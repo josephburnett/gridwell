@@ -19,7 +19,7 @@ func dbpath(t *testing.T) string {
 
 func TestCreateRecordsIdentity(t *testing.T) {
 	p := dbpath(t)
-	if err := Create(p, "id-1", "local"); err != nil {
+	if err := Create(p, "id-1", "home"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	// The gridwell marker must be present so the file is identifiable.
@@ -34,34 +34,34 @@ func TestCreateRecordsIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	if m.ID != "id-1" || m.Kind != "local" {
+	if m.ID != "id-1" || m.Kind != "home" {
 		t.Fatalf("stored identity: %+v", m)
 	}
 }
 
 func TestVerifyMatchingOK(t *testing.T) {
 	p := dbpath(t)
-	if err := Create(p, "id-1", "local"); err != nil {
+	if err := Create(p, "id-1", "home"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := Verify(p, "id-1", "local"); err != nil {
+	if _, err := Verify(p, "id-1", "home"); err != nil {
 		t.Fatalf("matching verify must succeed: %v", err)
 	}
 }
 
 func TestVerifyIDMismatch(t *testing.T) {
 	p := dbpath(t)
-	if err := Create(p, "id-1", "local"); err != nil {
+	if err := Create(p, "id-1", "home"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := Verify(p, "id-2", "local"); !errors.Is(err, ErrIDMismatch) {
+	if _, err := Verify(p, "id-2", "home"); !errors.Is(err, ErrIDMismatch) {
 		t.Fatalf("id change must be rejected, got: %v", err)
 	}
 }
 
 func TestVerifyKindMismatch(t *testing.T) {
 	p := dbpath(t)
-	if err := Create(p, "id-1", "local"); err != nil {
+	if err := Create(p, "id-1", "home"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	// Same id, different kind — the schema would be wrong; refuse.
@@ -90,7 +90,7 @@ func TestVerifyReadOnlyProbe(t *testing.T) {
 // cannot silently spawn a fresh store.
 func TestVerifyUninitialized(t *testing.T) {
 	// Missing file.
-	if _, err := Verify(dbpath(t), "id-1", "local"); !errors.Is(err, ErrNotInitialized) {
+	if _, err := Verify(dbpath(t), "id-1", "home"); !errors.Is(err, ErrNotInitialized) {
 		t.Errorf("missing DB must be ErrNotInitialized, got: %v", err)
 	}
 	// Existing but empty DB (no _gridwell_meta identity).
@@ -100,7 +100,7 @@ func TestVerifyUninitialized(t *testing.T) {
 		t.Fatal(err)
 	}
 	db.Close()
-	if _, err := Verify(p, "id-1", "local"); !errors.Is(err, ErrNotInitialized) {
+	if _, err := Verify(p, "id-1", "home"); !errors.Is(err, ErrNotInitialized) {
 		t.Errorf("uninitialized DB must be ErrNotInitialized, got: %v", err)
 	}
 }
@@ -119,10 +119,10 @@ func TestVerifyLegacyUUIDPreserved(t *testing.T) {
 	}
 	db.Close()
 
-	if _, err := Verify(p, "legacy-id", "local"); err != nil {
+	if _, err := Verify(p, "legacy-id", "home"); err != nil {
 		t.Fatalf("legacy id must be accepted: %v", err)
 	}
-	if _, err := Verify(p, "different", "local"); !errors.Is(err, ErrIDMismatch) {
+	if _, err := Verify(p, "different", "home"); !errors.Is(err, ErrIDMismatch) {
 		t.Fatalf("a different id against a legacy DB must be rejected, got: %v", err)
 	}
 }

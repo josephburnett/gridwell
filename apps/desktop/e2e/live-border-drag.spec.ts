@@ -24,7 +24,7 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
 
   // A live URL view via the ephemeral-visit swatch, on the local origin so it
   // loads instantly with no network.

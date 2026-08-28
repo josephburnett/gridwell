@@ -22,8 +22,8 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
   gw,
   window,
 }) => {
-  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'local')!.scratchGridID;
-  await gw.enterPlugin('local');
+  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

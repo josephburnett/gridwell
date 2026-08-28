@@ -9,7 +9,7 @@ test('live views park under the url modal and return on close', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
 
   // A live view first.
   const wcBefore = await electronApp.evaluate(

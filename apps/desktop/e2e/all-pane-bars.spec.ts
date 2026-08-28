@@ -8,7 +8,7 @@ import { test, expect } from './fixtures';
 // unfocused pane moves focus, nothing else.
 
 test('every pane wears the bar; moving focus moves nothing', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const panes = await gw.panes();
   expect(panes.length).toBe(2);

@@ -13,7 +13,7 @@ async function errors(window: any) {
 }
 
 test('a failed mutation RPC surfaces a dismissible notice on the strip', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -64,7 +64,7 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
 // (plugin health, backend exit persist until resolved/dismissed) is pinned by
 // the errsurface unit tests; this proves the live wiring actually fires.
 test('a one-shot notice expires off the strip once its source goes quiet', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -101,7 +101,7 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
 });
 
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -160,7 +160,7 @@ test('an unreachable live URL tile surfaces a did-fail-load notice from the Elec
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
 
   // The ephemeral-visit modal (clicking, not dragging, the url palette swatch)
   // descends straight into a live url tile — see ephemeral-url.spec.ts. Port 9
@@ -195,7 +195,7 @@ async function setupWellReframe(
   window: any,
   route: (r: any) => void,
 ): Promise<{ parentGrid: string; wellID: string; sig0: Record<string, string> }> {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);

@@ -49,7 +49,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 	t.Cleanup(closer)
 
 	reg := plugin.NewRegistry()
-	reg.Register("ur1", "local", direct, nil)
+	reg.Register("ur1", "home", direct, nil)
 	reg.SetLabel("ur1", "personal")
 	srv := server.New(reg, cfg)
 

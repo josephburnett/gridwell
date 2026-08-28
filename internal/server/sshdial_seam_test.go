@@ -48,7 +48,7 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 		}
 		t.Cleanup(closer)
 		uuid := fmt.Sprintf("ur%d", i+1)
-		reg.Register(uuid, "local", direct, nil)
+		reg.Register(uuid, "home", direct, nil)
 		reg.SetLabel(uuid, name)
 	}
 	direct, _ := reg.Get("ur1")

@@ -21,7 +21,7 @@ async function barLeave(gw: any): Promise<void> {
 }
 
 test('cloning a workspace: shared blob, independent divergence', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const ax = Math.round(f.cx);
@@ -76,7 +76,7 @@ test('cloning a workspace: shared blob, independent divergence', async ({ gw, wi
 // a default pane, reports once, and — the load-bearing half — NEVER writes
 // over the blob it could not read (a downgrade would rewrite history).
 test('an unreadable layout opens read-only and is never overwritten', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const ax = Math.round(f.cx);

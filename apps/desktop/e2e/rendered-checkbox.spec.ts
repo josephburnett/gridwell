@@ -14,7 +14,7 @@ test('clicking rendered checkboxes toggles the source markers and persists', asy
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

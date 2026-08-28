@@ -34,7 +34,7 @@ func registerPrimaryLocaldb(t *testing.T, reg *plugin.Registry, st *store.Store)
 		t.Fatalf("serve primary localdb: %v", err)
 	}
 	t.Cleanup(closer)
-	reg.Register(uuid, "local", client, nil)
+	reg.Register(uuid, "home", client, nil)
 	bareRoot, err := st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatalf("root grid id: %v", err)
@@ -204,7 +204,7 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 // its events REGARDLESS of the local kind string. This is the remote shape —
 // the ssh plugin serves a transparent proxy around a remote node, so its local
 // kind is "remote" while the proxied Info (forwarded verbatim) says watch=true.
-// Before the fix, Subscribe skipped every plugin whose kind wasn't "local",
+// Before the fix, Subscribe skipped every plugin whose kind wasn't "home",
 // so a remote localdb's events never reached the client.
 func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 	st, err := store.Open(":memory:")

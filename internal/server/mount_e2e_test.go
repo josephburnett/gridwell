@@ -48,7 +48,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(closer2)
-	reg.Register(secondUUID, "local", client2, nil)
+	reg.Register(secondUUID, "home", client2, nil)
 	secondBareRoot, err := st2.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

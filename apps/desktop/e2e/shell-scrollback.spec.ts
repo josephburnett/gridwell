@@ -17,7 +17,7 @@ test('wheel over a live shell scrolls back through tmux history (#206)', async (
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const sx = Math.round(home.cx);
   const sy = Math.round(home.cy);

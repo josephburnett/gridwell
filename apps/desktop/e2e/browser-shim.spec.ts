@@ -50,7 +50,7 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -99,7 +99,7 @@ test('xdg-open under a desktop session opens an ephemeral url visit below', asyn
   window,
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

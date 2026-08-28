@@ -768,7 +768,7 @@ func (*InfoRequest) Descriptor() ([]byte, []int) {
 
 type InfoResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // e.g. "local", "fs", "proc", "remote"
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // e.g. "home", "fs", "proc", "remote"
 	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	SchemaVersion int64                  `protobuf:"varint,3,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	Watch         bool                   `protobuf:"varint,4,opt,name=watch,proto3" json:"watch,omitempty"` // implements Subscribe for live change events
@@ -2096,7 +2096,7 @@ func (x *ListPluginsRequest) GetNamespace() string {
 type PluginInfo struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Uuid       string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the plugin's namespace; child grids are <uuid>/<id>
-	Kind       string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "local", "fs", "proc", "remote"
+	Kind       string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "home", "fs", "proc", "remote"
 	Label      string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
 	Writable   bool                   `protobuf:"varint,4,opt,name=writable,proto3" json:"writable,omitempty"`                        // accepts new tiles (primitives can be created in it)
 	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root

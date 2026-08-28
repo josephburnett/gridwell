@@ -16,7 +16,7 @@ test('first descent captures the current split; later descents restore it', asyn
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const panes0 = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(panes0).toHaveLength(2);

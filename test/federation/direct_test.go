@@ -29,7 +29,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 	// Node A: the "other server on this box".
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
+	run(t, renv, bin, "init", "--kind", "home", "--name", "personal")
 	// remoteAddr is the FEDERATION door — its unix socket path, the only
 	// thing a connection can dial since 2026-08-26; the web origin is not it.
 	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
@@ -41,7 +41,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 	// a direct client of that node boots — writable, immediately usable.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
+	run(t, lenv, bin, "init", "--kind", "home", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote")
 	appendConnectionsYAML(t, localHome, fmt.Sprintf("connections:\n    - name: dconn1\n      addr: %s\n", remoteAddr))
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")

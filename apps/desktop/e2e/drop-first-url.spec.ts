@@ -13,7 +13,7 @@ test('a url drops bare; the first descent prompts, writes the address, and goes 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

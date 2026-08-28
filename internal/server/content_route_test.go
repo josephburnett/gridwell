@@ -47,7 +47,7 @@ func twoPluginHTTPServer(t *testing.T) (cl *rpc.Client, baseURL, rootA, rootB st
 		t.Fatal(err)
 	}
 	t.Cleanup(closerB)
-	reg.Register(uuidB, "local", clientB, nil)
+	reg.Register(uuidB, "home", clientB, nil)
 	bareRootB, err := stB.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

@@ -10,7 +10,7 @@ import { tileAt } from './oracle';
 // the raw editor and an ordinary ascend-descend-elsewhere carry it now.
 
 test('an edit typed right before leaving the doc still persists', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) - 1;

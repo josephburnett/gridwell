@@ -10,7 +10,7 @@ import { test, expect } from './fixtures';
 // diverged by dozens of rows, which is exactly the visible "unwrap".
 
 test('the canvas paints the rows the textarea soft-wraps', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

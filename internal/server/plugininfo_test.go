@@ -26,7 +26,7 @@ import (
 // plugin can't blank or freeze the launcher.
 
 func TestBuildPluginInfo_InfoPresent(t *testing.T) {
-	got := buildPluginInfo("uuid-1", "local", "Home", &pb.InfoResponse{
+	got := buildPluginInfo("uuid-1", "home", "Home", &pb.InfoResponse{
 		RootGridId:    "7",
 		ScratchGridId: "9",
 		DisplayName:   "ignored-when-config-label-set",
@@ -59,7 +59,7 @@ func TestBuildPluginInfo_WritableFromHandshakeNotKind(t *testing.T) {
 		t.Error("an ssh-kind plugin whose Info declares writable must be writable")
 	}
 	// And the inverse: kind alone earns nothing.
-	got = buildPluginInfo("u", "local", "Local", &pb.InfoResponse{RootGridId: "1"}, nil)
+	got = buildPluginInfo("u", "home", "Local", &pb.InfoResponse{RootGridId: "1"}, nil)
 	if got.Writable {
 		t.Error("writable must come from the Info handshake, not the kind string")
 	}
@@ -178,7 +178,7 @@ func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
 // enterPlugin. Zero (never visited) must pass through too — the client
 // distinguishes it from an explicit user view.
 func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
-	got := buildPluginInfo("uuid-1", "local", "Home", &pb.InfoResponse{
+	got := buildPluginInfo("uuid-1", "home", "Home", &pb.InfoResponse{
 		RootGridId:   "7",
 		RootViewCx:   3.5,
 		RootViewCy:   -2.25,
@@ -195,7 +195,7 @@ func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
 	}
 
 	// Zero (never visited) passes through unchanged.
-	zero := buildPluginInfo("u", "local", "X", &pb.InfoResponse{
+	zero := buildPluginInfo("u", "home", "X", &pb.InfoResponse{
 		RootGridId:   "1",
 		RootViewZoom: 0,
 	}, nil)
@@ -354,7 +354,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	}
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
-	remoteReg.Register("rp1", "local", remoteClient, nil)
+	remoteReg.Register("rp1", "home", remoteClient, nil)
 	remoteSrv := New(remoteReg, Config{NodeID: "rnode"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()

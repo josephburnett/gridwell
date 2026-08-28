@@ -9,7 +9,7 @@ import { test, expect } from './fixtures';
 test('clicking the bar title zooms a pane and back, restoring the layout exactly', async ({
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(2);

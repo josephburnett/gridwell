@@ -13,7 +13,7 @@ test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: FS_ROOT } 
 // Gap 9: a framing save that races a version-bumping write retries with a
 // fresh claim instead of silently dropping.
 test('a framing save survives a racing version bump', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -58,7 +58,7 @@ test('an fs root grid keeps its viewport across leave and re-entry', async ({ gw
 // Gaps 7/8: a reload fired INSIDE the settle window still lands the save —
 // the unload flush rides beacons that outlive the page.
 test('a reload inside the settle window does not lose the framing', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -83,7 +83,7 @@ test('a reload inside the settle window does not lose the framing', async ({ gw,
 
 // Gap 5: text scroll persists on the settle tick, not just at ascent.
 test('text scroll persists without an ascent', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -112,7 +112,7 @@ test('text scroll persists without an ascent', async ({ gw, window }) => {
 // Gap 6: one active surface per grid — a passive sibling pane never
 // overwrites the focused pane's persisted framing.
 test('a split sibling never overwrites the focused pane framing', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

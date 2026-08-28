@@ -1,7 +1,8 @@
 package cli
 
-// ── DELETE AFTER 2026-09-16 ─────────────────────────────────────────────
-// One-shot kind rename (2026-08-16, owner decision): "localdb" → "local",
+// ── DELETE AFTER 2026-09-27 ─────────────────────────────────────────────
+// One-shot kind renames (owner decisions 2026-08-16 and 2026-08-27):
+// "localdb" → "home", "local" → "home" (the server's own DB is "home"),
 // "ssh" → "remote". Runs at serve boot: rewrites server.yaml kinds and
 // each affected plugin DB's identity stamp (pluginmeta.UpdateKind — ids
 // never change), then never matches again. Single-user migration window;
@@ -20,7 +21,8 @@ import (
 )
 
 var renamedKinds = map[string]string{
-	"localdb": "local",
+	"localdb": "home",
+	"local":   "home",
 	"ssh":     "remote",
 }
 

@@ -106,7 +106,7 @@ todo the user has seen. Config:
 the v2 cutover. 2026-08-27: the `gridwell.v1` subprocess door itself —
 `guest.Serve`, `compose.Command`, the `provider: true` flag, the second
 init door — retired: a plugin IS a content provider, every non-native
-kind spawns `gridwell-plugin-<kind>`, and `local`/`remote` are the
+kind spawns `gridwell-plugin-<kind>`, and `home`/`remote` are the
 node's own kinds. This document's remaining "gridwell-plugin-*" wording
 is the 2026-08-15 plan as executed; the current door is
 `docs/plugin-authoring.md`.)

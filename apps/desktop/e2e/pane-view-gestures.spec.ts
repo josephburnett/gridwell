@@ -6,7 +6,7 @@ import { test, expect } from './fixtures';
 // for wheel, and the framed grid id / path for ascend.
 
 test('wheel zoom and drag-pan reframe the focused pane', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const before = await gw.focused();
 
   // Wheel up (negative dy) zooms in: the focused pane's zoom changes.
@@ -25,7 +25,7 @@ test('wheel zoom and drag-pan reframe the focused pane', async ({ gw }) => {
 });
 
 test('right-drag splits the focused pane into two — another view of the same grid', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const before = await gw.focused();
   expect((await gw.panes()).length, 'starts with one pane').toBe(1);
 
@@ -49,7 +49,7 @@ test('right-drag splits the focused pane into two — another view of the same g
 test('left-drag resizes the divider both ways; dragging to the edge closes the side', async ({
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
 
@@ -72,7 +72,7 @@ test('left-drag resizes the divider both ways; dragging to the edge closes the s
 test('right-drag from the divider splits (a new pane); short of the minimum it cancels', async ({
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
 
@@ -94,7 +94,7 @@ test('a border right-drag flips direction mid-gesture and splits where it releas
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(2);
@@ -121,7 +121,7 @@ test('a border right-drag flips direction mid-gesture and splits where it releas
 });
 
 test('crumb click ascends; a right-click on the slot no longer does (#222)', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const root = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
@@ -143,7 +143,7 @@ test('crumb click ascends; a right-click on the slot no longer does (#222)', asy
 });
 
 test('middle-click ascends out of a descended well', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const root = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
@@ -168,7 +168,7 @@ test('middle-click ascends out of a descended well', async ({ gw }) => {
 // other pane to focus it" could descend into whatever tile sat under the
 // cursor — the old launcher ambiguity, generalized and closed.
 test('clicking an unfocused pane focuses without descending; the second click descends', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
@@ -203,7 +203,7 @@ test('clicking an unfocused pane focuses without descending; the second click de
 // well-ascent viewport. The portal here is a + menu descent into a SECOND
 // plugin (boot already sits inside the first, frameless).
 test.describe('stack hygiene', () => {
-  test.use({ extraPlugins: [{ kind: 'local', name: 'second' }] });
+  test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
 
   test('portal and well round trips leave both ascent stacks empty', async ({ gw }) => {
     const home = (await gw.focused()).anchor;

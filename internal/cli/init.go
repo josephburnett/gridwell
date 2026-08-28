@@ -36,7 +36,7 @@ func (m kvFlag) Set(s string) error {
 //	gridwell init --kind <kind> --name <name> [--config k=v ...]
 func RunInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	kind := fs.String("kind", "", "kind: a plugin (fs, proc, gitlab, …) or a native kind (local, remote)")
+	kind := fs.String("kind", "", "kind: a plugin (fs, proc, gitlab, …) or a native kind (home, remote)")
 	name := fs.String("name", "", "display name shown in the launcher (default: the kind)")
 	conf := kvFlag{}
 	fs.Var(conf, "config", "plugin config as key=value (repeatable)")

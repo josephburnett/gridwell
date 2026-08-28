@@ -10,7 +10,7 @@ import { tileAt } from './oracle';
 // ascent freeze, as before).
 
 test('shell descent reconnects the running session with its state', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -70,7 +70,7 @@ test('url descent reopens the page live; a sibling preview stays frozen', async 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

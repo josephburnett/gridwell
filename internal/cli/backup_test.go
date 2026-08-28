@@ -16,7 +16,7 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
-	if code := RunInit([]string{"--kind", "local", "--name", "home"}); code != 0 {
+	if code := RunInit([]string{"--kind", "home", "--name", "home"}); code != 0 {
 		t.Fatalf("init exit = %d", code)
 	}
 	// A provider entry that has never served: no memory DB yet (2026-08-27:

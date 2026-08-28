@@ -14,7 +14,7 @@ import { tileAt } from './oracle';
 // (paletteItems → startDescent/CreateWell → localdb → SQLite) and none of the
 // unit layers can see the composition.
 
-test.use({ extraPlugins: [{ kind: 'local', name: 'second' }] });
+test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
 
 test('boot lands on the first plugin with "/" as its URL', async ({ gw, window }) => {
   const pls = await gw.plugins();

@@ -194,7 +194,7 @@ SERVE_FLAGS ?=
 # ~/.gridwell/server.yaml. Run once before `make serve` / `make launch`.
 #   make init                                  # the native store, named "home"
 #   make init INIT_FLAGS="--kind fs --name files --config root=/home/joe"
-INIT_FLAGS ?= --kind local --name home
+INIT_FLAGS ?= --kind home --name home
 init: bin
 	$(BIN) init $(INIT_FLAGS)
 

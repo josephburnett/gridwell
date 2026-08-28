@@ -16,7 +16,7 @@ function countKind(snap: GridSnapshot, kind: string): number {
 }
 
 test('tile gestures (move, clone, resize, delete) mutate server state', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const grid = f.gridID;
   // Center cell, then work toward the upper-left interior (room from the edges).
@@ -69,7 +69,7 @@ test('tile gestures (move, clone, resize, delete) mutate server state', async ({
 // nothing visibly in the way; dragging far away and back again "worked"
 // because the old footprint was no longer under the target.
 test('a multi-cell tile moves one cell into its own old footprint (#231)', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx) - 1;

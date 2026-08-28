@@ -28,7 +28,7 @@ async function clickChainCrumb(gw: any, window: any, index: number): Promise<voi
 }
 
 test('a chain crumb click ascends all the way to that level and keeps the round trip', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f0 = await gw.focused();
   const rootGrid = f0.gridID;
   const cx = Math.round(f0.cx);

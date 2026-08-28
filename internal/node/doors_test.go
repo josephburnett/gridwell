@@ -21,7 +21,7 @@ import (
 // is gated from the first serve.
 func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 	home := t.TempDir()
-	if _, err := Init(home, "local", "home", nil); err != nil {
+	if _, err := Init(home, "home", "home", nil); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))

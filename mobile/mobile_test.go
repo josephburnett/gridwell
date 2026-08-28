@@ -89,7 +89,7 @@ func TestEmbeddedNodeLifecycle(t *testing.T) {
 		t.Fatalf("plugins = %d, want the one auto-inited localdb", len(plugins))
 	}
 	pm := plugins[0].(map[string]any)
-	if pm["label"] != "home" || pm["kind"] != "local" {
+	if pm["label"] != "home" || pm["kind"] != "home" {
 		t.Fatalf("auto-init plugin = %v", pm)
 	}
 	if lp["shellsDisabled"] != true {

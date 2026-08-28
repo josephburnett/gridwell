@@ -7,7 +7,7 @@ import (
 )
 
 var plugins = []rpc.PluginInfo{
-	{UUID: "loc", Label: "local", Glyph: "well", RootGridID: "loc/1",
+	{UUID: "loc", Label: "home", Glyph: "well", RootGridID: "loc/1",
 		MenuEntries: []rpc.MenuEntry{{ID: "trash", Label: "trash", Glyph: "trash", GridID: "loc/9"}}},
 	// A connection MENU ROW (v2 #269): a chained uuid whose root is the
 	// remote home — the replacement for the retired instance-picker arm.
@@ -48,7 +48,7 @@ func TestFindResolvesRootEntries(t *testing.T) {
 
 func TestFindResolvesPluginRoots(t *testing.T) {
 	got, kind := Find("loc/1", nil, plugins)
-	if kind != Root || got.AltText != "local" {
+	if kind != Root || got.AltText != "home" {
 		t.Fatalf("door = %+v (%v), want the local plugin swatch", got, kind)
 	}
 }

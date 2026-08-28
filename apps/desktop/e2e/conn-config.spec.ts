@@ -16,7 +16,7 @@ test.use({
 });
 
 test('one menu row per connection; the picker row is gone', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const pls = await gw.plugins();
 
   // The declared label, not the auto-label (the latch bug, 2026-08-23);
@@ -40,7 +40,7 @@ test('clicking a pending connection says WHY, not nothing-to-descend-into', asyn
   // LocalOf(id), which mangles a chained connection uuid, so the click
   // fell to the generic "nothing to descend into" instead of the
   // connection's own status.
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const rtb = (await gw.plugins()).find((p) => p.label === 'rtb')!;
   await gw.clickPluginSwatch('rtb');
   // The notice keys by UUID — labels can collide across connections.

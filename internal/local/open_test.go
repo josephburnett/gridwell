@@ -17,10 +17,10 @@ import (
 func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "plugin.db")
 	// gridwell init's registration step: stamp the config id into the DB.
-	if err := pluginmeta.Create(dbPath, "k3x9m2q", "local"); err != nil {
+	if err := pluginmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
 		t.Fatal(err)
 	}
-	st, err := OpenVerified(dbPath, "k3x9m2q", "local")
+	st, err := OpenVerified(dbPath, "k3x9m2q", "home")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,10 +38,10 @@ func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 // authoritative and a wrong spawn must fail loudly, not adopt.
 func TestOpenVerifiedRefusesMismatch(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "plugin.db")
-	if err := pluginmeta.Create(dbPath, "k3x9m2q", "local"); err != nil {
+	if err := pluginmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := OpenVerified(dbPath, "z9z9z9z", "local"); err == nil {
+	if _, err := OpenVerified(dbPath, "z9z9z9z", "home"); err == nil {
 		t.Fatal("OpenVerified accepted a config id that contradicts the stored identity")
 	}
 }

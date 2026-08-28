@@ -15,7 +15,7 @@ async function workspaceState(window: any): Promise<{ depth: number }> {
 }
 
 test('workspace descent keeps the outer live url running, parked; ascent shows it again', async ({ electronApp, gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const cx = Math.round(f.cx);

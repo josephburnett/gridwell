@@ -9,7 +9,7 @@ test('a border drag compresses the middle pane to its min, then the third; backi
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
 
   // Three columns: split twice (each split halves the focused pane).
   await gw.splitFocusedPaneVertical();
@@ -52,7 +52,7 @@ test('a border drag compresses the middle pane to its min, then the third; backi
 // must move only the grabbed border — the old single-ratio write visibly
 // slid nested borders the user never touched.
 test('a left-button border drag moves only the grabbed border', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
@@ -71,7 +71,7 @@ test('a left-button border drag moves only the grabbed border', async ({ gw }) =
 });
 
 test('a left-button drag far past the wall collapses on release (#203)', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const before = await gw.panes();
   expect(before).toHaveLength(2);
@@ -91,7 +91,7 @@ test('a left-button drag far past the wall collapses on release (#203)', async (
 test('crushing a middle pane past its bump closes it on release (#217)', async ({
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
@@ -117,7 +117,7 @@ test('crushing a middle pane past its bump closes it on release (#217)', async (
 // bump compare — a click's cursor sits AT the boundary, past no bump, even
 // when the neighbor already rests at its minimum.
 test('a bare click on a divider closes nothing (#204)', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(2);
@@ -130,7 +130,7 @@ test('a bare click on a divider closes nothing (#204)', async ({ gw, window }) =
 test('pressing just past the bump closes on release — no travel to the edge needed (#217)', async ({
   gw,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(2);
@@ -146,7 +146,7 @@ test('pressing just past the bump closes on release — no travel to the edge ne
 // B-side band (2px right of the divider) resolves the same divider and
 // produces the same resize as the A-side grab every other test uses.
 test('grabbing the border from its far side behaves identically (#217)', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
@@ -164,7 +164,7 @@ test('grabbing the border from its far side behaves identically (#217)', async (
 // "More and more panes go red until I let go — they all close" (#217):
 // pressing the nested divider past BOTH bumps on its side closes both.
 test('pressing past two bumps closes both panes on release (#217)', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
@@ -189,7 +189,7 @@ test('backing off just past the wall after a deep crush closes nothing (#238)', 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
@@ -215,7 +215,7 @@ test('backing off just past the wall after a deep crush closes nothing (#238)', 
 });
 
 test('the same divider closes either side by drag direction (#204)', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(2);

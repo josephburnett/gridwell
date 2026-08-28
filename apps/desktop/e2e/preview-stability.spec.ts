@@ -14,7 +14,7 @@ async function sigs(window: any): Promise<Record<string, string>> {
 }
 
 test('a descend/ascend round trip leaves every preview byte-identical; a reframe changes only the reframed well', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;

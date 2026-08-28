@@ -404,7 +404,7 @@ func TestListPlugins(t *testing.T) {
 	if len(plugins) != 3 {
 		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
 	}
-	if plugins[0].Kind != "local" || !plugins[0].Writable {
+	if plugins[0].Kind != "home" || !plugins[0].Writable {
 		t.Errorf("plugin[0] = %+v, want writable localdb", plugins[0])
 	}
 	// Each plugin advertises its qualified root grid id (for click-enter).

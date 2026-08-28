@@ -6,7 +6,7 @@ import { tileAt } from './oracle';
 // (GetTileContent). The edit LOGIC is unit-tested in client/textedit +
 // client/markdown; this proves the wiring — keystrokes → store → durable body.
 test('typing into a descended text tile persists to the server', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

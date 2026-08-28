@@ -48,7 +48,7 @@ func newNode(t *testing.T) *node {
 	}
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
-	reg.Register(uuid, "local", client, nil)
+	reg.Register(uuid, "home", client, nil)
 	srv := server.New(reg, server.Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)

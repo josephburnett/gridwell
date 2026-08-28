@@ -28,7 +28,7 @@ func TestNonNativeKindsResolveProviderBinaries(t *testing.T) {
 
 	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{
 		{ID: "p1", Kind: "fs"},
-		{ID: "p2", Kind: "local"},
+		{ID: "p2", Kind: "home"},
 		{ID: "p3", Kind: "proc"},
 	}}
 	bundled := map[string]plugin.Factory{"proc": nil}

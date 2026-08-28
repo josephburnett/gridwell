@@ -28,7 +28,7 @@ async function sig(window: any, tileId: string): Promise<string> {
 }
 
 test('workspace primitive: drag-create persists a pane tile and its preview tracks the layout blob', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

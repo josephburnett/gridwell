@@ -126,8 +126,8 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	}
 	return &gridwellv1.InfoResponse{
 		Glyph:         "well",
-		Kind:          "local",
-		DisplayName:   "local",
+		Kind:          "home",
+		DisplayName:   "home",
 		SchemaVersion: int64(p.st.SchemaVersion()),
 		RootGridId:    id,
 		ScratchGridId: scratch,

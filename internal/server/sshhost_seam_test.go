@@ -78,7 +78,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	}
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
-	remoteReg.Register("rp1", "local", remoteClient, nil)
+	remoteReg.Register("rp1", "home", remoteClient, nil)
 	remoteSrv := server.New(remoteReg, server.Config{NodeID: "rnodex"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()

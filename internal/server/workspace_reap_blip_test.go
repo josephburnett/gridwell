@@ -69,7 +69,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 	}
 	bc := &blipClient{GridwellClient: inner}
 	reg := plugin.NewRegistry()
-	reg.Register(uuid, "local", bc, nil)
+	reg.Register(uuid, "home", bc, nil)
 	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)

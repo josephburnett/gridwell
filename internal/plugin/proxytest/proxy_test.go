@@ -48,7 +48,7 @@ func TestProxy_UnaryForwards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-	if info.Kind != "local" || info.RootGridId == "" {
+	if info.Kind != "home" || info.RootGridId == "" {
 		t.Fatalf("Info through proxy = %+v, want the remote's", info)
 	}
 

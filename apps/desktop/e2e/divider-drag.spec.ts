@@ -15,7 +15,7 @@ test('left divider-arm mousedown is defaultPrevented; single-jump drag tracks fu
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
   const ps = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
@@ -63,7 +63,7 @@ test('a fast divider drag INTO a text pane keeps tracking and releases', async (
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
   let panes = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(panes[0]);

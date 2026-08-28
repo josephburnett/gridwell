@@ -218,8 +218,8 @@ func TestFederationSpawn(t *testing.T) {
 	// Remote node: two localdb plugins.
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
-	run(t, renv, bin, "init", "--kind", "local", "--name", "work")
+	run(t, renv, bin, "init", "--kind", "home", "--name", "personal")
+	run(t, renv, bin, "init", "--kind", "home", "--name", "work")
 	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 
 	// A real ssh server fronting it (shared helper — the same sshd the seam
@@ -231,7 +231,7 @@ func TestFederationSpawn(t *testing.T) {
 	// reconciled at boot.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
+	run(t, lenv, bin, "init", "--kind", "home", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedconn1", creds, remoteAddr))
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
@@ -463,7 +463,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	// Remote node: one localdb, served for real; a real sshd fronting it.
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
+	run(t, renv, bin, "init", "--kind", "home", "--name", "personal")
 	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
 
@@ -471,7 +471,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	// in server.yaml before first serve.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
+	run(t, lenv, bin, "init", "--kind", "home", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "connections")
 	yamlBefore, err := os.ReadFile(filepath.Join(localHome, "server.yaml"))
 	if err != nil {

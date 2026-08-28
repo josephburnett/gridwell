@@ -53,7 +53,7 @@ func nodeGridServerAt(t *testing.T, statePath string) (cl *rpc.Client, nodeRoot,
 		t.Fatal(err)
 	}
 	t.Cleanup(closerB)
-	reg.Register(uuidB, "local", clientB, nil)
+	reg.Register(uuidB, "home", clientB, nil)
 	reg.SetLabel(uuidB, "work")
 
 	srv := New(reg, Config{NodeID: "node1", NodeStatePath: statePath})

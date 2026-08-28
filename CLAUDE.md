@@ -182,8 +182,7 @@ Re-litigating them silently is how churn happens.
   contract — could be had with discipline alone; the subprocess door is
   the part that admits strangers, and it is judged by how good a door it
   is for them. (2026-08-27: that door is `plugin.v1` ONLY —
-  the `gridwell.v1` subprocess door retired; a plugin IS a content
-  provider, `local`/`remote` are the node's own kinds.) Therefore: the host (server, CLI, loader) and the client
+  the `gridwell.v1` subprocess door retired; a plugin serves content and keys, the node owns ids and layout; `home`/`remote` are the node's own kinds, not plugins.) Therefore: the host (server, CLI, loader) and the client
   never import a plugin implementation and never switch on a plugin
   KIND — every plugin-specific behavior rides a wire DECLARATION (Info
   capabilities, `Grid.source_kind`, tile fields), the shapes that already

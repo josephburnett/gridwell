@@ -100,7 +100,7 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	dark = &darkSource{GridwellClient: clientA,
 		darkContent: map[string]bool{}, darkGrids: map[string]bool{},
 		darkPreviews: map[string]bool{}, verdict: map[string]error{}}
-	reg.Register(uuidA, "local", dark, nil)
+	reg.Register(uuidA, "home", dark, nil)
 	bareRootA, err := stA.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 		t.Fatal(err)
 	}
 	t.Cleanup(closerB)
-	reg.Register(uuidB, "local", clientB, nil)
+	reg.Register(uuidB, "home", clientB, nil)
 	bareRootB, err := stB.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

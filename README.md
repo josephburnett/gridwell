@@ -103,7 +103,7 @@ arrangement you care about is the pane tile.
 ## Plugins and federation
 
 Every space is a plugin: a separate binary with its own SQLite database and
-its own id space. `local` holds your content. `fs` and `proc` project the
+its own id space. `home` holds your content. `fs` and `proc` project the
 filesystem and process table in as read-only grids — honest views of a
 world Gridwell doesn't own (files and processes come and go, but their
 placement stays stable while they exist). `ssh` mounts other machines.

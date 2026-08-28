@@ -3,7 +3,7 @@ package node
 // The native store (docs/v2-design.md §4.5, the v2 fold): the local
 // plugin's content engine is NODE code — always in-process, never a
 // subprocess. The server.yaml entry remains (it carries the durable
-// uuid every stored reference is qualified by), but kind "local" no
+// uuid every stored reference is qualified by), but kind "home" no
 // longer names a guest: it names the node's own store. Owner decision
 // 2026-08-22 (content-presentation.md §9) — "the server holds no
 // Gridwell state" was explicitly reversed.

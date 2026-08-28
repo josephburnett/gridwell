@@ -53,7 +53,7 @@ func TestDBPaths(t *testing.T) {
 
 func TestAppendPlugin(t *testing.T) {
 	home := t.TempDir()
-	a := PluginConfig{ID: "id-a", Name: "home", Kind: "local"}
+	a := PluginConfig{ID: "id-a", Name: "home", Kind: "home"}
 	b := PluginConfig{ID: "id-b", Name: "files", Kind: "fs", Config: map[string]string{"root": "/srv"}}
 
 	// First plugin bootstraps the file; second appends.
@@ -80,10 +80,10 @@ func TestAppendPlugin(t *testing.T) {
 	}
 
 	// Duplicate id and duplicate name are both rejected.
-	if err := AppendPlugin(home, PluginConfig{ID: "id-a", Name: "other", Kind: "local"}); !errors.Is(err, ErrDuplicatePlugin) {
+	if err := AppendPlugin(home, PluginConfig{ID: "id-a", Name: "other", Kind: "home"}); !errors.Is(err, ErrDuplicatePlugin) {
 		t.Errorf("dup id should be rejected: %v", err)
 	}
-	if err := AppendPlugin(home, PluginConfig{ID: "id-c", Name: "home", Kind: "local"}); !errors.Is(err, ErrDuplicatePlugin) {
+	if err := AppendPlugin(home, PluginConfig{ID: "id-c", Name: "home", Kind: "home"}); !errors.Is(err, ErrDuplicatePlugin) {
 		t.Errorf("dup name should be rejected: %v", err)
 	}
 }
@@ -127,7 +127,7 @@ static: "/var/www"
 plugins:
   - id: "abc123"
     name: "home"
-    kind: "local"
+    kind: "home"
   - id: "def456"
     name: "files"
     kind: "fs"
@@ -153,7 +153,7 @@ plugins:
 		t.Fatalf("plugins: got %d, want 2", len(cfg.Plugins))
 	}
 	p := cfg.Plugins[0]
-	if p.ID != "abc123" || p.Name != "home" || p.Kind != "local" {
+	if p.ID != "abc123" || p.Name != "home" || p.Kind != "home" {
 		t.Errorf("plugin[0]: %+v", p)
 	}
 }
@@ -293,7 +293,7 @@ func TestLoad_bindSet(t *testing.T) {
 // durable identity, exactly like a plugin id.
 func TestEnsureNodeID(t *testing.T) {
 	home := t.TempDir()
-	if err := AppendPlugin(home, PluginConfig{ID: "p1", Name: "e2e", Kind: "local"}); err != nil {
+	if err := AppendPlugin(home, PluginConfig{ID: "p1", Name: "e2e", Kind: "home"}); err != nil {
 		t.Fatal(err)
 	}
 	n := 0
@@ -377,7 +377,7 @@ func TestLoad_doors(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "server.yaml"), []byte("password: hunter2\nplugins: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "local"}); err != nil {
+	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "home"}); err != nil {
 		t.Fatal(err)
 	}
 	after, err := Load(filepath.Join(home, "server.yaml"))
@@ -429,7 +429,7 @@ func TestConnectionsPresenceSurvivesRewrite(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "server.yaml"), []byte("connections: []\nplugins: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "local"}); err != nil {
+	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "home"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := EnsureNodeID(home, func() string { return "nodeid1" }); err != nil {

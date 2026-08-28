@@ -14,7 +14,7 @@ import { tileAt, Tile } from './oracle';
 //   - dragging a plugin swatch out of the + menu into a grid mounts that
 //     plugin as a link well — the gesture the menu's plugin row exists for.
 
-test.use({ extraPlugins: [{ kind: 'local', name: 'second' }] });
+test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
 
 test('boot lands on the first plugin; the node grid stays a real grid of links', async ({ gw, window }) => {
   const pls = await gw.plugins();

@@ -21,7 +21,7 @@ async function barClickCrumb(gw: any, level: number): Promise<void> {
 }
 
 test('nested workspaces: breadcrumbs, session-only membership, safe self-reference', async ({ gw, window }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const ax = Math.round(f.cx);

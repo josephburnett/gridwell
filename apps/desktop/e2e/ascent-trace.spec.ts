@@ -14,7 +14,7 @@ test('ascending arms a fading trace on the tile just left, then it expires', asy
   gw,
   window,
 }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

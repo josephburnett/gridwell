@@ -97,7 +97,7 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 // own copy (2026-08-27: mobile's copy had drifted — its remote factory
 // skipped the connections: config mode, so a phone ignored the yaml).
 var nativeFactories = map[string]plugin.NativeFactory{
-	"local":  NativeLocalFactory,
+	"home":   NativeLocalFactory,
 	"remote": NativeRemoteFactory,
 }
 

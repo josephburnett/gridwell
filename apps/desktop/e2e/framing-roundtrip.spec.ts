@@ -21,10 +21,10 @@ import { test, expect } from './fixtures';
 // tile. This seam was broken once before (every re-entry reset to the
 // default calibrated zoom), so it keeps its crossing test.
 
-test.use({ extraPlugins: [{ kind: 'local', name: 'second' }] });
+test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
 
 test('re-descending a reframed well returns to exactly what you left', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
@@ -104,7 +104,7 @@ test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
   // descend deeper) and the viewport silently reverted. This test pins the
   // fix at the real seam: reframe a child grid and, WITHOUT ascending, the
   // well's view_* must show up in server truth on its own.
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
@@ -162,7 +162,7 @@ test('a plugin root reframe persists without ascending (issue #190)', async ({ g
 });
 
 test('ascending restores the parent viewport unchanged', async ({ gw }) => {
-  await gw.enterPlugin('local');
+  await gw.enterPlugin('home');
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 

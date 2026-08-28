@@ -39,7 +39,7 @@ const test = base.extend<Fixtures>({
   // node (one local plugin named farlocal), directly connected.
   world: async ({}, use) => {
     const farHome = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-far-'));
-    execFileSync(serveBin(), ['init', '--kind', 'local', '--name', 'farlocal'], {
+    execFileSync(serveBin(), ['init', '--kind', 'home', '--name', 'farlocal'], {
       env: { ...process.env, GRIDWELL_HOME: farHome },
       stdio: 'ignore',
     });

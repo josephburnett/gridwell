@@ -16,7 +16,7 @@ func TestRunInitCreatesPlugin(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	if rc := RunInit([]string{"--kind", "local", "--name", "home"}); rc != 0 {
+	if rc := RunInit([]string{"--kind", "home", "--name", "home"}); rc != 0 {
 		t.Fatalf("init returned %d", rc)
 	}
 
@@ -28,7 +28,7 @@ func TestRunInitCreatesPlugin(t *testing.T) {
 		t.Fatalf("plugins: got %d, want 1", len(cfg.Plugins))
 	}
 	p := cfg.Plugins[0]
-	if p.Name != "home" || p.Kind != "local" || p.ID == "" {
+	if p.Name != "home" || p.Kind != "home" || p.ID == "" {
 		t.Fatalf("plugin entry: %+v", p)
 	}
 
@@ -41,7 +41,7 @@ func TestRunInitCreatesPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read meta: %v", err)
 	}
-	if m.ID != p.ID || m.Kind != "local" {
+	if m.ID != p.ID || m.Kind != "home" {
 		t.Errorf("DB metadata %+v does not match config id %q", m, p.ID)
 	}
 }
@@ -50,10 +50,10 @@ func TestRunInitRejectsDuplicateName(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	if rc := RunInit([]string{"--kind", "local", "--name", "home"}); rc != 0 {
+	if rc := RunInit([]string{"--kind", "home", "--name", "home"}); rc != 0 {
 		t.Fatal("first init failed")
 	}
-	if rc := RunInit([]string{"--kind", "local", "--name", "home"}); rc == 0 {
+	if rc := RunInit([]string{"--kind", "home", "--name", "home"}); rc == 0 {
 		t.Error("duplicate name should be rejected")
 	}
 }
@@ -67,14 +67,14 @@ func TestRunInitRequiresKindNameDefaultsToIt(t *testing.T) {
 	}
 	// --name is optional (owner decision 2026-08-16): it defaults to the
 	// kind — "fs is called fs" for a single instance of anything.
-	if rc := RunInit([]string{"--kind", "local"}); rc != 0 {
+	if rc := RunInit([]string{"--kind", "home"}); rc != 0 {
 		t.Fatalf("init without --name returned %d", rc)
 	}
 	cfg, err := config.Load(filepath.Join(home, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Plugins[0].Name != "local" {
+	if cfg.Plugins[0].Name != "home" {
 		t.Errorf("default name = %q, want the kind", cfg.Plugins[0].Name)
 	}
 }
