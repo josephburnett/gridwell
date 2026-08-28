@@ -470,3 +470,14 @@ func (t *Tree) OtherPaneShows(paneID, tileID string) bool {
 	})
 	return found
 }
+
+// GridNotice is the one wording of a pane whose grid is not in the cache:
+// the wait while a fetch is in flight (a plugin building its first
+// listing can take a while), or the failure once the last fetch failed.
+// name is the plugin's label when known, else the grid id.
+func GridNotice(name string, failed bool) string {
+	if failed {
+		return name + " unavailable"
+	}
+	return "loading " + name + "…"
+}

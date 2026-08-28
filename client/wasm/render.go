@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strconv"
 	"syscall/js"
@@ -559,11 +558,12 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		a.drawGridLines(colorGridLineInterior, pscreen, r)
 	}
 
-	if !gridOK && p.Anchor != "" && p.TextFocus == "" {
+	if !gridOK && gid != "" && p.TextFocus == "" {
 		// The grid is not cached yet — a fetch is in flight, or a plugin is
 		// still building its first listing (a gitlab walk can take a
-		// while). Say so instead of showing an empty room (Joe, 2026-08-27).
-		a.drawLoadingNotice(r, gid)
+		// while) — or its last fetch failed. Say which instead of showing
+		// an empty room (Joe, 2026-08-27).
+		a.drawGridNotice(r, gid)
 	}
 	if gridOK {
 		cellSize := pscreen.CellPx * pscreen.Zoom
@@ -641,16 +641,6 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					a.ghost.displayedFragmentation)
 			}
 		}
-	} else {
-		// Status line in the upper-left so the user knows what state
-		// we're in and which grid id we're trying to load.
-		msg := fmt.Sprintf("loading grid %s…", gid)
-		if a.gridLoadFailed[gid] {
-			msg = fmt.Sprintf("grid %s unavailable", gid)
-		}
-		a.cctx.Set("fillStyle", colorMuted)
-		a.cctx.Set("font", "12px ui-monospace")
-		a.cctx.Call("fillText", msg, r.X+12, r.Y+24)
 	}
 
 	a.cctx.Call("restore")
@@ -1454,17 +1444,20 @@ func (a *App) drawTriangle(cx, cy, angle, size float64) {
 	a.cctx.Call("fill")
 }
 
-// drawLoadingNotice paints a centered, muted "loading …" line in a pane
-// whose grid has not arrived: the plugin's label when the grid's owner
-// is known (the launcher lists it), else just the wait.
-func (a *App) drawLoadingNotice(r pane.Rect, gid string) {
+// drawGridNotice paints a centered, muted status line in a pane whose grid
+// is not in the cache: pane.GridNotice words it (loading vs. unavailable);
+// the plugin's label names the grid when its owner is in the launcher list
+// (a mounted remote's grid falls back to the id — the label is a wire fact
+// this lookup cannot see; see scratchGridForPane).
+func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if r.W < 80 || r.H < 40 {
 		return
 	}
-	label := "loading…"
+	name := gid
 	if pl, ok := a.pluginByUUID(uuidOf(gid)); ok && pl.Label != "" {
-		label = "loading " + pl.Label + "…"
+		name = pl.Label
 	}
+	label := pane.GridNotice(name, a.gridLoadFailed[gid])
 	a.cctx.Call("save")
 	a.cctx.Set("fillStyle", colorMuted)
 	a.cctx.Set("font", "13px system-ui, sans-serif")

@@ -443,3 +443,15 @@ func TestOtherPaneShows(t *testing.T) {
 		t.Fatal("a sibling on a different tile does not hold tile-1")
 	}
 }
+
+// The pane's grid notice must say "unavailable" once the fetch has failed —
+// two draw sites once disagreed: the centered one said "loading…" forever
+// over a grid the strip had already reported dead.
+func TestGridNotice(t *testing.T) {
+	if got := GridNotice("gitlab", false); got != "loading gitlab…" {
+		t.Errorf("loading = %q", got)
+	}
+	if got := GridNotice("gitlab", true); got != "gitlab unavailable" {
+		t.Errorf("failed = %q", got)
+	}
+}

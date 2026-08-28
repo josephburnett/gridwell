@@ -18,9 +18,9 @@ import (
 // WebSocket streaming rod JPEGs). The live handle lives on paneLocal.urlView,
 // reached through a.urlViewFor(paneID) (nil = no live URL descent).
 type urlView struct {
-	tileID   string
-	paneID   string
-	bounds   viewBounds
+	tileID string
+	paneID string
+	bounds viewBounds
 	// anchor + path are the plugin-root grid id and the descent path to the
 	// grid that holds this URL tile, captured when the view went live. The
 	// freeze (SetURLState) needs them to resolve this tile's leaf grid
