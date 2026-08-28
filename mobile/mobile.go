@@ -32,10 +32,8 @@ import (
 	gofs "io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -127,20 +125,13 @@ func Stop() {
 	origin = ""
 }
 
-// inProcessFactories is the mobile provider registry: fs, proc
-// and gitlab as v2 content providers, constructed exactly as their subprocess
-// mains (cmd/gridwell-plugin-*) would, minus the process boundary.
+// inProcessFactories is the mobile plugin registry: fs, proc and gitlab
+// by their FromConfig — THE SAME function each subprocess main hands
+// guest.Main, so the two doors cannot derive a plugin differently.
 func inProcessFactories() map[string]plugin.Factory {
 	return map[string]plugin.Factory{
-		"fs": func(cfg map[string]string) (pluginv1.PluginServer, error) {
-			return fsplugin.New(cfg["root"], nil), nil
-		},
-		"proc": func(cfg map[string]string) (pluginv1.PluginServer, error) {
-			pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
-			return procplugin.New("", pid, nil), nil
-		},
-		"gitlab": func(cfg map[string]string) (pluginv1.PluginServer, error) {
-			return gitlabplugin.FromConfig(cfg), nil
-		},
+		"fs":     fsplugin.FromConfig,
+		"proc":   procplugin.FromConfig,
+		"gitlab": gitlabplugin.FromConfig,
 	}
 }

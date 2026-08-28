@@ -1,20 +1,12 @@
-// gridwell-plugin-gitlab — the gitlab todos content provider binary:
-// a stateless projection of one GitLab account's to-do list, serving
-// plugin.v1. Config: url (default https://gitlab.com),
-// token_file (a host-local file holding a personal access token with
-// read_api scope — secrets stay file paths, never yaml values),
-// refresh (optional Go duration, default 30s). No database — the node
-// owns this external's memory.
+// gridwell-plugin-gitlab — the gitlab todos plugin binary: a stateless
+// projection of one GitLab account's to-do list, serving plugin.v1. The
+// config vocabulary is plugin.FromConfig's — the one derivation every
+// door shares. No database — the node owns this external's memory.
 package main
 
 import (
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/guest"
 	"github.com/josephburnett/gridwell/plugins/gitlab/plugin"
 )
 
-func main() {
-	guest.Main(func(cfg map[string]string) (pluginv1.PluginServer, error) {
-		return plugin.FromConfig(cfg), nil
-	})
-}
+func main() { guest.Main(plugin.FromConfig) }

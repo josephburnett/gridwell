@@ -9,6 +9,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"syscall"
@@ -47,7 +48,27 @@ type Plugin struct {
 	killer   Killer
 }
 
-// New builds a provider. Empty procRoot uses /proc; rootPID <= 0 uses
+// FromConfig builds the production plugin from the shared config
+// vocabulary — the ONE owner of the config→plugin derivation, so the
+// subprocess main (guest.Main) and the bundled binaries (gridwell-all,
+// mobile) compose exactly the same plugin. Config: pid (optional root
+// pid, default 1). A pid that is not a positive integer is REFUSED (the
+// launch stops with the reason — owner decision 2026-08-27): silently
+// falling back to pid 1 would present the whole process tree as if
+// that were what server.yaml said.
+func FromConfig(cfg map[string]string) (pluginv1.PluginServer, error) {
+	var pid int64
+	if raw := strings.TrimSpace(cfg["pid"]); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("proc plugin: pid %q is not a positive process id", raw)
+		}
+		pid = n
+	}
+	return New("", pid, nil), nil
+}
+
+// New builds a plugin. Empty procRoot uses /proc; rootPID <= 0 uses
 // pid 1; nil killer signals real processes.
 func New(procRoot string, rootPID int64, killer Killer) *Plugin {
 	if procRoot == "" {

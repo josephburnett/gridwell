@@ -77,7 +77,7 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	defer srv.Close()
 
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	client, closeStack := gitlabStackAt(t, memPath, gitlabplugin.New(gitlabapi.New(srv.URL, "tok", nil), nil, gitlabplugin.Options{Now: func() time.Time { return base }}))
+	client, closeStack := gitlabStackAt(t, memPath, gitlabplugin.New(gitlabapi.New(srv.URL, "tok", nil), gitlabplugin.Options{Now: func() time.Time { return base }}))
 	defer closeStack()
 	ctx := context.Background()
 	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})

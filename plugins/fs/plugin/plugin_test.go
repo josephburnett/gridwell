@@ -1,6 +1,31 @@
 package plugin
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+)
+
+// FromConfig is the one config→plugin derivation: root projects, and no
+// root is the rootless (listed, not enterable) plugin, not a refusal.
+func TestFromConfigOwnsTheRootDerivation(t *testing.T) {
+	ctx := context.Background()
+	impl, err := FromConfig(map[string]string{"root": " /srv/docs "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, err := impl.(*Plugin).Info(ctx, &pluginv1.InfoRequest{}); err != nil || info.RootContext != "." || info.DisplayName != "docs" {
+		t.Errorf("rooted → %v, %v", info, err)
+	}
+	impl, err = FromConfig(map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, err := impl.(*Plugin).Info(ctx, &pluginv1.InfoRequest{}); err != nil || info.RootContext != "" {
+		t.Errorf("rootless → %v, %v; want listed with no root context", info, err)
+	}
+}
 
 // Same class as convert.relKey: the confinement check must not be a
 // hand-built root+"/" prefix — with root "/" that is "//", which no

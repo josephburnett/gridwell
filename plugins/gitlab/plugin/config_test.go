@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
 
-func TestFromConfigRefusalsSurfaceThroughList(t *testing.T) {
+// A config the plugin cannot run on is FromConfig's error — the one
+// verdict both doors (guest.Main, the loader's Factory) turn into a
+// launch that stops with the reason.
+func TestFromConfigRefusesBadConfig(t *testing.T) {
 	cases := map[string]map[string]string{
 		"token_file not configured": {},
 		"token_file: open":          {"token_file": filepath.Join(t.TempDir(), "missing")},
@@ -22,18 +22,21 @@ func TestFromConfigRefusalsSurfaceThroughList(t *testing.T) {
 		"not a duration":            {"token_file": writeTemp(t, "tok"), "refresh": "soon"},
 	}
 	for want, cfg := range cases {
-		p := FromConfig(cfg)
-		_, err := p.Info(context.Background(), &pluginv1.InfoRequest{})
-		if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), want) {
-			t.Errorf("cfg %v → %v, want FailedPrecondition containing %q", cfg, err, want)
+		impl, err := FromConfig(cfg)
+		if impl != nil || err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("cfg %v → %v, %v; want a refusal containing %q", cfg, impl, err, want)
 		}
 	}
 }
 
 func TestFromConfigComposesTheClient(t *testing.T) {
-	p := FromConfig(map[string]string{"token_file": writeTemp(t, "tok\n"), "refresh": "5m", "label": "work todos", "url": "https://gl.example/"})
-	if p.srcErr != nil || p.src == nil || p.refresh != 5*time.Minute {
-		t.Errorf("provider = src %v err %v refresh %v", p.src, p.srcErr, p.refresh)
+	impl, err := FromConfig(map[string]string{"token_file": writeTemp(t, "tok\n"), "refresh": "5m", "label": "work todos", "url": "https://gl.example/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := impl.(*Plugin)
+	if p.src == nil || p.refresh != 5*time.Minute {
+		t.Errorf("plugin = src %v refresh %v", p.src, p.refresh)
 	}
 	info, _ := p.Info(context.Background(), &pluginv1.InfoRequest{})
 	if info.DisplayName != "work todos" {

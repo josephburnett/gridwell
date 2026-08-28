@@ -35,7 +35,6 @@ const DefaultRefresh = 30 * time.Second
 type Plugin struct {
 	pluginv1.UnimplementedPluginServer
 	src     todos.Source
-	srcErr  error // a configuration verdict (no token): every listing refuses with it
 	mem     *todos.Memory
 	refresh time.Duration
 	now     func() time.Time
@@ -63,12 +62,11 @@ type Options struct {
 	Label   string // DisplayName; "" = "gitlab todos"
 }
 
-// New builds a provider over src. srcErr, when non-nil, is the reason
-// there is no source (an unconfigured token): Info still answers, so
-// the plugin is listed, and every listing refuses with the reason —
-// the error surfaces instead of an empty grid.
-func New(src todos.Source, srcErr error, o Options) *Plugin {
-	p := &Plugin{src: src, srcErr: srcErr, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, label: o.Label, syncedAt: map[string]time.Time{}, flights: map[string]*flight{}}
+// New builds a plugin over src. Whether there IS a source is decided
+// before this point: FromConfig refuses a missing token, and the doors
+// (guest.Main, the loader) stop the launch with its reason.
+func New(src todos.Source, o Options) *Plugin {
+	p := &Plugin{src: src, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, label: o.Label, syncedAt: map[string]time.Time{}, flights: map[string]*flight{}}
 	if p.refresh <= 0 {
 		p.refresh = DefaultRefresh
 	}
@@ -82,12 +80,6 @@ func New(src todos.Source, srcErr error, o Options) *Plugin {
 }
 
 func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	// A plugin without the config it needs refuses its HANDSHAKE, so the
-	// launch fails with the reason instead of serving an empty grid
-	// (owner decision 2026-08-27).
-	if p.srcErr != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, "gitlab plugin: %v", p.srcErr)
-	}
 	return &pluginv1.InfoResponse{
 		Kind:        Kind,
 		DisplayName: p.label,
@@ -113,9 +105,6 @@ func (p *Plugin) freshLocked(ctxKey string) bool {
 // already in flight for the context (or the root, which covers every
 // week) is shared: this call waits for its verdict.
 func (p *Plugin) sync(ctx context.Context, ctxKey string, since time.Time) error {
-	if p.srcErr != nil {
-		return status.Errorf(codes.FailedPrecondition, "gitlab provider: %v", p.srcErr)
-	}
 	p.mu.Lock()
 	if p.freshLocked(ctxKey) {
 		p.mu.Unlock()

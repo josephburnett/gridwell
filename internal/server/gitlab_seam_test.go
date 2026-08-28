@@ -88,7 +88,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	clock := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	now := func() time.Time { return clock }
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	client, closeStack := gitlabStackAt(t, memPath, gitlabplugin.New(gl, nil, gitlabplugin.Options{Now: now}))
+	client, closeStack := gitlabStackAt(t, memPath, gitlabplugin.New(gl, gitlabplugin.Options{Now: now}))
 
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
@@ -157,7 +157,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	// no longer lists it. The NODE remembers: same tile, same id, same
 	// placement, last-seen label; its content says it is not in memory.
 	closeStack()
-	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabplugin.New(gl, nil, gitlabplugin.Options{Now: now}))
+	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabplugin.New(gl, gitlabplugin.Options{Now: now}))
 	t.Cleanup(closeStack2)
 	reg2 := plugin.NewRegistry()
 	reg2.Register("ug1", "gitlab", client2, nil)

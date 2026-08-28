@@ -59,7 +59,18 @@ type Plugin struct {
 	readDir func(dir string) ([]fssource.Entry, error)
 }
 
-// New builds a provider over root. nil host trashes (production); tests
+// FromConfig builds the production plugin from the shared config
+// vocabulary — the ONE owner of the config→plugin derivation, so the
+// subprocess main (guest.Main) and the bundled binaries (gridwell-all,
+// mobile) compose exactly the same plugin. Config: root (the projected
+// directory). No root is the ROOTLESS plugin — listed, not enterable,
+// a fixable gap the client reports as a notice (issue #47's
+// classification, e2e-pinned) — not a refusal.
+func FromConfig(cfg map[string]string) (pluginv1.PluginServer, error) {
+	return New(strings.TrimSpace(cfg["root"]), nil), nil
+}
+
+// New builds a plugin over root. nil host trashes (production); tests
 // inject a recorder.
 func New(root string, host Host) *Plugin {
 	if host == nil {

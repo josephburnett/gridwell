@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -64,7 +63,7 @@ func TestListsWeeksThenTodosAndRefreshesOnAWindow(t *testing.T) {
 		done:    []todos.Todo{mk(3, "2026-08-19T10:00:00Z", "done")},
 	}
 	clock := at("2026-08-25T12:00:00Z")
-	p := New(src, nil, Options{Now: func() time.Time { return clock }})
+	p := New(src, Options{Now: func() time.Time { return clock }})
 	ctx := context.Background()
 
 	info, _ := p.Info(ctx, &pluginv1.InfoRequest{})
@@ -120,7 +119,7 @@ func TestListsWeeksThenTodosAndRefreshesOnAWindow(t *testing.T) {
 
 func TestReadContentAndProbe(t *testing.T) {
 	src := &oneShot{pending: []todos.Todo{mk(1, "2026-08-18T10:00:00Z", "pending")}}
-	p := New(src, nil, Options{})
+	p := New(src, Options{})
 	ctx := context.Background()
 	if _, err := p.List(ctx, &pluginv1.ListRequest{Context: todos.RootContext}); err != nil {
 		t.Fatal(err)
@@ -157,15 +156,8 @@ func TestReadContentAndProbe(t *testing.T) {
 	}
 }
 
-func TestNoTokenSurfacesAsAVerdict(t *testing.T) {
-	p := New(nil, errors.New("token_file not configured"), Options{})
-	_, err := p.List(context.Background(), &pluginv1.ListRequest{Context: todos.RootContext})
-	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "token_file") {
-		t.Errorf("err = %v, want FailedPrecondition naming the token", err)
-	}
-	if _, err := p.Info(context.Background(), &pluginv1.InfoRequest{}); status.Code(err) != codes.FailedPrecondition {
-		t.Errorf("Info must refuse the handshake with the reason (the launch fails), got %v", err)
-	}
+func TestUnknownContextIsAnArgumentError(t *testing.T) {
+	p := New(&oneShot{}, Options{})
 	if _, err := p.List(context.Background(), &pluginv1.ListRequest{Context: "bogus"}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("unknown context → %v", err)
 	}
@@ -192,7 +184,7 @@ func (g *gated) Page(_ context.Context, state string, page int) ([]todos.Todo, b
 // the same grid must not each page GitLab.
 func TestConcurrentListsShareOneWalk(t *testing.T) {
 	src := &gated{gate: make(chan struct{})}
-	p := New(src, nil, Options{})
+	p := New(src, Options{})
 	ctx := context.Background()
 	var wg sync.WaitGroup
 	errs := make([]error, 2)

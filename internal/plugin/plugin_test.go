@@ -2,6 +2,7 @@ package plugin_test
 
 import (
 	"context"
+	"fmt"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -185,5 +186,24 @@ func TestLoadAllClosesNativeImpls(t *testing.T) {
 	reg.Close()
 	if !impl.closed {
 		t.Fatal("Registry.Close did not Close the native impl")
+	}
+}
+
+// TestLoadAllFailsOnARefusingFactory: the in-process door's twin of the
+// refused handshake — a Factory (a plugin's FromConfig) that refuses its
+// config stops the launch with the reason, naming the plugin. The bundled
+// binaries hand the loader the SAME FromConfig the subprocess main hands
+// guest.Main, so `pid: abc` cannot come up as the whole process tree
+// through either door.
+func TestLoadAllFailsOnARefusingFactory(t *testing.T) {
+	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{
+		ID: "pr1234a", Name: "procs", Kind: "proc", Config: map[string]string{"pid": "abc", "db_file": filepath.Join(t.TempDir(), "mem.db")},
+	}}}
+	factories := map[string]plugin.Factory{"proc": func(cfg map[string]string) (pluginv1.PluginServer, error) {
+		return nil, fmt.Errorf("pid %q is not a positive process id", cfg["pid"])
+	}}
+	_, err := plugin.LoadAll(cfg, nil, factories)
+	if err == nil || !strings.Contains(err.Error(), `pid "abc"`) || !strings.Contains(err.Error(), "procs") {
+		t.Fatalf("LoadAll = %v, want the factory's reason, naming the plugin", err)
 	}
 }
