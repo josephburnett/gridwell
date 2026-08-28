@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { PARK_COORD } from '../src/main/viewutil';
 
 // Regression guard for mechanism A of issue #33: "palette appears under a live
 // WebContentsView." The fix has two parts in webviews.ts:
@@ -11,7 +12,10 @@ import { test, expect } from './fixtures';
 //
 //   2. New view creation: a fresh entry always started with hidden:false, so
 //      a view placed while the palette was open landed on top of it for one IPC
-//      round-trip before the following setHidden(true) arrived.
+//      round-trip before the following setHidden(true) arrived. The renderer's
+//      verdict for THIS frame now rides PlaceArgs.hidden (the registry keeps no
+//      global "something is parked" state — that ranged over a Go map and could
+//      park a new view at random).
 //
 // Both tests run entirely in the main process via electronApp.evaluate (the only
 // way to exercise a live WebContentsView — it's off the main webContents). They
@@ -19,9 +23,8 @@ import { test, expect } from './fixtures';
 // viewBoundsFor() — PARK_COORD from viewutil.ts — rather than the stored hidden
 // flag, so the "place re-asserts over palette" bug is observable at the seam.
 
-// PARK_COORD from viewutil.ts: far enough off any display that a parked view is
-// not visible. Inlined here since the e2e can't import from main.
-const PARK_COORD = -100000;
+// PARK_COORD is the registry's own park position (viewutil.ts is electron-free,
+// so the spec reads the one owner instead of carrying a copy).
 
 test('place() with new bounds while hidden keeps the view parked (reuse-path fix)', async ({
   electronApp,
@@ -88,7 +91,7 @@ test('place() with new bounds while hidden keeps the view parked (reuse-path fix
   expect(result.boundsAfterUnpark?.y).toBe(result.newBounds.y);
 });
 
-test('new view placed while _globalHidden=true starts parked (new-view-path fix)', async ({
+test('a new view placed with hidden=true starts parked (new-view-path fix)', async ({
   electronApp,
   window,
 }) => {
@@ -98,32 +101,23 @@ test('new view placed while _globalHidden=true starts parked (new-view-path fix)
     const reg = (globalThis as { __gwRegistry?: any }).__gwRegistry;
     if (!reg) throw new Error('registry not exposed (GRIDWELL_E2E not set?)');
 
-    // Use a sentinel pane to drive _globalHidden: place it, park it, then
-    // place a NEW view. The new view should inherit the hidden state and start
-    // parked rather than landing at its visible bounds.
-    const sentinelId = 'e2e-sentinel';
-    const newPaneId = 'e2e-new-while-hidden';
+    const paneId = 'e2e-new-while-hidden';
     const bounds = { x: 100, y: 100, width: 400, height: 300 };
 
-    // Place the sentinel and park it — this sets _globalHidden=true.
-    await reg.place(sentinelId, 1, 'obj-sentinel', args.dataURL, bounds);
-    const dSentinel = Date.now() + 8_000;
-    while (!webContents.getAllWebContents().some((w: any) => w.getURL().includes(args.marker)) && Date.now() < dSentinel) {
+    // Place a brand-new view with the renderer's "overlay is open" verdict
+    // (PlaceArgs.hidden = true). It must start parked, not at its bounds.
+    await reg.place(paneId, 2, 'obj-new-while-hidden', args.dataURL, bounds, 0, '', false, true);
+    const boundsAfterPlace = reg.viewBoundsFor(paneId);
+    const dLoad = Date.now() + 8_000;
+    while (!webContents.getAllWebContents().some((w: any) => w.getURL().includes(args.marker)) && Date.now() < dLoad) {
       await new Promise<void>((res) => setTimeout(res, 50));
     }
-    reg.setHidden(sentinelId, true, false);
 
-    // Now place a brand-new view. With _globalHidden=true it should start parked.
-    await reg.place(newPaneId, 2, 'obj-new-while-hidden', args.dataURL, bounds);
-    const boundsAfterPlace = reg.viewBoundsFor(newPaneId);
+    // The next syncURLViews frame un-parks it: it moves to its visible bounds.
+    reg.setHidden(paneId, false, true);
+    const boundsAfterUnpark = reg.viewBoundsFor(paneId);
 
-    // Restore: un-park the sentinel and the new view, then clean up.
-    reg.setHidden(sentinelId, false, false);
-    reg.setHidden(newPaneId, false, true);
-    const boundsAfterUnpark = reg.viewBoundsFor(newPaneId);
-
-    await reg.remove(sentinelId);
-    await reg.remove(newPaneId);
+    await reg.remove(paneId);
 
     return { boundsAfterPlace, boundsAfterUnpark, bounds };
   }, { dataURL: 'data:text/html,<meta charset=utf8>newviewtest', marker: 'newviewtest' });
@@ -131,7 +125,7 @@ test('new view placed while _globalHidden=true starts parked (new-view-path fix)
   // The new view must start parked, not at its visible bounds.
   expect(
     result.boundsAfterPlace?.x,
-    'a new view placed while _globalHidden=true must start at PARK_COORD',
+    'a new view placed with hidden=true must start at PARK_COORD',
   ).toBe(PARK_COORD);
 
   // After un-parking it moves to its visible bounds.

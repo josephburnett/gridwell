@@ -10,6 +10,7 @@ import { app, BaseWindow, BrowserWindow } from 'electron';
 import { WebviewRegistry } from '../main/webviews';
 import { registerWebviewIpc } from '../main/register';
 import type { NavEvent } from '../main/ipc';
+import { PARK_COORD } from '../main/viewutil';
 
 // The touch-scroll scenario synthesizes TouchEvents inside the hosted page.
 // Chromium only exposes the Touch/TouchEvent constructors when touch events
@@ -68,6 +69,23 @@ app.whenReady().then(async () => {
   if (freeze.jpegBase64.length === 0) fail('freeze snapshot empty');
   if (registry.has('pane1')) fail('pane still registered after remove');
   console.log(`freeze ok: ${freeze.jpegBase64.length} base64 chars, title=${JSON.stringify(freeze.title)}`);
+
+  // ── a view placed while an overlay is open starts parked ────────────────
+  // PlaceArgs.hidden is the renderer's verdict for THIS frame (issue #33
+  // mechanism A): a view placed while the palette is open must land at
+  // PARK_COORD, never on top of the canvas overlay for one round-trip, and
+  // the next setHidden(false) moves it to its real bounds.
+  const hiddenBounds = { x: 10, y: 20, width: 300, height: 200 };
+  await registry.place('pane1h', 'u1/45', 'obj-hidden', DATA_URL, hiddenBounds, 0, '', false, true);
+  const parked = registry.viewBoundsFor('pane1h');
+  if (parked?.x !== PARK_COORD) fail(`place(hidden=true) did not park the view (x=${parked?.x})`);
+  registry.setHidden('pane1h', false, true);
+  const shown = registry.viewBoundsFor('pane1h');
+  if (shown?.x !== hiddenBounds.x || shown?.y !== hiddenBounds.y) {
+    fail(`un-park after a hidden place landed at (${shown?.x},${shown?.y}), want (${hiddenBounds.x},${hiddenBounds.y})`);
+  }
+  await registry.remove('pane1h');
+  console.log('hidden place ok: parked at PARK_COORD, un-parked to its bounds');
 
   // ── a dead view yields an empty freeze, never a throw ──────────────────
   // The crashed-tab ascent: every view-bound read in remove() throws once
