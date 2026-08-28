@@ -310,16 +310,6 @@ export class GridwellDriver {
     await this.dragSwatchToCell(item, cx, cy);
   }
 
-  // dragEntryCreate drags a plugin-declared CREATION entry swatch (#258,
-  // matched by entry id) onto cell (cx, cy) of the focused pane — the drop
-  // mints the plugin's tool tile (params are prompted on first descent).
-  async dragEntryCreate(entryID: string, cx: number, cy: number): Promise<void> {
-    const pal = await this.palette();
-    const item = pal.items.find((i) => !i.isPlugin && i.entry === entryID);
-    if (!item) throw new Error(`no entry swatch ${entryID}; have ${pal.items.map((i) => i.entry)}`);
-    await this.dragSwatchToCell(item, cx, cy);
-  }
-
   // dragPluginLink drags a plugin swatch (matched by kind or label) onto cell
   // (cx, cy) of the focused pane — the drop-a-link gesture, distinct from
   // clickPluginSwatch's descend.
