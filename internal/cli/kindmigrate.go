@@ -17,9 +17,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/node"
+	"github.com/josephburnett/gridwell/internal/pluginmeta"
 )
 
 // migrateRenamedKinds updates retired kind names in server.yaml and the

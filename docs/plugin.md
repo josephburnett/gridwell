@@ -72,7 +72,8 @@ Allowed deps: grpc, protobuf, go-plugin. NOTHING else — pinned by test.
 ### The server module
 
 Today's `internal/{server,node,rpc,plugin(host side: registry, loader,
-mountcache),config,cli,dbformat,doctype,...}` plus `client/` and `web/`.
+mountcache),config,cli,dbformat,pluginmeta,doctype,...}` plus `client/`
+and `web/`.
 It knows how to OPEN the door (spawn a Command, accept an InProcess
 loadout) and never what's behind it.
 
@@ -174,7 +175,8 @@ replace graph is the whole story.
 
 Stages 1–5 are on main (`3b916a5..` through the codify commit): the
 couplings retired, the api module carved (gen + guest + compose +
-idshape + gwerr + rpc + dbformat + pluginmeta + panelayout), every
+idshape + gwerr + rpc + panelayout — dbformat + pluginmeta rode along
+until 2026-08-27, see below), every
 plugin its own module with `gridwell-plugin-<kind>` binaries, the stock
 host (`apps/gridwell`) + bundled example (`apps/gridwell-all`) + mobile
 as leaf composers, and the structure codified: `test/boundary` (arrows +
@@ -188,10 +190,15 @@ Deviations from the letter of the plan, each deliberate:
   identical arrows, a tenth of the churn). `mobile/` stayed at its path
   as its own module rather than moving under `apps/`.
 - Shared neutral homes became NESTED modules in place
-  (`internal/doctype`, `plugins/griddb`) instead of relocating; the api
-  absorbed the contract-shaped ones (including `modernc.org/sqlite` in
-  its budget for `pluginmeta`/`dbformat` — pinned, documented in the
-  budget test).
+  (`internal/doctype`; `plugins/griddb` too, until the v2 cutover
+  deleted it with the legacy fs/proc) instead of relocating; the api
+  absorbed the
+  contract-shaped ones. `pluginmeta`/`dbformat` went with them and
+  carried `modernc.org/sqlite` into the api budget — reversed
+  2026-08-27: nothing outside `internal/` ever imported either, so every
+  third-party plugin inherited sqlite + libc for nothing. Both live in
+  the root module now (`internal/pluginmeta`, `internal/dbformat`) and
+  the api budget is wire-only (pinned by the budget test).
 - The root module still REQUIRES plugin modules for its seam TESTS
   (server tests build real plugins); the arrow lint polices imports of
   non-test packages, which is the promise that matters — a leaf's

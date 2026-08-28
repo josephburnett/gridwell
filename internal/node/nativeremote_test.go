@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/api/pluginmeta"
+	"github.com/josephburnett/gridwell/internal/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/remote"
 )
 

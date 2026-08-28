@@ -1,8 +1,8 @@
 package local
 
 import (
-	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/pluginmeta"
 )
 
 // OpenVerified is the ONE door a localdb binary opens its store through:

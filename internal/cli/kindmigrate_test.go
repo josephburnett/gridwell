@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/pluginmeta"
 )
 
 // TestMigrateRenamedKinds: a pre-rename home (kind localdb/ssh — and, since

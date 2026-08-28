@@ -140,10 +140,11 @@ func TestArrows(t *testing.T) {
 
 // TestAPIDependencyBudget pins the api module's DIRECT dependencies: this
 // graph is inherited by every plugin ever written, so a new entry is a
-// deliberate, reviewed decision — never drift. (modernc.org/sqlite is the
-// one non-wire dep: pluginmeta/dbformat are the persistence contract's
-// mechanical half; the driver itself is only linked by binaries that
-// import it.)
+// deliberate, reviewed decision — never drift. The budget is WIRE ONLY:
+// modernc.org/sqlite left it 2026-08-27 when pluginmeta/dbformat (host
+// persistence, imported by nothing outside internal/) moved to the root
+// module — every third-party plugin had been inheriting sqlite + libc
+// for code it never called.
 func TestAPIDependencyBudget(t *testing.T) {
 	allowed := map[string]bool{
 		"connectrpc.com/connect":         true,
@@ -151,7 +152,6 @@ func TestAPIDependencyBudget(t *testing.T) {
 		"github.com/hashicorp/go-plugin": true,
 		"google.golang.org/grpc":         true,
 		"google.golang.org/protobuf":     true,
-		"modernc.org/sqlite":             true,
 	}
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "api", "go.mod"))
 	if err != nil {

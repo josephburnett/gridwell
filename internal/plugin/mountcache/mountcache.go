@@ -41,8 +41,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/josephburnett/gridwell/api/dbformat"
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/dbformat"
 	_ "modernc.org/sqlite"
 )
 

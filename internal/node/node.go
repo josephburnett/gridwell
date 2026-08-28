@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/api/idshape"
-	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/server"
 )

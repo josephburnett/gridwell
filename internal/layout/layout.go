@@ -23,7 +23,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/josephburnett/gridwell/api/dbformat"
+	"github.com/josephburnett/gridwell/internal/dbformat"
 	_ "modernc.org/sqlite"
 )
 
@@ -31,7 +31,7 @@ import (
 // fs/proc reconcilers used (their autoGridWidth).
 const DefaultGridWidth = 8
 
-// On-disk format identity (api/dbformat). The memory DB is
+// On-disk format identity (internal/dbformat). The memory DB is
 // durable-but-forgettable (tenet 5): losing it dangles links and resets
 // arrangement, but it still carries the additive-only promise — it is
 // never deleted to absorb a schema change.

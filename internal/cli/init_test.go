@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/pluginmeta"
 )
 
 // TestRunInitCreatesPlugin verifies the one coordinated step: a DB dir + DB with

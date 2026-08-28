@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/josephburnett/gridwell/api/dbformat"
+	"github.com/josephburnett/gridwell/internal/dbformat"
 )
 
 // applicationID marks a database file as a Gridwell DB. It is written into
