@@ -1,11 +1,12 @@
 import { test as base, Page } from '@playwright/test';
 import { spawn, ChildProcess } from 'node:child_process';
-import * as net from 'node:net';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome, PluginSpec } from '../e2e/fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { setOracleAuth } from '../e2e/oracle';
+import { parseServingLine } from '../src/main/lines';
+import { freePort } from '../src/main/freeport';
 
 // Browser-mode e2e fixtures: the SAME wasm client and Go server as the
 // Electron suite, but loaded in plain Chromium with NO Electron shell — the
@@ -25,16 +26,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 // hides the process boundary.
 export const serveBin = () => path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
 
-export function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const port = (srv.address() as net.AddressInfo).port;
-      srv.close(() => resolve(port));
-    });
-  });
-}
+// freePort is the sidecar's own (electron-free) picker — one copy.
+export { freePort };
 
 type Fixtures = {
   serve: Served;
@@ -72,10 +65,13 @@ export async function spawnServe(home: string, port: number, extraArgs: string[]
   child.stderr!.on('data', (d) => (output += d));
   const deadline = Date.now() + 15_000;
   for (;;) {
-    const m = /serving on \S+ \(.*\bauth=([0-9a-f]{64})\b/.exec(output);
-    if (m) {
-      setOracleAuth(origin, m[1]); // every served node is oracle-reachable
-      return { origin, home, token: m[1], child };
+    // The banner is parsed by the sidecar's own reader (lines.ts) — the
+    // one boot contract with `gridwell serve`, so a banner change that
+    // breaks the app breaks this suite the same way, not a private regex.
+    const served = output.split('\n').map(parseServingLine).find((a) => a?.auth);
+    if (served?.auth) {
+      setOracleAuth(origin, served.auth); // every served node is oracle-reachable
+      return { origin, home, token: served.auth, child };
     }
     if (child.exitCode !== null || Date.now() > deadline) {
       child.kill('SIGKILL');
