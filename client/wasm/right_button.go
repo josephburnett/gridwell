@@ -483,13 +483,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	}
 
 	// DropClone.
-	targetX := t.originX + float64(dropX)*t.cellSize
-	targetY := t.originY + float64(dropY)*t.cellSize
-	if a.ghost != nil {
-		a.ghost.paneID = t.pane.ID
-		a.ghost.targetCellSize = t.cellSize
-	}
-	a.startSnap(targetX, targetY, snapMs)
+	a.landGhost(t.pane.ID, t.cellSize, t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 	tileID := d.tileID
