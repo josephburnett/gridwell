@@ -84,10 +84,12 @@ plugins/fs/
   provider/ fsfile/ ...      the implementation
   cmd/gridwell-plugin-fs/  main: guest.Serve(provider.New(...))
 ```
-`plugins/gitlab` (2026-08-25) is the first provider written AGAINST the
+`plugins/gitlab` (2026-08-25) is the first plugin written AGAINST the
 v2 door rather than ported to it: a stateless projection of a GitLab
-account's to-do list — root context = weeks, week context = the todos
-created that week as page tiles serving their own HTML; completion is
+account's to-do list — root context = weeks (a calendar: a row per
+month), week context = the todos created that week as MARKDOWN text
+tiles (subject, who from, snippet, and the link to the target issue or
+merge request — a click opens an ephemeral visit); completion is
 derived from absence in the pending set, listings are non-authoritative
 and Probe never says GONE, so the node's read-through cache keeps every
 todo the user has seen. Config:

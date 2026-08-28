@@ -147,50 +147,19 @@ func (p *Plugin) List(ctx context.Context, req *pluginv1.ListRequest) (*pluginv1
 	}
 }
 
-// pageFor answers a key's page bytes and HTTP status.
-func (p *Plugin) pageFor(key string) (data []byte, code int64) {
-	id, ok := todos.ParseKey(key)
-	if !ok {
-		return nil, 404
-	}
-	t, ok := p.mem.Get(id)
-	if !ok {
-		return todos.GonePage(key), 404
-	}
-	return todos.Page(&t), 200
-}
-
-// ReadContent answers the page source as text/html (what fs answers
-// for an .html file): a page tile's document body IS its page.
+// ReadContent answers the todo's markdown (Markdown): the text tile's
+// face and rendered document, whose target link opens an ephemeral
+// visit. An unknown key reads as a one-line notice.
 func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
-	data, code := p.pageFor(req.Key)
-	if code != 200 {
-		return stream.Send(&pluginv1.ContentChunk{})
+	id, ok := todos.ParseKey(req.Key)
+	if !ok {
+		return stream.Send(&pluginv1.ContentChunk{}) // a week key: no body
 	}
-	return stream.Send(&pluginv1.ContentChunk{Data: data, MediaType: "text/html; charset=utf-8"})
-}
-
-func (p *Plugin) ServeContent(req *pluginv1.ServeContentRequest, stream pluginv1.Plugin_ServeContentServer) error {
-	if req.Subpath != "" {
-		return stream.Send(&pluginv1.ServeContentChunk{Status: 404, MediaType: "text/plain", Data: []byte("not found")})
+	t, known := p.mem.Get(id)
+	if !known {
+		return stream.Send(&pluginv1.ContentChunk{Data: todos.GoneMarkdown(req.Key), MediaType: "text/markdown"})
 	}
-	data, code := p.pageFor(req.Key)
-	if data == nil {
-		data = []byte("not found")
-		return stream.Send(&pluginv1.ServeContentChunk{Status: code, MediaType: "text/plain", Data: data})
-	}
-	return stream.Send(&pluginv1.ServeContentChunk{Status: code, MediaType: "text/html; charset=utf-8", Data: data})
-}
-
-// GetPreview is the tile face: a rendered card for a remembered todo,
-// nothing for anything else (the client keeps showing the label).
-func (p *Plugin) GetPreview(_ context.Context, req *pluginv1.GetPreviewRequest) (*pluginv1.GetPreviewResponse, error) {
-	if id, ok := todos.ParseKey(req.Key); ok {
-		if t, known := p.mem.Get(id); known {
-			return &pluginv1.GetPreviewResponse{Jpeg: todos.Preview(&t)}, nil
-		}
-	}
-	return &pluginv1.GetPreviewResponse{}, nil
+	return stream.Send(&pluginv1.ContentChunk{Data: todos.Markdown(&t), MediaType: "text/markdown"})
 }
 
 // Probe never says GONE: a remembered todo is PRESENT; one this process

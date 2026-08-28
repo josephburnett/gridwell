@@ -107,11 +107,16 @@ func (t *Todo) Action() string {
 	return strings.ReplaceAll(t.ActionName, "_", " ")
 }
 
-// Label is the tile face: a done mark, the short ref, and the title.
+// Label is the tile's banner: a done mark, who it is from, the short
+// ref, and the title.
 func (t *Todo) Label() string {
 	var b strings.Builder
 	if t.Done() {
 		b.WriteString("✓ ")
+	}
+	if name := strings.TrimSpace(t.Author.Name); name != "" {
+		b.WriteString(name)
+		b.WriteString(": ")
 	}
 	if r := t.Ref(); r != "" {
 		b.WriteString(r)
@@ -119,19 +124,6 @@ func (t *Todo) Label() string {
 	}
 	b.WriteString(t.Title())
 	return b.String()
-}
-
-// PreviewStamp is the face's generation: the client keys its thumbnail
-// cache by it, so a state flip (done) redraws the card. GitLab bumps
-// updated_at on the flip; a record without one falls back to the state.
-func (t *Todo) PreviewStamp() int64 {
-	if !t.UpdatedAt.IsZero() {
-		return t.UpdatedAt.Unix()
-	}
-	if t.Done() {
-		return 2
-	}
-	return 1
 }
 
 // Key is the todo's provider key — stable forever, GitLab's own id.

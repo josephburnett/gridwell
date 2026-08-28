@@ -47,13 +47,14 @@ func (f *oneShot) Page(_ context.Context, state string, page int) ([]todos.Todo,
 	return f.pending, false, nil
 }
 
-type sink struct {
-	pluginv1.Plugin_ServeContentServer
-	chunks []*pluginv1.ServeContentChunk
+// reader collects a ReadContent stream.
+type reader struct {
+	pluginv1.Plugin_ReadContentServer
+	chunks []*pluginv1.ContentChunk
 }
 
-func (s *sink) Send(c *pluginv1.ServeContentChunk) error { s.chunks = append(s.chunks, c); return nil }
-func (s *sink) Context() context.Context                 { return context.Background() }
+func (r *reader) Send(c *pluginv1.ContentChunk) error { r.chunks = append(r.chunks, c); return nil }
+func (r *reader) Context() context.Context            { return context.Background() }
 
 func TestListsWeeksThenTodosAndRefreshesOnAWindow(t *testing.T) {
 	src := &oneShot{
@@ -87,7 +88,7 @@ func TestListsWeeksThenTodosAndRefreshesOnAWindow(t *testing.T) {
 	if src.calls != 2 {
 		t.Errorf("a fresh week re-walked GitLab (%d calls)", src.calls)
 	}
-	if len(wk.Entries) != 2 || !wk.Entries[0].ServesPage || wk.Entries[0].Kind != "text" || wk.Entries[0].Key != "todo:1" {
+	if len(wk.Entries) != 2 || wk.Entries[0].ServesPage || wk.Entries[0].Kind != "text" || wk.Entries[0].Key != "todo:1" {
 		t.Fatalf("week = %v", wk.Entries)
 	}
 	if h := wk.Entries[0].PlacementHint; h == nil || h.X != todos.TodoTileW || h.W != todos.TodoTileW {
@@ -115,29 +116,29 @@ func TestListsWeeksThenTodosAndRefreshesOnAWindow(t *testing.T) {
 	}
 }
 
-func TestServeContentAndProbe(t *testing.T) {
+func TestReadContentAndProbe(t *testing.T) {
 	src := &oneShot{pending: []todos.Todo{mk(1, "2026-08-18T10:00:00Z", "pending")}}
 	p := New(src, nil, Options{})
 	ctx := context.Background()
 	if _, err := p.List(ctx, &pluginv1.ListRequest{Context: todos.RootContext}); err != nil {
 		t.Fatal(err)
 	}
-	s := &sink{}
-	if err := p.ServeContent(&pluginv1.ServeContentRequest{Key: "todo:1"}, s); err != nil {
+	r := &reader{}
+	if err := p.ReadContent(&pluginv1.ReadContentRequest{Key: "todo:1"}, r); err != nil {
 		t.Fatal(err)
 	}
-	if c := s.chunks[0]; c.Status != 200 || !strings.HasPrefix(c.MediaType, "text/html") || !strings.Contains(string(c.Data), "<strong>review</strong>") || !strings.Contains(string(c.Data), "mr x") {
-		t.Errorf("page = %d %s %s", c.Status, c.MediaType, c.Data)
+	if c := r.chunks[0]; c.MediaType != "text/markdown" || !strings.Contains(string(c.Data), "> please **review**") || !strings.Contains(string(c.Data), "# !1 mr x") || !strings.Contains(string(c.Data), "[Open !1 in GitLab](https://gitlab.example/g/p/-/merge_requests/1)") {
+		t.Errorf("content = %s %s", c.MediaType, c.Data)
 	}
-	s = &sink{}
-	_ = p.ServeContent(&pluginv1.ServeContentRequest{Key: "todo:99"}, s)
-	if c := s.chunks[0]; c.Status != 404 || !strings.Contains(string(c.Data), "todo:99") {
-		t.Errorf("unknown todo = %d %s", c.Status, c.Data)
+	r = &reader{}
+	_ = p.ReadContent(&pluginv1.ReadContentRequest{Key: "todo:99"}, r)
+	if !strings.Contains(string(r.chunks[0].Data), "todo:99") {
+		t.Errorf("unknown todo = %s", r.chunks[0].Data)
 	}
-	s = &sink{}
-	_ = p.ServeContent(&pluginv1.ServeContentRequest{Key: "todo:1", Subpath: "x"}, s)
-	if s.chunks[0].Status != 404 {
-		t.Error("a subpath must 404")
+	r = &reader{}
+	_ = p.ReadContent(&pluginv1.ReadContentRequest{Key: "week:2026-08-17"}, r)
+	if len(r.chunks[0].Data) != 0 {
+		t.Error("a week has no body")
 	}
 	probe := func(key string) pluginv1.ProbeResponse_Presence {
 		r, _ := p.Probe(ctx, &pluginv1.ProbeRequest{Key: key})

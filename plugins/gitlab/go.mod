@@ -4,8 +4,6 @@ go 1.26.5
 
 require (
 	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
-	github.com/yuin/goldmark v1.8.5
-	golang.org/x/image v0.45.0
 	google.golang.org/grpc v1.83.0
 )
 

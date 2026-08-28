@@ -1,10 +1,8 @@
 package todos
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"image/jpeg"
 	"strings"
 	"testing"
 	"time"
@@ -284,50 +282,41 @@ func TestWeeksAndEntries(t *testing.T) {
 	if h := wk[2].PlacementHint; h.X != 6*TodoTileW || h.Y != 0 {
 		t.Errorf("Sunday hint = %+v", h)
 	}
-	if !wk[0].ServesPage || wk[0].Kind != "text" || wk[1].Label != "✓ #2 t2" || wk[1].StatusDetail != StateDone {
+	if wk[0].ServesPage || wk[0].Kind != "text" || wk[1].Label != "✓ #2 t2" || wk[1].StatusDetail != StateDone {
 		t.Errorf("entry facts = %v", wk[1])
 	}
 }
 
-func TestPageEscapesAndRenders(t *testing.T) {
-	td := mk(9, "2026-08-18T10:00:00Z", StateDone)
-	td.Target.Title = "<script>alert(1)</script> title"
-	td.Body = "**bold** <img src=x onerror=alert(1)>"
-	td.TargetURL = "https://gitlab.example/x/-/issues/9"
-	got := string(Page(&td))
-	for _, want := range []string{"&lt;script&gt;", "<strong>bold</strong>", `class="badge done"`, `href="https://gitlab.example/x/-/issues/9"`} {
+func TestMarkdownCarriesTheEssentials(t *testing.T) {
+	td := mk(9, "2026-08-18T10:00:00Z", StatePending)
+	td.Target.Title = "Fix the widget"
+	td.ActionName = "review_requested"
+	td.Author.Name, td.Author.Username = "Ada Lovelace", "ada"
+	td.Project.PathWithNamespace = "g/p"
+	td.Body = "Could you   look at\nthis one?   " + strings.Repeat("x", 400)
+	td.TargetURL = "https://gitlab.example/g/p/-/issues/9"
+	got := string(Markdown(&td))
+	for _, want := range []string{
+		"# #9 Fix the widget",
+		"review requested — from Ada Lovelace (@ada) · g/p · 2026-08-18",
+		"> Could you look at this one? xxx",
+		"[Open #9 in GitLab](https://gitlab.example/g/p/-/issues/9)",
+	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("page lacks %q:\n%s", want, got)
+			t.Errorf("markdown lacks %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "<script>") || strings.Contains(got, "onerror") {
-		t.Errorf("page carries raw third-party HTML:\n%s", got)
+	if !strings.Contains(got, "…") || len([]rune(td.Snippet())) > SnippetRunes+1 {
+		t.Errorf("the snippet must be bounded: %d runes", len([]rune(td.Snippet())))
 	}
-	if !strings.Contains(string(GonePage("todo:<1>")), "todo:&lt;1&gt;") {
-		t.Error("gone page must escape the key")
-	}
-}
-
-func TestPreviewIsACardThatChangesWithState(t *testing.T) {
-	td := mk(9, "2026-08-18T10:00:00Z", StatePending)
-	td.Target.Title = "A merge request title long enough to wrap across the card at least twice over"
-	open := Preview(&td)
-	img, err := jpeg.Decode(bytes.NewReader(open))
-	if err != nil || img.Bounds().Dx() != previewW || img.Bounds().Dy() != previewH {
-		t.Fatalf("preview = %d bytes, %v", len(open), err)
+	if td.Label() != "Ada Lovelace: #9 Fix the widget" {
+		t.Errorf("label = %q", td.Label())
 	}
 	td.State = StateDone
-	if bytes.Equal(open, Preview(&td)) {
-		t.Error("a done todo must draw a different face")
+	if got := string(Markdown(&td)); !strings.HasPrefix(got, "# ✓ #9") || !strings.Contains(got, "· done") {
+		t.Errorf("done must show in the heading and the line:\n%s", got)
 	}
-	if td.PreviewStamp() != 2 || (&Todo{State: StatePending}).PreviewStamp() != 1 {
-		t.Error("state-only stamps")
-	}
-	td.UpdatedAt = at("2026-08-19T00:00:00Z")
-	if td.PreviewStamp() != td.UpdatedAt.Unix() {
-		t.Error("updated_at is the stamp when present")
-	}
-	if got := wrap("one two three four", 9, 2); len(got) != 2 || got[0] != "one two" || got[1] != "three…" {
-		t.Errorf("wrap = %q", got)
+	if !strings.Contains(string(GoneMarkdown("todo:<1>")), "todo:<1>") {
+		t.Error("the gone notice names the key")
 	}
 }

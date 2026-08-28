@@ -32,7 +32,8 @@ func RootEntries(weeks []WeekSummary) []*pluginv1.Entry {
 const TodoTileW = 2
 
 // WeekEntries derives one week's grid: every todo created that week as
-// a page tile (its content is the served HTML), hinted like a calendar
+// a markdown text tile (Markdown — its face and its rendered document;
+// the target link opens an ephemeral visit), hinted like a calendar
 // — weekday columns Monday..Sunday, rows in creation order within the
 // day. The hint seeds first placement only; the user's arrangement
 // wins from then on (the layout engine's rule).
@@ -51,9 +52,7 @@ func WeekEntries(start time.Time, todos []Todo) []*pluginv1.Entry {
 			Key:          t.Key(),
 			Kind:         "text",
 			Label:        t.Label(),
-			ServesPage:   true,
 			StatusDetail: t.State,
-			PreviewStamp: t.PreviewStamp(),
 			PlacementHint: &pluginv1.PlacementHint{
 				X: int64(day) * TodoTileW, Y: row, W: TodoTileW, H: 1,
 			},

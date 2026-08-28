@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,8 +23,7 @@ import (
 // the newest pending. Pins: the outset walk is one pass per state plus
 // the pages it takes; every week gets its own counts; the root is a
 // calendar (a row per month, weeks left to right); a week descent is
-// answered from memory; and each todo tile has a face through the
-// adapter's GetTilePreview.
+// answered from memory; and each todo tile reads as markdown.
 func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	base := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	type todo struct {
@@ -131,12 +131,11 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 		t.Fatalf("week = %d tiles after %d calls", len(wk.Tiles), calls)
 	}
 	for _, tl := range wk.Tiles {
-		if !tl.ServesPage || tl.PreviewBlobId == 0 {
-			t.Errorf("tile %s: serves_page=%v stamp=%d", tl.AltText, tl.ServesPage, tl.PreviewBlobId)
+		if tl.Kind != "text" || tl.ServesPage {
+			t.Errorf("tile %s: kind=%s serves_page=%v, want a markdown text tile", tl.AltText, tl.Kind, tl.ServesPage)
 		}
 	}
-	pv, err := client.GetTilePreview(ctx, &gridwellv1.GetTilePreviewRequest{TileId: wk.Tiles[0].Id})
-	if err != nil || len(pv.Jpeg) < 1000 {
-		t.Fatalf("preview = %d bytes, %v", len(pv.GetJpeg()), err)
+	if body := readContent(t, client, wk.Tiles[0].Id); !strings.Contains(body, "[Open !") {
+		t.Fatalf("content = %q", body)
 	}
 }

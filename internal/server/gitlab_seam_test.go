@@ -2,9 +2,9 @@ package server
 
 import (
 	"context"
-	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +20,7 @@ import (
 )
 
 // The gitlab todos provider through the WHOLE shipped stack — fake
-// GitLab → provider → adapter → server → the /content/ door — pinning
+// GitLab → plugin → adapter → server → ReadContent — pinning
 // the three promises the design makes at the seam where they are kept:
 // the provider's hints become the first arrangement and the user's
 // moves win from then on; a todo that leaves GitLab flips to done
@@ -46,6 +46,8 @@ func gitlabTodo(id int64, created string) todos.Todo {
 	t.ID, t.State = id, todos.StatePending
 	t.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	t.TargetType, t.Target.IID, t.Target.Title, t.Body = "MergeRequest", id, "change "+strings.Repeat("x", int(id)), "please **review**"
+	t.ActionName, t.Author.Name = "review_requested", "Ada"
+	t.TargetURL = "https://gitlab.example/g/p/-/merge_requests/" + strconv.FormatInt(id, 10)
 	return t
 }
 
@@ -118,21 +120,19 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	one := tileByLabelPrefix(wk.Tiles, "!1 ")
-	three := tileByLabelPrefix(wk.Tiles, "✓ !3 ")
+	one := tileByLabelPrefix(wk.Tiles, "Ada: !1 ")
+	three := tileByLabelPrefix(wk.Tiles, "✓ Ada: !3 ")
 	if len(wk.Tiles) != 2 || one == nil || three == nil {
 		t.Fatalf("week grid = %v", wk.Tiles)
 	}
-	if !one.ServesPage || one.Kind != "text" || one.X != 1*todos.TodoTileW || one.Y != 0 || one.W != todos.TodoTileW || three.X != 2*todos.TodoTileW {
+	if one.ServesPage || one.Kind != "text" || one.X != 1*todos.TodoTileW || one.Y != 0 || one.W != todos.TodoTileW || three.X != 2*todos.TodoTileW {
 		t.Errorf("hints not honored: one=%+v three=%+v", one, three)
 	}
 
-	// The door serves the provider's HTML.
-	token := ContentToken("pw")
-	pageURL := hs.URL + "/content/" + token + "/ug1/" + one.Id + "/"
-	res, body := get(t, noRedirect(hs), pageURL, "")
-	if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") || !strings.Contains(body, "<strong>review</strong>") {
-		t.Fatalf("page = %d %q %q", res.StatusCode, res.Header.Get("Content-Type"), body)
+	// The tile's content is markdown with the target link — what the
+	// rendered face shows, and what a click opens as an ephemeral visit.
+	if body := readContent(t, client, one.Id); !strings.Contains(body, "> please **review**") || !strings.Contains(body, "[Open !1 in GitLab](") {
+		t.Fatalf("content = %q", body)
 	}
 
 	// The user moves todo 1.
@@ -148,37 +148,52 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	flipped := tileByLabelPrefix(wk.Tiles, "✓ !1 ")
+	flipped := tileByLabelPrefix(wk.Tiles, "✓ Ada: !1 ")
 	if len(wk.Tiles) != 2 || flipped == nil || flipped.Id != one.Id || flipped.X != 5 || flipped.Y != 5 || flipped.W != 3 {
 		t.Fatalf("after deletion in GitLab: %v", wk.Tiles)
 	}
 
-	// Provider restart: a fresh process has never seen todo 1, and
-	// GitLab no longer lists it. The NODE remembers: same tile, same id,
-	// same placement, last-seen label; its page says it is not in memory.
+	// Plugin restart: a fresh process has never seen todo 1, and GitLab
+	// no longer lists it. The NODE remembers: same tile, same id, same
+	// placement, last-seen label; its content says it is not in memory.
 	closeStack()
 	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabplugin.New(gl, nil, gitlabplugin.Options{Now: now}))
 	t.Cleanup(closeStack2)
 	reg2 := plugin.NewRegistry()
 	reg2.Register("ug1", "gitlab", client2, nil)
-	hs2 := httptest.NewServer(New(reg2, Config{NodeID: "node1", Password: "pw"}).WebHandler())
-	t.Cleanup(hs2.Close)
 	wk, err = client2.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept := tileByLabelPrefix(wk.Tiles, "✓ !1 ")
+	kept := tileByLabelPrefix(wk.Tiles, "✓ Ada: !1 ")
 	if len(wk.Tiles) != 2 || kept == nil || kept.Id != one.Id || kept.X != 5 || kept.Y != 5 {
 		t.Fatalf("restart lost the todo: %v", wk.Tiles)
 	}
-	res, body = get(t, noRedirect(hs2), hs2.URL+"/content/"+token+"/ug1/"+one.Id+"/", "")
-	if res.StatusCode != http.StatusNotFound || !strings.Contains(body, "todo:1") {
-		t.Errorf("gone page = %d %q", res.StatusCode, body)
+	if body := readContent(t, client2, one.Id); !strings.Contains(body, "todo:1") {
+		t.Errorf("gone content = %q", body)
 	}
-	// And a live todo still serves after the restart.
-	three = tileByLabelPrefix(wk.Tiles, "✓ !3 ")
-	res, _ = get(t, noRedirect(hs2), hs2.URL+"/content/"+token+"/ug1/"+three.Id+"/", "")
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("live page after restart = %d", res.StatusCode)
+	// And a live todo still reads after the restart.
+	three = tileByLabelPrefix(wk.Tiles, "✓ Ada: !3 ")
+	if body := readContent(t, client2, three.Id); !strings.Contains(body, "[Open !3 in GitLab](") {
+		t.Errorf("live content after restart = %q", body)
 	}
+
+}
+
+// readContent drains a tile's ReadContent stream through the adapter client.
+func readContent(t *testing.T, client gridwellv1.GridwellClient, tileID string) string {
+	t.Helper()
+	rs, err := client.ReadContent(context.Background(), &gridwellv1.ReadContentRequest{TileId: tileID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	for {
+		c, err := rs.Recv()
+		if err != nil {
+			break
+		}
+		out = append(out, c.Data...)
+	}
+	return string(out)
 }
