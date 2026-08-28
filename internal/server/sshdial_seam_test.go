@@ -3,13 +3,14 @@ package server_test
 import (
 	"context"
 	"fmt"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/josephburnett/gridwell/internal/plugin"
 
 	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"

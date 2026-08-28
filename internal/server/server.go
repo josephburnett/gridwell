@@ -158,8 +158,6 @@ func (s *Server) clientForID(id string) (client pb.GridwellClient, local string,
 	return c, local, true
 }
 
-func (s *Server) Handler() http.Handler { return s.mux }
-
 // pluginInfo returns uuid's Info handshake, serving repeat calls from the
 // per-uuid cache. The live call is bounded by pluginInfoTimeout so a hung
 // plugin degrades (error, not stall); only a successful handshake is cached.

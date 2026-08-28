@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -85,8 +84,7 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	reg.SetLabel(procPluginUUID, "processes")
 
 	srv := mustNew(t, reg, Config{NodeID: "tnode"})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	return cl, root, fsRoot
 }

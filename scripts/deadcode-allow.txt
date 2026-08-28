@@ -2,14 +2,22 @@
 # line, each with a reason. Keep this list SHORT — an entry here is a claim
 # that the symbol is part of a shipped surface the deadcode roots can't see.
 
-# The parity oracle's single-node half: the CLI ships CrawlPair (two nodes,
-# one union frontier), while the seam tests (internal/parity,
-# internal/pluginhost) crawl one endpoint to prove determinism and the
-# MaxGrids abort. One crawl engine serves both; the sugar stays.
-internal/parity/parity.go Crawl
-
 # The mobile bind's login door: mobile.Start (a gomobile LIBRARY leaf —
 # no main for the deadcode roots to walk) returns TokenLoginURL so the
 # phone's webview authenticates against the always-gated web door
 # (2026-08-26). The server half (handleLogin's ?token= arm) is live.
 internal/server/auth.go TokenLoginURL
+
+# Methods a LIBRARY calls through its own interface — the method pass
+# sees only this repo's call sites. hashicorp/go-plugin dispenses through
+# GRPCPlugin.{GRPCServer,GRPCClient}; goldmark installs a renderer through
+# RegisterFuncs; grpc's ClientStream contract includes Trailer.
+api/compose/plugin.go pluginGRPCPlugin.GRPCServer
+api/compose/plugin.go pluginGRPCPlugin.GRPCClient
+client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
+internal/plugin/mountcache/streams.go noopClientStream.Trailer
+
+# The fs plugin's dark-source seam: internal/pluginhost's parity test
+# injects a failing ReadDir (EACCES cannot be staged without root). A
+# cross-package test hook, so export_test.go cannot carry it.
+plugins/fs/plugin/plugin.go Plugin.SetReadDir

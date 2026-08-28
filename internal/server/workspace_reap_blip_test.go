@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
@@ -71,8 +70,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register(uuid, "home", bc, nil)
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	root := uuid + "/" + bare
 

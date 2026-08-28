@@ -305,8 +305,7 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	reg.Register("u-broken", "fs", client, nil)
 	reg.SetLabel("u-broken", "Broken")
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	plugins, err := cl.ListPlugins(context.Background())
@@ -396,8 +395,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	localReg.Register("sshm", "remote", mountClient, nil)
 	localReg.SetTransit("sshm", true) // the declared transit (loader reads it from Info in production)
 	localSrv := mustNew(t, localReg, Config{NodeID: "lnode"})
-	localHTTP := httptest.NewServer(localSrv.Handler())
-	t.Cleanup(localHTTP.Close)
+	localHTTP := serveWeb(t, localSrv)
 	localCl := rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
 
 	chained, err := localCl.GetGrid(ctx, "sshm/rp1/"+rootBare)

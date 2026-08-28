@@ -126,8 +126,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	localReg.Register("sshc", "remote", sshClient, nil)
 	localReg.SetTransit("sshc", true) // the declaration the loader reads from Info in production
 	localSrv := servertest.New(t, localReg, server.Config{NodeID: "lnodex"})
-	localHTTP := httptest.NewServer(localSrv.Handler())
-	t.Cleanup(localHTTP.Close)
+	localHTTP := servertest.Serve(t, localSrv)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
 	// The remote's WEB door is a second listener (2026-08-26: the browser
 	// surface no longer shares the federation handler).

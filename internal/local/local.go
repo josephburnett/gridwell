@@ -93,10 +93,6 @@ func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// Store returns the underlying store (used by the server to wire shell
-// session cleanup and orphan detection at startup).
-func (p *Plugin) Store() *store.Store { return p.st }
-
 // Close closes the underlying store.
 func (p *Plugin) Close() error { return p.st.Close() }
 

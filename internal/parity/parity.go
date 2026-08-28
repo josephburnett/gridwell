@@ -155,16 +155,6 @@ func errCode(err error) string {
 	return "error"
 }
 
-// Crawl walks one node into a Snapshot. See CrawlPair for the two-node
-// form the migration gate uses.
-func Crawl(ctx context.Context, cl *rpc.Client, o Options) (*Snapshot, error) {
-	snaps, err := crawl(ctx, []*rpc.Client{cl}, o)
-	if err != nil {
-		return nil, err
-	}
-	return snaps[0], nil
-}
-
 // CrawlPair walks two nodes that claim to serve the same logical data.
 // The BFS frontier is the UNION of both sides' reachable grids, and each
 // grid is fetched from both sides back to back, minimizing the window in

@@ -330,17 +330,6 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// SetClock overrides the time source. Used by tests.
-func (s *Store) SetClock(now func() time.Time) {
-	s.now = now
-}
-
-// SetIDGenerator overrides UUID generation. Used by tests for deterministic
-// object_ids.
-func (s *Store) SetIDGenerator(f func() string) {
-	s.newID = f
-}
-
 // withTx runs fn inside a transaction.
 func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)

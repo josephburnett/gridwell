@@ -33,8 +33,7 @@ func beaconTestServer(t *testing.T) (cl *rpc.Client, hs *httptest.Server, root s
 	t.Cleanup(func() { _ = st.Close() })
 	_, root = registerPrimaryLocaldb(t, reg, st)
 	srv := mustNew(t, reg, Config{})
-	hs = httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs = serveWeb(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), hs, root
 }
 

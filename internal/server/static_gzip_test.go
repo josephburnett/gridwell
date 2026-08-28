@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"fmt"
+
 	"github.com/josephburnett/gridwell/web"
 )
 
@@ -48,8 +49,7 @@ func gzipStaticServer(t *testing.T) (hs *httptest.Server, dir string, raw []byte
 	}
 
 	srv := mustNew(t, nil, Config{StaticFS: os.DirFS(dir)})
-	hs = httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs = serveWeb(t, srv)
 	return hs, dir, raw
 }
 
@@ -129,8 +129,7 @@ func TestStaticGzipSidecar(t *testing.T) {
 // the "copy the binaries to another machine" contract.
 func TestEmbeddedWebClientServes(t *testing.T) {
 	srv := mustNew(t, nil, Config{StaticFS: web.FS})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 
 	res := getEncoded(t, hs.URL+"/", "")
 	body := new(bytes.Buffer)

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
@@ -57,8 +56,7 @@ func nodeGridServerAt(t *testing.T, statePath string) (cl *rpc.Client, nodeRoot,
 	reg.SetLabel(uuidB, "work")
 
 	srv := mustNew(t, reg, Config{NodeID: "node1", NodeStatePath: statePath})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), "node1/0", uuidA, rootA
 }
 
@@ -205,7 +203,7 @@ func TestNodeGridViewportSurvivesRestart(t *testing.T) {
 		uuidA, _ := registerPrimaryLocaldb(t, reg, st)
 		reg.SetLabel(uuidA, "personal")
 		srv := mustNew(t, reg, Config{NodeID: "node1", NodeStatePath: statePath})
-		hs := httptest.NewServer(srv.Handler())
+		hs := serveWeb(t, srv)
 		cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 		return cl, func() { hs.Close(); _ = st.Close() }
 	}

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -56,8 +55,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	secondRoot := secondUUID + "/" + secondBareRoot
 
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	// Mount the second DB: an exit well in the primary root whose child is the

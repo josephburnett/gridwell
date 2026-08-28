@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -129,8 +128,7 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	rootB = uuidB + "/" + bareRootB
 
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), dark, uuidA, rootA, uuidB, rootB
 }
 

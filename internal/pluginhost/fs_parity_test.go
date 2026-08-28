@@ -9,7 +9,6 @@ package pluginhost_test
 
 import (
 	"context"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -79,8 +78,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
 	srv := servertest.New(t, reg, server.Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := servertest.Serve(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), prov
 }
 

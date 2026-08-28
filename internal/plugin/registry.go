@@ -117,17 +117,6 @@ func (r *Registry) Get(id string) (gridwellv1.GridwellClient, bool) {
 	return c, ok
 }
 
-// IDs returns all registered plugin UUIDs in unspecified order.
-func (r *Registry) IDs() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	ids := make([]string, 0, len(r.clients))
-	for id := range r.clients {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
 // Close terminates all subprocess plugins and clears the registry.
 func (r *Registry) Close() {
 	r.mu.Lock()

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -64,8 +63,7 @@ func twoPluginServer(t *testing.T) (cl *rpc.Client, uuidA, rootA, uuidB, rootB s
 	rootB = uuidB + "/" + bareRootB
 
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), uuidA, rootA, uuidB, rootB
 }
 
@@ -487,8 +485,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	reg.Register(fsUUID, "fs", fsClient, nil)
 
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	// GetGrid materializes the directory's tiles (the user is dragging a

@@ -57,8 +57,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	_, root := registerPrimaryLocaldb(t, reg, st)
 
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	return hs, cl, root
 }
@@ -160,8 +159,7 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 	reg := plugin.NewRegistry()
 	registerPrimaryLocaldb(t, reg, st)
 	srv := mustNew(t, reg, Config{StaticFS: os.DirFS(dir)})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 
 	tests := []struct {
 		path string
@@ -236,8 +234,7 @@ func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 	reg.SetTransit(uuid, true) // the declaration the loader reads from Info in production
 
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	bareRoot, err := st.RootGridID(context.Background())

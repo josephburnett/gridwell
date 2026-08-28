@@ -7,7 +7,6 @@ package pluginhost_test
 
 import (
 	"context"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
 	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
@@ -68,8 +68,7 @@ func gitlabNode(t *testing.T, gl *fakeGitLab) *rpc.Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := servertest.Serve(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 }
 

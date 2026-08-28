@@ -2,7 +2,6 @@ package pluginhost_test
 
 import (
 	"context"
-	"net/http/httptest"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -78,8 +77,7 @@ func TestPluginProcessDarkServesRememberedListing(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
 	srv := servertest.New(t, reg, server.Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := servertest.Serve(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	ctx := context.Background()

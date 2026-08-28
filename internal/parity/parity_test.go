@@ -10,7 +10,6 @@ package parity_test
 
 import (
 	"context"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -51,8 +50,7 @@ func newNode(t *testing.T) *node {
 	reg := plugin.NewRegistry()
 	reg.Register(uuid, "home", client, nil)
 	srv := servertest.New(t, reg, server.Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := servertest.Serve(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	bareRoot, err := st.RootGridID(context.Background())
 	if err != nil {

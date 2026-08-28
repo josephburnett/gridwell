@@ -9,7 +9,6 @@ package pluginhost_test
 import (
 	"context"
 	"database/sql"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -85,8 +84,7 @@ func pluginProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 	reg := plugin.NewRegistry()
 	reg.Register(procUUID, "proc", client, nil)
 	srv := servertest.New(t, reg, server.Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := servertest.Serve(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 }
 

@@ -8,7 +8,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -56,8 +55,7 @@ func listFor(t *testing.T, impl pb.GridwellServer) []rpc.PluginInfo {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register("fakeuux", "fakeparam", client, nil)
-	hs := httptest.NewServer(mustNew(t, reg, Config{}).Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, mustNew(t, reg, Config{}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	pl, err := cl.ListPlugins(context.Background())
 	if err != nil {

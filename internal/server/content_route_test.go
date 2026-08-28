@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -54,8 +53,7 @@ func twoPluginHTTPServer(t *testing.T) (cl *rpc.Client, baseURL, rootA, rootB st
 	}
 
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), hs.URL, rootA, uuidB + "/" + bareRootB
 }
 

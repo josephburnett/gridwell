@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -75,8 +74,7 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("u-1", "test", client, nil)
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -150,8 +148,7 @@ func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) 
 	reg := plugin.NewRegistry()
 	reg.Register("u-2", "test", client, nil)
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -206,8 +203,7 @@ func TestWatchPluginResolvesHealthBeforeNoWatchReturn(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("u-3", "fs", client, nil)
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)

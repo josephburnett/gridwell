@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -31,8 +30,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 	_, root := registerPrimaryLocaldb(t, reg, st)
 	srv := mustNew(t, reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
+	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	pt, err := cl.CreatePane(ctx, &rpc.CreatePaneRequest{
