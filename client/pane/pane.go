@@ -441,3 +441,17 @@ func (t *Tree) SetFocus(id string) error {
 func StillDescended(p *Pane, tileID string) bool {
 	return p != nil && p.TextFocus == tileID
 }
+
+// RelocateTo moves pane p to where dest stands — anchor, path, viewport —
+// and descends it into tileID: the PROMOTE gesture (2026-08-27), where an
+// ephemeral url visit is dragged from the bar onto another pane's grid and
+// becomes a persistent tile there; the visiting pane follows its content,
+// so the nav chain and the next ascent both read the new place.
+func (p *Pane) RelocateTo(dest *Pane, tileID string) {
+	p.Anchor = dest.Anchor
+	p.Path = append([]string(nil), dest.Path...)
+	p.Cx, p.Cy, p.Zoom = dest.Cx, dest.Cy, dest.Zoom
+	p.TextFocus = tileID
+	p.TextMode = ""
+	p.TextScrollX, p.TextScrollY = 0, 0
+}

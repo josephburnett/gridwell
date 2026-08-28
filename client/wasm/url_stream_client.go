@@ -228,12 +228,32 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	a.draw()
 }
 
+// freezeTarget names the row a closing view's freeze is written to when
+// it is NOT the view's own tile: the promote gesture (finishPromote)
+// captures the ephemeral visit's final frame onto the persistent tile
+// that replaces it.
+type freezeTarget struct {
+	tileID  string
+	gridID  string
+	version int64
+}
+
 // closeURLStream tears down the live view for paneID: it removes the
 // WebContentsView, captures a final frame, and (when freeze is true) persists
 // the frozen preview + address + title via SetURLState. An ephemeral tile's
 // ascent passes freeze=false — the tile is about to be deleted, and a freeze
 // would bump its version out from under the delete (issue #85). Idempotent.
 func (a *App) closeURLStream(paneID string, freeze bool) {
+	a.closeURLStreamTo(paneID, nil, freeze)
+}
+
+// closeURLStreamTo is closeURLStream with the freeze redirected to target
+// (non-nil implies freeze).
+func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freezes ...bool) {
+	freeze := target != nil
+	if len(freezes) > 0 {
+		freeze = freezes[0]
+	}
 	pl, ok := a.localIf(paneID)
 	if !ok || pl.urlView == nil {
 		return
@@ -247,6 +267,10 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 	previewKey := tileID
 	if ct := a.cachedTileByID(tileID); ct != nil {
 		previewKey = ct.ContentID()
+	}
+	if target != nil {
+		tileID = target.tileID
+		previewKey = target.tileID
 	}
 	anchor := v.anchor
 	path := slices.Clone(v.path)
@@ -266,13 +290,16 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 			if version == 0 {
 				version = v.version
 			}
+			gid := a.gridIDForPathFrom(anchor, path)
+			if target != nil {
+				version, gid = target.version, target.gridID
+			}
 			// doFreezeWrite owns the leaving-gesture rule: a version conflict
 			// (a foreign writer or auto title capture racing the close)
 			// re-claims once and retries; a remaining failure surfaces AND
 			// resyncs the grid — the freeze the user just saw is not
 			// persisted and the preview will revert on next load (charter
 			// §6; issue #156 — this path used to bypass the dispatcher).
-			gid := a.gridIDForPathFrom(anchor, path)
 			go a.doFreezeWrite("SetURLState", gid, tileID, version,
 				"urlfreeze", "page preview save failed",
 				func(version int64) error {

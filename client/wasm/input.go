@@ -653,6 +653,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// an EPHEMERAL visit: open the url modal and, on submit, descend into a live
 	// url tile created in the off-grid scratch grid — visit a page without
 	// placing a tile. A drag instead places a real url tile (commitTemplateDrop).
+	if d.isTemplate && d.item.promotePane != "" && !d.started {
+		return nil // a click on the current crumb: this is where you are
+	}
 	if d.isTemplate && d.item.primitive == tplURL && !d.started {
 		// An ephemeral visit IS a live view — on a host without one (plain
 		// browser) the modal would only produce a blank frozen tile, so say
@@ -2294,6 +2297,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	case tplMarkdown:
 		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
 	case tplURL:
+		if d.item.promotePane != "" {
+			a.promoteEphemeralURL(d.item.promotePane, destPane, dropX, dropY)
+			break
+		}
 		a.createURLAtCell(destPane, dropX, dropY)
 	case tplShell:
 		a.createShellAtCell(destPane, dropX, dropY)
@@ -2661,3 +2668,58 @@ func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {
 }
 
 // (Right-button gesture handling lives in right_button.go.)
+
+// promoteEphemeralURL turns the ephemeral url visit shown in pane
+// originPaneID into a persistent url tile at (cellX, cellY) of destPane's
+// grid — the bar crumb dragged onto a grid (2026-08-27). The tile is
+// created with the visit's CURRENT address (the page may have navigated);
+// finishPromote then moves the visit onto it.
+func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cellX, cellY int64) {
+	op := a.tree.FindPane(originPaneID)
+	if op == nil {
+		return
+	}
+	t, ok := a.descendedTile(op)
+	if !ok || t.Kind != rpc.KindURL || !a.isEphemeralTile(op, &t) {
+		return
+	}
+	url := t.URLString
+	if v := a.urlViewFor(op.ID); v != nil && v.lastURL != "" {
+		url = v.lastURL
+	}
+	gid := a.gridIDForPane(destPane)
+	destID := destPane.ID
+	oldID, oldVersion := t.ID, t.Version
+	req := &rpc.CreateURLRequest{GridID: gid, X: cellX, Y: cellY, W: 1, H: 1, URL: url}
+	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateURL(ctx, req)
+	}, func(created rpc.Tile) {
+		a.finishPromote(originPaneID, destID, oldID, oldVersion, created)
+	})
+}
+
+// finishPromote moves the live visit from the ephemeral row onto the
+// persistent tile just created: the view's final frame, title, and trail
+// freeze onto the NEW tile (never the row about to die); the ephemeral
+// row is deleted (gray means gone); the pane relocates to the new tile's
+// grid (pane.RelocateTo — the nav chain and the next ascent read the new
+// place, its ascent viewport being the destination pane's); and the page
+// goes live again on the new tile.
+func (a *App) finishPromote(originPaneID, destPaneID, oldID string, oldVersion int64, created rpc.Tile) {
+	op := a.tree.FindPane(originPaneID)
+	dp := a.tree.FindPane(destPaneID)
+	if !pane.StillDescended(op, oldID) || dp == nil {
+		return // moved on mid-flight: the tile stays where it was dropped
+	}
+	a.closeURLStreamTo(op.ID, &freezeTarget{tileID: created.ID, gridID: created.GridID, version: created.Version})
+	a.deleteEphemeralTile(oldID, oldVersion)
+	op.RelocateTo(dp, created.ID)
+	// The ascent viewport is now the destination's: pop the visit's saved
+	// origin and push where the tile lives.
+	a.popPaneState(op.ID)
+	a.pushPaneState(op.ID, paneState{Cx: dp.Cx, Cy: dp.Cy, Zoom: dp.Zoom})
+	a.placeURLView(op.ID, created, created.Version)
+	a.refreshFileOverlay()
+	a.scheduleURLUpdate()
+	a.draw()
+}

@@ -240,6 +240,12 @@ type paletteItem struct {
 	// that grid); with Kind set it is a CREATION entry riding after the
 	// primitives (drop mints a tile carrying MenuEntry = entry.ID).
 	entry *rpc.MenuEntry
+	// promotePane, when set, marks a PROMOTE drag (2026-08-27): the item is
+	// the ephemeral url visit shown in that pane, dragged off the bar's
+	// current crumb; the drop creates a persistent url tile with its
+	// address and relocates the pane onto it. A click without a drag is
+	// nothing — the current crumb is where you are.
+	promotePane string
 }
 
 // paletteItems returns the palette entries for pane p, in display order:

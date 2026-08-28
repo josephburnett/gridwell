@@ -411,3 +411,19 @@ func TestStillDescended(t *testing.T) {
 		t.Fatal("closed, moved on, or ascended must not")
 	}
 }
+
+func TestRelocateToFollowsTheDestination(t *testing.T) {
+	p := &Pane{ID: "a", Anchor: "u1/0", Path: []string{"u1/3"}, Cx: 1, Cy: 2, Zoom: 0.5, TextFocus: "u1/9", TextMode: "text", TextScrollY: 40}
+	dest := &Pane{ID: "b", Anchor: "u2/0", Path: []string{"u2/7", "u2/8"}, Cx: 10, Cy: 20, Zoom: 2}
+	p.RelocateTo(dest, "u2/44")
+	if p.Anchor != "u2/0" || len(p.Path) != 2 || p.Path[1] != "u2/8" || p.Cx != 10 || p.Cy != 20 || p.Zoom != 2 {
+		t.Fatalf("location not taken: %+v", p)
+	}
+	if p.TextFocus != "u2/44" || p.TextMode != "" || p.TextScrollY != 0 {
+		t.Fatalf("descent not reset onto the new tile: %+v", p)
+	}
+	dest.Path[1] = "changed"
+	if p.Path[1] == "changed" {
+		t.Fatal("path must be a copy, not shared with the destination pane")
+	}
+}

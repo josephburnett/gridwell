@@ -503,7 +503,10 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 	}
 	t, ok := g.Tiles[cr.TileID]
 	if !ok {
-		return nil
+		// An EPHEMERAL visit lives in the scratch grid, not the pane's:
+		// resolve it by id so the crumb shows its live face (it drew a
+		// grey placeholder until 2026-08-27).
+		return a.findTileByID(cr.TileID)
 	}
 	return &t
 }
@@ -589,11 +592,49 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		}
 		return true
 	}
+	// The CURRENT crumb of an ephemeral url visit is a drag handle: onto
+	// another pane's grid it PROMOTES the visit to a persistent tile
+	// there (2026-08-27). Armed here on the press; onMouseUp decides
+	// click (nothing — this is where you are) vs drop.
+	if seg.Index == len(chain)-1 {
+		if p := a.tree.FocusedPane(); p != nil {
+			if t, ok := a.descendedTile(p); ok && t.Kind == rpc.KindURL && a.isEphemeralTile(p, &t) {
+				a.startPromoteDrag(p, t, seg, bx, top, sx, sy)
+				return true
+			}
+		}
+	}
 	// A current-chain crumb: ascend within the live tree.
 	if p := a.tree.FocusedPane(); p != nil {
 		a.ascendToChainCrumb(p, nc.crumb)
 	}
 	return true
+}
+
+// startPromoteDrag arms the promote drag from the bar's current crumb:
+// a template-shaped drag (the drop creates a tile) whose item carries the
+// origin pane, ghosting the visit's own url tile at the crumb's square.
+func (a *App) startPromoteDrag(p *pane.Pane, t rpc.Tile, seg wsbar.Segment, bx, top, sx, sy float64) {
+	square := min(seg.W, wsbar.RowH)
+	ghost := t
+	ghost.W, ghost.H = 1, 1
+	a.dragging = &dragState{
+		originPaneID:  p.ID,
+		originFocused: true,
+		isTemplate:    true,
+		item:          paletteItem{primitive: tplURL, promotePane: p.ID},
+		menuNS:        a.paneNodeNS(p),
+		startScreenX:  sx,
+		startScreenY:  sy,
+		curScreenX:    sx,
+		curScreenY:    sy,
+		cellOffsetX:   0.5,
+		cellOffsetY:   0.5,
+		snapshotTile:  ghost,
+		originScreenX: bx + seg.X,
+		originScreenY: top,
+		srcCellSize:   square,
+	}
 }
 
 // openWorkspaceRenameInput opens the shared inline rename input over the
