@@ -26,7 +26,7 @@ func FromConfig(cfg map[string]string) (pluginv1.PluginServer, error) {
 	if base == "" {
 		base = DefaultURL
 	}
-	opts := Options{Label: cfg["label"]}
+	var opts Options
 	if r := strings.TrimSpace(cfg["refresh"]); r != "" {
 		d, err := time.ParseDuration(r)
 		if err != nil || d <= 0 {

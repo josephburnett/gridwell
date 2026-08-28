@@ -30,7 +30,7 @@ func TestFromConfigRefusesBadConfig(t *testing.T) {
 }
 
 func TestFromConfigComposesTheClient(t *testing.T) {
-	impl, err := FromConfig(map[string]string{"token_file": writeTemp(t, "tok\n"), "refresh": "5m", "label": "work todos", "url": "https://gl.example/"})
+	impl, err := FromConfig(map[string]string{"token_file": writeTemp(t, "tok\n"), "refresh": "5m", "url": "https://gl.example/"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,9 +38,11 @@ func TestFromConfigComposesTheClient(t *testing.T) {
 	if p.src == nil || p.refresh != 5*time.Minute {
 		t.Errorf("plugin = src %v refresh %v", p.src, p.refresh)
 	}
+	// The user-facing name is server.yaml's `name` (the registry label);
+	// the plugin's own DisplayName is only the fallback.
 	info, _ := p.Info(context.Background(), &pluginv1.InfoRequest{})
-	if info.DisplayName != "work todos" {
-		t.Errorf("label = %q", info.DisplayName)
+	if info.DisplayName != displayName || info.Kind != Kind {
+		t.Errorf("info = %v", info)
 	}
 }
 

@@ -1,11 +1,11 @@
-// Package provider is the gitlab todos CONTENT PROVIDER: the wire half
-// over plugins/gitlab/todos. Contexts: the root ("todos") lists weeks;
-// a week ("week:<monday>") lists the todos created that week as page
-// tiles serving their own HTML. Keys are GitLab's todo ids, stable
+// Package plugin is the gitlab todos plugin: the wire half over
+// plugins/gitlab/todos. Contexts: the root ("todos") lists weeks; a
+// week ("week:<monday>") lists the todos created that week as markdown
+// text tiles (todos.Markdown). Keys are GitLab's todo ids, stable
 // forever. Listings are NON-authoritative and Probe never answers GONE:
 // a todo never disappears from the grid — it changes state (done) when
 // refreshed, and the node's read-through cache remembers it across
-// provider restarts (the provider itself is stateless by contract).
+// plugin restarts (the plugin itself is stateless by contract).
 package plugin
 
 import (
@@ -22,9 +22,15 @@ import (
 	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
 
-// Kind is the provider's declared kind — and the binary suffix
+// Kind is the plugin's declared kind — and the binary suffix
 // (gridwell-plugin-gitlab).
 const Kind = "gitlab"
+
+// displayName is the plugin's own name for itself. The name the user
+// sees is server.yaml's `name` (the registry label, one owner); this is
+// the fallback when none is configured, and the root grid's source
+// label.
+const displayName = "gitlab todos"
 
 // DefaultRefresh bounds how often one context re-walks GitLab: the node
 // lists a context on EVERY GetGrid/GetTile, and a descent must feel
@@ -38,7 +44,6 @@ type Plugin struct {
 	mem     *todos.Memory
 	refresh time.Duration
 	now     func() time.Time
-	label   string
 
 	mu       sync.Mutex
 	syncedAt map[string]time.Time // context → last successful walk
@@ -55,26 +60,22 @@ type flight struct {
 	err  error
 }
 
-// Options tunes a provider. Zero values take the defaults.
+// Options tunes a plugin. Zero values take the defaults.
 type Options struct {
 	Refresh time.Duration
 	Now     func() time.Time
-	Label   string // DisplayName; "" = "gitlab todos"
 }
 
 // New builds a plugin over src. Whether there IS a source is decided
 // before this point: FromConfig refuses a missing token, and the doors
 // (guest.Main, the loader) stop the launch with its reason.
 func New(src todos.Source, o Options) *Plugin {
-	p := &Plugin{src: src, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, label: o.Label, syncedAt: map[string]time.Time{}, flights: map[string]*flight{}}
+	p := &Plugin{src: src, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, syncedAt: map[string]time.Time{}, flights: map[string]*flight{}}
 	if p.refresh <= 0 {
 		p.refresh = DefaultRefresh
 	}
 	if p.now == nil {
 		p.now = time.Now
-	}
-	if p.label == "" {
-		p.label = "gitlab todos"
 	}
 	return p
 }
@@ -82,7 +83,7 @@ func New(src todos.Source, o Options) *Plugin {
 func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{
 		Kind:        Kind,
-		DisplayName: p.label,
+		DisplayName: displayName,
 		RootContext: todos.RootContext,
 	}, nil
 }
@@ -155,11 +156,11 @@ func (p *Plugin) List(ctx context.Context, req *pluginv1.ListRequest) (*pluginv1
 		// The totals ride the grid's source label, so the root says at a
 		// glance what the walk found.
 		return &pluginv1.ListResponse{Entries: todos.RootEntries(weeks), Authoritative: false,
-			SourceLabel: fmt.Sprintf("%s · %d open · %d done", p.label, open, done)}, nil
+			SourceLabel: fmt.Sprintf("%s · %d open · %d done", displayName, open, done)}, nil
 	default:
 		start, ok := todos.ParseWeekKey(req.Context)
 		if !ok {
-			return nil, status.Errorf(codes.InvalidArgument, "gitlab provider: unknown context %q", req.Context)
+			return nil, status.Errorf(codes.InvalidArgument, "gitlab plugin: unknown context %q", req.Context)
 		}
 		if err := p.sync(ctx, req.Context, start); err != nil {
 			return nil, err
