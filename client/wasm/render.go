@@ -553,6 +553,12 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		a.drawGridLines(colorGridLineInterior, pscreen, r)
 	}
 
+	if !gridOK && p.Anchor != "" && p.TextFocus == "" {
+		// The grid is not cached yet — a fetch is in flight, or a plugin is
+		// still building its first listing (a gitlab walk can take a
+		// while). Say so instead of showing an empty room (Joe, 2026-08-27).
+		a.drawLoadingNotice(r, gid)
+	}
 	if gridOK {
 		cellSize := pscreen.CellPx * pscreen.Zoom
 		selected := a.selectedFor(p.ID)
@@ -1440,4 +1446,24 @@ func (a *App) drawTriangle(cx, cy, angle, size float64) {
 	a.cctx.Call("lineTo", rightX, rightY)
 	a.cctx.Call("closePath")
 	a.cctx.Call("fill")
+}
+
+// drawLoadingNotice paints a centered, muted "loading …" line in a pane
+// whose grid has not arrived: the plugin's label when the grid's owner
+// is known (the launcher lists it), else just the wait.
+func (a *App) drawLoadingNotice(r pane.Rect, gid string) {
+	if r.W < 80 || r.H < 40 {
+		return
+	}
+	label := "loading…"
+	if pl, ok := a.pluginByUUID(uuidOf(gid)); ok && pl.Label != "" {
+		label = "loading " + pl.Label + "…"
+	}
+	a.cctx.Call("save")
+	a.cctx.Set("fillStyle", colorMuted)
+	a.cctx.Set("font", "13px system-ui, sans-serif")
+	a.cctx.Set("textAlign", "center")
+	a.cctx.Set("textBaseline", "middle")
+	a.cctx.Call("fillText", label, r.X+r.W/2, r.Y+r.H/2, r.W-16)
+	a.cctx.Call("restore")
 }
