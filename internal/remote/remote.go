@@ -18,6 +18,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
 
@@ -58,7 +59,7 @@ type Server struct {
 	// params change (dropLive); never persisted.
 	rootErr map[string]string
 
-	hub *eventHub
+	hub *eventhub.Hub[*gridwellv1.Event]
 }
 
 // liveConn is one connection's constructed transport. Constructing is cheap
@@ -81,7 +82,7 @@ type liveConn struct {
 // no ~ defaults; params must carry explicit paths).
 func New(db *DB, dial Dialer, home string) *Server {
 	return &Server{db: db, dial: dial, home: home, live: map[string]*liveConn{},
-		rootErr: map[string]string{}, hub: newEventHub()}
+		rootErr: map[string]string{}, hub: eventhub.New(eventKey)}
 }
 
 // Close tears down every live connection and closes the DB — the plugin
@@ -318,7 +319,7 @@ func (s *Server) kickRootFetch(c *Conn) {
 func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.GridwellClient) {
 	healthy := true
 	report := func(up bool, detail string) {
-		s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
+		s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
 			PluginUuid: ns, Healthy: up, Detail: detail,
 		}}})
 	}
@@ -351,7 +352,7 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.G
 					}
 					break
 				}
-				s.hub.publish(rpc.TransitQualifyEvent(ns, ev))
+				s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
 			}
 		}
 		select {
@@ -663,7 +664,7 @@ func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	}
 	_ = s.db.BumpGridVersion(ctx)
 	tile := tileFromConn(c)
-	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
 	return &gridwellv1.TileResponse{Tile: tile}, nil
 }
@@ -722,7 +723,7 @@ func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return nil, dbErr(err)
 	}
 	tile := tileFromConn(c)
-	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
 	return &gridwellv1.TileResponse{Tile: tile}, nil
 }
@@ -768,7 +769,7 @@ func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest
 		return nil, dbErr(err)
 	}
 	tile := tileFromConn(c)
-	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
 	return &gridwellv1.TileResponse{Tile: tile}, nil
 }
@@ -822,7 +823,7 @@ func (s *Server) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest
 	}
 	_ = s.db.BumpGridVersion(ctx)
 	tile := tileFromConn(c)
-	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
 	return &gridwellv1.TileResponse{Tile: tile}, nil
 }
@@ -849,7 +850,7 @@ func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	}
 	s.dropLive(c.NS)
 	_ = s.db.BumpGridVersion(ctx)
-	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{
 		TileRemoved: &gridwellv1.TileRemoved{GridId: connGridID, TileId: local}}})
 	return &gridwellv1.DeleteTileResponse{}, nil
 }
@@ -1001,7 +1002,7 @@ func (s *Server) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.Write
 	_ = s.db.BumpGridVersion(ctx)
 	s.kickRootFetch(row)
 	tile := tileFromConn(row)
-	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
 	return stream.SendAndClose(&gridwellv1.TileResponse{Tile: tile})
 }
@@ -1067,7 +1068,7 @@ func (s *Server) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 // ── events ───────────────────────────────────────────────────────────────────
 
 func (s *Server) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStreamingServer[gridwellv1.Event]) error {
-	ch, cancel := s.hub.subscribe()
+	ch, cancel := s.hub.Subscribe()
 	defer cancel()
 	for {
 		select {
@@ -1194,42 +1195,23 @@ func relay[T any](from recvStream[T], to sendStream[T]) error {
 	}
 }
 
-// eventHub is the plugin's one local event fan-out: local mutations and the
-// per-connection remote fan-ins publish; every Subscribe stream reads.
-type eventHub struct {
-	mu   sync.Mutex
-	next int
-	subs map[int]chan *gridwellv1.Event
-}
-
-func newEventHub() *eventHub {
-	return &eventHub{subs: map[int]chan *gridwellv1.Event{}}
-}
-
-func (h *eventHub) subscribe() (<-chan *gridwellv1.Event, func()) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	id := h.next
-	h.next++
-	ch := make(chan *gridwellv1.Event, 64)
-	h.subs[id] = ch
-	return ch, func() {
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if c, ok := h.subs[id]; ok {
-			delete(h.subs, id)
-			close(c)
-		}
+// eventKey names the entity a wire event is about, so the hub
+// (internal/eventhub — shared with the local store) can replace an older
+// undelivered event for the same entity with the newer one and never
+// drop a distinct one. The same shapes the store keys: a grid, a tile, a
+// removal (keyed apart from a change, by grid: a cross-grid move emits
+// both for one id and both must land), and a plugin's health (latest
+// state wins). "" means unkeyable — never coalesced.
+func eventKey(ev *gridwellv1.Event) string {
+	switch p := ev.GetPayload().(type) {
+	case *gridwellv1.Event_GridChanged:
+		return "g/" + p.GridChanged.GetGridId()
+	case *gridwellv1.Event_TileChanged:
+		return "t/" + p.TileChanged.GetTile().GetId()
+	case *gridwellv1.Event_TileRemoved:
+		return "r/" + p.TileRemoved.GetGridId() + "/" + p.TileRemoved.GetTileId()
+	case *gridwellv1.Event_PluginHealth:
+		return "h/" + p.PluginHealth.GetPluginUuid()
 	}
-}
-
-func (h *eventHub) publish(ev *gridwellv1.Event) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for _, ch := range h.subs {
-		select {
-		case ch <- ev:
-		default: // a stalled subscriber drops events rather than blocking mutations
-		}
-	}
+	return ""
 }

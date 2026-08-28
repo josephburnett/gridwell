@@ -306,7 +306,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 		return "", err
 	}
 	_ = s.db.BumpGridVersion(ctx)
-	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: tileFromConn(row)},
 	}})
 	return root, nil

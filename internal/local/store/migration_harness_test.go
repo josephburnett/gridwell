@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/josephburnett/gridwell/internal/eventhub"
 )
 
 // This file is the migration test harness: it builds genuine "old files" from
@@ -187,7 +189,7 @@ func compareFingerprints(t *testing.T, want, got map[string]tableFP) {
 // clock/IDs, so the harness can drive real internal methods (bootstrapRoot,
 // migrateUp) against a hand-built file.
 func storeOver(db *sql.DB) *Store {
-	s := &Store{db: db, subs: map[*subscriber]struct{}{}}
+	s := &Store{db: db, hub: eventhub.New(eventKey)}
 	seedDeterministic(s)
 	return s
 }

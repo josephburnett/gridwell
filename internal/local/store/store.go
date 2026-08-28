@@ -16,11 +16,11 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/eventhub"
 
 	_ "modernc.org/sqlite"
 )
@@ -47,8 +47,7 @@ type Store struct {
 	db    *sql.DB
 	now   func() time.Time // overridden in tests
 	newID func() string    // overridden in tests
-	mu    sync.Mutex       // protects subscriber list
-	subs  map[*subscriber]struct{}
+	hub   *eventhub.Hub[rpc.Event]
 	// pluginID is THE plugin identity, injected post-verify (SetPluginID,
 	// issue #196). "" = a bare test store; PluginUUID then falls back to
 	// the bootstrap mint.
@@ -96,7 +95,7 @@ func Open(path string) (*Store, error) {
 		db:    db,
 		now:   time.Now,
 		newID: newUUID,
-		subs:  map[*subscriber]struct{}{},
+		hub:   eventhub.New(eventKey),
 	}
 	if err := s.bootstrapRoot(context.Background()); err != nil {
 		db.Close()
