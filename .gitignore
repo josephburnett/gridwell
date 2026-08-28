@@ -1,13 +1,8 @@
+# Every build output at the root, under any past or future name (the
+# per-name list is what let renamed binaries get committed twice;
+# scripts/check-tracked-binaries.sh is the gate behind this guess).
 /gridwell
-/gridwell-plugin-local
-/gridwell-plugin-remote
-/gridwell-plugin-fs
-/gridwell-plugin-proc
-/gridwell-plugin-gitlab
-/gridwell-all
-# pre-rename binary names, in case an old checkout left them behind
-/gridwell-plugin-localdb
-/gridwell-plugin-ssh
+/gridwell-*
 /web/gridwell.wasm
 /web/gridwell.wasm.gz
 /web/wasm_exec.js
@@ -25,7 +20,6 @@ s*.png
 # Chromium profile when the server is run from the repo root.
 /chromium/
 test-results/
-/gridwell-all
 /apps/gridwell/gridwell
 /apps/gridwell-all/gridwell-all
 /client/wasm/wasm

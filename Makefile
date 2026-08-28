@@ -123,6 +123,7 @@ check: fmt-check proto-check wasm
 		(cd $$m && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go test ./...) || exit 1; \
 	done
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
+	./scripts/check-tracked-binaries.sh
 	./scripts/check-deadcode.sh
 	go tool staticcheck ./...
 	cd $(DESKTOP) && npm run typecheck
