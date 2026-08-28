@@ -1,9 +1,13 @@
 # The v2 design: content providers and the presiding node
 
-Status: implementation design (commissioned 2026-08-22). Successor to
-`docs/content-presentation.md` §9 (the seed) — this document is the one
-to build from. The migration section (§8) is deliberately the most
-detailed: the data is a daily driver's, and the switchover is one-time.
+Status: HISTORICAL — the implementation design (commissioned
+2026-08-22) that the v2 migration EXECUTED on 2026-08-24; kept as the
+record of why the tree looks the way it does. Paths and names below are
+the tree it started from (`plugins/local/store` is `internal/local/store`
+now, and so on); `ARCHITECTURE.md` describes the result. Successor to
+`docs/content-presentation.md` §9 (the seed). The migration section (§8)
+is deliberately the most detailed: the data is a daily driver's, and the
+switchover was one-time.
 
 ## 1. Tenets
 

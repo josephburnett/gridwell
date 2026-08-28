@@ -49,7 +49,7 @@ jobs:
       ELECTRON_DISABLE_SANDBOX: "1"
     steps:
       - uses: actions/checkout@v4
-      # Every live shell rides a tmux session (plugins/local/tmux); pin it
+      # Every live shell rides a tmux session (internal/local/tmux); pin it
       # present rather than trust the image (it shipped preinstalled when
       # this was added — the shell-spec failures were NOT a missing tmux).
       - name: system deps

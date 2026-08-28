@@ -98,7 +98,9 @@ proto-check:
 # green. fmt-check enforces gofmt; the wasm build catches GOOS=js breakage that
 # `go build ./...` (host arch) misses; the typecheck catches Electron-side TS
 # drift; `npm test` runs the desktop main-process unit tests (menu/geometry logic
-# that never reaches the heavier display-bound gates). No display or network needed.
+# that never reaches the heavier display-bound gates); check-docpaths fails
+# when a doc or workflow names a repo path that no longer exists. No display
+# or network needed.
 # MODULES lists every in-repo Go module beyond the root — the api, the
 # shared nested modules, and each plugin (its own module: the in-repo
 # strangers, docs/plugin.md). check builds and tests each one STANDALONE
@@ -119,6 +121,7 @@ check: fmt-check proto-check wasm
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
 	./scripts/check-tracked-binaries.sh
 	./scripts/check-deadcode.sh
+	./scripts/check-docpaths.sh
 	go tool staticcheck ./...
 	cd $(DESKTOP) && npm run typecheck
 	cd $(DESKTOP) && npm run typecheck:e2e

@@ -276,12 +276,13 @@ message InfoResponse {
   double root_view_cx   = 10;
   double root_view_cy   = 11;
   double root_view_zoom = 12;
-  // instance_grid_id is the off-grid grid holding this plugin's PARAMETERIZED
-  // instances (issue #251) — e.g. ssh's connection wells. A plugin declaring
-  // this with an empty root_grid_id is a parameterized plugin: the menu/drop
-  // gestures open the instance picker instead of descending. Like
-  // scratch_grid_id, it is a storage address, never a landing page. Empty for
-  // rooted plugins.
+  // instance_grid_id is the off-grid grid holding this plugin's INSTANCES
+  // (issue #251) — e.g. the remote transport's connection wells, which are
+  // server.yaml config since #269 (2026-08-23). A plugin declaring this with
+  // an empty root_grid_id is listed as one ListPlugins row PER WELL in the
+  // grid (the server's instanceRows synthesis) instead of as itself; the
+  // picker that used to open here is gone. Like scratch_grid_id, it is a
+  // storage address, never a landing page. Empty for rooted plugins.
   string instance_grid_id = 14;
   // transit declares that this plugin's ids are CHAINS from another node —
   // a mount, forwarding to a remote gridwell, whose ids arrive already
@@ -518,10 +519,11 @@ message PluginInfo {
   // rootless" — both otherwise present identically as root_grid_id == "".
   // Empty when Info succeeded, regardless of whether it declared a root.
   string info_error = 10;
-  // instance_grid_id: qualified <uuid>/<id> of the plugin's parameterized-
-  // instance grid (issue #251), forwarded from InfoResponse. Set with an
-  // empty root_grid_id it marks the plugin PARAMETERIZED: click/drop opens
-  // the instance picker. "" for rooted plugins.
+  // instance_grid_id: qualified <uuid>/<id> of the plugin's instance grid
+  // (issue #251), forwarded from InfoResponse. A plugin that declares one
+  // with an empty root_grid_id never appears as its own row: the server
+  // synthesizes one row per well in that grid (since #269 the picker is
+  // gone). "" for rooted plugins.
   string instance_grid_id = 11;
   // glyph mirrors InfoResponse.glyph for the client's plugin faces
   // (launcher tile, menu swatch, drag ghost). "" = the generic globe.

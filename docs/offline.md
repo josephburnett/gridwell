@@ -76,7 +76,7 @@ URL.
 Facts an offline design builds on (or fights):
 
 **Concurrency model.** Content mutations are compare-and-set on a per-tile
-`version` counter (`checkTileVersion`, `internal/store/tiles.go:25-35` →
+`version` counter (`checkTileVersion`, `internal/local/store/tiles.go` →
 `ErrVersionConflict` → Connect `FailedPrecondition`). Framing writes carry
 the same version *precondition* but never advance the counter
 (`emitTileChanged` vs `finishContentEdit`, `tiles.go:59-85`) — framing is
@@ -91,12 +91,12 @@ audit trail, no soft delete. `DeleteTile` hard-deletes the row
 grid version. A client that was away can discover a delete *only* by
 refetching the grid and noticing the absence. (Tombstones could be added
 additively — a new table is within the frozen-format contract,
-`internal/store/CLAUDE.md`.)
+`internal/local/store/CLAUDE.md`.)
 
 **No resumable event stream.** `SubscribeRequest` is empty — no cursor, no
 sequence number (`api/gridwell/v1/data.proto:610`). The server coalesces
 undelivered events per entity and discards them at cancel
-(`internal/server/events.go`). On reconnect the client refetches
+(`internal/local/store/events.go`). On reconnect the client refetches
 **nothing** (`startSSE`, `client/wasm/main.go:1095-1145`): it silently
 renders stale state with the disconnect notice cleared. This is a
 correctness gap even *before* offline is a feature.
@@ -491,4 +491,4 @@ clears only on reload (`main.go:203`). (5) No transport/application error
 taxonomy (`mutate.go:48-57`). (6) Frozen previews of mounted tiles have no
 host-side cache — a dark mount blanks them on reload (P3). (7) The unload
 beacon path covers framing only; a content save racing a tab close is lost
-(`internal/rpc/beacon.go:10-14` documents this).
+(`api/rpc/beacon.go` documents this).

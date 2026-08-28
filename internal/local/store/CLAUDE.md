@@ -1,17 +1,18 @@
-# internal/store — the localdb persistence layer
+# internal/local/store — the home persistence layer
 
-This package is the SQLite-backed store for the localdb plugin: the user's
-text, URLs, and grids. **The localdb format is out of testing mode. Its v1
-schema is frozen and the forward-compatibility promise is in effect.**
+This package is the SQLite-backed store behind the node's native `home`
+kind (`internal/local`; né localdb): the user's text, URLs, and grids.
+**The home format is out of testing mode. Its v1 schema is frozen and the
+forward-compatibility promise is in effect.**
 
 ## The promise
 
-Data written by any released localdb binary stays readable **forever**. A newer
+Data written by any released gridwell binary stays readable **forever**. A newer
 binary always opens an older DB and brings it forward; it never requires the
 data to be thrown away.
 
 - **Never delete the DB to absorb a schema change.** That was the testing-mode
-  habit; it is now forbidden for localdb.
+  habit; it is now forbidden for the home store.
 - **Never drop, rename, retype, or repurpose an existing column or table.** Old
   rows were written against the old meaning and must keep reading back the same.
 - Evolution is **additive only**: new columns (with a default), new tables, new
@@ -31,7 +32,9 @@ data to be thrown away.
   stamped into the SQLite header as `user_version`. The engine that applies
   the chain (fresh-stamp / foreign-file refusal / newer-version refusal) is
   the shared `internal/dbformat.EnsureVersion` — one implementation for every
-  plugin DB (localdb, fs, proc); `migrateUp` here is a thin adapter.
+  node DB (this store, each provider's memory DB in `internal/layout`, the
+  mount cache in `internal/plugin/mountcache`); `migrateUp` here is a thin
+  adapter.
 
 `TestSchemaEquivalence` proves `tablesV1 + migrations == fresh tablesTemplate`.
 That equivalence is what lets `migrateUp` stamp a fresh DB without running the

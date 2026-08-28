@@ -102,17 +102,19 @@ arrangement you care about is the pane tile.
 
 ## Plugins and federation
 
-Every space is a plugin: a separate binary with its own SQLite database and
-its own id space. `home` holds your content. `fs` and `proc` project the
-filesystem and process table in as read-only grids — honest views of a
+Every space is a plugin. `home` is the node's own store and holds your
+content. `fs`, `proc`, and `gitlab` are content providers — separate
+binaries that answer in their own stable keys (a path, a pid, a todo)
+while the node mints the ids and keeps the layout — honest views of a
 world Gridwell doesn't own (files and processes come and go, but their
-placement stays stable while they exist). `ssh` mounts other machines.
+placement stays stable while they exist). `remote` mounts other machines.
 
 You boot into home — your first plugin's root grid. The other plugins live
 on the + menu's top row: click one to step through, or drag it out to drop
 a doorway tile wherever you want one. Stepping into a mounted machine is
 the exact same gesture as stepping into a local grid, however many hops
-away it is: ids qualify and chain (`<plugin>/<id>`, `<ssh>/<plugin>/<id>`),
+away it is: ids qualify and chain (`<plugin>/<id>`,
+`<remote>/<connection>/<plugin>/<id>`),
 so a reference resolves through any number of mounts.
 
 Two consequences of the principle at this scale:
@@ -196,10 +198,12 @@ To mount remote nodes, the remote just runs `gridwell serve`; its
 `federation.socket` path (`<home>/federation.sock` by default) is what
 the connection's `addr` names — required, no default — reached through
 ssh's unix-socket forwarding.
-On the mounting machine, register the remote plugin once:
+On the mounting machine, register the transport once — one `remote`
+entry owns the whole connection list (serve refuses a `connections:`
+key without it, and refuses two):
 
 ```sh
-gridwell init --kind remote
+gridwell init --kind remote --name far
 ```
 
 A connection reaches the other node one of two ways, chosen by what you
@@ -220,9 +224,12 @@ yaml retires its name forever (`retired_names` is the graveyard). Keys
 stay files on your machine; an unverified host is refused, and key
 material never rides tile content.
 
-The CLI is three commands: `gridwell init` (register a plugin), `gridwell
-serve` (run the node), and `gridwell backup` (snapshot every plugin DB,
-safe while serving).
+The CLI is six commands: `gridwell init` (register a plugin), `gridwell
+serve` (run the node), `gridwell status` (is this home being served?),
+`gridwell backup` (snapshot every DB + server.yaml, safe while serving),
+`gridwell parity` (crawl two nodes and diff them — the migration oracle),
+and `gridwell clear-browser-data` (drop the desktop app's Chromium
+session).
 
 ## Reading further
 

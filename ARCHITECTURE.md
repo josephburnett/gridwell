@@ -30,14 +30,15 @@ lists where that still needs doing.
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  Connect-RPC  (the Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Local server                 internal/server, internal/rpc           │
+│ Local server                 internal/server, api/rpc               │
 │   STATELESS router: splits <uuid>/<id>, forwards, re-qualifies       │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  go-plugin gRPC  (the SAME Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Plugins        plugins/{fs,proc} as CONTENT PROVIDERS (v2)  │
-│   + node-native: internal/local (store), internal/remote     │
-│   each a separate binary owning one SQLite DB + one id space         │
+│ Plugins        plugins/{fs,proc,gitlab} as CONTENT PROVIDERS (v2)    │
+│   + node-native: internal/local (store), internal/remote             │
+│   a provider is stateless (keys + content); the node mints ids and   │
+│   keeps the layout in one memory DB per provider (internal/layout)   │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────────────────────────────────┐
@@ -142,12 +143,18 @@ plugin declares once in `Info`, never re-derived from its kind string.
 
 ## 4. Plugins and the store
 
-**Spawn model.** `server.yaml` is mandatory. Every configured plugin is
-spawned as a go-plugin subprocess — the only production path; the
-in-process loader survives solely as a test harness. Each plugin owns one
-SQLite DB and one id space; identity is verified at spawn and injected into
-the store in one fused step (`local.OpenVerified`), so the id every
-stored reference carries is the id the store answers with.
+**Spawn model.** `server.yaml` is mandatory. The node's NATIVE kinds
+(`home` → `internal/local`, `remote` → `internal/remote`) run in-process
+on every path. Every other configured kind is a CONTENT PROVIDER
+(`plugin.v1`): spawned as a `gridwell-plugin-<kind>` subprocess by the
+stock host, or composed in-process by a leaf binary that bundles it
+(`apps/gridwell-all`; the compose door hides which). A provider is
+stateless — it answers in its own stable keys — and the node keeps ONE
+memory DB per provider (`internal/layout`, at the id-derived
+`<home>/db/<id>/store.db`) that mints the ids and holds the layout. Every
+DB is opened identity-verified (`local.OpenVerified` for the home store,
+`layout.OpenVerified` for a provider's memory), so the id every stored
+reference carries is the id the node answers with.
 
 - **local** (né localdb, 2026-08-16) owns all user content (text, urls, wells, pane tiles) plus
   shells and the event stream. The only writable plugin. Shell tiles are
@@ -158,20 +165,20 @@ stored reference carries is the id the store answers with.
   rule: a failed read never deletes a tile row — only a definite GONE does.
   An unreadable source serves its stored rows verbatim until it's readable
   again.
-- **ssh** (#199, #251): the multi-connection plugin
-  (`internal/plugin/sshhost`) — PARAMETERIZED: no root grid; its connection
-  list is declared as its INSTANCE grid (`PluginInfo.instance_grid_id`),
-  the storage address the client's instance picker reads and writes, never
-  a landing page. Each connection is a well whose params are its CONTENT
-  and whose minted short id is a sub-namespace segment
-  (`<ssh>/<conn>/<remote-plugin>/<id>`), peeled and prepended with the same
-  transit rule the server applies one level up. A params document that
-  canonicalizes equal to a live connection's is refused at commit — one
-  param-set, one connection. Connections dial lazily and self-heal;
-  deleting one tombstones its segment forever. Connections are NEVER
-  config: `init` refuses the old host: keys, and `gridwell serve` migrates
-  a pre-#251 config entry into a connection row at boot (the config→data
-  twin of a schema migration).
+- **remote** (né ssh, 2026-08-16; #199, #251, then #269): the node's
+  builtin transport (`internal/remote`) — one `remote` entry owns the
+  connection list. Since #269 (2026-08-23) connections are server.yaml
+  CONFIG (`connections:`), injected at boot (`node.BuildConfig`) and
+  reconciled into the plugin's connection grid (`internal/remote/sync.go`),
+  which is declared as its INSTANCE grid (`PluginInfo.instance_grid_id`,
+  no root grid): a storage address the server's row synthesis reads
+  (`instanceRows`) — one menu row per connection, never a landing page,
+  and no picker. Each connection's immutable name is a sub-namespace
+  segment (`<remote>/<conn>/<remote-plugin>/<id>`), peeled and prepended
+  with the same transit rule the server applies one level up. The node
+  dials every connection at boot (`ConnectAll`, bounded per connection)
+  and the ssh session self-heals; removing a connection from the yaml
+  retires its name forever (`retired_names`).
 
 ### 4.1 Framing ≠ content — the best-enforced invariant
 

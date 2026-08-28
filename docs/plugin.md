@@ -1,7 +1,10 @@
 # Plugins: the third-party door — the plan of record
 
 Decided 2026-08-15 (supersedes the options draft of this file; the
-charter carries the standing rule). The plugin system exists so OTHER
+charter carries the standing rule). Paths in the plan text are the tree
+as it stood that day (`internal/store` is `internal/local/store` since
+the v2 fold, `plugins/griddb` and `internal/plugin/guest` are gone);
+the Status section at the end records what actually landed. The plugin system exists so OTHER
 PEOPLE can build plugins: go-plugin was chosen for process isolation AND
 a separate dependency graph. That separation eroded repeatedly when left
 to intention, so it becomes STRUCTURE — modules whose arrows make the

@@ -1,0 +1,22 @@
+# check-docpaths exemptions: "<file> <path>" — a path a doc names on purpose
+# although it does not exist in the tree. Every line says why.
+# Prose that happens to look like a path (a slash between two words):
+CLAUDE.md client/server
+ARCHITECTURE.md client/native
+docs/remote-menu.md plugins/nodes
+# A version placeholder, not a path:
+docs/plugin.md api/v0.x.y
+# The 2026-08-15 plan text names the tree as it stood then (the doc says so):
+docs/plugin.md internal/store
+docs/plugin.md internal/plugin/guest
+docs/plugin.md internal/cli/sshmigrate.go
+docs/plugin.md plugins/griddb
+# A proposed package that does not exist yet (offline options, 2026-08-14):
+docs/offline.md client/oplog
+# A gitignored runtime cache dir that `make vendor` creates:
+apps/desktop/README.md apps/desktop/.cache
+# Relative to apps/mobile (apps/mobile/test/bridge_test.dart):
+apps/mobile/README.md test/bridge_test.dart
+# The 2026-08-22 inventory names the pre-v2 homes beside the current ones:
+docs/content-presentation.md plugins/local/store
+docs/content-presentation.md plugins/remote/db.go

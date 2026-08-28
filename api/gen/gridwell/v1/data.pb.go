@@ -797,12 +797,13 @@ type InfoResponse struct {
 	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
-	// instance_grid_id is the off-grid grid holding this plugin's PARAMETERIZED
-	// instances (issue #251) — e.g. ssh's connection wells. A plugin declaring
-	// this with an empty root_grid_id is a parameterized plugin: the menu/drop
-	// gestures open the instance picker instead of descending. Like
-	// scratch_grid_id, it is a storage address, never a landing page. Empty for
-	// rooted plugins.
+	// instance_grid_id is the off-grid grid holding this plugin's INSTANCES
+	// (issue #251) — e.g. the remote transport's connection wells, which are
+	// server.yaml config since #269 (2026-08-23). A plugin declaring this with
+	// an empty root_grid_id is listed as one ListPlugins row PER WELL in the
+	// grid (the server's instanceRows synthesis) instead of as itself; the
+	// picker that used to open here is gone. Like scratch_grid_id, it is a
+	// storage address, never a landing page. Empty for rooted plugins.
 	InstanceGridId string `protobuf:"bytes,14,opt,name=instance_grid_id,json=instanceGridId,proto3" json:"instance_grid_id,omitempty"`
 	// transit declares that this plugin's ids are CHAINS from another node —
 	// a mount, forwarding to a remote gridwell, whose ids arrive already
@@ -2114,10 +2115,11 @@ type PluginInfo struct {
 	// rootless" — both otherwise present identically as root_grid_id == "".
 	// Empty when Info succeeded, regardless of whether it declared a root.
 	InfoError string `protobuf:"bytes,10,opt,name=info_error,json=infoError,proto3" json:"info_error,omitempty"`
-	// instance_grid_id: qualified <uuid>/<id> of the plugin's parameterized-
-	// instance grid (issue #251), forwarded from InfoResponse. Set with an
-	// empty root_grid_id it marks the plugin PARAMETERIZED: click/drop opens
-	// the instance picker. "" for rooted plugins.
+	// instance_grid_id: qualified <uuid>/<id> of the plugin's instance grid
+	// (issue #251), forwarded from InfoResponse. A plugin that declares one
+	// with an empty root_grid_id never appears as its own row: the server
+	// synthesizes one row per well in that grid (since #269 the picker is
+	// gone). "" for rooted plugins.
 	InstanceGridId string `protobuf:"bytes,11,opt,name=instance_grid_id,json=instanceGridId,proto3" json:"instance_grid_id,omitempty"`
 	// glyph mirrors InfoResponse.glyph for the client's plugin faces
 	// (launcher tile, menu swatch, drag ghost). "" = the generic globe.
