@@ -214,8 +214,8 @@ If a change lives in or affects the native layer, `make check` passing
 means nothing — run the electron and/or e2e gate AND add or extend a spec
 that crosses the behavior. Gate discipline: the gates rebuild at start, so
 never edit sources while one runs; a "vindicated isolated" flake rerun only
-counts against a freshly built tree; a spec on the known-flake ledger still
-gets a fresh look before you blame a change.
+counts against a freshly built tree; a spec on the flake ledger
+(`docs/flake-ledger.md`) still gets a fresh look before you blame a change.
 
 ## Making changes: the checklist
 
