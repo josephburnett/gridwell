@@ -46,14 +46,14 @@ func seedTree(t *testing.T) string {
 	return root
 }
 
-func pluginNode(t *testing.T, root string) (*rpc.Client, *fsplugin.Provider) {
+func pluginNode(t *testing.T, root string) (*rpc.Client, *fsplugin.Plugin) {
 	t.Helper()
 	return pluginNodeAt(t, root, filepath.Join(t.TempDir(), "mem.db"))
 }
 
 // pluginNodeAt builds the v2 stack over an EXISTING memory DB path —
 // how the conversion parity test serves a converted file.
-func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Provider) {
+func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Plugin) {
 	t.Helper()
 	mem, err := layout.Open(memPath)
 	if err != nil {

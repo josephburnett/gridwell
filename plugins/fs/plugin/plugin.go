@@ -51,8 +51,8 @@ type trashHost struct{}
 func (trashHost) Remove(p string) error    { return trash.Trash(p) }
 func (trashHost) RemoveAll(p string) error { return trash.Trash(p) }
 
-// Provider implements pluginv1.PluginServer for one directory root.
-type Provider struct {
+// Plugin implements pluginv1.PluginServer for one directory root.
+type Plugin struct {
 	pluginv1.UnimplementedPluginServer
 	root    string
 	host    Host
@@ -61,16 +61,16 @@ type Provider struct {
 
 // New builds a provider over root. nil host trashes (production); tests
 // inject a recorder.
-func New(root string, host Host) *Provider {
+func New(root string, host Host) *Plugin {
 	if host == nil {
 		host = trashHost{}
 	}
-	return &Provider{root: filepath.Clean(root), host: host, readDir: fssource.Read}
+	return &Plugin{root: filepath.Clean(root), host: host, readDir: fssource.Read}
 }
 
 // SetReadDir overrides the directory reader (the legacy test seam:
 // simulate EACCES without root). nil restores the default.
-func (p *Provider) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
+func (p *Plugin) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
 	if f == nil {
 		f = fssource.Read
 	}
@@ -80,7 +80,7 @@ func (p *Provider) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
 // abs resolves a relative key under the root, refusing escapes. Keys are
 // node-supplied (from this provider's own earlier answers), so an escape
 // is a bug or an attack either way — refuse loudly.
-func (p *Provider) abs(key string) (string, error) {
+func (p *Plugin) abs(key string) (string, error) {
 	clean := path.Clean("/" + key) // "/" + forces the cleanup to anchor
 	full := filepath.Join(p.root, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
 	if !fsfile.UnderRoot(p.root, full) {
@@ -91,7 +91,7 @@ func (p *Provider) abs(key string) (string, error) {
 
 // keyDirName splits a file key into its directory's absolute path and
 // the file's name.
-func (p *Provider) keyDirName(key string) (dir, name string, err error) {
+func (p *Plugin) keyDirName(key string) (dir, name string, err error) {
 	full, err := p.abs(key)
 	if err != nil {
 		return "", "", err
@@ -99,7 +99,7 @@ func (p *Provider) keyDirName(key string) (dir, name string, err error) {
 	return filepath.Dir(full), filepath.Base(full), nil
 }
 
-func (p *Provider) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	resp := &pluginv1.InfoResponse{
 		Kind:        "fs",
 		DisplayName: "files",
@@ -131,7 +131,7 @@ func (p *Provider) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoR
 // directory that exists but cannot be read answers Unavailable — "not
 // right now", which the node's read-through cache degrades to the
 // remembered answer (I12, now node machinery).
-func (p *Provider) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	dir, err := p.abs(req.Context)
 	if err != nil {
 		return nil, err
@@ -164,7 +164,7 @@ func (p *Provider) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1
 	return resp, nil
 }
 
-func (p *Provider) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
+func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
 	dir, name, err := p.keyDirName(req.Key)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func (w serveStream) Send(c *gridwellv1.ServeContentChunk) error {
 	return w.s.Send(&pluginv1.ServeContentChunk{Status: c.Status, MediaType: c.MediaType, Data: c.Data})
 }
 
-func (p *Provider) ServeContent(req *pluginv1.ServeContentRequest, stream pluginv1.Plugin_ServeContentServer) error {
+func (p *Plugin) ServeContent(req *pluginv1.ServeContentRequest, stream pluginv1.Plugin_ServeContentServer) error {
 	dir, name, err := p.keyDirName(req.Key)
 	if err != nil {
 		return err
@@ -199,7 +199,7 @@ func (p *Provider) ServeContent(req *pluginv1.ServeContentRequest, stream plugin
 	return fsfile.ServeFile(serveStream{stream}, dir, name, req.Subpath)
 }
 
-func (p *Provider) GetPreview(_ context.Context, req *pluginv1.GetPreviewRequest) (*pluginv1.GetPreviewResponse, error) {
+func (p *Plugin) GetPreview(_ context.Context, req *pluginv1.GetPreviewRequest) (*pluginv1.GetPreviewResponse, error) {
 	dir, name, err := p.keyDirName(req.Key)
 	if err != nil {
 		return nil, err
@@ -207,7 +207,7 @@ func (p *Provider) GetPreview(_ context.Context, req *pluginv1.GetPreviewRequest
 	return &pluginv1.GetPreviewResponse{Jpeg: fsfile.PreviewJPEG(dir, name)}, nil
 }
 
-func (p *Provider) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
+func (p *Plugin) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
 	full, err := p.abs(req.Key)
 	if err != nil {
 		return nil, err
@@ -225,7 +225,7 @@ func (p *Provider) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*plugin
 
 // Delete moves the source path to the trash (via Host). An already-gone
 // path succeeds — the delete gesture is idempotent.
-func (p *Provider) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*pluginv1.DeleteResponse, error) {
+func (p *Plugin) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*pluginv1.DeleteResponse, error) {
 	full, err := p.abs(req.Key)
 	if err != nil {
 		return nil, err

@@ -19,7 +19,7 @@ const DefaultURL = "https://gitlab.com"
 // compose exactly the same provider. A missing or unreadable token is
 // not fatal at spawn: the provider answers Info (the plugin is listed)
 // and every listing refuses with the reason (charter §6: it surfaces).
-func FromConfig(cfg map[string]string) *Provider {
+func FromConfig(cfg map[string]string) *Plugin {
 	base := strings.TrimSpace(cfg["url"])
 	if base == "" {
 		base = DefaultURL

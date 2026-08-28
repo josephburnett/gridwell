@@ -39,8 +39,8 @@ func (sysKiller) Kill(pid int64, sig syscall.Signal) error {
 	return syscall.Kill(int(pid), sig)
 }
 
-// Provider implements pluginv1.PluginServer for the process table.
-type Provider struct {
+// Plugin implements pluginv1.PluginServer for the process table.
+type Plugin struct {
 	pluginv1.UnimplementedPluginServer
 	procRoot string
 	rootPID  int64
@@ -49,7 +49,7 @@ type Provider struct {
 
 // New builds a provider. Empty procRoot uses /proc; rootPID <= 0 uses
 // pid 1; nil killer signals real processes.
-func New(procRoot string, rootPID int64, killer Killer) *Provider {
+func New(procRoot string, rootPID int64, killer Killer) *Plugin {
 	if procRoot == "" {
 		procRoot = procsource.DefaultRoot
 	}
@@ -59,10 +59,10 @@ func New(procRoot string, rootPID int64, killer Killer) *Provider {
 	if killer == nil {
 		killer = sysKiller{}
 	}
-	return &Provider{procRoot: procRoot, rootPID: rootPID, killer: killer}
+	return &Plugin{procRoot: procRoot, rootPID: rootPID, killer: killer}
 }
 
-func (p *Provider) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	label := "processes"
 	if p.rootPID != 1 {
 		label = "pid " + strconv.FormatInt(p.rootPID, 10)
@@ -90,7 +90,7 @@ func keyPID(key string) (int64, error) {
 // the same ids the legacy DB did. Never Unavailable: an unreadable
 // process table answers what it could read, non-authoritatively, and
 // the Probe arbitration does the rest.
-func (p *Provider) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	pid, err := keyPID(req.Context)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (p *Provider) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1
 	return resp, nil
 }
 
-func (p *Provider) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
+func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
 	if !strings.HasPrefix(req.Key, infoKeyPrefix) {
 		// Process wells carry no document body (the legacy rule).
 		return stream.Send(&pluginv1.ContentChunk{})
@@ -133,7 +133,7 @@ func (p *Provider) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1
 	})
 }
 
-func (p *Provider) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
+func (p *Plugin) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
 	if strings.HasPrefix(req.Key, infoKeyPrefix) {
 		// @info is NEVER swept (the legacy reconcile skipped it by
 		// name): it describes the grid's own process, and the grid
@@ -157,7 +157,7 @@ func (p *Provider) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*plugin
 
 // Delete sends SIGTERM — best-effort; the tile sweeps once the process
 // is definitively gone (the legacy semantics).
-func (p *Provider) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*pluginv1.DeleteResponse, error) {
+func (p *Plugin) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*pluginv1.DeleteResponse, error) {
 	pid, err := keyPID(req.Key)
 	if err != nil {
 		return nil, err

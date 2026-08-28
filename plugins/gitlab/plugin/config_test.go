@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
-	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
 
 func TestFromConfigRefusalsSurfaceThroughList(t *testing.T) {
@@ -24,7 +23,7 @@ func TestFromConfigRefusalsSurfaceThroughList(t *testing.T) {
 	}
 	for want, cfg := range cases {
 		p := FromConfig(cfg)
-		_, err := p.List(context.Background(), &pluginv1.ListRequest{Context: todos.RootContext})
+		_, err := p.Info(context.Background(), &pluginv1.InfoRequest{})
 		if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), want) {
 			t.Errorf("cfg %v → %v, want FailedPrecondition containing %q", cfg, err, want)
 		}

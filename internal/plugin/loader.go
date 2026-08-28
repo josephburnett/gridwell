@@ -55,18 +55,22 @@ func LoadAll(cfg *config.ServerConfig, natives map[string]NativeFactory, factori
 		// host never derives behavior from the kind string (charter,
 		// 2026-08-15). Transit-ness is the one declaration the host needs
 		// synchronously (routing reads it per request), so it is cached
-		// here, like identity. The local binary answers even when its
-		// remote is dark; a failed handshake defaults to leaf and logs —
-		// a transport plugin that cannot answer its own Info is broken,
-		// but a broken plugin must not stop the node.
-		transit := false
+		// here, like identity. A handshake that FAILS stops the launch
+		// (owner decision 2026-08-27: a plugin without the config it needs
+		// must not come up as an empty grid — Info is where a plugin says
+		// so, FailedPrecondition with the reason). The native remote
+		// answers its own Info even when every connection is dark.
 		ictx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if info, ierr := client.Info(ictx, &gridwellv1.InfoRequest{}); ierr == nil {
-			transit = info.GetTransit()
-		} else {
-			log.Printf("gridwell: plugin %q (%s): spawn handshake failed: %v (treated as a leaf plugin)", pc.Name, pc.ID, ierr)
-		}
+		info, ierr := client.Info(ictx, &gridwellv1.InfoRequest{})
 		cancel()
+		if ierr != nil {
+			if closer != nil {
+				closer()
+			}
+			reg.Close()
+			return nil, fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.ID, ierr)
+		}
+		transit := info.GetTransit()
 		// A MOUNT gets the read-through cache in front of it (mountcache,
 		// offline-plan phase 1): the remote going dark degrades to
 		// stale-but-readable instead of blank. A cache that cannot open

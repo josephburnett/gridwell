@@ -2,7 +2,12 @@ package plugin_test
 
 import (
 	"context"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"net"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -125,5 +130,29 @@ func TestRegistry_Label(t *testing.T) {
 	}
 	if got := reg.Label("unset"); got != "" {
 		t.Errorf("Label(unset) = %q, want empty", got)
+	}
+}
+
+// handshakeRefuser is a plugin whose Info refuses — the shape of "I do
+// not have the config I need" (FailedPrecondition with the reason).
+type handshakeRefuser struct {
+	pluginv1.UnimplementedPluginServer
+}
+
+func (handshakeRefuser) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	return nil, status.Error(codes.FailedPrecondition, "token_file not configured")
+}
+
+// TestLoadAllFailsOnARefusedHandshake (owner decision 2026-08-27): a plugin
+// that cannot answer Info stops the launch with its reason, instead of
+// coming up as an empty grid with a log line nobody reads.
+func TestLoadAllFailsOnARefusedHandshake(t *testing.T) {
+	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{
+		ID: "gl1234a", Name: "todos", Kind: "gitlab", Config: map[string]string{"db_file": filepath.Join(t.TempDir(), "mem.db")},
+	}}}
+	factories := map[string]plugin.Factory{"gitlab": func(map[string]string) (pluginv1.PluginServer, error) { return handshakeRefuser{}, nil }}
+	_, err := plugin.LoadAll(cfg, nil, factories)
+	if err == nil || !strings.Contains(err.Error(), "token_file not configured") || !strings.Contains(err.Error(), "todos") {
+		t.Fatalf("LoadAll = %v, want the plugin's own reason, naming it", err)
 	}
 }

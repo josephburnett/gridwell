@@ -31,8 +31,8 @@ const Kind = "gitlab"
 // instant, not cost a round of API pages each time.
 const DefaultRefresh = 30 * time.Second
 
-// Provider implements pluginv1.PluginServer.
-type Provider struct {
+// Plugin implements pluginv1.PluginServer.
+type Plugin struct {
 	pluginv1.UnimplementedPluginServer
 	src     todos.Source
 	srcErr  error // a configuration verdict (no token): every listing refuses with it
@@ -56,8 +56,8 @@ type Options struct {
 // there is no source (an unconfigured token): Info still answers, so
 // the plugin is listed, and every listing refuses with the reason —
 // the error surfaces instead of an empty grid.
-func New(src todos.Source, srcErr error, o Options) *Provider {
-	p := &Provider{src: src, srcErr: srcErr, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, label: o.Label, syncedAt: map[string]time.Time{}}
+func New(src todos.Source, srcErr error, o Options) *Plugin {
+	p := &Plugin{src: src, srcErr: srcErr, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, label: o.Label, syncedAt: map[string]time.Time{}}
 	if p.refresh <= 0 {
 		p.refresh = DefaultRefresh
 	}
@@ -70,7 +70,13 @@ func New(src todos.Source, srcErr error, o Options) *Provider {
 	return p
 }
 
-func (p *Provider) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	// A plugin without the config it needs refuses its HANDSHAKE, so the
+	// launch fails with the reason instead of serving an empty grid
+	// (owner decision 2026-08-27).
+	if p.srcErr != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "gitlab plugin: %v", p.srcErr)
+	}
 	return &pluginv1.InfoResponse{
 		Kind:        Kind,
 		DisplayName: p.label,
@@ -80,7 +86,7 @@ func (p *Provider) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoR
 
 // fresh reports whether ctxKey was walked within the refresh window —
 // a root walk covers every week, so a week is fresh under either.
-func (p *Provider) fresh(ctxKey string) bool {
+func (p *Plugin) fresh(ctxKey string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.now()
@@ -94,7 +100,7 @@ func (p *Provider) fresh(ctxKey string) bool {
 
 // sync walks GitLab for ctxKey unless it is fresh. since is zero for
 // the root (everything) and the Monday for a week (targeted).
-func (p *Provider) sync(ctx context.Context, ctxKey string, since time.Time) error {
+func (p *Plugin) sync(ctx context.Context, ctxKey string, since time.Time) error {
 	if p.srcErr != nil {
 		return status.Errorf(codes.FailedPrecondition, "gitlab provider: %v", p.srcErr)
 	}
@@ -113,7 +119,7 @@ func (p *Provider) sync(ctx context.Context, ctxKey string, since time.Time) err
 // List answers the root (weeks) or one week (todos). A walk failure
 // with a transport-shaped code degrades at the node to the remembered
 // listing, stamped stale; a verdict (bad token) surfaces.
-func (p *Provider) List(ctx context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+func (p *Plugin) List(ctx context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	switch {
 	case req.Context == todos.RootContext:
 		if err := p.sync(ctx, req.Context, time.Time{}); err != nil {
@@ -142,7 +148,7 @@ func (p *Provider) List(ctx context.Context, req *pluginv1.ListRequest) (*plugin
 }
 
 // pageFor answers a key's page bytes and HTTP status.
-func (p *Provider) pageFor(key string) (data []byte, code int64) {
+func (p *Plugin) pageFor(key string) (data []byte, code int64) {
 	id, ok := todos.ParseKey(key)
 	if !ok {
 		return nil, 404
@@ -156,7 +162,7 @@ func (p *Provider) pageFor(key string) (data []byte, code int64) {
 
 // ReadContent answers the page source as text/html (what fs answers
 // for an .html file): a page tile's document body IS its page.
-func (p *Provider) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
+func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
 	data, code := p.pageFor(req.Key)
 	if code != 200 {
 		return stream.Send(&pluginv1.ContentChunk{})
@@ -164,7 +170,7 @@ func (p *Provider) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1
 	return stream.Send(&pluginv1.ContentChunk{Data: data, MediaType: "text/html; charset=utf-8"})
 }
 
-func (p *Provider) ServeContent(req *pluginv1.ServeContentRequest, stream pluginv1.Plugin_ServeContentServer) error {
+func (p *Plugin) ServeContent(req *pluginv1.ServeContentRequest, stream pluginv1.Plugin_ServeContentServer) error {
 	if req.Subpath != "" {
 		return stream.Send(&pluginv1.ServeContentChunk{Status: 404, MediaType: "text/plain", Data: []byte("not found")})
 	}
@@ -178,7 +184,7 @@ func (p *Provider) ServeContent(req *pluginv1.ServeContentRequest, stream plugin
 
 // GetPreview is the tile face: a rendered card for a remembered todo,
 // nothing for anything else (the client keeps showing the label).
-func (p *Provider) GetPreview(_ context.Context, req *pluginv1.GetPreviewRequest) (*pluginv1.GetPreviewResponse, error) {
+func (p *Plugin) GetPreview(_ context.Context, req *pluginv1.GetPreviewRequest) (*pluginv1.GetPreviewResponse, error) {
 	if id, ok := todos.ParseKey(req.Key); ok {
 		if t, known := p.mem.Get(id); known {
 			return &pluginv1.GetPreviewResponse{Jpeg: todos.Preview(&t)}, nil
@@ -190,7 +196,7 @@ func (p *Provider) GetPreview(_ context.Context, req *pluginv1.GetPreviewRequest
 // Probe never says GONE: a remembered todo is PRESENT; one this process
 // has not seen is UNSPECIFIED — "cannot say", which keeps the node's
 // remembered tile (I12). Todos do not magically go away.
-func (p *Provider) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
+func (p *Plugin) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
 	if id, ok := todos.ParseKey(req.Key); ok {
 		if _, known := p.mem.Get(id); known {
 			return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_PRESENT}, nil
@@ -208,7 +214,7 @@ func (p *Provider) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*plugin
 
 // Search matches the query against titles, refs, bodies, projects and
 // authors of every remembered todo; each result's path is root → week.
-func (p *Provider) Search(_ context.Context, req *pluginv1.SearchRequest) (*pluginv1.SearchResponse, error) {
+func (p *Plugin) Search(_ context.Context, req *pluginv1.SearchRequest) (*pluginv1.SearchResponse, error) {
 	q := strings.ToLower(strings.TrimSpace(req.Query))
 	if q == "" {
 		return &pluginv1.SearchResponse{}, nil

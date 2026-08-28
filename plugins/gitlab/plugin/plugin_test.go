@@ -160,8 +160,8 @@ func TestNoTokenSurfacesAsAVerdict(t *testing.T) {
 	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "token_file") {
 		t.Errorf("err = %v, want FailedPrecondition naming the token", err)
 	}
-	if _, err := p.Info(context.Background(), &pluginv1.InfoRequest{}); err != nil {
-		t.Error("Info must still answer so the plugin is listed")
+	if _, err := p.Info(context.Background(), &pluginv1.InfoRequest{}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("Info must refuse the handshake with the reason (the launch fails), got %v", err)
 	}
 	if _, err := p.List(context.Background(), &pluginv1.ListRequest{Context: "bogus"}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("unknown context → %v", err)
