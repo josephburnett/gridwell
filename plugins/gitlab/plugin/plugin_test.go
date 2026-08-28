@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,5 +168,58 @@ func TestNoTokenSurfacesAsAVerdict(t *testing.T) {
 	}
 	if _, err := p.List(context.Background(), &pluginv1.ListRequest{Context: "bogus"}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("unknown context → %v", err)
+	}
+}
+
+// gated serves one page per state and blocks every Page call on a gate,
+// counting the calls that got through — a slow GitLab.
+type gated struct {
+	gate  chan struct{}
+	calls atomic.Int32
+}
+
+func (g *gated) Page(_ context.Context, state string, page int) ([]todos.Todo, bool, error) {
+	g.calls.Add(1)
+	<-g.gate
+	if page > 1 || state == todos.StateDone {
+		return nil, false, nil
+	}
+	return []todos.Todo{mk(1, "2026-08-18T10:00:00Z", "pending")}, false, nil
+}
+
+// A burst of concurrent Lists on one cold context shares ONE walk: the
+// node lists a context on every GetGrid/GetTile, and two panes opening
+// the same grid must not each page GitLab.
+func TestConcurrentListsShareOneWalk(t *testing.T) {
+	src := &gated{gate: make(chan struct{})}
+	p := New(src, nil, Options{})
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, errs[i] = p.List(ctx, &pluginv1.ListRequest{Context: todos.RootContext})
+		}(i)
+	}
+	// Both goroutines are in List before the walk is released.
+	deadline := time.Now().Add(5 * time.Second)
+	for src.calls.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("no walk started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(20 * time.Millisecond) // let the second List reach sync
+	close(src.gate)
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("List %d: %v", i, err)
+		}
+	}
+	if n := src.calls.Load(); n != 2 {
+		t.Errorf("GitLab saw %d page calls, want 2 (one pending + one done page: one shared walk)", n)
 	}
 }

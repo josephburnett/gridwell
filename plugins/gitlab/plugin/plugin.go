@@ -43,6 +43,17 @@ type Plugin struct {
 
 	mu       sync.Mutex
 	syncedAt map[string]time.Time // context → last successful walk
+	// flights are the walks in progress, by context: a List that finds
+	// one WAITS for it instead of starting its own — the node lists a
+	// context on every GetGrid/GetTile, and a burst of reads must cost
+	// GitLab one walk, not one per reader.
+	flights map[string]*flight
+}
+
+// flight is one walk in progress; done closes when err is final.
+type flight struct {
+	done chan struct{}
+	err  error
 }
 
 // Options tunes a provider. Zero values take the defaults.
@@ -57,7 +68,7 @@ type Options struct {
 // the plugin is listed, and every listing refuses with the reason —
 // the error surfaces instead of an empty grid.
 func New(src todos.Source, srcErr error, o Options) *Plugin {
-	p := &Plugin{src: src, srcErr: srcErr, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, label: o.Label, syncedAt: map[string]time.Time{}}
+	p := &Plugin{src: src, srcErr: srcErr, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, label: o.Label, syncedAt: map[string]time.Time{}, flights: map[string]*flight{}}
 	if p.refresh <= 0 {
 		p.refresh = DefaultRefresh
 	}
@@ -84,11 +95,10 @@ func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRes
 	}, nil
 }
 
-// fresh reports whether ctxKey was walked within the refresh window —
-// a root walk covers every week, so a week is fresh under either.
-func (p *Plugin) fresh(ctxKey string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// freshLocked reports whether ctxKey was walked within the refresh
+// window — a root walk covers every week, so a week is fresh under
+// either. Caller holds p.mu.
+func (p *Plugin) freshLocked(ctxKey string) bool {
 	now := p.now()
 	for _, k := range []string{ctxKey, todos.RootContext} {
 		if t, ok := p.syncedAt[k]; ok && now.Sub(t) < p.refresh {
@@ -99,21 +109,43 @@ func (p *Plugin) fresh(ctxKey string) bool {
 }
 
 // sync walks GitLab for ctxKey unless it is fresh. since is zero for
-// the root (everything) and the Monday for a week (targeted).
+// the root (everything) and the Monday for a week (targeted). A walk
+// already in flight for the context (or the root, which covers every
+// week) is shared: this call waits for its verdict.
 func (p *Plugin) sync(ctx context.Context, ctxKey string, since time.Time) error {
 	if p.srcErr != nil {
 		return status.Errorf(codes.FailedPrecondition, "gitlab provider: %v", p.srcErr)
 	}
-	if p.fresh(ctxKey) {
+	p.mu.Lock()
+	if p.freshLocked(ctxKey) {
+		p.mu.Unlock()
 		return nil
 	}
-	if err := p.mem.Sync(ctx, p.src, since); err != nil {
-		return err
+	for _, k := range []string{ctxKey, todos.RootContext} {
+		if f, ok := p.flights[k]; ok {
+			p.mu.Unlock()
+			select {
+			case <-f.done:
+				return f.err
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	}
-	p.mu.Lock()
-	p.syncedAt[ctxKey] = p.now()
+	f := &flight{done: make(chan struct{})}
+	p.flights[ctxKey] = f
 	p.mu.Unlock()
-	return nil
+
+	err := p.mem.Sync(ctx, p.src, since)
+	p.mu.Lock()
+	if err == nil {
+		p.syncedAt[ctxKey] = p.now()
+	}
+	delete(p.flights, ctxKey)
+	p.mu.Unlock()
+	f.err = err
+	close(f.done)
+	return err
 }
 
 // List answers the root (weeks) or one week (todos). A walk failure
