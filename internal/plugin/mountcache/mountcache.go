@@ -144,6 +144,7 @@ func Open(upstream pb.GridwellClient, dbPath string) (*Client, func(), error) {
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
 	return c, func() {
 		c.pf.cancel()
+		c.pf.wg.Wait() // the walk is out before its DB goes away
 		_ = db.Close()
 	}, nil
 }

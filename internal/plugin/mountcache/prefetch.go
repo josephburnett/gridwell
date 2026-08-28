@@ -63,6 +63,10 @@ type prefetcher struct {
 	running bool
 	ctx     context.Context
 	cancel  context.CancelFunc
+	// wg counts the running walk; the closer waits on it AFTER cancelling
+	// and BEFORE closing the DB, so a walk never writes into a closed
+	// cache (which logged "cache degraded" on every shutdown mid-walk).
+	wg sync.WaitGroup
 }
 
 // kick starts one walk if none is running. Serialized, never queued: a
@@ -76,9 +80,11 @@ func (c *Client) kickPrefetch() {
 		return
 	}
 	c.pf.running = true
+	c.pf.wg.Add(1)
 	ctx := c.pf.ctx
 	c.pf.mu.Unlock()
 	go func() {
+		defer c.pf.wg.Done()
 		defer func() {
 			c.pf.mu.Lock()
 			c.pf.running = false
