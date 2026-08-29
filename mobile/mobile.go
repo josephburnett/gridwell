@@ -17,9 +17,9 @@
 //     shell manager and the server refuses shell tiles node-wide.
 //   - No password (loopback inside an app sandbox; the webview is the
 //     only client) and no serve lock (the OS gives each app one process).
-//   - First run auto-inits a "home" plugin named "home" through the SAME init
-//     door the CLI uses (node.Init), so a phone home is
-//     byte-compatible with every other home.
+//   - First run mints the node's id through the SAME door serve uses
+//     (node.BuildConfig), so a phone home is byte-compatible with every
+//     other home.
 //
 // The exported surface is deliberately gomobile-shaped: strings, error,
 // no structs. Start is idempotent while running (returns the same
@@ -28,8 +28,6 @@ package mobile
 
 import (
 	"errors"
-	"fmt"
-	gofs "io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -68,14 +66,9 @@ func Start(home string) (string, error) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return "", err
 	}
+	// First run: no server.yaml — BuildConfig mints the node's id and
+	// writes the file, exactly as `gridwell serve` does on a fresh home.
 	cfgPath := filepath.Join(home, "server.yaml")
-	if _, err := os.Stat(cfgPath); errors.Is(err, gofs.ErrNotExist) {
-		// First run: one localdb named "home", exactly the heal the
-		// desktop sidecar performs — same door, same resulting bytes.
-		if _, err := node.Init(home, "home", "home", nil); err != nil {
-			return "", fmt.Errorf("mobile: first-run init: %w", err)
-		}
-	}
 	cfg, err := node.BuildConfig(home, cfgPath)
 	if err != nil {
 		return "", err

@@ -77,7 +77,7 @@ func (h *connectHandler) WriteContent(ctx context.Context, stream *connect.Clien
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	first := stream.Msg()
-	c, local, uuid, err := h.route(first.TileId)
+	c, local, uuid, transit, err := h.route(first.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -97,18 +97,18 @@ func (h *connectHandler) WriteContent(ctx context.Context, stream *connect.Clien
 		return nil, asConnectError(err) // broken inbound: upstream is never closed cleanly, no commit
 	}
 	resp, err := up.CloseAndRecv()
-	return h.tileResp(uuid, resp, err)
+	return h.tileResp(uuid, transit, resp, err)
 }
 
 // PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
 func (h *connectHandler) PlaceTile(ctx context.Context, req *connect.Request[pb.PlaceTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
-	c, local, uuid, err := h.route(m.TileId)
+	c, local, uuid, transit, err := h.route(m.TileId)
 	if err != nil {
 		return nil, err
 	}
 	m.TileId = local
 	m.GridId = stripUUID(m.GridId, uuid)
 	resp, err := c.PlaceTile(ctx, m)
-	return h.tileResp(uuid, resp, err)
+	return h.tileResp(uuid, transit, resp, err)
 }

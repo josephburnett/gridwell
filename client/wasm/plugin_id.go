@@ -40,6 +40,22 @@ func (a *App) gridKnownReadOnly(gridID string) bool {
 	return ok && !g.Meta.Writable
 }
 
+// pluginByRoot returns the menu row ROOTED at gridID — the row whose
+// root view a root-grid reframe persists to and restores from. Looked up
+// by root, not by namespace: a connection row's uuid ("<id>/<conn>") is
+// not a prefix of its root ("<id>/<conn>/<remote-home>/<n>").
+func (a *App) pluginByRoot(gridID string) (rpc.PluginInfo, bool) {
+	if gridID == "" {
+		return rpc.PluginInfo{}, false
+	}
+	for _, pl := range a.allPlugins() {
+		if pl.RootGridID == gridID {
+			return pl, true
+		}
+	}
+	return rpc.PluginInfo{}, false
+}
+
 // pluginByUUID returns the plugin with the given (possibly chain-
 // qualified) namespace: the local list first, then every fetched remote
 // menu context (remote-menu, 2026-08-16 — a remote plugin's descent

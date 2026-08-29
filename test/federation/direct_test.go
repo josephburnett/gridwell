@@ -28,8 +28,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 
 	// Node A: the "other server on this box".
 	remoteHome := t.TempDir()
-	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "home", "--name", "personal")
+	freshHome(t, remoteHome)
 	// remoteAddr is the FEDERATION door — its unix socket path, the only
 	// thing a connection can dial since 2026-08-26; the web origin is not it.
 	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
@@ -40,9 +39,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 	// HOME (remote-menu, 2026-08-16): personal's root grid, exactly where
 	// a direct client of that node boots — writable, immediately usable.
 	localHome := t.TempDir()
-	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "home", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "remote")
+	freshHome(t, localHome)
 	appendConnectionsYAML(t, localHome, fmt.Sprintf("connections:\n    - name: dconn1\n      addr: %s\n", remoteAddr))
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 	sshRoot := awaitConnRoot(t, localOrigin, "dconn1")
@@ -64,8 +61,8 @@ func TestDirectConnectSpawn(t *testing.T) {
 	if len(mp) != 1 {
 		t.Fatalf("routed menu = %d plugins, want the remote's one", len(mp))
 	}
-	if lbl := mp[0].(map[string]any)["label"]; lbl != "personal" {
-		t.Fatalf("routed menu plugin = %v, want personal", lbl)
+	if lbl := mp[0].(map[string]any)["label"]; lbl != "home" {
+		t.Fatalf("routed menu plugin = %v, want the remote's home", lbl)
 	}
 	if root, _ := mp[0].(map[string]any)["rootGridId"].(string); root != sshRoot {
 		t.Fatalf("routed menu root = %q, want the landing %q", root, sshRoot)

@@ -21,7 +21,7 @@ import { test, expect } from './fixtures';
 // tile. This seam was broken once before (every re-entry reset to the
 // default calibrated zoom), so it keeps its crossing test.
 
-test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
+test.use({ extraNodes: ['second'] });
 
 test('re-descending a reframed well returns to exactly what you left', async ({ gw }) => {
   await gw.enterPlugin('home');
@@ -200,7 +200,7 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
   await expect
     .poll(
       async () => {
-        const pl = (await gw.plugins()).find((x) => x.label === 'e2e');
+        const pl = (await gw.plugins()).find((x) => x.label === 'home');
         return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 10_000 },
@@ -259,7 +259,7 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   await expect
     .poll(
       async () => {
-        const pl = (await gw.plugins()).find((x) => x.label === 'e2e');
+        const pl = (await gw.plugins()).find((x) => x.label === 'home');
         return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 10_000 },

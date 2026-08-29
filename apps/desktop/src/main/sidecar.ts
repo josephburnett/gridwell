@@ -48,10 +48,6 @@ interface StartOptions {
   spawnFn?: (bin: string, args: string[]) => ChildProcess;
   binaryPath?: string;
   staticPath?: string;
-  // initRetried is internal recursion state: the one no-config → `gridwell
-  // init` → respawn pass has already happened, so a second no-config means
-  // init did not take (surface it, don't loop).
-  initRetried?: boolean;
 }
 
 // startSidecar spawns the Go backend (Connect-RPC + static files) and resolves once it
@@ -100,7 +96,6 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
 
   // The one no-config heal: seen on stderr, remembered until the child
   // exits, then `gridwell init` and a single respawn.
-  let sawNoConfig = false;
   // The server prints its actionable diagnostics ("no database at …",
   // "plugin binary not found") to stderr/stdout before exiting; keep the
   // tail so a boot failure dialog says WHY, not just an exit code.
@@ -121,7 +116,6 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
       if (settled) return;
       lastLines.push(line);
       if (lastLines.length > 8) lastLines.shift();
-      if (/\bno config at /.test(line)) sawNoConfig = true;
       if (opts.noServer && /^gridwell: not serving\b/.test(line)) {
         settled = true;
         clearTimeout(timer);
@@ -167,40 +161,10 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (sawNoConfig && !opts.noServer && !opts.initRetried) {
-        // First run: no server.yaml yet. Create the default home plugin the
-        // same way a user would, then start over — ONCE (a second no-config
-        // means init itself failed; that error must surface, not loop).
-        resolve(initThenRetry(bin, opts, onLog));
-        return;
-      }
       const tail = lastLines.length ? `\n${lastLines.join('\n')}` : '';
       reject(new Error(`sidecar exited before ready (code=${code} signal=${signal})${tail}`));
     });
   });
-}
-
-// initThenRetry runs `gridwell init --kind local --name home` (the app's
-// first-run heal) and restarts the boot with the retry latch set.
-async function initThenRetry(
-  bin: string,
-  opts: StartOptions,
-  onLog: (line: string) => void,
-): Promise<Sidecar> {
-  onLog('[first run] no config — running gridwell init --kind local --name home');
-  const initArgs = ['init', '--kind', 'local', '--name', 'home'];
-  await new Promise<void>((resolve, reject) => {
-    const child = opts.spawnFn
-      ? opts.spawnFn(bin, initArgs)
-      : spawn(bin, initArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    attachLineReader(child.stdout, onLog);
-    attachLineReader(child.stderr, onLog);
-    child.once('error', reject);
-    child.once('exit', (code) =>
-      code === 0 ? resolve() : reject(new Error(`gridwell init failed (code=${code})`)),
-    );
-  });
-  return startSidecar({ ...opts, initRetried: true });
 }
 
 // staticArgs maps a static override to serve flags: none means the server

@@ -27,7 +27,7 @@ test('a rootless plugin swatch is inert and reports a notice instead of descendi
   // Boot skipped the rootless plugin: home is the FIRST plugin WITH a root.
   const before = await gw.focused();
   expect(before.anchor, 'boots into the first rooted plugin, not the fs plugin').toBe(
-    pls.find((p) => p.label === 'e2e')!.rootGridID,
+    pls.find((p) => p.label === 'home')!.rootGridID,
   );
 
   // The + menu shows the rootless plugin's swatch with its classification

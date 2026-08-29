@@ -29,15 +29,14 @@ import (
 // the target the caller names explicitly (the store refuses a write to a
 // link row).
 func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (pb.GridwellClient, string, error) {
-	uuid, local, ok := rpc.SplitID(qualifiedID)
-	if !ok {
+	if _, _, ok := rpc.SplitID(qualifiedID); !ok {
 		return nil, "", status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
 	}
-	c, found := s.routeClient(uuid)
+	c, local, uuid, transit, found := s.resolve(qualifiedID)
 	if !found {
 		return nil, "", status.Errorf(gcodes.NotFound, "no plugin %q", uuid)
 	}
-	if s.pluginReg.Transit(uuid) {
+	if transit {
 		return c, local, nil
 	}
 	tr, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})

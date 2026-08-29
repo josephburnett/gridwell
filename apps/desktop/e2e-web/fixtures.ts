@@ -19,11 +19,8 @@ import { freePort } from '../src/main/freeport';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-// serveBin picks the server binary: the stock host by default, or the
-// bundled gridwell-all when GRIDWELL_SERVE_BIN says so — the composition
-// PARITY gate (docs/plugin.md) runs this same suite against both and
-// must see identical behavior; that is the pin that the compose door
-// hides the process boundary.
+// serveBin picks the server binary: the stock host, or the one
+// GRIDWELL_SERVE_BIN names.
 export const serveBin = () => path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
 
 // freePort is the sidecar's own (electron-free) picker — one copy.

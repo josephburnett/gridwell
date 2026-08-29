@@ -1,14 +1,23 @@
-// Package config loads ~/.gridwell/server.yaml and exposes the server and
-// plugin configuration. Plugin config keys are pass-through: the server hands
-// the map to the plugin binary at spawn (GRIDWELL_PLUGIN_CONFIG) without
-// interpreting the keys.
+// Package config loads ~/.gridwell/server.yaml: the ONE config of the ONE
+// node (docs/one-node.md). The node is its home — one id qualifies every
+// local reference and every connection through this node; `plugins:` lists
+// content plugins only; `connections:` lists the remote nodes. Plugin
+// config keys are pass-through: the node hands the map to the plugin
+// binary at spawn (GRIDWELL_PLUGIN_CONFIG) without interpreting the keys.
+//
+// The file is hand-edited. The node writes it in exactly one case: to
+// mint an id that is absent (the node's own, or a plugin's) — nothing else
+// ever rewrites it, so a comment the user leaves in it survives every
+// serve after the first.
 package config
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,23 +28,44 @@ import (
 	"github.com/josephburnett/gridwell/api/idshape"
 )
 
-// ServerConfig is the top-level ~/.gridwell/server.yaml structure. There is no
-// root: every plugin is equal; the client enters one from the launcher.
+// ServerConfig is the top-level ~/.gridwell/server.yaml structure.
 type ServerConfig struct {
-	// NodeID is this node's own durable identity — the uuid that qualifies the
-	// node grid (the launcher: one link tile per plugin). Minted once by
-	// EnsureNodeID and never changed; a stored deep link or a remote mount's
-	// reference through this node depends on it staying put, exactly like a
-	// plugin id.
-	NodeID string `yaml:"node_id,omitempty"`
+	// ID is the node's identity AND its home's: the namespace segment on
+	// every local reference ("<id>/12") and on every connection through
+	// this node ("<id>/<conn>/…"). Minted once by serve when absent, never
+	// changed — every stored reference depends on it staying put.
+	ID string `yaml:"id,omitempty"`
 	// Web is the BROWSER door: the address browsers and the desktop window
-	// load from, and the password that gates it. Federation is the NODE
-	// door: the loopback port other nodes mount this one through (ssh
-	// tunnels terminate there). Grouped by door (owner decision
-	// 2026-08-26) so the file cannot be misread about which listener the
-	// password protects or which port a remote entry must name.
-	Web        WebConfig        `yaml:"web,omitempty"`
+	// load from. Its password is NOT a yaml fact — see WebPassword.
+	Web WebConfig `yaml:"web,omitempty"`
+	// Federation is the NODE door: the unix socket other nodes mount this
+	// one through (ssh tunnels terminate there).
 	Federation FederationConfig `yaml:"federation,omitempty"`
+	// StaticDir: "" → the embedded web client; a path → dev override from
+	// disk.
+	StaticDir string `yaml:"static,omitempty"`
+	// Shell is the login shell for shell tiles ("" → the host default).
+	Shell string `yaml:"shell,omitempty"`
+	// DisableShells, when true, removes shell tiles from this node entirely:
+	// the + palette offers no shell primitive, and the server refuses
+	// CreateTile(kind=shell) and every OpenShell — whichever namespace
+	// (home or mounted) would serve it. Existing shell tiles keep their
+	// frozen previews (placement is sacred); they just can never attach a
+	// PTY here.
+	DisableShells bool `yaml:"disable_shells,omitempty"`
+	// Connections declares the remote nodes. The list is AUTHORITATIVE:
+	// the transport's connection rows are reconciled against it at every
+	// boot, and a name absent from it (and not retired) is an error.
+	Connections []ConnectionConfig `yaml:"connections,omitempty"`
+	// RetiredNames reserves connection names FOREVER: a deleted
+	// connection's name goes here so it can never be reused (stored
+	// references through its namespace stay dangling, never re-routed).
+	RetiredNames []string `yaml:"retired_names,omitempty"`
+	// Plugins are the CONTENT plugins — separate binaries speaking
+	// plugin.v1. The node's own store and transport are not listed: they
+	// are the node.
+	Plugins []PluginConfig `yaml:"plugins,omitempty"`
+
 	// WebPassword gates the web door. It is NOT a yaml fact: BuildConfig
 	// reads it from <home>/web-password (EnsurePasswordFile), which serve
 	// mints — a random token, 0600 — when absent and prints at startup, so
@@ -43,65 +73,21 @@ type ServerConfig struct {
 	// then lasts. Delete the file to rotate: the next serve mints a new
 	// one and every browser must log in again (owner decision 2026-08-26).
 	WebPassword string `yaml:"-"`
-	// LegacyBind is the pre-2026-08-26 flat bind key. Load folds it into
-	// Web (and records a deprecation) so an existing home keeps working;
-	// nothing reads it after Load. LegacyPassword (and Web.LegacyPassword)
-	// are IGNORED — the password is the file — and parsed only so a rewrite
-	// keeps the user's line. They stay in the struct, not in a parse-only
-	// probe, because every config REWRITE (AppendPlugin, EnsureNodeID)
-	// re-marshals this struct, and a key the struct cannot hold would be
-	// silently dropped by the next `gridwell init`.
-	LegacyBind     string `yaml:"bind,omitempty"`
-	LegacyPassword string `yaml:"password,omitempty"`
-	// Deprecations is derived by Load, never stored: one line per legacy
-	// key the file still uses, for serve to print.
-	Deprecations []string `yaml:"-"`
 	// CacheDir is derived by serve (never stored): <home>/cache, where the
-	// loader keeps each MOUNT's read-through cache DB (mountcache — the
-	// offline-plan phase-1 layer). Empty disables caching (tests, headless
+	// node keeps the mount cache. Empty disables caching (tests, headless
 	// probes). Cache files are disposable and excluded from backup.
-	CacheDir  string `yaml:"-"`
-	StaticDir string `yaml:"static,omitempty"` // "" → the embedded web client; a path → dev override from disk
-	// DisableShells, when true, removes shell tiles from this node entirely:
-	// the + palette offers no shell primitive, and the server refuses
-	// CreateTile(kind=shell) and every OpenShell — whichever plugin (local or
-	// mounted) would serve it. Existing shell tiles keep their frozen
-	// previews (placement is sacred); they just can never attach a PTY here.
-	DisableShells bool           `yaml:"disable_shells,omitempty"`
-	Plugins       []PluginConfig `yaml:"plugins"`
-	// Connections declares the node's remote-node connections (v2, #269 —
-	// reversing #199 by owner decision 2026-08-22: connections are server
-	// CONFIG, reconciled into the builtin transport at boot; the picker
-	// no longer creates them). A nil slice (no `connections:` key) leaves
-	// a legacy transport DB alone; a PRESENT key — even an empty list —
-	// makes this file authoritative: rows absent from it tombstone.
-	// A POINTER so presence survives a rewrite: nil = no key; a non-nil
-	// empty slice = `connections: []`, the authoritative-empty marker —
-	// which a plain `omitempty` slice silently dropped on the next
-	// `gridwell init` (2026-08-27), flipping the transport out of config
-	// mode. Set reports presence.
-	Connections *[]ConnectionConfig `yaml:"connections,omitempty"`
-	// RetiredNames reserves connection names FOREVER: a deleted
-	// connection's name goes here so it can never be reused (stored
-	// references through its namespace stay dangling, never re-routed).
-	RetiredNames []string `yaml:"retired_names,omitempty"`
+	CacheDir string `yaml:"-"`
 }
 
 // WebConfig is the browser door's configuration.
 type WebConfig struct {
 	Bind string `yaml:"bind,omitempty"`
 	// BindSet is derived by Load, never stored: true when the file names
-	// a non-empty bind (web.bind, or the legacy flat bind:). It
-	// distinguishes "the user pinned the listen address" from "Bind holds
-	// the built-in default", which is what lets `serve --bind-default`
-	// (the desktop sidecar's ephemeral loopback port) fill in only when
-	// the config is silent.
+	// a non-empty web.bind. It distinguishes "the user pinned the listen
+	// address" from "Bind holds the built-in default", which is what lets
+	// `serve --bind-default` (the desktop sidecar's ephemeral loopback
+	// port) fill in only when the config is silent.
 	BindSet bool `yaml:"-"`
-	// LegacyPassword is the pre-2026-08-26 `web.password` key. It is
-	// IGNORED (the password lives in the web-password file — see
-	// ServerConfig.WebPassword) and only parsed so a rewrite keeps the
-	// user's line and Load can say so once.
-	LegacyPassword string `yaml:"password,omitempty"`
 }
 
 // FederationConfig is the node door's configuration: a UNIX SOCKET path,
@@ -110,7 +96,7 @@ type WebConfig struct {
 // the socket is created 0600, so only the owning uid reaches the
 // ungated gRPC export; other users and sandboxed apps on the machine
 // cannot, which loopback TCP could never promise. ssh tunnels terminate
-// on the socket (direct-streamlocal); a remote entry's addr names it.
+// on the socket (direct-streamlocal); a connection's addr names it.
 // "" = the door is closed (no listener) — the mobile node, which nobody
 // mounts. BuildConfig fills the default (FederationSocket) for serve.
 type FederationConfig struct {
@@ -122,23 +108,13 @@ func FederationSocket(home string) string {
 	return filepath.Join(home, "federation.sock")
 }
 
-// ConnectionList answers the declared connections ([] when the key is
-// absent) and whether the key was PRESENT — present means this file is
-// authoritative for the connection set, empty list included (v2 #269).
-func (c *ServerConfig) ConnectionList() (conns []ConnectionConfig, set bool) {
-	if c.Connections == nil {
-		return nil, false
-	}
-	return *c.Connections, true
-}
-
-// ConnectionConfig is one remote-node connection. Name is an IMMUTABLE
-// ID — it is the namespace segment inside every stored reference through
-// this connection (idshape.ValidateSegment shape). RENAMING IT DANGLES
-// THOSE REFERENCES; change Label instead, retire the old name into
-// retired_names if the connection itself dies. Field meanings mirror the
-// old picker form: Host set = the ssh bridge; Host empty = a DIRECT dial
-// of Addr.
+// ConnectionConfig is one remote node. Name is an IMMUTABLE ID — it is
+// the namespace segment inside every stored reference through this
+// connection ("<id>/<name>/…", idshape.ValidateSegment shape). RENAMING IT
+// DANGLES THOSE REFERENCES; change Label instead, retire the old name
+// into retired_names if the connection itself dies. Host set = the ssh
+// bridge; Host empty = a DIRECT dial of Addr. Addr is the REMOTE's
+// federation socket path and is required either way.
 type ConnectionConfig struct {
 	Name       string `yaml:"name"`
 	Label      string `yaml:"label,omitempty"`
@@ -150,34 +126,31 @@ type ConnectionConfig struct {
 	KnownHosts string `yaml:"known_hosts,omitempty"`
 }
 
-// PluginConfig describes one plugin instance. ID is the UUID assigned once
-// and stored permanently in the plugin's own DB — it must never change after
-// the first run. Name is a display alias only; renaming it never invalidates
-// stored links. Binary is the path to the plugin executable; "" means
-// built-in. Config is forwarded verbatim to the plugin at spawn.
+// PluginConfig describes one content plugin. ID is the namespace segment
+// on every reference into it, minted once by serve when absent and never
+// changed. Label is display only; renaming it never invalidates stored
+// links. Binary is the path to the plugin executable ("" → the
+// gridwell-plugin-<kind> beside the gridwell binary). Config is forwarded
+// verbatim to the plugin at spawn — its values are visible in the
+// process environment, so a secret is a FILE PATH, never a value.
 type PluginConfig struct {
-	ID     string            `yaml:"id"`
-	Name   string            `yaml:"name"`
+	ID     string            `yaml:"id,omitempty"`
 	Kind   string            `yaml:"kind"`
+	Label  string            `yaml:"label,omitempty"`
 	Binary string            `yaml:"binary,omitempty"`
 	Config map[string]string `yaml:"config,omitempty"`
-	// LegacyPluginFlag is the retired `provider: true` marker (2026-08-27):
-	// every non-native kind IS a plugin now, so the flag says
-	// nothing. Parsed only so a rewrite keeps the line; Load notes it.
-	LegacyPluginFlag bool `yaml:"provider,omitempty"`
 }
 
 // Defaults holds the built-in values used when a field is absent from the
 // config file or no config file exists.
 var Defaults = ServerConfig{
-	Web:       WebConfig{Bind: "127.0.0.1:8080"},
-	StaticDir: "", // embedded web client (web.FS); a path serves a dev checkout from disk
+	Web: WebConfig{Bind: "127.0.0.1:8080"},
 }
 
 // Home returns the Gridwell home directory: GRIDWELL_HOME if set, else
-// ~/.gridwell. It anchors the mandatory server.yaml and every plugin's derived
-// DB path, and is overridable so tests and the desktop app can point at a
-// throwaway home without touching the real one.
+// ~/.gridwell. It anchors server.yaml and every derived path, and is
+// overridable so tests and the desktop app can point at a throwaway home
+// without touching the real one.
 func Home() (string, error) {
 	if h := os.Getenv("GRIDWELL_HOME"); h != "" {
 		return h, nil
@@ -189,18 +162,24 @@ func Home() (string, error) {
 	return filepath.Join(home, ".gridwell"), nil
 }
 
-// DBDir is the per-plugin database directory: <home>/db/<id>. A directory (not
-// a bare file) so the plugin's SQLite store and its -wal/-shm siblings live
+// DBDir is a namespace's database directory: <home>/db/<id>. A directory
+// (not a bare file) so a SQLite store and its -wal/-shm siblings live
 // together under the id that routes to it.
 func DBDir(home, id string) string {
 	return filepath.Join(home, "db", id)
 }
 
-// DBFile is the per-plugin database file: <home>/db/<id>/store.db. This is the
-// single source of truth both `init` and `serve` derive — the path is never
-// stored in server.yaml.
+// DBFile is a namespace's database file: <home>/db/<id>/store.db — the
+// home store under the node's id, a plugin's memory DB under the
+// plugin's. Derived, never stored in server.yaml.
 func DBFile(home, id string) string {
 	return filepath.Join(DBDir(home, id), "store.db")
+}
+
+// RemoteDBFile is the transport's connection store, beside the home
+// store under the node's own id: <home>/db/<id>/remote.db.
+func RemoteDBFile(home, id string) string {
+	return filepath.Join(DBDir(home, id), "remote.db")
 }
 
 // DefaultPath is the canonical location of the server config file:
@@ -213,88 +192,155 @@ func DefaultPath() (string, error) {
 	return filepath.Join(home, "server.yaml"), nil
 }
 
+// retiredKeys names the keys of the pre-one-node file shapes so a stale
+// file fails with the fix, not a decoder message.
+var retiredKeys = map[string]string{
+	"node_id":  "is `id` (the node IS its home; docs/one-node.md)",
+	"bind":     "is `web: {bind: …}`",
+	"password": "is the web-password file beside this config (delete it to rotate)",
+	"provider": "is gone (the old `provider: true` flag) — every entry is a content plugin",
+	"name":     "is `label`",
+}
+
 // Load reads path and returns a ServerConfig with defaults filled in for
-// missing fields. The config file is mandatory: a missing file returns an
-// error (wrapping fs.ErrNotExist) — there is no synthesized fallback, so a
-// node never runs with an undeclared identity. Tilde paths ("~/...") in
-// StaticDir and plugin Binary/Config are expanded.
+// missing fields. A missing file returns an error wrapping fs.ErrNotExist
+// (serve creates the file; BuildConfig). The decode is STRICT: an unknown
+// key is an error, so a retired key (node_id, flat bind, a `kind: home`
+// plugin entry) fails loudly instead of being silently ignored. Tilde
+// paths ("~/...") are expanded.
 func Load(path string) (*ServerConfig, error) {
-	cfg := Defaults
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// Surface the missing-file case verbatim (errors.Is(err, fs.ErrNotExist)
-		// stays true) so callers can print the "run `gridwell init`" guidance.
 		return nil, fmt.Errorf("config: read %s: %w", path, err)
 	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+	cfg, err := Parse(data)
+	if err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
-	// Presence is derived here, once. cfg starts as Defaults, so after the
-	// unmarshal above a field equal to its default is ambiguous between
-	// "key absent" and "key present with the default value" — a pointer
-	// probe is the only way to see presence. An explicitly empty value
-	// counts as unset (and is default-filled below).
-	var probe struct {
-		Bind *string `yaml:"bind"`
-		Web  *struct {
-			Bind *string `yaml:"bind"`
-		} `yaml:"web"`
+	return cfg, nil
+}
+
+// Parse decodes server.yaml bytes (Load's body, for callers that hold the
+// bytes — tests, the desktop's seeded homes).
+func Parse(data []byte) (*ServerConfig, error) {
+	var cfg ServerConfig
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
+		return nil, retiredKeyHint(err)
 	}
-	if err := yaml.Unmarshal(data, &probe); err != nil {
-		return nil, fmt.Errorf("config: parse %s: %w", path, err)
-	}
-	// The legacy flat keys fold into the web door — a file written before
-	// the doors were grouped keeps working, and says so once per serve.
-	// Presence comes from the probe, never from the value: cfg started as
-	// Defaults, so Web.Bind is non-empty even when the file never said so.
-	webBindSet := probe.Web != nil && probe.Web.Bind != nil && *probe.Web.Bind != ""
-	legacyBindSet := probe.Bind != nil && *probe.Bind != ""
-	if !webBindSet && legacyBindSet {
-		cfg.Web.Bind = cfg.LegacyBind
-		cfg.Deprecations = append(cfg.Deprecations, "bind: is now web.bind (the flat key still loads)")
-	}
-	if cfg.LegacyPassword != "" || cfg.Web.LegacyPassword != "" {
-		cfg.Deprecations = append(cfg.Deprecations, "password: / web.password are IGNORED — the web password is the web-password file beside this config (delete it to rotate)")
-	}
-	cfg.Web.BindSet = webBindSet || legacyBindSet
-	for _, pc := range cfg.Plugins {
-		if pc.LegacyPluginFlag {
-			cfg.Deprecations = append(cfg.Deprecations, fmt.Sprintf("plugin %q: provider: true is implied for every non-native kind; drop the line", pc.Name))
-		}
-	}
+	// Presence before defaults: BindSet is "the file names a bind", which
+	// the default-filled value below can no longer tell.
+	cfg.Web.BindSet = cfg.Web.Bind != ""
 	if cfg.Web.Bind == "" {
 		cfg.Web.Bind = Defaults.Web.Bind
+	}
+	for i := range cfg.Plugins {
+		if cfg.Plugins[i].Kind == "" {
+			return nil, fmt.Errorf("plugins[%d]: kind is required", i)
+		}
+		switch cfg.Plugins[i].Kind {
+		case "home", "remote", "local", "localdb", "ssh":
+			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin — delete the entry (the node's id is `id:`, its connections are `connections:`; docs/one-node.md)", i, cfg.Plugins[i].Kind)
+		}
 	}
 	if err := expandPaths(&cfg); err != nil {
 		return nil, err
 	}
 	if err := validateIDs(&cfg); err != nil {
-		return nil, fmt.Errorf("config: %s: %w", path, err)
+		return nil, err
 	}
 	return &cfg, nil
+}
+
+// retiredKeyHint rewrites the decoder's "field X not found" for a key the
+// one-node shape retired into the fix.
+func retiredKeyHint(err error) error {
+	msg := err.Error()
+	for key, hint := range retiredKeys {
+		if strings.Contains(msg, "field "+key+" not found") {
+			return fmt.Errorf("%s: `%s` %s", msg, key, hint)
+		}
+	}
+	return err
+}
+
+// Mint fills every absent id (the node's own, each plugin's) with a fresh
+// short id and reports whether anything was minted — the caller saves the
+// file then. The ONE place ids are minted.
+func Mint(cfg *ServerConfig) bool {
+	changed := false
+	if cfg.ID == "" {
+		cfg.ID = idshape.NewShortID()
+		changed = true
+	}
+	for i := range cfg.Plugins {
+		if cfg.Plugins[i].ID == "" {
+			cfg.Plugins[i].ID = idshape.NewShortID()
+			changed = true
+		}
+	}
+	return changed
+}
+
+// Save writes cfg to path (0600, atomically: temp + rename, so a crash
+// mid-write never loses the only copy of the node's ids). Derived fields
+// (WebPassword, CacheDir, BindSet) never reach the file.
+func Save(path string, cfg *ServerConfig) error {
+	out, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("config: marshal: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("config: mkdir: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o600); err != nil {
+		return fmt.Errorf("config: write %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("config: rename %s: %w", path, err)
+	}
+	return nil
 }
 
 // validateIDs enforces the identity-shape contract on every id the file
 // declares. Ids are otherwise opaque strings, but two properties are
 // load-bearing everywhere they travel: no '/' (the qualified-id codec's
 // delimiter — rpc.SplitID) and never purely numeric (URL paths tell a
-// namespace segment from a tile id by exactly this).
-// `gridwell init` mints conforming ids (idshape.NewShortID); this is the one
-// door that catches a hand-edited server.yaml before a bad id gets stored
-// into cross-plugin references it can never be removed from.
+// namespace segment from a tile id by exactly this). Mint produces
+// conforming ids; this is the one door that catches a hand-edited id
+// before it gets stored into references it can never be removed from. An
+// absent id is legal here (Mint fills it).
 func validateIDs(cfg *ServerConfig) error {
-	// The rules live with the mint (api/idshape) — one id-shape owner.
 	check := idshape.ValidateSegment
-	if err := check("node_id", cfg.NodeID); err != nil {
-		return err
+	if cfg.ID != "" {
+		if err := check("id", cfg.ID); err != nil {
+			return err
+		}
 	}
+	seen := map[string]bool{cfg.ID: cfg.ID != ""}
 	for _, p := range cfg.Plugins {
 		if p.ID == "" {
-			return fmt.Errorf("plugin %q has no id", p.Name)
+			continue
 		}
 		if err := check("plugin id", p.ID); err != nil {
 			return err
 		}
+		if seen[p.ID] {
+			return fmt.Errorf("plugin id %q is declared twice", p.ID)
+		}
+		seen[p.ID] = true
+	}
+	names := map[string]bool{}
+	for _, c := range cfg.Connections {
+		if err := check("connection name", c.Name); err != nil {
+			return err
+		}
+		if names[c.Name] {
+			return fmt.Errorf("connection %q is declared twice", c.Name)
+		}
+		names[c.Name] = true
 	}
 	return nil
 }
@@ -323,83 +369,6 @@ func expandPaths(cfg *ServerConfig) error {
 		}
 	}
 	return nil
-}
-
-// ErrDuplicatePlugin is returned by AppendPlugin when an entry with the same
-// id or name already exists — both must stay unique across the config.
-var ErrDuplicatePlugin = errors.New("config: a plugin with this id or name already exists")
-
-// AppendPlugin adds entry to <home>/server.yaml, creating the file (and its
-// parent dir) on the first plugin. It tolerates a missing file (this is how the
-// very first `gridwell init` bootstraps the config) but rejects a duplicate id
-// or name, so the file stays the authoritative, conflict-free plugin list.
-//
-// Only id/name/kind/config are persisted; the DB path is derived, never stored.
-func AppendPlugin(home string, entry PluginConfig) error {
-	path := filepath.Join(home, "server.yaml")
-	cfg := ServerConfig{}
-	data, err := os.ReadFile(path)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		// First plugin: start from an empty config.
-	case err != nil:
-		return fmt.Errorf("config: read %s: %w", path, err)
-	default:
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			return fmt.Errorf("config: parse %s: %w", path, err)
-		}
-	}
-
-	for _, p := range cfg.Plugins {
-		if p.ID == entry.ID {
-			return fmt.Errorf("%w: id %q", ErrDuplicatePlugin, entry.ID)
-		}
-		if p.Name == entry.Name {
-			return fmt.Errorf("%w: name %q", ErrDuplicatePlugin, entry.Name)
-		}
-	}
-	cfg.Plugins = append(cfg.Plugins, entry)
-
-	out, err := yaml.Marshal(&cfg)
-	if err != nil {
-		return fmt.Errorf("config: marshal: %w", err)
-	}
-	if err := os.MkdirAll(home, 0o755); err != nil {
-		return fmt.Errorf("config: mkdir %s: %w", home, err)
-	}
-	if err := os.WriteFile(path, out, 0o600); err != nil {
-		return fmt.Errorf("config: write %s: %w", path, err)
-	}
-	return nil
-}
-
-// EnsureNodeID returns the node's durable identity from <home>/server.yaml,
-// minting and persisting one (via newID) if the file predates node identity.
-// A node that existed before this field keeps every plugin id untouched — the
-// node id is purely additive. The file must already exist (a node never runs
-// with an undeclared identity; `gridwell init` creates it).
-func EnsureNodeID(home string, newID func() string) (string, error) {
-	path := filepath.Join(home, "server.yaml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("config: read %s: %w", path, err)
-	}
-	cfg := ServerConfig{}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return "", fmt.Errorf("config: parse %s: %w", path, err)
-	}
-	if cfg.NodeID != "" {
-		return cfg.NodeID, nil
-	}
-	cfg.NodeID = newID()
-	out, err := yaml.Marshal(&cfg)
-	if err != nil {
-		return "", fmt.Errorf("config: marshal: %w", err)
-	}
-	if err := os.WriteFile(path, out, 0o600); err != nil {
-		return "", fmt.Errorf("config: write %s: %w", path, err)
-	}
-	return cfg.NodeID, nil
 }
 
 // PasswordFile is where a home's web password lives: beside server.yaml
@@ -435,6 +404,9 @@ func EnsurePasswordFile(home string) (string, error) {
 		return "", fmt.Errorf("config: mint web password: %w", err)
 	}
 	pw := hex.EncodeToString(b[:])
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return "", fmt.Errorf("config: mkdir %s: %w", home, err)
+	}
 	if err := os.WriteFile(path, []byte(pw+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("config: write %s: %w", path, err)
 	}

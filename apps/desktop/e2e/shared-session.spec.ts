@@ -10,7 +10,7 @@ import { test, expect } from './fixtures';
 // tile owned by PLUGIN B. Under the old model these were different
 // partitions by construction and this spec would fail.
 
-test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
+test.use({ extraNodes: ['second'] });
 
 test('live tiles in different plugins share the one local session', async ({
   electronApp,

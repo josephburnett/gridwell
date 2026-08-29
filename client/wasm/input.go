@@ -1133,8 +1133,8 @@ func (a *App) persistPluginRootView(p *pane.Pane) {
 	if len(p.Path) > 0 || p.TextFocus != "" {
 		return
 	}
-	pl, ok := a.pluginByUUID(uuidOf(p.Anchor))
-	if !ok || pl.RootGridID != p.Anchor {
+	pl, ok := a.pluginByRoot(p.Anchor)
+	if !ok {
 		return
 	}
 	a.persistRootViewCore(p, pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom,
@@ -1395,7 +1395,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 		// A root grid: the read side of persistPluginRootView — the same
 		// 1×1 synthetic well, inverted; a root's view rides its PluginInfo.
 		var vcx, vcy, vzoom float64
-		if pl, found := a.pluginByUUID(uuidOf(anchor)); found && pl.RootGridID == anchor {
+		if pl, found := a.pluginByRoot(anchor); found {
 			vcx, vcy, vzoom = pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom
 		}
 		if vzoom <= 0 {

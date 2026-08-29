@@ -8,32 +8,30 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/node"
 )
 
-// backupTestHome builds a real home via RunInit (a localdb plugin with a DB)
-// and returns (home, the plugin's root grid id).
+// backupTestHome builds a real home the way serve does (node.BuildConfig
+// mints the id and creates the home store) and returns (home, the home's
+// root grid id).
 func backupTestHome(t *testing.T) (home string, rootID string) {
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
-	if code := RunInit([]string{"--kind", "home", "--name", "home"}); code != 0 {
-		t.Fatalf("init exit = %d", code)
-	}
+	cfgPath := filepath.Join(home, "server.yaml")
 	// A plugin entry that has never served: no memory DB yet (2026-08-27:
-	// backup aborted on it). And the loose durable files a served home has.
-	if code := RunInit([]string{"--kind", "gitlab", "--name", "todos"}); code != 0 {
-		t.Fatalf("init gitlab exit = %d", code)
+	// backup aborted on it).
+	if err := os.WriteFile(cfgPath, []byte("plugins:\n  - kind: gitlab\n    label: todos\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	for _, f := range []string{config.PasswordFile(home)} {
-		if err := os.WriteFile(f, []byte("x\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := node.BuildConfig(home, cfgPath); err != nil {
+		t.Fatal(err)
 	}
-	cfg, err := config.Load(filepath.Join(home, "server.yaml"))
+	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(config.DBFile(home, cfg.Plugins[0].ID))
+	st, err := store.Open(config.DBFile(home, cfg.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +62,7 @@ func TestBackupSnapshotsHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	copied := config.DBFile(dest, cfg.Plugins[0].ID)
+	copied := config.DBFile(dest, cfg.ID)
 	st, err := store.Open(copied)
 	if err != nil {
 		t.Fatalf("backed-up DB failed the open contract: %v", err)
@@ -82,8 +80,8 @@ func TestBackupSnapshotsHome(t *testing.T) {
 			t.Errorf("backup lacks %s: %v (a restored home would rotate its password / lose its viewport)", filepath.Base(f), err)
 		}
 	}
-	if len(cfg.Plugins) != 2 {
-		t.Errorf("backup config lists %d entries, want both (the plugin without a DB must not abort)", len(cfg.Plugins))
+	if len(cfg.Plugins) != 1 {
+		t.Errorf("backup config lists %d entries, want the never-served plugin kept (it must not abort the backup)", len(cfg.Plugins))
 	}
 	_ = home
 }

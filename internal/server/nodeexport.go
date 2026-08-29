@@ -355,11 +355,10 @@ func (n *nodeExport) WriteContent(stream pb.Gridwell_WriteContentServer) error {
 	if err != nil {
 		return err
 	}
-	uuid, local, ok := rpc.SplitID(first.TileId)
-	if !ok {
+	if _, _, ok := rpc.SplitID(first.TileId); !ok {
 		return status.Errorf(gcodes.InvalidArgument, "unqualified id %q", first.TileId)
 	}
-	c, found := n.srv.routeClient(uuid)
+	c, local, uuid, transit, found := n.srv.resolve(first.TileId)
 	if !found {
 		return status.Errorf(gcodes.NotFound, "no plugin %q", uuid)
 	}
@@ -379,7 +378,7 @@ func (n *nodeExport) WriteContent(stream pb.Gridwell_WriteContentServer) error {
 			}
 			t := resp.GetTile()
 			if t != nil {
-				t = qualifyTilesFor(n.srv.pluginReg.Transit(uuid), uuid, []*pb.Tile{t})[0]
+				t = qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
 			}
 			return stream.SendAndClose(&pb.TileResponse{Tile: t})
 		}

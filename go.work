@@ -7,7 +7,6 @@ use (
 	.
 	./api
 	./apps/gridwell
-	./apps/gridwell-all
 	./internal/doctype
 	./mobile
 	./plugins/fs

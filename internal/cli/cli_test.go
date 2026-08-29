@@ -128,64 +128,73 @@ func TestServingBanner(t *testing.T) {
 	}
 }
 
-func TestBuildServeConfigMissingFile(t *testing.T) {
+// A missing config is a FRESH HOME: the node mints its id, writes the
+// file, and creates the home store — no init step exists.
+func TestBuildServeConfigFreshHome(t *testing.T) {
 	home := t.TempDir()
-	_, err := buildServeConfig(home, filepath.Join(home, "server.yaml"))
-	if err == nil {
-		t.Fatal("a missing config must be an error (no synthesized fallback)")
+	path := filepath.Join(home, "server.yaml")
+	cfg, err := buildServeConfig(home, path)
+	if err != nil {
+		t.Fatalf("fresh home: %v", err)
 	}
-	if !strings.Contains(err.Error(), "gridwell init") {
-		t.Errorf("error should guide the user to `gridwell init`; got: %v", err)
+	if cfg.ID == "" {
+		t.Fatal("the node's id must be minted")
+	}
+	back, err := config.Load(path)
+	if err != nil || back.ID != cfg.ID {
+		t.Fatalf("the minted id must be written back: %v %+v", err, back)
+	}
+	if _, err := os.Stat(config.DBFile(home, cfg.ID)); err != nil {
+		t.Fatalf("the home store must exist after the first build: %v", err)
+	}
+	again, err := buildServeConfig(home, path)
+	if err != nil || again.ID != cfg.ID {
+		t.Fatalf("a second build must keep the id: %v %+v", err, again)
 	}
 }
 
-func TestBuildServeConfigNoPlugins(t *testing.T) {
+// A plugin listed without an id gets one minted and its memory DB dir
+// created; its derived db_file is injected, never stored.
+func TestBuildServeConfigMintsPluginIDsAndInjectsDBFile(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "server.yaml")
-	if err := os.WriteFile(path, []byte("bind: \"127.0.0.1:9090\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("plugins:\n  - kind: fs\n    config:\n      root: /tmp\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := buildServeConfig(home, path); err == nil {
-		t.Fatal("a config with no plugins must be an error")
-	}
-}
-
-func TestBuildServeConfigInjectsDBFile(t *testing.T) {
-	home := t.TempDir()
-	path := filepath.Join(home, "server.yaml")
-	yml := "plugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"home\"\n"
-	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	// The DB must already exist (created by `gridwell init`); fake one.
-	want := config.DBFile(home, "abc")
-	if err := os.MkdirAll(config.DBDir(home, "abc"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(want, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	cfg, err := buildServeConfig(home, path)
 	if err != nil {
 		t.Fatalf("buildServeConfig: %v", err)
 	}
-	if got := cfg.Plugins[0].Config["db_file"]; got != want {
+	pid := cfg.Plugins[0].ID
+	if pid == "" {
+		t.Fatal("plugin id must be minted")
+	}
+	if got, want := cfg.Plugins[0].Config["db_file"], config.DBFile(home, pid); got != want {
 		t.Errorf("db_file = %q, want derived %q", got, want)
+	}
+	raw, _ := os.ReadFile(path)
+	if strings.Contains(string(raw), "db_file") {
+		t.Errorf("db_file must never be stored:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), pid) {
+		t.Errorf("the minted plugin id must be written back:\n%s", raw)
 	}
 }
 
-// TestBuildServeConfigMissingDB is the regression guard for the silent-new-DB
-// hole: a config entry whose DB does not exist (e.g. its id was changed) must
-// be a hard error, not a fresh empty store.
-func TestBuildServeConfigMissingDB(t *testing.T) {
+// TestBuildServeConfigChangedID is the regression guard for the
+// silent-new-DB hole: a home whose store is missing under its id while
+// another store exists (the id was edited) must be a hard error, not a
+// fresh empty store beside the real one.
+func TestBuildServeConfigChangedID(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "server.yaml")
-	yml := "plugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"home\"\n"
-	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
+	if _, err := buildServeConfig(home, path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := buildServeConfig(home, path); err == nil {
-		t.Fatal("a plugin whose DB does not exist must be rejected")
+	if err := os.WriteFile(path, []byte("id: changed1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildServeConfig(home, path); err == nil || !strings.Contains(err.Error(), "did `id` change") {
+		t.Fatalf("a changed id must be refused, got %v", err)
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/internal/node"
 	_ "modernc.org/sqlite"
 )
 
@@ -63,7 +62,7 @@ func RunBackup(args []string) int {
 		fmt.Fprintf(os.Stderr, "backup: %v\n", err)
 		return 1
 	}
-	fmt.Printf("gridwell: backed up %d plugin DB(s) + server.yaml to %s\n", len(cfg.Plugins), dest)
+	fmt.Printf("gridwell: backed up the home + %d plugin DB(s) + server.yaml to %s\n", len(cfg.Plugins), dest)
 	return 0
 }
 
@@ -75,30 +74,43 @@ func backupHome(home, cfgPath string, cfg *config.ServerConfig, dest string) err
 	if _, err := os.Stat(filepath.Join(dest, "server.yaml")); err == nil {
 		return fmt.Errorf("destination %s already holds a backup (server.yaml exists); choose a fresh directory", dest)
 	}
-	if err := os.MkdirAll(dest, 0o755); err != nil {
+	if err := os.MkdirAll(dest, 0o700); err != nil {
 		return err
 	}
 
 	// Snapshot every DB first; write server.yaml last, so a completed
-	// backup (one whose server.yaml exists) always has all its DBs. A
-	// native kind's DB must exist (init created it); a plugin's is the
-	// node's memory DB, minted at first serve — absent means never served,
-	// not lost (durable-but-forgettable by contract).
-	for i := range cfg.Plugins {
-		pc := &cfg.Plugins[i]
-		src := config.DBFile(home, pc.ID)
+	// backup (one whose server.yaml exists) always has all its DBs. The
+	// home store and the transport store must exist (a served home has
+	// them); a plugin's is the node's memory DB, minted at first serve —
+	// absent means never served, not lost (durable-but-forgettable by
+	// contract).
+	snap := func(src, dst string, required bool) error {
 		if _, err := os.Stat(src); err != nil {
-			if !node.IsNative(pc.Kind) && errors.Is(err, fs.ErrNotExist) {
-				continue
+			if !required && errors.Is(err, fs.ErrNotExist) {
+				return nil
 			}
-			return fmt.Errorf("plugin %q (%s): no database at %s", pc.Name, pc.ID, src)
+			return fmt.Errorf("no database at %s", src)
 		}
-		dstDir := config.DBDir(dest, pc.ID)
-		if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 			return err
 		}
-		if err := vacuumInto(src, filepath.Join(dstDir, "store.db")); err != nil {
-			return fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.ID, err)
+		return vacuumInto(src, dst)
+	}
+	if cfg.ID == "" {
+		return fmt.Errorf("%s names no id — the home has never served; nothing to back up", cfgPath)
+	}
+	if err := snap(config.DBFile(home, cfg.ID), config.DBFile(dest, cfg.ID), true); err != nil {
+		return fmt.Errorf("home: %w", err)
+	}
+	if err := snap(config.RemoteDBFile(home, cfg.ID), config.RemoteDBFile(dest, cfg.ID), false); err != nil {
+		return fmt.Errorf("transport: %w", err)
+	}
+	for _, pc := range cfg.Plugins {
+		if pc.ID == "" {
+			continue // never served: no id, no memory DB
+		}
+		if err := snap(config.DBFile(home, pc.ID), config.DBFile(dest, pc.ID), false); err != nil {
+			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, err)
 		}
 	}
 

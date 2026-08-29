@@ -15,7 +15,6 @@ cd ../.. && make vendor
 Then create a home and run the app (offline from here on):
 
 ```sh
-cd ../.. && make init            # once: register the native store in ~/.gridwell
 make launch                      # against ~/.gridwell
 GRIDWELL_HOME=/path make launch  # against another home
 ```

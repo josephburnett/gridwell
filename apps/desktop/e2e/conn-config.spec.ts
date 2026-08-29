@@ -7,7 +7,6 @@ import { test, expect } from './fixtures';
 // the connection dialog had no job left and was deleted (2026-08-23).
 
 test.use({
-  extraPlugins: [{ kind: 'remote', name: 'connections' }],
   extraYaml: `connections:
     - name: fixedcon
       label: rtb

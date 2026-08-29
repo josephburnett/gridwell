@@ -9,453 +9,228 @@ import (
 	"testing"
 )
 
-// TestLoad_missing pins the mandatory-config contract: a missing server.yaml is
-// an error (wrapping fs.ErrNotExist), not a silent defaults fallback. This is
-// what forces a node to declare its plugins via `gridwell init` before it runs.
-func TestLoad_missing(t *testing.T) {
-	_, err := Load("/nonexistent/path/server.yaml")
-	if err == nil {
-		t.Fatal("missing file must error")
+func write(t *testing.T, dir, yml string) string {
+	t.Helper()
+	p := filepath.Join(dir, "server.yaml")
+	if err := os.WriteFile(p, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
 	}
+	return p
+}
+
+func TestLoad_missing(t *testing.T) {
+	_, err := Load(filepath.Join(t.TempDir(), "server.yaml"))
 	if !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("error should wrap fs.ErrNotExist; got: %v", err)
+		t.Fatalf("missing file must surface fs.ErrNotExist (serve treats it as a fresh home), got %v", err)
 	}
 }
 
 func TestHome(t *testing.T) {
-	t.Setenv("GRIDWELL_HOME", "/tmp/gw-home")
+	t.Setenv("GRIDWELL_HOME", "/x/y")
+	if h, _ := Home(); h != "/x/y" {
+		t.Errorf("GRIDWELL_HOME must win, got %q", h)
+	}
+	t.Setenv("GRIDWELL_HOME", "")
 	h, err := Home()
-	if err != nil {
-		t.Fatalf("Home: %v", err)
-	}
-	if h != "/tmp/gw-home" {
-		t.Errorf("GRIDWELL_HOME not honored: got %q", h)
-	}
-
-	os.Unsetenv("GRIDWELL_HOME")
-	h, err = Home()
-	if err != nil {
-		t.Fatalf("Home fallback: %v", err)
-	}
-	if !strings.HasSuffix(h, "/.gridwell") {
-		t.Errorf("fallback should be ~/.gridwell; got %q", h)
+	if err != nil || !strings.HasSuffix(h, "/.gridwell") {
+		t.Errorf("default home = %q (%v), want ~/.gridwell", h, err)
 	}
 }
 
 func TestDBPaths(t *testing.T) {
-	if got, want := DBDir("/home/x/.gridwell", "abc"), "/home/x/.gridwell/db/abc"; got != want {
-		t.Errorf("DBDir: got %q, want %q", got, want)
+	if got := DBFile("/h", "abc"); got != "/h/db/abc/store.db" {
+		t.Errorf("DBFile = %q", got)
 	}
-	if got, want := DBFile("/home/x/.gridwell", "abc"), "/home/x/.gridwell/db/abc/store.db"; got != want {
-		t.Errorf("DBFile: got %q, want %q", got, want)
-	}
-}
-
-func TestAppendPlugin(t *testing.T) {
-	home := t.TempDir()
-	a := PluginConfig{ID: "id-a", Name: "home", Kind: "home"}
-	b := PluginConfig{ID: "id-b", Name: "files", Kind: "fs", Config: map[string]string{"root": "/srv"}}
-
-	// First plugin bootstraps the file; second appends.
-	if err := AppendPlugin(home, a); err != nil {
-		t.Fatalf("append a: %v", err)
-	}
-	if err := AppendPlugin(home, b); err != nil {
-		t.Fatalf("append b: %v", err)
-	}
-
-	cfg, err := Load(filepath.Join(home, "server.yaml"))
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if len(cfg.Plugins) != 2 {
-		t.Fatalf("plugins: got %d, want 2", len(cfg.Plugins))
-	}
-	// StaticDir must NOT be forced empty by the round-trip (would mean headless).
-	if cfg.StaticDir != Defaults.StaticDir {
-		t.Errorf("static dir clobbered: got %q, want %q", cfg.StaticDir, Defaults.StaticDir)
-	}
-	if cfg.Plugins[1].Config["root"] != "/srv" {
-		t.Errorf("config map not persisted: %+v", cfg.Plugins[1])
-	}
-
-	// Duplicate id and duplicate name are both rejected.
-	if err := AppendPlugin(home, PluginConfig{ID: "id-a", Name: "other", Kind: "home"}); !errors.Is(err, ErrDuplicatePlugin) {
-		t.Errorf("dup id should be rejected: %v", err)
-	}
-	if err := AppendPlugin(home, PluginConfig{ID: "id-c", Name: "home", Kind: "home"}); !errors.Is(err, ErrDuplicatePlugin) {
-		t.Errorf("dup name should be rejected: %v", err)
+	if got := RemoteDBFile("/h", "abc"); got != "/h/db/abc/remote.db" {
+		t.Errorf("RemoteDBFile = %q", got)
 	}
 }
 
-// TestPasswordRoundTrip pins that a legacy `password:` line is PRESERVED
-// across a config rewrite (never silently dropped) even though it is
-// ignored since 2026-08-26 — the password is the web-password file.
-func TestPasswordRoundTrip(t *testing.T) {
-	home := t.TempDir()
-	path := filepath.Join(home, "server.yaml")
-	if err := os.WriteFile(path, []byte("password: \"hunter2\"\nplugins:\n  - id: id-a\n    name: home\n    kind: localdb\n"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if cfg.LegacyPassword != "hunter2" {
-		t.Fatalf("password: got %q, want hunter2", cfg.LegacyPassword)
-	}
-	if err := AppendPlugin(home, PluginConfig{ID: "id-b", Name: "files", Kind: "fs"}); err != nil {
-		t.Fatalf("append: %v", err)
-	}
-	if _, err := EnsureNodeID(home, func() string { return "n0deidx" }); err != nil {
-		t.Fatalf("ensure node id: %v", err)
-	}
-	cfg, err = Load(path)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	if cfg.LegacyPassword != "hunter2" {
-		t.Fatalf("password dropped by a config rewrite: got %q", cfg.LegacyPassword)
-	}
-}
-
+// The one-node shape, fully populated, round-trips through Load.
 func TestLoad_full(t *testing.T) {
-	dir := t.TempDir()
-	yml := `
-bind: "127.0.0.1:9090"
-static: "/var/www"
+	p := write(t, t.TempDir(), `id: n0deid1
+web:
+    bind: "127.0.0.1:10010"
+federation:
+    socket: /tmp/fed.sock
+static: /srv/web
+shell: /bin/zsh
+disable_shells: true
+connections:
+    - name: geneva
+      label: Geneva
+      host: geneva.example
+      user: joe
+      port: 2222
+      addr: /home/joe/.gridwell/federation.sock
+      key: /k
+      known_hosts: /kh
+retired_names: [olddead]
 plugins:
-  - id: "abc123"
-    name: "home"
-    kind: "home"
-  - id: "def456"
-    name: "files"
-    kind: "fs"
-    binary: "/usr/local/bin/gridwell-fs"
-    config:
-      root: "/home/joe"
-`
-	f := filepath.Join(dir, "server.yaml")
-	if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
+    - id: p1
+      kind: fs
+      label: Home dir
+      config:
+        root: /home/joe
+    - kind: gitlab
+`)
+	cfg, err := Load(p)
+	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(f)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
+	if cfg.ID != "n0deid1" || cfg.Web.Bind != "127.0.0.1:10010" || !cfg.Web.BindSet ||
+		cfg.Federation.Socket != "/tmp/fed.sock" || cfg.StaticDir != "/srv/web" ||
+		cfg.Shell != "/bin/zsh" || !cfg.DisableShells {
+		t.Fatalf("top level = %+v", cfg)
 	}
-	if cfg.Web.Bind != "127.0.0.1:9090" {
-		t.Errorf("bind: got %q", cfg.Web.Bind)
+	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "geneva" || cfg.Connections[0].Port != 2222 ||
+		cfg.Connections[0].Addr != "/home/joe/.gridwell/federation.sock" {
+		t.Fatalf("connections = %+v", cfg.Connections)
 	}
-	if cfg.StaticDir != "/var/www" {
-		t.Errorf("static: got %q", cfg.StaticDir)
+	if len(cfg.RetiredNames) != 1 || cfg.RetiredNames[0] != "olddead" {
+		t.Fatalf("retired = %v", cfg.RetiredNames)
 	}
-	if len(cfg.Plugins) != 2 {
-		t.Fatalf("plugins: got %d, want 2", len(cfg.Plugins))
-	}
-	p := cfg.Plugins[0]
-	if p.ID != "abc123" || p.Name != "home" || p.Kind != "home" {
-		t.Errorf("plugin[0]: %+v", p)
+	if len(cfg.Plugins) != 2 || cfg.Plugins[0].ID != "p1" || cfg.Plugins[0].Label != "Home dir" ||
+		cfg.Plugins[0].Config["root"] != "/home/joe" || cfg.Plugins[1].Kind != "gitlab" || cfg.Plugins[1].ID != "" {
+		t.Fatalf("plugins = %+v", cfg.Plugins)
 	}
 }
 
-// TestLoad_rejectsBadIDs pins the identity-shape contract at the one config
-// door (2026-07-25): a purely-numeric or slash-carrying plugin/node id would
-// be indistinguishable from a tile id in URL paths and embed hrefs (or break
-// the qualified-id codec), and once stored into cross-plugin references it
-// can never be removed. gridwell init mints conforming ids; this catches the
-// hand-edited file.
+// An empty file is a legal fresh home; defaults fill in.
+func TestLoad_empty_and_defaults(t *testing.T) {
+	cfg, err := Load(write(t, t.TempDir(), ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ID != "" || cfg.Web.Bind != Defaults.Web.Bind || cfg.Web.BindSet || len(cfg.Plugins) != 0 {
+		t.Fatalf("fresh config = %+v", cfg)
+	}
+}
+
+// The retired shapes fail LOUDLY with the fix, never load silently: a
+// node_id key, the flat bind, a password in the file, a `kind: home`
+// plugin entry, a plugin `name`.
+func TestLoad_refusesRetiredKeys(t *testing.T) {
+	cases := map[string]string{
+		"node_id: abc\n":                               "`id`",
+		"bind: 127.0.0.1:1\n":                          "web",
+		"password: hunter2\n":                          "web-password",
+		"plugins:\n  - kind: home\n    id: h1\n":       "node itself",
+		"plugins:\n  - kind: remote\n    id: r1\n":     "node itself",
+		"plugins:\n  - kind: fs\n    name: x\n":        "`label`",
+		"plugins:\n  - kind: fs\n    provider: true\n": "gone",
+		"plugins:\n  - id: p1\n":                       "kind is required",
+		"nonsense: 1\n":                                "not found",
+	}
+	for yml, want := range cases {
+		_, err := Load(write(t, t.TempDir(), yml))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want a refusal mentioning %q", yml, err, want)
+		}
+	}
+}
+
 func TestLoad_rejectsBadIDs(t *testing.T) {
-	write := func(t *testing.T, yml string) string {
-		t.Helper()
-		f := filepath.Join(t.TempDir(), "server.yaml")
-		if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
-			t.Fatal(err)
+	for _, yml := range []string{
+		"id: has/slash\n",
+		"id: \"12345\"\n",
+		"plugins:\n  - id: \"777\"\n    kind: fs\n",
+		"plugins:\n  - id: dup1\n    kind: fs\n  - id: dup1\n    kind: proc\n",
+		"connections:\n  - name: \"9\"\n    addr: /s\n",
+		"connections:\n  - name: c1\n    addr: /s\n  - name: c1\n    addr: /t\n",
+	} {
+		if _, err := Load(write(t, t.TempDir(), yml)); err == nil {
+			t.Errorf("%q must be refused", yml)
 		}
-		return f
-	}
-	bad := map[string]string{
-		"numeric plugin id":  "plugins:\n  - id: \"12345\"\n    name: a\n    kind: localdb\n",
-		"slash in plugin id": "plugins:\n  - id: \"abc/def\"\n    name: a\n    kind: localdb\n",
-		"empty plugin id":    "plugins:\n  - name: a\n    kind: localdb\n",
-		"numeric node id":    "node_id: \"777\"\nplugins:\n  - id: \"abc123\"\n    name: a\n    kind: localdb\n",
-	}
-	for name, yml := range bad {
-		if _, err := Load(write(t, yml)); err == nil {
-			t.Errorf("%s: Load accepted it", name)
-		}
-	}
-	good := map[string]string{
-		"short id":       "plugins:\n  - id: \"k3x9m2q\"\n    name: a\n    kind: localdb\n",
-		"legacy hex id":  "plugins:\n  - id: \"0123456789abcdef0123456789abcdef\"\n    name: a\n    kind: localdb\n",
-		"absent node id": "plugins:\n  - id: \"abc123\"\n    name: a\n    kind: localdb\n",
-	}
-	for name, yml := range good {
-		if _, err := Load(write(t, yml)); err != nil {
-			t.Errorf("%s: Load rejected it: %v", name, err)
-		}
-	}
-}
-
-func TestLoad_defaults_for_missing_fields(t *testing.T) {
-	dir := t.TempDir()
-	yml := `bind: "0.0.0.0:7070"`
-	f := filepath.Join(dir, "server.yaml")
-	if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := Load(f)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Web.Bind != "0.0.0.0:7070" {
-		t.Errorf("bind: got %q", cfg.Web.Bind)
 	}
 }
 
 func TestLoad_tilde_expansion(t *testing.T) {
-	dir := t.TempDir()
-	yml := `
-plugins:
-  - id: "xyz"
-    name: "files"
-    kind: "fs"
-    binary: "~/bin/gridwell-fs"
-    config:
-      root: "~/docs"
-`
-	f := filepath.Join(dir, "server.yaml")
-	if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
+	home, _ := os.UserHomeDir()
+	cfg, err := Load(write(t, t.TempDir(), "federation:\n  socket: ~/fed.sock\nstatic: ~/web\nplugins:\n  - id: p1\n    kind: fs\n    binary: ~/bin/x\n    config:\n      root: ~/docs\n"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(f)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	home, _ := os.UserHomeDir()
-	if !strings.HasPrefix(cfg.Plugins[0].Binary, home) {
-		t.Errorf("binary tilde not expanded: %q", cfg.Plugins[0].Binary)
-	}
-	if !strings.HasPrefix(cfg.Plugins[0].Config["root"], home) {
-		t.Errorf("config root tilde not expanded: %q", cfg.Plugins[0].Config["root"])
+	if cfg.Federation.Socket != filepath.Join(home, "fed.sock") || cfg.StaticDir != filepath.Join(home, "web") ||
+		cfg.Plugins[0].Binary != filepath.Join(home, "bin/x") || cfg.Plugins[0].Config["root"] != filepath.Join(home, "docs") {
+		t.Fatalf("tilde not expanded: %+v", cfg)
 	}
 }
 
 func TestLoad_invalid_yaml(t *testing.T) {
+	if _, err := Load(write(t, t.TempDir(), "plugins: [\n")); err == nil {
+		t.Fatal("invalid yaml must be an error")
+	}
+}
+
+// Mint fills exactly the absent ids and reports it; Save writes the file
+// the next Load reads back byte-meaningfully, 0600, with no derived field
+// leaking into it.
+func TestMintAndSave(t *testing.T) {
 	dir := t.TempDir()
-	f := filepath.Join(dir, "server.yaml")
-	if err := os.WriteFile(f, []byte("bind: [not a string]"), 0o600); err != nil {
+	p := write(t, dir, "plugins:\n  - kind: fs\n  - id: keep1\n    kind: proc\n")
+	cfg, err := Load(p)
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load(f)
-	if err == nil {
-		t.Error("expected error for invalid yaml")
+	cfg.WebPassword, cfg.CacheDir = "secret", "/cache"
+	if !Mint(cfg) {
+		t.Fatal("Mint must report the minted ids")
+	}
+	if cfg.ID == "" || cfg.Plugins[0].ID == "" || cfg.Plugins[1].ID != "keep1" {
+		t.Fatalf("mint = %+v", cfg)
+	}
+	if Mint(cfg) {
+		t.Fatal("a second Mint must be a no-op")
+	}
+	if err := Save(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := os.Stat(p)
+	if st.Mode().Perm() != 0o600 {
+		t.Errorf("saved mode = %v, want 0600", st.Mode().Perm())
+	}
+	raw, _ := os.ReadFile(p)
+	if strings.Contains(string(raw), "secret") || strings.Contains(string(raw), "/cache") || strings.Contains(string(raw), "web_password") {
+		t.Fatalf("derived fields leaked into the file:\n%s", raw)
+	}
+	back, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.ID != cfg.ID || back.Plugins[0].ID != cfg.Plugins[0].ID || back.Plugins[1].ID != "keep1" {
+		t.Fatalf("round trip: %+v vs %+v", back, cfg)
+	}
+	if _, err := os.Stat(p + ".tmp"); !errors.Is(err, fs.ErrNotExist) {
+		t.Error("the temp file must be renamed away")
 	}
 }
 
-// TestLoad_bindSet pins how "the user pinned the listen address" is detected:
-// BindSet is true only when server.yaml actually contains a non-empty `bind:`
-// key. This is what lets `serve --bind-default` (the desktop sidecar's
-// ephemeral loopback port) fill in only when the config is silent — an
-// explicit bind: equal to the built-in default must still count as set.
-func TestLoad_bindSet(t *testing.T) {
-	cases := []struct {
-		name     string
-		yml      string
-		wantBind string
-		wantSet  bool
-	}{
-		{"key absent", `static: "/var/www"`, Defaults.Web.Bind, false},
-		{"key present", `bind: "100.64.0.7:8080"`, "100.64.0.7:8080", true},
-		{"key present, equals built-in default", `bind: "127.0.0.1:8080"`, Defaults.Web.Bind, true},
-		{"key present but empty", `bind: ""`, Defaults.Web.Bind, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := filepath.Join(t.TempDir(), "server.yaml")
-			if err := os.WriteFile(f, []byte(c.yml), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			cfg, err := Load(f)
-			if err != nil {
-				t.Fatalf("Load: %v", err)
-			}
-			if cfg.Web.Bind != c.wantBind {
-				t.Errorf("Bind = %q, want %q", cfg.Web.Bind, c.wantBind)
-			}
-			if cfg.Web.BindSet != c.wantSet {
-				t.Errorf("BindSet = %v, want %v", cfg.Web.BindSet, c.wantSet)
-			}
-		})
-	}
-}
-
-// TestEnsureNodeID: mints once, persists, and never re-mints — the node id is
-// durable identity, exactly like a plugin id.
-func TestEnsureNodeID(t *testing.T) {
-	home := t.TempDir()
-	if err := AppendPlugin(home, PluginConfig{ID: "p1", Name: "e2e", Kind: "home"}); err != nil {
-		t.Fatal(err)
-	}
-	n := 0
-	mint := func() string { n++; return "node-minted" }
-	id1, err := EnsureNodeID(home, mint)
-	if err != nil {
-		t.Fatalf("EnsureNodeID: %v", err)
-	}
-	if id1 != "node-minted" || n != 1 {
-		t.Fatalf("first call = %q (mints %d), want node-minted (1)", id1, n)
-	}
-	// Persisted: a reload sees it, and a second Ensure never re-mints.
-	cfg, err := Load(home + "/server.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.NodeID != "node-minted" {
-		t.Errorf("Load NodeID = %q, want node-minted", cfg.NodeID)
-	}
-	id2, err := EnsureNodeID(home, mint)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id2 != "node-minted" || n != 1 {
-		t.Errorf("second call = %q (mints %d) — the id must never change", id2, n)
-	}
-	// The plugin list survived the rewrite.
-	if len(cfg.Plugins) != 1 || cfg.Plugins[0].ID != "p1" {
-		t.Errorf("plugins after node-id write = %+v", cfg.Plugins)
-	}
-}
-
-// TestLoad_doors pins the grouped-by-door shape (owner decision
-// 2026-08-26): web.bind / web.password and federation.socket load; the
-// legacy flat bind: / password: still load, folded into the web door
-// with a deprecation each; and a config REWRITE keeps a legacy file's
-// keys (they are struct fields, not probe-only).
-func TestLoad_doors(t *testing.T) {
-	write := func(t *testing.T, yml string) string {
-		t.Helper()
-		f := filepath.Join(t.TempDir(), "server.yaml")
-		if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return f
-	}
-	nested, err := Load(write(t, "web:\n  bind: \"100.64.0.7:8080\"\nfederation:\n  socket: /run/gw.sock\nplugins: []\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if nested.Web.Bind != "100.64.0.7:8080" || !nested.Web.BindSet ||
-		nested.Federation.Socket != "/run/gw.sock" || len(nested.Deprecations) != 0 {
-		t.Errorf("nested = %+v", nested)
-	}
-	// A yaml password (flat or nested) is IGNORED, with one notice: the
-	// password is the web-password file.
-	legacy, err := Load(write(t, "bind: \"100.64.0.7:8080\"\npassword: hunter2\nplugins: []\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if legacy.Web.Bind != "100.64.0.7:8080" || !legacy.Web.BindSet || legacy.WebPassword != "" || len(legacy.Deprecations) != 2 {
-		t.Errorf("legacy fold = %+v deprecations %v", legacy.Web, legacy.Deprecations)
-	}
-	tilde, err := Load(write(t, "federation:\n  socket: ~/gw.sock\nplugins: []\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if userHome, _ := os.UserHomeDir(); tilde.Federation.Socket != filepath.Join(userHome, "gw.sock") {
-		t.Errorf("~ not expanded in federation.socket: %q", tilde.Federation.Socket)
-	}
-	silent, err := Load(write(t, "plugins: []\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if silent.Web.Bind != Defaults.Web.Bind || silent.Web.BindSet || silent.Federation.Socket != "" {
-		t.Errorf("silent = web %+v federation %+v", silent.Web, silent.Federation)
-	}
-	// A rewrite (AppendPlugin re-marshals the struct) keeps a legacy
-	// file's lines rather than silently dropping them.
-	home := t.TempDir()
-	if err := os.WriteFile(filepath.Join(home, "server.yaml"), []byte("password: hunter2\nplugins: []\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "home"}); err != nil {
-		t.Fatal(err)
-	}
-	after, err := Load(filepath.Join(home, "server.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.LegacyPassword != "hunter2" {
-		t.Errorf("legacy line lost across a rewrite: %+v", after)
-	}
-}
-
-// TestEnsurePasswordFile: the web password is the web-password file
-// (2026-08-26) — minted 0600 on first ask, stable while the file exists,
-// rotated by deleting it.
 func TestEnsurePasswordFile(t *testing.T) {
 	home := t.TempDir()
-	minted, err := EnsurePasswordFile(home)
-	if err != nil || len(minted) != 32 {
-		t.Fatalf("mint = %q %v", minted, err)
+	pw, err := EnsurePasswordFile(home)
+	if err != nil || len(pw) != 32 {
+		t.Fatalf("minted %q (%v)", pw, err)
 	}
-	st, err := os.Stat(PasswordFile(home))
-	if err != nil || st.Mode().Perm() != 0o600 {
-		t.Fatalf("password file mode = %v (%v), want 0600", st.Mode(), err)
+	st, _ := os.Stat(PasswordFile(home))
+	if st.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %v", st.Mode().Perm())
 	}
-	if again, _ := EnsurePasswordFile(home); again != minted {
-		t.Fatalf("re-minted while the file exists: %q vs %q", again, minted)
+	again, _ := EnsurePasswordFile(home)
+	if again != pw {
+		t.Fatal("the file IS the password: a second read must not re-mint")
 	}
 	if err := os.Remove(PasswordFile(home)); err != nil {
 		t.Fatal(err)
 	}
-	if rotated, _ := EnsurePasswordFile(home); rotated == minted {
-		t.Fatal("deleting the file must rotate the password")
-	}
-	if err := os.WriteFile(PasswordFile(home), []byte("chosen\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := EnsurePasswordFile(home); got != "chosen" {
-		t.Fatalf("a hand-written file is the password: %q", got)
+	if rotated, _ := EnsurePasswordFile(home); rotated == pw {
+		t.Fatal("deleting the file must rotate")
 	}
 }
 
-// TestConnectionsPresenceSurvivesRewrite: `connections: []` (present and
-// empty = the transport is in config mode with no connections) must
-// survive AppendPlugin / EnsureNodeID, which re-marshal the struct — a
-// plain omitempty slice dropped the key (2026-08-27), silently flipping
-// a home out of config mode on its next `gridwell init`.
-func TestConnectionsPresenceSurvivesRewrite(t *testing.T) {
-	home := t.TempDir()
-	if err := os.WriteFile(filepath.Join(home, "server.yaml"), []byte("connections: []\nplugins: []\n"), 0o600); err != nil {
-		t.Fatal(err)
+func TestDurableFiles(t *testing.T) {
+	got := DurableFiles("/h")
+	if len(got) != 2 || got[0] != "/h/server.yaml" || got[1] != "/h/web-password" {
+		t.Fatalf("DurableFiles = %v", got)
 	}
-	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "home"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := EnsureNodeID(home, func() string { return "nodeid1" }); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := Load(filepath.Join(home, "server.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if conns, set := cfg.ConnectionList(); !set || len(conns) != 0 {
-		t.Fatalf("connections presence lost across rewrites: set=%v conns=%v", set, conns)
-	}
-	absent, err := Load(write(t, "plugins: []\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, set := absent.ConnectionList(); set {
-		t.Fatal("an absent key must not read as present")
-	}
-}
-
-func write(t *testing.T, yml string) string {
-	t.Helper()
-	f := filepath.Join(t.TempDir(), "server.yaml")
-	if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return f
 }

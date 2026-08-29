@@ -36,8 +36,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// Remote node: one local. Keep its address — the revival must land on
 	// the SAME addr the connection dials.
 	remoteHome := t.TempDir()
-	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "home", "--name", "personal")
+	freshHome(t, remoteHome)
 	// The federation socket lives under the home, so a revival on the same
 	// home lands on the SAME path the connection dials.
 	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0")
@@ -46,9 +45,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// Local node: localdb + the builtin transport; the connection is
 	// server.yaml CONFIG (v2 #269), declared before first serve.
 	localHome := t.TempDir()
-	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "home", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
+	freshHome(t, localHome)
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "partconn1", creds, remoteAddr))
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 	cl := clientFor(localOrigin)

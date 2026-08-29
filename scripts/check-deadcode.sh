@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-NATIVE_ROOTS=(./apps/gridwell ./apps/gridwell-all ./plugins/fs/cmd/... ./plugins/proc/cmd/... ./plugins/gitlab/cmd/...)
+NATIVE_ROOTS=(./apps/gridwell ./plugins/fs/cmd/... ./plugins/proc/cmd/... ./plugins/gitlab/cmd/...)
 PKGS=(./internal/... ./api/... ./client/...)
 
 # "path/file.go:12:6: unreachable func: Name" -> "path/file.go Name"

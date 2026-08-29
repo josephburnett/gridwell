@@ -10,7 +10,7 @@ import (
 // Main is the shared CLI dispatch for every composed gridwell binary
 // (docs/plugin.md): the stock host passes nil (every plugin
 // out-of-process); a bundled binary passes its compiled-in plugin
-// loadout — and everything else — init, status, backup, the whole serve
+// factories — and everything else — status, backup, the whole serve
 // wiring — is identical. Returns the process exit code.
 func Main(args []string, plugins map[string]plugin.Factory) int {
 	if len(args) < 1 {
@@ -20,8 +20,6 @@ func Main(args []string, plugins map[string]plugin.Factory) int {
 	cmd := args[0]
 	rest := args[1:]
 	switch cmd {
-	case "init":
-		return RunInit(rest)
 	case "serve":
 		return RunServeWith(rest, plugins)
 	case "status":
@@ -30,8 +28,6 @@ func Main(args []string, plugins map[string]plugin.Factory) int {
 		return RunBackup(rest)
 	case "clear-browser-data":
 		return RunClearBrowserData(rest)
-	case "parity":
-		return RunParity(rest)
 	case "-h", "--help", "help":
 		usage()
 		return 0
@@ -46,26 +42,21 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `gridwell — a spatial information system
 
 Usage:
-    gridwell init  --kind KIND --name NAME [--config k=v ...]
-                                              create + register a plugin
     gridwell serve [--bind ADDR] [--bind-default ADDR] [--static DIR]
-                                              run the backend server
+                                              run the node (a missing
+                                              ~/.gridwell/server.yaml is a
+                                              fresh home: the id is minted)
     gridwell status                           report the running server for this
                                               home (exit 0 + banner) or "not
                                               serving" (exit 1)
-    gridwell backup DEST                      snapshot every plugin DB + server.yaml
+    gridwell backup DEST                      snapshot every DB + server.yaml
                                               (VACUUM INTO; safe while serving)
-    gridwell parity --a URL --b URL [--password PW] [--ignore-fields f,g]
-                                              crawl two nodes serving the same
-                                              data and diff them (the migration
-                                              oracle; exit 0 = parity)
     gridwell clear-browser-data [--user-data DIR]
                                               delete the desktop app's Chromium
                                               session (cookies, storage, caches
                                               of every live url tile); the app
                                               must not be running
 
-init mints a plugin id, creates its DB (at ~/.gridwell/db/<id>/) with identity
-metadata, and appends the entry to ~/.gridwell/server.yaml. serve requires that
-config file — every plugin's DB path is derived from its id, not configured.`)
+server.yaml names the node's id, its connections and its content plugins
+(docs/one-node.md); every DB path is derived from an id, never configured.`)
 }

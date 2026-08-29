@@ -27,6 +27,13 @@ type Registry struct {
 	closers map[string]func()
 	// transit holds each plugin's DECLARED transit-ness (SetTransit).
 	transit map[string]bool
+	// transport is the node's connection namespace ("<id>/<conn>/…"),
+	// installed by the node (SetTransport). Not a plugin: it has no uuid
+	// of its own — the node's id qualifies it — and it never lists in
+	// Ordered. Transitional slot until the registry holds namespaces as
+	// Go values (docs/one-node.md P3).
+	transport      gridwellv1.GridwellClient
+	transportClose func()
 }
 
 // NewRegistry returns an empty registry.
@@ -109,6 +116,22 @@ func (r *Registry) Transit(id string) bool {
 	return r.transit[id]
 }
 
+// SetTransport installs the node's connection namespace; closer runs on
+// Close.
+func (r *Registry) SetTransport(client gridwellv1.GridwellClient, closer func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.transport, r.transportClose = client, closer
+}
+
+// Transport returns the connection namespace's client, or (nil, false)
+// when the node has none (unit tests over raw plugin routing).
+func (r *Registry) Transport() (gridwellv1.GridwellClient, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.transport, r.transport != nil
+}
+
 // Get returns the client for id, or (nil, false) if not registered.
 func (r *Registry) Get(id string) (gridwellv1.GridwellClient, bool) {
 	r.mu.RLock()
@@ -125,6 +148,10 @@ func (r *Registry) Close() {
 		c()
 		delete(r.closers, id)
 	}
+	if r.transportClose != nil {
+		r.transportClose()
+	}
+	r.transport, r.transportClose = nil, nil
 	r.clients = make(map[string]gridwellv1.GridwellClient)
 	r.kinds = make(map[string]string)
 	r.labels = make(map[string]string)

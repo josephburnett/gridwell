@@ -12,9 +12,6 @@ import (
 // store behind them.
 func TestCloseIsIdempotent(t *testing.T) {
 	home := t.TempDir()
-	if _, err := Init(home, "home", "home", nil); err != nil {
-		t.Fatal(err)
-	}
 	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)

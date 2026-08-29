@@ -145,8 +145,7 @@ The full experience is the Electron desktop app (live url tiles need it):
 
 ```sh
 make vendor   # once, online: deps + caches
-make init     # once: register a local plugin in ~/.gridwell
-make launch   # build and run
+make launch   # build and run (the first run mints ~/.gridwell/server.yaml)
 ```
 
 The same server also serves plain browsers — one instance, one origin, for
@@ -198,13 +197,6 @@ To mount remote nodes, the remote just runs `gridwell serve`; its
 `federation.socket` path (`<home>/federation.sock` by default) is what
 the connection's `addr` names — required, no default — reached through
 ssh's unix-socket forwarding.
-On the mounting machine, register the transport once — one `remote`
-entry owns the whole connection list (serve refuses a non-empty
-`connections:` list without it, and refuses two entries):
-
-```sh
-gridwell init --kind remote --name far
-```
 
 A connection reaches the other node one of two ways, chosen by what you
 fill in: an SSH host + user bridges over ssh (the authenticated
@@ -224,12 +216,11 @@ yaml retires its name forever (`retired_names` is the graveyard). Keys
 stay files on your machine; an unverified host is refused, and key
 material never rides tile content.
 
-The CLI is six commands: `gridwell init` (register a plugin), `gridwell
-serve` (run the node), `gridwell status` (is this home being served?),
-`gridwell backup` (snapshot every DB + server.yaml, safe while serving),
-`gridwell parity` (crawl two nodes and diff them — the migration oracle),
-and `gridwell clear-browser-data` (drop the desktop app's Chromium
-session).
+The CLI is four commands: `gridwell serve` (run the node — a missing
+server.yaml is a fresh home, its id minted on the spot), `gridwell
+status` (is this home being served?), `gridwell backup` (snapshot every
+DB + server.yaml, safe while serving), and `gridwell clear-browser-data`
+(drop the desktop app's Chromium session).
 
 ## Reading further
 

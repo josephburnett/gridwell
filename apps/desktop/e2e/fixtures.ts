@@ -1,47 +1,104 @@
 import { test as base, _electron as electron, ElectronApplication, Page } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
+import { spawn, ChildProcess } from 'node:child_process';
 import { GridwellDriver } from './driver';
 import { setOracleAuth } from './oracle';
 import { pluginUUIDs, killTmuxServers } from './homes';
+import { parseServingLine } from '../src/main/lines';
+import { freePort } from '../src/main/freeport';
 
 // apps/desktop, and the repo root two levels up (where `make build` lays out the
 // gridwell sidecar + plugin binaries and the web/ static dir).
 const DESKTOP_DIR = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(DESKTOP_DIR, '..', '..');
 
-// PluginSpec is one extra plugin to register via `gridwell init` beyond the
-// default home (see seedHome's extra param) — e.g. an fs plugin with no
-// config.root, the rootless-launcher-tile case (issue #47).
+// PluginSpec is one content plugin to declare in the seeded home's
+// server.yaml (see seedHome's extra param) — e.g. an fs plugin with no
+// config.root, the rootless-row case (issue #47).
 export interface PluginSpec {
   kind: string;
   name: string;
   config?: Record<string, string>;
 }
 
-// seedHome creates a throwaway Gridwell home and registers one `home` instance in
-// it via `gridwell init` — the same coordinated setup a real user runs. server.yaml
-// is mandatory (no fallback), so every launch points GRIDWELL_HOME at a home seeded
-// this way. `extra` registers additional plugins (in order, after the home) the
-// same way, for tests that need a second plugin present at boot. Returns the home
-// dir; callers remove it on teardown.
+// seedHome creates a throwaway Gridwell home: a server.yaml declaring the
+// given content plugins (ids are minted by the first serve, which also
+// creates the home store — the same first run a real user gets). Every
+// launch points GRIDWELL_HOME at a home seeded this way. `extraYaml`
+// appends raw server.yaml sections (e.g. a connections: list). Returns
+// the home dir; callers remove it on teardown.
 export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
-  const bin = path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
-  const env = { ...process.env, GRIDWELL_HOME: home };
-  execFileSync(bin, ['init', '--kind', 'home', '--name', 'e2e'], { env, stdio: 'ignore' });
-  for (const p of extra) {
-    const args = ['init', '--kind', p.kind, '--name', p.name];
-    for (const [k, v] of Object.entries(p.config ?? {})) args.push('--config', `${k}=${v}`);
-    execFileSync(bin, args, { env, stdio: 'ignore' });
+  let yaml = '';
+  if (extra.length) {
+    yaml += 'plugins:\n';
+    for (const p of extra) {
+      yaml += `    - kind: ${p.kind}\n      label: ${p.name}\n`;
+      const conf = Object.entries(p.config ?? {});
+      if (conf.length) {
+        yaml += '      config:\n';
+        for (const [k, v] of conf) yaml += `        ${k}: ${JSON.stringify(v)}\n`;
+      }
+    }
   }
-  // extraYaml appends raw server.yaml lines (v2 config facts init has no
-  // flag for yet — e.g. a connections: list, which is config by owner
-  // decision #269).
-  if (extraYaml) fs.appendFileSync(path.join(home, 'server.yaml'), extraYaml);
+  fs.writeFileSync(path.join(home, 'server.yaml'), yaml + extraYaml);
   return home;
+}
+
+// FarNode is a second `gridwell serve` a spec reaches through a direct
+// connection — the one-node model's "another writable space" (a node has
+// exactly one home; anything else you can write to is another node).
+export interface FarNode {
+  label: string;
+  home: string;
+  child: ChildProcess;
+}
+
+// spawnFarNode boots a fresh node (empty server.yaml; its first serve mints
+// its id) on a loopback port and waits for its banner. The federation
+// socket lives under its home, which is what the local node's connection
+// dials.
+async function spawnFarNode(label: string): Promise<FarNode> {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
+  fs.writeFileSync(path.join(home, 'server.yaml'), '');
+  const bin = path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
+  const port = await freePort();
+  const child = spawn(bin, ['serve', '--bind', `127.0.0.1:${port}`], {
+    env: { ...process.env, GRIDWELL_HOME: home, GRIDWELL_PLUGIN_DIR: REPO_ROOT },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout!.on('data', (d) => (output += d));
+  child.stderr!.on('data', (d) => (output += d));
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    if (output.split('\n').some((l) => parseServingLine(l)?.auth)) return { label, home, child };
+    if (child.exitCode !== null || Date.now() > deadline) {
+      child.kill('SIGKILL');
+      throw new Error(`far node ${label} did not announce:\n${output}`);
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+async function stopFarNode(n: FarNode): Promise<void> {
+  if (n.child.exitCode === null) {
+    await new Promise<void>((resolve) => {
+      const hard = setTimeout(() => {
+        n.child.kill('SIGKILL');
+        resolve();
+      }, 3_000);
+      n.child.once('exit', () => {
+        clearTimeout(hard);
+        resolve();
+      });
+      n.child.kill('SIGTERM');
+    });
+  }
+  killTmuxServers(pluginUUIDs(n.home));
+  fs.rmSync(n.home, { recursive: true, force: true });
 }
 
 
@@ -103,9 +160,13 @@ type Fixtures = {
   window: Page;
   gw: GridwellDriver;
   // extraPlugins is a test option (set via test.use({ extraPlugins: [...] })
-  // in a spec file, e.g. plugin-health.spec.ts): plugins seedHome registers
-  // beyond the default home, present from the very first launch.
+  // in a spec file, e.g. plugin-health.spec.ts): content plugins seedHome
+  // declares, present from the very first launch.
   extraPlugins: PluginSpec[];
+  // extraNodes: labels of FAR nodes to boot and connect directly (one row
+  // each in the + menu) — the second writable space a cross-namespace
+  // spec needs.
+  extraNodes: string[];
   extraYaml: string;
 };
 
@@ -133,10 +194,24 @@ type Fixtures = {
 // next one.
 export const test = base.extend<Fixtures>({
   extraPlugins: [[], { option: true }],
+  extraNodes: [[], { option: true }],
   extraYaml: ['', { option: true }],
 
-  home: async ({ extraPlugins, extraYaml }, use) => {
-    await use(seedHome(extraPlugins, extraYaml));
+  home: async ({ extraPlugins, extraNodes, extraYaml }, use) => {
+    // Far nodes come up BEFORE the local node so its boot-time connect
+    // learns each landing synchronously; they go down after the app
+    // closed (this fixture's teardown runs after electronApp's).
+    const far: FarNode[] = [];
+    for (const label of extraNodes) far.push(await spawnFarNode(label));
+    let yaml = extraYaml;
+    if (far.length) {
+      yaml += 'connections:\n';
+      for (const n of far) {
+        yaml += `    - name: ${n.label}\n      label: ${n.label}\n      addr: ${path.join(n.home, 'federation.sock')}\n`;
+      }
+    }
+    await use(seedHome(extraPlugins, yaml));
+    for (const n of far) await stopFarNode(n);
   },
 
   electronApp: async ({ home }, use) => {

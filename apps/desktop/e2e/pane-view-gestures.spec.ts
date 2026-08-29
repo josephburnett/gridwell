@@ -203,7 +203,7 @@ test('clicking an unfocused pane focuses without descending; the second click de
 // well-ascent viewport. The portal here is a + menu descent into a SECOND
 // plugin (boot already sits inside the first, frameless).
 test.describe('stack hygiene', () => {
-  test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
+  test.use({ extraNodes: ['second'] });
 
   test('portal and well round trips leave both ascent stacks empty', async ({ gw }) => {
     const home = (await gw.focused()).anchor;

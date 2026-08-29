@@ -46,7 +46,7 @@ test('the title shows a read-only context label on non-renamable panes', async (
   // first plugin, so this is the boot pane) and never opens the rename input
   // on right-click.
   await gw.plugins(); // wait for boot to settle on the plugin root
-  await expect.poll(async () => (await gw.barName()).label).toBe('e2e'); // the seeded plugin's name
+  await expect.poll(async () => (await gw.barName()).label).toBe('home'); // the home's name
   expect((await gw.barName()).editable).toBe(false);
   await gw.clickBarName('right');
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);

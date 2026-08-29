@@ -27,7 +27,7 @@ func TestRoute(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, local, uuid, err := h.route(c.id)
+			_, local, uuid, _, err := h.route(c.id)
 			if c.wantErr {
 				if err == nil {
 					t.Fatal("expected error for unregistered plugin")

@@ -108,58 +108,6 @@ test('"already serving" resolves EXTERNAL: connect, never watch, never kill', as
   assert.equal(child.killed, false, 'stop() must never signal toward an external server');
 });
 
-test('first run: "no config" exits → gridwell init → one respawn → ready', async () => {
-  const children: FakeChild[] = [];
-  const argvs: string[][] = [];
-  const p = startSidecar({
-    port: 4242,
-    timeoutMs: 500,
-    onLog: () => {},
-    spawnFn: (_bin, args) => {
-      argvs.push(args);
-      const c = new FakeChild();
-      children.push(c);
-      return c as unknown as ChildProcess;
-    },
-    binaryPath: '/fake/gridwell',
-  });
-  children[0].stderr.write('serve: no config at /h/server.yaml; run `gridwell init --kind local --name <name>` to create one\n');
-  children[0].emit('exit', 1, null);
-  await new Promise((r) => setTimeout(r, 10)); // let the init child spawn
-  assert.deepEqual(argvs[1], ['init', '--kind', 'local', '--name', 'home']);
-  children[1].emit('exit', 0, null);
-  await new Promise((r) => setTimeout(r, 10)); // let the retry serve spawn
-  assert.equal(argvs[2][0], 'serve', 'after init, serve is retried once');
-  children[2].stdout.write('gridwell: serving on 127.0.0.1:9999 (static=embedded plugins=1 federation=/tmp/gw home/federation.sock)\n');
-  const sc = await p;
-  assert.equal(sc.external, false);
-  assert.equal(sc.origin, 'http://127.0.0.1:9999');
-});
-
-test('first run retry is ONE-SHOT: a second no-config surfaces instead of looping', async () => {
-  const children: FakeChild[] = [];
-  const p = startSidecar({
-    port: 4242,
-    timeoutMs: 500,
-    onLog: () => {},
-    spawnFn: () => {
-      const c = new FakeChild();
-      children.push(c);
-      return c as unknown as ChildProcess;
-    },
-    binaryPath: '/fake/gridwell',
-  });
-  children[0].stderr.write('serve: no config at /h/server.yaml; run `gridwell init` to create one\n');
-  children[0].emit('exit', 1, null);
-  await new Promise((r) => setTimeout(r, 10));
-  children[1].emit('exit', 0, null); // init "succeeds"...
-  await new Promise((r) => setTimeout(r, 10));
-  children[2].stderr.write('serve: no config at /h/server.yaml; run `gridwell init` to create one\n');
-  children[2].emit('exit', 1, null); // ...but serve STILL has no config
-  await assert.rejects(p, /exited before ready/);
-  assert.equal(children.length, 3, 'no second init attempt');
-});
-
 test('--no-server runs `status` and rejects clearly when nothing is running', async () => {
   const argvs: string[][] = [];
   const child = new FakeChild();

@@ -199,12 +199,12 @@ func rpc(t *testing.T, origin, method string, req any) map[string]any {
 	return out
 }
 
-func run(t *testing.T, env []string, bin string, args ...string) {
+// freshHome seeds a home with an EMPTY server.yaml — the first serve mints
+// the node's id and creates its store (the one door, node.BuildConfig).
+func freshHome(t *testing.T, home string) {
 	t.Helper()
-	cmd := exec.Command(bin, args...)
-	cmd.Env = append(os.Environ(), env...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("%s %v: %v\n%s", bin, args, err, out)
+	if err := os.WriteFile(filepath.Join(home, "server.yaml"), nil, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -215,11 +215,9 @@ func TestFederationSpawn(t *testing.T) {
 		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
 	}
 
-	// Remote node: two localdb plugins.
+	// Remote node: a fresh home.
 	remoteHome := t.TempDir()
-	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "home", "--name", "personal")
-	run(t, renv, bin, "init", "--kind", "home", "--name", "work")
+	freshHome(t, remoteHome)
 	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 
 	// A real ssh server fronting it (shared helper — the same sshd the seam
@@ -230,9 +228,7 @@ func TestFederationSpawn(t *testing.T) {
 	// server.yaml CONFIG (v2 #269), declared before first serve and
 	// reconciled at boot.
 	localHome := t.TempDir()
-	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "home", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
+	freshHome(t, localHome)
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedconn1", creds, remoteAddr))
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 
@@ -249,11 +245,10 @@ func TestFederationSpawn(t *testing.T) {
 	}
 	sshRoot := awaitConnRoot(t, localOrigin, "fedconn1")
 
-	// 2. The landing is the remote's HOME — its FIRST plugin's root
-	//    (personal), where a direct client of that node boots (remote-menu,
-	//    2026-08-16). The second plugin (work) is reached the way the +
-	//    menu reaches it: the ROUTED plugin list for the landing's node.
-	//    (No network context rides the grid anymore — 2026-07-26.)
+	// 2. The landing is the remote's HOME, where a direct client of that
+	//    node boots (remote-menu, 2026-08-16). The remote's own + menu is
+	//    the ROUTED plugin list for the landing's node. (No network
+	//    context rides the grid anymore — 2026-07-26.)
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	if pe, ok := ng["grid"].(map[string]any)["proxyEndpoint"]; ok && pe != "" {
 		t.Fatalf("transit grid still carries a proxyEndpoint %v — the network-context surface should be gone", pe)
@@ -264,18 +259,12 @@ func TestFederationSpawn(t *testing.T) {
 	}
 	menu := rpc(t, localOrigin, "ListPlugins", map[string]any{"namespace": nodeNS})
 	mp := menu["plugins"].([]any)
-	if len(mp) != 2 {
-		t.Fatalf("routed menu has %d plugins through the tunnel, want 2", len(mp))
+	if len(mp) != 1 {
+		t.Fatalf("routed menu has %d plugins through the tunnel, want the remote's home alone", len(mp))
 	}
-	workChild := ""
-	for _, pi := range mp {
-		pm := pi.(map[string]any)
-		if pm["label"] == "work" {
-			workChild, _ = pm["rootGridId"].(string)
-		}
-	}
-	if workChild == "" {
-		t.Fatal("no 'work' plugin on the routed menu")
+	workChild, _ := mp[0].(map[string]any)["rootGridId"].(string)
+	if workChild != sshRoot {
+		t.Fatalf("routed menu root = %q, want the landing %q", workChild, sshRoot)
 	}
 
 	// 3. Create a named well with content on the remote, through the chain.
@@ -462,21 +451,14 @@ func TestConnectionsModeSpawn(t *testing.T) {
 
 	// Remote node: one localdb, served for real; a real sshd fronting it.
 	remoteHome := t.TempDir()
-	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "home", "--name", "personal")
+	freshHome(t, remoteHome)
 	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
 
 	// Local node: localdb + the builtin transport, the connection declared
 	// in server.yaml before first serve.
 	localHome := t.TempDir()
-	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "home", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "remote", "--name", "connections")
-	yamlBefore, err := os.ReadFile(filepath.Join(localHome, "server.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	freshHome(t, localHome)
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "cmconn1", creds, remoteAddr))
 	localOrigin, _, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0")
 
@@ -487,21 +469,10 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	if strings.Count(child, "/") != 3 {
 		t.Fatalf("root = %q, want the four-segment <ssh>/<conn>/<rplugin>/<grid>", child)
 	}
-	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
-	for _, p := range lp["plugins"].([]any) {
-		if p.(map[string]any)["label"] == "connections" {
-			t.Fatal("the transport's own row must hide behind its instances")
-		}
-	}
 
-	// 2. CONFIG MODE refuses the old picker mutations on the wire.
-	sshID, _, _ := strings.Cut(child, "/")
-	if code, body := rpcRaw(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": sshID + "/0",
-		"tile":   map[string]any{"kind": "well", "x": 5, "y": 5, "w": 1, "h": 1},
-	}); code == 200 || !strings.Contains(string(body), "server config") {
-		t.Fatalf("picker create must refuse with the config pointer, got %d %s", code, body)
-	}
+	// (2. The picker door is gone from the wire: a connection's well row is
+	//    not addressable — "<id>/0" is the home store's grid 0, which does
+	//    not exist.)
 
 	// 3. Real bytes through all three peels: local server → connection
 	//    segment → remote node → back.
@@ -532,12 +503,22 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	//    row goes, the namespace stops resolving forever — and the REMOTE
 	//    keeps its tile (verified on its own front door).
 	stopLocal()
+	// Keep the node's minted id (the first serve wrote it); replace the
+	// connection list with the retirement.
+	cur, err := os.ReadFile(filepath.Join(localHome, "server.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := string(cur)
+	if i := strings.Index(base, "connections:"); i >= 0 {
+		base = base[:i]
+	}
 	if err := os.WriteFile(filepath.Join(localHome, "server.yaml"),
-		append(yamlBefore, []byte("connections: []\nretired_names:\n    - cmconn1\n")...), 0o600); err != nil {
+		[]byte(base+"connections: []\nretired_names:\n    - cmconn1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	localOrigin2, _ := startServe(t, bin, localHome, "127.0.0.1:0")
-	lp = rpc(t, localOrigin2, "ListPlugins", map[string]any{})
+	lp := rpc(t, localOrigin2, "ListPlugins", map[string]any{})
 	for _, p := range lp["plugins"].([]any) {
 		if uuid, _ := p.(map[string]any)["uuid"].(string); strings.HasSuffix(uuid, "/cmconn1") {
 			t.Fatal("a retired connection must not row in")
@@ -560,7 +541,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 // picker flow this suite used to wire is deleted).
 func appendConnectionsYAML(t *testing.T, home, section string) {
 	t.Helper()
-	f, err := os.OpenFile(filepath.Join(home, "server.yaml"), os.O_APPEND|os.O_WRONLY, 0)
+	f, err := os.OpenFile(filepath.Join(home, "server.yaml"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}

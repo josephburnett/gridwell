@@ -20,3 +20,11 @@ apps/mobile/README.md test/bridge_test.dart
 # The 2026-08-22 inventory names the pre-v2 homes beside the current ones:
 docs/content-presentation.md plugins/local/store
 docs/content-presentation.md plugins/remote/db.go
+# docs/plugin.md: the 2026-08-15 inventory names the bundled binary deleted 2026-08-29 (docs/one-node.md):
+docs/plugin.md apps/gridwell-all
+docs/plugin.md gridwell-all/
+docs/plugin.md internal/cli/init.go
+# docs/one-node.md: the inventory of what the fold left behind names the deleted pieces:
+docs/one-node.md apps/gridwell-all
+docs/one-node.md internal/cli/init.go
+docs/one-node.md internal/parity

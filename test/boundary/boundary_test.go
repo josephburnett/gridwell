@@ -23,9 +23,9 @@ const repoModule = "github.com/josephburnett/gridwell"
 // modules maps each in-repo module (by path suffix, "" = root) to the
 // OTHER in-repo modules its NON-TEST packages may import. Tests are
 // exempt by construction: `go list .Imports` excludes test files, and
-// seam tests deliberately cross (that is their job). Leaf composers
-// (apps/gridwell-all, mobile) may import anything — enumeration is the
-// leaf-binary privilege.
+// seam tests deliberately cross (that is their job). The leaf composer
+// (mobile) may import anything — enumeration is the leaf-binary
+// privilege.
 var modules = map[string][]string{
 	// The api imports nothing of ours: it IS the contract.
 	"api": {},
@@ -44,9 +44,8 @@ var modules = map[string][]string{
 	"": {"api", "internal/doctype"},
 	// The stock host: server + api. NO plugins — it spawns binaries.
 	"apps/gridwell": {"", "api", "internal/doctype"},
-	// Leaf composers: enumeration is legal here.
-	"apps/gridwell-all": {"*"},
-	"mobile":            {"*"},
+	// Leaf composer: enumeration is legal here.
+	"mobile": {"*"},
 }
 
 // moduleOf resolves an import path to its in-repo module by longest

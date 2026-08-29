@@ -146,7 +146,7 @@ plugin declares once in `Info`, never re-derived from its kind string.
 on every path. Every other configured kind is a CONTENT PLUGIN
 (`plugin.v1`): spawned as a `gridwell-plugin-<kind>` subprocess by the
 stock host, or composed in-process by a leaf binary that bundles it
-(`apps/gridwell-all`; the compose door hides which). A plugin is
+(the mobile bind; the compose door hides which). A plugin is
 stateless — it answers in its own stable keys — and the node keeps ONE
 memory DB per plugin (`internal/layout`, at the id-derived
 `<home>/db/<id>/store.db`) that mints the ids and holds the layout. Every

@@ -38,6 +38,10 @@ type Config struct {
 	// os.DirFS over a dev checkout when server.yaml/--static overrides.
 	// Nil disables static files (headless: some tests, pure RPC probing).
 	StaticFS fs.FS
+	// ID is the node's own id — its home's namespace ("<ID>/12") and the
+	// prefix of every connection through it ("<ID>/<conn>/…"). Empty in
+	// unit tests over raw plugin routing (no connections then).
+	ID string
 	// Password gates the browser surface (the mux) behind the login-page
 	// cookie — see auth.go. REQUIRED: New refuses an empty one. The web
 	// door is never open (owner decision 2026-08-26) — BuildConfig mints
@@ -92,26 +96,86 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 	return srv, nil
 }
 
-// routeClient resolves a plugin uuid to its client. The ONE routing lookup
-// — the Connect handler, the shell relay, and the content door all resolve
-// through here.
+// routeClient resolves a namespace uuid to its client (home or a plugin).
+// Connections are not addressable by uuid alone — they live under the
+// node's id ("<ID>/<conn>/…"); resolve is the lookup that sees them.
 func (s *Server) routeClient(uuid string) (pb.GridwellClient, bool) {
 	return s.pluginReg.Get(uuid)
 }
 
-// clientForID resolves the plugin that owns a qualified id, returning its
-// client and the local (unprefixed) id. Used by the shell + preview
-// infrastructure to address a tile in whichever plugin holds it.
-func (s *Server) clientForID(id string) (client pb.GridwellClient, local string, ok bool) {
+// resolve is THE routing lookup: the namespace that owns a qualified id,
+// its client, the local (unprefixed) id the namespace understands, the
+// uuid to re-qualify answers with, and whether the namespace is TRANSIT
+// (its ids are chains from another node — the transit qualification
+// rule). "<ID>/<digits>" is the home store; "<ID>/<letters>/…" is a
+// connection, owned by the transport, whose local id keeps the
+// connection segment ("<conn>/…" — the transport peels it); anything
+// else is a plugin by uuid. The Connect handler, the export's streams,
+// the content door and the shell relay all resolve through here.
+func (s *Server) resolve(id string) (client pb.GridwellClient, local, uuid string, transit, ok bool) {
 	uuid, local, split := rpc.SplitID(id)
 	if !split {
-		return nil, "", false
+		return nil, "", "", false, false
 	}
-	c, found := s.routeClient(uuid)
-	if !found {
-		return nil, "", false
+	if s.cfg.ID != "" && uuid == s.cfg.ID && !localIsHome(local) {
+		t, has := s.pluginReg.Transport()
+		return t, local, uuid, true, has
 	}
-	return c, local, true
+	c, found := s.pluginReg.Get(uuid)
+	return c, local, uuid, s.pluginReg.Transit(uuid), found
+}
+
+// localIsHome reports whether a local id under the node's own segment
+// names the HOME store (its first segment is numeric — a grid or tile id)
+// rather than a connection (a letter-leading name; the id-shape rule).
+func localIsHome(local string) bool {
+	first := local
+	if i := strings.IndexByte(local, '/'); i >= 0 {
+		first = local[:i]
+	}
+	if first == "" {
+		return true
+	}
+	for i := 0; i < len(first); i++ {
+		if first[i] < '0' || first[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// clientForID resolves the namespace that owns a qualified id, returning
+// its client and the local id. Used by the shell + preview infrastructure
+// to address a tile wherever it lives.
+func (s *Server) clientForID(id string) (client pb.GridwellClient, local string, ok bool) {
+	c, local, _, _, found := s.resolve(id)
+	return c, local, found
+}
+
+// transportInfo is the transport's Info handshake (its declared
+// capabilities), cached like a plugin's.
+func (s *Server) transportInfo(ctx context.Context) (*pb.InfoResponse, error) {
+	const key = "\x00transport"
+	s.infoMu.Lock()
+	info, ok := s.infoCache[key]
+	s.infoMu.Unlock()
+	if ok {
+		return info, nil
+	}
+	t, has := s.pluginReg.Transport()
+	if !has {
+		return nil, errors.New("no transport")
+	}
+	ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
+	defer cancel()
+	info, err := t.Info(ictx, &pb.InfoRequest{})
+	if err != nil {
+		return nil, err
+	}
+	s.infoMu.Lock()
+	s.infoCache[key] = info
+	s.infoMu.Unlock()
+	return info, nil
 }
 
 // pluginInfo returns uuid's Info handshake, serving repeat calls from the

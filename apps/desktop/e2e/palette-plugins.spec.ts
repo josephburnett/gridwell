@@ -14,7 +14,7 @@ import { tileAt } from './oracle';
 // (paletteItems → startDescent/CreateWell → localdb → SQLite) and none of the
 // unit layers can see the composition.
 
-test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
+test.use({ extraNodes: ['second'] });
 
 test('boot lands on the first plugin with "/" as its URL', async ({ gw, window }) => {
   const pls = await gw.plugins();
@@ -81,11 +81,11 @@ test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
   // Plugin rows in server.yaml order; each local plugin's declared TRASH
   // root entry (#262) rides directly after its row.
   const rows = plugins.filter((i) => !i.entry);
-  expect(rows.map((i) => i.label), 'both plugins, server.yaml order').toEqual(['e2e', 'second']);
+  expect(rows.map((i) => i.label), 'both plugins, server.yaml order').toEqual(['home', 'second']);
   expect(
     plugins.map((i) => i.label),
     'each root entry rides after its declaring plugin',
-  ).toEqual(['e2e', 'trash', 'second', 'trash']);
+  ).toEqual(['home', 'trash', 'second']);
   expect(primitives.length, 'the primitive swatches are still there').toBeGreaterThanOrEqual(5);
 
   // Plugins come first in index order and sit strictly ABOVE the primitives.

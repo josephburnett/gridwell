@@ -62,7 +62,7 @@ the node.
 
 ## Running in-process instead
 
-A bundled binary (`apps/gridwell-all` is the template; the mobile bind
+A bundled binary (the mobile bind
 is the other leaf) skips the subprocess: provide a
 `plugin.Factory` and hand it to `cli.Main` — the node cannot
 tell the difference. This is how plugins run on iOS, where fork/exec

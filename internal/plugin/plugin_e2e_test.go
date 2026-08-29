@@ -50,12 +50,12 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	memPath := filepath.Join(t.TempDir(), "mem.db")
 
 	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{
-		ID: "pfsuuid", Name: "files", Kind: "fs", Binary: bin,
+		ID: "pfsuuid", Label: "files", Kind: "fs", Binary: bin,
 		Config: map[string]string{"root": root, "db_file": memPath},
 	}}}
-	reg, err := plugin.LoadAll(cfg, nil, nil)
-	if err != nil {
-		t.Fatalf("LoadAll: %v", err)
+	reg := plugin.NewRegistry()
+	if err := plugin.LoadInto(reg, cfg, nil); err != nil {
+		t.Fatalf("LoadInto: %v", err)
 	}
 	defer reg.Close()
 

@@ -1,9 +1,9 @@
-.PHONY: build bin bin-all plugins wasm fmt-check proto-check check check-electron check-e2e check-web check-parity check-federation serve init clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm fmt-check proto-check check check-electron check-e2e check-web check-federation serve clean launch vendor dist node-modules
 
 BIN := ./gridwell
 # Built plugin binaries — the plugins target below and clean
 # must agree; this is the one list.
-ALL_PLUGIN_BIN := ./gridwell-plugin-fs ./gridwell-plugin-proc ./gridwell-plugin-gitlab ./gridwell-all
+ALL_PLUGIN_BIN := ./gridwell-plugin-fs ./gridwell-plugin-proc ./gridwell-plugin-gitlab
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -24,7 +24,7 @@ export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 # we never serve a stale binary or wasm artifact. Every plugin is its own
 # separately-compiled go-plugin binary, laid out beside $(BIN) so the server
 # resolves them by `gridwell-plugin-<kind>`.
-build: bin bin-all plugins wasm
+build: bin plugins wasm
 
 # CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
 # pure Go, so nothing pulls cgo and the result has no libc-version coupling —
@@ -34,12 +34,6 @@ build: bin bin-all plugins wasm
 # bin depends on wasm so the embed always carries the current client.
 bin: wasm
 	cd apps/gridwell && CGO_ENABLED=0 go build -o ../../gridwell .
-
-# gridwell-all: the bundled example binary (docs/plugin.md) — same server,
-# plugins compiled in through the compose door. Built alongside so the
-# parity gate always has a fresh one.
-bin-all:
-	cd apps/gridwell-all && CGO_ENABLED=0 go build -o ../../gridwell-all .
 
 # Phony so a source change always rebuilds (Go's build cache keeps it fast);
 # file-target rules would skip the build whenever the binary already existed.
@@ -105,7 +99,7 @@ proto-check:
 # shared nested modules, and each plugin (its own module: the in-repo
 # strangers, docs/plugin.md). check builds and tests each one STANDALONE
 # (GOWORK=off) so no module can quietly lean on the workspace.
-MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell apps/gridwell-all mobile
+MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell mobile
 
 # check depends on wasm: web/embed.go EMBEDS the built gridwell.wasm, so
 # a fresh checkout (CI) cannot even `go build ./...` before one exists.
@@ -132,7 +126,7 @@ check: fmt-check proto-check wasm
 # (.github/workflows/gates.yml) invokes these targets rather than
 # re-spelling them — the two copies drifted (retries, verbosity, a nested
 # xvfb-run around a script that already wraps one). PW_FLAGS passes extra
-# Playwright flags through to check-e2e / check-web / check-parity:
+# Playwright flags through to check-e2e / check-web:
 #   make check-e2e PW_FLAGS=--retries=1     # CI's one-retry flake discipline
 PW_FLAGS ?=
 
@@ -166,14 +160,6 @@ check-e2e: build node-modules
 check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web -- $(PW_FLAGS)
 
-# check-parity is the COMPOSITION PARITY gate (docs/plugin.md): the same
-# browser suite against gridwell-all — every plugin IN-PROCESS through
-# the compose door. Identical behavior to check-web is the pin that the
-# door hides the process boundary. (The structure lint, test/boundary,
-# runs in `check` — it is not repeated here.)
-check-parity: build node-modules
-	cd $(DESKTOP) && GRIDWELL_SERVE_BIN=gridwell-all npm run test:e2e:web -- $(PW_FLAGS)
-
 # check-federation is the SPAWN GATE (issue #58): the real binaries —
 # gridwell init/serve and the go-plugin subprocesses —
 # through a real ssh tunnel, one write/read crossing every hop. The in-process
@@ -195,15 +181,6 @@ serve: build
 # SERVE_FLAGS passes extra flags through, e.g.
 # `make serve SERVE_FLAGS="--bind 0.0.0.0:8080"`.
 SERVE_FLAGS ?=
-
-# init bootstraps a fresh home: it mints a plugin id, creates its DB (with
-# identity metadata) under ~/.gridwell/db/<id>/, and registers it in
-# ~/.gridwell/server.yaml. Run once before `make serve` / `make launch`.
-#   make init                                  # the native store, named "home"
-#   make init INIT_FLAGS="--kind fs --name files --config root=/home/joe"
-INIT_FLAGS ?= --kind home --name home
-init: bin
-	$(BIN) init $(INIT_FLAGS)
 
 # vendor is the ONE online step. It pins and caches everything the desktop
 # build needs — npm packages (into $(NPM_CACHE) + node_modules), the Electron

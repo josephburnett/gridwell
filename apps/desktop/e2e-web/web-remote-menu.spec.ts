@@ -1,10 +1,9 @@
 import { test as base, expect, Page } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
-import { serveBin, Served, spawnServe, stopServe, freePort, authHeaders, authenticate } from './fixtures';
+import { Served, spawnServe, stopServe, freePort, authHeaders, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { getGrid, tileAt } from '../e2e/oracle';
 
@@ -35,14 +34,11 @@ type Fixtures = {
 };
 
 const test = base.extend<Fixtures>({
-  // world = the LOCAL node (e2e local + rtb remote plugin) and the FAR
-  // node (one local plugin named farlocal), directly connected.
+  // world = the LOCAL node and the FAR node (a fresh home; its first
+  // serve mints its id), directly connected.
   world: async ({}, use) => {
     const farHome = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-far-'));
-    execFileSync(serveBin(), ['init', '--kind', 'home', '--name', 'farlocal'], {
-      env: { ...process.env, GRIDWELL_HOME: farHome },
-      stdio: 'ignore',
-    });
+    fs.writeFileSync(path.join(farHome, 'server.yaml'), '');
     const farPort = await freePort();
     const far = await spawnServe(farHome, farPort);
 
@@ -50,7 +46,7 @@ const test = base.extend<Fixtures>({
     // first boot, reconciled into the transport at start — the picker
     // no longer exists to wire it "the data way".
     const localHome = seedHome(
-      [{ kind: 'remote', name: 'rtb' }],
+      [],
       `connections:
     - name: farconn1
       addr: ${path.join(farHome, 'federation.sock')}
@@ -158,7 +154,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     )
     // The far node's own menu, root entries included: its local plugin
     // brings its own trashcan (#262) — deletes over there file over there.
-    .toBe('farlocal,trash');
+    .toBe('home,trash');
 
   // ── A primitive from the remote menu creates on the REMOTE node ──
   const inside = await gw.focused();

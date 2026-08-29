@@ -142,9 +142,8 @@ func isExecutable(path string) bool {
 	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
 }
 
-// resolvePluginBinaries fills each entry's binary: the node's NATIVE
-// kinds run in-process; a kind with a bundled plugin factory runs
-// in-process too; every other kind spawns gridwell-plugin-<kind>
+// resolvePluginBinaries fills each entry's binary: a kind with a bundled
+// plugin factory runs in-process; every other kind spawns gridwell-plugin-<kind>
 // (server.yaml may pin an explicit binary: path instead).
 func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.Factory) error {
 	for i := range cfg.Plugins {
@@ -152,15 +151,12 @@ func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.F
 		if pc.Binary != "" {
 			continue
 		}
-		if node.IsNative(pc.Kind) {
-			continue
-		}
 		if _, bundled := plugins[pc.Kind]; bundled {
 			continue
 		}
 		bin, err := resolveBinary("gridwell-plugin-" + pc.Kind)
 		if err != nil {
-			return fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.Kind, err)
+			return fmt.Errorf("plugin %q (%s): %w", pc.ID, pc.Kind, err)
 		}
 		pc.Binary = bin
 	}
@@ -177,8 +173,7 @@ func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.F
 //
 // plugins is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
 // kinds present in it load in-process; every other plugin spawns
-// out-of-process. The stock host passes nil. The native kinds (local,
-// remote) are the node's own on every path.
+// out-of-process. The stock host passes nil.
 func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	home, err := config.Home()
 	if err != nil {
@@ -191,15 +186,9 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 		return 1
 	}
 
-	// DELETE AFTER 2026-09-27 with kindmigrate.go: the one-shot kind
-	// rename (localdb/local→home, ssh→remote; node.RenamedKinds).
-	if err := migrateRenamedKinds(home, cfgPath); err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
-	}
-
-	// The config is mandatory and authoritative: it lists every plugin and the
-	// id+kind the server verifies against each DB. No synthesized fallback.
+	// The config is authoritative: it names the node's id, its connections
+	// and its content plugins; a missing file is a fresh home (the node
+	// mints its id and writes the file).
 	cfg, err := buildServeConfig(home, cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
@@ -212,9 +201,6 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	}
 	cfg.Web.Bind = resolveBind(f.Bind, cfg.Web.Bind, cfg.Web.BindSet, f.BindDefault)
 	cfg.StaticDir = f.StaticDir
-	for _, d := range cfg.Deprecations {
-		fmt.Fprintf(os.Stderr, "gridwell: DEPRECATED in %s: %s\n", cfgPath, d)
-	}
 
 	// ONE serve per home (servelock.go): taken before any plugin spawns so a
 	// second server never touches the DBs. On conflict, re-emit the running
@@ -232,7 +218,7 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	defer lock.Release()
 
 	// Resolve each plugin's binary (server.yaml may pin an explicit path
-	// instead); native and bundled kinds stay in-process (node.IsNative).
+	// instead); bundled kinds stay in-process.
 	if err := resolvePluginBinaries(cfg, plugins); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1

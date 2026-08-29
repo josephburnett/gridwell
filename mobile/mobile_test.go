@@ -3,7 +3,6 @@ package mobile
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/josephburnett/gridwell/internal/node"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -146,11 +145,7 @@ func TestEmbeddedNodeHonorsConnectionsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	Stop()
-	// The desktop's init door registers the remote kind; the phone's
-	// first run only seeds local. Declare both, as the CLI would.
-	if _, err := node.Init(home, "remote", "connections", nil); err != nil {
-		t.Fatal(err)
-	}
+	// Connections are yaml alone: the node's own transport carries them.
 	f, err := os.OpenFile(filepath.Join(home, "server.yaml"), os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)

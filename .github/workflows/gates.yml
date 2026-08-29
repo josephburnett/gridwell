@@ -38,8 +38,6 @@ jobs:
         run: echo "GRIDWELL_WEB_CHROMIUM=$(cd apps/desktop && node -e "console.log(require('playwright-core').chromium.executablePath())")" >> "$GITHUB_ENV"
       - name: web gate
         run: make check-web PW_FLAGS=--retries=1
-      - name: parity gate (gridwell-all, in-process plugins)
-        run: make check-parity PW_FLAGS=--retries=1
   electron-e2e:
     runs-on: ubuntu-latest
     env:
