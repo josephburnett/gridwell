@@ -70,7 +70,7 @@ func (a *App) fetchMenuCtx(ns string) {
 		a.surfaceRPCError("ListPlugins", err)
 		return
 	}
-	ctx.plugins = lp.Plugins
+	ctx.plugins = rpc.MenuRows(lp)
 	ctx.shellsDisabled = lp.ShellsDisabled
 	ctx.fetched = true
 	a.draw()

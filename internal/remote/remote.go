@@ -1,11 +1,25 @@
+// Package remote is the node's TRANSPORT: its connections to other nodes
+// (docs/one-node.md). A connection is config (server.yaml `connections:`
+// — name, label, how to dial); the transport dials each one, learns where
+// it lands (the remote's home), and routes every id shaped
+// "<conn>/<remote-id…>" to that connection's client, prepending the
+// segment on the way back (rpc.TransitQualifyTiles — the one transit
+// rule, the same one the node applies one level up under its own id).
+//
+// The transport is not a plugin and owns no tiles: a connection is a row
+// in the + menu and, when the user drags it, an ordinary link tile in
+// their own grid. What it remembers (db.go) is the learned landing and
+// the graveyard of retired names.
 package remote
 
 import (
 	"context"
 	"errors"
-	"google.golang.org/protobuf/proto"
+	"fmt"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,56 +29,57 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
-
-// connGridID is the plugin's connection-list grid. Since the #251 flip it
-// is declared as the INSTANCE grid, not the root: a storage address the
-// row synthesis reads, never a landing page. It keeps serving under the
-// same id forever — connection rows present as menu rows of their own
-// automatically, and any legacy exit-well link to the list still resolves.
-const connGridID = "0"
 
 // Dialer builds a client of a remote node's export from a resolved config.
 // Production is dial.Dial (whose ssh session is itself lazy and
 // self-healing); tests inject in-process remotes.
 type Dialer func(cfg dial.Config) (gridwellv1.GridwellClient, func(), error)
 
-// Server is the multi-connection ssh plugin: a GridwellServer whose root grid
-// holds one connection well per remote node, and whose router peels the
-// minted connection segment from chained ids exactly as a node peels a
-// plugin segment. Everything below a connection forwards to that
-// connection's dialed client with the segment prepended on the way back
-// (rpc.TransitQualifyTiles — the one transit rule).
+// bootDialWait bounds how long ConnectAll waits for each connection at
+// boot before serving anyway (the dial keeps trying in the background).
+var bootDialWait = 5 * time.Second
+
+// Server is the transport: a GridwellServer whose ids are chains through
+// its connections.
 type Server struct {
 	gridwellv1.UnimplementedGridwellServer
 
 	db   *DB
 	dial Dialer
-	home string // plugin host's home dir, for ~-relative param defaults
-	// configMode: the connection set is OWNED by server.yaml (v2 #269);
-	// every connection mutation refuses (see sync.go).
-	configMode bool
+	home string // the host's home dir, for ~-relative key defaults
+
+	// conns is the declared set, by name, in config order (order).
+	conns map[string]*Conn
+	order []string
 
 	mu   sync.Mutex
-	live map[string]*liveConn // by ns
-	// rootErr is a connection's LAST dial/root-fetch failure, by ns —
-	// the one fact behind a pending row's status (surfaced as
-	// Tile.status_detail while the well has no child). Written only by
-	// ensureLive and the root-fetch goroutine, cleared on success and on
-	// params change (dropLive); never persisted.
+	live map[string]*liveConn // by name
+	// rootErr is a connection's LAST dial/root-fetch failure, by name —
+	// the one fact behind a pending row's status. Written by ensureLive
+	// and the root learn, cleared on success; never persisted.
 	rootErr map[string]string
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 }
 
+// Conn is one declared connection with what the store remembers about it.
+type Conn struct {
+	Cfg        config.ConnectionConfig
+	RemoteRoot string // the learned landing (the remote's home grid, in ITS frame); "" until learned
+}
+
 // liveConn is one connection's constructed transport. Constructing is cheap
 // and non-blocking (sshdial's ssh layer is lazy); a liveConn exists as soon
-// as the connection has valid params.
+// as the connection dialed.
 type liveConn struct {
 	client gridwellv1.GridwellClient
 	closer func()
@@ -73,57 +88,171 @@ type liveConn struct {
 	rootFetching bool
 }
 
-// New builds the plugin server. home is the host's home directory ("" =
-// no ~ defaults; params must carry explicit paths).
-func New(db *DB, dial Dialer, home string) *Server {
-	return &Server{db: db, dial: dial, home: home, live: map[string]*liveConn{},
-		rootErr: map[string]string{}, hub: eventhub.New(eventKey)}
+// Row is a connection as the handshake lists it (the node qualifies the
+// uuid with its own id).
+type Row struct {
+	Name         string
+	Label        string
+	RootGridID   string // "<name>/<remote home>" once learned, "" while pending
+	StatusDetail string // the last dial/learn failure while pending
+	ViewCx       float64
+	ViewCy       float64
+	ViewZoom     float64
 }
 
-// Close tears down every live connection and closes the DB — the plugin
-// owns both (the loader's closer calls this: io.Closer is the native
-// lifecycle contract).
+// New builds the transport and RECONCILES the store against the declared
+// connections (server.yaml is authoritative): a declared name that is
+// retired — in retired, or tombstoned in the store — is refused; a stored
+// name the config no longer declares tombstones; every retired name is
+// reserved in the store forever. home is the host's home directory ("" =
+// no ~ defaults; keys must be explicit paths).
+func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
+	ctx := context.Background()
+	s := &Server{db: db, dial: dialer, home: home, conns: map[string]*Conn{},
+		live: map[string]*liveConn{}, rootErr: map[string]string{}, hub: eventhub.New(eventKey)}
+	retiredSet := map[string]bool{}
+	for _, r := range retired {
+		retiredSet[r] = true
+	}
+	for _, c := range conns {
+		if err := idshape.ValidateSegment("connection name", c.Name); err != nil {
+			return nil, err
+		}
+		if _, dup := s.conns[c.Name]; dup {
+			return nil, fmt.Errorf("connection %q declared twice", c.Name)
+		}
+		if retiredSet[c.Name] {
+			return nil, fmt.Errorf("connection %q: this name is RETIRED — a retired name never returns; mint a new one", c.Name)
+		}
+		row, err := db.Get(ctx, c.Name)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+		if err == nil && row.Deleted {
+			return nil, fmt.Errorf("connection %q: this name is RETIRED in the connection store — a retired name never returns; mint a new one", c.Name)
+		}
+		if err := db.Ensure(ctx, c.Name); err != nil {
+			return nil, err
+		}
+		s.conns[c.Name] = &Conn{Cfg: c, RemoteRoot: row.RemoteRoot}
+		s.order = append(s.order, c.Name)
+	}
+	rows, err := db.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		if _, declared := s.conns[r.Name]; !declared && !r.Deleted {
+			if err := db.Tombstone(ctx, r.Name); err != nil {
+				return nil, fmt.Errorf("retire connection %q: %w", r.Name, err)
+			}
+		}
+	}
+	for _, name := range retired {
+		if err := db.Tombstone(ctx, name); err != nil {
+			return nil, fmt.Errorf("reserve retired name %q: %w", name, err)
+		}
+	}
+	return s, nil
+}
+
+// Close tears down every live connection and closes the store.
 func (s *Server) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for ns, lc := range s.live {
+	for name, lc := range s.live {
 		lc.cancel()
 		lc.closer()
-		delete(s.live, ns)
+		delete(s.live, name)
 	}
 	return s.db.Close()
 }
 
+// ConnectAll dials every declared connection and learns its landing,
+// bounded per connection (bootDialWait) — the boot doesn't serve mysteries
+// (Joe, 2026-08-23): a reachable connection is LIVE with its root known
+// before the node serves; an unreachable one has its error in the log and
+// on its row, and keeps trying lazily on every read.
+func (s *Server) ConnectAll(ctx context.Context) {
+	for _, name := range s.order {
+		c := s.conns[name]
+		done := make(chan error, 1)
+		go func() { _, err := s.learnRoot(c); done <- err }()
+		select {
+		case err := <-done:
+			if err != nil {
+				log.Printf("gridwell: connection %q (%s): %v", c.Cfg.Label, name, err)
+			} else {
+				log.Printf("gridwell: connection %q (%s): connected — root %s", c.Cfg.Label, name, c.RemoteRoot)
+			}
+		case <-time.After(bootDialWait):
+			log.Printf("gridwell: connection %q (%s): no answer after %v — still trying in the background", c.Cfg.Label, name, bootDialWait)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// Rows lists the declared connections for the handshake, in config
+// order: label, landing (once learned), the pending failure, and the
+// remote home's persisted view (asked of a live remote, briefly — a dark
+// one contributes zeros).
+func (s *Server) Rows(ctx context.Context) []Row {
+	out := make([]Row, 0, len(s.order))
+	for _, name := range s.order {
+		c := s.conns[name]
+		s.kickRootFetch(c)
+		r := Row{Name: name, Label: c.Cfg.Label}
+		if r.Label == "" {
+			r.Label = name
+		}
+		s.mu.Lock()
+		root := c.RemoteRoot
+		lc := s.live[name]
+		r.StatusDetail = s.rootErr[name]
+		s.mu.Unlock()
+		if root != "" {
+			r.RootGridID = rpc.QualifyID(name, root)
+			r.StatusDetail = ""
+			if lc != nil {
+				vctx, cancel := context.WithTimeout(ctx, time.Second)
+				if lp, err := lc.client.ListPlugins(vctx, &gridwellv1.ListPluginsRequest{}); err == nil {
+					r.ViewCx, r.ViewCy, r.ViewZoom = lp.HomeViewCx, lp.HomeViewCy, lp.HomeViewZoom
+				}
+				cancel()
+			}
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
 // ── routing ──────────────────────────────────────────────────────────────────
 
-// forward is a resolved chain hop: the connection's client plus its ns for
+// forward is a resolved hop: the connection's client plus its name for
 // prepending response ids.
 type forward struct {
 	ns     string
 	client gridwellv1.GridwellClient
 }
 
-// route decides where an id goes. A bare id ("0", "5") is local. A chained
-// id peels its first segment: non-numeric = a connection namespace (the same
-// grammar rule the URL path uses — a minted short id can never be purely
-// numeric); a numeric first segment is malformed (local tiles are leaves).
+// route resolves the connection an id chains through: the first segment
+// is the connection name (a numeric first segment is malformed — the
+// transport owns no tiles), the rest is the remote's own id.
 func (s *Server) route(ctx context.Context, id string) (*forward, string, error) {
 	first, rest, ok := rpc.SplitID(id)
 	if !ok {
-		return nil, id, nil // local
+		return nil, "", status.Errorf(codes.InvalidArgument, "remote: id %q names no connection", id)
 	}
 	if _, err := strconv.ParseInt(first, 10, 64); err == nil {
-		return nil, "", status.Errorf(codes.InvalidArgument, "sshhost: id %q chains through a numeric segment", id)
+		return nil, "", status.Errorf(codes.InvalidArgument, "remote: id %q chains through a numeric segment", id)
 	}
-	c, err := s.db.GetByNS(ctx, first)
-	if errors.Is(err, ErrNotFound) {
-		return nil, "", status.Errorf(codes.NotFound, "sshhost: no connection %q", first)
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	if c.Deleted {
-		return nil, "", status.Errorf(codes.NotFound, "sshhost: connection %q was deleted", first)
+	c, ok := s.conns[first]
+	if !ok {
+		if row, err := s.db.Get(ctx, first); err == nil && row.Deleted {
+			return nil, "", status.Errorf(codes.NotFound, "remote: connection %q was retired", first)
+		}
+		return nil, "", status.Errorf(codes.NotFound, "remote: no connection %q", first)
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
@@ -132,139 +261,175 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	return &forward{ns: first, client: lc.client}, rest, nil
 }
 
-// remoteHome resolves where a descent into this connection LANDS: the
-// remote's HOME — the root the remote's own export declares (its first
-// configured entry with a root, the same rule a direct client's boot
-// applies) — so entering a node through a mount and connecting to it
-// directly land in the same place ("when I descend into a node, I am
-// there", 2026-08-16).
-func (s *Server) remoteHome(ctx context.Context, lc *liveConn) (string, error) {
-	info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
-	if err != nil {
-		return "", err
+// dialConfig resolves a declared connection to a dial.Config, applying the
+// host-side defaults: port 22, key = the first of ~/.ssh/id_ed25519 /
+// ~/.ssh/id_rsa that exists, known_hosts = ~/.ssh/known_hosts. addr (the
+// REMOTE's federation socket path) is required either way: the remote's
+// socket lives under ITS home, which only the operator knows.
+func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
+	cfg := dial.Config{
+		User:       c.User,
+		KeyPath:    expandHome(c.Key, s.home),
+		KnownHosts: expandHome(c.KnownHosts, s.home),
+		Addr:       c.Addr,
 	}
-	return info.RootGridId, nil
+	if cfg.Addr == "" {
+		return dial.Config{}, fmt.Errorf("addr required — the remote node's federation socket path (its <home>/federation.sock)")
+	}
+	if c.Host == "" {
+		return cfg, nil // a DIRECT dial of the socket
+	}
+	if strings.TrimSpace(c.User) == "" {
+		return dial.Config{}, fmt.Errorf("user is required for an ssh connection")
+	}
+	port := int64(22)
+	if c.Port != 0 {
+		if c.Port < 1 || c.Port > 65535 {
+			return dial.Config{}, fmt.Errorf("port must be in 1..65535, got %d", c.Port)
+		}
+		port = c.Port
+	}
+	cfg.Host = fmt.Sprintf("%s:%d", c.Host, port)
+	if cfg.KeyPath == "" {
+		if s.home == "" {
+			return dial.Config{}, fmt.Errorf("key path required (no home directory to default from)")
+		}
+		cfg.KeyPath = firstExisting(filepath.Join(s.home, ".ssh", "id_ed25519"), filepath.Join(s.home, ".ssh", "id_rsa"))
+	}
+	if cfg.KnownHosts == "" {
+		if s.home == "" {
+			return dial.Config{}, fmt.Errorf("known_hosts path required (no home directory to default from)")
+		}
+		cfg.KnownHosts = filepath.Join(s.home, ".ssh", "known_hosts")
+	}
+	return cfg, nil
 }
 
-// ListPlugins forwards a NAMESPACED request through the named connection
-// (remote-menu, 2026-08-16): peel the connection segment, forward the
-// rest to its node export, and re-qualify the answer with the segment —
-// the same hop rule as every routed read, so the + menu inside a remote
-// pane shows THAT node's plugins with ids routable from here. A request
-// with no namespace is refused: a parameterized transit plugin has no
-// plugin list of its own.
-func (s *Server) ListPlugins(ctx context.Context, req *gridwellv1.ListPluginsRequest) (*gridwellv1.ListPluginsResponse, error) {
-	ns := req.GetNamespace()
-	if ns == "" {
-		return nil, status.Error(codes.InvalidArgument, "remote: ListPlugins needs a connection namespace")
+func expandHome(p, home string) string {
+	if home == "" {
+		return p
 	}
-	first, rest, ok := rpc.SplitID(ns)
-	if !ok {
-		first, rest = ns, ""
+	if p == "~" {
+		return home
 	}
-	fw, _, err := s.route(ctx, first+"/0")
-	if err != nil {
-		return nil, err
+	if strings.HasPrefix(p, "~/") {
+		return filepath.Join(home, p[2:])
 	}
-	resp, err := fw.client.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{Namespace: rest})
-	if err != nil {
-		return nil, err
+	return p
+}
+
+// firstExisting returns the first path that exists, or the first path
+// (whose open failure will then name the expected default loudly).
+func firstExisting(paths ...string) string {
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
 	}
-	return rpc.TransitQualifyPluginList(first, resp), nil
+	return paths[0]
 }
 
 // ensureLive returns the connection's transport, constructing it on first
-// use. Params must be committed and valid; a config-shaped problem (bad key
-// path) surfaces here, loudly, on every attempt.
+// use. A config-shaped problem (bad key path) surfaces here, loudly, on
+// every attempt.
 func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
+	name := c.Cfg.Name
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if lc, ok := s.live[c.NS]; ok {
+	if lc, ok := s.live[name]; ok {
 		return lc, nil
 	}
-	if c.Params == "" {
-		return nil, status.Errorf(codes.FailedPrecondition, "sshhost: connection %q has no parameters yet", c.NS)
-	}
-	p, err := ParseParams([]byte(c.Params))
+	cfg, err := s.dialConfig(c.Cfg)
 	if err != nil {
-		s.rootErr[c.NS] = err.Error()
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
+		s.rootErr[name] = err.Error()
+		return nil, status.Errorf(codes.FailedPrecondition, "remote: connection %q: %v", name, err)
 	}
-	cfg, err := p.DialConfig(s.home)
-	if err != nil {
-		s.rootErr[c.NS] = err.Error()
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	if s.dial == nil {
+		s.rootErr[name] = "no dialer"
+		return nil, status.Errorf(codes.FailedPrecondition, "remote: connection %q: no dialer", name)
 	}
 	client, closer, err := s.dial(cfg)
 	if err != nil {
-		// Record the BARE dial error (the ns wrapper below is routing
-		// noise to the person reading the row status).
-		s.rootErr[c.NS] = err.Error()
-		return nil, status.Errorf(codes.Unavailable, "sshhost: connection %q: %v", c.NS, err)
+		// Record the BARE dial error (the wrapper is routing noise to the
+		// person reading the row status).
+		s.rootErr[name] = err.Error()
+		return nil, status.Errorf(codes.Unavailable, "remote: connection %q: %v", name, err)
 	}
-	delete(s.rootErr, c.NS) // transport constructed; the learn may still fail
+	delete(s.rootErr, name) // transport constructed; the learn may still fail
 	ctx, cancel := context.WithCancel(context.Background())
 	lc := &liveConn{client: client, closer: closer, cancel: cancel}
-	s.live[c.NS] = lc
+	s.live[name] = lc
 	// Remote change events flow from the moment the connection is live,
-	// prefixed with its segment — the same fan-in shape the top-level server
-	// runs per plugin, one level down.
-	go s.fanInRemote(ctx, c.NS, client)
+	// prefixed with its segment — the same fan-in shape the node runs per
+	// namespace, one level down.
+	go s.fanInRemote(ctx, name, client)
 	return lc, nil
 }
 
-// dropLive tears down a connection's transport (params changed or deleted).
-func (s *Server) dropLive(ns string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.rootErr, ns) // stale trouble must not outlive the params that caused it
-	if lc, ok := s.live[ns]; ok {
-		lc.cancel()
-		lc.closer()
-		delete(s.live, ns)
-	}
-}
-
 // setRootErr records ("" clears) a connection's last dial/root-fetch failure.
-func (s *Server) setRootErr(ns, detail string) {
+func (s *Server) setRootErr(name, detail string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if detail == "" {
-		delete(s.rootErr, ns)
+		delete(s.rootErr, name)
 		return
 	}
-	s.rootErr[ns] = detail
+	s.rootErr[name] = detail
 }
 
-// stampStatus writes the connection's recorded failure onto its well tile —
-// only while the well is CHILDLESS: once the chain is learned, a transient
-// outage is the mount-health story, not a pending-row status.
-func (s *Server) stampStatus(c *Conn, t *gridwellv1.Tile) {
-	if c.RemoteRoot != "" {
-		return
+// learnRoot is THE connect-and-learn body — the boot path (ConnectAll)
+// calls it synchronously, the lazy kick (kickRootFetch) in a goroutine.
+// Dial the transport; a learned root is final; a fresh one persists and
+// publishes a health event so open clients re-list.
+func (s *Server) learnRoot(c *Conn) (string, error) {
+	name := c.Cfg.Name
+	lc, err := s.ensureLive(c)
+	if err != nil {
+		return "", err // ensureLive recorded the detail already
 	}
 	s.mu.Lock()
-	t.StatusDetail = s.rootErr[c.NS]
+	root := c.RemoteRoot
 	s.mu.Unlock()
+	if root != "" {
+		return root, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		s.setRootErr(name, status.Convert(err).Message())
+		return "", err
+	}
+	if info.RootGridId == "" {
+		err := errors.New("the remote declared no home")
+		s.setRootErr(name, err.Error())
+		return "", err
+	}
+	s.setRootErr(name, "")
+	if err := s.db.SetRemoteRoot(ctx, name, info.RootGridId); err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	c.RemoteRoot = info.RootGridId
+	s.mu.Unlock()
+	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
+		PluginUuid: name, Healthy: true,
+	}}})
+	return info.RootGridId, nil
 }
 
-// kickRootFetch learns the remote's home grid id in the background,
-// single-flight per connection. Success backfills remote_root — the
-// moment the connection well gains its child — and emits the change so
-// open clients refresh.
+// kickRootFetch learns a connection's landing in the background,
+// single-flight per connection; a no-op once learned.
 func (s *Server) kickRootFetch(c *Conn) {
-	if c.Params == "" || c.Deleted {
-		return
-	}
-	// Fast path without dialing: a learned root is final.
-	if c.RemoteRoot != "" {
+	s.mu.Lock()
+	known := c.RemoteRoot != ""
+	s.mu.Unlock()
+	if known {
 		return
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
-		// Params/dial problem — ensureLive just recorded it (rootErr), so
-		// the well's status_detail says why; direct paths also error.
-		return
+		return // recorded (rootErr); the row says why
 	}
 	s.mu.Lock()
 	if lc.rootFetching {
@@ -273,29 +438,24 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}
 	lc.rootFetching = true
 	s.mu.Unlock()
-	conn := *c
-	ns := c.NS
 	go func() {
 		defer func() {
 			s.mu.Lock()
-			if l, ok := s.live[ns]; ok {
+			if l, ok := s.live[c.Cfg.Name]; ok {
 				l.rootFetching = false
 			}
 			s.mu.Unlock()
 		}()
-		// Failure is already recorded (rootErr) by learnRoot/ensureLive so
-		// the well's status_detail says why; retried on the next read.
-		_, _ = s.learnRoot(&conn)
+		_, _ = s.learnRoot(c)
 	}()
 }
 
-// fanInRemote forwards a connection's remote change events, each id prefixed
-// with the connection segment. Plain retry loop: the transport underneath
-// self-heals (sshdial's redialer), so a dropped stream just re-subscribes —
-// but never silently: a connection whose events stop presents as "tiles
-// stopped updating" with no evidence, so each transition is logged and
-// published as an EventPluginHealth (the same contract the server's
-// fanInEvents keeps for local plugins, issue #47).
+// fanInRemote forwards a connection's remote change events, each id
+// prefixed with the connection segment. Plain retry loop: the transport
+// underneath self-heals (sshdial's redialer), so a dropped stream just
+// re-subscribes — never silently: each transition is logged and published
+// as an EventPluginHealth (the same contract the node's fanInEvents keeps
+// per namespace, issue #47).
 func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.GridwellClient) {
 	healthy := true
 	report := func(up bool, detail string) {
@@ -343,103 +503,44 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.G
 	}
 }
 
-// ── the connection well ──────────────────────────────────────────────────────
+// ── the forwarded verbs ──────────────────────────────────────────────────────
 
-// tileFromConn renders a connection row as its well tile. Reference is set —
-// dashed border, delete unlinks, the child is shared not owned — and the
-// child appears only once the remote's root is known.
-func tileFromConn(c *Conn) *gridwellv1.Tile {
-	alt := c.AltText
-	if !c.AltUser {
-		if l := autoLabel(c.Params); l != "" {
-			alt = l
-		}
+// ListPlugins forwards a NAMESPACED request through the named connection
+// (remote-menu, 2026-08-16): peel the connection segment, forward the
+// rest to its node export, and re-qualify the answer with the segment.
+func (s *Server) ListPlugins(ctx context.Context, req *gridwellv1.ListPluginsRequest) (*gridwellv1.ListPluginsResponse, error) {
+	ns := req.GetNamespace()
+	if ns == "" {
+		return nil, status.Error(codes.InvalidArgument, "remote: ListPlugins needs a connection namespace")
 	}
-	t := &gridwellv1.Tile{
-		Id:        strconv.FormatInt(c.ID, 10),
-		GridId:    connGridID,
-		ObjectId:  c.ObjectID,
-		Kind:      "well",
-		X:         c.X,
-		Y:         c.Y,
-		W:         c.W,
-		H:         c.H,
-		AltText:   alt,
-		Version:   c.Version,
-		ViewX:     c.ViewX,
-		ViewY:     c.ViewY,
-		ViewZoom:  c.ViewZoom,
-		Reference: true,
+	first, rest, ok := rpc.SplitID(ns)
+	if !ok {
+		first, rest = ns, ""
 	}
-	if c.RemoteRoot != "" {
-		t.ChildGridId = rpc.QualifyID(c.NS, c.RemoteRoot)
+	fw, _, err := s.route(ctx, first+"/0")
+	if err != nil {
+		return nil, err
 	}
-	return t
-}
-
-func dbErr(err error) error {
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, ErrNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, ErrVersionConflict):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	default:
-		return err
+	resp, err := fw.client.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{Namespace: rest})
+	if err != nil {
+		return nil, err
 	}
-}
-
-// ── lifecycle ────────────────────────────────────────────────────────────────
-
-func (s *Server) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	resp := &gridwellv1.InfoResponse{
-		// The DECLARATIONS the host reads instead of knowing this kind:
-		// transit (ids are chains from another node) and the generic globe
-		// glyph (empty = globe fallback).
-		Transit:     true,
-		Kind:        "remote",
-		DisplayName: "connections",
-		// The #251 flip: no root grid — the connection list is the INSTANCE
-		// grid, and the server synthesizes one menu row per connection
-		// from it. Writable is FALSE deliberately: it is the "+ palette
-		// shows here" gate. No root grid means no root view to report.
-		InstanceGridId: connGridID,
-		Watch:          true,
-	}
-	// No creation schema, ever: the instance picker retired with the v2
-	// config-managed connections (2026-08-23) — a connection is a menu
-	// row, and the list is edited in server.yaml.
-	return resp, nil
+	return rpc.TransitQualifyPluginList(first, resp), nil
 }
 
 func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
 		// A connection that cannot be resolved is NOT gone — only a
-		// tombstone is. A failed read must never sweep a tile.
+		// retired one is. A failed read must never sweep a tile.
 		if first, _, ok := rpc.SplitID(req.TileId); ok {
-			if c, derr := s.db.GetByNS(ctx, first); derr == nil && c.Deleted {
+			if row, derr := s.db.Get(ctx, first); derr == nil && row.Deleted {
 				return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 			}
 		}
 		return nil, err
 	}
-	if fw != nil {
-		return fw.client.Probe(ctx, &gridwellv1.ProbeRequest{TileId: local})
-	}
-	id, err := strconv.ParseInt(local, 10, 64)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "sshhost: bad tile id %q", local)
-	}
-	c, err := s.db.Get(ctx, id)
-	if errors.Is(err, ErrNotFound) || (err == nil && c.Deleted) {
-		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
+	return fw.client.Probe(ctx, &gridwellv1.ProbeRequest{TileId: local})
 }
 
 func (s *Server) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
@@ -447,101 +548,25 @@ func (s *Server) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewReq
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		// The CONNECTION'S OWN ROOT: the connection row is the DOOR, and
-		// the door owns its viewport (#263's rule; v2 #269 — the menu
-		// row's root_view reads the row's view_*). Persist framing HERE,
-		// never forward: forwarding wrote the FAR node's landing framing
-		// (clobbering what its own clients left) while the local row
-		// stayed at zero — the ascent wrote one place, the re-entry read
-		// another, and the round trip silently lost the viewport.
-		if c, cerr := s.db.GetByNS(ctx, fw.ns); cerr == nil && !c.Deleted && c.RemoteRoot == local {
-			if _, ferr := s.db.SetFraming(ctx, c.ID, int64(req.Cx), int64(req.Cy), req.Zoom); ferr != nil {
-				return nil, dbErr(ferr)
-			}
-			return &gridwellv1.SetRootViewResponse{}, nil
-		}
-		// Deeper targets (a far PLUGIN's root through the routed menu)
-		// forward: that root belongs to the far node.
-		out := proto.Clone(req).(*gridwellv1.SetRootViewRequest)
-		out.RootGridId = local
-		return fw.client.SetRootView(ctx, out)
-	}
-	// Local: the plugin has no root grid (#251 — the connection list is an
-	// instance grid, never a landing page), so there is no root view to
-	// persist. The transit branch above still forwards root-view writes to
-	// remote plugins reached through a connection.
-	return nil, status.Error(codes.Unimplemented, "sshhost: no root grid (parameterized plugin)")
+	out := proto.Clone(req).(*gridwellv1.SetRootViewRequest)
+	out.RootGridId = local
+	return fw.client.SetRootView(ctx, out)
 }
-
-// ── reads ────────────────────────────────────────────────────────────────────
 
 func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	fw, local, err := s.route(ctx, req.GridId)
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		resp, err := fw.client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: local})
-		if err != nil {
-			return nil, err
-		}
-		return &gridwellv1.GetGridResponse{
-			// The one transit grid rule, shared with the server's hop.
-			Grid:  rpc.TransitQualifyGrid(fw.ns, resp.Grid),
-			Tiles: rpc.TransitQualifyTiles(fw.ns, resp.Tiles),
-		}, nil
-	}
-	if local != connGridID {
-		return nil, status.Errorf(codes.NotFound, "sshhost: no grid %q", local)
-	}
-	conns, err := s.db.List(ctx)
+	resp, err := fw.client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: local})
 	if err != nil {
 		return nil, err
-	}
-	gv, err := s.db.GridVersion(ctx)
-	if err != nil {
-		return nil, err
-	}
-	tiles := make([]*gridwellv1.Tile, 0, len(conns))
-	for _, c := range conns {
-		// A connection that has params but no learned root retries the learn
-		// on every list — the read is what shows the child, so the read is
-		// what re-kicks a remote that was down. Kick BEFORE rendering the
-		// row: a config-shaped failure records synchronously, so the same
-		// read that retries also says why it keeps failing.
-		s.kickRootFetch(c)
-		t := tileFromConn(c)
-		s.stampStatus(c, t)
-		tiles = append(tiles, t)
-	}
-	grid := &gridwellv1.Grid{
-		Id:      connGridID,
-		Version: gv,
-		// NOT writable: that's the "+ palette shows here" gate (#251).
-		// The plugin stamps its own grid because it is registered
-		// TRANSIT — the server forwards this stamp verbatim.
 	}
 	return &gridwellv1.GetGridResponse{
-		Grid:  grid,
-		Tiles: tiles,
+		// The one transit grid rule, shared with the node's hop.
+		Grid:  rpc.TransitQualifyGrid(fw.ns, resp.Grid),
+		Tiles: rpc.TransitQualifyTiles(fw.ns, resp.Tiles),
 	}, nil
-}
-
-// localConn parses a bare local tile id and loads its live row.
-func (s *Server) localConn(ctx context.Context, local string) (*Conn, error) {
-	id, err := strconv.ParseInt(local, 10, 64)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "sshhost: bad tile id %q", local)
-	}
-	c, err := s.db.Get(ctx, id)
-	if err != nil {
-		return nil, dbErr(err)
-	}
-	if c.Deleted {
-		return nil, status.Errorf(codes.NotFound, "sshhost: tile %s was deleted", local)
-	}
-	return c, nil
 }
 
 func (s *Server) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
@@ -549,22 +574,11 @@ func (s *Server) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		resp, err := fw.client.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: local})
-		if err != nil {
-			return nil, err
-		}
-		return prependTileResp(fw.ns, resp), nil
-	}
-	c, err := s.localConn(ctx, local)
+	resp, err := fw.client.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: local})
 	if err != nil {
 		return nil, err
 	}
-	t := tileFromConn(c)
-	// The picker's create flow polls THIS read while the row says
-	// "connecting…" — it must carry the recorded failure, not hide it.
-	s.stampStatus(c, t)
-	return &gridwellv1.TileResponse{Tile: t}, nil
+	return prependTileResp(fw.ns, resp), nil
 }
 
 func (s *Server) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
@@ -572,10 +586,7 @@ func (s *Server) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		return fw.client.GetTilePreview(ctx, &gridwellv1.GetTilePreviewRequest{TileId: local})
-	}
-	return nil, status.Error(codes.NotFound, "sshhost: a connection well has no stored preview")
+	return fw.client.GetTilePreview(ctx, &gridwellv1.GetTilePreviewRequest{TileId: local})
 }
 
 func (s *Server) ShellSessionAlive(ctx context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
@@ -583,88 +594,29 @@ func (s *Server) ShellSessionAlive(ctx context.Context, req *gridwellv1.ShellSes
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		return fw.client.ShellSessionAlive(ctx, &gridwellv1.ShellSessionAliveRequest{TileId: local})
-	}
-	return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
+	return fw.client.ShellSessionAlive(ctx, &gridwellv1.ShellSessionAliveRequest{TileId: local})
 }
-
-// ── mutations ────────────────────────────────────────────────────────────────
 
 func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
 	fw, local, err := s.route(ctx, req.GridId)
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		out := proto.Clone(req).(*gridwellv1.CreateTileRequest)
-		out.GridId = local
-		if req.Tile != nil {
-			t := out.Tile
-			// A qualified child/target crossing INTO the connection was
-			// qualified from OUR side; strip our segment so the remote sees
-			// its own frame. (The server-side link machinery does the same
-			// strip one level up.)
-			t.ChildGridId = stripPrefix(t.ChildGridId, fw.ns)
-			t.LinkTargetId = stripPrefix(t.LinkTargetId, fw.ns)
-		}
-		resp, err := fw.client.CreateTile(ctx, out)
-		if err != nil {
-			return nil, err
-		}
-		return prependTileResp(fw.ns, resp), nil
+	out := proto.Clone(req).(*gridwellv1.CreateTileRequest)
+	out.GridId = local
+	if out.Tile != nil {
+		// A qualified child/target crossing INTO the connection was
+		// qualified from OUR side; strip our segment so the remote sees
+		// its own frame. (The node's link machinery does the same strip
+		// one level up.)
+		out.Tile.ChildGridId = stripPrefix(out.Tile.ChildGridId, fw.ns)
+		out.Tile.LinkTargetId = stripPrefix(out.Tile.LinkTargetId, fw.ns)
 	}
-	if local != connGridID {
-		return nil, status.Errorf(codes.NotFound, "sshhost: no grid %q", local)
-	}
-	if s.configMode {
-		return nil, status.Error(codes.FailedPrecondition, errConfigMode.Error())
-	}
-	t := req.Tile
-	if t == nil {
-		return nil, status.Error(codes.InvalidArgument, "sshhost: nil tile")
-	}
-	if t.Kind != "well" {
-		return nil, status.Errorf(codes.InvalidArgument,
-			"sshhost: the ssh plugin hosts connections — drop a well (got kind %q)", t.Kind)
-	}
-	w, h := t.W, t.H
-	if w <= 0 {
-		w = 1
-	}
-	if h <= 0 {
-		h = 1
-	}
-	if err := s.checkOverlap(ctx, t.X, t.Y, w, h, 0); err != nil {
-		return nil, err
-	}
-	c, err := s.db.Create(ctx, t.X, t.Y, w, h, t.AltText)
+	resp, err := fw.client.CreateTile(ctx, out)
 	if err != nil {
 		return nil, err
 	}
-	_ = s.db.BumpGridVersion(ctx)
-	tile := tileFromConn(c)
-	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
-	return &gridwellv1.TileResponse{Tile: tile}, nil
-}
-
-// checkOverlap refuses a placement that intersects another live connection.
-func (s *Server) checkOverlap(ctx context.Context, x, y, w, h, exclude int64) error {
-	conns, err := s.db.List(ctx)
-	if err != nil {
-		return err
-	}
-	for _, c := range conns {
-		if c.ID == exclude {
-			continue
-		}
-		if x < c.X+c.W && c.X < x+w && y < c.Y+c.H && c.Y < y+h {
-			return status.Errorf(codes.FailedPrecondition,
-				"sshhost: placement overlaps connection %d", c.ID)
-		}
-	}
-	return nil
+	return prependTileResp(fw.ns, resp), nil
 }
 
 func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
@@ -672,140 +624,43 @@ func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		out := proto.Clone(req).(*gridwellv1.SetTileRequest)
-		out.TileId = local
-		resp, err := fw.client.SetTile(ctx, out)
-		if err != nil {
-			return nil, err
-		}
-		return prependTileResp(fw.ns, resp), nil
-	}
-	c, err := s.localConn(ctx, local)
+	out := proto.Clone(req).(*gridwellv1.SetTileRequest)
+	out.TileId = local
+	resp, err := fw.client.SetTile(ctx, out)
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case req.Rename != "":
-		if s.configMode {
-			return nil, status.Error(codes.FailedPrecondition, errConfigMode.Error())
-		}
-		c, err = s.db.Rename(ctx, c.ID, req.Version, req.Rename)
-	case req.ContentZoom != nil:
-		return nil, status.Error(codes.InvalidArgument, "sshhost: content_zoom is refused for wells")
-	case req.Tile != nil && req.Tile.Kind == "well":
-		// Framing-class: never bumps (face #3 of the primary rule).
-		c, err = s.db.SetFraming(ctx, c.ID, req.Tile.ViewX, req.Tile.ViewY, req.Tile.ViewZoom)
-	default:
-		return nil, status.Error(codes.InvalidArgument, "sshhost: unsupported SetTile operation for a connection well")
-	}
-	if err != nil {
-		return nil, dbErr(err)
-	}
-	tile := tileFromConn(c)
-	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
-	return &gridwellv1.TileResponse{Tile: tile}, nil
+	return prependTileResp(fw.ns, resp), nil
 }
 
 func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
-	fwTile, localTile, err := s.route(ctx, req.TileId)
+	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	fwGrid, localGrid, err := s.route(ctx, req.GridId)
+	out := proto.Clone(req).(*gridwellv1.PlaceTileRequest)
+	out.TileId = local
+	out.GridId = stripPrefix(out.GridId, fw.ns)
+	resp, err := fw.client.PlaceTile(ctx, out)
 	if err != nil {
 		return nil, err
 	}
-	if nsOf(fwTile) != nsOf(fwGrid) {
-		return nil, status.Error(codes.Unimplemented,
-			"sshhost: placement never crosses a connection boundary — clone or link instead")
-	}
-	if fwTile != nil {
-		out := proto.Clone(req).(*gridwellv1.PlaceTileRequest)
-		out.TileId = localTile
-		out.GridId = localGrid
-		resp, err := fwTile.client.PlaceTile(ctx, out)
-		if err != nil {
-			return nil, err
-		}
-		return prependTileResp(fwTile.ns, resp), nil
-	}
-	if localGrid != connGridID {
-		return nil, status.Errorf(codes.NotFound, "sshhost: no grid %q", localGrid)
-	}
-	c, err := s.localConn(ctx, localTile)
-	if err != nil {
-		return nil, err
-	}
-	if req.W <= 0 || req.H <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "sshhost: w and h must be positive")
-	}
-	if err := s.checkOverlap(ctx, req.X, req.Y, req.W, req.H, c.ID); err != nil {
-		return nil, err
-	}
-	c, err = s.db.SetPlacement(ctx, c.ID, req.Version, req.X, req.Y, req.W, req.H)
-	if err != nil {
-		return nil, dbErr(err)
-	}
-	tile := tileFromConn(c)
-	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
-	return &gridwellv1.TileResponse{Tile: tile}, nil
+	return prependTileResp(fw.ns, resp), nil
 }
 
 func (s *Server) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	fwTile, localTile, err := s.route(ctx, req.TileId)
+	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	fwGrid, localGrid, err := s.route(ctx, req.DestGridId)
+	out := proto.Clone(req).(*gridwellv1.CloneTileRequest)
+	out.TileId = local
+	out.DestGridId = stripPrefix(out.DestGridId, fw.ns)
+	resp, err := fw.client.CloneTile(ctx, out)
 	if err != nil {
 		return nil, err
 	}
-	if nsOf(fwTile) != nsOf(fwGrid) {
-		return nil, status.Error(codes.Unimplemented,
-			"sshhost: clone never crosses a connection boundary here — the server's cross-plugin copy handles that")
-	}
-	if fwTile != nil {
-		out := proto.Clone(req).(*gridwellv1.CloneTileRequest)
-		out.TileId = localTile
-		out.DestGridId = localGrid
-		resp, err := fwTile.client.CloneTile(ctx, out)
-		if err != nil {
-			return nil, err
-		}
-		return prependTileResp(fwTile.ns, resp), nil
-	}
-	// Clone of a connection well: a NEW connection to the same endpoint —
-	// same params, its own minted namespace, its own dial. (The localdb
-	// discipline: clone copies the row; here the "content" is the params.)
-	src, err := s.localConn(ctx, localTile)
-	if err != nil {
-		return nil, err
-	}
-	if src.Version != req.Version {
-		return nil, status.Errorf(codes.FailedPrecondition,
-			"sshhost: tile %s is at version %d, claim was %d", localTile, src.Version, req.Version)
-	}
-	if err := s.checkOverlap(ctx, req.X, req.Y, src.W, src.H, 0); err != nil {
-		return nil, err
-	}
-	c, err := s.db.Create(ctx, req.X, req.Y, src.W, src.H, src.AltText)
-	if err != nil {
-		return nil, err
-	}
-	if src.Params != "" {
-		if c, err = s.db.SetParams(ctx, c.ID, c.Version, src.Params); err != nil {
-			return nil, dbErr(err)
-		}
-		s.kickRootFetch(c)
-	}
-	_ = s.db.BumpGridVersion(ctx)
-	tile := tileFromConn(c)
-	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
-	return &gridwellv1.TileResponse{Tile: tile}, nil
+	return prependTileResp(fw.ns, resp), nil
 }
 
 func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
@@ -813,29 +668,10 @@ func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	if err != nil {
 		return nil, err
 	}
-	if fw != nil {
-		return fw.client.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: local, Version: req.Version})
-	}
-	c, err := s.localConn(ctx, local)
-	if err != nil {
-		return nil, err
-	}
-	if s.configMode {
-		return nil, status.Error(codes.FailedPrecondition, errConfigMode.Error())
-	}
-	// Unlink, never cascade: the remote is untouched; the minted namespace
-	// stays reserved forever (tombstone, not DELETE).
-	if err := s.db.Tombstone(ctx, c.ID, req.Version); err != nil {
-		return nil, dbErr(err)
-	}
-	s.dropLive(c.NS)
-	_ = s.db.BumpGridVersion(ctx)
-	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{
-		TileRemoved: &gridwellv1.TileRemoved{GridId: connGridID, TileId: local}}})
-	return &gridwellv1.DeleteTileResponse{}, nil
+	out := proto.Clone(req).(*gridwellv1.DeleteTileRequest)
+	out.TileId = local
+	return fw.client.DeleteTile(ctx, out)
 }
-
-// ── content streams ──────────────────────────────────────────────────────────
 
 func (s *Server) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
 	ctx := stream.Context()
@@ -843,37 +679,18 @@ func (s *Server) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.Ser
 	if err != nil {
 		return err
 	}
-	if fw != nil {
-		cs, err := fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local})
-		if err != nil {
-			return err
-		}
-		return relay(cs, stream)
-	}
-	c, err := s.localConn(ctx, local)
+	cs, err := fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local})
 	if err != nil {
 		return err
 	}
-	// The well's content IS its params document; chunk 1 carries the version
-	// the bytes belong to (the save basis, never split).
-	return stream.Send(&gridwellv1.ContentChunk{
-		Data:      []byte(c.Params),
-		MediaType: "application/json",
-		Version:   c.Version,
-	})
+	return relay(cs, stream)
 }
 
-// ServeContent forwards web-content requests to the remote node; the
-// connection-well tiles themselves serve no pages (a well's content is its
-// params document, not a web page).
 func (s *Server) ServeContent(req *gridwellv1.ServeContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ServeContentChunk]) error {
 	ctx := stream.Context()
 	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
 		return err
-	}
-	if fw == nil {
-		return status.Error(codes.Unimplemented, "sshhost: connection wells serve no web content")
 	}
 	cs, err := fw.client.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: local, Subpath: req.Subpath})
 	if err != nil {
@@ -886,108 +703,42 @@ func (s *Server) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.Write
 	ctx := stream.Context()
 	first, err := stream.Recv()
 	if err != nil {
-		return status.Error(codes.InvalidArgument, "sshhost: write: empty stream")
+		return status.Error(codes.InvalidArgument, "remote: write: empty stream")
 	}
 	if first.TileId == "" {
-		return status.Error(codes.InvalidArgument, "sshhost: write: first message must bind tile_id")
+		return status.Error(codes.InvalidArgument, "remote: write: first message must bind tile_id")
 	}
 	fw, local, err := s.route(ctx, first.TileId)
 	if err != nil {
 		return err
 	}
-	if fw != nil {
-		cs, err := fw.client.WriteContent(ctx)
-		if err != nil {
-			return err
-		}
-		rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
-		rewritten.TileId = local
-		if err := cs.Send(rewritten); err != nil {
-			return err
-		}
-		for {
-			msg, err := stream.Recv()
-			if errors.Is(err, io.EOF) {
-				resp, err := cs.CloseAndRecv()
-				if err != nil {
-					return err
-				}
-				return stream.SendAndClose(prependTileResp(fw.ns, resp))
-			}
-			if err != nil {
-				return err
-			}
-			if err := cs.Send(msg); err != nil {
-				return err
-			}
-		}
-	}
-	// Local: the connection's params document. Accumulate, validate
-	// AUTHORITATIVELY, commit at close (a broken stream commits nothing).
-	if s.configMode {
-		return status.Error(codes.FailedPrecondition, errConfigMode.Error())
-	}
-	c, err := s.localConn(ctx, local)
+	cs, err := fw.client.WriteContent(ctx)
 	if err != nil {
 		return err
 	}
-	data := append([]byte(nil), first.Data...)
+	rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
+	rewritten.TileId = local
+	if err := cs.Send(rewritten); err != nil {
+		return err
+	}
 	for {
-		msg, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
+		msg, rerr := stream.Recv()
+		if errors.Is(rerr, io.EOF) {
 			break
 		}
-		if err != nil {
+		if rerr != nil {
+			return rerr
+		}
+		if err := cs.Send(msg); err != nil {
 			return err
 		}
-		data = append(data, msg.Data...)
-		if len(data) > 1<<16 {
-			return status.Error(codes.InvalidArgument, "sshhost: write: params too large")
-		}
 	}
-	if _, err := ParseParams(data); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-	// The #251 dedup refusal — identical details ARE an existing connection
-	// (one param-set, one minted segment); the caller should select it, not
-	// mint a twin. The plugin is the authority; the picker's pre-match is
-	// only UX.
-	want, err := CanonicalParams(data)
+	resp, err := cs.CloseAndRecv()
 	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
+		return err
 	}
-	live, err := s.db.List(ctx)
-	if err != nil {
-		return dbErr(err)
-	}
-	for _, other := range live {
-		if other.ID == c.ID || other.Params == "" {
-			continue
-		}
-		if got, cerr := CanonicalParams([]byte(other.Params)); cerr == nil && got == want {
-			name := other.AltText
-			if name == "" {
-				name = autoLabel(other.Params)
-			}
-			return status.Errorf(codes.AlreadyExists,
-				"sshhost: these details already exist as %q — select that connection instead", name)
-		}
-	}
-	row, err := s.db.SetParams(ctx, c.ID, first.Version, string(data))
-	if err != nil {
-		return dbErr(err)
-	}
-	// New endpoint: the old transport (and its cached root) no longer apply.
-	s.dropLive(c.NS)
-	_ = s.db.BumpGridVersion(ctx)
-	s.kickRootFetch(row)
-	tile := tileFromConn(row)
-	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
-	return stream.SendAndClose(&gridwellv1.TileResponse{Tile: tile})
+	return stream.SendAndClose(prependTileResp(fw.ns, resp))
 }
-
-// ── live bytes ───────────────────────────────────────────────────────────────
 
 func (s *Server) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellRequest, gridwellv1.OpenShellResponse]) error {
 	ctx := stream.Context()
@@ -998,9 +749,6 @@ func (s *Server) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 	fw, local, err := s.route(ctx, first.TileId)
 	if err != nil {
 		return err
-	}
-	if fw == nil {
-		return status.Error(codes.InvalidArgument, "sshhost: a connection well has no shell")
 	}
 	cs, err := fw.client.OpenShell(ctx)
 	if err != nil {
@@ -1045,8 +793,8 @@ func (s *Server) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 	return nil
 }
 
-// ── events ───────────────────────────────────────────────────────────────────
-
+// Subscribe streams every connection's remote events (prefixed) and the
+// connections' own health transitions.
 func (s *Server) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStreamingServer[gridwellv1.Event]) error {
 	ch, cancel := s.hub.Subscribe()
 	defer cancel()
@@ -1065,36 +813,18 @@ func (s *Server) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStr
 	}
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-func nsOf(fw *forward) string {
-	if fw == nil {
-		return ""
-	}
-	return fw.ns
-}
-
-// Search forwards the one find verb through the mount (issue #244). An
-// `id:` query routes to the connection owning the id, like every routed
-// call; free text fans out — to LIVE connections only (a search answers
-// with what is reachable; it never dials the world). Each remote answer
-// comes from a node SERVER, which fans to its own plugins and mounts —
-// the federation recursion falls out of the chain shape. Result ids
-// (tiles and paths) get the connection's namespace prepended like every
-// other read; a connection that errors or times out contributes nothing.
+// Search forwards the one find verb through the transport (issue #244).
+// An `id:` query routes to the connection owning the id; free text fans
+// out — to LIVE connections only (a search answers with what is
+// reachable; it never dials the world). Each remote answer comes from a
+// node, which fans to its own namespaces — the federation recursion falls
+// out of the chain shape. A connection that errors or times out
+// contributes nothing, loudly.
 func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
-		// An id: query targets ONE connection — an empty answer where the
-		// hop actually failed is a lie (it hid the export's missing Search
-		// delegate for weeks: every layer read the failure as "not found").
-		// Propagate; the fan-out caller upstream decides what a dead hop
-		// means for a broader search.
 		fw, local, err := s.route(ctx, q.ID)
 		if err != nil {
 			return nil, err
-		}
-		if fw == nil {
-			return &gridwellv1.SearchResponse{}, nil
 		}
 		resp, err := fw.client.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + local, Limit: req.Limit})
 		if err != nil {
@@ -1103,26 +833,20 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 		return prependSearchResp(fw.ns, resp), nil
 	}
 	s.mu.Lock()
-	type hop struct {
-		ns     string
-		client gridwellv1.GridwellClient
-	}
-	hops := make([]hop, 0, len(s.live))
+	hops := make([]forward, 0, len(s.live))
 	for ns, lc := range s.live {
-		hops = append(hops, hop{ns, lc.client})
+		hops = append(hops, forward{ns, lc.client})
 	}
 	s.mu.Unlock()
 	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
 	out := &gridwellv1.SearchResponse{}
 	for _, hp := range hops {
-		// Each hop bounded (rpc.SearchHopTimeout, shared with the
-		// server's fan-out): one hung tunnel must not stall the search.
+		// Each hop bounded (rpc.SearchHopTimeout, shared with the node's
+		// fan-out): one hung tunnel must not stall the search.
 		hctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
 		resp, err := hp.client.Search(hctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
 		cancel()
 		if err != nil {
-			// A hop contributing nothing is policy; contributing nothing
-			// SILENTLY is how the missing export delegate stayed invisible.
 			log.Printf("gridwell: search: connection %s skipped: %v", hp.ns, err)
 			continue
 		}
@@ -1131,9 +855,8 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 	return out, nil
 }
 
-// prependSearchResp applies the transit prepend to every id a search
-// answer carries — the walk is rpc.QualifySearchResponse, shared with
-// the server's fan-out.
+// ── helpers ──────────────────────────────────────────────────────────────────
+
 func prependSearchResp(ns string, resp *gridwellv1.SearchResponse) *gridwellv1.SearchResponse {
 	return rpc.QualifySearchResponse(resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
 		return rpc.TransitQualifyTiles(ns, ts)
@@ -1148,7 +871,7 @@ func prependTileResp(ns string, resp *gridwellv1.TileResponse) *gridwellv1.TileR
 	return &gridwellv1.TileResponse{Tile: rpc.TransitQualifyTiles(ns, []*gridwellv1.Tile{t})[0]}
 }
 
-// stripPrefix removes "<ns>/" from an id qualified from this plugin's frame,
+// stripPrefix removes "<ns>/" from an id qualified from this frame,
 // leaving other ids untouched.
 func stripPrefix(id, ns string) string {
 	if strings.HasPrefix(id, ns+"/") {
@@ -1176,12 +899,9 @@ func relay[T any](from recvStream[T], to sendStream[T]) error {
 }
 
 // eventKey names the entity a wire event is about, so the hub
-// (internal/eventhub — shared with the local store) can replace an older
+// (internal/eventhub — shared with the home store) can replace an older
 // undelivered event for the same entity with the newer one and never
-// drop a distinct one. The same shapes the store keys: a grid, a tile, a
-// removal (keyed apart from a change, by grid: a cross-grid move emits
-// both for one id and both must land), and a plugin's health (latest
-// state wins). "" means unkeyable — never coalesced.
+// drop a distinct one. "" means unkeyable — never coalesced.
 func eventKey(ev *gridwellv1.Event) string {
 	switch p := ev.GetPayload().(type) {
 	case *gridwellv1.Event_GridChanged:

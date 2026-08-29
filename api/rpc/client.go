@@ -66,6 +66,14 @@ type PluginList struct {
 	// every plugin-served page URL as
 	// <origin>/content/<ContentToken>/<tile-id>/ (see data.proto).
 	ContentToken string
+	// HomeGridID is where "/" lands (a field, docs/one-node.md); HomeView*
+	// its persisted viewport (zero zoom = never set).
+	HomeGridID   string
+	HomeViewCx   float64
+	HomeViewCy   float64
+	HomeViewZoom float64
+	// Connections: the node's remote nodes, in config order.
+	Connections []ConnectionInfo
 }
 
 func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
@@ -85,25 +93,36 @@ func (c *Client) ListPluginsNS(ctx context.Context, ns string) (PluginList, erro
 	out := make([]PluginInfo, len(r.Msg.Plugins))
 	for i, p := range r.Msg.Plugins {
 		out[i] = PluginInfo{
-			UUID:           p.Uuid,
-			Kind:           p.Kind,
-			Label:          p.Label,
-			Writable:       p.Writable,
-			RootGridID:     p.RootGridId,
-			ScratchGridID:  p.ScratchGridId,
-			InstanceGridID: p.InstanceGridId,
-			RootViewCx:     p.RootViewCx,
-			RootViewCy:     p.RootViewCy,
-			RootViewZoom:   p.RootViewZoom,
-			InfoError:      p.InfoError,
-			Glyph:          p.Glyph,
-			MenuEntries:    MenuEntriesFromProto(p.MenuEntries),
+			UUID:          p.Uuid,
+			Kind:          p.Kind,
+			Label:         p.Label,
+			Writable:      p.Writable,
+			RootGridID:    p.RootGridId,
+			ScratchGridID: p.ScratchGridId,
+			RootViewCx:    p.RootViewCx,
+			RootViewCy:    p.RootViewCy,
+			RootViewZoom:  p.RootViewZoom,
+			InfoError:     p.InfoError,
+			Glyph:         p.Glyph,
+			MenuEntries:   MenuEntriesFromProto(p.MenuEntries),
+		}
+	}
+	conns := make([]ConnectionInfo, len(r.Msg.Connections))
+	for i, c := range r.Msg.Connections {
+		conns[i] = ConnectionInfo{
+			UUID: c.Uuid, Label: c.Label, RootGridID: c.RootGridId, StatusDetail: c.StatusDetail,
+			RootViewCx: c.RootViewCx, RootViewCy: c.RootViewCy, RootViewZoom: c.RootViewZoom,
 		}
 	}
 	return PluginList{
 		Plugins:        out,
 		ShellsDisabled: r.Msg.ShellsDisabled,
 		ContentToken:   r.Msg.ContentToken,
+		HomeGridID:     r.Msg.HomeGridId,
+		HomeViewCx:     r.Msg.HomeViewCx,
+		HomeViewCy:     r.Msg.HomeViewCy,
+		HomeViewZoom:   r.Msg.HomeViewZoom,
+		Connections:    conns,
 	}, nil
 }
 

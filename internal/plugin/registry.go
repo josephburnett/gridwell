@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"sync"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -33,7 +34,16 @@ type Registry struct {
 	// Ordered. Transitional slot until the registry holds namespaces as
 	// Go values (docs/one-node.md P3).
 	transport      gridwellv1.GridwellClient
+	transportRows  func(context.Context) []ConnectionRow
 	transportClose func()
+}
+
+// ConnectionRow is one connection as the transport lists it for the
+// handshake (internal/remote.Row's shape, kept here so the registry needs
+// no transport import).
+type ConnectionRow struct {
+	Name, Label, RootGridID, StatusDetail string
+	ViewCx, ViewCy, ViewZoom              float64
 }
 
 // NewRegistry returns an empty registry.
@@ -116,12 +126,23 @@ func (r *Registry) Transit(id string) bool {
 	return r.transit[id]
 }
 
-// SetTransport installs the node's connection namespace; closer runs on
-// Close.
-func (r *Registry) SetTransport(client gridwellv1.GridwellClient, closer func()) {
+// SetTransport installs the node's connection namespace: its client, its
+// row lister (for the handshake), and the closer Close runs.
+func (r *Registry) SetTransport(client gridwellv1.GridwellClient, rows func(context.Context) []ConnectionRow, closer func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.transport, r.transportClose = client, closer
+	r.transport, r.transportRows, r.transportClose = client, rows, closer
+}
+
+// Connections lists the transport's rows (nil without a transport).
+func (r *Registry) Connections(ctx context.Context) []ConnectionRow {
+	r.mu.RLock()
+	rows := r.transportRows
+	r.mu.RUnlock()
+	if rows == nil {
+		return nil
+	}
+	return rows(ctx)
 }
 
 // Transport returns the connection namespace's client, or (nil, false)
@@ -151,7 +172,7 @@ func (r *Registry) Close() {
 	if r.transportClose != nil {
 		r.transportClose()
 	}
-	r.transport, r.transportClose = nil, nil
+	r.transport, r.transportRows, r.transportClose = nil, nil, nil
 	r.clients = make(map[string]gridwellv1.GridwellClient)
 	r.kinds = make(map[string]string)
 	r.labels = make(map[string]string)

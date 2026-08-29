@@ -209,17 +209,17 @@ func TestHomeGrid(t *testing.T) {
 	first := PluginInfo{UUID: "p1", RootGridID: "p1/1"}
 	second := PluginInfo{UUID: "p2", RootGridID: "p2/1"}
 	rootless := PluginInfo{UUID: "p0"} // no RootGridID: broken or rootless
-	if got := HomeGrid([]PluginInfo{first, second}); got != "p1/1" {
-		t.Errorf("HomeGrid = %q, want the FIRST plugin's root p1/1", got)
+	if got := HomeGrid(PluginList{HomeGridID: "n/1", Plugins: []PluginInfo{first}}); got != "n/1" {
+		t.Errorf("HomeGrid = %q, want the handshake's home_grid_id", got)
 	}
-	if got := HomeGrid([]PluginInfo{rootless, second}); got != "p2/1" {
-		t.Errorf("HomeGrid = %q, want p2/1 (skip the rootless first plugin)", got)
+	if got := HomeGrid(PluginList{Plugins: []PluginInfo{rootless, second}}); got != "p2/1" {
+		t.Errorf("HomeGrid = %q, want p2/1 (the first rooted row, when the field is absent)", got)
 	}
-	if got := HomeGrid([]PluginInfo{rootless}); got != "" {
-		t.Errorf("HomeGrid = %q, want \"\" (no rooted plugin, no fallback)", got)
+	if got := HomeGrid(PluginList{Plugins: []PluginInfo{rootless}}); got != "" {
+		t.Errorf("HomeGrid = %q, want \"\" (nothing rooted)", got)
 	}
-	if got := HomeGrid(nil); got != "" {
-		t.Errorf("HomeGrid(nil) = %q, want empty", got)
+	if got := HomeGrid(PluginList{}); got != "" {
+		t.Errorf("HomeGrid(empty) = %q, want empty", got)
 	}
 }
 

@@ -152,32 +152,6 @@ func (s *Server) clientForID(id string) (client pb.GridwellClient, local string,
 	return c, local, found
 }
 
-// transportInfo is the transport's Info handshake (its declared
-// capabilities), cached like a plugin's.
-func (s *Server) transportInfo(ctx context.Context) (*pb.InfoResponse, error) {
-	const key = "\x00transport"
-	s.infoMu.Lock()
-	info, ok := s.infoCache[key]
-	s.infoMu.Unlock()
-	if ok {
-		return info, nil
-	}
-	t, has := s.pluginReg.Transport()
-	if !has {
-		return nil, errors.New("no transport")
-	}
-	ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
-	defer cancel()
-	info, err := t.Info(ictx, &pb.InfoRequest{})
-	if err != nil {
-		return nil, err
-	}
-	s.infoMu.Lock()
-	s.infoCache[key] = info
-	s.infoMu.Unlock()
-	return info, nil
-}
-
 // pluginInfo returns uuid's Info handshake, serving repeat calls from the
 // per-uuid cache. The live call is bounded by pluginInfoTimeout so a hung
 // plugin degrades (error, not stall); only a successful handshake is cached.

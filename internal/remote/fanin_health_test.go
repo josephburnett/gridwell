@@ -33,7 +33,7 @@ func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	s := New(db, nil, "")
+	s := newTestServer(t, db)
 	events, unsub := s.hub.Subscribe()
 	t.Cleanup(unsub)
 

@@ -276,14 +276,10 @@ message InfoResponse {
   double root_view_cx   = 10;
   double root_view_cy   = 11;
   double root_view_zoom = 12;
-  // instance_grid_id is the off-grid grid holding this plugin's INSTANCES
-  // (issue #251) — e.g. the remote transport's connection wells, which are
-  // server.yaml config since #269 (2026-08-23). A plugin declaring this with
-  // an empty root_grid_id is listed as one ListPlugins row PER WELL in the
-  // grid (the server's instanceRows synthesis) instead of as itself; the
-  // picker that used to open here is gone. Like scratch_grid_id, it is a
-  // storage address, never a landing page. Empty for rooted plugins.
-  string instance_grid_id = 14;
+  // 14 was instance_grid_id: the parameterized-plugin instance grid,
+  // deleted 2026-08-29 (docs/one-node.md) — connections list as
+  // ListPluginsResponse.connections.
+  reserved 14;
   // transit declares that this plugin's ids are CHAINS from another node —
   // a mount, forwarding to a remote gridwell, whose ids arrive already
   // qualified from the remote's perspective. The host's qualification layer
@@ -519,12 +515,8 @@ message PluginInfo {
   // rootless" — both otherwise present identically as root_grid_id == "".
   // Empty when Info succeeded, regardless of whether it declared a root.
   string info_error = 10;
-  // instance_grid_id: qualified <uuid>/<id> of the plugin's instance grid
-  // (issue #251), forwarded from InfoResponse. A plugin that declares one
-  // with an empty root_grid_id never appears as its own row: the server
-  // synthesizes one row per well in that grid (since #269 the picker is
-  // gone). "" for rooted plugins.
-  string instance_grid_id = 11;
+  // 11 was instance_grid_id (deleted 2026-08-29, docs/one-node.md).
+  reserved 11;
   // glyph mirrors InfoResponse.glyph for the client's plugin faces
   // (launcher tile, menu swatch, drag ghost). "" = the generic globe.
   string glyph = 12;
@@ -533,12 +525,35 @@ message PluginInfo {
   // plugin's row in the (+) menu.
   repeated MenuEntry menu_entries = 13;
 }
+// ConnectionInfo is one of the node's connections as the handshake lists
+// it (docs/one-node.md): a row in the + menu that descends into the remote
+// node's home. uuid is "<node id>/<connection name>" — the namespace every
+// reference through the connection carries.
+message ConnectionInfo {
+  string uuid          = 1;
+  string label         = 2;
+  string root_grid_id  = 3;   // the remote's home, qualified; "" while pending
+  double root_view_cx   = 4;  // the remote home's persisted view (zero = unknown)
+  double root_view_cy   = 5;
+  double root_view_zoom = 6;
+  string status_detail = 7;   // the last dial/learn failure while pending
+}
 message ListPluginsResponse {
   // 2, 3, 6-8 were the node grid's identity and viewport (deleted
   // 2026-08-29, docs/one-node.md): a node has no grid of its own; home
   // is where a client lands and where a mount lands.
   reserved 2, 3, 6, 7, 8;
+  // plugins: the node's home (first) and its content plugins.
   repeated PluginInfo plugins = 1;
+  // home_grid_id is where a client lands ("/"): the home's root grid,
+  // qualified — a FIELD, never derived from row order. home_view_* is its
+  // persisted viewport (zero zoom = never set).
+  string home_grid_id   = 9;
+  double home_view_cx   = 10;
+  double home_view_cy   = 11;
+  double home_view_zoom = 12;
+  // connections: the node's remote nodes, in config order.
+  repeated ConnectionInfo connections = 13;
   // shells_disabled: this node refuses shell tiles outright (server.yaml
   // disable_shells) — the client removes the shell primitive from the +
   // palette, and the server refuses CreateTile(kind=shell) and OpenShell no
@@ -557,6 +572,7 @@ message ListPluginsResponse {
   // serving node; federation happens behind the door, over the RPC.
   string content_token = 5;
 }
+
 
 // TileResponse is the shape returned by every tile-producing mutation.
 message TileResponse {

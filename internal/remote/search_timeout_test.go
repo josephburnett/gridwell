@@ -42,7 +42,7 @@ func TestSearchFanOutBoundsEachHop(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	s := New(db, nil, "")
+	s := newTestServer(t, db)
 	s.mu.Lock()
 	s.live["dead"] = &liveConn{client: hangingSearchClient{}}
 	s.live["fine"] = &liveConn{client: answeringSearchClient{}}

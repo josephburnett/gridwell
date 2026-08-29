@@ -29,37 +29,6 @@ func TestClassify_Rootless(t *testing.T) {
 	}
 }
 
-// TestClassify_InstanceGridReadsRootless: the Parameterized status
-// retired with the instance picker (2026-08-23) — a parameterized
-// plugin's bare row (listed only when its instance grid is unreadable)
-// is just rootless-inert now; its instances present as rows of their own.
-func TestClassify_InstanceGridReadsRootless(t *testing.T) {
-	pl := rpc.PluginInfo{Label: "connections", InstanceGridID: "s/0"}
-	if got := Classify(pl); got != Rootless {
-		t.Errorf("Classify(%+v) = %v, want Rootless", pl, got)
-	}
-}
-
-// TestClassify_RootWinsOverInstanceGrid: a plugin declaring BOTH grids is
-// rooted — the root grid is where a click lands; the instance grid is
-// storage. (No current plugin does this, but the precedence must be pinned
-// so adding an instance grid can never un-root a plugin.)
-func TestClassify_RootWinsOverInstanceGrid(t *testing.T) {
-	pl := rpc.PluginInfo{Label: "X", RootGridID: "u/1", InstanceGridID: "u/9"}
-	if got := Classify(pl); got != Enterable {
-		t.Errorf("Classify(%+v) = %v, want Enterable", pl, got)
-	}
-}
-
-// TestClassify_BrokenWinsOverInstanceGrid: InfoError set means Broken even
-// if a (cached/stale) instance grid id is present.
-func TestClassify_BrokenWinsOverInstanceGrid(t *testing.T) {
-	pl := rpc.PluginInfo{Label: "X", InstanceGridID: "s/0", InfoError: "boom"}
-	if got := Classify(pl); got != Broken {
-		t.Errorf("Classify(%+v) = %v, want Broken", pl, got)
-	}
-}
-
 // TestClassify_BrokenTakesPrecedenceOverEmptyRoot: a plugin can only be
 // Broken when Info truly failed (InfoError set); RootGridID empty on its own
 // (with InfoError empty) must always mean Rootless, never Broken.

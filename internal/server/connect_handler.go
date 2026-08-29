@@ -189,40 +189,11 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		// from "healthy but rootless" — previously dropped on the floor here,
 		// which made both cases identical on the wire (issue #47).
 		info, err := h.srv.pluginInfo(ctx, p.UUID)
-		// A PARAMETERIZED plugin's instances join the menu as rows of
-		// their own (v2 #269: a connection presents like a plugin —
-		// click descends, drag drops a link well). Synthesized from the
-		// instance grid the plugin already declares — no kind is
-		// consulted, so any parameterized plugin gets this for free.
-		// The instances REPLACE the plugin's own row: one icon per
-		// configured thing (the instance picker is gone, 2026-08-23).
-		// The row stays when the instance read failed (never blank a
-		// configured plugin silently) or the plugin isn't parameterized;
-		// a failed read rides the row as its InfoError — the row is the
-		// only surface left to say why (the picker that used to show it
-		// on descent is gone, 2026-08-23).
-		c, _ := h.srv.pluginReg.Get(p.UUID)
-		inst, managed, instErr := h.instanceRows(ctx, p.UUID, c, info)
-		if !managed {
-			if err == nil {
-				err = instErr
-			}
-			out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
-		}
-		out = append(out, inst...)
+		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 	}
-	// The connections: one row each, from the transport, under the node's
-	// own id ("<ID>/<conn>"). A transport that cannot list them says so in
-	// the log (ConnectAll already reported each dial) — there is no row
-	// to carry the error.
-	if t, ok := h.srv.pluginReg.Transport(); ok && h.srv.cfg.ID != "" {
-		info, ierr := h.srv.transportInfo(ctx)
-		rows, _, rerr := h.instanceRows(ctx, h.srv.cfg.ID, t, info)
-		if ierr != nil || rerr != nil {
-			log.Printf("gridwell: connections unlisted: %v %v", ierr, rerr)
-		}
-		out = append(out, rows...)
-	}
+	// HOME is a field: the node's own store, where "/" lands (its row is
+	// first in out — the registry registers it first — but a client never
+	// has to know that).
 	resp := &pb.ListPluginsResponse{
 		Plugins:        out,
 		ShellsDisabled: h.srv.cfg.DisableShells,
@@ -231,56 +202,27 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		// it (content_door.go).
 		ContentToken: ContentToken(h.srv.cfg.Password),
 	}
+	if h.srv.cfg.ID != "" {
+		for _, p := range out {
+			if p.Uuid == h.srv.cfg.ID {
+				resp.HomeGridId = p.RootGridId
+				resp.HomeViewCx, resp.HomeViewCy, resp.HomeViewZoom = p.RootViewCx, p.RootViewCy, p.RootViewZoom
+			}
+		}
+		// The connections: one row each, under the node's own id
+		// ("<ID>/<conn>"), from the transport's declared set.
+		for _, c := range h.srv.pluginReg.Connections(ctx) {
+			row := &pb.ConnectionInfo{
+				Uuid: rpc.QualifyID(h.srv.cfg.ID, c.Name), Label: c.Label,
+				RootViewCx: c.ViewCx, RootViewCy: c.ViewCy, RootViewZoom: c.ViewZoom, StatusDetail: c.StatusDetail,
+			}
+			if c.RootGridID != "" {
+				row.RootGridId = rpc.QualifyID(h.srv.cfg.ID, c.RootGridID)
+			}
+			resp.Connections = append(resp.Connections, row)
+		}
+	}
 	return connect.NewResponse(resp), nil
-}
-
-// instanceRows synthesizes one menu row per instance of a parameterized
-// plugin (v2 #269): uuid is the CHAINED namespace (<plugin>/<instance>),
-// the root is the instance's child grid, the label is the instance's own.
-// An instance whose child is not yet learned (its remote never answered)
-// lists as rootless — inert, its status_detail riding InfoError so the
-// menu can say why. managed reports a successful synthesis (possibly
-// zero rows); false means not parameterized or an unreadable instance
-// grid — the caller then keeps the plugin's own row, carrying err (the
-// read failure) so the wire can tell "store down" from "rootless".
-func (h *connectHandler) instanceRows(ctx context.Context, uuid string, c pb.GridwellClient, info *pb.InfoResponse) (rows []*pb.PluginInfo, managed bool, err error) {
-	if info == nil || info.RootGridId != "" || info.InstanceGridId == "" || c == nil {
-		return nil, false, nil
-	}
-	// Bounded like the Info handshake three lines up (pluginInfoTimeout):
-	// a hung plugin must not stall every palette open through this read.
-	gctx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
-	defer cancel()
-	g, gerr := c.GetGrid(gctx, &pb.GetGridRequest{GridId: info.InstanceGridId})
-	if gerr != nil {
-		return nil, false, fmt.Errorf("instance grid unreadable: %w", gerr)
-	}
-	for _, t := range g.Tiles {
-		if t.Kind != "well" {
-			continue
-		}
-		row := &pb.PluginInfo{
-			Uuid:      rpc.QualifyID(uuid, t.Id),
-			Kind:      "instance",
-			Label:     t.AltText,
-			InfoError: t.StatusDetail,
-		}
-		if t.ChildGridId != "" {
-			row.Uuid = rpc.QualifyID(uuid, firstSegment(t.ChildGridId))
-			row.RootGridId = rpc.QualifyID(uuid, t.ChildGridId)
-			row.RootViewCx, row.RootViewCy, row.RootViewZoom = float64(t.ViewX), float64(t.ViewY), t.ViewZoom
-		}
-		rows = append(rows, row)
-	}
-	return rows, true, nil
-}
-
-// firstSegment returns the leading segment of a chained id.
-func firstSegment(id string) string {
-	if hop, _, ok := rpc.SplitID(id); ok {
-		return hop
-	}
-	return id
 }
 
 // buildPluginInfo assembles a launcher PluginInfo from the config (uuid, kind,
@@ -304,7 +246,7 @@ func firstSegment(id string) string {
 // travels while a kind check would strand it read-only.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
 	label := configLabel
-	var rootGridID, scratchGridID, instanceGridID, infoError string
+	var rootGridID, scratchGridID, infoError string
 	var writable bool
 	var glyph string
 	var menuEntries []*pb.MenuEntry
@@ -317,11 +259,6 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		// that don't support ephemeral visits.
 		if info.ScratchGridId != "" {
 			scratchGridID = rpc.QualifyID(uuid, info.ScratchGridId)
-		}
-		// Qualified parameterized-instance grid (issue #251); empty for
-		// rooted plugins.
-		if info.InstanceGridId != "" {
-			instanceGridID = rpc.QualifyID(uuid, info.InstanceGridId)
 		}
 		if label == "" {
 			label = info.DisplayName
@@ -348,19 +285,18 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		label = kind
 	}
 	return &pb.PluginInfo{
-		Uuid:           uuid,
-		Kind:           kind,
-		Label:          label,
-		Writable:       writable,
-		RootGridId:     rootGridID,
-		ScratchGridId:  scratchGridID,
-		InstanceGridId: instanceGridID,
-		RootViewCx:     rootViewCx,
-		RootViewCy:     rootViewCy,
-		RootViewZoom:   rootViewZoom,
-		InfoError:      infoError,
-		Glyph:          glyph,
-		MenuEntries:    menuEntries,
+		Uuid:          uuid,
+		Kind:          kind,
+		Label:         label,
+		Writable:      writable,
+		RootGridId:    rootGridID,
+		ScratchGridId: scratchGridID,
+		RootViewCx:    rootViewCx,
+		RootViewCy:    rootViewCy,
+		RootViewZoom:  rootViewZoom,
+		InfoError:     infoError,
+		Glyph:         glyph,
+		MenuEntries:   menuEntries,
 	}
 }
 
@@ -887,7 +823,10 @@ func (h *connectHandler) subscribe(ctx context.Context, send func(*pb.Event) err
 			func(ctx context.Context) (*pb.InfoResponse, error) { return h.srv.pluginInfo(ctx, uuid) }, events)
 	}
 	if t, ok := h.srv.pluginReg.Transport(); ok && h.srv.cfg.ID != "" {
-		go watchPlugin(subCtx, h.srv.cfg.ID, true, t, h.srv.transportInfo, events)
+		// The transport always watches (it fans in every connection's
+		// events); there is no handshake to ask.
+		go watchPlugin(subCtx, h.srv.cfg.ID, true, t,
+			func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{Watch: true}, nil }, events)
 	}
 
 	for {

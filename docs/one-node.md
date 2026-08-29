@@ -1,6 +1,6 @@
 # One node: finishing the v2 fold
 
-Status: APPROVED 2026-08-29 (decisions §4: two files; rewrite old prefixes; rename to Handshake). P2 landed (eb9e5a1) then P1 (fb8da04) — P2 first because node-grid tile ids (`<node>/<letters>`) would have collided with `<id>/<conn>`; Joe's two homes migrated by hand 2026-08-29. Next: P3. Successor to `docs/v2-design.md` (which
+Status: APPROVED 2026-08-29 (decisions §4: two files; rewrite old prefixes; rename to Handshake). P2 landed (eb9e5a1) then P1 (fb8da04) — P2 first because node-grid tile ids (`<node>/<letters>`) would have collided with `<id>/<conn>`; Joe's two homes migrated by hand 2026-08-29. P3 landed 2026-08-29: the transport is config + one small table (no instance grid, no wells, no params documents), the handshake carries `home_grid_id` and `connections[]`, and every in-process hop listens in memory. Deviation from §2.3, deliberate: the in-process gRPC hop STAYS (over bufconn) until P4 puts home and the plugin adapter on one store — the hop is the one shape the mount cache and the wire share. The RPC keeps its name (`ListPlugins`) for the same reason: the rename is churn P4 can carry. Next: P4. Successor to `docs/v2-design.md` (which
 executed the content-plugin half) — this finishes the other half, the
 one the fold left behind: the node still *pretends* its own store and
 its own transport are plugins, and a tile's arrangement is stored in

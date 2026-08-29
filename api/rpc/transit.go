@@ -137,6 +137,22 @@ func TransitQualifyPluginList(prefix string, resp *pb.ListPluginsResponse) *pb.L
 	}
 	out := &pb.ListPluginsResponse{
 		ShellsDisabled: resp.ShellsDisabled,
+		HomeViewCx:     resp.HomeViewCx,
+		HomeViewCy:     resp.HomeViewCy,
+		HomeViewZoom:   resp.HomeViewZoom,
+	}
+	if resp.HomeGridId != "" {
+		out.HomeGridId = QualifyID(prefix, resp.HomeGridId)
+	}
+	for _, c := range resp.Connections {
+		q := &pb.ConnectionInfo{
+			Uuid: QualifyID(prefix, c.Uuid), Label: c.Label, StatusDetail: c.StatusDetail,
+			RootViewCx: c.RootViewCx, RootViewCy: c.RootViewCy, RootViewZoom: c.RootViewZoom,
+		}
+		if c.RootGridId != "" {
+			q.RootGridId = QualifyID(prefix, c.RootGridId)
+		}
+		out.Connections = append(out.Connections, q)
 	}
 	for _, p := range resp.Plugins {
 		q := &pb.PluginInfo{
@@ -155,9 +171,6 @@ func TransitQualifyPluginList(prefix string, resp *pb.ListPluginsResponse) *pb.L
 		}
 		if p.ScratchGridId != "" {
 			q.ScratchGridId = QualifyID(prefix, p.ScratchGridId)
-		}
-		if p.InstanceGridId != "" {
-			q.InstanceGridId = QualifyID(prefix, p.InstanceGridId)
 		}
 		q.MenuEntries = QualifyMenuEntries(prefix, p.MenuEntries)
 		out.Plugins = append(out.Plugins, q)

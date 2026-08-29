@@ -163,20 +163,21 @@ reference carries is the id the node answers with.
   rule: a failed read never deletes a tile row — only a definite GONE does.
   An unreadable source serves its stored rows verbatim until it's readable
   again.
-- **remote** (né ssh, 2026-08-16; #199, #251, then #269): the node's
-  builtin transport (`internal/remote`) — one `remote` entry owns the
-  connection list. Since #269 (2026-08-23) connections are server.yaml
-  CONFIG (`connections:`), injected at boot (`node.BuildConfig`) and
-  reconciled into the plugin's connection grid (`internal/remote/sync.go`),
-  which is declared as its INSTANCE grid (`PluginInfo.instance_grid_id`,
-  no root grid): a storage address the server's row synthesis reads
-  (`instanceRows`) — one menu row per connection, never a landing page,
-  and no picker. Each connection's immutable name is a sub-namespace
-  segment (`<remote>/<conn>/<remote-plugin>/<id>`), peeled and prepended
-  with the same transit rule the server applies one level up. The node
-  dials every connection at boot (`ConnectAll`, bounded per connection)
-  and the ssh session self-heals; removing a connection from the yaml
-  retires its name forever (`retired_names`).
+- **the transport** (`internal/remote`; né the ssh plugin, folded into
+  the node 2026-08-16, finished 2026-08-29 — docs/one-node.md): the
+  node's connections to other nodes. A connection is server.yaml CONFIG
+  (`connections:` — an immutable name, a label, how to dial); the
+  transport dials each at boot (bounded — the boot doesn't serve
+  mysteries), learns where it lands (the remote's HOME) and remembers only
+  that plus the graveyard of retired names (`retired_names`: a name never
+  returns). It owns no tiles and no grid: a connection is a row in the +
+  menu (`ListPluginsResponse.connections`, uuid `<id>/<conn>`) and, when
+  dragged, an ordinary link tile in the user's grid. Every reference
+  through it is `<id>/<conn>/<remote-id…>`: `Server.resolve` peels the
+  node's own id and hands the rest to the transport, which peels the
+  connection name and prepends it on the way back — the same transit
+  rule at both hops. The mount cache (`internal/plugin/mountcache`) fronts
+  the transport so a dark remote degrades to stale-but-readable.
 
 ### 4.1 Framing ≠ content — the best-enforced invariant
 

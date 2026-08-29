@@ -15,7 +15,6 @@ package node
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -32,6 +31,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/remote"
+	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
@@ -91,8 +91,8 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return cfg, nil
 }
 
-// ensureHomeStores creates the home store and the transport store on a
-// FRESH home (identity stamped, pluginmeta). An existing home whose store
+// ensureHomeStores creates the home store on a FRESH home (identity
+// stamped, pluginmeta). An existing home whose store
 // is missing under its id is refused — a changed id must never silently
 // spawn an empty store beside the real one. "Existing" = <home>/db holds
 // a store this config does not name (a plugin's memory DB it does name is
@@ -120,14 +120,6 @@ func ensureHomeStores(home string, cfg *config.ServerConfig) error {
 		if err := pluginmeta.Create(homeDB, id, "home"); err != nil {
 			return err
 		}
-	}
-	remoteDB := config.RemoteDBFile(home, id)
-	if _, err := os.Stat(remoteDB); errors.Is(err, fs.ErrNotExist) {
-		if err := pluginmeta.Create(remoteDB, id, "remote"); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
 	}
 	return nil
 }
@@ -252,25 +244,37 @@ func startHome(reg *plugin.Registry, home string, cfg *config.ServerConfig) erro
 	return nil
 }
 
-// startTransport opens the connection store and dials the declared
-// connections, then installs the transport as the node's connection
+// startTransport opens the connection store, reconciles it against the
+// declared connections, dials them (bounded — the boot doesn't serve
+// mysteries), and installs the transport as the node's connection
 // namespace ("<id>/<conn>/…"), fronted by the mount cache so a dark
 // remote degrades to stale-but-readable instead of blank.
 func startTransport(reg *plugin.Registry, home string, cfg *config.ServerConfig) error {
-	tcfg, err := transportConfig(home, cfg)
+	db, err := remote.OpenDB(config.RemoteDBFile(home, cfg.ID))
 	if err != nil {
 		return err
 	}
-	impl, err := NativeRemoteFactory(tcfg)
+	userHome, _ := os.UserHomeDir()
+	impl, err := remote.New(db, dial.Dial, userHome, cfg.Connections, cfg.RetiredNames)
 	if err != nil {
+		db.Close()
 		return err
 	}
+	impl.ConnectAll(context.Background())
 	client, stop, err := plugin.ServeInProcess(impl)
 	if err != nil {
 		closeImpl(impl)
 		return err
 	}
 	closer := func() { stop(); closeImpl(impl) }
+	rows := func(ctx context.Context) []plugin.ConnectionRow {
+		out := []plugin.ConnectionRow{}
+		for _, r := range impl.Rows(ctx) {
+			out = append(out, plugin.ConnectionRow{Name: r.Name, Label: r.Label, RootGridID: r.RootGridID,
+				StatusDetail: r.StatusDetail, ViewCx: r.ViewCx, ViewCy: r.ViewCy, ViewZoom: r.ViewZoom})
+		}
+		return out
+	}
 	if cfg.CacheDir != "" {
 		// A cache that cannot open degrades to the uncached client —
 		// loudly, never fatally: the cache is an availability layer, and
@@ -286,45 +290,8 @@ func startTransport(reg *plugin.Registry, home string, cfg *config.ServerConfig)
 			closer = func() { cacheClose(); inner() }
 		}
 	}
-	reg.SetTransport(client, closer)
+	reg.SetTransport(client, rows, closer)
 	return nil
-}
-
-// transportConfig carries server.yaml's connections: declarations to the
-// transport through the flat config vocabulary the factory reads
-// (transitional — docs/one-node.md P3 hands it the typed list). The list
-// is always authoritative: rows absent from it tombstone.
-func transportConfig(home string, cfg *config.ServerConfig) (map[string]string, error) {
-	// The TYPED spec, not a hand-keyed map: remote.ConnSpec is the shape
-	// nativeremote unmarshals, so marshaling it here is the one place the
-	// yaml vocabulary meets the transport's. TestInjectConnectionsCarries
-	// EveryField pins the mapping exhaustive — a field added to ConnSpec
-	// without a line here fails that test instead of silently dropping.
-	specs := make([]remote.ConnSpec, 0, len(cfg.Connections))
-	for _, c := range cfg.Connections {
-		specs = append(specs, remote.ConnSpec{
-			Name: c.Name, Label: c.Label, Host: c.Host, User: c.User,
-			Port: c.Port, Addr: c.Addr, Key: c.Key, KnownHosts: c.KnownHosts,
-		})
-	}
-	blob, err := json.Marshal(specs)
-	if err != nil {
-		return nil, err
-	}
-	m := map[string]string{
-		"db_file":          config.RemoteDBFile(home, cfg.ID),
-		"uuid":             cfg.ID,
-		"kind":             "remote",
-		"connections_json": string(blob),
-	}
-	if len(cfg.RetiredNames) > 0 {
-		r, err := json.Marshal(cfg.RetiredNames)
-		if err != nil {
-			return nil, err
-		}
-		m["retired_json"] = string(r)
-	}
-	return m, nil
 }
 
 // closeImpl releases a native impl's own resources (the store's DB, the

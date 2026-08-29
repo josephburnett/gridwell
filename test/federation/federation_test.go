@@ -577,7 +577,8 @@ func awaitConnRoot(t *testing.T, origin, name string) string {
 	deadline := time.After(30 * time.Second)
 	for {
 		lp := rpc(t, origin, "ListPlugins", map[string]any{})
-		for _, p := range lp["plugins"].([]any) {
+		conns, _ := lp["connections"].([]any)
+		for _, p := range conns {
 			pm := p.(map[string]any)
 			if uuid, _ := pm["uuid"].(string); strings.HasSuffix(uuid, "/"+name) {
 				if root, _ := pm["rootGridId"].(string); root != "" {

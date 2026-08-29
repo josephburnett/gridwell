@@ -817,7 +817,7 @@ func (a *App) bootstrap() {
 			backoff *= 2
 		}
 	}
-	a.plugins = plugins.Plugins
+	a.plugins = rpc.MenuRows(plugins)
 	// Fold the node's shells_disabled fact into the capability set —
 	// still boot-time (nothing has rendered or accepted input yet),
 	// immutable afterward. caps stays the ONE owner of "what can this
@@ -826,7 +826,7 @@ func (a *App) bootstrap() {
 	// The /content/ door capability rides the same handshake; boot-time,
 	// immutable, read only by webAddress.
 	a.contentToken = plugins.ContentToken
-	a.home = rpc.HomeGrid(a.plugins)
+	a.home = rpc.HomeGrid(plugins)
 	a.afterBootstrap()
 }
 

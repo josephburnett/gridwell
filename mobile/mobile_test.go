@@ -164,7 +164,8 @@ func TestEmbeddedNodeHonorsConnectionsConfig(t *testing.T) {
 	origin, client := webview(t, loginURL)
 	lp := post(t, client, origin, "ListPlugins", map[string]any{})
 	var labels []string
-	for _, p := range lp["plugins"].([]any) {
+	conns, _ := lp["connections"].([]any)
+	for _, p := range conns {
 		labels = append(labels, p.(map[string]any)["label"].(string))
 	}
 	if !strings.Contains(strings.Join(labels, ","), "Laptop") {

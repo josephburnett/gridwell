@@ -140,13 +140,53 @@ func PluginWellTile(pl PluginInfo) Tile {
 	}
 }
 
-// HomeGrid picks the qualified grid id that "/" means: the root grid of the
-// FIRST configured plugin that has one (server.yaml order), skipping
-// broken/rootless plugins; "" when none has a root. One derivation; every
-// "empty anchor means home" reader goes through it. (A node has no grid of
-// its own to fall back to — docs/one-node.md.)
-func HomeGrid(plugins []PluginInfo) string {
-	for _, pl := range plugins {
+// ConnectionInfo is one of the node's connections as the handshake lists
+// it: a menu row that descends into the remote's home. UUID is
+// "<node id>/<connection name>" — the namespace every reference through
+// the connection carries.
+type ConnectionInfo struct {
+	UUID         string  `json:"uuid"`
+	Label        string  `json:"label"`
+	RootGridID   string  `json:"root_grid_id"` // the remote's home, qualified; "" while pending
+	RootViewCx   float64 `json:"root_view_cx,omitempty"`
+	RootViewCy   float64 `json:"root_view_cy,omitempty"`
+	RootViewZoom float64 `json:"root_view_zoom,omitempty"`
+	StatusDetail string  `json:"status_detail,omitempty"`
+}
+
+// ConnectionRow presents a connection as a menu row — the one shape every
+// menu flow (click-descend, drag-link, health, root-view persistence)
+// already handles. Kind "connection"; a pending one is rootless with its
+// failure as InfoError-free StatusDetail (pluginhealth reads the chained
+// uuid as "waiting", not "broken").
+func ConnectionRow(c ConnectionInfo) PluginInfo {
+	return PluginInfo{
+		UUID: c.UUID, Kind: "connection", Label: c.Label,
+		RootGridID: c.RootGridID, InfoError: c.StatusDetail,
+		RootViewCx: c.RootViewCx, RootViewCy: c.RootViewCy, RootViewZoom: c.RootViewZoom,
+	}
+}
+
+// MenuRows is the + menu's top row for a handshake: the node's plugins
+// (home first) followed by its connections.
+func MenuRows(l PluginList) []PluginInfo {
+	out := make([]PluginInfo, 0, len(l.Plugins)+len(l.Connections))
+	out = append(out, l.Plugins...)
+	for _, c := range l.Connections {
+		out = append(out, ConnectionRow(c))
+	}
+	return out
+}
+
+// HomeGrid picks the qualified grid id that "/" means: the handshake's
+// home_grid_id (a FIELD, docs/one-node.md), falling back to the first
+// rooted row for a node that predates the field. One derivation; every
+// "empty anchor means home" reader goes through it.
+func HomeGrid(l PluginList) string {
+	if l.HomeGridID != "" {
+		return l.HomeGridID
+	}
+	for _, pl := range l.Plugins {
 		if pl.RootGridID != "" {
 			return pl.RootGridID
 		}
@@ -217,7 +257,6 @@ type MenuEntry struct {
 func EntryPlugin(pl PluginInfo, e MenuEntry) PluginInfo {
 	pseudo := pl
 	pseudo.RootGridID = e.GridID
-	pseudo.InstanceGridID = ""
 	pseudo.RootViewCx, pseudo.RootViewCy, pseudo.RootViewZoom = 0, 0, 0
 	if e.Label != "" {
 		pseudo.Label = e.Label
@@ -466,15 +505,6 @@ type PluginInfo struct {
 	// ScratchGridID is the qualified off-grid grid this plugin holds ephemeral
 	// url tiles in ("descend into a url"); "" if the plugin has none.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`
-	// InstanceGridID is the qualified off-grid grid holding this plugin's
-	// parameterized instances (e.g. the transport's connection rows). Set
-	// with an empty RootGridID it marks the plugin PARAMETERIZED: the server
-	// synthesizes one menu row per instance from this grid (instanceRows)
-	// and the plugin's own row steps aside. A storage address, never a
-	// landing page. (The #251 instance picker this used to drive is gone,
-	// 2026-08-23; no client reads the field — it rides for parity and
-	// debugging.)
-	InstanceGridID string `json:"instance_grid_id,omitempty"`
 	// RootViewCx/Cy/Zoom is the plugin root grid's last-saved viewport from
 	// the Info handshake (center in world cell coords, live zoom). Zero means
 	// "never visited"; the client substitutes the default calibrated zoom.
