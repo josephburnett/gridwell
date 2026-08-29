@@ -7,11 +7,13 @@ package compose
 // privilege (charter, 2026-08-15).
 
 import (
+	"context"
 	"fmt"
 	"net"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -28,20 +30,22 @@ type NativeFactory func(cfg map[string]string) (gridwellv1.GridwellServer, error
 // the seam-test harness everywhere a real plugin is exercised without a
 // subprocess.
 func ServeInProcess(impl gridwellv1.GridwellServer) (gridwellv1.GridwellClient, func(), error) {
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, nil, fmt.Errorf("in-process listen: %w", err)
-	}
+	// An IN-MEMORY listener (bufconn): the hop never touches a socket, so
+	// nothing outside this process can reach the impl. (It used to listen
+	// on 127.0.0.1:0 with no auth — every local process could open the
+	// home store's shells; security review 2026-08-26.)
+	lis := bufconn.Listen(1 << 20)
 
 	srv := grpc.NewServer()
 	gridwellv1.RegisterGridwellServer(srv, impl)
 	go srv.Serve(lis)
 
-	addr := lis.Addr().String()
-	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cc, err := grpc.NewClient("passthrough:///in-process",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }))
 	if err != nil {
 		srv.Stop()
-		return nil, nil, fmt.Errorf("in-process dial %s: %w", addr, err)
+		return nil, nil, fmt.Errorf("in-process dial: %w", err)
 	}
 
 	closer := func() {

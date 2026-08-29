@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
@@ -110,20 +111,20 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient
 // loopback gRPC server and returns the connected client — the plugin
 // twin of ServeInProcess.
 func PluginInProcess(impl pluginv1.PluginServer) (pluginv1.PluginClient, func(), error) {
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, nil, fmt.Errorf("in-process plugin listen: %w", err)
-	}
+	// In-memory listener, like ServeInProcess: no socket, no reach from
+	// outside the process.
+	lis := bufconn.Listen(1 << 20)
 
 	srv := grpc.NewServer()
 	pluginv1.RegisterPluginServer(srv, impl)
 	go srv.Serve(lis)
 
-	addr := lis.Addr().String()
-	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cc, err := grpc.NewClient("passthrough:///in-process",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }))
 	if err != nil {
 		srv.Stop()
-		return nil, nil, fmt.Errorf("in-process plugin dial %s: %w", addr, err)
+		return nil, nil, fmt.Errorf("in-process plugin dial: %w", err)
 	}
 
 	closer := func() {
