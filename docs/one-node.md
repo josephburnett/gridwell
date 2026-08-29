@@ -123,29 +123,42 @@ costs nothing to keep them.
 
 ### 2.6 One arrangement engine, one DB
 
-`gridwell.db`:
+`gridwell.db` (durable) and `cache.db` (disposable, out of backup).
+Design fixed 2026-08-29 after reading the three schemas — this is the
+P4 spec:
 
-```
-grids  (id, ns, context_key, version, root_view…)     -- ns='' = home
-tiles  (id, grid_id, ns, key, kind, x y w h, view_*, text_*, content_zoom,
-        blob_id, version, tombstoned, …)
-blobs  (id, hash, data, media_type, refcount)
-connections (name, remote_root, deleted)
-```
+- **Additive on the home schema, not a new one.** `grids` gains `ns TEXT
+  NOT NULL DEFAULT ''` and `context_key TEXT NOT NULL DEFAULT ''`; `tiles`
+  gains `ns`, `key TEXT NOT NULL DEFAULT ''` and `tombstoned INTEGER NOT
+  NULL DEFAULT 0` (a partial unique index on live `(ns, grid_id, key)`).
+  `ns = ''` is home; `ns = <plugin id>` is that plugin's memory. The
+  frozen CHECK stands: a plugin well has a real child grid (its context
+  row), a plugin text row has no blob, a plugin url row has its
+  `url_string` — every plugin entry already fits a kind branch.
+- **`internal/layout` moves INTO the store** (same package, same `*sql.DB`):
+  `Merge(ns, contextKey, entries, authoritative)` mints/tombstones/places
+  over `tiles`; the store's own framing writers (`SetWellView`,
+  `SetTextView`, `SetContentZoom`, `PlaceTile`, `SetRootView`) become the
+  ONE set for home and plugins alike — that is the "layout repeated"
+  debt paid. `pluginhost.Adapter` takes the store + its ns.
+- **One `*sql.DB`.** The transport's `connections` table lives in
+  `gridwell.db` on the store's handle (two handles on one file is an
+  instant `SQLITE_BUSY` — the reason the stores were separate files).
+- **Ids: home keeps every id; plugin ids are REMAPPED.** One table, one
+  AUTOINCREMENT: the converter inserts home rows verbatim and re-mints
+  plugin rows, rewriting the few references INTO plugins (home tiles'
+  `child_grid_id`/`link_target_id`, pane-layout blobs' anchors) through a
+  mapping it prints. A plugin row's `kind` comes from the cached listing
+  (`cache_listings`), else the entry is re-listed on first serve.
+- **The converter runs in `serve`** when `<home>/gridwell.db` is absent
+  and `db/<id>/store.db` exists: build, verify (row counts, every
+  reference resolves), rename the old `db/` to `db.pre-one-node/`, and
+  only then serve. `backup` snapshots the one file.
+- Mount cache → `cache.db` (schema unchanged), `cache_listings` with it.
 
-Every tile everywhere — home content, an fs entry, a gitlab todo — is a
-row in **one** `tiles` table, placed and framed by **one** engine. For a
-home tile `key=''` and content is `blob_id`; for a plugin tile `key` is
-the plugin's stable key and content is fetched. `internal/layout`'s
-reconcile (listing → mint ids / tombstone / place first-sighted) becomes
-a function over this table, and the store's own placement code is that
-same function. `remote.ssh_connections`, `layout.idmap/layout/contexts`,
-per-`db/<id>/` directories — deleted. `cache_listings` and the mount
-cache tables move to `cache.db`, keyed by namespace.
-
-This resets the "storage format is frozen" rule at one cut: a one-shot
-converter reads today's four files and writes the one DB; the format
-contract starts again at v1 of this schema.
+This resets the "storage format is frozen" rule at one cut: the format
+contract restarts at v1 of this schema (the home's migration chain is
+folded into the converter, not carried).
 
 ### 2.7 Delete list (L6)
 
