@@ -59,7 +59,7 @@ func NewRegistry() *Registry {
 
 // SetLabel records the configured display name (server.yaml `name`) for a
 // plugin. Optional: an unset label falls back to the plugin's own Info /
-// kind in ListPlugins.
+// kind in Handshake.
 func (r *Registry) SetLabel(id, label string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

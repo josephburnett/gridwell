@@ -74,7 +74,7 @@ of unsaved text on a wifi blip, `client/wasm/mutate.go:216-234`).
    (re)connect — plus a slow timer as a backstop. The kick drains
    `client/pending`, sweeps `DirtyTileIDs`, and (fixing the silent-stale
    gap) resyncs the cache: refetch known grids, cheap-diffed by grid
-   version. Boot joins the same discipline: `ListPlugins` retries instead
+   version. Boot joins the same discipline: `Handshake` retries instead
    of dying once; `gridLoadFailed`/`tileLoadFailed` become retryable
    states instead of reload-only latches.
 

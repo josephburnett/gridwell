@@ -45,7 +45,7 @@ const contentPathPrefix = "/content/"
 
 // ContentToken derives the /content/ door's path capability from the
 // configured password. The ONE derivation, mirroring AuthToken: the door
-// checks it, and ListPlugins hands it to the client (over the
+// checks it, and Handshake hands it to the client (over the
 // cookie-authenticated mux, so only a logged-in client ever learns it).
 // The domain prefix differs from AuthToken's so neither token can ever be
 // replayed as the other.

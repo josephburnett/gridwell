@@ -6,7 +6,7 @@ package main
 // NODE a pane is inside — "when I descend into a node, I am there". A
 // context is one node's plugin list + its shells flag, keyed by the
 // pane's grid's node_ns ("" = this node, the boot handshake). Remote
-// contexts are fetched through the routed ListPlugins (ids arrive
+// contexts are fetched through the routed Handshake (ids arrive
 // re-qualified for this receiver) and cached for the session; the
 // mountcache makes the fetch answer even while the mount is dark.
 
@@ -59,15 +59,15 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 }
 
 // fetchMenuCtx loads one remote node's menu through the routed
-// ListPlugins. A transport failure leaves the context unfetched so the
+// Handshake. A transport failure leaves the context unfetched so the
 // next open retries (and surfaces once); the mount's health notice is
 // already the ambient signal.
 func (a *App) fetchMenuCtx(ns string) {
-	lp, err := a.cl.ListPluginsNS(context.Background(), ns)
+	lp, err := a.cl.HandshakeNS(context.Background(), ns)
 	ctx := a.menuCtxs[ns]
 	ctx.inflight = false
 	if err != nil {
-		a.surfaceRPCError("ListPlugins", err)
+		a.surfaceRPCError("Handshake", err)
 		return
 	}
 	ctx.plugins = rpc.MenuRows(lp)

@@ -179,11 +179,11 @@ func (p *pageFake) Info(ctx context.Context, _ *pb.InfoRequest, _ ...grpc.CallOp
 	}
 	return &pb.InfoResponse{Kind: "fs", RootGridId: "1"}, nil
 }
-func (p *pageFake) ListPlugins(ctx context.Context, _ *pb.ListPluginsRequest, _ ...grpc.CallOption) (*pb.ListPluginsResponse, error) {
+func (p *pageFake) Handshake(ctx context.Context, _ *pb.HandshakeRequest, _ ...grpc.CallOption) (*pb.HandshakeResponse, error) {
 	if p.dark {
 		return nil, status.Error(codes.Unavailable, "tunnel down")
 	}
-	return &pb.ListPluginsResponse{}, nil
+	return &pb.HandshakeResponse{}, nil
 }
 func (p *pageFake) GetGrid(ctx context.Context, in *pb.GetGridRequest, _ ...grpc.CallOption) (*pb.GetGridResponse, error) {
 	if p.dark {

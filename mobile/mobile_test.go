@@ -82,7 +82,7 @@ func TestEmbeddedNodeLifecycle(t *testing.T) {
 	}
 
 	// The handshake: one auto-inited localdb named "home", shells off.
-	lp := post(t, client, origin, "ListPlugins", map[string]any{})
+	lp := post(t, client, origin, "Handshake", map[string]any{})
 	plugins := lp["plugins"].([]any)
 	if len(plugins) != 1 {
 		t.Fatalf("plugins = %d, want the one auto-inited localdb", len(plugins))
@@ -112,7 +112,7 @@ func TestEmbeddedNodeLifecycle(t *testing.T) {
 	}
 	defer Stop()
 	origin2, client2 := webview(t, loginURL2)
-	lp2 := post(t, client2, origin2, "ListPlugins", map[string]any{})
+	lp2 := post(t, client2, origin2, "Handshake", map[string]any{})
 	pm2 := lp2["plugins"].([]any)[0].(map[string]any)
 	if pm2["uuid"] != firstUUID {
 		t.Fatalf("plugin id changed across restart: %v → %v", firstUUID, pm2["uuid"])
@@ -162,7 +162,7 @@ func TestEmbeddedNodeHonorsConnectionsConfig(t *testing.T) {
 	}
 	defer Stop()
 	origin, client := webview(t, loginURL)
-	lp := post(t, client, origin, "ListPlugins", map[string]any{})
+	lp := post(t, client, origin, "Handshake", map[string]any{})
 	var labels []string
 	conns, _ := lp["connections"].([]any)
 	for _, p := range conns {

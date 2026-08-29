@@ -151,7 +151,7 @@ Re-litigating them silently is how churn happens.
 - **Parameterized plugins: the picker, not a synthetic root (#251,
   2026-08-08; SUPERSEDED 2026-08-23 by #269): the picker and the
   parameterized flow are DELETED — connections are server.yaml config,
-  each instance presents as its own menu row (ListPlugins synthesis
+  each instance presents as its own menu row (Handshake synthesis
   from the instance grid), and stale unconfigured wells degrade to a
   delete-me notice.** What still stands: the instance grid is a storage
   address, never a landing page; an instance is always THE SAME

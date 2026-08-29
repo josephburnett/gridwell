@@ -76,17 +76,17 @@ type PluginList struct {
 	Connections []ConnectionInfo
 }
 
-func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
-	return c.ListPluginsNS(ctx, "")
+func (c *Client) Handshake(ctx context.Context) (PluginList, error) {
+	return c.HandshakeNS(ctx, "")
 }
 
-// ListPluginsNS is the ROUTED plugin list (remote-menu, 2026-08-16):
+// HandshakeNS is the ROUTED plugin list (remote-menu, 2026-08-16):
 // ns "" answers for the node this client talks to (the boot handshake);
 // a namespace chain answers for the node it names, ids re-qualified per
 // hop and node-local fields zeroed. The + menu inside a remote pane is
 // built from this.
-func (c *Client) ListPluginsNS(ctx context.Context, ns string) (PluginList, error) {
-	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{Namespace: ns}))
+func (c *Client) HandshakeNS(ctx context.Context, ns string) (PluginList, error) {
+	r, err := c.cl.Handshake(ctx, connect.NewRequest(&pb.HandshakeRequest{Namespace: ns}))
 	if err != nil {
 		return PluginList{}, err
 	}

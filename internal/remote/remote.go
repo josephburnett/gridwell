@@ -216,7 +216,7 @@ func (s *Server) Rows(ctx context.Context) []Row {
 			r.StatusDetail = ""
 			if lc != nil {
 				vctx, cancel := context.WithTimeout(ctx, time.Second)
-				if lp, err := lc.client.ListPlugins(vctx, &gridwellv1.ListPluginsRequest{}); err == nil {
+				if lp, err := lc.client.Handshake(vctx, &gridwellv1.HandshakeRequest{}); err == nil {
 					r.ViewCx, r.ViewCy, r.ViewZoom = lp.HomeViewCx, lp.HomeViewCy, lp.HomeViewZoom
 				}
 				cancel()
@@ -505,13 +505,13 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.G
 
 // ── the forwarded verbs ──────────────────────────────────────────────────────
 
-// ListPlugins forwards a NAMESPACED request through the named connection
+// Handshake forwards a NAMESPACED request through the named connection
 // (remote-menu, 2026-08-16): peel the connection segment, forward the
 // rest to its node export, and re-qualify the answer with the segment.
-func (s *Server) ListPlugins(ctx context.Context, req *gridwellv1.ListPluginsRequest) (*gridwellv1.ListPluginsResponse, error) {
+func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
 	ns := req.GetNamespace()
 	if ns == "" {
-		return nil, status.Error(codes.InvalidArgument, "remote: ListPlugins needs a connection namespace")
+		return nil, status.Error(codes.InvalidArgument, "remote: Handshake needs a connection namespace")
 	}
 	first, rest, ok := rpc.SplitID(ns)
 	if !ok {
@@ -521,7 +521,7 @@ func (s *Server) ListPlugins(ctx context.Context, req *gridwellv1.ListPluginsReq
 	if err != nil {
 		return nil, err
 	}
-	resp, err := fw.client.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{Namespace: rest})
+	resp, err := fw.client.Handshake(ctx, &gridwellv1.HandshakeRequest{Namespace: rest})
 	if err != nil {
 		return nil, err
 	}

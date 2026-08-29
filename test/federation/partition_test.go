@@ -54,7 +54,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// (remote-menu, 2026-08-16) — writable directly. The transport's id
 	// (the cache file's name) is the row's leading segment.
 	personalChild := awaitConnRoot(t, localOrigin, "partconn1")
-	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
+	lp := rpc(t, localOrigin, "Handshake", map[string]any{})
 	var homeRoot string
 	for _, p := range lp["plugins"].([]any) {
 		pm := p.(map[string]any)

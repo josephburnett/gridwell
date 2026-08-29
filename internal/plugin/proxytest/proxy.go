@@ -45,8 +45,8 @@ func (p *Plugin) Info(ctx context.Context, r *gridwellv1.InfoRequest) (*gridwell
 func (p *Plugin) Probe(ctx context.Context, r *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	return p.c.Probe(ctx, r)
 }
-func (p *Plugin) ListPlugins(ctx context.Context, r *gridwellv1.ListPluginsRequest) (*gridwellv1.ListPluginsResponse, error) {
-	return p.c.ListPlugins(ctx, r)
+func (p *Plugin) Handshake(ctx context.Context, r *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
+	return p.c.Handshake(ctx, r)
 }
 func (p *Plugin) GetGrid(ctx context.Context, r *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	return p.c.GetGrid(ctx, r)

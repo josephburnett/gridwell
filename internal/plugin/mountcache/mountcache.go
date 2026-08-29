@@ -186,12 +186,12 @@ func (c *Client) Info(ctx context.Context, in *pb.InfoRequest, opts ...grpc.Call
 	return cached, nil
 }
 
-// ListPlugins forwards the ROUTED plugin list (remote-menu, 2026-08-16)
+// Handshake forwards the ROUTED plugin list (remote-menu, 2026-08-16)
 // and remembers the answer per namespace, so a remote pane's + menu is
 // readable while the mount is dark — same contract as every other read:
 // serve-stale on transport only, verdicts pass through.
-func (c *Client) ListPlugins(ctx context.Context, in *pb.ListPluginsRequest, opts ...grpc.CallOption) (*pb.ListPluginsResponse, error) {
-	resp, err := c.GridwellClient.ListPlugins(ctx, in, opts...)
+func (c *Client) Handshake(ctx context.Context, in *pb.HandshakeRequest, opts ...grpc.CallOption) (*pb.HandshakeResponse, error) {
+	resp, err := c.GridwellClient.Handshake(ctx, in, opts...)
 	if err == nil {
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
@@ -207,7 +207,7 @@ func (c *Client) ListPlugins(ctx context.Context, in *pb.ListPluginsRequest, opt
 	if serr := c.db.QueryRowContext(ctx, `SELECT proto FROM pluginlists WHERE ns = ?`, in.GetNamespace()).Scan(&b); serr != nil {
 		return nil, err
 	}
-	cached := &pb.ListPluginsResponse{}
+	cached := &pb.HandshakeResponse{}
 	if uerr := proto.Unmarshal(b, cached); uerr != nil {
 		return nil, err
 	}

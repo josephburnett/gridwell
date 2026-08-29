@@ -92,7 +92,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   await expect
     .poll(
       async () => {
-        const lp = await rpcJSON(world.local, 'ListPlugins', {});
+        const lp = await rpcJSON(world.local, 'Handshake', {});
         const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
@@ -100,7 +100,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
       { timeout: 20_000 },
     )
     .not.toBe('');
-  const farLp = await rpcJSON(world.far, 'ListPlugins', {});
+  const farLp = await rpcJSON(world.far, 'Handshake', {});
   expect(farHomeGrid.endsWith('/' + farLp.plugins[0].rootGridId), 'the landing is the remote HOME').toBe(
     true,
   );
@@ -217,7 +217,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   await expect
     .poll(
       async () => {
-        const lp = await rpcJSON(world.local, 'ListPlugins', {});
+        const lp = await rpcJSON(world.local, 'Handshake', {});
         const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
@@ -225,7 +225,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
       { timeout: 20_000 },
     )
     .not.toBe('');
-  const farLp = await rpcJSON(world.far, 'ListPlugins', {});
+  const farLp = await rpcJSON(world.far, 'Handshake', {});
   await rpcJSON(world.far, 'CreateTile', {
     gridId: farLp.plugins[0].rootGridId,
     tile: { kind: 'text', x: 1, y: 1, w: 1, h: 1 },

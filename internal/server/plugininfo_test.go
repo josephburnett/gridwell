@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// buildPluginInfo is the pure assembly behind ListPlugins. These tests pin the
+// buildPluginInfo is the pure assembly behind Handshake. These tests pin the
 // fallback rules — especially the degraded case where a plugin's Info timed out
 // or failed (info == nil), which must still produce a listed plugin so one slow
 // plugin can't blank or freeze the launcher.
@@ -158,7 +158,7 @@ func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
 
 // TestBuildPluginInfo_RootViewForwardedFromInfo pins the launcher↔plugin-root
 // seam (issue #32): the server must forward Info.root_view_* into PluginInfo
-// so the client's ListPlugins response carries the framing needed to seed
+// so the client's Handshake response carries the framing needed to seed
 // enterPlugin. Zero (never visited) must pass through too — the client
 // distinguishes it from an explicit user view.
 func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
@@ -204,7 +204,7 @@ func (p *countingInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoRes
 	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1"}, nil
 }
 
-// TestListPluginsCachesInfo: repeat ListPlugins calls serve the handshake from
+// TestListPluginsCachesInfo: repeat Handshake calls serve the handshake from
 // the per-uuid cache — the plugin is asked exactly once. Before the cache,
 // every palette open re-handshook every plugin (up to pluginInfoTimeout each
 // for a slow remote).
@@ -221,12 +221,12 @@ func TestListPluginsCachesInfo(t *testing.T) {
 	h := newConnectHandler(srv)
 
 	for i := 0; i < 3; i++ {
-		if _, err := h.ListPlugins(context.Background(), connect.NewRequest(&pb.ListPluginsRequest{})); err != nil {
-			t.Fatalf("ListPlugins #%d: %v", i+1, err)
+		if _, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{})); err != nil {
+			t.Fatalf("Handshake #%d: %v", i+1, err)
 		}
 	}
 	if got := fake.calls.Load(); got != 1 {
-		t.Errorf("Info called %d times across 3 ListPlugins, want 1 (cached)", got)
+		t.Errorf("Info called %d times across 3 Handshake, want 1 (cached)", got)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestListPluginsRetriesFailedInfo(t *testing.T) {
 	srv := mustNew(t, reg, Config{})
 	h := newConnectHandler(srv)
 
-	r1, err := h.ListPlugins(context.Background(), connect.NewRequest(&pb.ListPluginsRequest{}))
+	r1, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestListPluginsRetriesFailedInfo(t *testing.T) {
 	if got := r1.Msg.Plugins[0].RootGridId; got != "" {
 		t.Errorf("failed Info should list a degraded entry, got root %q", got)
 	}
-	r2, err := h.ListPlugins(context.Background(), connect.NewRequest(&pb.ListPluginsRequest{}))
+	r2, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func (alwaysFailInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResp
 
 // TestListPluginsSurfacesInfoErrorOverTheWire crosses the seam a pure
 // buildPluginInfo unit test cannot reach: server -> Connect wire (proto-JSON)
-// -> rpc.Client.ListPlugins. InfoError must survive that round trip so the
+// -> rpc.Client.Handshake. InfoError must survive that round trip so the
 // wasm launcher — which only ever sees an internal/rpc.PluginInfo, never the
 // server's pb.PluginInfo — can classify a broken plugin (client/pluginhealth).
 func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
@@ -292,9 +292,9 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
-	plugins, err := cl.ListPlugins(context.Background())
+	plugins, err := cl.Handshake(context.Background())
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	if len(plugins.Plugins) != 1 {
 		t.Fatalf("got %d plugins, want 1: %+v", len(plugins.Plugins), plugins.Plugins)

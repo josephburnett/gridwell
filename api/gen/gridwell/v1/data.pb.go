@@ -130,7 +130,7 @@ type Grid struct {
 	// transit hop prepends its segment, exactly like scratch_grid_id. The
 	// one owner of "which node is this pane inside" (remote-menu,
 	// 2026-08-16): the client keys its per-pane + menu context by it and
-	// routes ListPlugins with it. Wire-only, never persisted.
+	// routes Handshake with it. Wire-only, never persisted.
 	NodeNs string `protobuf:"bytes,10,opt,name=node_ns,json=nodeNs,proto3" json:"node_ns,omitempty"`
 	// menu_entries is the owning plugin's declared (+) menu additions for
 	// this grid (see MenuEntry) — stamped from Info by the serving node,
@@ -2023,9 +2023,9 @@ func (x *SearchResponse) GetResults() []*SearchResult {
 	return nil
 }
 
-// ListPlugins enumerates the plugins a node hosts, in config order. The client
+// Handshake enumerates the plugins a node hosts, in config order. The client
 // builds the launcher / + menu from it. A leaf plugin returns an empty list.
-type ListPluginsRequest struct {
+type HandshakeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// namespace routes the request (remote-menu, 2026-08-16): "" answers
 	// for THIS node (the boot handshake, unchanged); a namespace chain
@@ -2042,20 +2042,20 @@ type ListPluginsRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListPluginsRequest) Reset() {
-	*x = ListPluginsRequest{}
+func (x *HandshakeRequest) Reset() {
+	*x = HandshakeRequest{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListPluginsRequest) String() string {
+func (x *HandshakeRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListPluginsRequest) ProtoMessage() {}
+func (*HandshakeRequest) ProtoMessage() {}
 
-func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
+func (x *HandshakeRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2067,12 +2067,12 @@ func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
-func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use HandshakeRequest.ProtoReflect.Descriptor instead.
+func (*HandshakeRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *ListPluginsRequest) GetNamespace() string {
+func (x *HandshakeRequest) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
@@ -2321,7 +2321,7 @@ func (x *ConnectionInfo) GetStatusDetail() string {
 	return ""
 }
 
-type ListPluginsResponse struct {
+type HandshakeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// plugins: the node's home (first) and its content plugins.
 	Plugins []*PluginInfo `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
@@ -2355,20 +2355,20 @@ type ListPluginsResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListPluginsResponse) Reset() {
-	*x = ListPluginsResponse{}
+func (x *HandshakeResponse) Reset() {
+	*x = HandshakeResponse{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListPluginsResponse) String() string {
+func (x *HandshakeResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListPluginsResponse) ProtoMessage() {}
+func (*HandshakeResponse) ProtoMessage() {}
 
-func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
+func (x *HandshakeResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2380,61 +2380,61 @@ func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListPluginsResponse.ProtoReflect.Descriptor instead.
-func (*ListPluginsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use HandshakeResponse.ProtoReflect.Descriptor instead.
+func (*HandshakeResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{27}
 }
 
-func (x *ListPluginsResponse) GetPlugins() []*PluginInfo {
+func (x *HandshakeResponse) GetPlugins() []*PluginInfo {
 	if x != nil {
 		return x.Plugins
 	}
 	return nil
 }
 
-func (x *ListPluginsResponse) GetHomeGridId() string {
+func (x *HandshakeResponse) GetHomeGridId() string {
 	if x != nil {
 		return x.HomeGridId
 	}
 	return ""
 }
 
-func (x *ListPluginsResponse) GetHomeViewCx() float64 {
+func (x *HandshakeResponse) GetHomeViewCx() float64 {
 	if x != nil {
 		return x.HomeViewCx
 	}
 	return 0
 }
 
-func (x *ListPluginsResponse) GetHomeViewCy() float64 {
+func (x *HandshakeResponse) GetHomeViewCy() float64 {
 	if x != nil {
 		return x.HomeViewCy
 	}
 	return 0
 }
 
-func (x *ListPluginsResponse) GetHomeViewZoom() float64 {
+func (x *HandshakeResponse) GetHomeViewZoom() float64 {
 	if x != nil {
 		return x.HomeViewZoom
 	}
 	return 0
 }
 
-func (x *ListPluginsResponse) GetConnections() []*ConnectionInfo {
+func (x *HandshakeResponse) GetConnections() []*ConnectionInfo {
 	if x != nil {
 		return x.Connections
 	}
 	return nil
 }
 
-func (x *ListPluginsResponse) GetShellsDisabled() bool {
+func (x *HandshakeResponse) GetShellsDisabled() bool {
 	if x != nil {
 		return x.ShellsDisabled
 	}
 	return false
 }
 
-func (x *ListPluginsResponse) GetContentToken() string {
+func (x *HandshakeResponse) GetContentToken() string {
 	if x != nil {
 		return x.ContentToken
 	}
@@ -3654,8 +3654,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\asnippet\x18\x03 \x01(\tR\asnippet\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\"E\n" +
 	"\x0eSearchResponse\x123\n" +
-	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"2\n" +
-	"\x12ListPluginsRequest\x12\x1c\n" +
+	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"0\n" +
+	"\x10HandshakeRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\x90\x03\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
@@ -3686,8 +3686,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\froot_view_cy\x18\x05 \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\x06 \x01(\x01R\frootViewZoom\x12#\n" +
-	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xff\x02\n" +
-	"\x13ListPluginsResponse\x121\n" +
+	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xfd\x02\n" +
+	"\x11HandshakeResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12 \n" +
 	"\fhome_grid_id\x18\t \x01(\tR\n" +
 	"homeGridId\x12 \n" +
@@ -3763,11 +3763,11 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\ftile_changed\x18\x02 \x01(\v2\x18.gridwell.v1.TileChangedH\x00R\vtileChanged\x12=\n" +
 	"\ftile_removed\x18\x03 \x01(\v2\x18.gridwell.v1.TileRemovedH\x00R\vtileRemoved\x12E\n" +
 	"\rplugin_health\x18\x04 \x01(\v2\x1e.gridwell.v1.EventPluginHealthH\x00R\fpluginHealthB\t\n" +
-	"\apayload2\xa1\v\n" +
+	"\apayload2\x9b\v\n" +
 	"\bGridwell\x12;\n" +
 	"\x04Info\x12\x18.gridwell.v1.InfoRequest\x1a\x19.gridwell.v1.InfoResponse\x12>\n" +
-	"\x05Probe\x12\x19.gridwell.v1.ProbeRequest\x1a\x1a.gridwell.v1.ProbeResponse\x12P\n" +
-	"\vListPlugins\x12\x1f.gridwell.v1.ListPluginsRequest\x1a .gridwell.v1.ListPluginsResponse\x12N\n" +
+	"\x05Probe\x12\x19.gridwell.v1.ProbeRequest\x1a\x1a.gridwell.v1.ProbeResponse\x12J\n" +
+	"\tHandshake\x12\x1d.gridwell.v1.HandshakeRequest\x1a\x1e.gridwell.v1.HandshakeResponse\x12N\n" +
 	"\tOpenShell\x12\x1d.gridwell.v1.OpenShellRequest\x1a\x1e.gridwell.v1.OpenShellResponse(\x010\x01\x12D\n" +
 	"\aGetGrid\x12\x1b.gridwell.v1.GetGridRequest\x1a\x1c.gridwell.v1.GetGridResponse\x12A\n" +
 	"\aGetTile\x12\x1b.gridwell.v1.GetTileRequest\x1a\x19.gridwell.v1.TileResponse\x12Y\n" +
@@ -3828,10 +3828,10 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*SearchRequest)(nil),             // 22: gridwell.v1.SearchRequest
 	(*SearchResult)(nil),              // 23: gridwell.v1.SearchResult
 	(*SearchResponse)(nil),            // 24: gridwell.v1.SearchResponse
-	(*ListPluginsRequest)(nil),        // 25: gridwell.v1.ListPluginsRequest
+	(*HandshakeRequest)(nil),          // 25: gridwell.v1.HandshakeRequest
 	(*PluginInfo)(nil),                // 26: gridwell.v1.PluginInfo
 	(*ConnectionInfo)(nil),            // 27: gridwell.v1.ConnectionInfo
-	(*ListPluginsResponse)(nil),       // 28: gridwell.v1.ListPluginsResponse
+	(*HandshakeResponse)(nil),         // 28: gridwell.v1.HandshakeResponse
 	(*TileResponse)(nil),              // 29: gridwell.v1.TileResponse
 	(*CreateTileRequest)(nil),         // 30: gridwell.v1.CreateTileRequest
 	(*ShellSessionAliveRequest)(nil),  // 31: gridwell.v1.ShellSessionAliveRequest
@@ -3865,8 +3865,8 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	3,  // 9: gridwell.v1.SearchResult.path:type_name -> gridwell.v1.Tile
 	23, // 10: gridwell.v1.SearchResponse.results:type_name -> gridwell.v1.SearchResult
 	2,  // 11: gridwell.v1.PluginInfo.menu_entries:type_name -> gridwell.v1.MenuEntry
-	26, // 12: gridwell.v1.ListPluginsResponse.plugins:type_name -> gridwell.v1.PluginInfo
-	27, // 13: gridwell.v1.ListPluginsResponse.connections:type_name -> gridwell.v1.ConnectionInfo
+	26, // 12: gridwell.v1.HandshakeResponse.plugins:type_name -> gridwell.v1.PluginInfo
+	27, // 13: gridwell.v1.HandshakeResponse.connections:type_name -> gridwell.v1.ConnectionInfo
 	3,  // 14: gridwell.v1.TileResponse.tile:type_name -> gridwell.v1.Tile
 	3,  // 15: gridwell.v1.CreateTileRequest.tile:type_name -> gridwell.v1.Tile
 	3,  // 16: gridwell.v1.SetTileRequest.tile:type_name -> gridwell.v1.Tile
@@ -3878,7 +3878,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	44, // 22: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
 	4,  // 23: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
 	6,  // 24: gridwell.v1.Gridwell.Probe:input_type -> gridwell.v1.ProbeRequest
-	25, // 25: gridwell.v1.Gridwell.ListPlugins:input_type -> gridwell.v1.ListPluginsRequest
+	25, // 25: gridwell.v1.Gridwell.Handshake:input_type -> gridwell.v1.HandshakeRequest
 	8,  // 26: gridwell.v1.Gridwell.OpenShell:input_type -> gridwell.v1.OpenShellRequest
 	11, // 27: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
 	21, // 28: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
@@ -3897,7 +3897,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	40, // 41: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
 	5,  // 42: gridwell.v1.Gridwell.Info:output_type -> gridwell.v1.InfoResponse
 	7,  // 43: gridwell.v1.Gridwell.Probe:output_type -> gridwell.v1.ProbeResponse
-	28, // 44: gridwell.v1.Gridwell.ListPlugins:output_type -> gridwell.v1.ListPluginsResponse
+	28, // 44: gridwell.v1.Gridwell.Handshake:output_type -> gridwell.v1.HandshakeResponse
 	9,  // 45: gridwell.v1.Gridwell.OpenShell:output_type -> gridwell.v1.OpenShellResponse
 	12, // 46: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
 	29, // 47: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse

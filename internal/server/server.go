@@ -50,7 +50,7 @@ type Config struct {
 	Password string
 	// DisableShells refuses shell tiles node-wide: CreateTile(kind=shell)
 	// and OpenShell are denied for every plugin (local or mounted),
-	// ShellSessionAlive answers "gone", and ListPlugins carries the flag so
+	// ShellSessionAlive answers "gone", and Handshake carries the flag so
 	// the client drops the shell primitive from the + palette. The one
 	// server-side owner of the fact is this field (from server.yaml
 	// disable_shells).
@@ -70,7 +70,7 @@ type Server struct {
 
 	// infoCache memoizes each plugin's first successful Info handshake, keyed
 	// by plugin uuid. Identity, roots, and capabilities are stable for a
-	// plugin's lifetime, so repeat ListPlugins / Subscribe calls must not
+	// plugin's lifetime, so repeat Handshake / Subscribe calls must not
 	// re-handshake every plugin (a consistently slow remote made every
 	// palette open pay pluginInfoTimeout). Failures are never cached — the
 	// next call retries. Invalidated when a plugin's declared facts change
@@ -182,7 +182,7 @@ func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse,
 // invalidateInfoCache drops the cached Info for uuid so the next call re-fetches
 // it from the plugin. Called by SetRootView after updating the root viewport:
 // root_view_* are part of Info but change on every portal ascent, so the
-// cache entry must be dropped to reflect the new framing on the next ListPlugins
+// cache entry must be dropped to reflect the new framing on the next Handshake
 // (page refresh).
 func (s *Server) invalidateInfoCache(uuid string) {
 	s.infoMu.Lock()

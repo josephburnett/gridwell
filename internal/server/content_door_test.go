@@ -304,7 +304,7 @@ func TestContentDoorUnimplemented(t *testing.T) {
 	}
 }
 
-// TestHandshakeCarriesTokensAndRootView pins the ListPlugins seam facts
+// TestHandshakeCarriesTokensAndRootView pins the Handshake seam facts
 // that only ever had producer-side coverage: the content token (must be
 // the CONTENT derivation, never the auth token) and a root's persisted
 // view — including through a raw BEACON post, the exact wire the unload
@@ -312,11 +312,11 @@ func TestContentDoorUnimplemented(t *testing.T) {
 // last-pan-survives-quit path rests on a tested seam.
 func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	hs, _, _ := contentDoorServer(t, testPassword)
-	withCookie(t, hs, testPassword) // ListPlugins and the beacon ride the gated mux
+	withCookie(t, hs, testPassword) // Handshake and the beacon ride the gated mux
 	cl := rpc.NewClient(hs.Client(), hs.URL)
 	ctx := context.Background()
 
-	pl, err := cl.ListPlugins(ctx)
+	pl, err := cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("beacon-shaped SetRootView POST = %d, want 200", res.StatusCode)
 	}
-	pl2, err := cl.ListPlugins(ctx)
+	pl2, err := cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

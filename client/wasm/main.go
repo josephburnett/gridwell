@@ -74,7 +74,7 @@ type App struct {
 	// served from. All server reads and mutations go through it.
 	cl *rpc.Client
 
-	// plugins is the configured plugin list from ListPlugins, used for the
+	// plugins is the configured plugin list from Handshake, used for the
 	// node-grid health tints, plugin glyphs, and the e2e launcher hook.
 	// Order is config order.
 	plugins []rpc.PluginInfo
@@ -147,7 +147,7 @@ type App struct {
 
 	// origin is the serving origin (location.origin), captured once at boot —
 	// the base every derived address builds on. contentToken is the
-	// /content/ door's path capability from the ListPlugins handshake
+	// /content/ door's path capability from the handshake
 	// (2026-08-11): rpc.PageURL(origin, contentToken, tileID) is a
 	// serves_page tile's address, derived at use time and never persisted
 	// (the desktop origin is an ephemeral port). webAddress is the one
@@ -803,14 +803,14 @@ func (a *App) bootstrap() {
 	var plugins rpc.PluginList
 	for {
 		var err error
-		plugins, err = a.cl.ListPlugins(context.Background())
+		plugins, err = a.cl.Handshake(context.Background())
 		if err == nil {
-			a.resolveErr("rpc:ListPlugins")
+			a.resolveErr("rpc:Handshake")
 			break
 		}
 		// The landing page renders empty meanwhile — say why, or it reads
 		// as "all my plugins vanished" (charter §6).
-		a.reportErr(errsurface.Error, "rpc:ListPlugins", "plugin list failed — retrying: "+rpcErrText(err))
+		a.reportErr(errsurface.Error, "rpc:Handshake", "plugin list failed — retrying: "+rpcErrText(err))
 		a.draw()
 		time.Sleep(backoff)
 		if backoff < 15*time.Second {

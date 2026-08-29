@@ -98,7 +98,7 @@ func (n *nodeExport) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoRespo
 	// A mount lands where a direct client lands: HOME — the first
 	// configured entry with a root (the same derivation as rpc.HomeGrid,
 	// over the same handshake). A node has no grid of its own.
-	lp, err := n.ListPlugins(ctx, &pb.ListPluginsRequest{})
+	lp, err := n.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +129,8 @@ func (n *nodeExport) Probe(ctx context.Context, r *pb.ProbeRequest) (*pb.ProbeRe
 
 // ── unary delegates: one routing implementation, two wire surfaces ───────────
 
-func (n *nodeExport) ListPlugins(ctx context.Context, r *pb.ListPluginsRequest) (*pb.ListPluginsResponse, error) {
-	resp, err := n.h.ListPlugins(ctx, connect.NewRequest(r))
+func (n *nodeExport) Handshake(ctx context.Context, r *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+	resp, err := n.h.Handshake(ctx, connect.NewRequest(r))
 	if err != nil {
 		return nil, statusErr(err)
 	}

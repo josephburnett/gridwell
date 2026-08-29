@@ -544,7 +544,7 @@ func (a *App) paneTileIDs(p *pane.Pane) []any {
 
 // thPlugins returns the configured plugin list (identity, root/scratch grids,
 // pluginhealth classification) with no screen positions — available wherever
-// the pane sits. Empty until ListPlugins lands; the driver polls.
+// the pane sits. Empty until Handshake lands; the driver polls.
 func (a *App) thPlugins(js.Value, []js.Value) any {
 	out := make([]any, 0, len(a.plugins))
 	for i, pl := range a.plugins {

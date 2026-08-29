@@ -105,9 +105,9 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	if !strings.HasPrefix(info.RootGridId, "ur1/") {
 		t.Fatalf("tunneled root = %q, want the remote home ur1/<n>", info.RootGridId)
 	}
-	lp, err := c.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{})
+	lp, err := c.Handshake(ctx, &gridwellv1.HandshakeRequest{})
 	if err != nil {
-		t.Fatalf("tunneled ListPlugins: %v", err)
+		t.Fatalf("tunneled Handshake: %v", err)
 	}
 	if len(lp.Plugins) != 2 || lp.Plugins[0].Label != "personal" || lp.Plugins[1].Label != "work" {
 		t.Fatalf("remote plugins = %+v, want personal,work", lp.Plugins)

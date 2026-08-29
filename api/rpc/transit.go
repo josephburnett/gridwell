@@ -121,7 +121,7 @@ func TransitQualifyEvent(prefix string, ev *pb.Event) *pb.Event {
 	})
 }
 
-// TransitQualifyPluginList re-qualifies a FORWARDED ListPlugins response
+// TransitQualifyPluginList re-qualifies a FORWARDED Handshake response
 // with one hop segment (remote-menu, 2026-08-16): every id the answer
 // carries — the plugin namespaces themselves and their grid addresses —
 // gains the hop prefix, so the receiving side holds ids routable from
@@ -131,11 +131,11 @@ func TransitQualifyEvent(prefix string, ev *pb.Event) *pb.Event {
 // handshake, meaningless — and unsafe to forward — through a chain).
 // shells_disabled and per-plugin InfoError ride verbatim: they describe
 // the answering node. Chains compose: each hop calls this once.
-func TransitQualifyPluginList(prefix string, resp *pb.ListPluginsResponse) *pb.ListPluginsResponse {
+func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.HandshakeResponse {
 	if resp == nil {
 		return nil
 	}
-	out := &pb.ListPluginsResponse{
+	out := &pb.HandshakeResponse{
 		ShellsDisabled: resp.ShellsDisabled,
 		HomeViewCx:     resp.HomeViewCx,
 		HomeViewCy:     resp.HomeViewCy,

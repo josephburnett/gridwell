@@ -81,7 +81,7 @@ func TestPluginProcessDarkServesRememberedListing(t *testing.T) {
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	ctx := context.Background()
-	pl, err := cl.ListPlugins(ctx)
+	pl, err := cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

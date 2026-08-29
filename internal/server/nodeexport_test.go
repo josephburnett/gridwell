@@ -26,9 +26,9 @@ import (
 // handshake a client boots on.
 func homeRoot(t *testing.T, c gridwellv1.GridwellClient) string {
 	t.Helper()
-	lp, err := c.ListPlugins(context.Background(), &gridwellv1.ListPluginsRequest{})
+	lp, err := c.Handshake(context.Background(), &gridwellv1.HandshakeRequest{})
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	for _, p := range lp.Plugins {
 		if p.RootGridId != "" {

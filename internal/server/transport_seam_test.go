@@ -154,7 +154,7 @@ func TestConnectionThroughTheChain(t *testing.T) {
 	// The handshake: home is a field, the connection is a row under the
 	// node's own id, landing on the remote's HOME (its home_grid_id, seen
 	// through the chain).
-	lp, err := h.localCl.ListPlugins(ctx)
+	lp, err := h.localCl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestConnectionThroughTheChain(t *testing.T) {
 
 	// The routed menu for the landing's node is the REMOTE's handshake,
 	// re-qualified — home first.
-	menu, err := h.localCl.ListPluginsNS(ctx, localNodeID+"/geneva")
+	menu, err := h.localCl.HandshakeNS(ctx, localNodeID+"/geneva")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
-	lp, err := h.localCl.ListPlugins(ctx)
+	lp, err := h.localCl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestDialFailureRidesTheRow(t *testing.T) {
 	// failure as its status, and a read through it fails, never answers
 	// empty.
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "dead", Label: "Dead", Addr: "/s"}}, errors.New("host key mismatch"))
-	lp, err := h.localCl.ListPlugins(ctx)
+	lp, err := h.localCl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

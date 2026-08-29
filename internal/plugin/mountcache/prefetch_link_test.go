@@ -33,11 +33,11 @@ func (u *linkUpstream) Info(context.Context, *pb.InfoRequest, ...grpc.CallOption
 	return &pb.InfoResponse{Kind: "remote", RootGridId: "u1/g1"}, nil
 }
 
-func (u *linkUpstream) ListPlugins(context.Context, *pb.ListPluginsRequest, ...grpc.CallOption) (*pb.ListPluginsResponse, error) {
+func (u *linkUpstream) Handshake(context.Context, *pb.HandshakeRequest, ...grpc.CallOption) (*pb.HandshakeResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
-	return &pb.ListPluginsResponse{}, nil
+	return &pb.HandshakeResponse{}, nil
 }
 
 func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest, _ ...grpc.CallOption) (*pb.GetGridResponse, error) {

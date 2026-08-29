@@ -61,7 +61,7 @@ func NoBridge() Bridge { return Bridge{} }
 
 // Derive computes the capability set from the boot facts: what the native
 // bridge declares (window.gridwell.caps), and whether the node disabled
-// shells (the ListPlugins handshake's shells_disabled). Called once with
+// shells (the handshake's shells_disabled). Called once with
 // the node fact unknown before the handshake and re-derived once when it
 // lands — still strictly boot-time, immutable afterward.
 func Derive(bridge Bridge, shellsDisabled bool) Caps {

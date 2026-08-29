@@ -85,7 +85,7 @@ func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 	cl := gitlabNode(t, gl)
 	ctx := context.Background()
 
-	pl, err := cl.ListPlugins(ctx)
+	pl, err := cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

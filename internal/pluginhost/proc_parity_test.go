@@ -94,7 +94,7 @@ func TestProcPluginSweepAndPlacement(t *testing.T) {
 	procRoot := fakeProc(t)
 	v2 := pluginProcNode(t, procRoot)
 	ctx := context.Background()
-	pl, err := v2.ListPlugins(ctx)
+	pl, err := v2.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestRetiredKeyStaysRetiredWithoutIdBurn(t *testing.T) {
 	v2 := pluginProcNodeAt(t, procRoot, memPath)
 	ctx := context.Background()
 
-	pl, err := v2.ListPlugins(ctx)
+	pl, err := v2.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

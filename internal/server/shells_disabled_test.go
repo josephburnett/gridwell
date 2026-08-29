@@ -5,7 +5,7 @@ package server_test
 // dialer and a remote mounter speak. The refusal lives at the node's
 // router, before plugin resolution, so no plugin (local or mounted) can
 // serve a shell while the flag is set:
-//   - ListPlugins carries shells_disabled (the client drops the palette
+//   - Handshake carries shells_disabled (the client drops the palette
 //     swatch from it),
 //   - CreateTile(kind=shell) is PermissionDenied while other kinds work,
 //   - OpenShell is PermissionDenied — the only PTY door on the node,
@@ -34,12 +34,12 @@ func TestShellsDisabled(t *testing.T) {
 	ctx := context.Background()
 
 	// The handshake tells the client.
-	lp, err := c.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{})
+	lp, err := c.Handshake(ctx, &gridwellv1.HandshakeRequest{})
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	if !lp.ShellsDisabled {
-		t.Errorf("ListPlugins.ShellsDisabled = false, want true")
+		t.Errorf("Handshake.ShellsDisabled = false, want true")
 	}
 
 	grid := rootGrid(t, c)
@@ -95,12 +95,12 @@ func TestShellsDisabled(t *testing.T) {
 func TestShellsEnabledByDefault(t *testing.T) {
 	c, _ := nodeServer(t)
 	ctx := context.Background()
-	lp, err := c.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{})
+	lp, err := c.Handshake(ctx, &gridwellv1.HandshakeRequest{})
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	if lp.ShellsDisabled {
-		t.Errorf("ListPlugins.ShellsDisabled = true with no flag set")
+		t.Errorf("Handshake.ShellsDisabled = true with no flag set")
 	}
 	if _, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: rootGrid(t, c),

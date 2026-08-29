@@ -106,7 +106,7 @@ export class GridwellDriver {
   }
 
   // plugins returns the configured plugin list with health classification.
-  // Waits for ListPlugins to land.
+  // Waits for Handshake to land.
   async plugins(): Promise<PluginDescriptor[]> {
     await this.win.waitForFunction(() => (window as any).__gridwellTest.plugins().length > 0, null, {
       timeout: 15_000,

@@ -57,7 +57,7 @@ func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 	if err := info(n.Ln.Addr().String()); err == nil {
 		t.Fatal("the web door answered raw gRPC")
 	}
-	res, err := http.Get("http://" + n.Ln.Addr().String() + "/gridwell.v1.Gridwell/ListPlugins")
+	res, err := http.Get("http://" + n.Ln.Addr().String() + "/gridwell.v1.Gridwell/Handshake")
 	if err != nil {
 		t.Fatal(err)
 	}

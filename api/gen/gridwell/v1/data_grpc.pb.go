@@ -34,7 +34,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	Gridwell_Info_FullMethodName              = "/gridwell.v1.Gridwell/Info"
 	Gridwell_Probe_FullMethodName             = "/gridwell.v1.Gridwell/Probe"
-	Gridwell_ListPlugins_FullMethodName       = "/gridwell.v1.Gridwell/ListPlugins"
+	Gridwell_Handshake_FullMethodName         = "/gridwell.v1.Gridwell/Handshake"
 	Gridwell_OpenShell_FullMethodName         = "/gridwell.v1.Gridwell/OpenShell"
 	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
 	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
@@ -62,11 +62,11 @@ const (
 type GridwellClient interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
 	// Info is the whole handshake (identity + default root); there is no
-	// Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+	// Attach/Detach/Bootstrap. Handshake enumerates a node's plugins (the SSH
 	// gateway calls it on a remote to learn that node's namespaces).
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 	Probe(ctx context.Context, in *ProbeRequest, opts ...grpc.CallOption) (*ProbeResponse, error)
-	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
+	Handshake(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error)
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenShellRequest, OpenShellResponse], error)
 	// ── Reads ─────────────────────────────────────────────────────────────────
@@ -123,10 +123,10 @@ func (c *gridwellClient) Probe(ctx context.Context, in *ProbeRequest, opts ...gr
 	return out, nil
 }
 
-func (c *gridwellClient) ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error) {
+func (c *gridwellClient) Handshake(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListPluginsResponse)
-	err := c.cc.Invoke(ctx, Gridwell_ListPlugins_FullMethodName, in, out, cOpts...)
+	out := new(HandshakeResponse)
+	err := c.cc.Invoke(ctx, Gridwell_Handshake_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -335,11 +335,11 @@ type Gridwell_SubscribeClient = grpc.ServerStreamingClient[Event]
 type GridwellServer interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
 	// Info is the whole handshake (identity + default root); there is no
-	// Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+	// Attach/Detach/Bootstrap. Handshake enumerates a node's plugins (the SSH
 	// gateway calls it on a remote to learn that node's namespaces).
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	Probe(context.Context, *ProbeRequest) (*ProbeResponse, error)
-	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
+	Handshake(context.Context, *HandshakeRequest) (*HandshakeResponse, error)
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(grpc.BidiStreamingServer[OpenShellRequest, OpenShellResponse]) error
 	// ── Reads ─────────────────────────────────────────────────────────────────
@@ -382,8 +382,8 @@ func (UnimplementedGridwellServer) Info(context.Context, *InfoRequest) (*InfoRes
 func (UnimplementedGridwellServer) Probe(context.Context, *ProbeRequest) (*ProbeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Probe not implemented")
 }
-func (UnimplementedGridwellServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListPlugins not implemented")
+func (UnimplementedGridwellServer) Handshake(context.Context, *HandshakeRequest) (*HandshakeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Handshake not implemented")
 }
 func (UnimplementedGridwellServer) OpenShell(grpc.BidiStreamingServer[OpenShellRequest, OpenShellResponse]) error {
 	return status.Error(codes.Unimplemented, "method OpenShell not implemented")
@@ -490,20 +490,20 @@ func _Gridwell_Probe_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_ListPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListPluginsRequest)
+func _Gridwell_Handshake_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandshakeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).ListPlugins(ctx, in)
+		return srv.(GridwellServer).Handshake(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_ListPlugins_FullMethodName,
+		FullMethod: Gridwell_Handshake_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).ListPlugins(ctx, req.(*ListPluginsRequest))
+		return srv.(GridwellServer).Handshake(ctx, req.(*HandshakeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -769,8 +769,8 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_Probe_Handler,
 		},
 		{
-			MethodName: "ListPlugins",
-			Handler:    _Gridwell_ListPlugins_Handler,
+			MethodName: "Handshake",
+			Handler:    _Gridwell_Handshake_Handler,
 		},
 		{
 			MethodName: "GetGrid",

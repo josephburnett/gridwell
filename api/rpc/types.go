@@ -314,7 +314,7 @@ type Grid struct {
 	// NodeNS is the namespace chain of the NODE serving this grid, from
 	// this receiver's perspective: "" = the node you are talking to;
 	// "<transit>" or deeper through mounts. The one owner of "which node
-	// is this pane inside" — the + menu context key and the ListPlugins
+	// is this pane inside" — the + menu context key and the Handshake
 	// routing namespace (remote-menu, 2026-08-16).
 	NodeNS string `json:"node_ns,omitempty"`
 	// Stale marks a response served from a mount's offline cache (#256):

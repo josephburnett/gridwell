@@ -7,7 +7,7 @@ import { GridwellDriver } from '../e2e/driver';
 
 // server.yaml `disable_shells: true`, seen from a real client: the +
 // palette offers every primitive EXCEPT shell. The flag rides the
-// ListPlugins handshake into caps (the one owner of "what can this client
+// Handshake handshake into caps (the one owner of "what can this client
 // do"), and the same server refuses shell creates outright — the palette
 // gap is the UI face of a server-side refusal, not a client preference.
 // The no-flag suites (web-core & co., browser-shim in the Electron suite)

@@ -173,9 +173,9 @@ func TestMountFsPlugin(t *testing.T) {
 func mountByClone(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, y int64) *rpc.Tile {
 	t.Helper()
 	ctx := context.Background()
-	lp, err := cl.ListPlugins(ctx)
+	lp, err := cl.Handshake(ctx)
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	var row rpc.PluginInfo
 	for _, p := range lp.Plugins {
@@ -198,15 +198,15 @@ func mountByClone(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, 
 }
 
 // TestMenuAndMountLabelAgree: the label the menu shows for a plugin
-// (ListPlugins) and the label carried onto a mounted link are the same
+// (Handshake) and the label carried onto a mounted link are the same
 // server.yaml display name — never a plugin-derived string.
 func TestMenuAndMountLabelAgree(t *testing.T) {
 	cl, root, _ := newTestServerWithPlugins(t)
 	ctx := context.Background()
 
-	plugins, err := cl.ListPlugins(ctx)
+	plugins, err := cl.Handshake(ctx)
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	var menuLabel string
 	for _, p := range plugins.Plugins {
@@ -407,9 +407,9 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 // order, with kind, label, and writability (only localdb accepts new tiles).
 func TestListPlugins(t *testing.T) {
 	cl, _, _ := newTestServerWithPlugins(t)
-	list, err := cl.ListPlugins(context.Background())
+	list, err := cl.Handshake(context.Background())
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	plugins := list.Plugins
 	// Registration order: primary localdb, then fs, then proc.
@@ -450,9 +450,9 @@ func TestListPlugins(t *testing.T) {
 func TestCreateScratchURLRoutes(t *testing.T) {
 	cl, _, _ := newTestServerWithPlugins(t)
 	ctx := context.Background()
-	plugins, err := cl.ListPlugins(ctx)
+	plugins, err := cl.Handshake(ctx)
 	if err != nil {
-		t.Fatalf("ListPlugins: %v", err)
+		t.Fatalf("Handshake: %v", err)
 	}
 	scratch := plugins.Plugins[0].ScratchGridID
 	if scratch == "" {

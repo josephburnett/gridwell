@@ -50,8 +50,8 @@ const (
 	GridwellInfoProcedure = "/gridwell.v1.Gridwell/Info"
 	// GridwellProbeProcedure is the fully-qualified name of the Gridwell's Probe RPC.
 	GridwellProbeProcedure = "/gridwell.v1.Gridwell/Probe"
-	// GridwellListPluginsProcedure is the fully-qualified name of the Gridwell's ListPlugins RPC.
-	GridwellListPluginsProcedure = "/gridwell.v1.Gridwell/ListPlugins"
+	// GridwellHandshakeProcedure is the fully-qualified name of the Gridwell's Handshake RPC.
+	GridwellHandshakeProcedure = "/gridwell.v1.Gridwell/Handshake"
 	// GridwellOpenShellProcedure is the fully-qualified name of the Gridwell's OpenShell RPC.
 	GridwellOpenShellProcedure = "/gridwell.v1.Gridwell/OpenShell"
 	// GridwellGetGridProcedure is the fully-qualified name of the Gridwell's GetGrid RPC.
@@ -91,11 +91,11 @@ const (
 type GridwellClient interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
 	// Info is the whole handshake (identity + default root); there is no
-	// Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+	// Attach/Detach/Bootstrap. Handshake enumerates a node's plugins (the SSH
 	// gateway calls it on a remote to learn that node's namespaces).
 	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
-	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	Handshake(context.Context, *connect.Request[v1.HandshakeRequest]) (*connect.Response[v1.HandshakeResponse], error)
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(context.Context) *connect.BidiStreamForClient[v1.OpenShellRequest, v1.OpenShellResponse]
 	// ── Reads ─────────────────────────────────────────────────────────────────
@@ -147,10 +147,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("Probe")),
 			connect.WithClientOptions(opts...),
 		),
-		listPlugins: connect.NewClient[v1.ListPluginsRequest, v1.ListPluginsResponse](
+		handshake: connect.NewClient[v1.HandshakeRequest, v1.HandshakeResponse](
 			httpClient,
-			baseURL+GridwellListPluginsProcedure,
-			connect.WithSchema(gridwellMethods.ByName("ListPlugins")),
+			baseURL+GridwellHandshakeProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Handshake")),
 			connect.WithClientOptions(opts...),
 		),
 		openShell: connect.NewClient[v1.OpenShellRequest, v1.OpenShellResponse](
@@ -256,7 +256,7 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 type gridwellClient struct {
 	info              *connect.Client[v1.InfoRequest, v1.InfoResponse]
 	probe             *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
-	listPlugins       *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
+	handshake         *connect.Client[v1.HandshakeRequest, v1.HandshakeResponse]
 	openShell         *connect.Client[v1.OpenShellRequest, v1.OpenShellResponse]
 	getGrid           *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
 	getTile           *connect.Client[v1.GetTileRequest, v1.TileResponse]
@@ -285,9 +285,9 @@ func (c *gridwellClient) Probe(ctx context.Context, req *connect.Request[v1.Prob
 	return c.probe.CallUnary(ctx, req)
 }
 
-// ListPlugins calls gridwell.v1.Gridwell.ListPlugins.
-func (c *gridwellClient) ListPlugins(ctx context.Context, req *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error) {
-	return c.listPlugins.CallUnary(ctx, req)
+// Handshake calls gridwell.v1.Gridwell.Handshake.
+func (c *gridwellClient) Handshake(ctx context.Context, req *connect.Request[v1.HandshakeRequest]) (*connect.Response[v1.HandshakeResponse], error) {
+	return c.handshake.CallUnary(ctx, req)
 }
 
 // OpenShell calls gridwell.v1.Gridwell.OpenShell.
@@ -374,11 +374,11 @@ func (c *gridwellClient) Subscribe(ctx context.Context, req *connect.Request[v1.
 type GridwellHandler interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
 	// Info is the whole handshake (identity + default root); there is no
-	// Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+	// Attach/Detach/Bootstrap. Handshake enumerates a node's plugins (the SSH
 	// gateway calls it on a remote to learn that node's namespaces).
 	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
-	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	Handshake(context.Context, *connect.Request[v1.HandshakeRequest]) (*connect.Response[v1.HandshakeResponse], error)
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(context.Context, *connect.BidiStream[v1.OpenShellRequest, v1.OpenShellResponse]) error
 	// ── Reads ─────────────────────────────────────────────────────────────────
@@ -426,10 +426,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("Probe")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellListPluginsHandler := connect.NewUnaryHandler(
-		GridwellListPluginsProcedure,
-		svc.ListPlugins,
-		connect.WithSchema(gridwellMethods.ByName("ListPlugins")),
+	gridwellHandshakeHandler := connect.NewUnaryHandler(
+		GridwellHandshakeProcedure,
+		svc.Handshake,
+		connect.WithSchema(gridwellMethods.ByName("Handshake")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellOpenShellHandler := connect.NewBidiStreamHandler(
@@ -534,8 +534,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellInfoHandler.ServeHTTP(w, r)
 		case GridwellProbeProcedure:
 			gridwellProbeHandler.ServeHTTP(w, r)
-		case GridwellListPluginsProcedure:
-			gridwellListPluginsHandler.ServeHTTP(w, r)
+		case GridwellHandshakeProcedure:
+			gridwellHandshakeHandler.ServeHTTP(w, r)
 		case GridwellOpenShellProcedure:
 			gridwellOpenShellHandler.ServeHTTP(w, r)
 		case GridwellGetGridProcedure:
@@ -585,8 +585,8 @@ func (UnimplementedGridwellHandler) Probe(context.Context, *connect.Request[v1.P
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Probe is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ListPlugins is not implemented"))
+func (UnimplementedGridwellHandler) Handshake(context.Context, *connect.Request[v1.HandshakeRequest]) (*connect.Response[v1.HandshakeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Handshake is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) OpenShell(context.Context, *connect.BidiStream[v1.OpenShellRequest, v1.OpenShellResponse]) error {

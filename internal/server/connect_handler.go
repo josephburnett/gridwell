@@ -143,17 +143,17 @@ func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Reques
 	return connect.NewResponse(resp), nil
 }
 
-// pluginInfoTimeout bounds each plugin's Info handshake during ListPlugins so
+// pluginInfoTimeout bounds each plugin's Info handshake during Handshake so
 // one slow or hung plugin can't stall (or block) the whole launcher. On timeout
 // the plugin is still listed from its config (kind + configured label), just
 // without a clickable root — graceful degradation beats a frozen launcher.
 const pluginInfoTimeout = 3 * time.Second
 
-// ListPlugins enumerates the configured plugins in config order so the client
+// Handshake enumerates the configured plugins in config order so the client
 // can build the launcher / + menu. label comes from each plugin's Info, and so
 // does writable (accepts new tiles) — a capability the handshake declares,
 // never derived from the kind string.
-func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[pb.ListPluginsRequest]) (*connect.Response[pb.ListPluginsResponse], error) {
+func (h *connectHandler) Handshake(ctx context.Context, req *connect.Request[pb.HandshakeRequest]) (*connect.Response[pb.HandshakeResponse], error) {
 	// A namespaced request ROUTES (remote-menu, 2026-08-16): peel one
 	// segment, forward the rest, re-qualify the answer with this hop —
 	// the same shape as every routed read. "" stays the local handshake.
@@ -170,7 +170,7 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		if !found {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", hop))
 		}
-		resp, err := c.ListPlugins(ctx, &pb.ListPluginsRequest{Namespace: rest})
+		resp, err := c.Handshake(ctx, &pb.HandshakeRequest{Namespace: rest})
 		if err != nil {
 			return nil, asConnectError(err)
 		}
@@ -194,7 +194,7 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 	// HOME is a field: the node's own store, where "/" lands (its row is
 	// first in out — the registry registers it first — but a client never
 	// has to know that).
-	resp := &pb.ListPluginsResponse{
+	resp := &pb.HandshakeResponse{
 		Plugins:        out,
 		ShellsDisabled: h.srv.cfg.DisableShells,
 		// The /content/ door's path capability, handed out only here — on
@@ -737,7 +737,7 @@ func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, candidates
 // (the UnimplementedGridwellServer returns Unimplemented — ignored here so a
 // read-only plugin's ascent doesn't surface an error to the user).
 // After a successful write, the per-plugin Info cache is invalidated so the
-// next ListPlugins (e.g. after a page refresh) returns fresh root-view fields.
+// next Handshake (e.g. after a page refresh) returns fresh root-view fields.
 func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
 	m := req.Msg
 	c, local, uuid, _, err := h.route(m.RootGridId)
@@ -758,7 +758,7 @@ func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[p
 		return nil, asConnectError(err)
 	}
 	// Invalidate the Info cache: root_view_* travel in the Info handshake
-	// and now differ from the cached values. The next ListPlugins (page
+	// and now differ from the cached values. The next Handshake (page
 	// refresh) must re-fetch Info to see the updated viewport.
 	h.srv.invalidateInfoCache(uuid)
 	return connect.NewResponse(&pb.SetRootViewResponse{}), nil

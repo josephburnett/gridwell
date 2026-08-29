@@ -89,7 +89,7 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	root := seedTree(t)
 	v2, prov := pluginNode(t, root)
 	ctx := context.Background()
-	pl, err := v2.ListPlugins(ctx)
+	pl, err := v2.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	root := seedTree(t)
 	v2, _ := pluginNode(t, root)
 	ctx := context.Background()
-	pl, err := v2.ListPlugins(ctx)
+	pl, err := v2.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 	root := seedTree(t)
 	v2, _ := pluginNode(t, root)
 	ctx := context.Background()
-	pl, err := v2.ListPlugins(ctx)
+	pl, err := v2.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 	root := seedTree(t)
 	v2, _ := pluginNode(t, root)
 	ctx := context.Background()
-	pl, err := v2.ListPlugins(ctx)
+	pl, err := v2.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

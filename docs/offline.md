@@ -140,7 +140,7 @@ authenticate *to*. Any offline mode implicitly creates the first
 client-held copy of user data, which changes the threat model on a stolen
 phone (see §8).
 
-**Boot is one non-retried RPC.** `bootstrap` calls `ListPlugins` exactly
+**Boot is one non-retried RPC.** `bootstrap` calls `Handshake` exactly
 once; failure yields a permanently empty shell until reload
 (`main.go:763-791`).
 
@@ -485,7 +485,7 @@ existing vocabulary nearly covers it:
 Compiled from the code audit; each is worth fixing regardless of the model
 chosen. (1) Transport failures drop dirty text buffers
 (`mutate.go:216-247`). (2) SSE reconnect never resyncs — silent staleness
-with a cleared notice (`main.go:1095-1145`). (3) Boot `ListPlugins` is
+with a cleared notice (`main.go:1095-1145`). (3) Boot `Handshake` is
 one-shot; failure is a dead shell (`main.go:763-791`). (4) `tileLoadFailed`
 clears only on reload (`main.go:203`). (5) No transport/application error
 taxonomy (`mutate.go:48-57`). (6) Frozen previews of mounted tiles have no

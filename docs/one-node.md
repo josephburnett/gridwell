@@ -1,6 +1,6 @@
 # One node: finishing the v2 fold
 
-Status: APPROVED 2026-08-29 (decisions §4: two files; rewrite old prefixes; rename to Handshake). P2 landed (eb9e5a1) then P1 (fb8da04) — P2 first because node-grid tile ids (`<node>/<letters>`) would have collided with `<id>/<conn>`; Joe's two homes migrated by hand 2026-08-29. P3 landed 2026-08-29: the transport is config + one small table (no instance grid, no wells, no params documents), the handshake carries `home_grid_id` and `connections[]`, and every in-process hop listens in memory. Deviation from §2.3, deliberate: the in-process gRPC hop STAYS (over bufconn) until P4 puts home and the plugin adapter on one store — the hop is the one shape the mount cache and the wire share. The RPC keeps its name (`ListPlugins`) for the same reason: the rename is churn P4 can carry. Next: P4. Successor to `docs/v2-design.md` (which
+Status: APPROVED 2026-08-29 (decisions §4: two files; rewrite old prefixes; rename to Handshake). P2 landed (eb9e5a1) then P1 (fb8da04) — P2 first because node-grid tile ids (`<node>/<letters>`) would have collided with `<id>/<conn>`; Joe's two homes migrated by hand 2026-08-29. P3 landed 2026-08-29: the transport is config + one small table (no instance grid, no wells, no params documents), the handshake carries `home_grid_id` and `connections[]`, and every in-process hop listens in memory. Deviation from §2.3, deliberate: the in-process gRPC hop STAYS (over bufconn) until P4 puts home and the plugin adapter on one store — the hop is the one shape the mount cache and the wire share. The RPC keeps its name (`Handshake`) for the same reason: the rename is churn P4 can carry. Next: P4. Successor to `docs/v2-design.md` (which
 executed the content-plugin half) — this finishes the other half, the
 one the fold left behind: the node still *pretends* its own store and
 its own transport are plugins, and a tile's arrangement is stored in
@@ -91,7 +91,7 @@ is the namespace's *type*, not an `Info` declaration. `IsNative`,
 
 ### 2.4 The handshake replaces the node grid
 
-`ListPlugins` → `Handshake` (rename the RPC or keep the name; the shape
+`Handshake` → `Handshake` (rename the RPC or keep the name; the shape
 is what matters):
 
 ```
@@ -194,6 +194,6 @@ make it small by removing everything that isn't a tile first.
    reason and it can be deleted freely.
 2. **Rewrite the two stored `i9sm6ff/…` references, or let them dangle?**
    Recommendation: rewrite — it's a prefix rename inside the converter.
-3. **Keep `ListPlugins` as the RPC name or rename to `Handshake`?**
+3. **Keep `Handshake` as the RPC name or rename to `Handshake`?**
    Recommendation: rename; the old name is the last place "everything is
    a plugin" would survive.

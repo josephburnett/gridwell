@@ -77,10 +77,10 @@ The surface, one method per concept:
 
 | Group | Methods |
 |---|---|
-| Lifecycle | `Info`, `Probe`, `ListPlugins`, `SetRootView` |
+| Lifecycle | `Info`, `Probe`, `Handshake`, `SetRootView` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview` |
 | Content bytes | `ReadContent` / `WriteContent` — the ONE way content moves. Versioned; a write commits at close (a broken stream leaves the old value intact); a read on a leaf link resolves to the target at the serving node |
-| Web content | `ServeContent` — the RPC carrier behind the HTTP `/content/<token>/<tile-id>/<subpath>` door: a plugin serves ANY content as web content (an image, a whole HTML page with relative subresources). GET-only; routes/link-resolves/federates exactly like `ReadContent`. The door stamps `CSP: sandbox allow-scripts` (opaque origin — no cookies, no RPC reach) and gates by the content token (its own password derivation, handed out on the authenticated `ListPlugins`). `Tile.serves_page` (wire-only, plugin-derived) tells the client to present the descent with url-tile semantics at the derived address |
+| Web content | `ServeContent` — the RPC carrier behind the HTTP `/content/<token>/<tile-id>/<subpath>` door: a plugin serves ANY content as web content (an image, a whole HTML page with relative subresources). GET-only; routes/link-resolves/federates exactly like `ReadContent`. The door stamps `CSP: sandbox allow-scripts` (opaque origin — no cookies, no RPC reach) and gates by the content token (its own password derivation, handed out on the authenticated `Handshake`). `Tile.serves_page` (wire-only, plugin-derived) tells the client to present the descent with url-tile semantics at the derived address |
 | Mutations | `CreateTile` (metadata only — a body follows as a WriteContent), `SetTile` (framing/preview + rename + content_zoom, one op per call), `PlaceTile` (the one placement writeback), `CloneTile`, `DeleteTile` |
 | Live bytes | `OpenShell` (a PTY both ways — deliberately the one live wire), `ShellSessionAlive` |
 | Events | `Subscribe` |
@@ -172,7 +172,7 @@ namespace of that same verified store.
   mysteries), learns where it lands (the remote's HOME) and remembers only
   that plus the graveyard of retired names (`retired_names`: a name never
   returns). It owns no tiles and no grid: a connection is a row in the +
-  menu (`ListPluginsResponse.connections`, uuid `<id>/<conn>`) and, when
+  menu (`HandshakeResponse.connections`, uuid `<id>/<conn>`) and, when
   dragged, an ordinary link tile in the user's grid. Every reference
   through it is `<id>/<conn>/<remote-id…>`: `Server.resolve` peels the
   node's own id and hands the rest to the transport, which peels the
@@ -387,7 +387,7 @@ file. What remains:
 
 ## 10. Map of the key journeys
 
-- **Boot.** `ListPlugins` returns the plugin list + node identity; panes
+- **Boot.** `Handshake` returns the plugin list + node identity; panes
   anchor at home (the first plugin's root grid) and "/" is its URL. A
   pane's URL is its anchor as leading path segments, then tile ids:
   `/<plugin>/<grid>/3/4`. Leading non-numeric segments are the namespace

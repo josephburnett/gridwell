@@ -160,7 +160,7 @@ func (w *walker) walkGrid(gridID string) bool {
 	if ns := resp.GetGrid().GetNodeNs(); !w.seenNs[ns] {
 		w.seenNs[ns] = true
 		if w.pause() {
-			if _, err := w.c.ListPlugins(w.ctx, &pb.ListPluginsRequest{Namespace: ns}); err != nil && gwerr.IsTransport(err) {
+			if _, err := w.c.Handshake(w.ctx, &pb.HandshakeRequest{Namespace: ns}); err != nil && gwerr.IsTransport(err) {
 				return false
 			}
 		} else {

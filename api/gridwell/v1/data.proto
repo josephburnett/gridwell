@@ -68,7 +68,7 @@ message Grid {
   // transit hop prepends its segment, exactly like scratch_grid_id. The
   // one owner of "which node is this pane inside" (remote-menu,
   // 2026-08-16): the client keys its per-pane + menu context by it and
-  // routes ListPlugins with it. Wire-only, never persisted.
+  // routes Handshake with it. Wire-only, never persisted.
   string node_ns = 10;
   // menu_entries is the owning plugin's declared (+) menu additions for
   // this grid (see MenuEntry) — stamped from Info by the serving node,
@@ -278,7 +278,7 @@ message InfoResponse {
   double root_view_zoom = 12;
   // 14 was instance_grid_id: the parameterized-plugin instance grid,
   // deleted 2026-08-29 (docs/one-node.md) — connections list as
-  // ListPluginsResponse.connections.
+  // HandshakeResponse.connections.
   reserved 14;
   // transit declares that this plugin's ids are CHAINS from another node —
   // a mount, forwarding to a remote gridwell, whose ids arrive already
@@ -480,9 +480,9 @@ message SearchResponse {
 // link tile, and label agreement is owned by that tile's alt — the condition
 // its comment set for removal.)
 
-// ListPlugins enumerates the plugins a node hosts, in config order. The client
+// Handshake enumerates the plugins a node hosts, in config order. The client
 // builds the launcher / + menu from it. A leaf plugin returns an empty list.
-message ListPluginsRequest {
+message HandshakeRequest {
   // namespace routes the request (remote-menu, 2026-08-16): "" answers
   // for THIS node (the boot handshake, unchanged); a namespace chain
   // ("<transit>" or "<transit>/<conn>/...") peels one segment per hop and
@@ -538,7 +538,7 @@ message ConnectionInfo {
   double root_view_zoom = 6;
   string status_detail = 7;   // the last dial/learn failure while pending
 }
-message ListPluginsResponse {
+message HandshakeResponse {
   // 2, 3, 6-8 were the node grid's identity and viewport (deleted
   // 2026-08-29, docs/one-node.md): a node has no grid of its own; home
   // is where a client lands and where a mount lands.
@@ -756,11 +756,11 @@ message Event {
 service Gridwell {
   // ── Lifecycle ───────────────────────────────────────────────────────────
   // Info is the whole handshake (identity + default root); there is no
-  // Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+  // Attach/Detach/Bootstrap. Handshake enumerates a node's plugins (the SSH
   // gateway calls it on a remote to learn that node's namespaces).
   rpc Info(InfoRequest)               returns (InfoResponse);
   rpc Probe(ProbeRequest)             returns (ProbeResponse);
-  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
 
   // ── Shell (live PTY, both ways) ───────────────────────────────────────────
   rpc OpenShell(stream OpenShellRequest) returns (stream OpenShellResponse);

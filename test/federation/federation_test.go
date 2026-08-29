@@ -235,7 +235,7 @@ func TestFederationSpawn(t *testing.T) {
 	// 1. The connection presents as its own menu row and gains its root
 	//    — the remote's HOME through the declared segment: the chained
 	//    <ssh>/<conn>/<rplugin>/<grid> mount root the rest drives.
-	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
+	lp := rpc(t, localOrigin, "Handshake", map[string]any{})
 	var homeRoot string
 	for _, p := range lp["plugins"].([]any) {
 		pm := p.(map[string]any)
@@ -257,7 +257,7 @@ func TestFederationSpawn(t *testing.T) {
 	if nodeNS == "" {
 		t.Fatal("the landing grid must carry its serving node's namespace (node_ns)")
 	}
-	menu := rpc(t, localOrigin, "ListPlugins", map[string]any{"namespace": nodeNS})
+	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
 	mp := menu["plugins"].([]any)
 	if len(mp) != 1 {
 		t.Fatalf("routed menu has %d plugins through the tunnel, want the remote's home alone", len(mp))
@@ -518,7 +518,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatal(err)
 	}
 	localOrigin2, _ := startServe(t, bin, localHome, "127.0.0.1:0")
-	lp := rpc(t, localOrigin2, "ListPlugins", map[string]any{})
+	lp := rpc(t, localOrigin2, "Handshake", map[string]any{})
 	for _, p := range lp["plugins"].([]any) {
 		if uuid, _ := p.(map[string]any)["uuid"].(string); strings.HasSuffix(uuid, "/cmconn1") {
 			t.Fatal("a retired connection must not row in")
@@ -576,7 +576,7 @@ func awaitConnRoot(t *testing.T, origin, name string) string {
 	t.Helper()
 	deadline := time.After(30 * time.Second)
 	for {
-		lp := rpc(t, origin, "ListPlugins", map[string]any{})
+		lp := rpc(t, origin, "Handshake", map[string]any{})
 		conns, _ := lp["connections"].([]any)
 		for _, p := range conns {
 			pm := p.(map[string]any)
