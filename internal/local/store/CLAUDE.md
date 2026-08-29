@@ -1,7 +1,10 @@
 # internal/local/store — the home persistence layer
 
-This package is the SQLite-backed store behind the node's native `home`
-kind (`internal/local`; né localdb): the user's text, URLs, and grids.
+This package is the node's ONE database (`<home>/gridwell.db`,
+docs/one-node.md §2.6): home's content — the user's text, URLs, and
+grids (`internal/local`; né localdb) — and, since schema v9, every
+content plugin's memory as namespaced rows of the same tables
+(`external.go`; `ns = ''` is home) plus the transport's connections.
 **The home format is out of testing mode. Its v1 schema is frozen and the
 forward-compatibility promise is in effect.**
 

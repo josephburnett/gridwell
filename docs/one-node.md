@@ -1,6 +1,6 @@
 # One node: finishing the v2 fold
 
-Status: APPROVED 2026-08-29 (decisions §4: two files; rewrite old prefixes; rename to Handshake). P2 landed (eb9e5a1) then P1 (fb8da04) — P2 first because node-grid tile ids (`<node>/<letters>`) would have collided with `<id>/<conn>`; Joe's two homes migrated by hand 2026-08-29. P3 landed 2026-08-29: the transport is config + one small table (no instance grid, no wells, no params documents), the handshake carries `home_grid_id` and `connections[]`, and every in-process hop listens in memory. Deviation from §2.3, deliberate: the in-process gRPC hop STAYS (over bufconn) until P4 puts home and the plugin adapter on one store — the hop is the one shape the mount cache and the wire share. The RPC keeps its name (`Handshake`) for the same reason: the rename is churn P4 can carry. Next: P4. Successor to `docs/v2-design.md` (which
+Status: DONE 2026-08-29 — P2 (eb9e5a1), P1 (fb8da04), the in-memory hop (9db9775), P3 (09931e6), P4 (acceb30), the Handshake rename (8fcf239), P5 (this commit). P2 went before P1 because node-grid tile ids (`<node>/<letters>`) would have collided with `<id>/<conn>`. Joe's two homes converted at first serve. Standing deviations from §2: the in-process gRPC hop stays, over an in-memory listener (bufconn) — the one shape the mount cache and the wire share; the vocabulary lint retires `loadout` only (`native` is Electron's word too, `instance` is plain English). Successor to `docs/v2-design.md` (which
 executed the content-plugin half) — this finishes the other half, the
 one the fold left behind: the node still *pretends* its own store and
 its own transport are plugins, and a tile's arrangement is stored in
@@ -182,7 +182,7 @@ found.
 | **P2 handshake, no node grid** | `home_grid_id` on the wire; client anchors on it | `nodegrid.go`, `node-view.json`, `isNodeGridPane` + readers, `rpc.HomeGrid`, `node_uuid` |
 | **P3 namespaces** | registry of Go values; connections at `<id>/<conn>`; prefix rewrite | `IsNative`, in-process gRPC hop, `Info` on natives, `pluginmeta` on natives, `connections_json`, instance grid + rows, `ssh_connections` presentation columns |
 | **P4 one DB** | `gridwell.db` + `cache.db`; one `tiles` table; one engine; converter | `db/<id>/` dirs, `layout.*` tables, `remote.ssh_connections`, `session`, `plugin_uuid` |
-| **P5 words + docs** | README/ARCHITECTURE/CLAUDE rewritten to this model; vocabulary lint gains `native`, `instance`, `loadout` | the stale owner decisions (home-is-first-plugin, node-grid-is-federation-surface, #199, #251 remnants) |
+| **P5 words + docs** | README/ARCHITECTURE/CLAUDE rewritten to this model; vocabulary lint gains `loadout` | the stale owner decisions (home-is-first-plugin, node-grid-is-federation-surface, #199, #251 remnants) |
 
 P4 is the largest and the one that pays the "layout repeated" debt; P1–P3
 make it small by removing everything that isn't a tile first.

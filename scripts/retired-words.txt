@@ -7,3 +7,5 @@
 # config must still recognize to print its deprecation.
 provider docs/v2-design\.md|docs/content-presentation\.md|.*[Ll]ink [Pp]rovider|.*registerLinkProvider|.*provider: true|.*yaml:"provider
 providers docs/v2-design\.md|docs/content-presentation\.md
+# "loadout" — the compiled-in plugin set of a leaf binary; retired 2026-08-29 with gridwell-all (docs/one-node.md names it as history).
+loadout docs/one-node\.md|docs/plugin\.md

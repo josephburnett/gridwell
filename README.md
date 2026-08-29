@@ -100,22 +100,25 @@ Note: the split-pane layout at the window root is deliberately
 session-ephemeral — scaffolding, not content. The durable home for an
 arrangement you care about is the pane tile.
 
-## Plugins and federation
+## One node, plugins, connections
 
-Every space is a plugin. `home` is the node's own store and holds your
-content. `fs`, `proc`, and `gitlab` are plugins — separate
-binaries that answer in their own stable keys (a path, a pid, a todo)
-while the node mints the ids and keeps the layout — honest views of a
-world Gridwell doesn't own (files and processes come and go, but their
-placement stays stable while they exist). `remote` mounts other machines.
+A Gridwell node is one server with one config, one id and one database.
+The node **is** its home: `~/.gridwell/gridwell.db` holds your content
+(text, urls, shells, wells, pane tiles) under the node's id. `fs`,
+`proc` and `gitlab` are **content plugins** — separate binaries that
+answer in their own stable keys (a path, a pid, a todo) while the node
+mints the ids and keeps the arrangement in that same database — honest
+views of a world Gridwell doesn't own (files and processes come and go,
+but their placement stays stable while they exist). **Connections** are
+other nodes, declared in config and dialed at boot.
 
-You boot into home — your first plugin's root grid. The other plugins live
-on the + menu's top row: click one to step through, or drag it out to drop
-a doorway tile wherever you want one. Stepping into a mounted machine is
-the exact same gesture as stepping into a local grid, however many hops
-away it is: ids qualify and chain (`<plugin>/<id>`,
-`<remote>/<connection>/<plugin>/<id>`),
-so a reference resolves through any number of mounts.
+You boot into home. Plugins and connections live on the + menu's top
+row: click one to step through, or drag it out to drop a doorway tile
+wherever you want one. Stepping into another machine is the exact same
+gesture as stepping into a local grid, however many hops away it is: ids
+qualify and chain (`<id>/<tile>`, `<plugin>/<tile>`,
+`<id>/<connection>/<remote-id>/<tile>`), so a reference resolves through
+any number of mounts.
 
 Two consequences of the principle at this scale:
 
@@ -149,19 +152,29 @@ make launch   # build and run (the first run mints ~/.gridwell/server.yaml)
 ```
 
 The same server also serves plain browsers — one instance, one origin, for
-the desktop window and your phone. The server has two doors, configured
-by door in `~/.gridwell/server.yaml`:
+the desktop window and your phone. Everything the node is lives in
+`~/.gridwell/server.yaml` (a missing file is a fresh home — the first
+`gridwell serve` mints the id and writes it):
 
 ```yaml
+id: 1b467bbd65466256f8a64c538cabdac8   # the node = its home; minted, immutable
 web:                       # browsers + the desktop window
   bind: "100.64.0.7:8080"  # your Tailscale IP
-federation:                # other nodes mounting this one, via ssh
+federation:                # other nodes mounting this one
   socket: ~/.gridwell/federation.sock   # a 0600 unix socket — never TCP
+connections:               # other nodes
+  - name: geneva           # immutable — a namespace segment
+    label: Geneva
+    host: geneva.example
+    user: joe
+    addr: /home/joe/.gridwell/federation.sock   # the REMOTE's socket
+plugins:                   # content plugins ONLY
+  - kind: fs               # id minted by serve
+    label: Home dir
+    config: { root: /home/joe }
 ```
 
-Give the web door a reachable address,
-
-then run `gridwell serve`. In a browser, live url tiles stay frozen.
+Give the web door a reachable address, then run `gridwell serve`. In a browser, live url tiles stay frozen.
 Everything else — grids, text, wells, live shells, navigation — works,
 touch included.
 
@@ -190,8 +203,9 @@ exists as a unix socket**, mode 0600 — the kernel admits your uid and
 nobody else; there is no TCP form, so no config can expose it. ssh is
 the one authenticated transport between nodes. Bind the web door to
 loopback or a VPN-only address (Tailscale is the intended transport),
-never an open interface. (The flat `bind:` key still loads with a
-deprecation notice; a yaml `password:` is ignored with one.)
+never an open interface. (A retired key — `node_id`, a flat `bind:`, a
+yaml `password:`, a `kind: home` plugin entry — fails loudly with the fix,
+never loads silently.)
 
 To mount remote nodes, the remote just runs `gridwell serve`; its
 `federation.socket` path (`<home>/federation.sock` by default) is what
@@ -217,10 +231,11 @@ stay files on your machine; an unverified host is refused, and key
 material never rides tile content.
 
 The CLI is four commands: `gridwell serve` (run the node — a missing
-server.yaml is a fresh home, its id minted on the spot), `gridwell
-status` (is this home being served?), `gridwell backup` (snapshot every
-DB + server.yaml, safe while serving), and `gridwell clear-browser-data`
-(drop the desktop app's Chromium session).
+server.yaml is a fresh home, its id minted on the spot; a pre-one-node
+home converts itself at first serve), `gridwell status` (is this home
+being served?), `gridwell backup` (snapshot `gridwell.db` + server.yaml,
+safe while serving), and `gridwell clear-browser-data` (drop the desktop
+app's Chromium session).
 
 ## Reading further
 

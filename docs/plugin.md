@@ -78,7 +78,7 @@ Today's `internal/{server,node,rpc,plugin(host side: registry, loader,
 mountcache),config,cli,dbformat,pluginmeta,doctype,...}` plus `client/`
 and `web/`.
 It knows how to OPEN the door (spawn a Command, accept an InProcess
-loadout) and never what's behind it.
+compiled-in plugin set) and never what's behind it.
 
 ### A plugin module (the example shape)
 
@@ -173,6 +173,11 @@ replace graph is the whole story.
 | `internal/store` → `client/markdown` | persistence imports the client tree (`AltFromSource`) | derivation moves to `internal/doctype` |
 | `mobile/` factories; future `apps/gridwell-all` | enumerate plugin kinds | LEGITIMATE — leaf binaries; the only legal place |
 | seam tests importing plugin impls | tests exercise the seam | LEGITIMATE — exempt from the arrow lint |
+
+> 2026-08-29 (docs/one-node.md): `apps/gridwell-all` and `make
+> check-parity` are gone — the mobile bind is the one leaf composer, and
+> the plugin adapter is exercised by its own seam tests. `gridwell init`
+> is gone with it: registration is a `plugins:` entry (serve mints the id).
 
 ## Status (2026-08-16): EXECUTED — all five stages landed
 

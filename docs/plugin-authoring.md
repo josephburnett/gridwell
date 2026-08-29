@@ -23,8 +23,9 @@ than ported to it; `fs` is the fullest surface.
   go-plugin's documented handshake — any language works.
 - **Binary name**: `gridwell-plugin-<kind>` beside the `gridwell`
   binary, on `GRIDWELL_PLUGIN_DIR`, or on PATH (or an explicit
-  `binary:` in server.yaml). Registration is one line of config:
-  `gridwell init --kind <kind> --name <label> [--config k=v]`.
+  `binary:` in server.yaml). Registration is a `plugins:` entry in
+  server.yaml (`- kind: <kind>`, an optional `label`, your `config`
+  keys); the first serve mints the entry's id.
 - **Main**: `guest.Serve(yourImpl)`. Config arrives as a JSON
   map in `GRIDWELL_PLUGIN_CONFIG` (`guest.Config()`): your server.yaml
   keys plus the injected identity (`uuid`, `kind`). The same map reaches

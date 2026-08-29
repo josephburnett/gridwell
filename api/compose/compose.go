@@ -26,7 +26,7 @@ type NativeFactory func(cfg map[string]string) (gridwellv1.GridwellServer, error
 
 // ServeInProcess starts a gRPC server in a goroutine on a loopback TCP
 // port and returns a client connected to it. closer stops the server and
-// closes the connection. The in-process half of the Loadout door; also
+// closes the connection. The in-process half of the compose door; also
 // the seam-test harness everywhere a real plugin is exercised without a
 // subprocess.
 func ServeInProcess(impl gridwellv1.GridwellServer) (gridwellv1.GridwellClient, func(), error) {

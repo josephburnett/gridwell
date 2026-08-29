@@ -13,7 +13,7 @@ import * as path from 'node:path';
 // `gridwell-all` (every plugin in-process through the compose door),
 // and until this spec the suite only ever seeded fs, so proc and gitlab
 // were never crossed in either composition. test/boundary pins that
-// every kind in apps/gridwell-all's loadout is seeded by some web spec.
+// every bundled plugin kind is seeded by some web spec.
 
 // A todo the fake serves: the JSON shape is plugins/gitlab/todos.Todo's
 // wire form (GET /api/v4/todos). One pending review request from Ada.

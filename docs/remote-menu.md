@@ -1,7 +1,9 @@
-> **Superseded in part (2026-08-23, #269):** the instance picker and the
-> parameterized-plugin flow described below are DELETED — connections are
-> server.yaml config, and each presents as its own menu row. The routed
-> + menu, node_ns, and qualification mechanics remain accurate.
+> **Superseded in part (2026-08-23, #269; 2026-08-29, docs/one-node.md):**
+> the instance picker, the parameterized-plugin flow, the instance grid
+> AND the node grid described below are DELETED — connections are
+> server.yaml config, each a row of the handshake's `connections[]`, and a
+> mount lands on the remote's `home_grid_id`. The routed + menu, node_ns,
+> and qualification mechanics remain accurate.
 
 # The remote menu: "when I descend into a node, I am there"
 

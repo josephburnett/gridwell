@@ -35,8 +35,8 @@ lists where that still needs doing.
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  go-plugin gRPC  (the SAME Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Plugins        plugins/{fs,proc,gitlab} as CONTENT PLUGINS (v2)       │
-│   + node-native: internal/local (store), internal/remote              │
+│ Namespaces     home (internal/local) · connections (internal/remote)  │
+│   · plugins/{fs,proc,gitlab} as CONTENT PLUGINS (plugin.v1)          │
 │   a plugin is stateless (keys + content); the node mints ids and      │
 │   keeps every namespace's arrangement in the ONE store (gridwell.db) │
 └───────────────┬──────────────────────────────────────────────────────┘
@@ -49,12 +49,13 @@ lists where that still needs doing.
 ```
 
 **One contract, every hop.** `api/gridwell/v1/data.proto` defines a single
-17-RPC service implemented identically by the local server, every plugin,
-and a remote node reached over SSH. "Remote" adds no vocabulary — the ssh
-plugin forwards to a remote node's **export** (`nodeexport.go`: the same
-service over raw gRPC, routed by the qualified ids each request carries).
-Ids chain one segment per hop (`<ssh>/<plugin>/<id>`), so any depth of
-mounting routes generically. Every byte — content streams and the live PTY
+17-RPC service implemented identically by the local server, every
+namespace, and a remote node reached through a connection. "Remote" adds
+no vocabulary — the transport forwards to a remote node's **export**
+(`nodeexport.go`: the same service over raw gRPC, routed by the qualified
+ids each request carries). Ids chain one segment per hop
+(`<id>/<conn>/<remote-id>/<tile>`), so any depth of mounting routes
+generically. Every byte — content streams and the live PTY
 included — crosses this one interface.
 
 **A node has no grid of its own** (2026-08-29, `docs/one-node.md`; the
@@ -108,17 +109,20 @@ Three fields encode the product rules directly:
 The server holds no Gridwell state. It routes every call to the owning
 plugin and translates ids at the boundary:
 
-1. `route(id)` peels the FIRST segment of a qualified id; the remainder
-   passes through verbatim, so `<ssh>/<plugin>/<id>` chains resolve one hop
-   at a time.
-2. The plugin answers in its own id space — bare ints for a leaf, chains
-   for a transit plugin (a node mount, whose ids arrive already qualified
+1. `Server.resolve(id)` peels the FIRST segment: the node's own id
+   followed by a numeric segment is HOME; the node's id followed by a
+   letter-leading segment is a CONNECTION (the transport peels that
+   segment next); any other first segment is a plugin. The remainder
+   passes through verbatim, so `<id>/<conn>/<remote-id>/<tile>` chains
+   resolve one hop at a time.
+2. The namespace answers in its own id space — bare ints for home and
+   plugins, chains for the transport (whose ids arrive already qualified
    from the remote's perspective).
 3. `qualifyTilesFor` re-qualifies ids going out: the leaf rule (prefix ids,
    derive `reference`) or the transit rule (prepend one segment everywhere,
    trust the wire bits — `rpc.TransitQualifyTiles`, one shared
-   implementation). Transit-ness comes from `Registry.Transit`, a
-   config-time fact, so it holds while the remote is down.
+   implementation). Transit is the namespace's TYPE (the transport), not
+   a declaration, so it holds while the remote is down.
 
 **Two wire surfaces, one implementation, two doors.** `WebHandler` is the
 Connect handler behind the password gate — the `web.bind` listener,
@@ -139,26 +143,30 @@ plugin declares once in `Info`, never re-derived from its kind string.
 
 ---
 
-## 4. Plugins and the store
+## 4. The namespaces and the store
 
-**Spawn model.** `server.yaml` is mandatory. The node's NATIVE kinds
-(`home` → `internal/local`, `remote` → `internal/remote`) run in-process
-on every path. Every other configured kind is a CONTENT PLUGIN
-(`plugin.v1`): spawned as a `gridwell-plugin-<kind>` subprocess by the
-stock host, or composed in-process by a leaf binary that bundles it
-(the mobile bind; the compose door hides which). A plugin is
-stateless — it answers in its own stable keys — and the node keeps ONE
-namespace of the ONE store (`internal/local/store`, `<home>/gridwell.db`;
-  docs/one-node.md §2.6) that mints the ids and holds the arrangement.
-store is opened identity-verified (`local.OpenVerified` against the node's
-id), so the id every stored reference carries is the id the node answers
-with; a plugin's memory needs no verification of its own — it is a
-namespace of that same verified store.
+**The node is its home** (docs/one-node.md). `server.yaml` names the
+node's `id`, its `connections:` and its `plugins:`; a missing file is a
+fresh home (serve mints the id and writes the file). The node constructs
+its own home (`internal/local`) and transport (`internal/remote`) from
+that config — they are not plugins and never appear in `plugins:`. Every
+`plugins:` entry is a CONTENT PLUGIN (`plugin.v1`): spawned as a
+`gridwell-plugin-<kind>` subprocess by the stock host, or composed
+in-process by a leaf binary that bundles it (the mobile bind; the compose
+door hides which). A plugin is stateless — it answers in its own stable
+keys — and the node keeps its memory as ONE namespace of the ONE store
+(`internal/local/store`, `<home>/gridwell.db`; docs/one-node.md §2.6)
+that mints the ids and holds the arrangement. The store is opened
+identity-verified (`local.OpenVerified` against the node's id), so the
+id every stored reference carries is the id the node answers with; a
+plugin's memory needs no verification of its own — it is a namespace of
+that same verified store. A pre-one-node home converts itself at first
+serve (`node.Convert`).
 
-- **local** (né localdb, 2026-08-16) owns all user content (text, urls, wells, pane tiles) plus
-  shells and the event stream. The only writable plugin. Shell tiles are
-  tmux sessions on a private per-DB socket, so they survive plugin
-  restarts.
+- **home** (`internal/local`; né localdb) owns all user content (text,
+  urls, wells, pane tiles) plus shells and the event stream — the one
+  writable namespace. Shell tiles are tmux sessions on a private per-node
+  socket, so they survive restarts.
 - **fs / proc** project the filesystem and process table as read-only
   grids, mapping paths/PIDs to stable integers. Both enforce the sweep
   rule: a failed read never deletes a tile row — only a definite GONE does.
@@ -387,8 +395,8 @@ file. What remains:
 
 ## 10. Map of the key journeys
 
-- **Boot.** `Handshake` returns the plugin list + node identity; panes
-  anchor at home (the first plugin's root grid) and "/" is its URL. A
+- **Boot.** `Handshake` returns home (`home_grid_id`, a field), the
+  plugins and the connections; panes anchor at home and "/" is its URL. A
   pane's URL is its anchor as leading path segments, then tile ids:
   `/<plugin>/<grid>/3/4`. Leading non-numeric segments are the namespace
   chain — sound because a plugin id can never be purely numeric.

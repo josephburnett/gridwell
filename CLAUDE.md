@@ -120,10 +120,15 @@ Re-litigating them silently is how churn happens.
 - **Cross-plugin: left-drag links, right-drag clones (2026-07-19).** A
   left-drag never duplicates content; a right-drag always does; there is no
   cross-plugin move. Dashed always means link; deleting a link unlinks.
-- **Home is the first configured plugin; plugins live in the + menu's top
-  row (2026-07-19).** A node has no grid of its own (the node grid was
-  deleted 2026-08-29, `docs/one-node.md`): a mount lands on the remote's
-  home, exactly where its own client lands.
+- **The node is its home (2026-08-29, `docs/one-node.md`; supersedes
+  "home is the first configured plugin", 2026-07-19).** One id (the
+  home's), one config (`server.yaml`: `id`, `web`, `federation`,
+  `connections`, `plugins` — no `init`; serve mints what is absent and
+  that is the only config write), one database (`gridwell.db`;
+  `cache.db` is disposable). `plugins:` are content plugins ONLY — the
+  node constructs its own home and transport. A node has no grid of its
+  own: a mount lands on the remote's home, exactly where its own client
+  lands; plugins and connections live on the + menu's top row.
 - **Pane closing is progressive crush (#217).** The split side follows the
   drag; closing is drag-through with red warning accumulation. The old
   corridor-edge one-click close stays dead.
@@ -138,9 +143,12 @@ Re-litigating them silently is how churn happens.
   (`persist:gridwell`) for every live url tile, local or mounted; live
   tiles browse from the host's own network. Nothing about sessions or
   networks crosses the wire.
-- **Connections are data (#199).** The ssh plugin's remotes are connection
-  wells, not config entries. Deleting one tombstones its namespace segment
-  forever. Secrets stay host-local file paths.
+- **Connections are config (2026-08-22 #269, finished 2026-08-29;
+  REVERSES #199 "connections are data").** A connection is a
+  `connections:` row — an immutable name (the namespace segment
+  `<id>/<name>`), a label, how to dial — with no well, no grid and no
+  params document; removing one retires its name forever
+  (`retired_names`). Secrets stay host-local file paths.
 - **Every pane wears the bar; the crumb click is the ascent
   (#220/#222, revised by #267 2026-08-21).** Bar contents are per-pane
   facts; since #267 the band renders in EVERY pane (content resizing on
@@ -148,16 +156,12 @@ Re-litigating them silently is how churn happens.
   clicks act only in the focused pane (an unfocused band click moves
   focus, nothing else). The old right-click ascends (corner circle,
   empty bar, slot) are gone; middle-click remains the in-pane shortcut.
-- **Parameterized plugins: the picker, not a synthetic root (#251,
-  2026-08-08; SUPERSEDED 2026-08-23 by #269): the picker and the
-  parameterized flow are DELETED — connections are server.yaml config,
-  each instance presents as its own menu row (Handshake synthesis
-  from the instance grid), and stale unconfigured wells degrade to a
-  delete-me notice.** What still stands: the instance grid is a storage
-  address, never a landing page; an instance is always THE SAME
-  instance, never a copy; deleting one is the tombstone gesture,
-  forever (a retired name never returns). Modals center on the active
-  pane, not the screen.
+- **No parameterized plugins (#251 2026-08-08 → #269 2026-08-23 →
+  2026-08-29).** The picker, the parameterized flow and the instance
+  grid are all DELETED; connections are config rows (above). What still
+  stands: a connection is always THE SAME connection, never a copy;
+  retiring one is forever (a retired name never returns). Modals center
+  on the active pane, not the screen.
 - **Plugins serve web content through the /content/ door (2026-08-11).**
   `ServeContent` is the one RPC carrier behind
   `/content/<token>/<tile-id>/<subpath>`; it routes/link-resolves/federates
@@ -182,8 +186,11 @@ Re-litigating them silently is how churn happens.
   Everything else the seam provides — id-space isolation, the wire
   contract — could be had with discipline alone; the subprocess door is
   the part that admits strangers, and it is judged by how good a door it
-  is for them. (2026-08-27: that door is `plugin.v1` ONLY —
-  the `gridwell.v1` subprocess door retired; a plugin serves content and keys, the node owns ids and layout; `home`/`remote` are the node's own kinds, not plugins.) Therefore: the host (server, CLI, loader) and the client
+  is for them. (2026-08-27: that door is `plugin.v1` ONLY — the
+  `gridwell.v1` subprocess door retired; a plugin serves content and
+  keys, the node owns ids and layout. 2026-08-29: home and the transport
+  are the node itself, not kinds; `plugins:` lists content plugins
+  only.) Therefore: the host (server, CLI, loader) and the client
   never import a plugin implementation and never switch on a plugin
   KIND — every plugin-specific behavior rides a wire DECLARATION (Info
   capabilities, `Grid.source_kind`, tile fields), the shapes that already
@@ -194,7 +201,11 @@ Re-litigating them silently is how churn happens.
   exercised by machinery; the coupling inventory and the enforcement
   options are `docs/plugin.md`.
 - **The storage format is frozen and additive-only.** The contract is
-  `internal/local/store/CLAUDE.md`. Never delete a DB to absorb a schema change.
+  `internal/local/store/CLAUDE.md`. Never delete a DB to absorb a schema
+  change. (2026-08-29: ONE database, `gridwell.db` — home and every
+  plugin's memory as namespaced rows, schema v9, additive; a pre-one-node
+  home converts itself at first serve, `node.Convert`, and the old files
+  are set aside, never deleted.)
 
 ## The verification gates
 
