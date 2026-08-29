@@ -23,19 +23,14 @@ import (
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
-// rootGrid resolves the registered localdb's root grid through the node
-// grid, like every other export test.
+// rootGrid resolves the registered localdb's root grid through the
+// handshake, like every other export test.
 func rootGrid(t *testing.T, c gridwellv1.GridwellClient) string {
-	t.Helper()
-	ng, err := c.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: "node1/0"})
-	if err != nil {
-		t.Fatalf("GetGrid(node grid): %v", err)
-	}
-	return ng.Tiles[0].ChildGridId
+	return homeRoot(t, c)
 }
 
 func TestShellsDisabled(t *testing.T) {
-	c, direct := nodeServerCfg(t, server.Config{NodeID: "node1", DisableShells: true})
+	c, direct := nodeServerCfg(t, server.Config{DisableShells: true})
 	ctx := context.Background()
 
 	// The handshake tells the client.

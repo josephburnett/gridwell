@@ -44,8 +44,8 @@ type Conn struct {
 	ViewX    int64
 	ViewY    int64
 	ViewZoom float64
-	// RemoteRoot caches the remote node's root grid id (its node grid, e.g.
-	// "rnode/0"), learned from the remote's Info on first successful contact.
+	// RemoteRoot caches the remote node's home grid id (e.g. "rplug/1"),
+	// learned from the remote's Info on first successful contact.
 	// "" = never reached: the well has no child and is inert until the remote
 	// answers. Cleared when params change (the old cache may name the wrong
 	// machine).

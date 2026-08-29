@@ -327,7 +327,7 @@ type DropInput struct {
 	HasTarget     bool
 	Forbidden     bool
 	// TargetReadOnly: the destination grid refuses CREATION (Grid.writable
-	// false — the node grid, an fs/proc grid): an ARRIVAL there (a
+	// false — an fs/proc grid): an ARRIVAL there (a
 	// cross-grid drop, a clone) is rejected up front instead of firing an
 	// RPC the server must refuse. A same-grid left-drag is exempt — that
 	// is PLACEMENT, not creation (see DecideDrop).

@@ -66,17 +66,6 @@ type PluginList struct {
 	// every plugin-served page URL as
 	// <origin>/content/<ContentToken>/<tile-id>/ (see data.proto).
 	ContentToken string
-	// NodeUUID / NodeRootGridID: the node's durable identity and its
-	// plugin-list grid — the SAME facts NodeIdentity returns; carried here
-	// so boot needs ONE handshake (it used to fire ListPlugins twice, and
-	// the server re-ran every plugin Info both times).
-	NodeUUID       string
-	NodeRootGridID string
-	// NodeRootView*: the node grid's own persisted viewport (2026-08-13);
-	// zero zoom = never set. The boot restore for a node-grid anchor.
-	NodeRootViewCx   float64
-	NodeRootViewCy   float64
-	NodeRootViewZoom float64
 }
 
 func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
@@ -112,14 +101,9 @@ func (c *Client) ListPluginsNS(ctx context.Context, ns string) (PluginList, erro
 		}
 	}
 	return PluginList{
-		Plugins:          out,
-		ShellsDisabled:   r.Msg.ShellsDisabled,
-		ContentToken:     r.Msg.ContentToken,
-		NodeUUID:         r.Msg.NodeUuid,
-		NodeRootGridID:   r.Msg.NodeRootGridId,
-		NodeRootViewCx:   r.Msg.NodeRootViewCx,
-		NodeRootViewCy:   r.Msg.NodeRootViewCy,
-		NodeRootViewZoom: r.Msg.NodeRootViewZoom,
+		Plugins:        out,
+		ShellsDisabled: r.Msg.ShellsDisabled,
+		ContentToken:   r.Msg.ContentToken,
 	}, nil
 }
 

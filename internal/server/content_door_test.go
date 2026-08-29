@@ -91,7 +91,7 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 
 	reg := plugin.NewRegistry()
 	reg.Register("uf1", "fs", fsClient, nil)
-	srv := mustNew(t, reg, Config{NodeID: "node1", Password: password})
+	srv := mustNew(t, reg, Config{Password: password})
 	hs = httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 
@@ -198,7 +198,7 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 	reg := plugin.NewRegistry()
 	_, rootA := registerPrimaryLocaldb(t, reg, st)
 	reg.Register("uf1", "fs", fsClient, nil)
-	srv := mustNew(t, reg, Config{NodeID: "node1"})
+	srv := mustNew(t, reg, Config{})
 	hs := serveWeb(t, srv)
 
 	ctx := context.Background()
@@ -254,7 +254,7 @@ func TestContentDoorTransit(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("ssh1", "remote", proxied, nil)
 	reg.SetTransit("ssh1", true) // the declaration the loader reads from Info in production
-	srv := mustNew(t, reg, Config{NodeID: "node1"})
+	srv := mustNew(t, reg, Config{})
 	hs := serveWeb(t, srv)
 
 	ctx := context.Background()
@@ -288,7 +288,7 @@ func TestContentDoorUnimplemented(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 	reg := plugin.NewRegistry()
 	_, root := registerPrimaryLocaldb(t, reg, st)
-	srv := mustNew(t, reg, Config{NodeID: "node1"})
+	srv := mustNew(t, reg, Config{})
 	hs := serveWeb(t, srv)
 
 	cl := rpc.NewClient(hs.Client(), hs.URL)
@@ -304,13 +304,13 @@ func TestContentDoorUnimplemented(t *testing.T) {
 	}
 }
 
-// TestHandshakeCarriesTokensAndNodeView pins the ListPlugins seam facts
+// TestHandshakeCarriesTokensAndRootView pins the ListPlugins seam facts
 // that only ever had producer-side coverage: the content token (must be
-// the CONTENT derivation, never the auth token) and the node grid's own
-// root view — including through a raw BEACON post, the exact wire the
-// unload flush uses (application/json unary, no Connect header), so the
+// the CONTENT derivation, never the auth token) and a root's persisted
+// view — including through a raw BEACON post, the exact wire the unload
+// flush uses (application/json unary, no Connect header), so the
 // last-pan-survives-quit path rests on a tested seam.
-func TestHandshakeCarriesTokensAndNodeView(t *testing.T) {
+func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	hs, _, _ := contentDoorServer(t, testPassword)
 	withCookie(t, hs, testPassword) // ListPlugins and the beacon ride the gated mux
 	cl := rpc.NewClient(hs.Client(), hs.URL)
@@ -326,12 +326,13 @@ func TestHandshakeCarriesTokensAndNodeView(t *testing.T) {
 	if pl.ContentToken == AuthToken(testPassword) {
 		t.Errorf("content token must never equal the auth token (domain separation)")
 	}
-	if pl.NodeRootViewZoom != 0 {
-		t.Errorf("fresh node root view zoom = %v, want 0 (never set)", pl.NodeRootViewZoom)
+	root := pl.Plugins[0]
+	if root.RootGridID == "" || root.RootViewZoom != 0 {
+		t.Fatalf("fresh root = %+v, want a root grid with zoom 0 (never set)", root)
 	}
 
 	path, body := rpc.SetRootViewBeacon(&rpc.SetRootViewRequest{
-		RootGridID: "node1/0", Cx: 3, Cy: 4, Zoom: 0.5,
+		RootGridID: root.RootGridID, Cx: 3, Cy: 4, Zoom: 0.5,
 	})
 	res, err := hs.Client().Post(hs.URL+path, "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -345,8 +346,9 @@ func TestHandshakeCarriesTokensAndNodeView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pl2.NodeRootViewCx != 3 || pl2.NodeRootViewCy != 4 || pl2.NodeRootViewZoom != 0.5 {
-		t.Errorf("node root view after beacon = (%v,%v,%v), want (3,4,0.5)",
-			pl2.NodeRootViewCx, pl2.NodeRootViewCy, pl2.NodeRootViewZoom)
+	got := pl2.Plugins[0]
+	if got.RootViewCx != 3 || got.RootViewCy != 4 || got.RootViewZoom != 0.5 {
+		t.Errorf("root view after beacon = (%v,%v,%v), want (3,4,0.5)",
+			got.RootViewCx, got.RootViewCy, got.RootViewZoom)
 	}
 }

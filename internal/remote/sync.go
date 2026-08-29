@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -254,28 +253,17 @@ func (s *Server) ConnectAll(ctx context.Context) {
 // learnRoot is THE connect-and-learn body — the boot path (ConnectAll)
 // calls it synchronously, the lazy kick (kickRootFetch) wraps it in a
 // goroutine. ONE implementation so the two paths cannot disagree about
-// what "learn" means (they were separate copies and had drifted on three
-// facts: the node-grid re-resolve, homeChecked, and the change event).
+// what "learn" means (they were separate copies and had drifted).
 //
-// Dial the transport; a stored node-grid root ("<rnode>/0" — the
-// pre-remote-menu landing) re-resolves to the remote HOME once per
-// process (homeChecked); any other stored root is final. A learned root
-// persists, bumps the connection grid, and publishes the row so open
-// clients see the well gain its room.
+// Dial the transport; a stored root is final. A learned root persists,
+// bumps the connection grid, and publishes the row so open clients see
+// the well gain its room.
 func (s *Server) learnRoot(c *Conn) (string, error) {
 	lc, err := s.ensureLive(c)
 	if err != nil {
 		return "", err // ensureLive recorded the detail already
 	}
-	refreshNodeGridRoot := c.RemoteRoot != "" && strings.HasSuffix(c.RemoteRoot, "/0") &&
-		strings.Count(c.RemoteRoot, "/") == 1
-	if c.RemoteRoot != "" && !refreshNodeGridRoot {
-		return c.RemoteRoot, nil
-	}
-	s.mu.Lock()
-	checked := lc.homeChecked
-	s.mu.Unlock()
-	if refreshNodeGridRoot && checked {
+	if c.RemoteRoot != "" {
 		return c.RemoteRoot, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -289,14 +277,6 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 		return "", fmt.Errorf("the remote declared no home")
 	}
 	s.setRootErr(c.NS, "")
-	s.mu.Lock()
-	if l, ok := s.live[c.NS]; ok {
-		l.homeChecked = true
-	}
-	s.mu.Unlock()
-	if root == c.RemoteRoot {
-		return root, nil // the remote's home IS its node grid; nothing to store
-	}
 	row, err := s.db.SetRemoteRoot(ctx, c.ID, root)
 	if err != nil {
 		// A learned root that cannot be STORED is a real failure — record

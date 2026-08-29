@@ -2256,13 +2256,6 @@ func (x *PluginInfo) GetMenuEntries() []*MenuEntry {
 type ListPluginsResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Plugins []*PluginInfo          `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
-	// node_uuid is this node's own durable identity (server.yaml node_id) and
-	// node_root_grid_id its plugin-list grid — the launcher the client anchors
-	// panes at on boot, qualified "<node_uuid>/0". Every gridwell node exposes
-	// the same shape, so a remote node reached through an ssh mount presents
-	// its launcher exactly like the local one.
-	NodeUuid       string `protobuf:"bytes,2,opt,name=node_uuid,json=nodeUuid,proto3" json:"node_uuid,omitempty"`
-	NodeRootGridId string `protobuf:"bytes,3,opt,name=node_root_grid_id,json=nodeRootGridId,proto3" json:"node_root_grid_id,omitempty"`
 	// shells_disabled: this node refuses shell tiles outright (server.yaml
 	// disable_shells) — the client removes the shell primitive from the +
 	// palette, and the server refuses CreateTile(kind=shell) and OpenShell no
@@ -2279,16 +2272,9 @@ type ListPluginsResponse struct {
 	// checked against the CURRENT password like the cookie is. A node-level
 	// fact of the LOCAL origin: content URLs are always built against the
 	// serving node; federation happens behind the door, over the RPC.
-	ContentToken string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
-	// node_root_view_cx/cy/zoom: the NODE GRID's own persisted viewport
-	// (2026-08-13, framing audit) — the read side of the node grid's
-	// SetRootView, so a client anchored at the node grid can boot back to
-	// the framing it left. Zero zoom = never set.
-	NodeRootViewCx   float64 `protobuf:"fixed64,6,opt,name=node_root_view_cx,json=nodeRootViewCx,proto3" json:"node_root_view_cx,omitempty"`
-	NodeRootViewCy   float64 `protobuf:"fixed64,7,opt,name=node_root_view_cy,json=nodeRootViewCy,proto3" json:"node_root_view_cy,omitempty"`
-	NodeRootViewZoom float64 `protobuf:"fixed64,8,opt,name=node_root_view_zoom,json=nodeRootViewZoom,proto3" json:"node_root_view_zoom,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	ContentToken  string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListPluginsResponse) Reset() {
@@ -2328,20 +2314,6 @@ func (x *ListPluginsResponse) GetPlugins() []*PluginInfo {
 	return nil
 }
 
-func (x *ListPluginsResponse) GetNodeUuid() string {
-	if x != nil {
-		return x.NodeUuid
-	}
-	return ""
-}
-
-func (x *ListPluginsResponse) GetNodeRootGridId() string {
-	if x != nil {
-		return x.NodeRootGridId
-	}
-	return ""
-}
-
 func (x *ListPluginsResponse) GetShellsDisabled() bool {
 	if x != nil {
 		return x.ShellsDisabled
@@ -2354,27 +2326,6 @@ func (x *ListPluginsResponse) GetContentToken() string {
 		return x.ContentToken
 	}
 	return ""
-}
-
-func (x *ListPluginsResponse) GetNodeRootViewCx() float64 {
-	if x != nil {
-		return x.NodeRootViewCx
-	}
-	return 0
-}
-
-func (x *ListPluginsResponse) GetNodeRootViewCy() float64 {
-	if x != nil {
-		return x.NodeRootViewCy
-	}
-	return 0
-}
-
-func (x *ListPluginsResponse) GetNodeRootViewZoom() float64 {
-	if x != nil {
-		return x.NodeRootViewZoom
-	}
-	return 0
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.
@@ -3613,16 +3564,11 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	" \x01(\tR\tinfoError\x12(\n" +
 	"\x10instance_grid_id\x18\v \x01(\tR\x0einstanceGridId\x12\x14\n" +
 	"\x05glyph\x18\f \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\"\xe3\x02\n" +
+	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\"\xb4\x01\n" +
 	"\x13ListPluginsResponse\x121\n" +
-	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12\x1b\n" +
-	"\tnode_uuid\x18\x02 \x01(\tR\bnodeUuid\x12)\n" +
-	"\x11node_root_grid_id\x18\x03 \x01(\tR\x0enodeRootGridId\x12'\n" +
+	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12'\n" +
 	"\x0fshells_disabled\x18\x04 \x01(\bR\x0eshellsDisabled\x12#\n" +
-	"\rcontent_token\x18\x05 \x01(\tR\fcontentToken\x12)\n" +
-	"\x11node_root_view_cx\x18\x06 \x01(\x01R\x0enodeRootViewCx\x12)\n" +
-	"\x11node_root_view_cy\x18\a \x01(\x01R\x0enodeRootViewCy\x12-\n" +
-	"\x13node_root_view_zoom\x18\b \x01(\x01R\x10nodeRootViewZoom\"5\n" +
+	"\rcontent_token\x18\x05 \x01(\tR\fcontentTokenJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"5\n" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"_\n" +
 	"\x11CreateTileRequest\x12\x17\n" +

@@ -95,14 +95,25 @@ func statusErr(err error) error {
 // landing page a mounter's descent lands on), and its capabilities. Watch is
 // true because Subscribe fans in every plugin's events.
 func (n *nodeExport) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, error) {
-	if n.srv.cfg.NodeID == "" {
-		return nil, status.Error(gcodes.FailedPrecondition, "this node has no node_id; run `gridwell serve` once to mint one")
+	// A mount lands where a direct client lands: HOME — the first
+	// configured entry with a root (the same derivation as rpc.HomeGrid,
+	// over the same handshake). A node has no grid of its own.
+	lp, err := n.ListPlugins(ctx, &pb.ListPluginsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	root := ""
+	for _, p := range lp.Plugins {
+		if p.RootGridId != "" {
+			root = p.RootGridId
+			break
+		}
 	}
 	return &pb.InfoResponse{
 		Kind:       "node",
 		Watch:      true,
 		Writable:   false,
-		RootGridId: n.srv.cfg.NodeID + "/" + nodeGridID,
+		RootGridId: root,
 	}, nil
 }
 

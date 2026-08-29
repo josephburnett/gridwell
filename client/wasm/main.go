@@ -79,17 +79,10 @@ type App struct {
 	// Order is config order.
 	plugins []rpc.PluginInfo
 
-	// nodeGrid is the qualified id of this node's node grid ("<node-uuid>/0")
-	// — the read-only plugin-list grid, still the federation surface an ssh
-	// mount lands on but no longer the local landing page. One fact, learned
-	// once from ListPlugins (NodeIdentity); "" only while bootstrap hasn't
-	// answered (or the server predates node identity).
-	nodeGrid string
-
 	// home is the qualified grid id "/" means — the first configured
-	// plugin's root grid, node grid as fallback (rpc.HomeGrid, the one
-	// derivation). Every "empty anchor means home" reader (boot, URL
-	// decode/encode, workspace leaf restore) reads THIS, never nodeGrid.
+	// plugin's root grid (rpc.HomeGrid, the one derivation). Every "empty
+	// anchor means home" reader (boot, URL decode/encode, workspace leaf
+	// restore) reads THIS.
 	home string
 
 	tree *pane.Tree
@@ -165,11 +158,6 @@ type App struct {
 	// unloading marks the beforeunload flush: framing writes switch to
 	// navigator.sendBeacon so they survive the dying page (unload.go).
 	unloading bool
-
-	// nodeRootView* is the node grid's own persisted viewport from the
-	// handshake (zero zoom = never set) — read by persistedGridView for a
-	// node-grid anchor and reconciled by persistPluginRootView's node arm.
-	nodeRootViewCx, nodeRootViewCy, nodeRootViewZoom float64
 
 	// touch is the touch→mouse gesture classifier (client/touchgest);
 	// touchTimerCb is its retained long-press timer callback;
@@ -800,10 +788,10 @@ func main() {
 	select {}
 }
 
-// bootstrap loads the plugin list and the node's identity, then starts the
-// rest of the client. The landing page is HOME — the first configured
-// plugin's root grid (node grid fallback, rpc.HomeGrid) — so panes anchor
-// there; plugins are reached from the + menu.
+// bootstrap loads the plugin list, then starts the rest of the client.
+// The landing page is HOME — the first configured plugin's root grid
+// (rpc.HomeGrid) — so panes anchor there; plugins are reached from the +
+// menu.
 func (a *App) bootstrap() {
 	// The handshake RETRIES until it lands (2026-08-14 audit: it used to
 	// fire exactly once, and one blip at boot left a permanently empty
@@ -838,16 +826,7 @@ func (a *App) bootstrap() {
 	// The /content/ door capability rides the same handshake; boot-time,
 	// immutable, read only by webAddress.
 	a.contentToken = plugins.ContentToken
-	// The node grid's own persisted viewport (2026-08-13).
-	a.nodeRootViewCx = plugins.NodeRootViewCx
-	a.nodeRootViewCy = plugins.NodeRootViewCy
-	a.nodeRootViewZoom = plugins.NodeRootViewZoom
-	// Node identity rides the SAME handshake (no second ListPlugins — the
-	// old NodeIdentity call re-ran every plugin Info server-side per boot).
-	if plugins.NodeRootGridID != "" {
-		a.nodeGrid = plugins.NodeRootGridID
-	}
-	a.home = rpc.HomeGrid(a.plugins, a.nodeGrid)
+	a.home = rpc.HomeGrid(a.plugins)
 	a.afterBootstrap()
 }
 

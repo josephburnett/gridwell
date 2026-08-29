@@ -57,13 +57,12 @@ Ids chain one segment per hop (`<ssh>/<plugin>/<id>`), so any depth of
 mounting routes generically. Every byte — content streams and the live PTY
 included — crosses this one interface.
 
-**Every node exposes a node grid.** A node's plugin list is a real,
-read-only grid — `<node_id>/0`, served by `internal/server/nodegrid.go` —
-one dashed link tile per plugin. It is the federation surface: an ssh mount
-lands on the remote's node grid. It is NOT the local landing page: the
-client boots into **home**, the first configured plugin's root grid
-(`rpc.HomeGrid`), and plugins are reached from the + menu's top row (click
-= portal descent, drag = drop an exit-well link).
+**A node has no grid of its own** (2026-08-29, `docs/one-node.md`; the
+node grid — `<node_id>/0`, one link tile per plugin — was deleted). The
+client boots into **home**, the first configured entry's root grid
+(`rpc.HomeGrid`); a mount lands there too (the export's `Info.RootGridId`
+is the same derivation). Plugins are reached from the + menu's top row
+(click = portal descent, drag = drop an exit-well link).
 
 ---
 
@@ -111,8 +110,7 @@ plugin and translates ids at the boundary:
 
 1. `route(id)` peels the FIRST segment of a qualified id; the remainder
    passes through verbatim, so `<ssh>/<plugin>/<id>` chains resolve one hop
-   at a time. The node's own uuid routes to the in-process node-grid
-   plugin.
+   at a time.
 2. The plugin answers in its own id space — bare ints for a leaf, chains
    for a transit plugin (a node mount, whose ids arrive already qualified
    from the remote's perspective).

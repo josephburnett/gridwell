@@ -71,11 +71,6 @@ type liveConn struct {
 	cancel context.CancelFunc // stops the root-fetch/fan-in goroutines
 	// rootFetching single-flights the remote-root learn.
 	rootFetching bool
-	// homeChecked marks that this process already re-resolved a stored
-	// node-grid root ("<rnode>/0") to the remote HOME — bounded to once
-	// per connection per process so a remote with no rooted plugins
-	// (home IS the node grid) doesn't refetch on every list read.
-	homeChecked bool
 }
 
 // New builds the plugin server. home is the host's home directory ("" =
@@ -138,26 +133,15 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 }
 
 // remoteHome resolves where a descent into this connection LANDS: the
-// remote's HOME — the same rule a direct client's boot applies (first
-// plugin with a root grid; the node grid as the fallback) — so entering
-// a node through a mount and connecting to it directly land in the same
-// place ("when I descend into a node, I am there", 2026-08-16). The
-// node grid stays addressable; it just is not the landing page, same as
-// locally (owner decision 2026-07-19).
+// remote's HOME — the root the remote's own export declares (its first
+// configured entry with a root, the same rule a direct client's boot
+// applies) — so entering a node through a mount and connecting to it
+// directly land in the same place ("when I descend into a node, I am
+// there", 2026-08-16).
 func (s *Server) remoteHome(ctx context.Context, lc *liveConn) (string, error) {
-	lp, err := lc.client.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{})
-	if err == nil {
-		for _, p := range lp.Plugins {
-			if p.RootGridId != "" {
-				return p.RootGridId, nil
-			}
-		}
-	}
-	// No rooted plugin (or a pre-remote-menu node that doesn't serve the
-	// list on its export): the node grid, from Info — the old behavior.
-	info, ierr := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
-	if ierr != nil {
-		return "", ierr
+	info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		return "", err
 	}
 	return info.RootGridId, nil
 }
@@ -264,20 +248,16 @@ func (s *Server) stampStatus(c *Conn, t *gridwellv1.Tile) {
 	s.mu.Unlock()
 }
 
-// kickRootFetch learns the remote's root grid id (its node grid) from its
-// Info, in the background, single-flight per connection. Success backfills
-// remote_root — the moment the connection well gains its child — and emits
-// the change so open clients refresh.
+// kickRootFetch learns the remote's home grid id in the background,
+// single-flight per connection. Success backfills remote_root — the
+// moment the connection well gains its child — and emits the change so
+// open clients refresh.
 func (s *Server) kickRootFetch(c *Conn) {
 	if c.Params == "" || c.Deleted {
 		return
 	}
-	// Fast path without dialing: a resolved home is final for this run
-	// (learnRoot re-checks under its own rules — the node-grid re-resolve
-	// and homeChecked live THERE, the one learn implementation).
-	refreshNodeGridRoot := c.RemoteRoot != "" && strings.HasSuffix(c.RemoteRoot, "/0") &&
-		strings.Count(c.RemoteRoot, "/") == 1
-	if c.RemoteRoot != "" && !refreshNodeGridRoot {
+	// Fast path without dialing: a learned root is final.
+	if c.RemoteRoot != "" {
 		return
 	}
 	lc, err := s.ensureLive(c)
@@ -287,7 +267,7 @@ func (s *Server) kickRootFetch(c *Conn) {
 		return
 	}
 	s.mu.Lock()
-	if lc.rootFetching || (refreshNodeGridRoot && lc.homeChecked) {
+	if lc.rootFetching {
 		s.mu.Unlock()
 		return
 	}

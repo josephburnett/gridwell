@@ -20,7 +20,6 @@ test('boot lands on the first plugin with "/" as its URL', async ({ gw, window }
   const pls = await gw.plugins();
   const f = await gw.focused();
   expect(f.gridID, 'boot anchors at the FIRST configured plugin root').toBe(pls[0].rootGridID);
-  expect(f.anchor, 'not the node grid').not.toMatch(/\/0$/);
 
   // Home encodes as a bare URL: no anchor param, root path.
   await gw.waitIdle();

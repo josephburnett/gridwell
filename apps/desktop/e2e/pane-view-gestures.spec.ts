@@ -175,7 +175,7 @@ test('clicking an unfocused pane focuses without descending; the second click de
   await gw.openPalette();
   await gw.dragCreate('markdown', cx, cy);
 
-  // Pane B: split (lands on the node grid), focus it by corner click.
+  // Pane B: split (lands at home), focus it by corner click.
   await gw.splitFocusedPaneVertical();
   const b = (await gw.panes()).find((p) => p.id !== a.id)!;
   await gw.clickScreen(b.x + 20, b.y + 20);

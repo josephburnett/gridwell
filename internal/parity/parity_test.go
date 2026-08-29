@@ -300,7 +300,6 @@ func remapNS(s *parity.Snapshot, ns string) *parity.Snapshot {
 		}
 	}
 	out := &parity.Snapshot{
-		NodeUUID: "node",
 		Plugins:  map[string]map[string]any{},
 		Grids:    map[string]parity.GridRecord{},
 		Tiles:    map[string]map[string]any{},

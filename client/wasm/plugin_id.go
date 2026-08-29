@@ -5,7 +5,6 @@ package main
 import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/door"
-	"github.com/josephburnett/gridwell/client/pane"
 )
 
 // uuidOf and isExitWell forward to the canonical rpc helpers: the
@@ -39,13 +38,6 @@ func (a *App) gridWritable(gridID string) bool {
 func (a *App) gridKnownReadOnly(gridID string) bool {
 	g, ok := a.c.Grid(gridID)
 	return ok && !g.Meta.Writable
-}
-
-// isNodeGridPane reports whether pane p sits at the node grid — the plugin
-// list landing page. Drives only the pane's identity border color; the node
-// grid otherwise renders and behaves as the ordinary (read-only) grid it is.
-func (a *App) isNodeGridPane(p *pane.Pane) bool {
-	return a.nodeGrid != "" && p.Anchor == a.nodeGrid && len(p.Path) == 0 && p.TextFocus == ""
 }
 
 // pluginByUUID returns the plugin with the given (possibly chain-
@@ -90,8 +82,6 @@ func (a *App) pluginGlyph(gridID string) string {
 			return rpc.GlyphFolder
 		case rpc.GridSourceProc:
 			return rpc.GlyphProcess
-		case rpc.GridSourceNode:
-			return "" // a node grid (a mount's landing page): generic globe
 		default:
 			if g.Meta.NodeNS != "" {
 				if pl, ok := a.pluginByUUID(uuidOf(g.Meta.NodeNS)); ok {

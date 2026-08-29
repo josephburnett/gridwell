@@ -19,7 +19,7 @@ import (
 // handler seam: a gRPC client against WebHandler gets no Gridwell
 // service, while the same call against FederationHandler answers.
 func TestWebDoorServesNoGRPC(t *testing.T) {
-	srv := mustNew(t, plugin.NewRegistry(), Config{NodeID: "node1"})
+	srv := mustNew(t, plugin.NewRegistry(), Config{})
 	serve := func(h http.Handler) string {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

@@ -322,7 +322,7 @@ func TestDecideDropFocusOnly(t *testing.T) {
 }
 
 // TestDecideDropTargetReadOnly: a drop (move OR clone) onto a read-only grid
-// (the node grid, fs/proc) is rejected up front — no doomed RPC, no
+// (fs/proc) is rejected up front — no doomed RPC, no
 // misleading "changed elsewhere" reconcile notice.
 func TestDecideDropTargetReadOnly(t *testing.T) {
 	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetReadOnly: true}

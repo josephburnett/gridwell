@@ -534,14 +534,11 @@ message PluginInfo {
   repeated MenuEntry menu_entries = 13;
 }
 message ListPluginsResponse {
+  // 2, 3, 6-8 were the node grid's identity and viewport (deleted
+  // 2026-08-29, docs/one-node.md): a node has no grid of its own; home
+  // is where a client lands and where a mount lands.
+  reserved 2, 3, 6, 7, 8;
   repeated PluginInfo plugins = 1;
-  // node_uuid is this node's own durable identity (server.yaml node_id) and
-  // node_root_grid_id its plugin-list grid — the launcher the client anchors
-  // panes at on boot, qualified "<node_uuid>/0". Every gridwell node exposes
-  // the same shape, so a remote node reached through an ssh mount presents
-  // its launcher exactly like the local one.
-  string node_uuid = 2;
-  string node_root_grid_id = 3;
   // shells_disabled: this node refuses shell tiles outright (server.yaml
   // disable_shells) — the client removes the shell primitive from the +
   // palette, and the server refuses CreateTile(kind=shell) and OpenShell no
@@ -559,13 +556,6 @@ message ListPluginsResponse {
   // fact of the LOCAL origin: content URLs are always built against the
   // serving node; federation happens behind the door, over the RPC.
   string content_token = 5;
-  // node_root_view_cx/cy/zoom: the NODE GRID's own persisted viewport
-  // (2026-08-13, framing audit) — the read side of the node grid's
-  // SetRootView, so a client anchored at the node grid can boot back to
-  // the framing it left. Zero zoom = never set.
-  double node_root_view_cx = 6;
-  double node_root_view_cy = 7;
-  double node_root_view_zoom = 8;
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.

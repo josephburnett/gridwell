@@ -12,7 +12,7 @@ content plugins. Stop preserving everything — it's a single-user app.*
 
 ## 1. What is actually wrong (the inventory, compressed)
 
-Three audits mapped the tree (config/CLI, node/server, client/wire).
+Three audits mapped the tree (config and CLI, node and server, client and wire).
 The half-fold shows up as six leftovers:
 
 | # | Leftover | Where |
@@ -22,7 +22,7 @@ The half-fold shows up as six leftovers:
 | L3 | **The node grid.** An in-process fake plugin serving one read-only grid with its own state file (`node-view.json`) — a second copy of "a grid's root view". The client lands there only as a fallback; mounts land on the remote's home root anyway. | `nodegrid.go`, `client/wasm/plugin_id.go:47` |
 | L4 | **A transport id between the node and its connections.** Every remote reference is `<remote-id>/<conn>/<plugin>/<tile>`; the remote-id segment exists only because remote was once a stranger. Connections then get an "instance grid" and synthesized `Kind:"instance"` rows — the dead #251 picker's shape. | `remote.go:115-146`, `connect_handler.go:242-290` |
 | L5 | **Arrangement stored three ways.** `store.tiles` (home), `layout.layout` (plugin memory), `remote.ssh_connections` (connection wells) each carry `x y w h view_x view_y view_zoom …` with their own placement code; the mount cache mirrors a fourth. This is the "layout code repeated" the v2 job was supposed to end. | `schema.go:121`, `layout.go:78`, `remote/db.go:63` |
-| L6 | **Migration scaffolding still standing.** `kindmigrate` + `RenamedKinds`, flat `bind:`/`password:`/`provider:` folds, `parity` + `convert-scope.txt`, `gridwell-all` (kept alive only by the parity gate), the dead `session` table, `system.plugin_uuid` (third id copy), `ConfigurePluginId`/`CreatePluginWell`, `instance_grid_id`, `node_uuid` on the wire (no reader). Plus a live bug: the desktop's first-run `init --kind local` uses a retired kind and fails (`sidecar.ts:191`). | `kinds.go`, `config.go:246-264`, `cli/parity.go` |
+| L6 | **Migration scaffolding still standing.** `kindmigrate` + `RenamedKinds`, flat `bind:`/`password:`/plugin-flag folds, `parity` + `convert-scope.txt`, `gridwell-all` (kept alive only by the parity gate), the dead `session` table, `system.plugin_uuid` (third id copy), `ConfigurePluginId`/`CreatePluginWell`, `instance_grid_id`, `node_uuid` on the wire (no reader). Plus a live bug: the desktop's first-run `init --kind local` uses a retired kind and fails (`sidecar.ts:191`). | `kinds.go`, `config.go:246-264`, `cli/parity.go` |
 
 ## 2. The target
 
@@ -65,7 +65,7 @@ plugins:                                  # content plugins ONLY
       config: { root: /home/joe }
 ```
 
-Gone: `node_id`, `kind: home/remote` entries, `name: ""`, `provider:`,
+Gone: `node_id`, `kind: home/remote` entries, `name: ""`, the retired plugin flag,
 flat `bind:`/`password:`, `kindmigrate`. **Serve mints** any missing
 `id` (node or plugin) and writes it back — the only config write. So
 `gridwell init` goes away: create the file, run serve. The desktop

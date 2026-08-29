@@ -57,9 +57,7 @@ func (a *App) installTestHook() {
 		}),
 		"workspace":     js.FuncOf(a.thWorkspace),
 		"bar":           js.FuncOf(a.thBar),
-		"launcher":      js.FuncOf(a.thLauncher),
 		"plugins":       js.FuncOf(a.thPlugins),
-		"nodeGrid":      js.FuncOf(func(js.Value, []js.Value) any { return a.nodeGrid }),
 		"palette":       js.FuncOf(a.thPalette),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
@@ -544,50 +542,9 @@ func (a *App) paneTileIDs(p *pane.Pane) []any {
 	return ids
 }
 
-// thLauncher returns the plugin tiles of the NODE GRID (the landing page)
-// for the focused pane. Each entry carries the plugin identity plus the
-// screen-space center of its tile, to click to enter it. Empty when the
-// focused pane isn't at the node grid, or the node grid hasn't loaded yet —
-// the driver polls until non-empty, which now also covers grid-fetch latency.
-func (a *App) thLauncher(js.Value, []js.Value) any {
-	p, r, ok := a.focusedPaneRect()
-	if !ok || !a.isNodeGridPane(p) {
-		return []any{}
-	}
-	g, ok := a.c.Grid(a.nodeGrid)
-	if !ok {
-		return []any{}
-	}
-	ps := paneToDragdrop(p, r)
-	out := make([]any, 0, len(a.plugins))
-	for i, pl := range a.plugins {
-		t, ok := g.Tiles[a.nodeGrid[:strings.IndexByte(a.nodeGrid, '/')]+"/"+pl.UUID]
-		if !ok {
-			continue
-		}
-		// Center of the plugin's tile, in screen pixels.
-		sx, sy := ps.CellToScreen(float64(t.X)+float64(t.W)/2, float64(t.Y)+float64(t.H)/2)
-		status := pluginStatusName(pl)
-		out = append(out, map[string]any{
-			"index":         i,
-			"kind":          pl.Kind,
-			"label":         pl.Label,
-			"uuid":          pl.UUID,
-			"rootGridID":    pl.RootGridID,
-			"scratchGridID": pl.ScratchGridID,
-			"infoError":     pl.InfoError,
-			"status":        status,
-			"x":             sx,
-			"y":             sy,
-		})
-	}
-	return out
-}
-
 // thPlugins returns the configured plugin list (identity, root/scratch grids,
 // pluginhealth classification) with no screen positions — available wherever
-// the pane sits, unlike thLauncher which reads the node grid's tiles. Empty
-// until ListPlugins lands; the driver polls.
+// the pane sits. Empty until ListPlugins lands; the driver polls.
 func (a *App) thPlugins(js.Value, []js.Value) any {
 	out := make([]any, 0, len(a.plugins))
 	for i, pl := range a.plugins {
@@ -609,7 +566,7 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 }
 
 // pluginStatusName is the stable string for a plugin's pluginhealth class,
-// shared by thLauncher and thPlugins/thPalette.
+// shared by thPlugins/thPalette.
 func pluginStatusName(pl rpc.PluginInfo) string {
 	switch pluginhealth.Classify(pl) {
 	case pluginhealth.Broken:

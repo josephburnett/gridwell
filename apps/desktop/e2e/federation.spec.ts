@@ -1,10 +1,9 @@
 import { test, expect } from './fixtures';
-import { tileAt, Tile } from './oracle';
+import { tileAt } from './oracle';
 
 // The federated space, end to end through the real stack:
 //   - boot lands on the FIRST plugin in server.yaml (owner decision
-//     2026-07-19); the node grid remains a real, read-only, server-owned
-//     grid of dashed links — the federation surface an ssh mount lands on;
+//     2026-07-19);
 //   - the 2026-07-19 gestures: LEFT-dragging a tile across a plugin boundary
 //     creates a LINK in the destination (an exit well for a well, a leaf
 //     link for text) and the source stays put — there is no cross-plugin
@@ -16,26 +15,13 @@ import { tileAt, Tile } from './oracle';
 
 test.use({ extraPlugins: [{ kind: 'home', name: 'second' }] });
 
-test('boot lands on the first plugin; the node grid stays a real grid of links', async ({ gw, window }) => {
+test('boot lands on the first plugin', async ({ gw }) => {
   const pls = await gw.plugins();
   expect(pls.map((p) => p.label), 'both plugins configured, server.yaml order').toEqual(['e2e', 'second']);
 
-  // Boot home: the FIRST plugin's root grid, not the node grid.
+  // Boot home: the FIRST plugin's root grid.
   const f = await gw.focused();
   expect(f.gridID, 'pane anchored at the first plugin root').toBe(pls[0].rootGridID);
-
-  // The node grid still exists as the federation surface: a REAL grid
-  // ("<node>/0") the oracle can read like any grid, one dashed link per
-  // plugin.
-  const nodeGrid = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
-  expect(nodeGrid, 'node identity learned').toMatch(/\/0$/);
-  const g = await gw.getGrid(nodeGrid);
-  const labels = (g.tiles ?? []).map((t: Tile) => t.altText).sort();
-  expect(labels, 'tiles labeled by config name').toEqual(['e2e', 'second']);
-  for (const t of g.tiles ?? []) {
-    expect(t.reference, `plugin tile ${t.altText} is a link (dashed)`).toBe(true);
-    expect(t.kind).toBe('well');
-  }
 });
 
 // twoPanesTwoPlugins splits the boot pane and enters plugin "e2e" in pane A,

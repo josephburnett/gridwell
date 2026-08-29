@@ -354,7 +354,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
 	remoteReg.Register("rp1", "home", remoteClient, nil)
-	remoteSrv := mustNew(t, remoteReg, Config{NodeID: "rnode"})
+	remoteSrv := mustNew(t, remoteReg, Config{})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
 	remoteHTTP.Config.Protocols = NodeProtocols()
@@ -394,7 +394,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	localReg := plugin.NewRegistry()
 	localReg.Register("sshm", "remote", mountClient, nil)
 	localReg.SetTransit("sshm", true) // the declared transit (loader reads it from Info in production)
-	localSrv := mustNew(t, localReg, Config{NodeID: "lnode"})
+	localSrv := mustNew(t, localReg, Config{})
 	localHTTP := serveWeb(t, localSrv)
 	localCl := rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
 

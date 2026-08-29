@@ -6,7 +6,6 @@ func testColors() BorderColors {
 	return BorderColors{
 		Focused:        "FOCUS",
 		FocusedFaded:   "FOCUS_FADED",
-		Root:           "ROOT",
 		Text:           "TEXT",
 		TextFaded:      "TEXT_FADED",
 		URL:            "URL",
@@ -19,13 +18,6 @@ func testColors() BorderColors {
 		ExitFaded:      "EXIT_FADED",
 		Ephemeral:      "EPHEMERAL",
 		EphemeralFaded: "EPHEMERAL_FADED",
-	}
-}
-
-func TestBorderColorLauncher(t *testing.T) {
-	// The gridless launcher home is the only place the brown Root shows.
-	if got := BorderColor(BorderInput{IsLauncher: true}, testColors()); got != "ROOT" {
-		t.Errorf("launcher: got %q, want ROOT", got)
 	}
 }
 
@@ -233,7 +225,6 @@ func TestFamilyOf(t *testing.T) {
 		want Family
 	}{
 		{"grid", BorderInput{}, FamilyGrid},
-		{"node grid", BorderInput{IsLauncher: true}, FamilyRoot},
 		{"text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text"}, FamilyText},
 		{"source text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InSourceGrid: true}, FamilyExit},
 		{"url frozen", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url"}, FamilyURL},

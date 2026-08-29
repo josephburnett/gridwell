@@ -1075,10 +1075,8 @@ func (a *App) ascendPane(p *pane.Pane) {
 }
 
 // Portal descents (anchor swaps through a link tile) live in startDescent:
-// a plugin tile on the node grid, a mounted well, and a cross-plugin clone
-// all descend through the SAME path a normal well does, with a frame pushed
-// so ascent returns exactly here. There is no separate enterPlugin anymore —
-// the launcher is a real grid.
+// a mounted well and a cross-plugin clone descend through the SAME path a
+// normal well does, with a frame pushed so ascent returns exactly here.
 
 // ascendPortal returns the pane to wherever it jumped into the current plugin
 // from (another plugin, or the launcher), reopening the + menu if it was open
@@ -1133,16 +1131,6 @@ func (a *App) ascendPortal(p *pane.Pane) {
 // what was just saved.
 func (a *App) persistPluginRootView(p *pane.Pane) {
 	if len(p.Path) > 0 || p.TextFocus != "" {
-		return
-	}
-	// The NODE GRID's own viewport (2026-08-13) writes through the same
-	// core: its plugin implements SetRootView like any plugin root, and
-	// the handshake copy reconciles like a PluginInfo's.
-	if p.Anchor != "" && p.Anchor == a.nodeGrid {
-		a.persistRootViewCore(p, a.nodeRootViewCx, a.nodeRootViewCy, a.nodeRootViewZoom,
-			func(vx, vy int64, zoom float64) {
-				a.nodeRootViewCx, a.nodeRootViewCy, a.nodeRootViewZoom = float64(vx), float64(vy), zoom
-			})
 		return
 	}
 	pl, ok := a.pluginByUUID(uuidOf(p.Anchor))
@@ -1405,12 +1393,9 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 	}
 	if len(path) == 0 {
 		// A root grid: the read side of persistPluginRootView — the same
-		// 1×1 synthetic well, inverted. The node grid's own view rides the
-		// handshake (2026-08-13); a plugin root's rides its PluginInfo.
+		// 1×1 synthetic well, inverted; a root's view rides its PluginInfo.
 		var vcx, vcy, vzoom float64
-		if anchor != "" && anchor == a.nodeGrid {
-			vcx, vcy, vzoom = a.nodeRootViewCx, a.nodeRootViewCy, a.nodeRootViewZoom
-		} else if pl, found := a.pluginByUUID(uuidOf(anchor)); found && pl.RootGridID == anchor {
+		if pl, found := a.pluginByUUID(uuidOf(anchor)); found && pl.RootGridID == anchor {
 			vcx, vcy, vzoom = pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom
 		}
 		if vzoom <= 0 {

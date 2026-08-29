@@ -74,7 +74,7 @@ func (a *App) barThemeFor(p *pane.Pane) (band, button string) {
 		return colorURLFill, colorURLLiveLine
 	case pane.FamilyShell:
 		return colorShellFill, colorShellBorder
-	case pane.FamilyRoot, pane.FamilyExit:
+	case pane.FamilyExit:
 		return "#241e12", colorPluginBorder
 	case pane.FamilyEphemeral:
 		return "#1d1f24", colorEphemeralBorder
@@ -278,9 +278,8 @@ func (a *App) drawBarTitleFor(p *pane.Pane, top float64) {
 // (issue #214, the corner circle's new home): URL descent shows back
 // (live) / refresh (frozen) / the slashed no-live button; a frozen shell
 // shows refresh; a grid shows the + menu button (and the trashcan during a
-// tile drag). The node grid and a markdown descent draw nothing — the
-// first is read-only (and must offer no drag-delete target), the second's
-// slot is occupied by the DOM text-mode toggle at the same center.
+// tile drag). A markdown descent draws nothing — its slot is occupied by
+// the DOM text-mode toggle at the same center.
 func (a *App) drawBarSlotFor(p *pane.Pane) {
 	if p == nil {
 		return
@@ -309,9 +308,7 @@ func (a *App) drawBarSlotFor(p *pane.Pane) {
 		}
 		return
 	}
-	if !a.isNodeGridPane(p) || a.tileDragInFlight() {
-		a.drawPlusButton(p)
-	}
+	a.drawPlusButton(p)
 }
 
 // barSlotClick dispatches a click on the bar's circle slot, always acting
@@ -358,7 +355,7 @@ func (a *App) barSlotClick(button int) {
 	case p.TextFocus != "":
 		// A markdown descent's slot is the DOM toggle button, which handles
 		// its own clicks; a canvas click reaching here just missed it.
-	case !a.isNodeGridPane(p):
+	default:
 		a.menu.Toggle(p.ID)
 		a.draw()
 	}

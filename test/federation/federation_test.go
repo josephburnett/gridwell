@@ -237,8 +237,8 @@ func TestFederationSpawn(t *testing.T) {
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 
 	// 1. The connection presents as its own menu row and gains its root
-	//    — the remote's node grid through the declared segment: the
-	//    chained <ssh>/<conn>/<rnode>/0 mount root the rest drives.
+	//    — the remote's HOME through the declared segment: the chained
+	//    <ssh>/<conn>/<rplugin>/<grid> mount root the rest drives.
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
 	var homeRoot string
 	for _, p := range lp["plugins"].([]any) {
@@ -482,10 +482,10 @@ func TestConnectionsModeSpawn(t *testing.T) {
 
 	// 1. The connection is a menu row of its own; the transport's row is
 	//    hidden behind it; the learned root is the chained
-	//    <ssh>/<conn>/<rnode>/0 mount root.
+	//    <ssh>/<conn>/<rplugin>/<grid> mount root (the remote's home).
 	child := awaitConnRoot(t, localOrigin, "cmconn1")
 	if strings.Count(child, "/") != 3 {
-		t.Fatalf("root = %q, want the four-segment <ssh>/<conn>/<rnode>/0", child)
+		t.Fatalf("root = %q, want the four-segment <ssh>/<conn>/<rplugin>/<grid>", child)
 	}
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
 	for _, p := range lp["plugins"].([]any) {

@@ -97,7 +97,6 @@ type ContentRecord struct {
 
 // Snapshot is one node's crawled state, keyed by qualified ids.
 type Snapshot struct {
-	NodeUUID string                    `json:"node_uuid"`
 	Plugins  map[string]map[string]any `json:"plugins"` // by uuid
 	Grids    map[string]GridRecord     `json:"grids"`
 	Tiles    map[string]map[string]any `json:"tiles"`
@@ -194,14 +193,12 @@ func crawl(ctx context.Context, cls []*rpc.Client, o Options) ([]*Snapshot, erro
 		if err != nil {
 			return nil, fmt.Errorf("parity: ListPlugins side %d: %w", i, err)
 		}
-		snaps[i].NodeUUID = pl.NodeUUID
 		for _, p := range pl.Plugins {
 			snaps[i].Plugins[p.UUID] = normalize(p)
 			enqueue(p.RootGridID)
 			enqueue(p.InstanceGridID)
 			enqueue(p.ScratchGridID)
 		}
-		enqueue(pl.NodeRootGridID)
 	}
 
 	visited := 0

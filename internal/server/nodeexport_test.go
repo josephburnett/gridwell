@@ -22,14 +22,31 @@ import (
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
-// nodeServer stands up a full Server (node id "node1", one in-process localdb
+// homeRoot is where a mounter lands: the node's home root, from the same
+// handshake a client boots on.
+func homeRoot(t *testing.T, c gridwellv1.GridwellClient) string {
+	t.Helper()
+	lp, err := c.ListPlugins(context.Background(), &gridwellv1.ListPluginsRequest{})
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	for _, p := range lp.Plugins {
+		if p.RootGridId != "" {
+			return p.RootGridId
+		}
+	}
+	t.Fatal("no rooted entry in the handshake")
+	return ""
+}
+
+// nodeServer stands up a full Server (one in-process localdb
 // registered as uuid "ur1", label "personal") behind its FederationHandler on a real
 // TCP listener, and returns a raw gRPC client dialed at it — the exact wire a
 // remote ssh-plugin sees after its tunnel. Every request routes by the
 // QUALIFIED ids it carries; there is no scoping header and no name-based
 // selection.
 func nodeServer(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient) {
-	return nodeServerCfg(t, server.Config{NodeID: "node1"})
+	return nodeServerCfg(t, server.Config{})
 }
 
 // nodeServerCfg is nodeServer with the server config under test control
@@ -72,15 +89,15 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 }
 
 func TestNodeExportInfoDescribesTheNode(t *testing.T) {
-	// A mounter's Info handshake sees the NODE: its node grid as the root
-	// (the plugin-list landing page), watchable (the fan-in), read-only.
+	// A mounter's Info handshake sees the NODE: its HOME as the root (where
+	// a direct client lands too), watchable (the fan-in), read-only.
 	c, _ := nodeServer(t)
 	info, err := c.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("Info over gRPC: %v", err)
 	}
-	if info.RootGridId != "node1/0" {
-		t.Errorf("RootGridId = %q, want node1/0 (the node grid, qualified)", info.RootGridId)
+	if want := homeRoot(t, c); info.RootGridId != want {
+		t.Errorf("RootGridId = %q, want the home root %q", info.RootGridId, want)
 	}
 	if !info.Watch || info.Writable {
 		t.Errorf("capabilities = watch:%v writable:%v, want watch:true writable:false", info.Watch, info.Writable)
@@ -94,15 +111,10 @@ func TestNodeExportRoutesByQualifiedID(t *testing.T) {
 	c, direct := nodeServer(t)
 	ctx := context.Background()
 
-	// The node grid lists the plugin as a link tile.
-	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
-	if err != nil {
-		t.Fatalf("GetGrid(node grid): %v", err)
+	pluginRoot := homeRoot(t, c)
+	if pluginRoot[:4] != "ur1/" {
+		t.Fatalf("home root = %q, want the plugin's qualified root ur1/<n>", pluginRoot)
 	}
-	if len(ng.Tiles) != 1 || ng.Tiles[0].Id != "node1/ur1" || !ng.Tiles[0].Reference {
-		t.Fatalf("node grid tiles = %+v, want one link tile node1/ur1", ng.Tiles)
-	}
-	pluginRoot := ng.Tiles[0].ChildGridId
 
 	// Create through the export, verify via the direct plugin client: the
 	// export writes to the same plugin, ids peeled one segment per hop.
@@ -166,12 +178,8 @@ func TestNodeExportSubscribeStreamsQualifiedEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
-	if err != nil {
-		t.Fatalf("GetGrid: %v", err)
-	}
 	if _, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
-		GridId: ng.Tiles[0].ChildGridId,
+		GridId: homeRoot(t, c),
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1},
 	}); err != nil {
 		t.Fatalf("CreateTile: %v", err)
@@ -190,12 +198,8 @@ func TestNodeExportOpenShellBidi(t *testing.T) {
 	// it must survive the export + h2c hop.
 	c, _ := nodeServer(t)
 	ctx := context.Background()
-	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
-	if err != nil {
-		t.Fatalf("GetGrid: %v", err)
-	}
 	shellTile, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
-		GridId: ng.Tiles[0].ChildGridId,
+		GridId: homeRoot(t, c),
 		Tile:   &gridwellv1.Tile{Kind: "shell", X: 3, Y: 3, W: 1, H: 1},
 	})
 	if err != nil {
@@ -229,11 +233,7 @@ func TestNodeExportContentStreams(t *testing.T) {
 	c, _ := nodeServer(t)
 	ctx := context.Background()
 
-	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
-	if err != nil {
-		t.Fatalf("GetGrid(node grid): %v", err)
-	}
-	pluginRoot := ng.Tiles[0].ChildGridId
+	pluginRoot := homeRoot(t, c)
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: pluginRoot,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
@@ -305,11 +305,7 @@ func TestNodeExportSearches(t *testing.T) {
 	c, _ := nodeServer(t)
 	ctx := context.Background()
 
-	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
-	if err != nil {
-		t.Fatalf("GetGrid(node grid): %v", err)
-	}
-	pluginRoot := ng.Tiles[0].ChildGridId
+	pluginRoot := homeRoot(t, c)
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: pluginRoot,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 2, H: 2},

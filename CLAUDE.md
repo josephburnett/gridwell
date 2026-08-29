@@ -121,8 +121,9 @@ Re-litigating them silently is how churn happens.
   left-drag never duplicates content; a right-drag always does; there is no
   cross-plugin move. Dashed always means link; deleting a link unlinks.
 - **Home is the first configured plugin; plugins live in the + menu's top
-  row (2026-07-19).** The node grid (`<node_id>/0`) is the federation
-  surface, not the landing page.
+  row (2026-07-19).** A node has no grid of its own (the node grid was
+  deleted 2026-08-29, `docs/one-node.md`): a mount lands on the remote's
+  home, exactly where its own client lands.
 - **Pane closing is progressive crush (#217).** The split side follows the
   drag; closing is drag-through with red warning accumulation. The old
   corridor-edge one-click close stays dead.

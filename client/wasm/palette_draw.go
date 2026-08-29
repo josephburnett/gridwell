@@ -228,12 +228,12 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 // through descent errors instead.
 func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
 	// A LINK with no target is not enterable wherever it lives — a broken or
-	// rootless plugin tile on ANY node grid (including a remote one, whose
-	// health the local plugin list cannot know). Dim it; the descent guard
-	// explains on click.
+	// rootless plugin link (including one to a remote plugin, whose health
+	// the local plugin list cannot know). Dim it; the descent guard explains
+	// on click.
 	if n.Reference && rpc.IsWellKind(n.Kind) && n.ChildGridID == "" {
 		color := colorLauncherRootlessTint
-		// The LOCAL node grid knows more: broken (Info failed) gets the
+		// The LOCAL plugin list knows more: broken (Info failed) gets the
 		// alarm tint, rootless the softer one.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.ID)); ok {
 			if pluginhealth.Classify(pl) == pluginhealth.Broken {

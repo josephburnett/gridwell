@@ -24,7 +24,6 @@ package pane
 //	  not to start persistent work there (issue #85).
 type BorderColors struct {
 	Focused, FocusedFaded     string
-	Root                      string
 	Text, TextFaded           string
 	URL, URLFaded             string
 	URLLive, URLLiveFaded     string
@@ -63,9 +62,6 @@ type BorderInput struct {
 	// read-only host text tile so it echoes the plugin well that led here.
 	// (The grid view itself is still blue — every grid is a grid.)
 	InSourceGrid bool
-	// IsLauncher is true when the pane sits at the node grid (the landing
-	// page). The only place the brown Root identity shows.
-	IsLauncher bool
 	// Ephemeral is true when the descended tile lives in the plugin's
 	// scratch grid — it will be DELETED on ascent. Overrides the kind color
 	// with gray (only meaningful when HasTextFocus and TileKnown).
@@ -83,9 +79,6 @@ const (
 	// FamilyGrid is any grid the user is navigating, at any depth and in
 	// any plugin (every grid is blue).
 	FamilyGrid Family = iota
-	// FamilyRoot is the node grid (the landing page): the brown home
-	// identity.
-	FamilyRoot
 	// FamilyText is a descent into a markdown text tile.
 	FamilyText
 	// FamilyURL is a descent into a URL tile, frozen preview.
@@ -127,16 +120,12 @@ func FamilyOf(s BorderInput) Family {
 		}
 		return FamilyGrid
 	}
-	if s.IsLauncher {
-		return FamilyRoot
-	}
 	return FamilyGrid
 }
 
 // BorderColor returns the CSS color string for the pane's outline: the
 // pane's Family, in the saturated variant when the pane has focus and the
-// faded one otherwise (only Root has no faded variant — it is the one
-// landing page and never shares the screen ambiguously).
+// faded one otherwise.
 func BorderColor(s BorderInput, c BorderColors) string {
 	switch FamilyOf(s) {
 	case FamilyEphemeral:
@@ -151,8 +140,6 @@ func BorderColor(s BorderInput, c BorderColors) string {
 		return focused(s, c.Exit, c.ExitFaded)
 	case FamilyText:
 		return focused(s, c.Text, c.TextFaded)
-	case FamilyRoot:
-		return c.Root
 	}
 	return focused(s, c.Focused, c.FocusedFaded)
 }

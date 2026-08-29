@@ -53,7 +53,7 @@ test('re-descending a reframed well returns to exactly what you left', async ({ 
   expect(back.cy, 'center y round-tripped').toBeCloseTo(left.cy, 1);
 });
 
-test('plugin root-grid viewport persists across + menu ascent and re-entry', async ({ gw, window }) => {
+test('plugin root-grid viewport persists across + menu ascent and re-entry', async ({ gw }) => {
   // Invariant: enter a plugin from the + menu, reframe its root grid, ascend
   // (portal back home), re-enter — viewport must match what was left
   // (issue #32, rehomed onto the menu portal 2026-07-19).
@@ -74,16 +74,14 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
   const home = await gw.focused();
   expect(home.gridID, 'ascended back home').not.toBe(pluginGrid);
 
-  // The write is SERVER truth, not just a client cache: the node grid serves
-  // each plugin's root view as its link tile's framing, so the reframed zoom
-  // must show up there. Poll — the SetRootView post is async.
-  const nodeGrid = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  // The write is SERVER truth, not just a client cache: the handshake
+  // serves each plugin's persisted root view, so the reframed zoom must
+  // show up there. Poll — the SetRootView post is async.
   await expect
     .poll(
       async () => {
-        const ng = await gw.getGrid(nodeGrid);
-        const t = (ng.tiles ?? []).find((x) => x.altText === 'second');
-        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+        const pl = (await gw.plugins()).find((x) => x.label === 'second');
+        return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 5_000 },
     )
@@ -134,7 +132,7 @@ test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
     .toBeGreaterThan(0);
 });
 
-test('a plugin root reframe persists without ascending (issue #190)', async ({ gw, window }) => {
+test('a plugin root reframe persists without ascending (issue #190)', async ({ gw }) => {
   // Same invariant one seam over: pan/zoom a plugin's ROOT grid and the
   // root view must reach the server without a + menu ascent (SetRootView
   // used to fire only from the portal-ascent path).
@@ -146,15 +144,13 @@ test('a plugin root reframe persists without ascending (issue #190)', async ({ g
   const left = await gw.focused();
   expect(left.zoom, 'reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
 
-  // The node grid serves each plugin's root view as its link tile's framing
-  // — poll it WITHOUT ascending.
-  const nodeGrid = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  // The handshake serves each plugin's persisted root view — poll it
+  // WITHOUT ascending.
   await expect
     .poll(
       async () => {
-        const ng = await gw.getGrid(nodeGrid);
-        const t = (ng.tiles ?? []).find((x) => x.altText === 'second');
-        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+        const pl = (await gw.plugins()).find((x) => x.label === 'second');
+        return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 5_000 },
     )
@@ -200,14 +196,12 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
   expect(left.zoom, 'reframe changed the zoom').not.toBeCloseTo(1.0, 2);
   await gw.waitIdle();
   // Wait on SERVER truth, not a sleep: the settle persister's SetRootView
-  // shows up as the home plugin's node-grid link framing.
-  const nodeGrid1 = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  // shows up as the home plugin's persisted root view.
   await expect
     .poll(
       async () => {
-        const ng = await gw.getGrid(nodeGrid1);
-        const t = (ng.tiles ?? []).find((x) => x.altText === 'e2e');
-        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+        const pl = (await gw.plugins()).find((x) => x.label === 'e2e');
+        return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 10_000 },
     )
@@ -261,14 +255,12 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
   // Server truth before reloading: the root view landed (the descent
-  // flush posts it; the node grid mirrors it).
-  const nodeGrid2 = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  // flush posts it; the handshake mirrors it).
   await expect
     .poll(
       async () => {
-        const ng = await gw.getGrid(nodeGrid2);
-        const t = (ng.tiles ?? []).find((x) => x.altText === 'e2e');
-        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+        const pl = (await gw.plugins()).find((x) => x.label === 'e2e');
+        return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 10_000 },
     )

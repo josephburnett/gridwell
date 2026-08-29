@@ -83,7 +83,7 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	registerPluginPlugin(t, reg, procPluginUUID, "proc", procplugin.New(t.TempDir(), 1, nil))
 	reg.SetLabel(procPluginUUID, "processes")
 
-	srv := mustNew(t, reg, Config{NodeID: "tnode"})
+	srv := mustNew(t, reg, Config{})
 	hs := serveWeb(t, srv)
 	cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	return cl, root, fsRoot
@@ -167,25 +167,40 @@ func TestMountFsPlugin(t *testing.T) {
 	}
 }
 
-// mountByClone mounts a plugin into a grid the way the UI does: right-drag =
-// CloneTile of the plugin's NODE-GRID link tile (whose local tile id is the
-// plugin uuid). The Mount RPC this replaced had no callers.
+// mountByClone mounts a plugin into a grid the way the UI does: drag the
+// plugin's menu row = CreateWell with the plugin's qualified root as the
+// child (an exit-well LINK), labeled with the row's label
+// (client/wasm createPluginLinkAtCell).
 func mountByClone(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, y int64) *rpc.Tile {
 	t.Helper()
-	tile, err := cl.CloneTile(context.Background(), &rpc.CloneTileRequest{
-		TileID: "tnode/" + pluginUUID, Version: 0,
-		DestGridID: destGrid, X: x, Y: y,
+	ctx := context.Background()
+	lp, err := cl.ListPlugins(ctx)
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	var row rpc.PluginInfo
+	for _, p := range lp.Plugins {
+		if p.UUID == pluginUUID {
+			row = p
+		}
+	}
+	if row.RootGridID == "" {
+		t.Fatalf("mount %s: no rooted menu row in %+v", pluginUUID, lp.Plugins)
+	}
+	tile, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: destGrid, X: x, Y: y, W: 1, H: 1,
+		ChildGridID: row.RootGridID, Label: row.Label,
+		ViewX: int64(row.RootViewCx), ViewY: int64(row.RootViewCy), ViewZoom: row.RootViewZoom,
 	})
 	if err != nil {
-		t.Fatalf("mount %s by clone: %v", pluginUUID, err)
+		t.Fatalf("mount %s by link: %v", pluginUUID, err)
 	}
 	return tile
 }
 
-// TestMenuAndMountLabelAgree: the label the launcher shows for a plugin
-// (ListPlugins / the node-grid tile) and the label carried onto a mounted
-// link (clone of that tile) are the same server.yaml display name — never a
-// plugin-derived string. One owner: the node-grid tile's alt.
+// TestMenuAndMountLabelAgree: the label the menu shows for a plugin
+// (ListPlugins) and the label carried onto a mounted link are the same
+// server.yaml display name — never a plugin-derived string.
 func TestMenuAndMountLabelAgree(t *testing.T) {
 	cl, root, _ := newTestServerWithPlugins(t)
 	ctx := context.Background()

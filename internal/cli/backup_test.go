@@ -24,7 +24,7 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	if code := RunInit([]string{"--kind", "gitlab", "--name", "todos"}); code != 0 {
 		t.Fatalf("init gitlab exit = %d", code)
 	}
-	for _, f := range []string{config.PasswordFile(home), config.NodeViewFile(home)} {
+	for _, f := range []string{config.PasswordFile(home)} {
 		if err := os.WriteFile(f, []byte("x\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}

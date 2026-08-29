@@ -38,16 +38,6 @@ type Config struct {
 	// os.DirFS over a dev checkout when server.yaml/--static overrides.
 	// Nil disables static files (headless: some tests, pure RPC probing).
 	StaticFS fs.FS
-	// NodeID is this node's durable identity (server.yaml node_id). It
-	// qualifies the node grid — the plugin-list landing page every client
-	// anchors at and every remote mounter descends into. Empty disables the
-	// node grid (some unit tests exercise raw plugin routing only).
-	NodeID string
-	// NodeStatePath, when set, is the file the node grid persists its own
-	// viewport to (the landing page's pan/zoom), so it survives a server
-	// restart — the landing page stays as you left it. Empty = in-memory
-	// only (tests).
-	NodeStatePath string
 	// Password gates the browser surface (the mux) behind the login-page
 	// cookie — see auth.go. REQUIRED: New refuses an empty one. The web
 	// door is never open (owner decision 2026-08-26) — BuildConfig mints
@@ -63,22 +53,16 @@ type Config struct {
 	DisableShells bool
 }
 
-// Server is the wired-up HTTP server. It holds NO Gridwell state of its own —
-// no *store.Store anywhere. Every operation, data plane and infrastructure
-// alike (shell PTY tile metadata, the preview endpoint), is routed through the
-// plugin registry; home (the first configured plugin) is where a client
-// lands. Construct with New and mount WebHandler (the browser door) and
-// FederationHandler (the node door) on their own listeners (node.Start).
+// Server is the wired-up HTTP server: a router. Every operation is routed
+// through the registry by the first segment of its qualified id; home (the
+// first configured entry with a root) is where a client lands. Construct
+// with New and mount WebHandler (the browser door) and FederationHandler
+// (the node door) on their own listeners (node.Start).
 type Server struct {
 	cfg       Config
 	pluginReg *plugin.Registry
 
 	mux *http.ServeMux
-
-	// nodeClient serves the node grid (the plugin-list landing page) when
-	// cfg.NodeID is set; nodeClose tears down its in-process listener.
-	nodeClient pb.GridwellClient
-	nodeClose  func()
 
 	// infoCache memoizes each plugin's first successful Info handshake, keyed
 	// by plugin uuid. Identity, roots, and capabilities are stable for a
@@ -86,17 +70,14 @@ type Server struct {
 	// re-handshake every plugin (a consistently slow remote made every
 	// palette open pay pluginInfoTimeout). Failures are never cached — the
 	// next call retries. Invalidated when a plugin's declared facts change
-	// under one uuid (invalidateInfoCache: a SetRootView framing write, a
-	// launcher placement through the node grid).
+	// under one uuid (invalidateInfoCache: a SetRootView framing write).
 	infoMu    sync.Mutex
 	infoCache map[string]*pb.InfoResponse
 }
 
-// New constructs a Server that routes everything through reg. With a NodeID
-// configured, the server also serves the NODE GRID — the plugin-list landing
-// page — as an in-process plugin addressed like any plugin
-// ("<node_id>/0"); every operation is addressed by a qualified id. An
-// empty Password is refused: the browser door has no open mode.
+// New constructs a Server that routes everything through reg; every
+// operation is addressed by a qualified id. An empty Password is refused:
+// the browser door has no open mode.
 func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 	if cfg.Password == "" {
 		return nil, errors.New("server: a web password is required (the browser door is never open)")
@@ -107,39 +88,14 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 		mux:       http.NewServeMux(),
 		infoCache: map[string]*pb.InfoResponse{},
 	}
-	if cfg.NodeID != "" {
-		ng := &nodeGrid{reg: reg, info: srv.pluginInfo, invalidate: srv.invalidateInfoCache, statePath: cfg.NodeStatePath}
-		ng.loadView()
-		client, closer, err := plugin.ServeInProcess(ng)
-		if err != nil {
-			// In-process serving can only fail on loopback-listen exhaustion;
-			// a node without its landing page is not worth starting.
-			panic("gridwell: node grid: " + err.Error())
-		}
-		srv.nodeClient = client
-		srv.nodeClose = closer
-	}
 	srv.routes()
 	return srv, nil
 }
 
-// Close releases what New created: the node grid's in-process grpc
-// listener. The registry is the caller's to close (Node.Close does).
-func (s *Server) Close() {
-	if s.nodeClose != nil {
-		s.nodeClose()
-	}
-}
-
-// routeClient resolves a plugin uuid to its client: the node grid plugin
-// for the node's own uuid, else the registry. The ONE routing lookup — the
-// Connect handler, the shell WS bridge, the session endpoint, and the preview
-// endpoint all resolve through here so the node grid is addressable
-// everywhere a plugin is.
+// routeClient resolves a plugin uuid to its client. The ONE routing lookup
+// — the Connect handler, the shell relay, and the content door all resolve
+// through here.
 func (s *Server) routeClient(uuid string) (pb.GridwellClient, bool) {
-	if s.cfg.NodeID != "" && uuid == s.cfg.NodeID {
-		return s.nodeClient, true
-	}
 	return s.pluginReg.Get(uuid)
 }
 

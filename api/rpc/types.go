@@ -131,9 +131,9 @@ func PluginWellTile(pl PluginInfo) Tile {
 		// plugin's own root, never this (synthetic) tile's grid. Mark it so it
 		// renders dashed identically to a mounted plugin well.
 		Reference: true,
-		// The plugin's persisted root view IS this tile's framing — the same
-		// mapping the node grid serves — so previewing and descending through
-		// the synthetic tile land at the left-off view.
+		// The plugin's persisted root view IS this tile's framing, so
+		// previewing and descending through the synthetic tile land at the
+		// left-off view.
 		ViewX:    int64(pl.RootViewCx),
 		ViewY:    int64(pl.RootViewCy),
 		ViewZoom: pl.RootViewZoom,
@@ -141,18 +141,17 @@ func PluginWellTile(pl PluginInfo) Tile {
 }
 
 // HomeGrid picks the qualified grid id that "/" means: the root grid of the
-// FIRST configured plugin that has one (server.yaml order — the owner's
-// "shown first" pick, 2026-07-19, reversing the launcher-as-landing-page
-// decision), falling back past broken/rootless plugins, and finally to the
-// node grid so a node with no usable plugin still lands on its plugin list.
-// One derivation; every "empty anchor means home" reader goes through it.
-func HomeGrid(plugins []PluginInfo, nodeRoot string) string {
+// FIRST configured plugin that has one (server.yaml order), skipping
+// broken/rootless plugins; "" when none has a root. One derivation; every
+// "empty anchor means home" reader goes through it. (A node has no grid of
+// its own to fall back to — docs/one-node.md.)
+func HomeGrid(plugins []PluginInfo) string {
 	for _, pl := range plugins {
 		if pl.RootGridID != "" {
 			return pl.RootGridID
 		}
 	}
-	return nodeRoot
+	return ""
 }
 
 // IsContentDescentKind reports whether a tile kind is a content tile you
@@ -182,9 +181,6 @@ func IsWorkspaceKind(kind string) bool {
 const (
 	GridSourceFS   = "fs"
 	GridSourceProc = "proc"
-	// GridSourceNode marks a node grid (a plugin-list landing page —
-	// stamped by nodegrid.go; a mount's landing page arrives with it too).
-	GridSourceNode = "node"
 )
 
 // CreateEntryTileRequest mints a tile from a plugin MenuEntry (#258).

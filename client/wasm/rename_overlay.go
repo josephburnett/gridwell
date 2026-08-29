@@ -26,7 +26,7 @@ import (
 // user-editable (Enter or blur commits the versioned SetTile rename — a
 // USER-owned name the automatic captures never overwrite; Escape cancels,
 // and an unchanged value never writes);
-// read-only contexts (the node grid, a plugin root, an ephemeral visit, a
+// read-only contexts (a plugin root, an ephemeral visit, a
 // text tile's derived name) just show their label. LEFT-click on the title
 // toggles the tmux-style pane zoom (Tree.ToggleZoom).
 //
@@ -40,7 +40,7 @@ import (
 //     too); ephemeral tiles die on ascent, so naming one is a lie.
 //   - inside a well's grid → the CONTAINING well (the last path segment),
 //     resolved from the parent grid — renaming the room names its door.
-//   - a plugin root / the node grid → nothing (plugin names are config-owned).
+//   - a plugin root → nothing (plugin names are config-owned).
 func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 	if p == nil {
 		return rpc.Tile{}, false
@@ -77,9 +77,8 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 
 // bubbleLabel is what the bar title shows for the focused pane and whether
 // it is user-editable: the renameTarget's name when one exists; otherwise a
-// read-only context label ("home" on the node grid, the plugin's config
-// label at its root, "ephemeral" inside a dying visit, a text tile's derived
-// first-line name).
+// read-only context label (the plugin's config label at its root,
+// "ephemeral" inside a dying visit, a text tile's derived first-line name).
 // bubbleDecorate applies pane-state markers to the title text — currently
 // the zoom indicator (issue #124). ONE owner: everything that shows the
 // name renders bubbleLabel's output.
@@ -107,9 +106,6 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 			}
 		}
 		return "unnamed", false, true
-	}
-	if a.isNodeGridPane(p) {
-		return "home", false, true
 	}
 	// A portal level: the DOOR's identity (#263) — the entry's or plugin's
 	// declared label, read-only. (A renamable door was already answered by

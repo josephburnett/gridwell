@@ -27,7 +27,7 @@ import (
 // This is the ssh plugin's REAL transport seam, in-process: a genuine
 // x/crypto/ssh server (public-key auth, host-key verification against a
 // known_hosts file, direct-tcpip channel forwarding) in front of a genuine
-// `gridwell serve` node handler (h2c + id-routed node export + node grid +
+// `gridwell serve` node handler (h2c + id-routed node export +
 // TWO in-process localdbs). dial.Dial crosses every layer the production
 // binary crosses except the network itself.
 
@@ -54,7 +54,7 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 		reg.SetLabel(uuid, name)
 	}
 	direct, _ := reg.Get("ur1")
-	srv := servertest.New(t, reg, server.Config{NodeID: "rnode"})
+	srv := servertest.New(t, reg, server.Config{})
 	// The federation door is a unix socket (2026-08-26); the test sshd
 	// forwards direct-streamlocal to it, exactly like a real sshd.
 	sock := filepath.Join(t.TempDir(), "federation.sock")
@@ -95,33 +95,28 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// The mount's root is the remote's node grid: both remote plugins appear
-	// as link tiles, labels intact.
+	// The mount's root is the remote's HOME (its first rooted plugin) —
+	// where a direct client of that node lands too. The remote's plugin
+	// list rides the same tunnel, labels intact.
 	info, err := c.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("tunneled Info: %v", err)
 	}
-	if info.RootGridId != "rnode/0" {
-		t.Fatalf("tunneled root = %q, want the remote node grid rnode/0", info.RootGridId)
+	if !strings.HasPrefix(info.RootGridId, "ur1/") {
+		t.Fatalf("tunneled root = %q, want the remote home ur1/<n>", info.RootGridId)
 	}
-	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.RootGridId})
+	lp, err := c.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{})
 	if err != nil {
-		t.Fatalf("GetGrid(remote node grid): %v", err)
+		t.Fatalf("tunneled ListPlugins: %v", err)
 	}
-	if len(ng.Tiles) != 2 {
-		t.Fatalf("remote node grid has %d tiles, want 2 (both remote plugins)", len(ng.Tiles))
-	}
-	if ng.Tiles[0].AltText != "personal" || ng.Tiles[1].AltText != "work" {
-		t.Errorf("labels = %q,%q — want personal,work", ng.Tiles[0].AltText, ng.Tiles[1].AltText)
-	}
-	if !ng.Tiles[0].Reference {
-		t.Error("remote plugin tiles must be links (dashed)")
+	if len(lp.Plugins) != 2 || lp.Plugins[0].Label != "personal" || lp.Plugins[1].Label != "work" {
+		t.Fatalf("remote plugins = %+v, want personal,work", lp.Plugins)
 	}
 
-	// Descend into the FIRST remote plugin through its link and write; read
-	// back directly on the remote: the mount is the same plugin, hop peeled.
+	// Write at the remote's home; read back directly on the remote: the
+	// mount is the same plugin, hop peeled.
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
-		GridId: ng.Tiles[0].ChildGridId,
+		GridId: info.RootGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
 	})
 	if err != nil {

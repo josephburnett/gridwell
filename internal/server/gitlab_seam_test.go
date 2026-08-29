@@ -92,7 +92,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
-	srv := mustNew(t, reg, Config{NodeID: "node1", Password: "pw"})
+	srv := mustNew(t, reg, Config{Password: "pw"})
 	hs := httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 	ctx := context.Background()

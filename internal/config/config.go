@@ -406,17 +406,14 @@ func EnsureNodeID(home string, newID func() string) (string, error) {
 // and the federation socket, 0600.
 func PasswordFile(home string) string { return filepath.Join(home, "web-password") }
 
-// NodeViewFile is the landing page's persisted viewport.
-func NodeViewFile(home string) string { return filepath.Join(home, "node-view.json") }
-
 // DurableFiles are the loose files a home is made of besides its DBs —
 // what a backup must carry for a restored home to be "as you left it"
-// (the password: every browser stays logged in; the landing viewport).
-// The ONE list; backup reads it, so a new durable file joins here and
-// nowhere else. Absent files are simply absent (a home that has never
-// served has no password yet).
+// (the password: every browser stays logged in). The ONE list; backup
+// reads it, so a new durable file joins here and nowhere else. Absent
+// files are simply absent (a home that has never served has no password
+// yet).
 func DurableFiles(home string) []string {
-	return []string{filepath.Join(home, "server.yaml"), PasswordFile(home), NodeViewFile(home)}
+	return []string{filepath.Join(home, "server.yaml"), PasswordFile(home)}
 }
 
 // EnsurePasswordFile returns the home's web password, minting one (128

@@ -80,7 +80,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
 	remoteReg.Register("rp1", "home", remoteClient, nil)
-	remoteSrv := servertest.New(t, remoteReg, server.Config{NodeID: "rnodex"})
+	remoteSrv := servertest.New(t, remoteReg, server.Config{})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
 	remoteHTTP.Config.Protocols = server.NodeProtocols()
@@ -125,7 +125,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	localReg := plugin.NewRegistry()
 	localReg.Register("sshc", "remote", sshClient, nil)
 	localReg.SetTransit("sshc", true) // the declaration the loader reads from Info in production
-	localSrv := servertest.New(t, localReg, server.Config{NodeID: "lnodex"})
+	localSrv := servertest.New(t, localReg, server.Config{})
 	localHTTP := servertest.Serve(t, localSrv)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
 	// The remote's WEB door is a second listener (2026-08-26: the browser
@@ -236,24 +236,6 @@ func TestConnectionLifecycleThroughTheChain(t *testing.T) {
 		t.Errorf("minted connection segment %q must start with a letter (the URL grammar's namespace rule)", ns)
 	}
 
-	// The remote's NODE GRID stays addressable through the chain — it just
-	// is not the landing page anymore (same rule as locally, 2026-07-19).
-	nodeGrid, err := h.localCl.GetGrid(ctx, "sshc/"+ns+"/rnodex/0")
-	if err != nil {
-		t.Fatalf("GetGrid(node grid): %v", err)
-	}
-	if len(nodeGrid.Tiles) != 1 {
-		t.Fatalf("remote node grid: want 1 plugin tile, got %d", len(nodeGrid.Tiles))
-	}
-	pluginTile := nodeGrid.Tiles[0]
-	wantPluginChild := "sshc/" + ns + "/rp1/" + h.rootBare
-	if pluginTile.ChildGridID != wantPluginChild {
-		t.Fatalf("plugin link child = %q, want %q", pluginTile.ChildGridID, wantPluginChild)
-	}
-	if !pluginTile.Reference {
-		t.Error("a node-grid plugin tile must stay a link through the chain (Reference verbatim)")
-	}
-
 	// The ROUTED plugin list (remote-menu): asking through the chain
 	// answers the REMOTE node's plugins, ids re-qualified per hop and
 	// node-local fields zeroed — the + menu inside a remote pane is
@@ -262,13 +244,14 @@ func TestConnectionLifecycleThroughTheChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("routed ListPlugins: %v", err)
 	}
+	wantPluginChild := "sshc/" + ns + "/rp1/" + h.rootBare
 	if len(menu.Plugins) != 1 || menu.Plugins[0].RootGridID != wantPluginChild {
 		t.Fatalf("routed menu = %+v, want one plugin rooted at %s", menu.Plugins, wantPluginChild)
 	}
 	if menu.Plugins[0].UUID != "sshc/"+ns+"/rp1" {
 		t.Errorf("routed plugin uuid = %q, want the chain-qualified namespace", menu.Plugins[0].UUID)
 	}
-	if menu.ContentToken != "" || menu.NodeUUID != "" {
+	if menu.ContentToken != "" {
 		t.Error("node-local fields must be ZEROED on a forwarded plugin list")
 	}
 	// The grid's node_ns names the serving node from this receiver — the

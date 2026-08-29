@@ -1321,7 +1321,6 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 		DescentDepth: len(p.Path),
 		Focused:      focused,
 		URLLive:      urlLive,
-		IsLauncher:   a.isNodeGridPane(p),
 	}
 	if p.TextFocus != "" {
 		// descendedTile (not g.Tiles) so an EPHEMERAL descent — focused off
@@ -1344,7 +1343,6 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 var paneBorderColors = pane.BorderColors{
 	Focused:        colorFocusBorder,
 	FocusedFaded:   colorFocusBorderFaded,
-	Root:           colorPluginBorder,
 	Text:           colorMarkdownLine,
 	TextFaded:      colorMarkdownLineFaded,
 	URL:            colorURLLine,

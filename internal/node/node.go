@@ -178,7 +178,7 @@ type Node struct {
 	closeErr      error
 }
 
-// Start assembles the node — plugins, identity, server — and LISTENS,
+// Start assembles the node — plugins, server — and LISTENS,
 // but does not serve yet: the caller announces the bound address first
 // (the CLI's banner contract) and then calls ServeBackground. On error
 // nothing is left running.
@@ -188,17 +188,8 @@ func Start(opts Options) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load plugins: %w", err)
 	}
-	nodeID, err := config.EnsureNodeID(opts.Home, idshape.NewShortID)
-	if err != nil {
-		reg.Close()
-		return nil, fmt.Errorf("node id: %w", err)
-	}
 	srv, err := server.New(reg, server.Config{
-		StaticFS: opts.StaticFS,
-		NodeID:   nodeID,
-		// The landing page's viewport survives restarts in a small state
-		// file beside the config ("things stay as you left them").
-		NodeStatePath: config.NodeViewFile(opts.Home),
+		StaticFS:      opts.StaticFS,
 		Password:      cfg.WebPassword,
 		DisableShells: cfg.DisableShells,
 	})
@@ -290,7 +281,6 @@ func (n *Node) Close() error {
 		if n.FedLn != nil {
 			err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
 		}
-		n.srv.Close()
 		n.Reg.Close()
 		n.closeErr = err
 	})
