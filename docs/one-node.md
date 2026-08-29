@@ -1,6 +1,6 @@
 # One node: finishing the v2 fold
 
-Status: PROPOSED 2026-08-28. Successor to `docs/v2-design.md` (which
+Status: APPROVED 2026-08-29 (decisions §4: two files; rewrite old prefixes; rename to Handshake). Phases execute in order. Successor to `docs/v2-design.md` (which
 executed the content-plugin half) — this finishes the other half, the
 one the fold left behind: the node still *pretends* its own store and
 its own transport are plugins, and a tile's arrangement is stored in
