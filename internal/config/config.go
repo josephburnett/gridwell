@@ -162,24 +162,23 @@ func Home() (string, error) {
 	return filepath.Join(home, ".gridwell"), nil
 }
 
-// DBDir is a namespace's database directory: <home>/db/<id>. A directory
-// (not a bare file) so a SQLite store and its -wal/-shm siblings live
-// together under the id that routes to it.
-func DBDir(home, id string) string {
+// DBFile is THE node's database: <home>/gridwell.db — home content,
+// every plugin's memory, the transport's connections (docs/one-node.md
+// §2.6). Derived, never stored in server.yaml.
+func DBFile(home string) string {
+	return filepath.Join(home, "gridwell.db")
+}
+
+// CacheFile is the node's mount cache: <home>/cache.db — disposable,
+// excluded from backup.
+func CacheFile(home string) string {
+	return filepath.Join(home, "cache.db")
+}
+
+// LegacyDBDir is the pre-one-node layout the converter reads:
+// <home>/db/<id>/ per namespace (node.Convert).
+func LegacyDBDir(home, id string) string {
 	return filepath.Join(home, "db", id)
-}
-
-// DBFile is a namespace's database file: <home>/db/<id>/store.db — the
-// home store under the node's id, a plugin's memory DB under the
-// plugin's. Derived, never stored in server.yaml.
-func DBFile(home, id string) string {
-	return filepath.Join(DBDir(home, id), "store.db")
-}
-
-// RemoteDBFile is the transport's connection store, beside the home
-// store under the node's own id: <home>/db/<id>/remote.db.
-func RemoteDBFile(home, id string) string {
-	return filepath.Join(DBDir(home, id), "remote.db")
 }
 
 // DefaultPath is the canonical location of the server config file:

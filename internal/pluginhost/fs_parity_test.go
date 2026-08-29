@@ -17,7 +17,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -55,11 +55,11 @@ func pluginNode(t *testing.T, root string) (*rpc.Client, *fsplugin.Plugin) {
 // how the conversion parity test serves a converted file.
 func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Plugin) {
 	t.Helper()
-	mem, err := layout.Open(memPath)
+	memStore, err := store.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = mem.Close() })
+	t.Cleanup(func() { _ = memStore.Close() })
 	// A plain-remove host: nil would mean the PRODUCTION trash — test
 	// deletions must never land in the real freedesktop Trash (they did,
 	// until 2026-08-23).
@@ -69,7 +69,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 		t.Fatal(err)
 	}
 	t.Cleanup(cpCloser)
-	adapter := pluginhost.New(cp, mem)
+	adapter := pluginhost.New(cp, memStore.Namespace("p1"))
 	client, closer, err := plugin.ServeInProcess(adapter)
 	if err != nil {
 		t.Fatal(err)

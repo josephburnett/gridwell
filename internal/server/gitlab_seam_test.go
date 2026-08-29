@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
-	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
@@ -55,7 +55,7 @@ func gitlabTodo(id int64, created string) todos.Todo {
 // (a restart reuses it) and returns the adapter client plus a closer.
 func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (gridwellv1.GridwellClient, func()) {
 	t.Helper()
-	mem, err := layout.Open(memPath)
+	memStore, err := store.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,11 +63,11 @@ func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (gr
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, mem))
+	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, memStore.Namespace("p1")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client, func() { closer(); cpCloser(); _ = mem.Close() }
+	return client, func() { closer(); cpCloser(); _ = memStore.Close() }
 }
 
 func tileByLabelPrefix(tiles []*gridwellv1.Tile, prefix string) *gridwellv1.Tile {

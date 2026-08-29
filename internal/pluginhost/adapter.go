@@ -31,15 +31,15 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
 // Adapter implements gridwellv1.GridwellServer over one plugin + its
-// memory DB.
+// namespace of the node's store (docs/one-node.md §2.6).
 type Adapter struct {
 	gridwellv1.UnimplementedGridwellServer
 	cp  pluginv1.PluginClient
-	mem *layout.DB
+	mem *store.Namespace
 
 	// kind memoizes the plugin's declared Kind after the first
 	// successful handshake. Identity-stable for the plugin's lifetime
@@ -51,7 +51,7 @@ type Adapter struct {
 }
 
 // New builds the adapter. The caller owns both halves' lifecycles.
-func New(cp pluginv1.PluginClient, mem *layout.DB) *Adapter {
+func New(cp pluginv1.PluginClient, mem *store.Namespace) *Adapter {
 	return &Adapter{cp: cp, mem: mem}
 }
 
@@ -200,12 +200,12 @@ func unionEntries(live, remembered []*pluginv1.Entry) []*pluginv1.Entry {
 }
 
 // engineEntries converts listing entries for the layout engine.
-func engineEntries(entries []*pluginv1.Entry) []layout.Entry {
-	out := make([]layout.Entry, len(entries))
+func engineEntries(entries []*pluginv1.Entry) []store.Entry {
+	out := make([]store.Entry, len(entries))
 	for i, e := range entries {
-		le := layout.Entry{Key: e.Key, Kind: e.Kind, Label: e.Label, ChildContext: e.ChildContext}
+		le := store.Entry{Key: e.Key, Kind: e.Kind, Label: e.Label, ChildContext: e.ChildContext, URL: e.UrlString}
 		if h := e.PlacementHint; h != nil {
-			le.Hint = &layout.Hint{X: h.X, Y: h.Y, W: h.W, H: h.H}
+			le.Hint = &store.Hint{X: h.X, Y: h.Y, W: h.W, H: h.H}
 		}
 		out[i] = le
 	}
@@ -213,7 +213,7 @@ func engineEntries(entries []*pluginv1.Entry) []layout.Entry {
 }
 
 // buildTiles joins merged layout tiles with the listing's content facts.
-func buildTiles(gridID string, tiles []layout.Tile, entries []*pluginv1.Entry) []*gridwellv1.Tile {
+func buildTiles(gridID string, tiles []store.ExtTile, entries []*pluginv1.Entry) []*gridwellv1.Tile {
 	byKey := map[string]*pluginv1.Entry{}
 	for _, e := range entries {
 		byKey[e.Key] = e
@@ -279,7 +279,7 @@ func (a *Adapter) sourceKind(ctx context.Context) (string, error) {
 // ↔ tile i.
 type synthesized struct {
 	grid  *gridwellv1.Grid
-	rows  []layout.Tile
+	rows  []store.ExtTile
 	tiles []*gridwellv1.Tile
 }
 
@@ -298,7 +298,7 @@ func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gri
 // GetGrid mints (never a parallel derivation).
 func (a *Adapter) synthesize(ctx context.Context, gid int64) (*synthesized, error) {
 	key, err := a.mem.ContextKey(gid)
-	if errors.Is(err, layout.ErrNotFound) {
+	if errors.Is(err, store.ErrNotFound) {
 		return nil, status.Errorf(codes.NotFound, "plugin: no grid %d", gid)
 	}
 	if err != nil {
@@ -331,7 +331,7 @@ func (a *Adapter) synthesize(ctx context.Context, gid int64) (*synthesized, erro
 			}
 			pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: t.Key})
 			if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
-				if rerr := a.mem.Retire(t.ID); rerr != nil && !errors.Is(rerr, layout.ErrNotFound) {
+				if rerr := a.mem.Retire(t.ID); rerr != nil && !errors.Is(rerr, store.ErrNotFound) {
 					return nil, rerr
 				}
 				continue // definitively gone: swept
@@ -369,7 +369,7 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 		return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid tile_id %q", tileID)
 	}
 	gid, _, tomb, err := a.mem.TileKey(id)
-	if errors.Is(err, layout.ErrNotFound) || tomb {
+	if errors.Is(err, store.ErrNotFound) || tomb {
 		return nil, status.Errorf(codes.NotFound, "plugin: no tile %d", id)
 	}
 	if err != nil {
@@ -498,7 +498,7 @@ func (a *Adapter) key(tileID string) (int64, string, error) {
 		return 0, "", status.Errorf(codes.InvalidArgument, "plugin: invalid tile_id %q", tileID)
 	}
 	_, key, tomb, err := a.mem.TileKey(id)
-	if errors.Is(err, layout.ErrNotFound) || tomb {
+	if errors.Is(err, store.ErrNotFound) || tomb {
 		return 0, "", status.Errorf(codes.NotFound, "plugin: no tile %d", id)
 	}
 	if err != nil {
@@ -640,7 +640,7 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
 	_, key, tomb, err := a.mem.TileKey(id)
-	if errors.Is(err, layout.ErrNotFound) || tomb {
+	if errors.Is(err, store.ErrNotFound) || tomb {
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
 	if err != nil {
@@ -673,7 +673,7 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 		return &gridwellv1.DeleteTileResponse{}, nil
 	}
 	_, key, tomb, kerr := a.mem.TileKey(id)
-	if errors.Is(kerr, layout.ErrNotFound) || tomb {
+	if errors.Is(kerr, store.ErrNotFound) || tomb {
 		return &gridwellv1.DeleteTileResponse{}, nil
 	}
 	if kerr != nil {
@@ -682,7 +682,7 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	if _, err := a.cp.Delete(ctx, &pluginv1.DeleteRequest{Key: key}); err != nil {
 		return nil, err
 	}
-	if err := a.mem.Retire(id); err != nil && !errors.Is(err, layout.ErrNotFound) {
+	if err := a.mem.Retire(id); err != nil && !errors.Is(err, store.ErrNotFound) {
 		return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)
 	}
 	return &gridwellv1.DeleteTileResponse{}, nil

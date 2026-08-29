@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
@@ -66,62 +68,37 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	if cfg.Federation.Socket == "" {
 		cfg.Federation.Socket = config.FederationSocket(home)
 	}
-	// The mount cache lives beside (never inside) the DBs: disposable,
+	// The mount cache lives beside (never inside) the DB: disposable,
 	// excluded from backup.
-	cfg.CacheDir = filepath.Join(home, "cache")
-	if err := ensureHomeStores(home, cfg); err != nil {
+	cfg.CacheDir = home
+	if err := ensureStore(home, cfg); err != nil {
 		return nil, err
-	}
-	for i := range cfg.Plugins {
-		pc := &cfg.Plugins[i]
-		if pc.Config == nil {
-			pc.Config = map[string]string{}
-		}
-		// A plugin's derived path is the NODE-owned memory DB
-		// (docs/v2-design.md §3.2), durable-but-FORGETTABLE by contract —
-		// creating it empty is the defined recovery from losing it, so
-		// serve creates it freely (layout.OpenVerified stamps identity at
-		// creation).
-		dbFile := config.DBFile(home, pc.ID)
-		pc.Config["db_file"] = dbFile
-		if err := os.MkdirAll(filepath.Dir(dbFile), 0o700); err != nil {
-			return nil, fmt.Errorf("plugin %q (%s): db dir: %w", pc.Kind, pc.ID, err)
-		}
 	}
 	return cfg, nil
 }
 
-// ensureHomeStores creates the home store on a FRESH home (identity
-// stamped, pluginmeta). An existing home whose store
-// is missing under its id is refused — a changed id must never silently
-// spawn an empty store beside the real one. "Existing" = <home>/db holds
-// a store this config does not name (a plugin's memory DB it does name is
-// fine; a plugin may be listed before first serve).
-func ensureHomeStores(home string, cfg *config.ServerConfig) error {
-	id := cfg.ID
-	homeDB := config.DBFile(home, id)
-	if _, err := os.Stat(homeDB); err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return err
+// ensureStore makes <home>/gridwell.db exist: a FRESH home gets one
+// (identity stamped, pluginmeta); a pre-one-node home (db/<id>/…) is
+// CONVERTED into one (Convert); an existing home is left alone.
+func ensureStore(home string, cfg *config.ServerConfig) error {
+	path := config.DBFile(home)
+	if _, err := os.Stat(path); err == nil {
+		// An existing store must be THIS node's: a changed id must never
+		// silently open (or shadow) another identity's data.
+		if _, err := pluginmeta.Verify(path, cfg.ID, "home"); err != nil {
+			return fmt.Errorf("%s is not the store of id %q — did `id` change? (an id is immutable; restore the old one): %w", path, cfg.ID, err)
 		}
-		known := map[string]bool{}
-		for _, p := range cfg.Plugins {
-			known[p.ID] = true
-		}
-		entries, _ := os.ReadDir(filepath.Join(home, "db"))
-		for _, e := range entries {
-			if e.IsDir() && !known[e.Name()] {
-				return fmt.Errorf("no home store at %s, but %s exists — did `id` change? (an id is immutable; restore the old one)", homeDB, config.DBDir(home, e.Name()))
-			}
-		}
-		if err := os.MkdirAll(config.DBDir(home, id), 0o700); err != nil {
-			return err
-		}
-		if err := pluginmeta.Create(homeDB, id, "home"); err != nil {
-			return err
-		}
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
-	return nil
+	if _, err := os.Stat(filepath.Join(home, "db")); err == nil {
+		return Convert(home, cfg)
+	}
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return err
+	}
+	return pluginmeta.Create(path, cfg.ID, "home")
 }
 
 // Options configures Start.
@@ -146,6 +123,7 @@ type Node struct {
 	Ln    net.Listener
 	FedLn net.Listener
 
+	st            *store.Store
 	srv           *server.Server
 	webSrv        *http.Server
 	fedSrv        *http.Server
@@ -160,20 +138,29 @@ type Node struct {
 // error nothing is left running.
 func Start(opts Options) (*Node, error) {
 	cfg := opts.Cfg
+	// THE store (docs/one-node.md §2.6): home content, every plugin's
+	// namespace, the transport's connections — one file, one handle,
+	// identity verified against the node's id.
+	st, err := local.OpenVerified(config.DBFile(opts.Home), cfg.ID, "home")
+	if err != nil {
+		return nil, err
+	}
 	reg := plugin.NewRegistry()
+	fail := func(err error) (*Node, error) {
+		reg.Close()
+		st.Close()
+		return nil, err
+	}
 	// HOME first: the first registered entry with a root is where a client
 	// lands (rpc.HomeGrid).
-	if err := startHome(reg, opts.Home, cfg); err != nil {
-		reg.Close()
-		return nil, fmt.Errorf("home: %w", err)
+	if err := startHome(reg, st, cfg); err != nil {
+		return fail(fmt.Errorf("home: %w", err))
 	}
-	if err := plugin.LoadInto(reg, cfg, opts.Factories); err != nil {
-		reg.Close()
-		return nil, fmt.Errorf("load plugins: %w", err)
+	if err := plugin.LoadInto(reg, cfg, opts.Factories, st); err != nil {
+		return fail(fmt.Errorf("load plugins: %w", err))
 	}
-	if err := startTransport(reg, opts.Home, cfg); err != nil {
-		reg.Close()
-		return nil, fmt.Errorf("transport: %w", err)
+	if err := startTransport(reg, st, opts.Home, cfg); err != nil {
+		return fail(fmt.Errorf("transport: %w", err))
 	}
 	srv, err := server.New(reg, server.Config{
 		ID:            cfg.ID,
@@ -182,8 +169,7 @@ func Start(opts Options) (*Node, error) {
 		DisableShells: cfg.DisableShells,
 	})
 	if err != nil {
-		reg.Close()
-		return nil, err
+		return fail(err)
 	}
 	requestCtx, cancel := context.WithCancel(context.Background())
 	// Two doors, two listeners (owner decision 2026-08-26): the web door
@@ -205,8 +191,7 @@ func Start(opts Options) (*Node, error) {
 	ln, err := net.Listen("tcp", cfg.Web.Bind)
 	if err != nil {
 		cancel()
-		reg.Close()
-		return nil, err
+		return fail(err)
 	}
 	var fedLn net.Listener
 	if sock := cfg.Federation.Socket; sock != "" {
@@ -214,32 +199,21 @@ func Start(opts Options) (*Node, error) {
 		if err != nil {
 			ln.Close()
 			cancel()
-			reg.Close()
-			return nil, err
+			return fail(err)
 		}
 	}
-	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
+	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, st: st, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
 }
 
-// startHome opens the home store under the node's id and registers it
-// (transitional: served over the in-process loopback like a plugin until
-// the registry holds Go values — docs/one-node.md P3).
-func startHome(reg *plugin.Registry, home string, cfg *config.ServerConfig) error {
-	impl, err := NativeLocalFactory(map[string]string{
-		"db_file": config.DBFile(home, cfg.ID),
-		"uuid":    cfg.ID,
-		"kind":    "home",
-		"shell":   cfg.Shell,
-	})
-	if err != nil {
-		return err
-	}
+// startHome registers the home over the store (served over the
+// in-process hop like every namespace — docs/one-node.md).
+func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) error {
+	impl := newHome(st, cfg.ID, cfg.Shell)
 	client, stop, err := plugin.ServeInProcess(impl)
 	if err != nil {
-		closeImpl(impl)
 		return err
 	}
-	reg.Register(cfg.ID, "home", client, func() { stop(); closeImpl(impl) })
+	reg.Register(cfg.ID, "home", client, stop)
 	reg.SetLabel(cfg.ID, "home")
 	return nil
 }
@@ -249,15 +223,14 @@ func startHome(reg *plugin.Registry, home string, cfg *config.ServerConfig) erro
 // mysteries), and installs the transport as the node's connection
 // namespace ("<id>/<conn>/…"), fronted by the mount cache so a dark
 // remote degrades to stale-but-readable instead of blank.
-func startTransport(reg *plugin.Registry, home string, cfg *config.ServerConfig) error {
-	db, err := remote.OpenDB(config.RemoteDBFile(home, cfg.ID))
+func startTransport(reg *plugin.Registry, st *store.Store, home string, cfg *config.ServerConfig) error {
+	db, err := remote.NewDB(st.SQL())
 	if err != nil {
 		return err
 	}
 	userHome, _ := os.UserHomeDir()
 	impl, err := remote.New(db, dial.Dial, userHome, cfg.Connections, cfg.RetiredNames)
 	if err != nil {
-		db.Close()
 		return err
 	}
 	impl.ConnectAll(context.Background())
@@ -282,7 +255,7 @@ func startTransport(reg *plugin.Registry, home string, cfg *config.ServerConfig)
 		// its purpose.
 		if mkErr := os.MkdirAll(cfg.CacheDir, 0o700); mkErr != nil {
 			log.Printf("gridwell: mount cache dir %s: %v (connections run uncached)", cfg.CacheDir, mkErr)
-		} else if cached, cacheClose, cErr := mountcache.Open(client, filepath.Join(cfg.CacheDir, cfg.ID+".db")); cErr != nil {
+		} else if cached, cacheClose, cErr := mountcache.Open(client, config.CacheFile(cfg.CacheDir)); cErr != nil {
 			log.Printf("gridwell: mount cache: %v (connections run uncached)", cErr)
 		} else {
 			client = cached
@@ -357,6 +330,7 @@ func (n *Node) Close() error {
 			err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
 		}
 		n.Reg.Close()
+		err = errors.Join(err, n.st.Close())
 		n.closeErr = err
 	})
 	return n.closeErr

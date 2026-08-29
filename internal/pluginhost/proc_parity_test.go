@@ -19,7 +19,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -66,17 +66,17 @@ func pluginProcNode(t *testing.T, procRoot string) *rpc.Client {
 
 func pluginProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 	t.Helper()
-	mem, err := layout.Open(memPath)
+	memStore, err := store.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = mem.Close() })
+	t.Cleanup(func() { _ = memStore.Close() })
 	cp, cpCloser, err := compose.PluginInProcess(procplugin.New(procRoot, 100, nopKiller{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(cpCloser)
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, mem))
+	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, memStore.Namespace("p1")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestRetiredKeyStaysRetiredWithoutIdBurn(t *testing.T) {
 		}
 		defer db.Close()
 		var n int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM idmap`).Scan(&n); err != nil {
+		if err := db.QueryRow(`SELECT COUNT(*) FROM tiles WHERE ns = 'p1'`).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n

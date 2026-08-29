@@ -41,7 +41,7 @@ type gridReader interface {
 func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.Grid, error) {
 	var g rpc.Grid
 	err := q.QueryRowContext(ctx,
-		`SELECT id, object_id, version FROM grids WHERE id = ?`, gridID,
+		`SELECT id, object_id, version FROM grids WHERE id = ? AND ns = ''`, gridID,
 	).Scan(&g.ID, &g.ObjectID, &g.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -112,7 +112,7 @@ func scanTile(scanner interface {
 }
 
 func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.Tile, error) {
-	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ?`, tileID)
+	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ? AND ns = ''`, tileID)
 	n, err := scanTile(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -124,7 +124,7 @@ func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.
 }
 
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Tile, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
+	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ? AND ns = '' ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}

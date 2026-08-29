@@ -29,7 +29,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 8
+const schemaVersion = 9
 
 // migration is one additive, non-destructive step that brings a DB from
 // version to-1 up to version to. Migrations must only add columns/tables
@@ -75,6 +75,13 @@ var migrations = []migration{
 	// Old rows all have child grids and copy through unchanged; the new
 	// column fills with its '' default.
 	{to: 8, run: rebuildTilesForConfigurePlugin},
+	// v9 (2026-08-29, docs/one-node.md §2.6): the externals' memory joins
+	// the home tables — ns/key/tombstoned on tiles, ns/context_key and a
+	// root viewport on grids, the listings table, and the two partial
+	// unique indexes. Every column carries a default; home rows are the
+	// defaults. (IfMissing: a rebuild at an earlier version materializes
+	// the current template, columns included.)
+	{to: 9, run: migrateV9},
 }
 
 // tilesRebuildColumns is the explicit column list a rebuild copies — every
@@ -186,6 +193,39 @@ func addColumnDDL(ddl string) func(ctx context.Context, tx *sql.Tx) error {
 // ALTER would fail with "duplicate column"; a genuinely old file whose
 // rebuild ran under an older binary still needs it. Both paths converge on
 // the same shape — TestSchemaEquivalence proves it.
+// migrateV9 adds the externals' columns and tables (see the chain entry).
+func migrateV9(ctx context.Context, tx *sql.Tx) error {
+	steps := []func(context.Context, *sql.Tx) error{
+		addColumnIfMissingDDL("grids", "ns", `ALTER TABLE grids ADD COLUMN ns TEXT NOT NULL DEFAULT ''`),
+		addColumnIfMissingDDL("grids", "context_key", `ALTER TABLE grids ADD COLUMN context_key TEXT NOT NULL DEFAULT ''`),
+		addColumnIfMissingDDL("grids", "root_cx", `ALTER TABLE grids ADD COLUMN root_cx REAL`),
+		addColumnIfMissingDDL("grids", "root_cy", `ALTER TABLE grids ADD COLUMN root_cy REAL`),
+		addColumnIfMissingDDL("grids", "root_zoom", `ALTER TABLE grids ADD COLUMN root_zoom REAL`),
+		addColumnIfMissingDDL("tiles", "ns", `ALTER TABLE tiles ADD COLUMN ns TEXT NOT NULL DEFAULT ''`),
+		addColumnIfMissingDDL("tiles", "key", `ALTER TABLE tiles ADD COLUMN key TEXT NOT NULL DEFAULT ''`),
+		addColumnIfMissingDDL("tiles", "tombstoned", `ALTER TABLE tiles ADD COLUMN tombstoned INTEGER NOT NULL DEFAULT 0`),
+	}
+	for _, step := range steps {
+		if err := step(ctx, tx); err != nil {
+			return err
+		}
+	}
+	// The listings table is CREATE IF NOT EXISTS in tablesDDL (it appears
+	// at Open); the two partial indexes name the columns just added, so
+	// they ride here (and in Open's post-migration step for a fresh
+	// file, which never runs the chain — externalsIndexDDL, one text).
+	if _, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS listings (
+    grid_id       INTEGER PRIMARY KEY REFERENCES grids(id),
+    entries       BLOB NOT NULL,
+    authoritative INTEGER NOT NULL DEFAULT 0
+);`); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, externalsIndexDDL)
+	return err
+}
+
 func addColumnIfMissingDDL(table, column, ddl string) func(ctx context.Context, tx *sql.Tx) error {
 	return func(ctx context.Context, tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")

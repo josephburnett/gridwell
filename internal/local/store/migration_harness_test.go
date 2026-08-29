@@ -692,4 +692,37 @@ func init() {
 			}
 		},
 	})
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 9,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES ('fixt-v9-home', ` + rootID + `, 'text', 50, 6, 1, 1, 'v8 text', 100, 100)`); err != nil {
+				t.Fatalf("seed v8 text tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var ns, key string
+			var tomb int
+			if err := db.QueryRow(`SELECT ns, key, tombstoned FROM tiles WHERE object_id = 'fixt-v9-home'`).Scan(&ns, &key, &tomb); err != nil {
+				t.Fatalf("read v8 tile: %v", err)
+			}
+			if ns != "" || key != "" || tomb != 0 {
+				t.Errorf("an old home row must carry the externals' defaults, got ns=%q key=%q tombstoned=%d", ns, key, tomb)
+			}
+			// An external's context grid and row are accepted; a live key
+			// is unique per context; a retired key may be re-minted.
+			if _, err := db.Exec(`INSERT INTO grids (object_id, created_at, ns, context_key) VALUES ('fixt-v9-ctx', 100, 'plug1', 'root')`); err != nil {
+				t.Fatalf("insert context grid post-migration: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
+				SELECT 'fixt-v9-ext', id, 'text', 0, 0, 1, 1, 'a', 100, 100, 'plug1', 'a' FROM grids WHERE object_id = 'fixt-v9-ctx'`); err != nil {
+				t.Fatalf("insert external row post-migration: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO listings (grid_id, entries) SELECT id, X'00' FROM grids WHERE object_id = 'fixt-v9-ctx'`); err != nil {
+				t.Fatalf("listings table missing post-migration: %v", err)
+			}
+		},
+	})
 }

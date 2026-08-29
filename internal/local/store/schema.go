@@ -91,9 +91,27 @@ CREATE TABLE IF NOT EXISTS grids (
     object_id   TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 0,
     created_at  INTEGER NOT NULL,
-    updated_at  INTEGER NOT NULL DEFAULT 0
+    updated_at  INTEGER NOT NULL DEFAULT 0,
+    -- ns names the grid's owner: '' = home; a plugin id = that plugin's
+    -- memory (docs/one-node.md §2.6 — one table for every namespace).
+    -- context_key is the plugin's stable key for the context this grid
+    -- projects ('' for home grids). root_cx/cy/zoom: a plugin context's
+    -- persisted root viewport (NULL = never set; home keeps its own in
+    -- the system table). Added post-v1 (schema v9, additive).
+    ns          TEXT NOT NULL DEFAULT '',
+    context_key TEXT NOT NULL DEFAULT '',
+    root_cx     REAL,
+    root_cy     REAL,
+    root_zoom   REAL
 );
 CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
+-- listings: a plugin context's last good listing (an opaque blob the
+-- adapter serializes) — the offline answer (v2 tenet 6). Schema v9.
+CREATE TABLE IF NOT EXISTS listings (
+    grid_id       INTEGER PRIMARY KEY REFERENCES grids(id),
+    entries       BLOB NOT NULL,
+    authoritative INTEGER NOT NULL DEFAULT 0
+);
 
 CREATE TABLE IF NOT EXISTS blobs (
     -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
@@ -194,6 +212,14 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     -- stays as provenance. '' for every other tile. Added post-v1 (schema
     -- v8, rebuild — the well CHECK branch gained the childless variant).
     configure_plugin_id TEXT NOT NULL DEFAULT '',
+    -- ns/key/tombstoned: an EXTERNAL's row (docs/one-node.md §2.6). ns is
+    -- the owning plugin id ('' = home); key is the plugin's stable key
+    -- for the entry; tombstoned=1 retires the key forever (the id is
+    -- never reused; a recreated key mints fresh). Home rows carry the
+    -- defaults. Added post-v1 (schema v9, additive).
+    ns            TEXT NOT NULL DEFAULT '',
+    key           TEXT NOT NULL DEFAULT '',
+    tombstoned    INTEGER NOT NULL DEFAULT 0,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
@@ -228,6 +254,15 @@ const tilesIndexDDL = `
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_object_id ON tiles(object_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
+`
+
+// externalsIndexDDL is the v9 pair of partial unique indexes over the
+// externals' columns. They name columns the v9 migration ADDS, so they
+// cannot ride tablesDDL (Open applies that before migrating an old file);
+// Open creates them after the chain, fresh and migrated files alike.
+const externalsIndexDDL = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_context ON grids(ns, context_key) WHERE ns != '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tiles_live_key ON tiles(ns, grid_id, key) WHERE ns != '' AND tombstoned = 0;
 `
 
 // tablesV1 is the FROZEN v1 grids/tiles/blobs schema. It is an immutable,

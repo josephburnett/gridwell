@@ -23,7 +23,8 @@ var ErrNotFound = errors.New("remote: not found")
 
 // DB is the connection store.
 type DB struct {
-	db *sql.DB
+	db    *sql.DB
+	owned bool // Close closes the handle only when this DB opened it
 }
 
 const connSchema = `
@@ -33,24 +34,24 @@ CREATE TABLE IF NOT EXISTS connections (
   deleted     INTEGER NOT NULL DEFAULT 0
 );`
 
-// OpenDB opens (creating the table as needed) the connection store.
-func OpenDB(path string) (*DB, error) {
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, fmt.Errorf("remote: open %q: %w", path, err)
-	}
-	// SQLite is single-writer at the file level; one connection eliminates
-	// pool-vs-pool lock races and gives deterministic interleaving.
-	db.SetMaxOpenConns(1)
+// NewDB installs the connections table on the node's ONE database handle
+// (docs/one-node.md §2.6: a second handle on the same SQLite file meets
+// an instant SQLITE_BUSY). Close is a no-op; the store owns the handle.
+func NewDB(db *sql.DB) (*DB, error) {
 	if _, err := db.Exec(connSchema); err != nil {
-		_ = db.Close()
 		return nil, fmt.Errorf("remote: init schema: %w", err)
 	}
 	return &DB{db: db}, nil
 }
 
-// Close closes the store.
-func (d *DB) Close() error { return d.db.Close() }
+// Close closes the handle when this DB opened it; a shared handle is the
+// store's to close.
+func (d *DB) Close() error {
+	if !d.owned {
+		return nil
+	}
+	return d.db.Close()
+}
 
 // Stored is one remembered connection.
 type Stored struct {

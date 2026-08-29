@@ -54,7 +54,6 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// (remote-menu, 2026-08-16) — writable directly. The transport's id
 	// (the cache file's name) is the row's leading segment.
 	personalChild := awaitConnRoot(t, localOrigin, "partconn1")
-	sshID, _, _ := strings.Cut(personalChild, "/")
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
 	var homeRoot string
 	for _, p := range lp["plugins"].([]any) {
@@ -92,8 +91,8 @@ func TestMountPartitionServesCache(t *testing.T) {
 	if body, _, _, err := cl.ReadContent(ctx, warmT["id"].(string)); err != nil || string(body) != "warmed words" {
 		t.Fatalf("warm read = %q (%v)", body, err)
 	}
-	if _, err := os.Stat(filepath.Join(localHome, "cache", sshID+".db")); err != nil {
-		t.Fatalf("mount cache file missing (the loader wiring): %v", err)
+	if _, err := os.Stat(filepath.Join(localHome, "cache.db")); err != nil {
+		t.Fatalf("mount cache file missing (the node wiring): %v", err)
 	}
 
 	// ── THE PARTITION ──────────────────────────────────────────────────

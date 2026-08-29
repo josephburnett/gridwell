@@ -104,7 +104,7 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 		return nil, false, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT blob_id FROM tiles WHERE kind = 'pane' AND blob_id IS NOT NULL`)
+		`SELECT blob_id FROM tiles WHERE ns = '' AND kind = 'pane' AND blob_id IS NOT NULL`)
 	if err != nil {
 		return nil, false, fmt.Errorf("workspace refs: %w", err)
 	}

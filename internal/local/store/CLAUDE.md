@@ -32,7 +32,7 @@ data to be thrown away.
   stamped into the SQLite header as `user_version`. The engine that applies
   the chain (fresh-stamp / foreign-file refusal / newer-version refusal) is
   the shared `internal/dbformat.EnsureVersion` — one implementation for every
-  node DB (this store, each plugin's memory DB in `internal/layout`, the
+  node DB (this store — home AND every plugin's memory, since v9 — and the
   mount cache in `internal/plugin/mountcache`); `migrateUp` here is a thin
   adapter.
 

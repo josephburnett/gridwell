@@ -16,6 +16,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -116,7 +117,7 @@ func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
 		ID: "gl1234a", Label: "todos", Kind: "gitlab", Config: map[string]string{"db_file": filepath.Join(t.TempDir(), "mem.db")},
 	}}}
 	factories := map[string]plugin.Factory{"gitlab": func(map[string]string) (pluginv1.PluginServer, error) { return handshakeRefuser{}, nil }}
-	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories)
+	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories, testStore(t))
 	if err == nil || !strings.Contains(err.Error(), "token_file not configured") || !strings.Contains(err.Error(), "gl1234a") {
 		t.Fatalf("LoadInto = %v, want the plugin's own reason, naming it", err)
 	}
@@ -135,7 +136,7 @@ func TestLoadIntoFailsOnARefusingFactory(t *testing.T) {
 	factories := map[string]plugin.Factory{"proc": func(cfg map[string]string) (pluginv1.PluginServer, error) {
 		return nil, fmt.Errorf("pid %q is not a positive process id", cfg["pid"])
 	}}
-	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories)
+	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories, testStore(t))
 	if err == nil || !strings.Contains(err.Error(), `pid "abc"`) || !strings.Contains(err.Error(), "pr1234a") {
 		t.Fatalf("LoadInto = %v, want the factory's reason, naming the plugin", err)
 	}
@@ -153,4 +154,15 @@ func TestRegistry_CloseForgetsEveryFact(t *testing.T) {
 	if reg.Label("p1") != "" || reg.Transit("p1") {
 		t.Fatalf("after Close: label=%q transit=%v, want nothing remembered", reg.Label("p1"), reg.Transit("p1"))
 	}
+}
+
+// testStore is a throwaway node database for the loader.
+func testStore(t *testing.T) *store.Store {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	return st
 }

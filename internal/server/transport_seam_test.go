@@ -9,6 +9,7 @@ package server_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	_ "modernc.org/sqlite"
 
 	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -82,7 +84,12 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	remoteExport := gridwellv1.NewGridwellClient(grpcConn)
 
 	h := &transportHarness{dialErr: dialErr}
-	db, err := remote.OpenDB(t.TempDir() + "/remote.db")
+	sqlDB, err := sql.Open("sqlite", t.TempDir()+"/remote.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := remote.NewDB(sqlDB)
 	if err != nil {
 		t.Fatal(err)
 	}

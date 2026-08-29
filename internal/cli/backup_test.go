@@ -27,11 +27,7 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	if _, err := node.BuildConfig(home, cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, err := store.Open(config.DBFile(home, cfg.ID))
+	st, err := store.Open(config.DBFile(home))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +58,7 @@ func TestBackupSnapshotsHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	copied := config.DBFile(dest, cfg.ID)
+	copied := config.DBFile(dest)
 	st, err := store.Open(copied)
 	if err != nil {
 		t.Fatalf("backed-up DB failed the open contract: %v", err)

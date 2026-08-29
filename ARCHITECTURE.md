@@ -38,7 +38,7 @@ lists where that still needs doing.
 │ Plugins        plugins/{fs,proc,gitlab} as CONTENT PLUGINS (v2)       │
 │   + node-native: internal/local (store), internal/remote              │
 │   a plugin is stateless (keys + content); the node mints ids and      │
-│   keeps the layout in one memory DB per plugin (internal/layout)      │
+│   keeps every namespace's arrangement in the ONE store (gridwell.db) │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────────────────────────────────┐
@@ -148,11 +148,12 @@ on every path. Every other configured kind is a CONTENT PLUGIN
 stock host, or composed in-process by a leaf binary that bundles it
 (the mobile bind; the compose door hides which). A plugin is
 stateless — it answers in its own stable keys — and the node keeps ONE
-memory DB per plugin (`internal/layout`, at the id-derived
-`<home>/db/<id>/store.db`) that mints the ids and holds the layout. Every
-DB is opened identity-verified (`local.OpenVerified` for the home store,
-`layout.OpenVerified` for a plugin's memory), so the id every stored
-reference carries is the id the node answers with.
+namespace of the ONE store (`internal/local/store`, `<home>/gridwell.db`;
+  docs/one-node.md §2.6) that mints the ids and holds the arrangement.
+store is opened identity-verified (`local.OpenVerified` against the node's
+id), so the id every stored reference carries is the id the node answers
+with; a plugin's memory needs no verification of its own — it is a
+namespace of that same verified store.
 
 - **local** (né localdb, 2026-08-16) owns all user content (text, urls, wells, pane tiles) plus
   shells and the event stream. The only writable plugin. Shell tiles are

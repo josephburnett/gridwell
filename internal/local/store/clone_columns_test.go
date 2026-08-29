@@ -94,7 +94,10 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 // slipped through. Now the omission is a named failure.
 func TestTileCopyColumnsAreTotal(t *testing.T) {
 	notCopied := map[string]string{
-		"id": "the copy's identity — freshly assigned, never reused",
+		"id":         "the copy's identity — freshly assigned, never reused",
+		"ns":         "a clone is home's (ns ''): externals' rows are never cloned, they are re-listed",
+		"key":        "an external's key — '' on every home row",
+		"tombstoned": "an external's retirement — 0 on every home row",
 	}
 
 	s := newTestStore(t)

@@ -31,7 +31,9 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// own GetGrid responses; the local store never persists them.
 			// writable is stamped by the serving node from the owning
 			// plugin's Info — wire-only, per-grid capability, never persisted.
-			storageOnly: []string{"created_at", "updated_at"},
+			// ns/context_key/root_* are the externals' memory (schema v9,
+			// docs/one-node.md §2.6) — never on the wire.
+			storageOnly: []string{"created_at", "updated_at", "ns", "context_key", "root_cx", "root_cy", "root_zoom"},
 			// menu_entries is stamped by the serving node from the owning
 			// plugin's Info (#258) — wire-only, like writable.
 			protoOnly: []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint", "create_schemas", "node_ns", "menu_entries", "stale"},
@@ -41,7 +43,8 @@ func TestProtoMatchesDDL(t *testing.T) {
 			message: (&pb.Tile{}).ProtoReflect().Descriptor(),
 			// alt_user is the server-side "user owns this name" latch (issue
 			// #61) — consulted by the capture paths, never sent on the wire.
-			storageOnly: []string{"created_at", "updated_at", "alt_user"},
+			// ns/key/tombstoned are the externals' memory (schema v9).
+			storageOnly: []string{"created_at", "updated_at", "alt_user", "ns", "key", "tombstoned"},
 			// reference is derived by the server (qualifyTiles) from a tile's
 			// child_grid_id shape, never persisted — wire-only, so it has no
 			// DDL column by design. serves_page is likewise derived, by the

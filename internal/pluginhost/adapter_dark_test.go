@@ -14,7 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/api/compose"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -58,18 +58,18 @@ func (d *darkableCP) Probe(ctx context.Context, req *pluginv1.ProbeRequest, opts
 // Info call — the tenet-6 promise never fired for the process-dark case.
 func TestPluginProcessDarkServesRememberedListing(t *testing.T) {
 	root := seedTree(t)
-	mem, err := layout.Open(filepath.Join(t.TempDir(), "mem.db"))
+	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = mem.Close() })
+	t.Cleanup(func() { _ = memStore.Close() })
 	cp, cpCloser, err := compose.PluginInProcess(fsplugin.New(root, osRemoveHost{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(cpCloser)
 	dc := &darkableCP{PluginClient: cp}
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(dc, mem))
+	client, closer, err := plugin.ServeInProcess(pluginhost.New(dc, memStore.Namespace("p1")))
 	if err != nil {
 		t.Fatal(err)
 	}

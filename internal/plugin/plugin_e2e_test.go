@@ -16,6 +16,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -47,14 +48,19 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "docs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	memPath := filepath.Join(t.TempDir(), "mem.db")
+	dbPath := filepath.Join(t.TempDir(), "gridwell.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
 
 	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{
 		ID: "pfsuuid", Label: "files", Kind: "fs", Binary: bin,
-		Config: map[string]string{"root": root, "db_file": memPath},
+		Config: map[string]string{"root": root},
 	}}}
 	reg := plugin.NewRegistry()
-	if err := plugin.LoadInto(reg, cfg, nil); err != nil {
+	if err := plugin.LoadInto(reg, cfg, nil, st); err != nil {
 		t.Fatalf("LoadInto: %v", err)
 	}
 	defer reg.Close()
@@ -99,9 +105,9 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if got.Tile.X != 4 || got.Tile.W != 2 {
 		t.Fatalf("placement not persisted through the subprocess seam: %+v", got.Tile)
 	}
-	// The memory DB is the node's file; the plugin process wrote
-	// nothing anywhere (its config carries no db path at all).
-	if _, err := os.Stat(memPath); err != nil {
-		t.Fatalf("node memory DB missing: %v", err)
+	// The plugin's memory is the NODE's one database; the plugin process
+	// wrote nothing anywhere (its config carries no db path at all).
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("node database missing: %v", err)
 	}
 }

@@ -16,7 +16,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -47,17 +47,17 @@ func gitlabTodo(id int64, created, title, body string) todos.Todo {
 
 func gitlabNode(t *testing.T, gl *fakeGitLab) *rpc.Client {
 	t.Helper()
-	mem, err := layout.Open(filepath.Join(t.TempDir(), "mem.db"))
+	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = mem.Close() })
+	t.Cleanup(func() { _ = memStore.Close() })
 	cp, cpCloser, err := compose.PluginInProcess(gitlabplugin.New(gl, gitlabplugin.Options{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(cpCloser)
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, mem))
+	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, memStore.Namespace("p1")))
 	if err != nil {
 		t.Fatal(err)
 	}

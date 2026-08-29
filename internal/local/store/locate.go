@@ -68,7 +68,7 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]rpc.Sear
 	// Name hits first (instr, not LIKE — no pattern-escaping trap).
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, alt_text FROM tiles
-		 WHERE alt_text != '' AND instr(lower(alt_text), ?) > 0
+		 WHERE ns = '' AND alt_text != '' AND instr(lower(alt_text), ?) > 0
 		 ORDER BY id LIMIT ?`, needle, limit)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]rpc.Sear
 	rows, err = s.db.QueryContext(ctx,
 		`SELECT t.id, CAST(b.data AS TEXT) FROM tiles t
 		 JOIN blobs b ON t.blob_id = b.id
-		 WHERE t.kind = 'text' AND instr(lower(CAST(b.data AS TEXT)), ?) > 0
+		 WHERE t.ns = '' AND t.kind = 'text' AND instr(lower(CAST(b.data AS TEXT)), ?) > 0
 		 ORDER BY t.id LIMIT ?`, needle, limit)
 	if err != nil {
 		return nil, err

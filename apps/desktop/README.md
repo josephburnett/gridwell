@@ -30,7 +30,7 @@ bound address, and loads the renderer from that origin. An explicit `web.bind` i
 server instance serves both the desktop window and a phone browser (see
 "Running it" in the repo README). `serve`
 requires `~/.gridwell/server.yaml`; each plugin's SQLite DB lives at
-`~/.gridwell/db/<id>/store.db`, derived from its id — there is no fallback DB.
+`~/.gridwell/gridwell.db` — the node's one database; there is no fallback DB.
 
 Overrides (env): `GRIDWELL_SIDECAR` (binary path), `GRIDWELL_STATIC`
 (web assets dir), `GRIDWELL_HOME` (config + DB root, default `~/.gridwell`).

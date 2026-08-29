@@ -38,11 +38,11 @@ func TestHome(t *testing.T) {
 }
 
 func TestDBPaths(t *testing.T) {
-	if got := DBFile("/h", "abc"); got != "/h/db/abc/store.db" {
+	if got := DBFile("/h"); got != "/h/gridwell.db" {
 		t.Errorf("DBFile = %q", got)
 	}
-	if got := RemoteDBFile("/h", "abc"); got != "/h/db/abc/remote.db" {
-		t.Errorf("RemoteDBFile = %q", got)
+	if got := CacheFile("/h"); got != "/h/cache.db" {
+		t.Errorf("CacheFile = %q", got)
 	}
 }
 

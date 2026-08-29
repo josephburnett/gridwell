@@ -144,7 +144,7 @@ func TestBuildServeConfigFreshHome(t *testing.T) {
 	if err != nil || back.ID != cfg.ID {
 		t.Fatalf("the minted id must be written back: %v %+v", err, back)
 	}
-	if _, err := os.Stat(config.DBFile(home, cfg.ID)); err != nil {
+	if _, err := os.Stat(config.DBFile(home)); err != nil {
 		t.Fatalf("the home store must exist after the first build: %v", err)
 	}
 	again, err := buildServeConfig(home, path)
@@ -153,9 +153,9 @@ func TestBuildServeConfigFreshHome(t *testing.T) {
 	}
 }
 
-// A plugin listed without an id gets one minted and its memory DB dir
-// created; its derived db_file is injected, never stored.
-func TestBuildServeConfigMintsPluginIDsAndInjectsDBFile(t *testing.T) {
+// A plugin listed without an id gets one minted and written back; the
+// node's database path is never stored.
+func TestBuildServeConfigMintsPluginIDs(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "server.yaml")
 	if err := os.WriteFile(path, []byte("plugins:\n  - kind: fs\n    config:\n      root: /tmp\n"), 0o600); err != nil {
@@ -169,12 +169,9 @@ func TestBuildServeConfigMintsPluginIDsAndInjectsDBFile(t *testing.T) {
 	if pid == "" {
 		t.Fatal("plugin id must be minted")
 	}
-	if got, want := cfg.Plugins[0].Config["db_file"], config.DBFile(home, pid); got != want {
-		t.Errorf("db_file = %q, want derived %q", got, want)
-	}
 	raw, _ := os.ReadFile(path)
-	if strings.Contains(string(raw), "db_file") {
-		t.Errorf("db_file must never be stored:\n%s", raw)
+	if strings.Contains(string(raw), "db_file") || strings.Contains(string(raw), "gridwell.db") {
+		t.Errorf("the database path must never be stored:\n%s", raw)
 	}
 	if !strings.Contains(string(raw), pid) {
 		t.Errorf("the minted plugin id must be written back:\n%s", raw)

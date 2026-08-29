@@ -105,6 +105,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
+	if _, err := db.Exec(externalsIndexDDL); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply externals indexes: %w", err)
+	}
 	// Guard against an out-of-contract shape that user_version alone can't catch
 	// (e.g. a pre-freeze DB the fast-path stamped as v1 without checking columns).
 	// Fail loudly here rather than let a later insert hit an orphaned constraint.
