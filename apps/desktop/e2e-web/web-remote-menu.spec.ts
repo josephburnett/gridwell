@@ -93,7 +93,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     .poll(
       async () => {
         const lp = await rpcJSON(world.local, 'ListPlugins', {});
-        const row = (lp.plugins ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
+        const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
@@ -218,7 +218,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
     .poll(
       async () => {
         const lp = await rpcJSON(world.local, 'ListPlugins', {});
-        const row = (lp.plugins ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
+        const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
