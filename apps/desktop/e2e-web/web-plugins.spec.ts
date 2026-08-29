@@ -7,10 +7,10 @@ import * as path from 'node:path';
 
 // Every shipped plugin kind, crawled through the browser client: proc
 // (a live process tree) and gitlab (todos against a fake GitLab API).
-// This spec is what makes `make check-parity` mean what it says — the
+// This spec is what makes the bundled-plugin composition mean what it says — the
 // composition-parity gate runs the SAME suite against `gridwell` (each
 // plugin a spawned gridwell-plugin-<kind> subprocess) and against
-// `gridwell-all` (every plugin in-process through the compose door),
+// the mobile bind (every plugin in-process through the compose door),
 // and until this spec the suite only ever seeded fs, so proc and gitlab
 // were never crossed in either composition. test/boundary pins that
 // every bundled plugin kind is seeded by some web spec.

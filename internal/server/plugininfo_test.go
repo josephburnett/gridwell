@@ -138,8 +138,8 @@ func TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil(t *testing.T) {
 // non-nil wins, InfoError never set") guarded a stale-err case that had no
 // producer; hiding a real error is the worse failure mode.
 func TestBuildPluginInfo_ErrorRidesAlongsideLiveInfo(t *testing.T) {
-	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "1"}, errors.New("instance grid unreadable: boom"))
-	if got.InfoError != "instance grid unreadable: boom" {
+	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "1"}, errors.New("boom"))
+	if got.InfoError != "boom" {
 		t.Errorf("InfoError = %q, want the post-handshake failure verbatim", got.InfoError)
 	}
 }

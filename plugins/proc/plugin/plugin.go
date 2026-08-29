@@ -50,7 +50,7 @@ type Plugin struct {
 
 // FromConfig builds the production plugin from the shared config
 // vocabulary — the ONE owner of the config→plugin derivation, so the
-// subprocess main (guest.Main) and the bundled binaries (gridwell-all,
+// subprocess main (guest.Main) and the bundled binaries (the mobile bind,
 // mobile) compose exactly the same plugin. Config: pid (optional root
 // pid, default 1). A pid that is not a positive integer is REFUSED (the
 // launch stops with the reason — owner decision 2026-08-27): silently

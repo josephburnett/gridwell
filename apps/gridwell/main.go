@@ -1,8 +1,8 @@
 // gridwell — the STOCK HOST binary (docs/plugin.md, a leaf composer that
 // bundles nothing): every plugin is an out-of-process gridwell-plugin-*
 // binary named by config or found on the PATH. This module imports ZERO
-// plugin implementations — the boundary lint pins it. Compare
-// apps/gridwell-all, the bundled example.
+// plugin implementations — the boundary lint pins it. Compare the
+// mobile bind, the one leaf that bundles.
 package main
 
 import (

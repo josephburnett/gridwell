@@ -61,7 +61,7 @@ type Plugin struct {
 
 // FromConfig builds the production plugin from the shared config
 // vocabulary — the ONE owner of the config→plugin derivation, so the
-// subprocess main (guest.Main) and the bundled binaries (gridwell-all,
+// subprocess main (guest.Main) and the bundled binaries (the mobile bind,
 // mobile) compose exactly the same plugin. Config: root (the projected
 // directory). No root is the ROOTLESS plugin — listed, not enterable,
 // a fixable gap the client reports as a notice (issue #47's

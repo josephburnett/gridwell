@@ -12,7 +12,7 @@ import (
 // TestEveryGateTargetRunsInCI pins that the Makefile is the ONE recipe
 // for every gate: each `check-*` target must be invoked (`make <target>`)
 // from some workflow under .github/workflows. Before this pin, gates.yml
-// re-spelled check-web / check-parity / check-e2e / check-electron by
+// re-spelled check-web / check-e2e / check-electron by
 // hand and the two copies drifted (retries, verbosity, a nested xvfb-run
 // around an npm script that already wraps one) — the recipe a developer
 // ran was not the recipe CI ran.

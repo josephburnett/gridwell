@@ -18,14 +18,8 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// NativeFactory constructs an in-process gridwell.v1 server (a native kind)
-// from its config map: db_file, uuid, kind, plus kind-specific keys —
-// the same vocabulary a plugin binary reads from the spawn environment
-// (guest.Config).
-type NativeFactory func(cfg map[string]string) (gridwellv1.GridwellServer, error)
-
-// ServeInProcess starts a gRPC server in a goroutine on a loopback TCP
-// port and returns a client connected to it. closer stops the server and
+// ServeInProcess starts a gRPC server in a goroutine on an in-memory
+// listener and returns a client connected to it. closer stops the server and
 // closes the connection. The in-process half of the compose door; also
 // the seam-test harness everywhere a real plugin is exercised without a
 // subprocess.

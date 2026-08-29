@@ -7,7 +7,7 @@
 //
 // This is THE seam of the v2 design — the one place two owners' facts
 // meet — which is why it stays thin: every merge decision lives in
-// internal/layout (pure, exhaustively unit-tested), every content
+// the store's externals engine (store.Namespace, unit-tested), every content
 // derivation lives in the plugin, and the adapter only converts and
 // forwards. Presentation verbs terminate here; content verbs pass
 // through; a plugin outage degrades to the remembered listing (the

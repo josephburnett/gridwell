@@ -3,7 +3,7 @@
 // constructed by the factories the serve wiring supplies) or a CONTENT
 // PLUGIN (everything else — spawned as a gridwell-plugin-<kind>
 // subprocess, the third-party door, or compiled in through a
-// Factory: gridwell-all, mobile — iOS forbids fork/exec). The
+// Factory: the mobile bind — iOS forbids fork/exec). The
 // gridwell.v1 subprocess door retired 2026-08-27; plugins are plugins.
 package plugin
 
@@ -25,7 +25,7 @@ import (
 )
 
 // Factory constructs an in-process plugin from the
-// shared config vocabulary (the plugin twin of NativeFactory).
+// shared config vocabulary.
 type Factory func(cfg map[string]string) (pluginv1.PluginServer, error)
 
 // LoadInto registers every content plugin of the server config in reg,
@@ -87,10 +87,6 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, factories map[string]Fact
 	}
 	return nil
 }
-
-// NativeFactory is compose.NativeFactory: an in-process constructor for a
-// NATIVE kind over the ONE config vocabulary plugins share.
-type NativeFactory = compose.NativeFactory
 
 // ServeInProcess is compose.ServeInProcess — re-exported for the many
 // seam tests that stand a real gridwell.v1 server up in-process.

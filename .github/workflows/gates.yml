@@ -1,5 +1,5 @@
 # The heavy gates (issue #260), on PRs and main: the browser suite, the
-# composition-parity suite (gridwell-all — every plugin in-process), the
+# the
 # federation spawn/direct/partition gates (self-contained sshd via
 # dialtest), and the full Electron e2e under xvfb. One retry per suite
 # (PW_FLAGS=--retries=1) is the CI face of the repo's vindicated-isolated
