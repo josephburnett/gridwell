@@ -106,7 +106,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   );
 
   // ── A link well to the far home, dropped where the client looks ──
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -232,7 +232,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   });
 
   // Link the far home into the local grid and descend: live first.
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

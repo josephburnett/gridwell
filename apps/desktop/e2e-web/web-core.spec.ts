@@ -6,7 +6,7 @@ import { tileAt } from '../e2e/oracle';
 // and no window.gridwell bridge, against the same server the desktop uses.
 // The errors() hook at the end is the "nothing degraded silently" oracle.
 test('the plain-browser client boots, creates, and edits', async ({ gw, window }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -37,7 +37,7 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
 // lands in the client's world. url tiles deliberately remain creatable
 // (recording an address is useful without a live view).
 test('the browser offers no shell creation, but views shell tiles fine', async ({ gw, window, serve }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
 
   await gw.openPalette();

@@ -11,7 +11,7 @@ import { tileAt } from '../e2e/oracle';
 // pane path attributes its raster paints per tile, so "stayed rendered"
 // is a counted fact, not a pixel guess.
 test('a rendered pane stays rendered when focus moves to a sibling', async ({ gw, window }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

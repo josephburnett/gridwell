@@ -100,7 +100,10 @@ func (a *App) pluginGlyph(gridID string) string {
 			return rpc.GlyphProcess
 		default:
 			if g.Meta.NodeNS != "" {
-				if pl, ok := a.pluginByUUID(uuidOf(g.Meta.NodeNS)); ok {
+				// The mount door IS the connection row (uuid "<id>/<conn>"
+				// — the node's own id prefixes it, so a prefix lookup
+				// would answer for HOME, not the door).
+				if pl, ok := a.pluginByUUID(g.Meta.NodeNS); ok {
 					return pl.Glyph
 				}
 				return "" // an unknown mount: the globe, like its swatch

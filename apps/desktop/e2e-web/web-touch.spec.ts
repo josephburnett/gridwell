@@ -20,7 +20,7 @@ test('touch: tap opens the + menu and descends into a plugin', async ({ gw, wind
     timeout: 5_000,
   });
   const open = await gw.palette();
-  const swatch = open.items.find((i) => i.isPlugin && i.label === 'e2e');
+  const swatch = open.items.find((i) => i.isPlugin && i.label === 'home');
   expect(swatch, 'plugin swatch present in the + menu').toBeTruthy();
   await window.touchscreen.tap(swatch!.x + swatch!.w / 2, swatch!.y + swatch!.h / 2);
   await gw.waitIdle();
@@ -30,7 +30,7 @@ test('touch: tap opens the + menu and descends into a plugin', async ({ gw, wind
 });
 
 test('touch: pinch zooms the focused grid at the pinch midpoint', async ({ gw, window }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   let f = await gw.focused();
   const z0 = f.zoom;
   const center = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
@@ -48,7 +48,7 @@ test('touch: pinch zooms the focused grid at the pinch midpoint', async ({ gw, w
 });
 
 test('touch: long-press-drag from the right edge splits the pane', async ({ gw, window }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const before = (await gw.panes()).length;
   const y = f.y + f.h / 2;
@@ -63,7 +63,7 @@ test('touch: tapping the previous crumb ascends a text descent (#222)', async ({
   // The ascent gesture is the crumb click (issue #222); on touch that is a
   // plain TAP on the second-to-last chain crumb — the canvas translation
   // routes it as the left mousedown the bar hit-test acts on.
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -85,7 +85,7 @@ test('touch: tapping the previous crumb ascends a text descent (#222)', async ({
 });
 
 test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, window }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

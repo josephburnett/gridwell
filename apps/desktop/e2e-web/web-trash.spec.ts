@@ -9,7 +9,7 @@ import { tileAt, getGrid } from '../e2e/oracle';
 // "another root grid with a glyph".
 
 test('delete parks in the dated trash; delete there is forever', async ({ gw, serve }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

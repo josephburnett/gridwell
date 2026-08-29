@@ -84,7 +84,7 @@ test('typing survives a server outage and saves itself after the restart', async
   window,
   outage,
 }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -148,7 +148,7 @@ test('typing survives a server outage and saves itself after the restart', async
 });
 
 test('framing settled during an outage lands after the restart', async ({ gw, outage }) => {
-  await gw.enterPlugin('e2e');
+  await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

@@ -44,7 +44,7 @@ const test = base.extend<Fixtures>({
 });
 
 test('disable_shells removes the shell primitive from the + palette', async ({ gw }) => {
-  await gw.enterPlugin('e2e'); // the seeded localdb — a writable grid, so primitives show
+  await gw.enterPlugin('home'); // home — a writable grid, so primitives show
   await gw.openPalette();
   const pal = await gw.palette();
   const primitives = pal.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
