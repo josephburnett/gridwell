@@ -221,7 +221,7 @@ func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
 	if len(args) > 0 && args[0].Truthy() {
 		p = a.tree.FindPane(args[0].String())
 	}
-	if p == nil || p.TextFocus == "" {
+	if p == nil || p.ContentID() == "" {
 		return nil
 	}
 	file, ok := a.descendedTile(p)
@@ -272,13 +272,13 @@ func (a *App) thTraces(_ js.Value, _ []js.Value) any {
 // invariant that issue #35 mechanism B violated.
 func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
+	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
 		return nil
 	}
 	r := paneRectFor(a, p)
 	return map[string]any{
 		"paneID":     p.ID,
-		"tileID":     p.TextFocus,
+		"tileID":     p.ContentID(),
 		"hasContent": a.textareaReady,
 		// The focused pane's inner box — lets e2e verify the overlay is over the
 		// right pane's geometry, not a sibling.
@@ -324,7 +324,7 @@ func (a *App) thErrors(js.Value, []js.Value) any {
 // focused pane is not descended into a file.
 func (a *App) thTextInnerBox(js.Value, []js.Value) any {
 	p, r, ok := a.focusedPaneRect()
-	if !ok || p.TextFocus == "" {
+	if !ok || p.ContentID() == "" {
 		return nil
 	}
 	x, y, w, h := textInnerBox(r)
@@ -397,15 +397,6 @@ func (a *App) thOrigin(js.Value, []js.Value) any {
 // animation) is in flight — the window I11's injection spec aims for.
 func (a *App) thTransitioning(js.Value, []js.Value) any {
 	return a.transition != nil
-}
-
-// thAscentDepth returns the session ascent-stack depth for a pane.
-func (a *App) thAscentDepth(paneID string) int {
-	pl, ok := a.localIf(paneID)
-	if !ok {
-		return 0
-	}
-	return pl.AscentDepth()
 }
 
 // thPreviewSigs returns, for the FOCUSED pane's leaf grid, a per-tile
@@ -503,11 +494,11 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"h":       r.H,
 			"focused": id == a.tree.Focus,
 			"gridID":  a.gridIDForPane(p),
-			"anchor":  p.Anchor,
-			"path":    stringsToAny(p.Path),
+			"anchor":  p.Anchor(),
+			"path":    stringsToAny(p.Path()),
 			// The tile this pane is descended into ("" when on a grid) — lets a
 			// test tell a shell descent from the url it descended further into.
-			"textFocus": p.TextFocus,
+			"textFocus": p.ContentID(),
 			// The descent's live raw/rendered mode (#261's spec reads it).
 			"textMode": p.TextMode,
 			// The pane's grid is a cache-served memory (the wire stale bit,
@@ -521,11 +512,11 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"cx":   p.Cx,
 			"cy":   p.Cy,
 			"zoom": p.Zoom,
-			// The two ascent-history depths: frames (portal crossings, on the
-			// pane) and the session stack (in-namespace descents). Disjoint
-			// owners — a spec can assert no flow leaks entries (issue #26).
-			"frameDepth":  len(p.Up),
-			"ascentDepth": a.thAscentDepth(id),
+			// How many doorways deep the pane is: ONE number, because there
+			// is one place stack (S8). A spec asserts no flow leaks a frame
+			// (issue #26); before this there were two disjoint stacks and a
+			// leak could hide in either.
+			"placeDepth": p.Depth() - 1,
 			// The ids of the tiles this pane RENDERS (its cache contents). The gap
 			// between this and the server (the GetGrid oracle) is exactly the
 			// create→cache→render / Subscribe-fanout seam where a tile "disappears":
@@ -761,7 +752,7 @@ func (a *App) thBar(_ js.Value, args []js.Value) any {
 // canvas-wrap seam with the SAME bytes on both sides.
 func (a *App) thRawRows(js.Value, []js.Value) any {
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" || !a.textTextarea.Truthy() {
+	if p == nil || p.ContentID() == "" || !a.textTextarea.Truthy() {
 		return -1
 	}
 	src := a.textTextarea.Get("value").String()

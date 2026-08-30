@@ -57,8 +57,8 @@ func previewBlobKey(n *rpc.Tile) int64 {
 	return 0
 }
 
-// drawURLTileInPane renders a URL tile that's currently the pane's
-// TextFocus (i.e., the user descended into it). The pane's inner-rect
+// drawURLTileInPane renders a URL tile that is the pane's current place
+// (i.e., the user descended into it). The pane's inner-rect
 // (x, y, w, h) gets the cached preview image letterboxed to fit. While a
 // live view is attached, mirror frames flow into the same urlPreview cache, so
 // this draw call automatically reflects them. (The old frozen-descent
@@ -141,8 +141,8 @@ func (a *App) drawPageTile(n *rpc.Tile, x, y, w, h float64, selected, outside, d
 	a.cctx.Call("restore")
 }
 
-// drawShellTileInPane renders a shell tile that's currently the pane's
-// TextFocus (the user descended into it). Mirrors drawURLTileInPane:
+// drawShellTileInPane renders a shell tile that is the pane's current place
+// (the user descended into it). Mirrors drawURLTileInPane:
 // the cached freeze-frame JPEG letterboxes into the pane; when no
 // preview is loaded yet the fetch is kicked off and a hint paints the
 // stored cwd so the user sees *something* while the JPEG decodes.

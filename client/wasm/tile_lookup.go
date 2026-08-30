@@ -30,22 +30,22 @@ func (a *App) findTileByID(id string) *rpc.Tile {
 	return nil
 }
 
-// descendedTile resolves the tile a pane is descended into (p.TextFocus). The
+// descendedTile resolves the tile a pane is descended into (p.ContentID()). The
 // fast path is the pane's current grid; the fallback is a by-id cache walk for
 // a tile that lives OFF the pane's grid — an ephemeral url visit focuses a tile
 // in the plugin's scratch grid without re-anchoring the pane onto it, so the
 // renderer, the url stream, and the ascent must still find it. Returns
 // (_, false) when the pane isn't descended or the tile isn't cached yet.
 func (a *App) descendedTile(p *pane.Pane) (rpc.Tile, bool) {
-	if p.TextFocus == "" {
+	if p.ContentID() == "" {
 		return rpc.Tile{}, false
 	}
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if t, ok := g.Tiles[p.TextFocus]; ok {
+		if t, ok := g.Tiles[p.ContentID()]; ok {
 			return t, true
 		}
 	}
-	if t := a.findTileByID(p.TextFocus); t != nil {
+	if t := a.findTileByID(p.ContentID()); t != nil {
 		return *t, true
 	}
 	return rpc.Tile{}, false

@@ -10,10 +10,10 @@
 // historical "menus disappearing / menu on the wrong pane" bug class, which came
 // from the open/closed flag being written from ~14 scattered sites with no owner.
 //
-// State is the LIVE state only. The menu's persistence ACROSS a portal descent
-// (so ascending returns you exactly as you left) rides in pane.Frame.MenuOpen, a
-// saved snapshot restored on ascent; record it with OpenOn at descent and reopen
-// with Open on ascent.
+// State is the LIVE state only. The menu's persistence ACROSS a descent into
+// another namespace (so ascending returns you exactly as you left) rides on
+// the place frame you left — pane.Frame.MenuOpen; record it with OpenOn at
+// the descent and reopen with Open when the ascent lands on that frame.
 //
 // The package is plain Go (no js/wasm build tag) so the whole state machine is
 // unit-tested headlessly — the orchestration, not just a leaf predicate.

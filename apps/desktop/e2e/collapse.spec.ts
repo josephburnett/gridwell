@@ -4,19 +4,20 @@ import { test, expect } from './fixtures';
 // collapsed, forgetPane tears down its per-pane state (a.locals entry) rather
 // than leaking it. Also the first e2e to exercise the pane-collapse gesture at
 // all (previously zero coverage of the collapse path).
-test('collapsing a pane tears down its per-pane state (forgetPane)', async ({ gw }) => {
+test('collapsing a pane tears down its per-pane state (forgetPane)', async ({ gw, window }) => {
   await gw.enterPlugin('home');
-  const f = await gw.focused();
-  const cx = Math.round(f.cx);
-  const cy = Math.round(f.cy);
 
-  // Give the focused pane per-pane state: create a well, descend, ascend. The
-  // descent pushes the parent viewport onto the pane's ascent stack, which
-  // materializes the pane's entry in a.locals.
-  await gw.openPalette();
-  await gw.dragCreate('well', cx, cy);
-  await gw.descendCell(cx, cy);
-  await gw.middleClickCell(cx, cy); // ascend back out
+  // Give the focused pane per-pane state. Since S8 the pane's PLACE lives on
+  // the pane itself, so a.locals holds only the selection and the live
+  // surfaces — an ephemeral url visit is the quickest of those: it descends
+  // and opens a native view, which is exactly the state forgetPane must tear
+  // down (not merely drop a map entry for).
+  await gw.clickPaletteSwatch('url');
+  await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+  await window.fill('#gw-url-input', 'https://example.com/collapse');
+  await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
+  await gw.waitIdle();
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const origId = (await gw.focused()).id;
   expect(await gw.localPaneIds(), 'the pane has per-pane state before the split').toContain(origId);
 

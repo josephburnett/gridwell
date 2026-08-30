@@ -65,7 +65,7 @@ func (a *App) handleContentZoomKey(ev js.Value) bool {
 		return false
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" {
+	if p == nil || p.ContentID() == "" {
 		return false
 	}
 	// Content zoom applies exactly to the content-descent kinds — the set has
@@ -106,7 +106,7 @@ func (a *App) contentZoomKeyFromView(paneID, key string) {
 		return
 	}
 	p := a.tree.FindPane(paneID)
-	if p == nil || p.TextFocus == "" {
+	if p == nil || p.ContentID() == "" {
 		return
 	}
 	t, ok := a.descendedTile(p)

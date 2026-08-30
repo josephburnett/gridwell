@@ -20,14 +20,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/workspace"
 )
 
 // wsSaveDebounceMs is the persister's coalescing window: every layout-
@@ -80,7 +78,117 @@ func (a *App) maybeInstallWorkspace(pd *wsPending) {
 	pd.install()
 }
 
-// startWorkspaceDescent enters a pane tile from pane p: a zoom into the
+// captureWorkspaceTree clones the CURRENT window layout as a fresh
+// workspace's initial arrangement (issue #242): an encode/decode round
+// trip through the SAME rel/abs pair the persister uses, so the capture is
+// byte-for-byte what the first flush will store — one serialization owner,
+// no second cloner. Any failure (a pane outside the node's reach encodes
+// as home, per the flush rule; a hard error falls all the way back) yields
+// the old organize-this default: a capture must never block the descent.
+func (a *App) captureWorkspaceTree(tileID, idPrefix string, origin pane.Pane) *pane.Tree {
+	prefix := paneTileChainPrefix(tileID)
+	data, _, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
+		rest, ok := strings.CutPrefix(id, prefix)
+		return rest, ok
+	})
+	if err == nil {
+		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix); derr == nil {
+			// An EPHEMERAL descent (a click-visit riding the scratch grid)
+			// is session state that dies on ascent — a durable capture must
+			// not reference it, and its copy re-going-live would keep the
+			// outer visit's view alive past the workspace boundary. The
+			// captured pane keeps its PLACE; the visit itself stays with
+			// the outer tree and re-engages on ascent as always.
+			t.Walk(func(cp *pane.Pane) {
+				if cp.ContentID() == "" {
+					return
+				}
+				if tile := a.findTileByID(cp.ContentID()); tile != nil && a.isEphemeralTile(cp, tile) {
+					cp.Pop()
+				}
+			})
+			return t
+		}
+	}
+	return workspaceTreeFromPlace(idPrefix, origin.Anchor(), origin.Path(), origin.Cx, origin.Cy, origin.Zoom)
+}
+
+// workspaceTreeFromPlace builds the single-pane fallback: one pane at the
+// given place. The decode-failure read-only default, the boot fallback —
+// and the capture fallback when the current tree cannot encode.
+func workspaceTreeFromPlace(idPrefix, anchor string, path []string, cx, cy, zoom float64) *pane.Tree {
+	t := pane.NewTree()
+	t.IDPrefix = idPrefix
+	p := t.FocusedPane()
+	p.ID = idPrefix + p.ID
+	t.Focus = p.ID
+	p.Stack = pane.StackAt(anchor, path, "")
+	p.Cx, p.Cy = cx, cy
+	if zoom <= 0 {
+		zoom = 1
+	}
+	p.Zoom = zoom
+	return t
+}
+
+// installWorkspace performs the actual swap: push the frame and install
+// the decoded tree, with the OUTER level LEFT RUNNING (issue #249, owner
+// reversal of the boundary freeze): its live views park off-screen and
+// its shells stay attached — liveness follows pane existence, and no pane
+// closed here. Level-scoped pane ids (Tree.IDPrefix) keep the
+// simultaneously-alive trees from colliding in the pane-keyed maps.
+// keepOuter=false means the
+// descent has no return tree (boot restore via ?w= — the boot-blank tree is
+// nothing the user built): the frame records OuterTree nil and ascent falls
+// back to the pane tile's containing grid. baseline is the decoded blob
+// bytes (nil for a never-arranged tile), seeding the persister's diff so a
+// pure visit never writes.
+func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string, readOnly bool, baseline []byte, keepOuter bool) {
+	a.transition = nil
+	// The capture animation's expanding rect lands exactly where the #225
+	// outline draws; dropping it here is the seamless handoff (issue #242).
+	a.wsExpand = nil
+	a.menu.Close()
+	// Entering a NESTED workspace: flush the current one's layout first —
+	// its tree is about to sit un-drawn in a frame for an unbounded time,
+	// and the debounce must not still be holding its latest arrangement.
+	// A no-op at depth 0 (no workspace to flush).
+	a.flushWorkspaceSave()
+	outer := a.tree
+	if !keepOuter {
+		// A boot restore replaces a boot-blank tree nothing lives in; the
+		// ordinary descent keeps the outer level fully ALIVE (issue #249 —
+		// the old flushDroppedSubtree teardown is deliberately gone).
+		outer = nil
+	}
+
+	f := pane.Level{
+		OuterTree:  outer,
+		OriginPane: originPane,
+		TileID:     pt.ID,
+		// Raw alt: the bar substitutes the generic label at draw time, so
+		// the crumb rename can round-trip an empty name honestly.
+		Name:     pt.AltText,
+		ReadOnly: readOnly,
+	}
+	pane.MarkSaved(&f, baseline)
+	a.ws.Push(f)
+
+	a.tree = tree
+	a.restoreWorkspaceLeaves(tree)
+	// The installed tree's focused leaf may be text-descended (a restored
+	// text_focus). Rebind the textarea singleton to it NOW: without this the
+	// overlay keeps showing — and scroll-tracking against — whatever tile it
+	// was bound to before the swap, which is exactly the stale-binding state
+	// the 2026-07-18 stomp rode in on. (Saves no longer trust the binding,
+	// but the DISPLAY must not lie either.)
+	a.refreshFileOverlay()
+	a.scheduleURLUpdate()
+	a.draw()
+}
+
+// descendLevel enters a pane tile from pane p — descend()'s window arm: a
+// zoom into the
 // tile's footprint (like every descent) racing the layout fetch, with the
 // swap at whichever finishes last. A blob that cannot be decoded installs
 // the default READ-ONLY: the session must never overwrite a blob it could
@@ -88,7 +196,7 @@ func (a *App) maybeInstallWorkspace(pd *wsPending) {
 // never-arranged tile opens on ITS CONTAINING GRID — dropping a workspace
 // into a grid means "organize this", so entering it shows the place it
 // lives, exactly as the descending pane saw it (owner decision 2026-07-10).
-func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
+func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 	originPane := p.ID
 	tileID := pt.ID
 	// The new level's pane-id namespace (issue #249): stacked trees are all
@@ -97,12 +205,13 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 	idPrefix := fmt.Sprintf("w%d:", a.ws.Depth()+1)
 	// The origin pane's place, for the organize-this default and for the
 	// byte-identical viewport restore under the animation.
-	origin := pane.Pane{Anchor: p.Anchor, Path: slices.Clone(p.Path), Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
+	origin := pane.Pane{Stack: p.Stack.Clone()}
+	here := p.Stack.Clone()
 
 	pd := &wsPending{
 		restore: func() {
 			if fp := a.tree.FindPane(originPane); fp != nil {
-				fp.Cx, fp.Cy, fp.Zoom = origin.Cx, origin.Cy, origin.Zoom
+				fp.Stack = origin.Stack.Clone()
 			}
 		},
 	}
@@ -126,7 +235,7 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 		a.startTransition(&paneTransition{
 			paneID: p.ID,
 			segments: []transSegment{{
-				path:   slices.Clone(p.Path),
+				place:  &here,
 				fromCx: p.Cx, fromCy: p.Cy, fromZoom: p.Zoom,
 				toCx: p.Cx, toCy: p.Cy, toZoom: p.Zoom,
 				durationMs: totalTransitionMs,
@@ -150,7 +259,7 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 		a.startTransition(&paneTransition{
 			paneID: p.ID,
 			segments: []transSegment{{
-				path:   slices.Clone(p.Path),
+				place:  &here,
 				fromCx: p.Cx, fromCy: p.Cy, fromZoom: p.Zoom,
 				toCx: tcx, toCy: tcy, toZoom: target,
 				durationMs: totalTransitionMs,
@@ -212,7 +321,7 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 			if derr != nil {
 				a.reportErr(errsurface.Error, "layout:"+tileID,
 					"workspace layout unreadable — opened read-only: "+derr.Error())
-				tree = workspaceTreeFromPlace(idPrefix, origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
+				tree = workspaceTreeFromPlace(idPrefix, origin.Anchor(), origin.Path(), origin.Cx, origin.Cy, origin.Zoom)
 				readOnly = true
 			}
 		}
@@ -232,120 +341,9 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 	}()
 }
 
-// captureWorkspaceTree clones the CURRENT window layout as a fresh
-// workspace's initial arrangement (issue #242): an encode/decode round
-// trip through the SAME rel/abs pair the persister uses, so the capture is
-// byte-for-byte what the first flush will store — one serialization owner,
-// no second cloner. Any failure (a pane outside the node's reach encodes
-// as home, per the flush rule; a hard error falls all the way back) yields
-// the old organize-this default: a capture must never block the descent.
-func (a *App) captureWorkspaceTree(tileID, idPrefix string, origin pane.Pane) *pane.Tree {
-	prefix := paneTileChainPrefix(tileID)
-	data, _, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
-		rest, ok := strings.CutPrefix(id, prefix)
-		return rest, ok
-	})
-	if err == nil {
-		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix); derr == nil {
-			// An EPHEMERAL descent (a click-visit riding the scratch grid)
-			// is session state that dies on ascent — a durable capture must
-			// not reference it, and its copy re-going-live would keep the
-			// outer visit's view alive past the workspace boundary. The
-			// captured pane keeps its PLACE; the visit itself stays with
-			// the outer tree and re-engages on ascent as always.
-			t.Walk(func(cp *pane.Pane) {
-				if cp.TextFocus == "" {
-					return
-				}
-				if tile := a.findTileByID(cp.TextFocus); tile != nil && a.isEphemeralTile(cp, tile) {
-					cp.TextFocus = ""
-					cp.TextMode = ""
-				}
-			})
-			return t
-		}
-	}
-	return workspaceTreeFromPlace(idPrefix, origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
-}
-
-// workspaceTreeFromPlace builds the single-pane fallback: one pane at the
-// given place. The decode-failure read-only default, the boot fallback —
-// and the capture fallback when the current tree cannot encode.
-func workspaceTreeFromPlace(idPrefix, anchor string, path []string, cx, cy, zoom float64) *pane.Tree {
-	t := pane.NewTree()
-	t.IDPrefix = idPrefix
-	p := t.FocusedPane()
-	p.ID = idPrefix + p.ID
-	t.Focus = p.ID
-	p.Anchor = anchor
-	p.Path = slices.Clone(path)
-	p.Cx, p.Cy = cx, cy
-	if zoom <= 0 {
-		zoom = 1
-	}
-	p.Zoom = zoom
-	return t
-}
-
-// installWorkspace performs the actual swap: push the frame and install
-// the decoded tree, with the OUTER level LEFT RUNNING (issue #249, owner
-// reversal of the boundary freeze): its live views park off-screen and
-// its shells stay attached — liveness follows pane existence, and no pane
-// closed here. Level-scoped pane ids (Tree.IDPrefix) keep the
-// simultaneously-alive trees from colliding in the pane-keyed maps.
-// keepOuter=false means the
-// descent has no return tree (boot restore via ?w= — the boot-blank tree is
-// nothing the user built): the frame records OuterTree nil and ascent falls
-// back to the pane tile's containing grid. baseline is the decoded blob
-// bytes (nil for a never-arranged tile), seeding the persister's diff so a
-// pure visit never writes.
-func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string, readOnly bool, baseline []byte, keepOuter bool) {
-	a.transition = nil
-	// The capture animation's expanding rect lands exactly where the #225
-	// outline draws; dropping it here is the seamless handoff (issue #242).
-	a.wsExpand = nil
-	a.menu.Close()
-	// Entering a NESTED workspace: flush the current one's layout first —
-	// its tree is about to sit un-drawn in a frame for an unbounded time,
-	// and the debounce must not still be holding its latest arrangement.
-	// A no-op at depth 0 (no workspace to flush).
-	a.flushWorkspaceSave()
-	outer := a.tree
-	if !keepOuter {
-		// A boot restore replaces a boot-blank tree nothing lives in; the
-		// ordinary descent keeps the outer level fully ALIVE (issue #249 —
-		// the old flushDroppedSubtree teardown is deliberately gone).
-		outer = nil
-	}
-
-	f := workspace.Frame{
-		OuterTree:  outer,
-		OriginPane: originPane,
-		TileID:     pt.ID,
-		// Raw alt: the bar substitutes the generic label at draw time, so
-		// the crumb rename can round-trip an empty name honestly.
-		Name:     pt.AltText,
-		ReadOnly: readOnly,
-	}
-	workspace.MarkSaved(&f, baseline)
-	a.ws.Push(f)
-
-	a.tree = tree
-	a.restoreWorkspaceLeaves(tree)
-	// The installed tree's focused leaf may be text-descended (a restored
-	// text_focus). Rebind the textarea singleton to it NOW: without this the
-	// overlay keeps showing — and scroll-tracking against — whatever tile it
-	// was bound to before the swap, which is exactly the stale-binding state
-	// the 2026-07-18 stomp rode in on. (Saves no longer trust the binding,
-	// but the DISPLAY must not lie either.)
-	a.refreshFileOverlay()
-	a.scheduleURLUpdate()
-	a.draw()
-}
-
 // bootWorkspace restores the innermost workspace from a reload (?w=). The
-// outer tree is nil by design — nesting membership is session-only, like
-// portal Up frames. Defaults (never-arranged / unreadable blob) open on the
+// outer tree is nil by design — nesting membership is session-only, like the
+// outer frames of a pane's place (#13). Defaults (never-arranged / unreadable blob) open on the
 // pane tile's containing grid, centered on the tile.
 func (a *App) bootWorkspace(tileID string) {
 	tile, err := a.cl.GetTile(context.Background(), tileID)
@@ -400,27 +398,31 @@ func (a *App) bootWorkspace(tileID string) {
 // already walks loosely).
 func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	tree.Walk(func(p *pane.Pane) {
-		if p.Anchor == "" {
-			p.Anchor = a.home
+		if p.Anchor() == "" {
+			p.Reset(pane.Frame{GridID: a.home, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 		}
 		if p.Zoom == 0 {
 			p.Zoom = 1
 		}
 		a.fetchGrid(a.gridIDForPane(p))
-		if p.TextFocus != "" {
-			a.autoLiveOnRestore(p.ID, p.TextFocus)
+		if p.ContentID() != "" {
+			a.autoLiveOnRestore(p.ID, p.ContentID())
 		}
 	})
 }
 
-// ascendWorkspaceLevels leaves `count` workspaces: for each, flush the
+// ascendLevels leaves `count` window levels — the pane-tile axis of the
+// same pop (the pane-frame axis is ascend()). For each level: flush the
 // layout one last time, freeze and forget the inner leaves, pop, and
 // restore the outer tree verbatim (focus returns to the origin pane). The
 // FINAL landing animates the reverse of the descent — the pane tile's face
 // shrinking back to the origin pane's viewport. A frame with no outer tree
 // (boot restore) falls back to a fresh pane at the pane tile's containing
-// grid — the same graceful degradation a portal ascent has after reload.
-func (a *App) ascendWorkspaceLevels(count int) {
+// grid — the same graceful degradation an ascent has after a reload.
+func (a *App) ascendLevels(count int) {
+	if count <= 0 {
+		return
+	}
 	for i := 0; i < count; i++ {
 		top := a.ws.Top()
 		if top == nil {
@@ -452,11 +454,9 @@ func (a *App) ascendWorkspaceLevels(count int) {
 	// panes that lost their surface to the ONE-SURFACE rule while a higher
 	// level held the same tile: the holder just closed, so the surface is
 	// free again and the pane re-engages (issue #202's one owner decides).
-	a.tree.Walk(func(p *pane.Pane) {
-		if p.TextFocus != "" {
-			a.autoLiveOnRestore(p.ID, p.TextFocus)
-		}
-	})
+	for _, h := range pane.ContentPanes(a.tree) {
+		a.autoLiveOnRestore(h.PaneID, h.TileID)
+	}
 	a.scheduleURLUpdate()
 	a.draw()
 }
@@ -465,9 +465,9 @@ func (a *App) ascendWorkspaceLevels(count int) {
 // zoomed into the pane tile's footprint (the reverse of the descent's end)
 // and animates back to its restored viewport. Skipped — an instant landing —
 // when the tile row isn't in the cached grid (nothing to zoom out of).
-func (a *App) animateWorkspaceReturn(f workspace.Frame) {
+func (a *App) animateWorkspaceReturn(f pane.Level) {
 	p := a.tree.FindPane(f.OriginPane)
-	if p == nil || p.TextFocus != "" {
+	if p == nil || p.ContentID() != "" {
 		return
 	}
 	g, ok := a.c.Grid(a.gridIDForPane(p))
@@ -483,13 +483,14 @@ func (a *App) animateWorkspaceReturn(f workspace.Frame) {
 	tcy := float64(t.Y) + float64(t.H)/2
 	overtake := textFitZoom(r, t.W, t.H)
 	savedCx, savedCy, savedZoom := p.Cx, p.Cy, p.Zoom
+	here := p.Stack.Clone()
 	if overtake < savedZoom {
 		overtake = savedZoom
 	}
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{{
-			path:   slices.Clone(p.Path),
+			place:  &here,
 			fromCx: tcx, fromCy: tcy, fromZoom: overtake,
 			toCx: savedCx, toCy: savedCy, toZoom: savedZoom,
 			durationMs: totalTransitionMs,
@@ -527,11 +528,11 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 // callback, where a blocking network call would wedge the wasm scheduler —
 // so the pane lands at home for a frame and re-anchors when the tile
 // arrives; an unreachable tile just leaves it at home (best-effort, same as
-// a portal ascent after reload).
+// an ascent after a reload).
 func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 	t := pane.NewTree()
 	p := t.FocusedPane()
-	p.Anchor = a.home
+	p.Reset(pane.Frame{GridID: a.home, Zoom: 1})
 	paneID := p.ID
 	go func() {
 		tile, err := a.cl.GetTile(context.Background(), tileID)
@@ -542,12 +543,13 @@ func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 		// Re-anchor only if the pane is still sitting untouched at home —
 		// a user who already navigated wins over the late fetch.
 		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.Anchor != a.home || len(fp.Path) > 0 || fp.TextFocus != "" {
+		if fp == nil || fp.Anchor() != a.home || len(fp.Path()) > 0 || fp.ContentID() != "" {
 			return
 		}
-		fp.Anchor = tile.GridID
-		fp.Cx = float64(tile.X) + float64(tile.W)/2
-		fp.Cy = float64(tile.Y) + float64(tile.H)/2
+		fp.Reset(pane.Frame{GridID: tile.GridID,
+			Cx:   float64(tile.X) + float64(tile.W)/2,
+			Cy:   float64(tile.Y) + float64(tile.H)/2,
+			Zoom: fp.Zoom})
 		a.fetchGrid(tile.GridID)
 		a.scheduleURLUpdate()
 		a.draw()
@@ -592,7 +594,7 @@ func (a *App) flushWorkspaceSave() {
 		a.reportErr(errsurface.Info, "layout:"+top.TileID,
 			"a pane views content the workspace's node cannot reach; it will reopen at home")
 	}
-	if !workspace.ShouldPersist(top, data) {
+	if !pane.ShouldPersist(top, data) {
 		return
 	}
 	go a.postPaneLayout(top.TileID, data)
@@ -620,7 +622,7 @@ func (a *App) postPaneLayout(tileID string, data []byte) {
 		},
 		then: func() {
 			if top := a.ws.Top(); top != nil && top.TileID == tileID {
-				workspace.MarkSaved(top, data)
+				pane.MarkSaved(top, data)
 			}
 			a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *tile}})
 			a.resolveErr("rpc:PaneLayout")

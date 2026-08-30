@@ -5,43 +5,43 @@ import (
 	"testing"
 )
 
+// chainPane is a pane four namespace levels deep, with wells and content
+// descents mixed in: home well 12, a link into n5, a text descent there,
+// a link into mnt7, two wells, and a text descent at the leaf.
 func chainPane() *Pane {
-	return &Pane{
-		ID:     "p1",
-		Anchor: "mnt7abc/9",
-		Path:   []string{"4", "7"},
-		Up: []Frame{
-			{Anchor: "k3x9m2q/1", Path: []string{"12"}},
-			{Anchor: "n5aaaaa/1", Path: nil, TextFocus: "33"},
-		},
-		TextFocus: "21",
-	}
+	p := &Pane{ID: "p1", Stack: NewStack("k3x9m2q/1")}
+	p.Push(Frame{Door: "12", Zoom: 1})
+	p.Push(Frame{GridID: "n5aaaaa/1", Door: "lnk1", Zoom: 1})
+	p.Push(Frame{Door: "33", Content: true, Zoom: 1})
+	p.Push(Frame{GridID: "mnt7abc/9", Door: "lnk2", Zoom: 1})
+	p.Push(Frame{Door: "4", Zoom: 1})
+	p.Push(Frame{Door: "7", Zoom: 1})
+	p.Push(Frame{Door: "21", Content: true, Zoom: 1})
+	return p
 }
 
-func TestDescentChainSpansFramesPathAndText(t *testing.T) {
-	got := DescentChain(chainPane())
+// One crumb per frame, in order: a frame that opens a namespace level shows
+// its root grid, every other frame shows the tile it came through.
+func TestCrumbsAreOnePerFrame(t *testing.T) {
+	got := chainPane().Crumbs()
 	want := []Crumb{
-		{Anchor: "k3x9m2q/1", UpLen: 0, ParentAnchor: "k3x9m2q/1"},
-		{TileID: "12", UpLen: 0, PathLen: 1, ParentAnchor: "k3x9m2q/1", ParentPath: []string{}},
-		{Anchor: "n5aaaaa/1", UpLen: 1, ParentAnchor: "n5aaaaa/1"},
-		{TileID: "33", Text: true, UpLen: 1, PathLen: 0, HasText: true,
-			ParentAnchor: "n5aaaaa/1", ParentPath: []string{}},
-		{Anchor: "mnt7abc/9", UpLen: 2, ParentAnchor: "mnt7abc/9"},
-		{TileID: "4", UpLen: 2, PathLen: 1, ParentAnchor: "mnt7abc/9", ParentPath: []string{}},
-		{TileID: "7", UpLen: 2, PathLen: 2, ParentAnchor: "mnt7abc/9", ParentPath: []string{"4"}},
-		{TileID: "21", Text: true, UpLen: 2, PathLen: 2, HasText: true,
-			ParentAnchor: "mnt7abc/9", ParentPath: []string{"4", "7"}},
+		{Level: 0, Anchor: "k3x9m2q/1", ParentAnchor: "k3x9m2q/1"},
+		{Level: 1, TileID: "12", ParentAnchor: "k3x9m2q/1"},
+		{Level: 2, Anchor: "n5aaaaa/1", ParentAnchor: "n5aaaaa/1"},
+		{Level: 3, TileID: "33", Text: true, ParentAnchor: "n5aaaaa/1"},
+		{Level: 4, Anchor: "mnt7abc/9", ParentAnchor: "mnt7abc/9"},
+		{Level: 5, TileID: "4", ParentAnchor: "mnt7abc/9"},
+		{Level: 6, TileID: "7", ParentAnchor: "mnt7abc/9", ParentPath: []string{"4"}},
+		{Level: 7, TileID: "21", Text: true, ParentAnchor: "mnt7abc/9", ParentPath: []string{"4", "7"}},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("chain length = %d, want %d\n%+v", len(got), len(want), got)
 	}
 	for i := range want {
 		g, w := got[i], want[i]
-		// slices.Clone of an empty prefix yields an empty non-nil slice;
-		// compare by content.
-		if g.Anchor != w.Anchor || g.TileID != w.TileID || g.Text != w.Text ||
-			g.UpLen != w.UpLen || g.PathLen != w.PathLen || g.HasText != w.HasText ||
-			g.ParentAnchor != w.ParentAnchor || !samePath(g.ParentPath, w.ParentPath) {
+		if g.Level != w.Level || g.Anchor != w.Anchor || g.TileID != w.TileID ||
+			g.Text != w.Text || g.ParentAnchor != w.ParentAnchor ||
+			!samePath(g.ParentPath, w.ParentPath) {
 			t.Errorf("crumb %d = %+v, want %+v", i, g, w)
 		}
 	}
@@ -54,95 +54,56 @@ func samePath(a, b []string) bool {
 	return len(a) == 0 || reflect.DeepEqual(a, b)
 }
 
-func TestDescentChainBootBlankIsEmpty(t *testing.T) {
-	if c := DescentChain(&Pane{ID: "p1"}); c != nil {
+func TestCrumbsBootBlankIsEmpty(t *testing.T) {
+	if c := (&Pane{ID: "p1"}).Crumbs(); c != nil {
 		t.Fatalf("boot-blank pane chain = %+v, want nil", c)
-	}
-	if c := DescentChain(nil); c != nil {
-		t.Fatalf("nil pane chain = %+v, want nil", c)
 	}
 }
 
-func TestDescentChainRootOnly(t *testing.T) {
-	c := DescentChain(&Pane{ID: "p1", Anchor: "k3x9m2q/1"})
+func TestCrumbsRootOnly(t *testing.T) {
+	p := &Pane{ID: "p1", Stack: NewStack("k3x9m2q/1")}
+	c := p.Crumbs()
 	if len(c) != 1 || c[0].Anchor != "k3x9m2q/1" || c[0].TileID != "" {
 		t.Fatalf("root-only chain = %+v", c)
 	}
 }
 
-// The last crumb of any chain IS the pane's current level: never deeper,
-// and every earlier crumb is shallower.
-func TestDeeperThanOrdersTheChain(t *testing.T) {
-	p := chainPane()
-	chain := DescentChain(p)
-	last := chain[len(chain)-1]
-	if DeeperThan(p, last) {
-		t.Fatalf("pane deeper than its own innermost crumb")
-	}
-	for i, c := range chain[:len(chain)-1] {
-		if !DeeperThan(p, c) {
-			t.Errorf("pane not deeper than crumb %d (%+v)", i, c)
-		}
-	}
-}
-
-// Simulate the ascent loop against the pure pane mutations: each single
-// ascent strictly decreases depth, and the loop reaches every crumb.
-func TestAscentLoopReachesEveryCrumb(t *testing.T) {
-	full := DescentChain(chainPane())
-	for target := range full {
+// The ascent arithmetic: n pops reach the crumb n levels out, the current
+// crumb is 0 (clicking where you are does nothing), and popping n really
+// lands on that crumb's level.
+func TestAscentsToLandsOnTheCrumb(t *testing.T) {
+	full := chainPane().Crumbs()
+	for target, c := range full {
 		p := chainPane()
-		c := full[target]
-		for steps := 0; DeeperThan(p, c); steps++ {
-			if steps > 16 {
-				t.Fatalf("crumb %d: ascent loop did not converge", target)
-			}
-			ascendOnce(p)
+		n := p.AscentsTo(c)
+		if want := len(full) - 1 - target; n != want {
+			t.Fatalf("crumb %d: AscentsTo = %d, want %d", target, n, want)
 		}
-		got := DescentChain(p)
+		for i := 0; i < n; i++ {
+			if !p.Pop() {
+				t.Fatalf("crumb %d: ran out of frames after %d pops", target, i)
+			}
+		}
+		got := p.Crumbs()
 		if len(got) != target+1 {
-			t.Errorf("crumb %d: landed at depth %d, want %d", target, len(got), target+1)
+			t.Fatalf("crumb %d: landed at depth %d, want %d", target, len(got), target+1)
 		}
-		if !reflect.DeepEqual(got[len(got)-1].AtLevel(), c.AtLevel()) {
-			t.Errorf("crumb %d: landed on %+v, want %+v", target, got[len(got)-1], c)
+		if last := got[len(got)-1]; last.Level != c.Level || last.TileID != c.TileID || last.Anchor != c.Anchor {
+			t.Errorf("crumb %d: landed on %+v, want %+v", target, last, c)
 		}
 	}
 }
 
-// AtLevel is the crumb's pane-state shape, for landing comparisons.
-func (c Crumb) AtLevel() [3]int { return depthKey(c.UpLen, c.PathLen, c.HasText) }
-
-// ascendOnce mirrors ascendPane's dispatch as pure pane mutations.
-func ascendOnce(p *Pane) {
-	switch {
-	case p.TextFocus != "":
-		p.TextFocus = ""
-	case len(p.Path) > 0:
-		p.Path = p.Path[:len(p.Path)-1]
-	case len(p.Up) > 0:
-		p.PopFrame()
-	}
-}
-
-func TestOneAscentReaches(t *testing.T) {
-	full := DescentChain(chainPane())
-	for target := range full {
-		p := chainPane()
-		c := full[target]
-		for DeeperThan(p, c) {
-			if OneAscentReaches(p, c) {
-				ascendOnce(p)
-				if DeeperThan(p, c) || len(DescentChain(p)) != target+1 {
-					t.Fatalf("crumb %d: OneAscentReaches lied — landed at %+v", target, p)
-				}
-				break
-			}
-			ascendOnce(p)
-		}
-	}
-	// The innermost crumb is where the pane already is: unreachable by ascent.
+// The innermost crumb is where the pane already is.
+func TestAscentsToCurrentIsZero(t *testing.T) {
 	p := chainPane()
-	if OneAscentReaches(p, full[len(full)-1]) {
-		t.Fatalf("OneAscentReaches claimed the current level")
+	full := p.Crumbs()
+	if n := p.AscentsTo(full[len(full)-1]); n != 0 {
+		t.Fatalf("AscentsTo(current) = %d, want 0", n)
+	}
+	// A crumb from a deeper chain than the pane has (stale bar click) never
+	// asks for a negative ascent.
+	if n := p.AscentsTo(Crumb{Level: 99}); n != 0 {
+		t.Fatalf("AscentsTo(stale deeper crumb) = %d, want 0", n)
 	}
 }

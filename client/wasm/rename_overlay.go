@@ -42,14 +42,14 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 	if p == nil {
 		return rpc.Tile{}, false
 	}
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		t, ok := a.descendedTile(p)
 		if !ok || t.Kind == rpc.KindText || a.isEphemeralTile(p, &t) {
 			return rpc.Tile{}, false
 		}
 		return t, true
 	}
-	if len(p.Path) == 0 {
+	if len(p.Path()) == 0 {
 		// A portal level (a connection, a linked world): the door tile —
 		// the well descended through, or the instance well naming the same
 		// place — is a real row, and renaming the room names its door,
@@ -60,12 +60,12 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 		}
 		return rpc.Tile{}, false
 	}
-	parentGridID := a.gridIDForPathFrom(p.Anchor, p.Path[:len(p.Path)-1])
+	parentGridID := a.gridIDForPathFrom(p.Anchor(), p.Path()[:len(p.Path())-1])
 	g, ok := a.c.Grid(parentGridID)
 	if !ok {
 		return rpc.Tile{}, false
 	}
-	t, ok := g.Tiles[p.Path[len(p.Path)-1]]
+	t, ok := g.Tiles[p.Path()[len(p.Path())-1]]
 	if !ok || !rpc.IsWellKind(t.Kind) {
 		return rpc.Tile{}, false
 	}
@@ -93,7 +93,7 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 		}
 		return t.AltText, true, false
 	}
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		if t, ok := a.descendedTile(p); ok {
 			if a.isEphemeralTile(p, &t) {
 				return "ephemeral", false, true
@@ -107,7 +107,7 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 	// A portal level: the DOOR's identity (#263) — the entry's or plugin's
 	// declared label, read-only. (A renamable door was already answered by
 	// the renameTarget arm above.)
-	if len(p.Path) == 0 {
+	if len(p.Path()) == 0 {
 		if t, kind := a.doorFind(p); kind != door.None {
 			if t.AltText == "" {
 				return "unnamed", false, true
@@ -130,9 +130,9 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 // the level below's grid when there is one, and the plugin declarations.
 func (a *App) doorFind(p *pane.Pane) (rpc.Tile, door.Kind) {
 	var parent map[string]rpc.Tile
-	if len(p.Up) > 0 {
-		f := p.Up[len(p.Up)-1]
-		if gid := a.gridIDForPathFrom(f.Anchor, f.Path); gid != "" {
+	if p.Depth() > 1 {
+		anchor, path := p.AnchorPathAt(p.Depth() - 2)
+		if gid := a.gridIDForPathFrom(anchor, path); gid != "" {
 			if g, ok := a.c.Grid(gid); ok {
 				parent = g.Tiles
 			} else {
@@ -140,7 +140,7 @@ func (a *App) doorFind(p *pane.Pane) (rpc.Tile, door.Kind) {
 			}
 		}
 	}
-	return door.Find(p.Anchor, parent, a.allPlugins())
+	return door.Find(p.Anchor(), parent, a.allPlugins())
 }
 
 // togglePaneZoom zooms the focused pane to the full layout, or back —

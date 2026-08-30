@@ -5,15 +5,12 @@ package main
 import (
 	"context"
 	"github.com/josephburnett/gridwell/client/textedit"
-	"slices"
 	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/textcursor"
-	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/urlwalk"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -57,12 +54,12 @@ func (a *App) flushFramingSave() {
 	a.framingFlushes++
 	// One active surface per grid (owner decision 2026-08-13, #249
 	// extended): among panes showing the same grid only the FOCUSED one
-	// writes its framing — panestate.FramingWriters is the pure rule.
-	var pgs []panestate.PaneGrid
+	// writes its framing — pane.FramingWriters is the pure rule.
+	var pgs []pane.PaneGrid
 	a.tree.Walk(func(p *pane.Pane) {
-		pgs = append(pgs, panestate.PaneGrid{PaneID: p.ID, GridID: a.gridIDForPane(p)})
+		pgs = append(pgs, pane.PaneGrid{PaneID: p.ID, GridID: a.gridIDForPane(p)})
 	})
-	writers := panestate.FramingWriters(pgs, a.tree.Focus)
+	writers := pane.FramingWriters(pgs, a.tree.Focus)
 	a.tree.Walk(func(p *pane.Pane) {
 		if writers[p.ID] {
 			a.persistPaneFraming(p)
@@ -105,45 +102,41 @@ func (a *App) flushWellWheelSaves() {
 }
 
 // persistPaneFraming writes pane p's current place framing — the same
-// write an ascent flushes, fired without waiting for one. It resolves
-// WHICH ROW owns the framing and hands it to persistFraming:
-//   - descended into a child grid: the leaf well, the doorway it came in by;
-//   - at a portal target: the containing link tile, under the FRAME's anchor;
-//   - at a root grid with no containing tile: no doorway, so the grid row.
+// write an ascent flushes, fired without waiting for one. WHICH ROW owns it
+// is the place stack's own projection (pane.FramingTarget): the doorway the
+// pane came in by, or the grid row when it came in by nothing. This used to
+// be three hand-written branches here and two more inside the ascents.
 //
-// A text descent settle-persists its SCROLL (decision 2026-08-13 — it
+// A content descent settle-persists its SCROLL (decision 2026-08-13 — it
 // used to survive only an ascent, so a reload lost your place in the
 // doc). No-op when the place is unresolvable (uncached parent grid) —
 // the next settle retries.
 func (a *App) persistPaneFraming(p *pane.Pane) {
-	if p.TextFocus != "" {
+	own := p.FramingTarget()
+	switch {
+	case own.Content:
 		a.persistTextScroll(p)
-		return
-	}
-	if len(p.Path) > 0 {
-		parentPath := p.Path[:len(p.Path)-1]
-		parentGridID := a.gridIDForPathFrom(p.Anchor, parentPath)
-		if parentGridID == "" {
+	case own.TileID == "":
+		a.persistFraming(p, nil, "", nil)
+	default:
+		gid := a.gridIDForPathFrom(own.DoorAnchor, own.DoorPath)
+		if gid == "" {
 			return
 		}
-		g, ok := a.c.Grid(parentGridID)
+		g, ok := a.c.Grid(gid)
 		if !ok {
 			return
 		}
-		w, ok := g.Tiles[p.Path[len(p.Path)-1]]
+		w, ok := g.Tiles[own.TileID]
 		if !ok {
+			// No row for the doorway — a + menu portal. The level's own
+			// root grid owns the framing instead (the same fact, the same
+			// verb).
+			a.persistFraming(p, nil, "", nil)
 			return
 		}
-		a.persistFraming(p, &w, p.Anchor, slices.Clone(parentPath))
-		return
+		a.persistFraming(p, &w, own.DoorAnchor, own.DoorPath)
 	}
-	if f, ok := p.TopFrame(); ok {
-		if well := a.portalWellForFrame(p, f); well != nil {
-			a.persistFraming(p, well, f.Anchor, slices.Clone(f.Path))
-			return
-		}
-	}
-	a.persistFraming(p, nil, "", nil)
 }
 
 // persistFraming is the ONE framing writeback (docs/simplify-plan.md S4).
@@ -184,16 +177,16 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 			a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
 		}
 	} else {
-		if len(p.Path) > 0 || p.TextFocus != "" {
+		if len(p.Path()) > 0 || p.ContentID() != "" {
 			return
 		}
-		pl, ok := a.pluginByRoot(p.Anchor)
+		pl, ok := a.pluginByRoot(p.Anchor())
 		if !ok {
 			return
 		}
 		cur = rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}
-		gridID = p.Anchor
-		req = rpc.SetFramingRequest{RootGridID: p.Anchor}
+		gridID = p.Anchor()
+		req = rpc.SetFramingRequest{RootGridID: p.Anchor()}
 		commit = func(f rpc.Framing) {
 			// The local PluginInfo copy of the root framing (a cache of
 			// the Info handshake) reconciles immediately, so the next
@@ -291,7 +284,7 @@ func (a *App) scheduleURLUpdate() {
 
 // writeURLNow encodes the focused pane's state and writes it to the browser
 // history — the ONE history writer. push-vs-replace is the tested
-// url.PushesEntry decision over the DIFF between this write's place and the
+// pane.URLPushesEntry decision over the DIFF between this write's place and the
 // last one written (issue #194): structural navigation (descend / ascend /
 // portal / workspace boundary) pushes an entry so back traverses it; framing
 // changes and pane-focus switches replace in place. No call site carries a
@@ -310,13 +303,13 @@ func (a *App) writeURLNow() {
 		return
 	}
 	state := a.encodeFocusedPaneURL()
-	raw := a.withE2EParam(url.Encode(state))
+	raw := a.withE2EParam(pane.EncodeURL(state))
 	var paneID string
 	if p := a.tree.FocusedPane(); p != nil {
 		paneID = p.ID
 	}
-	place := url.PlaceOf(paneID, state)
-	push := url.PushesEntry(a.urlPrevPlace, place, a.urlPlaceSeen)
+	place := pane.URLPlaceOf(paneID, state)
+	push := pane.URLPushesEntry(a.urlPrevPlace, place, a.urlPlaceSeen)
 	a.urlPrevPlace = place
 	a.urlPlaceSeen = true
 	if push {
@@ -326,7 +319,7 @@ func (a *App) writeURLNow() {
 	}
 }
 
-// withE2EParam re-appends the e2e harness gate. url.Encode rebuilds the query
+// withE2EParam re-appends the e2e harness gate. pane.EncodeURL rebuilds the query
 // from scratch, so any param it doesn't know is dropped on the first write —
 // including `e2e=1`. Without this the FIRST write de-instruments the page and
 // any spec that reloads or history-navigates mid-test loses the testhook
@@ -345,8 +338,8 @@ func (a *App) withE2EParam(raw string) string {
 // restoreFromHistory applies a browser back/forward (popstate): a
 // reload-equivalent restore of the focused pane at the URL the browser
 // navigated to. Runs on its own goroutine (fetches block). The session
-// scaffolding that a reload would lose — portal frames, the ascent stack,
-// live streams, selection — resets here too, deliberately: back is
+// scaffolding that a reload would lose — the pane's outer frames, live
+// streams, selection — resets here too, deliberately: back is
 // navigation to a PLACE, and the place's truth (content, framing) is all
 // server-owned by now (#190), so what's dropped is only transient workspace
 // scaffolding, never data.
@@ -373,64 +366,46 @@ func (a *App) restoreFromHistory(raw string) {
 	// never pushes entries (the URL is constant inside a workspace), so a
 	// popstate always crosses a place boundary — exit any workspace stack
 	// through its real exit path (layout flushes included) before restoring.
-	if n := a.ws.Depth(); n > 0 {
-		a.ascendWorkspaceLevels(n)
-	}
+	a.ascendLevels(a.ws.Depth())
 
 	p := a.tree.FocusedPane()
 	if p == nil {
 		return
 	}
-	// Reload-equivalent per-pane reset: close live streams, drop the session
-	// stacks, and clear the pane's PLACE — applyURLState assumes a
-	// boot-fresh pane (its no-path branch never writes Path, because at boot
-	// there is nothing to overwrite), so a stale descent path would survive
-	// a restore to a shallower place.
+	// Reload-equivalent per-pane reset: close live streams and clear the
+	// pane's PLACE down to one frame — applyURLState installs the decoded
+	// place over it, so a deeper frame left standing here would survive a
+	// restore to a shallower place.
 	a.menu.Close()
 	a.transition = nil
 	a.forgetPane(p.ID)
-	p.Up = nil
-	p.Path = nil
-	p.TextFocus = ""
-	p.TextMode = ""
+	p.Reset(pane.Frame{GridID: a.home, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 	a.refreshFileOverlay()
 
 	a.applyURLState(raw)
 }
 
-// encodeFocusedPaneURL builds a url.State from the focused pane.
-//   - If the pane is in text mode: TileIDs = path + TextFocus.
-//     For text mode, fill cursor (col, row) read from the textarea.
-//   - Otherwise: TileIDs = path; viewport from Cx, Cy, Zoom.
-func (a *App) encodeFocusedPaneURL() url.State {
-	// Inside a workspace, the pane tile IS the place: the interior (every
-	// pane's anchor/path/viewport) is server-owned by the layout blob, so
-	// nothing else rides the URL (one fact, one owner — the blob wins).
+// encodeFocusedPaneURL projects the focused pane's place into the URL DTO.
+// The projection itself is pane.URLStateOf (the ONE encode half, unit
+// tested); the only thing the shim adds is the textarea cursor, which is a
+// DOM fact.
+func (a *App) encodeFocusedPaneURL() pane.URLState {
+	// Inside a pane tile, that tile IS the place: the interior (every pane's
+	// place and viewport) is server-owned by the layout blob, so nothing
+	// else rides the URL (one fact, one owner — the blob wins).
 	if top := a.ws.Top(); top != nil {
-		return url.State{Workspace: top.TileID}
+		return pane.URLState{Workspace: top.TileID}
 	}
 	p := a.tree.FocusedPane()
 	if p == nil {
-		return url.State{}
+		return pane.URLState{}
 	}
-	var s url.State
-	if p.TextFocus != "" {
-		isText := p.TextMode == rpc.TextModeText
-		var col, row int
-		if isText {
-			col, row = a.textareaCursorRowCol()
-		}
-		s = url.TextState(p.Path, p.TextFocus, isText, col, row)
-	} else {
-		s = url.GridState(p.Path, p.Cx, p.Cy, p.Zoom)
+	isText := p.ContentID() != "" && p.TextMode == rpc.TextModeText
+	var col, row int
+	if isText {
+		col, row = a.textareaCursorRowCol()
 	}
-	// Anchor records which grid namespace the pane sits inside, so a reload
-	// re-enters the same place and walks the path within it. Home — the first
-	// plugin's root grid — encodes as empty, keeping "/" the home URL.
-	if p.Anchor != a.home {
-		s.Anchor = p.Anchor
-	}
-	return s
+	return pane.URLStateOf(&p.Stack, a.home, isText, col, row)
 }
 
 // textareaCursorRowCol returns the cursor position in the file
@@ -467,10 +442,10 @@ func (a *App) applyURLOnBoot() {
 // popstate restore (restoreFromHistory). See applyURLOnBoot for the
 // loose-input contract.
 func (a *App) applyURLState(raw string) {
-	state, err := url.Decode(raw)
+	state, err := pane.DecodeURL(raw)
 	if err != nil {
 		// Bad URL — drop to root.
-		state = url.State{}
+		state = pane.URLState{}
 	}
 
 	// A workspace place restores the innermost pane tile from its blob; the
@@ -499,7 +474,7 @@ func (a *App) applyURLState(raw string) {
 			return
 		}
 	}
-	p.Anchor = state.Anchor
+	p.Reset(pane.Frame{GridID: state.Anchor, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
 	// The URL's path segments are bare well ids within the anchor's grid
 	// namespace; qualify them with the anchor's NAMESPACE — everything up to
@@ -521,7 +496,7 @@ func (a *App) applyURLState(raw string) {
 	if len(qualified) == 0 {
 		a.fetchGridSync(state.Anchor)
 		rcx, rcy, rz, _ := a.persistedGridView(p, state.Anchor, nil)
-		if bv := url.BootViewport(state.X, state.Y, state.Zoom, rcx, rcy, rz); bv.Apply {
+		if bv := pane.URLBootViewport(state.X, state.Y, state.Zoom, rcx, rcy, rz); bv.Apply {
 			p.Cx = bv.Cx
 			p.Cy = bv.Cy
 			if bv.SetZoom {
@@ -555,9 +530,17 @@ func (a *App) applyURLState(raw string) {
 			return tiles, true
 		})
 
-	p.Path = resolvedPath
+	// The decoded place, built by the ONE decoder: a root grid, the walked
+	// doorway path, and the content leaf when there is one. The outer frames
+	// carry no viewport (nothing encodes those — owner decision #13), so the
+	// ascent out of here lands on each grid's persisted framing.
+	viewport := p.Frame
+	p.Stack = pane.StackAt(state.Anchor, resolvedPath, textTileID)
+	p.Cx, p.Cy, p.Zoom = viewport.Cx, viewport.Cy, viewport.Zoom
+	if p.Zoom <= 0 {
+		p.Zoom = 1
+	}
 	if textTileID != "" {
-		p.TextFocus = textTileID
 		// Mode follows the one descent decision (descentTextMode — a
 		// read-only tile always restores RENDERED, the selectable face);
 		// a URL that encodes a text cursor forces text mode. Scale is
@@ -621,7 +604,7 @@ func (a *App) fetchGridSync(id string) bool {
 // fetchBlobAndSetCursor pulls the file's bytes and, once they're in
 // the cache, places the cursor at (state.Col, state.Row) inside the
 // textarea. Asynchronous because GetBlob is over the wire.
-func (a *App) fetchBlobAndSetCursor(textTileID string, state url.State) {
+func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
 	gid := a.gridIDForPane(a.tree.FocusedPane())
 	g, ok := a.c.Grid(gid)
 	if !ok {

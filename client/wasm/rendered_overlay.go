@@ -75,7 +75,7 @@ func (a *App) ensureRenderedView() {
 	// textarea mirrors (previews and ascent-restore read the stored scroll).
 	scrollCb := js.FuncOf(func(js.Value, []js.Value) any {
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeRendered {
+		if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeRendered {
 			return nil
 		}
 		p.TextScrollY = a.renderedView.Get("scrollTop").Float()
@@ -101,7 +101,7 @@ func (a *App) refreshRenderedOverlay() {
 		a.lastRenderedKey = ""
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" {
+	if p == nil || p.ContentID() == "" {
 		hide()
 		return
 	}
@@ -165,7 +165,7 @@ func (a *App) refreshRenderedOverlay() {
 // the box must not LOOK saved when nothing was).
 func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" {
+	if p == nil || p.ContentID() == "" {
 		ev.Call("preventDefault")
 		return
 	}

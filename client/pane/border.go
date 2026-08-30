@@ -38,7 +38,7 @@ type BorderColors struct {
 // rpc.Tile types — the caller resolves "is there a descended tile, and
 // what kind?" first.
 type BorderInput struct {
-	// HasTextFocus mirrors pane.Pane.TextFocus != 0: this pane is
+	// HasTextFocus mirrors "the pane's place is a content frame": this pane is
 	// descended into a content tile (text or url).
 	HasTextFocus bool
 	// DescentDepth mirrors len(pane.Pane.Path): >0 means we're inside

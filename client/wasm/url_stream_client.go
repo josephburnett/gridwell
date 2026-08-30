@@ -180,15 +180,14 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	// ONE live surface per content tile (issue #249, generalizing the
 	// same-level rule): any OTHER pane — at any stack level — holding a
 	// live view on this content freezes now; the opener takes over.
-	for otherID, pl := range a.locals {
-		if otherID != paneID && pl.urlView != nil && pl.urlView.tileID == t.ID {
-			a.closeURLStream(otherID, true)
-		}
+	// pane.TakeOver is the rule, shared with the shell side.
+	for _, otherID := range pane.TakeOver(a.urlSurfaces(), paneID, t.ID) {
+		a.closeURLStream(otherID, true)
 	}
 	r := a.barAwarePaneRect(p)
 	b := contentViewBounds(r)
 	page := t.Kind != rpc.KindURL && t.ServesPage
-	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), page: page}
+	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
 	// durable = the DESCENDED row survives ascent: false for an ephemeral
 	// visit, which gets no Freeze Page in the context menu (issue #240).
 	// A page view is never durable in this sense either: it carries no
@@ -302,7 +301,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 // freezeURLPaneByIntent runs the explicit freeze gesture (issue #237, the
 // context menu's "Freeze Page"): persist the user's STANDING freeze, then
 // tear the live view down through the ordinary freeze writeback. The
-// intent lands on the DESCENDED row (p.TextFocus) — for a url link that
+// intent lands on the DESCENDED row (p.ContentID()) — for a url link that
 // is the link row itself: the freeze is this reference's presentation,
 // not the content owner's, and it is the row the next descent's
 // DecideAutoLive reads. The intent write goes first, then the teardown's
@@ -311,7 +310,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 func (a *App) freezeURLPaneByIntent(paneID string) {
 	p := a.tree.FindPane(paneID)
 	pl, ok := a.localIf(paneID)
-	if p == nil || !ok || pl.urlView == nil || p.TextFocus == "" {
+	if p == nil || !ok || pl.urlView == nil || p.ContentID() == "" {
 		return
 	}
 	tile, ok := a.descendedTile(p)

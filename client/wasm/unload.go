@@ -25,7 +25,6 @@ package main
 //     destination is user state).
 
 import (
-	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -64,7 +63,9 @@ func (a *App) flushOnUnload() {
 	if tr := a.transition; tr != nil && len(tr.segments) > 0 {
 		if p := a.tree.FindPane(tr.paneID); p != nil {
 			seg := tr.segments[len(tr.segments)-1]
-			p.Path = slices.Clone(seg.path)
+			if seg.place != nil {
+				p.Stack = seg.place.Clone()
+			}
 			p.Cx, p.Cy, p.Zoom = seg.toCx, seg.toCy, seg.toZoom
 		}
 		a.completeTransition()

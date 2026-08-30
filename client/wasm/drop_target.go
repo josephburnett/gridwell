@@ -106,7 +106,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	if !ok {
 		return nil, false
 	}
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		return nil, false
 	}
 	parentCell := cellPx * p.Zoom

@@ -29,8 +29,6 @@ import (
 	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
-	"github.com/josephburnett/gridwell/client/url"
-	"github.com/josephburnett/gridwell/client/workspace"
 )
 
 const (
@@ -99,15 +97,15 @@ type App struct {
 	dragging *dragState
 
 	// locals is the per-pane session-local client state, one entry per live
-	// pane, keyed by pane id: selection, the ascent stack, and the live
-	// URL/shell handles. Created on demand by a.local; removed atomically on
+	// pane, keyed by pane id: the selection and the live URL/shell handles
+	// (the pane's PLACE lives on the pane itself — client/pane, place.go). Created on demand by a.local; removed atomically on
 	// pane drop by a.forgetPane. See paneLocal / client/panestate.
 	locals map[string]*paneLocal
 
 	// Plus-button (+) creation-menu state. menu is the single owner: open/closed,
 	// which pane, hovered item. Never assign menu fields directly — go through
-	// its methods (see client/menu). Persistence across a portal descent rides in
-	// pane.Frame.MenuOpen.
+	// its methods (see client/menu). Persistence across a descent rides on the
+	// place frame you left — Frame.MenuOpen.
 	menu menu.State
 
 	// errs is the single owner of user-visible failure notices (charter §6).
@@ -122,11 +120,11 @@ type App struct {
 	// is what's memoized; the truth is the tile row + content bytes.
 	paneLayouts map[string]*paneLayoutEntry
 
-	// ws is the workspace stack — the ONE owner of "which pane tile is the
+	// ws is the window's level stack — the ONE owner of "which pane tile is the
 	// user inside, and what outer tree does each descent restore" (see
 	// client/workspace). a.tree is the display of its top; the persisted
 	// layout is owned by the server blob.
-	ws workspace.Stack
+	ws pane.Levels
 
 	// wsPending coordinates an in-flight workspace descent (animation ×
 	// fetch); nil when none. thIdle reports busy while it exists.
@@ -138,7 +136,7 @@ type App struct {
 	// urlRestoring marks an in-flight popstate restore, during which every
 	// write replaces (pushing would corrupt the stack being traversed).
 	// Owned by urlsync.go.
-	urlPrevPlace url.Place
+	urlPrevPlace pane.URLPlace
 	urlPlaceSeen bool
 	urlRestoring bool
 
@@ -274,7 +272,7 @@ type App struct {
 
 	// textTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
-	// when pane.TextFocus != 0 and pane.TextMode == "text", and hidden
+	// when the pane's place is a content frame in TextMode "text", and hidden
 	// otherwise. We hold it as a single shared element to avoid creating
 	// fresh DOM nodes on every descent.
 	textTextarea js.Value
@@ -417,11 +415,6 @@ type scheduler struct {
 	errExpireCb        js.Func
 }
 
-// paneState is the saved-ascent stack entry, owned by client/panestate
-// (panestate.Saved) so the per-pane state lives in one tested place. Aliased
-// here to keep the many `paneState{...}` construction sites unchanged.
-type paneState = panestate.Saved
-
 // wellWheelDrift is one well's in-flight hover-wheel state — the ONE owner
 // of the not-yet-persisted view (framing-audit decision 2026-08-13): the
 // grid to persist under, the FLOAT view center accumulated across the
@@ -440,8 +433,8 @@ type wellWheelDrift struct {
 }
 
 // paneLocal is the single owner of one pane's session-local client state:
-// the plain-data part (panestate.State, embedded — selection and the ascent
-// stack) plus the native live URL/shell handles. One per live pane in
+// the plain-data part (panestate.State, embedded — the selection) plus the
+// native live URL/shell handles. One per live pane in
 // App.locals, created on demand by App.local and
 // removed atomically when the pane is dropped (App.forgetPane), so none of this
 // state can outlive or be orphaned from its pane.
@@ -542,10 +535,10 @@ type paneTransition struct {
 	segments       []transSegment
 	currentSegment int
 	segmentStartMs float64
-	// onComplete, if set, runs after the last segment lands. Used by text
-	// tile descent to install pane.TextFocus only once the visual transition
-	// has reached the tile's footprint at OvertakeZoom (so the toggle
-	// button appearing doesn't pop into view mid-animation).
+	// onComplete, if set, runs after the last segment lands. Used by a
+	// content descent to push its frame only once the visual transition has
+	// reached the tile's footprint at OvertakeZoom (so the toggle button
+	// appearing doesn't pop into view mid-animation).
 	onComplete func()
 	// traceTileID, when set (ascents only), arms the ephemeral "you just came
 	// from HERE" highlight on that tile once the transition lands — a fading
@@ -565,15 +558,17 @@ type traceState struct {
 const traceDurMs = 2000.0
 
 type transSegment struct {
-	path                     []string
+	// place is the pane's PLACE for this segment — a snapshot installed at
+	// the segment's start. A descent's last segment carries the stack with
+	// the new frame pushed; an ascent's carries it popped; a same-place
+	// segment carries the stack unchanged. Because each segment installs a
+	// SNAPSHOT, the viewport the animation writes into the live top frame is
+	// scratch: the frame the pane will ascend onto keeps the viewport it was
+	// actually left at (that is the whole of the old saved-ascent stack).
+	place                    *pane.Stack
 	fromCx, fromCy, fromZoom float64
 	toCx, toCy, toZoom       float64
 	durationMs               float64
-	// setAnchor switches the pane's plugin anchor at this segment's start (a
-	// cross-plugin portal jump). anchor is the new plugin-root grid id. Normal
-	// same-plugin descents leave the anchor untouched.
-	setAnchor bool
-	anchor    string
 }
 
 // ghost is a transient floating render of a tile, positioned in screen
@@ -852,8 +847,8 @@ func (a *App) bootstrap() {
 func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
 	p := a.tree.FocusedPane()
-	p.Anchor = a.home // land at home; applyURLOnBoot may restore a location
-	p.Path = nil
+	// Land at home; applyURLOnBoot may restore a place over it.
+	p.Reset(pane.Frame{GridID: a.home, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 	if a.home != "" {
 		a.fetchGrid(a.home)
 	}
@@ -1060,7 +1055,7 @@ func (a *App) pruneTraces(now float64) bool {
 }
 
 // startTransition installs the given transition and primes the first
-// segment: the pane's path and viewport are set to the segment's start
+// segment: the pane's place and viewport are set to the segment's start
 // state and the per-frame loop is woken up.
 func (a *App) startTransition(t *paneTransition) {
 	a.transition = t
@@ -1069,17 +1064,16 @@ func (a *App) startTransition(t *paneTransition) {
 	a.scheduleFrame()
 }
 
-// applySegmentStart updates the pane's path and viewport to the segment's
-// starting state. Called when a segment begins (including the very first).
+// applySegmentStart installs the segment's place and viewport on the pane.
+// Called when a segment begins (including the very first).
 func (a *App) applySegmentStart(seg transSegment) {
 	p := a.tree.FindPane(a.transition.paneID)
 	if p == nil {
 		return
 	}
-	if seg.setAnchor {
-		p.Anchor = seg.anchor
+	if seg.place != nil {
+		p.Stack = seg.place.Clone()
 	}
-	p.Path = seg.path
 	p.Cx = seg.fromCx
 	p.Cy = seg.fromCy
 	p.Zoom = seg.fromZoom
@@ -1150,23 +1144,6 @@ func (a *App) ghostHiddenPane() string {
 		return ""
 	}
 	return a.ghost.hiddenPaneID
-}
-
-// pushPaneState saves the parent viewport on the stack for paneID. Called at
-// the start of descent so the matching ascent can animate the parent back to
-// exactly this position.
-func (a *App) pushPaneState(paneID string, s paneState) {
-	a.local(paneID).PushAscent(s)
-}
-
-// popPaneState removes and returns the most recent saved parent viewport for
-// paneID, or nil if the stack is empty (e.g. user reloaded mid-descent).
-func (a *App) popPaneState(paneID string) *paneState {
-	pl, ok := a.localIf(paneID)
-	if !ok {
-		return nil
-	}
-	return pl.PopAscent()
 }
 
 // startSSE opens the Connect-streaming Subscribe RPC and applies each
@@ -1279,19 +1256,19 @@ func (a *App) retryBackstop() {
 	}
 }
 
-// Session-local state: the full UI state — split layout, per-pane
-// navigation, viewport — rebuilds from the URL on reload. The URL
-// captures only the focused pane's path and viewport; the split tree
-// starts fresh. paneStateStack survives within the session so ascent
-// restores the exact pre-descent parent viewport; it is not persisted
-// across reloads. Text tile mode (rendered/text) is persisted on the
-// tile row, so it survives reload.
+// Session-local state: the full UI state — split layout, per-pane place,
+// viewport — rebuilds from the URL on reload. The URL captures only the
+// focused pane's place; the split tree starts fresh. The OUTER frames of a
+// pane's place stack (the viewports an ascent lands on) are session-only by
+// owner decision #13, so a restored pane ascends onto each grid's persisted
+// framing instead. Text tile mode (rendered/text) is persisted on the tile
+// row, so it survives reload.
 
-// gridIDForPane returns the grid id at the leaf of the pane's descent path,
-// walking from the pane's Anchor (the plugin root it currently sits inside).
-// Returns "" when the pane is at the launcher start screen (Anchor == "").
+// gridIDForPane returns the grid id the pane's place names: its current
+// namespace anchor walked down the doorway path (both PROJECTIONS of the
+// frame stack). Returns "" when the pane is boot-blank.
 func (a *App) gridIDForPane(p *pane.Pane) string {
-	return a.gridIDForPathFrom(p.Anchor, p.Path)
+	return a.gridIDForPathFrom(p.Anchor(), p.Path())
 }
 
 // gridIDForPathFrom walks `path` (well row ids) from `anchor` and returns the
