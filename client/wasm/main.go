@@ -33,30 +33,29 @@ import (
 
 const (
 	cellPx = pane.CellPx
-	// zoomMin is THE grid zoom floor — one value for every zoom gesture
-	// (wheel and pinch both land in zoomtrans.WheelZoom with it), on
-	// every client (desktop and the phone's web client alike; a narrow
-	// viewport needs the same floor to take in the lay of the land).
-	// 0.125 keeps cells at 8px, above the 4px line where
-	// drawGridLinesIn stops painting the grid (render.go).
+	// zoomMin is the grid zoom floor: one value for every zoom gesture,
+	// since wheel and pinch both land in zoomtrans.WheelZoom with it, and
+	// for every client, desktop and browser alike. 0.125 keeps cells at 8px,
+	// above the 4px line where drawGridLinesIn stops painting the grid
+	// (render.go).
 	zoomMin    = 0.125
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
-	// wellZoomRatio* clamp the hover-wheel well zoom (issue #210) in the
-	// INTRINSIC ratio's units (previewCell = parentCell × ratio; the
-	// unvisited default is 1/PreviewFactor = 0.125). Min keeps the preview
-	// above the renderer's 0.5px visibility floor at ordinary cell sizes;
-	// max 1.0 renders child cells at full parent-cell size.
+	// wellZoomRatio* clamp the hover-wheel well zoom in the intrinsic
+	// ratio's units: previewCell = parentCell × ratio, and the unvisited
+	// default is 1/PreviewFactor = 0.125. The min keeps the preview above
+	// the renderer's 0.5px visibility floor at ordinary cell sizes; the max
+	// of 1.0 renders child cells at full parent-cell size.
 	wellZoomRatioMin = 1.0 / 64.0
 	wellZoomRatioMax = 1.0
 
-	// textFixedScale is the constant render scale for text-file content —
-	// descended AND previewed (issue #205: the preview renders at this same
-	// constant scale × the tile's content_zoom, wrapped to the tile, so
-	// grid zoom reveals more lines instead of magnifying the type). The
-	// descended pane is a plain window onto the document at this scale,
-	// scrolled vertically.
+	// textFixedScale is the constant render scale for text content, both
+	// descended and previewed. The preview renders at this same constant
+	// scale times the tile's content_zoom, wrapped to the tile, so grid zoom
+	// reveals more lines instead of magnifying the type. The descended pane
+	// is a plain window onto the document at this scale, scrolled
+	// vertically.
 	textFixedScale = 1.0
 )
 
@@ -74,22 +73,21 @@ type App struct {
 	// served from. All server reads and mutations go through it.
 	cl *rpc.Client
 
-	// plugins is the configured plugin list from Handshake, used for the
-	// node-grid health tints, plugin glyphs, and the e2e launcher hook.
-	// Order is config order.
+	// plugins is the plugin list from the Handshake, used for health tints,
+	// plugin glyphs, and the e2e launcher hook. Order is config order.
 	plugins []rpc.PluginInfo
 
-	// home is the qualified grid id "/" means — the first configured
-	// plugin's root grid (rpc.HomeGrid, the one derivation). Every "empty
-	// anchor means home" reader (boot, URL decode/encode, workspace leaf
-	// restore) reads THIS.
+	// home is the qualified grid id "/" means: the home grid the handshake
+	// names (rpc.HomeGrid, the one derivation). Every "empty anchor means
+	// home" reader — boot, URL decode and encode, pane-tile leaf restore —
+	// reads this.
 	home string
 
 	tree *pane.Tree
 	c    *cache.Cache
 
-	// textSaves serializes UpdateText posts per tile so pipelined saves
-	// chain versions instead of racing (issue #140); see enqueueTextSave.
+	// textSaves serializes content writes per tile so pipelined saves chain
+	// versions instead of racing; see enqueueTextSave.
 	textSaves *textedit.SaveQueue
 
 	width, height float64
@@ -97,61 +95,62 @@ type App struct {
 	dragging *dragState
 
 	// locals is the per-pane session-local client state, one entry per live
-	// pane, keyed by pane id: the selection and the live URL/shell handles
-	// (the pane's PLACE lives on the pane itself — client/pane, place.go). Created on demand by a.local; removed atomically on
-	// pane drop by a.forgetPane. See paneLocal / client/panestate.
+	// pane, keyed by pane id: the selection and the live URL and shell
+	// handles. The pane's place lives on the pane itself (client/pane,
+	// place.go). Created on demand by a.local and removed atomically on pane
+	// drop by a.forgetPane. See paneLocal and client/panestate.
 	locals map[string]*paneLocal
 
-	// Plus-button (+) creation-menu state. menu is the single owner: open/closed,
-	// which pane, hovered item. Never assign menu fields directly — go through
-	// its methods (see client/menu). Persistence across a descent rides on the
-	// place frame you left — Frame.MenuOpen.
+	// The + creation-menu state. menu is the single owner of open or closed,
+	// which pane, and the hovered item. Never assign menu fields directly;
+	// go through its methods (client/menu). Persistence across a descent
+	// rides on the place frame you left, Frame.MenuOpen.
 	menu menu.State
 
-	// errs is the single owner of user-visible failure notices (charter §6).
-	// Every failure path reports via a.reportErr / a.resolveErr; only the
-	// notice-strip render and its click handler read it. Never write error
-	// state anywhere else.
+	// errs is the single owner of user-visible failure notices. Every
+	// failure path reports through a.reportErr or a.resolveErr; only the
+	// notice-strip render and its click handler read it. Error state lives
+	// nowhere else.
 	errs *errsurface.Surface
 
-	// paneLayouts memoizes each pane tile's decoded workspace tree, keyed by
-	// tile id and invalidated by blob generation (see paneTileLayout). A
-	// cache and a view of the server blob, never an authority — the DECODE
-	// is what's memoized; the truth is the tile row + content bytes.
+	// paneLayouts memoizes each pane tile's decoded tree, keyed by tile id
+	// and invalidated by blob generation (see paneTileLayout). It is a cache
+	// and a view of the server blob, never an authority: the decode is what
+	// is memoized, and the truth is the tile row plus its content bytes.
 	paneLayouts map[string]*paneLayoutEntry
 
-	// ws is the window's level stack — the ONE owner of "which pane tile is the
-	// user inside, and what outer tree does each descent restore" (the rules
-	// are client/pane's Levels). a.tree is the display of its top; the
+	// ws is the window's level stack: the one owner of which pane tile the
+	// user is inside and what outer tree each descent restores. The rules
+	// are client/pane's Levels. a.tree is the display of its top, and the
 	// persisted layout is owned by the server blob.
 	ws pane.Levels
 
-	// wsPending coordinates an in-flight workspace descent (animation ×
-	// fetch); nil when none. thIdle reports busy while it exists.
+	// wsPending coordinates an in-flight pane-tile descent, pairing the
+	// animation with the fetch; nil when none. thIdle reports busy while it
+	// exists.
 	wsPending *wsPending
 
-	// urlPrevPlace / urlPlaceSeen are the URL writer's push-vs-replace diff
-	// baseline: the structural place the last history write named (issue
-	// #194 — writeURLNow pushes only when the place changed structurally).
+	// urlPrevPlace and urlPlaceSeen are the URL writer's push-against-replace
+	// diff baseline: the structural place the last history write named, since
+	// writeURLNow pushes only when the place changed structurally.
 	// urlRestoring marks an in-flight popstate restore, during which every
-	// write replaces (pushing would corrupt the stack being traversed).
-	// Owned by urlsync.go.
+	// write replaces, because pushing would corrupt the stack being
+	// traversed. Owned by urlsync.go.
 	urlPrevPlace pane.URLPlace
 	urlPlaceSeen bool
 	urlRestoring bool
 
-	// caps is the host capability set (client/caps), derived ONCE at boot
-	// from bridge presence. Feature gates read a.caps; nothing else asks
-	// the bridge to make a behavior decision.
+	// caps is the host capability set (client/caps), derived once at boot
+	// from bridge presence. Feature gates read a.caps; nothing else asks the
+	// bridge to make a behavior decision.
 	caps caps.Caps
 
-	// origin is the serving origin (location.origin), captured once at boot —
+	// origin is the serving origin (location.origin), captured once at boot:
 	// the base every derived address builds on. contentToken is the
-	// /content/ door's path capability from the handshake
-	// (2026-08-11): rpc.PageURL(origin, contentToken, tileID) is a
-	// serves_page tile's address, derived at use time and never persisted
-	// (the desktop origin is an ephemeral port). webAddress is the one
-	// reader.
+	// /content/ door's path capability from the handshake, so
+	// rpc.PageURL(origin, contentToken, tileID) is a serves_page tile's
+	// address, derived at use time and never persisted, because the desktop
+	// origin is an ephemeral port. webAddress is the one reader.
 	origin       string
 	contentToken string
 
@@ -161,10 +160,9 @@ type App struct {
 
 	// touch is the touch→mouse gesture classifier (client/touchgest);
 	// touchTimerCb is its retained long-press timer callback;
-	// touchDownTarget is the element the current gesture started on — where
+	// touchDownTarget is the element the current gesture started on, where
 	// synthetic MouseDowns route, mirroring browser hit-testing for a real
-	// mouse (issue #191). Owned by touch.go; nothing else feeds or reads
-	// them.
+	// mouse. Owned by touch.go; nothing else feeds or reads them.
 	touch           *touchgest.Machine
 	touchTimerCb    js.Func
 	touchDownTarget js.Value
@@ -180,12 +178,12 @@ type App struct {
 	// response lands.
 	gridInflight map[string]bool
 
-	// contentInflight tracks tile ids with a pending ReadContent request.
-	// Deduped like gridInflight: tileBody fires fetchTileContent on every
+	// contentInflight tracks tile ids with a pending ReadContent request,
+	// deduped like gridInflight: tileBody fires fetchTileContent on every
 	// cache miss every frame, so without the guard one absent body spawns a
-	// fetch per frame — and any reply older than one that already landed
-	// would repaint stale bytes into the overlay (issue #189; the cache's
-	// PutFetchedContent version guard is the backstop).
+	// fetch per frame, and any reply older than one that already landed
+	// would repaint stale bytes into the overlay. The cache's
+	// PutFetchedContent version guard is the backstop.
 	contentInflight map[string]bool
 
 	// tileInflight tracks qualified tile ids with a pending GetTile request
@@ -222,10 +220,9 @@ type App struct {
 	// swap. See right_button.go.
 	rightDrag *rightDragState
 
-	// leftResize is the in-flight left-button pane-boundary resize, if
-	// any. Same divider math as the right-button resize but it never
-	// closes a pane (clamps to a recoverable minimum), so the left button
-	// can shuffle / minimize pane sizes without risking a live tile.
+	// leftResize is the in-flight left-button pane-boundary resize, if any.
+	// The drag itself clamps to the pane minimum and never closes a pane;
+	// the release decides a crush-through close.
 	leftResize *leftResizeState
 
 	// urlPreview caches decoded HTMLImageElement values for URL and
@@ -238,16 +235,14 @@ type App struct {
 	// wholesale when full, never a fact.
 	wrapCache map[string][]string
 
-	// shellAlive caches the result of the ShellSessionAlive probe per
-	// tile id. The refresh button shows iff (preview_blob_id == 0)
-	// || shellAlive[id] is true. shellAliveProbing single-flights the
-	// in-flight probe per tile — an entry holds the CALLBACKS waiting
-	// on the answer, so a rapid sequence of redraws doesn't fan out
-	// into many RPCs and a caller's callback is never dropped (the
-	// bar's callback-less badge probe used to win the flight and
-	// silently disarm the restore's attach callback). A missing
-	// shellAlive key means "unknown" — the renderer kicks off a probe
-	// and hides the button until the result lands.
+	// shellAlive caches the result of the ShellSessionAlive probe per tile
+	// id. The refresh button shows when preview_blob_id is 0, or when
+	// shellAlive[id] is true. shellAliveProbing single-flights the in-flight
+	// probe per tile: an entry holds the callbacks waiting on the answer, so
+	// a rapid sequence of redraws does not fan out into many RPCs and no
+	// caller's callback is dropped. A missing shellAlive key means unknown —
+	// the renderer kicks off a probe and hides the button until the result
+	// lands.
 	shellAlive        map[string]bool
 	shellAliveProbing map[string][]func(alive bool)
 
@@ -257,17 +252,17 @@ type App struct {
 	// hands it a dialer and the two callbacks.
 	shells *shellstream.Registry
 
-	// wellWheelPending holds well tiles whose preview framing the hover
-	// wheel changed (issue #210) but hasn't persisted yet: tile id → the
-	// grid the tile sits in. The cache is patched per notch (the renderer
-	// reads it live); the settle persister's flush posts ONE SetFraming
-	// per tile from the cached row, so a scroll burst is one write.
+	// wellWheelPending holds well tiles whose preview framing the hover wheel
+	// changed but has not persisted yet: tile id to the grid the tile sits
+	// in. The cache is patched per notch, since the renderer reads it live,
+	// and the settle persister's flush posts one SetFraming per tile from
+	// the cached row, so a scroll burst is one write.
 	wellWheelPending map[string]wellWheelDrift
 
-	// traces holds the per-pane ascent-trace highlight (the fading "you just
-	// came from HERE" outline, issue #83). Armed by completeTransition when
-	// the finished transition was an ascent; pruned by frame() as each fade
-	// runs out. Ephemeral view state, like selection.
+	// traces holds the per-pane ascent-trace highlight: the fading "you just
+	// came from here" outline. Armed by completeTransition when the finished
+	// transition was an ascent, and pruned by frame() as each fade runs out.
+	// Ephemeral view state, like the selection.
 	traces map[string]traceState
 
 	// textTextarea is the lazily-created <textarea> element used for
@@ -287,41 +282,41 @@ type App struct {
 	renameEditing bool
 
 	// renderedView is the singleton read-only rendered-HTML overlay div
-	// (issue #218; rendered_overlay.go). renderedReady mirrors
-	// textareaReady for the rendered mode: the canvas paints raw source
-	// until the overlay holds content. lastRenderedKey caches the render
-	// (tile+version+org) so scrolling never re-renders.
+	// (rendered_overlay.go). renderedReady mirrors textareaReady for
+	// rendered mode: the canvas paints raw source until the overlay holds
+	// content. lastRenderedKey caches the render (tile, version, org-ness)
+	// so scrolling never re-renders.
 	renderedView    js.Value
 	renderedReady   bool
 	lastRenderedKey string
 
-	// wsExpand is the in-flight first-descent capture animation (issue
-	// #242; workspace.go) — nil when none.
+	// wsExpand is the in-flight first-descent capture animation
+	// (workspace.go); nil when none.
 	wsExpand *wsExpandState
 
 	// renderedPrev caches rasterized rendered-mode grid previews by tile id
-	// (issue #233; rendered_preview.go): SVG-foreignObject images of
+	// (rendered_preview.go): SVG foreignObject images of
 	// markdown.RenderHTML's output, decoded async and drawn by
 	// drawMarkdownNode when a tile's stored text_mode is "rendered".
 	renderedPrev map[string]*renderedPreview
 
 	// zoomKeyRelays counts zoom chords that arrived over the main-process
-	// relay (issue #170's before-input-event interception). e2e-only
+	// relay, from its before-input-event interception. e2e-only
 	// introspection: together with the registry's zoomChordRelays counter it
 	// brackets the IPC hop, so a chord lost between interception and the
 	// wasm zoom owner is attributable instead of a silent no-op.
 	zoomKeyRelays int
 
 	// persistPosts counts optimistic-persist dispatches by label
-	// ("SetFraming", …) and framingFlushes counts settle-persister flush
-	// passes. e2e-only introspection (testhook persistPosts): the settle
-	// chain — gesture → debounce → flush → post — is otherwise silent in
-	// every stage, so a spec waiting on its effect (the #156
-	// rejected-writeback spec) could not say WHICH stage went quiet.
+	// ("SetFraming" and the rest) and framingFlushes counts settle-persister
+	// flush passes. e2e-only introspection (the persistPosts testhook): the
+	// settle chain — gesture, debounce, flush, post — is otherwise silent at
+	// every stage, so a spec waiting on its effect could not say which stage
+	// went quiet.
 	persistPosts   map[string]int
 	framingFlushes int
 
-	// out is the ONE record of writes the server has not acknowledged —
+	// out is the one record of writes the server has not acknowledged —
 	// framing, captures, layout, and the user's unsaved bytes alike — in the
 	// order they were made. retryKick and the unload flush are its two
 	// drains. See client/outbox.
@@ -331,10 +326,10 @@ type App struct {
 	// the grid-stamped node_ns. "" (the local node) is a.plugins/a.caps.
 	menuCtxs map[string]*menuContext
 
-	// renderedPanePaints counts rendered-RASTER paints of a descended pane
-	// by tile id (markdown_render.go) — e2e attribution for #261 (an
-	// unfocused rendered pane must paint the raster, never raw). Exposed
-	// by the renderedPreviews testhook.
+	// renderedPanePaints counts rendered-raster paints of a descended pane by
+	// tile id (markdown_render.go): e2e attribution that an unfocused
+	// rendered pane paints the raster, never raw. Exposed by the
+	// renderedPreviews testhook.
 	renderedPanePaints map[string]int
 
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
@@ -356,13 +351,14 @@ type App struct {
 	// different tile → fresh content.
 	lastTextareaTileID string
 
-	// textareaReady tracks whether the single textarea currently holds the
-	// focused tile's content (vs. being empty from a recent pane switch or
-	// pending blob fetch). Set true when refreshFileOverlay seeds the textarea
-	// with actual content or when the user types (input event). Set false when
-	// the textarea is cleared on a tile switch or mode toggle. drawMarkdownInPane
-	// reads this via textedit.CanvasHiddenByOverlay so the canvas keeps painting
-	// during the loading race (blank-pane fix, issue #35 mechanism B).
+	// textareaReady tracks whether the single textarea holds the focused
+	// tile's content, as against being empty from a recent pane switch or a
+	// pending blob fetch. Set true when refreshFileOverlay seeds the
+	// textarea with actual content, or when the user types; set false when
+	// the textarea is cleared on a tile switch or mode toggle.
+	// drawMarkdownInPane reads it through textedit.CanvasHiddenByOverlay, so
+	// the canvas keeps painting during the loading race instead of going
+	// blank.
 	textareaReady bool
 }
 
@@ -375,9 +371,10 @@ type scheduler struct {
 	// queue redundant frames.
 	rafScheduled bool
 
-	// wsSaveScheduled / wsSaveCb debounce the workspace-layout persister
-	// (see scheduleWorkspaceSave): draw() arms it while inside a workspace;
-	// the callback encodes, hash-diffs, and posts the layout WriteContent on change.
+	// wsSaveScheduled and wsSaveCb debounce the pane-layout persister (see
+	// scheduleWorkspaceSave): draw() arms it while inside a pane tile, and
+	// the callback encodes, hash-diffs, and posts the layout WriteContent on
+	// a change.
 	wsSaveScheduled bool
 	wsSaveCb        js.Func
 
@@ -404,16 +401,14 @@ type scheduler struct {
 	errExpireCb        js.Func
 }
 
-// wellWheelDrift is one well's in-flight hover-wheel state — the ONE owner
-// of the not-yet-persisted view (framing-audit decision 2026-08-13): the
-// grid to persist under, the FLOAT view center accumulated across the
-// burst (issue #219 — per-notch integer quantization rounded the cursor-
-// anchor drift away; since schema v11 the center is float all the way to
-// the store, so nothing rounds it at the flush either), and the
-// ratio/version the flush posts FROM. The flush must never re-read the
-// cache row: any refetch inside the settle window (a conflict resync, an
-// SSE row) replaces the patch with server values, and a cache-reading
-// flush then faithfully reverted the wheel.
+// wellWheelDrift is one well's in-flight hover-wheel state, the one owner of
+// the not-yet-persisted view: the grid to persist under, the float view
+// center accumulated across the burst, and the ratio and version the flush
+// posts from. The center is float all the way to the store, so nothing rounds
+// the cursor-anchored drift away. The flush never re-reads the cache row: any
+// refetch inside the settle window — a conflict resync, an arriving event —
+// replaces the patch with server values, and a cache-reading flush would
+// faithfully revert the wheel.
 type wellWheelDrift struct {
 	gridID  string
 	cx, cy  float64
@@ -421,21 +416,21 @@ type wellWheelDrift struct {
 	version int64
 }
 
-// paneLocal is the single owner of one pane's session-local client state:
-// the plain-data part (panestate.State, embedded — the selection) plus the
-// native live URL/shell handles. One per live pane in
-// App.locals, created on demand by App.local and
-// removed atomically when the pane is dropped (App.forgetPane), so none of this
-// state can outlive or be orphaned from its pane.
+// paneLocal is the single owner of one pane's session-local client state: the
+// plain-data part (panestate.State, embedded, holding the selection) plus the
+// native live URL and shell handles. One per live pane in App.locals, created
+// on demand by App.local and removed atomically when the pane is dropped
+// (App.forgetPane), so none of this state can outlive its pane or be orphaned
+// from it.
 type paneLocal struct {
 	panestate.State
 	// urlView is the live native WebContentsView handle when this pane is
 	// descended into a live URL tile; nil otherwise. Closed via closeURLStream.
 	urlView *urlView
-	// shellConn is the live shell session (main-process gRPC OpenShell
-	// relay + xterm.js overlay) when
-	// this pane is descended into a live shell tile; nil otherwise. Closed via
-	// closeShellStream / releaseShellStream.
+	// shellConn is the live shell session — the /shell WebSocket plus the
+	// xterm.js overlay — when this pane is descended into a live shell tile;
+	// nil otherwise. Closed through closeShellStream and
+	// releaseShellStream.
 	shellConn *shellStreamConn
 }
 
@@ -475,19 +470,17 @@ func (a *App) localIf(paneID string) (*paneLocal, bool) {
 	return pl, ok
 }
 
-// forgetPane tears down and removes all per-pane state for a pane that is going
-// away (a collapsed / closed pane): it freezes and closes any live URL or shell
-// session, then deletes the pane's entry from a.locals so no per-pane state
-// outlives its pane. The single, atomic cleanup point on pane drop — before this
-// the per-pane maps leaked their entries (a bounded leak, since pane ids are
-// never reused, but now the lifecycle is explicit and complete).
+// forgetPane tears down and removes all per-pane state for a pane that is
+// going away, collapsed or closed: it freezes and closes any live URL or
+// shell session, then deletes the pane's entry from a.locals, so no per-pane
+// state outlives its pane. The single atomic cleanup point on pane drop.
 func (a *App) forgetPane(paneID string) {
 	a.closeURLStream(paneID, true)
 	a.closeShellStream(paneID, true)
 	delete(a.locals, paneID)
-	// Level-scoped pane ids RECUR across successive views ("w1:p1" again
-	// on the next descent, issue #249), so every pane-keyed map must clear
-	// here — a stale entry would greet the next view's pane of the same id.
+	// Level-scoped pane ids recur across successive descents — "w1:p1"
+	// again on the next one — so every pane-keyed map clears here, or a
+	// stale entry would greet the next level's pane of the same id.
 	delete(a.traces, paneID)
 }
 
@@ -529,10 +522,10 @@ type paneTransition struct {
 	// reached the tile's footprint at OvertakeZoom (so the toggle button
 	// appearing doesn't pop into view mid-animation).
 	onComplete func()
-	// traceTileID, when set (ascents only), arms the ephemeral "you just came
-	// from HERE" highlight on that tile once the transition lands — a fading
-	// outline so the user can tell which shell/well/url they just left
-	// (issue #83). Pure view state; nothing persists.
+	// traceTileID, set on ascents only, arms the ephemeral "you just came
+	// from here" highlight on that tile once the transition lands: a fading
+	// outline so the user can tell which tile they just left. Pure view
+	// state; nothing persists.
 	traceTileID string
 }
 
@@ -547,13 +540,13 @@ type traceState struct {
 const traceDurMs = 2000.0
 
 type transSegment struct {
-	// place is the pane's PLACE for this segment — a snapshot installed at
+	// place is the pane's place for this segment: a snapshot installed at
 	// the segment's start. A descent's last segment carries the stack with
-	// the new frame pushed; an ascent's carries it popped; a same-place
+	// the new frame pushed, an ascent's carries it popped, and a same-place
 	// segment carries the stack unchanged. Because each segment installs a
-	// SNAPSHOT, the viewport the animation writes into the live top frame is
-	// scratch: the frame the pane will ascend onto keeps the viewport it was
-	// actually left at (that is the whole of the old saved-ascent stack).
+	// snapshot, the viewport the animation writes into the live top frame is
+	// scratch, and the frame the pane will ascend onto keeps the viewport it
+	// was actually left at.
 	place                    *pane.Stack
 	fromCx, fromCy, fromZoom float64
 	toCx, toCy, toZoom       float64
@@ -577,13 +570,12 @@ type ghost struct {
 	displayedCellSize float64
 	targetCellSize    float64
 
-	// hiddenTileID/hiddenPaneID suppress the SOURCE tile's normal render
-	// while this ghost represents it in a move drag (clones don't hide —
-	// the source stays). They live ON the ghost because their lifetime IS
-	// the ghost's: the tile must stay hidden through the snap-back
-	// animation after a.dragging is already nil, and reappear exactly when
-	// the ghost dies — one owner, correct lifecycle by construction
-	// (formerly two App-level scratch fields cleared by hand).
+	// hiddenTileID and hiddenPaneID suppress the source tile's normal render
+	// while this ghost represents it in a move drag; a clone does not hide,
+	// because the source stays. They live on the ghost because their
+	// lifetime is the ghost's: the tile stays hidden through the snap-back
+	// animation after a.dragging is already nil, and reappears exactly when
+	// the ghost dies.
 	hiddenTileID string
 	hiddenPaneID string
 
@@ -594,20 +586,19 @@ type ghost struct {
 	displayedFragmentation float64
 	targetFragmentation    float64
 
-	// forbidden is set when the cursor is over a drop target that would
-	// be rejected: a rendered-mode doc (read-only), a same-namespace
-	// cross-grid move with a source-backed endpoint, or a solid well
-	// right-dragged across a namespace (deep copy unimplemented).
-	// Renderer paints the international "no entry" badge over the ghost;
-	// mouseup snap-backs without RPC.
+	// forbidden is set when the cursor is over a drop target that would be
+	// rejected: a same-namespace cross-grid move with a source-backed
+	// endpoint, or a solid well right-dragged across a namespace, whose deep
+	// copy the server refuses. The renderer paints the "no entry" badge over
+	// the ghost, and mouseup snaps back without an RPC.
 	forbidden bool
 
-	// link is set while a left-drag hovers a target in a DIFFERENT id
-	// namespace: the drop will create a LINK and the source stays put
-	// (owner decision 2026-07-19 — there is no cross-plugin move). The
-	// renderer paints the ghost dashed with the chain badge so the user
-	// learns the meaning mid-drag; without it the source's survival
-	// after the drop would read as a surprise duplicate.
+	// link is set while a left-drag hovers a target in a different id
+	// namespace: the drop creates a link and the source stays put, because
+	// there is no cross-plugin move. The renderer paints the ghost dashed
+	// with the chain badge so the user learns the meaning mid-drag; without
+	// it the source's survival after the drop would read as a surprise
+	// duplicate.
 	link bool
 }
 
@@ -621,15 +612,15 @@ type ghost struct {
 // we can render a smooth ghost at the cursor and animate snap-back to the
 // original position if the drop is rejected.
 type dragState struct {
-	// menuNS is the node whose menu offered a template item (remote-menu):
-	// primitives create same-node only.
+	// menuNS is the node whose menu offered a template item: primitives
+	// create on that node only.
 	menuNS       string
 	originPaneID string
-	// originFocused records whether the origin pane was ALREADY focused when
+	// originFocused records whether the origin pane was already focused when
 	// the press landed. A bare click on an unfocused pane is focus-only: it
-	// must not also navigate or select — the same rule the bar slot follows
-	// (act only when prevFocus == pane). Without this, a
-	// click meant to focus a pane descends if it happens to hit a tile.
+	// must not also navigate or select, the same rule the bar slot follows.
+	// Without it, a click meant to focus a pane descends whenever it happens
+	// to hit a tile.
 	originFocused bool
 	tileID        string
 	cellOffsetX   float64
@@ -639,10 +630,10 @@ type dragState struct {
 	curScreenX    float64
 	curScreenY    float64
 	started       bool
-	// clone marks a right-button clone drag (armed by armRightClone). Such
-	// a drag commits only through the right-button release path; the
-	// left-button move-commit must refuse it so a stray non-right release
-	// can't silently turn the clone into a move.
+	// clone marks a right-button clone drag, armed by armRightClone. Such a
+	// drag commits only through the right-button release path; the
+	// left-button move-commit refuses it, so a stray non-right release
+	// cannot silently turn the clone into a move.
 	clone         bool
 	snapshotTile  rpc.Tile
 	originScreenX float64
@@ -667,12 +658,12 @@ type dragState struct {
 // dragThreshold is the cursor-movement distance (CSS px) that turns a press into
 // a drag. Below this, mousedown→mouseup is treated as a click (select).
 //
-// This is the SINGLE OWNER of the drag threshold. The native layer keeps two
-// forced copies (apps/desktop/src/main/viewutil.ts RIGHT_DRAG_THRESHOLD, and an
-// inlined copy in src/preload/urlview-preload.ts — a sandboxed preload may not
-// require modules) so a live URL view interprets a right-drag-vs-right-click
-// exactly as the canvas does. gesture-threshold.test.ts fails the build if either
-// copy drifts from this value, so they cannot silently disagree.
+// This is the single owner of the drag threshold. The native layer keeps two
+// forced copies — RIGHT_DRAG_THRESHOLD in apps/desktop/src/main/viewutil.ts,
+// and an inlined copy in src/preload/urlview-preload.ts, because a sandboxed
+// preload may not require modules — so a live URL view tells a right-drag
+// from a right-click exactly as the canvas does. gesture-threshold.test.ts
+// fails the build if either copy drifts from this value.
 const dragThreshold = 4.0
 
 func main() {
@@ -735,29 +726,25 @@ func main() {
 	}
 
 	// beforeunload: close every URL stream cleanly so the server's
-	// save-and-destroy path fires before the TCP connection dies.
-	// Without this, the WS still drops via TCP FIN — but server-side
-	// cleanup runs after a small delay and the user's final state
-	// might miss the preview write.
+	// save-and-destroy path fires before the connection dies. Without it the
+	// socket still drops, but server-side cleanup runs after a delay and the
+	// user's final state can miss the preview write.
 	app.win.Call("addEventListener", "beforeunload", js.FuncOf(func(this js.Value, args []js.Value) any {
-		// Everything durable rides BEACONS (unload.go) so it survives the
-		// dying page: framing in its settle window, dirty text (the
-		// streaming-envelope beacon — audit #8, 2026-08-14: text used to
-		// get an async enqueue that died with the page, losing up to the
-		// whole debounce window on every tab close), a live page's
-		// navigation state (audit #2), and an animating transition lands
-		// on its destination first.
+		// Everything durable rides beacons (unload.go) so it survives the
+		// dying page: framing in its settle window, dirty text through the
+		// streaming-envelope beacon, and a live page's navigation state. An
+		// animating transition lands on its destination first.
 		app.flushOnUnload()
 		app.closeAllURLStreams()
 		app.closeAllShellStreams()
 		return nil
 	}))
 
-	// popstate: the browser back/forward traverses descend/ascend (issue
-	// #194 — writeURLNow pushes an entry per structural navigation). The
-	// flag and the target URL are captured HERE, synchronously: a pending
-	// debounced write firing after this callback returns must find the
-	// writer suppressed, or it clobbers the entry the browser just
+	// popstate: the browser's back and forward traverse descents and
+	// ascents, since writeURLNow pushes an entry per structural navigation.
+	// The flag and the target URL are captured here, synchronously: a
+	// pending debounced write firing after this callback returns must find
+	// the writer suppressed, or it clobbers the entry the browser just
 	// navigated to. The restore itself fetches, so it runs on a goroutine.
 	app.win.Call("addEventListener", "popstate", js.FuncOf(func(this js.Value, args []js.Value) any {
 		app.urlRestoring = true
@@ -771,10 +758,10 @@ func main() {
 	}))
 
 	// The shell transport: PTY bytes ride the /shell WebSocket on this
-	// page's own origin, authenticated by the very cookie that served the
-	// page (owner decision 2026-08-29). The registry owns replace-on-open,
-	// exactly-once exit and no-op-after-close; the terminal glue below only
-	// reads and writes bytes.
+	// page's own origin, authenticated by the cookie that served the page.
+	// The registry owns replace-on-open, exactly-once exit, and
+	// no-op-after-close; the terminal glue below only reads and writes
+	// bytes.
 	app.shells = shellstream.New(
 		shellws.Dialer(shellws.Options{Origin: origin}),
 		func(paneID string, data []byte) { app.onShellData(paneID, data) },
@@ -791,17 +778,16 @@ func main() {
 	select {}
 }
 
-// bootstrap loads the plugin list, then starts the rest of the client.
-// The landing page is HOME — the first configured plugin's root grid
-// (rpc.HomeGrid) — so panes anchor there; plugins are reached from the +
-// menu.
+// bootstrap loads the plugin list, then starts the rest of the client. The
+// landing page is home — the grid the handshake names (rpc.HomeGrid) — so
+// panes anchor there, and plugins are reached from the + menu.
 func (a *App) bootstrap() {
-	// The handshake RETRIES until it lands (2026-08-14 audit: it used to
-	// fire exactly once, and one blip at boot left a permanently empty
-	// shell — no plugins, no home, no content token — until a manual
-	// reload). Runs on its own goroutine before anything renders content,
-	// so backing off here blocks nothing but the empty landing page, which
-	// carries the notice explaining itself.
+	// The handshake retries until it lands. Firing it exactly once would
+	// leave one blip at boot as a permanently empty shell — no plugins, no
+	// home, no content token — until a manual reload. It runs on its own
+	// goroutine before anything renders content, so backing off blocks
+	// nothing but the empty landing page, which carries the notice
+	// explaining itself.
 	backoff := time.Second
 	var plugins rpc.PluginList
 	for {
@@ -811,8 +797,8 @@ func (a *App) bootstrap() {
 			a.resolveErr("rpc:Handshake")
 			break
 		}
-		// The landing page renders empty meanwhile — say why, or it reads
-		// as "all my plugins vanished" (charter §6).
+		// The landing page renders empty meanwhile: say why, or it reads as
+		// "all my plugins vanished".
 		a.reportErr(errsurface.Error, "rpc:Handshake", "plugin list failed — retrying: "+rpcErrText(err))
 		a.draw()
 		time.Sleep(backoff)
@@ -821,10 +807,10 @@ func (a *App) bootstrap() {
 		}
 	}
 	a.plugins = rpc.MenuRows(plugins)
-	// Fold the node's shells_disabled fact into the capability set —
-	// still boot-time (nothing has rendered or accepted input yet),
-	// immutable afterward. caps stays the ONE owner of "what can this
-	// client do"; nothing else reads the handshake flag.
+	// Fold the node's shells_disabled fact into the capability set, still at
+	// boot time — nothing has rendered or accepted input yet — and immutable
+	// afterward. caps stays the one owner of what this client can do;
+	// nothing else reads the handshake flag.
 	a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)
 	// The /content/ door capability rides the same handshake; boot-time,
 	// immutable, read only by webAddress.
@@ -867,7 +853,7 @@ func (a *App) afterBootstrap() {
 		return nil
 	})
 
-	// Subscribe to SSE.
+	// Subscribe to the event stream.
 	go a.startSSE()
 
 	// The slow retry net behind the reconnect kick.
@@ -895,11 +881,10 @@ func (a *App) resize() {
 	a.cctx.Call("setTransform", dpr, 0, 0, dpr, 0, 0)
 }
 
-// loadGrid is THE GetGrid→cache hop: one call, one failure flag, one error
-// key ("grid:<id>") surfaced and resolved through the strip. The async
-// renderer path (fetchGrid) and the synchronous URL walk (fetchGridSync)
-// both come here — they were two copies once, and two writers of
-// gridLoadFailed.
+// loadGrid is the one GetGrid-to-cache hop: one call, one failure flag, one
+// error key ("grid:<id>") surfaced and resolved through the strip. The async
+// renderer path (fetchGrid) and the synchronous URL walk (fetchGridSync) both
+// come here, so gridLoadFailed has one writer.
 func (a *App) loadGrid(id string) error {
 	resp, err := a.cl.GetGrid(context.Background(), id)
 	if err != nil {
@@ -937,8 +922,8 @@ func (a *App) fetchGrid(id string) {
 			return
 		}
 		// Coalesced repaint (scheduleFrame): fetch completions land in
-		// bursts — one draw() per completed child-grid read meant
-		// hundreds of full repaints while a big directory loaded (#265).
+		// bursts, and one draw() per completed child-grid read would mean
+		// hundreds of full repaints while a big directory loads.
 		a.scheduleFrame()
 	}()
 }
@@ -957,11 +942,11 @@ func (a *App) fetchTileByID(tileID string) {
 		defer delete(a.tileInflight, tileID)
 		tile, err := a.cl.GetTile(context.Background(), tileID)
 		if err != nil || tile == nil {
-			// Latch only on a server VERDICT — a broken reference (deleted
-			// tile / unmounted plugin) will answer the same way every time,
-			// and the latch stops the per-frame draw dogpiling the server.
-			// A transport failure latches nothing: the server never spoke,
-			// and the next caller (a draw, a flush sweep tick) retries.
+			// Latch only on a server verdict: a broken reference — a
+			// deleted tile, an unmounted plugin — answers the same way
+			// every time, and the latch stops the per-frame draw dogpiling
+			// the server. A transport failure latches nothing, because the
+			// server never spoke, and the next caller retries.
 			if clientsync.Of(err) != clientsync.OutcomeTransport {
 				a.tileLoadFailed[tileID] = true
 			}
@@ -1135,12 +1120,11 @@ func (a *App) ghostHiddenPane() string {
 	return a.ghost.hiddenPaneID
 }
 
-// startSSE opens the Connect-streaming Subscribe RPC and applies each
-// inbound event to the local cache. Reconnects after a brief backoff on
-// stream termination — and a RECONNECT AFTER A GAP fires the retry kick:
-// Subscribe has no cursor, so every event that happened during the gap is
-// gone forever, and before the kick existed the client silently rendered
-// stale state under a freshly-cleared notice (2026-08-14 audit). The kick
+// startSSE opens the Connect-streaming Subscribe RPC and applies each inbound
+// event to the local cache. It reconnects after a brief backoff on stream
+// termination, and a reconnect after a gap fires the retry kick: Subscribe has
+// no cursor, so every event that happened during the gap is gone. Without the
+// kick the client renders stale state under a freshly-cleared notice; the kick
 // resyncs the cache and drains everything the gap left pending.
 func (a *App) startSSE() {
 	gap := false
@@ -1168,19 +1152,19 @@ func (a *App) startSSE() {
 				break
 			}
 			if !ok {
-				// Clean EOF is still a gap: events between now and the
-				// reconnect are lost (no cursor to resume from).
+				// A clean EOF is still a gap: events between now and the
+				// reconnect are lost, with no cursor to resume from.
 				gap = true
 				break
 			}
 			if a.c.Apply(ev) {
 				a.draw()
 			}
-			// A removed tile's decoded preview image (and its backing object
-			// URL) must be released, or deleting URL/shell tiles leaks browser
-			// image resources for the life of the page. The rendered-markdown
-			// preview holds the same pair (blob URL + decoded raster) and
-			// leaked identically until 2026-08-13.
+			// A removed tile's decoded preview image, and its backing object
+			// URL, must be released, or deleting url and shell tiles leaks
+			// browser image resources for the life of the page. The
+			// rendered-markdown preview holds the same pair — a blob URL
+			// and a decoded raster — and is released beside it.
 			if ev.Kind == rpc.EventTileRemoved && ev.TileRemoved != nil {
 				a.urlPreview.Drop(ev.TileRemoved.TileID)
 				a.dropRenderedPreview(ev.TileRemoved.TileID)
@@ -1189,12 +1173,13 @@ func (a *App) startSSE() {
 			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
 				a.fetchGrid(ev.GridChanged.GridID)
 			}
-			// PluginHealth: a plugin's OWN event stream (not this client's SSE
-			// connection to the server) went dark or recovered — see
-			// fanInEvents/watchPlugin in internal/server/connect_handler.go.
-			// Distinct source per plugin (keyed by uuid) so one plugin's outage
-			// doesn't coalesce with — or get cleared by — another's or the
-			// top-level "events" disconnect notice above.
+			// PluginHealth: a plugin's own event stream, not this client's
+			// connection to the server, went dark or recovered. See
+			// fanInEvents and watchPlugin in
+			// internal/server/connect_handler.go. The source is distinct per
+			// plugin, keyed by uuid, so one plugin's outage neither
+			// coalesces with nor clears another's, or the top-level "events"
+			// disconnect notice above.
 			if ev.Kind == rpc.EventPluginHealth && ev.PluginHealth != nil {
 				a.reportPluginHealth(*ev.PluginHealth)
 			}
@@ -1204,22 +1189,22 @@ func (a *App) startSSE() {
 	}
 }
 
-// retryKick drains everything a transport gap left behind. Fired on SSE
-// reconnect-after-gap (with resync — the gap's events are unrecoverable,
-// so cached grids must refetch), on a mount's health recovery, and by the
-// slow backstop timer (without resync — nothing says the cache is stale,
-// only that unacknowledged writes exist). Order: latches clear and refetches
-// launch first, then the ONE outbox drains in the order the writes were made
-// — framing, captures, layout, and the user's unsaved bytes through the same
-// door, where there used to be a ledger drain and a separate dirty-text
-// sweep with their own rules. The async pieces converge through the cache's
-// one Apply door (a refetch racing a parked write's echo lands whichever
-// finishes last, and the echo of the NEWER write is what the server holds).
+// retryKick drains everything a transport gap left behind. Fired on an event
+// stream reconnect after a gap, with a resync, because the gap's events are
+// unrecoverable and cached grids must refetch; on a mount's health recovery;
+// and by the slow backstop timer, without a resync, because nothing says the
+// cache is stale, only that unacknowledged writes exist. The order is: clear
+// the latches and launch the refetches, then drain the one outbox in the
+// order the writes were made — framing, captures, layout, and the user's
+// unsaved bytes through the same door. The async pieces converge through the
+// cache's one Apply door: a refetch racing a parked write's echo lands
+// whichever finishes last, and the echo of the newer write is what the server
+// holds.
 func (a *App) retryKick(resync bool) {
 	if resync {
 		// Failure latches are gap state: a grid that failed while the link
 		// was down deserves a fresh attempt, and a tile id latched by a
-		// verdict re-verifies once per reconnect (cheap — one GetTile).
+		// verdict re-verifies once per reconnect, at one GetTile.
 		clear(a.tileLoadFailed)
 		for _, gid := range a.c.KnownGridIDs() {
 			a.fetchGrid(gid)
@@ -1231,10 +1216,10 @@ func (a *App) retryKick(resync bool) {
 	}
 }
 
-// retryBackstop is the slow safety net behind the reconnect kick: if the
-// outbox holds anything (a transport failure with no SSE gap — the stream can
-// survive a blip that a unary write did not), re-post it without waiting for
-// a reconnect that may never come.
+// retryBackstop is the slow safety net behind the reconnect kick: when the
+// outbox holds anything — a transport failure with no stream gap, since the
+// stream can survive a blip a unary write did not — re-post it without
+// waiting for a reconnect that may never come.
 func (a *App) retryBackstop() {
 	for {
 		time.Sleep(30 * time.Second)
@@ -1247,11 +1232,10 @@ func (a *App) retryBackstop() {
 
 // Session-local state: the full UI state — split layout, per-pane place,
 // viewport — rebuilds from the URL on reload. The URL captures only the
-// focused pane's place; the split tree starts fresh. The OUTER frames of a
-// pane's place stack (the viewports an ascent lands on) are session-only by
-// owner decision #13, so a restored pane ascends onto each grid's persisted
-// framing instead. Text tile mode (rendered/text) is persisted on the tile
-// row, so it survives reload.
+// focused pane's place, and the split tree starts fresh. The outer frames of
+// a pane's place stack, the viewports an ascent lands on, are session-only,
+// so a restored pane ascends onto each grid's persisted framing instead. A
+// text tile's mode is persisted on the tile row, so it survives a reload.
 
 // gridIDForPane returns the grid id the pane's place names: its current
 // namespace anchor walked down the doorway path (both PROJECTIONS of the
@@ -1339,20 +1323,20 @@ func (a *App) resolveErr(source string) {
 }
 
 // reportPluginHealth maps an EventPluginHealth transition onto the error
-// surface: unhealthy reports (a plugin's event stream is down, so its tiles
-// have stopped updating with no other signal — the silent-disappearance
-// class), healthy resolves any prior notice for it. Keyed per plugin uuid so
-// it neither coalesces with nor is cleared by an unrelated plugin's outage or
-// the top-level SSE-connection notice ("events").
+// surface: unhealthy reports, since a plugin's event stream being down means
+// its tiles have stopped updating with no other signal, and healthy resolves
+// any prior notice for it. Keyed per plugin uuid, so it neither coalesces
+// with nor is cleared by an unrelated plugin's outage or the top-level event
+// stream notice ("events").
 func (a *App) reportPluginHealth(h rpc.PluginHealth) {
 	source := "plugin:" + h.PluginUUID
 	if h.Healthy {
-		// A recovered plugin is a healed gap for ITS tiles: the server-side
+		// A recovered plugin is a healed gap for its tiles: the server-side
 		// fan-in resumed with no backlog, so this client missed that
-		// plugin's events too. The kick resyncs and drains — same reasoning
-		// as the SSE reconnect kick, one plugin narrower in cause but the
-		// same cure (a per-plugin resync would need routing state the
-		// client deliberately doesn't keep).
+		// plugin's events too. The kick resyncs and drains, the same
+		// reasoning as the stream reconnect kick — one plugin narrower in
+		// cause, but the same cure, since a per-plugin resync would need
+		// routing state the client deliberately does not keep.
 		a.resolveErr(source)
 		a.retryKick(true)
 		return
