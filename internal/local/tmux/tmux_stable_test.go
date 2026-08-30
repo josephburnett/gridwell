@@ -1,10 +1,8 @@
 package tmux
 
-// Stable artifact paths (2026-08-23): the per-boot CreateTemp trio
-// leaked three artifacts per server start once the local plugin folded
-// into the node, and a /tmp cleaner could delete a RUNNING session's
-// shim. One directory per socket, overwritten idempotently, is the
-// class fix — this pins it.
+// Stable artifact paths: one directory per socket, overwritten
+// idempotently. A per-boot temp path would leak artifacts per server start
+// and let a /tmp cleaner delete a running session's shim.
 
 import (
 	"os"
@@ -25,7 +23,7 @@ func TestArtifactsAreStablePerSocket(t *testing.T) {
 	if c1.configPath != c2.configPath || c1.browserShim != c2.browserShim || c1.shadowDir != c2.shadowDir {
 		t.Fatalf("paths not stable across boots:\n%+v\n%+v", c1, c2)
 	}
-	// One directory total — no per-boot accumulation.
+	// One directory total: no per-boot accumulation.
 	entries, err := os.ReadDir(os.TempDir())
 	if err != nil {
 		t.Fatal(err)

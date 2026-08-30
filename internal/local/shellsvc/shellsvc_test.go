@@ -47,8 +47,9 @@ func TestAcquire_SnapshotNoSessionRejected(t *testing.T) {
 	fake := shellsvctest.New() // not alive
 	m := shellsvc.NewManager(fake)
 
-	// allowCreate=false (a snapshotted tile) + no live session → ErrSessionGone:
-	// we must not fabricate a fresh bash behind the JPEG.
+	// allowCreate false, for a snapshotted tile, plus no live session gives
+	// ErrSessionGone: a fresh shell must not be fabricated behind the
+	// JPEG.
 	if _, _, err := m.Acquire("1", false, 80, 24); !errors.Is(err, shellsvc.ErrSessionGone) {
 		t.Fatalf("err = %v, want ErrSessionGone", err)
 	}
@@ -65,7 +66,7 @@ func TestAcquire_TakeoverReusesPTYAndEvictsOld(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
-	// A second acquire (refresh from another pane) reuses the SAME PTY and
+	// A second acquire, a refresh from another pane, reuses the same PTY and
 	// signals the first holder to stop.
 	sess2, _, err := m.Acquire("1", true, 80, 24)
 	if err != nil {
@@ -85,14 +86,11 @@ func TestAcquire_TakeoverReusesPTYAndEvictsOld(t *testing.T) {
 	}
 }
 
-// A takeover hands a LIVE pty to a terminal that has never seen a byte of
-// it. tmux cannot tell that the viewer changed — same fd, same client — so
-// nothing repaints and the new pane sits blank until some later resize
-// happens to shake a redraw loose. Whether that ever came was pure timing:
-// when the old holder's detach lost the race to the new attach, the
-// workspace-keepalive e2e saw an empty terminal for its whole 15s poll.
-// The winsize bounce is the fix: SIGWINCH is raised only on a REAL change,
-// so tmux repaints for whoever is watching now.
+// A takeover hands a live PTY to a terminal that has never seen a byte of it.
+// tmux cannot tell that the viewer changed — same fd, same client — so nothing
+// repaints and the new pane sits blank until some later resize shakes a redraw
+// loose. The winsize bounce is what forces it: SIGWINCH is raised only on a
+// real change, so tmux repaints for whoever is watching now.
 func TestAcquire_TakeoverForcesARepaint(t *testing.T) {
 	fake := shellsvctest.New()
 	m := shellsvc.NewManager(fake)
@@ -132,7 +130,7 @@ func TestReleaseClosesSessionAndFiresOnDetach(t *testing.T) {
 func TestCleanupOrphans_KillsGoneTiles(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.SetAlive("1", true) // tile still exists
-	fake.SetAlive("2", true) // tile was deleted (orphan)
+	fake.SetAlive("2", true) // tile was deleted: an orphan
 	m := shellsvc.NewManager(fake)
 
 	exists := func(tileID string) (bool, error) { return tileID == "1", nil }

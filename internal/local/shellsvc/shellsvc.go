@@ -1,12 +1,12 @@
-// Package shellsvc owns the live shell PTY mechanics — the tmux-backed session
-// lifecycle that used to live in the server. It now belongs to the plugin that
-// owns the shell tiles (localdb), so the live bytes cross the Gridwell gRPC
-// interface (OpenShell) like everything else: the server is a pure bridge, and
-// a shell in a remote plugin streams over the same path.
+// Package shellsvc owns the live shell PTY mechanics: the tmux-backed session
+// lifecycle. It belongs to the namespace that owns the shell tiles, so the
+// live bytes cross the namespace interface through OpenShell like everything
+// else. The server is a pure bridge, and a shell in a remote namespace
+// streams over the same path.
 //
-// A gridwell-private tmux server backs every shell tile; sessions named
-// `gridwell-<tileID>` survive ascents and restarts (bash + scrollback live in
-// tmux). The tile id here is the plugin-LOCAL id — each plugin has its own tmux.
+// A gridwell-private tmux server backs every shell tile. Sessions named
+// `gridwell-<tileID>` survive ascents and restarts, because the shell and its
+// scrollback live in tmux. The tile id here is the namespace-local id.
 package shellsvc
 
 import (
@@ -29,15 +29,16 @@ const (
 	DefaultRows = 24
 )
 
-// ErrSessionGone is returned by Acquire when the tile has been snapshotted but
-// its tmux session is no longer alive — recovery is impossible (bash is gone,
-// only the JPEG remains), so the caller should signal the client to hide the
-// refresh button rather than fabricate a fresh session behind the snapshot.
+// ErrSessionGone is returned by Acquire when the tile has been snapshotted
+// but its tmux session is no longer alive. Recovery is impossible — the shell
+// is gone and only the JPEG remains — so the caller signals the client to
+// hide the refresh button rather than fabricate a fresh session behind the
+// snapshot.
 var ErrSessionGone = errors.New("shell session no longer alive")
 
-// Session is the per-tile PTY handle. Output is a channel rather than a blocking
-// read so a takeover/detach can return immediately without orphaning a goroutine
-// on a PTY syscall.
+// Session is the per-tile PTY handle. Output is a channel rather than a
+// blocking read so a takeover or detach can return immediately without
+// orphaning a goroutine on a PTY syscall.
 type Session interface {
 	Output() <-chan []byte
 	Write(p []byte) (int, error)
@@ -46,8 +47,8 @@ type Session interface {
 	Close() error
 }
 
-// Streamer is the tmux/PTY backend. Stubbed in tests so the manager can run
-// without spawning a real tmux/PTY pair.
+// Streamer is the tmux and PTY backend. It is stubbed in tests so the manager
+// can run without spawning a real pair.
 type Streamer interface {
 	OpenSession(tileID string, mode tmux.Mode, cols, rows uint16) (Session, error)
 	HasSession(tileID string) (bool, error)
@@ -56,9 +57,9 @@ type Streamer interface {
 	PaneCommand(tileID string) (string, error)
 }
 
-// NewLive is the production Streamer: it composes tmux argv via the controller
-// and execs that argv through shelldriver, so callers get a PTY-backed tmux
-// client that survives detach via the underlying tmux server.
+// NewLive is the production Streamer: it composes the tmux argv through the
+// controller and execs it through shelldriver, so callers get a PTY-backed
+// tmux client that survives detach through the underlying tmux server.
 func NewLive(ctrl *tmux.Controller) Streamer { return &liveStreamer{ctrl: ctrl} }
 
 type liveStreamer struct{ ctrl *tmux.Controller }
@@ -68,8 +69,8 @@ func (l *liveStreamer) OpenSession(tileID string, mode tmux.Mode, cols, rows uin
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("shellsvc: empty tmux argv for tile %s mode %v", tileID, mode)
 	}
-	// ctrl.Env carries the shadow-launcher PATH (issue #166): panes inherit
-	// PATH from the tmux SERVER process, which this client may lazy-start.
+	// ctrl.Env carries the shadow-launcher PATH: panes inherit PATH from the
+	// tmux server process, which this client may lazy-start.
 	return shelldriver.Start(shelldriver.Config{Cols: cols, Rows: rows, BashPath: argv[0], Args: argv[1:], Env: l.ctrl.Env()})
 }
 
@@ -79,10 +80,10 @@ func (l *liveStreamer) ListLiveTileIDs() ([]string, error)        { return l.ctr
 func (l *liveStreamer) PaneCommand(tileID string) (string, error) { return l.ctrl.PaneCommand(tileID) }
 
 // Manager owns the single live PTY per tile and the takeover semantics: a
-// refresh from another pane evicts the previous holder but reuses the SAME PTY
-// (the tmux session is alive by construction) and forces a repaint, because
-// the new holder's terminal is empty and tmux has no way to know a viewer
-// changed. It is the plugin-side half of OpenShell.
+// refresh from another pane evicts the previous holder but reuses the same
+// PTY, since the tmux session is alive by construction, and forces a repaint,
+// because the new holder's terminal is empty and tmux has no way to know a
+// viewer changed. It is the namespace-side half of OpenShell.
 type Manager struct {
 	streamer Streamer
 	mu       sync.Mutex
@@ -107,23 +108,24 @@ func NewManager(s Streamer) *Manager {
 //   - no holder, no session    → open in create mode iff allowCreate, else
 //     ErrSessionGone.
 //
-// allowCreate is the caller's intent: true for a fresh tile (no snapshot yet, a
-// new bash is expected), false for a snapshotted tile (don't fabricate state
-// behind the JPEG). The returned channel is closed when a later Acquire takes
-// over; pump until the session's Done, that channel, or the request ends.
+// allowCreate is the caller's intent: true for a fresh tile, with no snapshot
+// yet, where a new shell is expected; false for a snapshotted tile, where
+// fabricating state behind the JPEG would be wrong. The returned channel is
+// closed when a later Acquire takes over; pump until the session's Done, that
+// channel, or the request ends.
 func (m *Manager) Acquire(tileID string, allowCreate bool, cols, rows uint16) (Session, chan struct{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if e, ok := m.active[tileID]; ok {
 		close(e.stopOld)
 		e.stopOld = make(chan struct{})
-		// The PTY is reused, so tmux cannot see that the VIEWER changed:
-		// nothing repaints, and the new pane's terminal — a fresh, empty
-		// one — stays blank until something else happens to resize it.
-		// Bounce the winsize (one row taller, then back): the kernel
-		// raises SIGWINCH only on a REAL change, and that is what makes
-		// tmux repaint the whole screen for whoever is watching now.
-		// Height-only, so nothing rewraps on the way through.
+		// The PTY is reused, so tmux cannot see that the viewer changed:
+		// nothing repaints, and the new pane's fresh, empty terminal stays
+		// blank until something else happens to resize it. Bounce the
+		// winsize, one row taller and back: the kernel raises SIGWINCH only
+		// on a real change, and that is what makes tmux repaint the whole
+		// screen for whoever is watching now. Height-only, so nothing
+		// rewraps on the way through.
 		_ = e.session.Resize(cols, rows+1)
 		_ = e.session.Resize(cols, rows)
 		return e.session, e.stopOld, nil
@@ -148,11 +150,12 @@ func (m *Manager) Acquire(tileID string, allowCreate bool, cols, rows uint16) (S
 	return sess, m.active[tileID].stopOld, nil
 }
 
-// Release is the inverse of Acquire. If this holder still owns the entry (no
-// takeover happened mid-flight) the PTY-side session is closed — which kills the
-// gridwell-spawned tmux CLIENT but leaves the tmux SERVER + bash running, so the
-// next refresh re-attaches to the same state — and onDetach (best-effort title
-// capture) fires. On takeover this is a no-op: the new holder keeps the session.
+// Release is the inverse of Acquire. If this holder still owns the entry, so
+// no takeover happened mid-flight, the PTY-side session is closed, which kills
+// the gridwell-spawned tmux client but leaves the tmux server and the shell
+// running, so the next refresh re-attaches to the same state; then onDetach,
+// the best-effort title capture, fires. On takeover this is a no-op: the new
+// holder keeps the session.
 func (m *Manager) Release(tileID string, mySession Session, myStopOld chan struct{}, onDetach func()) {
 	m.mu.Lock()
 	e, ok := m.active[tileID]
@@ -176,14 +179,15 @@ func (m *Manager) HasSession(tileID string) (bool, error) { return m.streamer.Ha
 // Kill removes the tile's tmux session. Idempotent.
 func (m *Manager) Kill(tileID string) error { return m.streamer.Kill(tileID) }
 
-// PaneCommand returns the foreground command of the tile's session (e.g.
-// "claude", "vim"), or "" if gone. Used to label a frozen shell on detach.
+// PaneCommand returns the foreground command of the tile's session, or "" if
+// it is gone. It labels a frozen shell on detach.
 func (m *Manager) PaneCommand(tileID string) (string, error) { return m.streamer.PaneCommand(tileID) }
 
 // CleanupOrphans kills tmux sessions whose tile id no longer exists. exists is
-// queried per live session; a tile that is GONE had its row deleted while the
-// session leaked (delete raced a crash). Returns the count killed and the first
-// error (best-effort: a per-session failure doesn't abort the pass).
+// queried per live session; a tile that is gone had its row deleted while the
+// session leaked, because a delete raced a crash. Returns the count killed and
+// the first error; it is best-effort, so a per-session failure does not abort
+// the pass.
 func (m *Manager) CleanupOrphans(_ context.Context, exists func(tileID string) (bool, error)) (int, error) {
 	live, err := m.streamer.ListLiveTileIDs()
 	if err != nil {
@@ -213,8 +217,8 @@ func (m *Manager) CleanupOrphans(_ context.Context, exists func(tileID string) (
 	return killed, firstErr
 }
 
-// ClampSize clamps a requested cols/rows to the PTY minimums, substituting the
-// shell defaults for zero/too-small values.
+// ClampSize clamps a requested cols and rows to the PTY minimums,
+// substituting the shell defaults for zero or too-small values.
 func ClampSize(cols, rows uint16) (uint16, uint16) {
 	if cols == 0 {
 		cols = DefaultCols

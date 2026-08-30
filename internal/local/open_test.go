@@ -8,15 +8,13 @@ import (
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
 )
 
-// The #196 seam: the store-side SetPluginID existed and was unit-tested,
-// but the binary never called it, so production identity fell back to the
-// bootstrap-minted system.plugin_uuid and the boot scratch sweep compared
-// workspace blob refs (which carry the CONFIG id) against the mint —
-// never matching. This test crosses the open seam: a store opened the way
-// the binary opens it must report the config id, not the mint.
+// The open seam: a store opened the way the binary opens it must report the
+// config id, not the bootstrap-minted system.plugin_uuid. Qualified
+// references, including a pane tile's layout blob refs, carry the config
+// id, so the mint would never match them.
 func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "plugin.db")
-	// gridwell init's registration step: stamp the config id into the DB.
+	// Stamp the config id into the DB, as registration does.
 	if err := pluginmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
 		t.Fatal(err)
 	}
@@ -34,8 +32,8 @@ func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 	}
 }
 
-// A mismatched config id must refuse to open — the DB's stored identity is
-// authoritative and a wrong spawn must fail loudly, not adopt.
+// A mismatched config id must refuse to open: the DB's stored identity is
+// authoritative and a wrong spawn must fail loudly rather than adopt.
 func TestOpenVerifiedRefusesMismatch(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "plugin.db")
 	if err := pluginmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {

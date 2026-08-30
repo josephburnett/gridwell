@@ -36,21 +36,21 @@ func getTile(t *testing.T, p *local.Plugin, id string) *gridwellv1.Tile {
 	return r.Tile
 }
 
-// TestSetTileDispatchVersionSemantics proves the single SetTile writeback routes
-// each kind to the right store op AND that the version rule rides across the
-// dispatch seam: NOTHING SetTile can write is a user content edit — well and
-// text framing, a url freeze, a shell's frozen frame are all framing or
-// automatic captures — so no arm may bump (docs/simplify-plan.md S5;
-// store/version_rule_test.go is the whole table). The user's own edits reach
+// TestSetTileDispatchVersionSemantics proves the single SetTile writeback
+// routes each kind to the right store operation, and that the version rule
+// rides across the dispatch seam. Nothing SetTile can write is a user
+// content edit — well and text framing, a url freeze, a shell's frozen frame
+// are all framing or automatic captures — so no arm may bump.
+// store/version_rule_test.go is the whole table. The user's own edits reach
 // the store by other verbs: WriteContent and the rename arm.
 func TestSetTileDispatchVersionSemantics(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
-	// well framing rides its OWN verb now (SetFraming — one verb for the
-	// doorway tile and the root grid alike), so SetTile refuses the kind
-	// rather than leaving the mapping ambiguous. Still no version bump.
+	// Well framing rides SetFraming, the one verb for the doorway tile and
+	// the root grid alike, so SetTile refuses the kind rather than leaving
+	// the mapping ambiguous. Still no version bump.
 	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}, nil)
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: well.Id, Version: well.Version,
 		Tile: &gridwellv1.Tile{Kind: "well", ViewCx: 3, ViewCy: 4, ViewZoom: 2}}); err == nil {
@@ -95,8 +95,8 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 	}
 }
 
-// TestSetAndCreateRejectBadKinds: the dispatch surfaces a clear error for a nil
-// tile and an unknown kind rather than silently no-op'ing.
+// TestSetAndCreateRejectBadKinds: the dispatch surfaces a clear error for a
+// nil tile and an unknown kind rather than silently doing nothing.
 func TestSetAndCreateRejectBadKinds(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
@@ -113,9 +113,10 @@ func TestSetAndCreateRejectBadKinds(t *testing.T) {
 	}
 }
 
-// TestCloneTileThroughPlugin: cloning routes through the plugin and yields an
-// independent tile (new row id, new interior child grid) — the eager-copy rule
-// holds across the RPC boundary, not just in the store.
+// TestCloneTileThroughPlugin: cloning routes through the namespace and
+// yields an independent tile, with a new row id and a new interior child
+// grid, so the eager-copy rule holds across the RPC boundary and not just in
+// the store.
 func TestCloneTileThroughPlugin(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)

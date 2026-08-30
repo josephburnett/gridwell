@@ -23,8 +23,7 @@ func openPlugin(t *testing.T) *local.Plugin {
 	return local.New(st, nil)
 }
 
-// rootGrid returns the plugin's default root grid id (from Info — the whole
-// handshake; there is no Attach).
+// rootGrid returns the default root grid id from Info.
 func rootGrid(t *testing.T, p *local.Plugin) string {
 	t.Helper()
 	info, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
@@ -37,8 +36,8 @@ func rootGrid(t *testing.T, p *local.Plugin) string {
 	return info.RootGridId
 }
 
-// createText is a CreateTile helper for a text tile (creation is
-// metadata-only; the body follows through the store's one content write).
+// createText is a CreateTile helper for a text tile. Creation is
+// metadata-only; the body follows through the one content write.
 func createText(t *testing.T, p *local.Plugin, gridID string, data []byte) *gridwellv1.Tile {
 	t.Helper()
 	cr, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
@@ -148,8 +147,8 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	tile := createText(t, p, rootGrid(t, p), []byte("bye"))
-	// Two-stage (#262): the first delete PARKS the tile in the trash — it
-	// moved, it didn't die, so Probe still answers PRESENT.
+	// Delete is two-stage: the first delete parks the tile in the trash. It
+	// moved, it did not die, so Probe still answers PRESENT.
 	_, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
 		TileId: tile.Id,
 	})
@@ -163,7 +162,7 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: tile.Id}); err != nil {
 		t.Fatal(err)
 	}
-	// The second delete (inside the trash) destroys for real.
+	// The second delete, inside the trash, destroys for real.
 	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
 		TileId: tile.Id,
 	}); err != nil {
@@ -176,7 +175,7 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 }
 
 func TestShellSessionAlive_NoShellHost(t *testing.T) {
-	p := openPlugin(t) // shell = nil
+	p := openPlugin(t) // shell is nil
 	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
 	if err != nil {
 		t.Fatal(err)
@@ -217,9 +216,9 @@ func TestShellSessionAlive_WithShellHost(t *testing.T) {
 }
 
 // TestCreateWell_InteriorVsExit: a well CreateTile with no child_grid_id
-// allocates an interior child grid; with a qualified child_grid_id it stores a
-// cross-plugin exit well pointing at that grid (no interior grid, the reference
-// verbatim). alt_text is the exit well's label.
+// allocates an interior child grid; with a qualified child_grid_id it stores
+// a cross-plugin exit well pointing at that grid, with no interior grid and
+// the reference verbatim. alt_text is the exit well's label.
 func TestCreateWell_InteriorVsExit(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
@@ -257,9 +256,9 @@ func TestCreateWell_InteriorVsExit(t *testing.T) {
 	}
 }
 
-// TestReadContent_ReturnsBody: a text tile's body is fetched through the
-// store's one content read (the gRPC ReadContent chunks the same value; the
-// stream-level contract is pinned in content_stream_test.go).
+// TestReadContent_ReturnsBody: a text tile's body is fetched through the one
+// content read. ReadContent chunks the same value, and the stream-level
+// contract is pinned in content_stream_test.go.
 func TestReadContent_ReturnsBody(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
@@ -273,11 +272,10 @@ func TestReadContent_ReturnsBody(t *testing.T) {
 	}
 }
 
-// TestGetTileAndRename: GetTile reads a tile's metadata; the SetTile rename
-// arm (the versioned wire rename, issue #61 + 2026-07-26) stamps a
-// user-owned label on a shell tile and returns it — and REFUSES a text tile,
-// whose name derives from its first line (a rename there would be clobbered
-// by the next edit).
+// TestGetTileAndRename: GetTile reads a tile's metadata, and the versioned
+// SetTile rename arm stamps a user-owned label on a shell tile and returns
+// it. A text tile is refused: its name derives from its first line, so a
+// rename there would be clobbered by the next edit.
 func TestGetTileAndRename(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
@@ -312,9 +310,9 @@ func TestGetTileAndRename(t *testing.T) {
 	}
 }
 
-// TestWellFramingNoVersionBump: framing writes (a doorway's view) do not
-// bump version; a content writeback (url freeze) does. This pins the
-// version rule the store operations behind SetFraming and SetTile carry.
+// TestWellFramingNoVersionBump: a framing write, a doorway's view, does not
+// bump version. It pins the version rule the store operations behind
+// SetFraming and SetTile carry.
 func TestWellFramingNoVersionBump(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
@@ -342,20 +340,17 @@ func TestWellFramingNoVersionBump(t *testing.T) {
 	}
 }
 
-// TestInfoRootFramingSeedAndWriteback pins the launcher↔plugin-root
-// seam (issue #32): SetFraming persists the framing, and Info returns it so
-// the client can restore the left-off viewport on enterPlugin without an extra
-// round-trip. Framing only — a root write must not bump a content version.
-//
-// Why was this not caught? framing-roundtrip.spec.ts only tested wells INSIDE
-// a plugin; the launcher↔plugin-root seam (portal entry/ascent) had no test.
+// TestInfoRootFramingSeedAndWriteback pins the menu-to-plugin-root seam:
+// SetFraming persists the framing and Info returns it, so the client can
+// restore the left-off viewport on entry without an extra round-trip. It is
+// framing only, so a root write must not bump a content version.
 func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	const eps = 1e-9
 
-	// A freshly-opened plugin starts with zero root view (default calibration
-	// will be used on first entry — the correct "never visited" behaviour).
+	// A freshly-opened store starts with a zero root view, so first entry
+	// uses the default calibration.
 	info0, err := p.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("Info(initial): %v", err)
@@ -364,8 +359,8 @@ func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 		t.Errorf("fresh Info.RootViewZoom = %v, want 0", info0.RootViewZoom)
 	}
 
-	// Write the root framing through the ONE verb, aimed at the root grid
-	// row (the ascent-writeback path).
+	// Write the root framing through the one verb, aimed at the root grid
+	// row, which is the ascent-writeback path.
 	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 		RootGridId: info0.RootGridId,
 		Cx:         3.5,
@@ -375,8 +370,8 @@ func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 		t.Fatalf("SetFraming(root): %v", err)
 	}
 
-	// Info must now reflect the saved values so enterPlugin can seed the
-	// portal-well framing (the read side of the same seam).
+	// Info must now reflect the saved values so entry can seed the doorway
+	// framing: the read side of the same seam.
 	info1, err := p.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("Info(after SetFraming): %v", err)
@@ -391,26 +386,25 @@ func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 		t.Errorf("Info.RootViewZoom = %v, want 1.75", info1.RootViewZoom)
 	}
 
-	// A root framing write is framing-only: the root grid's own version
-	// must not change. We check via Info — schema_version reflects the DB
-	// format, not a content edit; but the SetFraming call above must not
-	// have errored with a version conflict either. A non-zero version bump would surface as a different
-	// schema_version here or as an error above.
+	// A root framing write must not change the root grid's own version.
+	// schema_version reflects the DB format, not a content edit, and the
+	// SetFraming call above must not have errored with a version
+	// conflict.
 	if info1.SchemaVersion != info0.SchemaVersion {
 		t.Errorf("schema_version changed after the root framing write: %d → %d", info0.SchemaVersion, info1.SchemaVersion)
 	}
 }
 
-// TestCleanupScratchSweepsEphemeralTiles (issue #85's crash net, coverage gap
-// found in the audit): the startup sweep deletes EVERY scratch-grid tile — an
-// ascent that never ran (crash, hard kill) must not leak ephemeral visits.
+// TestCleanupScratchSweepsEphemeralTiles: the startup sweep deletes every
+// scratch-grid tile, so an ascent that never ran — a crash, a hard kill —
+// does not leak ephemeral visits.
 func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	scratch := scratchGrid(t, p)
 
-	// Two ephemeral tiles a crashed session left behind: a url and a shell
-	// (created through the plugin's scratch routing, like the client does).
+	// Two ephemeral tiles a crashed session left behind, a url and a shell,
+	// created through the scratch routing the client uses.
 	for _, tile := range []*gridwellv1.Tile{
 		{Kind: "url", X: 0, Y: 0, W: 1, H: 1, UrlString: "https://example.com/leak"},
 		{Kind: "shell", X: 0, Y: 0, W: 1, H: 1},
@@ -447,13 +441,12 @@ func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 	}
 }
 
-// TestCleanupScratchSparesWorkspaceEphemerals (issue #174 part 2): a scratch
-// tile referenced by a pane tile's layout blob is a WORKSPACE'S ephemeral —
-// part of a durable arrangement, alive on purpose across app restarts (its
-// tmux session survives them) — and the boot sweep must not reap it. An
-// unreferenced scratch tile still sweeps (the crash net), and once the pane
-// tile is deleted the reference dies with the blob, so the next sweep
-// reclaims it: self-healing, no second bookkeeping copy.
+// TestCleanupScratchSparesWorkspaceEphemerals: a scratch tile referenced by
+// a pane tile's layout blob is part of a durable arrangement, alive on
+// purpose across restarts because its tmux session is, so the boot sweep
+// must not reap it. An unreferenced scratch tile still sweeps, and once the
+// pane tile is deleted the reference dies with the blob and the next sweep
+// reclaims it. Self-healing, with no second bookkeeping copy.
 func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
@@ -468,7 +461,7 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A workspace-owned ephemeral shell + an orphaned (crash-leaked) one.
+	// A pane-tile-owned ephemeral shell, and a crash-leaked orphan.
 	owned, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch,
 		Tile: &gridwellv1.Tile{Kind: "shell", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
@@ -480,8 +473,8 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The pane tile whose layout references the owned shell (qualified id,
-	// exactly what the client persister writes).
+	// The pane tile whose layout references the owned shell, by the
+	// qualified id the client persister writes.
 	pt, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,
 		Tile: &gridwellv1.Tile{Kind: "pane", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
@@ -507,18 +500,19 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Error("crash-leaked scratch tile survived the sweep")
 	}
 
-	// Delete the pane tile: the first delete PARKS it in the trash (#262)
-	// and its workspace layout keeps holding its ephemerals — a restored
-	// workspace must come back whole, so nothing is reclaimable yet.
+	// The first delete parks the pane tile in the trash, and its layout
+	// keeps holding its ephemerals: a restored arrangement must come back
+	// whole, so nothing is reclaimable yet.
 	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id}); err != nil {
 		t.Fatal(err)
 	}
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 0 {
 		t.Errorf("post-trash sweep = (%d, %v), want (0, nil) — a trashed workspace keeps its ephemerals", swept, err)
 	}
-	// The second delete destroys the pane tile; the reference dies with the
-	// blob and the next sweep reclaims the formerly-owned ephemeral. (The
-	// server-level delete reap usually gets there first; the sweep is the net.)
+	// The second delete destroys the pane tile, the reference dies with the
+	// blob, and the next sweep reclaims the formerly-owned ephemeral. The
+	// server-level delete reap usually gets there first; the sweep is the
+	// net.
 	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: pt.Tile.Id}); err != nil {
 		t.Fatal(err)
 	}

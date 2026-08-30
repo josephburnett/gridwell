@@ -1,14 +1,12 @@
-// Package shelldriver spawns a process attached to a PTY and bridges
-// its stdin/stdout to a caller-supplied I/O surface. The server's
-// WebSocket shell-stream handler wraps a Session in a duplex
-// transport; tests substitute in-memory transports to exercise the
-// driver without needing a real WebSocket.
+// Package shelldriver spawns a process attached to a PTY and bridges its
+// stdin and stdout to a caller-supplied I/O surface. The shell door wraps a
+// Session in a duplex transport; tests substitute in-memory transports to
+// exercise the driver without a real WebSocket.
 //
-// Scope: one Session = one PTY = one spawned process. Historically
-// the spawned process was bash directly; with the tmux backing it is
-// `tmux new-session` / `tmux attach-session`. The driver doesn't
-// know which: it just execs the configured binary with the
-// configured args. That mapping lives in the server layer.
+// One Session is one PTY is one spawned process. In practice the spawned
+// process is `tmux new-session` or `tmux attach-session`, but the driver
+// does not know that: it execs the configured binary with the configured
+// args, and the mapping lives above it.
 package shelldriver
 
 import (
@@ -46,21 +44,20 @@ type Config struct {
 	Env []string
 }
 
-// Session is one live bash PTY. Output reads bytes from the PTY (what
-// the user sees on screen); Write sends keystrokes into bash's stdin.
-// Resize updates the PTY window size when the pane resizes. Cwd reads
-// /proc/<pid>/cwd live so the freeze path can persist where bash is
-// before SIGTERM. Close terminates the process group cleanly.
+// Session is one live PTY. Output reads bytes from the PTY, what the user
+// sees on screen; Write sends keystrokes into the process's stdin; Resize
+// updates the PTY window size when the pane resizes; Close terminates the
+// process group cleanly.
 //
-// All methods are safe to call concurrently. Methods that need the PTY
-// after Close has run return an error rather than panicking on a torn-
-// down file descriptor.
-// outputBufferFrames is the depth of the internal PTY-output channel.
-// Set high enough that a short gap between WS detach and re-attach
-// during a takeover doesn't drop bash output. When full, the pump
-// goroutine blocks on the PTY read, which back-pressures bash — that
-// is the correct behavior over silently dropping bytes that may form
-// part of an ANSI escape sequence.
+// All methods are safe to call concurrently. Methods that need the PTY after
+// Close has run return an error rather than panicking on a torn-down file
+// descriptor.
+
+// outputBufferFrames is the depth of the internal PTY-output channel. It is
+// set high enough that a short gap between detach and re-attach during a
+// takeover does not drop output. When full, the pump goroutine blocks on the
+// PTY read, which back-pressures the process; that is correct over silently
+// dropping bytes that may form part of an ANSI escape sequence.
 const outputBufferFrames = 64
 
 type Session struct {
@@ -68,11 +65,10 @@ type Session struct {
 	ptmx *os.File
 	pid  int
 
-	// outCh is the single drain point for PTY bytes. Exactly one
-	// internal pump goroutine writes to it; subscribers (one WS
-	// handler at a time) read from it. The takeover protocol relies on
-	// being able to cancel-safe select on this channel, which a
-	// blocking PTY Read could not satisfy.
+	// outCh is the single drain point for PTY bytes. Exactly one internal
+	// pump goroutine writes to it, and one subscriber at a time reads from
+	// it. The takeover protocol needs a cancel-safe select on this channel,
+	// which a blocking PTY Read could not satisfy.
 	outCh chan []byte
 
 	closeOnce sync.Once
@@ -139,16 +135,12 @@ func Start(cfg Config) (*Session, error) {
 // Close has run, so a `for chunk := range s.Output() {}` loop
 // terminates naturally.
 //
-// Contract: after Close, chunks the PTY produced BEFORE the fd closed
-// (e.g. bash's startup prompt) may still be delivered before the
-// channel closes — the pump's cancellable send races the consumer's
-// receive, and dropping vs delivering an already-produced chunk are
-// both correct. Consumers must therefore drain to close, never assume
-// the next receive after Close is the close itself.
-//
-// Replaces the prior blocking Read-style API so callers can select on
-// this channel together with a context — required for cancel-safe
-// detach in the WS takeover path.
+// After Close, chunks the PTY produced before the fd closed — a startup
+// prompt, say — may still be delivered before the channel closes: the pump's
+// cancellable send races the consumer's receive, and dropping or delivering
+// an already-produced chunk are both correct. Consumers must therefore drain
+// to close and never assume the next receive after Close is the close
+// itself.
 func (s *Session) Output() <-chan []byte { return s.outCh }
 
 // pump is the single PTY reader. Runs until the master fd reports EOF
@@ -163,14 +155,14 @@ func (s *Session) pump() {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
 			// Cancellable send. A plain `outCh <- chunk` would wedge this
-			// goroutine forever if outCh is full and nobody is draining it
-			// (e.g. a WS-takeover gap, or the tile was deleted) when the
-			// process exits: closing the PTY unblocks a blocked Read, not a
-			// blocked channel send. doneCh closes when the process exits
-			// (Close guarantees it via SIGTERM→SIGKILL), so fall through and
-			// drop the final chunk rather than leaking the goroutine + fd.
-			// While the process lives, doneCh is open, so a full channel
-			// still back-pressures the PTY read (the intended behavior).
+			// goroutine forever if outCh is full and nobody is draining it —
+			// a takeover gap, or a deleted tile — when the process exits:
+			// closing the PTY unblocks a blocked Read, not a blocked channel
+			// send. doneCh closes when the process exits, which Close
+			// guarantees through SIGTERM then SIGKILL, so fall through and
+			// drop the final chunk rather than leaking the goroutine and the
+			// fd. While the process lives, doneCh is open, so a full channel
+			// still back-pressures the PTY read.
 			select {
 			case s.outCh <- chunk:
 			case <-s.doneCh:

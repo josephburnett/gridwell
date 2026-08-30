@@ -13,10 +13,10 @@ import (
 
 // --- Pure-Go tests: name encoding + argv composition ---
 
-// TestSessionNameRoundtrip locks in the canonical tile-id → tmux-
-// session-name mapping. Any change to this encoding silently breaks
-// orphan cleanup (which parses names from `tmux list-sessions`) and
-// makes pre-existing sessions un-attachable after a server upgrade.
+// TestSessionNameRoundtrip locks in the canonical tile-id to
+// tmux-session-name mapping. A change to this encoding silently breaks
+// orphan cleanup, which parses names from `tmux list-sessions`, and makes
+// pre-existing sessions un-attachable after an upgrade.
 func TestSessionNameRoundtrip(t *testing.T) {
 	// Qualified ids contain "/" and the uuid may contain "-"/"_"; the encoding
 	// must round-trip all of them.
@@ -29,10 +29,8 @@ func TestSessionNameRoundtrip(t *testing.T) {
 	}
 }
 
-// TestParseSessionNameRejectsNonGridwell guards against the orphan
-// cleanup blowing away sessions in the user's own tmux that happen
-// to share our socket (shouldn't happen given private socket, but
-// defensive).
+// TestParseSessionNameRejectsNonGridwell guards against the orphan cleanup
+// killing sessions that are not Gridwell's.
 func TestParseSessionNameRejectsNonGridwell(t *testing.T) {
 	// Non-gridwell names, the bare prefix (empty payload), and invalid base64
 	// must all be rejected.
@@ -44,11 +42,9 @@ func TestParseSessionNameRejectsNonGridwell(t *testing.T) {
 	}
 }
 
-// TestArgsCreate locks in the exact argv used for fresh-tile spawn.
-// If tmux ever changes its flag semantics (e.g. -A on new-session)
-// or if we drift, the wasm UX silently breaks: a "refresh fresh
-// tile" might attach to stale state from a previous test run on the
-// same socket, etc.
+// TestArgsCreate locks in the exact argv used for a fresh-tile spawn. If
+// tmux changes its flag semantics, or this argv drifts, a refresh of a fresh
+// tile can silently attach to stale state on the same socket.
 func TestArgsCreate(t *testing.T) {
 	c := &Controller{binary: "/usr/bin/tmux", socketName: "test", configPath: "/tmp/cfg.conf", shell: "bash"}
 	got := c.Args("t/42", ModeCreate, 80, 24, "/home/joe")
@@ -63,10 +59,10 @@ func TestArgsCreate(t *testing.T) {
 	}
 }
 
-// TestArgsCreateSkipsCwdWhenEmpty: when no startDir is given, bash
-// inherits the spawned process's cwd. Asserting on the omission
-// catches regressions where an empty -c "" leaks into argv (tmux
-// would create the session in / rather than $HOME).
+// TestArgsCreateSkipsCwdWhenEmpty: with no startDir, the shell inherits the
+// spawned process's cwd. Asserting on the omission catches an empty -c ""
+// leaking into argv, which would create the session in / rather than
+// $HOME.
 func TestArgsCreateSkipsCwdWhenEmpty(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "bash"}
 	got := c.Args("t/1", ModeCreate, 80, 24, "")
@@ -77,10 +73,9 @@ func TestArgsCreateSkipsCwdWhenEmpty(t *testing.T) {
 	}
 }
 
-// TestArgsAttach locks in the attach-only form. Crucially does NOT
-// include -A: that's the bug-class where a "refresh of a tile whose
-// session is gone" silently spawns a fresh bash. Per the design,
-// attach must fail in that case so the wasm hides the button.
+// TestArgsAttach locks in the attach-only form. It must not include -A: with
+// -A, a refresh of a tile whose session is gone silently spawns a fresh
+// shell. Attach must fail in that case so the client hides the button.
 func TestArgsAttach(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c"}
 	got := c.Args("t/7", ModeAttach, 80, 24, "/ignored")
@@ -93,10 +88,10 @@ func TestArgsAttach(t *testing.T) {
 	}
 }
 
-// TestFilterEnvDropsTmuxVar guards against the recursion case: if
-// gridwell ever runs inside an outer tmux, that outer's $TMUX would
-// leak into our shell-out and tmux refuses commands on a different
-// socket from inside an existing session.
+// TestFilterEnvDropsTmuxVar guards the recursion case: if gridwell runs
+// inside an outer tmux, that outer's $TMUX would leak into the shell-out, and
+// tmux refuses commands on a different socket from inside an existing
+// session.
 func TestFilterEnvDropsTmuxVar(t *testing.T) {
 	in := []string{"PATH=/usr/bin", "TMUX=/tmp/tmux-1000/default,1234,0", "HOME=/home/x"}
 	out := filterEnv(in, "TMUX")
@@ -110,11 +105,10 @@ func TestFilterEnvDropsTmuxVar(t *testing.T) {
 	}
 }
 
-// TestIsMissingSessionErrMatchesTmuxMessages: the sentinel detection
-// is what makes HasSession("missing") return (false, nil) rather
-// than bubbling tmux's exit-1 as an error. Keeping it tested means
-// a tmux version that rewords its diagnostic won't silently break
-// the whole "is the session alive?" path.
+// TestIsMissingSessionErrMatchesTmuxMessages: the sentinel detection is what
+// makes HasSession("missing") return (false, nil) rather than bubbling
+// tmux's exit-1 as an error. Testing it means a tmux version that rewords its
+// diagnostic cannot silently break the "is the session alive?" path.
 func TestIsMissingSessionErrMatchesTmuxMessages(t *testing.T) {
 	cases := []string{
 		"can't find session: gridwell-5",
@@ -127,7 +121,7 @@ func TestIsMissingSessionErrMatchesTmuxMessages(t *testing.T) {
 			t.Errorf("isMissingSessionErr(%q) = false; want true", msg)
 		}
 	}
-	// Real failure must not be classified as "missing".
+	// A real failure must not be classified as missing.
 	if isMissingSessionErr([]byte("permission denied"), errors.New("exit 1")) {
 		t.Error(`isMissingSessionErr("permission denied") = true; want false`)
 	}
