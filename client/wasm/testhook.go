@@ -647,19 +647,12 @@ func (a *App) focusedPaneRect() (*pane.Pane, pane.Rect, bool) {
 	return p, r, ok
 }
 
-// templateKindName is the stable string a test uses to pick a primitive swatch.
+// templateKindName is the stable string a test uses to pick a primitive
+// swatch, read from the primitives table so a name cannot drift from the
+// swatch it names.
 func templateKindName(k templateKind) string {
-	switch k {
-	case tplWell:
-		return "well"
-	case tplMarkdown:
-		return "markdown"
-	case tplURL:
-		return "url"
-	case tplShell:
-		return "shell"
-	case tplPane:
-		return "pane"
+	if pr, ok := primitiveFor(k); ok {
+		return pr.name
 	}
 	return ""
 }

@@ -161,17 +161,8 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 	} else {
 		outside := tileOutside(&n, false)
 		drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx, false)
-		switch item.primitive {
-		case tplWell:
-			drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
-		case tplMarkdown:
-			drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine)
-		case tplURL:
-			drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
-		case tplShell:
-			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
-		case tplPane:
-			drawPaneGlyph(a.cctx, x, y, w, h, colorPaneTileBorder)
+		if pr, ok := primitiveFor(item.primitive); ok {
+			pr.glyph(a, x, y, w, h)
 		}
 	}
 	if hovered {

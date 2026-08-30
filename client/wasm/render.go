@@ -255,9 +255,82 @@ const (
 	tplPane
 )
 
-// primitiveKinds is the palette layout order of the built-in tile
-// primitives, left to right. They appear in any writable grid.
-var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell, tplPane}
+// primitive is everything the palette knows about one built-in tile kind:
+// the stable name a test picks the swatch by, the synthetic 1x1 tile the
+// swatch and the drag ghost paint, the identity glyph overlaid on it, and the
+// create RPC a plain drop fires. One row per kind is the one owner of that
+// set, so a kind cannot be half-added — a swatch with no glyph, a glyph with
+// no create — and every reader derives from the same order.
+type primitive struct {
+	kind   templateKind
+	name   string
+	ghost  rpc.Tile
+	glyph  func(a *App, x, y, w, h float64)
+	create func(a *App, p *pane.Pane, cellX, cellY int64)
+}
+
+// primitives is the palette layout order of the built-in tile primitives,
+// left to right. They appear in any writable grid. primitiveKinds is its
+// order, the layout the popover and the hit-test indices follow — derived,
+// never a second list.
+//
+// Both are filled in init rather than by a var initializer: the create and
+// glyph rows close over App methods, and the package-level reference graph
+// from a method back to the table is a cycle the compiler refuses.
+var (
+	primitives     []primitive
+	primitiveKinds []templateKind
+)
+
+func init() {
+	primitives = []primitive{
+		{
+			kind: tplWell, name: "well",
+			ghost:  rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1},
+			glyph:  func(a *App, x, y, w, h float64) { drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder) },
+			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createWellAtCell(p, cellX, cellY) },
+		},
+		{
+			kind: tplMarkdown, name: "markdown",
+			ghost:  rpc.Tile{Kind: rpc.KindText, W: 1, H: 1},
+			glyph:  func(a *App, x, y, w, h float64) { drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine) },
+			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createTextAtCell(p, []byte{}, cellX, cellY) },
+		},
+		{
+			kind: tplURL, name: "url",
+			ghost:  rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1},
+			glyph:  func(a *App, x, y, w, h float64) { drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine) },
+			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createURLAtCell(p, cellX, cellY) },
+		},
+		{
+			kind: tplShell, name: "shell",
+			ghost:  rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"},
+			glyph:  func(a *App, x, y, w, h float64) { drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder) },
+			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createShellAtCell(p, cellX, cellY) },
+		},
+		{
+			kind: tplPane, name: "pane",
+			ghost:  rpc.Tile{Kind: rpc.KindPane, W: 1, H: 1, AltText: "workspace"},
+			glyph:  func(a *App, x, y, w, h float64) { drawPaneGlyph(a.cctx, x, y, w, h, colorPaneTileBorder) },
+			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createPaneAtCell(p, cellX, cellY) },
+		},
+	}
+	primitiveKinds = make([]templateKind, len(primitives))
+	for i, pr := range primitives {
+		primitiveKinds[i] = pr.kind
+	}
+}
+
+// primitiveFor returns the table row for k. Not-ok is an unknown kind: the
+// callers each do nothing for it, exactly as their switches fell through.
+func primitiveFor(k templateKind) (primitive, bool) {
+	for _, pr := range primitives {
+		if pr.kind == k {
+			return pr, true
+		}
+	}
+	return primitive{}, false
+}
 
 // paletteItem is one entry in the creation palette. It is either a
 // configured plugin (click to enter, drag to drop an exit-well link)

@@ -1364,17 +1364,8 @@ func paletteItemGhostNode(item paletteItem) rpc.Tile {
 		t.ID = item.plugin.UUID
 		return t
 	}
-	switch item.primitive {
-	case tplWell:
-		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1}
-	case tplMarkdown:
-		return rpc.Tile{Kind: rpc.KindText, W: 1, H: 1}
-	case tplURL:
-		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
-	case tplShell:
-		return rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"}
-	case tplPane:
-		return rpc.Tile{Kind: rpc.KindPane, W: 1, H: 1, AltText: "workspace"}
+	if pr, ok := primitiveFor(item.primitive); ok {
+		return pr.ghost
 	}
 	return rpc.Tile{}
 }
@@ -1436,21 +1427,14 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
 	a.landGhost(destPane.ID, 0, targetX, targetY)
 
-	switch d.item.primitive {
-	case tplWell:
-		a.createWellAtCell(destPane, dropX, dropY)
-	case tplMarkdown:
-		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
-	case tplURL:
-		if d.item.promotePane != "" {
-			a.promoteEphemeralURL(d.item.promotePane, destPane, dropX, dropY)
-			break
-		}
-		a.createURLAtCell(destPane, dropX, dropY)
-	case tplShell:
-		a.createShellAtCell(destPane, dropX, dropY)
-	case tplPane:
-		a.createPaneAtCell(destPane, dropX, dropY)
+	// A promote drag is the one arm that is not a plain create: the ephemeral
+	// url dragged off the bar's crumb becomes a persistent tile carrying its
+	// address, and the pane relocates onto it. Every other drop is the
+	// primitives table's create.
+	if d.item.primitive == tplURL && d.item.promotePane != "" {
+		a.promoteEphemeralURL(d.item.promotePane, destPane, dropX, dropY)
+	} else if pr, ok := primitiveFor(d.item.primitive); ok {
+		pr.create(a, destPane, dropX, dropY)
 	}
 	a.menu.Close()
 }
