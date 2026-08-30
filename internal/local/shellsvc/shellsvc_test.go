@@ -85,6 +85,34 @@ func TestAcquire_TakeoverReusesPTYAndEvictsOld(t *testing.T) {
 	}
 }
 
+// A takeover hands a LIVE pty to a terminal that has never seen a byte of
+// it. tmux cannot tell that the viewer changed — same fd, same client — so
+// nothing repaints and the new pane sits blank until some later resize
+// happens to shake a redraw loose. Whether that ever came was pure timing:
+// when the old holder's detach lost the race to the new attach, the
+// workspace-keepalive e2e saw an empty terminal for its whole 15s poll.
+// The winsize bounce is the fix: SIGWINCH is raised only on a REAL change,
+// so tmux repaints for whoever is watching now.
+func TestAcquire_TakeoverForcesARepaint(t *testing.T) {
+	fake := shellsvctest.New()
+	m := shellsvc.NewManager(fake)
+
+	if _, _, err := m.Acquire("1", true, 80, 24); err != nil {
+		t.Fatalf("first Acquire: %v", err)
+	}
+	sess := fake.LastSession()
+	if got := len(sess.Resizes()); got != 0 {
+		t.Fatalf("a first attach resized %d times, want 0 (the open carries the size)", got)
+	}
+	if _, _, err := m.Acquire("1", true, 80, 24); err != nil {
+		t.Fatalf("second Acquire: %v", err)
+	}
+	want := [][2]uint16{{80, 25}, {80, 24}}
+	if got := sess.Resizes(); len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("takeover resizes = %v, want a bounce %v — no bounce, no SIGWINCH, no repaint", got, want)
+	}
+}
+
 func TestReleaseClosesSessionAndFiresOnDetach(t *testing.T) {
 	fake := shellsvctest.New()
 	m := shellsvc.NewManager(fake)
