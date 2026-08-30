@@ -317,6 +317,13 @@ func (a *App) ascendOnce(p *pane.Pane, animate bool) bool {
 		return true
 	}
 	r := paneRectFor(a, p)
+	// Every animated ascent lands the same way once its segments finish: the
+	// pane may have been closed mid-flight, so look it up again.
+	onLanded := func() {
+		if fp := a.tree.FindPane(p.ID); fp != nil {
+			a.landOnFrame(fp)
+		}
+	}
 	if landing.Content || p.Content {
 		// Out of a content descent, or back onto one stacked below: a
 		// single combined pan and zoom from the tile's footprint at
@@ -339,11 +346,7 @@ func (a *App) ascendOnce(p *pane.Pane, animate bool) bool {
 				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
 				durationMs: totalTransitionMs,
 			}},
-			onComplete: func() {
-				if fp := a.tree.FindPane(p.ID); fp != nil {
-					a.landOnFrame(fp)
-				}
-			},
+			onComplete: onLanded,
 		})
 		return true
 	}
@@ -389,11 +392,7 @@ func (a *App) ascendOnce(p *pane.Pane, animate bool) bool {
 				durationMs: durations[1],
 			},
 		},
-		onComplete: func() {
-			if fp := a.tree.FindPane(p.ID); fp != nil {
-				a.landOnFrame(fp)
-			}
-		},
+		onComplete: onLanded,
 	})
 	return true
 }
@@ -525,9 +524,10 @@ func zoomDist(z1, z2 float64) float64 {
 }
 
 // urlSurfaces and shellSurfaces list the panes currently holding a live
-// surface, keyed by the content they show: the input to pane.TakeOver. They
-// read straight off the live handles, the one owner of "this pane has a
-// surface open"; nothing is mirrored.
+// surface, keyed by the content they show: the input to pane.TakeOver, and
+// the snapshot the close-all sweeps walk at unload. They read straight off
+// the live handles, the one owner of "this pane has a surface open"; nothing
+// is mirrored.
 func (a *App) urlSurfaces() []pane.Holder {
 	var out []pane.Holder
 	for id, pl := range a.locals {

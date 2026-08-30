@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"syscall/js"
 
@@ -65,10 +64,7 @@ type shellStreamConn struct {
 }
 
 // shellLog writes a tagged debug message to the browser console.
-func shellLog(format string, args ...any) {
-	msg := "[shellstream] " + fmt.Sprintf(format, args...)
-	js.Global().Get("console").Call("log", msg)
-}
+var shellLog = taggedLog("[shellstream]")
 
 // isShellDescent reports whether pane p is currently descended into a
 // shell tile. The input layer uses this to switch from Gridwell-native
@@ -655,16 +651,11 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 
 // closeAllShellStreams closes every open shell stream. Used on
 // beforeunload so the server's freeze-and-destroy runs before the tab
-// goes away.
+// goes away. shellSurfaces is the snapshot, so closing as we go never walks
+// a map being mutated.
 func (a *App) closeAllShellStreams() {
-	ids := make([]string, 0, len(a.locals))
-	for id, pl := range a.locals {
-		if pl.shellConn != nil {
-			ids = append(ids, id)
-		}
-	}
-	for _, id := range ids {
-		a.closeShellStream(id, true)
+	for _, h := range a.shellSurfaces() {
+		a.closeShellStream(h.PaneID, true)
 	}
 }
 

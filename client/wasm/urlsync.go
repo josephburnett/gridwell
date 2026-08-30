@@ -33,11 +33,7 @@ const framingSaveDebounceMs = 600
 // at ascent would lose the viewport whenever a grid is left another way:
 // descending deeper, a pane switch, a URL edit, a reload.
 func (a *App) scheduleFramingSave() {
-	if a.sched.framingSaveScheduled {
-		return
-	}
-	a.sched.framingSaveScheduled = true
-	js.Global().Call("setTimeout", a.sched.framingSaveCb, framingSaveDebounceMs)
+	a.sched.framingSave.arm(framingSaveDebounceMs)
 }
 
 // flushFramingSave persists every pane's settled grid framing now. The
@@ -86,7 +82,7 @@ func (a *App) flushWellWheelSaves() {
 		// The unload transport is the dispatcher's business (write.beacon):
 		// one place decides whether this write goes as an RPC or as a
 		// beacon, so a parked framing write reaches the beacon path too.
-		a.postFramingPersistBeacon("SetFraming", gid, tileID,
+		a.postFramingPersist("SetFraming", gid, tileID,
 			func(ctx context.Context) error {
 				_, err := a.cl.SetFraming(ctx, req)
 				return err
@@ -211,7 +207,7 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 	if key == "" {
 		key = req.RootGridID
 	}
-	a.postFramingPersistBeacon("SetFraming", gridID, key,
+	a.postFramingPersist("SetFraming", gridID, key,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetFraming(ctx, &req)
 			return err
@@ -254,7 +250,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	patched.TextW, patched.TextH = req.TextW, req.TextH
 	patched.TextMode = p.TextMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
-	a.postFramingPersistBeacon("SetTextView", gid, file.ID,
+	a.postFramingPersist("SetTextView", gid, file.ID,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetTextView(ctx, req)
 			return err
@@ -269,11 +265,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 // it to be replaced on the next debounce tick. Cheap to call from any
 // state-mutating code path.
 func (a *App) scheduleURLUpdate() {
-	if a.sched.urlUpdateScheduled {
-		return
-	}
-	a.sched.urlUpdateScheduled = true
-	js.Global().Call("setTimeout", a.sched.urlUpdateCb, urlUpdateDebounceMs)
+	a.sched.urlUpdate.arm(urlUpdateDebounceMs)
 }
 
 // writeURLNow encodes the focused pane's state and writes it to the browser
@@ -402,7 +394,7 @@ func (a *App) encodeFocusedPaneURL() pane.URLState {
 // textarea as (column, row), 0-indexed. Returns (0, 0) if the
 // textarea isn't visible.
 func (a *App) textareaCursorRowCol() (int, int) {
-	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
+	if !a.hasTextarea() {
 		return 0, 0
 	}
 	val := a.textTextarea.Get("value").String()
@@ -419,12 +411,20 @@ func (a *App) textareaCursorRowCol() (int, int) {
 // still resolve down to 12. After applying, replaceState the cleaned
 // URL so what's in the bar matches what's on screen.
 func (a *App) applyURLOnBoot() {
+	a.applyURLState(locationPath())
+}
+
+// locationPath is what the browser's address bar currently says, in the exact
+// form pane.DecodeURL reads: path plus query. The one reader of
+// window.location — boot and the popstate restore must decode the same
+// bytes, or they land in different places from one address.
+func locationPath() string {
 	loc := js.Global().Get("location")
 	raw := loc.Get("pathname").String()
 	if s := loc.Get("search").String(); s != "" {
 		raw += s
 	}
-	a.applyURLState(raw)
+	return raw
 }
 
 // applyURLState decodes raw and places the focused pane there — the
@@ -604,23 +604,15 @@ func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
 		return
 	}
 	go func() {
-		// Content is routable by tile id (ReadContent); blob ids carry no
-		// plugin namespace and are not routable on their own. Store it in
-		// the cache, the one text-body store the overlay reads from.
-		data, _, version, err := a.cl.ReadContent(context.Background(), textTileID)
-		if err != nil {
-			// The tile the URL pointed at stays blank: say why.
-			a.surfaceRPCError("ReadContent", err)
-			return
-		}
-		a.c.PutFetchedContent(textTileID, data, version)
-		// Refresh the overlay (in text mode this seeds the textarea
-		// from the blob), then place the cursor.
-		a.refreshFileOverlay()
-		if state.CursorMode {
-			a.placeCursorAt(state.Col, state.Row)
-		}
-		a.draw()
+		// loadTileContent stores the bytes and refreshes the overlay (in
+		// text mode that seeds the textarea from the body); the cursor is
+		// what this path adds, and it goes after the seeding.
+		a.loadTileContent(textTileID, func() {
+			if state.CursorMode {
+				a.placeCursorAt(state.Col, state.Row)
+			}
+			a.draw()
+		})
 	}()
 }
 
@@ -628,7 +620,7 @@ func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
 // applies it to the textarea via setSelectionRange. No-op if the
 // textarea isn't ready.
 func (a *App) placeCursorAt(col, row int) {
-	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
+	if !a.hasTextarea() {
 		return
 	}
 	val := a.textTextarea.Get("value").String()

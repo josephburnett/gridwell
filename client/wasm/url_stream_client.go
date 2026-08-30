@@ -4,11 +4,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"slices"
-	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -54,10 +53,7 @@ type urlView struct {
 }
 
 // urlLog writes a tagged debug message to the browser console.
-func urlLog(format string, args ...any) {
-	msg := "[urlview] " + fmt.Sprintf(format, args...)
-	js.Global().Get("console").Call("log", msg)
-}
+var urlLog = taggedLog("[urlview]")
 
 // contentViewBounds maps a pane's screen rect to the content-box rectangle a
 // hosted webview should occupy: the pane minus its border band and the bar
@@ -327,16 +323,11 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 }
 
 // closeAllURLStreams tears down every live view. Used on beforeunload so the
-// freeze writes fire before the page goes away.
+// freeze writes fire before the page goes away. urlSurfaces is the snapshot,
+// so closing as we go never walks a map being mutated.
 func (a *App) closeAllURLStreams() {
-	ids := make([]string, 0, len(a.locals))
-	for id, pl := range a.locals {
-		if pl.urlView != nil {
-			ids = append(ids, id)
-		}
-	}
-	for _, id := range ids {
-		a.closeURLStream(id, true)
+	for _, h := range a.urlSurfaces() {
+		a.closeURLStream(h.PaneID, true)
 	}
 }
 
@@ -405,18 +396,14 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 // URL tiles only: a page view's navigations stay within plugin-served
 // content, and the tile row has no url_string fact to shadow.
 func (a *App) updateCachedTileURL(tileID string, newURL string) {
-	for _, gid := range a.c.KnownGridIDs() {
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			continue
-		}
+	a.forEachCachedGrid(func(gid string, g *cache.Grid) bool {
 		t, ok := g.Tiles[tileID]
-		if !ok || t.Kind != rpc.KindURL {
-			continue
+		if ok && t.Kind == rpc.KindURL {
+			t.URLString = newURL
+			a.c.UpdateTile(gid, t)
 		}
-		t.URLString = newURL
-		a.c.UpdateTile(gid, t)
-	}
+		return true
+	})
 }
 
 // paneRectByID looks up the screen rect for the given pane via a fresh

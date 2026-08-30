@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"syscall/js"
 	"time"
@@ -207,9 +208,9 @@ type App struct {
 	animation *anim.Animation
 
 	// sched holds the debounce / requestAnimationFrame bookkeeping: each
-	// "Scheduled" bool guards a pending callback so repeated triggers
-	// coalesce into one, and each retained js.Func is allocated once so
-	// re-scheduling never leaks handles. See scheduler below.
+	// debounce guards a pending callback so repeated triggers coalesce into
+	// one, and its retained js.Func is allocated once so re-scheduling never
+	// leaks handles. See scheduler below.
 	sched scheduler
 
 	// transition is the active descent/ascent zoom animation, if any.
@@ -362,43 +363,67 @@ type App struct {
 	textareaReady bool
 }
 
+// debounce is one coalescing deferred callback: arm() starts a setTimeout
+// unless a run is already pending, and the retained js.Func — allocated once,
+// by set() — clears the pending guard before running the body. Repeated arms
+// inside the window collapse into a single run, and re-arming never leaks a
+// handle.
+type debounce struct {
+	// pending guards a timer already in flight.
+	pending bool
+	// cb is the retained callback; set() allocates it once for the life of
+	// the page.
+	cb js.Func
+}
+
+// set installs the debounce's body. Called once, at startup.
+func (d *debounce) set(body func()) {
+	d.cb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		d.pending = false
+		body()
+		return nil
+	})
+}
+
+// arm schedules the body ms milliseconds out, unless a run is already
+// pending. Caller-side conditions (is there anything to save? is there a
+// deadline?) stay at the call site; arm() only coalesces.
+func (d *debounce) arm(ms int) {
+	if d.pending {
+		return
+	}
+	d.pending = true
+	js.Global().Call("setTimeout", d.cb, ms)
+}
+
 // scheduler holds the App's debounce / requestAnimationFrame bookkeeping.
-// Each "Scheduled" bool guards a pending callback so repeated triggers
-// coalesce into a single deferred run; each js.Func is allocated once and
-// retained so re-scheduling never leaks handles.
 type scheduler struct {
 	// rafScheduled tracks a pending requestAnimationFrame so we don't
 	// queue redundant frames.
 	rafScheduled bool
 
-	// wsSaveScheduled and wsSaveCb debounce the pane-layout persister (see
+	// wsSave debounces the pane-layout persister (see
 	// scheduleWorkspaceSave): draw() arms it while inside a pane tile, and
 	// the callback encodes, hash-diffs, and posts the layout WriteContent on
 	// a change.
-	wsSaveScheduled bool
-	wsSaveCb        js.Func
+	wsSave debounce
 
-	// urlUpdateScheduled / urlUpdateCb debounce the URL replaceState:
-	// multiple state changes within the window coalesce into one.
-	urlUpdateScheduled bool
-	urlUpdateCb        js.Func
+	// urlUpdate debounces the URL replaceState: multiple state changes
+	// within the window coalesce into one.
+	urlUpdate debounce
 
-	// framingSaveScheduled / framingSaveCb debounce the grid-framing
-	// persister (see scheduleFramingSave): draw() arms it; the callback
-	// flushes every pane's settled framing through the no-op-guarded
-	// writers.
-	framingSaveScheduled bool
-	framingSaveCb        js.Func
+	// framingSave debounces the grid-framing persister (see
+	// scheduleFramingSave): draw() arms it; the callback flushes every
+	// pane's settled framing through the no-op-guarded writers.
+	framingSave debounce
 
-	// textSaveScheduled / textSaveCb debounce the text-tile content save.
-	textSaveScheduled bool
-	textSaveCb        js.Func
+	// textSave debounces the text-tile content save.
+	textSave debounce
 
-	// errExpireScheduled / errExpireCb arm one timer for the error surface's
-	// soonest expiry deadline, so stale one-shot notices leave the strip
-	// without polling. See scheduleErrExpiry.
-	errExpireScheduled bool
-	errExpireCb        js.Func
+	// errExpire arms one timer for the error surface's soonest expiry
+	// deadline, so stale one-shot notices leave the strip without polling.
+	// See scheduleErrExpiry.
+	errExpire debounce
 }
 
 // wellWheelDrift is one well's in-flight hover-wheel state, the one owner of
@@ -748,11 +773,7 @@ func main() {
 	// navigated to. The restore itself fetches, so it runs on a goroutine.
 	app.win.Call("addEventListener", "popstate", js.FuncOf(func(this js.Value, args []js.Value) any {
 		app.urlRestoring = true
-		loc := js.Global().Get("location")
-		raw := loc.Get("pathname").String()
-		if s := loc.Get("search").String(); s != "" {
-			raw += s
-		}
+		raw := locationPath()
 		go app.restoreFromHistory(raw)
 		return nil
 	}))
@@ -828,29 +849,14 @@ func (a *App) afterBootstrap() {
 		a.fetchGrid(a.home)
 	}
 
-	a.sched.wsSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.wsSaveScheduled = false
-		a.flushWorkspaceSave()
-		return nil
-	})
-	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.urlUpdateScheduled = false
-		a.writeURLNow()
-		return nil
-	})
-	a.sched.framingSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.framingSaveScheduled = false
-		a.flushFramingSave()
-		return nil
-	})
-
-	a.sched.errExpireCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.errExpireScheduled = false
+	a.sched.wsSave.set(a.flushWorkspaceSave)
+	a.sched.urlUpdate.set(a.writeURLNow)
+	a.sched.framingSave.set(a.flushFramingSave)
+	a.sched.errExpire.set(func() {
 		if a.errs.Expire(time.Now()) {
 			a.scheduleFrame() // strip shrank; panes reclaim the height on redraw
 		}
 		a.scheduleErrExpiry()
-		return nil
 	})
 
 	// Subscribe to the event stream.
@@ -960,6 +966,16 @@ func (a *App) fetchTileByID(tileID string) {
 // reported by the browser. Used for animation timing.
 func nowMs() float64 {
 	return js.Global().Get("Date").Call("now").Float()
+}
+
+// taggedLog returns a console logger that prefixes every message with tag.
+// The live-surface clients trace through it; the prefixes ("[urlview]",
+// "[shellstream]") are what a log reader — and the e2e suite — greps for, so
+// they are part of the output, not decoration.
+func taggedLog(tag string) func(format string, args ...any) {
+	return func(format string, args ...any) {
+		js.Global().Get("console").Call("log", tag+" "+fmt.Sprintf(format, args...))
+	}
 }
 
 // scheduleFrame ensures a draw happens on the next animation frame. While
@@ -1298,7 +1314,7 @@ func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 // A coalesced re-report that pushed a deadline out only makes the pending
 // timer fire early, prune nothing, and reschedule — never miss an expiry.
 func (a *App) scheduleErrExpiry() {
-	if a.sched.errExpireScheduled {
+	if a.sched.errExpire.pending {
 		return
 	}
 	d, ok := a.errs.NextDeadline(time.Now())
@@ -1311,8 +1327,7 @@ func (a *App) scheduleErrExpiry() {
 	if ms < 1 {
 		ms = 1
 	}
-	a.sched.errExpireScheduled = true
-	js.Global().Call("setTimeout", a.sched.errExpireCb, ms)
+	a.sched.errExpire.arm(ms)
 }
 
 // resolveErr clears a source's notice when its condition heals (e.g. the

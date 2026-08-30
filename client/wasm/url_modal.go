@@ -6,6 +6,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/urlnorm"
 )
 
@@ -20,13 +21,9 @@ const maxURLSuggestions = 8
 // opened this session do not contribute.
 func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 	var out []urlnorm.Candidate
-	for _, gid := range a.c.KnownGridIDs() {
+	a.forEachCachedGrid(func(gid string, g *cache.Grid) bool {
 		if uuidOf(gid) != pluginUUID {
-			continue
-		}
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			continue
+			return true
 		}
 		for _, t := range g.Tiles {
 			if t.Kind == rpc.KindURL && t.URLString != "" {
@@ -35,7 +32,8 @@ func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 				out = append(out, urlnorm.Candidate{URL: t.URLString, Title: t.AltText})
 			}
 		}
-	}
+		return true
+	})
 	return out
 }
 

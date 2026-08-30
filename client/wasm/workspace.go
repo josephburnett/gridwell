@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -557,11 +556,10 @@ func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 // from the live tree by encode and diff, so there is no per-gesture
 // persistence hook to forget.
 func (a *App) scheduleWorkspaceSave() {
-	if a.sched.wsSaveScheduled || a.ws.Depth() == 0 {
+	if a.ws.Depth() == 0 {
 		return
 	}
-	a.sched.wsSaveScheduled = true
-	js.Global().Call("setTimeout", a.sched.wsSaveCb, wsSaveDebounceMs)
+	a.sched.wsSave.arm(wsSaveDebounceMs)
 }
 
 // flushWorkspaceSave persists the current layout immediately if it changed

@@ -1150,16 +1150,31 @@ func (a *App) fetchTileContent(tileID string) {
 	a.contentInflight[tileID] = true
 	go func() {
 		defer delete(a.contentInflight, tileID)
-		data, _, version, err := a.cl.ReadContent(context.Background(), tileID)
-		if err != nil {
-			// The tile body would otherwise never appear: say why.
-			a.surfaceRPCError("ReadContent", err)
-			return
-		}
-		a.c.PutFetchedContent(tileID, data, version)
-		a.refreshFileOverlay()
-		a.scheduleFrame() // coalesced: body fetches land in bursts (#265)
+		// Coalesced repaint: body fetches land in bursts (#265).
+		a.loadTileContent(tileID, a.scheduleFrame)
 	}()
+}
+
+// loadTileContent reads one tile's bytes into the cache and refreshes the
+// text overlay from them, then runs then() — the caller's repaint. It is the
+// one content-fetch body: the lazy render-path fetch above and the URL boot's
+// cursor-placing fetch (fetchBlobAndSetCursor) differ only in their guards
+// and in what they do once the bytes have landed. Blocking, so both callers
+// run it on their own goroutine.
+//
+// Content is routable by tile id (ReadContent); blob ids carry no plugin
+// namespace and are not routable on their own. The cache is the one text-body
+// store every overlay reads from.
+func (a *App) loadTileContent(tileID string, then func()) {
+	data, _, version, err := a.cl.ReadContent(context.Background(), tileID)
+	if err != nil {
+		// The tile body would otherwise never appear: say why.
+		a.surfaceRPCError("ReadContent", err)
+		return
+	}
+	a.c.PutFetchedContent(tileID, data, version)
+	a.refreshFileOverlay()
+	then()
 }
 
 // tileBody returns a text tile's body bytes, fetching lazily on a miss. Every

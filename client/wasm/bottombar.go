@@ -587,8 +587,8 @@ func (a *App) openWorkspaceRenameInput(level int) {
 		return
 	}
 	a.openNameInputAt(f.Name, seg.W-28, func(st js.Value) {
-		st.Set("left", pxOf(bx+seg.X+2))
-		st.Set("top", pxOf(top+4))
+		st.Set("left", pxf(bx+seg.X+2))
+		st.Set("top", pxf(top+4))
 	}, func(val string) {
 		a.commitWorkspaceRename(level, val)
 	})
@@ -627,8 +627,8 @@ func (a *App) openRenameInput() {
 	}
 	tileID := target.ID
 	a.openNameInputAt(target.AltText, w-24, func(st js.Value) {
-		st.Set("left", pxOf(x))
-		st.Set("top", pxOf(top+4))
+		st.Set("left", pxf(x))
+		st.Set("top", pxf(top+4))
 	}, func(val string) {
 		a.commitRename(tileID, val)
 	})

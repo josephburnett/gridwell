@@ -153,7 +153,7 @@ func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 				TileID: tileID, ContentZoom: z,
 			})
 			return err
-		})
+		}, nil)
 }
 
 // applyShellZooms sets the live terminal's font for the pane; the per-draw

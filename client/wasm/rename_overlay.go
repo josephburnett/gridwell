@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -180,7 +179,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 	st.Set("font", "12px sans-serif")
 	st.Set("color", colorMenuItemHi)
 	st.Set("outline", "none")
-	st.Set("width", pxOf(width))
+	st.Set("width", pxf(width))
 	position(st)
 	a.renameEditing = true
 
@@ -281,9 +280,4 @@ func (a *App) gridIDOfTile(tileID string) string {
 		return t.GridID
 	}
 	return ""
-}
-
-// pxOf formats a float as a CSS pixel length.
-func pxOf(v float64) string {
-	return strconv.FormatFloat(v, 'f', 1, 64) + "px"
 }
