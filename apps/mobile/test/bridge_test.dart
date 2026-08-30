@@ -1,6 +1,6 @@
-// The mobile bridge's pure half under plain `flutter test` (charter §5):
-// the view registry lifecycle, the dispatch contract, and the injected JS
-// — everything that decides behavior, with no platform channel.
+// The mobile bridge's pure half under plain `flutter test`: the view registry
+// lifecycle, the dispatch contract, and the injected JS. Everything that decides
+// behavior, with no platform channel.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridwell_mobile/bridge.dart';
@@ -116,8 +116,8 @@ void main() {
     });
 
     test('defines EVERY onX registrar the wasm installs at boot', () {
-      // installWebviewListeners (client/wasm/webview_bridge.go) calls each
-      // of these unconditionally; a missing one is a boot TypeError.
+      // installWebviewListeners in client/wasm/webview_bridge.go calls each of
+      // these unconditionally; a missing one is a boot TypeError.
       for (final name in [
         'onFrame', 'onNav', 'onRightForward', 'onMiddleForward', 'onLeftForward',
         'onOpenBelow', 'onFreezeURL', 'onZoomKey', 'onError',

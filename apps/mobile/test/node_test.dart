@@ -1,7 +1,7 @@
-// The Dart half of the embedded-node seam (lib/node.dart): the channel
-// wrapper's degrade contract — no shim means null, never a crash — and
-// the pure boot decision. The Go half is tested in mobile/mobile_test.go;
-// the platform shim itself is the real-hardware pass.
+// The Dart half of the embedded-node seam, lib/node.dart: the channel wrapper's
+// degrade contract, where no shim means null and never a crash, plus the pure
+// boot decision. The Go half is tested in mobile/mobile_test.go, and the
+// platform shim itself needs real hardware.
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,8 +26,8 @@ void main() {
   });
 
   test('start degrades to null with no shim (MissingPluginException)', () async {
-    // No handler installed at all — the real shape of a build without the
-    // bound Go node. The app must fall back, never crash.
+    // No handler installed at all: the shape of a build without the bound Go
+    // node. The app must fall back, never crash.
     expect(await GwNode.start(), isNull);
   });
 
@@ -40,7 +40,7 @@ void main() {
   });
 
   test('stop is safe with and without a shim', () async {
-    await GwNode.stop(); // no shim
+    await GwNode.stop(); // no shim installed
     var stopped = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(GwNode.channel, (call) async {

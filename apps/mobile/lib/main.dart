@@ -1,18 +1,17 @@
-// Gridwell mobile shell (2026-08-13): the third host of the ONE wasm
-// client. A full-screen host webview loads the server's origin — the same
-// client a plain browser gets — and this shell adds what a browser can't:
-// native webviews floated over the pane content boxes for LIVE url tiles,
-// driven through the same window.gridwell bridge contract Electron
-// implements (declared caps: liveUrl only — shells need no host half
-// since 2026-08-29; the PTY rides the web door).
+// The Gridwell mobile shell: the third host of the one wasm client. A
+// full-screen host webview loads the server's origin, the same client a plain
+// browser gets, and this shell adds what a browser cannot: native webviews
+// floated over the pane content boxes for live url tiles, driven through the
+// same window.gridwell bridge contract Electron implements. The declared
+// capability is liveUrl only; shells need no host half, since the PTY rides the
+// web door.
 //
-// The PHONE IS A NODE (offline-plan phase 2): boot first asks the
-// embedded Go node (lib/node.dart → mobile/mobile.go via the platform
-// shim) for its loopback origin — the phone's own durable localdb, no
-// network involved. On builds where the shim isn't wired yet, the
-// remote-server flow below is the unchanged fallback: first launch asks
-// for the server URL; the server's own login page handles the password,
-// and the webview's cookie store keeps it.
+// The phone is a node. Boot first asks the embedded Go node, through
+// lib/node.dart and the platform shim into mobile/mobile.go, for its loopback
+// origin: the phone's own durable store, with no network involved. On builds
+// where the shim is not wired, the remote-server flow below is the fallback.
+// The first launch asks for the server url, the server's own login page handles
+// the password, and the webview's cookie store keeps it.
 
 import 'dart:collection';
 import 'dart:convert';
@@ -62,8 +61,8 @@ class _RootState extends State<_Root> {
   }
 
   Future<void> _boot() async {
-    // The embedded node first (null when this build has no shim), then
-    // the stored remote server — decideBoot owns the order.
+    // The embedded node first, which is null when this build has no shim, then
+    // the stored remote server. decideBoot owns the order.
     final local = await GwNode.start();
     final p = await SharedPreferences.getInstance();
     setState(() {
@@ -90,8 +89,8 @@ class _RootState extends State<_Root> {
     if (!_loaded) return const Scaffold(body: SizedBox.shrink());
     final target = decideBoot(_localOrigin, _serverUrl);
     if (target.origin == null) return ServerForm(onSubmit: _setServer);
-    // On the local node there is no server to leave — the phone IS the
-    // node; other machines are mounts from inside.
+    // On the local node there is no server to leave: the phone is the node, and
+    // other machines are mounts from inside it.
     return GridwellScreen(
       origin: target.origin!,
       onLeaveServer: target.local ? null : _clearServer,
@@ -99,7 +98,7 @@ class _RootState extends State<_Root> {
   }
 }
 
-/// ServerForm asks for the server origin (e.g. the tailnet HTTPS address).
+/// ServerForm asks for the server origin, such as a tailnet HTTPS address.
 class ServerForm extends StatefulWidget {
   final Future<void> Function(String url) onSubmit;
   const ServerForm({super.key, required this.onSubmit});
@@ -155,8 +154,8 @@ class _ServerFormState extends State<ServerForm> {
   }
 }
 
-/// normalizeServerUrl validates and canonicalizes the typed address:
-/// scheme defaulted to https, trailing slash dropped. Null = not usable.
+/// normalizeServerUrl validates and canonicalizes the typed address: the scheme
+/// defaults to https and a trailing slash is dropped. Null means not usable.
 String? normalizeServerUrl(String input) {
   var s = input.trim();
   if (s.isEmpty) return null;
@@ -174,9 +173,9 @@ String? normalizeServerUrl(String input) {
 /// live url views stacked over it at their pane bounds.
 class GridwellScreen extends StatefulWidget {
   final String origin;
-  /// onLeaveServer clears the stored remote server (the "change server"
-  /// affordance). Null on the embedded LOCAL node: the phone is the node,
-  /// there is no server to leave.
+  /// onLeaveServer clears the stored remote server: the change-server
+  /// affordance. It is null on the embedded local node, where the phone is the
+  /// node and there is no server to leave.
   final Future<void> Function()? onLeaveServer;
   const GridwellScreen({super.key, required this.origin, required this.onLeaveServer});
 
@@ -216,7 +215,7 @@ class _GridwellScreenState extends State<GridwellScreen> implements ViewHost {
         title: title,
       );
     } catch (_) {
-      return const FreezeCapture(); // degrade: no capture, tile still freezes
+      return const FreezeCapture(); // degrade: no capture, but the tile freezes
     }
   }
 
@@ -263,9 +262,9 @@ class _GridwellScreenState extends State<GridwellScreen> implements ViewHost {
                   );
                 },
                 onReceivedError: (c, req, err) {
-                  // The failure the user must see is the HOST page failing —
-                  // a wrong server URL. Live-view errors flow to the wasm
-                  // error surface instead (charter §6).
+                  // The failure the user must see is the host page failing, on
+                  // a wrong server url. Live-view errors flow to the wasm error
+                  // surface instead.
                   if (req.isForMainFrame ?? false) {
                     _showServerError(err.description);
                   }
@@ -281,9 +280,9 @@ class _GridwellScreenState extends State<GridwellScreen> implements ViewHost {
                 child: Offstage(
                   offstage: v.hidden || v.bounds.width <= 0 || v.bounds.height <= 0,
                   child: Listener(
-                    // A tap inside a live view must still transfer pane
-                    // focus in the canvas beneath — the onLeftForward
-                    // contract (the native view swallows the pointer).
+                    // A tap inside a live view must still transfer pane focus
+                    // in the canvas beneath, since the native view swallows the
+                    // pointer. That is the onLeftForward contract.
                     onPointerDown: (ev) {
                       final local = ev.position;
                       _fire('onLeftForward', {'x': local.dx, 'y': local.dy});
@@ -314,8 +313,8 @@ class _GridwellScreenState extends State<GridwellScreen> implements ViewHost {
     final leave = widget.onLeaveServer;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('server unreachable: $description'),
-      // The local node has no server to change; a load failure there is
-      // its own bug and the message stands alone.
+      // The local node has no server to change, so a load failure there is its
+      // own bug and the message stands alone.
       action: leave == null
           ? null
           : SnackBarAction(label: 'change server', onPressed: () => leave()),
