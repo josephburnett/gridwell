@@ -39,11 +39,7 @@ func setBoundsPx(style js.Value, left, top, width, height float64) {
 // textarea contents. Cheap to call from every keystroke — no-op if a
 // save is already pending.
 func (a *App) scheduleFileSave() {
-	if a.sched.textSaveScheduled {
-		return
-	}
-	a.sched.textSaveScheduled = true
-	js.Global().Call("setTimeout", a.sched.textSaveCb, textSaveDebounceMs)
+	a.sched.textSave.arm(textSaveDebounceMs)
 }
 
 // textFitZoom returns the parent zoom at which the text tile's footprint
@@ -144,15 +140,13 @@ func (a *App) ensureFileTextarea() {
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
 
-	a.sched.textSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.textSaveScheduled = false
+	a.sched.textSave.set(func() {
 		// Sweep every dirty content entry, whoever holds focus now.
 		// Fire-time guards on the focused pane, the mode, or the singleton
 		// binding would only be needed by a save that read the DOM and had
 		// to prove the DOM still belonged to the tile. A sweep over
 		// tile-keyed entries cannot strand an edit whose pane moved on.
 		a.flushDirtyText()
-		return nil
 	})
 	a.textTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the keystroke into the cache under the tile the textarea is

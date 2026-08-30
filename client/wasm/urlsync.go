@@ -33,11 +33,7 @@ const framingSaveDebounceMs = 600
 // at ascent would lose the viewport whenever a grid is left another way:
 // descending deeper, a pane switch, a URL edit, a reload.
 func (a *App) scheduleFramingSave() {
-	if a.sched.framingSaveScheduled {
-		return
-	}
-	a.sched.framingSaveScheduled = true
-	js.Global().Call("setTimeout", a.sched.framingSaveCb, framingSaveDebounceMs)
+	a.sched.framingSave.arm(framingSaveDebounceMs)
 }
 
 // flushFramingSave persists every pane's settled grid framing now. The
@@ -269,11 +265,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 // it to be replaced on the next debounce tick. Cheap to call from any
 // state-mutating code path.
 func (a *App) scheduleURLUpdate() {
-	if a.sched.urlUpdateScheduled {
-		return
-	}
-	a.sched.urlUpdateScheduled = true
-	js.Global().Call("setTimeout", a.sched.urlUpdateCb, urlUpdateDebounceMs)
+	a.sched.urlUpdate.arm(urlUpdateDebounceMs)
 }
 
 // writeURLNow encodes the focused pane's state and writes it to the browser
