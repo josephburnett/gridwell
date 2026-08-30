@@ -1,21 +1,21 @@
 import { test, expect } from './fixtures';
 
 // Drives the pane-management and view-framing gestures. These have no server
-// footprint (they reframe/relayout the client), so the oracle here is the
-// read-only panes() hook: pane count for split, viewport center for pan, zoom
-// for wheel, and the framed grid id / path for ascend.
+// footprint, since they reframe and relayout the client, so the oracle here is
+// the read-only panes() hook: pane count for a split, viewport center for a pan,
+// zoom for the wheel, and the framed grid id and path for an ascend.
 
 test('wheel zoom and drag-pan reframe the focused pane', async ({ gw }) => {
   await gw.enterPlugin('home');
   const before = await gw.focused();
 
-  // Wheel up (negative dy) zooms in: the focused pane's zoom changes.
+  // Wheel up, a negative dy, zooms in: the focused pane's zoom changes.
   await gw.wheelAtFocusedCenter(-300);
   const zoomed = await gw.focused();
   expect(zoomed.zoom, 'wheel changed the zoom').not.toBeCloseTo(before.zoom, 3);
 
-  // Drag-pan from one empty cell to another shifts the viewport center. The
-  // root grid is empty after entry, so the press lands on no tile → it pans.
+  // Drag-panning from one empty cell to another shifts the viewport center. The
+  // root grid is empty after entry, so the press lands on no tile and pans.
   const cx = Math.round(zoomed.cx);
   const cy = Math.round(zoomed.cy);
   await gw.panFocusedGrid(cx, cy, cx - 1, cy - 1);
@@ -33,19 +33,18 @@ test('right-drag splits the focused pane into two — another view of the same g
 
   const panes = await gw.panes();
   expect(panes.length, 'split produced a second pane').toBe(2);
-  // "Split" means "another view of where I am" (issue #27): the new pane
-  // clones the source's grid — same anchor, same path — not the landing page.
+  // A split is another view of where you are: the new pane clones the source's
+  // grid, same anchor and same path.
   const other = panes.find((p) => p.id !== before.id)!;
   expect(other.gridID, 'the new pane shows the SAME grid').toBe(before.gridID);
   expect(other.anchor).toBe(before.anchor);
 });
 
-// Issue #203: one behavior per button on a border. LEFT-drag owns the whole
-// resize job — including CLOSING a side dragged all the way across to the
-// corridor's edge at release (issue #204: the minimum wall is a resize
-// clamp, not a close threshold). RIGHT-drag from a border is the SPLIT
-// gesture (a new pane), exactly like right-drag from inside the pane; short
-// of the minimum it cancels silently.
+// One behavior per button on a border. The left drag owns the whole resize job,
+// including closing a side dragged all the way across to the corridor's edge at
+// release; the minimum wall is a resize clamp, not a close threshold. A right
+// drag from a border is the split gesture, exactly like a right drag from inside
+// the pane, and short of the minimum it cancels silently.
 test('left-drag resizes the divider both ways; dragging to the edge closes the side', async ({
   gw,
 }) => {
@@ -53,16 +52,16 @@ test('left-drag resizes the divider both ways; dragging to the edge closes the s
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
 
-  // Left-drag left → the left pane shrinks; right → grows (clamped resize).
+  // Dragging left shrinks the left pane and dragging right grows it, clamped.
   const r = await gw.resizeDivider('left', -150);
   expect(r.after, 'left-drag shrank the left pane').toBeLessThan(r.before);
   const l = await gw.resizeDivider('left', 150);
   expect(l.after, 'left-drag grew the left pane').toBeGreaterThan(l.before);
 
-  // Drag ALL THE WAY across the left pane — into the close band at the
-  // corridor's edge (within gesture.CloseBandPx = 8) — and release: it
-  // closes. The target stays INSIDE the viewport (4px from the pane's left
-  // edge) — CDP does not deliver events at off-viewport coordinates.
+  // Drag all the way across the left pane, into the close band at the corridor's
+  // edge within gesture.CloseBandPx of 8, and release: it closes. The target
+  // stays inside the viewport, 4px from the pane's left edge, because CDP does
+  // not deliver events at off-viewport coordinates.
   const ps = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   const g = await gw.resizeDivider('left', -(ps[0].w - 4));
   expect(g.after, 'the side dragged to the edge collapsed at release').toBe(0);
@@ -76,20 +75,20 @@ test('right-drag from the divider splits (a new pane); short of the minimum it c
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
 
-  // A short right-drag from the divider (under the minimum pane size)
-  // cancels silently — no new pane, and no resize either.
+  // A short right drag from the divider, under the minimum pane size, cancels
+  // silently: no new pane, and no resize either.
   await gw.resizeDivider('right', -10);
   expect((await gw.panes()).length, 'short drag cancels').toBe(2);
 
-  // A right-drag well past the minimum creates a pane — the same split
-  // gesture as from inside the pane.
+  // A right drag well past the minimum creates a pane: the same split gesture as
+  // from inside the pane.
   await gw.resizeDivider('right', -200);
   expect((await gw.panes()).length, 'border right-drag split a pane').toBe(3);
 });
 
-// Issue #217: the split's side follows the DRAG, not the grab — the same
-// border press can travel one way, cross back, and commit on the other
-// side; the new pane opens in whatever pane the cursor released in.
+// The split's side follows the drag, not the grab: one border press can travel
+// one way, cross back, and commit on the other side, and the new pane opens in
+// whichever pane the cursor released in.
 test('a border right-drag flips direction mid-gesture and splits where it releases', async ({
   gw,
   window,
@@ -100,9 +99,9 @@ test('a border right-drag flips direction mid-gesture and splits where it releas
   expect(before).toHaveLength(2);
   const [left, right] = before;
 
-  // Press on the shared border, drag LEFT into the left pane, then cross
-  // back and release INSIDE the right pane: the new pane opens between the
-  // border and the release point — in the right pane's territory.
+  // Press on the shared border, drag left into the left pane, then cross back
+  // and release inside the right pane: the new pane opens between the border and
+  // the release point, in the right pane's territory.
   const gx = left.x + left.w;
   const gy = left.y + left.h / 2;
   await window.mouse.move(gx - 2, gy);
@@ -131,7 +130,7 @@ test('crumb click ascends; a right-click on the slot no longer does (#222)', asy
   await gw.descendCell(cx, cy);
   expect((await gw.focused()).gridID, 'descended').not.toBe(root);
 
-  // The removed gesture: right-clicking the slot must do nothing now.
+  // Right-clicking the slot must do nothing.
   const pal = await gw.palette();
   await window.mouse.click(pal.plusX, pal.plusY, { button: 'right' });
   await gw.waitIdle();
@@ -155,18 +154,17 @@ test('middle-click ascends out of a descended well', async ({ gw }) => {
   const inside = await gw.focused();
   expect(inside.gridID, 'descended into the well child grid').not.toBe(root);
 
-  // Middle-click ascends back to the parent grid (the universal ascend).
+  // A middle-click ascends back to the parent grid: the universal ascend.
   await gw.middleClickCell(cx, cy);
   const out = await gw.focused();
   expect(out.gridID, 'middle-click returned to the root grid').toBe(root);
 });
 
-// Focus-first click (issue #28): clicking a pane that was NOT focused at
-// press time only moves focus — even when the click lands on a tile. Acting
-// (descent) requires the pane to have been focused before the press, the
-// same rule the bar slot follows. Without this, "click the
-// other pane to focus it" could descend into whatever tile sat under the
-// cursor — the old launcher ambiguity, generalized and closed.
+// Focus first: clicking a pane that was not focused at press time only moves
+// focus, even when the click lands on a tile. Acting, meaning a descent,
+// requires the pane to have been focused before the press, the same rule the bar
+// slot follows. Otherwise clicking the other pane to focus it descends into
+// whatever tile sat under the cursor.
 test('clicking an unfocused pane focuses without descending; the second click descends', async ({ gw }) => {
   await gw.enterPlugin('home');
   const a = await gw.focused();
@@ -175,52 +173,51 @@ test('clicking an unfocused pane focuses without descending; the second click de
   await gw.openPalette();
   await gw.dragCreate('markdown', cx, cy);
 
-  // Pane B: split (lands at home), focus it by corner click.
+  // Pane B: split, which lands at home, then focus it with a corner click.
   await gw.splitFocusedPaneVertical();
   const b = (await gw.panes()).find((p) => p.id !== a.id)!;
   await gw.clickScreen(b.x + 20, b.y + 20);
   expect((await gw.panes()).find((p) => p.id === b.id)!.focused, 'pane B focused').toBe(true);
 
-  // First click on pane A's TILE: focus moves, no descent.
+  // First click on pane A's tile: focus moves, with no descent.
   const c = await gw.cellCenter(a.id, cx, cy);
   await gw.clickScreen(c.x, c.y);
   let aNow = (await gw.panes()).find((p) => p.id === a.id)!;
   expect(aNow.focused, 'first click focused pane A').toBe(true);
   expect(aNow.textFocus, 'first click did NOT descend into the tile').toBe('');
 
-  // Second click (pane now focused): descends into the markdown tile.
+  // Second click, with the pane now focused: it descends into the markdown tile.
   await gw.clickScreen(c.x, c.y);
   await gw.waitIdle();
   aNow = (await gw.panes()).find((p) => p.id === a.id)!;
   expect(aNow.textFocus, 'second click descended').not.toBe('');
 });
 
-// Ascent-history hygiene (issue #26): a balanced excursion — a namespace
-// crossing AND a well descent — must return the pane's place to depth zero.
-// This used to need TWO assertions because there were two stacks with
-// disjoint owners, and a descent that pushed the wrong one leaked an orphan
-// a later ascent could mis-consume as a viewport. Since S8 there is one
-// stack, so one number answers it. The crossing here is a + menu descent
-// into a SECOND plugin (boot already sits inside the first, at depth 0).
+// Ascent hygiene: a balanced excursion, a namespace crossing plus a well
+// descent, must return the pane's place to depth zero. There is one place stack,
+// so one number answers it; two stacks with disjoint owners let a descent push
+// the wrong one and leak an orphan a later ascent could mis-consume as a
+// viewport. The crossing here is a + menu descent into a second namespace, since
+// boot already sits at depth 0 in home.
 test.describe('stack hygiene', () => {
   test.use({ extraNodes: ['second'] });
 
   test('a namespace crossing and a well round trip leave the place stack empty', async ({ gw }) => {
     const home = (await gw.focused()).anchor;
-    await gw.enterPlugin('second'); // + menu crossing (one frame pushed)
+    await gw.enterPlugin('second'); // the + menu crossing pushes one frame
     const f = await gw.focused();
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy) - 1;
     await gw.openPalette();
     await gw.dragCreate('well', cx, cy);
 
-    await gw.descendCell(cx, cy); // well descent (a second frame)
+    await gw.descendCell(cx, cy); // the well descent pushes a second frame
     let cur = (await gw.panes()).find((p) => p.id === f.id)!;
     expect(cur.placeDepth, 'two doorways deep: a well, then the plugin link').toBe(2);
 
-    // Pane-center clicks: the ascend is position-independent, and a
-    // computed cell center can be OFF-PANE at the child grid's high zoom
-    // (the silent no-op behind this spec's long flake history, #195).
+    // Pane-center clicks: the ascend is position-independent, and a computed
+    // cell center can land off-pane at the child grid's high zoom, which is the
+    // silent no-op behind this spec's flake history.
     await gw.middleClickPane(); // pop the well frame
     await gw.middleClickPane(); // pop the crossing, back home
 

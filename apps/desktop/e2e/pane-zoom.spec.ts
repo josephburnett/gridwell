@@ -1,10 +1,9 @@
 import { test, expect } from './fixtures';
 
-// Issues #80 + #118 + #213: LEFT-click on the bar's centered title zooms the
-// focused pane to the full window, tmux-style; click again restores the
-// exact prior layout (split ratios untouched — the guiding rule). The title
-// is the pane's one universal handle (RIGHT-click renames); the old
-// double-right-click gesture is gone, and so is the floating bubble.
+// A left-click on the bar's centered title zooms the focused pane to the full
+// window, tmux-style, and a second click restores the exact prior layout with
+// the split ratios untouched. The title is the pane's one universal handle; a
+// right-click on it renames.
 
 test('clicking the bar title zooms a pane and back, restoring the layout exactly', async ({
   gw,
@@ -15,8 +14,8 @@ test('clicking the bar title zooms a pane and back, restoring the layout exactly
   expect(before).toHaveLength(2);
   const focusedBefore = before.find((p) => p.focused)!;
 
-  // Zoom the focused pane via the title: it owns the whole layout, and the
-  // title says so (the zoom marker, issue #124).
+  // Zoom the focused pane through the title: it owns the whole layout, and the
+  // title's zoom marker says so.
   await gw.clickBarName();
   await gw.waitIdle();
   const zoomed = await gw.panes();
@@ -42,10 +41,9 @@ test('the title shows a read-only context label on non-renamable panes', async (
   gw,
   window,
 }) => {
-  // A plugin root shows the plugin's config label (boot lands inside the
-  // first plugin, so this is the boot pane) and never opens the rename input
-  // on right-click.
-  await gw.plugins(); // wait for boot to settle on the plugin root
+  // A root grid shows its configured label, and right-clicking it never opens
+  // the rename input.
+  await gw.plugins(); // wait for boot to settle on the root grid
   await expect.poll(async () => (await gw.barName()).label).toBe('home'); // the home's name
   expect((await gw.barName()).editable).toBe(false);
   await gw.clickBarName('right');
