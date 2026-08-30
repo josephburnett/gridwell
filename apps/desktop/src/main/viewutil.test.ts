@@ -156,7 +156,8 @@ test('classifyRightPress requires both distance and time to classify as drag', (
     'diagonal 5.66px movement with sufficient hold → drag',
   );
 
-  // Exactly at threshold distance (dragExceeded contract: exactly equal is NOT exceeded).
+  // Exactly at the threshold distance: the comparison is strictly greater, so
+  // equal is not exceeded.
   assert.ok(
     !classifyRightPress(dist, 0, time + 100, dist, time),
     'exactly at distance threshold, sufficient time → click (strict >)',

@@ -23,9 +23,9 @@
       border: 1px solid #292c36;
       border-radius: 6px;
       padding: 20px 24px;
-      /* FIXED width: suggestion matches used to stretch the card per
-         keystroke, making it jump (issue #132). Long entries ellipsize
-         inside the stable box instead. */
+      /* A fixed width: suggestion matches would otherwise stretch the card
+         per keystroke and make it jump. Long entries ellipsize inside the
+         stable box instead. */
       width: 480px;
       max-width: 80vw;
       box-sizing: border-box;
@@ -80,9 +80,9 @@
     .gw-modal .gw-suggest li:hover,
     .gw-modal .gw-suggest li.active { background: #1c1f29; color: #e8e9ee; border-color: #292c36; }
 
-    /* Boot overlay: the wasm is a large download (a phone on a slow link
-       sees seconds-to-minutes of it) — say so instead of a black page.
-       Removed by the boot script the moment the wasm starts running. */
+    /* Boot overlay: the wasm is a large download, and a phone on a slow link
+       waits seconds or minutes for it, so say so instead of showing a black
+       page. The boot script removes this the moment the wasm starts running. */
     #gw-boot {
       position: fixed; inset: 0; z-index: 30;
       display: flex; flex-direction: column; align-items: center; justify-content: center;

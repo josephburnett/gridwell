@@ -32,8 +32,8 @@ const VIEW_TOUCHSCROLL = 'gw:view-touchscroll';
 // imported here.
 const RIGHT_DRAG_THRESHOLD = 4;
 // Keep in sync with RIGHT_DRAG_TIME_MS in ../main/viewutil.ts.
-// A right-button press must be held for at least this many ms AND exceed the
-// distance threshold before it counts as a pane gesture. A fast trackpad tap
+// A right-button press must be held for at least this many ms and also exceed
+// the distance threshold before it counts as a pane gesture. A fast trackpad tap
 // that drifts a few pixels past the threshold is still a click, not a drag.
 const RIGHT_DRAG_TIME_MS = 200;
 // Mirrors viewutil.RIGHT_DRAG_FAR_THRESHOLD: distance past this is a drag
@@ -43,7 +43,7 @@ const RIGHT_DRAG_FAR_THRESHOLD = 24;
 const RIGHT_BUTTON_MASK = 2;
 
 // Deferred right-button state. The press point is captured at right-down; the
-// gesture is forwarded only if the cursor drags past the threshold AND the
+// gesture is forwarded only if the cursor drags past the threshold and the
 // button has been held for at least RIGHT_DRAG_TIME_MS.
 let rightDown = false;
 let rightDragged = false;
