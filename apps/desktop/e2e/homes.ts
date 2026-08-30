@@ -4,11 +4,12 @@ import * as os from 'node:os';
 import * as fs from 'node:fs';
 
 // Shared helpers for the throwaway Gridwell homes the e2e suite creates
-// (fixtures.ts seedHome) and the leak sweep that keeps aborted runs from
-// polluting later ones (issue #108).
+// (fixtures.ts seedHome) and the leak sweep that keeps an aborted run from
+// polluting later ones.
 
-// pluginUUIDs extracts the plugin UUIDs from <home>/server.yaml. Used by
-// teardown and the sweep to kill the per-plugin tmux servers.
+// pluginUUIDs extracts every minted id from <home>/server.yaml: the node's own
+// and any plugin row's. Teardown and the sweep use them to kill the tmux
+// servers those ids name.
 export function pluginUUIDs(home: string): string[] {
   const p = path.join(home, 'server.yaml');
   let src: string;
@@ -19,38 +20,36 @@ export function pluginUUIDs(home: string): string[] {
   }
   const uuids: string[] = [];
   for (const line of src.split('\n')) {
-    // YAML list entry: `    - id: <id>` (the leading dash was missing from
-    // this regex originally, so the per-test tmux kill matched NOTHING — one
-    // of the reasons servers leaked; caught by the homes unit test). Two
-    // minted id shapes exist: legacy 32-hex and the 7-char base36 short form
-    // (2026-07-25) — matching only the long one would leak tmux servers for
-    // every new plugin, the exact issue-#108 regression again.
+    // A top-level `id: <id>` or a YAML list entry `    - id: <id>`; the
+    // optional dash is load-bearing, since without it the per-test tmux kill
+    // matches nothing and servers leak. Both minted id shapes are valid
+    // forever: 32-hex and the 7-char base36 short form. Matching only one shape
+    // leaks a tmux server for every id of the other.
     const m = line.match(/^\s*-?\s*id:\s*([0-9a-f]{32}|[a-z][0-9a-z]{6})\s*$/i);
     if (m) uuids.push(m[1]);
   }
   return uuids;
 }
 
-// killTmuxServers kills the gridwell-private tmux server for each plugin UUID.
-// Each `home` instance owns a tmux server on socket "gridwell-<id>"
-// (internal/node/nativelocal.go); if a
-// test crashes before deleting shell tiles those sessions linger and can
-// interfere with the next test. Best-effort: no-op if not running.
+// killTmuxServers kills the gridwell-private tmux server for each id. A node's
+// home owns a tmux server on the socket "gridwell-<id>"
+// (internal/node/nativelocal.go), and if a test crashes before deleting its
+// shell tiles those sessions linger and interfere with the next test.
+// Best-effort: a no-op when nothing is running.
 export function killTmuxServers(uuids: string[]): void {
   for (const uuid of uuids) {
     spawnSync('tmux', ['-L', `gridwell-${uuid}`, 'kill-server'], { stdio: 'ignore' });
   }
 }
 
-// sweepLeakedHomes removes every throwaway e2e home a PREVIOUS run left in
-// the tmpdir — killing its tmux servers first — plus any stale gridwell-*
-// tmux sockets whose server is gone. The per-test teardown already cleans up
-//, but a HARD-KILLED worker (a teardown that exceeds the test
-// timeout gets the whole worker SIGKILLed) never runs it; those leaks
-// accumulated until suite runs degraded from 4 to 10 minutes (issue #108).
-// Sweeping at the START of each run is robust to any kind of kill: the next
-// run cleans up, and only e2e-created homes (the gridwell-e2e- mkdtemp
-// prefix) are ever touched — never the user's real ~/.gridwell.
+// sweepLeakedHomes removes every throwaway e2e home a previous run left in the
+// tmpdir, killing its tmux servers first, plus any stale gridwell-* tmux socket
+// whose server is gone. The per-test teardown already cleans up, but a
+// hard-killed worker never runs it: a teardown that exceeds the test timeout
+// gets the whole worker SIGKILLed, and those leaks accumulate until suite runs
+// slow to a crawl. Sweeping at the start of each run survives any kind of kill.
+// Only e2e-created homes are touched, by the gridwell-e2e- mkdtemp prefix,
+// never the user's real ~/.gridwell.
 export function sweepLeakedHomes(): void {
   const tmp = os.tmpdir();
   let names: string[] = [];
@@ -68,7 +67,7 @@ export function sweepLeakedHomes(): void {
       fs.rmSync(home, { recursive: true, force: true });
       swept++;
     } catch {
-      // in use or already gone — leave it for the next sweep
+      // In use or already gone; leave it for the next sweep.
     }
   }
   if (swept > 0) {
@@ -77,25 +76,22 @@ export function sweepLeakedHomes(): void {
   sweepStaleSockets();
 }
 
-// sweepStaleSockets removes gridwell-* tmux SOCKET FILES with no server
-// behind them. kill-server deletes the socket only when a live server
-// answers; a SIGKILLed run leaves the file behind forever (63 had
-// accumulated by 2026-08-07 — this function's contract was described in
-// the comment above for a long time but never implemented). A dead socket
-// is probed with list-sessions, which fails fast without spawning a
-// server. Two things are deliberately out of scope: non-gridwell sockets
-// (the user's own tmux lives on "default"), and any LIVE gridwell-<uuid>
-// server — once its e2e home is gone, a leaked live server is
-// indistinguishable from the user's real desktop app, so it is never
-// killed here (the per-test teardown owns killing its own servers).
+// sweepStaleSockets removes gridwell-* tmux socket files with no server behind
+// them. kill-server deletes the socket only when a live server answers, so a
+// SIGKILLed run leaves the file behind forever. A dead socket is probed with
+// list-sessions, which fails fast without spawning a server. Two things stay
+// out of scope: non-gridwell sockets, since the user's own tmux lives on
+// "default", and any live gridwell-<id> server, because once its e2e home is
+// gone a leaked live server is indistinguishable from the user's real desktop
+// app. The per-test teardown owns killing its own servers.
 function sweepStaleSockets(): void {
-  // tmux's own socket-dir rule: $TMUX_TMPDIR, else /tmp — not os.tmpdir().
+  // tmux's own socket-dir rule: $TMUX_TMPDIR, else /tmp, not os.tmpdir().
   const dir = path.join(process.env.TMUX_TMPDIR || '/tmp', `tmux-${process.getuid?.() ?? ''}`);
   let socks: string[] = [];
   try {
     socks = fs.readdirSync(dir);
   } catch {
-    return; // no tmux dir — nothing to sweep
+    return; // no tmux dir, nothing to sweep
   }
   let removed = 0;
   for (const s of socks) {
@@ -106,7 +102,7 @@ function sweepStaleSockets(): void {
         fs.unlinkSync(path.join(dir, s));
         removed++;
       } catch {
-        // vanished between readdir and unlink — fine
+        // Vanished between readdir and unlink.
       }
     }
   }

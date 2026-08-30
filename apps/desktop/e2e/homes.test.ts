@@ -5,22 +5,21 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { sweepLeakedHomes, pluginUUIDs } from './homes';
 
-// Issue #108's sweep, unit-covered (coverage gap found in the audit): a fake
-// leaked home from an "aborted run" must be removed by the start-of-run
-// sweep, and only gridwell-e2e-* prefixed homes are ever touched.
+// The start-of-run sweep, unit-covered: a fake leaked home from an aborted run
+// must be removed, and only gridwell-e2e-* prefixed homes are ever touched.
 
 test('sweepLeakedHomes removes leaked e2e homes and nothing else', () => {
   const leaked = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
-  // Both minted id shapes: legacy 32-hex and the 7-char base36 short form
-  // (2026-07-25). The regex must find each, or its tmux server leaks.
+  // Both minted id shapes: 32-hex and the 7-char base36 short form. The regex
+  // must find each, or that id's tmux server leaks.
   fs.writeFileSync(
     path.join(leaked, 'server.yaml'),
     'plugins:\n    - id: 0123456789abcdef0123456789abcdef\n      kind: localdb\n    - id: k3x9m2q\n      kind: localdb\n',
   );
   const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-real-'));
-  // Stale-socket sweep fixtures in tmux's socket dir ($TMUX_TMPDIR||/tmp):
-  // a dead gridwell-* socket (a plain file — no server answers on it) must
-  // be removed; a non-gridwell name must never be touched.
+  // Stale-socket sweep fixtures in tmux's socket dir ($TMUX_TMPDIR, else /tmp).
+  // A dead gridwell-* socket is a plain file no server answers on and must be
+  // removed; a non-gridwell name must never be touched.
   const sockDir = path.join(process.env.TMUX_TMPDIR || '/tmp', `tmux-${process.getuid?.() ?? ''}`);
   fs.mkdirSync(sockDir, { recursive: true });
   const deadSock = path.join(sockDir, 'gridwell-zz9dead');
