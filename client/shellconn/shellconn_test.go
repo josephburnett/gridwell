@@ -3,10 +3,9 @@ package shellconn
 import "testing"
 
 // TestSessionDeadOnClose pins the rule that only the server's explicit 1008
-// PolicyViolation is a definitive "session gone" signal. The regression is the
-// abnormal-closure case (1006): it must NOT be treated as dead-or-alive but as
-// unknown (SessionDeadOnClose == false → caller re-probes), because the old
-// code cached a dead session as alive on any non-1008 close.
+// PolicyViolation is a definitive "session gone" signal. An abnormal closure
+// (1006) is unknown, not dead-or-alive: SessionDeadOnClose is false and the
+// caller re-probes.
 func TestDecideShellRefreshVisible(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -52,11 +51,10 @@ func TestDecodeJPEGDataURL(t *testing.T) {
 	}
 }
 
-// The auto-live descent decision (issue #202): descending engages — url
-// opens, an alive or fresh shell opens, a dead shell stays frozen, a
-// capability-gated host stays silently frozen, unknown aliveness probes.
-// A serves_page tile (2026-08-11) gets exactly the url verdict: a page
-// tile and a url tile must engage identically.
+// The auto-live descent decision: descending engages — url opens, an alive
+// or fresh shell opens, a dead shell stays frozen, a capability-gated host
+// stays silently frozen, unknown aliveness probes. A serves_page tile gets
+// exactly the url verdict: a page tile and a url tile engage identically.
 func TestDecideAutoLive(t *testing.T) {
 	cases := []struct {
 		name                                                                           string
@@ -65,7 +63,7 @@ func TestDecideAutoLive(t *testing.T) {
 	}{
 		{"url on Electron opens", true, false, true, true, true, false, false, false, AutoLiveURL},
 		{"url in a browser stays frozen", true, false, false, false, true, false, false, false, AutoLiveNone},
-		// #237: the user's standing freeze beats the engagement default —
+		// The user's standing freeze beats the engagement default:
 		// re-descending a deliberately frozen url stays frozen until the
 		// reconnect gesture clears the intent.
 		{"user-frozen url stays frozen", true, false, true, true, true, false, false, true, AutoLiveNone},

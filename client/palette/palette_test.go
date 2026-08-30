@@ -51,9 +51,8 @@ func TestTileIndexAt(t *testing.T) {
 }
 
 func TestLayoutHandlesExpandedKindCount(t *testing.T) {
-	// The current palette ships six kinds (well, markdown, url, file-well,
-	// process-well, shell). The layout has to widen the popover to fit them
-	// and the tile rects must stay non-overlapping.
+	// With six tiles the layout has to widen the popover to fit them, and
+	// the tile rects must stay non-overlapping.
 	l := makeLayout()
 	l.NumTiles = 6
 	pop := l.PopoverRect()
@@ -92,7 +91,7 @@ func TestPointInPopover(t *testing.T) {
 
 func TestPopoverTracksCenter(t *testing.T) {
 	// The popover is anchored to the + center: moving the center (a window
-	// resize moves the bar slot) translates the popover 1:1.
+	// resize moves the bar slot) translates the popover one for one.
 	l := makeLayout()
 	r1 := l.PopoverRect()
 	l.PlusX += 500

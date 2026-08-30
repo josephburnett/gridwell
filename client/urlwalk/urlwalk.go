@@ -1,9 +1,9 @@
 // Package urlwalk holds the pure boot-time descent walk: resolving a
 // URL's tile-id list against the user's grids into a descent path plus an
-// optional trailing file-tile. Extracted from the wasm client (where it
-// was entangled with cache fetches) so the state-machine — skip missing
-// ids, switch grids at well boundaries, stop at a content leaf — gets real
-// `go test` coverage. A misstep here lands the user in the wrong grid.
+// optional trailing content tile. The state machine — skip missing ids,
+// switch grids at well boundaries, stop at a content leaf — lives here, not
+// in the wasm shim, so `go test` covers it. A misstep lands the user in the
+// wrong grid.
 package urlwalk
 
 // Tile is the minimum a walk step needs to know about a tile: whether it
@@ -33,7 +33,7 @@ type GridLookup func(gid string) (tiles map[string]Tile, ok bool)
 //     the same grid and tries the next id.
 //   - A well id is appended to the path and the walk descends into its
 //     child grid.
-//   - A content tile is accepted only as the LAST id; a content tile
+//   - A content tile is accepted only as the last id; a content tile
 //     mid-path is nonsense and skipped.
 //   - A grid that fails to load ends the walk with what's resolved so far.
 func Walk(rootGridID string, tileIDs []string, lookup GridLookup) (path []string, fileTileID string) {

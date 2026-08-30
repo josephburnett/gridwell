@@ -15,7 +15,7 @@ import (
 var urlInText = regexp.MustCompile(`https?://[^\s"'<>` + "`" + `]+`)
 
 // URLSpan is one URL found in a line of text: Col0/Col1 are 1-based, inclusive
-// COLUMN positions (xterm link-range convention) of its first and last byte.
+// column positions (xterm link-range convention) of its first and last byte.
 // Byte offsets equal columns for the ASCII URLs shell output carries.
 type URLSpan struct {
 	Col0, Col1 int
@@ -81,10 +81,10 @@ type Candidate struct {
 // (case-insensitively, ignoring a leading "http(s)://" and "www." on both
 // sides — typing "git" matches "https://github.com") or the TITLE
 // (case-insensitive substring — typing words from a page's title finds
-// its url, issue #235). A candidate whose comparable address STARTS with
-// the input ranks before any other match (address substring or title
-// hit); within a rank the input order is preserved (the caller passes
-// most-relevant-first). Dedupe is by the COMPARABLE address, so
+// its url). A candidate whose comparable address starts with the input
+// ranks before any other match (address substring or title hit); within a
+// rank the input order is preserved (the caller passes most-relevant-first).
+// Dedupe is by the comparable address, so
 // scheme/www variants of one address collapse to a single suggestion.
 // Empty input returns the first `limit` distinct candidates. Returns at
 // most `limit` results (nil when limit <= 0).

@@ -109,9 +109,8 @@ func TestSuggest(t *testing.T) {
 	}
 }
 
-// TestSuggestMatchesTitles pins issue #235: typing words from a page's
-// TITLE finds its url — and an address-prefix match still outranks a
-// title hit, so muscle-memory address typing keeps its old behavior.
+// TestSuggestMatchesTitles: typing words from a page's title finds its url,
+// and an address-prefix match still outranks a title hit.
 func TestSuggestMatchesTitles(t *testing.T) {
 	cands := []Candidate{
 		{URL: "https://news.ycombinator.com", Title: "Hacker News"},
@@ -129,9 +128,9 @@ func TestSuggestMatchesTitles(t *testing.T) {
 	if got := urls(Suggest("HACKER news", cands, 5)); !slices.Equal(got, []string{"https://news.ycombinator.com"}) {
 		t.Errorf("case-insensitive title: %v", got)
 	}
-	// "news" prefixes news.ycombinator.com's comparable address AND appears
-	// in the other candidate's title — the address-prefix match must rank
-	// first regardless of input order.
+	// "news" prefixes news.ycombinator.com's comparable address and appears
+	// in the other candidate's title — the address-prefix match ranks first
+	// regardless of input order.
 	both := Suggest("news", []Candidate{
 		{URL: "https://example.com", Title: "Daily News"},
 		{URL: "https://news.ycombinator.com", Title: ""},
@@ -160,10 +159,9 @@ func TestSuggestPrefixBeatsSubstringAcrossOrder(t *testing.T) {
 	}
 }
 
-// TestSuggestDedupesSchemeAndWwwVariants: the same address typed with different
-// scheme/www boilerplate must collapse to one suggestion (the first seen), not
-// crowd the list with look-alikes that differ only in characters the user
-// rarely types.
+// TestSuggestDedupesSchemeAndWwwVariants: the same address typed with
+// different scheme/www boilerplate collapses to one suggestion (the first
+// seen).
 func TestSuggestDedupesSchemeAndWwwVariants(t *testing.T) {
 	cands := fromURLs(
 		"https://example.com",

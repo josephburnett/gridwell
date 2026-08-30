@@ -50,8 +50,8 @@ func TestOpenResetsHover(t *testing.T) {
 	}
 }
 
-// Close must clear the remembered pane so a later OpenOn cannot resolve true off
-// a stale id — the core of the "menu shows on the wrong pane" class.
+// Close clears the remembered pane so a later OpenOn cannot resolve true off
+// a stale id.
 func TestCloseClearsPane(t *testing.T) {
 	s := New()
 	s.Open("p1")
@@ -85,9 +85,8 @@ func TestToggleOtherPaneMovesMenu(t *testing.T) {
 	}
 }
 
-// SyncFocus is the "menu only on the focused pane" rule: focus moving away from
-// the menu's pane closes it. This is the regression guard for the owner's
-// "menu circle still visible on url panes when not focused" report.
+// SyncFocus is the "menu only on the focused pane" rule: focus moving away
+// from the menu's pane closes it.
 func TestSyncFocusClosesOnFocusMoveAway(t *testing.T) {
 	s := New()
 	s.Open("p1")
@@ -160,11 +159,11 @@ func TestDescendAscentRoundTripClosedStaysClosed(t *testing.T) {
 	}
 }
 
-// TransferFocus is the single-call focus-change helper used by every path that
-// moves wasm focus (canvas, forwarded right-down, forwarded left-down). These
-// tests prove the omission class is unrepresentable: calling TransferFocus from a
-// new path automatically closes the menu when focus moves away from it, without
-// any extra thought at the call site.
+// TransferFocus is the single-call focus-change helper used by every path
+// that moves wasm focus (canvas, forwarded right-down, forwarded left-down).
+// These tests prove the omission class is unrepresentable: calling
+// TransferFocus from a new path closes the menu when focus moves away from
+// it, with no extra thought at the call site.
 
 func TestTransferFocusReturnsChangedAndClosesMenu(t *testing.T) {
 	s := New()
@@ -202,11 +201,9 @@ func TestTransferFocusMenuClosedNoChange(t *testing.T) {
 	}
 }
 
-// Regression guard for the latent twin in onForwardedRightDown: the right-button
-// press path used to duplicate the focus-transfer block but omit SyncFocus.
-// Calling TransferFocus from all paths (canvas + forwarded right + forwarded left)
-// means the menu closes whenever focus moves, regardless of which gesture triggered
-// the focus change.
+// Calling TransferFocus from all paths (canvas, forwarded right, forwarded
+// left) means the menu closes whenever focus moves, regardless of which
+// gesture triggered the focus change.
 func TestTransferFocusForwardedPathClosesMenu(t *testing.T) {
 	s := New()
 	s.Open("p1") // menu open on the text pane

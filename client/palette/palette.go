@@ -4,8 +4,8 @@
 // plugins on a top row (click to enter, drag to drop a link), the
 // tile primitives (well, markdown, url, shell, pane) on a row below.
 //
-// All layout is pure: it depends only on the + button's center (the
-// bottom bar's right-end slot since issue #214), and the tile counts.
+// All layout is pure: it depends only on the + button's center (the bottom
+// bar's right-end slot) and the tile counts.
 // The wasm renderer reads the rects out and paints into them.
 package palette
 
@@ -51,7 +51,7 @@ func Default() Config {
 type Layout struct {
 	Cfg Config
 	// PlusX, PlusY are the + button's center: the bottom bar's right-end
-	// slot (issue #214) — a fixed home, no longer a pane's corner.
+	// slot, a fixed home.
 	PlusX, PlusY float64
 	NumTiles     int
 	// TopRow is how many of NumTiles sit in the popover's first row (the
@@ -89,11 +89,12 @@ func (l Layout) PlusCenter() (cx, cy float64) {
 	return l.PlusX, l.PlusY
 }
 
-// TilePx returns the per-tile size in screen pixels for the palette.
-// Fixed at half a default cell and independent of pane zoom: the creation
-// menu is a constant-size affordance — a row of icons, not a literal
-// preview of the placed tile's on-screen size. (The drag ghost resizes to
-// the destination zoom on drop, the same as dragging a tile across wells.)
+// TilePx returns the per-tile size in screen pixels for the palette. Fixed
+// at three quarters of a default cell and independent of pane zoom: the
+// creation menu is a constant-size affordance — a row of icons, not a
+// literal preview of the placed tile's on-screen size. The drag ghost
+// resizes to the destination zoom on drop, the same as dragging a tile
+// across wells.
 func (l Layout) TilePx() float64 {
 	return l.Cfg.CellPx * 0.75
 }

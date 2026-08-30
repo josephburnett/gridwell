@@ -1,22 +1,19 @@
 // Package menu owns the live UI state of the "+" creation menu: whether it is
 // open, which pane it is open on, and which palette item is hovered.
 //
-// This is the single owner. The menu is open on at most one pane at a time —
-// "the menu appears on exactly one pane, whichever is focused" (CLAUDE.md: the
-// menu is the deliberate focused-pane exception to the guiding rule). Every
-// transition goes through a method here and nothing else assigns the fields, so
-// a newly-added gesture-ending path cannot forget to clear the menu and leave it
-// stranded open on a stale, now-unfocused pane. That stranding is exactly the
-// historical "menus disappearing / menu on the wrong pane" bug class, which came
-// from the open/closed flag being written from ~14 scattered sites with no owner.
+// This is the single owner. The menu is open on at most one pane at a time,
+// the focused one. Every transition goes through a method here and nothing
+// else assigns the fields, so a newly-added gesture-ending path cannot forget
+// to clear the menu and leave it stranded open on a stale, now-unfocused
+// pane.
 //
-// State is the LIVE state only. The menu's persistence ACROSS a descent into
-// another namespace (so ascending returns you exactly as you left) rides on
-// the place frame you left — pane.Frame.MenuOpen; record it with OpenOn at
+// State is the live state only. The menu's persistence across a descent into
+// another namespace — so ascending returns you exactly as you left — rides on
+// the place frame you left (pane.Frame.MenuOpen): record it with OpenOn at
 // the descent and reopen with Open when the ascent lands on that frame.
 //
-// The package is plain Go (no js/wasm build tag) so the whole state machine is
-// unit-tested headlessly — the orchestration, not just a leaf predicate.
+// The package is plain Go (no js/wasm build tag) so the whole state machine
+// is unit-tested headlessly.
 package menu
 
 // noHover is the hovered-item index when nothing is hovered.
@@ -92,11 +89,10 @@ func (s *State) SetHover(i int) (changed bool) {
 	return true
 }
 
-// SyncFocus enforces "the menu belongs only to the focused pane": if the menu is
-// open on a pane that is no longer the focused one, it closes. Call this whenever
-// focus moves. (In practice the menu can only be open on the focused pane, so a
-// focus move away from it always closes it — but expressing the rule this way
-// means the menu never has to be closed defensively from every focus path.)
+// SyncFocus enforces "the menu belongs only to the focused pane": if the menu
+// is open on a pane that is no longer the focused one, it closes. Call this
+// whenever focus moves. Expressing the rule this way means the menu never has
+// to be closed defensively from every focus path.
 func (s *State) SyncFocus(focusedPaneID string) {
 	if s.open && s.paneID != focusedPaneID {
 		s.Close()
@@ -105,9 +101,9 @@ func (s *State) SyncFocus(focusedPaneID string) {
 
 // TransferFocus is the canonical focus-change helper: it calls SyncFocus(newID)
 // when newID ≠ prevID and reports whether focus actually changed. Callers use
-// this instead of "if new != prev { SyncFocus(new) }" to make the omission class
-// unrepresentable — every code path that moves wasm focus (canvas onMouseDown,
-// forwarded right-down, forwarded left-down) must call this, and calling it is
+// this instead of "if new != prev { SyncFocus(new) }" so the omission class is
+// unrepresentable. Every code path that moves wasm focus (canvas onMouseDown,
+// forwarded right-down, forwarded left-down) calls it, and calling it is
 // always safe even when focus has not moved.
 func (s *State) TransferFocus(prevID, newID string) bool {
 	if prevID == newID {

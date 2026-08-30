@@ -25,7 +25,7 @@ func TestLayoutAndHitTestAgree(t *testing.T) {
 }
 
 // Every crumb is a full RowH square, abutting its neighbor, starting at
-// x=0 — one uniform chain (issue #245).
+// x=0 — one uniform chain.
 func TestLayoutSquares(t *testing.T) {
 	segs := Layout(squares(3), 1000)
 	if segs[0].X != 0 || segs[0].Index != 0 {
@@ -41,9 +41,9 @@ func TestLayoutSquares(t *testing.T) {
 	}
 }
 
-// Overflow truncates from the LEFT (issue #245): the tail — where you are
-// — keeps priority, survivors keep full size, and Index keeps addressing
-// the caller's full crumb list.
+// Overflow truncates from the left: the tail — where you are — keeps
+// priority, survivors keep full size, and Index keeps addressing the
+// caller's full crumb list.
 func TestLayoutTruncatesFromLeft(t *testing.T) {
 	width := SlotW + 3*RowH + 10 // room for exactly 3 squares
 	segs := Layout(squares(10), width)
@@ -83,8 +83,8 @@ func squares(n int) []float64 {
 	return out
 }
 
-// A boundary crumb is a WIDE bar among the squares; truncation still
-// drops whole crumbs from the left, wide or not.
+// A boundary crumb is a wide bar among the squares; truncation still drops
+// whole crumbs from the left, wide or not.
 func TestLayoutMixedWidths(t *testing.T) {
 	widths := []float64{RowH, BoundaryW, RowH, RowH}
 	segs := Layout(widths, 900)
