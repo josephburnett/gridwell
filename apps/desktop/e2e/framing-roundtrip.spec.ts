@@ -1,25 +1,21 @@
 import { test, expect } from './fixtures';
 
-// Locks the descend → reframe → ascend round trip: invariant I7, "preview =
-// descent target = ascent return" (CLAUDE.md face #3; ARCHITECTURE.md §11). This
-// is the invariant the owner's "previews go wonky" reports are about, and the
-// test forensics found it had no test home at all — the framing round trip was
-// asserted nowhere. It is also the safety net any framing refactor (Phase 1b)
-// must have first: these tests must stay green while the framing copies are given
-// a single owner.
+// Locks the descend, reframe, ascend round trip: preview equals descent target
+// equals ascent return. This is the invariant behind every "previews go wonky"
+// report, and it is the safety net any framing change needs: these tests must
+// stay green while the framing writers are consolidated.
 //
-// Both tests drive the real app and read framing from the panes() hook (the live
-// viewport the user sees), so they catch a desync between the live pane, the
-// saved ascent state, and the server-persisted well view_*.
+// The tests drive the real app and read framing from the panes() hook, the live
+// viewport the user sees, so they catch a desync between the live pane, the
+// saved ascent state, and the server-persisted well framing.
 //
-// The plugin-root viewport test (I7-portal) locks invariant I7 at the
-// menu↔plugin-root seam: enter a plugin from the + menu, pan/zoom its root
-// grid, ascend, re-enter — the viewport must be exactly as left. The seam
-// moved when the launcher landing page was reversed (2026-07-19): a menu
-// portal has no containing link tile, so the ascent writeback goes straight
-// to the plugin's root framing (SetFraming's root arm) instead of through a node-grid
-// tile. This seam was broken once before (every re-entry reset to the
-// default calibrated zoom), so it keeps its crossing test.
+// The plugin-root viewport test locks the same invariant at the seam between the
+// + menu and a plugin root: enter a plugin from the menu, pan and zoom its root
+// grid, ascend, re-enter, and the viewport must be exactly as it was left. A
+// menu portal has no containing link tile, so the ascent writeback goes straight
+// to the plugin's root framing through SetFraming's root arm. That seam has
+// broken before, with every re-entry resetting to the default calibrated zoom,
+// so it keeps its own crossing test.
 
 test.use({ extraNodes: ['second'] });
 
@@ -41,7 +37,7 @@ test('re-descending a reframed well returns to exactly what you left', async ({ 
   const left = await gw.focused();
   expect(left.zoom, 'the reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
 
-  // Ascend out, then re-descend: must land on exactly the framing we left.
+  // Ascend out, then re-descend: it must land on exactly the framing left behind.
   await gw.middleClickCell(Math.round(left.cx), Math.round(left.cy));
   expect((await gw.focused()).gridID, 'ascended out of the child').not.toBe(childGrid);
 
@@ -54,14 +50,13 @@ test('re-descending a reframed well returns to exactly what you left', async ({ 
 });
 
 test('plugin root-grid viewport persists across + menu ascent and re-entry', async ({ gw }) => {
-  // Invariant: enter a plugin from the + menu, reframe its root grid, ascend
-  // (portal back home), re-enter — viewport must match what was left
-  // (issue #32, rehomed onto the menu portal 2026-07-19).
+  // Enter a plugin from the + menu, reframe its root grid, ascend back home
+  // through the portal, re-enter: the viewport must match what was left.
   await gw.enterPlugin('second');
   const pluginGrid = (await gw.focused()).gridID;
 
-  // Reframe the plugin root: zoom in, then pan. The grid is empty so the
-  // press lands on nothing and pans.
+  // Reframe the plugin root: zoom in, then pan. The grid is empty, so the press
+  // lands on nothing and pans.
   await gw.wheelAtFocusedCenter(-300);
   const zc = await gw.focused();
   await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
@@ -74,9 +69,9 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
   const home = await gw.focused();
   expect(home.gridID, 'ascended back home').not.toBe(pluginGrid);
 
-  // The write is SERVER truth, not just a client cache: the handshake
-  // serves each plugin's persisted root view, so the reframed zoom must
-  // show up there. Poll — the root framing post is async.
+  // The write is server truth, not a client cache: the handshake serves each
+  // plugin's persisted root view, so the reframed zoom must show up there. Poll,
+  // because the root framing post is async.
   await expect
     .poll(
       async () => {
@@ -87,7 +82,7 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
     )
     .toBeGreaterThan(0);
 
-  // Re-enter from the menu: viewport must match what we left.
+  // Re-enter from the menu: the viewport must match what was left.
   await gw.enterPlugin('second');
   const back = await gw.focused();
   expect(back.gridID, 're-entered the same plugin root').toBe(pluginGrid);
@@ -97,11 +92,10 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
 });
 
 test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
-  // Before the settle persister, the ONLY framing writers were the ascent
-  // flushes — leave a grid any other way (reload, pane switch, URL edit,
-  // descend deeper) and the viewport silently reverted. This test pins the
-  // fix at the real seam: reframe a child grid and, WITHOUT ascending, the
-  // well's view_* must show up in server truth on its own.
+  // The settle persister is what makes framing survive leaving a grid any way
+  // other than an ascent: a reload, a pane switch, a url edit, a deeper descent.
+  // This pins it at the real seam: reframe a child grid and, without ascending,
+  // the well's framing must show up in server truth on its own.
   await gw.enterPlugin('home');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
@@ -118,8 +112,8 @@ test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
   const left = await gw.focused();
   expect(left.zoom, 'the reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
 
-  // No ascent, no navigation: the debounced settle persister alone must
-  // write the framing. A fresh well's viewZoom is 0 until the first write.
+  // No ascent, no navigation: the debounced settle persister alone must write
+  // the framing. A fresh well's zoom is 0 until the first write.
   await expect
     .poll(
       async () => {
@@ -133,9 +127,8 @@ test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
 });
 
 test('a plugin root reframe persists without ascending (issue #190)', async ({ gw }) => {
-  // Same invariant one seam over: pan/zoom a plugin's ROOT grid and the
-  // root framing must reach the server without a + menu ascent (the root
-  // used to fire only from the portal-ascent path).
+  // The same invariant one seam over: pan and zoom a plugin's root grid, and the
+  // root framing must reach the server without a + menu ascent.
   await gw.enterPlugin('second');
 
   await gw.wheelAtFocusedCenter(-300);
@@ -144,8 +137,8 @@ test('a plugin root reframe persists without ascending (issue #190)', async ({ g
   const left = await gw.focused();
   expect(left.zoom, 'reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
 
-  // The handshake serves each plugin's persisted root view — poll it
-  // WITHOUT ascending.
+  // The handshake serves each plugin's persisted root view; poll it without
+  // ascending.
   await expect
     .poll(
       async () => {
@@ -182,21 +175,20 @@ test('ascending restores the parent viewport unchanged', async ({ gw }) => {
   expect(after.cy, 'parent center y unchanged').toBeCloseTo(before.cy, 1);
 });
 
-// A fresh page at bare "/" (what every app relaunch loads) must open home
-// at the PERSISTED root view — the boot path passed literal 0,0,1 for the
-// root fallback since the parameter existed, so every relaunch opened
-// home at the origin no matter what the user left (2026-08-13).
+// A fresh page at bare "/", which is what every app relaunch loads, must open
+// home at the persisted root view. A boot path that passes a literal 0,0,1 root
+// fallback opens home at the origin no matter what the user left.
 test('a bare-URL boot restores the persisted home viewport', async ({ gw, window }) => {
-  // Reframe HOME's root grid (the boot anchor), then let the settle
-  // persister write the root view.
+  // Reframe home's root grid, the boot anchor, then let the settle persister
+  // write the root view.
   await gw.wheelAtFocusedCenter(-300);
   const zc = await gw.focused();
   await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
   const left = await gw.focused();
   expect(left.zoom, 'reframe changed the zoom').not.toBeCloseTo(1.0, 2);
   await gw.waitIdle();
-  // Wait on SERVER truth, not a sleep: the settle persister's root framing
-  // shows up as the home plugin's persisted root view.
+  // Wait on server truth rather than a sleep: the settle persister's root
+  // framing shows up as home's persisted root view.
   await expect
     .poll(
       async () => {
@@ -207,8 +199,8 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
     )
     .toBeGreaterThan(0);
 
-  // A bare URL is the fresh-launch shape: no viewport params to win over
-  // the stored root view.
+  // A bare url is the fresh-launch shape: no viewport params to win over the
+  // stored root view.
   await window.evaluate(() => {
     globalThis.location.href = '/?e2e=1';
   });
@@ -226,24 +218,24 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
     null,
     { timeout: 30_000 },
   );
-  // Poll: a slow boot applies the viewport late (fetch + handshake).
+  // Poll: a slow boot applies the viewport late, after the fetch and handshake.
   await expect
     .poll(async () => (await gw.focused()).zoom, { timeout: 10_000 })
     .toBeCloseTo(left.zoom, 1);
   const back = await gw.focused();
-  // Root-view origins are stored as INTEGER cells (the schema is additive-
-  // only), so the center round-trips within half a cell — the storage
-  // resolution, not a framing loss.
+  // Root-view origins are stored as integer cells, so the center round-trips
+  // within half a cell. That is the storage resolution, not a framing loss.
   expect(Math.abs(back.cx - left.cx), 'boot restored the persisted center x').toBeLessThan(0.51);
   expect(Math.abs(back.cy - left.cy), 'boot restored the persisted center y').toBeLessThan(0.51);
 });
 
-// Ascending after a RELOAD (restored frames carry no viewport) must land on the
-// parent's persisted framing — what a fresh descent into it would show —
-// not an arbitrary zoom-1 origin (2026-08-13).
+// Ascending after a reload, where the restored frames carry no viewport, must
+// land on the parent's persisted framing, what a fresh descent into it would
+// show, not an arbitrary zoom-1 origin.
 test('a post-reload ascent restores the parent framing it was left at', async ({ gw, window }) => {
-  // Home (the boot anchor) IS a plugin root — reframe the plugin ROOT first (this is the framing the ascent must
-  // come back to), then descend into a well and reload.
+  // Home, the boot anchor, is itself a root grid. Reframe that root first, since
+  // it is the framing the ascent must come back to, then descend into a well and
+  // reload.
   await gw.wheelAtFocusedCenter(-240);
   const zc = await gw.focused();
   await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy));
@@ -254,8 +246,8 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
-  // Server truth before reloading: the root view landed (the descent
-  // flush posts it; the handshake mirrors it).
+  // Server truth before reloading: the root view landed. The descent flush posts
+  // it and the handshake mirrors it.
   await expect
     .poll(
       async () => {
@@ -266,9 +258,8 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
     )
     .toBeGreaterThan(0);
 
-  // The URL writer is debounced: reload only after the descent path is
-  // actually IN the URL, or the reload lands at the root with nothing to
-  // ascend from.
+  // The url writer is debounced, so reload only once the descent path is in the
+  // url; otherwise the reload lands at the root with nothing to ascend from.
   await expect
     .poll(() => window.evaluate(() => globalThis.location.pathname), { timeout: 10_000 })
     .not.toBe('/');
