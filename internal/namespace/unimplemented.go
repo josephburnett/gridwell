@@ -1,12 +1,12 @@
 package namespace
 
-// Unimplemented is the embeddable "this namespace does not offer that
-// verb" default — the in-process twin of pb.UnimplementedGridwellServer,
-// so a namespace declares only what it actually serves and everything else
-// answers with the SAME Unimplemented code it answered with over the wire.
-// The code is load-bearing: the router treats Unimplemented as a silent
-// no-op in exactly one place (SetFraming on a namespace that keeps no
-// framing), and the client's classifier reads it everywhere else.
+// Unimplemented is the embeddable "this namespace does not offer that verb"
+// default: the in-process twin of pb.UnimplementedGridwellServer, so a
+// namespace declares only what it serves and everything else answers with the
+// same Unimplemented code the wire would. The code is load-bearing: the
+// router treats Unimplemented as a silent no-op in exactly one place,
+// SetFraming on a namespace that keeps no framing, and the client's
+// classifier reads it everywhere else.
 
 import (
 	"context"

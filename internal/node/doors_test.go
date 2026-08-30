@@ -13,12 +13,11 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// The listener seam of the two-door decision (2026-08-26): Start binds
-// the web door where config says and the federation door as a 0600 UNIX
-// SOCKET at federation.socket — never TCP — so the ungated gRPC export
-// is reachable by the owning uid only, and the web door keeps its
-// Connect API. A fresh home's first BuildConfig minted the password, so
-// the web door is gated from the first serve.
+// The listener seam of the two doors: Start binds the web door where config
+// says and the federation door as a 0600 unix socket at federation.socket,
+// never TCP, so the ungated gRPC export is reachable by the owning uid only
+// while the web door keeps its Connect API. A fresh home's first BuildConfig
+// mints the password, so the web door is gated from the first serve.
 func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 	home := t.TempDir()
 	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))

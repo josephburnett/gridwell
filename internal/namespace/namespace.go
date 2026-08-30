@@ -1,19 +1,17 @@
-// Package namespace is the node's IN-PROCESS interface: one namespace —
-// the home store, a content plugin's adapter, the transport — as a Go
-// value the router calls directly.
+// Package namespace is the node's in-process interface: one namespace — the
+// home store, a content plugin's adapter, the transport — as a Go value the
+// router calls directly.
 //
-// Owner decision (docs/simplify-plan.md S2, 2026-08-29): "the plugin.v1
-// subprocess and the federation socket are the only gRPC hops". Inside
-// the node there is no wire: the router holds a Namespace and calls it.
-// The two gRPC hops that remain are the ones that cross a PROCESS or a
-// MACHINE boundary and so must serialize anyway —
+// Inside the node there is no wire: the router holds a Namespace and calls
+// it. The only two gRPC hops are the ones that cross a process or a machine
+// boundary, and so must serialize anyway:
 //
 //   - the plugin.v1 subprocess (api/compose.LoadPlugin): the third-party
-//     door, process isolation and a separate dependency graph;
+//     door, with process isolation and a separate dependency graph;
 //   - the federation socket (internal/server/nodeexport.go serving
 //     gridwell.v1, internal/remote/dial consuming it): another node.
 //
-// The web door stays Connect over HTTP — it crosses to the browser.
+// The web door stays Connect over HTTP, because it crosses to the browser.
 //
 // # The shape of a stream
 //
@@ -44,9 +42,9 @@
 // Without a wire between them, a caller and a Namespace share the proto
 // messages they pass. The contract, so no copy layer is needed:
 //
-//   - a Namespace must not RETAIN or MUTATE a request after it returns;
-//     one that rewrites ids clones first (internal/remote does);
-//   - a Namespace must not MUTATE a response after returning it;
+//   - a Namespace must not retain or mutate a request after it returns;
+//     one that rewrites ids clones first, as internal/remote does;
+//   - a Namespace must not mutate a response after returning it;
 //   - a caller must not mutate a response in place: the qualification
 //     layer clones (api/rpc.TransitQualifyTiles, server.qualifyTiles), so
 //     two subscribers of the same event never see each other's prefix.
@@ -91,7 +89,7 @@ type Namespace interface {
 	// ServeContent streams a plugin-served web response (the /content/
 	// door). The first chunk carries status and media_type.
 	ServeContent(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error
-	// WriteContent assembles the caller's messages and commits ONCE, at a
+	// WriteContent assembles the caller's messages and commits once, at a
 	// clean io.EOF: a recv that fails leaves the old value byte-for-byte
 	// intact. The first message binds tile_id and claims the version.
 	WriteContent(ctx context.Context, recv func() (*pb.WriteContentRequest, error)) (*pb.TileResponse, error)
@@ -99,9 +97,9 @@ type Namespace interface {
 	// ── live ─────────────────────────────────────────────────────────────
 
 	ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error)
-	// OpenShell attaches a tile's PTY. The first recv binds the tile id
-	// (and the initial size); keystrokes and resizes flow up, terminal
-	// output down, until either side ends.
+	// OpenShell attaches a tile's PTY. The first recv binds the tile id and
+	// the initial size; keystrokes and resizes flow up, terminal output
+	// down, until either side ends.
 	OpenShell(ctx context.Context, recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error
 	// Subscribe streams this namespace's change events until ctx ends.
 	Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error

@@ -1,16 +1,14 @@
 package node
 
-// Convert folds a pre-one-node home (docs/one-node.md §2.6) into the one
-// database: <home>/db/<id>/store.db (the home store) becomes
-// <home>/gridwell.db; every plugin's memory DB (db/<plugin-id>/store.db —
-// contexts, idmap, layout, cache_listings) becomes rows under its
-// namespace; the transport's connections (db/<id>/remote.db) come along.
-// Home keeps every id. A plugin's grids and tiles are RE-MINTED (one table,
-// one sequence), and the references INTO them — home tiles' child_grid_id
-// (exit wells) and link_target_id, and the anchors/paths inside pane-layout
-// blobs — are rewritten through the mapping. The old files are renamed
-// aside (db.pre-one-node), never deleted; the source cache is disposable and
-// goes.
+// Convert folds a home laid out as one database per namespace into the single
+// database. <home>/db/<id>/store.db, the home store, becomes
+// <home>/gridwell.db; every plugin's memory DB becomes rows under its
+// namespace; the transport's connections come along. Home keeps every id. A
+// plugin's grids and tiles are re-minted, since there is now one table and
+// one sequence, and the references into them — home tiles' child_grid_id for
+// exit wells, link_target_id, and the anchors and paths inside pane-layout
+// blobs — are rewritten through the mapping. The old files are renamed aside
+// as db.pre-one-node, never deleted, and the disposable source cache goes.
 
 import (
 	"context"
@@ -41,7 +39,7 @@ type idMap struct {
 	tiles map[int64]int64
 }
 
-// Convert builds <home>/gridwell.db from the legacy layout. It is
+// Convert builds <home>/gridwell.db from the per-namespace layout. It is
 // idempotent in effect: a home with no db/ dir is not converted, and a
 // finished conversion leaves db.pre-one-node behind.
 func Convert(home string, cfg *config.ServerConfig) error {
@@ -53,9 +51,9 @@ func Convert(home string, cfg *config.ServerConfig) error {
 	target := config.DBFile(home)
 	log.Printf("gridwell: converting %s to the one-database layout (%s)", home, target)
 
-	// 1. The home store, verbatim: a consistent snapshot into the new
-	// file (VACUUM INTO — safe against WAL), then the current schema
-	// migrates it in place on Open.
+	// 1. The home store, verbatim: a consistent snapshot into the new file
+	// through VACUUM INTO, which is safe against WAL, then the current
+	// schema migrates it in place on Open.
 	if err := snapshot(oldHome, target); err != nil {
 		return fmt.Errorf("convert: home store: %w", err)
 	}
@@ -76,7 +74,7 @@ func Convert(home string, cfg *config.ServerConfig) error {
 		}
 		mem := filepath.Join(config.LegacyDBDir(home, pc.ID), "store.db")
 		if _, err := os.Stat(mem); errors.Is(err, fs.ErrNotExist) {
-			continue // never served
+			continue // this plugin never served
 		}
 		m, err := importMemory(ctx, st, pc.ID, mem)
 		if err != nil {
@@ -130,11 +128,11 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 	m := &idMap{grids: map[int64]int64{}, tiles: map[int64]int64{}}
 	n := st.Namespace(ns)
 
-	// Contexts → grids (context_key), root framing along. A pre-one-node
-	// plugin stored a root as the ORIGIN of the 1×1 synthetic doorway the
-	// client framed it through, and the client read it back as
-	// origin + 1/2 — so the center this store keeps (schema v11) is
-	// + 0.5, the picture the user actually had.
+	// Contexts become grids, keyed by context_key, with the root framing
+	// alongside. The old layout stored a root as the origin of the 1x1
+	// synthetic doorway the client framed it through, and the client read it
+	// back as origin + 1/2, so the center this store keeps is + 0.5: the
+	// picture the user actually had.
 	type ctxRow struct {
 		id              int64
 		key             string
@@ -170,11 +168,11 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 	}
 
 	// The old file's remembered listings give each key its kind, label,
-	// child context and url — facts that become DURABLE ROWS here; a key
-	// with no remembered entry converts as text named by its key (the
-	// next listing refreshes the facts). The listing blob itself does not
-	// come along: what the source last said is cache, and the new home
-	// keeps none (docs/simplify-plan.md S7).
+	// child context, and url — facts that become durable rows here. A key
+	// with no remembered entry converts as text named by its key, and the
+	// next listing refreshes the facts. The listing blob itself does not come
+	// along: what the source last said is cache, and the durable file keeps
+	// none of it.
 	facts := map[int64]map[string]*pluginv1.Entry{}
 	lrows, err := old.QueryContext(ctx, `SELECT grid_id, entries FROM cache_listings`)
 	if err != nil {
@@ -206,7 +204,8 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 		facts[l.gid] = byKey
 	}
 
-	// idmap + layout → tiles, id-for-id in old order (stable output).
+	// idmap and layout become tiles, id-for-id in the old order, so the
+	// output is stable.
 	type tileRow struct {
 		id, gid            int64
 		key                string
@@ -263,8 +262,8 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 		if kind == "url" && url == "" {
 			kind = "text"
 		}
-		// The old layout row's view_x/view_y was a window ORIGIN; the
-		// center this store keeps is origin + footprint/2 — the same
+		// The old layout row's view_x and view_y were a window origin; the
+		// center this store keeps is origin + footprint/2, the same
 		// arithmetic schema v11's migration applies to a home file.
 		newID, err := st.InsertExternalRow(ctx, ns, gid, t.key, kind, label, child, url, t.tomb != 0,
 			[4]int64{t.x, t.y, t.w, t.h},
@@ -278,10 +277,10 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 	return m, nil
 }
 
-// rewriteReferences maps every home reference into a plugin (exit wells'
-// child_grid_id, leaf links' link_target_id, pane-layout anchors and
-// paths) through the plugin's id map. A reference with no mapping is
-// left as it was — dangling, never re-pointed.
+// rewriteReferences maps every home reference into a plugin — an exit well's
+// child_grid_id, a leaf link's link_target_id, a pane layout's anchors and
+// paths — through the plugin's id map. A reference with no mapping is left as
+// it was: dangling, never re-pointed.
 func rewriteReferences(ctx context.Context, st *store.Store, maps map[string]*idMap) error {
 	if len(maps) == 0 {
 		return nil
@@ -421,7 +420,7 @@ func importConnections(ctx context.Context, st *store.Store, path string) error 
 	}
 	rows, err := old.QueryContext(ctx, `SELECT name, remote_root, deleted FROM connections`)
 	if err != nil {
-		return nil // an older transport store (no connections table): nothing remembered
+		return nil // an older transport store with no connections table
 	}
 	type row struct {
 		name, root string

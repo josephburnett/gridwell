@@ -1,9 +1,9 @@
 package node
 
-// The node's HOME: its own content (text, urls, shells, wells, pane tiles)
-// over its store, with the shell manager (tmux, a private per-node
-// server) and the boot sweeps. Not a plugin: the node constructs it from
-// its own config (docs/one-node.md).
+// The node's home: its own content — text, urls, shells, wells, pane tiles —
+// over its store, with the shell manager, a private per-node tmux server, and
+// the boot sweeps. It is not a plugin: the node constructs it from its own
+// config.
 
 import (
 	"context"

@@ -1,11 +1,10 @@
 package plugin_test
 
-// The v2 plugin spawn path, end to end (docs/v2-design.md §4): a
-// separately-compiled gridwell-plugin-fs binary spawned through
-// go-plugin, serving plugin.v1; the loader opens the NODE-owned
-// memory DB, wraps the adapter, and the registry client sees an ordinary
-// Gridwell plugin — placement persists in the node's file, and the
-// plugin process holds no state at all.
+// The plugin spawn path, end to end: a separately-compiled
+// gridwell-plugin-fs binary spawned through go-plugin, serving plugin.v1. The
+// loader opens the node-owned store, wraps the adapter, and the registry
+// client sees an ordinary Gridwell namespace. Placement persists in the node's
+// file and the plugin process holds no state at all.
 
 import (
 	"context"
@@ -20,10 +19,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// buildPluginBinary compiles a shipped plugin binary into a temp
-// file. A build failure FAILS the test (never skips): a skip-on-failure
-// once masked a stale build path for weeks while the subprocess
-// transport went unexercised.
+// buildPluginBinary compiles a shipped plugin binary into a temp file. A build
+// failure fails the test and never skips: a skip would leave the subprocess
+// transport unexercised while the suite stayed green.
 func buildPluginBinary(t *testing.T, kind string) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "gridwell-plugin-"+kind)
@@ -105,8 +103,8 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if got.Tile.X != 4 || got.Tile.W != 2 {
 		t.Fatalf("placement not persisted through the subprocess seam: %+v", got.Tile)
 	}
-	// The plugin's memory is the NODE's one database; the plugin process
-	// wrote nothing anywhere (its config carries no db path at all).
+	// The plugin's memory is the node's one database, and the plugin process
+	// wrote nothing anywhere: its config carries no db path at all.
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Fatalf("node database missing: %v", err)
 	}

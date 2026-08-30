@@ -1,11 +1,10 @@
 package namespace_test
 
-// The codec seam: a Namespace written onto gridwell.v1 by Server, read
-// back off it by FromClient, is the SAME Namespace. This is the one test
-// whose purpose is the gRPC codec itself — everything else in the node
-// calls the Go value directly (docs/simplify-plan.md S2) — so it runs over
-// a real gRPC loopback, and the loopback lives here, in the test that
-// needs it, not in production code.
+// The codec seam: a Namespace written onto gridwell.v1 by Server and read
+// back off it by FromClient is the same Namespace. This is the one test whose
+// purpose is the gRPC codec itself, since everything else in the node calls
+// the Go value directly, so it runs over a real gRPC loopback, and the
+// loopback lives here rather than in production code.
 
 import (
 	"context"
@@ -181,7 +180,7 @@ func TestTileRoundTripsBytesIdentical(t *testing.T) {
 	}
 }
 
-// The client classifies errors by CODE (client/clientsync). A code that
+// The client classifies errors by code, in client/clientsync. A code that
 // collapses to Unknown at either codec turns a version conflict into an
 // unrecoverable failure, so pin every code the router hands out.
 func TestStatusCodesSurviveBothCodecs(t *testing.T) {
@@ -248,8 +247,8 @@ func TestWriteContentStreamRoundTrips(t *testing.T) {
 	}
 }
 
-// A recv that FAILS must never reach the commit: the far side sees the
-// stream break, not a clean end (commit-at-close).
+// A recv that fails must never reach the commit: the far side sees the stream
+// break, not a clean end.
 func TestWriteContentBrokenRecvNeverCommits(t *testing.T) {
 	f := &fake{tile: richTile()}
 	ns := loopback(t, f)

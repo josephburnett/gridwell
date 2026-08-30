@@ -20,7 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/remote"
 )
 
-// legacyMemoryDDL is the retired internal/layout memory-DB schema, as the
+// legacyMemoryDDL is the retired per-plugin memory-DB schema, as the
 // converter reads it.
 const legacyMemoryDDL = `
 CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -32,14 +32,14 @@ CREATE TABLE layout (tile_id INTEGER PRIMARY KEY, x INTEGER NOT NULL DEFAULT 0, 
   text_x INTEGER NOT NULL DEFAULT 0, text_y INTEGER NOT NULL DEFAULT 0, text_w INTEGER NOT NULL DEFAULT 0, text_h INTEGER NOT NULL DEFAULT 0,
   text_mode TEXT NOT NULL DEFAULT '', content_zoom REAL NOT NULL DEFAULT 0);`
 
-// TestConvertFoldsALegacyHome builds a pre-one-node home — a home store
-// with an exit well into a plugin grid, a leaf link into a plugin tile and
-// a pane layout anchored in the plugin; the plugin's memory DB with two
-// contexts, three keys (one retired) and a cached listing; a transport
-// store with one learned root — converts it, and checks: home ids kept,
-// plugin rows re-minted under their namespace with facts and framing,
-// every reference into the plugin rewritten, the connections remembered,
-// the old files set aside.
+// TestConvertFoldsALegacyHome builds a home in the per-namespace layout — a
+// home store with an exit well into a plugin grid, a leaf link into a plugin
+// tile, and a pane layout anchored in the plugin; the plugin's memory DB with
+// two contexts, three keys, one of them retired, and a cached listing; and a
+// transport store with one learned root — converts it, and checks that home
+// keeps its ids, the plugin's rows are re-minted under their namespace with
+// their facts and framing, every reference into the plugin is rewritten, the
+// connections are remembered, and the old files are set aside.
 func TestConvertFoldsALegacyHome(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
@@ -150,22 +150,22 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		t.Fatalf("home exit well lost: %v", err)
 	}
 	// The plugin's rows, re-minted under its namespace: the root context
-	// keeps its view, the well keeps its framing and child, the text its
-	// window, the retired key stays retired.
+	// keeps its view, the well keeps its framing and child, the text keeps
+	// its window, and the retired key stays retired.
 	p := ns.Namespace(pid)
 	rootGID, err := p.ContextID("root")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The old file stored a root as the ORIGIN of the 1×1 synthetic
-	// doorway (2.5, -1); the center the client showed — and the one the
-	// v11 shape keeps — is + 0.5.
+	// The old file stored a root as the origin of the 1x1 synthetic doorway,
+	// (2.5, -1); the center the client showed, and the one this shape keeps,
+	// is + 0.5.
 	if f, ok, _ := p.RootFraming(rootGID); !ok || f.Cx != 3 || f.Cy != -0.5 || f.Zoom != 0.75 {
 		t.Fatalf("root framing lost: %+v ok=%v", f, ok)
 	}
-	// The retired key stayed retired across the conversion: a listing
-	// that says nothing — non-authoritative, so nothing is absent, the
-	// shape a dark source now takes — answers the two LIVE rows only.
+	// The retired key stayed retired across the conversion: a
+	// non-authoritative listing that says nothing, which is the shape a dark
+	// source takes, answers the two live rows only.
 	if live, lerr := p.Merge(rootGID, nil, false); lerr != nil || len(live) != 2 {
 		t.Fatalf("retired key came back live: %+v err=%v", live, lerr)
 	}
@@ -186,8 +186,8 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		}
 	}
 	docsGID, _ := p.ContextID("root/docs")
-	// view_x 7 on a 2×2 footprint is the center 8 — the same arithmetic
-	// the v11 migration applies to a home file.
+	// view_x 7 on a 2x2 footprint is the center 8, the same arithmetic the
+	// v11 migration applies to a home file.
 	if docs.X != 4 || docs.W != 2 || docs.ViewCx != 8 || docs.ViewCy != 9 || docs.ViewZoom != 1.5 || docs.ChildGridID != docsGID {
 		t.Fatalf("well framing/child lost: %+v (child %d)", docs, docsGID)
 	}
