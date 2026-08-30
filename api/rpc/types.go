@@ -154,14 +154,20 @@ type ConnectionInfo struct {
 	StatusDetail string  `json:"status_detail,omitempty"`
 }
 
+// PluginKindConnection is the Kind ConnectionRow stamps on a connection's
+// menu row. It is the DECLARATION that a row is a connection rather than a
+// plugin — the one fact readers consult (client/pluginhealth), never the
+// shape of the uuid. Minted here and nowhere else.
+const PluginKindConnection = "connection"
+
 // ConnectionRow presents a connection as a menu row — the one shape every
 // menu flow (click-descend, drag-link, health, root-view persistence)
-// already handles. Kind "connection"; a pending one is rootless with its
-// failure as InfoError-free StatusDetail (pluginhealth reads the chained
-// uuid as "waiting", not "broken").
+// already handles. Kind PluginKindConnection; a pending one is rootless
+// with its failure as StatusDetail → InfoError (pluginhealth reads the
+// declared kind as "waiting", not "broken").
 func ConnectionRow(c ConnectionInfo) PluginInfo {
 	return PluginInfo{
-		UUID: c.UUID, Kind: "connection", Label: c.Label,
+		UUID: c.UUID, Kind: PluginKindConnection, Label: c.Label,
 		RootGridID: c.RootGridID, InfoError: c.StatusDetail,
 		RootViewCx: c.RootViewCx, RootViewCy: c.RootViewCy, RootViewZoom: c.RootViewZoom,
 	}

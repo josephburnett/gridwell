@@ -101,11 +101,17 @@ func TestClickNotice_SourceKeyedByLabelCoalesces(t *testing.T) {
 	}
 }
 
-// A CONNECTION row (chained uuid, v2 #269) that hasn't learned its root
-// is WAITING, not misconfigured — the notice must say so, never point at
-// config.root (which doesn't exist for connections).
+// A CONNECTION row (v2 #269) that hasn't learned its root is WAITING, not
+// misconfigured — the notice must say so, never point at config.root
+// (which doesn't exist for connections). The row is recognized by its
+// DECLARED kind, so an unsegmented uuid reads the same as a chained one:
+// this case is built through rpc.ConnectionRow, the one minter.
 func TestClickNotice_PendingConnection(t *testing.T) {
-	pl := rpc.PluginInfo{UUID: "sshx/conn1", Label: "rtb"}
+	pl := rpc.ConnectionRow(rpc.ConnectionInfo{UUID: "conn1", Label: "rtb"})
+	if _, _, msg, _ := ClickNotice(pl); !strings.Contains(msg, "hasn't answered") {
+		t.Fatalf("an unsegmented connection uuid must still read as waiting: %q", msg)
+	}
+	pl = rpc.ConnectionRow(rpc.ConnectionInfo{UUID: "sshx/conn1", Label: "rtb"})
 	sev, source, msg, ok := ClickNotice(pl)
 	if !ok || source != "launcher:sshx/conn1" {
 		t.Fatalf("notice = %v %q %q %v (keyed by UUID — labels can collide)", sev, source, msg, ok)

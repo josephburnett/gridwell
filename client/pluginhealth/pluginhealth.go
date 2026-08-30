@@ -10,8 +10,6 @@
 package pluginhealth
 
 import (
-	"strings"
-
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
@@ -71,10 +69,14 @@ func ClickNotice(pl rpc.PluginInfo) (sev errsurface.Severity, source, message st
 	case Broken:
 		return errsurface.Error, "launcher:" + pl.UUID, pl.Label + ": " + pl.InfoError, true
 	case Rootless:
-		// A chained uuid is a CONNECTION row (v2 #269): rootless means
-		// its remote hasn't answered yet — a waiting state, not a
-		// config gap.
-		if strings.Contains(pl.UUID, "/") {
+		// A CONNECTION row (v2 #269) declares itself with
+		// rpc.PluginKindConnection — the row's own fact, minted by
+		// rpc.ConnectionRow. Rootless there means the remote hasn't
+		// answered yet: a waiting state, not a config gap. (This used to
+		// sniff a "/" in the uuid, which is the host reading an id's
+		// SHAPE instead of a declaration — and it misread any connection
+		// whose uuid carried no segment.)
+		if pl.Kind == rpc.PluginKindConnection {
 			return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " — the remote hasn't answered yet; it will open once the connection comes up", true
 		}
 		return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " has no root configured — set config.root in server.yaml", true
