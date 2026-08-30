@@ -509,51 +509,11 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		return nil
 	}
 	d := a.dragging
-	// Promote to "started" once cursor has moved past the threshold.
-	if !d.started {
-		dxs := sx - d.startScreenX
-		dys := sy - d.startScreenY
-		if dxs*dxs+dys*dys >= dragThreshold*dragThreshold {
-			d.started = true
-			// On node drag, materialize the ghost; for moves, also hide
-			// the original at its stored position so we don't see two
-			// copies of the same stone. Template drags also need a
-			// ghost so the synthetic tile follows the cursor.
-			if d.tileID != "" || d.isTemplate {
-				size := d.srcCellSize
-				if size <= 0 {
-					// Template drag: srcCellSize wasn't set by the
-					// palette (it lives in screen px, not cells), so
-					// use the focused pane's parent cell size.
-					if src := a.tree.FindPane(d.originPaneID); src != nil {
-						size = cellPx * src.Zoom
-					} else {
-						size = cellPx
-					}
-				}
-				a.ghost = &ghost{
-					tile:              d.snapshotTile,
-					paneID:            d.originPaneID,
-					screenX:           d.originScreenX,
-					screenY:           d.originScreenY,
-					displayedCellSize: size,
-					targetCellSize:    size,
-				}
-				if d.tileID != "" {
-					// Hide by row id: a clone is a different row that
-					// looks the same, so a by-lineage hide would make
-					// every clone vanish whenever its sibling is
-					// picked up (dragdrop.HiddenMatch and its test
-					// cover the predicate). It lives on the ghost,
-					// because the hide outlives the drag through the
-					// snap-back and dies with the ghost.
-					a.ghost.hiddenTileID = d.tileID
-					a.ghost.hiddenPaneID = d.originPaneID
-				}
-			}
-		} else {
-			return nil
-		}
+	// Promote to "started" once the cursor has moved past the threshold,
+	// materializing the ghost — the one threshold, shared with the
+	// right-button clone drag (advanceCloneDrag).
+	if !a.advanceDragGhost(d, sx, sy) {
+		return nil
 	}
 	if d.tileID == "" && !d.isTemplate {
 		// Pan the source pane's parent-grid view smoothly. A pan drag only
@@ -575,6 +535,66 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	d.curScreenY = sy
 	a.draw()
 	return nil
+}
+
+// advanceDragGhost promotes an armed drag past the drag threshold and
+// materializes its ghost, once, for both buttons: the left-drag move/template
+// path (onMouseMove) and the right-drag clone path (advanceCloneDrag). It
+// reports whether the drag is started — false means the cursor has not left
+// the press point yet, and the caller decides what a not-yet-started move
+// does (the left path drops the move entirely; the right path still tracks
+// the cursor).
+//
+// The two flavors differ in exactly two places, both kept explicit:
+//   - the hide. A move hides the original at its stored position so we don't
+//     see two copies of the same stone; a clone (d.clone) shows both, since
+//     the copy is a new stone. Hiding is by row id: a clone is a different
+//     row that looks the same, so a by-lineage hide would make every clone
+//     vanish whenever its sibling is picked up (dragdrop.HiddenMatch and its
+//     test cover the predicate). It lives on the ghost, because the hide
+//     outlives the drag through the snap-back and dies with the ghost.
+//   - the missing-cell-size fallback (below).
+//
+// A pan drag — no tile and no template — materializes no ghost; a right-drag
+// always carries a tile (armRightClone), so the guard only ever excludes the
+// left path's pan.
+func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
+	if d.started {
+		return true
+	}
+	dxs := sx - d.startScreenX
+	dys := sy - d.startScreenY
+	if dxs*dxs+dys*dys < dragThreshold*dragThreshold {
+		return false
+	}
+	d.started = true
+	if d.tileID == "" && !d.isTemplate {
+		return true
+	}
+	size := d.srcCellSize
+	if size <= 0 {
+		// Template drag: srcCellSize wasn't set by the palette (it lives in
+		// screen px, not cells), so use the focused pane's parent cell size.
+		// A right-drag clone is armed from a real tile with a real cell size
+		// and keeps the bare cellPx fallback it has always had.
+		size = cellPx
+		if src := a.tree.FindPane(d.originPaneID); src != nil && !d.clone {
+			size = cellPx * src.Zoom
+		}
+	}
+	a.ghost = &ghost{
+		tile:              d.snapshotTile,
+		paneID:            d.originPaneID,
+		screenX:           d.originScreenX,
+		screenY:           d.originScreenY,
+		displayedCellSize: size,
+		targetCellSize:    size,
+	}
+	if d.tileID != "" && !d.clone {
+		a.ghost.hiddenTileID = d.tileID
+		a.ghost.hiddenPaneID = d.originPaneID
+	}
+	return true
 }
 
 func (a *App) onMouseUp(this js.Value, args []js.Value) any {

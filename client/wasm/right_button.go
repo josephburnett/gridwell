@@ -341,36 +341,19 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	a.scheduleURLUpdate()
 }
 
-// advanceCloneDrag drives the a.dragging ghost from a right-button
-// move. Same logic the left-drag onMouseMove path runs, narrowed to
-// the case we care about (d.tileID != 0): cross the drag threshold
-// to materialize the ghost, then track the cursor.
+// advanceCloneDrag drives the a.dragging ghost from a right-button move: the
+// one threshold-and-ghost promotion the left-drag path runs
+// (advanceDragGhost), then cursor tracking. Below the threshold the cursor
+// still tracks, so the gesture starts from where the button actually is.
 func (a *App) advanceCloneDrag(sx, sy float64) {
 	d := a.dragging
 	if d == nil {
 		return
 	}
-	if !d.started {
-		dxs := sx - d.startScreenX
-		dys := sy - d.startScreenY
-		if dxs*dxs+dys*dys < dragThreshold*dragThreshold {
-			d.curScreenX = sx
-			d.curScreenY = sy
-			return
-		}
-		d.started = true
-		size := d.srcCellSize
-		if size <= 0 {
-			size = cellPx
-		}
-		a.ghost = &ghost{
-			tile:              d.snapshotTile,
-			paneID:            d.originPaneID,
-			screenX:           d.originScreenX,
-			screenY:           d.originScreenY,
-			displayedCellSize: size,
-			targetCellSize:    size,
-		}
+	if !a.advanceDragGhost(d, sx, sy) {
+		d.curScreenX = sx
+		d.curScreenY = sy
+		return
 	}
 	if a.ghost != nil {
 		// Same DecideDrop verdict the right-drag commit (commitRightClone)
