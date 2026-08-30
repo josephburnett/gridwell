@@ -21,9 +21,9 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/menu"
+	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
-	"github.com/josephburnett/gridwell/client/pending"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
@@ -315,12 +315,11 @@ type App struct {
 	persistPosts   map[string]int
 	framingFlushes int
 
-	// pend is the ONE owner of durable writes the server has not
-	// acknowledged (client/pending, 2026-08-14): a framing/freeze write
-	// that fails on TRANSPORT parks its retry here instead of being
-	// abandoned; the retry kick drains it when the link returns. Content
-	// bytes are not here — the cache's dirty entries are their ledger.
-	pend *pending.Ledger
+	// out is the ONE record of writes the server has not acknowledged —
+	// framing, captures, layout, and the user's unsaved bytes alike — in the
+	// order they were made. retryKick and the unload flush are its two
+	// drains. See client/outbox.
+	out *outbox.Outbox
 
 	// menuCtxs caches each remote node's + menu (menuctx.go), keyed by
 	// the grid-stamped node_ns. "" (the local node) is a.plugins/a.caps.
@@ -711,7 +710,7 @@ func main() {
 		paneLayouts:        map[string]*paneLayoutEntry{},
 		renderedPrev:       map[string]*renderedPreview{},
 		persistPosts:       map[string]int{},
-		pend:               pending.New(),
+		out:                outbox.New(),
 		menuCtxs:           map[string]*menuContext{},
 		renderedPanePaints: map[string]int{},
 	}
@@ -1224,11 +1223,13 @@ func (a *App) startSSE() {
 // reconnect-after-gap (with resync — the gap's events are unrecoverable,
 // so cached grids must refetch), on a mount's health recovery, and by the
 // slow backstop timer (without resync — nothing says the cache is stale,
-// only that parked writes exist). Order: latches clear and refetches
-// launch first, then parked writes re-post, then dirty text sweeps; the
-// async pieces converge through the cache's one Apply door (a refetch
-// racing a parked write's echo lands whichever finishes last, and the
-// echo of the NEWER write is what the server then holds).
+// only that unacknowledged writes exist). Order: latches clear and refetches
+// launch first, then the ONE outbox drains in the order the writes were made
+// — framing, captures, layout, and the user's unsaved bytes through the same
+// door, where there used to be a ledger drain and a separate dirty-text
+// sweep with their own rules. The async pieces converge through the cache's
+// one Apply door (a refetch racing a parked write's echo lands whichever
+// finishes last, and the echo of the NEWER write is what the server holds).
 func (a *App) retryKick(resync bool) {
 	if resync {
 		// Failure latches are gap state: a grid that failed while the link
@@ -1239,20 +1240,21 @@ func (a *App) retryKick(resync bool) {
 			a.fetchGrid(gid)
 		}
 	}
-	for _, retry := range a.pend.Drain() {
+	a.syncContentOutbox()
+	for _, retry := range a.out.Drain() {
 		retry()
 	}
-	a.flushDirtyText()
 }
 
-// retryBackstop is the slow safety net behind the reconnect kick: if
-// anything is parked or dirty (a transport failure with no SSE gap — the
-// stream can survive a blip that a unary write did not), re-post it
-// without waiting for a reconnect that may never come.
+// retryBackstop is the slow safety net behind the reconnect kick: if the
+// outbox holds anything (a transport failure with no SSE gap — the stream can
+// survive a blip that a unary write did not), re-post it without waiting for
+// a reconnect that may never come.
 func (a *App) retryBackstop() {
 	for {
 		time.Sleep(30 * time.Second)
-		if a.pend.Len() > 0 || len(a.c.DirtyTileIDs()) > 0 {
+		a.syncContentOutbox()
+		if a.out.Len() > 0 {
 			a.retryKick(false)
 		}
 	}

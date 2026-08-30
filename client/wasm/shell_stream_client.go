@@ -820,21 +820,23 @@ func snapshotShellCanvas(container js.Value) []byte {
 // validates the tile against the path — a shell inside a well needs
 // the real descent path, issue #77).
 func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
-	// doFreezeWrite owns the leaving-gesture rule. The frozen frame is a
+	// One dispatcher, keyed in the outbox by the tile: the frozen frame is a
 	// CAPTURE — no claim, no bump (docs/simplify-plan.md S5) — so the stream
-	// close racing this freeze can no longer refuse it; a failure surfaces
-	// AND resyncs the grid (issue #156 — the terminal frame the user just
-	// left is not persisted; the preview will show an older state, charter
-	// §6).
-	a.doFreezeWrite("SetShellPreview", a.gridIDForPathFrom(anchor, path), tileID,
-		"shell", "shell preview save failed",
-		func() error {
-			_, err := a.cl.SetShellPreview(context.Background(), &rpc.SetShellPreviewRequest{
-				TileID: tileID, JPEG: jpeg,
-			})
+	// close racing this freeze can no longer refuse it. A transport failure
+	// PARKS the closure, which holds the only remaining copy of the jpeg once
+	// the live surface is gone; a verdict surfaces AND resyncs the grid
+	// (issue #156 — the terminal frame the user just left is not persisted;
+	// the preview will show an older state, charter §6).
+	req := &rpc.SetShellPreviewRequest{TileID: tileID, JPEG: jpeg}
+	a.do(write{
+		label: "SetShellPreview", gid: a.gridIDForPathFrom(anchor, path), id: tileID,
+		source: "shell", failText: "shell preview save failed",
+		call: func(ctx context.Context) error {
+			_, err := a.cl.SetShellPreview(ctx, req)
 			if err != nil {
 				shellLog("SetShellPreview tile=%s err=%v", tileID, err)
 			}
 			return err
-		})
+		},
+	})
 }

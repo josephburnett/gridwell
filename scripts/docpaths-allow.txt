@@ -34,3 +34,9 @@ docs/one-node.md internal/layout
 # The 2026-08-29 architecture review names the dead machinery S1 removed:
 docs/architecture-review.md client/schemaform
 docs/architecture-review.md client/wasm/entry_params.go
+# The 2026-08-14 offline plan and the 2026-08-29 review name client/pending,
+# the per-write-family ledger that docs/simplify-plan.md S5 folded into
+# client/outbox; both docs describe the tree as it stood when they were
+# written:
+docs/offline-plan.md client/pending
+docs/architecture-review.md client/pending

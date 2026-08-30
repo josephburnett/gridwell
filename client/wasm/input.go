@@ -815,9 +815,16 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		W:      d.snapshotTile.W,
 		H:      d.snapshotTile.H,
 	}
-	a.postCrossGridMutate("PlaceTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.PlaceTile(ctx, req)
-	}, d)
+	// A drag carries no parked value: the ghost is presentation, and snapping
+	// it back to its origin IS the honest reconcile the user can see.
+	a.post(write{
+		label: "PlaceTile", gid: srcGridID, alsoGID: dstGridID, refetchOnOK: true,
+		call: func(ctx context.Context) error {
+			_, err := a.cl.PlaceTile(ctx, req)
+			return err
+		},
+		undo: func() { a.snapBackToOrigin(d) },
+	})
 	a.draw()
 	return nil
 }
@@ -1989,8 +1996,16 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			TextH:    viewH,
 			TextMode: mode,
 		}
-		a.doTileMutate("SetTextView", gid, func(ctx context.Context) (*rpc.Tile, error) {
-			return a.cl.SetTextView(ctx, req)
+		a.do(write{
+			label: "SetTextView", gid: gid, id: file.ID, refetchOnOK: true,
+			call: func(ctx context.Context) error {
+				_, err := a.cl.SetTextView(ctx, req)
+				return err
+			},
+			beacon: func() (string, []byte, string) {
+				path, body := rpc.SetTextViewBeacon(req)
+				return path, body, rpc.BeaconJSONType
+			},
 		})
 	})
 }
@@ -2209,21 +2224,24 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 	candidates := a.urlSuggestCandidates(uuidOf(gid))
 	a.openURLModal(candidates, func(url string) {
 		go func() {
-			// Through doFreezeWrite, not postWriteContent: the typed url has
-			// no cache entry backing it (the modal is the only holder), so
-			// the save path's dirty-ledger retry can't cover it — the
-			// dispatcher parks the closure itself on a transport failure
-			// (audit #10, 2026-08-14) and the address lands on the retry
-			// kick; only the descend is skipped.
+			// Through the plain dispatcher, not postWriteContent: the typed
+			// url has no cache entry backing it (the modal is the only
+			// holder), so the content path's "the dirty entry is the record"
+			// rule can't cover it — the dispatcher parks the closure itself
+			// on a transport failure (audit #10, 2026-08-14) and the address
+			// lands on the retry kick; only the descend is skipped.
 			var tile rpc.Tile
-			err := a.doFreezeWrite("ConfigureURL", gid, id, "url", "url save failed",
-				func() error {
-					t, werr := a.cl.WriteContent(context.Background(), id, version, []byte(url))
+			err := a.do(write{
+				label: "ConfigureURL", gid: gid, id: id,
+				source: "url", failText: "url save failed",
+				call: func(ctx context.Context) error {
+					t, werr := a.cl.WriteContent(ctx, id, version, []byte(url))
 					if werr == nil {
 						tile = *t
 					}
 					return werr
-				})
+				},
+			})
 			if err != nil {
 				return
 			}

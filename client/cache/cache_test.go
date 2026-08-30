@@ -390,6 +390,69 @@ func TestApplyForeignTextEventDropsCleanContent(t *testing.T) {
 	}
 }
 
+// TestCaptureEventKeepsTheBodyAndStillRenders is the S5 pin
+// (docs/simplify-plan.md): an AUTOMATIC CAPTURE — a page title, a frozen
+// jpeg, a shell's foreground command — no longer bumps the tile version, so
+// the event it rides carries the SAME version the cached body derives from.
+//
+// Two things must hold at once, and they used to be in tension. The cached
+// body must survive: a capture changed nothing about the bytes, and evicting
+// a CLEAN one refetched content on every freeze while evicting nothing was
+// what protected an edit in progress. AND the capture must still reach the
+// screen: the event carries the whole tile, so the row — its new name, its
+// new preview blob — replaces the cached row and Apply reports a redraw.
+func TestCaptureEventKeepsTheBodyAndStillRenders(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3, BlobID: 7, AltText: "old name"},
+	})
+	c.PutFetchedContent("10", []byte("# the body"), 3)
+
+	// A capture on the very tile whose body is cached: same version, new
+	// name, new preview blob.
+	capture := rpc.Tile{
+		ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3, BlobID: 7,
+		AltText: "captured name", PreviewBlobID: 42,
+	}
+	if !c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: capture}}) {
+		t.Fatal("a capture event must report a redraw — it changed what the tile looks like")
+	}
+	if b, ok := c.TileContent("10"); !ok || string(b) != "# the body" {
+		t.Error("a capture evicted the cached body")
+	}
+	g, _ := c.Grid("1")
+	if got := g.Tiles["10"]; got.AltText != "captured name" || got.PreviewBlobID != 42 {
+		t.Errorf("the capture did not reach the cached row: %+v", got)
+	}
+}
+
+// TestCaptureDuringAnEditKeepsTheKeystrokes is the same event arriving while
+// the user is typing. The dirty entry — the ONE copy of the unsaved words —
+// must be untouched, and its save basis must stay where it was, so the save
+// that follows still claims a version the server will accept. Before S5 the
+// capture bumped the row, and the next save conflicted and reverted the
+// paragraph for no reason the user could see.
+func TestCaptureDuringAnEditKeepsTheKeystrokes(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3, BlobID: 7},
+	})
+	c.PutFetchedContent("10", []byte("# saved state"), 3)
+	c.PutEditedContent("10", []byte("# words still being typed"))
+
+	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
+		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3, BlobID: 7, AltText: "captured"},
+	}})
+
+	data, dirty := c.DirtyContent("10")
+	if !dirty || string(data) != "# words still being typed" {
+		t.Fatalf("capture disturbed the unsaved edit: %q dirty=%v", data, dirty)
+	}
+	if base, _ := c.SaveBasis("10"); base != 3 {
+		t.Errorf("save basis = %d, want 3 — a capture must not move what the edit claims", base)
+	}
+}
+
 // TestPutGridReconcilesContentLikeAnEvent: a grid REFETCH and a Subscribe
 // event are the same fact arriving on two paths; both must age cached bodies
 // identically. Before this, PutGrid replaced rows (advancing the version a

@@ -171,7 +171,7 @@ func (a *App) ensureFileTextarea() {
 		}
 		// Keyed by contentKey: a leaf link's edits accumulate under its
 		// TARGET's id — the one shared content fact (see text_flush.go).
-		a.c.PutEditedContent(a.contentKey(a.lastTextareaTileID), []byte(a.textTextarea.Get("value").String()))
+		a.putEditedContent(a.contentKey(a.lastTextareaTileID), []byte(a.textTextarea.Get("value").String()))
 		a.scheduleFileSave()
 		a.draw()
 		a.scheduleURLUpdate()

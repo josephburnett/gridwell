@@ -4,14 +4,21 @@ package main
 
 // The unload flush (framing-audit decisions 2026-08-13): quitting or
 // reloading inside the settle window must not lose the last pan/scroll.
-// Two mechanisms:
+// Three mechanisms:
 //
-//   - beacons: during beforeunload every framing write posts through
+//   - beacons: during beforeunload a write posts through
 //     navigator.sendBeacon (Chromium completes beacons after the page
 //     dies) instead of a goroutine RPC that dies with the page. The
 //     bodies are the exact wire form the ordinary calls send
-//     (internal/rpc's *Beacon helpers — one request builder, two
-//     transports).
+//     (api/rpc's *Beacon helpers — one request builder, two transports).
+//     WHICH transport a write takes is the dispatcher's decision now
+//     (write.beacon, client/wasm/mutate.go), not each call site's.
+//   - the OUTBOX drains here too (docs/simplify-plan.md S5): everything an
+//     earlier outage parked — a settled viewport, a frozen face, a
+//     workspace arrangement, unsaved bytes — leaves through the beacon
+//     transport instead of dying with the page. Before, the unload flush
+//     knew only about fresh framing and dirty text; anything parked was
+//     silently lost at quit.
 //   - a transition in flight persists its DESTINATION: the viewport the
 //     user chose is the transition's end state, and the old flush simply
 //     skipped it (the mid-animation values are presentation; the
@@ -22,7 +29,6 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/textedit"
 )
 
 // sendBeacon posts one write so it survives the page (contentType picks
@@ -48,11 +54,12 @@ func (a *App) sendBeacon(path string, body []byte, contentType string) bool {
 	return nav.Call("sendBeacon", a.origin+path, blob).Bool()
 }
 
-// flushOnUnload is the beforeunload durable-state path: land the
-// in-flight transition on its destination, then run the framing flush
-// with the beacon transport switched in (a.unloading), then beacon the
-// two content-shaped leftovers the framing flush doesn't carry — dirty
-// text and live pages' navigation state.
+// flushOnUnload is the beforeunload durable-state path: land the in-flight
+// transition on its destination, switch the beacon transport in
+// (a.unloading), run the settle-persister flush for framing the user just
+// changed, DRAIN THE OUTBOX so everything already owed leaves too, and
+// finally beacon the one thing neither covers — a live page's navigation
+// state, which lives in the bridge, not in any ledger.
 func (a *App) flushOnUnload() {
 	if tr := a.transition; tr != nil && len(tr.segments) > 0 {
 		if p := a.tree.FindPane(tr.paneID); p != nil {
@@ -64,46 +71,11 @@ func (a *App) flushOnUnload() {
 	}
 	a.unloading = true
 	a.flushFramingSave()
-	a.flushContentOnUnload()
-	a.flushURLStateOnUnload()
-}
-
-// flushContentOnUnload beacons every dirty text body (audit #8,
-// 2026-08-14): the old path enqueued async saves on a dying page, so up
-// to a full debounce window of typing was reliably lost on every tab
-// close — while framing had beacons all along. What may write, and with
-// what claim, is textedit.DecideUnloadFlush (an UNCACHED owner row
-// beacons on the SaveBasis alone — audit #6's not-a-dead-end rule); a
-// refused or oversized beacon falls back to the async enqueue, which
-// beats guaranteeing the loss.
-func (a *App) flushContentOnUnload() {
-	for _, cid := range a.c.DirtyTileIDs() {
-		data, dirty := a.c.DirtyContent(cid)
-		if !dirty {
-			continue
-		}
-		t := a.cachedTileByID(cid)
-		basis, haveBasis := a.c.SaveBasis(cid)
-		var rowVersion int64
-		editable := false
-		if t != nil {
-			rowVersion = t.Version
-			editable = t.Kind == rpc.KindText && !a.tileReadOnly(t)
-		}
-		version, do := textedit.DecideUnloadFlush(t != nil, editable, rowVersion, basis, haveBasis)
-		switch do {
-		case textedit.UnloadSkip:
-			continue
-		case textedit.UnloadAsync:
-			a.flushTileContent(cid)
-			continue
-		}
-		if path, body := rpc.WriteContentBeacon(cid, version, data); body != nil &&
-			a.sendBeacon(path, body, rpc.BeaconStreamType) {
-			continue
-		}
-		a.flushTileContent(cid)
+	a.syncContentOutbox()
+	for _, retry := range a.out.Drain() {
+		retry()
 	}
+	a.flushURLStateOnUnload()
 }
 
 // flushURLStateOnUnload beacons the address (+title) a live durable page
@@ -134,10 +106,4 @@ func (a *App) flushURLStateOnUnload() {
 			a.sendBeacon(path, body, rpc.BeaconJSONType)
 		}
 	}
-}
-
-// sendBeaconJSON adapts the two-value (path, body) unary beacon builders
-// to sendBeacon's typed signature.
-func (a *App) sendBeaconJSON(path string, body []byte) bool {
-	return a.sendBeacon(path, body, rpc.BeaconJSONType)
 }

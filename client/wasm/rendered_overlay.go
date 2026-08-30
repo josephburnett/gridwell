@@ -203,7 +203,7 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 			"checkbox did not map to a task marker — nothing was changed")
 		return
 	}
-	a.c.PutEditedContent(t.ContentID(), toggled)
+	a.putEditedContent(t.ContentID(), toggled)
 	a.scheduleFileSave()
 	// Re-render from the toggled source: the render key won't change (same
 	// tile, same version, same length), so force it.

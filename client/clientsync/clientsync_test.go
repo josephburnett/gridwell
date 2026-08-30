@@ -89,9 +89,13 @@ func TestReactTables(t *testing.T) {
 			OutcomeRejected:  {Refetch: true, Log: true, DropLocal: true},
 			OutcomeTransport: {Log: true, Retry: true},
 		}},
+		// ReactSave differs from the other two on Conflict alone, and
+		// deliberately (docs/simplify-plan.md S5): a save conflict now means
+		// a real concurrent edit is about to replace the user's words, so it
+		// is surfaced instead of reconciled in silence.
 		{"ReactSave", ReactSave, map[Outcome]Reaction{
 			OutcomeOK:        {},
-			OutcomeConflict:  {Refetch: true, DropLocal: true},
+			OutcomeConflict:  {Refetch: true, Log: true, DropLocal: true},
 			OutcomeRejected:  {Refetch: true, Log: true, DropLocal: true},
 			OutcomeTransport: {Log: true, Retry: true},
 		}},

@@ -88,13 +88,18 @@ func (a *App) flushWellWheelSaves() {
 			TileID:  tileID,
 			Framing: rpc.Framing{Cx: st.cx, Cy: st.cy, Zoom: st.ratio},
 		}
-		if a.unloading && a.sendBeaconJSON(rpc.SetFramingBeacon(req)) {
-			continue
-		}
-		a.postFramingPersist("SetFraming", gid, tileID,
+		// The unload transport is the dispatcher's business now (write.beacon):
+		// one place decides whether this write goes as an RPC or as a beacon,
+		// so a PARKED framing write reaches the beacon path too — before, the
+		// check lived here and the unload flush left the outbox untouched.
+		a.postFramingPersistBeacon("SetFraming", gid, tileID,
 			func(ctx context.Context) error {
 				_, err := a.cl.SetFraming(ctx, req)
 				return err
+			},
+			func() (string, []byte, string) {
+				path, body := rpc.SetFramingBeacon(req)
+				return path, body, rpc.BeaconJSONType
 			})
 	}
 }
@@ -210,9 +215,6 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 	}
 	commit(next)
 	req.Framing = next
-	if a.unloading && a.sendBeaconJSON(rpc.SetFramingBeacon(&req)) {
-		return
-	}
 	// One dispatcher for both rows a framing can live on: the doorway tile
 	// and the root grid. They differ only in which id keys the parked write
 	// (a grid id and a tile id are separate sequences), never in policy —
@@ -221,10 +223,15 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 	if key == "" {
 		key = req.RootGridID
 	}
-	a.postFramingPersist("SetFraming", gridID, key, func(ctx context.Context) error {
-		_, err := a.cl.SetFraming(ctx, &req)
-		return err
-	})
+	a.postFramingPersistBeacon("SetFraming", gridID, key,
+		func(ctx context.Context) error {
+			_, err := a.cl.SetFraming(ctx, &req)
+			return err
+		},
+		func() (string, []byte, string) {
+			path, body := rpc.SetFramingBeacon(&req)
+			return path, body, rpc.BeaconJSONType
+		})
 }
 
 // persistTextScroll is the settle persister's text arm (framing-audit
@@ -260,13 +267,14 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	patched.TextW, patched.TextH = req.TextW, req.TextH
 	patched.TextMode = p.TextMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
-	if a.unloading && a.sendBeaconJSON(rpc.SetTextViewBeacon(req)) {
-		return
-	}
-	a.postFramingPersist("SetTextView", gid, file.ID,
+	a.postFramingPersistBeacon("SetTextView", gid, file.ID,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetTextView(ctx, req)
 			return err
+		},
+		func() (string, []byte, string) {
+			path, body := rpc.SetTextViewBeacon(req)
+			return path, body, rpc.BeaconJSONType
 		})
 }
 

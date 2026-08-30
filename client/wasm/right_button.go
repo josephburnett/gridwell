@@ -493,9 +493,14 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		X:          dropX,
 		Y:          dropY,
 	}
-	a.postCrossGridMutate("CloneTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.CloneTile(ctx, req)
-	}, d)
+	a.post(write{
+		label: "CloneTile", gid: srcGridID, alsoGID: dstGridID, refetchOnOK: true,
+		call: func(ctx context.Context) error {
+			_, err := a.cl.CloneTile(ctx, req)
+			return err
+		},
+		undo: func() { a.snapBackToOrigin(d) },
+	})
 }
 
 // runDeleteTile fires DeleteTile against the dragged source tile. Used when
@@ -513,8 +518,21 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	// kills behind it.
 	delete(a.shellAlive, d.tileID)
 	delete(a.shellAliveProbing, d.tileID)
-	a.postTwoGridMutate("DeleteTile", d.srcGridID, dstGridID, func(ctx context.Context) error {
-		return a.cl.DeleteTile(ctx, req)
+	// No snapback and no parked value: the tile is going to vanish either
+	// way, so there is no ghost to roll back — both grids refetch whatever
+	// the server said, and a failed delete putting the row back on screen IS
+	// the reconcile.
+	src, dst := d.srcGridID, dstGridID
+	refetch := func() {
+		a.fetchGrid(src)
+		if dst != "" && dst != src {
+			a.fetchGrid(dst)
+		}
+	}
+	a.post(write{
+		label: "DeleteTile", gid: src, alsoGID: dst, refetchOnOK: true,
+		call: func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
+		undo: refetch,
 	})
 }
 

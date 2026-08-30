@@ -258,27 +258,36 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 			if target != nil {
 				gid = target.gridID
 			}
-			// doFreezeWrite owns the leaving-gesture rule. The freeze is an
-			// in-place CAPTURE on this tile's own row (copy-on-clone: nothing
-			// is shared, so there is no fork) — no claim, no bump
-			// (docs/simplify-plan.md S5), so a foreign writer or an auto
-			// title capture racing the close can no longer refuse it. A
-			// failure surfaces AND resyncs the grid — the freeze the user
-			// just saw is not persisted and the preview will revert on next
-			// load (charter §6; issue #156 — this path used to bypass the
-			// dispatcher).
-			go a.doFreezeWrite("SetURLState", gid, tileID,
-				"urlfreeze", "page preview save failed",
-				func() error {
-					_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
-						TileID: tileID,
-						JPEG:   jpeg, URL: url, Title: title, History: history,
-					})
+			// The freeze is an in-place CAPTURE on this tile's own row
+			// (copy-on-clone: nothing is shared, so there is no fork) — no
+			// claim, no bump (docs/simplify-plan.md S5), so a foreign writer
+			// or an auto title capture racing the close can no longer refuse
+			// it. A transport failure PARKS the closure, which after the live
+			// surface is gone holds the only copy of the frame, the address
+			// and the trail; a verdict surfaces AND resyncs the grid — the
+			// freeze the user just saw is not persisted and the preview will
+			// revert on next load (charter §6; issue #156 — this path used to
+			// bypass the dispatcher). The beacon form is what carries it
+			// through a tab close.
+			req := &rpc.SetURLStateRequest{
+				TileID: tileID,
+				JPEG:   jpeg, URL: url, Title: title, History: history,
+			}
+			a.post(write{
+				label: "SetURLState", gid: gid, id: tileID,
+				source: "urlfreeze", failText: "page preview save failed",
+				call: func(ctx context.Context) error {
+					_, err := a.cl.SetURLState(ctx, req)
 					if err != nil {
 						urlLog("SetURLState tile=%s err=%v", tileID, err)
 					}
 					return err
-				})
+				},
+				beacon: func() (string, []byte, string) {
+					path, body := rpc.SetURLStateBeacon(req)
+					return path, body, rpc.BeaconJSONType
+				},
+			})
 		}
 		if len(jpeg) > 0 {
 			// Reflect the just-frozen frame immediately so the pane (and

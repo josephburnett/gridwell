@@ -116,17 +116,25 @@ func ReactOptimistic(o Outcome) Reaction {
 	return Reaction{}
 }
 
-// ReactSave is the policy for a content save drawn from the dirty ledger
-// (the cache's content entries). On a verdict the dirty bytes reconcile
-// away — the screen must show what the server holds, not what it refused
-// (charter §6: no silent divergence). On Transport the entry STAYS DIRTY:
-// it is the only copy of the user's unsaved words, and the flush sweep
-// retries it. This is the arm whose absence was the archetype data-loss
-// bug (postWriteContent dropped the buffer on a wifi blip, 2026-08-14).
+// ReactSave is the policy for a content save (the bytes in the cache's
+// content entry — the one write that still claims a version). On a verdict
+// the unsaved bytes reconcile away — the screen must show what the server
+// holds, not what it refused (charter §6: no silent divergence). On Transport
+// the entry STAYS DIRTY: it is the only copy of the user's unsaved words, and
+// the retry lands it. This is the arm whose absence was the archetype
+// data-loss bug (postWriteContent dropped the buffer on a wifi blip,
+// 2026-08-14).
+//
+// A CONFLICT is surfaced (Log), unlike in the other two tables. Since
+// docs/simplify-plan.md S5 a save conflict can only mean one thing: someone
+// else changed these bytes, and the words on screen are about to be replaced
+// by theirs. That used to be routine control flow — every page title, preview
+// and shell command bumped the row — so it was reconciled quietly; now it is
+// exactly the event the user must be told about.
 func ReactSave(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
-		return Reaction{Refetch: true, DropLocal: true}
+		return Reaction{Refetch: true, Log: true, DropLocal: true}
 	case OutcomeRejected:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
 	case OutcomeTransport:
