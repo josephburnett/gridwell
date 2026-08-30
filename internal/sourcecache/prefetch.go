@@ -1,31 +1,28 @@
 package sourcecache
 
-// Whole-source prefetch (issue #254, the phase-1 open decision resolved
-// YES): the cache remembers what you TOUCHED; this walker warms what you
-// DIDN'T, so "everything on the mount is readable offline" is literally
-// true rather than everything-visited. It is a PER-NAMESPACE POLICY
-// (Options.Prefetch), not part of the engine: the transport opts in
-// because a connection's absence is a machine going dark; a local
-// plugin's source is right here and never crawls. The data is small by construction
-// (text, previews, metadata — megabytes, not gigabytes; 2026-08-14), so
-// the walk is a full traversal with caps as emergency valves, not a
-// sampling strategy.
+// Whole-source prefetch. The cache remembers what you touched; this walker
+// warms what you did not, so "everything on this source is readable offline"
+// is literally true rather than everything-visited. It is a per-namespace
+// policy, Options.Prefetch, and not part of the engine: the transport opts in
+// because a connection's absence is a machine going dark, while a local
+// plugin's source is right here and never crawls. The data is small by
+// construction — text, previews, metadata — so the walk is a full traversal
+// with caps as emergency valves, not a sampling strategy.
 //
-// Trigger: every successful Subscribe establishment — that is both the
-// initial connect and each health-up reconnect (the server's fan-in
-// re-subscribes through this wrapper), so the walk doubles as the
-// deletes-while-away resync for grids the user never re-opened. The walk
-// runs through the wrapper's OWN read methods, so every answer lands in
-// the cache by the one existing write path (no second writer).
+// The trigger is every successful Subscribe establishment, which is both the
+// initial connect and each health-up reconnect, since the server's fan-in
+// re-subscribes through this wrapper. The walk therefore doubles as the
+// deletes-while-away resync for grids the user never re-opened. It runs
+// through the wrapper's own read methods, so every answer lands in the cache
+// by the one existing write path and there is no second writer.
 //
-// A transport failure mid-walk aborts quietly — the source went dark; the
-// next successful Subscribe walks again. Coded refusals on individual
-// reads (a tombstoned segment, a permission wall) skip that branch and
-// keep walking: the walker must never invent reachability the mount
-// denies. A serves_page tile's door body (its root subpath) is walked
-// under the same byte budget, so photos and plugin pages are offline too
-// for the common case; the explicit pin gesture stays deferred until
-// budget-bounded prefetch proves too cold in practice (issue #255).
+// A transport failure mid-walk aborts quietly: the source went dark, and the
+// next successful Subscribe walks again. A coded refusal on an individual read
+// — a tombstoned segment, a permission wall — skips that branch and keeps
+// walking, because the walker must never invent reachability the source
+// denies. A serves_page tile's door body, at its root subpath, is walked under
+// the same byte budget, so photos and plugin pages are offline too in the
+// common case.
 
 import (
 	"context"
@@ -38,14 +35,14 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// Emergency valves, not tuning knobs: a mount that trips one is far
-// outside the small-data model this cache is built for, and the walk
-// simply stops warming there (everything already walked stays cached).
+// Emergency valves, not tuning knobs: a source that trips one is far outside
+// the small-data model this cache is built for, and the walk simply stops
+// warming there. Everything already walked stays cached.
 var (
 	// prefetchMaxGrids caps the traversal breadth.
 	prefetchMaxGrids = 4096
-	// prefetchContentBudget caps the SUM of content bodies fetched by one
-	// walk (per-entry bodies are already capped by maxCachedContentBytes).
+	// prefetchContentBudget caps the sum of content bodies fetched by one
+	// walk; per-entry bodies are already capped by maxCachedContentBytes.
 	prefetchContentBudget = 256 << 20
 	// prefetchPause is the politeness gap between RPCs so a background
 	// walk never crowds out the user's own reads on a slow link.
@@ -53,9 +50,9 @@ var (
 )
 
 // contentKinds are the tile kinds whose bodies the walk fetches: the ones
-// whose CONTENT is what the user came for offline (a note's text, a
-// workspace's layout). Everything else offline-renders from its cached
-// row + preview.
+// whose content is what the user came for offline, such as a note's text or a
+// pane tile's layout. Everything else renders offline from its cached row and
+// preview.
 var contentKinds = map[string]bool{"text": true, "pane": true}
 
 // prefetcher is the walk's single-flight state, one per Client.
@@ -64,17 +61,16 @@ type prefetcher struct {
 	running bool
 	ctx     context.Context
 	cancel  context.CancelFunc
-	// wg counts the running walk; the closer waits on it AFTER cancelling
-	// and BEFORE closing the DB, so a walk never writes into a closed
-	// cache (which logged "cache degraded" on every shutdown mid-walk).
+	// wg counts the running walk. The closer waits on it after cancelling and
+	// before closing the DB, so a walk never writes into a closed cache.
 	wg sync.WaitGroup
 }
 
-// kick starts one walk if none is running — and only where the walk is
-// this namespace's POLICY (Options.Prefetch). Serialized, never queued: a
-// trigger during a walk is satisfied by that walk's own freshness (each
-// Subscribe re-trigger means the source is up NOW, which the running walk
-// is already exploiting).
+// kick starts one walk if none is running, and only where the walk is this
+// namespace's policy (Options.Prefetch). It is serialized, never queued: a
+// trigger during a walk is satisfied by that walk's own freshness, since each
+// Subscribe re-trigger means the source is up now and the running walk is
+// already exploiting that.
 func (c *Layer) kickPrefetch() {
 	if !c.opts.Prefetch {
 		return
@@ -99,15 +95,15 @@ func (c *Layer) kickPrefetch() {
 	}()
 }
 
-// Prefetch walks the whole mount through the wrapper's own read methods,
-// warming grids, tiles, previews, plugin lists, and content bodies.
-// Exported so a deliberate warm (a future pin gesture, a test) can run it
-// synchronously; the Subscribe trigger runs it in the background.
+// Prefetch walks the whole source through the wrapper's own read methods,
+// warming grids, tiles, previews, plugin lists, and content bodies. It is
+// exported so a deliberate warm can run it synchronously; the Subscribe
+// trigger runs it in the background.
 func (c *Layer) Prefetch(ctx context.Context) {
 	w := &walker{c: c, ctx: ctx, seenGrids: map[string]bool{}, seenTiles: map[string]bool{}, seenNs: map[string]bool{}}
 	info, err := c.Info(ctx, &pb.InfoRequest{})
 	if err != nil {
-		return // dark (or refused) at the doorstep: nothing to walk
+		return // dark, or refused, at the doorstep: nothing to walk
 	}
 	roots := []string{}
 	if info.GetRootGridId() != "" {
@@ -134,8 +130,8 @@ type walker struct {
 	spent     int
 }
 
-// pause is the politeness gap; false means the walk should stop (context
-// done — the client is closing).
+// pause is the politeness gap. false means the walk should stop, because the
+// context is done and the client is closing.
 func (w *walker) pause() bool {
 	select {
 	case <-w.ctx.Done():
@@ -145,9 +141,9 @@ func (w *walker) pause() bool {
 	}
 }
 
-// walkGrid warms one grid and recurses into its children. Returns false
-// only when the walk should ABORT (transport-dark, context done, cap
-// tripped) — a coded refusal skips the branch and returns true.
+// walkGrid warms one grid and recurses into its children. It returns false
+// only when the walk should abort — the source is dark, the context is done,
+// or a cap tripped. A coded refusal skips the branch and returns true.
 func (w *walker) walkGrid(gridID string) bool {
 	if w.seenGrids[gridID] || len(w.seenGrids) >= prefetchMaxGrids {
 		return len(w.seenGrids) < prefetchMaxGrids
@@ -158,10 +154,10 @@ func (w *walker) walkGrid(gridID string) bool {
 	}
 	resp, err := w.c.GetGrid(w.ctx, &pb.GetGridRequest{GridId: gridID})
 	if err != nil {
-		return !gwerr.IsTransport(err) // dark → abort; refused → skip this branch
+		return !gwerr.IsTransport(err) // dark aborts; a refusal skips this branch
 	}
-	// The + menu context for this grid's node (remote-menu): warm the
-	// routed plugin list once per namespace.
+	// The + menu context for this grid's node: warm the routed plugin list
+	// once per namespace.
 	if ns := resp.GetGrid().GetNodeNs(); !w.seenNs[ns] {
 		w.seenNs[ns] = true
 		if w.pause() {
@@ -187,7 +183,7 @@ func (w *walker) walkGrid(gridID string) bool {
 	return true
 }
 
-// walkTile warms one tile's preview and (for content kinds) its body,
+// walkTile warms one tile's preview and, for a content kind, its body,
 // following a leaf link to its target row once.
 func (w *walker) walkTile(t *pb.Tile) bool {
 	if w.seenTiles[t.GetId()] {
@@ -214,8 +210,8 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		w.spent += n
 	}
 	// A serves_page tile's face-value body is its door page at the root
-	// subpath (rpc.PageURL's target). Bounded like every body: the entry
-	// cap skips oversized pages, the budget stops the class.
+	// subpath, which is rpc.PageURL's target. It is bounded like every body:
+	// the entry cap skips an oversized page and the budget stops the class.
 	if t.GetServesPage() && w.spent < prefetchContentBudget {
 		if !w.pause() {
 			return false
@@ -229,12 +225,13 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		}
 		w.spent += n
 	}
-	// A leaf link's target is what the link renders and resolves through:
-	// warm the target row (and its face/body) even if its own grid is
+	// A leaf link's target is what the link renders and resolves through, so
+	// warm the target row, and its face and body, even if its own grid is
 	// never walked.
-	// walkTile owns the seen-set: pre-marking the target here would make
-	// the recursion below return at its seen-check with nothing warmed —
-	// and poison the target's later natural visit too.
+	//
+	// walkTile owns the seen-set: pre-marking the target here would make the
+	// recursion below return at its seen-check with nothing warmed, and would
+	// poison the target's later natural visit too.
 	if target := t.GetLinkTargetId(); target != "" && !w.seenTiles[target] {
 		if !w.pause() {
 			return false
@@ -252,9 +249,9 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	return true
 }
 
-// drain runs one content read purely to WARM the cache (the tee behind it
-// stores what passes), reporting the bytes seen. ok=false means the mount
-// went dark before a single chunk — abort the walk; a failure after bytes
+// drain runs one content read purely to warm the cache — the tee behind it
+// stores what passes — and reports the bytes seen. ok=false means the source
+// went dark before a single chunk, so the walk aborts; a failure after bytes
 // have flowed, or a coded refusal, just ends this branch.
 func drain(read func(count func(int)) error) (n int, ok bool) {
 	first := true

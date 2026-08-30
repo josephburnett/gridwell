@@ -5,8 +5,8 @@ import (
 	"fmt"
 )
 
-// OpenDB opens a standalone connection store at path — the test-only
-// shape; production shares the node's one handle (NewDB).
+// OpenDB opens a standalone connection store at path: the test-only shape.
+// Production shares the node's one handle through NewDB.
 func OpenDB(path string) (*DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {

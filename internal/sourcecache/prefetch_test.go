@@ -13,13 +13,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// The #254 promise, pinned: after a prefetch, grids and bodies the user
-// NEVER opened are readable while the mount is dark — offline readability
-// is whole-mount, not touched-only.
+// After a prefetch, grids and bodies the user never opened are readable while
+// the source is dark: offline readability is whole-source, not touched-only.
 
 // seedNested builds root → well → (text "deep note", inner well) on the
-// upstream store, entirely BEHIND the cache (raw client), so nothing is
-// cached by the seeding itself. Returns the nested grid id, the inner
+// upstream store, entirely behind the cache through a raw client, so nothing
+// is cached by the seeding itself. It returns the nested grid id, the inner
 // well's child grid id, and the text tile id.
 func seedNested(t *testing.T, cc *Layer, upstream *darkable, root string) (nested, inner, textID string) {
 	t.Helper()
@@ -100,13 +99,12 @@ func TestSubscribeKicksPrefetch(t *testing.T) {
 	}
 }
 
-// TestSubscribeDoesNotCrawlWithoutThePolicy: the walk is a PER-NAMESPACE
-// policy over the one engine, not part of the engine. A local plugin's
-// layer is opened without it and must never traverse — the seam is the
-// Subscribe trigger, so this drives the same door the transport does and
-// asserts nothing was warmed. (Without the policy gate this test fails by
-// finding the nested grid cached: every plugin would crawl its own disk
-// on every reconnect.)
+// TestSubscribeDoesNotCrawlWithoutThePolicy: the walk is a per-namespace
+// policy over the one engine, not part of the engine. A local plugin's layer
+// is opened without it and must never traverse. The seam is the Subscribe
+// trigger, so this drives the same door the transport does and asserts nothing
+// was warmed. Without the policy gate, every plugin would crawl its own disk
+// on every reconnect.
 func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -127,14 +125,14 @@ func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 	go func() {
 		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(*pb.Event) error { return nil })
 	}()
-	// Give a walk every chance to happen before declaring it didn't: the
+	// Give a walk every chance to happen before declaring it did not: the
 	// positive twin above finds the grid well inside this window.
 	time.Sleep(500 * time.Millisecond)
 	if _, ok := cc.loadGrid(ctx, nested); ok {
 		t.Fatal("a namespace without the prefetch policy crawled itself anyway")
 	}
-	// The layer still caches what is actually READ — the engine is the
-	// same; only the crawl is policy.
+	// The layer still caches what is actually read: the engine is the same,
+	// and only the crawl is policy.
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: nested}); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +159,7 @@ func TestStaleBitMarksCacheServedGrids(t *testing.T) {
 	if !stale.GetGrid().GetStale() {
 		t.Error("a cache-served grid must say so on the wire (#256)")
 	}
-	// Back alive: the bit clears (it is never stored).
+	// Back alive: the bit clears, since it is never stored.
 	upstream.dark = false
 	again, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
@@ -172,11 +170,11 @@ func TestStaleBitMarksCacheServedGrids(t *testing.T) {
 	}
 }
 
-// degrading is an upstream that answers, but with a DEGRADED grid: the
-// shape a plugin adapter takes when its source goes dark (the rows it
-// minted, no source facts, stamped stale). The cache must not remember
-// it — the degraded answer succeeds, so nothing else would ever put the
-// good one back.
+// degrading is an upstream that answers, but with a degraded grid: the shape a
+// plugin adapter takes when its source goes dark, holding the rows it minted,
+// no source facts, stamped stale. The cache must not remember it, because the
+// degraded answer succeeds and nothing else would ever put the good one
+// back.
 type degrading struct {
 	namespace.Namespace
 	degraded bool

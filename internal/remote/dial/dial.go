@@ -1,15 +1,14 @@
-// Package dial is the builtin transport's dialer: it opens an SSH tunnel to
-// a remote host and dials the remote node's federation socket through it
-// with raw gRPC (direct-streamlocal). The far end is the remote's node
-// export — the full
-// Gridwell service, routed by the qualified ids each request carries — so the
-// mount is the WHOLE NODE: its node grid (the plugin-list landing page) is
-// the root the descent lands on, and every remote plugin is reachable through
-// it. No selector, no name resolution — routing is by id at every hop.
+// Package dial is the transport's dialer: it opens an ssh tunnel to a remote
+// host and dials that node's federation socket through it with raw gRPC, over
+// direct-streamlocal. The far end is the remote's node export, the full
+// Gridwell service routed by the qualified ids each request carries, so a
+// mount is the whole node: the descent lands on its home and every remote
+// plugin is reachable through it. There is no selector and no name
+// resolution; routing is by id at every hop.
 //
-// The whole path — key auth, known_hosts verification, tunnel, gRPC over
-// the socket — is testable in-process against a real ssh server
-// (dialtest; internal/server/sshdial_seam_test.go crosses it).
+// The whole path — key auth, known_hosts verification, tunnel, gRPC over the
+// socket — is testable in-process against a real ssh server; see dialtest and
+// internal/server/sshdial_seam_test.go.
 package dial
 
 import (
@@ -31,36 +30,33 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// Config is the remote plugin's connection settings. Host is the
-// TRANSPORT SELECTOR (owner decision 2026-08-16): set, the connection
-// bridges over ssh (auth + encryption); empty, it dials Addr DIRECTLY —
-// another node on this machine or across the tailnet, where the network
-// itself is the trust boundary.
+// Config is one connection's settings. Host is the transport selector: when
+// set, the connection bridges over ssh, with its auth and encryption; when
+// empty, it dials Addr directly — another node on this machine, where the
+// socket's mode is the gate.
 type Config struct {
-	Host       string // SSH endpoint "host:port"; "" = direct connection
-	User       string // SSH user (ssh only)
+	Host       string // ssh endpoint "host:port"; "" means a direct connection
+	User       string // ssh user (ssh only)
 	KeyPath    string // private key file (ssh only)
-	KnownHosts string // known_hosts file (ssh only; mandatory — no blind trust)
-	// Addr is the remote node's federation door: its UNIX SOCKET PATH —
-	// on the remote host for an ssh bridge (its federation.socket,
-	// <home>/federation.sock by default), on this host for a direct
-	// connection (another node on this machine). Never a TCP address:
-	// the door does not exist in that form (owner decision 2026-08-26).
+	KnownHosts string // known_hosts file (ssh only; mandatory, no blind trust)
+	// Addr is the remote node's federation door: its unix socket path, on
+	// the remote host for an ssh bridge — its federation.socket,
+	// <home>/federation.sock by default — or on this host for a direct
+	// connection. Never a TCP address; the door does not exist in that
+	// form.
 	Addr string
 }
 
-// redialer is THE owner of "is the ssh session up" — the fact that used to
-// have no owner at all. The original Dial captured one *ssh.Client in the
-// gRPC dialer closure; when that session died (laptop sleep, network change,
-// remote sshd restart), every gRPC reconnect attempt tunneled through the
-// same dead session and failed forever — the server's fan-in retried with
-// perfect backoff against a transport that could never recover, and the
-// mount stayed dark until the whole plugin was restarted.
+// redialer is the one owner of "is the ssh session up". Capturing a single
+// *ssh.Client in the gRPC dialer closure would leave every reconnect attempt
+// tunneling through the same dead session after a laptop sleep, a network
+// change, or a remote sshd restart, so the fan-in would retry with perfect
+// backoff against a transport that can never recover.
 //
-// Every consumer of the tunnel (the gRPC channel AND the SOCKS proxy) dials
-// through dial(), which re-establishes the ssh layer on demand: a dead
-// session is dropped and rebuilt on the next attempt, single-flight under
-// mu so concurrent callers don't stampede the remote sshd.
+// Every consumer of the tunnel dials through dial(), which re-establishes the
+// ssh layer on demand: a dead session is dropped and rebuilt on the next
+// attempt, single-flight under mu so concurrent callers do not stampede the
+// remote sshd.
 type redialer struct {
 	host    string
 	user    string
@@ -68,15 +64,15 @@ type redialer struct {
 	hostKey ssh.HostKeyCallback
 
 	mu     sync.Mutex
-	client *ssh.Client // nil = not established or known dead
+	client *ssh.Client // nil means not established, or known dead
 }
 
 // dial opens addr on the remote host through the current ssh session,
 // establishing or re-establishing the session as needed. A channel-open
 // failure drops the whole session and retries once through a fresh one:
-// distinguishing "session dead" from "remote endpoint refused" isn't worth
-// the fragility, and the cost is one extra ssh handshake bounded by the
-// caller's (gRPC's) backoff.
+// distinguishing "session dead" from "remote endpoint refused" is not worth
+// the fragility, and the cost is one extra ssh handshake, bounded by gRPC's
+// backoff.
 func (r *redialer) dial(_ string, addr string) (net.Conn, error) {
 	if c := r.current(); c != nil {
 		conn, err := c.Dial("unix", addr)
@@ -89,8 +85,8 @@ func (r *redialer) dial(_ string, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	// direct-streamlocal@openssh.com: the remote's federation door is a
-	// unix socket, never a port (2026-08-26).
+	// direct-streamlocal@openssh.com: the remote's federation door is a unix
+	// socket, never a port.
 	conn, err := c.Dial("unix", addr)
 	if err != nil {
 		r.drop(c)
@@ -105,8 +101,8 @@ func (r *redialer) current() *ssh.Client {
 	return r.client
 }
 
-// drop forgets a dead session (only if it is still the current one — a
-// concurrent caller may already have re-established) and closes it so any
+// drop forgets a dead session, but only if it is still the current one, since
+// a concurrent caller may already have re-established, and closes it so any
 // goroutines blocked on it unwind.
 func (r *redialer) drop(dead *ssh.Client) {
 	r.mu.Lock()
@@ -131,13 +127,13 @@ func (r *redialer) establish() (*ssh.Client, error) {
 		Auth:            r.auth,
 		HostKeyCallback: r.hostKey,
 		// Offer the algorithms known_hosts already trusts for this host
-		// FIRST (recomputed each dial — the user may have just fixed the
-		// file), or a server with several host keys can present one the
-		// file doesn't hold and strict verification reports "key
-		// mismatch" on a perfectly good host (hostalgos.go).
+		// first, recomputed each dial because the user may have just fixed
+		// the file. Otherwise a server with several host keys can present one
+		// the file does not hold, and strict verification reports "key
+		// mismatch" on a good host. See hostalgos.go.
 		HostKeyAlgorithms: hostKeyAlgorithmsFor(r.hostKey, r.host),
-		// Without a timeout a black-holing network (dropped NAT mapping,
-		// sleeping laptop's dead route) would hang the handshake — and mu —
+		// Without a timeout a black-holing network — a dropped NAT mapping, a
+		// sleeping laptop's dead route — would hang the handshake, and mu,
 		// indefinitely.
 		Timeout: 10 * time.Second,
 	})
@@ -160,20 +156,17 @@ func (r *redialer) close() {
 }
 
 // Dial builds the tunnel transport and returns a client of the remote node's
-// export and a closer. (The loopback SOCKS proxy that used to ride along is
-// gone — 2026-07-26, owner decision 2: live url tiles always browse from the
-// host's own network.) The client speaks the remote's qualified ids
-// verbatim; the host server's transit qualification prepends this plugin's
-// uuid on the way back to the local client, so chains compose one segment
-// per hop.
+// export plus a closer. The client speaks the remote's qualified ids verbatim,
+// and the transit qualification prepends this connection's segment on the way
+// back, so chains compose one segment per hop.
 //
-// Config-shaped failures (unreadable key, bad known_hosts) fail here, at
-// spawn, where they are a misconfiguration to surface. The ssh session
-// itself is established LAZILY on first use and re-established after any
-// death (see redialer) — so a mount whose remote is down at spawn, or whose
-// tunnel dies later, heals by itself the moment the remote is reachable
-// again; until then every RPC fails loudly and the server's fan-in health
-// machinery (issue #47) tells the user.
+// Config-shaped failures — an unreadable key, a bad known_hosts — fail here,
+// at construction, where they are a misconfiguration to surface. The ssh
+// session itself is established lazily on first use and re-established after
+// any death; see redialer. A connection whose remote is down at construction,
+// or whose tunnel dies later, heals by itself the moment the remote is
+// reachable again, and until then every RPC fails loudly and the fan-in health
+// machinery tells the user.
 func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 	if cfg.Host == "" {
 		return dialDirect(cfg.Addr)
@@ -197,28 +190,28 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 		hostKey: hostKey,
 	}
 
-	// A fixed passthrough target: grpc's resolvers cannot carry a socket
-	// path (they would strip its leading slash), and the dialer never
+	// A fixed passthrough target: gRPC's resolvers cannot carry a socket
+	// path, since they would strip its leading slash, and the dialer never
 	// needs it — it opens cfg.Addr on the remote host through the
-	// (self-healing) SSH session, whatever grpc hands it.
+	// self-healing ssh session, whatever gRPC hands it.
 	conn, err := grpc.NewClient("passthrough:///federation",
 		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
 			return rd.dial("unix", cfg.Addr)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// HTTP/2 pings through the tunnel: a session that dies WITHOUT an
-		// error (sleep, NAT expiry) would otherwise leave long-lived streams
-		// — the event Subscribe above all — blocked in Recv forever, which
-		// presents as tiles silently going stale with no retry and no health
-		// notice. The ping timeout turns that into Unavailable, the fan-in
-		// retries, and the retry's dial rebuilds the ssh session.
+		// HTTP/2 pings through the tunnel. A session that dies without an
+		// error — sleep, NAT expiry — would otherwise leave long-lived
+		// streams, the event Subscribe above all, blocked in Recv forever,
+		// which presents as tiles silently going stale with no retry and no
+		// health notice. The ping timeout turns that into Unavailable, the
+		// fan-in retries, and the retry's dial rebuilds the ssh session.
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:    30 * time.Second,
 			Timeout: 10 * time.Second,
 		}),
-		// A mount is one user's tunnel, not a fleet: cap the reconnect
-		// backoff well below gRPC's 2-minute default so a healed network
-		// means a healed mount in seconds.
+		// A connection is one user's tunnel, not a fleet: cap the reconnect
+		// backoff well below gRPC's two-minute default so a healed network
+		// means a healed connection in seconds.
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
 				BaseDelay:  time.Second,
@@ -239,12 +232,13 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 	return namespace.FromClient(gridwellv1.NewGridwellClient(conn)), closer, nil
 }
 
-// dialDirect is the DIRECT transport: a plain gRPC connection to another
-// node's federation socket on this machine, same keepalive and healing
-// posture as the tunnel — a dead peer surfaces as Unavailable (never a
-// silent stale stream) and a revived one heals in seconds. No auth on
-// this path: the socket's 0600 mode is the gate (same uid only); across
-// machines the ssh bridge is the one authenticated transport.
+// dialDirect is the direct transport: a plain gRPC connection to another
+// node's federation socket on this machine, with the same keepalive and
+// healing posture as the tunnel, so a dead peer surfaces as Unavailable rather
+// than a silent stale stream and a revived one heals in seconds. There is no
+// auth on this path: the socket's 0600 mode is the gate, admitting the same
+// uid only. Across machines the ssh bridge is the one authenticated
+// transport.
 func dialDirect(addr string) (namespace.Namespace, func(), error) {
 	conn, err := grpc.NewClient("unix:"+addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

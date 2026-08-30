@@ -33,17 +33,16 @@ func writeOne(t *testing.T, c namespace.Namespace, tileID string, version int64,
 	}
 }
 
-// The mount-cache contract (docs/offline-plan.md phase 1): every
-// successful read is remembered; a TRANSPORT-dark mount serves the
-// remembered answer; an ANSWERED error — NotFound, anything coded — is
-// never masked by a cached row; the cache survives a restart; and a
-// successful re-read reconciles what changed while dark. The fixture is a
-// real localdb behind a switchable dark proxy — the exact shape of an ssh
-// mount whose tunnel dropped.
+// The cache contract: every successful read is remembered; a transport-dark
+// source serves the remembered answer; an answered error — NotFound, anything
+// coded — is never masked by a cached row; the cache survives a restart; and a
+// successful re-read reconciles what changed while dark. The fixture is a real
+// home store behind a switchable dark proxy, the shape of a connection whose
+// tunnel dropped.
 
-// darkable wraps the upstream client; dark=true fails every READ the way
-// a dead tunnel does. Writes are not intercepted — write behavior under
-// darkness is the pass-through error path, not cache behavior.
+// darkable wraps the upstream client; dark=true fails every read the way a
+// dead tunnel does. Writes are not intercepted: write behavior under darkness
+// is the pass-through error path, not cache behavior.
 type darkable struct {
 	namespace.Namespace
 	dark bool
@@ -291,8 +290,8 @@ func TestVerdictNeverMasked(t *testing.T) {
 	if _, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: id}); err != nil {
 		t.Fatal(err)
 	}
-	// Two deletes: the first parks the tile in the local plugin's trash
-	// (#262 — it still reads), the second destroys it for real.
+	// Two deletes: the first parks the tile in home's trash, where it still
+	// reads, and the second destroys it for real.
 	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id}); err != nil {
 		t.Fatal(err)
 	}

@@ -1,46 +1,44 @@
-// Package sourcecache is the node's ONE memory of WHAT A SOURCE LAST SAID
-// (docs/simplify-plan.md S7). It sits in front of every non-home
-// namespace — every content plugin's adapter and the transport's
-// connections — as a read-through layer over one disposable file: online
-// it passes through and remembers every successful read; when the source
-// is unreachable (transport-class failure ONLY — an answered "gone" is
-// never masked) it serves the remembered answer, stamped stale. Writes
-// always pass through: the cache is never a write buffer, and the source
-// stays the one owner of its truth — this layer owns only the REMEMBERED
-// ANSWER (charter §7: one fact, one owner; no second writer).
+// Package sourcecache is the node's one memory of what a source last said. It
+// sits in front of every non-home namespace — every content plugin's adapter
+// and the transport's connections — as a read-through layer over one
+// disposable file. Online it passes through and remembers every successful
+// read; when the source is unreachable, on a transport-class failure only,
+// since an answered "gone" is never masked, it serves the remembered answer
+// stamped stale. Writes always pass through: the cache is never a write
+// buffer, the source stays the one owner of its truth, and this layer owns
+// only the remembered answer.
 //
-// It is a cache, not memory: the node's OWN facts about a plugin's
-// entries — the ids it minted, where the user put them, how they are
-// framed — are durable rows in gridwell.db (internal/local/store's
-// externals engine), and an adapter answers a dark source from those
-// rows, not from here. What lives here is only what the source itself
-// said: the handshake, the tile facts of a remote grid, bodies,
-// previews, page bytes.
+// It is a cache, not memory. The node's own facts about a plugin's entries —
+// the ids it minted, where the user put them, how they are framed — are
+// durable rows in gridwell.db, and an adapter answers a dark source from
+// those rows, not from here. What lives here is only what the source itself
+// said: the handshake, the tile facts of a remote grid, bodies, previews,
+// page bytes.
 //
-// Storage is ONE SQLite DB for the whole node (<home>/cache.db,
-// docs/one-node.md), EXPLICITLY DISPOSABLE: deleting it is always safe
-// (it re-warms from use), it is not backed up, and it is NOT under the
-// frozen-format promise — dbformat-versioned only so a future shape
-// change can migrate or refuse cleanly. Rows are wire-shaped (marshaled
-// protos keyed by the ids this layer sees), so there is no schema to
-// drift against the contract. Ids never collide across namespaces: a
-// local namespace's ids come from the store's one AUTOINCREMENT, and a
-// connection's are qualified by its name segment.
+// Storage is one SQLite DB for the whole node, <home>/cache.db, and it is
+// explicitly disposable: deleting it is always safe, since it re-warms from
+// use; it is not backed up; and it is not under the frozen-format promise,
+// being dbformat-versioned only so a future shape change can migrate or
+// refuse cleanly. Rows are wire-shaped — marshaled protos keyed by the ids
+// this layer sees — so there is no schema to drift against the contract. Ids
+// never collide across namespaces: a local namespace's ids come from the
+// store's one AUTOINCREMENT, and a connection's are qualified by its name
+// segment.
 //
 // Freshness: every successful read replaces its rows, and the Subscribe
-// stream the server already holds through this layer is teed — a
-// TileChanged upserts, a TileRemoved deletes — so the cache tracks the
-// live session without a poller. Deletions that happen while the source
-// is DARK are caught by the next successful GetGrid (which replaces the
-// grid's whole tile set); that read-through refresh is the resync, by
-// construction rather than by a sweep.
+// stream the server already holds through this layer is teed, so a
+// TileChanged upserts and a TileRemoved deletes and the cache tracks the live
+// session without a poller. Deletions that happen while the source is dark
+// are caught by the next successful GetGrid, which replaces the grid's whole
+// tile set, so that read-through refresh is the resync by construction rather
+// than by a sweep.
 //
-// Not cached (deliberate): write responses (the next read refreshes) and
-// any answer already stamped stale (remembering a degraded answer would
-// overwrite the good one it degraded from). ServeContent bodies are
-// cached BOUNDED (servecontent.go, issue #255); the whole-source
-// prefetch walk is a PER-NAMESPACE POLICY, off by default and opted into
-// by the transport alone (prefetch.go, issue #254).
+// Deliberately not cached: write responses, since the next read refreshes,
+// and any answer already stamped stale, since remembering a degraded answer
+// would overwrite the good one it degraded from. ServeContent bodies are
+// cached under their own bounds (servecontent.go); the whole-source prefetch
+// walk is a per-namespace policy, off by default and opted into by the
+// transport alone (prefetch.go).
 package sourcecache
 
 import (
@@ -60,11 +58,9 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// cacheApplicationID stamps a source-cache file as ours ("gwmc"), so a
-// foreign SQLite file at the cache path is refused, never overwritten.
-// The bytes are the pre-rename mount cache's — the file's identity did
-// not change when the package was renamed (2026-08-29), and re-stamping
-// would refuse every existing cache.db for nothing.
+// cacheApplicationID stamps a source-cache file as ours, so a foreign SQLite
+// file at the cache path is refused rather than overwritten. The bytes are
+// frozen: re-stamping would refuse every existing cache.db for nothing.
 const cacheApplicationID int64 = 0x67776d63
 
 // cacheSchemaVersion is the current cache generation. The file is
@@ -106,9 +102,9 @@ CREATE TABLE IF NOT EXISTS previews (
     jpeg       BLOB NOT NULL,
     fetched_at INTEGER NOT NULL
 );
--- The /content/ door's bounded body cache (issue #255). Added without a
--- version bump: schemaDDL runs at every Open and the table is additive,
--- which is exactly the liberty the disposable, non-frozen format buys.
+-- The /content/ door's bounded body cache. Added without a version bump:
+-- schemaDDL runs at every Open and the table is additive, which is the
+-- liberty the disposable, non-frozen format buys.
 CREATE TABLE IF NOT EXISTS servecontent (
     tile_id    TEXT NOT NULL,
     subpath    TEXT NOT NULL,
@@ -124,28 +120,28 @@ CREATE TABLE IF NOT EXISTS servecontent (
 // cache-served stream is shaped like a live one.
 const contentChunkBytes = 256 * 1024
 
-// maxCachedContentBytes bounds one cached body. Matches the store's blob
-// cap — anything a plugin can serve as tile content fits; a larger stream
+// maxCachedContentBytes bounds one cached body. It matches the store's blob
+// cap, so anything a plugin can serve as tile content fits; a larger stream
 // still passes through live, just uncached.
 const maxCachedContentBytes = 16 * 1024 * 1024
 
-// Options is the PER-NAMESPACE policy over the one engine. The engine is
-// the same for a local plugin and a remote connection; what differs is
-// how eagerly it warms.
+// Options is the per-namespace policy over the one engine. The engine is the
+// same for a local plugin and a remote connection; what differs is how eagerly
+// it warms.
 type Options struct {
 	// Prefetch walks the whole namespace on every successful Subscribe,
-	// warming grids, tiles, previews and bodies nobody has opened yet
-	// (prefetch.go). It is the OFFLINE policy: it belongs to a namespace
-	// whose answers cross a network and whose absence is a machine going
-	// dark — the transport. A local plugin's source is right here; making
-	// it crawl its own disk on every reconnect would buy nothing and cost
-	// a full traversal.
+	// warming grids, tiles, previews, and bodies nobody has opened yet; see
+	// prefetch.go. It is the offline policy, and belongs to a namespace whose
+	// answers cross a network and whose absence is a machine going dark: the
+	// transport. A local plugin's source is right here, so making it crawl its
+	// own disk on every reconnect would buy nothing and cost a full
+	// traversal.
 	Prefetch bool
 }
 
-// Layer is the cache in front of ONE namespace. All methods not
-// overridden here pass through the embedded Namespace untouched (writes,
-// shells, Probe, SetFraming).
+// Layer is the cache in front of one namespace. Every method not overridden
+// here passes through the embedded Namespace untouched: writes, shells, Probe,
+// SetFraming.
 type Layer struct {
 	namespace.Namespace
 	db   *sql.DB
@@ -157,9 +153,9 @@ type Layer struct {
 var _ namespace.Namespace = (*Layer)(nil)
 
 // Store is the one cache file, shared by every layer over it. SQLite is
-// single-writer per file, so a handle per namespace would put every
-// layer's write behind another handle's busy timeout for no gain — the
-// same reason the home store exposes its one handle (store.Store.SQL).
+// single-writer per file, so a handle per namespace would put every layer's
+// write behind another handle's busy timeout for no gain. It is the same
+// reason the home store exposes its one handle.
 type Store struct {
 	db     *sql.DB
 	mu     sync.Mutex
@@ -197,7 +193,7 @@ func (s *Store) Front(upstream namespace.Namespace, opts Options) *Layer {
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed { // opened after the store closed: a layer that never warms
+	if s.closed { // opened after the store closed: this layer never warms
 		c.pf.cancel()
 		return c
 	}
@@ -223,9 +219,9 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// logErr surfaces a cache-side failure to the server log. A broken cache
-// must never fail a live request — but it must not be silent either, or
-// the offline promise degrades invisibly until the day it's needed.
+// logErr surfaces a cache-side failure to the server log. A broken cache must
+// never fail a live request, but it must not be silent either, or the offline
+// promise degrades invisibly until the day it is needed.
 func logErr(op string, err error) {
 	if err != nil {
 		log.Printf("gridwell: sourcecache %s: %v (cache degraded; the live path is unaffected)", op, err)
@@ -260,10 +256,10 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 	return cached, nil
 }
 
-// Handshake forwards the ROUTED plugin list (remote-menu, 2026-08-16)
-// and remembers the answer per namespace, so a remote pane's + menu is
-// readable while the mount is dark — same contract as every other read:
-// serve-stale on transport only, verdicts pass through.
+// Handshake forwards the routed plugin list and remembers the answer per
+// namespace, so a remote pane's + menu is readable while the source is dark.
+// The contract is every other read's: serve stale on transport failures only,
+// and verdicts pass through.
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	resp, err := c.Namespace.Handshake(ctx, in)
 	if err == nil {
@@ -293,14 +289,13 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	resp, err := c.Namespace.GetGrid(ctx, in)
 	if err == nil {
-		// A STALE answer is never remembered. The layer below degrades
-		// too — a plugin adapter whose source went dark answers from the
-		// rows it minted and stamps the grid — and storing that would
-		// overwrite the good answer it degraded FROM with a poorer one,
-		// permanently (the degraded read succeeds, so nothing would ever
-		// correct it but a live read that may never come). The stale bit
-		// is the one place that fact is known; this is the one place it
-		// is obeyed.
+		// A stale answer is never remembered. The layer below degrades too —
+		// a plugin adapter whose source went dark answers from the rows it
+		// minted and stamps the grid — and storing that would permanently
+		// overwrite the good answer it degraded from with a poorer one,
+		// because the degraded read succeeds and nothing would correct it but
+		// a live read that may never come. The stale bit is the one place
+		// that fact is known, and this is the one place it is obeyed.
 		if !resp.GetGrid().GetStale() {
 			c.storeGrid(ctx, in.GridId, resp)
 		}
@@ -313,19 +308,18 @@ func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 	if !hit {
 		return nil, err
 	}
-	// The stale bit (issue #256): this is the REMEMBERED answer, and the
-	// wire says so — the one place the fact is known is the one place it
-	// is stamped. Wire-only, never stored (a later live read re-stores
-	// the grid without it).
+	// The stale bit: this is the remembered answer and the wire says so. The
+	// one place the fact is known is the one place it is stamped. Wire-only,
+	// never stored, so a later live read re-stores the grid without it.
 	if cached.GetGrid() != nil {
 		cached.Grid.Stale = true
 	}
 	return cached, nil
 }
 
-// storeGrid replaces the grid row AND its whole tile set in one
-// transaction — a successful LIVE GetGrid is by definition the complete
-// list, so this is also how deletions that happened while dark reconcile.
+// storeGrid replaces the grid row and its whole tile set in one transaction. A
+// successful live GetGrid is by definition the complete list, so this is also
+// how deletions that happened while dark reconcile.
 func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridResponse) {
 	gb, err := proto.Marshal(resp.GetGrid())
 	if err != nil {
@@ -466,12 +460,12 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 
 // ── ReadContent ─────────────────────────────────────────────────────────
 
-// ReadContent TEES the live stream: the bytes are remembered as they pass
-// and stored only at a CLEAN end — the cache holds complete values only, a
-// partial body served later would be silent corruption. A transport-shaped
-// failure BEFORE any chunk falls back to the remembered body; after a
-// chunk has flowed the error passes through (splicing cache into a
-// half-live stream would fabricate a body nobody ever had).
+// ReadContent tees the live stream: the bytes are remembered as they pass and
+// stored only at a clean end, because the cache holds complete values only and
+// a partial body served later would be silent corruption. A transport-shaped
+// failure before any chunk falls back to the remembered body; after a chunk has
+// flowed the error passes through, since splicing cache into a half-live stream
+// would fabricate a body nobody ever had.
 func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	var mediaType string
 	var version int64
@@ -479,8 +473,8 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 	var gotChunk, oversized bool
 	err := c.Namespace.ReadContent(ctx, in, func(ch *pb.ContentChunk) error {
 		gotChunk = true
-		// Chunk 1 carries media_type + version (a plugin sends it even for
-		// empty content, so both always arrive before the end).
+		// Chunk 1 carries media_type and version. A plugin sends it even for
+		// empty content, so both always arrive before the end.
 		if mediaType == "" && ch.GetMediaType() != "" {
 			mediaType = ch.GetMediaType()
 		}
@@ -517,8 +511,8 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 
 // sendChunked replays a remembered body in the live chunk shape — chunk 1
 // carries the metadata, later chunks data only — so a caller cannot tell a
-// remembered answer from a live one by its framing. One empty first chunk
-// still goes out for an empty body: the metadata always arrives.
+// remembered answer from a live one by its framing. One empty first chunk still
+// goes out for an empty body, so the metadata always arrives.
 func sendChunked(data []byte, emit func(b []byte, first bool) error) error {
 	first := true
 	for {
@@ -551,15 +545,15 @@ func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, vers
 
 // ── Subscribe ───────────────────────────────────────────────────────────
 
-// Subscribe passes the event stream through with a tee: the cache tracks
-// the live session's mutations as the server relays them. If nothing is
-// subscribed (headless node), reads still refresh on their own — the tee
-// is an accelerator, not the correctness path.
+// Subscribe passes the event stream through with a tee: the cache tracks the
+// live session's mutations as the server relays them. With nothing subscribed,
+// reads still refresh on their own; the tee is an accelerator, not the
+// correctness path.
 func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
-	// Every (re)subscription is a moment to warm the whole mount (issue
-	// #254): the initial connect and each health-up reconnect land here,
-	// so the walk doubles as the resync for grids nobody re-opened while
-	// the mount was dark.
+	// Every subscription and resubscription is a moment to warm the whole
+	// source: the initial connect and each health-up reconnect land here, so
+	// the walk doubles as the resync for grids nobody re-opened while the
+	// source was dark.
 	c.kickPrefetch()
 	return c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
 		c.applyEvent(ctx, ev)
@@ -567,8 +561,8 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 	})
 }
 
-// applyEvent folds one mount event into the cache. GridChanged carries
-// only an id — nothing to apply; the next successful GetGrid refreshes.
+// applyEvent folds one event into the cache. GridChanged carries only an id,
+// so there is nothing to apply and the next successful GetGrid refreshes.
 func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 	switch p := ev.GetPayload().(type) {
 	case *pb.Event_TileChanged:

@@ -10,8 +10,8 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// hangingSearchClient blocks Search until the caller's context dies —
-// what a wedged ssh tunnel looks like to the fan-out.
+// hangingSearchClient blocks Search until the caller's context dies: what a
+// wedged ssh tunnel looks like to the fan-out.
 type hangingSearchClient struct {
 	namespace.Namespace
 }
@@ -31,10 +31,10 @@ func (answeringSearchClient) Search(context.Context, *gridwellv1.SearchRequest) 
 	}}}, nil
 }
 
-// One hung connection must not stall the whole federated search: each
-// hop is bounded by rpc.SearchHopTimeout (the same owner the server's
-// per-plugin fan-out reads). Before the fix, the hanging hop held the
-// caller's unbounded context forever.
+// One hung connection must not stall the whole federated search: each hop is
+// bounded by rpc.SearchHopTimeout, the same owner the server's per-plugin
+// fan-out reads. Without the bound, a hanging hop holds the caller's unbounded
+// context forever.
 func TestSearchFanOutBoundsEachHop(t *testing.T) {
 	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
 	if err != nil {

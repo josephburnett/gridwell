@@ -1,15 +1,15 @@
-// Package remote is the node's TRANSPORT: its connections to other nodes
-// (docs/one-node.md). A connection is config (server.yaml `connections:`
-// — name, label, how to dial); the transport dials each one, learns where
-// it lands (the remote's home), and routes every id shaped
-// "<conn>/<remote-id…>" to that connection's client, prepending the
-// segment on the way back (rpc.TransitQualifyTiles — the one transit
-// rule, the same one the node applies one level up under its own id).
+// Package remote is the node's transport: its connections to other nodes. A
+// connection is config — a server.yaml `connections:` row naming it, labelling
+// it, and saying how to dial. The transport dials each one, learns where it
+// lands, which is the remote's home, and routes every id shaped
+// "<conn>/<remote-id…>" to that connection's client, prepending the segment on
+// the way back through rpc.TransitQualifyTiles: the one transit rule, the same
+// one the node applies a level up under its own id.
 //
-// The transport is not a plugin and owns no tiles: a connection is a row
-// in the + menu and, when the user drags it, an ordinary link tile in
-// their own grid. What it remembers (db.go) is the learned landing and
-// the graveyard of retired names.
+// The transport is not a plugin and owns no tiles. A connection is a row in
+// the + menu and, when the user drags it, an ordinary link tile in their own
+// grid. What it remembers, in db.go, is the learned landing and the graveyard
+// of retired names.
 package remote
 
 import (
@@ -39,13 +39,13 @@ import (
 )
 
 // Dialer builds a namespace over a remote node's export from a resolved
-// config. Production is dial.Dial (whose ssh session is itself lazy and
-// self-healing, and which reads the far node's gridwell.v1 through the one
-// client codec, namespace.FromClient); tests inject in-process remotes.
+// config. Production is dial.Dial, whose ssh session is lazy and self-healing,
+// and which reads the far node's gridwell.v1 through the one client codec,
+// namespace.FromClient. Tests inject in-process remotes.
 type Dialer func(cfg dial.Config) (namespace.Namespace, func(), error)
 
-// bootDialWait bounds how long ConnectAll waits for each connection at
-// boot before serving anyway (the dial keeps trying in the background).
+// bootDialWait bounds how long ConnectAll waits for each connection at boot
+// before serving anyway. The dial keeps trying in the background.
 var bootDialWait = 5 * time.Second
 
 // Server is the transport: a namespace.Namespace whose ids are chains
@@ -64,9 +64,9 @@ type Server struct {
 
 	mu   sync.Mutex
 	live map[string]*liveConn // by name
-	// rootErr is a connection's LAST dial/root-fetch failure, by name —
-	// the one fact behind a pending row's status. Written by ensureLive
-	// and the root learn, cleared on success; never persisted.
+	// rootErr is a connection's last dial or root-fetch failure, by name: the
+	// one fact behind a pending row's status. Written by ensureLive and the
+	// root learn, cleared on success, never persisted.
 	rootErr map[string]string
 
 	hub *eventhub.Hub[*gridwellv1.Event]
@@ -79,8 +79,8 @@ type Conn struct {
 }
 
 // liveConn is one connection's constructed transport. Constructing is cheap
-// and non-blocking (sshdial's ssh layer is lazy); a liveConn exists as soon
-// as the connection dialed.
+// and non-blocking, because the ssh layer is lazy, so a liveConn exists as
+// soon as the connection dialed.
 type liveConn struct {
 	client namespace.Namespace
 	closer func()
@@ -104,12 +104,12 @@ type Row struct {
 // The router calls the transport as a Go value; the compiler says so.
 var _ namespace.Namespace = (*Server)(nil)
 
-// New builds the transport and RECONCILES the store against the declared
-// connections (server.yaml is authoritative): a declared name that is
-// retired — in retired, or tombstoned in the store — is refused; a stored
-// name the config no longer declares tombstones; every retired name is
-// reserved in the store forever. home is the host's home directory ("" =
-// no ~ defaults; keys must be explicit paths).
+// New builds the transport and reconciles the store against the declared
+// connections; server.yaml is authoritative. A declared name that is retired,
+// whether in retired or tombstoned in the store, is refused; a stored name the
+// config does not declare is tombstoned; and every retired name is reserved in
+// the store forever. home is the host's home directory, and "" means no ~
+// defaults, so keys must be explicit paths.
 func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
 	s := &Server{db: db, dial: dialer, home: home, conns: map[string]*Conn{},
@@ -172,11 +172,11 @@ func (s *Server) Close() error {
 	return s.db.Close()
 }
 
-// ConnectAll dials every declared connection and learns its landing,
-// bounded per connection (bootDialWait) — the boot doesn't serve mysteries
-// (Joe, 2026-08-23): a reachable connection is LIVE with its root known
-// before the node serves; an unreachable one has its error in the log and
-// on its row, and keeps trying lazily on every read.
+// ConnectAll dials every declared connection and learns its landing, bounded
+// per connection by bootDialWait, so the boot serves no mysteries: a reachable
+// connection is live with its root known before the node serves, and an
+// unreachable one has its error in the log and on its row and keeps trying
+// lazily on every read.
 func (s *Server) ConnectAll(ctx context.Context) {
 	for _, name := range s.order {
 		c := s.conns[name]
@@ -197,10 +197,10 @@ func (s *Server) ConnectAll(ctx context.Context) {
 	}
 }
 
-// Rows lists the declared connections for the handshake, in config
-// order: label, landing (once learned), the pending failure, and the
-// remote home's persisted view (asked of a live remote, briefly — a dark
-// one contributes zeros).
+// Rows lists the declared connections for the handshake, in config order:
+// label, landing once learned, the pending failure, and the remote home's
+// persisted view, asked of a live remote briefly. A dark one contributes
+// zeros.
 func (s *Server) Rows(ctx context.Context) []Row {
 	out := make([]Row, 0, len(s.order))
 	for _, name := range s.order {
@@ -240,9 +240,9 @@ type forward struct {
 	client namespace.Namespace
 }
 
-// route resolves the connection an id chains through: the first segment
-// is the connection name (a numeric first segment is malformed — the
-// transport owns no tiles), the rest is the remote's own id.
+// route resolves the connection an id chains through: the first segment is the
+// connection name, and the rest is the remote's own id. A numeric first
+// segment is malformed, because the transport owns no tiles.
 func (s *Server) route(ctx context.Context, id string) (*forward, string, error) {
 	first, rest, ok := rpc.SplitID(id)
 	if !ok {
@@ -266,10 +266,10 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 }
 
 // dialConfig resolves a declared connection to a dial.Config, applying the
-// host-side defaults: port 22, key = the first of ~/.ssh/id_ed25519 /
-// ~/.ssh/id_rsa that exists, known_hosts = ~/.ssh/known_hosts. addr (the
-// REMOTE's federation socket path) is required either way: the remote's
-// socket lives under ITS home, which only the operator knows.
+// host-side defaults: port 22; the key is the first of ~/.ssh/id_ed25519 and
+// ~/.ssh/id_rsa that exists; known_hosts is ~/.ssh/known_hosts. addr, the
+// remote's federation socket path, is required either way, because that socket
+// lives under the remote's home, which only the operator knows.
 func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 	cfg := dial.Config{
 		User:       c.User,
@@ -281,7 +281,7 @@ func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 		return dial.Config{}, fmt.Errorf("addr required — the remote node's federation socket path (its <home>/federation.sock)")
 	}
 	if c.Host == "" {
-		return cfg, nil // a DIRECT dial of the socket
+		return cfg, nil // a direct dial of the socket
 	}
 	if strings.TrimSpace(c.User) == "" {
 		return dial.Config{}, fmt.Errorf("user is required for an ssh connection")
@@ -322,8 +322,8 @@ func expandHome(p, home string) string {
 	return p
 }
 
-// firstExisting returns the first path that exists, or the first path
-// (whose open failure will then name the expected default loudly).
+// firstExisting returns the first path that exists, or else the first path,
+// whose open failure then names the expected default loudly.
 func firstExisting(paths ...string) string {
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
@@ -354,8 +354,8 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	}
 	client, closer, err := s.dial(cfg)
 	if err != nil {
-		// Record the BARE dial error (the wrapper is routing noise to the
-		// person reading the row status).
+		// Record the bare dial error: the wrapper is routing noise to
+		// whoever reads the row status.
 		s.rootErr[name] = err.Error()
 		return nil, status.Errorf(codes.Unavailable, "remote: connection %q: %v", name, err)
 	}
@@ -364,13 +364,14 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	lc := &liveConn{client: client, closer: closer, cancel: cancel}
 	s.live[name] = lc
 	// Remote change events flow from the moment the connection is live,
-	// prefixed with its segment — the same fan-in shape the node runs per
+	// prefixed with its segment: the same fan-in shape the node runs per
 	// namespace, one level down.
 	go s.fanInRemote(ctx, name, client)
 	return lc, nil
 }
 
-// setRootErr records ("" clears) a connection's last dial/root-fetch failure.
+// setRootErr records a connection's last dial or root-fetch failure; "" clears
+// it.
 func (s *Server) setRootErr(name, detail string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -381,9 +382,9 @@ func (s *Server) setRootErr(name, detail string) {
 	s.rootErr[name] = detail
 }
 
-// learnRoot is THE connect-and-learn body — the boot path (ConnectAll)
-// calls it synchronously, the lazy kick (kickRootFetch) in a goroutine.
-// Dial the transport; a learned root is final; a fresh one persists and
+// learnRoot is the connect-and-learn body: the boot path, ConnectAll, calls it
+// synchronously, and the lazy kick, kickRootFetch, calls it in a goroutine. It
+// dials the transport; a learned root is final, and a fresh one persists and
 // publishes a health event so open clients re-list.
 func (s *Server) learnRoot(c *Conn) (string, error) {
 	name := c.Cfg.Name
@@ -433,7 +434,7 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
-		return // recorded (rootErr); the row says why
+		return // recorded in rootErr; the row says why
 	}
 	s.mu.Lock()
 	if lc.rootFetching {
@@ -454,12 +455,12 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}()
 }
 
-// fanInRemote forwards a connection's remote change events, each id
-// prefixed with the connection segment. Plain retry loop: the transport
-// underneath self-heals (sshdial's redialer), so a dropped stream just
-// re-subscribes — never silently: each transition is logged and published
-// as an EventPluginHealth (the same contract the node's fanInEvents keeps
-// per namespace, issue #47).
+// fanInRemote forwards a connection's remote change events, each id prefixed
+// with the connection segment. It is a plain retry loop: the transport
+// underneath self-heals through the redialer, so a dropped stream re-subscribes
+// — never silently, since each transition is logged and published as an
+// EventPluginHealth, the same contract the node's fanInEvents keeps per
+// namespace.
 func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Namespace) {
 	healthy := true
 	report := func(up bool, detail string) {
@@ -468,9 +469,9 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 		}}})
 	}
 	for {
-		// ESTABLISHED, not "opened": a callback stream has no open to
-		// report, so namespace.Follow decides the moment (the one
-		// definition the node's own fan-in reads too).
+		// Established, not opened: a callback stream has no open to report,
+		// so namespace.Follow decides the moment, and the node's own fan-in
+		// reads the same definition.
 		err := namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{},
 			func(ev *gridwellv1.Event) error {
 				s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
@@ -504,9 +505,9 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 
 // ── the forwarded verbs ──────────────────────────────────────────────────────
 
-// Handshake forwards a NAMESPACED request through the named connection
-// (remote-menu, 2026-08-16): peel the connection segment, forward the
-// rest to its node export, and re-qualify the answer with the segment.
+// Handshake forwards a namespaced request through the named connection: peel
+// the connection segment, forward the rest to its node export, and re-qualify
+// the answer with the segment.
 func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
 	ns := req.GetNamespace()
 	if ns == "" {
@@ -530,8 +531,8 @@ func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest
 func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
-		// A connection that cannot be resolved is NOT gone — only a
-		// retired one is. A failed read must never sweep a tile.
+		// A connection that cannot be resolved is not gone; only a retired
+		// one is. A failed read must never sweep a tile.
 		if first, _, ok := rpc.SplitID(req.TileId); ok {
 			if row, derr := s.db.Get(ctx, first); derr == nil && row.Deleted {
 				return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
@@ -614,10 +615,10 @@ func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	out := proto.Clone(req).(*gridwellv1.CreateTileRequest)
 	out.GridId = local
 	if out.Tile != nil {
-		// A qualified child/target crossing INTO the connection was
-		// qualified from OUR side; strip our segment so the remote sees
-		// its own frame. (The node's link machinery does the same strip
-		// one level up.)
+		// A qualified child or target crossing into the connection was
+		// qualified from this side, so strip our segment and let the remote
+		// see its own frame. The node's link machinery does the same strip
+		// one level up.
 		out.Tile.ChildGridId = stripPrefix(out.Tile.ChildGridId, fw.ns)
 		out.Tile.LinkTargetId = stripPrefix(out.Tile.LinkTargetId, fw.ns)
 	}
@@ -710,9 +711,9 @@ func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	if err != nil {
 		return nil, err
 	}
-	// CLONE before rewriting: without a wire between the caller and this
-	// hop, the request is the caller's own message (namespace.Namespace's
-	// ownership contract).
+	// Clone before rewriting: with no wire between the caller and this hop,
+	// the request is the caller's own message. See namespace.Namespace's
+	// ownership contract.
 	rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
 	rewritten.TileId = local
 	sentFirst := false
@@ -738,7 +739,7 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 	if err != nil {
 		return err
 	}
-	// CLONE before rewriting the bind: the caller still owns `first`.
+	// Clone before rewriting the bind: the caller still owns `first`.
 	rewritten := proto.Clone(first).(*gridwellv1.OpenShellRequest)
 	rewritten.TileId = local
 	sentBind := false
@@ -762,9 +763,9 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 			if !ok {
 				return nil
 			}
-			// The hub hands the SAME event to every subscriber; nobody
-			// mutates it (the router's qualification clones — see
-			// namespace's ownership contract).
+			// The hub hands the same event to every subscriber and nobody
+			// mutates it; the router's qualification clones. See
+			// namespace's ownership contract.
 			if err := send(ev); err != nil {
 				return err
 			}
@@ -774,13 +775,12 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 	}
 }
 
-// Search forwards the one find verb through the transport (issue #244).
-// An `id:` query routes to the connection owning the id; free text fans
-// out — to LIVE connections only (a search answers with what is
-// reachable; it never dials the world). Each remote answer comes from a
-// node, which fans to its own namespaces — the federation recursion falls
-// out of the chain shape. A connection that errors or times out
-// contributes nothing, loudly.
+// Search forwards the one find verb through the transport. An id: query routes
+// to the connection owning the id; free text fans out to live connections
+// only, because a search answers with what is reachable and never dials the
+// world. Each remote answer comes from a node, which fans out to its own
+// namespaces, so the federation recursion falls out of the chain shape. A
+// connection that errors or times out contributes nothing, loudly.
 func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
 		fw, local, err := s.route(ctx, q.ID)
@@ -802,8 +802,8 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
 	out := &gridwellv1.SearchResponse{}
 	for _, hp := range hops {
-		// Each hop bounded (rpc.SearchHopTimeout, shared with the node's
-		// fan-out): one hung tunnel must not stall the search.
+		// Each hop is bounded by rpc.SearchHopTimeout, shared with the
+		// node's fan-out, so one hung tunnel cannot stall the search.
 		hctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
 		resp, err := hp.client.Search(hctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
 		cancel()
@@ -841,10 +841,10 @@ func stripPrefix(id, ns string) string {
 	return id
 }
 
-// eventKey names the entity a wire event is about, so the hub
-// (internal/eventhub — shared with the home store) can replace an older
-// undelivered event for the same entity with the newer one and never
-// drop a distinct one. "" means unkeyable — never coalesced.
+// eventKey names the entity a wire event is about, so the hub in
+// internal/eventhub, shared with the home store, can replace an older
+// undelivered event for the same entity with the newer one and never drop a
+// distinct one. "" means unkeyable, and is never coalesced.
 func eventKey(ev *gridwellv1.Event) string {
 	switch p := ev.GetPayload().(type) {
 	case *gridwellv1.Event_GridChanged:

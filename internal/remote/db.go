@@ -1,13 +1,12 @@
 package remote
 
-// The transport's store: what the node REMEMBERS about its connections
-// beyond what server.yaml declares — the learned landing (the remote's
-// home grid id, so a dark remote still has a room to show through the
-// source cache) and the graveyard (a retired name never returns: its
-// namespace stays reserved forever, because stored references through it
-// must stay dangling rather than re-routed). Everything else about a
-// connection — where it is, how to reach it, what it is called — is
-// config, read fresh every boot.
+// The transport's store: what the node remembers about its connections beyond
+// what server.yaml declares. That is the learned landing, the remote's home
+// grid id, so a dark remote still has a room to show through the source cache;
+// and the graveyard, since a retired name never returns and its namespace
+// stays reserved forever, so stored references through it stay dangling rather
+// than re-routed. Everything else about a connection — where it is, how to
+// reach it, what it is called — is config, read fresh every boot.
 
 import (
 	"context"
@@ -34,9 +33,9 @@ CREATE TABLE IF NOT EXISTS connections (
   deleted     INTEGER NOT NULL DEFAULT 0
 );`
 
-// NewDB installs the connections table on the node's ONE database handle
-// (docs/one-node.md §2.6: a second handle on the same SQLite file meets
-// an instant SQLITE_BUSY). Close is a no-op; the store owns the handle.
+// NewDB installs the connections table on the node's one database handle. A
+// second handle on the same SQLite file would meet an instant SQLITE_BUSY.
+// Close is a no-op; the store owns the handle.
 func NewDB(db *sql.DB) (*DB, error) {
 	if _, err := db.Exec(connSchema); err != nil {
 		return nil, fmt.Errorf("remote: init schema: %w", err)
@@ -108,8 +107,8 @@ func (d *DB) SetRemoteRoot(ctx context.Context, name, root string) error {
 	return err
 }
 
-// Tombstone retires name forever (creating the row if it never existed —
-// a retired_names entry on a fresh store is still a reservation).
+// Tombstone retires name forever, creating the row if it never existed: a
+// retired_names entry on a fresh store is still a reservation.
 func (d *DB) Tombstone(ctx context.Context, name string) error {
 	if err := d.Ensure(ctx, name); err != nil {
 		return err
