@@ -26,21 +26,21 @@ lists where that still needs doing.
 ┌───────────────▼──────────────────────────────────────────────────────┐
 │ Go→wasm client               client/wasm/  +  pure client/* packages │
 │   canvas, panes, gestures, framing, previews, menu                   │
-│   ~13.6k LOC of orchestration with no unit tests — see §5            │
+│   ~15k LOC of orchestration with no unit tests — see §5              │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  Connect-RPC  (the Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Local server                 internal/server, api/rpc               │
+│ Local server                 internal/server, api/rpc                │
 │   STATELESS router: splits <uuid>/<id>, forwards, re-qualifies       │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  a Go call  (namespace.Namespace — no wire, no codec)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Namespaces     home (internal/local) · connections (internal/remote)  │
+│ Namespaces    home (internal/local) · connections (internal/remote)  │
 │   · plugins/{fs,proc,gitlab} as CONTENT PLUGINS (plugin.v1)          │
-│   a plugin is stateless (keys + content); the node mints ids and      │
+│   a plugin is stateless (keys + content); the node mints ids and     │
 │   keeps every namespace's arrangement in the ONE store (gridwell.db) │
 │   ↓ the two gRPC hops that cross a real boundary:                    │
-│     go-plugin subprocess (plugin.v1) · federation socket (gridwell.v1)│
+│     go-plugin subprocess (plugin.v1) · the federation socket         │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────────────────────────────────┐
@@ -74,10 +74,11 @@ crosses nothing.
 
 **A node has no grid of its own** (2026-08-29, `docs/one-node.md`; the
 node grid — `<node_id>/0`, one link tile per plugin — was deleted). The
-client boots into **home**, the first configured entry's root grid
-(`rpc.HomeGrid`); a mount lands there too (the export's `Info.RootGridId`
-is the same derivation). Plugins are reached from the + menu's top row
-(click = portal descent, drag = drop an exit-well link).
+client boots into **home**, which the handshake states as a FIELD
+(`home_grid_id`, read through `rpc.HomeGrid`); a mount lands on the same
+grid, because the export answers the same field. Plugins are reached from
+the + menu's top row (click = portal descent, drag = drop an exit-well
+link).
 
 ---
 
@@ -109,7 +110,7 @@ The surface, one method per concept:
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview` |
 | Content bytes | `ReadContent` / `WriteContent` — the ONE way content moves. Versioned; a write commits at close (a broken stream leaves the old value intact); a read on a leaf link resolves to the target at the serving node |
 | Web content | `ServeContent` — the RPC carrier behind the HTTP `/content/<token>/<tile-id>/<subpath>` door: a plugin serves ANY content as web content (an image, a whole HTML page with relative subresources). GET-only; routes/link-resolves/federates exactly like `ReadContent`. The door stamps `CSP: sandbox allow-scripts` (opaque origin — no cookies, no RPC reach) and gates by the content token (its own password derivation, handed out on the authenticated `Handshake`). `Tile.serves_page` (wire-only, plugin-derived) tells the client to present the descent with url-tile semantics at the derived address |
-| Mutations | `CreateTile` (metadata only — a body follows as a WriteContent), `SetTile` (framing/preview + rename + content_zoom, one op per call), `PlaceTile` (the one placement writeback), `CloneTile`, `DeleteTile` |
+| Mutations | `CreateTile` (metadata only — a body follows as a WriteContent), `SetTile` (ONE op per call: `rename`, `content_zoom`, `url_frozen`, or a per-kind tile writeback — a text tile's window and mode, a url capture, a shell preview. The `well` and `pane` arms are REFUSALS naming where that write went, so the kind→operation mapping stays total: well framing rides `SetFraming`, a pane's layout blob rides `WriteContent`), `PlaceTile` (the one placement writeback), `CloneTile`, `DeleteTile` |
 | Live bytes | `OpenShell` (a PTY both ways — deliberately the one live wire; the browser reaches it through the `/shell` WebSocket door, `client/shellwire`), `ShellSessionAlive` |
 | Events | `Subscribe` |
 
@@ -187,8 +188,9 @@ subscribers, one prefix each).
 
 `Info` handshakes are timeout-bounded and cached per uuid after first
 success (invalidated on a ROOT `SetFraming`, since root framing rides
-the handshake). Capabilities (`watch`, `writable`, `has_session`) are facts a
-plugin declares once in `Info`, never re-derived from its kind string.
+the handshake). Capabilities (`watch`, `writable`) and presentation
+declarations (`glyph`, `menu_entries`) are facts a plugin states once in
+`Info`, never re-derived from its kind string.
 
 ---
 
@@ -311,12 +313,17 @@ looks like; emulate it.
   content address + refcount, no structural sharing. An edit to one copy
   can never touch another, and no id is ever reassigned. (COW was tried and
   torn out — a fork re-rows tiles, and no patch makes that safe.)
-- The storage format is frozen and additive-only; the contract lives in
-  `internal/local/store/CLAUDE.md`. Never delete a DB to absorb a change.
-- One layering wrinkle: `internal/local/store` imports `client/markdown` for
-  `AltFromSource` (deriving a text tile's label from its first line). Pure
-  and shared, but the arrow points from persistence into the client tree —
-  if it grows, move the derivation to a neutral package.
+- The storage format is stable and additive by DEFAULT; the contract lives
+  in `internal/local/store/CLAUDE.md`. The promise is that data written by
+  any released binary stays READABLE forever — so storage no released
+  binary reads for a user-visible meaning may be retired, on evidence, by a
+  rebuild migration that preserves every surviving row and the
+  `sqlite_sequence` seeds (v10, v11, v12). A row the new shape cannot hold
+  is CONVERTED, never deleted. Never delete a DB to absorb a change.
+- Deriving a text tile's label from its first line (`AltFromSource`) is
+  shared by the store and the client, and lives in neither: the neutral
+  `internal/doctype` owns it, so no arrow points from persistence into the
+  client tree.
 
 ---
 
@@ -326,10 +333,10 @@ The intended shape: a thin wasm shim over pure, headlessly testable
 `client/*` packages (`pane`, `cache`, `zoomtrans`, `gesture`, `wsbar`,
 `markdown`, `menu`, …). The pure packages are clean and well-tested.
 
-The shim never stayed thin. `client/wasm` is 29 files, ~13.6k LOC, zero
+The shim never stayed thin. `client/wasm` is 33 files, ~15k LOC, zero
 test files. `make check` compiles it (`GOOS=js`) but executes none of it;
 only the e2e gates touch it, as a black box. The hottest files in the repo
-live here (`input.go` ~2,400 LOC, `render.go` ~1,300, `main.go` ~1,200).
+live here (`input.go` ~1,800 LOC, `render.go` ~1,400, `main.go` ~1,400).
 When you change behavior here, extract the decision into a js-free
 `client/*` package and unit-test it — that rule is the charter, not a
 suggestion.
@@ -403,9 +410,10 @@ signature).
 **Every pane wears the bottom bar** (`client/wsbar` geometry,
 `bottombar.go` glue; #267, 2026-08-21 — the band was focused-pane-only
 under #220, but content resizing on every focus change was distracting;
-focus shows only in the border color): workspace crumbs, the anchor
-block, the descent chain as clickable square previews (one crumb per
-place frame, projected by `pane.Crumbs` — never stored), the centered title, and the
+focus shows only in the border color): ONE nav chain of clickable square
+previews — one crumb per place frame, projected by `pane.Crumbs`, never
+stored, with the wide named bar of a pane-tile boundary among them — plus
+the centered title and the
 circle slot (the + menu / back / refresh button). Native surfaces carve
 the band out of their rects unconditionally (`panebox.BarInset`), so
 nothing can occlude it and nothing reflows on focus moves. Clicks act in
@@ -464,7 +472,8 @@ same truth twice. The templates:
 | `loadForWrite` / `claimContentVersion` | "may this mutation claim a version" | `store/tiles.go` | every store mutation |
 | `emitTileChanged` / `finishContentEdit` | "does this mutation bump version" | `store/tiles.go` | every store mutation |
 | `outbox.Record` | "is this write still owed, or did the server answer" | `client/outbox` | every client mutation |
-| `classifyStoreError` | "what status is this error" | one function | every transport |
+| `gwerr.ClassifyError` | "what status is this error" | one sentinel→class table in the api | every transport (Connect, raw HTTP, the plugin gRPC hop) |
+| `pane.Stack` | "where is this pane" | one stack of frames (`client/pane/place.go`) | the URL codec, the layout blob codec, the crumbs, the framing writeback |
 | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` | the viewport transform | one pure pair | preview + descent |
 | `client/menu` | "is the menu open, on which pane" | one state machine | every gesture path (was 14 scattered writes) |
 | `cache` content entries + `text_flush.go` | "the bytes, their version, and whether they're edited" | one entry per tile id | every save path |
@@ -505,32 +514,54 @@ has exactly one owner; this is the inventory, and
 Each entry is the same disease — one truth duplicated — and a ranked target
 for the §7 cure.
 
-1. **Viewport / framing** — five roles kept consistent by convention (§5);
-   the round trip is locked by `framing-roundtrip.spec.ts`. Highest impact:
-   this is the descend/ascend round trip.
-2. **Native view bounds vs. canvas pane rect** — the per-frame
+1. **Native view bounds vs. canvas pane rect** — the per-frame
    reconciliation in `syncURLViews`; coordinate math in two languages,
    timing-sensitive. The pure math is extracted and tested (`viewutil.ts`).
-3. **The drag threshold** — `dragThreshold` (Go, the declared owner) plus
+   Highest impact of what remains: it is where live tiles go wrong.
+2. **The drag threshold** — `dragThreshold` (Go, the declared owner) plus
    two forced copies (`viewutil.ts`, and inlined in the sandboxed
    `urlview-preload.ts`, which cannot import). Drift-linted by
    `gesture-threshold.test.ts`.
-4. **The `SetTile` kind→operation mapping** — described in the proto,
-   implemented in the local plugin switch, and again in `conv.go`.
-5. **Text scroll of a rendered descent** — the canvas wheel handler writes
-   `p.TextScrollY` and the rendered overlay's own scroll listener writes it
-   too; the canvas path never syncs the div's scrollTop. Two writers, found
-   2026-07-31, unfixed.
+3. **The `SetTile` kind→operation mapping** — described in the proto,
+   implemented in the local plugin's switch, and spelled a third time by
+   `conv.go`'s per-kind request builders (the one half of `conv.go` that is
+   still hand-written).
+4. **Text scroll of a rendered descent** — the canvas wheel handler writes
+   the frame's `TextScrollY` and the rendered overlay's own scroll listener
+   writes it too; the canvas path never syncs the div's scrollTop. Two
+   writers, found 2026-07-31, unfixed.
 
-Cured and closed: the three copies of Tile (finding 4 — the proto owns the
-record: `api/rpc` is generated from it, the store's five column lists are one
-descriptor, and the derived wire fields are inventoried with one owner each,
-§7 and §7.1); the menu (single owner `client/menu`); the corner-control
-visibility predicate (the control views were deleted outright, #214); the
-source-sweep policy (fs/proc, both tested); plugin capabilities (declared
-once in `Info`); the two ROUTERS (the node export used to re-implement
-every stream and delegate every unary by hand — both doors are codecs over
-one `namespace.Namespace` since 2026-08-29, `docs/simplify-plan.md` S2).
+Cured and closed, each by making the copy unrepresentable rather than
+consistent:
+
+- **Framing** (finding 2, S4) — five roles over two storage shapes and four
+  store writers became ONE float centre on the row that owns the doorway,
+  one wire verb, one store writer and one client persister (§2, §4.1, §5).
+  The quantization math that existed only to make the integer origin
+  survive a round trip is gone; the round trip is locked by
+  `framing-roundtrip.spec.ts` and `TestFramingRoundTripsByteIdenticalAcrossTheSeam`.
+- **"Where am I"** (finding 1, S8) — five representations and eight ascents
+  became one `pane.Stack` of frames, one `descend`, one `ascend` (§5, §10).
+- **`version`** (finding 3, S5) — the concurrency claim and the
+  cache-staleness counter were one field; now `version` means content
+  bytes, everything else routes through `loadForWrite`, and the retired
+  claim fields are `reserved` (§4.1).
+- **Unacknowledged writes** (S5) — a ledger per write family became one
+  `client/outbox` with one reconcile rule and two drains (§5).
+- **The three copies of Tile** (finding 4, S6) — the proto owns the record:
+  `api/rpc` is generated from it, the store's five column lists are one
+  descriptor, and the derived wire fields are inventoried with one owner
+  each (§7, §7.1).
+- **Two remembering systems** (finding 6, S7) — the adapter's `listings`
+  blob and the mount cache became `internal/sourcecache`, one engine in one
+  disposable file, with the durable rows answering a dark source (§4.0.1).
+- **The two ROUTERS** (finding 5, S2) — the node export used to
+  re-implement every stream and delegate every unary by hand; both doors
+  are codecs over one `namespace.Namespace`.
+- Earlier: the menu (single owner `client/menu`); the corner-control
+  visibility predicate (the control views were deleted outright, #214); the
+  source-sweep policy (fs/proc, both tested); plugin capabilities (declared
+  once in `Info`).
 
 ---
 
@@ -539,12 +570,15 @@ one `namespace.Namespace` since 2026-08-29, `docs/simplify-plan.md` S2).
 The rule: fix a stale comment or name in the same commit that touches the
 file. What remains:
 
-- **Three legacy JSON keys on `pane.Pane`.** `TextScrollX/Y` and `TextZoom`
-  tag as `file_scroll_x`/`file_scroll_y`/`file_zoom` while every neighbor
-  (and `pane.Frame`, `panestate.Saved`, the persisted `LayoutV1` codec)
-  says `text_*`. Inert today — nothing marshals `pane.Pane` itself — but a
-  hazard the moment something does. Finish the rename when touching the
-  struct.
+- **`text_focus` in the persisted layout blob.** `LayoutV1`
+  (`api/panelayout`) names a leaf's content descent `text_focus`, and
+  `panelayout.TextFocusIDs` reads it; the model calls that a CONTENT frame
+  (`pane.Frame.Content` — text, url, shell and page tiles alike). The bytes
+  are frozen, so the key cannot change; read it as "the content tile this
+  pane is inside". Do not spread the word back into new code.
+  (The `file_scroll_x`/`file_zoom` tags this section used to name are gone
+  with the `pane.Pane` fields that carried them — a pane is now its id and
+  its place stack, and the codec spells every key out by hand.)
 
 ---
 
@@ -578,8 +612,8 @@ file. What remains:
   automatic capture — also no claim and no bump). Clicking a bar crumb is
   `ascend(p.AscentsTo(crumb))`.
 - **Drop a tile.** Gesture → `CreateTile`/`PlaceTile`/`CloneTile`,
-  id-addressed (layout carries no version claim) → server routes → store mutates →
-  `Subscribe` event → `cache.Apply` → redraw. Across a plugin boundary
+  id-addressed (layout carries no version claim) → server routes → store
+  mutates → `Subscribe` event → `cache.Apply` → redraw. Across a plugin boundary
   there is no move: a left-drag creates a LINK in the destination (exit
   well or `link_target_id`), a right-drag CLONES (leaves copy bytes; a
   solid well deep-copies its subtree — `internal/server/deepcopy.go`,
@@ -589,15 +623,27 @@ file. What remains:
 - **Open a live URL tile.** The canvas places a rect; IPC asks the native
   layer for a `WebContentsView` on the shared partition; `syncURLViews`
   tracks its bounds every frame and parks it during overlays.
+- **Attach a shell.** The client opens a WebSocket at `/shell` on the
+  page's own origin (`client/shellwire` writes the query; the bind rides
+  the handshake, so the attach is atomic with the upgrade). The door
+  (`internal/server/shell_door.go`) sits on the same cookie-gated mux as
+  every page request and resolves the id BEFORE accepting, so a refused
+  upgrade can never leave a tmux session behind; then it pumps
+  `OpenShell` through the same shell route the federation export uses.
+  Binary frames are raw PTY bytes both ways, text frames are JSON control
+  (up: resize; down: one exit verdict, always the last thing the door
+  says). `client/shellstream` owns the lifecycle — replace-on-open,
+  exactly-once exit, no late bytes from a replaced stream — and
+  `pane.TakeOver` decides who holds the one live surface (#249).
 - **Enter a workspace (pane tile).** `descend`'s window arm: push a
   `pane.Level` (outer tree + origin), decode the layout blob, swap
   `App.tree`. The outer level stays ALIVE (#249) — nothing is flushed
-  away. While inside, a debounced persister
-  encodes the live tree, hash-diffs, and posts the layout as a
-  `WriteContent` (framing-class — no claim, never bumps version) only on
-  change. The
-  URL is `?w=<tile id>`. The level stack itself is session-only, like the
-  outer frames of a pane's place (#13); `ascendLevels` is its pop.
+  away. While inside, a debounced persister encodes the live tree,
+  hash-diffs, and posts the layout as a `WriteContent` (framing-class — no
+  claim, never bumps version) only on change. The URL is `?w=<tile id>`.
+  The level stack is the ONE deliberate second axis of a pane's place, and
+  it is session-only, like the outer frames of the place stack (#13);
+  `ascendLevels` is its pop.
 - **Show the menu.** `menu.Open(paneID)` on the focused pane, toggled from
   the bar slot; native views park; the popover paints above every pane. A
   click inside the open popover routes BEFORE pane resolution — resolving
@@ -614,11 +660,11 @@ invariants are where bugs are born.
 | # | Invariant | Enforced where | Status |
 |---|---|---|---|
 | I1 | Ids never reused | SQLite AUTOINCREMENT | ✅ construction |
-| I2 | Framing write ≠ content edit | `emitTileChanged`/`finishContentEdit` | ✅ construction |
+| I2 | `version` means the user's content bytes; framing, captures and layout carry no claim | `claimContentVersion`/`finishContentEdit` vs `loadForWrite`/`emitTileChanged`, and the retired claim fields are `reserved` | ✅ construction + tabled (`version_rule_test.go`) |
 | I3 | Clone is an eager deep copy; no id reassigned | `CloneTile` | ✅ construction |
 | I4 | Blobs immutable, content-addressed, refcounted | store blob layer | ✅ construction |
 | I5 | "Is a link" is one derived fact | `qualifyTiles` → `Tile.reference` | ✅ construction |
-| I6 | Qualified-id routing | server `route` + transit rules | ✅ construction |
+| I6 | Qualified-id routing | `Server.resolve` (the one owner, read by all four doors) + the transit rules | ✅ construction |
 | I6b | Two wire surfaces cannot drift | both are codecs over one `namespace.Namespace` (`connect_codec.go`, `namespace.Server`) | ✅ construction |
 | I6c | An answer is never mutated under another reader | qualification clones (`rpc.TransitQualifyTiles`, `server.qualifyTiles`); `internal/namespace`'s ownership contract | ✅ construction + tested (`TestTwoSubscribersEachSeeExactlyOnePrefix`) |
 | I7 | preview = descent target = ascent return | one place stack + the tile row | ⚠️ convention, round trip tested (`framing-roundtrip.spec.ts`); the preview-bytes half still has no oracle (issue #19) |
