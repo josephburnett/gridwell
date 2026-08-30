@@ -681,29 +681,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// Snapshot every world-read the drop decision needs, once, using the
 	// local d, since a.dragging is already nil above. DecideDrop then picks
 	// the action and the switch executes the side effects. onMouseMove
-	// builds the same DropInput for the ghost preview, so preview and commit
-	// cannot diverge.
-	in := dragdrop.DropInput{
-		Started:       d.started,
-		OriginFocused: d.originFocused,
-		IsTemplate:    d.isTemplate,
-		Clone:         d.clone, // always false here — clone commits via the right path above
-		TileID:        d.tileID,
-		OverDelete:    a.overDeleteButton(d, sx, sy),
-	}
-	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
-	in.HasTarget = haveT
-	var dropX, dropY int64
-	if haveT {
-		in.Forbidden = a.dropForbiddenForMove(d, t)
-		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
-		in.SameGrid = t.gridID == d.srcGridID
-		in.CrossPlugin = dropCrossNamespace(d, t)
-		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
-		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
-		in.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
-			d.snapshotTile.W, d.snapshotTile.H, d.tileID)
-	}
+	// gathers the same DropInput for the ghost preview, so preview and commit
+	// cannot diverge. clone=false: a clone commits via the right path above.
+	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, false /* clone */, true /* placement */)
 
 	switch dragdrop.DecideDrop(in) {
 	case dragdrop.DropFocusOnly:

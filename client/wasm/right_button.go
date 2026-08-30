@@ -437,31 +437,11 @@ func (a *App) commitTileCenter(sx, sy float64) {
 // otherwise a right-drag clones or links.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// The same snapshot-then-DecideDrop discipline as the left-drag commit
-	// (onMouseUp): gather every world-read once, then switch on the verdict,
-	// so the preview (advanceCloneDrag) and the commit share one decision. A
-	// right-drag clones everywhere — a copy of the dragged tile, and a link
-	// tile copies as another link.
-	in := dragdrop.DropInput{
-		Started:       d.started,
-		OriginFocused: d.originFocused,
-		IsTemplate:    d.isTemplate,
-		Clone:         true,
-		TileID:        d.tileID,
-		OverDelete:    a.overDeleteButton(d, sx, sy),
-	}
-	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
-	in.HasTarget = haveT
-	var dropX, dropY int64
-	if haveT {
-		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
-		in.CrossPlugin = dropCrossNamespace(d, t)
-		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
-		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
-		// A clone excludes nothing: the source tile is a real neighbor the
-		// copy must not land on.
-		in.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
-			d.snapshotTile.W, d.snapshotTile.H, "")
-	}
+	// (onMouseUp), through the one gatherer (dropInputAt), so the preview
+	// (advanceCloneDrag) and the commit share one decision. A right-drag
+	// clones everywhere — a copy of the dragged tile, and a link tile copies
+	// as another link.
+	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* clone */, true /* placement */)
 
 	switch dragdrop.DecideDrop(in) {
 	case dragdrop.DropDelete:

@@ -29,22 +29,35 @@ type dropTarget struct {
 	originY  float64
 }
 
-// previewDrop updates the active ghost for an in-flight tile drag from the
-// same dragdrop.DecideDrop verdict the commit path uses, so a previewed
-// action cannot diverge from the committed one. clone picks the right-drag
-// flavor: Clone=true, Forbidden never, and no no-entry badge on a read-only
-// doc. The left flavor feeds MoveForbidden and, across a namespace, previews
-// the link (dashed ghost plus chain badge — the teaching signal).
+// dropInputAt gathers, at the cursor, every world-read a drop decision needs:
+// one resolution of the drop target and one dragdrop.DropInput built from it,
+// read by the left commit (onMouseUp), the right commit (commitRightClone)
+// and the ghost preview (previewDrop) alike, so the three cannot disagree
+// about the world they decide on.
 //
-// SameCell and Occupied are deliberately not fed here: the preview is
-// optimistic about placement and shows the snap-to-cell even over an occupied
-// cell, while the commit does the authoritative overlap check and snaps back.
-// What the two share is the action class: delete, link, place, or reject.
-func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
-	if a.ghost == nil {
-		return
-	}
-	in := dragdrop.DropInput{
+// clone picks the gesture flavor, and the two flavors differ deliberately:
+//
+//   - Forbidden is a move-only input (dropForbiddenForMove): no clone is
+//     forbidden — a solid well deep-copies and a link copies as a link — so
+//     the clone flavor leaves it false and DecideDrop's forbidden branch
+//     never fires for a right-drag.
+//   - Occupied excludes the dragged tile itself on a move, mirroring the
+//     server's PlaceTile self-exclusion, and excludes nothing on a clone,
+//     where the source tile is a real neighbor the copy must not land on.
+//
+// SameGrid is fed on both flavors: DecideDrop reads it only through
+// `TargetReadOnly && !(SameGrid && !Clone)`, where Clone already decides the
+// branch, so a clone's SameGrid cannot change a verdict.
+//
+// placement asks for the drop cell as well — SameCell, Occupied, and the
+// returned (dropX, dropY). The preview passes false: it is optimistic about
+// placement and shows the snap-to-cell even over an occupied cell, while the
+// commit does the authoritative overlap check and snaps back. What the two
+// always share is the action class: delete, link, place, or reject.
+func (a *App) dropInputAt(d *dragState, sx, sy float64, clone, placement bool) (
+	in dragdrop.DropInput, t *dropTarget, dropX, dropY int64) {
+
+	in = dragdrop.DropInput{
 		Started:       d.started,
 		OriginFocused: d.originFocused,
 		IsTemplate:    d.isTemplate,
@@ -52,17 +65,41 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 		TileID:        d.tileID,
 		OverDelete:    a.overDeleteButton(d, sx, sy),
 	}
-	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
-	in.HasTarget = haveT
-	if haveT {
-		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
-		in.SameGrid = t.gridID == d.srcGridID
-		in.CrossPlugin = dropCrossNamespace(d, t)
-		if clone {
-		} else {
-			in.Forbidden = a.dropForbiddenForMove(d, t)
-		}
+	t, in.HasTarget = a.dropTargetAt(sx, sy, d.tileID)
+	if !in.HasTarget {
+		return in, t, 0, 0
 	}
+	in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
+	in.SameGrid = t.gridID == d.srcGridID
+	in.CrossPlugin = dropCrossNamespace(d, t)
+	if !clone {
+		in.Forbidden = a.dropForbiddenForMove(d, t)
+	}
+	if !placement {
+		return in, t, 0, 0
+	}
+	dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
+	in.SameCell = in.SameGrid && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
+	exclude := d.tileID
+	if clone {
+		exclude = ""
+	}
+	in.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
+		d.snapshotTile.W, d.snapshotTile.H, exclude)
+	return in, t, dropX, dropY
+}
+
+// previewDrop updates the active ghost for an in-flight tile drag from the
+// same dragdrop.DecideDrop verdict the commit path uses, so a previewed
+// action cannot diverge from the committed one. clone picks the right-drag
+// flavor: Clone=true, Forbidden never, and no no-entry badge on a read-only
+// doc. The left flavor feeds MoveForbidden and, across a namespace, previews
+// the link (dashed ghost plus chain badge — the teaching signal).
+func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
+	if a.ghost == nil {
+		return
+	}
+	in, t, _, _ := a.dropInputAt(d, sx, sy, clone, false /* placement */)
 
 	// The verdict picks the action; GhostPlanForDrop picks the styling. Both
 	// are pure and tested in client/dragdrop, so preview, commit, and the
@@ -70,7 +107,7 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	// so feed all three candidate pane ids and sizes.
 	var targetPaneID string
 	var targetCellSize float64
-	if haveT {
+	if t != nil {
 		targetPaneID = t.pane.ID
 		targetCellSize = t.cellSize
 	}
