@@ -15,16 +15,13 @@
 # EnsureVersion`) are stripped. Each must satisfy `test -e` from the
 # repo root.
 #
-# Exemptions: docs/v2-design.md is a HISTORICAL record — the design
-# the 2026-08-24 migration executed, written in terms of the tree it
-# started from — and is skipped wholesale. Individual deliberately
-# historical mentions elsewhere go in scripts/docpaths-allow.txt as
-# "<file> <path>" lines with a comment saying why the path is gone.
+# Exemptions go in scripts/docpaths-allow.txt as "<file> <path>" lines
+# with a comment saying why the path is gone.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 allow=scripts/docpaths-allow.txt
-skip_files=(docs/v2-design.md)
+skip_files=()
 
 files=$(git ls-files '*.md' '.github/workflows/*.yml' | grep -v '/node_modules/')
 bad=0

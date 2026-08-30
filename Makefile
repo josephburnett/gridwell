@@ -75,7 +75,7 @@ fmt-check:
 # fails when the generated set differs from the git INDEX or carries
 # untracked files. GENERATED covers both halves: api/gen (the protobuf +
 # connect code) and api/rpc/wire_gen.go (api/rpc's Go records and their
-# conversions, derived from the same proto — docs/simplify-plan.md S6).
+# conversions, derived from the same proto).
 # This catches all three ways generated code goes wrong: a proto edit
 # without `buf generate`; a hand-edit to generated code; and a PARTIAL
 # `git add` of the generated set — the 2026-08-04 `make launch` break,
@@ -102,7 +102,7 @@ proto-check:
 # or network needed.
 # MODULES lists every in-repo Go module beyond the root — the api, the
 # shared nested modules, and each plugin (its own module: the in-repo
-# strangers, docs/plugin.md). check builds and tests each one STANDALONE
+# strangers, ARCHITECTURE.md). check builds and tests each one STANDALONE
 # (GOWORK=off) so no module can quietly lean on the workspace.
 MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell mobile
 

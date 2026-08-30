@@ -1,14 +1,11 @@
 # Gridwell mobile (Flutter)
 
-The third host of the ONE wasm client. A full-screen webview loads your
+The third host of the one wasm client. A full-screen webview loads your
 server's origin — the same client a plain browser gets — and this shell
-adds the thing a browser can't do: **native webviews floated over the
-pane content boxes**, so url tiles go LIVE on descent, exactly like the
-Electron desktop app. Same `window.gridwell` bridge contract; declared
-caps `{liveUrl: true}` — the whole list. Shell tiles go live here too
-(2026-08-29): the PTY rides a WebSocket on the web door, which this
-webview speaks like any other same-origin request, so no host half is
-needed for it.
+adds the one thing a browser can't do: native webviews floated over the
+pane content boxes, so url tiles go live on descent like the desktop app.
+Same `window.gridwell` bridge contract; declared caps `{liveUrl: true}`.
+Shells need no host half: the PTY rides a WebSocket on the web door.
 
 No sidecar: the app connects to a `gridwell serve` you run elsewhere
 (typically over a tailnet). First launch asks for the server address;
@@ -20,7 +17,7 @@ the cookie.
 - `lib/bridge.dart` — the bridge core, deliberately Flutter-free:
   the live-view registry, the call dispatcher, and the injected
   `window.gridwell` JS. Everything decision-shaped lives here and runs
-  under plain `flutter test` (charter §5).
+  under plain `flutter test`.
 - `lib/main.dart` — the shell: server form, host webview, and one
   positioned `InAppWebView` per live view.
 - `test/bridge_test.dart` — lifecycle, skew, and JS-contract pins,

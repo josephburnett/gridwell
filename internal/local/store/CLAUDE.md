@@ -1,232 +1,107 @@
-# internal/local/store — the home persistence layer
+# internal/local/store — the format contract
 
-This package is the node's ONE database (`<home>/gridwell.db`,
-docs/one-node.md §2.6): home's content — the user's text, URLs, and
-grids (`internal/local`; né localdb) — and, since schema v9, every
-content plugin's memory as namespaced rows of the same tables
-(`external.go`; `ns = ''` is home) plus the transport's connections.
-
-**The forever file holds NODE facts only** (owner decision,
-docs/simplify-plan.md S7): ids the node minted (`ns`,`key` → tile/grid
-id), layout, framing, the user's content bytes, connections, and
-tombstones. What a SOURCE last said — a plugin's listing, a remote's
-tiles, bodies, previews — is cache: it lives in the disposable
-`<home>/cache.db` behind `internal/sourcecache`, never here. That is
-what schema v12 retired the `listings` table for. A dark source costs
-nothing in this file: the adapter merges an empty non-authoritative
-listing and the durable rows answer, unchanged.
-**The home format is out of testing mode. Its v1 schema is frozen and the
-forward-compatibility promise is in effect.**
+This package is the node's one database, `<home>/gridwell.db`: home's
+content (`ns = ''`), every plugin's memory as namespaced rows of the same
+tables, and the transport's connections. It holds node facts only: minted
+ids (`ns`, `key` → id), layout, framing, the user's bytes, connections,
+tombstones. What a source last said is cache and lives in `cache.db`
+(`internal/sourcecache`), never here.
 
 ## The promise
 
-Data written by any released gridwell binary stays readable **forever**. A newer
-binary always opens an older DB and brings it forward; it never requires the
-data to be thrown away.
+Data written by any released binary stays readable forever. A newer binary
+opens an older file and brings it forward, with every user-visible fact
+intact.
 
-- **Never delete the DB to absorb a schema change.** That was the testing-mode
-  habit; it is now forbidden for the home store.
-- **Never rename, retype, or repurpose an existing column or table.** Old rows
-  were written against the old meaning and must keep reading back the same.
-- Evolution is **additive by default**: new columns (with a default), new
-  tables, new indexes. Reach for anything else only for the case below.
-
-### Retiring dead storage (owner decision, docs/simplify-plan.md 2026-08-29)
-
-The promise is that data written by a released binary stays **readable** —
-that a newer binary always brings an older file forward with every
-user-visible fact intact. Storage that no released binary reads for any
-user-visible meaning carries no such fact, so it may be **retired**:
-
-- The bar is evidence, not opinion: grep every read (store, clone, link,
-  conv, server, client, tests) and show that no reader DECIDES anything on
-  it. A pass-through copy is not a reader; a test asserting the value
-  survives a round-trip is not a reader either.
-- The step is a **rebuild migration** (below) that preserves every surviving
-  row and the `sqlite_sequence` seeds. A row the new shape can no longer
-  hold is CONVERTED, never deleted — the guiding rule ("things stay as you
-  left them") outranks the tidiness of the drop. v10's stale unconfigured
-  plugin wells are the worked example: each is given a fresh empty child
-  grid so the user's tile stays where they put it.
-- The decision is **recorded in the migration's chain-entry comment**, naming
-  what died and when its last reader went. v10 is the first one; v11 is the
-  second (`tiles.view_x/view_y`, the integer window ORIGIN, replaced by the
-  float `view_cx/view_cy` center it was only ever read to compute); v12 is
-  the third (the `listings` table — a CACHE that had been living under the
-  frozen promise, whose one engine is now `internal/sourcecache`).
-- A retiring column whose MEANING lives on is **converted, not dropped**:
-  the descriptor keeps the DESTINATION column with the `since` of the data it
-  carries, and `rebuildSelect` supplies the expression that reads it out of
-  the old shape (`view_x + w/2`). The conversion therefore happens exactly
-  once, whichever rebuild step an old file passes through first.
-- A wire field removed alongside a column gets `reserved <n>` in the proto —
-  numbers are never reused. (`TestDescriptorMatchesProto` pairs on-wire
-  columns with proto fields, so a column and its field must retire in the
-  SAME change.)
-- A **rebuild always materializes the current `tilesTableDDL`**, so an older
-  rebuild step replays onto the latest shape: after a drop, deleting the
-  descriptor entry is enough — no rebuild copy list names it any more,
-  because none of them is written by hand. The chain and a fresh Open still
-  converge — `TestSchemaEquivalence` proves it.
+- Never delete the DB to absorb a schema change.
+- Never rename, retype, or repurpose a column or table.
+- Evolution is additive by default: new columns with a default, new tables,
+  new indexes.
+- Dead storage may be retired. The bar is evidence: grep every read and show
+  that no reader decides anything on it (a pass-through is not a reader).
+  The step is a rebuild migration that preserves every surviving row and
+  the `sqlite_sequence` seeds. A row the new shape cannot hold is converted,
+  never deleted. Record the decision in the migration's comment. A wire
+  field retired with a column becomes `reserved`. v10, v11, and v12 are the
+  worked examples.
 
 ## How the schema is represented
 
-- `columns.go` `tilesColumns` / `gridsColumns` is the **one description of a
-  column**: its name, its SQL type and constraints, its DDL comment, the
-  schema version whose DATA it carries (`since`), the scan destination on
-  `rpc.Tile`/`rpc.Grid` when it is on the wire (`bind`), and the reason a
-  clone skips it (`noCopy`). Five readers derive from it — the CREATE TABLE
-  text, the SELECT list, the row scan, the clone INSERT, and every rebuild
-  migration's copy list — so a column cannot be spelled twice, and therefore
-  cannot be spelled inconsistently.
-- `schema.go` `tablesDDL()` RENDERS that descriptor: it is the latest shape a
-  fresh `Open` materializes directly. Read the descriptor to know the present
-  columns; do not reconstruct the schema by replaying migrations. Only the
-  tiles kind `CHECK` (`tilesCheck`) is literal text — it is a per-KIND rule
-  over columns, not a column list.
-- `schema.go` `tablesV1` is the **frozen v1 base** — an immutable byte-for-byte
-  copy of the tables as they were when the format froze. **Never edit it.**
-  Tests build genuine "old files" from it and migrate them forward.
-- `migrations.go` `migrations` is the ordered, additive chain; entry _i_ takes a
-  DB from version _i+1_ to _i+2_. `schemaVersion` is the current generation,
-  stamped into the SQLite header as `user_version`. The engine that applies
-  the chain (fresh-stamp / foreign-file refusal / newer-version refusal) is
-  the shared `internal/dbformat.EnsureVersion` — one implementation for every
-  node DB (this store — home AND every plugin's memory, since v9 — and the
-  source cache in `internal/sourcecache`); `migrateUp` here is a thin
-  adapter.
+- `columns.go` (`tilesColumns`, `gridsColumns`) is the one description of
+  a column: name, SQL type and constraints, comment, the version whose data
+  it carries (`since`), the `rpc.Tile`/`rpc.Grid` field it binds to when on
+  the wire, and a `noCopy` reason when a clone skips it. The DDL, the
+  SELECT, the scan, the clone INSERT, and every rebuild copy list derive
+  from it. Only the tiles kind `CHECK` (`tilesCheck`) is literal text.
+- `schema.go` `tablesDDL()` renders the descriptor: the shape a fresh
+  `Open` materializes. `tablesV1` is the frozen v1 base. Never edit it.
+  Tests build genuine old files from it and migrate them forward.
+- `migrations.go` `migrations` is the ordered chain; entry _i_ takes a DB
+  from version _i+1_ to _i+2_. `schemaVersion` is stamped as
+  `user_version`. `internal/dbformat.EnsureVersion` applies the chain for
+  every node DB.
 
 `TestSchemaEquivalence` proves `tablesV1 + migrations == fresh tablesDDL()`.
-That equivalence is what lets `migrateUp` stamp a fresh DB without running the
-chain: the two routes are guaranteed to converge.
 
-## Adding a column (the common case)
+## Adding a column
 
-ONE descriptor entry plus a migration and its fixture — the equivalence test
-makes any omission a loud failure, so you cannot half-do it:
-
-1. **`columns.go`**: append one `column` entry — `name`, `ddl`, a `comment`
-   saying what the column means, `since: N` (the new schema version), and
-   either a `bind` (it is a field of `rpc.Tile`/`rpc.Grid`, and therefore a
-   proto field of the same name) or nothing (storage-only). Give it a
-   `noCopy` reason only if a clone must NOT carry it. Do **not** touch
-   `tablesV1`, and do not add the name anywhere else: the DDL, the SELECT,
-   the scan, the clone INSERT and every rebuild copy list all read this
-   entry.
-2. **`migrations.go`**: bump `schemaVersion` by one and append
+1. `columns.go`: append one entry — `name`, `ddl`, `comment`, `since: N`,
+   and a `bind` if it is on the wire. Do not spell the name anywhere else.
+2. `migrations.go`: bump `schemaVersion`; append
    `{to: N, run: addColumn("ALTER TABLE … ADD COLUMN …")}`.
-3. **`migration_harness_test.go`**: append one `migrationFixture{version: N,
-   seed, verify}` — seed rows valid at version N-1, verify the new column is
-   present and the old rows survived.
+3. `migration_harness_test.go`: append one `migrationFixture{version: N,
+   seed, verify}`.
 
-An on-wire column also needs its proto field (`api/gridwell/v1/data.proto`,
-same snake_case name) — `buf generate` derives the Go field from it and
-`TestDescriptorMatchesProto` fails until the two agree. A storage-only column
-needs nothing more; a proto field that is DERIVED rather than stored goes on
-that test's `wireOnly` list with the reason.
+An on-wire column also needs its proto field (same snake_case name);
+`TestDescriptorMatchesProto` fails until they agree. A derived proto field
+goes on that test's `wireOnly` list with its reason. If a clone must supply
+a value, `insertTileCopy`'s value map is where; `copyBinding` errors by name
+until it does.
 
-If a clone must supply a value for the new column, `insertTileCopy`'s value
-map is where — `copyBinding` errors by name until it does.
+SQLite limits: an added `NOT NULL` column needs a constant default; no
+`UNIQUE`, `PRIMARY KEY`, or non-constant default. New tables and indexes
+ride in through `CREATE … IF NOT EXISTS` but still get a migration and
+fixture.
 
-### SQLite `ADD COLUMN` limits
+## Rebuilding a table
 
-A `NOT NULL` column must carry a **constant** default (`… NOT NULL DEFAULT 0`,
-`DEFAULT ''`). No `UNIQUE`, no `PRIMARY KEY`, no non-constant default
-(`CURRENT_TIMESTAMP`) on an added column. New tables and indexes ride in for
-free via `CREATE … IF NOT EXISTS` in `tablesDDL()` (they appear on old DBs at
-Open), but still bump `schemaVersion` and add a migration + fixture so the
-version bookkeeping and equivalence stay honest.
+Changing the tiles `CHECK` or retiring storage needs a rebuild, inside the
+migration tx: create `tiles_new` from the current DDL → `INSERT … SELECT`
+the columns `rebuildColumns(N-1)` derives → `DROP TABLE tiles` → rename →
+recreate every `idx_tiles_*` index (from `tilesIndexDDL` and
+`externalsIndexDDL`) → restore the `sqlite_sequence` row. Without the
+restore, ids of deleted tiles get reused and stored references resolve to
+the wrong tile. `migrateV10` is the worked example; `rebuildSelect` is where
+a retiring column's meaning converts into its successor (`view_x + w/2`).
+`grids` has no `CHECK`: `DROP INDEX` then `ALTER TABLE … DROP COLUMN`.
 
-## The expensive case: changing a CHECK / a tile kind
+A rebuild always materializes the current shape, so a chain-built file at
+N-1 never has a retired column. A drop or conversion needs a genuine-old-file
+test (`TestMigrateV10OverAGenuineV9File`), not just a fixture. Fixtures find
+their rows by `alt_text`, which survives the whole chain. `Open` runs the
+chain before `bootstrapRoot`.
 
-`ALTER TABLE ADD COLUMN` **cannot** change the table-level `CHECK` constraint on
-`tiles` (the `kind IN (…)` / per-kind column rules). Adding a new tile kind
-therefore needs a **table-rebuild migration**, all inside the migration tx:
-create `tiles_new` with the new CHECK → `INSERT INTO tiles_new (the columns
-`rebuildColumns(N-1)` derives — every column whose data the version being READ
-already had, id included) SELECT … FROM tiles` → `DROP TABLE tiles` → `ALTER TABLE
-tiles_new RENAME TO tiles` → recreate the `idx_tiles_*` indexes (BOTH
-sources: `tilesIndexDDL` and, at or after v9, `externalsIndexDDL`'s
-`idx_tiles_live_key`, which `DROP TABLE` takes with it) — **and
-save/restore the `sqlite_sequence` row for `tiles`**: `DROP TABLE` deletes it,
-and the copy re-seeds at the max *surviving* id, so without the restore the ids
-of previously-deleted tiles get REUSED (violating the identity invariant below;
-embeds and deep links would resolve to the wrong tile). The v5 migration
-(`rebuildTilesForPaneKind`, the first executed rebuild) is the worked example:
-it builds `tiles_new` from the same `tilesTableDDL` text a fresh Open uses (one
-DDL source, no drift), and its fixture pins the id-reuse trap. `migrateV10` is
-the worked example for a DROP (and for `grids`, which has no CHECK: `DROP
-INDEX` then `ALTER TABLE … DROP COLUMN`, so the table is never dropped and its
-seed is never disturbed). The equivalence and chain tests still guard the
-result. Reach for a rebuild only when a CHECK must change or storage retires.
+## Tests that must stay green
 
-**Fixture handles.** A rebuild does not renumber rows, but it does drop
-columns, so a fixture must find its rows again by a column that survives the
-whole chain — `alt_text` today. (`object_id` was the handle until v10 retired
-it.)
-
-**A fixture cannot see a retired column.** Every rebuild materializes the
-CURRENT shape, so a CHAIN-built file at version N-1 already has version N's
-columns and none of the ones N drops — a per-migration fixture can never
-plant a row in the old shape. The genuine-old-file tests
-(`TestMigrateV10OverAGenuineV9File`, `TestMigrateV11OverAGenuineV10File`)
-put the retired shape back by hand and run the step over it. A drop or a
-conversion needs one of those, not just a fixture.
-
-The exception is a whole TABLE created by a MIGRATION LITERAL rather than
-by the template: v9 spells `listings` in its own step, so a chain-built
-v11 file really has the table and the v12 fixture really plants the
-retired shape. Check which it is before writing a second test.
-
-**Open's order.** `Open` runs the migration chain BEFORE `bootstrapRoot`:
-bootstrap is a write through the CURRENT column set, and an old file does not
-have that shape until the chain has run.
-
-## Test discipline (must stay green)
-
-- Every migration adds **exactly one** `migrationFixture` (enforced by
-  `TestMigrationsWellFormed`).
-- `TestSchemaEquivalence`, `TestMigrationChain`, `TestPerMigration`, and
-  `TestReopenRoundTrip` must stay green.
-- Migration and durability tests run on **file-backed** DBs (`newTestStoreFile`,
-  `buildDBAtV1`): a `:memory:` DB forces `journal_mode=memory`, so WAL and the
-  pinned `synchronous` level — the durability we are proving — are inert there.
+`TestMigrationsWellFormed` (one fixture per migration),
+`TestSchemaEquivalence`, `TestMigrationChain`, `TestPerMigration`,
+`TestReopenRoundTrip`. Migration and durability tests use file-backed DBs; a
+`:memory:` DB forces `journal_mode=memory` and proves nothing about WAL.
 
 ## Durability
 
-`Open` pins connection-scoped pragmas every time (`journal_mode=WAL`,
-`synchronous=NORMAL`, `foreign_keys=ON`). `synchronous` is not stored in the
-file and defaults to FULL, so it is re-applied on every Open; NORMAL is durable
-against app/OS crashes (a power loss can lose at most the last uncheckpointed
-transaction, never corrupt the file). Never relax these in a way that weakens an
-existing file's guarantees.
+`Open` pins `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON` on
+every open. Never relax them.
 
-## Identity invariants (don't break these)
+## Invariants
 
-- Grid/tile/blob ids are `AUTOINCREMENT` and **never reused** — client caches
-  and stored references (embeds, deep links) are keyed by id.
-- `version` means ONE thing: **the user's content bytes changed** — a text
-  body, a url the user typed, a name the user typed. It is the
-  optimistic-concurrency claim for exactly those edits (owner decision
-  2026-08-29, docs/simplify-plan.md S5). Three consequences, pinned as a
-  table by `version_rule_test.go`:
-  - **Content** bumps and claims. The claim is `claimContentVersion`, whose
-    only callers are `WriteContent`'s text and url arms and `RenameTile`;
-    the bump is `finishContentEdit`. Who can reach those two functions IS
-    the rule.
-  - **Captures** — a page title, a preview jpeg, a url history, a shell's
-    foreground command — neither bump nor claim. They are facts the server
-    OBSERVED; they ride the tile event to every client as last-writer-wins.
-    A capture that bumped could cost a concurrent editor their claim, and a
-    capture that claimed could be refused for losing a race it never
-    entered.
-  - **Framing** (view_*, text window and mode, content zoom, url freeze,
-    pane layout) and **layout** (place / move / resize / clone / delete)
-    neither bump nor claim. Layout is an explicit act on a tile the user can
-    see, so a race resolves as "whoever moved it last moved it"; the one
-    thing a race could corrupt — two tiles in one cell — is refused by the
-    overlap check inside the same transaction, claim or no claim. These go
-    through `loadForWrite` + `emitTileChanged`.
-- Blobs are content-addressed (sha256), immutable, refcounted, and
-  self-describing via `media_type` (read it back; never hard-code a type at the
-  read site).
+- Ids are `AUTOINCREMENT` and never reused.
+- `version` means the user's content bytes changed. `claimContentVersion`
+  (callers: `WriteContent`'s text and url arms, `RenameTile`) claims and
+  `finishContentEdit` bumps. Everything else — captures, framing, layout —
+  goes through `loadForWrite` + `emitTileChanged` and neither claims nor
+  bumps. Layout races resolve last-writer-wins; the overlap check in the
+  same transaction is what prevents two tiles in one cell.
+  `version_rule_test.go` is the table.
+- Blobs are sha256-addressed, immutable, refcounted, and carry their
+  `media_type`. Read it back; never hard-code a type at the read site.

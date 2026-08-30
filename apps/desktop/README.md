@@ -20,17 +20,14 @@ GRIDWELL_HOME=/path make launch  # against another home
 ```
 
 `make launch` builds the sidecar + wasm, compiles the TS, and runs Electron
-with Chromium's OS sandbox on (no `--no-sandbox`): live URL tiles load
-untrusted web content, so the sandbox is the containment that matters, and a
-modern Linux/WSL2 kernel with unprivileged user namespaces needs no setuid
-helper for it. The app spawns `<repo>/gridwell serve` with an ephemeral
-loopback port as `--bind-default`, waits for the server to announce its actual
-bound address, and loads the renderer from that origin. An explicit `web.bind` in
-`~/.gridwell/server.yaml` overrides the ephemeral default — that is how one
-server instance serves both the desktop window and a phone browser (see
-"Running it" in the repo README). `serve`
-requires `~/.gridwell/server.yaml`; each plugin's SQLite DB lives at
-`~/.gridwell/gridwell.db` — the node's one database; there is no fallback DB.
+with Chromium's OS sandbox on. Live URL tiles load untrusted web content, so
+the sandbox is the containment that matters; a modern Linux/WSL2 kernel with
+unprivileged user namespaces needs no setuid helper. The app spawns
+`<repo>/gridwell serve` with an ephemeral loopback port as `--bind-default`,
+waits for the bound address, and loads the renderer from that origin. An
+explicit `web.bind` in `~/.gridwell/server.yaml` overrides the default — that
+is how one server serves both the desktop window and a phone. The node's one
+database is `~/.gridwell/gridwell.db`.
 
 Overrides (env): `GRIDWELL_SIDECAR` (binary path), `GRIDWELL_STATIC`
 (web assets dir), `GRIDWELL_HOME` (config + DB root, default `~/.gridwell`).
@@ -51,18 +48,15 @@ containment for untrusted URL-tile content, so prefer enabling user namespaces.
 
 ## How live URL tiles work
 
-A frozen URL tile is a JPEG drawn into the canvas. Descending goes live
-(owner decision 2026-07-26, #202): the renderer calls
-`window.gridwell.placeWebview` and the main process floats a
-native `WebContentsView` over the pane's content box, on the ONE shared
-persistent session partition (`persist:gridwell` — the Chromium session is
-host-local, 2026-07-26; your logins everywhere, mounts included).
-`syncURLViews` tracks the view to its content box every frame and parks
-it off-screen during drag/palette gestures so canvas overlays paint on top. A
-`MirrorPump` captures live views on a modest cadence and pushes frames to the
-renderer so other panes showing the same tile mirror navigation. On ascend the
-view is captured one last time, the frame + URL + title are persisted via the
-`SetURLState` RPC, and the view is destroyed.
+A frozen URL tile is a JPEG drawn into the canvas. Descending goes live: the
+renderer calls `window.gridwell.placeWebview` and the main process floats a
+native `WebContentsView` over the pane's content box, on the one shared
+session partition (`persist:gridwell`). `syncURLViews` tracks the view to its
+content box every frame and parks it off-screen during drag and menu gestures
+so canvas overlays paint on top. A `MirrorPump` captures live views on a
+modest cadence so other panes showing the same tile mirror navigation. On
+ascend the view is captured once more, the frame, URL, and title are persisted
+through `SetTile`, and the view is destroyed.
 
 ## Packaging (hermetic AppImage)
 

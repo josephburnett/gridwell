@@ -1,337 +1,166 @@
 # Gridwell
 
-Gridwell is a single-tenant personal operating environment: tiles on a 2D
-grid, nested, federated across plugins and machines. `README.md` says what
-it is and how it behaves. `ARCHITECTURE.md` says how the machine works —
-the layers, the wire contract, the seams, and where each invariant is
-enforced. Read both before changing anything. This file is what's different
-about working on *this* project: the rule that decides judgment calls, the
-charter that keeps fixes fixed, the owner decisions you must not silently
-reverse, and the verification gates.
+Gridwell is a personal space: tiles on an infinite grid, nested, federated
+across plugins and machines. Four primitives (text, url, shell, well) and a
+closed, stable experience over an open set of content. `ARCHITECTURE.md`
+says how it works. Read it first. This file says how to change it.
 
-## The guiding rule: things stay as you left them
+## The rule: things stay as you left them
 
-**This is the deciding factor.** When a technical decision is unclear, the
-option that preserves this wins — over performance, over elegance, over
-convenience. Gridwell is a physical space: write-heavy, mutating freely,
-but **nothing changes except by the user's explicit action.** Step out and
-look back: byte-identical. Step back in: the same. Reading never mutates.
+Nothing changes except by the user's explicit action. Step out and look back:
+byte-identical. Step back in: the same. Reading never mutates.
 
-Run every judgment call through one test: after this change, is everything
-the user didn't touch byte-for-byte the same, and does every reference
-still resolve to the thing it named? That test is why ids are never
-reassigned, why clone is an eager deep copy (COW forks re-row tiles — it
-was tried and torn out), why framing writes never bump `version`, and why
-there is no cross-plugin move — only link, or copy-then-delete where the
-user can see the identity break.
+When a decision is unclear, this rule wins — over performance, elegance, and
+convenience. Ask of every change: is everything the user didn't touch
+byte-for-byte the same, and does every reference still resolve to the thing
+it named? That is why ids are never reassigned, clone is a deep copy, framing
+never bumps `version`, and there is no cross-plugin move.
 
-## The engineering charter
+## How to work
 
-The instability this project once had was not bad luck. It had one root
-cause: **the same fact stored in several parallel copies with no single
-owner, written from many code paths.** A fix corrects one copy; another
-path keeps writing the rest; the symptom returns. The charter exists to
-stop creating new copies.
-
-1. **One fact, one owner. Derive once, read everywhere.** Before adding any
-   field, map, or piece of state, ask: does this fact already live
-   somewhere? If yes, read it from there. If a fact must exist in two
-   layers, one place derives it and everything else reads it — never a
-   second writer. `ARCHITECTURE.md §7` lists the worked exemplars
-   (`Tile.reference`, the version-bump split, `client/menu`, the content
-   entries, …); copy those shapes. In the fragile areas (framing, native
-   bounds — §8's seam catalog), a change that leaves the copy-count the
-   same has not fixed the class; it has added a patch that will regress.
-   The goal of every change is the design where the bug **cannot be
-   written**, not the design where it is merely fixed this once.
-
-2. **Root-cause before you touch anything.** State the mechanism in one
-   sentence ("the menu stays open because the right-drag end path at
-   `right_button.go:276` is the only one that clears it, and this gesture
-   ends through `input.go:419`"). If you cannot name the mechanism, you are
-   guessing — keep digging. A reload, a retry, a `setTimeout`, a defensive
-   nil-check that hides the nil: smells, not fixes. Evidence, not
-   medium-confidence guesswork.
-
-3. **Every bug fix is a test first.** Three parts, asked every time:
-   a reproducing test that fails for the real reason before the fix; a
-   commit message that answers **"why was this not caught?"** and closes
-   that gap; and a fix for the *class*, not the instance. If the code isn't
-   testable as written, make it testable — extract the logic into a pure
-   package. "It can only be tested by running the app" is a structural
-   defect, not an excuse.
-
-4. **Test the seam, not just each side.** A unit test on each side of a
-   contract will not catch a contract mismatch — and the mismatch is the
-   bug. The #196 identity bug is the standing example: the store side was
-   unit-tested, the binary never called it, and everything looked green.
-   When you fix a seam bug, the test must cross the seam.
-
-5. **`client/wasm` and the Electron main process are where bugs hide.**
-   The wasm shim (33 files, ~15k LOC) has zero unit tests and `make check`
-   executes none of it. Do not add untested orchestration there: extract the
-   decision into a js-free `client/*` package (as `pane`, `gesture`,
-   `zoomtrans`, `wsbar`, `outbox`, `shellstream` are) and unit-test it. Same
-   rule for `apps/desktop/src/main` — pure-function modules with unit tests
-   (`viewutil.ts`, `contextmenu.ts`) and/or e2e coverage. `webviews.ts` is
-   the documented bug source and has no direct test; anything you touch
-   there needs one.
-
-6. **Errors must surface.** A failure that logs to console and returns
-   presents to the user as "it just disappeared." Route failures through
-   the error surface (`client/errsurface`, `sendError` in main); an
-   optimistic mutation the server rejects must visibly reconcile.
-
-7. **No client-only state.** Anything the user can change is a server
-   fact, written through the store and reflected by an event. The decided
-   exceptions — the session split-pane tree, the selection, the outer
+1. **One fact, one owner.** Before adding a field, map, or piece of state,
+   ask where the fact already lives and read it from there. If two layers
+   need it, one derives and the rest read. `ARCHITECTURE.md` lists the
+   shapes to copy. A change that leaves the copy-count the same has not
+   fixed the class; aim for the design where the bug cannot be written.
+2. **Root-cause first.** State the mechanism in one sentence before touching
+   anything. If you cannot name it, keep digging. A retry, a `setTimeout`, a
+   nil-check that hides the nil — smells, not fixes.
+3. **Every bug fix is a test first.** A reproducing test that fails for the
+   real reason; a fix for the class, not the instance; a commit message that
+   answers "why was this not caught?" and closes the gap. If the code isn't
+   testable, make it testable.
+4. **Test the seam.** A unit test on each side of a contract does not catch
+   a contract mismatch. A seam bug's test crosses the seam.
+5. **The shim and the Electron main process are where bugs hide.**
+   `client/wasm` has no unit tests and `make check` executes none of it.
+   Put decisions in a js-free `client/*` package with tests; the shim is
+   glue. Same for `apps/desktop/src/main`: pure modules with unit tests, and
+   e2e coverage. `webviews.ts` has no direct test; anything you touch there
+   gets one.
+6. **Errors surface.** A failure that logs and returns looks to the user
+   like "it just disappeared." Route through `client/errsurface` or
+   `sendError`. A rejected optimistic mutation reconciles visibly.
+7. **No client-only state.** Anything the user can change is a server fact,
+   written through the store and reflected by an event. The exceptions are
+   decided, not accidental: the session pane tree, the selection, the outer
    frames of a pane's place, the pane-tile level stack, Chromium's own
-   session storage — are ephemeral by owner decision, not by omission. Do
-   not add to that list without a new owner decision.
+   session storage. Do not add to that list without a decision.
+8. **DRY is correctness.** If a fix in one place doesn't fix an identical
+   behavior elsewhere, unify them.
+9. **Commit each logical change on its own.** Never batch. If an
+   instruction seems wrong, say so and propose the alternative — never
+   quietly do something else. Fix a stale comment in the same commit that
+   touches the file.
 
-8. **DRY is correctness, not tidiness.** If a fix in one place doesn't fix
-   a visibly identical behavior elsewhere, you have found duplication;
-   unify it rather than patching both.
+## Decisions
 
-9. **Commit incrementally; never batch; never silently deviate.** Commit
-   each logical change as it lands. If an instruction seems wrong, say so
-   and propose the alternative — do not quietly do something else. And keep
-   comments true: fix a stale comment in the same commit that touches the
-   file.
+These were decided deliberately. Do not reverse one without a new decision.
 
-## Owner decisions (do not re-reverse without a new one)
+**Data**
 
-Each of these was decided deliberately, some reversing an earlier decision.
-Re-litigating them silently is how churn happens.
+- The node is its home. One id, one `server.yaml` (`id`, `web`,
+  `federation`, `connections`, `plugins`), one `gridwell.db`. `cache.db` is
+  disposable. Serve mints what is absent; that is the only config write.
+- The forever file holds node facts only: minted ids, layout, framing, the
+  user's bytes, connections, tombstones. What a source last said is cache.
+- The storage format is additive by default. Dead storage — no released
+  binary reads it for a user-visible meaning, shown by grep — may be
+  retired by a rebuild migration that preserves every surviving row. A row
+  the new shape cannot hold is converted, never deleted. Never delete a DB
+  to absorb a schema change. Retired wire fields are `reserved`. The
+  contract is `internal/local/store/CLAUDE.md`.
+- `version` means the user's content bytes: a text body, a typed url, a
+  typed name. Captures, framing, and layout carry no claim and cause no
+  bump.
+- Framing is a float center plus a pane-size-independent zoom on the row
+  that owns the doorway; a root keeps the same shape on its grid row. One
+  wire verb (`SetFraming`), one store writer, one client function.
+- Ids are 7-char lowercase base36 with a leading letter. Both shapes (short
+  and legacy 32-hex) are valid forever. The leading letter is how a URL
+  tells a namespace segment from a tile id.
+- Clone is an eager deep copy. COW was tried and torn out.
 
-- **Every stacked level stays alive (#249, 2026-08-06).** Liveness
-  follows PANE EXISTENCE: descending into a pane tile parks the outer
-  level (views keep rendering off-screen, shells stay attached); a pane's
-  resources close only when the pane closes, and leaving a view closes
-  that view's panes. ONE live surface per content tile, at any level:
-  opening a tile live elsewhere freezes the other pane's stream — the
-  opener takes over. This REVERSED the workspace-boundary freeze.
-- **Descent goes live (#202).** The frozen preview is what a tile looks
-  like from outside; DESCENDING is the engagement gesture — a url reopens,
-  a shell reconnects. One owner decides (`shellconn.DecideAutoLive`); call
-  sites never hand-roll go-live.
-- **A pane's place is ONE STACK OF FRAMES (2026-08-29,
-  `docs/simplify-plan.md` S8).** A frame is `(grid, doorway tile,
-  viewport)`; descending through ANY doorway pushes one and ascending pops
-  one, so the viewport you left a level at IS the frame you left. `client/pane`
-  owns the stack; the URL and the pane-tile layout blob are ENCODINGS of it
-  and the bar's crumbs a projection, never a second model. This replaced
-  five parallel representations and the shim's eight ascents with one
-  `descend` and one `ascend`. The ONE deliberate second axis is the
-  PANE-TILE level (`pane.Levels`): entering a pane tile swaps the whole
-  pane tree, which is a different gesture, not a deeper frame.
-- **Framing is a float center on the doorway row (2026-08-29,
-  `docs/simplify-plan.md` S4; schema v11).** "How this grid looked when I
-  left it" is a float CENTER in the grid's own coordinates plus a
-  pane-size-independent intrinsic zoom, stored on the row that owns the
-  doorway — `tiles.view_cx/cy/zoom` for a well (each doorway keeps its own),
-  `grids.root_cx/cy/zoom` for a root that has none, home's included. ONE
-  wire verb (`SetFraming`), ONE store writer (`Store.SetFraming`), ONE
-  client function (`persistFraming`). The integer window origin and the
-  quantization math that made it survive a round trip are gone.
-- **`version` means the user's content bytes, and nothing else
-  (2026-08-29, `docs/simplify-plan.md` S5).** It is the
-  optimistic-concurrency claim for a text body, a typed url and a typed
-  name — the three writes that reach `claimContentVersion`. Captures (a
-  title, a preview jpeg, a shell's foreground command), framing and layout
-  (place / move / resize / clone / delete) carry NO claim and cause NO
-  bump; the request fields that used to carry one are `reserved`, so a
-  stale claim is unrepresentable rather than ignored. Unacknowledged writes
-  park in ONE ledger, `client/outbox`.
-- **Shells ride the web door (2026-08-29; REVERSES 2026-07-26 "PTY bytes
-  ride the Electron main process's gRPC OpenShell stream").** PTY bytes
-  cross a WebSocket at `/shell` on the browser door — the page's own
-  origin, behind the SAME auth cookie as every other request, same-origin
-  checked, routed through the one shell route the node export uses. The
-  grammar has one owner both ends read (`client/shellwire`); the
-  lifecycle is a js-free package (`client/shellstream`). Therefore
-  `caps.LiveShell` is `!shellsDisabled` — a browser and a phone attach a
-  real terminal exactly as the desktop does, and the ONLY thing that
-  turns shells off is the node saying so (`disable_shells`). The Electron
-  shell stack is deleted; no host implements a shell half. What a phone
-  running its OWN node cannot do is HOST a shell (no tmux on iOS —
-  `mobile.Start` sets `disable_shells`); reaching one on another node is
-  unaffected.
-- **Session-ephemeral by decision (#13).** The window-root pane tree, the
-  selection, the pane-tile level stack and the OUTER frames' viewports live
-  only in the session. The durable home for a layout is the **pane tile**
-  (a workspace as a thing).
-- **Cross-plugin: left-drag links, right-drag clones (2026-07-19).** A
-  left-drag never duplicates content; a right-drag always does; there is no
-  cross-plugin move. Dashed always means link; deleting a link unlinks.
-- **The node is its home (2026-08-29, `docs/one-node.md`; supersedes
-  "home is the first configured plugin", 2026-07-19).** One id (the
-  home's), one config (`server.yaml`: `id`, `web`, `federation`,
-  `connections`, `plugins` — no `init`; serve mints what is absent and
-  that is the only config write), one database (`gridwell.db`;
-  `cache.db` is disposable). `plugins:` are content plugins ONLY — the
-  node constructs its own home and transport. A node has no grid of its
-  own: a mount lands on the remote's home, exactly where its own client
-  lands; plugins and connections live on the + menu's top row.
-- **Pane closing is progressive crush (#217).** The split side follows the
-  drag; closing is drag-through with red warning accumulation. The old
-  corridor-edge one-click close stays dead.
-- **The rendered view is a sanitized-HTML overlay (#218).** goldmark +
-  go-org + bluemonday. Embeds, tile-links-in-docs, and rendered-mode
-  editing were deleted with the custom canvas engine; a doc link is just a
-  link. ONE carve-out (2026-08-09): task-list checkboxes are interactive —
-  clicking one flips its `[ ]`/`[x]` source marker through the normal
-  text-edit door (`markdown.ToggleTask`, parity-pinned); everything else
-  stays read-only.
-- **The Chromium session is host-local (2026-07-26).** One partition
-  (`persist:gridwell`) for every live url tile, local or mounted; live
-  tiles browse from the host's own network. Nothing about sessions or
-  networks crosses the wire.
-- **Connections are config (2026-08-22 #269, finished 2026-08-29;
-  REVERSES #199 "connections are data").** A connection is a
-  `connections:` row — an immutable name (the namespace segment
-  `<id>/<name>`), a label, how to dial — with no well, no grid and no
-  params document; removing one retires its name forever
-  (`retired_names`). Secrets stay host-local file paths.
-- **Every pane wears the bar; the crumb click is the ascent
-  (#220/#222, revised by #267 2026-08-21).** Bar contents are per-pane
-  facts; since #267 the band renders in EVERY pane (content resizing on
-  focus change was distracting — focus shows in the border color), and
-  clicks act only in the focused pane (an unfocused band click moves
-  focus, nothing else). The old right-click ascends (corner circle,
-  empty bar, slot) are gone; middle-click remains the in-pane shortcut.
-- **No parameterized plugins (#251 2026-08-08 → #269 2026-08-23 →
-  2026-08-29).** The picker, the parameterized flow and the instance
-  grid are all DELETED; connections are config rows (above). What still
-  stands: a connection is always THE SAME connection, never a copy;
-  retiring one is forever (a retired name never returns). Modals center
-  on the active pane, not the screen.
-- **Plugins serve web content through the /content/ door (2026-08-11).**
-  `ServeContent` is the one RPC carrier behind
-  `/content/<token>/<tile-id>/<subpath>`; it routes/link-resolves/federates
-  exactly like ReadContent. Every response is SANDBOXED by the server (CSP
-  `sandbox allow-scripts` — opaque origin, no cookies, no RPC reach); the
-  door is exempt from the cookie gate and gated by the content token (its
-  own sha256 domain, never interchangeable with the auth cookie — pinned by
-  test). `Tile.serves_page` (wire-only, plugin-derived) gives the descent
-  url-tile semantics at the DERIVED address (`rpc.PageURL`, never
-  persisted); page views skip the SetURLState freeze writeback — the
-  plugin derives the frozen face (fs: GetTilePreview thumbnails). The
-  client/server URL grammar is pinned to itself by a round-trip seam test.
-- **Id shape (2026-07-25).** New plugin/node ids are 7-char lowercase
-  base36 with a leading letter (`idshape.NewShortID`); an id is immutable
-  once minted, and both shapes (short + legacy 32-hex) are valid forever.
-  The leading letter is load-bearing: it is how URL paths tell a namespace
-  segment from a tile id.
-- **Plugins are the third-party door; the host must not know its plugins
-  (2026-08-15).** The plugin system exists so OTHER PEOPLE can build
-  plugins: hashicorp go-plugin was chosen for process isolation AND a
-  separate dependency graph (Go's own plugin package offers neither).
-  Everything else the seam provides — id-space isolation, the wire
-  contract — could be had with discipline alone; the subprocess door is
-  the part that admits strangers, and it is judged by how good a door it
-  is for them. (2026-08-27: that door is `plugin.v1` ONLY — the
-  `gridwell.v1` subprocess door retired; a plugin serves content and
-  keys, the node owns ids and layout. 2026-08-29: home and the transport
-  are the node itself, not kinds; `plugins:` lists content plugins
-  only.) Therefore: the host (server, CLI, loader) and the client
-  never import a plugin implementation and never switch on a plugin
-  KIND — every plugin-specific behavior rides a wire DECLARATION (Info
-  capabilities, `Grid.source_kind`, tile fields), the shapes that already
-  work. The included plugins are the standard library, shipped in-repo
-  for convenience, never special cases; only a LEAF BINARY (the mobile
-  bind, a future bundled main) may enumerate what it ships. This
-  separation has ERODED REPEATEDLY when left to intention — it must be
-  exercised by machinery; the coupling inventory and the enforcement
-  options are `docs/plugin.md`.
-- **Inside the node a namespace is a Go value; gRPC only where a boundary
-  forces it (2026-08-29, `docs/simplify-plan.md` S2).** The contract is one
-  method set (`internal/namespace`, the same shape as the proto service),
-  and the router simply calls it — home no longer crosses a wire to reach
-  itself. Exactly TWO gRPC hops survive, both crossing a boundary that has
-  to serialize anyway: the **plugin.v1 subprocess** (the third-party door)
-  and the **federation socket**. Connect over HTTP is the third codec and
-  it crosses to the browser. Both node-side doors are thin CODECS over the
-  one router, so there is no second router to keep in step; the in-memory
-  loopback (`compose.ServeInProcess`) is deleted. With no serializer
-  between a caller and a namespace they share protos by pointer, so
-  qualification CLONES — that clone is the whole protection, and
-  `internal/namespace` writes the ownership contract down.
-- **The storage format is stable and additive by DEFAULT — and dead
-  storage may be retired (2026-08-29, `docs/simplify-plan.md`; supersedes
-  the absolute "never drop").** The promise is that data written by any
-  released binary stays READABLE forever, every user-visible fact intact.
-  Storage that no released binary reads for a user-visible meaning carries
-  no such fact, so it may be retired — by a **rebuild migration** that
-  preserves every surviving row and the `sqlite_sequence` seeds, on
-  EVIDENCE (grep every read; a pass-through is not a reader), with the
-  decision recorded in the migration's chain-entry comment. A row the new
-  shape cannot hold is CONVERTED, never deleted. A wire field removed
-  alongside a column becomes `reserved`, never renumbered. Never delete a
-  DB to absorb a schema change. The contract is
-  `internal/local/store/CLAUDE.md`; v10, v11 and v12 are the worked
-  examples.
-- **The forever file holds NODE facts only (2026-08-29,
-  `docs/simplify-plan.md` S7).** ONE database, `gridwell.db` — home's
-  content and every plugin's memory as namespaced rows of the same tables:
-  the ids the node minted (`ns`,`key` → id), layout, framing, the user's
-  bytes, connections, tombstones. What a SOURCE last SAID — a plugin's
-  listing, a remote's tiles, bodies, previews — is cache and lives in the
-  disposable `cache.db` behind ONE engine (`internal/sourcecache`, in front
-  of every non-home namespace). That is the split an outage divides along:
-  a dark SOURCE costs nothing (the durable rows answer, a move made during
-  the outage included), a dark PLUGIN or node is answered from the cache.
-  A pre-one-node home converts itself at first serve (`node.Convert`) and
-  the old files are set aside, never deleted.
+**Node**
 
-## The verification gates
+- Inside the node a namespace is a Go value (`internal/namespace`). gRPC
+  survives at two hops only: the plugin subprocess and the federation
+  socket. Both node-side doors are codecs over the one router.
+- Plugins are the third-party door. The host never imports a plugin
+  implementation and never switches on a plugin kind; every plugin behavior
+  rides a wire declaration. Only a leaf binary may enumerate what it ships.
+  `test/boundary` enforces it.
+- A plugin serves keys and content; the node owns ids and layout. A
+  connection is config: an immutable name, a label, how to dial. Retiring a
+  name is forever. Secrets stay host-local file paths.
+- A node has no grid of its own. A mount lands on the remote's home.
+  Plugins and connections live on the + menu's top row.
+- The web door always has a password (the minted 0600 `web-password` file;
+  delete it to rotate). The federation door is a 0600 unix socket, never
+  TCP.
+- Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
+  Every response is sandboxed and gated by the content token, which is never
+  interchangeable with the cookie.
 
-`make check` must be green on every commit — but it *cannot see the native
-shell*, and the native shell is where the worst bugs live. It is necessary,
-never sufficient, for anything touching live tiles, panes, focus, previews,
-or the bar.
+**Experience**
+
+- A pane's place is one stack of frames. Descending through any doorway
+  pushes; ascending pops. The URL and the layout blob encode the stack; the
+  crumbs project it. The pane-tile level is the one second axis.
+- Every stacked level stays alive. Descending into a pane tile parks the
+  outer level; resources close only when the pane closes. One live surface
+  per content tile — opening it elsewhere takes over.
+- Descent goes live. The frozen preview is what a tile looks like from
+  outside; entering a url reopens it, entering a shell reconnects. One
+  owner decides (`shellconn.DecideAutoLive`).
+- Shells ride the web door: a WebSocket at `/shell`, same cookie, same
+  origin. Every host with the web client has shells. The only thing that
+  turns shells off is the node (`disable_shells`; a phone cannot host tmux).
+- Session-ephemeral: the pane tree, the selection, the level stack, and the
+  outer frames' viewports. The durable home for a layout is the pane tile.
+- Cross-plugin: left-drag links, right-drag clones. There is no move.
+  Dashed means link; deleting a link unlinks.
+- Every pane wears the bar. Clicks act in the focused pane; a click in an
+  unfocused pane moves focus, nothing else. A crumb click ascends;
+  middle-click is the in-pane shortcut.
+- Pane closing is progressive crush: drag-through with red warning.
+- The rendered view is a sanitized HTML overlay. Task-list checkboxes are
+  the one interactive control; everything else is read-only.
+- The Chromium session is host-local: one partition for every live url
+  tile. Nothing about sessions or networks crosses the wire.
+- No parameterized plugins. Modals center on the active pane.
+
+## Gates
+
+`make check` must be green on every commit. It cannot see the native layer,
+and that is where the worst bugs live.
 
 | Gate | Sees | Run it when |
 |---|---|---|
-| `make check` | pure Go + TS logic; *compiles* wasm but executes none of it | every commit, always |
-| `make check-electron` | the real `WebContentsView` bridge under xvfb | the live URL path, the bridge, `webviews.ts`, the preload contract |
-| `make check-e2e` | the full app (Electron + Go sidecar) as a black box | any `apps/desktop` change, the native layer, any cross-seam behavior; pre-merge |
-| `make check-web` | the browser-mode client (no Electron): caps gating, touch, the live shell | `client/caps`, `client/touchgest`, the shell transport (`client/shellwire`/`shellstream`/`shellws`, `internal/server/shell_door.go`), the serve/boot path |
-| `make check-federation` | the real binaries through a real ssh tunnel | plugin spawn, `sshdial`, the node export, id routing |
+| `make check` | Go + TS logic; compiles wasm, executes none of it | every commit |
+| `make check-electron` | the `WebContentsView` bridge under xvfb | the live url path, `webviews.ts`, the preload |
+| `make check-e2e` | the full app as a black box | any `apps/desktop` change, the native layer, cross-seam behavior |
+| `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, the shell door |
+| `make check-federation` | the real binaries through a real ssh tunnel | plugin spawn, the export, id routing |
 
-If a change lives in or affects the native layer, `make check` passing
-means nothing — run the electron and/or e2e gate AND add or extend a spec
-that crosses the behavior. Gate discipline: the gates rebuild at start, so
-never edit sources while one runs; a "vindicated isolated" flake rerun only
-counts against a freshly built tree; a spec on the flake ledger
-(`docs/flake-ledger.md`) still gets a fresh look before you blame a change.
+If a change touches the native layer, `make check` passing means nothing.
+Run the electron or e2e gate and add a spec. The gates rebuild at start, so
+never edit sources while one runs. A flake rerun only counts against a
+freshly built tree. A spec on `docs/flake-ledger.md` still gets a fresh look
+before you blame a change.
 
-## Making changes: the checklist
+## Before you commit
 
-Before you commit, every one of these is true:
-
-- [ ] I named the root-cause mechanism (fix) or the one owner of any new
-      fact (feature) in one sentence. I did not guess.
-- [ ] I did not add a new copy of an existing fact; if anything, I reduced
-      the copies.
-- [ ] A test fails before my change and passes after, and it crosses the
-      seam where the behavior actually lives.
-- [ ] For a bug fix, the commit message answers "why was this not caught?"
-      and I closed that gap.
-- [ ] `make check` is green. If I touched the native/live layer, the
-      electron/e2e gates are green and a spec covers the behavior.
-- [ ] No error is swallowed to the console; failures surface and reconcile.
-- [ ] For every RPC call site I touched: what happens to local state on a
-      TRANSPORT failure (`clientsync.OutcomeTransport` — the server never
-      spoke)? Nothing user-made may be dropped without a server verdict;
-      unacknowledged writes park in the one outbox (`client/outbox`) and
-      the retry kick lands them.
+- [ ] I named the mechanism (fix) or the one owner of any new fact
+      (feature) in one sentence.
+- [ ] I added no copy of an existing fact.
+- [ ] A test fails before and passes after, across the seam.
+- [ ] For a bug fix, the commit message says why it was not caught.
+- [ ] `make check` is green; the native gates too if I touched that layer.
+- [ ] No error is swallowed. Unacknowledged writes park in `client/outbox`
+      and nothing user-made is dropped without a server verdict.
 - [ ] Nothing the user can change lives only on the client.
-- [ ] No new host/client import of a plugin implementation and no new
-      switch on a plugin kind — plugin-specific behavior rides a wire
-      declaration; leaf binaries alone enumerate what they ship.
-- [ ] I committed this logical change on its own and fixed any stale
-      comment in the files I touched.
-- [ ] The guiding rule still holds: everything the user didn't touch is
-      byte-for-byte the same, and every reference resolves to what it
-      named.
+- [ ] No host or client import of a plugin, no switch on a plugin kind.
+- [ ] This is one logical change, and the comments in the files I touched
+      are true.
+- [ ] Things stay as the user left them.

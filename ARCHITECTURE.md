@@ -1,676 +1,303 @@
-# Gridwell Architecture
+# Gridwell architecture
 
-This is the map of how Gridwell works: the layers, the contract between
-them, and the invariants each one holds. `README.md` says what Gridwell is
-and how it feels to use. `CLAUDE.md` says how to change the code without
-breaking it. This document says how the machine runs.
+Gridwell is a personal space made of tiles on an infinite 2D grid. There are
+four primitives: text, url, shell, and well (a tile that holds another grid).
+A pane tile holds a split-pane layout. Grids nest without limit, and they
+federate across plugins and machines. The one rule: things stay as you left
+them.
 
-One diagnosis to carry with you: the store and server are sound by
-construction. Every fragile invariant lives in the client/native split, and
-they all share one root cause — **a single fact stored in several parallel
-copies, written from many code paths.** The cure is one discipline: derive a
-fact in exactly one place and read it everywhere (§7). The seam catalog (§8)
-lists where that still needs doing.
+This doc says how the machine works. `CLAUDE.md` says how to change it.
 
----
-
-## 1. The system in one breath
+## Layers
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│ Electron main process        apps/desktop/src/main/                  │
-│   native WebContentsViews positioned over a wasm canvas              │
-│   (live URL pages) — nothing else. Invisible to `make check`.        │
-└───────────────┬──────────────────────────────────────────────────────┘
-                │  IPC  (window.gridwell bridge, CSS-px bounds both ways)
-┌───────────────▼──────────────────────────────────────────────────────┐
-│ Go→wasm client               client/wasm/  +  pure client/* packages │
-│   canvas, panes, gestures, framing, previews, menu                   │
-│   ~15k LOC of orchestration with no unit tests — see §5              │
-└───────────────┬──────────────────────────────────────────────────────┘
-                │  Connect-RPC  (the Gridwell service)
-┌───────────────▼──────────────────────────────────────────────────────┐
-│ Local server                 internal/server, api/rpc                │
-│   STATELESS router: splits <uuid>/<id>, forwards, re-qualifies       │
-└───────────────┬──────────────────────────────────────────────────────┘
-                │  a Go call  (namespace.Namespace — no wire, no codec)
-┌───────────────▼──────────────────────────────────────────────────────┐
-│ Namespaces    home (internal/local) · connections (internal/remote)  │
-│   · plugins/{fs,proc,gitlab} as CONTENT PLUGINS (plugin.v1)          │
-│   a plugin is stateless (keys + content); the node mints ids and     │
-│   keeps every namespace's arrangement in the ONE store (gridwell.db) │
-│   ↓ the two gRPC hops that cross a real boundary:                    │
-│     go-plugin subprocess (plugin.v1) · the federation socket         │
-└───────────────┬──────────────────────────────────────────────────────┘
-                │
-┌───────────────▼──────────────────────────────────────────────────────┐
-│ Store                        internal/local/store/  (node code, v2)  │
-│   ids, version = the user's content bytes only, clone, blobs         │
-│   SOLID BY CONSTRUCTION — the model to emulate                       │
-└──────────────────────────────────────────────────────────────────────┘
+Electron main       apps/desktop/src/main     live url pages as native views
+     │ IPC
+wasm client         client/wasm + client/*    canvas, panes, gestures, framing
+     │ Connect-RPC (+ a WebSocket for shells)
+router              internal/server           stateless; routes by id
+     │ Go call (namespace.Namespace)
+namespaces          home · plugins · connections
+     │
+store               internal/local/store      gridwell.db
 ```
 
-**One contract, every hop.** `api/gridwell/v1/data.proto` defines a single
-service implemented identically by the router, every namespace, and a
-remote node reached through a connection. "Remote" adds no vocabulary —
-the transport forwards to a remote node's **export** (`nodeexport.go`:
-the same service over raw gRPC, routed by the qualified ids each request
-carries). Ids chain one segment per hop
-(`<id>/<conn>/<remote-id>/<tile>`), so any depth of mounting routes
-generically. Every byte — content streams and the live PTY
-included — crosses this one interface.
+Inside the node a namespace is a Go interface (`internal/namespace`). There
+are exactly two gRPC hops, both across a real process boundary: the plugin
+subprocess (`plugin.v1`) and the federation socket (`gridwell.v1`). Connect
+over HTTP is the third codec, and it crosses to the browser.
 
-**The contract is an INTERFACE in process, a wire only where it must be**
-(2026-08-29, `docs/simplify-plan.md` S2). Inside the node a namespace is
-`namespace.Namespace` — the same method set as Go, with streams as
-idiomatic callbacks — and the router simply calls it. gRPC survives at
-exactly two hops, both of which cross a boundary that has to serialize
-anyway: the **plugin.v1 subprocess** (`compose.LoadPlugin` — the
-third-party door, process isolation and a separate dependency graph) and
-the **federation socket** (`nodeexport.go` writing the router onto
-gridwell.v1, `internal/remote/dial` reading it back). Connect over HTTP
-is the third codec, and it crosses to the browser. Home reaching itself
-crosses nothing.
+## Ids
 
-**A node has no grid of its own** (2026-08-29, `docs/one-node.md`; the
-node grid — `<node_id>/0`, one link tile per plugin — was deleted). The
-client boots into **home**, which the handshake states as a FIELD
-(`home_grid_id`, read through `rpc.HomeGrid`); a mount lands on the same
-grid, because the export answers the same field. Plugins are reached from
-the + menu's top row (click = portal descent, drag = drop an exit-well
-link).
+An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
+`Server.resolve` peels the first segment and routes on its shape:
 
----
+- the node's own id followed by digits: home
+- the node's own id followed by a letter-leading segment: a connection
+- anything else: a plugin
 
-## 2. The contract (`api/gridwell/v1/data.proto`)
+The remainder passes through untouched, so any depth of mounting routes the
+same way. Ids going out are re-qualified once (`qualifyTilesFor`): a leaf
+prefixes and derives `Tile.reference`; transit prepends one segment and
+trusts the wire bits (`rpc.TransitQualifyTiles`). Qualification clones —
+that clone is the whole protection for messages shared by pointer.
 
-The proto is the single source of truth for both the wire types and the
-persisted record shapes, and it is the OWNER of both rather than the first of
-several copies (`docs/simplify-plan.md` S6):
+Plugin and node ids are 7-char lowercase base36 with a leading letter
+(`idshape.NewShortID`). The leading letter is what tells a namespace segment
+from a tile id in a URL. Ids are never reassigned.
 
-- The Go record types and their conversions — `rpc.Tile`, `rpc.Grid`, and
-  every request/response whose Go shape is the message field for field — are
-  GENERATED from it into `api/rpc/wire_gen.go` by an in-repo protoc plugin
-  (`api/rpc/internal/gen`) that `buf generate` runs; `make proto-check` fails
-  when they are stale. The proto's field comments become the Go doc comments,
-  so a field is documented where it is defined.
-- The store's columns are described once, in
-  `internal/local/store/columns.go`, which renders the DDL and drives every
-  SELECT, scan, clone INSERT and rebuild copy list.
-  `TestDescriptorMatchesProto` binds that descriptor's on-wire set to the
-  proto's fields, exactly, in both directions — every proto field is either a
-  stored column of the same name or carries a written reason it is derived.
+## The contract
 
-The surface, one method per concept:
+`api/gridwell/v1/data.proto` is the one description of the wire and the
+record shapes. Everything else derives from it:
+
+- `api/rpc/wire_gen.go` (the Go record types and conversions) is generated
+  by `api/rpc/internal/gen`; `make proto-check` fails when it is stale.
+- `internal/local/store/columns.go` is the one description of a stored
+  column. It renders the DDL and drives every SELECT, scan, clone INSERT,
+  and rebuild copy list. `TestDescriptorMatchesProto` pins the descriptor
+  to the proto in both directions.
 
 | Group | Methods |
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
-| Framing | `SetFraming` — the ONE framing write: a float center plus a pane-size-independent zoom, onto the DOORWAY tile a grid was entered through or onto the grid row itself for a root that has none |
-| Reads | `GetGrid`, `GetTile`, `GetTilePreview` |
-| Content bytes | `ReadContent` / `WriteContent` — the ONE way content moves. Versioned; a write commits at close (a broken stream leaves the old value intact); a read on a leaf link resolves to the target at the serving node |
-| Web content | `ServeContent` — the RPC carrier behind the HTTP `/content/<token>/<tile-id>/<subpath>` door: a plugin serves ANY content as web content (an image, a whole HTML page with relative subresources). GET-only; routes/link-resolves/federates exactly like `ReadContent`. The door stamps `CSP: sandbox allow-scripts` (opaque origin — no cookies, no RPC reach) and gates by the content token (its own password derivation, handed out on the authenticated `Handshake`). `Tile.serves_page` (wire-only, plugin-derived) tells the client to present the descent with url-tile semantics at the derived address |
-| Mutations | `CreateTile` (metadata only — a body follows as a WriteContent), `SetTile` (ONE op per call: `rename`, `content_zoom`, `url_frozen`, or a per-kind tile writeback — a text tile's window and mode, a url capture, a shell preview. The `well` and `pane` arms are REFUSALS naming where that write went, so the kind→operation mapping stays total: well framing rides `SetFraming`, a pane's layout blob rides `WriteContent`), `PlaceTile` (the one placement writeback), `CloneTile`, `DeleteTile` |
-| Live bytes | `OpenShell` (a PTY both ways — deliberately the one live wire; the browser reaches it through the `/shell` WebSocket door, `client/shellwire`), `ShellSessionAlive` |
+| Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Search` |
+| Content | `ReadContent`, `WriteContent` — the one way bytes move. Versioned. A write commits at close; a broken stream leaves the old value. |
+| Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts`), gated by the content token, never the cookie. |
+| Framing | `SetFraming` — the one framing write |
+| Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
+| Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
 | Events | `Subscribe` |
 
-No request carries a descent path — the server derives location facts from
-rows it owns. Sessions and networks never cross the wire: the Chromium
-session is host-local and live tiles browse from the host's own network.
-
-Three fields encode the product rules directly:
-
-- `Tile.view_cx / view_cy / view_zoom` — at once the preview frame, the
-  descent target, and the ascent return value. One value, three readings.
-  ONE shape everywhere (schema v11): a float CENTER in the child grid's
-  coordinates plus a pane-size-independent zoom (the intrinsic ratio
-  live/overtake). A grid with no doorway keeps the same three numbers on
-  its own row (`grids.root_cx / root_cy / root_zoom`, home's at `ns = ''`),
-  and one store writer (`Store.SetFraming`) writes both. Zoom 0 is the one
-  "never visited" convention.
-- `Tile.reference` (bool, server-derived, never stored) — the one
-  authoritative "this tile is a link" signal. Render draws the dashed
-  border from it, delete and clone key on it, descent portals through it.
-- `Grid.writable` (bool, wire-only) — the owning plugin's per-grid mutation
-  capability, stamped by the serving node. The client's "+ palette shows
-  here" gate reads the grid, never a local plugin-list lookup, because one
-  ssh mount fronts many remote plugins with differing capabilities.
-
----
-
-## 3. The server: a stateless router (`internal/server`)
-
-The server holds no Gridwell state. It routes every call to the owning
-plugin and translates ids at the boundary:
-
-1. `Server.resolve(id)` peels the FIRST segment and answers with the
-   `namespace.Namespace` that owns it: the node's own id followed by a
-   numeric segment is HOME; the node's id followed by a letter-leading
-   segment is a CONNECTION (the transport peels that segment next); any
-   other first segment is a plugin. The remainder passes through
-   verbatim, so `<id>/<conn>/<remote-id>/<tile>` chains resolve one hop
-   at a time.
-2. The namespace answers in its own id space — bare ints for home and
-   plugins, chains for the transport (whose ids arrive already qualified
-   from the remote's perspective).
-3. `qualifyTilesFor` re-qualifies ids going out: the leaf rule (prefix ids,
-   derive `reference`) or the transit rule (prepend one segment everywhere,
-   trust the wire bits — `rpc.TransitQualifyTiles`, one shared
-   implementation). Transit is the namespace's TYPE (the transport), not
-   a declaration, so it holds while the remote is down.
-
-**One router, two codecs, two listeners.** The routing lives in `router.go`
-as a `namespace.Namespace` of QUALIFIED ids — a space whose verbs peel one
-segment and forward. Over it stand two thin codecs that route nothing of
-their own: `connect_codec.go` (the browser's Connect handler, mapping the
-router's gRPC status codes through gwerr's one table) and
-`namespace.Server` (`nodeexport.go`, the raw-gRPC export). They cannot
-drift, because they are the same value. `WebHandler` serves the Connect
-codec behind the password gate — the `web.bind` listener, bindable to a
-network; `FederationHandler` serves the export on its own listener, the
-0600 unix socket at `federation.socket`, never TCP (the kernel gates it
-to the owning uid; ssh's direct-streamlocal forwarding is the
-authenticated transport between nodes). The web door always has a
-password — the 0600 `web-password` file serve mints and prints; delete it
-to rotate. The Connect codec is deliberately not total: `Info`, `Probe`
-and `OpenShell` are federation verbs (the browser learns the node from
-`Handshake` and takes its PTY bytes over the /shell WebSocket).
-
-**Message ownership.** With no wire between the router and its
-namespaces, a request and a response are shared by pointer. The contract
-(`internal/namespace`): a namespace never retains or mutates a request
-after returning, and never mutates a response it handed back; a caller
-never rewrites ids in place — the qualification layer CLONES
-(`rpc.TransitQualifyTiles`, `server.qualifyTiles`). That clone is the
-whole protection, so there is no general copy layer; the seam test is
-`TestTwoSubscribersEachSeeExactlyOnePrefix` (one hub event, four
-subscribers, one prefix each).
-
-`Info` handshakes are timeout-bounded and cached per uuid after first
-success (invalidated on a ROOT `SetFraming`, since root framing rides
-the handshake). Capabilities (`watch`, `writable`) and presentation
-declarations (`glyph`, `menu_entries`) are facts a plugin states once in
-`Info`, never re-derived from its kind string.
-
----
-
-## 4. The namespaces and the store
-
-**The node is its home** (docs/one-node.md). `server.yaml` names the
-node's `id`, its `connections:` and its `plugins:`; a missing file is a
-fresh home (serve mints the id and writes the file). The node constructs
-its own home (`internal/local`) and transport (`internal/remote`) from
-that config — they are not plugins and never appear in `plugins:`. Every
-`plugins:` entry is a CONTENT PLUGIN (`plugin.v1`): spawned as a
-`gridwell-plugin-<kind>` subprocess by the stock host, or composed
-in-process by a leaf binary that bundles it (the mobile bind; the compose
-door hides which). A plugin is stateless — it answers in its own stable
-keys — and the node keeps its memory as ONE namespace of the ONE store
-(`internal/local/store`, `<home>/gridwell.db`; docs/one-node.md §2.6)
-that mints the ids and holds the arrangement. The store is opened
-identity-verified (`local.OpenVerified` against the node's id), so the
-id every stored reference carries is the id the node answers with; a
-plugin's memory needs no verification of its own — it is a namespace of
-that same verified store. A pre-one-node home converts itself at first
-serve (`node.Convert`).
-
-- **home** (`internal/local`; né localdb) owns all user content (text,
-  urls, wells, pane tiles) plus shells and the event stream — the one
-  writable namespace. Shell tiles are tmux sessions on a private per-node
-  socket, so they survive restarts.
-- **fs / proc** project the filesystem and process table as read-only
-  grids, mapping paths/PIDs to stable integers. Both enforce the sweep
-  rule: a failed read never deletes a tile row — only a definite GONE does.
-  An unreadable source serves its stored rows verbatim until it's readable
-  again.
-- **the transport** (`internal/remote`; né the ssh plugin, folded into
-  the node 2026-08-16, finished 2026-08-29 — docs/one-node.md): the
-  node's connections to other nodes. A connection is server.yaml CONFIG
-  (`connections:` — an immutable name, a label, how to dial); the
-  transport dials each at boot (bounded — the boot doesn't serve
-  mysteries), learns where it lands (the remote's HOME) and remembers only
-  that plus the graveyard of retired names (`retired_names`: a name never
-  returns). It owns no tiles and no grid: a connection is a row in the +
-  menu (`HandshakeResponse.connections`, uuid `<id>/<conn>`) and, when
-  dragged, an ordinary link tile in the user's grid. Every reference
-  through it is `<id>/<conn>/<remote-id…>`: `Server.resolve` peels the
-  node's own id and hands the rest to the transport, which peels the
-  connection name and prepends it on the way back — the same transit
-  rule at both hops.
-
-### 4.0.1 One memory of what a source last said
-
-`internal/sourcecache` is the node's ONE read-through cache, put in front
-of every NON-HOME namespace — each content plugin's adapter and the
-transport — in one place, `node.Start`. One disposable file
-(`<home>/cache.db`, shared by every layer: SQLite is single-writer per
-file). Online it passes through and remembers; on a transport-class
-failure it serves the remembered answer, stamped `Grid.stale`. Writes
-always pass through — it is never a write buffer. Policy is per
-namespace, engine is one: the whole-source PREFETCH walk is opted into by
-the transport alone (a connection's absence is a machine going dark), and
-nothing else crawls.
-
-It is a cache, not memory. The node's own facts about a plugin's entries
-— the id it minted for a key, where the user put it, its framing, its
-tombstone — are durable rows in `gridwell.db` (§4's externals engine).
-That split is what an outage divides along:
-
-| what is missing | who answers | what the user sees |
-|---|---|---|
-| the SOURCE (the plugin answers; its directory/API/process table does not) | the adapter, from its durable rows: an empty non-authoritative listing retires nothing | every tile, same ids and placement — including a move made DURING the outage — stamped stale |
-| the PLUGIN (the subprocess is gone) or a remote node | `sourcecache`, from what that namespace last said | the last grid it served, handshake included, stamped stale |
-
-Caching the adapter's own answer instead would replay a JOIN of both
-owners' facts — and with it the OLD placement over a move the user just
-made. For the same reason, an answer already stamped stale is never
-remembered: it would overwrite the good answer it degraded from, and
-nothing would ever put that back. Before 2026-08-29 the plugin half of
-this lived in a `listings` table inside the FOREVER file (schema v12
-retired it — `docs/simplify-plan.md` S7).
-
-### 4.1 `version` means the user's content bytes — the best-enforced invariant
-
-`version` says ONE thing (owner decision 2026-08-29,
-`docs/simplify-plan.md` S5): **the user's content bytes changed.** It is the
-optimistic-concurrency claim for exactly those edits and nothing else.
-Three named helpers in `internal/local/store` make that structural rather
-than advisory:
-
-| Helper | Used by | Claims? | Bumps? |
-|---|---|---|---|
-| `claimContentVersion` + `finishContentEdit` | content writes: `WriteContent`'s text and url arms, `RenameTile` | Yes | Yes |
-| `loadForWrite` + `emitTileChanged` | everything else | No | No |
-
-"Everything else" is three families, and each was a real bug source when it
-carried a version:
-
-- **Captures** — a page title, a preview jpeg, a url trail, a shell's
-  foreground command. Facts the server OBSERVED. They ride the tile event
-  to every client as last-writer-wins. A capture that bumped could cost a
-  concurrent editor their claim mid-paragraph.
-- **Framing** — `view_*`, a text tile's window and mode, content zoom, a
-  standing url freeze, a pane tile's layout. Last-writer-wins by design.
-- **Layout** — place / move / resize / clone / delete. An explicit act on a
-  tile the user can SEE, so a race resolves as "whoever moved it last moved
-  it"; the one thing a race could corrupt — two tiles in one cell — is
-  refused by the overlap check inside the same transaction, claim or no
-  claim.
-
-A new mutation physically has to choose a side (there is no version to pass
-to `loadForWrite`), and the wire agrees: the request fields that used to
-carry a claim for framing and layout are `reserved`, so a stale claim is
-not ignored — it is unrepresentable. `version_rule_test.go` is the whole
-table, and it counts how many store writes can even be handed a version, so
-a claim cannot reappear silently. This is what enforced-by-construction
-looks like; emulate it.
-
-### 4.2 Identity and clone
-
-- Grid/tile/blob ids are SQLite AUTOINCREMENT, never reused. Stored
-  references and client caches key on them, so reuse would be catastrophic.
-- Clone is an eager deep copy: new ids for the copy, blobs shared by
-  content address + refcount, no structural sharing. An edit to one copy
-  can never touch another, and no id is ever reassigned. (COW was tried and
-  torn out — a fork re-rows tiles, and no patch makes that safe.)
-- The storage format is stable and additive by DEFAULT; the contract lives
-  in `internal/local/store/CLAUDE.md`. The promise is that data written by
-  any released binary stays READABLE forever — so storage no released
-  binary reads for a user-visible meaning may be retired, on evidence, by a
-  rebuild migration that preserves every surviving row and the
-  `sqlite_sequence` seeds (v10, v11, v12). A row the new shape cannot hold
-  is CONVERTED, never deleted. Never delete a DB to absorb a change.
-- Deriving a text tile's label from its first line (`AltFromSource`) is
-  shared by the store and the client, and lives in neither: the neutral
-  `internal/doctype` owns it, so no arrow points from persistence into the
-  client tree.
-
----
-
-## 5. The Go→wasm client (`client/wasm` + pure `client/*`)
-
-The intended shape: a thin wasm shim over pure, headlessly testable
-`client/*` packages (`pane`, `cache`, `zoomtrans`, `gesture`, `wsbar`,
-`markdown`, `menu`, …). The pure packages are clean and well-tested.
-
-The shim never stayed thin. `client/wasm` is 33 files, ~15k LOC, zero
-test files. `make check` compiles it (`GOOS=js`) but executes none of it;
-only the e2e gates touch it, as a black box. The hottest files in the repo
-live here (`input.go` ~1,800 LOC, `render.go` ~1,400, `main.go` ~1,400).
-When you change behavior here, extract the decision into a js-free
-`client/*` package and unit-test it — that rule is the charter, not a
-suggestion.
-
-**The `App` object** carries the session: the pane tree, per-pane local
-state (`App.locals`, one entry per live pane, dropped atomically with the
-pane), the grid/tile cache, and the native handles. Gesture handlers and
-stream callbacks both mutate it with no serialization point — which is why
-every fact here must have exactly one writer.
-
-**A pane's place is ONE STACK OF FRAMES** (`client/pane`, `place.go`). A
-frame is the grid you landed in, the tile you came through, and the
-viewport you have there; descending through ANY doorway pushes one and
-ascending pops one. The viewport you left a level at IS the frame you left
-— there is no separate ascent stack, no separate portal stack, and no
-separate in-namespace path (S8 collapsed those five representations, and
-with them the shim's eight ascents). The URL (`url.go`) and the pane-tile
-layout blob (`wire.go`) are ENCODINGS of the stack, one codec each and both
-round-trip tested; the bar's crumbs (`chain.go`) are a projection, one crumb
-per frame, so a crumb click is arithmetic: `AscentsTo`. Framing therefore
-lives in exactly two places that must agree — the stack and the server
-tile's `view_*` — and the round trip is locked by
-`framing-roundtrip.spec.ts`. A debounced settle persister (armed from
-`draw()` — every state change redraws, so there is no per-gesture hook to
-forget) writes settled framing back without waiting for an ascent, through
-the same `pane.FramingTarget` projection an ascent uses.
-
-**Text content has one door.** A content-store entry ({bytes, base version,
-dirty}, keyed by tile id) owns a text tile's current body. Every keystroke
-mirrors into it; every flush goes through `text_flush.go`, which posts by
-tile id and never reads the DOM — so bytes can never be saved under another
-tile's id. Saves claim `SaveBasis` (advanced only by fetches and save
-responses), so a stale save 409s and reconciles visibly — and since a
-capture no longer bumps the row, a 409 there can only mean a real
-concurrent edit, which is why `clientsync.ReactSave` surfaces it.
-`cache.Apply` drops events strictly older than the cached row, and a newer
-row drops a clean body while sparing a dirty one — a foreign writer's edit
-appears, and unsaved typing survives.
-
-**Every unacknowledged write has one home.** `client/outbox` is the ordered
-record of what the server has not answered — framing, captures, layout, and
-the user's unsaved bytes alike — with ONE reconcile rule (`Record`: a
-transport failure parks a retry, any verdict acks) and two drains: the
-retry kick on reconnect, and the unload flush, where each entry leaves
-through its `navigator.sendBeacon` form. It holds order and retry, never a
-copy of a value: a content entry's thunk re-reads the bytes from the cache,
-their one owner. On the client side of a mutation there are exactly two
-paths — `postWriteContent` (the one write that claims a version) and
-`write`/`do` (everything else) in `client/wasm/mutate.go`.
-
-**Events never touch framing.** The SSE path flows only into the cache;
-framing writes live only in the gesture/transition code. An event landing
-mid-animation updates data and redraws, but cannot move the viewport a
-transition is animating. (This separation is verified by inspection only —
-see I11.)
-
-**The rendered view is a DOM overlay.** A focused text pane in rendered
-mode shows sanitized HTML in a div (`markdown.RenderHTML`: goldmark, go-org
-for `.org` names, bluemonday); the editing textarea is another overlay.
-Task-list checkboxes are the overlay's one interactive control (2026-08-09):
-a click maps DOM index → source marker (`markdown.ToggleTask`, one shared
-parser, parity-pinned by unit test) and the edit rides the same content
-entry + flush as a keystroke.
-Every other view paints raw soft-wrapped source on canvas, wrapped to the
-same columns the textarea shows (`markdown.WrapRawText`), so nothing
-reflows when focus moves. Grid previews render at constant scale
-(`markdown.PreviewWindowFrame` takes only the tile's own facts, so a
-sibling pane's width cannot re-wrap a preview — unrepresentable by
-signature).
-
-**Every pane wears the bottom bar** (`client/wsbar` geometry,
-`bottombar.go` glue; #267, 2026-08-21 — the band was focused-pane-only
-under #220, but content resizing on every focus change was distracting;
-focus shows only in the border color): ONE nav chain of clickable square
-previews — one crumb per place frame, projected by `pane.Crumbs`, never
-stored, with the wide named bar of a pane-tile boundary among them — plus
-the centered title and the
-circle slot (the + menu / back / refresh button). Native surfaces carve
-the band out of their rects unconditionally (`panebox.BarInset`), so
-nothing can occlude it and nothing reflows on focus moves. Clicks act in
-the focused pane; a band click in an unfocused pane moves focus, nothing
-else. Clicking a chain crumb is THE bar ascent gesture; middle-click on
-a pane is the in-pane shortcut.
-
----
-
-## 6. The Electron native shell (`apps/desktop/src/main`)
-
-Live URL pages are native `WebContentsView`s positioned over the wasm
-canvas. They are separate webContents off the main page, so nothing here is
-reachable by `make check` — only `make check-electron` (harnesses under
-xvfb) and `make check-e2e` (the full app). This is why the worst bugs (live
-tiles, menus over live tiles) escape the fast gate.
-
-**`WebviewRegistry`** (`webviews.ts`, ~600 LOC, the documented bug source,
-still untested directly) owns a `Map<paneId, {view, bounds, hidden,
-focused}>`. The tightest timing seam in the system is `syncURLViews`, run
-every frame: the renderer sends CSS-px content-box bounds over IPC;
-`roundBounds` snaps to integer DIP; `boundsEqual` skips no-op churn; and
-`liveOverlaysHidden` (dragging ∨ rightDrag ∨ leftResize ∨ menuOpen) parks
-native views off-screen so canvas overlays can paint where they sit. Get
-that predicate wrong and a live view either eats input or vanishes.
-
-A view's `focused` flag feeds one thing: the focus-steal guard — only the
-focused pane's view may hold OS keyboard focus, and a page that grabs it
-via scripted navigation gets it taken back.
-
-**Sessions.** One host-local Chromium partition, `persist:gridwell`, for
-every live url tile — local or through a mount. Chromium's own disk
-persistence is the session's system of record (a documented charter-§7
-exception, like processes and files). Teardown captures a final frame for
-the freeze but never depends on the capture succeeding.
-
-**No shell transport.** There was one — main dialed the federation socket
-and relayed gRPC `OpenShell` per pane over IPC — and it is gone
-(2026-08-29). PTY bytes ride a WebSocket on the WEB door
-(`internal/server/shell_door.go`, `client/shellwire`), like every other
-primitive, so the desktop is no longer the only host with shells and this
-process carries nothing shell-shaped at all.
-
----
-
-## 7. The cure pattern (already in the codebase — copy it)
-
-Derive a fact in exactly one place and read it everywhere; never store the
-same truth twice. The templates:
-
-| Exemplar | The one fact | Where derived | Read by |
-|---|---|---|---|
-| `Tile.reference` | "this tile is a link" | `server.qualifyTiles` | render (`isLinkTile`), delete, clone, descent |
-| `rpc.Tile` / `rpc.Grid` | what a record IS | `api/gridwell/v1/data.proto`, generated by `api/rpc/internal/gen` | every Go caller; the store, the router, the client |
-| `store/columns.go` | how a row is STORED | one descriptor entry per column | the DDL, the SELECT, the scan, the clone INSERT, every rebuild copy list |
-| `loadForWrite` / `claimContentVersion` | "may this mutation claim a version" | `store/tiles.go` | every store mutation |
-| `emitTileChanged` / `finishContentEdit` | "does this mutation bump version" | `store/tiles.go` | every store mutation |
-| `outbox.Record` | "is this write still owed, or did the server answer" | `client/outbox` | every client mutation |
-| `gwerr.ClassifyError` | "what status is this error" | one sentinel→class table in the api | every transport (Connect, raw HTTP, the plugin gRPC hop) |
-| `pane.Stack` | "where is this pane" | one stack of frames (`client/pane/place.go`) | the URL codec, the layout blob codec, the crumbs, the framing writeback |
-| `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` | the viewport transform | one pure pair | preview + descent |
-| `client/menu` | "is the menu open, on which pane" | one state machine | every gesture path (was 14 scattered writes) |
-| `cache` content entries + `text_flush.go` | "the bytes, their version, and whether they're edited" | one entry per tile id | every save path |
-| `shellconn.DecideAutoLive` | "does this descent go live" | one decision | every descent/restore path |
-| `client/shellwire` | the shell door's address + frames | one grammar | the server door and the wasm client |
-| `local.OpenVerified` | the plugin's identity | verify+open+inject fused | every identity read |
-| `Server.resolve` + `server.router` | "who owns this qualified id, and what does the answer look like" | one lookup, one `namespace.Namespace` over it | the Connect codec, the federation codec, the content door, the shell door |
-| `namespace.Follow` | "this event stream is established" | one definition | the node's fan-in and the transport's |
-
-Each makes a bug class unrepresentable. That is the goal of every change:
-prefer the design where the bug cannot be written over the design where it
-is merely fixed this once.
-
-### 7.1 The derived wire fields and who owns each
-
-A record field that is NOT a stored column is computed somewhere. Each one
-has exactly one owner; this is the inventory, and
-`TestDescriptorMatchesProto`'s `wireOnly` list is its machine-checked half
-(a field that leaves the proto, or gains a column, fails there).
-
-| Field | The one fact | Owner |
-|---|---|---|
-| `Tile.reference` | "this tile is a link" | `server.qualifyTiles` — a child that ARRIVED qualified, or a `link_target_id`. Both link shapes, one bit. The client reads it alone; the synthetic launcher swatch (`rpc.PluginWellTile`) stamps it itself, since it never passes the router |
-| `Tile.serves_page` | "the plugin serves this tile's content as a web page" | the owning plugin declares it on its `Entry` (fs: `fsfile.ServesPage`); `pluginhost/adapter.go` is the one place an entry's declaration reaches the wire tile |
-| `Tile.text_presentation` | "how this body presents" | the same pair — declared on the `Entry`, copied once by the adapter |
-| `Tile.status_detail` | "the owning plugin's current trouble with this tile" | the same pair; `internal/remote` supplies it for a connection well that has not dialled yet |
-| `Grid.writable` | the owning plugin's per-grid mutation capability | `server.router.GetGrid` stamps it from that plugin's `Info`; a transit response carries the remote node's stamp through `rpc.TransitQualifyGrid` |
-| `Grid.scratch_grid_id` | the plugin's ephemeral-url grid, qualified for the receiver | the same two, same rule |
-| `Grid.menu_entries` | the plugin's declared (+) additions for this grid | the same two, via `rpc.QualifyMenuEntries` |
-| `Grid.node_ns` | "which node is this grid inside, from here" | `rpc.TransitQualifyGrid` (`QualifyNS`) — the only writer anywhere |
-| `Grid.source_kind` / `source_id` | "this grid is host-backed, by this path/PID" | `pluginhost/adapter.go`, synthesizing a plugin's grid |
-| `Grid.stale` | "this is the remembered answer, not the live one" | two sites RAISE it — `internal/sourcecache` serving a cached answer, and the adapter answering a dark source — but neither derives it: each names its own situation. One meaning, no shared computation to factor |
-
----
-
-## 8. The seam catalog: one fact, many copies
-
-Each entry is the same disease — one truth duplicated — and a ranked target
-for the §7 cure.
-
-1. **Native view bounds vs. canvas pane rect** — the per-frame
-   reconciliation in `syncURLViews`; coordinate math in two languages,
-   timing-sensitive. The pure math is extracted and tested (`viewutil.ts`).
-   Highest impact of what remains: it is where live tiles go wrong.
-2. **The drag threshold** — `dragThreshold` (Go, the declared owner) plus
-   two forced copies (`viewutil.ts`, and inlined in the sandboxed
-   `urlview-preload.ts`, which cannot import). Drift-linted by
-   `gesture-threshold.test.ts`.
-3. **The `SetTile` kind→operation mapping** — described in the proto,
-   implemented in the local plugin's switch, and spelled a third time by
-   `conv.go`'s per-kind request builders (the one half of `conv.go` that is
-   still hand-written).
-4. **Text scroll of a rendered descent** — the canvas wheel handler writes
-   the frame's `TextScrollY` and the rendered overlay's own scroll listener
-   writes it too; the canvas path never syncs the div's scrollTop. Two
-   writers, found 2026-07-31, unfixed.
-
-Cured and closed, each by making the copy unrepresentable rather than
-consistent:
-
-- **Framing** (finding 2, S4) — five roles over two storage shapes and four
-  store writers became ONE float centre on the row that owns the doorway,
-  one wire verb, one store writer and one client persister (§2, §4.1, §5).
-  The quantization math that existed only to make the integer origin
-  survive a round trip is gone; the round trip is locked by
-  `framing-roundtrip.spec.ts` and `TestFramingRoundTripsByteIdenticalAcrossTheSeam`.
-- **"Where am I"** (finding 1, S8) — five representations and eight ascents
-  became one `pane.Stack` of frames, one `descend`, one `ascend` (§5, §10).
-- **`version`** (finding 3, S5) — the concurrency claim and the
-  cache-staleness counter were one field; now `version` means content
-  bytes, everything else routes through `loadForWrite`, and the retired
-  claim fields are `reserved` (§4.1).
-- **Unacknowledged writes** (S5) — a ledger per write family became one
-  `client/outbox` with one reconcile rule and two drains (§5).
-- **The three copies of Tile** (finding 4, S6) — the proto owns the record:
-  `api/rpc` is generated from it, the store's five column lists are one
-  descriptor, and the derived wire fields are inventoried with one owner
-  each (§7, §7.1).
-- **Two remembering systems** (finding 6, S7) — the adapter's `listings`
-  blob and the mount cache became `internal/sourcecache`, one engine in one
-  disposable file, with the durable rows answering a dark source (§4.0.1).
-- **The two ROUTERS** (finding 5, S2) — the node export used to
-  re-implement every stream and delegate every unary by hand; both doors
-  are codecs over one `namespace.Namespace`.
-- Earlier: the menu (single owner `client/menu`); the corner-control
-  visibility predicate (the control views were deleted outright, #214); the
-  source-sweep policy (fs/proc, both tested); plugin capabilities (declared
-  once in `Info`).
-
----
-
-## 9. Known drift (do not trust these names)
-
-The rule: fix a stale comment or name in the same commit that touches the
-file. What remains:
-
-- **`text_focus` in the persisted layout blob.** `LayoutV1`
-  (`api/panelayout`) names a leaf's content descent `text_focus`, and
-  `panelayout.TextFocusIDs` reads it; the model calls that a CONTENT frame
-  (`pane.Frame.Content` — text, url, shell and page tiles alike). The bytes
-  are frozen, so the key cannot change; read it as "the content tile this
-  pane is inside". Do not spread the word back into new code.
-  (The `file_scroll_x`/`file_zoom` tags this section used to name are gone
-  with the `pane.Pane` fields that carried them — a pane is now its id and
-  its place stack, and the codec spells every key out by hand.)
-
----
-
-## 10. Map of the key journeys
-
-- **Boot.** `Handshake` returns home (`home_grid_id`, a field), the
-  plugins and the connections; panes anchor at home and "/" is its URL. A
-  pane's URL is its anchor as leading path segments, then tile ids:
-  `/<plugin>/<grid>/3/4`. Leading non-numeric segments are the namespace
-  chain — sound because a plugin id can never be purely numeric.
-- **Descend.** ONE verb (`descend`, `client/wasm/nav.go`): it pushes a
-  frame, and WHICH KIND is the doorway tile's own declaration, never the
-  call site's. A well pushes a grid frame (the pane reads the tile's
-  `view_*` and restores the stored viewport); a LINK pushes a grid frame
-  carrying the target grid id, so path ids never mix namespaces; a
-  text/url/shell/page tile pushes a content frame (no grid — the tile is
-  the place); a pane tile descends the WINDOW a level instead
-  (`descendLevel`).
-- **Descend into content.** Entering a url tile reopens the page; a shell
-  reconnects its still-running tmux session (a fresh tile creates one; a
-  dead session stays frozen). One owner decides (`shellconn.DecideAutoLive`)
-  and every re-entry path — reload restore, workspace swap, a stacked
-  ascent — applies the same rule. The frozen preview is what a tile looks
-  like from outside; going live never mutates the row.
-- **Ascend.** ONE verb (`ascend(p, n, animate)`): pop n frames, the last
-  hop animated, the ones above it instant. Every hop performs the same
-  writebacks through one `leaveFrame`: the intrinsic viewport writes back
-  via `SetFraming` (framing — no claim, no version bump) onto the doorway
-  the frame came in by, or the root grid row when there is none (the same
-  verb, the other target); a url/shell descent freezes its preview (an
-  automatic capture — also no claim and no bump). Clicking a bar crumb is
-  `ascend(p.AscentsTo(crumb))`.
-- **Drop a tile.** Gesture → `CreateTile`/`PlaceTile`/`CloneTile`,
-  id-addressed (layout carries no version claim) → server routes → store
-  mutates → `Subscribe` event → `cache.Apply` → redraw. Across a plugin boundary
-  there is no move: a left-drag creates a LINK in the destination (exit
-  well or `link_target_id`), a right-drag CLONES (leaves copy bytes; a
-  solid well deep-copies its subtree — `internal/server/deepcopy.go`,
-  issue #200 — degrading any unreachable piece to a LINK to the original,
-  never a silent hole; a source that answers "gone" still aborts).
-  Relocation is the explicit two-step: clone, then delete.
-- **Open a live URL tile.** The canvas places a rect; IPC asks the native
-  layer for a `WebContentsView` on the shared partition; `syncURLViews`
-  tracks its bounds every frame and parks it during overlays.
-- **Attach a shell.** The client opens a WebSocket at `/shell` on the
-  page's own origin (`client/shellwire` writes the query; the bind rides
-  the handshake, so the attach is atomic with the upgrade). The door
-  (`internal/server/shell_door.go`) sits on the same cookie-gated mux as
-  every page request and resolves the id BEFORE accepting, so a refused
-  upgrade can never leave a tmux session behind; then it pumps
-  `OpenShell` through the same shell route the federation export uses.
-  Binary frames are raw PTY bytes both ways, text frames are JSON control
-  (up: resize; down: one exit verdict, always the last thing the door
-  says). `client/shellstream` owns the lifecycle — replace-on-open,
-  exactly-once exit, no late bytes from a replaced stream — and
-  `pane.TakeOver` decides who holds the one live surface (#249).
-- **Enter a workspace (pane tile).** `descend`'s window arm: push a
-  `pane.Level` (outer tree + origin), decode the layout blob, swap
-  `App.tree`. The outer level stays ALIVE (#249) — nothing is flushed
-  away. While inside, a debounced persister encodes the live tree,
-  hash-diffs, and posts the layout as a `WriteContent` (framing-class — no
-  claim, never bumps version) only on change. The URL is `?w=<tile id>`.
-  The level stack is the ONE deliberate second axis of a pane's place, and
-  it is session-only, like the outer frames of the place stack (#13);
-  `ascendLevels` is its pop.
-- **Show the menu.** `menu.Open(paneID)` on the focused pane, toggled from
-  the bar slot; native views park; the popover paints above every pane. A
-  click inside the open popover routes BEFORE pane resolution — resolving
-  the pane under it first would transfer focus and close the very menu
-  being used.
-
----
-
-## 11. The invariant inventory
-
-Construction-enforced invariants are safe to build on; convention-only
-invariants are where bugs are born.
-
-| # | Invariant | Enforced where | Status |
-|---|---|---|---|
-| I1 | Ids never reused | SQLite AUTOINCREMENT | ✅ construction |
-| I2 | `version` means the user's content bytes; framing, captures and layout carry no claim | `claimContentVersion`/`finishContentEdit` vs `loadForWrite`/`emitTileChanged`, and the retired claim fields are `reserved` | ✅ construction + tabled (`version_rule_test.go`) |
-| I3 | Clone is an eager deep copy; no id reassigned | `CloneTile` | ✅ construction |
-| I4 | Blobs immutable, content-addressed, refcounted | store blob layer | ✅ construction |
-| I5 | "Is a link" is one derived fact | `qualifyTiles` → `Tile.reference` | ✅ construction |
-| I6 | Qualified-id routing | `Server.resolve` (the one owner, read by all four doors) + the transit rules | ✅ construction |
-| I6b | Two wire surfaces cannot drift | both are codecs over one `namespace.Namespace` (`connect_codec.go`, `namespace.Server`) | ✅ construction |
-| I6c | An answer is never mutated under another reader | qualification clones (`rpc.TransitQualifyTiles`, `server.qualifyTiles`); `internal/namespace`'s ownership contract | ✅ construction + tested (`TestTwoSubscribersEachSeeExactlyOnePrefix`) |
-| I7 | preview = descent target = ascent return | one place stack + the tile row | ⚠️ convention, round trip tested (`framing-roundtrip.spec.ts`); the preview-bytes half still has no oracle (issue #19) |
-| I8 | Text preview == what you left (no re-wrap) | `PreviewWindowFrame` takes only the tile's own facts | ✅ construction + tested |
-| I9 | Focus steal is impossible | the registry's focus guard; wasm owns focus | ✅ tested (`control-focus.spec.ts`) |
-| I10 | Menu changes only by user action | one owner `client/menu` | ✅ construction + tested |
-| I11 | Reading never mutates (SSE during animation) | events flow only into `cache`; framing writes only in gesture code | ⚠️ separation verified by inspection only — no mid-transition injection test; a new framing write into the SSE path would regress silently. The echo/foreign-writer reconcile half is ✅ (`client/cache` units + `foreign-writer.spec.ts`) |
-| I12 | User state survives an unreachable source | fs/proc sweep rules | ✅ construction + tested |
-| I13 | A workspace restores exactly as left; a pure visit never writes | live tree is the one owner; the blob is derived (encode + hash-diff) | ✅ construction + tested |
+No request carries a descent path. The server derives location from rows it
+owns. Sessions and networks never cross the wire.
+
+Wire-only fields are derived in exactly one place each. `Tile.reference`
+(this tile is a link) comes from `server.qualifyTiles`. `Tile.serves_page`,
+`text_presentation`, and `status_detail` come from the plugin's `Entry`
+through `pluginhost/adapter.go`. `Grid.writable`, `scratch_grid_id`, and
+`menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
+transit). `Grid.node_ns` comes from `TransitQualifyGrid` alone. `Grid.stale`
+is raised by whoever serves a remembered answer.
+
+## The router
+
+`internal/server/router.go` is a `namespace.Namespace` over qualified ids.
+It holds no state. Two codecs stand on it and route nothing themselves:
+`connect_codec.go` for the browser and `namespace.Server` (`nodeexport.go`)
+for other nodes. They cannot drift because they are the same value.
+
+Two listeners. The web door (`web.bind`) serves Connect, the content door,
+and the shell door behind a password cookie; serve mints the 0600
+`web-password` file and prints it, delete it to rotate. The federation door
+is a 0600 unix socket (`federation.socket`), never TCP; ssh forwards it
+between nodes.
+
+## The node
+
+`server.yaml` names the node: `id`, `web`, `federation`, `connections`,
+`plugins`. A missing file is a fresh home; serve mints what is absent, and
+that is the only config write. The node builds its own home and transport.
+`plugins:` lists content plugins only.
+
+**Home** (`internal/local`) owns the user's content: text, urls, wells, pane
+tiles, shells, and the event stream. Shells are tmux sessions on a private
+socket, so they survive restarts.
+
+**Plugins** (`plugins/{fs,proc,gitlab}` and anyone else's) speak `plugin.v1`.
+A plugin is stateless. It answers in its own stable string keys and never
+sees ids, layout, or a database. The node mints ids against those keys and
+keeps the arrangement as a namespace of its own store
+(`internal/pluginhost/adapter.go`). The host never imports a plugin and never
+switches on its kind; every plugin behavior rides a wire declaration.
+`docs/plugin-authoring.md` is the contract from the plugin's side.
+
+**Connections** (`internal/remote`) are config rows: an immutable name, a
+label, how to dial. The transport dials each at boot, lands on the remote's
+home, and remembers nothing else but retired names (a name never returns).
+A connection is a row in the + menu and, when dragged, an ordinary link
+tile. `Server.resolve` peels the node id, the transport peels the connection
+name, and the same transit rule applies at both hops.
+
+**Cache** (`internal/sourcecache`) is the one read-through cache, in front
+of every non-home namespace, in one disposable file (`cache.db`). Online it
+passes through and remembers. On a transport-class failure it serves the
+remembered answer stamped `stale`. Writes always pass through. Prefetch is a
+per-namespace option only the transport takes. A dark *source* (the plugin
+answers, its directory or API does not) is answered by the durable rows, so
+a move made during the outage still lands. A dark *plugin* or node is
+answered by the cache.
+
+### The store
+
+One database, `gridwell.db`. It holds node facts only: the ids the node
+minted (`ns`, `key` → id), layout, framing, the user's bytes, connections,
+tombstones. What a source last said lives in `cache.db`. The format contract
+is `internal/local/store/CLAUDE.md`.
+
+**Framing** is one shape: a float center in the grid's own coordinates plus
+a pane-size-independent zoom (the intrinsic ratio, live/overtake). It lives
+on the row that owns the doorway — `tiles.view_cx/cy/zoom` for a well,
+`grids.root_cx/cy/zoom` for a root with no doorway. Zoom 0 means never
+visited. One store writer, one wire verb, one client function.
+
+**`version`** means the user's content bytes changed: a text body, a typed
+url, a typed name. It is the optimistic-concurrency claim for those three
+writes and nothing else. `claimContentVersion` + `finishContentEdit` claim
+and bump; `loadForWrite` + `emitTileChanged` do neither. Captures (title,
+preview, url trail, shell title), framing, and layout ride the second pair.
+The request fields that used to carry a claim are `reserved`, so a stale
+claim cannot be expressed. `version_rule_test.go` is the table.
+
+**Identity.** Ids are AUTOINCREMENT and never reused. Clone is an eager deep
+copy: new ids, blobs shared by content address and refcount, no structural
+sharing. Blobs are immutable, sha256-addressed, refcounted, and carry their
+own `media_type`.
+
+## The client
+
+`client/*` packages are pure Go with unit tests: `pane`, `cache`, `outbox`,
+`zoomtrans`, `gesture`, `wsbar`, `markdown`, `menu`, `shellstream`,
+`shellwire`, `clientsync`, `errsurface`. `client/wasm` is the shim: canvas,
+DOM, and the RPC calls. `make check` compiles the shim but executes none of
+it; only the e2e gates see it. A decision that lives only in the shim is a
+defect — extract it.
+
+**Place.** A pane's place is one stack of frames (`client/pane/place.go`). A
+frame is the grid you are in, the tile you came through, and your viewport
+there. Every descent pushes a frame; every ascent pops one. The viewport you
+left a level at is the frame you left. The URL (`url.go`) and the pane-tile
+layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
+project it. A pane tile swaps the whole pane tree instead — that is the one
+second axis (`levels.go`), and it is session-only.
+
+There is one `descend` and one `ascend` (`client/wasm/nav.go`). Which frame
+a descent pushes is the tile's own declaration: a well or link pushes a grid
+frame, a text/url/shell/page tile pushes a content frame, a pane tile
+descends the window a level. Every ascent hop writes framing back through
+`SetFraming` and freezes a live preview, with no claim and no version bump.
+A debounced settle persister does the same without waiting for an ascent.
+
+**Content.** A cache entry ({bytes, base version, dirty}, keyed by tile id)
+owns a text tile's body. Keystrokes mirror into it; every flush goes through
+`text_flush.go` by tile id, never through the DOM. A stale save 409s and
+reconciles visibly. `cache.Apply` drops events older than the cached row and
+spares a dirty body.
+
+**Outbox.** `client/outbox` is the ordered record of writes the server has
+not answered: framing, captures, layout, unsaved bytes. One reconcile rule
+(`Record`: a transport failure parks a retry, any verdict acks). Two drains:
+the retry kick on reconnect and the unload flush by `sendBeacon`. It holds
+order and retry, never a copy of a value. `client/wasm/mutate.go` has two
+paths: `postWriteContent` (the one write that claims a version) and
+`write`/`do` (everything else).
+
+**Events** flow only into the cache. Framing writes live only in gesture and
+transition code. An event landing mid-animation updates data and redraws;
+it cannot move the viewport.
+
+**Rendered text** is a sanitized HTML overlay (`markdown.RenderHTML`:
+goldmark, go-org, bluemonday). Task-list checkboxes are the one interactive
+control; a click flips the source marker through the normal edit path. Every
+other view paints soft-wrapped source on canvas at the same columns as the
+textarea, so nothing reflows on focus. Previews render at constant scale from
+the tile's own facts alone.
+
+**The bar.** Every pane wears it (`client/wsbar`, `bottombar.go`): one crumb
+per frame, the title, and the circle slot (+ menu / back / refresh). Native
+surfaces carve the band out unconditionally (`panebox.BarInset`). Clicks act
+in the focused pane; a click in an unfocused pane moves focus, nothing else.
+A crumb click is the ascent gesture; middle-click is the in-pane shortcut.
+
+**Shells** attach over a WebSocket at `/shell` on the page's own origin
+(`client/shellwire` writes the address and frames; `client/shellstream` owns
+the lifecycle). Binary frames are PTY bytes, text frames are JSON control
+(resize up, one exit verdict down). The door (`internal/server/shell_door.go`)
+resolves the id before accepting, so a refused upgrade never leaves a tmux
+session behind. One live surface per content tile: opening it elsewhere takes
+over (`pane.TakeOver`).
+
+## The desktop
+
+`apps/desktop/src/main` does one thing: it places native `WebContentsView`s
+over the canvas for live url tiles. `WebviewRegistry` (`webviews.ts`) owns
+one entry per pane. `syncURLViews` runs every frame: the renderer sends CSS-px
+bounds, `roundBounds` snaps to DIP, `boundsEqual` skips churn, and
+`liveOverlaysHidden` parks views off-screen while a drag, resize, or menu
+needs the canvas. The focus guard keeps OS keyboard focus in the focused
+pane's view only. One Chromium partition (`persist:gridwell`) holds every
+live url tile, local or mounted; live tiles browse from the host's network.
+Nothing here touches shells. Nothing here is visible to `make check`.
+
+## One fact, one owner
+
+Every fact is derived in one place and read everywhere else. The shapes to
+copy:
+
+| Fact | Owner |
+|---|---|
+| what a record is | `api/gridwell/v1/data.proto` → generated `api/rpc` |
+| how a row is stored | `store/columns.go` |
+| this tile is a link | `server.qualifyTiles` → `Tile.reference` |
+| may this write claim a version | `claimContentVersion` vs `loadForWrite` |
+| does this write bump `version` | `finishContentEdit` vs `emitTileChanged` |
+| where is this pane | `pane.Stack` |
+| is this write still owed | `outbox.Record` |
+| the bytes, their version, edited or not | one cache entry per tile id |
+| does this descent go live | `shellconn.DecideAutoLive` |
+| is the menu open, on which pane | `client/menu` |
+| the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
+| the shell door's address and frames | `client/shellwire` |
+| what error is this | `gwerr.ClassifyError` |
+| who owns this qualified id | `Server.resolve` + `server.router` |
+| this event stream is established | `namespace.Follow` |
+
+Remaining seams with more than one writer, ranked by risk:
+
+1. Native view bounds vs. canvas pane rect — reconciled every frame in
+   `syncURLViews`; the math is extracted to `viewutil.ts`.
+2. The drag threshold — `dragThreshold` in Go plus forced copies in
+   `viewutil.ts` and the sandboxed `urlview-preload.ts`; drift-linted.
+3. The `SetTile` kind→operation mapping — the proto, the local switch, and
+   the hand-written per-kind builders in `api/rpc/conv.go`.
+4. Text scroll of a rendered descent — the canvas wheel handler and the
+   overlay's scroll listener both write `TextScrollY`.
+
+Note: the persisted layout blob (`api/panelayout`) still spells a content
+frame `text_focus`. The bytes are frozen; read it as "the content tile this
+pane is inside" and do not spread the word.
+
+## Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Ids never reused | AUTOINCREMENT |
+| `version` = content bytes; framing, captures, layout carry no claim | the two store pairs; reserved request fields; `version_rule_test.go` |
+| Clone is an eager deep copy | `CloneTile` |
+| Blobs immutable, content-addressed, refcounted | the blob layer |
+| "Is a link" is one derived fact | `qualifyTiles` |
+| Two wire surfaces cannot drift | both are codecs over one `namespace.Namespace` |
+| An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
+| preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
+| Text preview never re-wraps | `PreviewWindowFrame` takes only the tile's facts |
+| Focus steal is impossible | the registry's focus guard; `control-focus.spec.ts` |
+| Menu changes only by user action | `client/menu` |
+| Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
+| User state survives an unreachable source | the durable rows answer; fs/proc sweep rules |
+| A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
+
+## Module boundaries
+
+```
+plugins/*          → api                      (nothing else of ours)
+internal, server   → api
+apps/gridwell      → server, api              (no plugin modules)
+apps/mobile        → server, api, chosen plugins   (a leaf may enumerate)
+api                → nothing of ours
+```
+
+`test/boundary` enforces the arrows with `go list -deps`, pins the api
+module's dependency budget, and `make check` builds every module standalone
+without go.work. The e2e suite runs the same specs against subprocess and
+in-process plugins; identical behavior is the pin that the compose door hides
+the process boundary.

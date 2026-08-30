@@ -1,64 +1,6 @@
 # check-docpaths exemptions: "<file> <path>" — a path a doc names on purpose
 # although it does not exist in the tree. Every line says why.
-# Prose that happens to look like a path (a slash between two words):
-CLAUDE.md client/server
-ARCHITECTURE.md client/native
-docs/remote-menu.md plugins/nodes
-# A version placeholder, not a path:
-docs/plugin.md api/v0.x.y
-# The 2026-08-15 plan text names the tree as it stood then (the doc says so):
-docs/plugin.md internal/store
-docs/plugin.md internal/plugin/guest
-docs/plugin.md internal/cli/sshmigrate.go
-docs/plugin.md plugins/griddb
-# The 2026-08-29 review names the five place representations as they stood
-# before S8 folded them into client/pane; the plan's status table names the
-# two packages that fold retired:
-docs/architecture-review.md client/url
-docs/architecture-review.md client/workspace
-docs/simplify-plan.md client/url
-docs/simplify-plan.md client/workspace
-# A proposed package that does not exist yet (offline options, 2026-08-14):
-docs/offline.md client/oplog
 # A gitignored runtime cache dir that `make vendor` creates:
 apps/desktop/README.md apps/desktop/.cache
 # Relative to apps/mobile (apps/mobile/test/bridge_test.dart):
 apps/mobile/README.md test/bridge_test.dart
-# The 2026-08-22 inventory names the pre-v2 homes beside the current ones:
-docs/content-presentation.md plugins/local/store
-docs/content-presentation.md plugins/remote/db.go
-# docs/plugin.md: the 2026-08-15 inventory names the bundled binary deleted 2026-08-29 (docs/one-node.md):
-docs/plugin.md apps/gridwell-all
-docs/plugin.md gridwell-all/
-docs/plugin.md internal/cli/init.go
-# docs/one-node.md: the inventory of what the fold left behind names the deleted pieces:
-docs/one-node.md apps/gridwell-all
-# The 2026-08-22 inventory names the retired layout engine (folded into the store 2026-08-29):
-docs/content-presentation.md internal/layout
-docs/one-node.md internal/layout
-# The 2026-08-29 architecture review names the dead machinery S1 removed:
-docs/architecture-review.md client/schemaform
-docs/architecture-review.md client/wasm/entry_params.go
-# The 2026-08-29 review's finding 8 names the Electron shell relay it asked
-# for; S3 deleted it (shells ride the web door):
-docs/architecture-review.md apps/desktop/src/main/shellgrpc.ts
-# The 2026-08-14 offline plan and the 2026-08-29 review name client/pending,
-# the per-write-family ledger that docs/simplify-plan.md S5 folded into
-# client/outbox; both docs describe the tree as it stood when they were
-# written:
-docs/offline-plan.md client/pending
-docs/architecture-review.md client/pending
-docs/simplify-plan.md client/pending
-# docs/architecture-review.md names the in-process gRPC loopback its
-# finding 5 is about, DELETED 2026-08-29 (docs/simplify-plan.md S2):
-docs/architecture-review.md api/compose/compose.go
-# docs/plugin.md and the review's Resolution name the test proxy DELETED
-# 2026-08-29 with the in-process hop (docs/simplify-plan.md S2):
-docs/plugin.md internal/plugin/proxytest
-docs/architecture-review.md internal/plugin/proxytest
-docs/simplify-plan.md internal/plugin/proxytest
-# The 2026-08-29 review's finding 6 names the mount cache by the path it had;
-# S7 renamed it internal/sourcecache and put it in front of plugins too. The
-# 2026-08-14 offline plan names it the same way, and says so inline:
-docs/architecture-review.md internal/plugin/mountcache
-docs/offline-plan.md internal/plugin/mountcache

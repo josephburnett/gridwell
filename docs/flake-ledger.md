@@ -1,24 +1,18 @@
 # The flake ledger
 
-`CLAUDE.md` (the verification gates) says a spec on this ledger still
-gets a fresh look before you blame a change. This is that ledger: every
-e2e spec or fixture whose history includes a flake, what the flake
-really was, and how it was closed. The authoritative notes live as
-comments IN the specs themselves (grep `flak` under `apps/desktop/e2e`);
-this page indexes them so the history is findable from one place.
-`test/boundary` pins that every spec carrying such a note is listed here.
+Every e2e spec whose history includes a flake, what the flake was, and how
+it was closed. The notes live as comments in the specs (grep `flak` under
+`apps/desktop/e2e`); this page indexes them. `test/boundary` pins that every
+spec carrying such a note is listed here.
 
-Two rules the history keeps teaching:
+Two rules:
 
-- **A flake is a bug with a diagnosis pending.** Every entry below ended
-  as a mechanism — a race in the spec, a dropped synthetic input, a
-  teardown that hung — never as "it was just flaky". A retry that passes
-  is evidence for the ledger, not a verdict.
-- **Vindicated isolated only counts against a fresh tree.** The gates
-  rebuild at start; a single-spec `npx playwright test` does not — run
-  `make build` and `npm run build` first, or a rerun "vindicates" a spec
-  against last week's sidecar. Rerun on a built tree before calling
-  anything vindicated.
+- A flake is a bug with a diagnosis pending. Every entry below ended as a
+  mechanism, never as "it was just flaky". A retry that passes is evidence,
+  not a verdict.
+- A rerun only vindicates a spec on a freshly built tree. The gates rebuild
+  at start; a single-spec `npx playwright test` does not. Run `make build`
+  and `npm run build` first.
 
 ## Specs with a flake history (all closed)
 
