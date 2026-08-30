@@ -19,6 +19,10 @@ import (
 
 const repoModule = "github.com/josephburnett/gridwell"
 
+// pluginsModule is the plugins repository. Nothing here may reach into it:
+// gridwell owns the door, that repository owns the plugins.
+const pluginsModule = "github.com/josephburnett/gridwell-plugins"
+
 // modules maps each in-repo module, by path suffix with "" for the root, to
 // the other in-repo modules its non-test packages may import. Tests are exempt
 // by construction: `go list .Imports` excludes test files, and a seam test
@@ -159,6 +163,69 @@ func TestAPIDependencyBudget(t *testing.T) {
 		dep := strings.Fields(l)[0]
 		if !allowed[dep] {
 			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (every plugin inherits this graph)", dep)
+		}
+	}
+}
+
+// TestNoPluginImplementation is the standing pin on the third-party door: no
+// package in this repository, TEST FILES INCLUDED, may import a plugin
+// implementation, and no module here may even declare the plugins repository
+// as a dependency. The host must not know its plugins — every plugin-specific
+// behavior rides a wire declaration — and this separation has eroded
+// repeatedly when left to intention, so it is machinery, not a review
+// argument.
+//
+// Tests are the half that used to leak: a seam test that linked the fs plugin
+// gave the host tree an import edge no production code had. They reach a real
+// plugin the way production does instead — internal/plugintest spawns the
+// shipped gridwell-plugin-<kind> binary through compose.LoadPlugin.
+func TestNoPluginImplementation(t *testing.T) {
+	root := repoRoot(t)
+	for mod := range modules {
+		dir := filepath.Join(root, mod)
+		// Every import edge, including the ones only tests have: Imports is
+		// the non-test set, TestImports the in-package test files', and
+		// XTestImports the _test package's.
+		cmd := exec.Command("go", "list", "-f",
+			`{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}`, "./...")
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("go list in %s: %v\n%s", mod, err, out)
+		}
+		sc := bufio.NewScanner(bytes.NewReader(out))
+		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+		for sc.Scan() {
+			fields := strings.Fields(sc.Text())
+			for _, imp := range fields[1:] {
+				if imp == pluginsModule || strings.HasPrefix(imp, pluginsModule+"/") {
+					t.Errorf("%s imports %s — a plugin implementation is another repository's; spawn the binary through internal/plugintest instead", fields[0], imp)
+				}
+			}
+		}
+	}
+	// A go.mod that names the plugins repository at all — require or replace —
+	// is the same coupling one step earlier, and would let an import back in.
+	mods, err := filepath.Glob(filepath.Join(root, "**", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range append(goWorkUses(t, root), ".") {
+		mods = append(mods, filepath.Join(root, dir, "go.mod"))
+	}
+	seen := map[string]bool{}
+	for _, path := range mods {
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(data), pluginsModule) {
+			rel, _ := filepath.Rel(root, path)
+			t.Errorf("%s names %s — no module here may depend on the plugins repository", rel, pluginsModule)
 		}
 	}
 }
