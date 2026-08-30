@@ -55,26 +55,37 @@ user-visible meaning carries no such fact, so it may be **retired**:
   the third (the `listings` table — a CACHE that had been living under the
   frozen promise, whose one engine is now `internal/sourcecache`).
 - A retiring column whose MEANING lives on is **converted, not dropped**:
-  the rebuild's copy list names the DESTINATION columns and `rebuildSelect`
-  supplies the expression that reads them out of the old shape
-  (`view_x + w/2`). The conversion therefore happens exactly once, whichever
-  rebuild step an old file passes through first.
+  the descriptor keeps the DESTINATION column with the `since` of the data it
+  carries, and `rebuildSelect` supplies the expression that reads it out of
+  the old shape (`view_x + w/2`). The conversion therefore happens exactly
+  once, whichever rebuild step an old file passes through first.
 - A wire field removed alongside a column gets `reserved <n>` in the proto —
-  numbers are never reused. (`TestProtoMatchesDDL` pairs columns with proto
-  fields, so a column and its field must retire in the SAME change.)
+  numbers are never reused. (`TestDescriptorMatchesProto` pairs on-wire
+  columns with proto fields, so a column and its field must retire in the
+  SAME change.)
 - A **rebuild always materializes the current `tilesTableDDL`**, so an older
-  rebuild step replays onto the latest shape: after a drop, every earlier
-  rebuild's copy list must stop naming the dropped column. The chain and a
-  fresh Open still converge — `TestSchemaEquivalence` proves it.
+  rebuild step replays onto the latest shape: after a drop, deleting the
+  descriptor entry is enough — no rebuild copy list names it any more,
+  because none of them is written by hand. The chain and a fresh Open still
+  converge — `TestSchemaEquivalence` proves it.
 
 ## How the schema is represented
 
-- `schema.go` `tablesTemplate` (returned by `tablesDDL()`) is the **single
-  readable description of the current schema** — the latest shape a fresh `Open`
-  materializes directly. Read it to know the present columns; do not reconstruct
-  the schema by replaying migrations.
+- `columns.go` `tilesColumns` / `gridsColumns` is the **one description of a
+  column**: its name, its SQL type and constraints, its DDL comment, the
+  schema version whose DATA it carries (`since`), the scan destination on
+  `rpc.Tile`/`rpc.Grid` when it is on the wire (`bind`), and the reason a
+  clone skips it (`noCopy`). Five readers derive from it — the CREATE TABLE
+  text, the SELECT list, the row scan, the clone INSERT, and every rebuild
+  migration's copy list — so a column cannot be spelled twice, and therefore
+  cannot be spelled inconsistently.
+- `schema.go` `tablesDDL()` RENDERS that descriptor: it is the latest shape a
+  fresh `Open` materializes directly. Read the descriptor to know the present
+  columns; do not reconstruct the schema by replaying migrations. Only the
+  tiles kind `CHECK` (`tilesCheck`) is literal text — it is a per-KIND rule
+  over columns, not a column list.
 - `schema.go` `tablesV1` is the **frozen v1 base** — an immutable byte-for-byte
-  copy of `tablesTemplate` as it was when the format froze. **Never edit it.**
+  copy of the tables as they were when the format froze. **Never edit it.**
   Tests build genuine "old files" from it and migrate them forward.
 - `migrations.go` `migrations` is the ordered, additive chain; entry _i_ takes a
   DB from version _i+1_ to _i+2_. `schemaVersion` is the current generation,
@@ -85,26 +96,37 @@ user-visible meaning carries no such fact, so it may be **retired**:
   source cache in `internal/sourcecache`); `migrateUp` here is a thin
   adapter.
 
-`TestSchemaEquivalence` proves `tablesV1 + migrations == fresh tablesTemplate`.
+`TestSchemaEquivalence` proves `tablesV1 + migrations == fresh tablesDDL()`.
 That equivalence is what lets `migrateUp` stamp a fresh DB without running the
 chain: the two routes are guaranteed to converge.
 
 ## Adding a column (the common case)
 
-Two edits plus one fixture — the equivalence test makes any omission a loud
-failure, so you cannot half-do it:
+ONE descriptor entry plus a migration and its fixture — the equivalence test
+makes any omission a loud failure, so you cannot half-do it:
 
-1. **`schema.go`**: add the column inline to `tablesTemplate` (keeps the
-   readable latest shape true). Do **not** touch `tablesV1`.
+1. **`columns.go`**: append one `column` entry — `name`, `ddl`, a `comment`
+   saying what the column means, `since: N` (the new schema version), and
+   either a `bind` (it is a field of `rpc.Tile`/`rpc.Grid`, and therefore a
+   proto field of the same name) or nothing (storage-only). Give it a
+   `noCopy` reason only if a clone must NOT carry it. Do **not** touch
+   `tablesV1`, and do not add the name anywhere else: the DDL, the SELECT,
+   the scan, the clone INSERT and every rebuild copy list all read this
+   entry.
 2. **`migrations.go`**: bump `schemaVersion` by one and append
    `{to: N, run: addColumn("ALTER TABLE … ADD COLUMN …")}`.
 3. **`migration_harness_test.go`**: append one `migrationFixture{version: N,
    seed, verify}` — seed rows valid at version N-1, verify the new column is
    present and the old rows survived.
 
-If the column is storage-only (not on the wire), also add its name to the
-tiles/grids `storageOnly` allowlist in `drift_test.go`; otherwise add it to the
-proto and the drift lint passes on its own.
+An on-wire column also needs its proto field (`api/gridwell/v1/data.proto`,
+same snake_case name) — `buf generate` derives the Go field from it and
+`TestDescriptorMatchesProto` fails until the two agree. A storage-only column
+needs nothing more; a proto field that is DERIVED rather than stored goes on
+that test's `wireOnly` list with the reason.
+
+If a clone must supply a value for the new column, `insertTileCopy`'s value
+map is where — `copyBinding` errors by name until it does.
 
 ### SQLite `ADD COLUMN` limits
 
@@ -120,8 +142,9 @@ version bookkeeping and equivalence stay honest.
 `ALTER TABLE ADD COLUMN` **cannot** change the table-level `CHECK` constraint on
 `tiles` (the `kind IN (…)` / per-kind column rules). Adding a new tile kind
 therefore needs a **table-rebuild migration**, all inside the migration tx:
-create `tiles_new` with the new CHECK → `INSERT INTO tiles_new (explicit
-columns, id included) SELECT … FROM tiles` → `DROP TABLE tiles` → `ALTER TABLE
+create `tiles_new` with the new CHECK → `INSERT INTO tiles_new (the columns
+`rebuildColumns(N-1)` derives — every column whose data the version being READ
+already had, id included) SELECT … FROM tiles` → `DROP TABLE tiles` → `ALTER TABLE
 tiles_new RENAME TO tiles` → recreate the `idx_tiles_*` indexes (BOTH
 sources: `tilesIndexDDL` and, at or after v9, `externalsIndexDDL`'s
 `idx_tiles_live_key`, which `DROP TABLE` takes with it) — **and

@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -81,59 +83,89 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 	}
 }
 
-// TestTileCopyColumnsAreTotal is the drift lint for the clone INSERT: every
-// column of the tiles table must be either copied by insertTileCopy
-// (tileCopyColumns) or on the explicit not-copied list below. Before this
-// lint, adding a column to the schema and forgetting the clone path compiled
-// clean and silently produced incomplete copies — three columns had already
-// slipped through. Now the omission is a named failure.
-func TestTileCopyColumnsAreTotal(t *testing.T) {
-	notCopied := map[string]string{
-		"id":         "the copy's identity — freshly assigned, never reused",
-		"ns":         "a clone is home's (ns ''): externals' rows are never cloned, they are re-listed",
-		"key":        "an external's key — '' on every home row",
-		"tombstoned": "an external's retirement — 0 on every home row",
+// TestEveryTileColumnIsCopiedOrExcused: a clone is an EAGER, COMPLETE copy,
+// so every tiles column must be either copied or carry a written reason it is
+// not. Before the column descriptor this was a lint over a hand-listed
+// INSERT; now the list IS the descriptor, and what still needs holding is the
+// claim behind each exclusion.
+func TestEveryTileColumnIsCopiedOrExcused(t *testing.T) {
+	excused := map[string]bool{}
+	for _, c := range tilesColumns {
+		if c.noCopy != "" {
+			excused[c.name] = true
+		}
 	}
+	// Named exclusions only — a new column defaults to being copied, which is
+	// the safe direction.
+	want := map[string]bool{"id": true, "ns": true, "key": true, "tombstoned": true}
+	if !reflect.DeepEqual(excused, want) {
+		t.Errorf("clone exclusions = %v, want %v — a column left out of a clone needs a reason on its descriptor entry", excused, want)
+	}
+}
 
+// TestCopyBindingRefusesAnIncompleteCopy pins the mechanism that makes "add a
+// column, forget the clone path" loud: the copy is written BY NAME, and a
+// value map missing any copied column is an error at the copy, not a row with
+// a silently defaulted column.
+func TestCopyBindingRefusesAnIncompleteCopy(t *testing.T) {
+	full := map[string]any{}
+	for _, c := range copyColumns() {
+		full[c] = 0
+	}
+	if _, _, err := copyBinding(full); err != nil {
+		t.Fatalf("a complete map must bind: %v", err)
+	}
+	delete(full, "content_zoom")
+	_, _, err := copyBinding(full)
+	if err == nil || !strings.Contains(err.Error(), "content_zoom") {
+		t.Errorf("a missing column must name itself; got %v", err)
+	}
+	full["content_zoom"] = 0
+	full["not_a_column"] = 0
+	if _, _, err := copyBinding(full); err == nil {
+		t.Error("a value for a non-copied column must be refused")
+	}
+}
+
+// TestDescriptorMatchesLiveSchema: the descriptor renders the DDL, so the
+// columns SQLite actually has must be exactly the columns described. This is
+// what catches a typo in a name — which would otherwise fail only when a
+// query naming it runs.
+func TestDescriptorMatchesLiveSchema(t *testing.T) {
 	s := newTestStore(t)
-	rows, err := s.db.Query(`SELECT name FROM pragma_table_info('tiles')`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	copied := make(map[string]bool, len(tileCopyColumns))
-	for _, c := range tileCopyColumns {
-		copied[c] = true
-	}
-	var schemaCols []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+	for _, tc := range []struct {
+		table string
+		want  []string
+	}{
+		{"tiles", columnNames(tilesColumns)},
+		{"grids", columnNames(gridsColumns)},
+	} {
+		rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, tc.table)
+		if err != nil {
 			t.Fatal(err)
 		}
-		schemaCols = append(schemaCols, name)
-		if _, deliberate := notCopied[name]; deliberate {
-			if copied[name] {
-				t.Errorf("column %q is on both tileCopyColumns and the not-copied list", name)
+		var got []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatal(err)
 			}
-			continue
+			got = append(got, name)
 		}
-		if !copied[name] {
-			t.Errorf("tiles column %q is not copied by insertTileCopy and not on the deliberate not-copied list — a clone would silently lose it", name)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	// And the inverse: tileCopyColumns must not name a column the schema
-	// doesn't have (a rename/typo would otherwise fail only at clone time).
-	schema := make(map[string]bool, len(schemaCols))
-	for _, c := range schemaCols {
-		schema[c] = true
-	}
-	for _, c := range tileCopyColumns {
-		if !schema[c] {
-			t.Errorf("tileCopyColumns names %q which is not a column of tiles (typo or stale rename); schema has: %s", c, strings.Join(schemaCols, ", "))
+		rows.Close()
+		sort.Strings(got)
+		want := append([]string(nil), tc.want...)
+		sort.Strings(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s columns = %v, descriptor says %v", tc.table, got, want)
 		}
 	}
+}
+
+func columnNames[T any](cols []column[T]) []string {
+	out := make([]string, len(cols))
+	for i, c := range cols {
+		out[i] = c.name
+	}
+	return out
 }

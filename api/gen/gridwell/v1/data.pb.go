@@ -314,19 +314,25 @@ func (x *MenuEntry) GetGridId() string {
 // subset of the optional fields is meaningful; the DDL CHECK constraint
 // enforces it.
 type Tile struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Version     int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	GridId      string                 `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	Kind        string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
-	X           int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
-	Y           int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
-	W           int64                  `protobuf:"varint,8,opt,name=w,proto3" json:"w,omitempty"`
-	H           int64                  `protobuf:"varint,9,opt,name=h,proto3" json:"h,omitempty"`
-	ViewZoom    float64                `protobuf:"fixed64,12,opt,name=view_zoom,json=viewZoom,proto3" json:"view_zoom,omitempty"`
-	ViewCx      float64                `protobuf:"fixed64,36,opt,name=view_cx,json=viewCx,proto3" json:"view_cx,omitempty"`
-	ViewCy      float64                `protobuf:"fixed64,37,opt,name=view_cy,json=viewCy,proto3" json:"view_cy,omitempty"`
-	ChildGridId string                 `protobuf:"bytes,13,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	GridId  string                 `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	Kind    string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
+	X       int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
+	Y       int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
+	W       int64                  `protobuf:"varint,8,opt,name=w,proto3" json:"w,omitempty"`
+	H       int64                  `protobuf:"varint,9,opt,name=h,proto3" json:"h,omitempty"`
+	// well-only: the child grid's framing — at once the preview frame,
+	// the descent target, and the ascent return value. ONE shape (schema
+	// v11, docs/simplify-plan.md S4): a float CENTER in the child grid's
+	// coordinates (view_cx/view_cy) plus the pane-size-independent
+	// intrinsic zoom (live / overtake) — the same three numbers a ROOT
+	// grid keeps on its own row. view_zoom == 0 means never visited.
+	ViewZoom    float64 `protobuf:"fixed64,12,opt,name=view_zoom,json=viewZoom,proto3" json:"view_zoom,omitempty"`
+	ViewCx      float64 `protobuf:"fixed64,36,opt,name=view_cx,json=viewCx,proto3" json:"view_cx,omitempty"`
+	ViewCy      float64 `protobuf:"fixed64,37,opt,name=view_cy,json=viewCy,proto3" json:"view_cy,omitempty"`
+	ChildGridId string  `protobuf:"bytes,13,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
 	// text-only: text_x/text_y is the scroll offset; text_w/text_h is the
 	// window size; all four are doc-space px. text_mode is "rendered" or
 	// "text". blob_id points at the markdown source in the blobs table.

@@ -65,46 +65,25 @@ CREATE TABLE IF NOT EXISTS system (
 // harness, which still builds genuine old files that have it.)
 
 // tablesDDL returns the grids/tiles/blobs DDL for the main database. This is
-// the canonical, always-current schema a fresh Open materializes directly, and
-// the single readable description of the present shape — read it here, not by
-// replaying migrations. Every column added here after v1 must be matched by an
-// additive migration (see migrations.go); TestSchemaEquivalence proves the two
-// agree. See internal/store/CLAUDE.md for the schema-evolution contract.
+// the canonical, always-current schema a fresh Open materializes directly.
+// The grids and tiles halves are RENDERED from the column descriptor
+// (columns.go) — that table, not this function, is where a column is
+// described. Every column added there must be matched by an additive
+// migration (see migrations.go); TestSchemaEquivalence proves the two agree.
+// See internal/local/store/CLAUDE.md for the schema-evolution contract.
 //
 // The tiles table is built by tilesTableDDL so its one DDL source is shared
 // with the CHECK-rebuild migration path (migrations.go): a rebuild creates
 // tiles_new from the same text a fresh Open uses, so the two cannot drift.
-func tablesDDL() string { return tablesTemplate + tilesTableDDL("tiles") + tilesIndexDDL }
+func tablesDDL() string {
+	return gridsTableDDL() + blobsTemplate + tilesTableDDL("tiles") + tilesIndexDDL
+}
 
-const tablesTemplate = `
-CREATE TABLE IF NOT EXISTS grids (
-    -- AUTOINCREMENT so a deleted grid's id is never reused. Without it,
-    -- SQLite recycles the rowid of a deleted grid (e.g. an interior well that
-    -- was deleted, taking its owned child grid with it), and a new grid taking
-    -- that id would collide with the client's still-cached copy of the old
-    -- grid — making a fresh well render the deleted well's tiles. Fresh ids
-    -- keep the client cache (keyed by id) honest.
-    --
-    -- No refcount: grids are owned 1:1 by their parent well (copy-on-clone
-    -- never shares a grid), so only blobs are reference-counted.
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    version     INTEGER NOT NULL DEFAULT 0,
-    created_at  INTEGER NOT NULL,
-    updated_at  INTEGER NOT NULL DEFAULT 0,
-    -- ns names the grid's owner: '' = home; a plugin id = that plugin's
-    -- memory (docs/one-node.md §2.6 — one table for every namespace).
-    -- context_key is the plugin's stable key for the context this grid
-    -- projects ('' for home grids). root_cx/cy/zoom: the framing of a
-    -- ROOT grid — one with no doorway tile to carry it — in exactly the
-    -- shape a doorway's view_cx/cy/zoom uses. NULL or zero zoom = never
-    -- visited. Home's root is this row with ns = '' (schema v11); a
-    -- plugin context's is its own. Added post-v1 (schema v9, additive).
-    ns          TEXT NOT NULL DEFAULT '',
-    context_key TEXT NOT NULL DEFAULT '',
-    root_cx     REAL,
-    root_cy     REAL,
-    root_zoom   REAL
-);
+// gridsTableDDL renders the grids table from the column descriptor
+// (columns.go), which is also what the SELECT list and the scan read.
+func gridsTableDDL() string { return createTable("grids", gridsColumns, "") }
+
+const blobsTemplate = `
 CREATE TABLE IF NOT EXISTS blobs (
     -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
     -- cache key, so a recycled blob id could serve stale image bytes.
@@ -125,94 +104,19 @@ CREATE TABLE IF NOT EXISTS blobs (
 // tilesTableDDL returns the CREATE TABLE for the current tiles shape with the
 // table name parameterized: "tiles" for a fresh Open, "tiles_new" for the
 // CHECK-rebuild migration (the only migration shape that can change the kind
-// CHECK — see internal/store/CLAUDE.md). One text, two readers, no drift.
+// CHECK — see internal/local/store/CLAUDE.md). The columns come from the
+// descriptor in columns.go, which is also what the SELECT list, the scan, the
+// clone INSERT and every rebuild copy list read: one description of a column,
+// five readers.
 func tilesTableDDL(name string) string {
-	return `
-CREATE TABLE IF NOT EXISTS ` + name + ` (
-    -- AUTOINCREMENT for the same reason as grids: a reused tile id would
-    -- collide with the client's per-tile caches (e.g. the URL preview cache
-    -- keyed by tile id), showing a deleted tile's frozen frame on a new one.
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    version       INTEGER NOT NULL DEFAULT 0,
-    grid_id       INTEGER NOT NULL REFERENCES grids(id),
-    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','shell','pane')),
-    x             INTEGER NOT NULL,
-    y             INTEGER NOT NULL,
-    w             INTEGER NOT NULL DEFAULT 1 CHECK (w > 0),
-    h             INTEGER NOT NULL DEFAULT 1 CHECK (h > 0),
-    -- well: the framing this doorway was left at — a float CENTER in the
-    -- child grid's coordinates plus the pane-size-independent intrinsic
-    -- zoom (live / overtake). One shape, shared with a root grid's
-    -- root_cx/cy/zoom. view_zoom = 0 is the one "never visited"
-    -- convention: cx/cy carry no meaning then and the reader falls back
-    -- to the preview calibration. (view_x/view_y — an integer window
-    -- ORIGIN — retired at v11, docs/simplify-plan.md S4.)
-    view_cx       REAL NOT NULL DEFAULT 0,
-    view_cy       REAL NOT NULL DEFAULT 0,
-    view_zoom     REAL NOT NULL DEFAULT 0,
-    -- No FK on child_grid_id: an exit well's child grid lives in another
-    -- plugin (a qualified "<uuid>/<id>" reference), so the link is a soft
-    -- pointer. Interior well integrity rests on the refcount machinery +
-    -- property test.
-    child_grid_id INTEGER,
-    -- text-only: the framed window in doc-space px (scroll offset + size)
-    -- plus rendered/text mode.
-    text_x        INTEGER NOT NULL DEFAULT 0,
-    text_y        INTEGER NOT NULL DEFAULT 0,
-    text_w        INTEGER NOT NULL DEFAULT 0,
-    text_h        INTEGER NOT NULL DEFAULT 0,
-    text_mode     TEXT,
-    blob_id       INTEGER REFERENCES blobs(id),
-    -- url-only: the URL string. The frozen JPEG preview from last close
-    -- lives in the blobs table; preview_blob_id points at it (NULL until
-    -- first close). Hash-deduped across clones the same way text content
-    -- is — clones that haven't navigated independently share one row.
-    url_string       TEXT,
-    preview_blob_id  INTEGER REFERENCES blobs(id),
-    -- Canonical display label. Stamped at insert time. The client renders
-    -- alt_text verbatim (no derivation). Empty string until something stamps
-    -- it (e.g. a URL tile before its page title is captured).
-    alt_text      TEXT NOT NULL DEFAULT '',
-    -- alt_user=1 marks alt_text as USER-OWNED (the rename gesture, issue
-    -- #61): automatic captures (a url's page title on freeze, a shell's
-    -- foreground command on detach) must not overwrite a name the user set.
-    -- Added post-v1 (schema v2, additive).
-    alt_user      INTEGER NOT NULL DEFAULT 0,
-    -- content_zoom scales the content rendered INSIDE a text/shell/url tile
-    -- (the text font, the terminal font, the page zoom — issue #82).
-    -- Framing, never bumps version; 0 = unset (renders at 1.0). Added
-    -- post-v1 (schema v3, additive).
-    content_zoom  REAL NOT NULL DEFAULT 0,
-    -- url_history is a url tile's persisted navigation back-stack (JSON
-    -- {index, entries:[{url,title}]}, capped) captured at freeze so a
-    -- revived tile can still go "back" (issue #113). Content, rides the
-    -- versioned freeze writeback. Added post-v1 (schema v4, additive).
-    url_history   TEXT,
-    -- link_target_id makes a LEAF tile (text/url/shell/pane) a LINK: a
-    -- qualified "<uuid>/<tile-id>" reference to the tile that owns the
-    -- content. NULL = an ordinary owned tile. A link row stores no content
-    -- of its own (the CHECK's link branch enforces it) — readers resolve
-    -- bytes/preview/session through the target id. The well kind's link
-    -- variant remains a qualified child_grid_id (the exit well); this
-    -- column is never set on wells. Added post-v1 (schema v6, rebuild —
-    -- the CHECK gained the link branch).
-    link_target_id TEXT,
-    -- url_frozen=1 is the USER'S standing freeze on a url tile (issue
-    -- #237): descending does not auto-go-live until the reconnect gesture
-    -- clears it. Framing, never bumps version. Added post-v1 (schema v7,
-    -- additive).
-    url_frozen    INTEGER NOT NULL DEFAULT 0,
-    -- ns/key/tombstoned: an EXTERNAL's row (docs/one-node.md §2.6). ns is
-    -- the owning plugin id ('' = home); key is the plugin's stable key
-    -- for the entry; tombstoned=1 retires the key forever (the id is
-    -- never reused; a recreated key mints fresh). Home rows carry the
-    -- defaults. Added post-v1 (schema v9, additive).
-    ns            TEXT NOT NULL DEFAULT '',
-    key           TEXT NOT NULL DEFAULT '',
-    tombstoned    INTEGER NOT NULL DEFAULT 0,
-    created_at    INTEGER NOT NULL,
-    updated_at    INTEGER NOT NULL,
-    CHECK (
+	return createTable(name, tilesColumns, tilesCheck)
+}
+
+// tilesCheck is the tiles table's kind CHECK: which columns each kind may
+// and may not hold. It is a per-KIND rule over columns, not a column list,
+// so it stays literal text — the only part of the table a rebuild migration
+// can change (see internal/local/store/CLAUDE.md).
+const tilesCheck = `    CHECK (
        (link_target_id IS NULL AND (
           -- well: an interior/exit well always has a child grid. (v8's
           -- childless variant — the unconfigured plugin well — went with
@@ -234,9 +138,7 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
         AND child_grid_id IS NULL AND blob_id IS NULL AND url_string IS NULL
         AND preview_blob_id IS NULL AND text_mode IS NULL)
     )
-);
 `
-}
 
 // tilesIndexDDL recreates the tiles indexes; shared by the fresh path
 // (tablesDDL) and the rebuild migration for the same no-drift reason as
@@ -256,14 +158,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tiles_live_key ON tiles(ns, grid_id, key) 
 `
 
 // tablesV1 is the FROZEN v1 grids/tiles/blobs schema. It is an immutable,
-// byte-for-byte copy of what tablesTemplate was at the moment the localdb
+// byte-for-byte copy of what the live tables were at the moment the localdb
 // format was frozen (schemaVersion 1). NEVER edit it: tests build genuine
 // "old files" from this text and migrate them forward, so editing it would
 // rewrite history and hide migration bugs. New columns/tables go into
-// tablesTemplate (the live schema) plus a migration — never here.
+// the column descriptor (columns.go) plus a migration — never here.
 //
 // TestSchemaEquivalence asserts (tablesV1 + all migrations) produces a schema
-// identical to a fresh tablesTemplate; that is the proof that a brand-new DB
+// identical to a fresh tablesDDL(); that is the proof that a brand-new DB
 // and an upgraded old DB converge on the same shape.
 const tablesV1 = `
 CREATE TABLE IF NOT EXISTS grids (

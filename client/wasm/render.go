@@ -954,13 +954,16 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 // These render with a dashed border, and dropping one on /dev/null only unlinks
 // it (drops the tile row); an owned interior well deletes for real.
 //
-// Reference is the authoritative signal the server stamps (qualifyTiles) from
-// the child_grid_id shape — the same fact the store's delete/clone key on, so
-// render can't disagree with them. isExitWell still covers the synthetic
-// empty-GridID launcher tile (built client-side before any server round-trip),
-// which also sets Reference, so either alone would do; both keeps it robust.
+// Reference is the ONE authoritative signal, stamped by the server
+// (qualifyTiles) from the child_grid_id shape — the same fact the store's
+// delete/clone key on, so render can't disagree with them. It reads Reference
+// ALONE: the second arm this used to carry (isExitWell, a bare uuid
+// comparison) was a second derivation of the same fact, and a weaker one — it
+// misses a same-plugin mount, which "arrived qualified" catches. The one tile
+// built client-side before any round-trip, the launcher swatch, stamps
+// Reference itself (rpc.PluginWellTile, pinned by TestPluginWellTile).
 func isLinkTile(n *rpc.Tile) bool {
-	return n.Reference || isExitWell(n)
+	return n.Reference
 }
 
 // tileBorderDash is the dash pattern for link-tile borders: short on/off so

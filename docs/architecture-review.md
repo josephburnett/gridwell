@@ -88,8 +88,16 @@ dispatch layer has no reason to exist.
 
 ### 4. Three copies of Tile
 
-`pb.Tile` ↔ `rpc.Tile` (hand-mirrored in `api/rpc/conv.go`, pinned by a
-drift lint) ↔ the store's scan/insert column lists. Ten of the wire
+RESOLVED 2026-08-29 (`docs/simplify-plan.md` S6). The proto is the owner:
+`api/rpc`'s records and conversions are GENERATED from it
+(`api/rpc/internal/gen`, run by `buf generate`, staleness caught by
+`make proto-check`), the store's five column lists are one descriptor
+(`internal/local/store/columns.go`), and each derived wire field has a
+named owner (`ARCHITECTURE.md` §7.1). `conv.go`'s mirror half and both
+drift lints are gone — there is nothing left to drift.
+
+Was: `pb.Tile` ↔ `rpc.Tile` (hand-mirrored in `api/rpc/conv.go`, pinned
+by a drift lint) ↔ the store's scan/insert column lists. Ten of the wire
 fields are derived and never stored. The charter says "derive once"; this
 is copy-and-lint.
 

@@ -40,36 +40,9 @@ func ParseSearchQuery(q string) SearchQuery {
 	return SearchQuery{Text: q}
 }
 
-// SearchResult is one hit: a PLACE, not just a row — the tile plus its
-// containing-well chain from the plugin root (outermost first, empty at
-// the root), with optional snippet/score for merged display.
-type SearchResult struct {
-	Tile    Tile
-	Path    []Tile
-	Snippet string
-	Score   float64
-}
-
-// SearchResultToProto / SearchResultFromProto convert one hit.
-func SearchResultToProto(r *SearchResult) *pb.SearchResult {
-	return &pb.SearchResult{
-		Tile:    TileToProto(&r.Tile),
-		Path:    TilesToProto(r.Path),
-		Snippet: r.Snippet,
-		Score:   r.Score,
-	}
-}
-
-func SearchResultFromProto(r *pb.SearchResult) *SearchResult {
-	out := &SearchResult{Snippet: r.Snippet, Score: r.Score}
-	if t := TileFromProto(r.Tile); t != nil {
-		out.Tile = *t
-	}
-	for _, w := range r.Path {
-		out.Path = append(out.Path, *TileFromProto(w))
-	}
-	return out
-}
+// SearchResult (one hit: a PLACE, not just a row — the tile plus its
+// containing-well chain from the plugin root) and its conversions are
+// GENERATED from the proto, like every other record: wire_gen.go.
 
 // Search issues one query against the server surface. scope routes to the
 // namespace owning that qualified id; "" fans out across every configured
@@ -82,9 +55,5 @@ func (c *Client) Search(ctx context.Context, query, scope string, limit int32) (
 	if err != nil {
 		return nil, err
 	}
-	out := make([]SearchResult, 0, len(resp.Msg.Results))
-	for _, r := range resp.Msg.Results {
-		out = append(out, *SearchResultFromProto(r))
-	}
-	return out, nil
+	return SearchResultsFromProto(resp.Msg.Results), nil
 }

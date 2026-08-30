@@ -93,8 +93,9 @@ func TestMigrationsWellFormed(t *testing.T) {
 
 // TestSchemaEquivalence is the no-drift binding: a DB built from the frozen
 // tablesV1 base and walked through every migration must end up schema-identical
-// to a fresh Open (tablesTemplate). This is what makes the fresh-DB stamp
-// shortcut in migrateUp sound — forget the inline tablesTemplate edit and the
+// to a fresh Open (tablesDDL(), rendered from the column descriptor). This is
+// what makes the fresh-DB stamp shortcut in migrateUp sound — forget the
+// descriptor entry and the
 // fresh side lacks the column; forget the migration and the migrated side does.
 func TestSchemaEquivalence(t *testing.T) {
 	db, _ := buildDBAtV1(t, filepath.Join(t.TempDir(), "migrated.db"))

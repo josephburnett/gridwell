@@ -92,20 +92,6 @@ func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) 
 	return nil, nil
 }
 
-// tileCopyColumns is the full set of tiles columns a clone writes, in the
-// bind order of insertTileCopy's INSERT. Every schema column must be either
-// here or on the deliberate not-copied list in TestTileCopyColumnsAreTotal —
-// that drift lint is what makes "add a column, forget the clone path" a loud
-// failure instead of a silently incomplete copy.
-var tileCopyColumns = []string{
-	"version", "grid_id", "kind", "x", "y", "w", "h",
-	"view_cx", "view_cy", "view_zoom", "child_grid_id",
-	"text_x", "text_y", "text_w", "text_h", "text_mode", "blob_id",
-	"url_string", "preview_blob_id", "alt_text", "alt_user",
-	"content_zoom", "url_history", "link_target_id", "url_frozen",
-	"created_at", "updated_at",
-}
-
 // placeholders returns "?, ?, …" with n placeholders.
 func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
@@ -174,15 +160,29 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		`SELECT alt_user FROM tiles WHERE id = ?`, srcID).Scan(&altUser); err != nil {
 		return 0, fmt.Errorf("tile copy: read alt_user of source %d: %w", srcID, err)
 	}
+	// The copy is written BY NAME, not by position: copyBinding renders the
+	// column list from the descriptor (columns.go) and refuses a map that
+	// misses a copied column. "Add a column, forget the clone path" is a
+	// named error here instead of a silently incomplete copy — the exact
+	// regression that once dropped content_zoom, url_history and alt_user.
+	cols, args, err := copyBinding(map[string]any{
+		"version": n.Version, "grid_id": gridID, "kind": n.Kind,
+		"x": x, "y": y, "w": n.W, "h": n.H,
+		"view_cx": n.ViewCx, "view_cy": n.ViewCy, "view_zoom": n.ViewZoom,
+		"child_grid_id": child,
+		"text_x":        n.TextX, "text_y": n.TextY, "text_w": n.TextW, "text_h": n.TextH,
+		"text_mode": textMode, "blob_id": blob,
+		"url_string": urlStr, "preview_blob_id": previewBlob,
+		"alt_text": n.AltText, "alt_user": altUser,
+		"content_zoom": n.ContentZoom, "url_history": urlHist,
+		"link_target_id": linkTarget, "url_frozen": boolToInt(n.URLFrozen),
+		"created_at": now, "updated_at": now,
+	})
+	if err != nil {
+		return 0, err
+	}
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO tiles (`+strings.Join(tileCopyColumns, ", ")+`)
-		VALUES (`+placeholders(len(tileCopyColumns))+`)`,
-		n.Version, gridID, n.Kind, x, y, n.W, n.H,
-		n.ViewCx, n.ViewCy, n.ViewZoom, child,
-		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-		urlStr, previewBlob, n.AltText, altUser,
-		n.ContentZoom, urlHist, linkTarget, boolToInt(n.URLFrozen),
-		now, now)
+		`INSERT INTO tiles (`+cols+`) VALUES (`+placeholders(len(args))+`)`, args...)
 	if err != nil {
 		return 0, fmt.Errorf("insert tile copy: %w", err)
 	}

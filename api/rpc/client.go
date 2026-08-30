@@ -40,11 +40,7 @@ func (c *Client) GetGrid(ctx context.Context, gridID string) (*GetGridResponse, 
 	if err != nil {
 		return nil, err
 	}
-	out := &GetGridResponse{Tiles: TilesFromProto(r.Msg.Tiles)}
-	if g := GridFromProto(r.Msg.Grid); g != nil {
-		out.Grid = *g
-	}
-	return out, nil
+	return GetGridResponseFromProto(r.Msg), nil
 }
 
 func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, error) {
@@ -90,39 +86,15 @@ func (c *Client) HandshakeNS(ctx context.Context, ns string) (PluginList, error)
 	if err != nil {
 		return PluginList{}, err
 	}
-	out := make([]PluginInfo, len(r.Msg.Plugins))
-	for i, p := range r.Msg.Plugins {
-		out[i] = PluginInfo{
-			UUID:          p.Uuid,
-			Kind:          p.Kind,
-			Label:         p.Label,
-			Writable:      p.Writable,
-			RootGridID:    p.RootGridId,
-			ScratchGridID: p.ScratchGridId,
-			RootViewCx:    p.RootViewCx,
-			RootViewCy:    p.RootViewCy,
-			RootViewZoom:  p.RootViewZoom,
-			InfoError:     p.InfoError,
-			Glyph:         p.Glyph,
-			MenuEntries:   MenuEntriesFromProto(p.MenuEntries),
-		}
-	}
-	conns := make([]ConnectionInfo, len(r.Msg.Connections))
-	for i, c := range r.Msg.Connections {
-		conns[i] = ConnectionInfo{
-			UUID: c.Uuid, Label: c.Label, RootGridID: c.RootGridId, StatusDetail: c.StatusDetail,
-			RootViewCx: c.RootViewCx, RootViewCy: c.RootViewCy, RootViewZoom: c.RootViewZoom,
-		}
-	}
 	return PluginList{
-		Plugins:        out,
+		Plugins:        PluginInfosFromProto(r.Msg.Plugins),
 		ShellsDisabled: r.Msg.ShellsDisabled,
 		ContentToken:   r.Msg.ContentToken,
 		HomeGridID:     r.Msg.HomeGridId,
 		HomeViewCx:     r.Msg.HomeViewCx,
 		HomeViewCy:     r.Msg.HomeViewCy,
 		HomeViewZoom:   r.Msg.HomeViewZoom,
-		Connections:    conns,
+		Connections:    ConnectionInfosFromProto(r.Msg.Connections),
 	}, nil
 }
 
@@ -282,14 +254,14 @@ func (c *Client) WriteContent(ctx context.Context, tileID string, version int64,
 // PlaceTile is the single placement writeback: one verb owns
 // (grid, x, y, w, h) — a move, a resize, or both in one write.
 func (c *Client) PlaceTile(ctx context.Context, req *PlaceTileRequest) (*Tile, error) {
-	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(PlaceTileToProto(req))))
+	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(PlaceTileRequestToProto(req))))
 }
 
 func (c *Client) CloneTile(ctx context.Context, req *CloneTileRequest) (*Tile, error) {
-	return tileResp(c.cl.CloneTile(ctx, connect.NewRequest(CloneTileToProto(req))))
+	return tileResp(c.cl.CloneTile(ctx, connect.NewRequest(CloneTileRequestToProto(req))))
 }
 func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
-	r, err := c.cl.ShellSessionAlive(ctx, connect.NewRequest(ShellSessionAliveToProto(req)))
+	r, err := c.cl.ShellSessionAlive(ctx, connect.NewRequest(ShellSessionAliveRequestToProto(req)))
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +296,7 @@ func (c *Client) SetURLFrozen(ctx context.Context, req *SetURLFrozenRequest) (*T
 }
 
 func (c *Client) DeleteTile(ctx context.Context, req *DeleteTileRequest) error {
-	_, err := c.cl.DeleteTile(ctx, connect.NewRequest(DeleteTileToProto(req)))
+	_, err := c.cl.DeleteTile(ctx, connect.NewRequest(DeleteTileRequestToProto(req)))
 	return err
 }
 

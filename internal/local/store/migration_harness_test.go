@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS session (
 `
 
 // buildDBAtV1 creates a file DB whose tables come from the FROZEN tablesV1 text
-// (never tablesTemplate), bootstraps a root grid, and stamps our application_id
+// (never the current tablesDDL()), bootstraps a root grid, and stamps our application_id
 // + user_version=1 — a faithful "DB written by a v1 binary". Returns the open
 // DB (closed via t.Cleanup) and the root grid id.
 func buildDBAtV1(t *testing.T, path string) (*sql.DB, string) {

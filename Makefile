@@ -72,7 +72,10 @@ fmt-check:
 	if [ -n "$$bad" ]; then echo "gofmt needed (run: gofmt -w <file>):"; echo "$$bad"; exit 1; fi
 
 # proto-check regenerates the wire code (local buf plugins — offline) and
-# fails when api/gen differs from the git INDEX or carries untracked files.
+# fails when the generated set differs from the git INDEX or carries
+# untracked files. GENERATED covers both halves: api/gen (the protobuf +
+# connect code) and api/rpc/wire_gen.go (api/rpc's Go records and their
+# conversions, derived from the same proto — docs/simplify-plan.md S6).
 # This catches all three ways generated code goes wrong: a proto edit
 # without `buf generate`; a hand-edit to generated code; and a PARTIAL
 # `git add` of the generated set — the 2026-08-04 `make launch` break,
@@ -81,12 +84,14 @@ fmt-check:
 # the pushed history didn't compile. Staged-but-uncommitted generated
 # files pass (worktree == index is the invariant), so the normal
 # edit → regen → git add → make check → commit loop is unaffected.
+GENERATED := api/gen api/rpc/wire_gen.go
+
 proto-check:
 	@command -v buf >/dev/null || { echo "buf not found — install buf (+protoc-gen-go, -connect-go, -go-grpc) to run proto-check"; exit 1; }
 	buf generate
-	@git diff --exit-code -- api/gen || { echo "api/gen differs from the index — run 'git add api/gen' (or commit the regen with the proto change)"; exit 1; }
-	@untracked=$$(git ls-files --others --exclude-standard api/gen); \
-	if [ -n "$$untracked" ]; then echo "untracked generated files — run 'git add api/gen':"; echo "$$untracked"; exit 1; fi
+	@git diff --exit-code -- $(GENERATED) || { echo "generated code differs from the index — run 'git add $(GENERATED)' (or commit the regen with the proto change)"; exit 1; }
+	@untracked=$$(git ls-files --others --exclude-standard $(GENERATED)); \
+	if [ -n "$$untracked" ]; then echo "untracked generated files — run 'git add $(GENERATED)':"; echo "$$untracked"; exit 1; fi
 
 # check is the per-commit verification gate: every commit must leave all of these
 # green. fmt-check enforces gofmt; the wasm build catches GOOS=js breakage that

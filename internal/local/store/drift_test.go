@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"sort"
 	"testing"
 
@@ -9,117 +8,104 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// TestProtoMatchesDDL is the drift lint between the wire schema in
-// data.proto and the hand-written SQLite schema in schema.go. Every
-// proto field on a record message (Grid, Tile) must have a matching
-// SQLite column with the same snake_case name; every column must
-// either have a proto field or be on the documented storage-only
-// allowlist. Run on every test invocation so a forgotten proto+DDL
-// pair fails the build immediately.
-func TestProtoMatchesDDL(t *testing.T) {
-	s := newTestStore(t)
+// TestDescriptorMatchesProto binds the two remaining descriptions of a record
+// to each other: the PROTO (the owner of what a Tile is — api/rpc's Go types
+// are generated from it) and the store's COLUMN DESCRIPTOR (the owner of how
+// a row is stored, which renders the DDL, the SELECT, the scan, the clone
+// INSERT and every rebuild copy list).
+//
+// The claim is about the ON-WIRE set only, and it is exact in both
+// directions: a column marked as being on the wire must be a proto field of
+// the same name, and every proto field must be either such a column or on the
+// wireOnly list below — with a written reason, because a field that is
+// derived rather than stored is a design decision, not an oversight.
+//
+// This replaces the old lint over the hand-written DDL text (which compared
+// PRAGMA output against the proto). The DDL is no longer hand-written, so
+// what is worth pinning moved up a level: the descriptor and the proto.
+func TestDescriptorMatchesProto(t *testing.T) {
 	cases := []struct {
-		table       string
-		message     protoreflect.MessageDescriptor
-		storageOnly []string
-		protoOnly   []string
+		table    string
+		message  protoreflect.MessageDescriptor
+		onWire   []string
+		wireOnly map[string]string
 	}{
 		{
 			table:   "grids",
 			message: (&pb.Grid{}).ProtoReflect().Descriptor(),
-			// source_kind/source_id are set by the fs/proc plugins on their
-			// own GetGrid responses; the local store never persists them.
-			// writable is stamped by the serving node from the owning
-			// plugin's Info — wire-only, per-grid capability, never persisted.
-			// ns/context_key are the externals' memory (schema v9,
-			// docs/one-node.md §2.6) — never on the wire. root_cx/cy/zoom
-			// is a ROOT grid's framing (schema v11, home's included at
-			// ns = ''): it reaches the client through the Info handshake's
-			// root_view_* fields, never as a Grid field.
-			storageOnly: []string{"created_at", "updated_at", "ns", "context_key", "root_cx", "root_cy", "root_zoom"},
-			// menu_entries is stamped by the serving node from the owning
-			// plugin's Info (#258) — wire-only, like writable.
-			protoOnly: []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint", "node_ns", "menu_entries", "stale"},
+			onWire:  wireNames(gridsColumns),
+			wireOnly: map[string]string{
+				"source_kind":     "set by the fs/proc plugins on their own GetGrid responses; the local store never persists it",
+				"source_id":       "likewise — the path or PID behind a host-backed grid",
+				"writable":        "stamped by the serving node from the owning plugin's Info — a per-grid capability, never persisted",
+				"scratch_grid_id": "stamped by the serving node, qualified per hop",
+				"node_ns":         "the namespace chain of the node serving the grid, from the receiver's perspective",
+				"menu_entries":    "stamped by the serving node from the owning plugin's Info (#258)",
+				"stale":           "marks a response served from a mount's offline cache (#256)",
+			},
 		},
 		{
 			table:   "tiles",
 			message: (&pb.Tile{}).ProtoReflect().Descriptor(),
-			// alt_user is the server-side "user owns this name" latch (issue
-			// #61) — consulted by the capture paths, never sent on the wire.
-			// ns/key/tombstoned are the externals' memory (schema v9).
-			storageOnly: []string{"created_at", "updated_at", "alt_user", "ns", "key", "tombstoned"},
-			// reference is derived by the server (qualifyTiles) from a tile's
-			// child_grid_id shape, never persisted — wire-only, so it has no
-			// DDL column by design. serves_page is likewise derived, by the
-			// owning plugin from its own content (fs: the filename's media
-			// type) — wire-only; localdb tiles never declare it.
-			// status_detail is the owning plugin's transient trouble (the
-			// ssh plugin's last dial error) — wire-only, never a column.
-			protoOnly: []string{"reference", "serves_page", "text_presentation", "status_detail"},
+			onWire:  wireNames(tilesColumns),
+			wireOnly: map[string]string{
+				"reference":         `derived by the router from a qualified child_grid_id — the one authoritative "is a link" signal`,
+				"serves_page":       "declared by the owning plugin from its own content (fs: the filename's media type)",
+				"text_presentation": "likewise — how the owning plugin says a text body presents",
+				"status_detail":     "the owning plugin's current trouble with this tile (an ssh well's last dial error)",
+			},
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.table, func(t *testing.T) {
-			cols := tableColumns(t, s, c.table)
+			cols := stringSet(c.onWire)
 			fields := protoFieldNames(c.message)
-			storage := stringSet(c.storageOnly)
-			protoOnly := stringSet(c.protoOnly)
 
-			missingCols := []string{}
-			for f := range fields {
-				if _, ok := protoOnly[f]; ok {
-					continue
-				}
-				if _, ok := cols[f]; !ok {
-					missingCols = append(missingCols, f)
-				}
-			}
-			missingFields := []string{}
+			var notFields, notColumns []string
 			for col := range cols {
-				if _, ok := storage[col]; ok {
+				if _, ok := fields[col]; !ok {
+					notFields = append(notFields, col)
+				}
+			}
+			for f := range fields {
+				if _, ok := cols[f]; ok {
 					continue
 				}
-				if _, ok := fields[col]; ok {
+				if _, ok := c.wireOnly[f]; ok {
 					continue
 				}
-				missingFields = append(missingFields, col)
+				notColumns = append(notColumns, f)
 			}
-			sort.Strings(missingCols)
-			sort.Strings(missingFields)
-			if len(missingCols) > 0 {
-				t.Errorf("proto %s fields with no matching DDL column: %v",
-					c.message.Name(), missingCols)
+			sort.Strings(notFields)
+			sort.Strings(notColumns)
+			if len(notFields) > 0 {
+				t.Errorf("%s columns marked on-wire with no proto field of that name: %v", c.table, notFields)
 			}
-			if len(missingFields) > 0 {
-				t.Errorf("DDL %s columns with no matching proto field (add to proto or storage allowlist): %v",
-					c.table, missingFields)
+			if len(notColumns) > 0 {
+				t.Errorf("proto %s fields that are neither a stored column nor on the wire-only list: %v "+
+					"(store it, or add it to wireOnly with the reason it is derived)", c.message.Name(), notColumns)
+			}
+			// A wire-only entry is a claim; a stale one hides the next real
+			// finding under it.
+			for f := range c.wireOnly {
+				if _, ok := fields[f]; !ok {
+					t.Errorf("wireOnly names %q, which %s no longer declares", f, c.message.Name())
+				}
+				if _, ok := cols[f]; ok {
+					t.Errorf("wireOnly names %q, which the descriptor now stores", f)
+				}
 			}
 		})
 	}
 }
 
-// tableColumns reads column names from sqlite_master via PRAGMA.
-func tableColumns(t *testing.T, s *Store, table string) map[string]struct{} {
-	t.Helper()
-	rows, err := s.db.QueryContext(context.Background(), "PRAGMA table_info("+table+")")
-	if err != nil {
-		t.Fatalf("table_info %s: %v", table, err)
-	}
-	defer rows.Close()
-	out := map[string]struct{}{}
-	for rows.Next() {
-		var (
-			cid       int
-			name      string
-			ctype     string
-			notnull   int
-			dfltValue any
-			pk        int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
-			t.Fatalf("scan table_info: %v", err)
+// wireNames is the set of column names a table puts on the wire.
+func wireNames[T any](cols []column[T]) []string {
+	var out []string
+	for _, c := range cols {
+		if c.bind != nil {
+			out = append(out, c.name)
 		}
-		out[name] = struct{}{}
 	}
 	return out
 }

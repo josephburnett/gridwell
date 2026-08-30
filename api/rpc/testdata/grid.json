@@ -1,0 +1,19 @@
+{
+  "id": "ID-171",
+  "menuEntries": [
+    {
+      "color": "Color-614",
+      "glyph": "Glyph-357",
+      "gridId": "GridID-305",
+      "id": "ID-171",
+      "label": "Label-133"
+    }
+  ],
+  "nodeNs": "NodeNS-154",
+  "scratchGridId": "ScratchGridID-274",
+  "sourceId": "SourceID-743",
+  "sourceKind": "SourceKind-285",
+  "stale": true,
+  "version": "488",
+  "writable": true
+}
