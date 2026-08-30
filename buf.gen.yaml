@@ -14,3 +14,9 @@ plugins:
     out: api/gen
     opt:
       - paths=source_relative
+  # api/rpc's Go records and their conversions are DERIVED from the proto
+  # (docs/simplify-plan.md S6) — one description of a Tile, not three. The
+  # plugin lives in-repo; `go run` keeps it building from source so it can
+  # never be stale relative to the proto it reads.
+  - local: ["go", "run", "./api/rpc/internal/gen"]
+    out: .

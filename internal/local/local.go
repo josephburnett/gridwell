@@ -186,10 +186,7 @@ func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &gridwellv1.GetGridResponse{
-		Grid:  rpc.GridToProto(&r.Grid),
-		Tiles: rpc.TilesToProto(r.Tiles),
-	}, nil
+	return rpc.GetGridResponseToProto(r), nil
 }
 
 func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
@@ -351,14 +348,14 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 // ── Mutations ────────────────────────────────────────────────────────────────
 
 func (p *Plugin) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.CloneTile(ctx, rpc.CloneTileFromProto(req)))
+	return tileResp(p.st.CloneTile(ctx, rpc.CloneTileRequestFromProto(req)))
 }
 
 // PlaceTile is the single placement writeback (2026-07-26 redesign): one verb
 // owns (grid, x, y, w, h); the store derives the well-into-own-subtree
 // refusal itself.
 func (p *Plugin) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.PlaceTile(ctx, rpc.PlaceTileFromProto(req)))
+	return tileResp(p.st.PlaceTile(ctx, rpc.PlaceTileRequestFromProto(req)))
 }
 
 // SetTile is the single content/preview writeback: tile.kind selects the one
@@ -533,7 +530,7 @@ func (p *Plugin) captureShellTitle(tileID string) {
 
 func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	tileID := req.TileId
-	if err := p.st.DeleteTile(ctx, rpc.DeleteTileFromProto(req)); err != nil {
+	if err := p.st.DeleteTile(ctx, rpc.DeleteTileRequestFromProto(req)); err != nil {
 		return nil, errToStatus(err)
 	}
 	// Reap the tile's shell session once its row is gone (a cloned shell is an

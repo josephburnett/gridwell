@@ -110,17 +110,17 @@ message Tile {
   int64 w = 8;
   int64 h = 9;
 
+  // 10, 11 were view_x/view_y, an integer window ORIGIN; the center the
+  // client derived from it (origin + footprint/2) is stored directly now
+  // and the migration converted every row.
+  reserved 10, 11;
+
   // well-only: the child grid's framing — at once the preview frame,
   // the descent target, and the ascent return value. ONE shape (schema
   // v11, docs/simplify-plan.md S4): a float CENTER in the child grid's
   // coordinates (view_cx/view_cy) plus the pane-size-independent
   // intrinsic zoom (live / overtake) — the same three numbers a ROOT
   // grid keeps on its own row. view_zoom == 0 means never visited.
-  //
-  // 10, 11 were view_x/view_y, an integer window ORIGIN; the center the
-  // client derived from it (origin + footprint/2) is stored directly now
-  // and the migration converted every row.
-  reserved 10, 11;
   double view_zoom = 12;
   double view_cx = 36;
   double view_cy = 37;

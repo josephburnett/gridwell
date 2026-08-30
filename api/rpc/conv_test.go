@@ -7,63 +7,12 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// fullTile is a Tile with a DISTINCT value in every field, so a round-trip that
-// swaps or drops any field is caught (a same-valued fixture would hide it).
-func fullTile() *Tile {
-	return &Tile{
-		ID:      "id-1",
-		Version: 3,
-		GridID:  "grid-4",
-		Kind:    KindURL,
-		X:       5, Y: 6, W: 7, H: 8,
-		ViewCx: 9, ViewCy: 10, ViewZoom: 11,
-		ChildGridID: "child-12",
-		TextX:       13, TextY: 14, TextW: 15, TextH: 16,
-		TextMode:         "rendered",
-		BlobID:           18,
-		URLString:        "https://19",
-		PreviewBlobID:    20,
-		AltText:          "alt-21",
-		Reference:        true,
-		ContentZoom:      22,
-		URLHistory:       "hist-23",
-		LinkTargetID:     "target-24",
-		URLFrozen:        true,
-		ServesPage:       true,
-		TextPresentation: "both",
-	}
-}
-
-// TestTileProtoRoundTrip: every field survives Tile → proto → Tile unchanged.
-func TestTileProtoRoundTrip(t *testing.T) {
-	in := fullTile()
-	got := TileFromProto(TileToProto(in))
-	if !reflect.DeepEqual(in, got) {
-		t.Errorf("tile round-trip diverged:\n in = %+v\nout = %+v", in, got)
-	}
-}
-
-// TestTileProtoNil: nil maps to nil in both directions (the server relies on
-// this to pass "no tile" through without allocating an empty one).
-func TestTileProtoNil(t *testing.T) {
-	if TileToProto(nil) != nil {
-		t.Error("TileToProto(nil) should be nil")
-	}
-	if TileFromProto(nil) != nil {
-		t.Error("TileFromProto(nil) should be nil")
-	}
-}
-
-func TestGridProtoRoundTrip(t *testing.T) {
-	in := &Grid{ID: "g1", Version: 3, SourceKind: "fs", SourceID: "/tmp"}
-	got := GridFromProto(GridToProto(in))
-	if !reflect.DeepEqual(in, got) {
-		t.Errorf("grid round-trip diverged:\n in = %+v\nout = %+v", in, got)
-	}
-	if GridToProto(nil) != nil || GridFromProto(nil) != nil {
-		t.Error("nil grid must map to nil both ways")
-	}
-}
+// The Tile/Grid round trips and the drift lint that used to live here are
+// GONE, not moved: rpc.Tile, rpc.Grid and their conversions are generated
+// from the proto (wire_gen.go), so there is no second spelling left to
+// diverge from. What a test can still add is the wire's exhaustive round
+// trip and its JSON shape — wire_test.go — and the hand-written shapes
+// below, which the generator deliberately does not produce.
 
 // TestTilesSliceProto: nil slices stay nil (not []), and a populated slice
 // round-trips element-for-element.
@@ -74,7 +23,7 @@ func TestTilesSliceProto(t *testing.T) {
 	if TilesFromProto(nil) != nil {
 		t.Error("TilesFromProto(nil) should be nil")
 	}
-	in := []Tile{*fullTile(), {ID: "x", Kind: KindText, X: 1}}
+	in := []Tile{*exhaustiveTile(t), {ID: "x", Kind: KindText, X: 1}}
 	got := TilesFromProto(TilesToProto(in))
 	if !reflect.DeepEqual(in, got) {
 		t.Errorf("tiles slice round-trip diverged:\n in = %+v\nout = %+v", in, got)
@@ -86,7 +35,7 @@ func TestTilesSliceProto(t *testing.T) {
 func TestEventProtoRoundTrip(t *testing.T) {
 	cases := []Event{
 		{Kind: EventGridChanged, GridChanged: &GridChanged{GridID: "g-1"}},
-		{Kind: EventTileChanged, TileChanged: &TileChanged{Tile: *fullTile()}},
+		{Kind: EventTileChanged, TileChanged: &TileChanged{Tile: *exhaustiveTile(t)}},
 		{Kind: EventTileRemoved, TileRemoved: &TileRemoved{GridID: "g-2", TileID: "t-3"}},
 		{Kind: EventPluginHealth, PluginHealth: &PluginHealth{PluginUUID: "u-1", Healthy: false, Detail: "dial tcp: connection refused"}},
 		{Kind: EventPluginHealth, PluginHealth: &PluginHealth{PluginUUID: "u-1", Healthy: true}},
@@ -107,35 +56,6 @@ func TestEventFromProtoNil(t *testing.T) {
 	}
 	if got := EventFromProto(&pb.Event{}); got.Kind != "" {
 		t.Errorf("EventFromProto(empty) = %+v, want zero", got)
-	}
-}
-
-// TestMutationRequestRoundTrips: the symmetric *FromProto/*ToProto request
-// converters preserve every field both ways. These are the wire boundary for
-// the LAYOUT mutations, which carry no Version key at all since
-// docs/simplify-plan.md S5 — version is the user's content claim, and the
-// proto numbers those fields used are reserved.
-func TestMutationRequestRoundTrips(t *testing.T) {
-	place := &PlaceTileRequest{TileID: "t", GridID: "dg", X: 3, Y: 4, W: 5, H: 6}
-	if got := PlaceTileFromProto(PlaceTileToProto(place)); !reflect.DeepEqual(place, got) {
-		t.Errorf("place round-trip: in=%+v out=%+v", place, got)
-	}
-
-	clone := &CloneTileRequest{TileID: "t", DestGridID: "dg", X: 6, Y: 7}
-	if got := CloneTileFromProto(CloneTileToProto(clone)); !reflect.DeepEqual(clone, got) {
-		t.Errorf("clone round-trip: in=%+v out=%+v", clone, got)
-	}
-
-	del := &DeleteTileRequest{TileID: "t"}
-	if got := DeleteTileFromProto(DeleteTileToProto(del)); !reflect.DeepEqual(del, got) {
-		t.Errorf("delete round-trip: in=%+v out=%+v", del, got)
-	}
-
-	if got := ShellSessionAliveToProto(&ShellSessionAliveRequest{TileID: "t-9"}); got.TileId != "t-9" {
-		t.Errorf("shell-alive req: got %+v", got)
-	}
-	if got := ShellSessionAliveResponseFromProto(&pb.ShellSessionAliveResponse{Alive: true}); !got.Alive {
-		t.Errorf("shell-alive resp: got %+v", got)
 	}
 }
 
