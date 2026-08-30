@@ -1,28 +1,26 @@
 package store
 
-// The node's memory of EXTERNALS (docs/one-node.md §2.6): every content
-// plugin's entries live as rows in the same grids/tiles tables as home,
-// under the plugin's namespace (ns = the plugin id; home is ns = ''). A
-// plugin answers from its source in stable string KEYS; the node mints
-// the ids, keeps the user's arrangement and framing, and retires keys
-// (tombstones — an id is never reused, a retired key stays retired). One
-// table, one column vocabulary for placement and framing, whichever
-// namespace a tile belongs to.
+// The node's memory of a plugin's entries: they live as rows in the same
+// grids and tiles tables as home, under the plugin's namespace, where ns is
+// the plugin id and home is ns = ''. A plugin answers from its source in
+// stable string keys; the node mints the ids, keeps the user's arrangement and
+// framing, and retires keys as tombstones, so an id is never reused and a
+// retired key stays retired. One table and one column vocabulary for placement
+// and framing, whichever namespace a tile belongs to.
 //
-// Identity rules (v2 tenet 7): ids are AUTOINCREMENT, never reused; a
-// retired key's row stays (a dangling reference stays interpretable) and
-// a recreated key mints a fresh id — enforced by a partial unique index
-// on LIVE rows only. Plugin rows are unversioned (version 0 on the wire)
-// and emit no store events: the plugin's own listing is the truth.
+// Identity: ids are AUTOINCREMENT and never reused. A retired key's row stays,
+// so a dangling reference stays interpretable, and a recreated key mints a
+// fresh id, which a partial unique index over live rows only enforces. Plugin
+// rows are unversioned, version 0 on the wire, and emit no store events: the
+// plugin's own listing is the truth.
 //
-// These rows are the node's OWN facts, and they are the whole of what
-// the forever file keeps about an external (docs/simplify-plan.md S7):
-// the id it minted for a key, where the user put it, how it is framed,
-// and the tombstone of a key that went away. What the SOURCE last said —
-// listings, bodies, previews — is cache and lives in cache.db
-// (internal/sourcecache). That is why a dark source costs nothing here:
-// the adapter merges an empty non-authoritative listing and these rows
-// answer, unchanged.
+// These rows are the node's own facts, and they are the whole of what the
+// durable file keeps about a plugin's entries: the id it minted for a key,
+// where the user put it, how it is framed, and the tombstone of a key that
+// went away. What the source last said — listings, bodies, previews — is cache
+// and lives in cache.db, in internal/sourcecache. That is why a dark source
+// costs nothing here: the adapter merges an empty non-authoritative listing
+// and these rows answer, unchanged.
 
 import (
 	"context"
@@ -33,7 +31,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Namespace is one external's view of the store.
+// Namespace is one plugin's view of the store.
 type Namespace struct {
 	s  *Store
 	ns string
@@ -184,7 +182,7 @@ func (n *Namespace) Merge(gridID int64, entries []Entry, authoritative bool) ([]
 		return nil, err
 	}
 
-	// Occupancy: full footprints of every live row (the #265 rule).
+	// Occupancy: the full footprints of every live row.
 	occupied := map[[2]int64]bool{}
 	for _, l := range liveByKey {
 		occupyRect(occupied, l.x, l.y, l.w, l.h)

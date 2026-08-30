@@ -10,15 +10,15 @@ import (
 )
 
 // CloneTile duplicates a tile into a destination grid at (x, y) as an eager,
-// independent copy. The new row carries the source's version (the two stay
-// "the same content" until one diverges) but gets a fresh row id. The SOURCE
-// row is untouched, so the clone is layout, not content: no claim, no bump
-// (docs/simplify-plan.md S5). An interior well's whole child
-// subtree is deep-copied (new grid + tile rows; blobs shared); an exit well
-// keeps its qualified cross-plugin child_grid_id (the child grid is owned by
-// another plugin, not duplicated); a text/url/shell tile shares its
-// content/preview blob (refcount bumped). Nothing is shared between the two
-// copies, so editing one can never touch the other.
+// independent copy. The new row carries the source's version, so the two are
+// the same content until one diverges, but gets a fresh row id. The source row
+// is untouched, so a clone is layout, not content: no claim, no bump. An
+// interior well's whole child subtree is deep-copied, with new grid and tile
+// rows and shared blobs; an exit well keeps its qualified cross-plugin
+// child_grid_id, since the child grid is owned by another plugin; a text, url,
+// or shell tile shares its content or preview blob with the refcount bumped.
+// Nothing else is shared between the two copies, so editing one can never
+// touch the other.
 func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -35,7 +35,8 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			return err
 		}
 
-		// destination is id-addressed; refuse a grid that doesn't exist.
+		// The destination is id-addressed; refuse a grid that does not
+		// exist.
 		if _, err := s.loadGrid(ctx, tx, destGridID); err != nil {
 			return fmt.Errorf("%w: destination grid %d: %v", ErrInvalidArgument, destGridID, err)
 		}
@@ -51,9 +52,9 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 
 		now := s.now().Unix()
 		// child_grid_id: an interior well gets a deep copy of its subtree
-		// (cloneSubtree); an exit well keeps its qualified cross-plugin child
-		// reference (the child grid lives in another plugin); everything else
-		// has none.
+		// through cloneSubtree; an exit well keeps its qualified cross-plugin
+		// child reference, since the child grid lives in another plugin; and
+		// everything else has none.
 		child, err := s.childGridForClone(ctx, tx, n)
 		if err != nil {
 			return err
@@ -71,8 +72,8 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 	return out, err
 }
 
-// writeTextContent replaces a text tile's blob with new bytes — the text arm
-// of WriteContent (the one content write; text is a content edit and bumps).
+// writeTextContent replaces a text tile's blob with new bytes: the text arm of
+// WriteContent. Text is a content edit, so it bumps.
 func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version int64, data []byte) (*rpc.Tile, error) {
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
@@ -96,17 +97,17 @@ func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version 
 			return err
 		}
 		if !changed {
-			// Byte-identical content (same content-addressed blob). Re-saving
-			// unchanged bytes must NOT bump the version or fan a TileChanged —
-			// reading and no-op writes never mutate (the primary rule). alt_text
-			// is a pure function of the content, so it is unchanged too. A
-			// debounced auto-save that fires on a tile the user didn't actually
-			// edit is thereby a true no-op.
+			// Byte-identical content, so the same content-addressed blob.
+			// Re-saving unchanged bytes must not bump the version or fan a
+			// TileChanged: a no-op write never mutates. alt_text is a pure
+			// function of the content, so it is unchanged too. A debounced
+			// auto-save on a tile the user did not edit is therefore a true
+			// no-op.
 			out, err = s.loadTile(ctx, tx, tileID)
 			return err
 		}
-		// alt_text is a deterministic function of the content; write it
-		// alongside (a separate statement from the blob kernel).
+		// alt_text is a deterministic function of the content, written
+		// alongside in a separate statement from the blob kernel.
 		alt := doctype.AltFromSource(string(data))
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,

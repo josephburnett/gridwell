@@ -9,11 +9,11 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// A Subscribe stream that stalls must not lose changes: the hub coalesces
-// per entity (a newer change to the same tile replaces the older
-// undelivered one) and never drops a DISTINCT one. The old 64-slot
-// channel dropped the 65th tile on the floor — a pane stayed stale until
-// some unrelated event touched the same grid.
+// A Subscribe stream that stalls must not lose changes: the hub coalesces per
+// entity, so a newer change to the same tile replaces the older undelivered
+// one, and never drops a distinct one. A fixed-size channel would drop
+// changes on the floor, leaving a pane stale until some unrelated event
+// touched the same grid.
 func TestHubNeverDropsDistinctTilesForAStalledSubscriber(t *testing.T) {
 	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
 	if err != nil {

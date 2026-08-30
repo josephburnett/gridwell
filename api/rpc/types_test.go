@@ -15,10 +15,9 @@ func TestIsWellKind(t *testing.T) {
 }
 
 // TestIsContentDescentKind pins the content-descent set the click router and
-// the URL-restore walk both rely on. Shell MUST be included (it sets TextFocus
-// and is encoded into the URL, so it has to round-trip on reload); the well
-// kinds must NOT be (they are grid descents, not text-focus). This is the drift
-// that dropped shell descents on reload.
+// the URL-restore walk both rely on. Shell must be included: it sets
+// TextFocus and is encoded into the URL, so it has to round-trip on reload.
+// The well kinds must not be, because they are grid descents.
 func TestIsContentDescentKind(t *testing.T) {
 	content := []string{KindText, KindURL, KindShell}
 	for _, k := range content {
@@ -56,20 +55,17 @@ func TestQualifyIDUUIDOfRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSplitID pins the one-hop routing peel every layer shares. Until this
-// codec was unified, the server carried its own splitPluginID and two literal
-// copies of the peel (session.go, nodeexport.go) whose no-slash handling had
-// already diverged from UUIDOf — the exact "same fact, parallel copies" seam
-// the charter forbids. These cases are the contract: a chain peels exactly one
-// segment; a bare id, an empty id, and a degenerate leading "/" are all
-// unqualified (ok=false), never a half-parse.
+// TestSplitID pins the one-hop routing peel every layer shares. These cases
+// are the contract: a chain peels exactly one segment, and a bare id, an
+// empty id, and a degenerate leading "/" are all unqualified (ok=false),
+// never a half-parse.
 func TestSplitID(t *testing.T) {
 	cases := []struct {
 		id, uuid, rest string
 		ok             bool
 	}{
 		{"u/1", "u", "1", true},
-		{"ssh1/rp1/7", "ssh1", "rp1/7", true}, // a chain peels ONE segment
+		{"ssh1/rp1/7", "ssh1", "rp1/7", true}, // a chain peels one segment
 		{"u/", "u", "", true},                 // empty rest is still qualified
 		{"42", "", "", false},                 // bare local id
 		{"", "", "", false},
@@ -90,11 +86,9 @@ func TestSplitID(t *testing.T) {
 	}
 }
 
-// TestLocalOf pins the display half of the codec. Until LocalOf existed the
-// last-segment strip was re-implemented inline in three client packages
-// (wasm input, embed's DefaultAlt, url's Encode) — the same computation,
-// three copies. The invariant that makes LocalOf safe everywhere:
-// QualifyID(NamespaceOf(id), LocalOf(id)) reproduces any qualified id.
+// TestLocalOf pins the display half of the codec. The invariant that makes
+// LocalOf safe everywhere: QualifyID(NamespaceOf(id), LocalOf(id))
+// reproduces any qualified id.
 func TestLocalOf(t *testing.T) {
 	cases := []struct{ id, local string }{
 		{"u/7", "7"},
@@ -131,7 +125,7 @@ func TestIsExitWell(t *testing.T) {
 			Tile{Kind: KindWell, GridID: "u/1"}, false},
 		{"synthetic node, both ids empty, is not an exit well",
 			Tile{Kind: KindWell}, false},
-		// The launcher's exact shape: no owning grid, qualified child grid.
+		// A menu swatch's exact shape: no owning grid, qualified child grid.
 		{"synthetic launcher node (empty GridID, qualified ChildGridID) is an exit well",
 			Tile{Kind: KindWell, ChildGridID: "plugin-uuid/1"}, true},
 	}
@@ -146,9 +140,9 @@ func TestPluginWellTile(t *testing.T) {
 	pl := PluginInfo{Label: "files", RootGridID: "fs-uuid/1",
 		RootViewCx: 3, RootViewCy: -2, RootViewZoom: 0.5}
 	got := PluginWellTile(pl)
-	// The load-bearing invariants the launcher preview depends on: the node is
+	// The load-bearing invariants the swatch preview depends on: the tile is
 	// a well carrying the plugin's root grid as its child, which makes it an
-	// exit well (so drawNodeWithPreview fetches and previews that grid).
+	// exit well, so the client fetches and previews that grid.
 	if !IsWellKind(got.Kind) {
 		t.Errorf("PluginWellTile kind = %q, want a well", got.Kind)
 	}
@@ -158,31 +152,30 @@ func TestPluginWellTile(t *testing.T) {
 	if !IsExitWell(&got) {
 		t.Errorf("PluginWellTile is not an exit well; launcher would draw an inert interior well")
 	}
-	// Reference is the ONE "this is a link" signal, and the client reads it
-	// alone (client/wasm's isLinkTile). This synthetic tile never passes
-	// through the server's qualifyTiles, so it must stamp the bit itself or
-	// the launcher swatch would lose its dashed border.
+	// Reference is the one "this is a link" signal, and the client reads it
+	// alone. This synthetic tile never passes through the server's
+	// qualifyTiles, so it must stamp the bit itself or the menu swatch loses
+	// its dashed border.
 	if !got.Reference {
 		t.Error("PluginWellTile does not set Reference; the launcher swatch would render as owned content, not a link")
 	}
 	if got.AltText != pl.Label {
 		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)
 	}
-	// The plugin's persisted root framing rides as the tile's framing —
-	// ONE shape, so it carries across verbatim — and a + menu descent
-	// lands at the left-off view.
+	// The plugin's persisted root framing rides as the tile's framing. It is
+	// one shape, so it carries across verbatim, and a + menu descent lands at
+	// the left-off view.
 	if got.ViewCx != 3 || got.ViewCy != -2 || got.ViewZoom != 0.5 {
 		t.Errorf("PluginWellTile framing = (%v,%v,%v), want the plugin root framing (3,-2,0.5)",
 			got.ViewCx, got.ViewCy, got.ViewZoom)
 	}
 }
 
-// TestKindPartition pins the three descent-class predicates as a PARTITION of
-// the descendable kinds: every kind belongs to exactly one of grid descent
-// (IsWellKind), text-focus descent (IsContentDescentKind), or workspace
-// descent (IsWorkspaceKind). A new kind that joins no class — or two — falls
-// through (or double-fires) the click router and the URL-restore walk, the
-// exact drift that once dropped shell descents on reload.
+// TestKindPartition pins the three descent-class predicates as a partition
+// of the descendable kinds: every kind belongs to exactly one of grid
+// descent (IsWellKind), content descent (IsContentDescentKind), and pane-tile
+// descent (IsWorkspaceKind). A new kind that joins no class, or two, falls
+// through or double-fires the click router and the URL-restore walk.
 func TestKindPartition(t *testing.T) {
 	all := []string{KindWell, KindText, KindURL, KindShell, KindPane}
 	for _, k := range all {
@@ -210,9 +203,9 @@ func TestKindPartition(t *testing.T) {
 	}
 }
 
-// TestHomeGrid: "/" means the first configured plugin's root grid, skipping
-// plugins without one (broken/rootless) — the boot/URL home derivation
-// (owner decision 2026-07-19).
+// TestHomeGrid: "/" means the handshake's home_grid_id, falling back to the
+// first rooted plugin row and skipping rootless ones. It is the one boot and
+// URL home derivation.
 func TestHomeGrid(t *testing.T) {
 	first := PluginInfo{UUID: "p1", RootGridID: "p1/1"}
 	second := PluginInfo{UUID: "p2", RootGridID: "p2/1"}
@@ -231,11 +224,11 @@ func TestHomeGrid(t *testing.T) {
 	}
 }
 
-// TestContentID: the ONE resolution point for read-through — a leaf link's
+// TestContentID: the one resolution point for read-through. A leaf link's
 // content operations key by its target; an owned tile keys by itself. Every
 // client content door (body fetch, edit buffer, save routing, preview fetch,
-// shell session, workspace layout) reads this, so a link and its target share
-// one content fact by construction.
+// shell session, pane layout) reads this, so a link and its target share one
+// content fact by construction.
 func TestContentID(t *testing.T) {
 	link := Tile{ID: "b/9", Kind: KindText, LinkTargetID: "a/42"}
 	if got := link.ContentID(); got != "a/42" {

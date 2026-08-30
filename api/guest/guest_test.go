@@ -14,8 +14,8 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
 
-// TestConfigDecodesEnv: a JSON object in GRIDWELL_PLUGIN_CONFIG decodes to the
-// config map the plugin reads at spawn (db_file, uuid, kind, …).
+// TestConfigDecodesEnv: a JSON object in GRIDWELL_PLUGIN_CONFIG decodes to
+// the config map the plugin reads at spawn.
 func TestConfigDecodesEnv(t *testing.T) {
 	t.Setenv(gplug.ConfigEnvVar, `{"db_file":"/x/store.db","uuid":"abc","kind":"home"}`)
 	got, err := Config()
@@ -25,8 +25,8 @@ func TestConfigDecodesEnv(t *testing.T) {
 	}
 }
 
-// TestConfigEmptyWhenUnset: an unset/empty env yields an empty (non-nil) map,
-// so callers can index it without a nil check.
+// TestConfigEmptyWhenUnset: an unset or empty env yields an empty non-nil
+// map, so callers can index it without a nil check.
 func TestConfigEmptyWhenUnset(t *testing.T) {
 	t.Setenv(gplug.ConfigEnvVar, "")
 	got, err := Config()
@@ -49,9 +49,8 @@ func TestConfigMalformedIsAnError(t *testing.T) {
 
 // TestMainRefusesTheHandshake: a config that will not decode, and a factory
 // that refuses its config, both become a plugin whose Info answers
-// FailedPrecondition with the reason — the door through which the host
-// stops the launch naming it (owner decision 2026-08-27). A factory that
-// builds is served as itself.
+// FailedPrecondition with the reason, which is how the host stops the
+// launch naming it. A factory that builds is served as itself.
 func TestMainRefusesTheHandshake(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv(gplug.ConfigEnvVar, `{not valid json`)

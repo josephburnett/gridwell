@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# check-docpaths: every repo path a document names must exist. Docs cite
-# code by path (`internal/local/store`, `plugins/fs`, `apps/desktop/...`)
-# and those paths rot silently when code moves — ARCHITECTURE.md kept
-# describing `internal/plugin/sshhost` (never existed after the rename)
-# and three docs cited `plugins/local/store` months after the v2 fold
-# made it `internal/local/store`. A stale path is a false fact about
-# where something lives, and nothing checked it. This gate does.
+# check-docpaths: every repo path a document names must exist. Docs cite code
+# by path — `internal/local/store`, `plugins/fs`, `apps/desktop/...` — and those
+# paths rot silently when code moves. A stale path is a false fact about where
+# something lives; this gate is what checks it.
 #
 # Scope: every tracked *.md plus .github/workflows/*.yml. A token is
 # path-like when it starts with one of the top-level code dirs

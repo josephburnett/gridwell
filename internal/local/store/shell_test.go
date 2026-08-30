@@ -9,11 +9,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// TestCreateShellCreatesFrozenTile: a brand-new shell tile must
-// land with kind=shell, the default alt_text, and no preview yet.
-// With the tmux backing the cwd is no longer tile state — bash's
-// directory lives inside tmux from the first refresh onward — so
-// this just covers the initial-row invariants.
+// TestCreateShellCreatesFrozenTile: a new shell tile lands with kind=shell,
+// the default alt_text, and no preview yet. The shell's directory is tmux
+// state, not tile state, so this covers only the initial-row invariants.
 func TestCreateShellCreatesFrozenTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)

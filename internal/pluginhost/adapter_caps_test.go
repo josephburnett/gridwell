@@ -24,12 +24,12 @@ func (capsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRe
 	return &pluginv1.InfoResponse{Kind: "caps", DisplayName: "caps", RootContext: "r", Watch: true, Writable: true}, nil
 }
 
-// The adapter must never declare a door it cannot open. It has no
-// Subscribe (a declared watch:true sent the server's watchPlugin into
-// Unimplemented retries forever) and no WriteContent (a declared
-// writable:true offered editing the adapter refuses): until it
-// implements them, the node-facing Info answers both false whatever
-// the plugin declares.
+// The adapter must never declare a door it cannot open. It has no Subscribe,
+// so a declared watch:true would send the server's watchPlugin into
+// Unimplemented retries forever, and no WriteContent, so a declared
+// writable:true would offer editing the adapter refuses. Until it implements
+// them, the node-facing Info answers both false whatever the plugin
+// declares.
 func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {

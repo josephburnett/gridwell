@@ -7,11 +7,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// Main is the shared CLI dispatch for every composed gridwell binary
-// (docs/plugin.md): the stock host passes nil (every plugin
-// out-of-process); a bundled binary passes its compiled-in plugin
-// factories — and everything else — status, backup, the whole serve
-// wiring — is identical. Returns the process exit code.
+// Main is the shared CLI dispatch for every composed gridwell binary. The
+// stock host passes nil, so every plugin runs out-of-process; a leaf binary
+// passes its compiled-in plugin factories. Everything else — status,
+// backup, the whole serve wiring — is identical. Returns the process exit
+// code.
 func Main(args []string, plugins map[string]plugin.Factory) int {
 	if len(args) < 1 {
 		usage()
@@ -57,6 +57,6 @@ Usage:
                                               of every live url tile); the app
                                               must not be running
 
-server.yaml names the node's id, its connections and its content plugins
-(docs/one-node.md); every DB path is derived from an id, never configured.`)
+server.yaml names the node's id, its connections and its content plugins;
+every DB path is derived from an id, never configured.`)
 }

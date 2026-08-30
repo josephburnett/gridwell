@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// The link-resolution seam (owner decision 8, 2026-07-26): ReadContent and
+// The link-resolution seam: ReadContent and
 // GetTilePreview on a LEAF LINK resolve to the target at the SERVING NODE,
 // through the one contentRoute door — across two real plugins and the real
 // router. Before this, resolution lived only in the wasm client

@@ -1,23 +1,22 @@
 package server
 
-// Password auth for the BROWSER surface (the mux: Connect RPCs, static
-// files, the wasm client). Single-tenant by design: one plaintext password
-// (the minted <home>/web-password file — config.PasswordFile), one derived
-// cookie, no accounts, no sessions table.
+// Password auth for the browser surface: the mux carrying Connect RPCs,
+// static files, and the wasm client. Single-tenant by design — one plaintext
+// password, the minted <home>/web-password file named by config.PasswordFile,
+// one derived cookie, no accounts, no sessions table.
 //
-// The one fact is the password (config-owned); everything else derives from
-// it in exactly one place: AuthToken(password) is both the cookie value a
-// login sets and the value every request is checked against. Because the
-// check is against the CURRENT password's token, changing the password
-// invalidates every outstanding cookie with no revocation state at all.
+// The one fact is the password, owned by config, and everything else derives
+// from it in exactly one place: AuthToken(password) is both the cookie value a
+// login sets and the value every request is checked against. Because the check
+// is against the current password's token, changing the password invalidates
+// every outstanding cookie with no revocation state at all.
 //
-// Deliberately NOT gated: the gRPC node export (FederationHandler) — it
-// carries federation (an ssh mount's tunnel dials it). Its gate is the
-// kernel: it is served only on the 0600 unix socket node.listenFederation
-// opens. Everything on the BROWSER door is gated here, the /shell
-// WebSocket (shell_door.go) included — a PTY is not an exception. The desktop app's own window
-// authenticates without prompting: the serve banner carries the token and
-// the sidecar pre-sets the cookie (apps/desktop/src/main/sidecar.ts).
+// Deliberately not gated: the gRPC node export, FederationHandler, which a
+// mounter's ssh tunnel dials. Its gate is the kernel — it is served only on
+// the 0600 unix socket node.listenFederation opens. Everything on the browser
+// door is gated here, the /shell WebSocket included; a PTY is not an
+// exception. The desktop app's own window authenticates without prompting: the
+// serve banner carries the token and the sidecar pre-sets the cookie.
 
 import (
 	"crypto/sha256"
@@ -36,20 +35,16 @@ const (
 	// collide with the SPA fallback.
 	authLoginPath = "/auth/login"
 	// authCookieMaxAge is the cookie lifetime in seconds: 400 days, the
-	// browser-enforced maximum — and the cookie is RE-ISSUED on every
-	// authenticated request, so in use it never expires (owner decision
-	// 2026-08-26: one-time setup). Revocation is rotating the password
-	// (deleting the web-password file), never a cookie expiry.
-	// It remains the
-	// longest modern browsers honor. The user asked for "no expiration" —
-	// this is as close as a cookie gets, and every authenticated request
-	// re-issues it, so the window slides forever under any regular use.
+	// browser-enforced maximum, which is the longest modern browsers honor.
+	// The cookie is re-issued on every authenticated request, so under regular
+	// use the window slides and it never expires. Revocation is rotating the
+	// password by deleting the web-password file, never a cookie expiry.
 	authCookieMaxAge = 400 * 24 * 60 * 60
 )
 
-// AuthToken derives the auth cookie value from the configured password. The
-// ONE derivation: the login handler sets it, the middleware checks it, and
-// the serve banner prints it for the desktop sidecar. Not stored anywhere —
+// AuthToken derives the auth cookie value from the configured password. It is
+// the one derivation: the login handler sets it, the middleware checks it, and
+// the serve banner prints it for the desktop sidecar. It is stored nowhere, so
 // a password change changes the token and thereby signs every browser out.
 func AuthToken(password string) string {
 	sum := sha256.Sum256([]byte("gridwell-auth-v1\n" + password))
@@ -67,22 +62,23 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, contentPathPrefix) {
-			// The /content/ door can never see the cookie (sandboxed pages
-			// have opaque origins; the desktop's native views live on their
-			// own session partition) — it gates itself by the content token
-			// in the path (content_door.go).
+			// The /content/ door can never see the cookie: sandboxed pages
+			// have opaque origins and the desktop's native views live on
+			// their own session partition. It gates itself by the content
+			// token in the path; see content_door.go.
 			next.ServeHTTP(w, r)
 			return
 		}
 		if authed(r, token) {
-			// Re-issue on every authenticated request: the 400-day cap
-			// slides, so a regularly-used browser never expires.
+			// Re-issue on every authenticated request, so the 400-day cap
+			// slides and a regularly-used browser never expires.
 			setAuthCookie(w, token)
 			next.ServeHTTP(w, r)
 			return
 		}
-		// A browser navigation gets the login page; anything else (RPC
-		// POSTs, streams) gets a bare 401 the client surfaces as an error.
+		// A browser navigation gets the login page; anything else, an RPC
+		// POST or a stream, gets a bare 401 the client surfaces as an
+		// error.
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			writeLoginPage(w, http.StatusUnauthorized, false)
 			return
@@ -109,13 +105,13 @@ func setAuthCookie(w http.ResponseWriter, token string) {
 	})
 }
 
-// handleLogin serves the login page (GET) and checks a submitted password
-// (POST). The submitted password is compared by token so the compare is
-// constant-time over fixed-length digests. A GET carrying ?token=<token>
-// is the TOKEN LOGIN: the shells that own a webview's cookie jar but
-// cannot set a cookie from outside it (the mobile bind) load this URL
-// once and land home authenticated. The token is the banner's — same
-// trust as the <home>/web-password file the password is read from.
+// handleLogin serves the login page on GET and checks a submitted password on
+// POST. The submitted password is compared by token, so the compare is
+// constant-time over fixed-length digests. A GET carrying ?token=<token> is
+// the token login: a shell that owns a webview's cookie jar but cannot set a
+// cookie from outside it, such as the mobile bind, loads this URL once and
+// lands home authenticated. The token is the banner's, at the same trust level
+// as the <home>/web-password file the password is read from.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, token string) {
 	switch r.Method {
 	case http.MethodPost:
@@ -146,9 +142,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, token strin
 	}
 }
 
-// writeLoginPage renders the self-contained login form (no static-dir
-// dependency — the static dir is behind the very gate this page opens).
-// Only fixed strings are interpolated, so nothing here can echo input.
+// writeLoginPage renders the self-contained login form. It has no static-dir
+// dependency, because the static dir is behind the gate this page opens. Only
+// fixed strings are interpolated, so nothing here can echo input.
 func writeLoginPage(w http.ResponseWriter, status int, wrong bool) {
 	errLine := ""
 	if wrong {
@@ -180,9 +176,9 @@ func writeLoginPage(w http.ResponseWriter, status int, wrong bool) {
 </form>`))
 }
 
-// TokenLoginURL is the token-login address for origin (handleLogin's GET
-// ?token= arm): what a native shell loads first to authenticate its
-// webview. The one place the URL is built.
+// TokenLoginURL is the token-login address for origin, handleLogin's GET
+// ?token= arm: what a native shell loads first to authenticate its webview. It
+// is the one place the URL is built.
 func TokenLoginURL(origin, password string) string {
 	return origin + authLoginPath + "?token=" + AuthToken(password)
 }

@@ -5,9 +5,8 @@ import (
 	"fmt"
 )
 
-// Test-only pragma access: the migration/durability tests read version
-// stamps and INJECT corrupt ones. Moved out of the shipped code (deadcode
-// sweep 2026-08-08) — production reads/writes pragmas through
+// Test-only pragma access: the migration and durability tests read version
+// stamps and inject corrupt ones. Production reads and writes pragmas through
 // internal/dbformat only.
 
 // readPragmaInt reads an integer-valued PRAGMA (e.g. application_id,

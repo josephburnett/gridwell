@@ -73,7 +73,7 @@ func TestHubCoalescesPerKeyAndDropsNothing(t *testing.T) {
 }
 
 // Cancel closes the stream, detaches the subscriber, and is safe to call
-// twice (a deferred cancel after an explicit one).
+// twice, as with a deferred cancel after an explicit one.
 func TestCancelClosesAndIsIdempotent(t *testing.T) {
 	h := New(func(e ev) string { return e.key })
 	ch, cancel := h.Subscribe()

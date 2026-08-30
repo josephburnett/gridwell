@@ -44,10 +44,10 @@ plugins:
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's
-# serveGzipSidecar) — the wasm is ~33 MB raw, ~8 MB gzipped, and a phone
-# on a relayed tailscale link downloads it every boot. gzip runs after the
-# build so the sidecar is always at least as new as the raw file (the
-# server refuses a stale one).
+# serveGzipSidecar). The wasm is tens of megabytes raw and a fraction of
+# that gzipped, and a phone on a relayed link downloads it every boot.
+# gzip runs after the build so the sidecar is always at least as new as
+# the raw file; the server refuses a stale one.
 wasm: $(WASM_EXEC)
 	mkdir -p web
 	GOOS=js GOARCH=wasm go build -o $(WASM) ./client/wasm
@@ -64,9 +64,8 @@ $(WASM_EXEC):
 	fi
 
 # fmt-check fails if any hand-written Go file isn't gofmt-clean (generated code
-# under api/gen is excluded — it's regenerated, not hand-edited). Kept as the
-# first check step so formatting drift can't accumulate the way it had: several
-# files were committed non-gofmt because nothing enforced it. Fix with `gofmt -w`.
+# under api/gen is excluded — it's regenerated, not hand-edited). It is the
+# first check step so formatting drift cannot accumulate. Fix with `gofmt -w`.
 fmt-check:
 	@bad=$$(gofmt -l $$(git ls-files '*.go' | grep -v '/gen/')); \
 	if [ -n "$$bad" ]; then echo "gofmt needed (run: gofmt -w <file>):"; echo "$$bad"; exit 1; fi
@@ -77,13 +76,11 @@ fmt-check:
 # connect code) and api/rpc/wire_gen.go (api/rpc's Go records and their
 # conversions, derived from the same proto).
 # This catches all three ways generated code goes wrong: a proto edit
-# without `buf generate`; a hand-edit to generated code; and a PARTIAL
-# `git add` of the generated set — the 2026-08-04 `make launch` break,
-# where data.pb.go was committed but data_grpc.pb.go/data.connect.go
-# stayed in the working tree, so every working-tree gate was green while
-# the pushed history didn't compile. Staged-but-uncommitted generated
-# files pass (worktree == index is the invariant), so the normal
-# edit → regen → git add → make check → commit loop is unaffected.
+# without `buf generate`; a hand-edit to generated code; and a partial
+# `git add` of the generated set, which leaves every working-tree gate
+# green while the pushed history does not compile. Staged-but-uncommitted
+# generated files pass, since worktree == index is the invariant, so the
+# normal edit, regen, git add, make check, commit loop is unaffected.
 GENERATED := api/gen api/rpc/wire_gen.go
 
 proto-check:
@@ -100,10 +97,10 @@ proto-check:
 # that never reaches the heavier display-bound gates); check-docpaths fails
 # when a doc or workflow names a repo path that no longer exists. No display
 # or network needed.
-# MODULES lists every in-repo Go module beyond the root — the api, the
-# shared nested modules, and each plugin (its own module: the in-repo
-# strangers, ARCHITECTURE.md). check builds and tests each one STANDALONE
-# (GOWORK=off) so no module can quietly lean on the workspace.
+# MODULES lists every in-repo Go module beyond the root: the api, the
+# shared nested modules, and each plugin, which is its own module. check
+# builds and tests each one standalone (GOWORK=off) so no module can
+# quietly lean on the workspace.
 MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell mobile
 
 # check depends on wasm: web/embed.go EMBEDS the built gridwell.wasm, so
@@ -127,34 +124,31 @@ check: fmt-check proto-check wasm
 	cd $(DESKTOP) && npm run typecheck:e2e
 	cd $(DESKTOP) && npm test
 
-# The heavy gates below are the ONE recipe for each gate: CI
+# The heavy gates below are the one recipe for each gate: CI
 # (.github/workflows/gates.yml) invokes these targets rather than
-# re-spelling them — the two copies drifted (retries, verbosity, a nested
-# xvfb-run around a script that already wraps one). PW_FLAGS passes extra
+# re-spelling them, so the two cannot drift. PW_FLAGS passes extra
 # Playwright flags through to check-e2e / check-web:
 #   make check-e2e PW_FLAGS=--retries=1     # CI's one-retry flake discipline
 PW_FLAGS ?=
 
-# check-electron runs the live-tile harnesses under a virtual display. Needed
-# only for phases that touch the URL/shell live path (and the final pass), since
-# they exercise the real Electron WebContentsView. (There is no PTY bridge any
-# more: shells ride a WebSocket on the web door, so check-web owns that path.)
-# Requires xvfb +
-# a prior `make vendor` for node_modules. (The npm scripts wrap xvfb-run
-# themselves — do not wrap them again.)
+# check-electron runs the live-tile harnesses under a virtual display. It is
+# needed only for a change that touches the live url path, since it exercises
+# the real Electron WebContentsView; shells ride a WebSocket on the web door,
+# so check-web owns that path. Requires xvfb and a prior `make vendor` for
+# node_modules. The npm scripts wrap xvfb-run themselves — do not wrap them
+# again.
 check-electron: node-modules
 	cd $(DESKTOP) && npm run test:integration && npm run test:bridge
 
-# check-e2e drives the REAL Electron app end to end: Playwright launches the same
-# `electron .` as `make launch` (which spawns the Go sidecar), points it at a
-# fresh throwaway home (a directory serve mints its config into), and drives
-# the wasm canvas with synthetic mouse input —
-# asserting outcomes against the live server over Connect-RPC. This is the only
-# test that exercises the full renderer→wasm→RPC→server→SQLite composition (e.g.
-# drag-create in a descended grid). Heavier than `make check` (it builds the
-# binaries and boots Electron), so it's a pre-merge full-stack gate alongside
-# check-electron, not part of the fast per-commit `check`. Requires xvfb + a
-# prior `make vendor` for node_modules + Playwright.
+# check-e2e drives the real Electron app end to end: Playwright launches the
+# same `electron .` as `make launch`, which spawns the Go sidecar, points it at
+# a fresh throwaway home that serve mints its config into, and drives the wasm
+# canvas with synthetic mouse input, asserting outcomes against the live server
+# over Connect-RPC. It is the only test that exercises the full renderer, wasm,
+# RPC, server, SQLite composition. It is heavier than `make check`, since it
+# builds the binaries and boots Electron, so it is a pre-merge full-stack gate
+# rather than part of the fast per-commit check. Requires xvfb and a prior
+# `make vendor` for node_modules and Playwright.
 check-e2e: build node-modules
 	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e -- $(PW_FLAGS)
 
@@ -168,21 +162,21 @@ check-e2e: build node-modules
 check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web -- $(PW_FLAGS)
 
-# check-federation is the SPAWN GATE (issue #58): the real binaries —
-# gridwell serve and the go-plugin subprocesses —
-# through a real ssh tunnel, one write/read crossing every hop. The in-process
-# seam tests cannot see go-plugin spawn: the pluginmeta sqlite-driver bug kept
-# every test green while every production spawn failed. Guarded by the
-# `federation` build tag so make check stays fast. Headless, ~1s after build.
-# Run for any change to plugin spawn, sshdial, the node export, or routing.
+# check-federation is the spawn gate: the real binaries — gridwell serve and
+# the go-plugin subprocesses — through a real ssh tunnel, with one write and
+# read crossing every hop. The in-process seam tests cannot see go-plugin
+# spawn, so a failure that only happens in a spawned process leaves them green.
+# Guarded by the `federation` build tag so make check stays fast. Headless.
+# Run it for any change to plugin spawn, the dialer, the node export, or
+# routing.
 check-federation: build
 	cd test/federation && go test -tags federation -count=1 .
 
-# serve runs the backend on its own (the desktop app spawns it as a sidecar;
-# this target is for poking at the RPC/SSE surface or loading the wasm client
-# in a plain browser — note live URL tiles only work inside the Electron app).
-# It requires ~/.gridwell/server.yaml (run `make init` once to create it); every
-# plugin's DB path is derived from its id, so there is no --db flag.
+# serve runs the backend on its own. The desktop app spawns it as a sidecar;
+# this target is for poking at the RPC surface or loading the wasm client in a
+# plain browser, where live url tiles only work inside the Electron app. A
+# missing ~/.gridwell/server.yaml is a fresh home: the first serve mints the
+# node's id and writes the file.
 serve: build
 	$(BIN) serve $(SERVE_FLAGS)
 
@@ -198,9 +192,9 @@ SERVE_FLAGS ?=
 # AppImage once. After this completes, `make dist` needs no network.
 vendor: bin wasm
 	cd $(DESKTOP) && npm ci --cache $(NPM_CACHE)
-	# Electron ≥42 no longer downloads its binary in postinstall (it defers to
-	# first run) — materialize it NOW, into the repo-local cache, or the first
-	# offline `make launch`/harness run would try to hit the network.
+	# Electron defers its binary download to first run, so materialize it here,
+	# into the repo-local cache, or the first offline `make launch` or harness
+	# run reaches for the network.
 	cd $(DESKTOP) && node node_modules/electron/install.js
 	$(MAKE) dist
 	@echo "vendored: caches warm under $(CACHE); 'make dist' is now offline"
@@ -213,16 +207,14 @@ dist: bin wasm node-modules
 	cd $(DESKTOP) && npm run build && ./node_modules/.bin/electron-builder --linux AppImage
 	@echo "AppImage: $(DESKTOP)/out/"
 
-# `make launch` is the one-shot dev run: build the sidecar + wasm, compile the
-# TS, and launch Electron against ~/.gridwell (server.yaml + the plugin DBs it
-# names) so your existing grids are right there. Requires ~/.gridwell/server.yaml
-# — run `make init` once first; there is no fallback DB. Point at a different
-# home with GRIDWELL_HOME. Runs WITH Chromium's OS sandbox on (this box's kernel
-# allows unprivileged user namespaces, so no setuid helper is needed) — live URL
-# tiles load untrusted web content, so the sandbox is the containment that
-# matters. Needs a prior `make vendor` for node_modules.
+# `make launch` is the one-shot dev run: build the sidecar and wasm, compile
+# the TS, and launch Electron against ~/.gridwell, so your existing grids are
+# right there. A home with no server.yaml is created on the first serve. Point
+# at a different home with GRIDWELL_HOME. It runs with Chromium's OS sandbox
+# on, since live url tiles load untrusted web content and the sandbox is the
+# containment that matters. Needs a prior `make vendor` for node_modules.
 #
-#   make init && make launch                       # ~/.gridwell
+#   make launch                                     # ~/.gridwell
 #   GRIDWELL_HOME=/path/to/home make launch         # another home
 launch: build node-modules
 	cd $(DESKTOP) && npm run build && ./node_modules/.bin/electron .

@@ -8,9 +8,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// The id: selector subsumes LocateTile (issue #244 over #234): an exact
-// lookup whose one result carries the containing-well chain outermost
-// first, tracking moves; a missing id is empty results, never an error.
+// The id: selector is an exact lookup whose one result carries the
+// containing-well chain, outermost first, tracking moves. A missing id gives
+// empty results, never an error.
 func TestSearchByID(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)

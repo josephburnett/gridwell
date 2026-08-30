@@ -1,20 +1,17 @@
 # Retired words (scripts/check-vocabulary.sh): "<word> [<allowed hit regex>]".
 # A hit is "path:line:text"; the regex must match it from the start.
 #
-# "provider" — one word: plugin (owner decision 2026-08-27). Allowed: the
-# two design records that coined it (history, not guidance); xterm's own
-# "link provider" API; the retired `provider: true` yaml key, which the
-# config must still recognize to print its deprecation.
-provider docs/v2-design\.md|docs/content-presentation\.md|.*[Ll]ink [Pp]rovider|.*registerLinkProvider|.*provider: true|.*yaml:"provider
-providers docs/v2-design\.md|docs/content-presentation\.md
-# "loadout" — the compiled-in plugin set of a leaf binary; retired 2026-08-29 with gridwell-all (docs/one-node.md names it as history).
-loadout docs/one-node\.md|docs/plugin\.md
-# "viewX"/"viewY" — a doorway's integer window ORIGIN, spelled ViewX/ViewY
-# on the wire and viewX/viewY in proto-JSON; retired 2026-08-29 by schema
-# v11, which keeps the framing as a float CENTER (viewCx/viewCy). Nothing
-# on the wire answers to the old name any more, so a stale read is silently
-# undefined — which is how three e2e assertions went on comparing zeros.
-# The SQL column view_x is a different word and stays legal: the migration
-# shim must still spell it.
+# "provider" — one word: plugin. Allowed: xterm's own "link provider" API,
+# and the retired `provider: true` yaml key, which the config must still
+# recognize to print its deprecation.
+provider .*[Ll]ink [Pp]rovider|.*registerLinkProvider|.*provider: true|.*yaml:"provider
+providers
+# "loadout" — the compiled-in plugin set of a leaf binary.
+loadout
+# "viewX"/"viewY" — a doorway's integer window origin, spelled ViewX/ViewY on
+# the wire and viewX/viewY in proto-JSON. Schema v11 keeps the framing as a
+# float center (viewCx/viewCy), and nothing on the wire answers to the old
+# name, so a stale read is silently undefined. The SQL column view_x is a
+# different word and stays legal: the migration shim must still spell it.
 viewX
 viewY

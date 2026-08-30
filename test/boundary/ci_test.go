@@ -9,13 +9,11 @@ import (
 	"testing"
 )
 
-// TestEveryGateTargetRunsInCI pins that the Makefile is the ONE recipe
-// for every gate: each `check-*` target must be invoked (`make <target>`)
-// from some workflow under .github/workflows. Before this pin, gates.yml
-// re-spelled check-web / check-e2e / check-electron by
-// hand and the two copies drifted (retries, verbosity, a nested xvfb-run
-// around an npm script that already wraps one) — the recipe a developer
-// ran was not the recipe CI ran.
+// TestEveryGateTargetRunsInCI pins that the Makefile is the one recipe for
+// every gate: each `check-*` target must be invoked as `make <target>` from
+// some workflow under .github/workflows. A workflow that re-spells a gate by
+// hand drifts from the Makefile, and then the recipe a developer runs is not
+// the recipe CI runs.
 func TestEveryGateTargetRunsInCI(t *testing.T) {
 	root := repoRoot(t)
 	mk, err := os.ReadFile(filepath.Join(root, "Makefile"))

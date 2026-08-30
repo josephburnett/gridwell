@@ -76,7 +76,7 @@ func into(trashDir, src string) error {
 		infoPath := filepath.Join(infoDir, name+".trashinfo")
 		f, err := os.OpenFile(infoPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if errors.Is(err, os.ErrExist) {
-			continue // name taken — try name.2, name.3, ...
+			continue // the name is taken: try name.2, name.3, …
 		}
 		if err != nil {
 			return err
@@ -90,7 +90,7 @@ func into(trashDir, src string) error {
 			return werr
 		}
 		if err := moveOrCopy(abs, filepath.Join(filesDir, name)); err != nil {
-			_ = os.Remove(infoPath) // don't leave an orphaned record
+			_ = os.Remove(infoPath) // do not leave an orphaned record
 			return err
 		}
 		return nil
@@ -98,8 +98,7 @@ func into(trashDir, src string) error {
 }
 
 // moveOrCopy renames src to dst, falling back to a recursive copy-then-remove
-// when the two are on different filesystems (os.Rename returns EXDEV — e.g. a
-// file-well pointing at /mnt/c while the trash is on the Linux fs).
+// when the two are on different filesystems, where os.Rename returns EXDEV.
 func moveOrCopy(src, dst string) error {
 	err := os.Rename(src, dst)
 	if err == nil {

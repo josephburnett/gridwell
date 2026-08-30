@@ -13,11 +13,10 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// linkUpstream is a fake REMOTE NODE (qualified ids, the shape a mount
-// really serves): a root grid holding one leaf link whose target lives
-// in a grid no well references — the link arm is the target's ONLY warm
-// path, exactly the case the walker's doc promises to cover ("warm the
-// target row and its face/body even if its own grid is never walked").
+// linkUpstream is a fake remote node, with qualified ids, the shape a
+// connection really serves: a root grid holding one leaf link whose target
+// lives in a grid no well references. The link arm is the target's only warm
+// path, which is the case the walker promises to cover.
 type linkUpstream struct {
 	namespace.Namespace
 	dark bool
@@ -87,10 +86,10 @@ func (u *linkUpstream) ReadContent(_ context.Context, req *pb.ReadContentRequest
 	return status.Error(codes.NotFound, "no content")
 }
 
-// The link arm used to pre-mark the target seen before recursing, so
-// walkTile returned at its own seen-check without warming anything —
-// the target's body was offline-unreadable after a "whole-mount"
-// prefetch whenever the link was the only path to it.
+// The link arm must not pre-mark the target seen before recursing: walkTile
+// would then return at its own seen-check without warming anything, leaving
+// the target's body offline-unreadable after a whole-source prefetch whenever
+// the link was its only path.
 func TestPrefetchWarmsLinkTargetBody(t *testing.T) {
 	up := &linkUpstream{}
 	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})

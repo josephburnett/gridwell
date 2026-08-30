@@ -5,11 +5,10 @@ import (
 	"testing"
 )
 
-// TestCloseIsIdempotent pins Node.Close's contract: the CLI defers it AND
-// calls it explicitly (serve.go), so the second call must be a harmless
-// no-op that returns the first call's verdict — never a double shutdown
-// of listeners, plugins, or (since the loader closes native impls) the
-// store behind them.
+// TestCloseIsIdempotent pins Node.Close's contract: the CLI both defers it
+// and calls it explicitly, so the second call must be a harmless no-op that
+// returns the first call's verdict, never a double shutdown of listeners,
+// plugins, or the store behind them.
 func TestCloseIsIdempotent(t *testing.T) {
 	home := t.TempDir()
 	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))

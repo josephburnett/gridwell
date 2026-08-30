@@ -30,13 +30,12 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
 
-// Config returns the config map the host handed this plugin at spawn (root,
-// pid, uuid, …), decoded from the GRIDWELL_PLUGIN_CONFIG environment
-// variable. An unset/empty value yields an empty map; a value that is not
-// a JSON object is an ERROR, never an empty map — a plugin that silently
-// ran unconfigured (fs rootless, proc at pid 1) would present as a plugin
-// that lost its config, which is the silent-disappearance class. A plugin
-// is configured once, at launch.
+// Config returns the config map the host handed this plugin at spawn,
+// decoded from the GRIDWELL_PLUGIN_CONFIG environment variable. An
+// unset or empty value yields an empty map. A value that is not a JSON
+// object is an error, never an empty map: a plugin that silently ran
+// unconfigured (fs rootless, proc at pid 1) would look like a plugin that
+// lost its config. A plugin is configured once, at launch.
 func Config() (map[string]string, error) {
 	raw := os.Getenv(gplug.ConfigEnvVar)
 	if raw == "" {
@@ -49,7 +48,7 @@ func Config() (map[string]string, error) {
 	return out, nil
 }
 
-// Factory is the plugin's config→plugin derivation: the ONE owner of how
+// Factory is the plugin's config→plugin derivation: the one owner of how
 // server.yaml config becomes a running plugin, shared by the subprocess
 // main (Main) and the bundled binaries (the loader's Factory has the same
 // shape). An error is the verdict "I do not have the config I need".
@@ -57,11 +56,10 @@ type Factory func(cfg map[string]string) (pluginv1.PluginServer, error)
 
 // Main decodes the spawn config, builds the plugin, and serves it. A
 // config that will not decode, or a factory that refuses it, is served as
-// a REFUSAL: a plugin whose handshake (Info) answers FailedPrecondition
-// with the reason, so the host stops the launch naming it (owner decision
-// 2026-08-27) — the same door a plugin uses for its own bad config, rather
-// than an exit the host would report as a handshake failure with the
-// reason lost in the guest's stderr.
+// a refusal: a plugin whose Info answers FailedPrecondition with the
+// reason, so the host stops the launch naming it. Exiting instead would
+// present as a handshake failure with the reason lost in the guest's
+// stderr.
 func Main(factory Factory) {
 	Serve(build(factory))
 }
@@ -91,15 +89,14 @@ func (r refusal) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRes
 	return nil, status.Errorf(codes.FailedPrecondition, "%v", r.err)
 }
 
-// watchHost exits the guest when the spawning host dies (issue #197).
-// go-plugin v1.8 gives a guest NO host-death detection in our configuration:
-// the guest inherits the host's stdin (never closes), and a crashed or
-// SIGKILLed host just looks like a disconnected gRPC client while the guest
-// keeps listening forever — nine generations of orphaned plugins were found
-// reparented to init. The host hands its pid in the environment (spawn-time
-// fact, so a pre-watchdog race cannot capture a post-death parent); the
-// guest probes it with signal 0 — robust against subreaper reparenting,
-// where a Getppid comparison can lie. A vanished env var (a hand-launched
+// watchHost exits the guest when the spawning host dies. go-plugin gives a
+// guest no host-death detection in our configuration: the guest inherits
+// the host's stdin (which never closes), and a killed host looks like a
+// disconnected gRPC client while the guest keeps listening forever. The
+// host hands its pid in the environment — a spawn-time fact, so a
+// pre-watchdog race cannot capture a post-death parent — and the guest
+// probes it with signal 0, which is robust against subreaper reparenting
+// where a Getppid comparison can lie. A missing env var (a hand-launched
 // guest, a test harness) disables the watchdog rather than guessing.
 func watchHost() {
 	pid, err := strconv.Atoi(os.Getenv(gplug.HostPIDEnvVar))

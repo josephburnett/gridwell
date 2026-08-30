@@ -286,8 +286,8 @@ func TestResizeNode(t *testing.T) {
 }
 
 // TestResizeIgnoresStaleClaim: resize rides PlaceTile, which carries no
-// version claim (docs/simplify-plan.md S5) — see TestPlaceTileIgnoresStaleClaim
-// for the rule and version_rule_test.go for the whole table.
+// version claim. TestPlaceTileIgnoresStaleClaim has the rule and
+// version_rule_test.go the whole table.
 func TestResizeIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -479,7 +479,7 @@ func TestDeleteTile(t *testing.T) {
 	childGridIDStr := w.ChildGridID
 	childGridID, _ := parseID(childGridIDStr)
 	wIDInt, _ := parseID(w.ID)
-	// Two-stage (#262): the first delete parks it in the trash; the second
+	// Delete is two-stage: the first parks it in the trash, the second
 	// destroys. This test is about destruction's reference release.
 	hardDelete(t, s, w.ID)
 	if _, err := s.loadTile(ctx, s.db, wIDInt); !errors.Is(err, ErrNotFound) {
@@ -520,7 +520,7 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 // tile they can see, and it is recoverable (the row moves to the trash). A
 // version that moved under it — a page title capture on the very tile being
 // discarded — must not turn the gesture into an error the user has to
-// re-issue. No claim (docs/simplify-plan.md S5).
+// re-issue. There is no claim.
 func TestDeleteTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)

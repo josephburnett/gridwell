@@ -13,8 +13,8 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// deadSubscribeClient's event stream never opens — a mount whose tunnel
-// is down.
+// deadSubscribeClient's event stream never opens: a mount whose tunnel is
+// down.
 type deadSubscribeClient struct {
 	namespace.Namespace
 }
@@ -23,10 +23,10 @@ func (deadSubscribeClient) Subscribe(context.Context, *gridwellv1.SubscribeReque
 	return status.Error(codes.Unavailable, "tunnel down")
 }
 
-// A connection whose event stream dies must SAY so: the fan-in publishes
-// an EventPluginHealth down transition (the contract fanInEvents keeps
-// for local plugins, issue #47). Before the fix it broke into a bare 5s
-// retry — "tiles stopped updating" with no evidence.
+// A connection whose event stream dies must say so: the fan-in publishes an
+// EventPluginHealth down transition, the same contract fanInEvents keeps for
+// local plugins. Retrying silently presents as tiles that stopped updating
+// with no evidence.
 func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
 	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
 	if err != nil {

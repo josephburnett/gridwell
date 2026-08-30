@@ -1,8 +1,7 @@
-# The per-commit gate (issue #260): `make check` — fmt, proto drift,
-# every module standalone, the boundary lint, wasm, TS — plus the mobile
-# ANDROID cross-compile canary (the cheap half of #252's CI note; the
-# iOS canary needs a macOS runner, see mobile-ios.yml). Broken code must
-# not be mergeable, let alone releasable.
+# The per-commit gate: `make check` — fmt, proto drift, every module
+# standalone, the boundary lint, wasm, TS — plus the mobile Android
+# cross-compile canary. The iOS canary needs a macOS runner; see
+# mobile-ios.yml. Broken code must not be mergeable, let alone releasable.
 name: check
 on:
   push:
@@ -16,9 +15,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          # Every module's go.sum keys the cache (test/boundary pins it):
-          # an enumerated list missed mobile, apps/*, internal/doctype and
-          # test/federation, whose dependency changes never invalidated it.
+          # Every module's go.sum keys the cache, which test/boundary pins:
+          # a module missing from an enumerated list is a module whose
+          # dependency change never invalidates the cache.
           cache-dependency-path: '**/go.sum'
       - uses: actions/setup-node@v4
         with:

@@ -4,11 +4,10 @@ import "testing"
 
 import pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
-// The transit grid rule lives ONCE (TransitQualifyGrid) — before the
-// extraction the server's hop and the builtin transport's hop each kept
-// a hand copy, and a new id-bearing Grid field added to one could
-// silently miss the other. Ids gain one segment; the far node's stamped
-// facts ride verbatim; the input is never mutated.
+// The transit grid rule lives once, in TransitQualifyGrid, so a new
+// id-bearing Grid field cannot reach one hop and miss the other. Ids gain
+// one segment, the far node's stamped facts ride verbatim, and the input is
+// never mutated.
 func TestTransitQualifyGrid(t *testing.T) {
 	in := &pb.Grid{
 		Id:            "far/7",

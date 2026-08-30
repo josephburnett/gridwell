@@ -287,7 +287,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestURLHistoryRoundTrip (issue #113): the freeze writeback persists the
+// TestURLHistoryRoundTrip: the freeze writeback persists the
 // navigation back-stack; an empty capture leaves the stored one untouched
 // (the JPEG rule); the tile reads it back for revive.
 func TestURLHistoryRoundTrip(t *testing.T) {

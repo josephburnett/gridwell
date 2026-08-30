@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// The unload-beacon seam (2026-08-14, the transport-loss class): the
+// The unload-beacon seam (the transport-loss class): the
 // beacon helpers hand-build wire bodies that navigator.sendBeacon posts
 // after the page is gone — nothing else ever exercises those bytes, so
 // they MUST be pinned against the real Connect handler. The WriteContent

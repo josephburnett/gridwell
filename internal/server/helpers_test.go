@@ -10,10 +10,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// testPassword is the password every in-package test server is gated
-// behind unless a test configures its own. A password is REQUIRED (New
-// refuses an empty one — the web door is never open, owner decision
-// 2026-08-26), so there is no ungated shortcut for tests to lean on.
+// testPassword is the password every in-package test server is gated behind
+// unless a test configures its own. A password is required, and New refuses an
+// empty one, so there is no ungated shortcut for tests to lean on.
 const testPassword = "test-password"
 
 // mustNew is New with the test password filled in and the error

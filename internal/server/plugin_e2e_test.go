@@ -64,7 +64,7 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 2b. The file tile's descent body routes to the plugin — and since the
-	// content-types program (2026-08-13) a .txt file's body is the FILE
+	// content-types program, a .txt file's body is the FILE
 	// ITSELF, verbatim, not a metadata summary.
 	body, media, _, err := cl.ReadContent(ctx, alpha.ID)
 	if err != nil {

@@ -5,19 +5,13 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-// codePairs is the ONE gRPC↔Connect status-code table. Gridwell answers in
+// codePairs is the one gRPC↔Connect status-code table. Gridwell answers in
 // gRPC status codes everywhere — every namespace, the router, the
 // federation export — and exactly one hop translates: the Connect codec on
-// the way to a browser (server.asConnectError). Before this table that hop
-// and the export's inverse each kept a hand-written switch with a default
-// → Internal, and the two had drifted: a mount-of-mount's Unavailable came
-// out Internal, IsTransport said "a verdict", and clientsync dropped an
-// unacknowledged write it should have parked. (The inverse is gone with
-// the export's per-method delegation — 2026-08-29, docs/simplify-plan.md
-// S2: the export hands a mounter the router's status error unchanged.) The
-// table is total and injective over the gRPC enum
-// (TestCodeTableIsTotal) — a code missing here fails the contract's test,
-// not a user's write.
+// the way to a browser (server.asConnectError). The federation export
+// hands a mounter the router's status error unchanged. The table is total
+// and injective over the gRPC enum (TestCodeTableIsTotal), so a code
+// missing here fails the contract's test rather than a user's write.
 var codePairs = []struct {
 	G codes.Code
 	C connect.Code

@@ -1,9 +1,8 @@
-// Package plugin is the v2 fs CONTENT PLUGIN (docs/v2-design.md §5):
-// the stateless projection of a directory tree. Keys are slash-relative
-// paths under the configured root ("." is the root context); every
-// derivation and byte-level answer comes from plugins/fs/fsfile, SHARED
-// with the legacy plugin so the two stacks answer identically by
-// construction. No database, no ids, no layout — the node owns those.
+// Package plugin is the fs content plugin: a stateless projection of a
+// directory tree. Keys are slash-relative paths under the configured root, and
+// "." is the root context. Every derivation and byte-level answer comes from
+// plugins/fs/fsfile. There is no database, no ids, and no layout; the node
+// owns those.
 package plugin
 
 import (
@@ -25,8 +24,8 @@ import (
 	"github.com/josephburnett/gridwell/plugins/fs/trash"
 )
 
-// Host is the destructive side-effect surface, injected so tests never
-// touch real files (the legacy plugin's discipline).
+// Host is the destructive side-effect surface, injected so tests never touch
+// real files.
 type Host interface {
 	Remove(path string) error
 	RemoveAll(path string) error
@@ -45,18 +44,17 @@ type Plugin struct {
 	readDir func(dir string) ([]fssource.Entry, error)
 }
 
-// FromConfig builds the production plugin from the shared config
-// vocabulary — the ONE owner of the config→plugin derivation, so the
-// subprocess main (guest.Main) and the bundled binaries (the mobile bind,
-// mobile) compose exactly the same plugin. Config: root (the projected
-// directory). No root is the ROOTLESS plugin — listed, not enterable,
-// a fixable gap the client reports as a notice (issue #47's
-// classification, e2e-pinned) — not a refusal.
+// FromConfig builds the production plugin from the shared config vocabulary.
+// It is the one owner of the config-to-plugin derivation, so the subprocess
+// main and a bundled binary compose exactly the same plugin. The config key is
+// root, the projected directory. No root makes a rootless plugin — listed but
+// not enterable, a fixable gap the client reports as a notice — rather than a
+// refusal.
 func FromConfig(cfg map[string]string) (pluginv1.PluginServer, error) {
 	return New(strings.TrimSpace(cfg["root"]), nil), nil
 }
 
-// New builds a plugin over root. nil host trashes (production); tests
+// New builds a plugin over root. A nil host trashes, as production does; tests
 // inject a recorder.
 func New(root string, host Host) *Plugin {
 	if host == nil {
@@ -65,8 +63,8 @@ func New(root string, host Host) *Plugin {
 	return &Plugin{root: filepath.Clean(root), host: host, readDir: fssource.Read}
 }
 
-// SetReadDir overrides the directory reader (the legacy test seam:
-// simulate EACCES without root). nil restores the default.
+// SetReadDir overrides the directory reader, so a test can simulate EACCES
+// without root. nil restores the default.
 func (p *Plugin) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
 	if f == nil {
 		f = fssource.Read
@@ -78,7 +76,7 @@ func (p *Plugin) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
 // node-supplied (from this plugin's own earlier answers), so an escape
 // is a bug or an attack either way — refuse loudly.
 func (p *Plugin) abs(key string) (string, error) {
-	clean := path.Clean("/" + key) // "/" + forces the cleanup to anchor
+	clean := path.Clean("/" + key) // the leading "/" anchors the cleanup
 	full := filepath.Join(p.root, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
 	if !fsfile.UnderRoot(p.root, full) {
 		return "", status.Errorf(codes.InvalidArgument, "fs plugin: key %q escapes the root", key)
@@ -102,8 +100,8 @@ func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRes
 		DisplayName: "files",
 		Glyph:       "folder",
 	}
-	// No configured root → ROOTLESS (the legacy rule): the plugin is
-	// listed but not enterable; no context exists to descend into.
+	// No configured root makes the plugin rootless: it is listed but not
+	// enterable, because no context exists to descend into.
 	if p.root == "" || p.root == "." {
 		return resp, nil
 	}
@@ -114,11 +112,10 @@ func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRes
 	return resp, nil
 }
 
-// List enumerates one directory context. A definitively-missing
-// directory is an AUTHORITATIVE empty listing (its entries are gone); a
-// directory that exists but cannot be read answers Unavailable — "not
-// right now", which the node's read-through cache degrades to the
-// remembered answer (I12, now node machinery).
+// List enumerates one directory context. A definitively missing directory is
+// an authoritative empty listing, because its entries are gone; a directory
+// that exists but cannot be read answers Unavailable, meaning "not right now",
+// which the node's read-through cache degrades to the remembered answer.
 func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	dir, err := p.abs(req.Context)
 	if err != nil {
@@ -158,16 +155,16 @@ func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.P
 		return err
 	}
 	if fi, statErr := os.Lstat(filepath.Join(dir, name)); statErr != nil || fi.IsDir() {
-		// Directories and vanished files have no document body — an
-		// empty chunk, never an error (the legacy ContentBody rule).
+		// A directory or a vanished file has no document body: an empty
+		// chunk, never an error.
 		return stream.Send(&pluginv1.ContentChunk{})
 	}
 	data, mediaType := fsfile.Body(dir, name)
 	return stream.Send(&pluginv1.ContentChunk{Data: data, MediaType: mediaType})
 }
 
-// serveStream adapts the plugin chunk stream to fsfile's sender (the
-// two services' chunk shapes match field-for-field).
+// serveStream adapts the plugin chunk stream to fsfile's sender; the two chunk
+// shapes match field for field.
 type serveStream struct {
 	s pluginv1.Plugin_ServeContentServer
 }
@@ -211,8 +208,8 @@ func (p *Plugin) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1
 	}
 }
 
-// Delete moves the source path to the trash (via Host). An already-gone
-// path succeeds — the delete gesture is idempotent.
+// Delete moves the source path to the trash, through Host. An already-gone
+// path succeeds: the delete gesture is idempotent.
 func (p *Plugin) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*pluginv1.DeleteResponse, error) {
 	full, err := p.abs(req.Key)
 	if err != nil {

@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// TestDeletePaneTileReapsItsEphemerals (issue #174): a pane tile's layout
+// TestDeletePaneTileReapsItsEphemerals: a pane tile's layout
 // blob is the ONLY record of the workspace's ephemeral leaves (scratch-grid
 // tiles). Deleting the pane tile deletes only the arrangement — but must
 // terminate what the arrangement owns, exactly like closing a pane does:
@@ -75,7 +75,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 
 	// The first delete PARKS the workspace in the local plugin's trash
-	// (#262): its ephemerals stay alive so a restore comes back whole.
+	// Its ephemerals stay alive so a restore comes back whole.
 	if _, err := cl.GetTile(ctx, eph.ID); err != nil {
 		t.Fatalf("a trashed workspace must keep its ephemeral shell: %v", err)
 	}

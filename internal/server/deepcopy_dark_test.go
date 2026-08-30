@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// The OFFLINE deep-copy seam (offline-plan owner decision, 2026-08-14):
+// The offline deep-copy seam:
 // cloning a partially-reachable remote grid never refuses and never leaves
 // a silent hole — a tile whose bytes the source cannot serve degrades to a
 // LINK to the original; a nested room whose grid is unreachable degrades

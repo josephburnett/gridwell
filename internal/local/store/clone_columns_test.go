@@ -12,11 +12,10 @@ import (
 
 // TestClonePreservesAllContentColumns — clone is an EAGER, COMPLETE copy
 // (CLAUDE.md identity semantics): everything the user set on the source must
-// be on the copy. Regression: insertTileCopy's hand-listed INSERT omitted
-// content_zoom, url_history, and alt_user, so a clone silently lost its
-// content zoom, its navigation back-stack, and — worst — the "name is
-// user-owned" latch, letting the next automatic title capture clobber a name
-// the user chose (the exact issue-#61 class, reintroduced on the clone path).
+// be on the copy. A hand-listed INSERT that omits content_zoom, url_history,
+// or alt_user makes a clone silently lose its content zoom, its navigation
+// back-stack, or the "name is user-owned" latch, which lets the next
+// automatic title capture clobber a name the user chose.
 func TestClonePreservesAllContentColumns(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -29,7 +28,7 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A freeze that stored a navigation back-stack (issue #113)...
+	// A freeze that stored a navigation back-stack...
 	history := `[{"url":"https://example.com"},{"url":"https://example.com/page"}]`
 	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
 		TileID: tile.ID,
@@ -37,13 +36,13 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// ...a content zoom (issue #82; framing, no version bump)...
+	// ...a content zoom, which is framing and bumps no version...
 	if _, err := s.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
 		TileID: tile.ID, ContentZoom: 1.5,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// ...and a USER rename (issue #61; latches alt_user).
+	// ...and a user rename, which latches alt_user.
 	tileIDInt, _ := parseID(tile.ID)
 	if err := s.SetTileAlt(ctx, tileIDInt, "my page", true); err != nil {
 		t.Fatal(err)

@@ -52,8 +52,9 @@ func TestQualifyTilesReference(t *testing.T) {
 	if !cross[0].Reference {
 		t.Error("cross-plugin exit well should be a reference")
 	}
-	// Same-plugin mount: child arrived qualified with the SAME uuid as the
-	// well's grid. Still a reference (the reported bug — it used to render solid).
+	// A same-namespace mount: the child arrived qualified with the same uuid
+	// as the well's grid. It is still a reference, which a bare uuid
+	// comparison would miss.
 	same := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidA/9"}})
 	if !same[0].Reference {
 		t.Error("same-plugin mount (qualified child) should be a reference, not owned")
@@ -88,7 +89,7 @@ func TestQualifyTilesEmptyChildStaysEmpty(t *testing.T) {
 // the wire Reference bit verbatim: a remote plugin's interior well is OWNED
 // content and renders solid, even though its child id contains "/".
 func TestQualifyTilesTransit(t *testing.T) {
-	// A remote localdb's interior well, as the remote front door emits it.
+	// A remote home's interior well, as the remote front door emits it.
 	interior := qualifyTilesTransit("ssh1", []*pb.Tile{{
 		Id: "rp/7", GridId: "rp/1", ChildGridId: "rp/5", Reference: false,
 	}})[0]

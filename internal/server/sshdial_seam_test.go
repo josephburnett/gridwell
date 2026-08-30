@@ -25,15 +25,15 @@ import (
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
-// This is the ssh plugin's REAL transport seam, in-process: a genuine
-// x/crypto/ssh server (public-key auth, host-key verification against a
-// known_hosts file, direct-tcpip channel forwarding) in front of a genuine
-// `gridwell serve` node handler (h2c + id-routed node export +
-// TWO in-process localdbs). dial.Dial crosses every layer the production
-// binary crosses except the network itself.
+// The transport's real dial seam, in-process: a genuine x/crypto/ssh server —
+// public-key auth, host-key verification against a known_hosts file, channel
+// forwarding — in front of a genuine `gridwell serve` node handler, with
+// cleartext HTTP/2, the id-routed node export, and two in-process stores.
+// dial.Dial crosses every layer the production binary crosses except the
+// network itself.
 
 // remoteNode stands up the "remote gridwell serve": node id "rnode" with two
-// localdb plugins ("personal", "work") behind FederationHandler on a real listener.
+// namespaces ("personal", "work") behind FederationHandler on a real listener.
 // Returns its address and a direct client to the first plugin for
 // ground-truth assertions.
 func remoteNode(t *testing.T) (string, namespace.Namespace) {
@@ -52,7 +52,7 @@ func remoteNode(t *testing.T) (string, namespace.Namespace) {
 	}
 	direct, _ := reg.Get("ur1")
 	srv := servertest.New(t, reg, server.Config{})
-	// The federation door is a unix socket (2026-08-26); the test sshd
+	// The federation door is a unix socket; the test sshd
 	// forwards direct-streamlocal to it, exactly like a real sshd.
 	sock := filepath.Join(t.TempDir(), "federation.sock")
 	ln, err := net.Listen("unix", sock)
@@ -131,9 +131,9 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	}
 }
 
-// writeThenRead drives the contracted content surface: WriteContent commits
-// the bytes (version claimed from the created row), ReadContent streams them
-// back. The test helper for what CreateTile.data used to carry.
+// writeThenRead drives the content surface: WriteContent commits the bytes,
+// with the version claimed from the created row, and ReadContent streams them
+// back.
 func writeThenRead(t *testing.T, ctx context.Context, c namespace.Namespace, tileID string, version int64, data []byte) []byte {
 	t.Helper()
 	sent := false

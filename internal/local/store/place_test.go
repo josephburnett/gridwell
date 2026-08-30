@@ -8,12 +8,10 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// The PlaceTile suite (2026-07-26 redesign): placement is one verb owning one
-// fact, id-addressed, with NO descent path anywhere — the
-// well-into-own-subtree refusal must come from the store's own ancestor walk,
-// where the old MoveTile trusted a client-supplied DestPath membership check.
-// It carries no version claim either (docs/simplify-plan.md S5): the overlap
-// refusal below, not a claim, is what protects the grid.
+// The PlaceTile suite: placement is one verb owning one fact, id-addressed,
+// with no descent path anywhere, so the well-into-own-subtree refusal comes
+// from the store's own ancestor walk. It carries no version claim either: the
+// overlap refusal below, not a claim, is what protects the grid.
 
 func placeText(t *testing.T, s *Store, gridID string, x, y int64) *rpc.Tile {
 	t.Helper()
@@ -78,7 +76,7 @@ func TestPlaceTileMoveAndResizeAtOnce(t *testing.T) {
 			got.GridID, got.X, got.Y, got.W, got.H, well.ChildGridID)
 	}
 
-	// The source grid no longer lists it; the destination does.
+	// The source grid does not list it; the destination does.
 	src, err := s.GetGrid(ctx, root)
 	if err != nil {
 		t.Fatal(err)
@@ -119,9 +117,9 @@ func TestPlaceTileOverlapRefused(t *testing.T) {
 
 // TestPlaceTileIgnoresStaleClaim: a drag is an explicit act on a tile the
 // user can see, so a version that moved under it (a title capture, a foreign
-// rename) must not cost the user the move. Placement carries no claim
-// (docs/simplify-plan.md S5); the overlap check below is what actually
-// protects the grid, and it runs in the same transaction either way.
+// rename) must not cost the user the move. Placement carries no claim; the
+// overlap check below is what protects the grid, and it runs in the same
+// transaction either way.
 func TestPlaceTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

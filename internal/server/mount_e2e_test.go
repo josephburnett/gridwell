@@ -14,13 +14,13 @@ import (
 )
 
 // TestSecondDBMountE2E proves the federated model end to end: with the server
-// holding no native state, a SECOND Gridwell DB registered as a localdb plugin
+// holding no native state, a second Gridwell DB registered as its own namespace
 // can be mounted as a cross-plugin well in the primary, descended into, and
 // edited — and its tiles live in the second DB, isolated from the primary.
 func TestSecondDBMountE2E(t *testing.T) {
 	ctx := context.Background()
 
-	// Primary DB, registered as the primary localdb plugin.
+	// The primary DB, registered as the primary namespace.
 	st1, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +29,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	reg := plugin.NewRegistry()
 	primaryUUID, root := registerPrimaryLocaldb(t, reg, st1)
 
-	// Second DB, registered as another localdb plugin under its own uuid.
+	// A second DB, registered as another namespace under its own uuid.
 	st2, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)

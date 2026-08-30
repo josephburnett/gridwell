@@ -13,7 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// The two doors are DIFFERENT handlers (2026-08-26): the web door no
+// The two doors are different handlers: the web door no
 // longer demuxes raw gRPC to the node export, so a listener bound to a
 // network address serves exactly the gated surface. Pinned at the
 // handler seam: a gRPC client against WebHandler gets no Gridwell

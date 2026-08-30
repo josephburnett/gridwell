@@ -19,20 +19,20 @@ import (
 	"github.com/josephburnett/gridwell/web"
 )
 
-// serveFlags holds the parsed `serve` subcommand options. Split out from
-// RunServe so the flag-parsing path is unit-testable. The DB path is no longer
-// a flag — it is derived from each plugin's id under the Gridwell home.
+// serveFlags holds the parsed `serve` subcommand options. It is split out
+// from RunServe so the flag-parsing path is unit-testable. The database
+// path is not a flag; it is derived from the Gridwell home.
 type serveFlags struct {
 	Bind        string
 	BindDefault string
 	StaticDir   string
 }
 
-// parseServeFlags parses the `serve` flag set. StaticDir defaults to defStatic
-// (the server.yaml value, already default-filled by config.Load). Bind and
-// BindDefault deliberately default to empty: "" means "not passed", which is
-// what resolveBind needs to apply its precedence — the bind decision is made
-// there, not by flag defaulting.
+// parseServeFlags parses the `serve` flag set. StaticDir defaults to
+// defStatic, the server.yaml value config.Load already default-filled. Bind
+// and BindDefault deliberately default to empty: "" means not passed, which
+// is what resolveBind needs to apply its precedence. The bind decision is
+// made there, not by flag defaulting.
 func parseServeFlags(args []string, defStatic string) (serveFlags, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var f serveFlags
@@ -55,13 +55,13 @@ func parseServeFlags(args []string, defStatic string) (serveFlags, error) {
 // resolveBind is the one owner of the web listen-address decision:
 //
 //	--bind (a human's hard override)
-//	> server.yaml web.bind (explicitly present — BindSet, see config.Load)
-//	> --bind-default (the caller's fallback, e.g. the desktop sidecar's
+//	> server.yaml web.bind (explicitly present; BindSet, see config.Load)
+//	> --bind-default (the caller's fallback, such as the desktop sidecar's
 //	  ephemeral loopback port)
 //	> the built-in default (config.Defaults.Web.Bind).
 //
-// "Unset" is the empty string at every level, so an explicit config bind
-// equal to the built-in default still pins the address. This is what lets
+// Unset is the empty string at every level, so an explicit config bind
+// equal to the built-in default still pins the address. That is what lets
 // one server instance carry both the desktop window and a phone: declare
 // web.bind in server.yaml and the sidecar's --bind-default no longer wins.
 func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault string) string {
@@ -77,17 +77,16 @@ func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault st
 	}
 }
 
-// servingBanner is the one-line boot contract with the desktop sidecar
-// (apps/desktop/src/main/lines.ts parses it): the web door's ACTUAL bound
-// address leads, printed only once both listeners are up; auth= is the
-// derived auth token (server.AuthToken — the cookie value; a password is
+// servingBanner is the one-line boot contract with the desktop sidecar,
+// which apps/desktop/src/main/lines.ts parses. The web door's actual bound
+// address leads, printed only once both listeners are up. auth= is the
+// derived auth token (server.AuthToken, the cookie value; a password is
 // always configured), so the sidecar can authenticate its own window
-// without ever prompting — local stdout is same-trust as the
-// <home>/web-password file the password is read from; federation= is
-// LAST and runs to the closing paren: the node door's unix socket path,
-// which may contain spaces. The desktop no longer reads federation= — the
-// PTY rides the web door since 2026-08-29 — but the field stays: it is how
-// an operator sees which socket a mounter must reach.
+// without prompting; local stdout is the same trust level as the
+// <home>/web-password file the password is read from. federation= is last
+// and runs to the closing paren: the node door's unix socket path, which
+// may contain spaces. It is how an operator sees which socket a mounter
+// must reach.
 func servingBanner(addr, fedSocket, staticDir string, plugins int, password string) string {
 	if staticDir == "" {
 		staticDir = "embedded"
@@ -97,8 +96,8 @@ func servingBanner(addr, fedSocket, staticDir string, plugins int, password stri
 }
 
 // staticFS resolves the static override: "" is the embedded web client
-// (the distributed-binary default, web.FS — the gridwell binary is fully
-// self-contained since 2026-08-12), a path is a dev checkout on disk.
+// (web.FS; the gridwell binary is self-contained), and a path serves a
+// checkout from disk instead.
 func staticFS(dir string) fs.FS {
 	if dir == "" {
 		return web.FS
@@ -106,16 +105,16 @@ func staticFS(dir string) fs.FS {
 	return os.DirFS(dir)
 }
 
-// buildServeConfig is node.BuildConfig (the load/validate/inject path
-// moved to the embeddable core so the CLI and the mobile bind share ONE
-// serve wiring); this thin name keeps the CLI's tests and call sites.
+// buildServeConfig is node.BuildConfig, the load, validate, and inject
+// path. It lives in the embeddable core so the CLI and the mobile bind
+// share one serve wiring; this name keeps the CLI's tests and call sites.
 func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return node.BuildConfig(home, cfgPath)
 }
 
-// resolveBinary finds a plugin binary (gridwell-plugin-<kind>): via
-// GRIDWELL_PLUGIN_DIR, then beside the running gridwell executable (how
-// `make` lays them out), then on PATH.
+// resolveBinary finds a plugin binary, gridwell-plugin-<kind>: through
+// GRIDWELL_PLUGIN_DIR, then beside the running gridwell executable, which
+// is how make lays them out, then on PATH.
 func resolveBinary(name string) (string, error) {
 	var tried []string
 	if dir := os.Getenv("GRIDWELL_PLUGIN_DIR"); dir != "" {
@@ -144,8 +143,9 @@ func isExecutable(path string) bool {
 }
 
 // resolvePluginBinaries fills each entry's binary: a kind with a bundled
-// plugin factory runs in-process; every other kind spawns gridwell-plugin-<kind>
-// (server.yaml may pin an explicit binary: path instead).
+// plugin factory runs in-process, and every other kind spawns
+// gridwell-plugin-<kind>. server.yaml may pin an explicit binary: path
+// instead.
 func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.Factory) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
@@ -164,17 +164,17 @@ func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.F
 	return nil
 }
 
-// RunServeWith starts the backend HTTP server — the data plane for the
-// Gridwell desktop app and any plain-browser client: Connect-RPC, the SSE
-// event stream, the wasm client, and shell PTYs. Live URL tiles are hosted
+// RunServeWith starts the backend HTTP server: the data plane for the
+// desktop app and any plain-browser client, carrying Connect-RPC, the event
+// stream, the wasm client, and shell PTYs. Live url tiles are hosted
 // natively by the Electron shell, so there is no browser driver here. The
-// listen address comes from resolveBind (loopback by default; server.yaml
-// web.bind pins it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM
-// trigger graceful shutdown.
+// listen address comes from resolveBind: loopback by default, and
+// server.yaml web.bind pins it, for instance to a Tailscale address for
+// phone access. SIGINT and SIGTERM trigger graceful shutdown.
 //
-// plugins is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
-// kinds present in it load in-process; every other plugin spawns
-// out-of-process. The stock host passes nil.
+// plugins is the bundled-binary door: kinds present in it load in-process,
+// and every other plugin spawns out-of-process. The stock host passes
+// nil.
 func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	home, err := config.Home()
 	if err != nil {
@@ -187,9 +187,9 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 		return 1
 	}
 
-	// The config is authoritative: it names the node's id, its connections
-	// and its content plugins; a missing file is a fresh home (the node
-	// mints its id and writes the file).
+	// The config is authoritative: it names the node's id, its connections,
+	// and its content plugins. A missing file is a fresh home, and the node
+	// mints its id and writes the file.
 	cfg, err := buildServeConfig(home, cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
@@ -203,10 +203,11 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	cfg.Web.Bind = resolveBind(f.Bind, cfg.Web.Bind, cfg.Web.BindSet, f.BindDefault)
 	cfg.StaticDir = f.StaticDir
 
-	// ONE serve per home (servelock.go): taken before any plugin spawns so a
-	// second server never touches the DBs. On conflict, re-emit the running
-	// holder's banner as "already serving" — the desktop app parses it and
-	// connects to the existing server instead of starting its own.
+	// One serve per home, see servelock.go. The lock is taken before any
+	// plugin spawns, so a second server never touches the database. On
+	// conflict, re-emit the running holder's banner as "already serving":
+	// the desktop app parses it and connects to the existing server instead
+	// of starting its own.
 	lock, err := acquireServeLock(home)
 	if err != nil {
 		var held *errServeLockHeld
@@ -218,25 +219,25 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	}
 	defer lock.Release()
 
-	// Resolve each plugin's binary (server.yaml may pin an explicit path
-	// instead); bundled kinds stay in-process.
+	// Resolve each plugin's binary; server.yaml may pin an explicit path
+	// instead. Bundled kinds stay in-process.
 	if err := resolvePluginBinaries(cfg, plugins); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
 
-	// The node core (internal/node — shared with the mobile bind): plugin
-	// loading, identity, the server assembly, and the two listeners (the
-	// web door where config says, the federation door's unix socket). The
-	// CLI's own concerns wrap it: the lock above, the banner below,
+	// The node core, internal/node, shared with the mobile bind: plugin
+	// loading, identity, the server assembly, and the two listeners — the
+	// web door where config says, and the federation door's unix socket.
+	// The CLI's own concerns wrap it: the lock above, the banner below,
 	// signals.
 	n, err := node.Start(node.Options{
 		Home:      home,
 		Cfg:       cfg,
 		Factories: plugins,
-		// The embedded web client by default — the binary is self-contained
-		// (web.FS); server.yaml static:/--static is the dev override that
-		// serves a checkout from disk instead.
+		// The embedded web client by default; the binary is self-contained.
+		// server.yaml static: and --static serve a checkout from disk
+		// instead.
 		StaticFS: staticFS(f.StaticDir),
 	})
 	if err != nil {
@@ -248,19 +249,18 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	// Listen-before-announce is node.Start's contract: the "serving on"
-	// banner is parsed by the desktop sidecar
-	// (apps/desktop/src/main/lines.ts) to learn the origin its window
-	// should load, so it must carry the listener's ACTUAL bound address
-	// and appear only once the listener is really up.
+	// Listen-before-announce is node.Start's contract. The desktop sidecar
+	// parses the "serving on" banner to learn the origin its window should
+	// load, so the banner must carry the listener's actual bound address and
+	// appear only once the listener is really up.
 	banner := servingBanner(n.Ln.Addr().String(), cfg.Federation.Socket, cfg.StaticDir, len(cfg.Plugins), cfg.WebPassword)
 	fmt.Println(banner)
 	// The password itself, for the human at the process: carry it to a
-	// browser once and the cookie lasts (owner decision 2026-08-26).
+	// browser once and the cookie lasts.
 	fmt.Fprintf(os.Stderr, "gridwell: web password: %s  (%s — delete the file to rotate; every browser logs in again)\n",
 		cfg.WebPassword, config.PasswordFile(home))
-	// Record the banner in the lock file — the "already serving" reprint a
-	// conflicting serve hands to the desktop app.
+	// Record the banner in the lock file: it is the "already serving"
+	// reprint a conflicting serve hands to the desktop app.
 	lock.WriteBanner(banner)
 
 	errCh := n.ServeBackground()

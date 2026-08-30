@@ -14,14 +14,13 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// The door's bounded cache (issue #255), pinned: a 200 body re-serves
-// byte-identical while dark; verdicts (non-200) are never remembered; an
-// oversized body streams live but stays uncached; the mount cap evicts
-// oldest-first.
+// The door's bounded cache, pinned: a 200 body re-serves byte-identical while
+// dark, a non-200 verdict is never remembered, an oversized body streams live
+// but stays uncached, and the cap evicts oldest-first.
 
 // doorFake is a namespace whose only living method is ServeContent.
 type doorFake struct {
-	namespace.Namespace // nil: any other call panics, which IS the assertion
+	namespace.Namespace // nil: any other call panics, which is the assertion
 	bodies              map[string]doorBody
 	dark                bool
 }
@@ -88,7 +87,7 @@ func TestServeContentServesStaleWhenDark(t *testing.T) {
 		t.Errorf("stale serve = (%d, %s, %d bytes), want the exact live answer", st, mt, len(data))
 	}
 
-	// A body never seen stays a transport error — no invention.
+	// A body never seen stays a transport error; nothing is invented.
 	if _, _, _, err := serveDoor(cc, "7", "other.jpg"); status.Code(err) != codes.Unavailable {
 		t.Errorf("uncached miss = %v, want the transport error through", err)
 	}
@@ -104,8 +103,8 @@ func TestServeContentNeverCachesVerdicts(t *testing.T) {
 	if st != 404 {
 		t.Fatalf("live 404 = %d", st)
 	}
-	// …and is NOT remembered: dark yields the transport error, never a
-	// stale error page.
+	// …and is not remembered: dark yields the transport error, never a stale
+	// error page.
 	fake.dark = true
 	if _, _, _, err := serveDoor(cc, "9", "gone.png"); status.Code(err) != codes.Unavailable {
 		t.Errorf("dark after 404 = %v, want Unavailable (verdicts are never served stale)", err)

@@ -1,11 +1,9 @@
 package pluginhost_test
 
-// The v2 fs stack (fs plugin + adapter + layout engine) through a full
-// server: placement and framing persist, sweeps remove only the dead,
-// the node's own rows answer when the source goes dark, and a
-// retired id never returns. (Until the 2026-08 cutover these behaviors
-// were pinned by crawling this stack against the legacy fs plugin; the
-// legacy twin is gone, so the assertions are direct now.)
+// The fs stack — the fs plugin, the adapter, and the store — through a full
+// server: placement and framing persist, sweeps remove only the dead, the
+// node's own rows answer when the source goes dark, and a retired id never
+// returns.
 
 import (
 	"context"
@@ -51,8 +49,8 @@ func pluginNode(t *testing.T, root string) (*rpc.Client, *fsplugin.Plugin) {
 	return pluginNodeAt(t, root, filepath.Join(t.TempDir(), "mem.db"))
 }
 
-// pluginNodeAt builds the v2 stack over an EXISTING memory DB path —
-// how the conversion parity test serves a converted file.
+// pluginNodeAt builds the stack over an existing store path: how the
+// conversion parity test serves a converted file.
 func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Plugin) {
 	t.Helper()
 	memStore, err := store.Open(memPath)
@@ -60,9 +58,8 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	// A plain-remove host: nil would mean the PRODUCTION trash — test
-	// deletions must never land in the real freedesktop Trash (they did,
-	// until 2026-08-23).
+	// A plain-remove host: nil would mean the production trash, and a test
+	// deletion must never land in the real freedesktop Trash.
 	prov := fsplugin.New(root, osRemoveHost{})
 	cp, cpCloser, err := compose.PluginInProcess(prov)
 	if err != nil {
@@ -79,9 +76,9 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 }
 
 func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
-	// Tenet 6: a source that stops answering costs the user nothing. The
-	// adapter merges an EMPTY non-authoritative listing, so the durable
-	// rows still read — stamped stale, retiring nothing.
+	// A source that stops answering costs the user nothing: the adapter merges
+	// an empty non-authoritative listing, so the durable rows still read,
+	// stamped stale and retiring nothing.
 	root := seedTree(t)
 	v2, prov := pluginNode(t, root)
 	ctx := context.Background()
@@ -97,8 +94,8 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	if len(before.Tiles) == 0 || before.Grid.Stale {
 		t.Fatalf("bad first read: %+v", before.Grid)
 	}
-	// The source goes dark (EACCES, an unmounted share): every read
-	// fails transiently.
+	// The source goes dark — EACCES, an unmounted share — so every read fails
+	// transiently.
 	prov.SetReadDir(func(string) ([]fssource.Entry, error) {
 		return nil, os.ErrPermission
 	})
@@ -129,10 +126,10 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 }
 
 func TestDeleteRetiresOnTheWire(t *testing.T) {
-	// The delete gesture through the full v2 stack: the source is
-	// trashed, the row retires — Probe answers GONE, reads answer
-	// NotFound, a second delete is a no-op, and a recreated file is a
-	// NEW thing with a fresh id (the identity rule at the wire seam).
+	// The delete gesture through the full stack: the source is trashed and the
+	// row retires, so Probe answers GONE, reads answer NotFound, a second
+	// delete is a no-op, and a recreated file is a new thing with a fresh
+	// id.
 	root := seedTree(t)
 	v2, _ := pluginNode(t, root)
 	ctx := context.Background()

@@ -16,7 +16,7 @@ import (
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
-// Cross-plugin gesture semantics (owner decision 2026-07-19): LEFT-drag
+// Cross-plugin gesture semantics: LEFT-drag
 // across a plugin boundary creates a LINK (one copy of the content — an exit
 // well for a grid, a leaf link via link_target_id for text/url/shell/pane),
 // and RIGHT-drag creates a CLONE (a real copy: leaves copy bytes; a solid
@@ -27,7 +27,7 @@ import (
 // the real router seam. Framing and labels ride every cross-plugin link
 // and copy, so a link looks like what it points at.
 
-// twoPluginServer stands up a server with two localdb plugins and returns the
+// twoPluginServer stands up a server with two store namespaces and returns the
 // client plus each plugin's uuid and qualified root grid id.
 func twoPluginServer(t *testing.T) (cl *rpc.Client, uuidA, rootA, uuidB, rootB string) {
 	t.Helper()
@@ -143,8 +143,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	_ = uuidA
 }
 
-// TestCloneWellAcrossPluginsDeepCopies (issue #200, completing the
-// 2026-07-19 right-drag-copies decision): a solid well right-dragged across
+// TestCloneWellAcrossPluginsDeepCopies: a solid well right-dragged across
 // a plugin boundary DEEP-COPIES — the destination gains an independent
 // subtree, byte-identical bodies, framing preserved, provenance carried,
 // references inside copied as references — and editing the copy never
@@ -367,7 +366,7 @@ func TestCloneURLAcrossPluginsCopiesAddress(t *testing.T) {
 }
 
 // TestCloneAcrossPluginsCopiesCurrentContent: a clone carries no version
-// claim (docs/simplify-plan.md S5 — the SOURCE row is untouched, so a copy is
+// claim (the SOURCE row is untouched, so a copy is
 // layout), and the handler's own hand-rolled re-derivation of the store's
 // claim went with it. What the copy must carry is what the source says NOW,
 // even though the source's version moved after it was created.
@@ -451,12 +450,11 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	}
 }
 
-// TestLinkDirWellFromFsPlugin (formerly the issue-#171 clone test): dragging
-// a directory from an fs grid into a localdb grid creates a LINK — under the
-// 2026-07-19 gestures that is the LEFT-drag, committed as a CreateWell
+// TestLinkDirWellFromFsPlugin: dragging a directory from an fs grid into a
+// home grid creates a link. That is the left-drag, committed as a CreateWell
 // carrying the fs dir's qualified grid. This crosses the real seam: server
 // routing → in-process fs plugin (GetGrid materializes the dir tiles) → link
-// created in the localdb destination.
+// created in the home destination.
 func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	ctx := context.Background()
 	reg := plugin.NewRegistry()

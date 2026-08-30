@@ -1,9 +1,9 @@
 package pluginhost_test
 
-// A plugin's Search is only worth anything if the node can reach it and
-// turn its answers into PLACES — tiles with the ids the memory DB
-// minted, on a path of well tiles. This crosses the whole seam: fake
-// GitLab → gitlab plugin → adapter → server → rpc client.
+// A plugin's Search is only worth anything if the node can reach it and turn
+// its answers into places: tiles with the ids the store minted, on a path of
+// well tiles. This crosses the whole seam, from a fake GitLab through the
+// gitlab plugin, the adapter, and the server to the rpc client.
 
 import (
 	"context"
@@ -68,11 +68,10 @@ func gitlabNode(t *testing.T, gl *fakeGitLab) *rpc.Client {
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 }
 
-// Search results are the SAME tiles GetGrid mints — id, grid, placement
-// — on a path of the well tiles that lead there, so a hit is a place
-// the client can go. Before the adapter forwarded Search, the server's
-// fan-out skipped the plugin (Unimplemented) and the query answered
-// nothing at all.
+// Search results are the same tiles GetGrid mints — id, grid, placement — on
+// a path of the well tiles that lead there, so a hit is a place the client can
+// go. An adapter that does not forward Search answers Unimplemented, and the
+// server's fan-out then skips the plugin entirely.
 func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 	gl := &fakeGitLab{pending: []todos.Todo{
 		gitlabTodo(1, "2026-08-18T10:00:00Z", "fix the widget", "please review the widget"),
@@ -99,8 +98,8 @@ func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 		t.Fatalf("no week well in the root: %v", root.Tiles)
 	}
 
-	// Search BEFORE the week was ever listed: the hit is minted through
-	// the same synthesis a GetGrid would run.
+	// Search before the week was ever listed: the hit is minted through the
+	// same synthesis a GetGrid would run.
 	hits, err := cl.Search(ctx, "widget", "", 10)
 	if err != nil {
 		t.Fatal(err)

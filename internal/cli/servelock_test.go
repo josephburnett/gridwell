@@ -9,11 +9,11 @@ import (
 	"testing"
 )
 
-// The one-serve-per-home guard: an flock, so a second acquire fails while
-// the first is held — even within one process (flock conflicts across open
-// file descriptions) — carries the holder's banner for the "already
-// serving" reprint, and dies with the holder (Release here; the kernel on
-// a crash).
+// The one-serve-per-home guard is an flock. A second acquire fails while
+// the first is held, even within one process, because flock conflicts
+// across open file descriptions. It carries the holder's banner for the
+// "already serving" reprint, and dies with the holder: Release here, the
+// kernel on a crash.
 func TestServeLock(t *testing.T) {
 	home := t.TempDir()
 
@@ -43,9 +43,9 @@ func TestServeLock(t *testing.T) {
 	defer l3.Release()
 }
 
-// A leftover file from a CRASHED holder (flock gone, content stale) must
-// not block the next serve — the flock is the gate, the file is just the
-// banner.
+// A leftover file from a crashed holder, with the flock gone and the
+// content stale, must not block the next serve: the flock is the gate and
+// the file is just the banner.
 func TestServeLockStaleFile(t *testing.T) {
 	home := t.TempDir()
 	if err := os.WriteFile(filepath.Join(home, "serve.lock"),
@@ -57,7 +57,7 @@ func TestServeLockStaleFile(t *testing.T) {
 		t.Fatalf("acquire over stale file: %v", err)
 	}
 	defer l.Release()
-	// The stale banner was truncated away — a conflicting serve must never
+	// The stale banner was truncated away: a conflicting serve must never
 	// reprint a dead holder's address.
 	b, err := os.ReadFile(filepath.Join(home, "serve.lock"))
 	if err != nil || len(b) != 0 {
@@ -65,10 +65,10 @@ func TestServeLockStaleFile(t *testing.T) {
 	}
 }
 
-// The status probe is READ-ONLY: it must never truncate, unlink, or win a
-// write race (the old probe took LOCK_EX and could beat a starting serve
-// to its own lock). A held lock reports the banner; a crashed holder's
-// leftover file reports not-serving; the file survives probing either way.
+// The status probe is read-only: it must never truncate, unlink, or win a
+// write race against a starting serve. A held lock reports the banner, a
+// crashed holder's leftover file reports not-serving, and the file survives
+// probing either way.
 func TestProbeServeLockReadOnly(t *testing.T) {
 	home := t.TempDir()
 
@@ -92,8 +92,8 @@ func TestProbeServeLockReadOnly(t *testing.T) {
 	}
 	l.Release()
 
-	// A crashed holder's leftover (file present, flock gone): not running,
-	// and the breadcrumb file survives the probe.
+	// A crashed holder's leftover, with the file present and the flock gone:
+	// not running, and the breadcrumb file survives the probe.
 	if err := os.WriteFile(filepath.Join(home, "serve.lock"), []byte("stale\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

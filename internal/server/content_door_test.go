@@ -31,8 +31,8 @@ import (
 // surface a sandboxed page's subresource request hits.
 
 // TestParseContentPath pins the URL grammar: the first all-digits segment
-// terminates the qualified tile id (the id-shape owner decision — namespace
-// segments are never purely numeric), and ".." never survives.
+// terminates the qualified tile id, since a namespace segment is never purely
+// numeric, and ".." never survives.
 func TestParseContentPath(t *testing.T) {
 	cases := []struct {
 		path                   string
@@ -179,7 +179,7 @@ func TestContentDoorTokenGate(t *testing.T) {
 	}
 }
 
-// TestContentDoorResolvesLeafLink: a localdb LINK to an fs image serves the
+// TestContentDoorResolvesLeafLink: a home link to an fs image serves the
 // TARGET's bytes — the door inherits contentRoute, the one resolution
 // point, like every other content read.
 func TestContentDoorResolvesLeafLink(t *testing.T) {
@@ -237,7 +237,7 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 
 // TestContentDoorThroughAConnection: the id "<node>/<conn>/<tile>"
 // forwards through the node's TRANSPORT — the only transit namespace there
-// is (docs/one-node.md) — and streams back, so federation for pages is the
+// is — and streams back, so federation for pages is the
 // same one-hop-per-segment composition as every content read. The dialer
 // lands the connection on an in-process namespace; there is no proxy stand-in
 // any more, because the transport itself is a Go value now.

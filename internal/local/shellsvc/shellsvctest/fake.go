@@ -1,8 +1,8 @@
 // Package shellsvctest provides an in-memory shellsvc.Streamer for tests, so
-// the shell manager, the localdb plugin's OpenShell, and the server's
-// WebSocket↔OpenShell bridge can all be exercised without a real tmux/PTY.
-// Sessions echo their input to their output, so a byte written in comes back
-// out — enough to verify an end-to-end round trip through every hop.
+// the shell manager, the home's OpenShell, and the server's WebSocket bridge
+// can all be exercised without a real tmux session or PTY. Sessions echo
+// their input to their output, so a byte written in comes back out, which is
+// enough to verify a round trip through every hop.
 package shellsvctest
 
 import (
@@ -14,8 +14,8 @@ import (
 )
 
 // FakeStreamer is a programmable shellsvc.Streamer. HasSession is driven per
-// tile so a test can pick the create / attach / reject path; every OpenSession
-// is recorded with its mode and size.
+// tile so a test can pick the create, attach, or reject path, and every
+// OpenSession is recorded with its mode and size.
 type FakeStreamer struct {
 	mu       sync.Mutex
 	alive    map[string]bool
@@ -102,7 +102,8 @@ func (f *FakeStreamer) Killed() []string {
 }
 
 // FakeSession is an echoing PTY: bytes written are pushed to Output, so a
-// round trip through the manager/plugin/bridge returns them.
+// round trip through the manager, the namespace, and the bridge returns
+// them.
 type FakeSession struct {
 	TileID      string
 	OpenMode    tmux.Mode

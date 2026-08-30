@@ -7,8 +7,8 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// The absorbed SetTile operations (2026-07-26 redesign decision 6): rename
-// and content_zoom ride the one writeback, one operation per call.
+// The scalar SetTile operations: rename and content_zoom ride the one
+// writeback, one operation per call.
 
 func TestSetTileRenameArm(t *testing.T) {
 	p := openPlugin(t)
@@ -37,7 +37,8 @@ func TestSetTileRenameArm(t *testing.T) {
 		t.Errorf("a rename is a user edit: version must bump (%d -> %d)", url.Version, r.Tile.Version)
 	}
 
-	// A later auto title capture (the url-arm tile.alt_text) defers to it.
+	// A later automatic title capture, the url arm's tile.alt_text, defers
+	// to it.
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
 		TileId: url.Id, Version: r.Tile.Version,
 		Tile: &gridwellv1.Tile{Kind: "url", AltText: "Captured Title"},
@@ -77,7 +78,8 @@ func TestSetTileContentZoomArm(t *testing.T) {
 		t.Errorf("content zoom is framing: version must not bump (%d -> %d)", text.Version, r.Tile.Version)
 	}
 
-	// Wells are refused (their view_zoom is the grid viewport, not content).
+	// Wells are refused: their view_zoom is the grid viewport, not
+	// content.
 	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 3, Y: 0, W: 1, H: 1}, nil)
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
 		TileId: well.Id, Version: well.Version, ContentZoom: zoom(2),
@@ -86,8 +88,9 @@ func TestSetTileContentZoomArm(t *testing.T) {
 	}
 }
 
-// TestSetTileURLFrozenArm pins the #237 intent bit: framing (no version
-// bump), set and clear both round-trip, refused off the url kind.
+// TestSetTileURLFrozenArm pins the standing-freeze bit: it is framing, so no
+// version bump; set and clear both round-trip; and it is refused off the url
+// kind.
 func TestSetTileURLFrozenArm(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
@@ -108,7 +111,7 @@ func TestSetTileURLFrozenArm(t *testing.T) {
 		t.Errorf("url_frozen is framing: version must not bump (%d -> %d)", url.Version, r.Tile.Version)
 	}
 
-	// Clearing (the reconnect gesture) is a distinct false write, not an
+	// Clearing, the reconnect gesture, is a distinct false write, not an
 	// absent field.
 	r, err = p.SetTile(ctx, &gridwellv1.SetTileRequest{
 		TileId: url.Id, Version: url.Version, UrlFrozen: frozen(false),

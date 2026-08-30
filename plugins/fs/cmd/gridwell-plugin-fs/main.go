@@ -1,7 +1,7 @@
-// gridwell-plugin-fs — the fs plugin binary (docs/v2-design.md §5): a
-// stateless projection of a directory tree serving plugin.v1. The
-// config vocabulary is plugin.FromConfig's — the one derivation every
-// door shares. No database — the node owns this external's memory.
+// gridwell-plugin-fs is the fs plugin binary: a stateless projection of a
+// directory tree serving plugin.v1. The config vocabulary is
+// plugin.FromConfig's, the one derivation every door shares. It has no
+// database; the node owns this plugin's memory.
 package main
 
 import (

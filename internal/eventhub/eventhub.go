@@ -1,21 +1,19 @@
-// Package eventhub is the ONE event fan-out: a publisher never blocks on
-// a slow subscriber and no distinct change is ever dropped. It grew out
-// of the local store's hub (2026-07) and is now shared with the remote
-// transport, whose own 64-slot channel hub silently dropped events for a
-// stalled Subscribe stream — the exact class the store's hub had already
-// fixed once.
+// Package eventhub is the one event fan-out: a publisher never blocks on a
+// slow subscriber and no distinct change is ever dropped. The home store
+// and the remote transport both use it.
 //
 // Each subscriber owns a coalescing queue drained by a pump goroutine:
 //
-//   - The queue is keyed by the changed entity (the caller's key func: a
-//     tile id, a grid id, a removal). A newer event for the same entity
-//     REPLACES the older undelivered one in place — the semantics of the
-//     client cache, which upserts by id, so skipping an intermediate
-//     state is indistinguishable from having applied it.
+//   - The queue is keyed by the changed entity, through the caller's key
+//     func: a tile id, a grid id, a removal. A newer event for the same
+//     entity replaces the older undelivered one in place. That matches the
+//     client cache, which upserts by id, so skipping an intermediate state
+//     is indistinguishable from having applied it.
 //   - Distinct entities are never coalesced away, so the queue is bounded
-//     by the number of entities touched while the consumer stalls — not
-//     by an arbitrary buffer whose overflow drops events.
-//   - An unkeyable event (key "") gets a unique key and is never coalesced.
+//     by the number of entities touched while the consumer stalls, not by
+//     an arbitrary buffer whose overflow drops events.
+//   - An unkeyable event, with key "", gets a unique key and is never
+//     coalesced.
 package eventhub
 
 import (
@@ -70,9 +68,9 @@ func (h *Hub[T]) Subscribe() (<-chan T, func()) {
 	return sub.out, cancel
 }
 
-// Publish hands the event to every subscriber's queue. Never blocks:
-// enqueue is a map write under a short mutex, and delivery happens on
-// each subscriber's own pump goroutine.
+// Publish hands the event to every subscriber's queue. It never blocks:
+// enqueue is a map write under a short mutex, and delivery happens on each
+// subscriber's own pump goroutine.
 func (h *Hub[T]) Publish(ev T) {
 	key := h.key(ev)
 	h.mu.Lock()
@@ -104,9 +102,8 @@ func (sub *subscriber[T]) enqueue(key string, ev T) {
 }
 
 // pump moves queued events to the consumer in first-touch order, waiting
-// when the queue is empty and exiting (closing out) when the subscriber
-// is cancelled. Undelivered events at cancel are discarded — the consumer
-// is gone.
+// when the queue is empty and closing out when the subscriber is cancelled.
+// Undelivered events at cancel are discarded; the consumer is gone.
 func (sub *subscriber[T]) pump() {
 	defer close(sub.out)
 	for {

@@ -1,10 +1,9 @@
-// Package boundary CODIFIES the module structure (docs/plugin.md): the
-// dependency arrows between the in-repo modules, and the api module's
-// dependency budget. It imports NOTHING of ours — it reads the tree and
-// shells out to `go list` — so it can police every module without being
-// inside any of them. A wrong arrow is a failing build, not a review
-// argument: this coupling eroded repeatedly when left to intention
-// (charter, 2026-08-15).
+// Package boundary codifies the module structure: the dependency arrows
+// between the in-repo modules, and the api module's dependency budget. It
+// imports nothing of ours — it reads the tree and shells out to `go list` — so
+// it can police every module without being inside any of them. A wrong arrow
+// is a failing build rather than a review argument, because this coupling
+// erodes when left to intention.
 package boundary
 
 import (
@@ -20,31 +19,29 @@ import (
 
 const repoModule = "github.com/josephburnett/gridwell"
 
-// modules maps each in-repo module (by path suffix, "" = root) to the
-// OTHER in-repo modules its NON-TEST packages may import. Tests are
-// exempt by construction: `go list .Imports` excludes test files, and
-// seam tests deliberately cross (that is their job). The leaf composer
-// (mobile) may import anything — enumeration is the leaf-binary
-// privilege.
+// modules maps each in-repo module, by path suffix with "" for the root, to
+// the other in-repo modules its non-test packages may import. Tests are exempt
+// by construction: `go list .Imports` excludes test files, and a seam test
+// deliberately crosses. The mobile leaf may import anything, because
+// enumeration is the leaf-binary privilege.
 var modules = map[string][]string{
-	// The api imports nothing of ours: it IS the contract.
+	// The api imports nothing of ours: it is the contract.
 	"api": {},
 	// doctype: neutral text-document semantics, self-contained.
 	"internal/doctype": {},
-	// Plugins: the api, the shared neutral homes — never the host, never
-	// each other. (local left this list 2026-08-23: the v2 fold made the
-	// native store NODE code — content-presentation.md §9.)
+	// A plugin may import the api and the shared neutral packages, never the
+	// host and never another plugin.
 	"plugins/fs":   {"api", "internal/doctype"},
 	"plugins/proc": {"api"},
-	// gitlab: the api plus goldmark (a plugin's own dependency graph is
-	// the door's point — the host never sees it).
+	// gitlab: the api plus goldmark. A plugin's own dependency graph is the
+	// door's point, and the host never sees it.
 	"plugins/gitlab": {"api"},
-	// The root module is the SERVER LIBRARY (+ its embedded client): the
-	// api and the neutral homes — never a plugin implementation.
+	// The root module is the server library and its embedded client: the api
+	// and the neutral packages, never a plugin implementation.
 	"": {"api", "internal/doctype"},
-	// The stock host: server + api. NO plugins — it spawns binaries.
+	// The stock host: server and api. No plugins; it spawns binaries.
 	"apps/gridwell": {"", "api", "internal/doctype"},
-	// Leaf composer: enumeration is legal here.
+	// A leaf binary: enumeration is legal here.
 	"mobile": {"*"},
 }
 
@@ -93,7 +90,7 @@ func TestArrows(t *testing.T) {
 	root := repoRoot(t)
 	for mod, allowed := range modules {
 		if len(allowed) == 1 && allowed[0] == "*" {
-			continue // leaf composer: anything goes
+			continue // a leaf binary: anything goes
 		}
 		allowedSet := map[string]bool{mod: true}
 		for _, a := range allowed {
@@ -131,19 +128,17 @@ func TestArrows(t *testing.T) {
 			if name == "" {
 				name = "(root)"
 			}
-			t.Errorf("module %s crosses a forbidden arrow (docs/plugin.md):\n  %s",
+			t.Errorf("module %s crosses a forbidden arrow:\n  %s",
 				name, strings.Join(bad, "\n  "))
 		}
 	}
 }
 
-// TestAPIDependencyBudget pins the api module's DIRECT dependencies: this
+// TestAPIDependencyBudget pins the api module's direct dependencies. That
 // graph is inherited by every plugin ever written, so a new entry is a
-// deliberate, reviewed decision — never drift. The budget is WIRE ONLY:
-// modernc.org/sqlite left it 2026-08-27 when pluginmeta/dbformat (host
-// persistence, imported by nothing outside internal/) moved to the root
-// module — every third-party plugin had been inheriting sqlite + libc
-// for code it never called.
+// deliberate decision rather than drift. The budget is wire only: host
+// persistence lives in the root module, so no third-party plugin inherits a
+// database driver for code it never calls.
 func TestAPIDependencyBudget(t *testing.T) {
 	allowed := map[string]bool{
 		"connectrpc.com/connect":         true,
@@ -172,7 +167,7 @@ func TestAPIDependencyBudget(t *testing.T) {
 		}
 		dep := strings.Fields(l)[0]
 		if !allowed[dep] {
-			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (docs/plugin.md — every plugin inherits this graph)", dep)
+			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (every plugin inherits this graph)", dep)
 		}
 	}
 }

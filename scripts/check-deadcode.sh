@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# check-deadcode: every first-party function must be reachable from a SHIPPED
-# binary — the native binaries (server, plugins, converters) or the wasm
-# client. Reachable only from a test does not count: production code kept
-# alive by its own test is still dead (the TaskCount/NodeIdentity class,
-# goal sweep 2026-08-24). The previous sweep ran deadcode BY HAND and the
-# findings grew back within weeks; this gate is the fix for that class.
+# check-deadcode: every first-party function must be reachable from a shipped
+# binary — the native binaries or the wasm client. Reachable only from a test
+# does not count: production code kept alive by its own test is still dead.
+# Running deadcode by hand lets the findings grow back; this gate is the fix
+# for that class.
 #
 # Two worlds, one verdict: a symbol is dead when the native world cannot
 # reach it AND either its package is not part of the wasm build or the wasm
@@ -20,8 +19,8 @@ PKGS=(./internal/... ./api/... ./client/...)
 # "path/file.go:12:6: unreachable func: Name" -> "path/file.go Name"
 norm() { sed 's/:[0-9][0-9]*:[0-9][0-9]*: unreachable func: / /' | LC_ALL=C sort -u; }
 
-# Resolve the tool to a NATIVE binary first: `go tool` under GOOS=js would
-# try to build (and exec) a wasm deadcode.
+# Resolve the tool to a native binary first: `go tool` under GOOS=js would
+# try to build, and exec, a wasm deadcode.
 DEADCODE=$(go tool -n deadcode)
 native=$("$DEADCODE" "${NATIVE_ROOTS[@]}" "${PKGS[@]}" | norm)
 wasm=$(GOOS=js GOARCH=wasm "$DEADCODE" ./client/wasm | norm)
@@ -49,10 +48,10 @@ if [ "$flagged" != 0 ]; then
 	exit 1
 fi
 
-# An allowlist entry is a claim ("this symbol is unrooted but shipped");
-# once the symbol is deleted or gains a root the claim is stale and the
-# entry hides the next real finding under it (parity.Crawl, goal sweep
-# 2026-08-27). Every entry must still name a symbol deadcode reports.
+# An allowlist entry is a claim: this symbol is unrooted but shipped. Once the
+# symbol is deleted or gains a root the claim is stale and the entry hides the
+# next real finding under it, so every entry must still name a symbol deadcode
+# reports.
 if [ -f "$allow" ]; then
 	while IFS= read -r line; do
 		case "$line" in ''|\#*) continue ;; esac
@@ -62,13 +61,12 @@ if [ -f "$allow" ]; then
 	[ "$flagged" = 0 ] || exit 1
 fi
 
-# Exported METHODS: RTA keeps a method alive whenever its signature
-# satisfies an interface the program calls dynamically, so a method with
-# no caller at all (Server.Handler, Plugin.Store, Registry.IDs — used only
-# by tests, 2026-08-27) never shows above. Coarse textual pass: an
-# exported method whose name is never written as ".Name(" in any non-test
-# Go file (generated code included — that is how RPC services are called)
-# has no caller. Allowlist lines "<file> <Type>.<Method>" cover the rest.
+# Exported methods: RTA keeps a method alive whenever its signature satisfies
+# an interface the program calls dynamically, so a method with no caller at all
+# never shows above. This is a coarse textual pass: an exported method whose
+# name is never written as ".Name(" in any non-test Go file, generated code
+# included, since that is how RPC services are called, has no caller. Allowlist
+# lines "<file> <Type>.<Method>" cover the rest.
 uncalled=()
 called=$(git ls-files -z -- '*.go' | grep -zv '_test\.go$' | xargs -0 grep -hoE '\.[A-Z][A-Za-z0-9_]*\(' | LC_ALL=C sort -u)
 flagged=0

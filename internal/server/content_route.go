@@ -11,13 +11,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// contentRoute resolves the namespace + local id that serves a tile's
-// CONTENT — body bytes and preview. It is the ONE link-resolution point
-// (owner decision 8, 2026-07-26): if the tile is a leaf link, the route
-// follows link_target_id at the serving node, so every caller — our client,
-// a CLI, a remote mounter — inherits the resolution instead of
-// reimplementing it. Every content-serving door (Connect ReadContent and
-// the node export) resolves through here.
+// contentRoute resolves the namespace and local id that serve a tile's
+// content: its body bytes and its preview. It is the one link-resolution
+// point: when the tile is a leaf link, the route follows link_target_id at the
+// serving node, so every caller — the client, a CLI, a remote mounter —
+// inherits the resolution instead of reimplementing it. Every content-serving
+// door resolves through here.
 //
 // Two structural facts keep this a single step:
 //   - resolution happens only where the link row LIVES: a transit-owned id

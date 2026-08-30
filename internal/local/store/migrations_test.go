@@ -181,26 +181,25 @@ func TestMigrateUpRunsRealMigrations(t *testing.T) {
 }
 
 // TestMigrateV10OverAGenuineV9File covers what the per-migration fixture
-// cannot reach. A file written by a v9 BINARY carries tiles.object_id, its
-// index, tiles.configure_plugin_id, and a CHECK that admits a CHILDLESS well
-// — the unconfigured plugin well (#251). A chain-built v9 file carries none
-// of those: the v5 rebuild already materializes the CURRENT tiles shape (the
-// convergence contract), so there was nothing there to plant a row in. Here
-// the genuine v9 shape is put back by hand and v10 is run over it.
+// cannot reach. A file written by a v9 binary carries tiles.object_id, its
+// index, tiles.configure_plugin_id, and a CHECK that admits a childless well.
+// A chain-built v9 file carries none of those, because the v5 rebuild already
+// materializes the current tiles shape, so there is nothing to plant a row
+// in. Here the genuine v9 shape is put back by hand and v10 is run over it.
 //
-// The invariant under test is the guiding rule: a tile the user placed must
-// still be there afterwards, at the SAME id, and must now work — deleting it
-// because its feature retired would be a change the user did not make.
+// The invariant under test: a tile the user placed must still be there
+// afterwards, at the same id, and must work. Deleting it because its feature
+// retired would be a change the user did not make.
 func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "genuinev9.db")
 	db, root := buildDBAtV1(t, path)
 	applyMigrationsUpTo(t, db, 9)
 
-	// The v9 columns and index a chain-built file no longer has. (object_id
-	// was TEXT NOT NULL with no default on a real v9 file; the added default
-	// only lets this test insert without naming it — v10 never copies the
-	// column either way.)
+	// The v9 columns and index a chain-built file does not have. object_id
+	// was TEXT NOT NULL with no default on a real v9 file; the default added
+	// here only lets this test insert without naming it, and v10 never copies
+	// the column either way.
 	for _, ddl := range []string{
 		`ALTER TABLE tiles ADD COLUMN object_id TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX idx_tiles_object_id ON tiles(object_id)`,

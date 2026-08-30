@@ -23,9 +23,8 @@ func (s *Store) GetBlob(ctx context.Context, blobID int64) ([]byte, error) {
 }
 
 // GetBlobWithMedia returns a blob's bytes together with its self-describing
-// IANA media type (schema.go). The media type travels with the bytes so a
-// reader (GetTileContent over the wire) reports what the blob actually is
-// instead of hard-coding a type at the call site.
+// IANA media type. The media type travels with the bytes so a reader reports
+// what the blob actually is instead of hard-coding a type at the call site.
 func (s *Store) GetBlobWithMedia(ctx context.Context, blobID int64) ([]byte, string, error) {
 	var (
 		data      []byte

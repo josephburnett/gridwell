@@ -1,11 +1,10 @@
 //go:build federation
 
-// The DIRECT-CONNECT gate (owner decision 2026-08-16): the remote plugin
-// reaches another node's export with NO ssh anywhere — the exact case
-// that motivated it: two gridwell nodes on one machine, different ports
-// (and identically, a tailnet address). Params carry ONLY an addr; the
-// empty host is the transport selector. Trust is the network's
-// (loopback/tailnet); the ssh bridge remains the authenticated transport.
+// The direct-connect gate: the transport reaches another node's export with
+// no ssh anywhere, which is the two-nodes-on-one-machine case. The connection
+// carries only an addr, and the empty host is the transport selector. Trust is
+// the socket's mode; the ssh bridge remains the authenticated transport across
+// machines.
 
 package federation_test
 
@@ -29,15 +28,14 @@ func TestDirectConnectSpawn(t *testing.T) {
 	// Node A: the "other server on this box".
 	remoteHome := t.TempDir()
 	freshHome(t, remoteHome)
-	// remoteAddr is the FEDERATION door — its unix socket path, the only
-	// thing a connection can dial since 2026-08-26; the web origin is not it.
+	// remoteAddr is the federation door: its unix socket path, the only thing
+	// a connection can dial. The web origin is not it.
 	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 
-	// Node B: local + the builtin transport. A DIRECT connection — addr
-	// only, host empty; no sshd exists in this entire test — declared in
-	// server.yaml (v2 #269) before first serve. Its root is the remote's
-	// HOME (remote-menu, 2026-08-16): personal's root grid, exactly where
-	// a direct client of that node boots — writable, immediately usable.
+	// Node B: home plus the transport. A direct connection — addr only, host
+	// empty, and no sshd anywhere in this test — declared in server.yaml
+	// before first serve. Its root is the remote's home, exactly where a
+	// direct client of that node boots: writable and immediately usable.
 	localHome := t.TempDir()
 	freshHome(t, localHome)
 	appendConnectionsYAML(t, localHome, fmt.Sprintf("connections:\n    - name: dconn1\n      addr: %s\n", remoteAddr))
@@ -54,8 +52,8 @@ func TestDirectConnectSpawn(t *testing.T) {
 		t.Fatalf("home grid nodeNs = %q, want the two-segment <remote>/<conn> chain", nodeNS)
 	}
 
-	// The ROUTED MENU: asking with the home grid's node_ns answers the
-	// REMOTE node's plugins — the + menu a pane inside this node shows.
+	// The routed menu: asking with the home grid's node_ns answers the remote
+	// node's plugins, which is the + menu a pane inside this node shows.
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
 	mp := menu["plugins"].([]any)
 	if len(mp) != 1 {

@@ -106,9 +106,9 @@ func TestRemovalNeverMaskedByPendingChange(t *testing.T) {
 	}
 }
 
-// TestCancelDetachesSubscriber: after cancel, a subscriber no longer receives
-// events (it's removed from the set) and a later publish doesn't panic on the
-// now-closed channel.
+// TestCancelDetachesSubscriber: after cancel, a subscriber is removed from
+// the set and receives no more events, and a later publish does not panic on
+// the closed channel.
 func TestCancelDetachesSubscriber(t *testing.T) {
 	s := newTestStore(t)
 	ch, cancel := s.SubscribeEvents()

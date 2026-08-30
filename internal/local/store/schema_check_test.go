@@ -9,18 +9,18 @@ import (
 	"testing"
 )
 
-// TestOpenRejectsLegacyBlobShape reproduces the silent "disappearing tile" bug:
-// a pre-freeze DB whose blobs table still carries the long-removed `size`
-// (NOT NULL, no default) column. The fast-path in migrateUp stamps such a DB as
-// v1 without checking columns, so the divergence used to surface only when a
-// blob insert hit the orphaned NOT NULL constraint — an error the client
-// swallowed, making the tile vanish. Open must now reject it up front, naming
-// the offending column.
+// TestOpenRejectsLegacyBlobShape covers the disappearing-tile class: an
+// unstamped DB whose blobs table still carries a `size` column that is NOT
+// NULL with no default. The fast path in migrateUp stamps such a DB as v1
+// without checking columns, so without this guard the divergence surfaces
+// only when a blob insert hits the orphaned constraint, which presents as a
+// tile that vanished. Open rejects it up front, naming the offending
+// column.
 func TestOpenRejectsLegacyBlobShape(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 
-	// The pre-cebea98 blobs shape: size + created_at, which the current writer
-	// (clone.go putBlob) no longer populates.
+	// An out-of-contract blobs shape: size and created_at, which the current
+	// writer, putBlob in clone.go, does not populate.
 	const legacyBlobs = `
 CREATE TABLE blobs (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

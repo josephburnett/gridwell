@@ -39,8 +39,8 @@ func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 	if _, err := s.SetPaneLayout(ctx, txtID, txt.Version, []byte(`{"v":1}`)); !errors.Is(err, ErrNotPaneTile) {
 		t.Errorf("SetPaneLayout on text tile: err = %v, want ErrNotPaneTile", err)
 	}
-	// No version guard: a layout write is framing-class, last-writer-wins,
-	// and carries no claim (docs/simplify-plan.md S5; version_rule_test.go).
+	// No version guard: a layout write is framing-class and
+	// last-writer-wins, and carries no claim. See version_rule_test.go.
 	if _, err := s.SetPaneLayout(ctx, id, pt.Version+7, []byte(`{"v":1}`)); err != nil {
 		t.Errorf("stale claim must be accepted: %v", err)
 	}
@@ -138,15 +138,13 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 	}
 }
 
-// TestWorkspaceRefsMatchTheInjectedIdentity is the production shape of issue
-// #196: the plugin identity is the CONFIG id, injected post-verify
-// (SetPluginID) — NOT the bootstrap-minted system.plugin_uuid. Workspace
-// layout blobs qualify their references with the config id, so the
-// ephemeral-refs matcher must speak it too; before the fix it compared
-// against the mint, never matched, and the boot scratch sweep reaped
-// workspace-owned shells (killing their tmux sessions). The older
-// self-consistent tests couldn't catch this: they built the blob FROM
-// PluginUUID, matching whatever it returned.
+// TestWorkspaceRefsMatchTheInjectedIdentity pins the production shape: the
+// plugin identity is the config id injected by SetPluginID, not the
+// bootstrap-minted system.plugin_uuid. Layout blobs qualify their references
+// with the config id, so the ephemeral-refs matcher must speak it too, or the
+// boot scratch sweep reaps pane-tile-owned shells and kills their tmux
+// sessions. A test that builds the blob from PluginUUID cannot catch this: it
+// matches whatever PluginUUID returns.
 func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

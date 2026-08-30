@@ -63,7 +63,7 @@ func TestCreateTextNilData(t *testing.T) {
 }
 
 // TestCreateURLEmptyString: an EMPTY url is the legal unconfigured state
-// (issue #209 — drop first, prompt on first descent); a GARBAGE scheme
+// (drop first, prompt on first descent); a garbage scheme
 // still fails loudly with InvalidArgument, not silently with Internal.
 func TestCreateURLEmptyString(t *testing.T) {
 	_, cl, root := newTestServer(t)

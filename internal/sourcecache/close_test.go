@@ -17,9 +17,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
-// gated is an upstream whose GetGrid parks the caller until release is
-// closed — the walk held mid-flight, deterministically, ignoring ctx the
-// way a slow network read does.
+// gated is an upstream whose GetGrid parks the caller until release is closed:
+// the walk held mid-flight, deterministically, ignoring ctx the way a slow
+// network read does.
 type gated struct {
 	namespace.Namespace
 	once    sync.Once
@@ -33,10 +33,10 @@ func (g *gated) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 	return g.Namespace.GetGrid(ctx, in)
 }
 
-// Closing the cache mid-walk: the closer must cancel AND wait for the
-// walk before closing the DB. Before, it only cancelled — the walk's next
-// store hit the closed DB and every shutdown during a prefetch logged
-// "cache degraded" for a cache that was fine.
+// Closing the cache mid-walk: the closer must cancel and wait for the walk
+// before closing the DB. Cancelling alone leaves the walk's next store hitting
+// a closed DB, so every shutdown during a prefetch logs "cache degraded" for a
+// cache that was fine.
 func TestCloseWaitsForTheWalk(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -53,11 +53,10 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
-	// Restore a REAL writer, never nil: the standard logger is process-wide,
+	// Restore a real writer, never nil: the standard logger is process-wide,
 	// and another test's prefetch goroutine can still be walking when this
 	// cleanup runs. log.Printf into a nil writer panics and takes the whole
-	// package's test binary with it (a flake that only shows under the
-	// parallel `go test ./...`).
+	// package's test binary with it.
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
 	subCtx, subCancel := context.WithCancel(context.Background())

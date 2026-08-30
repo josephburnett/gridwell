@@ -20,9 +20,8 @@ import (
 // wireOnly list below — with a written reason, because a field that is
 // derived rather than stored is a design decision, not an oversight.
 //
-// This replaces the old lint over the hand-written DDL text (which compared
-// PRAGMA output against the proto). The DDL is no longer hand-written, so
-// what is worth pinning moved up a level: the descriptor and the proto.
+// The DDL is rendered from the descriptor, so what is pinned here is the
+// descriptor against the proto.
 func TestDescriptorMatchesProto(t *testing.T) {
 	cases := []struct {
 		table    string
@@ -40,8 +39,8 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"writable":        "stamped by the serving node from the owning plugin's Info — a per-grid capability, never persisted",
 				"scratch_grid_id": "stamped by the serving node, qualified per hop",
 				"node_ns":         "the namespace chain of the node serving the grid, from the receiver's perspective",
-				"menu_entries":    "stamped by the serving node from the owning plugin's Info (#258)",
-				"stale":           "marks a response served from a mount's offline cache (#256)",
+				"menu_entries":    "stamped by the serving node from the owning plugin's Info",
+				"stale":           "marks a response served from a cache, not the live source",
 			},
 		},
 		{

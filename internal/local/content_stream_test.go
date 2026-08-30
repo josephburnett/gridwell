@@ -11,11 +11,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// The content-stream seam tests drive home as the Go value the router holds
-// (namespace.Namespace — docs/simplify-plan.md S2). The property under test
-// — commit-at-close, and a broken stream committing nothing — lives in the
-// stream lifecycle, and the lifecycle is now the recv/send contract: a recv
-// that fails must leave the old value byte-for-byte intact.
+// The content-stream seam tests drive home as the namespace.Namespace value
+// the router holds. The property under test — commit at close, and a broken
+// stream committing nothing — lives in the stream lifecycle, which is the
+// recv and send contract: a recv that fails must leave the old value
+// byte-for-byte intact.
 
 func homeNamespace(t *testing.T) (namespace.Namespace, string) {
 	t.Helper()
@@ -23,8 +23,8 @@ func homeNamespace(t *testing.T) (namespace.Namespace, string) {
 	return p, rootGrid(t, p)
 }
 
-// sendParts is the caller's half of a WriteContent: the parts in order,
-// then io.EOF — the clean end that commits.
+// sendParts is the caller's half of a WriteContent: the parts in order, then
+// io.EOF, the clean end that commits.
 func sendParts(parts ...*gridwellv1.WriteContentRequest) func() (*gridwellv1.WriteContentRequest, error) {
 	i := 0
 	return func() (*gridwellv1.WriteContentRequest, error) {
@@ -111,10 +111,9 @@ func TestContentStreamRoundTrip(t *testing.T) {
 
 // TestWriteContentBrokenStreamCommitsNothing is the commit-at-close seam
 // test: a stream that dies mid-write must leave the old value byte-for-byte
-// intact — partial delivery is never visible. (The value-vs-wire split:
-// content is a value; a torn write would be corruption.) The break is a
-// recv that FAILS instead of reaching io.EOF — the in-process shape of the
-// stream that dropped.
+// intact, so partial delivery is never visible. Content is a value; a torn
+// write would be corruption. The break is a recv that fails instead of
+// reaching io.EOF.
 func TestWriteContentBrokenStreamCommitsNothing(t *testing.T) {
 	c, root := homeNamespace(t)
 	tile := grpcCreateText(t, c, root, []byte("the old value"))

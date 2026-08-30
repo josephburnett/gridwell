@@ -14,19 +14,18 @@ import (
 	"github.com/josephburnett/gridwell/api/compose"
 )
 
-// The host-death seam (issue #197): a SIGKILLed host must not orphan its
-// plugin subprocesses. go-plugin gives the guest no host-death detection
-// in our configuration (the guest inherits the host's stdin and a dead
-// host is just a disconnected gRPC client), so guest.Serve runs
-// its own watchdog on the pid the host hands over at spawn. This test
-// FAILS WITHOUT the watchdog: the plugin survives its host indefinitely.
+// The host-death seam: a SIGKILLed host must not orphan its plugin
+// subprocesses. go-plugin gives the guest no host-death detection in our
+// configuration — the guest inherits the host's stdin and a dead host is just a
+// disconnected gRPC client — so guest.Serve runs its own watchdog on the pid
+// the host hands over at spawn. This test fails without the watchdog: the
+// plugin survives its host indefinitely.
 //
-// Topology: the test re-execs ITSELF as an intermediate host
-// (TestHelperPluginHost, gated by an env flag) which spawns the real
-// plugin binary via the production LoadPlugin, prints the child pid,
-// and blocks. The test then SIGKILLs the host — the exact harness-timeout
-// / crashed-sidecar shape that produced the observed orphans — and asserts
-// the plugin exits within the watchdog bound.
+// The test re-execs itself as an intermediate host, TestHelperPluginHost,
+// gated by an env flag. That host spawns the real plugin binary through the
+// production LoadPlugin, prints the child pid, and blocks. The test then
+// SIGKILLs the host — the crashed-sidecar shape — and asserts the plugin exits
+// within the watchdog bound.
 
 // TestHelperPluginHost is not a test: it is the intermediate host body,
 // entered only when the test re-execs itself with GRIDWELL_TEST_HOST=1.
@@ -108,7 +107,8 @@ func TestPluginExitsWhenHostDiesHard(t *testing.T) {
 		t.Fatalf("plugin pid %d not alive before the host dies: %v", pluginPID, err)
 	}
 
-	// The crash: SIGKILL the host — no graceful path, no Registry.Close.
+	// The crash: SIGKILL the host, with no graceful path and no
+	// Registry.Close.
 	if err := host.Process.Kill(); err != nil {
 		t.Fatalf("kill host: %v", err)
 	}
@@ -118,11 +118,11 @@ func TestPluginExitsWhenHostDiesHard(t *testing.T) {
 	deadline2 := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline2) {
 		if err := syscall.Kill(pluginPID, 0); err == syscall.ESRCH {
-			return // reaped — the fix holds
+			return // reaped: the watchdog holds
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	// Clean up the orphan so a failing run doesn't itself leak.
+	// Clean up the orphan so a failing run does not itself leak.
 	_ = syscall.Kill(pluginPID, syscall.SIGKILL)
 	t.Fatalf("plugin pid %d survived its host's death — the orphan leak (issue #197)", pluginPID)
 }

@@ -1,6 +1,6 @@
 // Package rpc declares the Go-side types for the Gridwell RPC service and
 // their conversions to the proto wire form. The records and their
-// mechanical mirrors are GENERATED from data.proto into wire_gen.go; conv.go
+// mechanical mirrors are generated from data.proto into wire_gen.go; conv.go
 // holds only the conversions a human has to write. The wire itself is
 // Connect/gRPC on /gridwell.v1.Gridwell/<Method> — data.proto is the
 // source of truth for the encoding.
@@ -23,18 +23,18 @@ const (
 	KindText  = "text"
 	KindURL   = "url"
 	KindShell = "shell"
-	// KindPane is a durable workspace: a tile whose content blob is a
-	// serialized split-pane layout (the LayoutV1 codec in client/pane).
+	// KindPane is a durable layout: a tile whose content blob is a
+	// serialized split-pane layout (the codec in api/panelayout).
 	// Descending into it swaps the whole pane tree; ascending restores the
-	// outer arrangement. The string is frozen into the localdb CHECK.
+	// outer arrangement. The string is frozen into the store's CHECK.
 	KindPane = "pane"
 )
 
 // IsWellKind reports whether a tile kind has a child grid that can be
-// descended into. Only "well" qualifies — an exit well (one whose child grid
-// lives in another plugin) is still a well; it is distinguished by its
-// qualified child_grid_id, not by its kind. Shared by the store (path
-// validation, refcount holdings) and the client (drop-target resolution).
+// descended into. Only "well" qualifies. An exit well — one whose child grid
+// lives in another plugin — is still a well, distinguished by its qualified
+// child_grid_id, not by its kind. Shared by the store (path validation,
+// refcount holdings) and the client (drop-target resolution).
 func IsWellKind(kind string) bool {
 	return kind == KindWell
 }
@@ -80,27 +80,27 @@ func UUIDOf(id string) string {
 
 // IsExitWell reports whether a well tile's child grid lives in a different
 // plugin than the well itself — descending it leaves the current plugin's id
-// space (a file/process/remote well, or a plugin mounted as a launcher tile).
+// space: a file, process, or remote well, or a plugin dropped as a tile.
 // Derived purely from the qualified ids: the well's own grid uuid versus its
 // child grid uuid.
 //
 // A non-well, or a well with no child grid, is never an exit well; nor is a
-// synthetic node with both grid ids empty (uuids equal). But a synthetic node
-// with an empty GridID and a qualified ChildGridID — exactly the shape the
-// launcher renders a plugin as (see PluginWellTile) — IS an exit well, because
-// "" != "<uuid>". That is what makes a launcher tile preview and descend into
-// the plugin's grid rather than draw as an inert interior well.
+// synthetic node with both grid ids empty, whose uuids are equal. But a
+// synthetic node with an empty GridID and a qualified ChildGridID — the
+// shape a plugin is rendered as, see PluginWellTile — is an exit well,
+// because "" != "<uuid>". That is what makes a menu swatch preview and
+// descend into the plugin's grid rather than draw as an inert interior
+// well.
 func IsExitWell(t *Tile) bool {
 	return IsWellKind(t.Kind) && t.ChildGridID != "" &&
 		UUIDOf(t.ChildGridID) != UUIDOf(t.GridID)
 }
 
 // NamespaceOf returns the id-space a qualified id belongs to: everything
-// before its LAST segment ("uuid" for "uuid/7", "ssh1/rp1" for "ssh1/rp1/7",
-// "" for a bare id). Two ids can only ever name the same store when their
-// namespaces are equal — the test for "would a move cross a plugin
-// boundary", which no single-uuid comparison answers once ids chain
-// through node mounts.
+// before its last segment ("n1" for "n1/7", "n1/c1" for "n1/c1/7", "" for a
+// bare id). Two ids can only name the same store when their namespaces are
+// equal, which is the test for "would a move cross a plugin boundary". No
+// single-segment comparison answers that once ids chain through mounts.
 func NamespaceOf(id string) string {
 	if i := strings.LastIndexByte(id, '/'); i >= 0 {
 		return id[:i]
@@ -108,11 +108,11 @@ func NamespaceOf(id string) string {
 	return ""
 }
 
-// LocalOf returns a qualified id's LAST segment — the id local to the owning
-// plugin ("7" for "uuid/7" or "ssh1/rp1/7"; a bare id is its own local id).
+// LocalOf returns a qualified id's last segment: the id local to the owning
+// plugin ("7" for "n1/7" or "n1/c1/7"; a bare id is its own local id).
 // Complement of NamespaceOf: QualifyID(NamespaceOf(id), LocalOf(id)) == id
-// for any qualified id. The display half of the codec — human-readable URL
-// path segments, default alt text, node-grid tile ids.
+// for any qualified id. It is the display half of the codec, used for
+// human-readable URL path segments and default alt text.
 func LocalOf(id string) string {
 	if i := strings.LastIndexByte(id, '/'); i >= 0 {
 		return id[i+1:]
@@ -121,11 +121,11 @@ func LocalOf(id string) string {
 }
 
 // PluginWellTile builds the synthetic exit-well tile a plugin is rendered as
-// when it isn't sitting in a real grid: the drag ghost, the menu swatch, and
-// the launcher start-page tile (whose preview is the plugin's root grid). A 1×1
-// well whose child grid is the plugin's qualified RootGridID — so IsExitWell is
-// true (it has no owning grid uuid to match) and it previews / descends into
-// that grid. One definition so all three uses read identically.
+// when it is not sitting in a real grid: the drag ghost and the menu swatch.
+// It is a 1x1 well whose child grid is the plugin's qualified RootGridID, so
+// IsExitWell is true — it has no owning grid uuid to match — and it previews
+// and descends into that grid. One definition, so every use reads
+// identically.
 func PluginWellTile(pl PluginInfo) Tile {
 	return Tile{
 		Kind:        KindWell,
@@ -133,12 +133,12 @@ func PluginWellTile(pl PluginInfo) Tile {
 		H:           1,
 		AltText:     pl.Label,
 		ChildGridID: pl.RootGridID,
-		// A launcher/menu swatch is a link by nature — its child grid is the
-		// plugin's own root, never this (synthetic) tile's grid. Mark it so it
-		// renders dashed identically to a mounted plugin well.
+		// A menu swatch is a link by nature: its child grid is the plugin's
+		// own root, never this synthetic tile's grid. Mark it so it renders
+		// dashed identically to a mounted plugin well.
 		Reference: true,
-		// The plugin's persisted root framing IS this tile's framing — one
-		// shape, so it carries across verbatim — and previewing or
+		// The plugin's persisted root framing is this tile's framing. It is
+		// one shape, so it carries across verbatim, and previewing or
 		// descending through the synthetic tile lands at the left-off view.
 		ViewCx:   pl.RootViewCx,
 		ViewCy:   pl.RootViewCy,
@@ -147,16 +147,16 @@ func PluginWellTile(pl PluginInfo) Tile {
 }
 
 // PluginKindConnection is the Kind ConnectionRow stamps on a connection's
-// menu row. It is the DECLARATION that a row is a connection rather than a
-// plugin — the one fact readers consult (client/pluginhealth), never the
-// shape of the uuid. Minted here and nowhere else.
+// menu row. It is the declaration that a row is a connection rather than a
+// plugin, and it is the one fact readers consult, never the shape of the
+// uuid. Minted here and nowhere else.
 const PluginKindConnection = "connection"
 
-// ConnectionRow presents a connection as a menu row — the one shape every
+// ConnectionRow presents a connection as a menu row: the one shape every
 // menu flow (click-descend, drag-link, health, root-view persistence)
-// already handles. Kind PluginKindConnection; a pending one is rootless
-// with its failure as StatusDetail → InfoError (pluginhealth reads the
-// declared kind as "waiting", not "broken").
+// already handles. Its Kind is PluginKindConnection. A pending connection is
+// rootless with its failure carried as StatusDetail, then InfoError, so
+// health reads the declared kind as waiting rather than broken.
 func ConnectionRow(c ConnectionInfo) PluginInfo {
 	return PluginInfo{
 		UUID: c.UUID, Kind: PluginKindConnection, Label: c.Label,
@@ -177,9 +177,9 @@ func MenuRows(l PluginList) []PluginInfo {
 }
 
 // HomeGrid picks the qualified grid id that "/" means: the handshake's
-// home_grid_id (a FIELD, docs/one-node.md), falling back to the first
-// rooted row for a node that predates the field. One derivation; every
-// "empty anchor means home" reader goes through it.
+// home_grid_id, falling back to the first rooted row for a node that does
+// not send the field. One derivation; every "empty anchor means home"
+// reader goes through it.
 func HomeGrid(l PluginList) string {
 	if l.HomeGridID != "" {
 		return l.HomeGridID
@@ -193,22 +193,22 @@ func HomeGrid(l PluginList) string {
 }
 
 // IsContentDescentKind reports whether a tile kind is a content tile you
-// descend into via a *text-focus* descent (it sets pane.TextFocus) rather than
-// a grid descent — text, url, and shell. Shared by the client's click-to-descend
-// routing and its URL-restore walk so the set is spelled out once: when those
-// two drifted, a shell descent encoded into the URL was silently dropped on
-// reload (the restore walk omitted shell).
+// descend into with a content descent, which sets pane.TextFocus, rather
+// than a grid descent: text, url, and shell. The client's click-to-descend
+// routing and its URL-restore walk share it, so the set is spelled out once.
+// If the two drift, a descent encoded into the URL is silently dropped on
+// reload.
 func IsContentDescentKind(kind string) bool {
 	return kind == KindText || kind == KindURL || kind == KindShell
 }
 
-// IsWorkspaceKind reports whether a tile kind is a pane tile — the THIRD
-// descent class. A workspace descent is neither a grid descent (IsWellKind:
-// push onto pane.Path) nor a text-focus descent (IsContentDescentKind: set
-// pane.TextFocus); it swaps the whole pane tree and pushes a workspace
-// frame. The three predicates partition the descendable kinds; the pin test
-// keeps the sets disjoint and total so a new kind cannot silently fall
-// through a descent or URL-restore dispatch.
+// IsWorkspaceKind reports whether a tile kind is a pane tile: the third
+// descent class. A pane-tile descent is neither a grid descent (IsWellKind,
+// which pushes onto pane.Path) nor a content descent (IsContentDescentKind,
+// which sets pane.TextFocus); it swaps the whole pane tree and pushes a
+// level. The three predicates partition the descendable kinds, and the pin
+// test keeps the sets disjoint and total so a new kind cannot fall through a
+// descent or URL-restore dispatch.
 func IsWorkspaceKind(kind string) bool {
 	return kind == KindPane
 }
@@ -221,12 +221,12 @@ const (
 	GridSourceProc = "proc"
 )
 
-// EntryPlugin shapes a plugin ROOT MenuEntry as a PSEUDO-PLUGIN (#258):
-// the entry's grid as the root, its label/glyph as the face, no instance
-// grid — so every downstream flow (swatch, ghost, click-descend,
-// drag-link, the bar's door identity) is the battle-tested plugin path.
-// The handshake root view belongs to the MAIN root grid, so it is
-// zeroed: an entry grid opens at the default framing.
+// EntryPlugin shapes a plugin's root MenuEntry as a pseudo-plugin: the
+// entry's grid as the root and its label and glyph as the face, so every
+// downstream flow (swatch, ghost, click-descend, drag-link, the bar's door
+// identity) takes the ordinary plugin path. The handshake root view belongs
+// to the main root grid, so it is zeroed and an entry grid opens at the
+// default framing.
 func EntryPlugin(pl PluginInfo, e MenuEntry) PluginInfo {
 	pseudo := pl
 	pseudo.RootGridID = e.GridID
@@ -240,9 +240,9 @@ func EntryPlugin(pl PluginInfo, e MenuEntry) PluginInfo {
 	return pseudo
 }
 
-// The plugin glyph vocabulary (InfoResponse.glyph / PluginInfo.Glyph):
+// The plugin glyph vocabulary (InfoResponse.glyph, PluginInfo.Glyph):
 // declared by the plugin, rendered by the client, with anything unknown
-// falling back to the generic globe — a third-party plugin degrades
+// falling back to the generic globe, so a third-party plugin degrades
 // politely without either side learning names.
 const (
 	GlyphFolder  = "folder"
@@ -257,40 +257,37 @@ const (
 	TextModeText     = "text"
 )
 
-// (The Path type is gone — 2026-07-26 contraction: every mutation is
-// id-addressed + version-claimed.)
-
-// WebContent reports whether this tile PRESENTS as web content: a url tile
-// (its own address) or a serves_page tile (the /content/ door address). The
-// single classification every url-tile semantic keys off — live native view
-// on a desktop host, open-in-new-tab on a browser host, preview-image
-// frozen face — so the two shapes can never diverge gesture by gesture.
+// WebContent reports whether this tile presents as web content: a url tile,
+// at its own address, or a serves_page tile, at the /content/ door address.
+// It is the single classification every url-tile semantic keys off — live
+// native view on a desktop host, open-in-new-tab on a browser host, frozen
+// preview image — so the two shapes cannot diverge gesture by gesture.
 func (t *Tile) WebContent() bool {
 	return t.Kind == KindURL || t.ServesPage
 }
 
-// PageURL builds the /content/ door address for a tile — the ONE place the
-// URL grammar is written on the client side (the server's parseContentPath
-// is its mirror; a seam test pins that they agree). The trailing slash is
-// load-bearing: relative subresource URLs inside a served page resolve
-// against the directory.
+// PageURL builds the /content/ door address for a tile: the one place the
+// URL grammar is written on the client side. The server's parseContentPath
+// is its mirror, and a seam test pins that they agree. The trailing slash is
+// load-bearing, because relative subresource URLs inside a served page
+// resolve against the directory.
 func PageURL(origin, contentToken, tileID string) string {
 	return origin + "/content/" + contentToken + "/" + tileID + "/"
 }
 
-// The text_presentation vocabulary (decision 2026-08-13).
+// The text_presentation vocabulary.
 const (
 	TextPresentationPlain    = "plain"
 	TextPresentationRendered = "rendered"
 	TextPresentationBoth     = "both"
 )
 
-// ContentID returns the tile id that OWNS this tile's content: a leaf link's
+// ContentID returns the tile id that owns this tile's content: a leaf link's
 // target, or the tile's own id. Every client content operation — body fetch,
-// edit buffer, save routing, preview fetch, shell session, workspace layout —
-// keys by this, so a link and its target (and every sibling link) share ONE
-// content fact and a write can never land on a link row (which owns no
-// bytes; the store refuses it). The single resolution point for read-through.
+// edit buffer, save routing, preview fetch, shell session, pane layout —
+// keys by this, so a link and its target share one content fact and a write
+// can never land on a link row, which owns no bytes and which the store
+// refuses. It is the single resolution point for read-through.
 func (t *Tile) ContentID() string {
 	if t.LinkTargetID != "" {
 		return t.LinkTargetID
@@ -298,24 +295,22 @@ func (t *Tile) ContentID() string {
 	return t.ID
 }
 
-// The read/mutation request and response shapes that mirror a proto message
-// field-for-field are GENERATED (wire_gen.go) — GetGridResponse,
+// The read and mutation request and response shapes that mirror a proto
+// message field for field are generated into wire_gen.go: GetGridResponse,
 // CloneTileRequest, PlaceTileRequest, DeleteTileRequest, ShellSessionAlive*,
 // the event payloads, PluginInfo and ConnectionInfo among them. What stays
-// here is the shapes that are NOT a message mirror: the store's typed create
-// and set sugar over the unified CreateTile/SetTile verbs, the embedded
-// Framing, and the Event discriminator over the proto's oneof.
+// here is the shapes that are not a message mirror: the typed create and set
+// sugar over the unified CreateTile and SetTile verbs, the embedded Framing,
+// and the Event discriminator over the proto's oneof.
 //
-// (GetGridRequest, GetTilePreviewRequest/Response, TileResponse,
-// SubscribeRequest and DeleteTileResponse were mirrors nothing read: the
-// Client builds those requests as proto directly. Deleted 2026-08-29 rather
-// than generated — a copy no one uses is still a copy.)
+// The Client builds the remaining requests as proto directly, so they have
+// no Go twin here.
 
 // Creates: no Version (the tile doesn't exist yet).
 
 // CreateWellRequest is a typed create. On the wire every create is a single
-// CreateTile carrying a Tile; the Client exposes typed sugar (CreateWell, …)
-// over it and the localdb store keeps these as its internal create API.
+// CreateTile carrying a Tile; the Client exposes typed sugar over it and the
+// home store keeps these as its internal create API.
 type CreateWellRequest struct {
 	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
@@ -323,29 +318,22 @@ type CreateWellRequest struct {
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
 	// ChildGridID, when set, makes this an exit well pointing at an existing
-	// grid in another plugin (a mounted DB, an fs/proc grid). Label is the
-	// display name for such a well. Empty → an ordinary interior well.
+	// grid in another plugin: a mounted node, an fs or proc grid. Label is
+	// the display name for such a well. Empty means an ordinary interior
+	// well.
 	ChildGridID string `json:"child_grid_id,omitempty"`
 	Label       string `json:"label,omitempty"`
-	// Framing seeds an exit well's framing at creation (e.g. a plugin link
-	// dropped from the + menu starts at the plugin's persisted root view,
-	// the same framing a node-grid tile shows). Zero zoom = never visited,
-	// the default view. Ignored for interior wells, which always start
-	// unframed.
+	// Framing seeds an exit well's framing at creation: a plugin link
+	// dropped from the + menu starts at the plugin's persisted root view.
+	// Zero zoom means never visited, so the default view. Ignored for
+	// interior wells, which always start unframed.
 	Framing
 }
 
-// (The unconfigured plugin well is gone — 2026-08-29. The instance
-// picker retired 2026-08-23 (connections are config rows), so nothing
-// could mint or adopt one: CreateWellRequest.ConfigurePluginID, the
-// CreateTile configure arm, SetTile's adopt arm, store's
-// CreatePluginWell/AdoptChildGrid, Tile.ConfigurePluginID and the
-// column itself (schema v10) all went.)
-
-// CreateLeafLinkRequest creates a LEAF LINK: a text/url/shell/pane tile whose
-// content lives in another plugin's tile (the cross-plugin left-drag). Kind is
-// the target's kind; LinkTargetID is the qualified "<uuid>/<tile-id>"
-// reference; Label is the link's local alt_text (usually the source's).
+// CreateLeafLinkRequest creates a leaf link: a text, url, shell, or pane tile
+// whose content lives in another plugin's tile, which is what a cross-plugin
+// left-drag makes. Kind is the target's kind, LinkTargetID is the qualified
+// "<uuid>/<tile-id>" reference, and Label is the link's local alt_text.
 type CreateLeafLinkRequest struct {
 	GridID       string `json:"grid_id"`
 	X            int64  `json:"x"`
@@ -372,10 +360,10 @@ type CreatePaneRequest struct {
 	Y      int64  `json:"y"`
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
-	// Label is the workspace name (alt_text; the bottom bar's breadcrumb).
+	// Label is the pane tile's name: its alt_text, and the bar's crumb.
 	Label string `json:"label,omitempty"`
-	// Data is the optional initial layout blob; empty = never arranged
-	// (descent installs the default single pane).
+	// Data is the optional initial layout blob. Empty means never arranged,
+	// and descent installs the default single pane.
 	Data []byte `json:"data,omitempty"`
 }
 
@@ -388,12 +376,9 @@ type CreateURLRequest struct {
 	URL    string `json:"url"`
 }
 
-// CreateShellRequest creates a shell tile. The bash session is not
-// started until the user refreshes (matches the URL tile model — drop
-// + descend show the frozen preview placeholder until explicitly
-// activated). Once activated, the bash lives in a gridwell-private
-// tmux session keyed by tile id and persists across ascents until
-// the tile is deleted (or the machine reboots).
+// CreateShellRequest creates a shell tile. The shell session lives in a
+// Gridwell-private tmux session keyed by tile id, so it persists across
+// ascents until the tile is deleted or the machine reboots.
 type CreateShellRequest struct {
 	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
@@ -402,17 +387,17 @@ type CreateShellRequest struct {
 	H      int64  `json:"h"`
 }
 
-// Mutations. Only the CONTENT writes carry a Version claim — WriteContent
-// and RenameTile (2026-08-29, docs/simplify-plan.md S5: version means "the
-// user's content bytes changed"). Framing, automatic captures and LAYOUT
-// (place / clone / delete) are last-writer-wins and carry none; the server
-// returns 409 / ErrVersionConflict only for a stale content claim.
+// Mutations. Only the content writes carry a Version claim: WriteContent and
+// RenameTile. Version means the user's content bytes changed. Framing,
+// automatic captures, and layout (place, clone, delete) are
+// last-writer-wins and carry no claim; the server returns 409 and
+// ErrVersionConflict only for a stale content claim.
 
-// Framing is the ONE shape of "how this grid looked when I left it through
-// this doorway": a float CENTER in the grid's own coordinates plus a
-// pane-size-independent zoom — the intrinsic ratio live/overtake, so a
-// window resize never moves a saved view. Zoom == 0 is the one
-// "never visited" convention; Cx/Cy carry no meaning then.
+// Framing is the one shape of "how this grid looked when I left it through
+// this doorway": a float center in the grid's own coordinates plus a
+// pane-size-independent zoom, the intrinsic ratio live over overtake, so a
+// window resize never moves a saved view. Zoom == 0 is the one "never
+// visited" convention, and Cx and Cy carry no meaning then.
 type Framing struct {
 	Cx   float64 `json:"cx,omitempty"`
 	Cy   float64 `json:"cy,omitempty"`
@@ -420,15 +405,15 @@ type Framing struct {
 }
 
 // framingEpsilon is how close two framings must be to count as the same
-// picture. Below it a write would be noise — float jitter in an animated
-// or re-derived viewport, not a place the user chose. One cell-thousandth
-// is far under a screen pixel at any usable zoom.
+// picture. Below it a write is noise: float jitter in an animated or
+// re-derived viewport, not a place the user chose. One cell-thousandth is
+// far under a screen pixel at any usable zoom.
 const framingEpsilon = 0.001
 
 // SameAs reports whether f and g describe the same framing, within
-// framingEpsilon. It is the ONE "did the user actually move?" rule — the
-// no-op guard every persister consults, so a quiet settle tick never
-// churns the store.
+// framingEpsilon. It is the one "did the user actually move?" rule: the
+// no-op guard every persister consults, so a quiet settle tick never churns
+// the store.
 func (f Framing) SameAs(g Framing) bool {
 	return math.Abs(f.Cx-g.Cx) < framingEpsilon &&
 		math.Abs(f.Cy-g.Cy) < framingEpsilon &&
@@ -436,10 +421,10 @@ func (f Framing) SameAs(g Framing) bool {
 }
 
 // SetFramingRequest persists a Framing onto the row that owns it. Exactly
-// one target: TileID names the DOORWAY tile a grid was entered through (a
-// well — interior, exit, or link; each doorway keeps its own framing),
-// RootGridID a ROOT grid, which has no doorway. Framing only — no claim and
-// no version bump: framing is last-writer-wins by design, so there is
+// one target is set: TileID names the doorway tile a grid was entered
+// through (a well, interior, exit, or link — each doorway keeps its own
+// framing), and RootGridID names a root grid, which has no doorway. Framing
+// carries no claim and no version bump; it is last-writer-wins, so there is
 // nothing here for a racing capture to conflict with.
 type SetFramingRequest struct {
 	TileID     string `json:"tile_id,omitempty"`
@@ -466,19 +451,18 @@ type SetShellPreviewRequest struct {
 	JPEG   []byte `json:"jpeg"`
 }
 
-// SetURLStateRequest freezes a live URL tile (preview JPEG + address +
-// title + history) when its Electron WebContentsView is torn down on ascend.
-// Every field is a CAPTURE — what the live surface was observed to be — so
-// it carries no version claim and makes no bump (docs/simplify-plan.md S5);
-// it is an in-place write to this tile's row (copy-on-clone: clones are
-// independent, so there is no fork). Empty jpeg/url/title fields are skipped.
+// SetURLStateRequest freezes a live url tile — preview JPEG, address, title,
+// and history — when its native view is torn down on ascent. Every field is
+// a capture of what the live surface was observed to be, so it carries no
+// version claim and makes no bump. It is an in-place write to this tile's
+// row. Empty jpeg, url, and title fields are skipped.
 type SetURLStateRequest struct {
 	TileID string `json:"tile_id"`
 	JPEG   []byte `json:"jpeg"`
 	URL    string `json:"url"`
 	Title  string `json:"title"`
-	// History is the JSON back-stack captured at freeze ("" = leave the
-	// stored history untouched — a partial capture must not clobber it).
+	// History is the JSON back-stack captured at freeze. "" leaves the
+	// stored history untouched, so a partial capture cannot clobber it.
 	History string `json:"history,omitempty"`
 }
 
@@ -489,8 +473,8 @@ type SetContentZoomRequest struct {
 	ContentZoom float64 `json:"content_zoom"`
 }
 
-// SetURLFrozenRequest persists the user's standing freeze on a url tile
-// (issue #237; framing, no claim, no bump).
+// SetURLFrozenRequest persists the user's standing freeze on a url tile.
+// Framing: no claim, no bump.
 type SetURLFrozenRequest struct {
 	TileID string `json:"tile_id"`
 	Frozen bool   `json:"frozen"`

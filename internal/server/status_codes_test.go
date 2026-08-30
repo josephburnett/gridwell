@@ -12,14 +12,13 @@ import (
 )
 
 // TestStatusCodesSurviveTheConnectCodec crosses the browser codec's
-// translation — the namespace's gRPC status → Connect (asConnectError) and
-// back through gwerr's inverse — for EVERY status code, asserting the code
-// the owning namespace answered with is the code the client classifies on.
-// The mapping used to be two hand-written switches whose defaults collapsed
-// to Internal, and they had drifted apart (Unavailable survived one and not
-// the other): a transport failure two hops away reached gwerr.IsTransport
-// as a verdict, and clientsync dropped a parked write. The federation
-// codec's half of this is namespace.TestStatusCodesSurviveBothCodecs.
+// translation — the namespace's gRPC status to Connect, through
+// asConnectError, and back through gwerr's inverse — for every status code,
+// asserting that the code the owning namespace answered with is the code the
+// client classifies on. A code that collapses to Internal turns a transport
+// failure two hops away into a verdict, and clientsync then drops a parked
+// write. The federation codec's half of this is
+// namespace.TestStatusCodesSurviveBothCodecs.
 func TestStatusCodesSurviveTheConnectCodec(t *testing.T) {
 	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {
 		in := status.Error(c, "far side says "+c.String())

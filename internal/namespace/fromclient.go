@@ -1,10 +1,10 @@
 package namespace
 
-// FromClient is ONE of the two codecs (the other is Server): it reads a
-// gridwell.v1 gRPC client as a Namespace. Exactly one place needs it —
-// internal/remote/dial, which dials another node's federation socket — so
-// the transport's connections are Namespace values like everything else
-// and internal/remote never touches a gRPC stream type.
+// FromClient is one of the two codecs; the other is Server. It reads a
+// gridwell.v1 gRPC client as a Namespace. Exactly one place needs it,
+// internal/remote/dial, which dials another node's federation socket, so the
+// transport's connections are Namespace values like everything else and
+// internal/remote never touches a gRPC stream type.
 
 import (
 	"context"
@@ -107,8 +107,8 @@ func (f fromClient) WriteContent(ctx context.Context, recv func() (*pb.WriteCont
 	for {
 		msg, rerr := recv()
 		if errors.Is(rerr, io.EOF) {
-			// Only a CLEAN end closes the stream, and only a close
-			// commits: a broken recv returns below with nothing written.
+			// Only a clean end closes the stream, and only a close commits:
+			// a broken recv returns below with nothing written.
 			return up.CloseAndRecv()
 		}
 		if rerr != nil {
@@ -131,10 +131,10 @@ func (f fromClient) OpenShell(ctx context.Context, recv func() (*pb.OpenShellReq
 			msg, rerr := recv()
 			if rerr != nil {
 				// The caller has no more to say. CloseSend and let the
-				// DOWN side finish: that is the half carrying the far
-				// end's verdict, and returning here on a clean io.EOF
-				// would race the verdict away (a refused attach read as
-				// a normal detach).
+				// down side finish: that half carries the far end's
+				// verdict, and returning here on a clean io.EOF would race
+				// the verdict away, so a refused attach would read as a
+				// normal detach.
 				_ = up.CloseSend()
 				if !errors.Is(rerr, io.EOF) {
 					errc <- rerr

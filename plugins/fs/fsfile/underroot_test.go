@@ -2,8 +2,8 @@ package fsfile
 
 import "testing"
 
-// UnderRoot must have no root=="/" edge: the hand-built root+"/" prefix
-// check it replaces produced "//" there and confined nothing.
+// UnderRoot must have no root=="/" edge: a hand-built root+"/" prefix check
+// produces "//" there and confines nothing.
 func TestUnderRoot(t *testing.T) {
 	cases := []struct {
 		root, path string

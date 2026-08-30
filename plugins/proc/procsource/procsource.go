@@ -1,7 +1,7 @@
-// Package procsource reads the Linux /proc filesystem and projects the
-// process tree into abstract entries the proc-grid reconciler in
-// internal/store turns into tile rows. Pure-Go, no DB. Tests run against
-// a temp-dir stub /proc so we don't depend on the host's process table.
+// Package procsource reads the Linux /proc filesystem and projects the process
+// tree into the abstract entries the proc plugin lists. It is pure Go, with no
+// database. Tests run against a temp-dir stub /proc, so they do not depend on
+// the host's process table.
 package procsource
 
 import (
@@ -242,16 +242,16 @@ func stripTrailingNUL(b []byte) []byte {
 	return b
 }
 
-// MetadataMarkdown returns the descent body for a process info tile —
-// deterministic so its blob hash dedupes across reconciles of an
-// unchanged process. Layout is a small markdown list because the same
-// renderer paints tile previews and descents: a bullet list reads as
-// "process detail" at any zoom without the chrome a table would force.
+// MetadataMarkdown returns the descent body for a process info tile. It is
+// deterministic, so its blob hash dedupes across reads of an unchanged
+// process. The layout is a small markdown list because the same renderer paints
+// tile previews and descents, and a bullet list reads as process detail at any
+// zoom without the chrome a table would force.
 //
-// Fields are emitted in stable order. Zero values for optional fields
-// (Cwd, memory, state, threads) are omitted so a tile for a kernel
-// thread doesn't show "vm-size: 0 kB" lines — the rule is "don't render
-// fields we couldn't read".
+// Fields are emitted in stable order, and a zero value for an optional field —
+// Cwd, memory, state, threads — is omitted, so a kernel thread's tile does not
+// show "vm-size: 0 kB" lines. A field that could not be read is not
+// rendered.
 func MetadataMarkdown(info Info) string {
 	var b strings.Builder
 	b.WriteString("# ")
@@ -285,10 +285,10 @@ func MetadataMarkdown(info Info) string {
 	return b.String()
 }
 
-// formatKB turns a kilobyte count into a short human-readable string —
-// "12.3 MiB" for typical process sizes, "120 KiB" when sub-MiB, "1.4
-// GiB" for giants. Binary units because the kernel reports kB but
-// means KiB (1024-byte blocks).
+// formatKB turns a kilobyte count into a short human-readable string: "120
+// KiB" below a mebibyte, "12.3 MiB" for a typical process, "1.4 GiB" for a
+// large one. The units are binary because the kernel reports kB but means KiB,
+// in 1024-byte blocks.
 func formatKB(kb int64) string {
 	const (
 		mib = 1024

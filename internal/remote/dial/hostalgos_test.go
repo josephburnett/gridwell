@@ -1,10 +1,9 @@
 package dial
 
-// The knownhosts key-mismatch class (Joe's laptop, 2026-08-23): the file
-// holds the host's ed25519 key (what `ssh` saved on first contact), but
-// the handshake negotiated a different host-key algorithm, so strict
-// verification reported "key mismatch" on a perfectly good host.
-// OpenSSH offers the KNOWN algorithms first; so must we.
+// The knownhosts key-mismatch class: the file holds the host's ed25519 key,
+// what ssh saved on first contact, but the handshake negotiates a different
+// host-key algorithm, so strict verification reports "key mismatch" on a good
+// host. OpenSSH offers the known algorithms first, and so must this dialer.
 
 import (
 	"crypto/ed25519"
@@ -17,7 +16,7 @@ import (
 )
 
 func TestHostKeyAlgorithmsFromKnownHosts(t *testing.T) {
-	// A REAL ed25519 entry for the host (what `ssh` saves).
+	// A real ed25519 entry for the host, of the shape ssh saves.
 	pub, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)

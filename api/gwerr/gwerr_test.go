@@ -45,12 +45,9 @@ func TestClassifyError(t *testing.T) {
 }
 
 // TestEverySentinelIsClassified is the drift lint: every exported Err*
-// sentinel declared in this package must appear in sentinelClasses. This is
-// what makes the one-table design safe to rely on — before it, the server and
-// localdb each kept a private copy of the sentinel list, and a sentinel added
-// to one and forgotten in the other silently degraded to Internal/500 on that
-// transport. Declaring a sentinel now REQUIRES classifying it, or this test
-// names the omission.
+// sentinel declared in this package must appear in sentinelClasses. An
+// unclassified sentinel would silently degrade to Internal, so declaring
+// one requires classifying it or this test names the omission.
 func TestEverySentinelIsClassified(t *testing.T) {
 	declared := declaredSentinelNames(t)
 	if len(declared) == 0 {
@@ -125,7 +122,7 @@ func declaredSentinelNames(t *testing.T) map[string]string {
 }
 
 // TestIsTransportPinsWireCodes: the three transport codes and nothing
-// else — a coded answer is never a transport failure.
+// else. A coded answer is never a transport failure.
 func TestIsTransportPinsWireCodes(t *testing.T) {
 	for _, c := range []codes.Code{codes.Unavailable, codes.DeadlineExceeded, codes.Canceled} {
 		if !IsTransport(status.Error(c, "x")) {

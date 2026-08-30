@@ -295,8 +295,8 @@ func TestCloseIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestPumpDoesNotLeakWhenOutputUndrained is the regression for the wedged-pump
-// goroutine leak. If outCh fills (subscriber gone — a WS-takeover gap, or the
+// TestPumpDoesNotLeakWhenOutputUndrained pins the wedged-pump goroutine
+// leak. If outCh fills (subscriber gone — a takeover gap, or the
 // tile was deleted) and Close runs, a plain blocking `outCh <- chunk` strands
 // the pump goroutine forever: closing the PTY unblocks a blocked Read, not a
 // blocked channel send. Each cycle below spawns a session that spews output,

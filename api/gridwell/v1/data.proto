@@ -1,23 +1,23 @@
 // data.proto is the single source of truth for Gridwell's wire types and
-// the persisted record shapes. Every field in Grid / Tile maps 1:1 to a
-// column in the hand-written DDL (internal/store/schema.go); a drift-lint
-// test fails the build if they get out of sync.
+// the persisted record shapes. Every stored field in Grid and Tile maps 1:1
+// to a column described by internal/local/store/columns.go;
+// TestDescriptorMatchesProto pins the two together in both directions.
 //
 // Conventions:
-//   - kind / source_kind / text_mode are string fields, not enums. The
-//     DDL CHECK constraints already pin the closed sets; carrying them
-//     as strings keeps the proto-to-column mapping mechanical and lets
-//     us add named constants alongside the generated types.
-//   - created_at / updated_at exist in the DDL but are not exposed on
-//     the wire (and not in the proto). They are pure storage metadata.
+//   - kind, source_kind, and text_mode are string fields, not enums. The
+//     DDL CHECK constraints already pin the closed sets; strings keep the
+//     proto-to-column mapping mechanical and let named constants live
+//     alongside the generated types.
+//   - created_at and updated_at exist in the DDL but are not on the wire.
+//     They are pure storage metadata.
 syntax = "proto3";
 
 package gridwell.v1;
 
 option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridwellv1";
 
-// (The Path message is gone — 2026-07-26 contraction: every mutation is
-// id-addressed + version-claimed; the server derives location facts itself.)
+// Every mutation is id-addressed; the server derives location facts itself.
+// No request carries a descent path.
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells
 // point at child grids. The root grid has no parent.
@@ -27,64 +27,58 @@ option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridw
 // for the process table. source_id carries the path or PID.
 message Grid {
   string id = 1;
-  // 2 (object_id): removed 2026-08-29 with the column (schema v10) — a
-  // 128-bit provenance mint copied through every clone and link that no
-  // reader anywhere consulted to decide anything. Identity is the id.
+  // 2 was object_id, a provenance mint no reader consulted. Identity is
+  // the id.
   reserved 2;
   int64 version = 3;
   string source_kind = 4;
   string source_id = 5;
-  // writable reports whether the grid's OWNING plugin accepts mutations —
-  // per grid, not per local plugin entry, because through a node mount one
-  // local plugin (ssh) fronts many remote plugins with differing
-  // capabilities. Stamped by the serving node from the owning plugin's Info
-  // (leaf) or passed through verbatim (transit); wire-only, never persisted.
+  // writable reports whether the grid's owning plugin accepts mutations.
+  // It is per grid, not per namespace, because one connection fronts many
+  // remote plugins with differing capabilities. Stamped by the serving node
+  // from the owning plugin's Info at a leaf, passed through verbatim in
+  // transit. Wire-only, never persisted.
   bool writable = 6;
-  // scratch_grid_id is the OWNING plugin's ephemeral-url scratch grid,
-  // qualified from the receiver's perspective (chained through mounts) —
-  // same stamping rule as writable. "" when the plugin has none. Wire-only.
+  // scratch_grid_id is the owning plugin's ephemeral-url scratch grid,
+  // qualified from the receiver's perspective and chained through mounts,
+  // by the same stamping rule as writable. "" when the plugin has none.
+  // Wire-only.
   string scratch_grid_id = 7;
-  // 8 (proxy_endpoint): removed 2026-07-26 with the network-context surface
-  // (live url tiles always browse from the host's own network).
+  // 8 was proxy_endpoint, removed with the network-context surface: live
+  // url tiles always browse from the host's own network.
   reserved 8;
-  // 9 (create_schemas): removed 2026-08-29. The #198 creation-parameter
-  // form retired with the instance picker (2026-08-23) — no plugin ever
-  // declared a schema and no client ever read one; the server stopped
-  // stamping it, so the field only ever carried the empty map.
+  // 9 was create_schemas, a creation-parameter form no plugin declared and
+  // no client read.
   reserved 9;
-  // stale marks a grid the source could not answer for (issue #256):
-  // this is the REMEMBERED answer, not the live one. Two node-side
-  // stampers, one meaning — internal/sourcecache on its serve-stale
-  // path, and a plugin adapter answering a dark source from the rows it
-  // minted. Wire-only, never persisted — the same derived-fact shape as
-  // writable/serves_page. The cache also OBEYS it: an answer already
+  // stale marks a grid the source could not answer for: this is the
+  // remembered answer, not the live one. Two node-side stampers share the
+  // one meaning — internal/sourcecache on its serve-stale path, and a
+  // plugin adapter answering a dark source from the rows it minted.
+  // Wire-only, never persisted. The cache also obeys it: an answer already
   // stamped stale is never remembered.
   bool stale = 12;
-  // node_ns is the namespace chain of the NODE serving this grid, from
-  // the receiver's perspective: "" for a grid served by the node you are
-  // talking to; "<transit>/<conn>" (or deeper) through mounts — each
-  // transit hop prepends its segment, exactly like scratch_grid_id. The
-  // one owner of "which node is this pane inside" (remote-menu,
-  // 2026-08-16): the client keys its per-pane + menu context by it and
-  // routes Handshake with it. Wire-only, never persisted.
+  // node_ns is the namespace chain of the node serving this grid, from the
+  // receiver's perspective: "" for a grid served by the node you are
+  // talking to, "<transit>/<conn>" or deeper through mounts, each transit
+  // hop prepending its segment exactly like scratch_grid_id. It is the one
+  // owner of "which node is this pane inside": the client keys its per-pane
+  // + menu context by it and routes Handshake with it. Wire-only, never
+  // persisted.
   string node_ns = 10;
   // menu_entries is the owning plugin's declared (+) menu additions for
-  // this grid (see MenuEntry) — stamped from Info by the serving node,
-  // verbatim through transit (grid_id prefixed per hop). Wire-only.
+  // this grid. Stamped from Info by the serving node, and verbatim through
+  // transit with grid_id prefixed per hop. Wire-only.
   repeated MenuEntry menu_entries = 11;
 }
 
-// MenuEntry is one plugin-declared (+) menu entry (issue #258): an extra
-// plugin ROOT (local's trashcan, #262). Declared in Info, stamped per
-// grid by the serving node exactly like writable, and passed VERBATIM
-// through transit hops (grid_id gains the hop prefix like every id). The
-// swatch behaves exactly like a plugin swatch over grid_id: click
-// descends, drag drops an exit-well link.
+// MenuEntry is one plugin-declared (+) menu entry: an extra plugin root,
+// such as the trashcan. Declared in Info, stamped per grid by the serving
+// node exactly like writable, and passed verbatim through transit hops,
+// where grid_id gains the hop prefix like every id. The swatch behaves like
+// a plugin swatch over grid_id: click descends, drag drops an exit-well
+// link.
 //
-// 5/6 (kind, param_schema) were the CREATION-entry half — dropping an
-// entry to mint a tool tile, with a #198 parameter form on first
-// descent. Removed 2026-08-29: the node never carried it (the pluginhost
-// adapter stripped every creation entry before the wire), so no client
+// 5 and 6 were kind and param_schema, the creation-entry half. No client
 // could ever receive one.
 message MenuEntry {
   string id           = 1; // entry identity within the plugin
@@ -100,7 +94,7 @@ message MenuEntry {
 // enforces it.
 message Tile {
   string id = 1;
-  reserved 2; // object_id: removed 2026-08-29, see Grid.object_id
+  reserved 2; // object_id; see Grid's reserved 2
 
   int64 version = 3;
   string grid_id = 4;
@@ -110,17 +104,16 @@ message Tile {
   int64 w = 8;
   int64 h = 9;
 
-  // 10, 11 were view_x/view_y, an integer window ORIGIN; the center the
-  // client derived from it (origin + footprint/2) is stored directly now
-  // and the migration converted every row.
+  // 10 and 11 were view_x and view_y, an integer window origin. The center
+  // is stored directly now.
   reserved 10, 11;
 
-  // well-only: the child grid's framing — at once the preview frame,
-  // the descent target, and the ascent return value. ONE shape (schema
-  // v11, docs/simplify-plan.md S4): a float CENTER in the child grid's
-  // coordinates (view_cx/view_cy) plus the pane-size-independent
-  // intrinsic zoom (live / overtake) — the same three numbers a ROOT
-  // grid keeps on its own row. view_zoom == 0 means never visited.
+  // well-only: the child grid's framing, which is at once the preview
+  // frame, the descent target, and the ascent return value. One shape: a
+  // float center in the child grid's coordinates (view_cx, view_cy) plus
+  // the pane-size-independent intrinsic zoom (live over overtake), the same
+  // three numbers a root grid keeps on its own row. view_zoom == 0 means
+  // never visited.
   double view_zoom = 12;
   double view_cx = 36;
   double view_cy = 37;
@@ -141,167 +134,161 @@ message Tile {
   string url_string = 20;
   int64 preview_blob_id = 21;
 
-  // 22 (fs_path), 23 (pid), 24 (source_key): removed with the legacy
-  // source-grid reconciler. A file/process well is now a plain well whose
-  // child_grid_id is a qualified "<plugin-uuid>/<grid-id>" reference.
+  // 22, 23, 24 were fs_path, pid, and source_key. A file or process well
+  // is a plain well whose child_grid_id is a qualified
+  // "<plugin-uuid>/<grid-id>" reference.
 
   // alt_text is the canonical display label, rendered verbatim by the
   // client. Stamped at insert time (for plugin-owned tiles, the entry name;
   // for an exit well, the mounted plugin's label).
   string alt_text = 25;
 
-  // reference reports that this well is a LINK, not owned content: its
-  // child_grid_id is a qualified cross-plugin reference (a mounted plugin,
-  // a file/process well, a cross-plugin clone) rather than a bare local
-  // child grid. It is the single authoritative "is a link" signal — the
-  // client renders a dashed border from it, and delete/clone already treat
-  // a qualified child_grid_id as unlink-only / share (never cascade). Set
-  // by the server in qualifyTiles (a child that arrived already qualified),
-  // so render and the store can never disagree on what a link is. Wire-only,
-  // derived — never a stored column.
+  // reference reports that this well is a link, not owned content: its
+  // child_grid_id is a qualified cross-plugin reference rather than a bare
+  // local child grid. It is the single authoritative "is a link" signal.
+  // The client renders a dashed border from it, and delete and clone treat
+  // a qualified child_grid_id as unlink-only and share, never cascade. Set
+  // by the server in qualifyTiles, from a child that arrived already
+  // qualified, so render and the store cannot disagree on what a link is.
+  // Wire-only, derived, never a stored column.
   bool reference = 26;
 
-  // content_zoom scales the CONTENT rendered inside a text/shell/url tile —
-  // the text font, the terminal font, the page zoom (issue #82). Framing,
-  // not content: persisted per tile, never bumps version. 0 means unset
-  // (renders at 1.0). Written by the SetTile content_zoom arm only.
+  // content_zoom scales the content rendered inside a text, shell, or url
+  // tile: the text font, the terminal font, the page zoom. It is framing,
+  // not content — persisted per tile, and it never bumps version. 0 means
+  // unset and renders at 1.0. Written by the SetTile content_zoom arm
+  // only.
   double content_zoom = 27;
 
-  // url_history is a url tile's persisted navigation back-stack (JSON
-  // {index, entries:[{url,title}]}, capped) captured at freeze so a revived
-  // tile can still go "back" (issue #113). Rides the url SetTile writeback;
-  // an empty value on a write leaves the stored history untouched (a partial
-  // capture must not clobber it, mirroring the preview-JPEG rule).
+  // url_history is a url tile's persisted navigation back-stack, JSON
+  // {index, entries:[{url,title}]} and capped, captured at freeze so a
+  // revived tile can still go back. Rides the url SetTile writeback. An
+  // empty value on a write leaves the stored history untouched, so a
+  // partial capture cannot clobber it, mirroring the preview-JPEG rule.
   string url_history = 28;
 
-  // link_target_id makes a LEAF tile (text/url/shell/pane) a LINK: a
+  // link_target_id makes a leaf tile (text, url, shell, pane) a link: a
   // qualified "<plugin-uuid>/<tile-id>" reference to the tile that owns the
-  // content. The link row stores no content of its own (no blob, no url, no
-  // preview) — readers resolve bytes/preview/session through the target id,
-  // which the router already routes anywhere (including through transit
-  // chains, which prepend one hop segment exactly as they do for a well's
-  // qualified child_grid_id). Kind stays the target's kind; link-ness is
-  // orthogonal metadata. The well kind's link variant remains a qualified
-  // child_grid_id (the battle-tested exit well) — Reference is the single
-  // derived "is a link" bit over both shapes. Deleting a link only unlinks.
+  // content. The link row stores no content of its own — no blob, no url,
+  // no preview — and readers resolve bytes, preview, and session through
+  // the target id, which the router routes anywhere, including through
+  // transit chains that prepend one hop segment exactly as they do for a
+  // well's qualified child_grid_id. Kind stays the target's kind;
+  // link-ness is orthogonal metadata. A well's link variant is a qualified
+  // child_grid_id instead, and reference is the single derived "is a link"
+  // bit over both shapes. Deleting a link only unlinks.
   string link_target_id = 29;
 
-  // url_frozen is the USER'S standing freeze on a url tile (issue #237):
-  // set by the explicit freeze gesture, cleared by the reconnect button.
-  // While set, descending does NOT auto-go-live (unlike the transient
-  // navigate-away freeze, which auto-revives on return). Framing-class —
-  // written by the SetTile url_frozen arm only, never bumps version.
+  // url_frozen is the user's standing freeze on a url tile: set by the
+  // explicit freeze gesture, cleared by the reconnect button. While set,
+  // descending does not auto-go-live, unlike the transient navigate-away
+  // freeze, which auto-revives on return. Framing-class: written by the
+  // SetTile url_frozen arm only, and it never bumps version.
   bool url_frozen = 30;
 
-  // 31 (configure_plugin_id): removed 2026-08-29 with the column (schema
-  // v10). It marked a CHILDLESS well as an UNCONFIGURED PLUGIN WELL
-  // (#251); the instance picker retired 2026-08-23 and the create/adopt
-  // verbs went with it. v10 adopts any stale row into an ordinary well.
+  // 31 was configure_plugin_id, which marked a childless well as an
+  // unconfigured plugin well. Nothing can mint a childless well now.
   reserved 31;
 
-  // serves_page (2026-08-11): the owning plugin serves this tile's content
-  // as WEB CONTENT through the /content/ door (rpc ServeContent) — an image
-  // file, an HTML page. The client gives the descent url-tile semantics (a
-  // live native view on a desktop host, open-in-new-tab on a browser host)
-  // at the DERIVED address /content/<content-token>/<tile-id>/ — derived at
-  // render time from the current origin, never persisted (ports are
-  // ephemeral). Plugin-declared, derived from the content itself (fs: the
-  // filename's media type) — never a stored column.
+  // serves_page: the owning plugin serves this tile's content as web
+  // content through the /content/ door, over the ServeContent RPC — an
+  // image file, an HTML page. The client gives the descent url-tile
+  // semantics (a live native view on a desktop host, open-in-new-tab on a
+  // browser host) at the derived address
+  // /content/<content-token>/<tile-id>/, built at render time from the
+  // current origin and never persisted, because ports are ephemeral.
+  // Plugin-declared, derived from the content itself, such as the
+  // filename's media type in fs. Never a stored column.
   bool serves_page = 32;
 
-  // text_presentation (2026-08-13): the owning plugin's declaration of how
-  // a text tile's body PRESENTS — "plain" (monospace, no markdown
-  // interpretation: source code, logs), "rendered" (document renderer
-  // only), or "both" (rendered by default, user may toggle to the raw
-  // source). "" = no declaration: the stored user text_mode rules, as it
-  // always has for localdb docs. Plugin-derived from the content itself
-  // (fs: the filename/sniff) — wire-only, never a stored column.
+  // text_presentation is the owning plugin's declaration of how a text
+  // tile's body presents: "plain" (monospace, no markdown interpretation —
+  // source code, logs), "rendered" (document renderer only), or "both"
+  // (rendered by default, and the user may toggle to the raw source). ""
+  // means no declaration, and the stored user text_mode rules, which is the
+  // case for the home's own documents. Plugin-derived from the content
+  // itself, such as the filename or a sniff in fs. Wire-only, never a
+  // stored column.
   string text_presentation = 33;
 
-  // 34 (menu_entry): removed 2026-08-29 with the creation-entry half of
-  // MenuEntry — nothing ever minted an entry tile (the pluginhost
-  // adapter stripped creation entries before the wire) and no plugin
-  // ever persisted the field.
+  // 34 was menu_entry, the creation-entry half of MenuEntry. Nothing
+  // minted an entry tile and no plugin persisted the field.
   reserved 34;
 
-  // status_detail is the owning plugin's CURRENT TROUBLE with this tile,
-  // for the client to display verbatim — e.g. an ssh connection well whose
-  // last dial failed carries that error until the connection comes up
-  // (errors must surface; the picker's "connecting…" must not hide the one
-  // message that names the problem). Wire-only, derived — never a stored
-  // column, never set by clients.
+  // status_detail is the owning plugin's current trouble with this tile,
+  // for the client to display verbatim. A connection well whose last dial
+  // failed carries that error until the connection comes up, so the failure
+  // surfaces instead of presenting as a tile that is merely waiting.
+  // Wire-only, derived. Never a stored column, never set by clients.
   string status_detail = 35;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
-// The same RPCs are exposed by a local server, a plugin process, and a
-// remote server reached over SSH. The client talks to the local server;
-// the server routes to plugins; an SSH gateway transparently proxies.
+// The same RPCs are exposed by a node, a plugin process, and a remote node
+// reached over a connection. The client talks to its own node; the node
+// routes to plugins and forwards through connections.
 
 // Info is the whole plugin handshake: a plugin loaded from server.yaml is
-// simply "there", so Info reports its identity AND its default root grid (the
-// grid the launcher descends into). There is no Attach/Detach — the gRPC
-// connection, opened at load and closed at unload, is the only lifecycle.
+// simply there, so Info reports its identity and its default root grid.
+// There is no Attach or Detach — the gRPC connection, opened at load and
+// closed at unload, is the only lifecycle.
 message InfoRequest {}
 message InfoResponse {
-  string kind           = 1;   // e.g. "home", "fs", "proc", "remote"
+  string kind           = 1;   // e.g. "home", "fs", "proc"
   string display_name   = 2;
   int64  schema_version = 3;
   bool   watch          = 4;   // implements Subscribe for live change events
-  // root_grid_id is the plugin's default root (fs uses its configured root,
-  // proc pid 1, localdb its singleton root). Click-enter descends here.
+  // root_grid_id is the plugin's default root: fs uses its configured
+  // root, proc pid 1, the home its singleton root. Click-enter descends
+  // here.
   string root_grid_id   = 5;
-  reserved 6; // network (NetworkContext): removed 2026-07-26 — host network always
-  reserved 7; // has_session: removed 2026-07-26 — the session is host-local
-  // 13 (create_schemas): removed 2026-08-29 with Grid.create_schemas —
-  // no plugin declared one, no client read one.
+  reserved 6; // network (NetworkContext); live tiles always use the host network
+  reserved 7; // has_session; the Chromium session is host-local
+  // 13 was create_schemas; see Grid's reserved 9.
   reserved 13;
-  // scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
-  // ("descend into a url" without placing a tile). Never rendered, never
-  // mounted; persists as visited-url history. Empty for plugins that don't
-  // support ephemeral visits (fs/proc).
+  // scratch_grid_id is the plugin's off-grid grid for ephemeral url tiles,
+  // where descending into a url places no tile. Never rendered, never
+  // mounted; it persists as visited-url history. Empty for plugins that do
+  // not support ephemeral visits, such as fs and proc.
   string scratch_grid_id = 8;
-  // writable reports that this plugin accepts CreateTile (new primitives can
-  // be dropped into its grids). Like watch, a capability the
-  // plugin declares once here — the server must never re-derive it from the
-  // kind string, or a remote plugin reached through a proxy (whose local kind
-  // is "ssh") is wrongly presented read-only.
+  // writable reports that this plugin accepts CreateTile, so new primitives
+  // can be dropped into its grids. Like watch, it is a capability the
+  // plugin declares once here; the node must never re-derive it from the
+  // kind string, or a remote plugin reached through a connection is wrongly
+  // presented read-only.
   bool writable = 9;
-  // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport (the
-  // center in world cell coords and the live zoom). Filled by localdb from
-  // its system KV table; fs/proc return zero (no persistent root view). The
-  // client seeds the portal-well framing on enterPlugin so re-entry restores
-  // exactly the left-off view. Purely a read: the write path is SetFraming.
+  // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
+  // center in grid coordinates and the intrinsic zoom. The home fills it
+  // from its system KV table; fs and proc return zero, having no persistent
+  // root view. The client seeds the doorway framing from it so re-entry
+  // restores the left-off view. Purely a read; the write path is
+  // SetFraming.
   double root_view_cx   = 10;
   double root_view_cy   = 11;
   double root_view_zoom = 12;
-  // 14 was instance_grid_id: the parameterized-plugin instance grid,
-  // deleted 2026-08-29 (docs/one-node.md) — connections list as
-  // HandshakeResponse.connections.
+  // 14 was instance_grid_id, the parameterized-plugin instance grid.
+  // Connections list as HandshakeResponse.connections instead.
   reserved 14;
-  // 15 was transit: a plugin declaring that its ids are CHAINS from
-  // another node. That was how a node MOUNT was a plugin; since
-  // connections became config (2026-08-29, docs/one-node.md) the node's
-  // own TRANSPORT is the only transit namespace there is, and it is
-  // structural — a connection's ids arrive already qualified from the far
-  // node's frame — not a declaration anyone makes. Retired with the
-  // registry's transit slot (docs/simplify-plan.md S2); no plugin set it
-  // and no reader remained. Reserved, never renumbered.
+  // 15 was transit, a plugin declaring that its ids are chains from another
+  // node. The node's own transport is the only transit namespace there is,
+  // and it is structural — a connection's ids arrive already qualified from
+  // the far node's frame — not a declaration anyone makes.
   reserved 15;
-  // glyph is the plugin's identity glyph for the launcher/menu/ghost faces:
-  // "folder", "process", "well", or "" for the generic globe. A declaration,
-  // never a kind switch in the client; unknown values also fall back to the
-  // globe, so a third-party plugin degrades politely.
+  // glyph is the plugin's identity glyph for the menu and ghost faces:
+  // "folder", "process", "well", or "" for the generic globe. It is a
+  // declaration, never a kind switch in the client, and unknown values also
+  // fall back to the globe, so a third-party plugin degrades politely.
   string glyph = 16;
-  // menu_entries: the plugin's declared (+) menu additions (issue #258;
-  // see MenuEntry). The serving node stamps them onto every grid the
-  // plugin serves.
+  // menu_entries is the plugin's declared (+) menu additions; see
+  // MenuEntry. The serving node stamps them onto every grid the plugin
+  // serves.
   repeated MenuEntry menu_entries = 17;
 }
 
-// Probe reports the definitive presence of one tile. Used for non-
-// authoritative listings (proc) where an entry can vanish between List and
-// reconcile. A failed read must never sweep a tile — only GONE does.
+// Probe reports the definitive presence of one tile. It is for
+// non-authoritative sources, such as proc, where an entry can vanish
+// between a listing and the reconcile. A failed read must never sweep a
+// tile; only GONE does.
 message ProbeRequest {
   string tile_id = 1;
 }
@@ -314,13 +301,10 @@ message ProbeResponse {
   Presence presence = 1;
 }
 
-// (Session streaming is gone — 2026-07-26: the Chromium session is
-// host-local; no blob crosses the interface.)
-
 // ─── Shell streaming ──────────────────────────────────────────────────────
-// OpenShell replaces the WebSocket /rpc/ShellStream endpoint. Bidirectional:
-// raw PTY bytes both ways. First OpenShellRequest binds the tile (data empty);
-// then keystrokes flow up / terminal output flows down.
+// OpenShell is bidirectional: raw PTY bytes both ways. The first
+// OpenShellRequest binds the tile, with data empty; then keystrokes flow up
+// and terminal output flows down.
 
 message OpenShellRequest  { string tile_id = 1; bytes data = 2; PTYSize resize = 3; }
 message OpenShellResponse { bytes data = 1; }
@@ -343,22 +327,18 @@ message GetTilePreviewResponse {
   bytes jpeg = 1;
 }
 
-// (GetTileContentRequest/Response are gone — ReadContent is the one
-// content read.)
-
-// ─── Content streams (2026-07-26 redesign; interface-redesign-plan.md) ──────
-// ReadContent / WriteContent are the ONE way content bytes move: values —
-// finite, versioned, transactional — as opposed to OpenShell's live wire.
-// They replaced the unary content verbs and CreateTileRequest.data at the
-// 2026-07-26 contraction — creation is metadata-only; a body follows as a
-// write.
+// ─── Content streams ──────────────────────────────────────────────────────
+// ReadContent and WriteContent are the one way content bytes move: values,
+// finite and versioned and transactional, as opposed to OpenShell's live
+// wire. Creation is metadata-only; a body follows as a write.
 
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
-// the tile row version the bytes belong to (the client's save basis — bytes
-// and version are paired at the owner, never apart); later chunks carry data
-// only. On a leaf-link tile the serving node resolves through link_target_id
-// (the one resolution point — callers never reimplement link semantics).
-// Plugins whose bodies are not version-edited (fs, proc) send version 0.
+// the tile row version the bytes belong to — the client's save basis, so
+// bytes and version are paired at the owner, never apart. Later chunks carry
+// data only. On a leaf-link tile the serving node resolves through
+// link_target_id, the one resolution point, so callers never reimplement
+// link semantics. Plugins whose bodies are not version-edited, such as fs
+// and proc, send version 0.
 message ReadContentRequest {
   string tile_id = 1;
 }
@@ -369,22 +349,22 @@ message ContentChunk {
 }
 
 // WriteContent streams a tile's content bytes up. The first message binds
-// tile_id and claims the version (optimistic concurrency, checked against the
-// row before any byte is accepted); subsequent messages carry data only.
-// COMMIT AT CLOSE: the write is transactional — the new value becomes visible
-// only when the stream closes cleanly, and a broken stream leaves the old
-// value byte-for-byte intact. Version semantics are kind-determined in the
-// store's one table: a text body is a content edit (claims + bumps); a pane
-// layout is framing-class (no claim, never bumps). Not accepted on link tiles: content
-// ops write through the target the caller names explicitly.
+// tile_id and claims the version, checked against the row before any byte is
+// accepted; subsequent messages carry data only. The write commits at close:
+// the new value becomes visible only when the stream closes cleanly, and a
+// broken stream leaves the old value byte-for-byte intact. Version semantics
+// are kind-determined in the store's one table — a text body is a content
+// edit that claims and bumps; a pane layout is framing-class, with no claim
+// and no bump. Not accepted on link tiles: content operations write through
+// the target the caller names explicitly.
 message WriteContentRequest {
   string tile_id = 1;
   int64 version = 2;
   bytes data = 3;
 }
 
-// ServeContent is the plugin-as-web-server door (2026-08-11): the RPC
-// carrier behind the server's HTTP /content/ endpoint. A GET of
+// ServeContent is the plugin-as-web-server door: the RPC carrier behind
+// the server's HTTP /content/ endpoint. A GET of
 // /content/<token>/<tile-id>/<subpath> becomes one ServeContent call routed
 // to the tile's owning plugin — through transit hops exactly like
 // ReadContent — and the response streams back as the HTTP body. It exists so
@@ -409,20 +389,17 @@ message ServeContentChunk {
 }
 
 // PlaceTile is the single placement writeback: placement is one fact,
-// (grid_id, x, y, w, h), and one verb owns it (replaces MoveTile + ResizeTile;
-// both coexist during migration). grid_id is the DESTINATION grid — same as
-// the tile's current grid for a pure resize. The server refuses overlap, and
-// refuses placing a well inside its own subtree by walking ancestors from
-// grid_id (a server-derived check; no client-supplied path). Placement never
-// crosses a plugin boundary (there is no cross-plugin move — link or clone
-// instead).
+// (grid_id, x, y, w, h), and one verb owns it. grid_id is the destination
+// grid, the same as the tile's current grid for a pure resize. The server
+// refuses overlap, and refuses placing a well inside its own subtree by
+// walking ancestors from grid_id — a server-derived check, with no
+// client-supplied path. Placement never crosses a plugin boundary; there is
+// no cross-plugin move, only link or clone.
 message PlaceTileRequest {
   string tile_id = 1;
-  reserved 2; // version: retired 2026-08-29 (docs/simplify-plan.md S5) —
-              // placement is LAYOUT, not content. version claims the user's
-              // content bytes and nothing else, so a drag no longer loses to
-              // a title capture that bumped the row. Overlap is still refused
-              // server-side, in the same transaction.
+  reserved 2; // version: placement is layout, not content, so it carries no
+              // claim. Overlap is still refused server-side, in the same
+              // transaction.
   string grid_id = 3;
   int64 x = 4;
   int64 y = 5;
@@ -436,27 +413,27 @@ message GetTileRequest {
   string tile_id = 1;
 }
 
-// Search is the one generic find verb (issue #244, generalizing #234's
-// LocateTile). Every plugin MAY implement it — Unimplemented simply means
-// no results. The query is free text with a small selector grammar owned
-// by ONE shared parser (internal/rpc.ParseSearchQuery): `id:<tile-id>` is
-// an exact-id lookup (what LocateTile was), anything else is
-// plugin-interpreted text matching (names, bodies, addresses — whatever
-// the plugin's data means). Each result is a PLACE, not just a row: the
-// tile plus its containing-well chain from the plugin's root grid
-// (outermost first, empty at the root), so a hit can be navigated to and
-// its crumbs previewed; snippet/score are optional context and ranking
+// Search is the one generic find verb. Every plugin may implement it;
+// Unimplemented simply means no results. The query is free text with a small
+// selector grammar owned by one shared parser (rpc.ParseSearchQuery):
+// id:<tile-id> is an exact-id lookup, and anything else is
+// plugin-interpreted text matching against names, bodies, addresses, or
+// whatever the plugin's data means. Each result is a place, not just a row:
+// the tile plus its containing-well chain from the plugin's root grid,
+// outermost first and empty at the root, so a hit can be navigated to and
+// its crumbs previewed. snippet and score are optional context and ranking
 // for merged displays.
 //
-// Routing (the server surface): scope routes to one namespace (any
-// qualified id — the plugin that owns it answers); an empty scope fans
-// out to every configured plugin in config order. A transit plugin (a
-// node mount) forwards the query to its remote node's server, which fans
-// out again — so an unscoped search recurses through the whole federation
-// naturally, and results come back qualified like every other id.
+// Routing, on the server surface: scope routes to one namespace, and the
+// plugin that owns that qualified id answers; an empty scope fans out to
+// every configured plugin in config order. A transit hop forwards the query
+// to the remote node, which fans out again, so an unscoped search recurses
+// through the whole federation and results come back qualified like every
+// other id.
 message SearchRequest {
   string query = 1;
-  // limit caps the results per answering plugin; 0 = the plugin default.
+  // limit caps the results per answering plugin; 0 means the plugin's
+  // default.
   int32 limit = 2;
   // scope: server surface only (plugins receive their own namespace's
   // queries with scope already consumed).
@@ -472,35 +449,22 @@ message SearchResponse {
   repeated SearchResult results = 1;
 }
 
-// (SetTileAltRequest is gone — the versioned rename rides SetTile.rename.)
-
-// (SetPaneLayoutRequest is gone — a pane layout is content bytes and rides
-// WriteContent; its framing-class version rule lives in the store's table.)
-
-// (SetContentZoomRequest is gone — content zoom rides SetTile.content_zoom.)
-
-// (The Mount RPC is gone: mounting is a CloneTile of the plugin's node-grid
-// link tile, and label agreement is owned by that tile's alt — the condition
-// its comment set for removal.)
-
 // Handshake enumerates the plugins a node hosts, in config order. The client
-// builds the launcher / + menu from it. A leaf plugin returns an empty list.
+// builds the + menu from it. A leaf plugin returns an empty list.
 message HandshakeRequest {
-  // namespace routes the request (remote-menu, 2026-08-16): "" answers
-  // for THIS node (the boot handshake, unchanged); a namespace chain
-  // ("<transit>" or "<transit>/<conn>/...") peels one segment per hop and
-  // forwards to the node it names, so a client can ask "what plugins does
-  // the node serving this pane have?" — the + menu inside a remote pane
-  // shows THAT node's plugins, exactly as a direct client would see them.
-  // Each hop RE-QUALIFIES the response's grid ids with its prefix, like
-  // every other transit response; node-local fields (content token, node
-  // identity/view) are zeroed on forward — they answer only for the node
-  // you asked directly.
+  // namespace routes the request. "" answers for this node, which is the
+  // boot handshake; a namespace chain ("<transit>" or "<transit>/<conn>/…")
+  // peels one segment per hop and forwards to the node it names, so the +
+  // menu inside a remote pane shows that node's plugins exactly as a direct
+  // client would see them. Each hop re-qualifies the response's grid ids
+  // with its prefix, like every other transit response, and node-local
+  // fields (content token, node identity and view) are zeroed on forward:
+  // they answer only for the node you asked directly.
   string namespace = 1;
 }
 message PluginInfo {
   string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
-  string kind          = 2;   // "home", "fs", "proc", "remote"
+  string kind          = 2;   // "home", "fs", "proc", "connection"
   string label         = 3;   // display name
   bool   writable      = 4;   // accepts new tiles (primitives can be created in it)
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
@@ -513,25 +477,25 @@ message PluginInfo {
   double root_view_cx   = 7;
   double root_view_cy   = 8;
   double root_view_zoom = 9;
-  // info_error is set when the plugin's Info handshake failed or timed out
-  // (a crashed/hung plugin), distinguishing "broken" from "healthy but
-  // rootless" — both otherwise present identically as root_grid_id == "".
-  // Empty when Info succeeded, regardless of whether it declared a root.
+  // info_error is set when the plugin's Info handshake failed or timed out,
+  // distinguishing broken from healthy but rootless, which otherwise
+  // present identically as root_grid_id == "". Empty when Info succeeded,
+  // whether or not it declared a root.
   string info_error = 10;
-  // 11 was instance_grid_id (deleted 2026-08-29, docs/one-node.md).
+  // 11 was instance_grid_id, the parameterized-plugin instance grid.
   reserved 11;
-  // glyph mirrors InfoResponse.glyph for the client's plugin faces
-  // (launcher tile, menu swatch, drag ghost). "" = the generic globe.
+  // glyph mirrors InfoResponse.glyph for the client's plugin faces: the
+  // menu swatch and the drag ghost. "" is the generic globe.
   string glyph = 12;
   // menu_entries mirrors InfoResponse.menu_entries with grid targets
-  // qualified for the receiver (issue #258): root entries join the
-  // plugin's row in the (+) menu.
+  // qualified for the receiver: root entries join the plugin's row in the
+  // (+) menu.
   repeated MenuEntry menu_entries = 13;
 }
 // ConnectionInfo is one of the node's connections as the handshake lists
-// it (docs/one-node.md): a row in the + menu that descends into the remote
-// node's home. uuid is "<node id>/<connection name>" — the namespace every
-// reference through the connection carries.
+// it: a row in the + menu that descends into the remote node's home. uuid
+// is "<node id>/<connection name>", the namespace every reference through
+// the connection carries.
 message ConnectionInfo {
   string uuid          = 1;
   string label         = 2;
@@ -542,37 +506,38 @@ message ConnectionInfo {
   string status_detail = 7;   // the last dial/learn failure while pending
 }
 message HandshakeResponse {
-  // 2, 3, 6-8 were the node grid's identity and viewport (deleted
-  // 2026-08-29, docs/one-node.md): a node has no grid of its own; home
-  // is where a client lands and where a mount lands.
+  // 2, 3, and 6-8 were a node grid's identity and viewport. A node has no
+  // grid of its own; home is where a client lands and where a mount lands.
   reserved 2, 3, 6, 7, 8;
   // plugins: the node's home (first) and its content plugins.
   repeated PluginInfo plugins = 1;
   // home_grid_id is where a client lands ("/"): the home's root grid,
-  // qualified — a FIELD, never derived from row order. home_view_* is its
-  // persisted viewport (zero zoom = never set).
+  // qualified. It is a field, never derived from row order. home_view_* is
+  // its persisted viewport, and zero zoom means never set.
   string home_grid_id   = 9;
   double home_view_cx   = 10;
   double home_view_cy   = 11;
   double home_view_zoom = 12;
   // connections: the node's remote nodes, in config order.
   repeated ConnectionInfo connections = 13;
-  // shells_disabled: this node refuses shell tiles outright (server.yaml
-  // disable_shells) — the client removes the shell primitive from the +
-  // palette, and the server refuses CreateTile(kind=shell) and OpenShell no
-  // matter which plugin would serve them. A node-level operator fact, so it
-  // rides the node handshake, not any per-plugin Info.
+  // shells_disabled: this node refuses shell tiles outright, from
+  // server.yaml's disable_shells. The client removes the shell primitive
+  // from the + palette, and the server refuses CreateTile(kind=shell) and
+  // OpenShell no matter which plugin would serve them. It is a node-level
+  // operator fact, so it rides the node handshake, not any per-plugin
+  // Info.
   bool shells_disabled = 4;
-  // content_token gates the HTTP /content/ door (the ServeContent carrier).
-  // Pages served there run sandboxed with an OPAQUE origin, so neither their
+  // content_token gates the HTTP /content/ door, the ServeContent carrier.
+  // Pages served there run sandboxed with an opaque origin, so neither their
   // subresource requests nor the desktop's native views carry the auth
-  // cookie — the token rides in the path instead:
-  // /content/<content_token>/<tile-id>/<subpath>. Derived from the server
-  // password (sha256, its own domain prefix — it can never double as the
-  // auth cookie), handed out only on this authenticated handshake, and
-  // checked against the CURRENT password like the cookie is. A node-level
-  // fact of the LOCAL origin: content URLs are always built against the
-  // serving node; federation happens behind the door, over the RPC.
+  // cookie; the token rides in the path instead, as
+  // /content/<content_token>/<tile-id>/<subpath>. It is derived from the
+  // server password by sha256 under its own domain prefix, so it can never
+  // double as the auth cookie, handed out only on this authenticated
+  // handshake, and checked against the current password like the cookie is.
+  // It is a node-level fact of the local origin: content URLs are always
+  // built against the serving node, and federation happens behind the door,
+  // over the RPC.
   string content_token = 5;
 }
 
@@ -582,25 +547,25 @@ message TileResponse {
   Tile tile = 1;
 }
 
-// CreateTileRequest creates one tile of any kind (no version — the tile does
-// not exist yet). tile.kind selects which fields are meaningful:
-//   well  → child_grid_id set makes an exit well pointing at a grid in another
-//           plugin (a qualified "<uuid>/<grid-id>"); empty allocates a fresh
-//           interior child grid. alt_text is the exit well's display label.
-//   text  → the markdown body rides in data (no blob yet).
+// CreateTileRequest creates one tile of any kind. There is no version: the
+// tile does not exist yet. tile.kind selects which fields are meaningful:
+//   well  → child_grid_id set makes an exit well pointing at a grid in
+//           another plugin, a qualified "<uuid>/<grid-id>"; empty allocates
+//           a fresh interior child grid. alt_text is the well's label.
+//   text  → the body follows as a WriteContent.
 //   url   → url_string.
-//   shell → no extra fields (the bash session starts only on refresh).
-// Only localdb accepts creates; fs/proc/ssh leave this unimplemented.
+//   shell → no extra fields.
+// A plugin that does not accept creates leaves this unimplemented.
 message CreateTileRequest {
-  reserved 1; // path: removed 2026-07-26 (id-addressed; grid_id is authoritative)
+  reserved 1; // path; grid_id is authoritative
   string grid_id = 2;
   Tile   tile    = 3;
-  reserved 4; // data: removed 2026-07-26 — one way to write bytes (WriteContent);
-              // creation is metadata-only, text/pane bodies follow as a write
+  reserved 4; // data; WriteContent is the one way to write bytes, and
+              // creation is metadata-only
 }
 
-// ShellSessionAlive reports whether the tile's gridwell-private tmux
-// session currently exists. Called on shell descent so the wasm can
+// ShellSessionAlive reports whether the tile's Gridwell-private tmux
+// session currently exists. Called on shell descent so the client can
 // decide whether to show the refresh button:
 //   - alive=true             → button shown; refresh attaches.
 //   - alive=false, no snap   → button shown; refresh creates fresh.
@@ -613,112 +578,105 @@ message ShellSessionAliveResponse {
   bool alive = 1;
 }
 
-// Mutations. A version CLAIM rides only the writes that change the user's
+// Mutations. A version claim rides only the writes that change the user's
 // content bytes — WriteContent and SetTile's rename arm — and the server
-// returns a version-conflict error when it doesn't match. Layout, framing
-// and capture writes carry no claim at all (docs/simplify-plan.md S5).
-// (MoveTileRequest/ResizeTileRequest are gone — PlaceTile owns placement.)
+// returns a version-conflict error when it does not match. Layout, framing,
+// and capture writes carry no claim at all.
 
 message CloneTileRequest {
-  reserved 1, 5; // path, dest_path: removed 2026-07-26 (id-addressed; the
-                 // subtree copy completes before the insert, so no cycle
-                 // can form and no client-supplied location is needed)
+  reserved 1, 5; // path, dest_path; the subtree copy completes before the
+                 // insert, so no cycle can form and no client-supplied
+                 // location is needed
   string tile_id = 2;
-  reserved 3; // version: retired 2026-08-29 (docs/simplify-plan.md S5) — a
-              // clone leaves the SOURCE row untouched; layout carries no claim.
+  reserved 3; // version; a clone leaves the source row untouched, and
+              // layout carries no claim
   string dest_grid_id = 4;
   int64 x = 6;
   int64 y = 7;
 }
 
-// SetTileRequest is the single framing/capture writeback. It is dispatched on
-// tile.kind to the one operation that kind supports:
-//   (well framing left for SetFraming — one verb for both rows that can
-//    own it, doorway tile and root grid alike.)
+// SetTileRequest is the single framing and capture writeback. It is
+// dispatched on tile.kind to the one operation that kind supports:
 //   text  → text_x/text_y/text_w/text_h/text_mode  (framing)
 //   url   → url_string, alt_text (page title), preview jpeg, url_history
 //                                                 (automatic capture)
 //   shell → preview jpeg                          (automatic capture)
-// NOTHING this message can write is a user content edit, so no arm bumps the
-// version and no arm carries a claim (2026-08-29, docs/simplify-plan.md S5).
-// Empty preview/url_string/alt_text fields are skipped so a partial capture
-// never clobbers good state.
+// Well framing is not here: SetFraming is the one verb for both rows that
+// can own it, doorway tile and root grid alike.
+//
+// Nothing this message can write is a user content edit, so no arm bumps the
+// version and no arm carries a claim, apart from rename. Empty preview,
+// url_string, and alt_text fields are skipped so a partial capture never
+// clobbers good state.
 message SetTileRequest {
-  reserved 1; // path: removed 2026-07-26 (id-addressed)
+  reserved 1; // path; the request is id-addressed
   string tile_id = 2;
-  // version is the RENAME ARM'S claim, and only that arm's: a rename is the
-  // user typing a name, the one user content edit this message carries. Every
-  // other arm leaves it zero and the server ignores it.
+  // version is the rename arm's claim, and only that arm's: a rename is the
+  // user typing a name, the one user content edit this message carries.
+  // Every other arm leaves it zero and the server ignores it.
   int64  version = 3;
   Tile   tile    = 4;   // the fields to write for tile.kind
   bytes  preview = 5;   // jpeg to freeze (url/shell)
 
-  // 2026-07-26 (interface-redesign-plan.md): the absorbed scalar writebacks.
-  // Exactly ONE operation per call — rename, content_zoom, url_frozen, or
-  // the kind-dispatched tile writeback above; a request setting more than
-  // one is refused, so the "empty fields are skipped" rule never turns
-  // ambiguous.
+  // The scalar writebacks. Exactly one operation per call: rename,
+  // content_zoom, url_frozen, or the kind-dispatched tile writeback above.
+  // A request setting more than one is refused, so the "empty fields are
+  // skipped" rule never turns ambiguous.
   //
-  // rename is the USER rename gesture (formerly SetTileAlt): sets alt_text
-  // and latches alt_user so automatic captures (url page title, shell
-  // foreground command) defer from then on. Distinct from tile.alt_text in
-  // the url arm, which is the AUTO title capture — two different facts, one
+  // rename is the user's rename gesture: it sets alt_text and latches
+  // alt_user so automatic captures (url page title, shell foreground
+  // command) defer from then on. It is distinct from tile.alt_text in the
+  // url arm, which is the automatic title capture — two facts in one
   // column, arbitrated by the alt_user latch in exactly one place
-  // (store.SetTileAlt). Now VERSIONED like every user edit (the condition
-  // the old SetTileAlt comment set for this fold). Refused for text tiles
-  // (their name derives from the first line).
+  // (store.SetTileAlt). Versioned like every user edit. Refused for text
+  // tiles, whose name derives from the first line.
   string rename = 6;
-  // content_zoom (formerly SetContentZoom): the per-tile content scale.
-  // Framing — no claim, never bumps version; refused for wells. optional so
-  // presence is explicit (0 is a meaningful "unset" stored value).
+  // content_zoom is the per-tile content scale. Framing: no claim, and it
+  // never bumps version. Refused for wells. optional so presence is
+  // explicit, because 0 is a meaningful stored value.
   optional double content_zoom = 7;
-  // url_frozen: the user's standing freeze on a url tile (issue #237).
-  // Framing — no claim, never bumps version; refused for non-url tiles.
-  // optional so clearing (false) is distinct from absent.
+  // url_frozen is the user's standing freeze on a url tile. Framing: no
+  // claim, and it never bumps version. Refused for non-url tiles. optional
+  // so clearing (false) is distinct from absent.
   optional bool url_frozen = 8;
-  // 9 (adopt_child_grid): removed 2026-08-29 with the unconfigured plugin
-  // well (issue #251) — nothing can mint a childless well any more.
+  // 9 was adopt_child_grid, which adopted an unconfigured plugin well.
+  // Nothing can mint a childless well now.
   reserved 9;
 }
 
-// (UpdateTextRequest is gone — text bodies ride WriteContent, whose
-// kind-dispatched version rule keeps 'text bumps' in the store's one table.)
-
 message DeleteTileRequest {
-  reserved 1; // path: removed 2026-07-26 (id-addressed)
+  reserved 1; // path; the request is id-addressed
   string tile_id = 2;
-  reserved 3; // version: retired 2026-08-29 (docs/simplify-plan.md S5) — a
-              // delete is layout (the row MOVES to the trash) and recoverable;
-              // it must not be refused because a capture bumped the row.
+  reserved 3; // version; a delete is layout — the row moves to the trash and
+              // is recoverable — so it must not be refused because a capture
+              // bumped the row
 }
 message DeleteTileResponse {}
 
 // SetFramingRequest persists "how this grid looked when I left it through
-// this doorway" — the ONE framing verb (docs/simplify-plan.md S4; it
-// replaced the SetTile well arm and SetRootView). cx/cy are a float CENTER
-// in the grid's OWN coordinates; zoom is the pane-size-independent
-// intrinsic ratio (live / overtake), so a window resize never moves a
-// saved view. Zoom 0 means never visited.
+// this doorway": the one framing verb. cx and cy are a float center in the
+// grid's own coordinates; zoom is the pane-size-independent intrinsic ratio
+// (live over overtake), so a window resize never moves a saved view. Zoom 0
+// means never visited.
 //
-// Exactly one target, and it is also what routes the call to the owning
-// plugin: tile_id names the DOORWAY tile a grid was entered through (a
-// well — interior, exit, or link; each doorway keeps its own framing),
-// root_grid_id a ROOT grid, which has no doorway to carry it.
+// Exactly one target is set, and it is also what routes the call to the
+// owning plugin: tile_id names the doorway tile a grid was entered through
+// (a well, interior or exit or link — each doorway keeps its own framing),
+// and root_grid_id names a root grid, which has no doorway to carry it.
 //
-// Framing only — no version claim and no version bump (2026-08-29,
-// docs/simplify-plan.md S5: version is the user's content claim, and framing
-// is last-writer-wins by design). A plugin that keeps no framing answers
-// Unimplemented, which the node treats as "nothing to store", not an error.
+// Framing carries no version claim and makes no version bump; it is
+// last-writer-wins. A plugin that keeps no framing answers Unimplemented,
+// which the node treats as nothing to store, not an error.
 message SetFramingRequest {
   string tile_id      = 1;  // qualified "<plugin-uuid>/<id>"; the doorway
   string root_grid_id = 2;  // qualified "<plugin-uuid>/<id>"; a root grid
-  reserved 3; // version: retired 2026-08-29 — framing carries no claim.
+  reserved 3; // version; framing carries no claim
   double cx           = 4;
   double cy           = 5;
   double zoom         = 6;
 }
-// SetFramingResponse carries the updated DOORWAY tile (so the client can
-// reconcile its row); a root write has no tile and leaves it unset.
+// SetFramingResponse carries the updated doorway tile, so the client can
+// reconcile its row. A root write has no tile and leaves it unset.
 message SetFramingResponse {
   Tile tile = 1;
 }
@@ -740,21 +698,20 @@ message TileRemoved {
   string tile_id = 2;
 }
 
-// EventPluginHealth reports a transition in a plugin's event-stream health, as
-// seen by the top-level server's fan-in (fanInEvents / watchPlugin in
-// connect_handler.go). Emitted on the down transition (healthy=false, detail =
-// the dial/recv/Info error that caused it) and again on recovery
-// (healthy=true, detail=""). Not per-retry-attempt — only on a change of
-// state, so a flapping plugin doesn't spam the client.
+// EventPluginHealth reports a transition in a plugin's event-stream health,
+// as seen by the router's fan-in (fanInEvents and watchPlugin in
+// internal/server/router.go). Emitted on the down transition (healthy=false,
+// detail carrying the dial, recv, or Info error that caused it) and again on
+// recovery (healthy=true, detail=""). Only on a change of state, never per
+// retry attempt, so a flapping plugin does not spam the client.
 message EventPluginHealth {
   string plugin_uuid = 1;
   bool healthy       = 2;
   string detail       = 3;
 }
 
-// Event carries one of the change kinds. The variant tells the client
-// what changed; the variant tag IS the discriminator (no separate kind
-// string).
+// Event carries one of the change kinds. The variant tag is the
+// discriminator; there is no separate kind string.
 message Event {
   oneof payload {
     GridChanged grid_changed = 1;
@@ -764,13 +721,13 @@ message Event {
   }
 }
 
-// Gridwell is the unified RPC surface, implemented by every node: a local
-// server, a plugin process, and a remote server reached over SSH.
+// Gridwell is the unified RPC surface, implemented by every node and by
+// every plugin.
 service Gridwell {
   // ── Lifecycle ───────────────────────────────────────────────────────────
-  // Info is the whole handshake (identity + default root); there is no
-  // Attach/Detach/Bootstrap. Handshake enumerates a node's plugins (the SSH
-  // gateway calls it on a remote to learn that node's namespaces).
+  // Info is the whole handshake: identity plus the default root. Handshake
+  // enumerates a node's plugins; the transport calls it on a remote to learn
+  // that node's namespaces.
   rpc Info(InfoRequest)               returns (InfoResponse);
   rpc Probe(ProbeRequest)             returns (ProbeResponse);
   rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
@@ -791,7 +748,7 @@ service Gridwell {
   // ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
   rpc ServeContent(ServeContentRequest) returns (stream ServeContentChunk);
 
-  // PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
+  // PlaceTile is the single placement writeback.
   rpc PlaceTile(PlaceTileRequest) returns (TileResponse);
 
   // ── Mutations (one create, one writeback, plus placement) ─────────────────
@@ -800,12 +757,12 @@ service Gridwell {
   rpc CloneTile(CloneTileRequest)   returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
 
-  // SetFraming persists the framing of a grid — onto the DOORWAY tile it
-  // was entered through, or onto the grid row itself for a root that has
-  // no doorway. One verb, one shape, both rows (docs/simplify-plan.md S4).
+  // SetFraming persists the framing of a grid: onto the doorway tile it was
+  // entered through, or onto the grid row itself for a root that has no
+  // doorway. One verb, one shape, both rows.
   rpc SetFraming(SetFramingRequest) returns (SetFramingResponse);
 
-  // ShellSessionAlive gates the wasm refresh button on shell descent.
+  // ShellSessionAlive gates the client's refresh button on shell descent.
   rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);
 
   rpc Subscribe(SubscribeRequest) returns (stream Event);

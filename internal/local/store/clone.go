@@ -12,23 +12,22 @@ import (
 )
 
 // isWellKind reports whether a tile kind has a child grid that can be
-// descended into (the "well" kind — interior or, by a cross-plugin
-// child_grid_id, an exit well). Thin alias for rpc.IsWellKind so the set lives
-// in one place; kept as a package-local name for the many store callsites.
+// descended into: the "well" kind, interior or, by a cross-plugin
+// child_grid_id, an exit well. It is a thin alias for rpc.IsWellKind so the
+// set lives in one place, under a package-local name for the store's call
+// sites.
 func isWellKind(kind string) bool {
 	return rpc.IsWellKind(kind)
 }
 
 // cloneSubtree deep-copies a grid and everything beneath it into fresh rows,
 // returning the new grid id. It is the eager copy the clone gesture performs
-// for an interior well: each grid and tile gets a brand-new row id
-// (version preserved), so no tile is ever shared
-// between two clones — editing one can never touch the other, and no id is
-// ever reassigned. Blobs (immutable content) are shared by reference
-// (refcount bumped); host-backed source grids behind file/process wells are
-// shared by identity, not copied (see childGridForClone). "Things stay where
-// you put them": the copy is what the user explicitly asked for, the original
-// is untouched.
+// for an interior well: each grid and tile gets a new row id, with the
+// version preserved, so no tile is shared between two clones — editing one
+// can never touch the other, and no id is ever reassigned. Blobs are
+// immutable and shared by reference, with the refcount bumped; source grids
+// behind file and process wells are shared by identity, not copied. See
+// childGridForClone.
 func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (int64, error) {
 	old, err := s.loadGrid(ctx, tx, srcGridID)
 	if err != nil {
@@ -45,9 +44,9 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 	if err != nil {
 		return 0, err
 	}
-	// loadTilesInGrid materializes the rows before we recurse, so we're not
-	// iterating a live cursor on the single connection while issuing nested
-	// inserts.
+	// loadTilesInGrid materializes the rows before recursing, so a live
+	// cursor on the single connection is not being iterated while nested
+	// inserts run.
 	tiles, err := s.loadTilesInGrid(ctx, tx, srcGridID)
 	if err != nil {
 		return 0, err
@@ -66,13 +65,14 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 }
 
 // childGridForClone returns the child_grid_id a copy of tile n should carry,
-// as a value ready to bind into the INSERT (nil → NULL, int64 → a local grid,
-// string → a qualified cross-plugin reference):
-//   - interior well (numeric child): a deep copy of its subtree (cloneSubtree),
-//     returned as the new grid's id;
-//   - exit well (qualified "<uuid>/<id>" child): the SAME cross-plugin
-//     reference — the child grid is owned by another plugin, not duplicated;
-//   - everything else: nil.
+// as a value ready to bind into the INSERT: nil for NULL, int64 for a local
+// grid, string for a qualified cross-plugin reference.
+//   - an interior well, with a numeric child, gets a deep copy of its
+//     subtree through cloneSubtree, returned as the new grid's id;
+//   - an exit well, with a qualified "<uuid>/<id>" child, keeps the same
+//     cross-plugin reference, since the child grid is owned by another
+//     plugin and is not duplicated;
+//   - everything else gets nil.
 func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) (any, error) {
 	if n.ChildGridID == "" {
 		return nil, nil
@@ -98,10 +98,10 @@ func placeholders(n int) string {
 }
 
 // insertTileCopy inserts a copy of tile n into gridID at (x, y) with the given
-// child grid, preserving version and sharing the
-// blob (refcount bumped). The per-kind column nullability mirrors the schema
-// CHECK constraint. Used by CloneTile (one tile) and cloneSubtree (every tile
-// in a subtree).
+// child grid, preserving the version and sharing the blob with its refcount
+// bumped. The per-kind column nullability mirrors the schema CHECK
+// constraint. Used by CloneTile for one tile and by cloneSubtree for every
+// tile in a subtree.
 func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *rpc.Tile, x, y int64, child any, now int64) (int64, error) {
 	var (
 		blob, previewBlob sql.NullInt64
@@ -110,9 +110,9 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		linkTarget        sql.NullString
 	)
 	if n.LinkTargetID != "" {
-		// A copy of a LINK is another link to the same target — the link row
-		// holds no content, so there is nothing else to copy (the CHECK's
-		// link branch requires every content column NULL).
+		// A copy of a link is another link to the same target. The link row
+		// holds no content, so there is nothing else to copy: the CHECK's
+		// link branch requires every content column NULL.
 		linkTarget = sql.NullString{String: n.LinkTargetID, Valid: true}
 	}
 	switch {
@@ -127,8 +127,9 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 			urlHist = sql.NullString{String: n.URLHistory, Valid: true}
 		}
 	case n.Kind == rpc.KindShell:
-		// A PTY can't be copied, so a cloned shell is a screenshot: carry the
-		// frozen preview blob, but not the live session (keyed by tile id).
+		// A PTY cannot be copied, so a cloned shell is a screenshot: it
+		// carries the frozen preview blob but not the live session, which is
+		// keyed by tile id.
 		if n.PreviewBlobID != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
 		}
@@ -140,17 +141,17 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
 		}
 	case n.Kind == rpc.KindPane:
-		// The layout blob is shared by refcount like a text body; the copy
-		// diverges on its first edit (content addressing). NULL (never
-		// arranged) copies as NULL.
+		// The layout blob is shared by refcount like a text body, and the copy
+		// diverges on its first edit through content addressing. A NULL blob,
+		// meaning never arranged, copies as NULL.
 		if n.BlobID != 0 {
 			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
 		}
 	}
-	// alt_user is storage-only (deliberately not on rpc.Tile), so the latch is
+	// alt_user is storage-only, deliberately not on rpc.Tile, so the latch is
 	// read straight from the source row: a user-owned name must stay
-	// user-owned on the copy, or the next automatic title capture clobbers it
-	// (the issue-#61 class).
+	// user-owned on the copy, or the next automatic title capture clobbers
+	// it.
 	srcID, err := parseID(n.ID)
 	if err != nil {
 		return 0, fmt.Errorf("tile copy: source id %q: %w", n.ID, err)
@@ -160,11 +161,10 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		`SELECT alt_user FROM tiles WHERE id = ?`, srcID).Scan(&altUser); err != nil {
 		return 0, fmt.Errorf("tile copy: read alt_user of source %d: %w", srcID, err)
 	}
-	// The copy is written BY NAME, not by position: copyBinding renders the
-	// column list from the descriptor (columns.go) and refuses a map that
-	// misses a copied column. "Add a column, forget the clone path" is a
-	// named error here instead of a silently incomplete copy — the exact
-	// regression that once dropped content_zoom, url_history and alt_user.
+	// The copy is written by name, not by position: copyBinding renders the
+	// column list from the descriptor in columns.go and refuses a map that
+	// misses a copied column. Adding a column and forgetting the clone path
+	// is a named error here instead of a silently incomplete copy.
 	cols, args, err := copyBinding(map[string]any{
 		"version": n.Version, "grid_id": gridID, "kind": n.Kind,
 		"x": x, "y": y, "w": n.W, "h": n.H,
@@ -205,11 +205,11 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 }
 
 // deleteGrid recursively deletes a grid and everything it owns: each tile row
-// is dropped, interior-well child grids cascade (decTileRefs), and text /
-// preview blobs are released. Host-backed source grids behind file/process
-// wells are left alone — they're shared by identity and disposable. Owned
-// grids are 1:1 with their parent well, so there is no refcount to consult;
-// deleting the well deletes the grid.
+// is dropped, interior-well child grids cascade through decTileRefs, and text
+// and preview blobs are released. Source grids behind file and process wells
+// are left alone, being shared by identity. An owned grid is 1:1 with its
+// parent well, so there is no refcount to consult and deleting the well
+// deletes the grid.
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id, kind, child_grid_id, blob_id, preview_blob_id FROM tiles WHERE grid_id = ?`, gridID)
@@ -253,21 +253,19 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 	return nil
 }
 
-// putBlob inserts a blob row if one with the given hash doesn't already exist,
-// and returns its id. It does NOT bump the refcount — callers must do that
-// explicitly so the refcount semantics remain visible at the call site.
+// putBlob inserts a blob row if one with the given hash does not already
+// exist, and returns its id. It does not bump the refcount; callers do that
+// explicitly so the refcount semantics stay visible at the call site.
 //
-// mediaType is the IANA type stamped on a newly-created blob so it is
-// self-describing (see schema.go). An already-present blob (same hash) keeps
-// its original media_type — content-addressed blobs are immutable, so the
-// first writer's metadata stands.
+// mediaType is the IANA type stamped on a newly created blob so it is
+// self-describing. An already-present blob with the same hash keeps its
+// original media_type: content-addressed blobs are immutable, so the first
+// writer's metadata stands.
 //
-// nil is normalized to an empty (but non-nil) slice before binding:
-// database/sql maps nil-bytes to SQL NULL, which would trip the
-// data BLOB NOT NULL constraint. Empty-content tiles are a valid use
-// case — a fresh palette drop of a markdown tile arrives here with
-// Data=nil (proto3 default-value omission round-tripped through the
-// wire as a missing field), and that path has to succeed.
+// nil is normalized to an empty but non-nil slice before binding, because
+// database/sql maps nil bytes to SQL NULL, which would trip the data BLOB NOT
+// NULL constraint. Empty-content tiles are valid — a fresh palette drop of a
+// markdown tile arrives here with Data nil — and that path has to succeed.
 func (s *Store) putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte, mediaType string) (int64, error) {
 	if data == nil {
 		data = []byte{}
@@ -294,22 +292,20 @@ func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) e
 	return err
 }
 
-// swapTileBlob repoints a tile's blob column at the content-addressed blob
-// for `bytes`, keeping refcounts balanced. It hashes + dedupes via putBlob;
-// when the resulting blob differs from what the column held it UPDATEs
-// tiles.<col> (+ updated_at) and inc-new / dec-old. Identical content is a
-// pure no-op — no write, no refcount churn, changed=false — which matches the
-// idempotent reconcile path and is harmless for the freeze paths (their
-// version bump is independent of updated_at).
+// swapTileBlob repoints a tile's blob column at the content-addressed blob for
+// bytes, keeping refcounts balanced. It hashes and dedupes through putBlob;
+// when the resulting blob differs from what the column held, it updates
+// tiles.<col> and updated_at, increments the new refcount, and decrements the
+// old. Identical content is a pure no-op — no write, no refcount churn,
+// changed=false — which matches the idempotent reconcile path.
 //
-// This is the single home for the blob-swap dance that SetShellPreview,
-// SetURLState (jpeg), UpdateText (blob), and refreshProcInfoBlob each used to
-// hand-roll. Callers keep their own version bump and any sibling-column
-// writes (alt / url / title); only the blob kernel lives here.
+// This is the single home for the blob swap every content write flows
+// through. Callers keep their own version bump and any sibling-column writes;
+// only the blob kernel lives here.
 //
-// col must be a trusted literal ("blob_id" / "preview_blob_id") — it is
+// col must be a trusted literal, "blob_id" or "preview_blob_id": it is
 // interpolated into the SQL, never user input. mediaType is stamped on the
-// blob if it is newly created (self-describing media).
+// blob if it is newly created.
 func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col string, bytes []byte, mediaType string) (newBlobID int64, changed bool, err error) {
 	var oldBlob sql.NullInt64
 	var linkTarget sql.NullString
@@ -318,11 +314,11 @@ func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col 
 		return 0, false, err
 	}
 	if linkTarget.Valid && linkTarget.String != "" {
-		// A LINK row owns no content — its bytes live in the target tile, and
-		// content mutations must be routed there (by the qualified target id)
-		// or the link and the thing it names silently diverge. Guarded here,
-		// in the one blob kernel every content write flows through (text body,
-		// pane layout, url/shell previews), rather than per caller.
+		// A link row owns no content: its bytes live in the target tile, and
+		// content mutations must be routed there by the qualified target id,
+		// or the link and the thing it names silently diverge. The guard is
+		// here, in the one blob kernel every content write flows through,
+		// rather than per caller.
 		return 0, false, fmt.Errorf("%w: tile %d is a link; content lives in its target %s",
 			ErrInvalidArgument, tileID, linkTarget.String)
 	}
@@ -349,7 +345,7 @@ func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col 
 	return newBlobID, true, nil
 }
 
-// nullToInt unwraps a NullInt64, mapping NULL to 0 — the "no reference"
+// nullToInt unwraps a NullInt64, mapping NULL to 0, the "no reference"
 // sentinel the refcount helpers use.
 func nullToInt(n sql.NullInt64) int64 {
 	if n.Valid {
@@ -358,22 +354,22 @@ func nullToInt(n sql.NullInt64) int64 {
 	return 0
 }
 
-// tileRefs is the single source of truth for what a tile *owns*: an interior
-// well's child grid (deep-copied on clone, recursively deleted on delete) and
-// the blob it holds a refcount on (its text body, or a url/shell preview).
-// file/process wells point at a host-backed source grid shared by identity, so
-// they own no grid — only their own preview blob (if any), exactly like
-// url/shell. Derived from the raw child_grid_id, blob_id, and preview_blob_id
-// (0 = none). clone, single-delete, and grid teardown all route through it.
+// tileRefs is the one description of what a tile owns: an interior well's
+// child grid, deep-copied on clone and recursively deleted on delete, and the
+// blob it holds a refcount on, its text body or a url or shell preview. A
+// file or process well points at a source grid shared by identity, so it owns
+// no grid, only its own preview blob if it has one. Derived from the raw
+// child_grid_id, blob_id, and preview_blob_id, where 0 means none. Clone,
+// single-delete, and grid teardown all route through it.
 func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch kind {
 	case rpc.KindWell:
 		return childGrid, 0
 	case rpc.KindText, rpc.KindPane:
 		// A pane tile owns its layout blob exactly as a text tile owns its
-		// body: clone shares by refcount, delete decs, GC at zero. The
-		// PLACES the layout references are not owned — deleting a workspace
-		// deletes only the arrangement.
+		// body: clone shares by refcount, delete decrements, and the blob is
+		// collected at zero. The places the layout references are not owned,
+		// so deleting a pane tile deletes only the arrangement.
 		return 0, blob
 	case rpc.KindURL, rpc.KindShell:
 		return 0, previewBlob
@@ -381,10 +377,10 @@ func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef
 	return 0, 0
 }
 
-// decTileRefs releases what a deleted tile owned: its interior-well child grid
-// (recursively deleted) and its blob (refcount dec, GC'd at zero). Called when
-// a tile row is destroyed by single-delete (dropTileRow / deleteFSGridTile) or
-// grid teardown (deleteGrid).
+// decTileRefs releases what a deleted tile owned: its interior-well child
+// grid, recursively deleted, and its blob, whose refcount is decremented and
+// which is collected at zero. Called when a tile row is destroyed by a single
+// delete or by grid teardown.
 func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind string, childGrid, blob, previewBlob int64) error {
 	g, b := tileRefs(kind, childGrid, blob, previewBlob)
 	if g != 0 {

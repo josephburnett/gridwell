@@ -34,7 +34,7 @@ func New(t testing.TB, reg *plugin.Registry, cfg server.Config) *server.Server {
 }
 
 // Serve serves srv's WebHandler (the production browser door) on an
-// httptest server whose Client() carries the auth cookie for Password.
+// httptest server whose Client carries the auth cookie for Password.
 // Closed at test cleanup.
 func Serve(t testing.TB, srv *server.Server) *httptest.Server {
 	t.Helper()

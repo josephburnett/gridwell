@@ -4,18 +4,12 @@
 // regenerates its Go mirror too and `make proto-check` fails when either is
 // stale.
 //
-// Why it exists (docs/simplify-plan.md S6, architecture-review finding 4):
-// a Tile used to be described three times — the proto, a hand-written
-// rpc.Tile plus a hand-written conv.go, and the store's column lists — with
-// a drift lint holding the first two together. A lint is not an owner: it
-// only reports that the copies disagree, and it can only report what it was
-// taught to look for (the hand-written round-trip fixture it stood beside
-// never set status_detail). The proto is the owner now; this program derives
-// the Go side from it, so there is nothing left to drift.
+// The proto is the owner of the record shapes; deriving the Go side from
+// it leaves nothing to drift.
 //
-// What it does NOT generate: the Go shapes that are deliberately not a
+// What it does not generate: the Go shapes that are deliberately not a
 // message mirror — the Event discriminator over the proto's oneof, the
-// embedded Framing, and the store's typed create/set sugar over the unified
+// embedded Framing, and the typed create/set sugar over the unified
 // CreateTile/SetTile verbs. Those live in types.go and conv.go and carry
 // their own reasons.
 package main
@@ -41,15 +35,16 @@ const pbImport = "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 // mirror names one proto message that has a Go twin in package rpc.
 //
-// This table is the ONLY hand-maintained part of the mirror, and it holds no
+// This table is the only hand-maintained part of the mirror, and it holds no
 // field facts: adding a field to a message is a proto edit and nothing else.
-// A message lands here when the Go side wants a plain-struct twin (value
+// A message lands here when the Go side wants a plain-struct twin, for value
 // semantics: pb messages carry a sync.Mutex in their state and cannot be
-// copied, which is why the client's caches hold rpc.Tile and not pb.Tile).
+// copied, which is why the client's caches hold rpc.Tile and not pb.Tile.
 //
-// to/from say which conversion directions SHIP. Both are usually true; a
-// direction that no binary calls would be dead code (scripts/check-deadcode.sh
-// judges generated code exactly like hand-written code, which is the point).
+// to/from say which conversion directions ship. Both are usually true; a
+// direction no binary calls is dead code, which
+// scripts/check-deadcode.sh judges in generated code exactly as in
+// hand-written code.
 type mirror struct {
 	msg    string // proto message name
 	goName string // Go type name; "" = same as msg
@@ -83,10 +78,8 @@ var mirrors = []mirror{
 	{msg: "EventPluginHealth", goName: "PluginHealth", to: true, from: true},
 }
 
-// initialisms are the segments a Go name spells in capitals. The rule
-// reproduces every name the hand-written mirror used (url_string →
-// URLString, node_ns → NodeNS, plugin_uuid → PluginUUID), which is how we
-// know the generated types are the same types.
+// initialisms are the segments a Go name spells in capitals: url_string →
+// URLString, node_ns → NodeNS, plugin_uuid → PluginUUID.
 var initialisms = map[string]string{
 	"id":   "ID",
 	"ids":  "IDs",

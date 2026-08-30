@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// TestNewShortIDShape pins the owner-decided id shape (2026-07-25): 7 chars,
-// lowercase base36, leading letter. The leading letter is the load-bearing
-// part — it guarantees a plugin/node id can never parse as an integer, which
-// is how URL paths and embed hrefs tell namespace segments from tile ids.
+// TestNewShortIDShape pins the id shape: 7 chars, lowercase base36,
+// leading letter. The leading letter is the load-bearing part — it
+// guarantees a plugin or node id can never parse as an integer, which is
+// how URL paths tell namespace segments from tile ids.
 func TestNewShortIDShape(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 1000; i++ {
@@ -35,9 +35,9 @@ func TestNewShortIDShape(t *testing.T) {
 	}
 }
 
-// TestNewUUIDStays128Bit pins that the provenance generator was NOT shortened
-// with the plugin ids — object_id claims global uniqueness across nodes and
-// needs the full 128 bits.
+// TestNewUUIDStays128Bit pins that NewUUID keeps its full 128 bits: it
+// mints system.plugin_uuid, which claims global uniqueness across nodes,
+// and must not be shortened along with the plugin ids.
 func TestNewUUIDStays128Bit(t *testing.T) {
 	id := NewUUID()
 	if len(id) != 32 {

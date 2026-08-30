@@ -16,15 +16,16 @@ func TestAltFromSource(t *testing.T) {
 		{"plain paragraph", "hello world", "hello world"},
 		{"H1 heading", "# Heading One\n\nbody", "Heading One"},
 		{"H2 heading", "## Sub", "Sub"},
-		// goldmark joins the two physical lines into one paragraph (soft break
-		// → space), so the alt now summarizes the whole first paragraph.
+		// goldmark joins the two physical lines into one paragraph, turning
+		// the soft break into a space, so the alt summarizes the whole first
+		// paragraph.
 		{"soft-wrapped first paragraph", "\n\nfirst real line\nsecond line", "first real line second line"},
 		{"bold and italic stripped", "**bold** and *italic*", "bold and italic"},
 		{"inline code retained", "use `foo()` here", "use foo() here"},
 		{"link text retained", "click [here](https://x) please", "click here please"},
 		{"embed skipped, surrounding text kept", "before [![alt](src)](href) after", "before after"},
-		// A code-block-first doc must not leak its newlines into the alt — a
-		// newline would break the generated [alt](href) embed link.
+		// A code-block-first document must not leak its newlines into the
+		// alt: the alt is a single line by contract.
 		{"code block collapses to one line", "```\nfoo\nbar\n```", "foo bar"},
 		{"internal whitespace collapsed", "a    b\tc", "a b c"},
 		{"clamped to 100 runes",

@@ -9,16 +9,16 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// This file is the store side of the 'pane' tile kind — a durable workspace
-// whose content blob is a serialized split-pane layout (client/pane LayoutV1,
-// media type panelayout.LayoutMediaType). The store treats the layout as opaque
-// bytes: the codec, the id-relativity rule, and the restore semantics all
-// live in client/pane; here it is one more content-addressed blob.
+// This file is the store side of the 'pane' tile kind: a tile whose content
+// blob is a serialized split-pane layout, in the api/panelayout format under
+// panelayout.LayoutMediaType. The store treats the layout as opaque bytes —
+// the codec, the id-relativity rule, and the restore semantics live in
+// client/pane — so here it is one more content-addressed blob.
 
-// CreatePane creates a pane tile. data is the optional initial layout blob —
-// empty leaves blob_id NULL ("never arranged": descent installs the default
-// single pane). alt is the user-given workspace name (the + palette's name
-// field; the bottom bar's breadcrumb reads it).
+// CreatePane creates a pane tile. data is the optional initial layout blob;
+// empty leaves blob_id NULL, meaning never arranged, and descent installs the
+// default single pane. alt is the user-given name, which the bar's crumb
+// reads.
 func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64, alt string, data []byte) (*rpc.Tile, error) {
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
@@ -54,15 +54,14 @@ func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64,
 		})
 }
 
-// SetPaneLayout writes a pane tile's layout blob. Framing-class: the whole
-// layout is arrangement of references to other content — the SetFraming of
-// workspaces — so it goes through emitTileChanged and NEVER bumps version
-// (owner decision 2026-07-08: no layout history; edit in place). It carries
-// no claim either (docs/simplify-plan.md S5): framing is last-writer-wins,
-// and version is the content claim only. The version parameter survives as
-// WriteContent's kind-dispatched signature; this arm ignores it. Identical
-// bytes are a pure no-op (swapTileBlob dedups), so the client's hash-diff
-// persister and a pure re-save cannot churn the DB.
+// SetPaneLayout writes a pane tile's layout blob. It is framing-class: the
+// whole layout is an arrangement of references to other content, so it goes
+// through emitTileChanged and never bumps version. There is no layout history;
+// the layout is edited in place. It carries no claim either, because framing
+// is last-writer-wins and version is the content claim only. The version
+// parameter survives as WriteContent's kind-dispatched signature and this arm
+// ignores it. Identical bytes are a pure no-op, since swapTileBlob dedups, so
+// the client's hash-diff persister and a pure re-save cannot churn the DB.
 func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data []byte) (*rpc.Tile, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("%w: empty layout", ErrInvalidArgument)
@@ -91,15 +90,15 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 	return out, nil
 }
 
-// WorkspaceEphemeralRefs returns the set of LOCAL tile ids referenced as a
-// content descent (text_focus) by ANY pane tile's layout blob in this store.
-// The boot scratch sweep reads it to spare workspace-owned ephemerals (issue
-// #174 part 2). The blob is the ONE record of workspace ownership — no second
-// bookkeeping table — so a reference dies exactly when its pane tile (or the
-// arrangement that named it) does, and the next sweep reclaims the tile.
-// unreadable=true when any pane blob failed to decode (corrupt, or written by
-// a newer Gridwell): the caller must then reap NOTHING — a wrongly-swept
-// workspace shell is a killed process, unrecoverable; a delayed sweep is not.
+// WorkspaceEphemeralRefs returns the set of local tile ids referenced as a
+// content descent by any pane tile's layout blob in this store. The boot
+// scratch sweep reads it to spare pane-tile-owned ephemerals. The blob is the
+// one record of that ownership, with no second bookkeeping table, so a
+// reference dies exactly when its pane tile — or the arrangement that named it
+// — does, and the next sweep reclaims the tile. unreadable is true when any
+// pane blob failed to decode, whether corrupt or written by a newer Gridwell;
+// the caller must then reap nothing, because a wrongly-swept shell is a killed
+// process and unrecoverable, while a delayed sweep is not.
 func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]bool, unreadable bool, err error) {
 	uuid, err := s.PluginUUID(ctx)
 	if err != nil {
@@ -136,7 +135,7 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 		}
 		for _, id := range ids {
 			// Blob ids are qualified in the owning node's frame; only
-			// same-plugin references resolve to rows in THIS store.
+			// same-namespace references resolve to rows in this store.
 			if u, local, ok := rpc.SplitID(id); ok && u == uuid {
 				refs[local] = true
 			}

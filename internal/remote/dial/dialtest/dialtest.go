@@ -1,7 +1,7 @@
-// Package dialtest provides a minimal REAL ssh server for tests: public-key
+// Package dialtest provides a minimal but real ssh server for tests: public-key
 // auth against exactly one authorized key, host-key verification material, and
-// direct-streamlocal channel forwarding — everything the ssh plugin's dial path
-// needs, nothing else. Shared by the sshdial seam test (in-process) and the
+// direct-streamlocal channel forwarding — everything the dial path needs and
+// nothing else. Shared by the sshdial seam test, in-process, and the
 // federation spawn gate (production binaries), so there is one implementation
 // of "a throwaway sshd" instead of a hand-rolled copy per smoke.
 package dialtest
@@ -22,9 +22,9 @@ import (
 )
 
 // directStreamLocal is the direct-streamlocal@openssh.com channel-open
-// payload (OpenSSH PROTOCOL §2.4): what x/crypto/ssh's Client.Dial("unix",
-// path) sends — the only forwarding the federation dial uses since the
-// node door became a unix socket (2026-08-26).
+// payload, what x/crypto/ssh's Client.Dial("unix", path) sends. It is the only
+// forwarding the federation dial uses, because the node door is a unix
+// socket.
 type directStreamLocal struct {
 	SocketPath string
 	Reserved0  string

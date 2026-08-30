@@ -1,10 +1,9 @@
-// Package plugin is the v2 proc CONTENT PLUGIN (docs/v2-design.md
-// §5): the stateless projection of the process table. A context is a pid
-// (its grid lists that process's direct children); tile keys are pid
-// strings, plus "info:<pid>" for the @info metadata tile. Listings are
-// NON-authoritative — a child unreadable this pass is not gone; the node
-// arbitrates absence through Probe (the legacy reconcile's sweep rule,
-// now adapter machinery). No database: the process table is the source.
+// Package plugin is the proc content plugin: a stateless projection of the
+// process table. A context is a pid, whose grid lists that process's direct
+// children; tile keys are pid strings, plus "info:<pid>" for the @info
+// metadata tile. Listings are non-authoritative — a child unreadable this pass
+// is not gone — and the node arbitrates absence through Probe. There is no
+// database: the process table is the source.
 package plugin
 
 import (
@@ -21,17 +20,17 @@ import (
 	"github.com/josephburnett/gridwell/plugins/proc/procsource"
 )
 
-// Killer is the signal interface. Injected so tests never signal real
-// processes. Production uses syscall.Kill (sysKiller).
+// Killer is the signal interface, injected so tests never signal real
+// processes. Production uses syscall.Kill, in sysKiller.
 type Killer interface {
 	Kill(pid int64, sig syscall.Signal) error
 }
 
-// infoLabel is the metadata tile's display label (the legacy key).
+// infoLabel is the metadata tile's display label.
 const infoLabel = "@info"
 
-// infoKeyPrefix namespaces the metadata tiles' keys: "@info" appears in
-// EVERY grid, but plugin keys must be globally unique.
+// infoKeyPrefix namespaces the metadata tiles' keys: "@info" appears in every
+// grid, but plugin keys must be unique across the plugin.
 const infoKeyPrefix = "info:"
 
 type sysKiller struct{}
@@ -48,14 +47,13 @@ type Plugin struct {
 	killer   Killer
 }
 
-// FromConfig builds the production plugin from the shared config
-// vocabulary — the ONE owner of the config→plugin derivation, so the
-// subprocess main (guest.Main) and the bundled binaries (the mobile bind,
-// mobile) compose exactly the same plugin. Config: pid (optional root
-// pid, default 1). A pid that is not a positive integer is REFUSED (the
-// launch stops with the reason — owner decision 2026-08-27): silently
-// falling back to pid 1 would present the whole process tree as if
-// that were what server.yaml said.
+// FromConfig builds the production plugin from the shared config vocabulary.
+// It is the one owner of the config-to-plugin derivation, so the subprocess
+// main and a bundled binary compose exactly the same plugin. The config key is
+// pid, an optional root pid defaulting to 1. A pid that is not a positive
+// integer is refused and the launch stops with the reason: silently falling
+// back to pid 1 would present the whole process tree as if that were what
+// server.yaml said.
 func FromConfig(cfg map[string]string) (pluginv1.PluginServer, error) {
 	var pid int64
 	if raw := strings.TrimSpace(cfg["pid"]); raw != "" {
@@ -68,8 +66,8 @@ func FromConfig(cfg map[string]string) (pluginv1.PluginServer, error) {
 	return New("", pid, nil), nil
 }
 
-// New builds a plugin. Empty procRoot uses /proc; rootPID <= 0 uses
-// pid 1; nil killer signals real processes.
+// New builds a plugin. An empty procRoot uses /proc, a rootPID of 0 or less
+// uses pid 1, and a nil killer signals real processes.
 func New(procRoot string, rootPID int64, killer Killer) *Plugin {
 	if procRoot == "" {
 		procRoot = procsource.DefaultRoot
@@ -106,11 +104,10 @@ func keyPID(key string) (int64, error) {
 	return pid, nil
 }
 
-// List enumerates one process's children plus its @info tile — in the
-// legacy reconcile's insertion order (@info first), so the node mints
-// the same ids the legacy DB did. Never Unavailable: an unreadable
-// process table answers what it could read, non-authoritatively, and
-// the Probe arbitration does the rest.
+// List enumerates one process's children plus its @info tile, @info first, so
+// the ids the node mints stay stable. It is never Unavailable: an unreadable
+// process table answers what it could read, non-authoritatively, and the Probe
+// arbitration does the rest.
 func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	pid, err := keyPID(req.Context)
 	if err != nil {
@@ -137,7 +134,7 @@ func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.L
 
 func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
 	if !strings.HasPrefix(req.Key, infoKeyPrefix) {
-		// Process wells carry no document body (the legacy rule).
+		// A process well carries no document body.
 		return stream.Send(&pluginv1.ContentChunk{})
 	}
 	pid, err := keyPID(req.Key)
@@ -156,9 +153,8 @@ func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.P
 
 func (p *Plugin) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
 	if strings.HasPrefix(req.Key, infoKeyPrefix) {
-		// @info is NEVER swept (the legacy reconcile skipped it by
-		// name): it describes the grid's own process, and the grid
-		// outliving the process is the wells' problem, not @info's.
+		// @info is never swept: it describes the grid's own process, and a
+		// grid outliving its process is the wells' problem, not @info's.
 		return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_PRESENT}, nil
 	}
 	pid, err := keyPID(req.Key)
@@ -176,8 +172,8 @@ func (p *Plugin) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1
 	}
 }
 
-// Delete sends SIGTERM — best-effort; the tile sweeps once the process
-// is definitively gone (the legacy semantics).
+// Delete sends SIGTERM, best-effort; the tile sweeps once the process is
+// definitively gone.
 func (p *Plugin) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*pluginv1.DeleteResponse, error) {
 	pid, err := keyPID(req.Key)
 	if err != nil {

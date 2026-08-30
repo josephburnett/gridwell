@@ -27,7 +27,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
-// rootGrid resolves the registered localdb's root grid through the
+// rootGrid resolves the registered store's root grid through the
 // handshake, like every other export test.
 func rootGrid(t *testing.T, c namespace.Namespace) string {
 	return homeRoot(t, c)

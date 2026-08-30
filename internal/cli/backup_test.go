@@ -11,16 +11,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/node"
 )
 
-// backupTestHome builds a real home the way serve does (node.BuildConfig
-// mints the id and creates the home store) and returns (home, the home's
-// root grid id).
+// backupTestHome builds a real home the way serve does — node.BuildConfig
+// mints the id and creates the home store — and returns the home path and
+// its root grid id.
 func backupTestHome(t *testing.T) (home string, rootID string) {
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 	cfgPath := filepath.Join(home, "server.yaml")
-	// A plugin entry that has never served: no memory DB yet (2026-08-27:
-	// backup aborted on it).
+	// A plugin entry that has never served, so it has no memory rows yet.
+	// A backup must not abort on it.
 	if err := os.WriteFile(cfgPath, []byte("plugins:\n  - kind: gitlab\n    label: todos\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -39,10 +39,10 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	return home, rootID
 }
 
-// TestBackupSnapshotsHome: the backup mirrors the home layout, and the copied
-// DB opens through the full store contract (application_id / user_version /
-// schema check) with the SAME identity — a restored home is byte-meaningful,
-// not just byte-shaped.
+// TestBackupSnapshotsHome: the backup mirrors the home layout, and the
+// copied database opens through the full store contract — application_id,
+// user_version, schema check — with the same identity, so a restored home is
+// byte-meaningful, not just byte-shaped.
 func TestBackupSnapshotsHome(t *testing.T) {
 	home, rootID := backupTestHome(t)
 	dest := filepath.Join(t.TempDir(), "snap")
@@ -83,7 +83,8 @@ func TestBackupSnapshotsHome(t *testing.T) {
 }
 
 // TestBackupRefusesOverwrite: a destination already holding a backup is
-// refused — overwriting a previous snapshot must be the user's explicit call.
+// refused. Overwriting a previous snapshot must be the user's explicit
+// call.
 func TestBackupRefusesOverwrite(t *testing.T) {
 	_, _ = backupTestHome(t)
 	dest := filepath.Join(t.TempDir(), "snap")

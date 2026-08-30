@@ -1,10 +1,8 @@
 package pluginhost_test
 
-// The v2 proc stack through a full server: a dead child is probed and
-// swept while the survivors keep id and placement, and a retired key
-// never re-mints on reads of an unchanged grid. (Until the 2026-08
-// cutover these were pinned by crawling against the legacy proc plugin;
-// the legacy twin is gone, so the assertions are direct now.)
+// The proc stack through a full server: a dead child is probed and swept
+// while the survivors keep their id and placement, and a retired key never
+// re-mints on reads of an unchanged grid.
 
 import (
 	"context"
@@ -138,13 +136,12 @@ func TestProcPluginSweepAndPlacement(t *testing.T) {
 	}
 }
 
-// TestRetiredKeyStaysRetiredWithoutIdBurn pins the "a retired key stays
-// retired" tenet against the CACHE: a non-authoritative listing's cached
-// union used to keep a swept key forever, so every later read re-minted a
-// fresh id for it and immediately re-retired it — idmap/layout grew without
-// bound and the AUTOINCREMENT sequence (the identity fact the v2
-// converter existed to protect) advanced on every read of an unchanged
-// grid. Reading never mutates.
+// TestRetiredKeyStaysRetiredWithoutIdBurn pins "a retired key stays retired"
+// against the cache. If a non-authoritative listing's cached union kept a
+// swept key, every later read would re-mint a fresh id for it and immediately
+// re-retire it: the rows would grow without bound and the AUTOINCREMENT
+// sequence would advance on every read of an unchanged grid. Reading never
+// mutates.
 func TestRetiredKeyStaysRetiredWithoutIdBurn(t *testing.T) {
 	procRoot := fakeProc(t)
 	memPath := filepath.Join(t.TempDir(), "mem.db")
