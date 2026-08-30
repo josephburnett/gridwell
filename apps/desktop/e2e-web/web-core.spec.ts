@@ -29,14 +29,13 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
   expect(errs.notices).toEqual([]);
 });
 
-// #259: shell CREATION needs an attach capability, not just node policy.
-// A plain browser has no PTY bridge — a shell created there could never
-// attach, dead weight from birth — so the swatch is gone even on a
-// shells-ENABLED node. Viewing stays: a shell tile created elsewhere
-// (here: through the server oracle, as the desktop app would) still
-// lands in the client's world. url tiles deliberately remain creatable
-// (recording an address is useful without a live view).
-test('the browser offers no shell creation, but views shell tiles fine', async ({ gw, window, serve }) => {
+// Shells in a plain browser (2026-08-29): the PTY rides a WebSocket on
+// the web door, so a browser has the same attach capability the desktop
+// has and the palette offers the shell swatch. This REVERSES #259 ("shell
+// creation needs an attach capability, not just node policy") — the
+// premise that a browser has no PTY door is no longer true. A shell tile
+// made elsewhere still renders here, as it always did.
+test('the browser offers shell creation and views shell tiles fine', async ({ gw, window, serve }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
 
@@ -44,11 +43,12 @@ test('the browser offers no shell creation, but views shell tiles fine', async (
   const pal = await gw.palette();
   const primitives = pal.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
   expect(primitives, 'url stays creatable in the browser').toContain('url');
-  expect(primitives, 'no attach capability → no shell swatch').not.toContain('shell');
+  expect(primitives, 'the browser attaches PTYs now — the swatch is offered').toContain('shell');
   await window.keyboard.press("Escape");
   await gw.waitIdle();
 
-  // A desktop-made shell tile (oracle create) still renders here.
+  // A shell tile made elsewhere (oracle create, as the desktop would) still
+  // lands in the client's world.
   const cx = Math.round(f.cx) + 2;
   const cy = Math.round(f.cy);
   const res = await fetch(`${gw.origin}/gridwell.v1.Gridwell/CreateTile`, {

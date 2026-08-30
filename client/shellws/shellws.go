@@ -218,7 +218,13 @@ func (c *conn) Close() {
 	ws := c.ws
 	c.mu.Unlock()
 	if ws != nil {
-		_ = ws.Close(websocket.StatusNormalClosure, "")
+		// The close HANDSHAKE waits for the peer's close frame, which in a
+		// browser can only arrive through the JS event loop — and Close is
+		// called FROM that loop (a pane teardown inside a click handler).
+		// Waiting here would block the very loop that must deliver the
+		// answer: the page freezes, permanently. Hand the wait to a
+		// goroutine; the caller returns immediately.
+		go func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
 	}
 	c.end("", false)
 }
