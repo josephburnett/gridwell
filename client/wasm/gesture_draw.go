@@ -13,15 +13,15 @@ import (
 )
 
 // This file holds every in-flight gesture preview the right-button state
-// machine paints (split / swap / tile-resize) plus their small canvas
-// helpers. Pure drawing off rightDragState — the classification and commit
-// logic stay in right_button.go. (The left-resize crush preview draws in
-// drawLeftResizePreview.)
+// machine paints — split, swap, tile-resize — plus their small canvas
+// helpers. It is pure drawing off rightDragState; the classification and
+// commit logic stay in right_button.go. The left-resize crush preview draws
+// in drawLeftResizePreview.
 
 // drawRightDragPreview paints the in-flight gesture's visual hint:
-//   - Split: a horizontal/vertical line at the clamped cursor projection.
-//     Blue when "active" (past start in expected direction AND in
-//     valid range), grey otherwise.
+//   - Split: a horizontal or vertical line at the clamped cursor
+//     projection. Blue when active — past the start in the expected
+//     direction and within the valid range — grey otherwise.
 //   - Swap: a double-headed arrow from origin pane center to either
 //     the cursor or the destination pane center.
 func (a *App) drawRightDragPreview() {
@@ -59,8 +59,8 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	var paneID string
 	switch rd.kind {
 	case rightDragSplit:
-		// The host follows the cursor (issue #217): highlight the pane the
-		// split would land in right now.
+		// The host follows the cursor: highlight the pane the split would
+		// land in right now.
 		if hp, _, ok := a.paneAtScreen(rd.curX, rd.curY); ok {
 			paneID = hp.ID
 		}
@@ -119,8 +119,8 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	drawHotspotArrow(a.cctx, r.X+w/6, r.Y+h/2, -arrow, 0)  // left
 	drawHotspotArrow(a.cctx, r.X+w-w/6, r.Y+h/2, arrow, 0) // right
 
-	// Center glyph: swap, the same on every pane (a URL descent is no
-	// longer special — go-live lives in the bar slot, #214).
+	// Center glyph: swap, the same on every pane. A URL descent is not
+	// special; go-live lives in the bar slot.
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
 	drawSwapGlyph(a.cctx, cx, cy, 16, colorMuted)
@@ -292,11 +292,11 @@ func jsArray(vals ...float64) js.Value {
 	return js.ValueOf(arr)
 }
 
-// drawSplitPreview draws the partition line where the split would land
-// RIGHT NOW: the side and host pane follow the drag (issue #217), so the
-// line lives in the pane under the cursor, flipping across the grabbed
-// border as the cursor does. Blue when a release here would commit, grey
-// while the drag is below the arm threshold or outside a valid position.
+// drawSplitPreview draws the partition line where the split would land right
+// now: the side and host pane follow the drag, so the line lives in the pane
+// under the cursor, flipping across the grabbed border as the cursor does.
+// Blue when a release here would commit, grey while the drag is below the arm
+// threshold or outside a valid position.
 func (a *App) drawSplitPreview(rd *rightDragState) {
 	host, r, ok := a.paneAtScreen(rd.curX, rd.curY)
 	if !ok {
@@ -345,9 +345,8 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 }
 
 // drawSplitAxisHint paints the gesture identity at the grab point: two
-// opposing arrows along the split's axis — "drag EITHER way to open a new
-// pane on that side" (issue #217; the old one-sided sector hard-committed a
-// direction the gesture no longer has).
+// opposing arrows along the split's axis, meaning "drag either way to open a
+// new pane on that side".
 func (a *App) drawSplitAxisHint(r pane.Rect, rd *rightDragState) {
 	a.cctx.Set("strokeStyle", colorMuted)
 	a.cctx.Set("lineWidth", 1.0)
@@ -451,18 +450,18 @@ func drawArrowHead(a *App, cx, cy, angle, size float64) {
 	a.cctx.Call("fill")
 }
 
-// drawLeftResizePreview paints the LEFT resize affordance (issue #203: the
-// left drag owns resize AND close). Two layers:
+// drawLeftResizePreview paints the left resize affordance; the left drag owns
+// resize and close. Two layers:
 //   - Always: highlight the divider being dragged in grey with an
 //     orthogonal double-headed arrow.
-//   - Every corridor segment the drag has pressed past its bump (issue
-//     #217) gets a red border: release closes ALL of them; backing off
-//     un-reds them one by one.
+//   - Every corridor segment the drag has pressed past its bump gets a red
+//     border: a release closes all of them, and backing off un-reds them one
+//     by one.
 func (a *App) drawLeftResizePreview(lr *leftResizeState) {
-	// LIVE geometry, every frame: the cascade moves ancestor ratios, so the
+	// Live geometry, every frame: the cascade moves ancestor ratios, so the
 	// grabbed split's container and its boundary are wherever the applied
-	// layout says they are — an arm-time copy goes stale mid-drag (the
-	// stale-container bug closed panes on a legal mid-corridor release).
+	// layout says they are. An arm-time copy goes stale mid-drag and closes
+	// panes on a legal mid-corridor release.
 	root := a.tree.Root
 	rootRect := a.rootLayoutRect()
 	r, ok := pane.LocateSplit(root, rootRect, lr.targetSplit)
@@ -497,10 +496,10 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 	}
 	a.cctx.Set("lineWidth", 1.0)
 
-	// The crush verdict (issue #217): every corridor segment the drag has
-	// pressed past its live bump reds — the release reads the IDENTICAL
-	// stored lr.crush.Red() state, so the red set and the closed set
-	// cannot diverge. Rects are live (SegmentRects), tracking the crush.
+	// The crush verdict: every corridor segment the drag has pressed past
+	// its live bump reds, and the release reads the identical stored
+	// lr.crush.Red() state, so the red set and the closed set cannot
+	// diverge. Rects are live (SegmentRects), tracking the crush.
 	red := lr.crush.Red()
 	if len(red) == 0 {
 		return
@@ -548,9 +547,9 @@ func drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
 	c.Set("lineWidth", 1.0)
 }
 
-// drawGhostLinkBadge paints the chain-link glyph over the dragged ghost
-// when the drop would create a cross-plugin LINK (2026-07-19): the
-// in-flight ghost teaches that a left-drag links, never copies.
+// drawGhostLinkBadge paints the chain-link glyph over the dragged ghost when
+// the drop would create a cross-plugin link: the in-flight ghost teaches that
+// a left-drag links, never copies.
 func drawGhostLinkBadge(c js.Value, cx, cy, size float64) {
 	stroke := size * 0.10
 	if stroke < 2 {

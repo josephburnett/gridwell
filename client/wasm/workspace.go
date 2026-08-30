@@ -2,20 +2,20 @@
 
 package main
 
-// Workspace navigation: descending into a pane tile swaps the whole pane
-// tree — descend()'s WINDOW arm, the second axis beside a pane's own frame
-// stack — the bottom bar names the nesting and owns the way back out, and a
-// debounced snapshot-diff persister keeps the layout blob current while
-// inside. The rules live in pure packages — client/pane's Levels (the level
-// stack and the persist decision) and client/wsbar (the bar geometry) —
-// this file is the glue: gestures in, RPCs out, draw calls between.
+// Pane-tile navigation: descending into a pane tile swaps the whole pane tree
+// — descend()'s window arm, the second axis beside a pane's own frame stack.
+// The bottom bar names the nesting and owns the way back out, and a debounced
+// snapshot-diff persister keeps the layout blob current while inside. The
+// rules live in pure packages: client/pane's Levels holds the level stack and
+// the persist decision, client/wsbar the bar geometry. This file is the glue —
+// gestures in, RPCs out, draw calls between.
 //
-// Bar gestures: LEFT-click a workspace crumb LEAVES workspace k and
-// everything deeper; RIGHT-click renames it inline (issues #212, #220).
-// Descent and ascent animate like every other tile: the
-// zoom rides through the pane tile's footprint, and because the preview is
-// the live layout under one uniform scale (client/panepreview's tested
-// property), the swap lands on exactly what the preview showed.
+// Bar gestures: a left-click on a level crumb leaves level k and everything
+// deeper; a right-click renames it inline. Descent and ascent animate like
+// every other tile: the zoom rides through the pane tile's footprint, and
+// because the preview is the live layout under one uniform scale
+// (client/panepreview's tested property), the swap lands on exactly what the
+// preview showed.
 
 import (
 	"context"
@@ -28,27 +28,27 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// wsSaveDebounceMs is the persister's coalescing window: every layout-
-// affecting gesture inside a workspace lands in the blob at most this long
-// after it settles (plus the flush on ascent). A reload inside the window
+// wsSaveDebounceMs is the persister's coalescing window: every
+// layout-affecting gesture inside a pane tile lands in the blob at most this
+// long after it settles, plus the flush on ascent. A reload inside the window
 // loses at most this much arrangement.
 const wsSaveDebounceMs = 500
 
-// wsExpandState is the first-descent CAPTURE animation (issue #242): the
-// pane tile's screen rect at arm, growing into the workspace outline while
-// the content underneath never moves. Drawn at the end of draw(); cleared
-// on install (where the real #225 outline takes over seamlessly) or on a
-// failed descent.
+// wsExpandState is the first-descent capture animation: the pane tile's
+// screen rect at arm, growing into the level outline while the content
+// underneath never moves. Drawn at the end of draw(), and cleared on install,
+// where the real outline takes over seamlessly, or on a failed descent.
 type wsExpandState struct {
 	x, y, w, h float64
 	startMs    float64
 }
 
-// wsPending coordinates a workspace descent's two async halves: the zoom
-// animation and the tile+layout fetch. The install runs when BOTH are done
-// (whichever finishes second calls maybeInstallWorkspace); a fetch failure
-// restores the origin pane's viewport once the animation lands. Tracked on
-// App so thIdle can report busy between animation end and install.
+// wsPending coordinates a pane-tile descent's two async halves: the zoom
+// animation and the tile-plus-layout fetch. The install runs when both are
+// done, whichever finishes second calling maybeInstallWorkspace, and a fetch
+// failure restores the origin pane's viewport once the animation lands.
+// Tracked on App so thIdle can report busy between animation end and
+// install.
 type wsPending struct {
 	animDone bool
 	dataDone bool
@@ -57,9 +57,9 @@ type wsPending struct {
 	restore  func()
 }
 
-// maybeInstallWorkspace runs the install (or the failure restore) once both
-// halves of the descent are done. Superseded pendings (never expected —
-// input is blocked during the transition) are ignored.
+// maybeInstallWorkspace runs the install, or the failure restore, once both
+// halves of the descent are done. A superseded pending is ignored; input is
+// blocked during the transition, so it is not expected.
 func (a *App) maybeInstallWorkspace(pd *wsPending) {
 	if a.wsPending != pd || !pd.animDone {
 		return
@@ -78,13 +78,13 @@ func (a *App) maybeInstallWorkspace(pd *wsPending) {
 	pd.install()
 }
 
-// captureWorkspaceTree clones the CURRENT window layout as a fresh
-// workspace's initial arrangement (issue #242): an encode/decode round
-// trip through the SAME rel/abs pair the persister uses, so the capture is
-// byte-for-byte what the first flush will store — one serialization owner,
-// no second cloner. Any failure (a pane outside the node's reach encodes
-// as home, per the flush rule; a hard error falls all the way back) yields
-// the old organize-this default: a capture must never block the descent.
+// captureWorkspaceTree clones the current window layout as a fresh pane
+// tile's initial arrangement: an encode and decode round trip through the same
+// rel/abs pair the persister uses, so the capture is byte-for-byte what the
+// first flush will store. One serialization owner, no second cloner. Any
+// failure — a pane outside the node's reach encodes as home, per the flush
+// rule, and a hard error falls all the way back — yields the single-pane
+// default, because a capture must never block the descent.
 func (a *App) captureWorkspaceTree(tileID, idPrefix string, origin pane.Pane) *pane.Tree {
 	prefix := paneTileChainPrefix(tileID)
 	data, _, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
@@ -93,12 +93,12 @@ func (a *App) captureWorkspaceTree(tileID, idPrefix string, origin pane.Pane) *p
 	})
 	if err == nil {
 		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix); derr == nil {
-			// An EPHEMERAL descent (a click-visit riding the scratch grid)
-			// is session state that dies on ascent — a durable capture must
-			// not reference it, and its copy re-going-live would keep the
-			// outer visit's view alive past the workspace boundary. The
-			// captured pane keeps its PLACE; the visit itself stays with
-			// the outer tree and re-engages on ascent as always.
+			// An ephemeral descent — a click-visit riding the scratch grid
+			// — is session state that dies on ascent. A durable capture
+			// must not reference it, and a copy going live would keep the
+			// outer visit's view alive past the boundary. The captured pane
+			// keeps its place; the visit stays with the outer tree and
+			// re-engages on ascent.
 			t.Walk(func(cp *pane.Pane) {
 				if cp.ContentID() == "" {
 					return
@@ -114,7 +114,7 @@ func (a *App) captureWorkspaceTree(tileID, idPrefix string, origin pane.Pane) *p
 }
 
 // workspaceTreeFromPlace builds the single-pane fallback: one pane at the
-// given place. The decode-failure read-only default, the boot fallback —
+// given place. It is the decode-failure read-only default, the boot fallback,
 // and the capture fallback when the current tree cannot encode.
 func workspaceTreeFromPlace(idPrefix, anchor string, path []string, cx, cy, zoom float64) *pane.Tree {
 	t := pane.NewTree()
@@ -131,34 +131,31 @@ func workspaceTreeFromPlace(idPrefix, anchor string, path []string, cx, cy, zoom
 	return t
 }
 
-// installWorkspace performs the actual swap: push the frame and install
-// the decoded tree, with the OUTER level LEFT RUNNING (issue #249, owner
-// reversal of the boundary freeze): its live views park off-screen and
-// its shells stay attached — liveness follows pane existence, and no pane
-// closed here. Level-scoped pane ids (Tree.IDPrefix) keep the
+// installWorkspace performs the swap: push the frame and install the decoded
+// tree, with the outer level left running — its live views park off-screen
+// and its shells stay attached, because liveness follows pane existence and
+// no pane closed here. Level-scoped pane ids (Tree.IDPrefix) keep the
 // simultaneously-alive trees from colliding in the pane-keyed maps.
-// keepOuter=false means the
-// descent has no return tree (boot restore via ?w= — the boot-blank tree is
-// nothing the user built): the frame records OuterTree nil and ascent falls
-// back to the pane tile's containing grid. baseline is the decoded blob
-// bytes (nil for a never-arranged tile), seeding the persister's diff so a
-// pure visit never writes.
+// keepOuter=false means the descent has no return tree (a boot restore
+// through ?w=, whose boot-blank tree is nothing the user built): the frame
+// records OuterTree nil and ascent falls back to the pane tile's containing
+// grid. baseline is the decoded blob bytes, nil for a never-arranged tile,
+// seeding the persister's diff so a pure visit never writes.
 func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string, readOnly bool, baseline []byte, keepOuter bool) {
 	a.transition = nil
-	// The capture animation's expanding rect lands exactly where the #225
-	// outline draws; dropping it here is the seamless handoff (issue #242).
+	// The capture animation's expanding rect lands exactly where the level
+	// outline draws; dropping it here is the seamless handoff.
 	a.wsExpand = nil
 	a.menu.Close()
-	// Entering a NESTED workspace: flush the current one's layout first —
-	// its tree is about to sit un-drawn in a frame for an unbounded time,
-	// and the debounce must not still be holding its latest arrangement.
-	// A no-op at depth 0 (no workspace to flush).
+	// Entering a nested level: flush the current one's layout first. Its
+	// tree is about to sit un-drawn in a frame for an unbounded time, and
+	// the debounce must not still be holding its latest arrangement. A no-op
+	// at depth 0.
 	a.flushWorkspaceSave()
 	outer := a.tree
 	if !keepOuter {
 		// A boot restore replaces a boot-blank tree nothing lives in; the
-		// ordinary descent keeps the outer level fully ALIVE (issue #249 —
-		// the old flushDroppedSubtree teardown is deliberately gone).
+		// ordinary descent keeps the outer level fully alive.
 		outer = nil
 	}
 
@@ -166,8 +163,8 @@ func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string,
 		OuterTree:  outer,
 		OriginPane: originPane,
 		TileID:     pt.ID,
-		// Raw alt: the bar substitutes the generic label at draw time, so
-		// the crumb rename can round-trip an empty name honestly.
+		// Raw alt text: the bar substitutes the generic label at draw time,
+		// so the crumb rename can round-trip an empty name honestly.
 		Name:     pt.AltText,
 		ReadOnly: readOnly,
 	}
@@ -176,32 +173,28 @@ func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string,
 
 	a.tree = tree
 	a.restoreWorkspaceLeaves(tree)
-	// The installed tree's focused leaf may be text-descended (a restored
-	// text_focus). Rebind the textarea singleton to it NOW: without this the
-	// overlay keeps showing — and scroll-tracking against — whatever tile it
-	// was bound to before the swap, which is exactly the stale-binding state
-	// the 2026-07-18 stomp rode in on. (Saves no longer trust the binding,
-	// but the DISPLAY must not lie either.)
+	// The installed tree's focused leaf may be text-descended, from a
+	// restored text_focus. Rebind the textarea singleton to it now: without
+	// this the overlay keeps showing, and scroll-tracking against, whatever
+	// tile it was bound to before the swap. Saves do not trust the binding,
+	// but the display must not lie either.
 	a.refreshFileOverlay()
 	a.scheduleURLUpdate()
 	a.draw()
 }
 
 // descendLevel enters a pane tile from pane p — descend()'s window arm: a
-// zoom into the
-// tile's footprint (like every descent) racing the layout fetch, with the
-// swap at whichever finishes last. A blob that cannot be decoded installs
-// the default READ-ONLY: the session must never overwrite a blob it could
-// not read (a newer format downgraded would be rewriting history). A
-// never-arranged tile opens on ITS CONTAINING GRID — dropping a workspace
-// into a grid means "organize this", so entering it shows the place it
-// lives, exactly as the descending pane saw it (owner decision 2026-07-10).
+// zoom into the tile's footprint, like every descent, racing the layout
+// fetch, with the swap at whichever finishes last. A blob that cannot be
+// decoded installs the default read-only: the session must never overwrite a
+// blob it could not read, since downgrading a newer format would rewrite
+// history.
 func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 	originPane := p.ID
 	tileID := pt.ID
-	// The new level's pane-id namespace (issue #249): stacked trees are all
-	// ALIVE now, and pane ids key the locals / native views / shell
-	// streams, so each level mints and decodes under its own prefix.
+	// The new level's pane-id namespace: stacked trees are all alive, and
+	// pane ids key the locals, the native views, and the shell streams, so
+	// each level mints and decodes under its own prefix.
 	idPrefix := fmt.Sprintf("w%d:", a.ws.Depth()+1)
 	// The origin pane's place, for the organize-this default and for the
 	// byte-identical viewport restore under the animation.
@@ -217,15 +210,14 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 	}
 	a.wsPending = pd
 
-	// First descent into a NEVER-ARRANGED tile CAPTURES the current window
-	// layout (issue #242, reversing the 2026-07-10 organize-this default):
-	// you keep looking at exactly what you had — now inside the workspace.
-	// Its animation is the tile's face becoming the workspace outline (an
-	// expanding teal rect; the content never moves) instead of the zoom,
-	// which would read as a jarring descend-and-return over an unchanged
-	// view. The CACHED row picks the animation; the FRESH row picks the
-	// tree (they disagree only across the #190 stale-cache window, where
-	// either combination is harmless).
+	// The first descent into a never-arranged tile captures the current
+	// window layout: you keep looking at exactly what you had, now inside
+	// the pane tile. Its animation is the tile's face becoming the level
+	// outline — an expanding teal rect, with the content never moving —
+	// instead of the zoom, which would read as a jarring descend-and-return
+	// over an unchanged view. The cached row picks the animation and the
+	// fresh row picks the tree; they disagree only across the stale-cache
+	// window, where either combination is harmless.
 	if pt.BlobID == 0 {
 		r := paneRectFor(a, p)
 		dd := paneToDragdrop(p, r)
@@ -247,8 +239,8 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 		})
 	} else {
 		// The zoom: pan to the tile's center while zooming until its
-		// footprint fills the pane box — the preview grows into the live
-		// workspace.
+		// footprint fills the pane box, so the preview grows into the live
+		// tree.
 		r := paneRectFor(a, p)
 		tcx := float64(pt.X) + float64(pt.W)/2
 		tcy := float64(pt.Y) + float64(pt.H)/2
@@ -273,11 +265,11 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 
 	go func() {
 		// Refetch the tile rather than trusting the cached row: a stale
-		// BlobID of 0 (another client's first arrange whose echo hasn't
-		// landed here yet) would install the WRITABLE default, and the
-		// persister could then overwrite the fresh arrangement — layout
-		// writes carry no version bump to conflict on. One RPC closes the
-		// window to genuine concurrent edits (the I11/#5 residual class).
+		// BlobID of 0 — another client's first arrange whose echo has not
+		// landed here yet — would install the writable default, and the
+		// persister could then overwrite the fresh arrangement, since
+		// layout writes carry no version bump to conflict on. One RPC
+		// closes the window to genuine concurrent edits.
 		fresh, err := a.cl.GetTile(context.Background(), tileID)
 		if err != nil {
 			a.surfaceRPCError("GetTile", err)
@@ -286,9 +278,10 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 			return
 		}
 		if fresh.LinkTargetID != "" {
-			// A pane LINK opens the TARGET workspace — the one shared
-			// arrangement; the persister then writes back through the target
-			// id too. Same read-through rule as every other content door.
+			// A pane link opens the target's arrangement, the one shared
+			// layout, and the persister then writes back through the target
+			// id too. The same read-through rule as every other content
+			// door.
 			tileID = fresh.LinkTargetID
 			fresh, err = a.cl.GetTile(context.Background(), tileID)
 			if err != nil {
@@ -303,9 +296,9 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 		readOnly := false
 		capture := false
 		if fresh.BlobID == 0 {
-			// Never arranged: the FIRST descent captures the current window
-			// layout (issue #242). Deferred to install time so the encode
-			// reads the tree as it stands at the swap, after pd.restore().
+			// Never arranged: the first descent captures the current window
+			// layout. Deferred to install time so the encode reads the tree
+			// as it stands at the swap, after pd.restore().
 			capture = true
 		} else {
 			data, _, _, err = a.cl.ReadContent(context.Background(), tileID)
@@ -326,10 +319,9 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 			}
 		}
 		pd.install = func() {
-			// The animation left the origin pane zoomed into the tile; put
-			// its true place back BEFORE capturing the outer tree, so ascent
-			// restores exactly what the user left (the roundtrip spec's
-			// byte-identical assertion rides on this).
+			// The animation left the origin pane zoomed into the tile: put
+			// its true place back before capturing the outer tree, so
+			// ascent restores exactly what the user left.
 			pd.restore()
 			if capture {
 				tree = a.captureWorkspaceTree(tileID, idPrefix, origin)
@@ -341,10 +333,11 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 	}()
 }
 
-// bootWorkspace restores the innermost workspace from a reload (?w=). The
-// outer tree is nil by design — nesting membership is session-only, like the
-// outer frames of a pane's place (#13). Defaults (never-arranged / unreadable blob) open on the
-// pane tile's containing grid, centered on the tile.
+// bootWorkspace restores the innermost pane tile from a reload (?w=). The
+// outer tree is nil by design: nesting membership is session-only, like the
+// outer frames of a pane's place. The defaults — a never-arranged tile, an
+// unreadable blob — open on the pane tile's containing grid, centered on the
+// tile.
 func (a *App) bootWorkspace(tileID string) {
 	tile, err := a.cl.GetTile(context.Background(), tileID)
 	if err != nil {
@@ -352,7 +345,7 @@ func (a *App) bootWorkspace(tileID string) {
 		return
 	}
 	if tile.LinkTargetID != "" {
-		// A pane LINK boots the TARGET workspace (see openWorkspace).
+		// A pane link boots the target's arrangement (see openWorkspace).
 		tileID = tile.LinkTargetID
 		tile, err = a.cl.GetTile(context.Background(), tileID)
 		if err != nil {
@@ -364,7 +357,7 @@ func (a *App) bootWorkspace(tileID string) {
 		a.reportErr(errsurface.Error, "layout:"+tileID, "?w= names a non-workspace tile")
 		return
 	}
-	// The boot workspace is level 1 (the stack is empty at boot).
+	// The boot pane tile is level 1: the stack is empty at boot.
 	homeTree := func() *pane.Tree {
 		return workspaceTreeFromPlace("w1:", tile.GridID, nil,
 			float64(tile.X)+float64(tile.W)/2, float64(tile.Y)+float64(tile.H)/2, 1)
@@ -391,11 +384,11 @@ func (a *App) bootWorkspace(tileID string) {
 }
 
 // restoreWorkspaceLeaves applies the boot-blank fixups a freshly-installed
-// tree needs: an empty anchor means home (the first plugin's root grid),
-// exactly as the boot pane resolves it, and every leaf's grid fetch is
-// kicked so the panes fill in. Loose per the urlwalk rule: a place that no
-// longer resolves stays where its longest live prefix lands (gridIDForPane
-// already walks loosely).
+// tree needs: an empty anchor means the node's home grid, exactly as the boot
+// pane resolves it, and every leaf's grid fetch is kicked so the panes fill
+// in. Loose, per the urlwalk rule: a place that no longer resolves stays
+// where its longest live prefix lands, and gridIDForPane already walks
+// loosely.
 func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	tree.Walk(func(p *pane.Pane) {
 		if p.Anchor() == "" {
@@ -411,14 +404,14 @@ func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	})
 }
 
-// ascendLevels leaves `count` window levels — the pane-tile axis of the
-// same pop (the pane-frame axis is ascend()). For each level: flush the
-// layout one last time, freeze and forget the inner leaves, pop, and
-// restore the outer tree verbatim (focus returns to the origin pane). The
-// FINAL landing animates the reverse of the descent — the pane tile's face
-// shrinking back to the origin pane's viewport. A frame with no outer tree
-// (boot restore) falls back to a fresh pane at the pane tile's containing
-// grid — the same graceful degradation an ascent has after a reload.
+// ascendLevels leaves `count` window levels: the pane-tile axis of the same
+// pop, whose pane-frame axis is ascend(). For each level it flushes the layout
+// one last time, freezes and forgets the inner leaves, pops, and restores the
+// outer tree verbatim, with focus returning to the origin pane. The final
+// landing animates the reverse of the descent — the pane tile's face
+// shrinking back to the origin pane's viewport. A frame with no outer tree,
+// from a boot restore, falls back to a fresh pane at the pane tile's
+// containing grid, the same degradation an ascent has after a reload.
 func (a *App) ascendLevels(count int) {
 	if count <= 0 {
 		return
@@ -448,12 +441,12 @@ func (a *App) ascendLevels(count int) {
 	// Same rebind as installWorkspace: the restored outer tree's focused pane
 	// may itself be text-descended, and the singleton must follow the swap.
 	a.refreshFileOverlay()
-	// The restored outer leaves never froze (issue #249 — the boundary
-	// keeps every level alive), so for a still-running pane this walk is a
-	// no-op (the stream openers are idempotent). It still matters for the
-	// panes that lost their surface to the ONE-SURFACE rule while a higher
-	// level held the same tile: the holder just closed, so the surface is
-	// free again and the pane re-engages (issue #202's one owner decides).
+	// The restored outer leaves never froze — the boundary keeps every
+	// level alive — so for a still-running pane this walk is a no-op, since
+	// the stream openers are idempotent. It matters for the panes that lost
+	// their surface to the one-surface rule while a higher level held the
+	// same tile: the holder just closed, so the surface is free again and
+	// the pane re-engages, through the one owner of that decision.
 	for _, h := range pane.ContentPanes(a.tree) {
 		a.autoLiveOnRestore(h.PaneID, h.TileID)
 	}
@@ -462,9 +455,10 @@ func (a *App) ascendLevels(count int) {
 }
 
 // animateWorkspaceReturn plays the ascent's zoom-out: the origin pane starts
-// zoomed into the pane tile's footprint (the reverse of the descent's end)
-// and animates back to its restored viewport. Skipped — an instant landing —
-// when the tile row isn't in the cached grid (nothing to zoom out of).
+// zoomed into the pane tile's footprint, the reverse of the descent's end,
+// and animates back to its restored viewport. Skipped, for an instant
+// landing, when the tile row is not in the cached grid: there is nothing to
+// zoom out of.
 func (a *App) animateWorkspaceReturn(f pane.Level) {
 	p := a.tree.FindPane(f.OriginPane)
 	if p == nil || p.ContentID() != "" {
@@ -498,13 +492,13 @@ func (a *App) animateWorkspaceReturn(f pane.Level) {
 	})
 }
 
-// The bar itself — always-on, carrying the workspace crumbs AND the focused
-// pane's descent chain — lives in bottombar.go (issue #212).
+// The bar itself — always on, carrying the level crumbs and the focused
+// pane's descent chain — lives in bottombar.go.
 
-// commitWorkspaceRename posts the user-owned name for the workspace at
-// `level` and updates its crumb + version claim from the response (a rename
-// bumps the tile version — the layout persister's next write must carry the
-// fresh claim rather than burn a conflict-retry).
+// commitWorkspaceRename posts the user-owned name for the pane tile at
+// `level` and updates its crumb and version claim from the response. A rename
+// bumps the tile version, so the layout persister's next write carries the
+// fresh claim rather than burning a conflict retry.
 func (a *App) commitWorkspaceRename(level int, alt string) {
 	f := a.ws.At(level)
 	if f == nil {
@@ -512,8 +506,8 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 	}
 	tileID := f.TileID
 	a.commitRenameRetained(tileID, alt, func(tile *rpc.Tile) {
-		// The frame may be gone by the time a parked retry lands (the user
-		// left the workspace) — the rename still landed on the tile row;
+		// The frame may be gone by the time a parked retry lands, if the
+		// user left the level. The rename still landed on the tile row;
 		// only the crumb update is conditional.
 		if fr := a.ws.At(level); fr != nil && fr.TileID == tileID {
 			fr.Name = tile.AltText
@@ -523,12 +517,11 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 }
 
 // fallbackTreeFor builds the post-reload ascent landing: a fresh single pane
-// that re-anchors to the pane tile's containing grid, viewport centered on
-// the tile. The GetTile rides a goroutine — this runs inside a click
-// callback, where a blocking network call would wedge the wasm scheduler —
-// so the pane lands at home for a frame and re-anchors when the tile
-// arrives; an unreachable tile just leaves it at home (best-effort, same as
-// an ascent after a reload).
+// that re-anchors to the pane tile's containing grid, its viewport centered
+// on the tile. The GetTile rides a goroutine, because this runs inside a
+// click callback where a blocking network call would wedge the wasm
+// scheduler, so the pane lands at home for a frame and re-anchors when the
+// tile arrives. An unreachable tile leaves it at home.
 func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 	t := pane.NewTree()
 	p := t.FocusedPane()
@@ -560,10 +553,9 @@ func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 // ── the persister ──────────────────────────────────────────────────────────
 
 // scheduleWorkspaceSave arms the debounced layout persister. Called from
-// draw() whenever the workspace stack is non-empty — the layout blob is
-// DERIVED from the live tree by encode-and-diff, so there is no per-gesture
-// persistence hook to forget (charter §1: a missed write is unrepresentable
-// when there are no call sites).
+// draw() whenever the level stack is non-empty: the layout blob is derived
+// from the live tree by encode and diff, so there is no per-gesture
+// persistence hook to forget.
 func (a *App) scheduleWorkspaceSave() {
 	if a.sched.wsSaveScheduled || a.ws.Depth() == 0 {
 		return
@@ -590,7 +582,7 @@ func (a *App) flushWorkspaceSave() {
 	}
 	if len(skipped) > 0 {
 		// A pane looking outside the owning node's reach persists as home.
-		// One coalesced notice (same source key) — not one per save.
+		// One coalesced notice, on the same source key, not one per save.
 		a.reportErr(errsurface.Info, "layout:"+top.TileID,
 			"a pane views content the workspace's node cannot reach; it will reopen at home")
 	}
@@ -600,16 +592,16 @@ func (a *App) flushWorkspaceSave() {
 	go a.postPaneLayout(top.TileID, data)
 }
 
-// postPaneLayout sends one layout write (WriteContent — the one content
-// door; a pane layout is framing-class: no version claim and no bump —
-// docs/simplify-plan.md S5, so the frame carries no version to track and
-// there is no conflict to re-claim through). Success marks the bytes saved
-// and lets the response row fan into the cache exactly like an SSE event
-// (one Apply owner). A transport failure PARKS the encoded layout: inside
-// the workspace the debounce diff retries naturally, but the ASCENT-BOUNDARY
-// flush fires once and then pops the frame — by the time the error lands the
-// inner tree is gone and `data` is the only copy of the arrangement (audit
-// #3, 2026-08-14). The beacon form carries it through a tab close.
+// postPaneLayout sends one layout write through WriteContent, the one content
+// door. A pane layout is framing-class: no version claim and no bump, so the
+// frame carries no version to track and there is no conflict to re-claim
+// through. Success marks the bytes saved and lets the response row fan into
+// the cache exactly like an event, through the one Apply owner. A transport
+// failure parks the encoded layout: inside the level the debounce diff
+// retries naturally, but the ascent-boundary flush fires once and then pops
+// the frame, so by the time the error lands the inner tree is gone and `data`
+// is the only copy of the arrangement. The beacon form carries it through a
+// tab close.
 func (a *App) postPaneLayout(tileID string, data []byte) {
 	var tile *rpc.Tile
 	a.do(write{

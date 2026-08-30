@@ -46,39 +46,38 @@ func (a *App) scheduleFileSave() {
 	js.Global().Call("setTimeout", a.sched.textSaveCb, textSaveDebounceMs)
 }
 
-// textFitZoom returns the parent zoom at which the file tile's
-// footprint (W × H cells) exactly fits inside the inner-box dimensions
-// (textarea region) of pane rect r — the smaller inner-box dim binds.
+// textFitZoom returns the parent zoom at which the text tile's footprint
+// (W × H cells) exactly fits inside the inner-box (textarea) dimensions of
+// pane rect r; the smaller inner-box dimension binds.
 //
-// Uses zoomtrans.Fit (min of dim ratios), not Overtake (max). The
-// distinction matters when the file's footprint aspect ≠ the inner-box
-// aspect (e.g., a 1×1 file in a landscape pane): the binding dim is
-// what limits user content in live mode, so calibrating ViewZoom
-// against it makes the preview text fill the file cell at the same
-// fraction as live text fills the inner-box. Thin adapter over
-// panebox.FitZoom bundling the wasm renderer's constants.
+// It uses zoomtrans.Fit, the min of the dimension ratios, not Overtake, the
+// max. The distinction matters when the tile's footprint aspect differs from
+// the inner-box aspect — a 1×1 tile in a landscape pane, say: the binding
+// dimension is what limits user content in live mode, so calibrating ViewZoom
+// against it makes the preview text fill the tile at the same fraction as
+// live text fills the inner box. A thin adapter over panebox.FitZoom
+// bundling the wasm renderer's constants.
 func textFitZoom(r pane.Rect, fileW, fileH int64) float64 {
 	return panebox.FitZoom(r, fileW, fileH, textSideInset, cellPx)
 }
 
-// textInnerBox returns the screen rectangle of a file-focused pane's
-// inner area: the light-grey reading region that the textarea sits on
-// (text mode) or the rendered markdown fills (rendered mode). The same
-// rect is used by the canvas painter, the markdown renderer, the
-// textarea positioner, and the click hit-test so the user's "inside
-// vs. outside" mental model is consistent across all three.
+// textInnerBox returns the screen rectangle of a text-focused pane's inner
+// area: the light-grey reading region the textarea sits on in text mode, or
+// the rendered markdown fills in rendered mode. The canvas painter, the
+// markdown renderer, the textarea positioner, and the click hit-test all use
+// the same rect, so "inside" and "outside" mean the same thing to all of
+// them.
 //
-// URL tiles use the full pane content area (paneContentBox) instead
-// of this narrower textarea-shaped box — see drawURLTileInPane and
-// the mouse/wheel handlers' isURLDescent branches.
+// URL tiles use the full pane content area (paneContentBox) instead of this
+// narrower textarea-shaped box; see drawURLTileInPane and the mouse and wheel
+// handlers' isURLDescent branches.
 func textInnerBox(r pane.Rect) (x, y, w, h float64) {
 	b := panebox.InnerBox(r, textSideInset)
 	return b.X, b.Y, b.W, b.H
 }
 
-// barAwarePaneRect is pane p's rect with the focused pane's bar band
-// carved out (issue #220) — the rect every overlay/native surface sizes
-// from, so none can occlude the band.
+// barAwarePaneRect is pane p's rect with the bar band carved out: the rect
+// every overlay and native surface sizes from, so none can occlude the band.
 func (a *App) barAwarePaneRect(p *pane.Pane) pane.Rect {
 	return panebox.BarInset(paneRectFor(a, p), wsbar.RowH)
 }
@@ -147,30 +146,30 @@ func (a *App) ensureFileTextarea() {
 
 	a.sched.textSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.textSaveScheduled = false
-		// Sweep every dirty content entry, whoever holds focus now. The old
-		// fire-time guards (focused pane, mode, singleton binding) existed
-		// because the save read the DOM and had to prove the DOM still
-		// belonged to the tile; a sweep over tile-keyed entries needs none of
-		// that, and can't strand an edit whose pane has moved on.
+		// Sweep every dirty content entry, whoever holds focus now.
+		// Fire-time guards on the focused pane, the mode, or the singleton
+		// binding would only be needed by a save that read the DOM and had
+		// to prove the DOM still belonged to the tile. A sweep over
+		// tile-keyed entries cannot strand an edit whose pane moved on.
 		a.flushDirtyText()
 		return nil
 	})
 	a.textTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		// Mirror the keystroke into the content store under the tile the
-		// textarea is BOUND to — the one owner of unsaved text. The DOM value
-		// is a view; nothing ever persists from it directly. Then arm the
-		// debounced sweep. URL update is debounced separately.
+		// Mirror the keystroke into the cache under the tile the textarea is
+		// bound to, the one owner of unsaved text. The DOM value is a view;
+		// nothing persists from it directly. Then arm the debounced sweep;
+		// the URL update is debounced separately.
 		a.textareaReady = true
 		if a.lastTextareaTileID == "" {
-			// Typing into an unbound textarea has no tile to belong to. This
-			// state should be unreachable (an unbound textarea is hidden);
+			// Typing into an unbound textarea has no tile to belong to. An
+			// unbound textarea is hidden, so this should be unreachable;
 			// surface it rather than let the typing vanish silently.
 			a.reportErr(errsurface.Error, "textedit",
 				"typing arrived with no bound tile — this edit cannot be saved")
 			return nil
 		}
 		// Keyed by contentKey: a leaf link's edits accumulate under its
-		// TARGET's id — the one shared content fact (see text_flush.go).
+		// target's id, the one shared content fact (see text_flush.go).
 		a.putEditedContent(a.contentKey(a.lastTextareaTileID), []byte(a.textTextarea.Get("value").String()))
 		a.scheduleFileSave()
 		a.draw()
@@ -192,11 +191,10 @@ func (a *App) ensureFileTextarea() {
 
 	a.textTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the browser scroll position onto the focused pane so
-		// SetTextView on ascent persists the right value — but only when the
-		// textarea is actually BOUND to the focused pane's tile. Without the
-		// binding check this was the framing twin of the cross-tile stomp:
-		// in a stale-binding window, tile A's scroll offset landed on tile
-		// B's pane and persisted as B's text_y.
+		// SetTextView on ascent persists the right value, but only when the
+		// textarea is bound to the focused pane's tile. Without the binding
+		// check, a stale-binding window lands tile A's scroll offset on tile
+		// B's pane and persists it as B's text_y.
 		p := a.tree.FocusedPane()
 		if p == nil || p.ContentID() == "" || p.ContentID() != a.lastTextareaTileID {
 			return nil
@@ -212,11 +210,10 @@ func (a *App) ensureFileTextarea() {
 
 	// The textarea covers the whole pane in text mode, so canvas click
 	// handlers never see clicks here. Forward two gestures:
-	//   - Edge-zone left mousedown → file ascent (the "click any edge
-	//     to leave the file" gesture).
-	//   - Right mousedown → pane-management gesture, same entry point
-	//     as the canvas listener so split/swap/resize work over the
-	//     textarea.
+	//   - an edge-zone left mousedown ascends out of the tile;
+	//   - a right mousedown starts a pane-management gesture, through the
+	//     same entry point as the canvas listener, so split, swap, and
+	//     resize work over the textarea.
 	mdCb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		ev := args[0]
 		button := ev.Get("button").Int()
@@ -305,19 +302,20 @@ func (a *App) ensureFileTextarea() {
 	})
 	ta.Call("addEventListener", "contextmenu", cmCb)
 
-	// Multi-finger touches forward into the touch gesture machine (two-finger
-	// tap = ascend, pinch = wheel) — the touch analogue of the mouse
-	// forwarding above. Single-finger touches keep native textarea behavior
-	// (caret, selection, the OS keyboard). See installTextareaTouch.
+	// Multi-finger touches forward into the touch gesture machine — a
+	// two-finger tap ascends, a pinch is a wheel — the touch analogue of the
+	// mouse forwarding above. Single-finger touches keep native textarea
+	// behavior: caret, selection, the OS keyboard. See installTextareaTouch.
 	a.installTextareaTouch(ta)
 
 	a.doc.Get("body").Call("appendChild", ta)
 	a.textTextarea = ta
 }
 
-// ensureFileToggle creates (once) the floating rendered/raw toggle
-// button used during a markdown descent. A DOM element layered above the
-// textarea (zIndex 6 > textarea 5) so the text content can fill the pane.
+// ensureFileToggle creates, once, the floating rendered/raw toggle button
+// used during a markdown descent. It is a DOM element layered above the
+// textarea (zIndex 6 against the textarea's 5) so the text content can fill
+// the pane.
 func (a *App) ensureFileToggle() {
 	if !a.textToggleBtn.IsUndefined() && !a.textToggleBtn.IsNull() {
 		return
@@ -331,9 +329,9 @@ func (a *App) ensureFileToggle() {
 	style.Set("width", strconv.Itoa(2*plusButtonRadius)+"px")
 	style.Set("height", strconv.Itoa(2*plusButtonRadius)+"px")
 	style.Set("borderRadius", "50%")
-	// background/color are NOT set here: refreshFileToggle derives them from
-	// barTheme on every refresh (issue #227 — a create-time color was a
-	// second, frozen copy of the theme fact).
+	// background and color are not set here: refreshFileToggle derives them
+	// from barTheme on every refresh, so there is no second, frozen copy of
+	// the theme fact.
 	style.Set("border", "1px solid #dff4f4")
 	style.Set("cursor", "pointer")
 	style.Set("alignItems", "center")
@@ -354,8 +352,8 @@ func (a *App) ensureFileToggle() {
 		if p == nil || p.ContentID() == "" {
 			return nil
 		}
-		// LEFT-click toggles rendered/raw; right-click does nothing — the
-		// ascent gesture is clicking the previous crumb (issue #222).
+		// A left-click toggles rendered against raw; a right-click does
+		// nothing, since the ascent gesture is clicking the previous crumb.
 		if ev.Get("button").Int() != 0 {
 			return nil
 		}
@@ -363,24 +361,24 @@ func (a *App) ensureFileToggle() {
 		return nil
 	})
 	btn.Call("addEventListener", "mousedown", a.textToggleCb)
-	// Suppress the browser context menu so a right-click on the toggle
-	// stays inert (#222) instead of popping a menu.
+	// Suppress the browser context menu so a right-click on the toggle stays
+	// inert instead of popping a menu.
 	btn.Call("addEventListener", "contextmenu", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) > 0 {
 			args[0].Call("preventDefault")
 		}
 		return nil
 	}))
-	// Touch: the shared translation routes a tap here as a left mousedown
-	// (toggle) — without this the button was mouse-only (issue #191).
+	// Touch: the shared translation routes a tap here as a left mousedown,
+	// which toggles. Without it the button would be mouse-only.
 	a.installOverlayTouch(btn, nil)
 	a.doc.Get("body").Call("appendChild", btn)
 	a.textToggleBtn = btn
 }
 
-// refreshFileToggle positions/styles the floating toggle for a markdown
-// descent (any mode) and hides it otherwise. URL tiles use a canvas back
-// button instead, so they're excluded.
+// refreshFileToggle positions and styles the floating toggle for a markdown
+// descent, in any mode, and hides it otherwise. URL tiles use a canvas back
+// button instead, so they are excluded.
 func (a *App) refreshFileToggle() {
 	a.ensureFileToggle()
 	style := a.textToggleBtn.Get("style")
@@ -414,13 +412,13 @@ func (a *App) refreshFileToggle() {
 	cx, cy := a.plusButtonCenter()
 	style.Set("left", pxf(cx-plusButtonRadius))
 	style.Set("top", pxf(cy-plusButtonRadius))
-	// The family shades, same as the canvas slot buttons (issue #223/#227):
-	// saturated hue for the face, the dark band shade for the glyph.
+	// The family shades, the same as the canvas slot buttons: the saturated
+	// hue for the face, the dark band shade for the glyph.
 	band, button := a.barTheme()
 	style.Set("background", button)
 	style.Set("color", band)
-	// Glyph hints at the TARGET mode: an italic serif "a" means clicking
-	// renders; a monospace "a" means clicking edits the source.
+	// The glyph hints at the target mode: an italic serif "a" means clicking
+	// renders, and a monospace "a" means clicking edits the source.
 	if p.TextMode == rpc.TextModeRendered {
 		style.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
 		style.Set("fontStyle", "normal")
@@ -431,9 +429,9 @@ func (a *App) refreshFileToggle() {
 	style.Set("display", "flex")
 }
 
-// refreshFileOverlay shows or hides the textarea based on whether the
-// focused pane is descended into a file in text mode. Called whenever
-// pane state changes (descent completes, mode toggles, ascent begins).
+// refreshFileOverlay shows or hides the textarea based on whether the focused
+// pane is descended into a text tile in text mode. Called whenever pane state
+// changes: a descent completes, a mode toggles, an ascent begins.
 func (a *App) refreshFileOverlay() {
 	a.refreshFileToggle()
 	a.refreshRenderedOverlay()
@@ -448,10 +446,10 @@ func (a *App) refreshFileOverlay() {
 		a.focusCanvas()
 		return
 	}
-	// Source-backed text tiles are read-only — never show the textarea
-	// even if a stale TextMode says "text". (The mode is server-stored
-	// and can outlive the source-key being set, so this is the only
-	// place we can enforce the invariant client-side.)
+	// Source-backed text tiles are read-only: never show the textarea, even
+	// if a stale TextMode says "text". The mode is server-stored and can
+	// outlive the source key being set, so this is the only place the
+	// invariant can be enforced client-side.
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 		if file, ok := g.Tiles[p.ContentID()]; ok && a.tileReadOnly(&file) {
 			ta.Get("style").Set("display", "none")
@@ -472,14 +470,13 @@ func (a *App) refreshFileOverlay() {
 	style.Set("fontSize", pxf(fontPx))
 	style.Set("display", "block")
 
-	// Sync the textarea singleton to the focused tile. The decision
-	// lives in textedit.DecideTextareaSync so it's natively
-	// testable — the wasm side just gathers inputs from cache + DOM
-	// and applies the result. Critically, on a tile switch we clear
-	// immediately even when the blob hasn't loaded yet, so the
-	// previous tile's buffer doesn't appear as the new tile's
-	// "default" content. The blob-fetch onComplete fires
-	// refreshFileOverlay again with the actual content.
+	// Sync the textarea singleton to the focused tile. The decision lives in
+	// textedit.DecideTextareaSync so it is natively testable; the wasm side
+	// gathers inputs from the cache and the DOM and applies the result. On a
+	// tile switch it clears immediately even when the blob has not loaded
+	// yet, so the previous tile's buffer never appears as the new tile's
+	// default content. The blob fetch's onComplete fires refreshFileOverlay
+	// again with the actual content.
 	gid := a.gridIDForPane(p)
 	_, pendingEdit := a.c.DirtyContent(a.contentKey(a.lastTextareaTileID))
 	in := textedit.TextareaSyncInput{
@@ -497,16 +494,16 @@ func (a *App) refreshFileOverlay() {
 		}
 	}
 	// A rebind rescues nothing and discards nothing: the old tile's typing
-	// lives in its own content-store entry, and the dirty sweep posts it no
-	// matter which pane (if any) still shows it. The old "flush old first /
-	// discard when the pane is gone" seam is unrepresentable now.
+	// lives in its own cache entry, and the dirty sweep posts it whichever
+	// pane, if any, still shows it.
 	dec := textedit.DecideTextareaSync(in)
 	if dec.SetValue {
 		ta.Set("value", dec.Value)
-		// Track whether the textarea now has content for textedit.CanvasHiddenByOverlay:
-		// true = overlay covers this pane with actual content (canvas should hide).
-		// false = textarea cleared on tile switch / blob not yet arrived (canvas must
-		// keep painting — the loading-race blank, issue #35 mechanism B).
+		// Track whether the textarea now has content, for
+		// textedit.CanvasHiddenByOverlay. True means the overlay covers this
+		// pane with actual content and the canvas hides; false means the
+		// textarea was cleared on a tile switch, or the blob has not
+		// arrived, and the canvas keeps painting through the loading race.
 		a.textareaReady = dec.Value != ""
 	}
 	a.lastTextareaTileID = dec.NewLastTileID
@@ -518,12 +515,12 @@ func (a *App) refreshFileOverlay() {
 	ta.Call("focus")
 }
 
-// focusCanvas returns keyboard focus to the canvas — UNLESS the inline
-// rename input is open. This runs on every async overlay refresh (a
-// content fetch landing, a TileChanged event), and unconditional
-// canvas.focus() here yanked focus out of the rename input moments after
-// it opened — typing landed on the canvas, and (now that blur commits)
-// it would also close the input mid-thought.
+// focusCanvas returns keyboard focus to the canvas, unless the inline rename
+// input is open. It runs on every async overlay refresh — a content fetch
+// landing, a TileChanged event — and an unconditional canvas.focus() would
+// yank focus out of the rename input moments after it opened: typing would
+// land on the canvas, and since blur commits, it would also close the input
+// mid-thought.
 func (a *App) focusCanvas() {
 	if a.renameEditing {
 		return
@@ -564,30 +561,29 @@ func (a *App) syncTextOverlayPosition() {
 // font size for pane p with rect r. Adapter over panebox.TextareaBox
 // supplying the wasm renderer's fixed-scale constants.
 func (a *App) textTextareaBox(p *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
-	// Font size = the canvas painter's codePx at the pane's live scale
-	// (base × the tile's content zoom, issue #82), so focused (textarea) and
+	// The font size is the canvas painter's codePx at the pane's live scale
+	// (the base times the tile's content zoom), so focused (textarea) and
 	// blurred (canvas) raw text are the same size. See drawMarkdownText.
 	b, fp := panebox.TextareaBox(r, textSideInset, defaultMarkdownStyle().codePx, a.textScaleFor(p))
 	return b.X, b.Y, b.W, b.H, fp
 }
 
-// textSideInset is the gap between the pane edge and the text content —
-// a small reading margin so glyphs don't touch the frame. Kept fixed
-// (independent of the now-1px paneBorderPx) so thinning the colored
-// border didn't cram text against the edge. The rendered/raw toggle is a
-// DOM overlay button (refreshFileToggle), so no strip is reserved for it.
+// textSideInset is the gap between the pane edge and the text content: a
+// small reading margin so glyphs do not touch the frame. It is fixed,
+// independent of paneBorderPx, so thinning the colored border does not cram
+// text against the edge. The rendered/raw toggle is a DOM overlay button
+// (refreshFileToggle), so no strip is reserved for it.
 const textSideInset = 6.0
 
-// onToggleFileMode flips the focused pane between text and rendered
-// modes. Going text→rendered saves the current buffer first; going
-// rendered→text just shows the textarea (the buffer is the cached blob
-// from the last save).
+// onToggleFileMode flips the focused pane between text and rendered modes.
+// Text to rendered saves the current buffer first; rendered to text just
+// shows the textarea, whose buffer is the cached blob from the last save.
 func (a *App) onToggleFileMode(p *pane.Pane) {
 	if p.ContentID() == "" {
 		return
 	}
-	// A read-only NON-renderable tile has no mode to flip to; a renderable
-	// host file flips rendered/raw source (issue #236) — the textarea
+	// A read-only non-renderable tile has no mode to flip to; a renderable
+	// host file flips between rendered and raw source, and the textarea
 	// guard in refreshFileOverlay keeps raw mode caret-free either way.
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 		if file, ok := g.Tiles[p.ContentID()]; ok && !textToggleVisible(&file, a.tileReadOnly(&file)) {
@@ -595,8 +591,8 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 		}
 	}
 	if p.TextMode == rpc.TextModeText {
-		// Flush any pending typing before switching to rendered — from the
-		// content store (the keystrokes already live there), never the DOM.
+		// Flush any pending typing before switching to rendered, from the
+		// cache, where the keystrokes already live, never from the DOM.
 		a.flushTileContent(p.ContentID())
 		p.TextMode = rpc.TextModeRendered
 	} else {
@@ -615,18 +611,14 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	a.scheduleURLUpdate()
 }
 
-// saveTextFromTextarea is GONE. Text bytes reach the server through exactly
-// one door — client/wasm/text_flush.go — which reads the content store by
-// tile id and never the DOM. See that file for why (the cross-tile stomp).
-
-// textToggleVisible decides whether the rendered/raw toggle exists for a
-// text tile. The owning plugin's text_presentation is the one authority
-// when declared (decision 2026-08-13): "both" keeps the flip (rendered vs
-// raw source — the textarea guard still keeps raw read-only), "plain" and
-// "rendered" are single-presentation. Undeclared tiles keep the legacy
-// rule: writable docs always toggle; a read-only tile toggles only when
-// its name is renderable (fs .md/.org — issue #236), because a metadata
-// summary has nothing to flip.
+// textToggleVisible decides whether the rendered/raw toggle exists for a text
+// tile. The owning plugin's text_presentation is the authority when declared:
+// "both" keeps the flip between rendered and raw source, with the textarea
+// guard still keeping raw read-only, while "plain" and "rendered" are
+// single-presentation. An undeclared tile follows the default rule: a
+// writable doc always toggles, and a read-only tile toggles only when its
+// name is renderable (an fs .md or .org), because a metadata summary has
+// nothing to flip.
 func textToggleVisible(file *rpc.Tile, readOnly bool) bool {
 	switch file.TextPresentation {
 	case rpc.TextPresentationBoth:
