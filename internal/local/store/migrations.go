@@ -167,37 +167,6 @@ func migrateV12(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
-// tilesRebuildColumns is the explicit column list a rebuild copies — every
-// tiles column as of v5 that still exists, id included (identity is
-// preserved byte-for-byte; a rebuild changes the CHECK, never the data).
-// The v5 and v6 rebuilds copy this same list: the v6 rebuild reads a
-// v5-shaped table, and the new link_target_id column fills with its NULL
-// default.
-//
-// object_id is NOT here: it was retired at v10, and a rebuild always
-// materializes the CURRENT tilesTableDDL, so a v4 file replaying v5 lands
-// on the v11 shape and simply does not carry the column forward. That is
-// the convergence contract working as designed — the fresh and migrated
-// routes must end at the same schema.
-//
-// view_cx/view_cy are the v11 framing columns, named here as DESTINATION
-// columns: rebuildSelect reads them from a pre-v11 source as
-// view_x + w/2 and view_y + h/2, so an old file replaying ANY rebuild
-// converts its framing exactly once and keeps the picture it had.
-const tilesRebuildColumns = `id, version, grid_id, kind, x, y, w, h,
-	view_cx, view_cy, view_zoom, child_grid_id,
-	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string, preview_blob_id, alt_text, alt_user, content_zoom, url_history,
-	created_at, updated_at`
-
-// tilesRebuildColumnsV8 is the copy list for the v8 rebuild, which reads a
-// v7-shaped table — so it must ALSO carry the post-v5 columns
-// (link_target_id, url_frozen) or every link row and standing freeze would
-// be silently reset to defaults. A rebuild's copy list is always "every
-// column of the version it reads", never the shared v5 list.
-const tilesRebuildColumnsV8 = tilesRebuildColumns + `,
-	link_target_id, url_frozen`
-
 // rebuildTilesForPaneKind is the v5 rebuild (adds the 'pane' kind to the
 // CHECK). Note the chain's convergence contract: a rebuild always creates
 // tiles_new from the CURRENT tilesTableDDL text, so an old DB replaying v5
@@ -205,20 +174,20 @@ const tilesRebuildColumnsV8 = tilesRebuildColumns + `,
 // idempotent re-runs — TestSchemaEquivalence proves the chain and a fresh
 // Open converge either way.
 func rebuildTilesForPaneKind(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx, tilesRebuildColumns)
+	return rebuildTiles(ctx, tx, 4)
 }
 
 // rebuildTilesForLinkTarget is the v6 rebuild (adds link_target_id and the
 // CHECK's link branch).
 func rebuildTilesForLinkTarget(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx, tilesRebuildColumns)
+	return rebuildTiles(ctx, tx, 5)
 }
 
 // rebuildTilesForConfigurePlugin is the v8 rebuild (adds
 // configure_plugin_id and the well CHECK's childless variant — issue #251).
 // It reads a v7-shaped table, so it copies the v7 column list.
 func rebuildTilesForConfigurePlugin(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx, tilesRebuildColumnsV8)
+	return rebuildTiles(ctx, tx, 7)
 }
 
 // rebuildTiles rebuilds the tiles table into the current shape: create
@@ -236,7 +205,8 @@ func rebuildTilesForConfigurePlugin(ctx context.Context, tx *sql.Tx) error {
 // REUSED after the migration, violating the "ids are never reused" invariant
 // (embeds, deep links, and client caches are keyed by id and would resolve to
 // the wrong tile). The fixture in migration_harness_test.go pins this trap.
-func rebuildTiles(ctx context.Context, tx *sql.Tx, columns string) error {
+func rebuildTiles(ctx context.Context, tx *sql.Tx, reads int) error {
+	columns := rebuildColumns(reads)
 	src, err := rebuildSelect(ctx, tx, columns)
 	if err != nil {
 		return err
@@ -321,7 +291,7 @@ func migrateV11(ctx context.Context, tx *sql.Tx) error {
 	if err := moveHomeRootFraming(ctx, tx); err != nil {
 		return err
 	}
-	if err := rebuildTiles(ctx, tx, tilesRebuildColumnsV10); err != nil {
+	if err := rebuildTiles(ctx, tx, 9); err != nil {
 		return err
 	}
 	// DROP TABLE tiles took idx_tiles_live_key with it (see rebuildTiles).
@@ -474,7 +444,7 @@ func migrateV10(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_tiles_object_id`); err != nil {
 		return fmt.Errorf("drop idx_tiles_object_id: %w", err)
 	}
-	if err := rebuildTiles(ctx, tx, tilesRebuildColumnsV10); err != nil {
+	if err := rebuildTiles(ctx, tx, 10); err != nil {
 		return err
 	}
 	// DROP TABLE tiles took idx_tiles_live_key with it — that index is
@@ -485,14 +455,6 @@ func migrateV10(ctx context.Context, tx *sql.Tx) error {
 	_, err = tx.ExecContext(ctx, externalsIndexDDL)
 	return err
 }
-
-// tilesRebuildColumnsV10 is the copy list for the v10 rebuild: every tiles
-// column of the version it READS (v9) that SURVIVES v10 — so the post-v5
-// columns and the v9 externals' columns ride across, and object_id +
-// configure_plugin_id are simply not carried. A rebuild's copy list is
-// always "every surviving column of the version it reads".
-const tilesRebuildColumnsV10 = tilesRebuildColumnsV8 + `,
-	ns, key, tombstoned`
 
 // adoptStalePluginWells turns every UNCONFIGURED PLUGIN WELL (#251: a
 // childless well carrying configure_plugin_id) into an ordinary interior
