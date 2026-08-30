@@ -3,79 +3,24 @@ package plugin_test
 import (
 	"context"
 	"fmt"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"net"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// stubServer is a minimal GridwellServer for transport tests.
-type stubServer struct {
-	gridwellv1.UnimplementedGridwellServer
-}
-
-func (s *stubServer) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	return &gridwellv1.InfoResponse{Kind: "stub", DisplayName: "Stub Plugin", RootGridId: "42"}, nil
-}
-
-// TestInProcessRoundTrip verifies the gRPC server/client stubs round-trip
-// over a loopback TCP connection (same as ServeInProcess uses).
-func TestInProcessRoundTrip(t *testing.T) {
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	srv := grpc.NewServer()
-	gridwellv1.RegisterGridwellServer(srv, &stubServer{})
-	go srv.Serve(lis)
-	defer srv.GracefulStop()
-
-	cc, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
-	defer cc.Close()
-	client := gridwellv1.NewGridwellClient(cc)
-
-	info, err := client.Info(context.Background(), &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatalf("Info: %v", err)
-	}
-	if info.Kind != "stub" {
-		t.Errorf("Info.Kind: got %q, want %q", info.Kind, "stub")
-	}
-	if info.RootGridId != "42" {
-		t.Errorf("Info.RootGridId: got %q, want %q", info.RootGridId, "42")
-	}
-}
-
-// TestServeInProcess verifies that ServeInProcess returns a working client.
-func TestServeInProcess(t *testing.T) {
-	client, closer, err := plugin.ServeInProcess(&stubServer{})
-	if err != nil {
-		t.Fatalf("ServeInProcess: %v", err)
-	}
-	defer closer()
-
-	info, err := client.Info(context.Background(), &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatalf("Info: %v", err)
-	}
-	if info.Kind != "stub" {
-		t.Errorf("Info.Kind: got %q, want %q", info.Kind, "stub")
-	}
-}
+// The gridwell.v1 CODEC round trip — a namespace written onto the wire and
+// read back — is namespace.TestTileRoundTripsBytesIdentical and friends:
+// the one place a real gRPC loopback still belongs (docs/simplify-plan.md
+// S2). Everything here is the loader and the registry, which hold Go
+// values.
 
 // TestRegistry_GetMissing verifies that a missing plugin returns (nil, false).
 func TestRegistry_GetMissing(t *testing.T) {
@@ -142,17 +87,22 @@ func TestLoadIntoFailsOnARefusingFactory(t *testing.T) {
 	}
 }
 
-// Close is terminal for the clients, and must be for every per-plugin fact:
-// labels and transit verdicts survived it, so a re-Register after Close
-// inherited a stale transit-ness.
+// Close is terminal for the namespaces, and must be for every per-plugin
+// fact: labels survived it, so a re-Register after Close inherited a stale
+// one.
 func TestRegistry_CloseForgetsEveryFact(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("p1", "fs", nil, nil)
 	reg.SetLabel("p1", "files")
-	reg.SetTransit("p1", true)
 	reg.Close()
-	if reg.Label("p1") != "" || reg.Transit("p1") {
-		t.Fatalf("after Close: label=%q transit=%v, want nothing remembered", reg.Label("p1"), reg.Transit("p1"))
+	if reg.Label("p1") != "" {
+		t.Fatalf("after Close: label=%q, want nothing remembered", reg.Label("p1"))
+	}
+	if _, ok := reg.Get("p1"); ok {
+		t.Fatal("after Close: the namespace is still registered")
+	}
+	if len(reg.Ordered()) != 0 {
+		t.Fatalf("after Close: Ordered() = %v, want empty", reg.Ordered())
 	}
 }
 

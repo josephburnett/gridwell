@@ -16,6 +16,8 @@ package server_test
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
+	"io"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -27,7 +29,7 @@ import (
 
 // rootGrid resolves the registered localdb's root grid through the
 // handshake, like every other export test.
-func rootGrid(t *testing.T, c gridwellv1.GridwellClient) string {
+func rootGrid(t *testing.T, c namespace.Namespace) string {
 	return homeRoot(t, c)
 }
 
@@ -74,13 +76,17 @@ func TestShellsDisabled(t *testing.T) {
 	}
 	qualified := "ur1/" + pre.Tile.Id
 
-	stream, err := c.OpenShell(ctx)
-	if err != nil {
-		t.Fatalf("OpenShell dial: %v", err)
-	}
-	_ = stream.Send(&gridwellv1.OpenShellRequest{TileId: qualified, Resize: &gridwellv1.PTYSize{Cols: 80, Rows: 24}})
-	if _, err := stream.Recv(); status.Code(err) != codes.PermissionDenied {
-		t.Errorf("OpenShell = %v, want PermissionDenied", err)
+	bind := &gridwellv1.OpenShellRequest{TileId: qualified, Resize: &gridwellv1.PTYSize{Cols: 80, Rows: 24}}
+	sent := false
+	serr := c.OpenShell(ctx, func() (*gridwellv1.OpenShellRequest, error) {
+		if sent {
+			return nil, io.EOF
+		}
+		sent = true
+		return bind, nil
+	}, func(*gridwellv1.OpenShellResponse) error { return nil })
+	if status.Code(serr) != codes.PermissionDenied {
+		t.Errorf("OpenShell = %v, want PermissionDenied", serr)
 	}
 
 	alive, err := c.ShellSessionAlive(ctx, &gridwellv1.ShellSessionAliveRequest{TileId: qualified})

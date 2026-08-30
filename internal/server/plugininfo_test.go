@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -185,7 +186,7 @@ func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
 // countingInfoPlugin is a minimal plugin that counts Info calls and can fail
 // the first one — the seam for the Info cache tests.
 type countingInfoPlugin struct {
-	pb.UnimplementedGridwellServer
+	namespace.Unimplemented
 	calls     atomic.Int32
 	failFirst bool
 }
@@ -204,15 +205,11 @@ func (p *countingInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoRes
 // for a slow remote).
 func TestListPluginsCachesInfo(t *testing.T) {
 	fake := &countingInfoPlugin{}
-	client, closer, err := plugin.ServeInProcess(fake)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := fake
 	reg := plugin.NewRegistry()
 	reg.Register("u-1", "test", client, nil)
 	srv := mustNew(t, reg, Config{})
-	h := newConnectHandler(srv)
+	h := newConnectHandler(newRouter(srv))
 
 	for i := 0; i < 3; i++ {
 		if _, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{})); err != nil {
@@ -228,15 +225,11 @@ func TestListPluginsCachesInfo(t *testing.T) {
 // cached — the next call retries and the plugin recovers its listing.
 func TestListPluginsRetriesFailedInfo(t *testing.T) {
 	fake := &countingInfoPlugin{failFirst: true}
-	client, closer, err := plugin.ServeInProcess(fake)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := fake
 	reg := plugin.NewRegistry()
 	reg.Register("u-1", "test", client, nil)
 	srv := mustNew(t, reg, Config{})
-	h := newConnectHandler(srv)
+	h := newConnectHandler(newRouter(srv))
 
 	r1, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{}))
 	if err != nil {
@@ -261,7 +254,7 @@ func TestListPluginsRetriesFailedInfo(t *testing.T) {
 // alwaysFailInfoPlugin never succeeds its Info handshake — the persistently
 // broken plugin the buildPluginInfo unit tests can only simulate by hand.
 type alwaysFailInfoPlugin struct {
-	pb.UnimplementedGridwellServer
+	namespace.Unimplemented
 }
 
 func (alwaysFailInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
@@ -274,11 +267,7 @@ func (alwaysFailInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResp
 // wasm launcher — which only ever sees an internal/rpc.PluginInfo, never the
 // server's pb.PluginInfo — can classify a broken plugin (client/pluginhealth).
 func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
-	client, closer, err := plugin.ServeInProcess(alwaysFailInfoPlugin{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := alwaysFailInfoPlugin{}
 	reg := plugin.NewRegistry()
 	reg.Register("u-broken", "fs", client, nil)
 	reg.SetLabel("u-broken", "Broken")

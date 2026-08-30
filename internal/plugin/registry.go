@@ -4,15 +4,16 @@ import (
 	"context"
 	"sync"
 
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// Registry maps plugin UUID strings to their gRPC clients. Thread-safe.
-// Close() terminates all managed subprocesses; in-process plugins have no
-// subprocess to terminate.
+// Registry maps plugin UUID strings to their NAMESPACES — Go values the
+// router calls directly (docs/simplify-plan.md S2). Thread-safe. Close()
+// terminates all managed subprocesses; a namespace with no subprocess
+// behind it has nothing to terminate.
 type Registry struct {
 	mu      sync.RWMutex
-	clients map[string]gridwellv1.GridwellClient
+	clients map[string]namespace.Namespace
 	// kinds maps plugin UUID → kind — carried for Ordered()'s listing
 	// only; there is deliberately NO by-kind lookup (the host never
 	// switches on a plugin kind — charter).
@@ -26,14 +27,11 @@ type Registry struct {
 	order []string
 	// closers holds the cleanup function for each managed (subprocess) plugin.
 	closers map[string]func()
-	// transit holds each plugin's DECLARED transit-ness (SetTransit).
-	transit map[string]bool
 	// transport is the node's connection namespace ("<id>/<conn>/…"),
 	// installed by the node (SetTransport). Not a plugin: it has no uuid
 	// of its own — the node's id qualifies it — and it never lists in
-	// Ordered. Transitional slot until the registry holds namespaces as
-	// Go values (docs/one-node.md P3).
-	transport      gridwellv1.GridwellClient
+	// Ordered.
+	transport      namespace.Namespace
 	transportRows  func(context.Context) []ConnectionRow
 	transportClose func()
 }
@@ -49,11 +47,10 @@ type ConnectionRow struct {
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		clients: make(map[string]gridwellv1.GridwellClient),
+		clients: make(map[string]namespace.Namespace),
 		kinds:   make(map[string]string),
 		labels:  make(map[string]string),
 		closers: make(map[string]func()),
-		transit: make(map[string]bool),
 	}
 }
 
@@ -76,13 +73,13 @@ func (r *Registry) Label(id string) string {
 
 // Register adds a plugin client for the given UUID and kind. closer, if
 // non-nil, is called on Close() to terminate the backing subprocess.
-func (r *Registry) Register(id, kind string, client gridwellv1.GridwellClient, closer func()) {
+func (r *Registry) Register(id, kind string, ns namespace.Namespace, closer func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.clients[id]; !exists {
 		r.order = append(r.order, id)
 	}
-	r.clients[id] = client
+	r.clients[id] = ns
 	r.kinds[id] = kind
 	if closer != nil {
 		r.closers[id] = closer
@@ -103,35 +100,12 @@ func (r *Registry) Ordered() []struct{ UUID, Kind string } {
 	return out
 }
 
-// SetTransit records the plugin's DECLARED transit-ness (InfoResponse.
-// transit, read once from the spawn-time handshake by the loader — the
-// local transport binary is alive even when its remote isn't, so the fact
-// is as stable as identity). The host never derives it from the kind
-// string (charter, 2026-08-15: the host must not know its plugins).
-func (r *Registry) SetTransit(id string, transit bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.transit[id] = transit
-}
-
-// Transit reports whether the plugin's ids are CHAINS from another node — a
-// node mount, where the plugin forwards to a remote gridwell's front door and
-// its ids arrive already qualified from the remote's perspective. The server's
-// qualification layer prepends this plugin's uuid to every id it returns
-// (qualifyTilesTransit) instead of applying leaf-plugin rules. The fact is
-// the plugin's own declaration (SetTransit), cached at spawn.
-func (r *Registry) Transit(id string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.transit[id]
-}
-
 // SetTransport installs the node's connection namespace: its client, its
 // row lister (for the handshake), and the closer Close runs.
-func (r *Registry) SetTransport(client gridwellv1.GridwellClient, rows func(context.Context) []ConnectionRow, closer func()) {
+func (r *Registry) SetTransport(ns namespace.Namespace, rows func(context.Context) []ConnectionRow, closer func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.transport, r.transportRows, r.transportClose = client, rows, closer
+	r.transport, r.transportRows, r.transportClose = ns, rows, closer
 }
 
 // Connections lists the transport's rows (nil without a transport).
@@ -145,16 +119,16 @@ func (r *Registry) Connections(ctx context.Context) []ConnectionRow {
 	return rows(ctx)
 }
 
-// Transport returns the connection namespace's client, or (nil, false)
-// when the node has none (unit tests over raw plugin routing).
-func (r *Registry) Transport() (gridwellv1.GridwellClient, bool) {
+// Transport returns the connection namespace, or (nil, false) when the
+// node has none (unit tests over raw plugin routing).
+func (r *Registry) Transport() (namespace.Namespace, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.transport, r.transport != nil
 }
 
-// Get returns the client for id, or (nil, false) if not registered.
-func (r *Registry) Get(id string) (gridwellv1.GridwellClient, bool) {
+// Get returns the namespace for id, or (nil, false) if not registered.
+func (r *Registry) Get(id string) (namespace.Namespace, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	c, ok := r.clients[id]
@@ -173,9 +147,8 @@ func (r *Registry) Close() {
 		r.transportClose()
 	}
 	r.transport, r.transportRows, r.transportClose = nil, nil, nil
-	r.clients = make(map[string]gridwellv1.GridwellClient)
+	r.clients = make(map[string]namespace.Namespace)
 	r.kinds = make(map[string]string)
 	r.labels = make(map[string]string)
-	r.transit = make(map[string]bool)
 	r.order = nil
 }

@@ -69,11 +69,7 @@ func TestPluginProcessDarkServesRememberedListing(t *testing.T) {
 	}
 	t.Cleanup(cpCloser)
 	dc := &darkableCP{PluginClient: cp}
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(dc, memStore.Namespace("p1")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := pluginhost.New(dc, memStore.Namespace("p1"))
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
 	srv := servertest.New(t, reg, server.Config{})

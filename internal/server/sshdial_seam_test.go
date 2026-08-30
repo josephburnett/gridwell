@@ -3,6 +3,8 @@ package server_test
 import (
 	"context"
 	"fmt"
+	"github.com/josephburnett/gridwell/internal/namespace"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -12,7 +14,6 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/plugin"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
@@ -35,7 +36,7 @@ import (
 // localdb plugins ("personal", "work") behind FederationHandler on a real listener.
 // Returns its address and a direct client to the first plugin for
 // ground-truth assertions.
-func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
+func remoteNode(t *testing.T) (string, namespace.Namespace) {
 	t.Helper()
 	reg := plugin.NewRegistry()
 	for i, name := range []string{"personal", "work"} {
@@ -44,11 +45,7 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 			t.Fatalf("store.Open: %v", err)
 		}
 		t.Cleanup(func() { st.Close() })
-		direct, closer, err := compose.ServeInProcess(local.New(st, shellsvc.NewManager(shellsvctest.New())))
-		if err != nil {
-			t.Fatalf("serve localdb: %v", err)
-		}
-		t.Cleanup(closer)
+		direct := local.New(st, shellsvc.NewManager(shellsvctest.New()))
 		uuid := fmt.Sprintf("ur%d", i+1)
 		reg.Register(uuid, "home", direct, nil)
 		reg.SetLabel(uuid, name)
@@ -69,12 +66,12 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 }
 
 // dialThroughSSH assembles the full topology and returns the tunneled client.
-func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient, error) {
+func dialThroughSSH(t *testing.T) (namespace.Namespace, namespace.Namespace, error) {
 	t.Helper()
 	nodeAddr, direct := remoteNode(t)
 	creds := dialtest.Server(t, t.TempDir())
 
-	client, closer, err := dial.Dial(dial.Config{
+	client, dialClose, err := dial.Dial(dial.Config{
 		Host:       creds.Addr,
 		User:       "joe",
 		KeyPath:    creds.KeyPath,
@@ -84,7 +81,7 @@ func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.Gridwel
 	if err != nil {
 		return nil, direct, err
 	}
-	t.Cleanup(closer)
+	t.Cleanup(dialClose)
 	return client, direct, nil
 }
 
@@ -128,18 +125,7 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	// The body follows through the tunnel's WriteContent, then reads back
 	// DIRECTLY on the remote — the mount is the same plugin, hop peeled.
 	_ = writeThenRead(t, ctx, c, created.Tile.Id, created.Tile.Version, []byte("# over ssh"))
-	r, err := direct.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: strings.TrimPrefix(created.Tile.Id, "ur1/")})
-	if err != nil {
-		t.Fatalf("direct read: %v", err)
-	}
-	var got []byte
-	for {
-		chunk, rerr := r.Recv()
-		if rerr != nil {
-			break
-		}
-		got = append(got, chunk.Data...)
-	}
+	got := readAllChunks(t, ctx, direct, strings.TrimPrefix(created.Tile.Id, "ur1/"))
 	if string(got) != "# over ssh" {
 		t.Errorf("content = %q, want %q", got, "# over ssh")
 	}
@@ -148,29 +134,28 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 // writeThenRead drives the contracted content surface: WriteContent commits
 // the bytes (version claimed from the created row), ReadContent streams them
 // back. The test helper for what CreateTile.data used to carry.
-func writeThenRead(t *testing.T, ctx context.Context, c gridwellv1.GridwellClient, tileID string, version int64, data []byte) []byte {
+func writeThenRead(t *testing.T, ctx context.Context, c namespace.Namespace, tileID string, version int64, data []byte) []byte {
 	t.Helper()
-	w, err := c.WriteContent(ctx)
-	if err != nil {
-		t.Fatalf("WriteContent open: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tileID, Version: version, Data: data}); err != nil {
-		t.Fatalf("WriteContent send: %v", err)
-	}
-	if _, err := w.CloseAndRecv(); err != nil {
-		t.Fatalf("WriteContent close: %v", err)
-	}
-	r, err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: tileID})
-	if err != nil {
-		t.Fatalf("ReadContent: %v", err)
-	}
-	var out []byte
-	for {
-		chunk, err := r.Recv()
-		if err != nil {
-			break
+	sent := false
+	if _, err := c.WriteContent(ctx, func() (*gridwellv1.WriteContentRequest, error) {
+		if sent {
+			return nil, io.EOF
 		}
-		out = append(out, chunk.Data...)
+		sent = true
+		return &gridwellv1.WriteContentRequest{TileId: tileID, Version: version, Data: data}, nil
+	}); err != nil {
+		t.Fatalf("WriteContent: %v", err)
+	}
+	return readAllChunks(t, ctx, c, tileID)
+}
+
+// readAllChunks drains a namespace's ReadContent into one value.
+func readAllChunks(t *testing.T, ctx context.Context, c namespace.Namespace, tileID string) []byte {
+	t.Helper()
+	var out []byte
+	if err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: tileID},
+		func(chunk *gridwellv1.ContentChunk) error { out = append(out, chunk.Data...); return nil }); err != nil {
+		t.Fatalf("ReadContent: %v", err)
 	}
 	return out
 }
@@ -186,7 +171,7 @@ func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 	nodeAddr, _ := remoteNode(t)
 	creds, sshd := dialtest.Restartable(t, t.TempDir())
 
-	client, closer, err := dial.Dial(dial.Config{
+	client, dialClose, err := dial.Dial(dial.Config{
 		Host:       creds.Addr,
 		User:       "joe",
 		KeyPath:    creds.KeyPath,
@@ -196,7 +181,7 @@ func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	t.Cleanup(closer)
+	t.Cleanup(dialClose)
 	ctx := context.Background()
 
 	if _, err := client.Info(ctx, &gridwellv1.InfoRequest{}); err != nil {

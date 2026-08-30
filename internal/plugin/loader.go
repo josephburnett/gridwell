@@ -1,18 +1,17 @@
 // Package plugin — loader builds the registry from server config. Every
-// entry is one of two things: a NATIVE kind (local, remote — node code,
-// constructed by the factories the serve wiring supplies) or a CONTENT
-// PLUGIN (everything else — spawned as a gridwell-plugin-<kind>
-// subprocess, the third-party door, or compiled in through a
-// Factory: the mobile bind — iOS forbids fork/exec). The
-// gridwell.v1 subprocess door retired 2026-08-27; plugins are plugins.
+// entry is a CONTENT PLUGIN: spawned as a gridwell-plugin-<kind>
+// subprocess (the third-party door) or compiled in through a Factory (the
+// mobile bind — iOS forbids fork/exec). The node constructs its own home
+// and transport around this call (internal/node); neither is a plugin.
+//
+// A loaded plugin reaches the registry as a namespace.Namespace — a Go
+// value the router calls directly. The plugin.v1 subprocess underneath is
+// one of the node's only two gRPC hops (docs/simplify-plan.md S2).
 package plugin
 
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/josephburnett/gridwell/api/compose"
@@ -20,7 +19,7 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 )
 
@@ -36,21 +35,18 @@ type Factory func(cfg map[string]string) (pluginv1.PluginServer, error)
 func LoadInto(reg *Registry, cfg *config.ServerConfig, factories map[string]Factory, st *store.Store) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
-		client, closer, err := loadPlugin(pc, factories, st)
+		ns, closer, err := loadPlugin(pc, factories, st)
 		if err != nil {
 			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, err)
 		}
-		// The spawn-time handshake reads the plugin's DECLARATIONS — the
-		// host never derives behavior from the kind string (charter,
-		// 2026-08-15). Transit-ness is the one declaration the host needs
-		// synchronously (routing reads it per request), so it is cached
-		// here, like identity. A handshake that FAILS stops the launch
-		// (owner decision 2026-08-27: a plugin without the config it needs
-		// must not come up as an empty grid — Info is where a plugin says
-		// so, FailedPrecondition with the reason). The native remote
-		// answers its own Info even when every connection is dark.
+		// A handshake that FAILS stops the launch (owner decision
+		// 2026-08-27: a plugin without the config it needs must not come up
+		// as an empty grid — Info is where a plugin says so,
+		// FailedPrecondition with the reason). Nothing is READ from the
+		// answer here: every plugin-specific behavior rides a wire
+		// declaration the router reads per request (charter, 2026-08-15).
 		ictx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		info, ierr := client.Info(ictx, &gridwellv1.InfoRequest{})
+		_, ierr := ns.Info(ictx, &gridwellv1.InfoRequest{})
 		cancel()
 		if ierr != nil {
 			if closer != nil {
@@ -58,45 +54,17 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, factories map[string]Fact
 			}
 			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, ierr)
 		}
-		transit := info.GetTransit()
-		// A MOUNT gets the read-through cache in front of it (mountcache,
-		// offline-plan phase 1): the remote going dark degrades to
-		// stale-but-readable instead of blank. A cache that cannot open
-		// degrades to the uncached client — loudly, never fatally: the
-		// cache is an availability layer, and refusing to serve because
-		// the OPTIMIZATION broke would invert its purpose.
-		if transit && cfg.CacheDir != "" {
-			if mkErr := os.MkdirAll(cfg.CacheDir, 0o700); mkErr != nil {
-				log.Printf("gridwell: mount cache dir %s: %v (plugin %q runs uncached)", cfg.CacheDir, mkErr, pc.ID)
-			} else if cached, cacheClose, cErr := mountcache.Open(client, filepath.Join(cfg.CacheDir, pc.ID+".db")); cErr != nil {
-				log.Printf("gridwell: mount cache for %q: %v (plugin runs uncached)", pc.ID, cErr)
-			} else {
-				client = cached
-				inner := closer
-				closer = func() {
-					cacheClose()
-					if inner != nil {
-						inner()
-					}
-				}
-			}
-		}
-		reg.Register(pc.ID, pc.Kind, client, closer)
+		reg.Register(pc.ID, pc.Kind, ns, closer)
 		reg.SetLabel(pc.ID, pc.Label)
-		reg.SetTransit(pc.ID, transit)
 	}
 	return nil
 }
 
-// ServeInProcess is compose.ServeInProcess — re-exported for the many
-// seam tests that stand a real gridwell.v1 server up in-process.
-var ServeInProcess = compose.ServeInProcess
-
 // loadPlugin materializes one plugin entry: the content process
 // (subprocess binary or in-process factory) and the adapter joining it
-// with the plugin's namespace of the node's store, served back as an
-// ordinary GridwellClient.
-func loadPlugin(pc *config.PluginConfig, pluginFactories map[string]Factory, st *store.Store) (gridwellv1.GridwellClient, func(), error) {
+// with the plugin's namespace of the node's store — an ordinary
+// namespace.Namespace the router calls in-process.
+func loadPlugin(pc *config.PluginConfig, pluginFactories map[string]Factory, st *store.Store) (namespace.Namespace, func(), error) {
 	// The plugin's config: its own keys plus identity. A plugin is
 	// stateless by contract; the node's store is never the guest's.
 	cfg := make(map[string]string, len(pc.Config)+2)
@@ -124,14 +92,5 @@ func loadPlugin(pc *config.PluginConfig, pluginFactories map[string]Factory, st 
 		return nil, nil, err
 	}
 
-	client, adapterClose, err := compose.ServeInProcess(pluginhost.New(cp, st.Namespace(pc.ID)))
-	if err != nil {
-		cpClose()
-		return nil, nil, err
-	}
-	closer := func() {
-		adapterClose()
-		cpClose()
-	}
-	return client, closer, nil
+	return pluginhost.New(cp, st.Namespace(pc.ID)), cpClose, nil
 }

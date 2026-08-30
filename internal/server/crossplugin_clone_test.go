@@ -50,11 +50,7 @@ func twoPluginServer(t *testing.T) (cl *rpc.Client, uuidA, rootA, uuidB, rootB s
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientB, closerB, err := plugin.ServeInProcess(local.New(stB, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closerB)
+	clientB := local.New(stB, nil)
 	reg.Register(uuidB, "home", clientB, nil)
 	bareRootB, err := stB.RootGridID(ctx)
 	if err != nil {

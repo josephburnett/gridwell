@@ -12,10 +12,8 @@ package mountcache
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/api/gwerr"
-	"io"
 
-	"google.golang.org/grpc"
+	"github.com/josephburnett/gridwell/api/gwerr"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -30,73 +28,47 @@ var (
 	serveContentMountCap = int64(512 << 20)
 )
 
-func (c *Client) ServeContent(ctx context.Context, in *pb.ServeContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ServeContentChunk], error) {
-	upstream, err := c.GridwellClient.ServeContent(ctx, in, opts...)
-	if err != nil {
-		if gwerr.IsTransport(err) {
-			if s, ok := c.loadServeContent(ctx, in.GetTileId(), in.GetSubpath()); ok {
-				return s, nil
+// ServeContent tees the door body the way ReadContent tees a tile's:
+// remember the complete body at a clean end; a transport failure before
+// any chunk falls back to the remembered entry. Only status-200 answers
+// are remembered — an error page is a VERDICT, never served stale.
+func (c *Client) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
+	var status int64
+	var mediaType string
+	var data []byte
+	var gotChunk, oversized bool
+	err := c.Namespace.ServeContent(ctx, in, func(ch *pb.ServeContentChunk) error {
+		gotChunk = true
+		if status == 0 && ch.GetStatus() != 0 {
+			status = ch.GetStatus()
+			mediaType = ch.GetMediaType()
+		}
+		if !oversized {
+			data = append(data, ch.GetData()...)
+			if len(data) > serveContentEntryCap {
+				oversized = true
+				data = nil
 			}
 		}
-		return nil, err
-	}
-	return &teeServeStream{ServerStreamingClient: upstream, c: c, ctx: ctx,
-		tileID: in.GetTileId(), subpath: in.GetSubpath()}, nil
-}
-
-// teeServeStream mirrors teeContentStream for the door: remember the
-// complete body at clean EOF; before any frame, a transport failure falls
-// back to the cached entry (the dark mount surfaces on the FIRST Recv of
-// a chained stream, exactly like ReadContent).
-type teeServeStream struct {
-	grpc.ServerStreamingClient[pb.ServeContentChunk]
-	c               *Client
-	ctx             context.Context
-	tileID, subpath string
-
-	status    int64
-	mediaType string
-	data      []byte
-	oversized bool
-	stored    bool
-	gotFrame  bool
-	fallback  *memServeStream
-}
-
-func (s *teeServeStream) Recv() (*pb.ServeContentChunk, error) {
-	if s.fallback != nil {
-		return s.fallback.Recv()
-	}
-	chunk, err := s.ServerStreamingClient.Recv()
-	if err == io.EOF {
-		if !s.stored && !s.oversized && s.status == 200 {
-			s.stored = true
-			s.c.storeServeContent(s.ctx, s.tileID, s.subpath, s.status, s.mediaType, s.data)
+		return send(ch)
+	})
+	if err == nil {
+		if !oversized && status == 200 {
+			c.storeServeContent(ctx, in.GetTileId(), in.GetSubpath(), status, mediaType, data)
 		}
-		return nil, err
+		return nil
 	}
-	if err != nil {
-		if !s.gotFrame && gwerr.IsTransport(err) {
-			if m, ok := s.c.loadServeContent(s.ctx, s.tileID, s.subpath); ok {
-				s.fallback = m
-				return s.fallback.Recv()
-			}
-		}
-		return nil, err
-	}
-	s.gotFrame = true
-	if s.status == 0 && chunk.GetStatus() != 0 {
-		s.status = chunk.GetStatus()
-		s.mediaType = chunk.GetMediaType()
-	}
-	if !s.oversized {
-		s.data = append(s.data, chunk.GetData()...)
-		if len(s.data) > serveContentEntryCap {
-			s.oversized = true
-			s.data = nil
+	if !gotChunk && gwerr.IsTransport(err) {
+		if st, mt, cached, ok := c.loadServeContent(ctx, in.GetTileId(), in.GetSubpath()); ok {
+			return sendChunked(cached, func(b []byte, first bool) error {
+				if first {
+					return send(&pb.ServeContentChunk{Status: st, MediaType: mt, Data: b})
+				}
+				return send(&pb.ServeContentChunk{Data: b})
+			})
 		}
 	}
-	return chunk, nil
+	return err
 }
 
 func (c *Client) storeServeContent(ctx context.Context, tileID, subpath string, status int64, mediaType string, data []byte) {
@@ -130,46 +102,11 @@ func (c *Client) evictServeContent(ctx context.Context) {
 	}
 }
 
-func (c *Client) loadServeContent(ctx context.Context, tileID, subpath string) (*memServeStream, bool) {
-	var status int64
-	var mediaType string
-	var data []byte
+func (c *Client) loadServeContent(ctx context.Context, tileID, subpath string) (status int64, mediaType string, data []byte, ok bool) {
 	err := c.db.QueryRowContext(ctx, `SELECT status, media_type, data FROM servecontent
 		WHERE tile_id = ? AND subpath = ?`, tileID, subpath).Scan(&status, &mediaType, &data)
 	if err != nil {
-		return nil, false
+		return 0, "", nil, false
 	}
-	return newMemServeStream(ctx, status, mediaType, data), true
-}
-
-// memServeStream serves a cached door body in the live chunk shape:
-// chunk 1 carries status + media_type, later chunks data only.
-type memServeStream struct {
-	noopClientStream
-	chunks []*pb.ServeContentChunk
-	i      int
-}
-
-func newMemServeStream(ctx context.Context, status int64, mediaType string, data []byte) *memServeStream {
-	first := &pb.ServeContentChunk{Status: status, MediaType: mediaType}
-	if len(data) > 0 {
-		first.Data = data[:min(len(data), contentChunkBytes)]
-		data = data[len(first.Data):]
-	}
-	chunks := []*pb.ServeContentChunk{first}
-	for len(data) > 0 {
-		n := min(len(data), contentChunkBytes)
-		chunks = append(chunks, &pb.ServeContentChunk{Data: data[:n]})
-		data = data[n:]
-	}
-	return &memServeStream{noopClientStream: noopClientStream{ctx: ctx}, chunks: chunks}
-}
-
-func (m *memServeStream) Recv() (*pb.ServeContentChunk, error) {
-	if m.i >= len(m.chunks) {
-		return nil, io.EOF
-	}
-	ch := m.chunks[m.i]
-	m.i++
-	return ch, nil
+	return status, mediaType, data, true
 }

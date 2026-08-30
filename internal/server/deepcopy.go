@@ -6,12 +6,13 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
 // Cross-plugin DEEP COPY of a solid well (issue #200) — the standing punt
 // from the 2026-07-19 link/clone decision, unblocked by the content streams.
-// The router walks the source subtree through the plugin interface (reads by
-// LOCAL id against the source client; reference targets re-expressed in the
+// The router walks the source subtree through the namespace interface (reads by
+// LOCAL id against the source namespace; reference targets re-expressed in the
 // server-global frame via the same qualification every response gets) and
 // materializes it in the destination plugin: create → recurse → bytes via
 // the one content door → framing via the one writeback.
@@ -41,7 +42,7 @@ import (
 // read BEFORE anything is created: an unreachable room must degrade to a
 // LINK (the caller's decision, keyed on sourceUnreachable of the nil-out
 // error), not to an empty solid well pretending to be a copy.
-func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst pb.GridwellClient, dstGrid string, x, y int64) (*pb.TileResponse, error) {
+func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst namespace.Namespace, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	srcChild := srcLocalTile.ChildGridId
 	g, err := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcChild})
 	if err != nil {
@@ -70,7 +71,7 @@ func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient
 
 	dstChild := created.GetTile().GetChildGridId()
 	for _, child := range g.Tiles {
-		if err := h.deepCopyTile(ctx, src, srcTransit, srcUUID, child, dst, dstChild); err != nil {
+		if err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, child, dst, dstChild); err != nil {
 			return created, fmt.Errorf("copy tile %s: %w", child.Id, err)
 		}
 	}
@@ -79,7 +80,7 @@ func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient
 
 // deepCopyTile copies one plugin-local source tile into dest-local grid
 // dstGrid at the source's own coordinates.
-func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient, srcTransit bool, srcUUID string, t *pb.Tile, dst pb.GridwellClient, dstGrid string) error {
+func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, t *pb.Tile, dst namespace.Namespace, dstGrid string) error {
 	// The server-global view of this tile decides its reference-ness and the
 	// qualified targets a copied reference must carry — the SAME
 	// qualification every wire response gets, so the copy and a fresh read
@@ -97,7 +98,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 		})
 		return err
 	case q.Kind == "well":
-		created, err := h.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, t.X, t.Y)
+		created, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, t.X, t.Y)
 		// Degrade ONLY when nothing was created (the source grid was dark
 		// before the copy began) — the same guard the top-level clone has
 		// (out != nil). A failure with a partial in place must surface as

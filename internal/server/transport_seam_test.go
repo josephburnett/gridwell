@@ -11,6 +11,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -22,7 +23,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	_ "modernc.org/sqlite"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/shellstream"
@@ -42,12 +42,12 @@ import (
 const localNodeID = "lnode1"
 
 type transportHarness struct {
-	localCl   *rpc.Client               // the local node's front door
-	remoteCl  *rpc.Client               // the remote node's own front door
-	tClient   gridwellv1.GridwellClient // the transport, in process
-	rootBare  string                    // the remote home's bare root grid id
-	localURL  string                    // the local node's web door origin
-	localHTTP *httptest.Server          // …and the server behind it
+	localCl   *rpc.Client         // the local node's front door
+	remoteCl  *rpc.Client         // the remote node's own front door
+	tClient   namespace.Namespace // the transport, in process
+	rootBare  string              // the remote home's bare root grid id
+	localURL  string              // the local node's web door origin
+	localHTTP *httptest.Server    // …and the server behind it
 	// remoteShell is the REMOTE home's PTY backend — the fake echoing
 	// streamer, so a shell attach through the chain can be asserted
 	// without a tmux anywhere.
@@ -72,11 +72,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = remoteStore.Close() })
-	remoteClient, remoteCloser, err := compose.ServeInProcess(local.New(remoteStore, shellsvc.NewManager(h.remoteShell)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(remoteCloser)
+	remoteClient := local.New(remoteStore, shellsvc.NewManager(h.remoteShell))
 	remoteReg := plugin.NewRegistry()
 	remoteReg.Register("rnode1", "home", remoteClient, nil)
 	remoteReg.SetLabel("rnode1", "home")
@@ -104,25 +100,21 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	if err != nil {
 		t.Fatal(err)
 	}
-	transport, err := remote.New(db, func(cfg dial.Config) (gridwellv1.GridwellClient, func(), error) {
+	transport, err := remote.New(db, func(cfg dial.Config) (namespace.Namespace, func(), error) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.dialed = append(h.dialed, cfg)
 		if h.dialErr != nil {
 			return nil, nil, h.dialErr
 		}
-		return remoteExport, func() {}, nil
+		return namespace.FromClient(remoteExport), func() {}, nil
 	}, "", conns, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = transport.Close() })
 	transport.ConnectAll(ctx)
-	tClient, tCloser, err := compose.ServeInProcess(transport)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(tCloser)
+	tClient := transport
 	h.tClient = tClient
 
 	localStore, err := store.Open(":memory:")
@@ -130,11 +122,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = localStore.Close() })
-	homeClient, homeCloser, err := compose.ServeInProcess(local.New(localStore, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(homeCloser)
+	homeClient := local.New(localStore, nil)
 	localReg := plugin.NewRegistry()
 	localReg.Register(localNodeID, "home", homeClient, nil)
 	localReg.SetLabel(localNodeID, "home")
@@ -234,10 +222,16 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 	root := lp.Connections[0].RootGridID
 	// Hop 1: the transport's own stream carries the remote's events with
 	// the connection segment prepended.
-	ts, err := h.tClient.Subscribe(ctx, &gridwellv1.SubscribeRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	transportEvents := make(chan *gridwellv1.Event, 32)
+	go func() {
+		_ = h.tClient.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+			select {
+			case transportEvents <- ev:
+			case <-ctx.Done():
+			}
+			return nil
+		})
+	}()
 	// Hop 2: the local door's stream carries them under the node's id.
 	// (Connect's server-stream call returns only once headers flush — on
 	// the first event — so it runs in a goroutine, like server_test does.)
@@ -263,16 +257,17 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 	if _, err := h.localCl.CreateText(ctx, &rpc.CreateTextRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1}); err != nil {
 		t.Fatal(err)
 	}
-	for {
-		ev, err := ts.Recv()
-		if err != nil {
-			t.Fatalf("hop 1 (transport stream): %v", err)
-		}
-		if tc := ev.GetTileChanged(); tc != nil {
-			if !strings.HasPrefix(tc.Tile.Id, "geneva/rnode1/") {
-				t.Fatalf("transport event id = %q, want geneva/rnode1/…", tc.Tile.Id)
+	for done := false; !done; {
+		select {
+		case ev := <-transportEvents:
+			if tc := ev.GetTileChanged(); tc != nil {
+				if !strings.HasPrefix(tc.Tile.Id, "geneva/rnode1/") {
+					t.Fatalf("transport event id = %q, want geneva/rnode1/…", tc.Tile.Id)
+				}
+				done = true
 			}
-			break
+		case <-ctx.Done():
+			t.Fatal("hop 1 (transport stream): no event")
 		}
 	}
 	for {
@@ -358,5 +353,78 @@ func TestShellDoorThroughAConnection(t *testing.T) {
 	}
 	if h.remoteShell.SessionCount() != 1 {
 		t.Errorf("remote PTY sessions = %d, want 1", h.remoteShell.SessionCount())
+	}
+}
+
+// TestTwoSubscribersEachSeeExactlyOnePrefix is the MESSAGE-OWNERSHIP seam
+// (namespace's contract): with no wire between the router and its
+// namespaces, one *pb.Event travels to every subscriber by pointer — the
+// transport's hub fans the same value out, and the router qualifies it per
+// hop. Qualification therefore has to CLONE (api/rpc.TransitQualifyTiles,
+// server.qualifyTiles); if any hop rewrote ids in place, the second
+// subscriber would read "lnode1/lnode1/geneva/…" or worse, and the
+// corruption would be invisible to a single-subscriber test. gRPC used to
+// hide this by handing every stream its own decoded copy — the reason a
+// general deep-copy layer looks unnecessary is that the clone already lives
+// in the one place that mutates.
+func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
+	lp, err := h.localCl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := lp.Connections[0].RootGridID
+
+	const subscribers = 4
+	ids := make(chan string, subscribers*8)
+	errs := make(chan error, subscribers)
+	for i := 0; i < subscribers; i++ {
+		go func() {
+			es, err := h.localCl.Subscribe(ctx)
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer es.Close()
+			for {
+				ev, ok, err := es.Recv()
+				if err != nil || !ok {
+					return
+				}
+				if ev.TileChanged != nil {
+					select {
+					case ids <- ev.TileChanged.Tile.ID:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}()
+	}
+	time.Sleep(500 * time.Millisecond) // every subscriber is fanned in
+
+	if _, err := h.localCl.CreateText(ctx, &rpc.CreateTextRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := localNodeID + "/geneva/rnode1/"
+	seen := 0
+	for seen < subscribers {
+		select {
+		case id := <-ids:
+			if !strings.HasPrefix(id, want) {
+				t.Fatalf("subscriber saw id %q, want the single chain %q…", id, want)
+			}
+			if strings.Count(id, localNodeID+"/") != 1 || strings.Count(id, "geneva/") != 1 {
+				t.Fatalf("subscriber saw id %q — a segment was applied twice (an event mutated in place)", id)
+			}
+			seen++
+		case err := <-errs:
+			t.Fatalf("subscribe: %v", err)
+		case <-ctx.Done():
+			t.Fatalf("only %d of %d subscribers saw the event", seen, subscribers)
+		}
 	}
 }

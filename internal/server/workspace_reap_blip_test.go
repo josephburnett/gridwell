@@ -2,11 +2,11 @@ package server
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"sync/atomic"
 	"testing"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -21,24 +21,24 @@ import (
 // every GetTile answers Unavailable — a transport blip at exactly the
 // moment the handler confirms whether the deleted workspace row is gone.
 type blipClient struct {
-	pb.GridwellClient
+	namespace.Namespace
 	armID string
 	blip  atomic.Bool
 }
 
-func (c *blipClient) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest, opts ...grpc.CallOption) (*pb.DeleteTileResponse, error) {
-	resp, err := c.GridwellClient.DeleteTile(ctx, req, opts...)
+func (c *blipClient) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
+	resp, err := c.Namespace.DeleteTile(ctx, req)
 	if err == nil && req.TileId == c.armID {
 		c.blip.Store(true)
 	}
 	return resp, err
 }
 
-func (c *blipClient) GetTile(ctx context.Context, req *pb.GetTileRequest, opts ...grpc.CallOption) (*pb.TileResponse, error) {
+func (c *blipClient) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error) {
 	if c.blip.Load() && req.TileId == c.armID {
 		return nil, status.Error(codes.Unavailable, "blip")
 	}
-	return c.GridwellClient.GetTile(ctx, req, opts...)
+	return c.Namespace.GetTile(ctx, req)
 }
 
 // A transport blip on the confirming read must NOT reap: "row unreadable
@@ -53,11 +53,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	inner, closer, err := plugin.ServeInProcess(local.New(st, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	inner := local.New(st, nil)
 	uuid, err := st.PluginUUID(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +62,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bc := &blipClient{GridwellClient: inner}
+	bc := &blipClient{Namespace: inner}
 	reg := plugin.NewRegistry()
 	reg.Register(uuid, "home", bc, nil)
 	srv := mustNew(t, reg, Config{})

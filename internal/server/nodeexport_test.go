@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -17,14 +18,55 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
+// writeOne sends one complete value through a namespace's WriteContent —
+// the caller's half of the stream, ending at io.EOF (the clean end that
+// commits).
+func writeOne(t *testing.T, c namespace.Namespace, tileID string, version int64, data []byte) *gridwellv1.TileResponse {
+	t.Helper()
+	sent := false
+	resp, err := c.WriteContent(context.Background(), func() (*gridwellv1.WriteContentRequest, error) {
+		if sent {
+			return nil, io.EOF
+		}
+		sent = true
+		return &gridwellv1.WriteContentRequest{TileId: tileID, Version: version, Data: data}, nil
+	})
+	if err != nil {
+		t.Fatalf("WriteContent: %v", err)
+	}
+	return resp
+}
+
+// readOne drains a namespace's ReadContent, returning the bytes and the
+// version chunk 1 paired them with.
+func readOne(t *testing.T, c namespace.Namespace, tileID string) ([]byte, int64) {
+	t.Helper()
+	var data []byte
+	var version int64
+	first := true
+	if err := c.ReadContent(context.Background(), &gridwellv1.ReadContentRequest{TileId: tileID},
+		func(chunk *gridwellv1.ContentChunk) error {
+			if first {
+				version = chunk.Version
+				first = false
+			}
+			data = append(data, chunk.Data...)
+			return nil
+		}); err != nil {
+		t.Fatalf("ReadContent: %v", err)
+	}
+	return data, version
+}
+
 // homeRoot is where a mounter lands: the node's home root, from the same
 // handshake a client boots on.
-func homeRoot(t *testing.T, c gridwellv1.GridwellClient) string {
+func homeRoot(t *testing.T, c namespace.Namespace) string {
 	t.Helper()
 	lp, err := c.Handshake(context.Background(), &gridwellv1.HandshakeRequest{})
 	if err != nil {
@@ -45,14 +87,14 @@ func homeRoot(t *testing.T, c gridwellv1.GridwellClient) string {
 // remote ssh-plugin sees after its tunnel. Every request routes by the
 // QUALIFIED ids it carries; there is no scoping header and no name-based
 // selection.
-func nodeServer(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient) {
+func nodeServer(t *testing.T) (namespace.Namespace, namespace.Namespace) {
 	return nodeServerCfg(t, server.Config{})
 }
 
 // nodeServerCfg is nodeServer with the server config under test control
 // (shells_disabled_test.go flips DisableShells; everything else uses the
 // plain nodeServer default).
-func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, gridwellv1.GridwellClient) {
+func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namespace.Namespace) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -60,11 +102,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 	}
 	t.Cleanup(func() { st.Close() })
 	impl := local.New(st, shellsvc.NewManager(shellsvctest.New()))
-	direct, closer, err := plugin.ServeInProcess(impl)
-	if err != nil {
-		t.Fatalf("serve localdb: %v", err)
-	}
-	t.Cleanup(closer)
+	direct := impl
 
 	reg := plugin.NewRegistry()
 	reg.Register("ur1", "home", direct, nil)
@@ -85,7 +123,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 		t.Fatalf("grpc dial: %v", err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	return gridwellv1.NewGridwellClient(conn), direct
+	return namespace.FromClient(gridwellv1.NewGridwellClient(conn)), direct
 }
 
 func TestNodeExportInfoDescribesTheNode(t *testing.T) {
@@ -131,29 +169,9 @@ func TestNodeExportRoutesByQualifiedID(t *testing.T) {
 	// The body follows through the export's WriteContent; verify via the
 	// DIRECT plugin client — the export writes to the same plugin, ids
 	// peeled one segment per hop.
-	w, err := c.WriteContent(ctx)
-	if err != nil {
-		t.Fatalf("WriteContent via export: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: created.Tile.Id, Version: created.Tile.Version, Data: []byte("# via export")}); err != nil {
-		t.Fatalf("send: %v", err)
-	}
-	if _, err := w.CloseAndRecv(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
+	writeOne(t, c, created.Tile.Id, created.Tile.Version, []byte("# via export"))
 	localID := created.Tile.Id[4:]
-	r, err := direct.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: localID})
-	if err != nil {
-		t.Fatalf("direct ReadContent: %v", err)
-	}
-	var body []byte
-	for {
-		chunk, rerr := r.Recv()
-		if rerr != nil {
-			break
-		}
-		body = append(body, chunk.Data...)
-	}
+	body, _ := readOne(t, direct, localID)
 	if string(body) != "# via export" {
 		t.Errorf("content = %q, want %q", body, "# via export")
 	}
@@ -174,22 +192,30 @@ func TestNodeExportSubscribeStreamsQualifiedEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	sub, err := c.Subscribe(ctx, &gridwellv1.SubscribeRequest{})
-	if err != nil {
-		t.Fatalf("Subscribe: %v", err)
-	}
+	evs := make(chan *gridwellv1.Event, 8)
+	go func() {
+		_ = c.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+			select {
+			case evs <- ev:
+			case <-ctx.Done():
+			}
+			return nil
+		})
+	}()
+	time.Sleep(200 * time.Millisecond) // the fan-in is up before the mutation
 	if _, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: homeRoot(t, c),
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1},
 	}); err != nil {
 		t.Fatalf("CreateTile: %v", err)
 	}
-	ev, err := sub.Recv()
-	if err != nil {
-		t.Fatalf("no event through the export after a mutation: %v", err)
-	}
-	if tc := ev.GetTileChanged(); tc != nil && tc.Tile.Id[:4] != "ur1/" {
-		t.Errorf("event tile id = %q, want qualified", tc.Tile.Id)
+	select {
+	case ev := <-evs:
+		if tc := ev.GetTileChanged(); tc != nil && tc.Tile.Id[:4] != "ur1/" {
+			t.Errorf("event tile id = %q, want qualified", tc.Tile.Id)
+		}
+	case <-ctx.Done():
+		t.Fatal("no event through the export after a mutation")
 	}
 }
 
@@ -205,24 +231,36 @@ func TestNodeExportOpenShellBidi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTile(shell): %v", err)
 	}
-	stream, err := c.OpenShell(ctx)
-	if err != nil {
-		t.Fatalf("OpenShell: %v", err)
+	shellCtx, shellCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer shellCancel()
+	up := make(chan *gridwellv1.OpenShellRequest, 2)
+	up <- &gridwellv1.OpenShellRequest{TileId: shellTile.Tile.Id, Resize: &gridwellv1.PTYSize{Cols: 80, Rows: 24}}
+	up <- &gridwellv1.OpenShellRequest{Data: []byte("ping")}
+	down := make(chan []byte, 4)
+	go func() {
+		_ = c.OpenShell(shellCtx, func() (*gridwellv1.OpenShellRequest, error) {
+			select {
+			case m := <-up:
+				return m, nil
+			case <-shellCtx.Done():
+				return nil, io.EOF
+			}
+		}, func(r *gridwellv1.OpenShellResponse) error {
+			select {
+			case down <- r.Data:
+			case <-shellCtx.Done():
+			}
+			return nil
+		})
+	}()
+	select {
+	case got := <-down:
+		if string(got) != "ping" {
+			t.Errorf("shell echo through export = %q, want %q", got, "ping")
+		}
+	case <-shellCtx.Done():
+		t.Fatal("no shell output through the export")
 	}
-	if err := stream.Send(&gridwellv1.OpenShellRequest{TileId: shellTile.Tile.Id, Resize: &gridwellv1.PTYSize{Cols: 80, Rows: 24}}); err != nil {
-		t.Fatalf("bind: %v", err)
-	}
-	if err := stream.Send(&gridwellv1.OpenShellRequest{Data: []byte("ping")}); err != nil {
-		t.Fatalf("send: %v", err)
-	}
-	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("recv: %v", err)
-	}
-	if string(resp.Data) != "ping" {
-		t.Errorf("shell echo through export = %q, want %q", resp.Data, "ping")
-	}
-	_ = stream.CloseSend()
 }
 
 // TestNodeExportContentStreams drives the new content verbs over the raw
@@ -242,41 +280,12 @@ func TestNodeExportContentStreams(t *testing.T) {
 		t.Fatalf("CreateTile: %v", err)
 	}
 
-	w, err := c.WriteContent(ctx)
-	if err != nil {
-		t.Fatalf("WriteContent: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{
-		TileId: created.Tile.Id, Version: created.Tile.Version, Data: []byte("# via the export"),
-	}); err != nil {
-		t.Fatalf("send: %v", err)
-	}
-	resp, err := w.CloseAndRecv()
-	if err != nil {
-		t.Fatalf("CloseAndRecv: %v", err)
-	}
+	resp := writeOne(t, c, created.Tile.Id, created.Tile.Version, []byte("# via the export"))
 	if got := resp.Tile.Id; got != created.Tile.Id {
 		t.Errorf("response id = %q, want re-qualified %q", got, created.Tile.Id)
 	}
 
-	r, err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: created.Tile.Id})
-	if err != nil {
-		t.Fatalf("ReadContent: %v", err)
-	}
-	var data []byte
-	var version int64
-	first := true
-	for {
-		chunk, err := r.Recv()
-		if err != nil {
-			break
-		}
-		if first {
-			version = chunk.Version
-			first = false
-		}
-		data = append(data, chunk.Data...)
-	}
+	data, version := readOne(t, c, created.Tile.Id)
 	if string(data) != "# via the export" {
 		t.Errorf("content = %q", data)
 	}
@@ -313,16 +322,7 @@ func TestNodeExportSearches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTile: %v", err)
 	}
-	w, err := c.WriteContent(ctx)
-	if err != nil {
-		t.Fatalf("WriteContent: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: created.Tile.Id, Version: created.Tile.Version, Data: []byte("# xylophone notes")}); err != nil {
-		t.Fatalf("send: %v", err)
-	}
-	if _, err := w.CloseAndRecv(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
+	writeOne(t, c, created.Tile.Id, created.Tile.Version, []byte("# xylophone notes"))
 
 	// Free text finds the tile, id qualified for THIS hop's view.
 	resp, err := c.Search(ctx, &gridwellv1.SearchRequest{Query: "xylophone", Limit: 10})

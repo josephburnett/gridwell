@@ -11,11 +11,10 @@ internal/server/auth.go TokenLoginURL
 # Methods a LIBRARY calls through its own interface — the method pass
 # sees only this repo's call sites. hashicorp/go-plugin dispenses through
 # GRPCPlugin.{GRPCServer,GRPCClient}; goldmark installs a renderer through
-# RegisterFuncs; grpc's ClientStream contract includes Trailer.
+# RegisterFuncs.
 api/compose/plugin.go pluginGRPCPlugin.GRPCServer
 api/compose/plugin.go pluginGRPCPlugin.GRPCClient
 client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
-internal/plugin/mountcache/streams.go noopClientStream.Trailer
 
 # The fs plugin's dark-source seam: internal/pluginhost's parity test
 # injects a failing ReadDir (EACCES cannot be staged without root). A

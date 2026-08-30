@@ -56,11 +56,7 @@ func newShellDoorFixture(t *testing.T, cfg Config) *shellDoorFixture {
 		t.Fatalf("plugin uuid: %v", err)
 	}
 	fake := shellsvctest.New()
-	client, closer, err := plugin.ServeInProcess(local.New(st, shellsvc.NewManager(fake)))
-	if err != nil {
-		t.Fatalf("serve home: %v", err)
-	}
-	t.Cleanup(closer)
+	client := local.New(st, shellsvc.NewManager(fake))
 	reg := plugin.NewRegistry()
 	reg.Register(uuid, "home", client, nil)
 	bareRoot, err := st.RootGridID(context.Background())

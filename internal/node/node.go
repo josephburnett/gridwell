@@ -29,6 +29,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
@@ -205,15 +206,11 @@ func Start(opts Options) (*Node, error) {
 	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, st: st, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
 }
 
-// startHome registers the home over the store (served over the
-// in-process hop like every namespace — docs/one-node.md).
+// startHome registers the home over the store — a Go value the router
+// calls directly, no hop at all (docs/simplify-plan.md S2). Home does not
+// own the store handle: the node opened it and the node closes it.
 func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) error {
-	impl := newHome(st, cfg.ID, cfg.Shell)
-	client, stop, err := plugin.ServeInProcess(impl)
-	if err != nil {
-		return err
-	}
-	reg.Register(cfg.ID, "home", client, stop)
+	reg.Register(cfg.ID, "home", newHome(st, cfg.ID, cfg.Shell), nil)
 	reg.SetLabel(cfg.ID, "home")
 	return nil
 }
@@ -222,7 +219,8 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 // declared connections, dials them (bounded — the boot doesn't serve
 // mysteries), and installs the transport as the node's connection
 // namespace ("<id>/<conn>/…"), fronted by the mount cache so a dark
-// remote degrades to stale-but-readable instead of blank.
+// remote degrades to stale-but-readable instead of blank. ONE cache, in
+// front of the ONE namespace whose answers come from another machine.
 func startTransport(reg *plugin.Registry, st *store.Store, home string, cfg *config.ServerConfig) error {
 	db, err := remote.NewDB(st.SQL())
 	if err != nil {
@@ -234,12 +232,8 @@ func startTransport(reg *plugin.Registry, st *store.Store, home string, cfg *con
 		return err
 	}
 	impl.ConnectAll(context.Background())
-	client, stop, err := plugin.ServeInProcess(impl)
-	if err != nil {
-		closeImpl(impl)
-		return err
-	}
-	closer := func() { stop(); closeImpl(impl) }
+	var ns namespace.Namespace = impl
+	closer := func() { closeImpl(impl) }
 	rows := func(ctx context.Context) []plugin.ConnectionRow {
 		out := []plugin.ConnectionRow{}
 		for _, r := range impl.Rows(ctx) {
@@ -255,15 +249,15 @@ func startTransport(reg *plugin.Registry, st *store.Store, home string, cfg *con
 		// its purpose.
 		if mkErr := os.MkdirAll(cfg.CacheDir, 0o700); mkErr != nil {
 			log.Printf("gridwell: mount cache dir %s: %v (connections run uncached)", cfg.CacheDir, mkErr)
-		} else if cached, cacheClose, cErr := mountcache.Open(client, config.CacheFile(cfg.CacheDir)); cErr != nil {
+		} else if cached, cacheClose, cErr := mountcache.Open(ns, config.CacheFile(cfg.CacheDir)); cErr != nil {
 			log.Printf("gridwell: mount cache: %v (connections run uncached)", cErr)
 		} else {
-			client = cached
+			ns = cached
 			inner := closer
 			closer = func() { cacheClose(); inner() }
 		}
 	}
-	reg.SetTransport(client, rows, closer)
+	reg.SetTransport(ns, rows, closer)
 	return nil
 }
 

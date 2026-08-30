@@ -76,11 +76,7 @@ func pluginProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 		t.Fatal(err)
 	}
 	t.Cleanup(cpCloser)
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, memStore.Namespace("p1")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := pluginhost.New(cp, memStore.Namespace("p1"))
 	reg := plugin.NewRegistry()
 	reg.Register(procUUID, "proc", client, nil)
 	srv := servertest.New(t, reg, server.Config{})

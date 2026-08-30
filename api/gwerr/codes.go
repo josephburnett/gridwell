@@ -5,16 +5,19 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-// codePairs is the ONE gRPC↔Connect status-code table. Every hop that
-// translates a status between the two wires (the Connect handler's
-// asConnectError on the way to a browser, the node export's statusErr on
-// the way to a mounter) reads it in one direction or the other, so a code
-// that survives one hop survives the next. Before this table each hop kept
-// a hand-written switch with a default → Internal, and the two had drifted:
-// a mount-of-mount's Unavailable came out Internal, IsTransport said "a
-// verdict", and clientsync dropped an unacknowledged write it should have
-// parked. The table is total over both enums (TestCodeTableIsTotal) — a
-// code missing here fails the contract's test, not a user's write.
+// codePairs is the ONE gRPC↔Connect status-code table. Gridwell answers in
+// gRPC status codes everywhere — every namespace, the router, the
+// federation export — and exactly one hop translates: the Connect codec on
+// the way to a browser (server.asConnectError). Before this table that hop
+// and the export's inverse each kept a hand-written switch with a default
+// → Internal, and the two had drifted: a mount-of-mount's Unavailable came
+// out Internal, IsTransport said "a verdict", and clientsync dropped an
+// unacknowledged write it should have parked. (The inverse is gone with
+// the export's per-method delegation — 2026-08-29, docs/simplify-plan.md
+// S2: the export hands a mounter the router's status error unchanged.) The
+// table is total and injective over the gRPC enum
+// (TestCodeTableIsTotal) — a code missing here fails the contract's test,
+// not a user's write.
 var codePairs = []struct {
 	G codes.Code
 	C connect.Code
@@ -47,15 +50,4 @@ func ConnectCode(c codes.Code) connect.Code {
 		}
 	}
 	return connect.CodeInternal
-}
-
-// GRPCCode maps a Connect error code to its gRPC twin; a code outside the
-// table maps to Internal.
-func GRPCCode(c connect.Code) codes.Code {
-	for _, p := range codePairs {
-		if p.C == c {
-			return p.G
-		}
-	}
-	return codes.Internal
 }

@@ -30,8 +30,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -138,42 +136,34 @@ func (s *Server) contentDoor() http.Handler {
 			httpStatusError(w, err)
 			return
 		}
-		up, err := c.ServeContent(r.Context(), &pb.ServeContentRequest{TileId: local, Subpath: subpath})
-		if err != nil {
-			httpStatusError(w, err)
-			return
-		}
-		first, err := up.Recv()
-		if err != nil {
-			httpStatusError(w, err)
-			return
-		}
-		h := w.Header()
-		// The sandbox is the door's invariant, stamped on EVERY response.
-		h.Set("Content-Security-Policy", "sandbox allow-scripts")
-		h.Set("X-Content-Type-Options", "nosniff")
-		if mt := first.GetMediaType(); mt != "" {
-			h.Set("Content-Type", mt)
-		}
-		code := int(first.GetStatus())
-		if code == 0 {
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if _, err := w.Write(first.GetData()); err != nil {
-			return
-		}
-		for {
-			chunk, err := up.Recv()
-			if errors.Is(err, io.EOF) {
-				return
-			}
-			if err != nil {
-				return // headers are gone; nothing truthful left to send
-			}
-			if _, err := w.Write(chunk.GetData()); err != nil {
-				return
-			}
+		// The FIRST chunk carries the status and media type, so the
+		// headers are written from inside the stream: a failure before it
+		// is still an HTTP status the browser can read, and a failure after
+		// it can only truncate the body (the headers are gone; there is
+		// nothing truthful left to send).
+		wroteHeader := false
+		serr := c.ServeContent(r.Context(), &pb.ServeContentRequest{TileId: local, Subpath: subpath},
+			func(chunk *pb.ServeContentChunk) error {
+				if !wroteHeader {
+					wroteHeader = true
+					h := w.Header()
+					// The sandbox is the door's invariant, stamped on EVERY response.
+					h.Set("Content-Security-Policy", "sandbox allow-scripts")
+					h.Set("X-Content-Type-Options", "nosniff")
+					if mt := chunk.GetMediaType(); mt != "" {
+						h.Set("Content-Type", mt)
+					}
+					code := int(chunk.GetStatus())
+					if code == 0 {
+						code = http.StatusOK
+					}
+					w.WriteHeader(code)
+				}
+				_, werr := w.Write(chunk.GetData())
+				return werr
+			})
+		if serr != nil && !wroteHeader {
+			httpStatusError(w, serr)
 		}
 	})
 }
