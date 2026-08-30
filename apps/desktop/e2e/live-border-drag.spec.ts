@@ -1,23 +1,22 @@
 import { test, expect } from './fixtures';
 import { EV } from '../src/main/ipc';
 
-// Issue #81: a LEFT border-drag whose grab point lands on a live URL
-// WebContentsView must still resize the divider. The 10px grab band straddles
-// the divider and the live view's content box ends only 5px (LiveViewInsetPx)
-// inside the pane, so the inner half of the band IS the live view: the view
-// swallows the real press and the preload forwards it (VIEW_LEFTDOWN →
-// EV.leftForward → wasm onForwardedLeftDown). Historically that handler only
-// transferred focus — the resize never armed, the view never parked, and every
-// subsequent move was eaten ("moves a little then stops"), while the
-// right-button twin ran the full classification and worked.
+// A left border-drag whose grab point lands on a live url WebContentsView must
+// still resize the divider. The 10px grab band straddles the divider and the
+// live view's content box ends only 5px (LiveViewInsetPx) inside the pane, so
+// the inner half of the band is the live view: the view swallows the real press
+// and the preload forwards it as VIEW_LEFTDOWN, then EV.leftForward, then the
+// wasm onForwardedLeftDown. If that handler only transfers focus, the resize
+// never arms, the view never parks, and every later move is eaten, while the
+// right-button twin runs the full classification and works.
 //
-// CDP-injected Playwright input lands on the MAIN webContents (the canvas) and
-// is never intercepted by the native view, so a real mouse drag cannot
-// reproduce "the view ate the press". Instead this spec drives the exact seam
-// the fix lives in: it fires EV.leftForward from the main process with the
-// grab-band coordinates (what the preload+main relay produces for a real
-// press), then continues the drag with synthetic canvas mousemove/mouseup —
-// which is precisely what the wasm sees once arming parks the view.
+// CDP-injected Playwright input lands on the main webContents, the canvas, and
+// the native view never intercepts it, so a real mouse drag cannot reproduce the
+// view eating the press. Instead this spec drives the seam directly: it fires
+// EV.leftForward from the main process with the grab-band coordinates the
+// preload and main relay produce for a real press, then continues the drag with
+// synthetic canvas mousemove and mouseup, which is what the wasm sees once
+// arming parks the view.
 
 test('a forwarded left press in the grab band arms the divider resize', async ({
   electronApp,
@@ -26,8 +25,8 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
 }) => {
   await gw.enterPlugin('home');
 
-  // A live URL view via the ephemeral-visit swatch, on the local origin so it
-  // loads instantly with no network.
+  // A live url view through the ephemeral-visit swatch, on the local origin so
+  // it loads with no network.
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
@@ -43,7 +42,7 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
     .toBeGreaterThan(wcBefore);
   const urlPaneId = (await gw.focused()).id;
 
-  // Split: the live url pane keeps the left half, the new pane takes focus on
+  // Split: the live url pane keeps the left half and the new pane takes focus on
   // the right. The divider band between them half-overlaps the live view.
   await gw.splitFocusedPaneVertical();
   const panes = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
@@ -52,9 +51,9 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
   const gx = panes[0].x + panes[0].w;
   const gy = panes[0].y + panes[0].h / 2;
 
-  // The forwarded press: 8px left of the divider — inside the 10px grab band,
-  // past the 5px inset, i.e. a point that on real hardware belongs to the
-  // live view. This is the exact payload main relays for such a press.
+  // The forwarded press: 8px left of the divider, inside the 10px grab band and
+  // past the 5px inset, so on real hardware it belongs to the live view. This is
+  // the payload main relays for such a press.
   await electronApp.evaluate(
     ({ BrowserWindow }, { ch, pt }) => {
       BrowserWindow.getAllWindows()[0].webContents.send(ch, pt);
@@ -62,16 +61,16 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
     { ch: EV.leftForward, pt: { x: gx - 8, y: gy } },
   );
 
-  // Wait for the forwarded press to ARM the resize (arming is also what
-  // parks the view) — the observable the sleep used to approximate.
+  // Wait for the forwarded press to arm the resize; arming is also what parks
+  // the view.
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.leftResizeArmed()), {
       timeout: 5_000,
     })
     .toBe(true);
 
-  // Continue the drag on the canvas (post-park, that is where the real events
-  // land): a held-button move to the target, then release.
+  // Continue the drag on the canvas, where the real events land once the view is
+  // parked: a held-button move to the target, then release.
   await window.evaluate(
     ([tx, ty]: number[]) => {
       const c = document.querySelector('canvas')!;

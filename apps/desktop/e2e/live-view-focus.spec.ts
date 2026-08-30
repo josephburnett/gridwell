@@ -1,21 +1,18 @@
 import { test, expect } from './fixtures';
 
-// Regression guard for issue #34: left-clicking a pane with a live URL
-// WebContentsView must transfer pane focus to that pane, closing the + menu on
-// the previously-focused pane if it was open.
+// Left-clicking a pane with a live url WebContentsView must transfer pane focus
+// to that pane, closing the + menu on the previously-focused pane if it was
+// open.
 //
-// Root cause: the preload forwarded only right-drag and middle-click to main;
-// left-click was silently swallowed by Chromium's WebContentsView, so the wasm
-// canvas's onMouseDown (the only path calling menu.SyncFocus) never ran.
+// Chromium's WebContentsView swallows the left-click, so the canvas onMouseDown,
+// the only path calling menu.SyncFocus, never runs. urlview-preload.ts therefore
+// sends VIEW_LEFTDOWN on every left-down, without preventDefault so in-page
+// interaction stays with the page. Main relays it as EV.leftForward, and the
+// wasm onForwardedLeftDown calls focusToPane, which does SetFocus,
+// menu.TransferFocus to close the + menu, and refreshFileOverlay.
 //
-// Fix: urlview-preload.ts now sends VIEW_LEFTDOWN on every left-down (without
-// preventDefault — in-page interaction stays with the page). main relays it as
-// EV.leftForward; the wasm handler onForwardedLeftDown calls focusToPane, which
-// does SetFocus + menu.TransferFocus (closing the + menu) + refreshFileOverlay.
-//
-// Related: onForwardedRightDown had a latent twin — it duplicated the
-// focus-transfer block but omitted SyncFocus. That is also fixed by routing
-// through focusToPane (see wasm/right_button.go).
+// onForwardedRightDown routes through the same focusToPane, so the two buttons
+// cannot drift on the focus rules (see wasm/right_button.go).
 
 test('left-clicking a live URL pane transfers focus when the palette is closed', async ({
   electronApp,
@@ -24,7 +21,7 @@ test('left-clicking a live URL pane transfers focus when the palette is closed',
 }) => {
   await gw.enterPlugin('home');
 
-  // Create a live URL view via the ephemeral-visit swatch (click, not drag).
+  // Create a live url view through the ephemeral-visit swatch: click, not drag.
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
@@ -34,7 +31,8 @@ test('left-clicking a live URL pane transfers focus when the palette is closed',
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
 
-  // Wait for the native WebContentsView to come up (async: create→descend→open).
+  // Wait for the native WebContentsView to come up; create, descend, and open
+  // are async.
   await expect
     .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
       timeout: 15_000,
@@ -43,23 +41,22 @@ test('left-clicking a live URL pane transfers focus when the palette is closed',
 
   const urlPaneId = (await gw.focused()).id;
 
-  // Split the URL pane — focus moves to the new right pane, the URL pane keeps
-  // its live view on the left and loses focus.
+  // Split the url pane: focus moves to the new right pane, and the url pane
+  // keeps its live view on the left while losing focus.
   await gw.splitFocusedPaneVertical();
   const textPaneId = (await gw.focused()).id;
   expect(textPaneId, 'split moved focus off the URL pane').not.toBe(urlPaneId);
 
-  // LEFT-CLICK the URL pane. The live view is NOT parked (no gesture, no open
-  // palette) so the click goes to the native WebContentsView — Chromium swallows
-  // it, but the preload fires VIEW_LEFTDOWN → main → EV.leftForward → wasm
-  // onForwardedLeftDown → focusToPane. Before the fix, this click was silently
-  // lost and focus stayed on the text pane.
+  // Left-click the url pane. The live view is not parked, since no gesture runs
+  // and no palette is open, so the click goes to the native WebContentsView.
+  // Chromium swallows it, but the preload fires VIEW_LEFTDOWN, main relays
+  // EV.leftForward, and the wasm onForwardedLeftDown calls focusToPane. Without
+  // that relay the click is lost and focus stays on the text pane.
   const urlPane = (await gw.panes()).find((p) => p.id === urlPaneId)!;
   await gw.clickScreen(urlPane.x + urlPane.w / 2, urlPane.y + urlPane.h / 2);
 
-  // Focus must now be on the URL pane — this is the primary regression assertion.
-  // (The per-pane native corner control this spec used to poll is GONE —
-  // issue #214: the circle lives in the bottom bar, outside every view.)
+  // Focus must now be on the url pane. The circle control lives in the bottom
+  // bar, outside every view, so there is no native per-pane control to poll.
   await expect
     .poll(() => gw.focused().then((f) => f.id), { timeout: 5_000 })
     .toBe(urlPaneId);
@@ -72,7 +69,7 @@ test('left-clicking a live URL pane closes the + menu on the previously-focused 
 }) => {
   await gw.enterPlugin('home');
 
-  // Create a live URL view.
+  // Create a live url view.
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
@@ -94,22 +91,23 @@ test('left-clicking a live URL pane closes the + menu on the previously-focused 
   const textPaneId = (await gw.focused()).id;
   expect(textPaneId).not.toBe(urlPaneId);
 
-  // Open the + palette on the text pane. While the palette is open, the live URL
-  // view is parked (liveOverlaysHidden=true) and clicks go to the canvas. The
-  // canvas onMouseDown calls focusToPane → menu.TransferFocus, which closes the
-  // palette. This tests that the canvas path also goes through focusToPane.
+  // Open the + palette on the text pane. While it is open the live url view is
+  // parked, since liveOverlaysHidden is true, and clicks go to the canvas. The
+  // canvas onMouseDown calls focusToPane, which calls menu.TransferFocus and
+  // closes the palette, so the canvas path goes through focusToPane too.
   await gw.openPalette();
   expect((await gw.palette()).open, 'palette open on the text pane').toBe(true);
 
-  // Click the URL pane. The live view IS parked (palette open), so the click
-  // lands on the canvas. focusToPane closes the palette via menu.TransferFocus.
+  // Click the url pane. The live view is parked, since the palette is open, so
+  // the click lands on the canvas and focusToPane closes the palette through
+  // menu.TransferFocus.
   const urlPane = (await gw.panes()).find((p) => p.id === urlPaneId)!;
   await gw.clickScreen(urlPane.x + urlPane.w / 2, urlPane.y + urlPane.h / 2);
   await gw.waitIdle();
 
-  // Palette must be closed (menu.TransferFocus fired from focusToPane).
+  // The palette must be closed, by menu.TransferFocus from focusToPane.
   expect((await gw.palette()).open, 'palette closed after focus moved to URL pane').toBe(false);
 
-  // And focus is now on the URL pane.
+  // And focus is now on the url pane.
   expect((await gw.focused()).id, 'focus moved to the URL pane').toBe(urlPaneId);
 });

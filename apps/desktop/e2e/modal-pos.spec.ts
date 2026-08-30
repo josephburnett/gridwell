@@ -1,10 +1,9 @@
 import { test, expect } from './fixtures';
 
-// Pane-centered modals (issue #251): a dialog opens where you acted — the
-// card centers on the ACTIVE pane, not the screen. One centering rule
-// (panebox.ModalCardPos, applied by centerCardOnActivePane) covers every
-// modal card; this spec crosses it through the url modal in a split, where
-// pane-center and screen-center are far apart.
+// A modal opens where the user acted: the card centers on the active pane, not
+// the screen. One rule, panebox.ModalCardPos applied by
+// centerCardOnActivePane, covers every modal card. This spec crosses it through
+// the url modal in a split, where pane center and screen center are far apart.
 test('the url modal centers on the active pane, not the screen', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
@@ -12,8 +11,8 @@ test('the url modal centers on the active pane, not the screen', async ({ gw, wi
   const right = ps[1];
   await gw.focusPane(right);
 
-  // Clicking (not dragging) the url swatch opens the ephemeral-visit modal
-  // on the focused pane.
+  // Clicking the url swatch, rather than dragging it, opens the ephemeral-visit
+  // modal on the focused pane.
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
 
