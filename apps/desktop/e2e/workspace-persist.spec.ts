@@ -1,12 +1,12 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Reload inside a workspace: the URL is the pane tile (`?w=` — the workspace
-// IS the place; its interior is server-owned), so a fresh boot restores the
-// arrangement from the layout blob. The workspace STACK is session-only by
-// design (like portal frames), so after the reload the bar's ascent falls
-// back to the pane tile's containing grid rather than a remembered outer
-// tree.
+// Reload inside a workspace. The url is the pane tile, through `?w=`, since the
+// workspace is the place and its interior is server-owned, so a fresh boot
+// restores the arrangement from the layout blob. The workspace stack is
+// session-only by design, like portal frames, so after the reload the bar's
+// ascent falls back to the pane tile's containing grid rather than a remembered
+// outer tree.
 
 async function workspaceState(window: any): Promise<{ depth: number; tileID?: string }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
@@ -36,11 +36,11 @@ test('reload restores the workspace from ?w=; post-reload bar ascent lands at th
     }
   }, { message: 'persister must write the split before the reload', timeout: 10_000 }).toBe(true);
 
-  // The URL now names the workspace as the place.
+  // The url now names the workspace as the place.
   expect(window.url()).toContain('w=');
 
-  // Fresh boot straight into the workspace (?w= + the e2e gate the harness
-  // window normally carries).
+  // Fresh boot straight into the workspace, with ?w= plus the e2e gate the
+  // harness window normally carries.
   await window.evaluate(
     ([tileId]) => {
       location.href = `${location.origin}/?w=${encodeURIComponent(tileId)}&e2e=1`;
@@ -59,12 +59,12 @@ test('reload restores the workspace from ?w=; post-reload bar ascent lands at th
 
   // Post-reload the stack has no outer tree: the bar falls back to the pane
   // tile's containing grid.
-  // The bar lives inside the FOCUSED pane (issue #220); leaving is the
-  // crumb BEFORE the pane boundary (one-chain nav, #245: click = go there).
+  // The bar lives inside the focused pane, and a crumb click goes to that crumb,
+  // so leaving means clicking the crumb before the pane boundary.
   await gw.leaveWorkspace();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
-  // The re-anchor fetches the tile asynchronously (a click handler cannot
-  // block on the network), so the landing settles within a beat.
+  // The re-anchor fetches the tile asynchronously, since a click handler cannot
+  // block on the network, so the landing settles a beat later.
   await expect.poll(async () => (await gw.focused()).gridID, {
     message: 'fallback ascent must land at the containing grid',
   }).toBe(rootGrid);
