@@ -8,22 +8,22 @@ import { setOracleAuth } from '../e2e/oracle';
 import { parseServingLine } from '../src/main/lines';
 import { freePort } from '../src/main/freeport';
 
-// Browser-mode e2e fixtures: the SAME wasm client and Go server as the
-// Electron suite, but loaded in plain Chromium with NO Electron shell — the
-// degraded phone/tablet client. `gridwell serve` is spawned directly (no
-// sidecar), the page is Playwright's ordinary browser page, and the
-// GridwellDriver / server oracle are reused verbatim from ../e2e. What this
-// suite uniquely proves: the client boots and works with no window.gridwell
-// bridge, live-URL affordances degrade visibly (client/caps), and the touch
-// gesture layer (client/touchgest) drives the real canvas.
+// Browser-mode e2e fixtures: the same wasm client and Go server as the Electron
+// suite, loaded in plain Chromium with no Electron shell, which is the degraded
+// phone and tablet client. `gridwell serve` is spawned directly, with no
+// sidecar, the page is Playwright's ordinary browser page, and GridwellDriver
+// and the server oracle are reused verbatim from ../e2e. What this suite alone
+// proves: the client boots and works with no window.gridwell bridge, live-url
+// affordances degrade visibly through client/caps, and the touch gesture layer
+// in client/touchgest drives the real canvas.
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-// serveBin picks the server binary: the stock host, or the one
-// GRIDWELL_SERVE_BIN names.
+// serveBin picks the server binary: the stock one, or what GRIDWELL_SERVE_BIN
+// names.
 export const serveBin = () => path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
 
-// freePort is the sidecar's own (electron-free) picker — one copy.
+// freePort is the sidecar's own electron-free picker; there is one copy.
 export { freePort };
 
 type Fixtures = {
@@ -31,14 +31,13 @@ type Fixtures = {
   window: Page;
   gw: GridwellDriver;
   // extraPlugins mirrors the Electron fixture's option: plugins seedHome
-  // registers beyond the default home (e.g. an fs plugin with a root).
+  // registers beyond the node's own home, such as an fs plugin with a root.
   extraPlugins: PluginSpec[];
 };
 
-// Served is one running `gridwell serve`: its web origin, its home, and
-// the auth token the banner announced (the web door is always gated,
-// 2026-08-26 — init minted the password; the token is what a logged-in
-// browser's cookie carries).
+// Served is one running `gridwell serve`: its web origin, its home, and the auth
+// token the banner announced. The web door is always gated by the password serve
+// minted, and the token is what a logged-in browser's cookie carries.
 export interface Served {
   origin: string;
   home: string;
@@ -46,10 +45,10 @@ export interface Served {
   child: ChildProcess;
 }
 
-// spawnServe is THE serve spawner for the browser suites (one copy —
-// there were four): boots a node on a home, waits for the banner, and
-// returns the origin with its token. Readiness is the banner itself: the
-// server prints "serving on" only once both doors listen.
+// spawnServe is the one serve spawner for the browser suites: it boots a node on
+// a home, waits for the banner, and returns the origin with its token. Readiness
+// is the banner itself, since the server prints "serving on" only once both
+// doors listen.
 export async function spawnServe(home: string, port: number, extraArgs: string[] = []): Promise<Served> {
   const origin = `http://127.0.0.1:${port}`;
   const child = spawn(
@@ -62,12 +61,12 @@ export async function spawnServe(home: string, port: number, extraArgs: string[]
   child.stderr!.on('data', (d) => (output += d));
   const deadline = Date.now() + 15_000;
   for (;;) {
-    // The banner is parsed by the sidecar's own reader (lines.ts) — the
-    // one boot contract with `gridwell serve`, so a banner change that
-    // breaks the app breaks this suite the same way, not a private regex.
+    // The banner is parsed by the sidecar's own reader in lines.ts, the one boot
+    // contract with `gridwell serve`, so a banner change that breaks the app
+    // breaks this suite the same way rather than passing a private regex.
     const served = output.split('\n').map(parseServingLine).find((a) => a?.auth);
     if (served?.auth) {
-      setOracleAuth(origin, served.auth); // every served node is oracle-reachable
+      setOracleAuth(origin, served.auth); // every served node is reachable by the oracle
       return { origin, home, token: served.auth, child };
     }
     if (child.exitCode !== null || Date.now() > deadline) {
@@ -78,7 +77,8 @@ export async function spawnServe(home: string, port: number, extraArgs: string[]
   }
 }
 
-// stopServe: SIGTERM with a hard SIGKILL fallback; resolves once exited.
+// stopServe sends SIGTERM with a SIGKILL fallback and resolves once the process
+// has exited.
 export async function stopServe(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null) return;
   await new Promise<void>((resolve) => {
@@ -94,15 +94,15 @@ export async function stopServe(child: ChildProcess): Promise<void> {
   });
 }
 
-// authHeaders is the cookie a spec's own fetch must carry against a
-// served origin.
+// authHeaders is the cookie a spec's own fetch must carry against a served
+// origin.
 export function authHeaders(served: Served): Record<string, string> {
   return { Cookie: `gridwell_auth=${served.token}` };
 }
 
-// authenticate seeds the page's cookie jar with a served node's token, so
-// the page boots straight into the client — the way a returning browser
-// does; web-auth.spec.ts alone drives the login FORM.
+// authenticate seeds the page's cookie jar with a served node's token, so the
+// page boots straight into the client, the way a returning browser does.
+// web-auth.spec.ts alone drives the login form.
 export async function authenticate(page: Page, served: Served): Promise<void> {
   await page.context().addCookies([{ name: 'gridwell_auth', value: served.token, url: served.origin }]);
 }
@@ -110,8 +110,8 @@ export async function authenticate(page: Page, served: Served): Promise<void> {
 export const test = base.extend<Fixtures>({
   extraPlugins: [[], { option: true }],
 
-  // serve seeds a throwaway home (same `gridwell init` path as the Electron
-  // suite) and runs the real server on an ephemeral loopback port.
+  // serve seeds a throwaway home, the same way the Electron suite does, and runs
+  // the real server on an ephemeral loopback port.
   serve: async ({ extraPlugins }, use) => {
     const home = seedHome(extraPlugins);
     const served = await spawnServe(home, await freePort());
@@ -120,9 +120,9 @@ export const test = base.extend<Fixtures>({
     fs.rmSync(home, { recursive: true, force: true });
   },
 
-  // window is Playwright's plain browser page pointed at the served client,
-  // with the ?e2e=1 introspection hook installed — same contract as the
-  // Electron suite's window fixture.
+  // window is Playwright's plain browser page pointed at the served client, with
+  // the ?e2e=1 introspection hook installed: the same contract as the Electron
+  // suite's window fixture.
   window: async ({ serve, page }, use) => {
     await authenticate(page, serve);
     await page.goto(serve.origin + '/?e2e=1');

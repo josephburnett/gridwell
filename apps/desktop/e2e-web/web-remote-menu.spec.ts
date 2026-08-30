@@ -7,13 +7,12 @@ import { Served, spawnServe, stopServe, freePort, authHeaders, authenticate } fr
 import { GridwellDriver } from '../e2e/driver';
 import { getGrid, tileAt } from '../e2e/oracle';
 
-// The REMOTE MENU seam (docs/remote-menu.md, 2026-08-16: "when I descend
-// into a node, I am there"): two real nodes over a DIRECT connection —
-// no sshd anywhere. Descending the connection lands on the remote's
-// HOME, the + menu inside that pane shows the REMOTE node's plugins
-// (exactly what a direct client of it sees), a primitive dragged from
-// that menu creates on the REMOTE node, and dropping it into a LOCAL
-// pane refuses VISIBLY — a menu belongs to its node.
+// The remote-menu seam: descending into a node means being there. Two real nodes
+// over a direct connection, with no sshd anywhere. Descending the connection
+// lands on the remote's home, the + menu inside that pane shows the remote
+// node's plugins, exactly what a direct client of it sees, a primitive dragged
+// from that menu creates on the remote node, and dropping it into a local pane
+// refuses visibly: a menu belongs to its node.
 
 const SERVICE = 'gridwell.v1.Gridwell';
 
@@ -34,17 +33,16 @@ type Fixtures = {
 };
 
 const test = base.extend<Fixtures>({
-  // world = the LOCAL node and the FAR node (a fresh home; its first
-  // serve mints its id), directly connected.
+  // world is the local node and the far node, whose fresh home gets its id from
+  // its first serve, directly connected.
   world: async ({}, use) => {
     const farHome = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-far-'));
     fs.writeFileSync(path.join(farHome, 'server.yaml'), '');
     const farPort = await freePort();
     const far = await spawnServe(farHome, farPort);
 
-    // The connection is server.yaml config (v2 #269): declared before
-    // first boot, reconciled into the transport at start — the picker
-    // no longer exists to wire it "the data way".
+    // The connection is server.yaml config: declared before the first boot and
+    // reconciled into the transport at start.
     const localHome = seedHome(
       [],
       `connections:
@@ -58,7 +56,7 @@ const test = base.extend<Fixtures>({
     await use({
       local,
       far,
-      // The partition switch (stale-affordance spec): the far node dies
+      // The partition switch the stale-affordance spec uses: the far node dies
       // mid-session, exactly like a machine going dark.
       killFar: () => stopServe(far.child),
     });
@@ -85,9 +83,9 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   window,
   world,
 }) => {
-  // ── The yaml-declared connection presents as its own menu row; its
-  // root (the remote HOME) is learned through the direct dial and rides
-  // the row's rootGridId (v2 #269 — the instance-row synthesis). ──
+  // ── The yaml-declared connection presents as its own menu row, and its root,
+  // the remote home, is learned through the direct dial and rides the row's
+  // rootGridId. ──
   let farHomeGrid = '';
   await expect
     .poll(
@@ -118,13 +116,12 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     .poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'well', cx, cy))
     .toBe(true);
 
-  // ── Descend: I AM THERE. The menu is the far node's. ──
+  // ── Descend: the pane is there, and the menu is the far node's. ──
   await gw.descendCell(cx, cy);
 
-  // The bar knows the DOOR (#263): the title is the link well's own name —
-  // never the plugin's config label — and renaming here renames that well
-  // (rename-where-you-stand). The level's crumb wears the mount's glyph
-  // (the globe, ""), not a generic grid face (#264).
+  // The bar knows the door: the title is the link well's own name, never the
+  // remote's config label, and renaming here renames that well. The level's crumb
+  // wears the mount's glyph, the globe, rather than a generic grid face.
   await expect.poll(async () => (await gw.barName()).label).toBe('far');
   expect((await gw.barName()).editable, 'the door is a real row — renamable').toBe(true);
   const bar = await gw.bar();
@@ -152,11 +149,11 @@ test('the + menu inside a remote pane is the remote node, and its creations land
       },
       { timeout: 15_000 },
     )
-    // The far node's own menu, root entries included: its local plugin
-    // brings its own trashcan (#262) — deletes over there file over there.
+    // The far node's own menu, root entries included: its home brings its own
+    // trashcan, so a delete over there files over there.
     .toBe('home,trash');
 
-  // ── A primitive from the remote menu creates on the REMOTE node ──
+  // ── A primitive from the remote menu creates on the remote node ──
   const inside = await gw.focused();
   const icx = Math.round(inside.cx);
   const icy = Math.round(inside.cy);
@@ -165,25 +162,23 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   const farSnap = await getGrid(world.far.origin, farRootBare);
   expect(tileAt(farSnap, 'text', icx, icy), 'the text tile exists ON THE FAR NODE').toBeTruthy();
 
-  // ── The refusal: a remote menu's primitive dropped into a LOCAL pane ──
+  // ── The refusal: a remote menu's primitive dropped into a local pane ──
   await gw.splitFocusedPaneVertical();
-  // After a split the new sibling shows the same place; refocus pane A
-  // (the remote pane) — the split leaves focus there; ascend the SIBLING
-  // to the local grid: click it, ascend via middle-click (one step =
-  // portal back to e2e). Simpler: pane B is a clone of the remote pane;
-  // drag from A's menu into B after B ascends home.
+  // After a split the new sibling shows the same place. Pane B is a clone of the
+  // remote pane, so ascend B back to the local grid, then drag from A's menu into
+  // B.
   const panes = await window.evaluate(() => (window as any).__gridwellTest.panes());
   const other = panes.find((p: any) => p.id !== inside.id);
   expect(other, 'the split produced a sibling').toBeTruthy();
-  // Focus the sibling and ascend it out of the portal to the LOCAL grid.
+  // Focus the sibling and ascend it out of the portal to the local grid.
   await gw.clickScreen(other.x + other.w / 2, other.y + 10);
   await window.mouse.click(other.x + other.w / 2, other.y + other.h / 2, { button: 'middle' });
   await gw.waitIdle();
   const sib = await gw.focused();
   expect(sib.gridID, 'the sibling ascended to the local grid').toBe(f.gridID);
 
-  // Back to the REMOTE pane; open ITS menu and drag markdown into the
-  // sibling (local) pane: visible refusal, no tile.
+  // Back to the remote pane: open its menu and drag markdown into the sibling,
+  // local pane. The refusal is visible and no tile appears.
   await gw.clickScreen(inside.x + 20, inside.y + 20);
   await gw.openPalette();
   const pal = await window.evaluate(() => (window as any).__gridwellTest.palette());
@@ -206,13 +201,12 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   expect(((await gw.getGrid(f.gridID)).tiles ?? []).length, 'no cross-node tile was created').toBe(before);
 });
 
-// The stale affordance (#256): a mounted machine going dark degrades the
-// remote pane to a cache-served MEMORY — the tiles render exactly as
-// remembered ("stays as you left it") and the wire-level stale bit
-// surfaces as the bar's quiet offline chip, read here via the panes()
-// hook. Nothing moves, nothing blanks.
+// A mounted machine going dark degrades the remote pane to a cache-served
+// memory: the tiles render exactly as remembered, and the wire's stale bit
+// surfaces as the bar's quiet offline chip, read here through the panes() hook.
+// Nothing moves and nothing blanks.
 test('a dark mount serves the remembered room, marked stale', async ({ gw, window, world }) => {
-  // The yaml-declared connection: its learned root IS the mount target.
+  // The yaml-declared connection: its learned root is the mount target.
   let farHomeGrid = '';
   await expect
     .poll(
@@ -248,8 +242,8 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   const liveTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
   expect(liveTiles.length).toBeGreaterThan(0);
 
-  // The machine goes dark. Leave and re-enter: the room re-reads through
-  // the source cache and arrives as a marked memory, tiles intact.
+  // The machine goes dark. Leave and re-enter: the room re-reads through the
+  // source cache and arrives as a marked memory, tiles intact.
   await world.killFar();
   await gw.ascendViaCrumb();
   await gw.descendCell(cx, cy);

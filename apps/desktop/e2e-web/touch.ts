@@ -1,10 +1,10 @@
 import type { Page } from '@playwright/test';
 
-// Raw CDP touch injection. page.touchscreen offers only tap; the long-press
-// and multi-finger vocabulary (client/touchgest) needs Input.dispatchTouchEvent
-// so the browser fires REAL TouchEvents at the canvas — the same events an
-// iPhone produces — and the whole touch→gesture pipeline is exercised, not
-// simulated.
+// Raw CDP touch injection. page.touchscreen offers only tap, while the
+// long-press and multi-finger vocabulary in client/touchgest needs
+// Input.dispatchTouchEvent, so the browser fires real TouchEvents at the canvas,
+// the same events a phone produces, and the whole touch-to-gesture pipeline runs
+// rather than being simulated.
 
 interface Pt {
   x: number;
@@ -15,10 +15,10 @@ async function session(page: Page) {
   return page.context().newCDPSession(page);
 }
 
-// longPressDrag holds one finger still past the touchgest HoldMs threshold
-// (classifying the press as the right button), then drags it — the touch form
-// of every right-drag pane gesture (split / swap / clone / resize / ascend).
-// The hold is a real wall-clock wait: the long-press IS a duration.
+// longPressDrag holds one finger still past the touchgest HoldMs threshold,
+// which classifies the press as the right button, then drags it: the touch form
+// of every right-drag pane gesture, split, swap, clone, resize, ascend. The hold
+// is a real wall-clock wait, because the long-press is a duration.
 export async function longPressDrag(page: Page, from: Pt, to: Pt, holdMs = 550): Promise<void> {
   const s = await session(page);
   await s.send('Input.dispatchTouchEvent', {
@@ -40,8 +40,8 @@ export async function longPressDrag(page: Page, from: Pt, to: Pt, holdMs = 550):
 }
 
 
-// pinch moves two fingers symmetrically about `center` from ±fromHalf to
-// ±toHalf horizontal separation: spread (toHalf > fromHalf) zooms in.
+// pinch moves two fingers symmetrically about `center`, from fromHalf to toHalf
+// of horizontal separation each way. Spreading, where toHalf is larger, zooms in.
 export async function pinch(page: Page, center: Pt, fromHalf: number, toHalf: number): Promise<void> {
   const s = await session(page);
   const at = (half: number) => [
@@ -60,8 +60,8 @@ export async function pinch(page: Page, center: Pt, fromHalf: number, toHalf: nu
   await s.detach();
 }
 
-// twoFingerTap taps two fingers briefly — touchgest maps it to a middle click
-// (the ascend gesture).
+// twoFingerTap taps two fingers briefly; touchgest maps it to a middle click,
+// the ascend gesture.
 export async function twoFingerTap(page: Page, center: Pt): Promise<void> {
   const s = await session(page);
   await s.send('Input.dispatchTouchEvent', {

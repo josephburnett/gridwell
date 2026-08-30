@@ -2,16 +2,15 @@ import { test, expect } from './fixtures';
 import { tileAt } from '../e2e/oracle';
 import { longPressDrag, pinch, twoFingerTap } from './touch';
 
-// Crosses the touch seam (client/touchgest → synthetic mouse/wheel events →
-// the untouched gesture engine): REAL TouchEvents injected over CDP must
-// drive the canvas exactly as a finger on an iPhone would. Each gesture is
-// verified against pane/server state, never pixels.
+// Crosses the touch seam, from client/touchgest through synthetic mouse and
+// wheel events into the unchanged gesture engine: real TouchEvents injected over
+// CDP must drive the canvas exactly as a finger on a phone would. Each gesture is
+// verified against pane and server state, never pixels.
 
 test('touch: tap opens the + menu and descends into a plugin', async ({ gw, window }) => {
-  // Boot already sits at the first plugin's root; plugins live on the + menu
-  // (2026-07-19 reversal). The tap gesture is verified against that portal:
-  // tap the + button, tap the plugin swatch — the pane descends and a frame
-  // is pushed for the return trip.
+  // Boot already sits at home's root, and every namespace lives on the + menu.
+  // The tap gesture is verified against that portal: tap the + button, tap the
+  // swatch, and the pane descends, pushing a frame for the return trip.
   await gw.plugins();
   const before = await gw.focused();
   const pal = await gw.palette();
@@ -35,13 +34,13 @@ test('touch: pinch zooms the focused grid at the pinch midpoint', async ({ gw, w
   const z0 = f.zoom;
   const center = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
 
-  await pinch(window, center, 40, 160); // spread → zoom in
+  await pinch(window, center, 40, 160); // spread: zoom in
   await gw.waitIdle();
   f = await gw.focused();
   expect(f.zoom, 'spread pinch zooms in').toBeGreaterThan(z0);
 
   const z1 = f.zoom;
-  await pinch(window, center, 160, 40); // close → zoom out
+  await pinch(window, center, 160, 40); // close: zoom out
   await gw.waitIdle();
   f = await gw.focused();
   expect(f.zoom, 'closing pinch zooms out').toBeLessThan(z1);
@@ -52,17 +51,17 @@ test('touch: long-press-drag from the right edge splits the pane', async ({ gw, 
   const f = await gw.focused();
   const before = (await gw.panes()).length;
   const y = f.y + f.h / 2;
-  // Same geometry as driver.splitFocusedPaneVertical, but by finger: hold in
-  // the right-edge band (becomes the right button), drag to mid-pane.
+  // The same geometry as driver.splitFocusedPaneVertical, but by finger: hold in
+  // the right-edge band, which becomes the right button, then drag to mid-pane.
   await longPressDrag(window, { x: f.x + f.w - 5, y }, { x: f.x + f.w * 0.45, y });
   await gw.waitIdle();
   expect((await gw.panes()).length, 'long-press-drag split the pane').toBe(before + 1);
 });
 
 test('touch: tapping the previous crumb ascends a text descent (#222)', async ({ gw, window }) => {
-  // The ascent gesture is the crumb click (issue #222); on touch that is a
-  // plain TAP on the second-to-last chain crumb — the canvas translation
-  // routes it as the left mousedown the bar hit-test acts on.
+  // The ascent gesture is the crumb click, and on touch that is a plain tap on
+  // the second-to-last chain crumb: the canvas translation routes it as the left
+  // mousedown the bar hit-test acts on.
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -94,7 +93,7 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
   const created = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(created, 'markdown tile created').toBeTruthy();
 
-  // One-finger drag = left drag: move the tile one cell right. Cell centers
+  // A one-finger drag is a left drag: move the tile one cell right. Cell centers
   // come from the same hook the mouse specs use.
   const fromPt = await gw.cellCenter(f.id, cx, cy);
   const toPt = await gw.cellCenter(f.id, cx + 1, cy);
