@@ -195,9 +195,9 @@ func (a *App) gridSourceKind(gridID string) string {
 // dropCrossNamespace reports whether the drag's source grid and t's
 // destination grid live in different id namespaces — the one predicate the
 // cross-plugin gestures branch on: a left-drag becomes a link, and a solid
-// well's right-drag is refused. One reader of NamespaceOf for all three
-// gather sites (left preview, left commit, right commit), so they cannot
-// disagree.
+// well's right-drag is refused. The one reader of NamespaceOf, called from
+// the one gather (dropInputAt) and from the move-forbidden rule it feeds, so
+// the two cannot disagree about what "cross-plugin" means.
 func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false
