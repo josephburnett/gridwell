@@ -121,9 +121,9 @@ type App struct {
 	paneLayouts map[string]*paneLayoutEntry
 
 	// ws is the window's level stack — the ONE owner of "which pane tile is the
-	// user inside, and what outer tree does each descent restore" (see
-	// client/workspace). a.tree is the display of its top; the persisted
-	// layout is owned by the server blob.
+	// user inside, and what outer tree does each descent restore" (the rules
+	// are client/pane's Levels). a.tree is the display of its top; the
+	// persisted layout is owned by the server blob.
 	ws pane.Levels
 
 	// wsPending coordinates an in-flight workspace descent (animation ×
@@ -260,7 +260,7 @@ type App struct {
 	// wellWheelPending holds well tiles whose preview framing the hover
 	// wheel changed (issue #210) but hasn't persisted yet: tile id → the
 	// grid the tile sits in. The cache is patched per notch (the renderer
-	// reads it live); the settle persister's flush posts ONE SetWellView
+	// reads it live); the settle persister's flush posts ONE SetFraming
 	// per tile from the cached row, so a scroll burst is one write.
 	wellWheelPending map[string]wellWheelDrift
 
@@ -313,7 +313,7 @@ type App struct {
 	zoomKeyRelays int
 
 	// persistPosts counts optimistic-persist dispatches by label
-	// ("SetWellView", …) and framingFlushes counts settle-persister flush
+	// ("SetFraming", …) and framingFlushes counts settle-persister flush
 	// passes. e2e-only introspection (testhook persistPosts): the settle
 	// chain — gesture → debounce → flush → post — is otherwise silent in
 	// every stage, so a spec waiting on its effect (the #156
@@ -348,13 +348,11 @@ type App struct {
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
 
-	// modalCard is the shared modal-form container (modal_form.go — born
-	// as the instance picker's, inherited by the entry-params form when
-	// the picker died, 2026-08-23); modalOpen gates re-entry and
-	// parks live views;
-	// modalFuncs collects the current render's js callbacks so a
-	// re-render or close releases them (the no-leak discipline every
-	// modal here follows).
+	// What the shared modal-form container left behind. It held the
+	// instance picker, then the entry-params form; the picker retired
+	// 2026-08-23 and the parameterized flow with it, so nothing writes
+	// these now — the busy check (url_stream_client.go) still reads
+	// modalOpen. The URL-entry modal above owns its own DOM.
 	modalCard  js.Value
 	modalOpen  bool
 	modalFuncs []js.Func

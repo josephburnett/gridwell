@@ -488,11 +488,11 @@ func (a *App) applyURLState(raw string) {
 	}
 
 	// No path → sit at the anchor's root grid, at its PERSISTED root view
-	// (SetRootView's writeback) unless the URL carries its own viewport —
-	// this call site passed literal 0,0,1 for years, so every relaunch
-	// opened home at the origin no matter what the user left behind (the
-	// guiding rule, violated at boot; the parameters were even unit-tested,
-	// just never fed).
+	// (persistFraming's root arm writes it) unless the URL carries its own
+	// viewport — this call site passed literal 0,0,1 for years, so every
+	// relaunch opened home at the origin no matter what the user left
+	// behind (the guiding rule, violated at boot; the parameters were even
+	// unit-tested, just never fed).
 	if len(qualified) == 0 {
 		a.fetchGridSync(state.Anchor)
 		rcx, rcy, rz, _ := a.persistedGridView(p, state.Anchor, nil)
