@@ -120,26 +120,43 @@ green; `make check` + electron + e2e green.
 
 ---
 
-## Phase 1 — the mount cache (read-through, in the local node)
+## Phase 1 — the source cache (read-through, in the local node)
 
 The P3 fix: a mounted machine going dark degrades to *stale-but-readable*
 instead of blank. Ships value to the desktop immediately, and is the same
 layer the Flutter node uses in Phase 2.
 
+> **As built (2026-08-29, `docs/simplify-plan.md` S7).** This section was
+> written for the tree of 2026-08-14; three things changed and the text
+> below is corrected in place. (1) The wrapper is not a
+> `gridwellv1.GridwellClient` — a namespace is a Go interface in-process
+> (`internal/namespace`, S2), and the layer wraps that. (2) The package
+> is `internal/sourcecache`, not `internal/plugin/mountcache`: it fronts
+> every non-home namespace, content plugins included, because "what did
+> the source last say" is one concern with one engine (review finding 6).
+> (3) There is ONE cache file for the node, not one per mount.
+
 ### Where it sits
 
-A `gridwellv1.GridwellClient` wrapper, interposed at registration for
-transit plugins only (`loader.go` / `registry.go` — `Transit` is already
-a config-time fact, so the wrap point is one line in `LoadAll`):
+A `namespace.Namespace` layer, put in front of each namespace by the node
+at wiring time (`internal/node.Start` — the one place that decides who is
+cached and under what policy):
 
 ```
-server → [mountcache] → sshhost plugin → tunnel → remote node
+server → [sourcecache] → the transport → tunnel → remote node
+server → [sourcecache] → the plugin adapter → plugin.v1 subprocess
 ```
 
-New package `internal/plugin/mountcache` (renamed `internal/sourcecache`
-2026-08-29, docs/simplify-plan.md S7). It implements the full client
-interface; non-cached methods pass through untouched. The server, the
-plugins, and the wire contract do not change.
+`internal/sourcecache` implements the full namespace interface; non-cached
+methods pass through untouched. The server, the plugins, and the wire
+contract do not change.
+
+Only what the SOURCE says lives here. The node's own facts about a
+plugin's entries — the ids it minted, where the user put them, how they
+are framed — are durable rows in `gridwell.db`, and a dark source is
+answered from those rows by the adapter, below this layer. That split is
+why a placement made while a source is dark still stands: replaying a
+cached JOIN of both owners' facts would replay the old placement over it.
 
 ### Semantics
 
@@ -171,24 +188,33 @@ plugins, and the wire contract do not change.
 
 ### Storage
 
-One SQLite DB per mount under `~/.gridwell/cache/<plugin-uuid>.db`,
-using `internal/dbformat` versioning like every other plugin DB — but
+ONE SQLite DB for the node, `<home>/cache.db` (docs/one-node.md), shared
+by every layer over it — SQLite is single-writer per file, so a handle
+per namespace would meet an instant SQLITE_BUSY. It uses
+`internal/dbformat` versioning like every other node DB, but is
 **explicitly disposable**: deleting it is always safe (it re-warms), it
-is excluded from `gridwell backup`, and it is NOT under the frozen-format
-promise (documented in the package). Schema: qualified-id-keyed rows for
-tiles/grids/info, a blob table keyed by content hash for
-previews/content, byte-capped LRU eviction.
+is excluded from `gridwell backup`, and it is NOT under the
+frozen-format promise (documented in the package). Rows are wire-shaped
+protos keyed by the ids the layer sees, for grids/tiles/info/plugin
+lists, plus bodies, previews and bounded page bytes.
 
-Charter check: one fact, one owner — the remote owns the truth; the
-mountcache is the single owner of the *remembered answer*; the client
+Charter check: one fact, one owner — the source owns the truth; the
+source cache is the single owner of the *remembered answer*; the client
 reads whichever the node serves. No new client state, no second writer.
+And one answer is never remembered: one already stamped STALE, which
+would overwrite the good answer it degraded from.
 
 ### Tests
 
-- Unit: the wrapper against a `ServeInProcess` fake remote — the existing
-  test harness is exactly the right fixture. Kill the fake, assert
-  serve-stale for reads, pass-through failure for writes, resync after
-  revival, tombstone NotFound never masked.
+- Unit: the layer against an in-process fake namespace — a Go value, no
+  transport to fake. Kill the fake, assert serve-stale for reads,
+  pass-through failure for writes, resync after revival, tombstone
+  NotFound never masked.
+- Seam (plugins): a plugin whose subprocess is gone still serves its last
+  grid through the cache, handshake included
+  (`internal/pluginhost/adapter_dark_test.go`); a plugin whose SOURCE is
+  dark answers from its durable rows, placement made during the outage
+  included.
 - Seam: extend `make check-federation` with the missing mid-session
   partition case (noted gap: today's federation tests only cover spawn) —
   drop the tunnel, read through the cache, restore, assert resync.
@@ -263,14 +289,14 @@ the phase waits on its result.
 ### In-process plugins (owner decision required)
 
 iOS forbids fork/exec, so the go-plugin subprocess model cannot run
-there. `plugin.ServeInProcess` (`internal/plugin/loader.go:78`) already
-serves the identical gRPC surface over loopback with no subprocess — it
-is "test-only" by policy, not by capability. The decision to make:
-**promote the in-process path to a supported production mode on mobile**
-(a `PluginConfig` flag or a mobile build default). What subprocess
-isolation actually buys today is crash isolation and independent binary
-upgrade — neither load-bearing for correctness; the wire contract and id
-discipline are identical on both paths. Desktop keeps subprocesses.
+there. **DECIDED and BUILT:** a plugin entry with no `binary` is
+constructed in-process from a `plugin.Factory` (`internal/plugin/loader.go`),
+which the mobile bind supplies for what it ships — the one kind of leaf
+binary allowed to enumerate its own plugins. The wire contract and id
+discipline are identical on both paths; what the subprocess buys is crash
+isolation and an independent dependency graph, which is why desktop keeps
+it. (The loopback gRPC hop the in-process path once used is gone too:
+`docs/simplify-plan.md` S2 made a namespace a Go value.)
 
 ### The embedded node
 

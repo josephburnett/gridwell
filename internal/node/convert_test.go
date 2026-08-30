@@ -137,7 +137,7 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		t.Error("the old files must survive beside, not vanish")
 	}
 	if _, err := os.Stat(filepath.Join(home, "cache")); !os.IsNotExist(err) {
-		t.Error("the mount cache is disposable and must go")
+		t.Error("the source cache is disposable and must go")
 	}
 	ns, err := store.Open(config.DBFile(home))
 	if err != nil {

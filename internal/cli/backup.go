@@ -96,7 +96,7 @@ func backupHome(home, cfgPath string, cfg *config.ServerConfig, dest string) err
 		return fmt.Errorf("%s names no id — the home has never served; nothing to back up", cfgPath)
 	}
 	// ONE database (docs/one-node.md §2.6): home content, every plugin's
-	// memory, the connections. The mount cache (cache.db) is disposable
+	// memory, the connections. The source cache (cache.db) is disposable
 	// and stays out.
 	if err := snap(config.DBFile(home), config.DBFile(dest), true); err != nil {
 		return err

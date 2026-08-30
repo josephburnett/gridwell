@@ -249,7 +249,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   expect(liveTiles.length).toBeGreaterThan(0);
 
   // The machine goes dark. Leave and re-enter: the room re-reads through
-  // the mount cache and arrives as a marked memory, tiles intact.
+  // the source cache and arrives as a marked memory, tiles intact.
   await world.killFar();
   await gw.ascendViaCrumb();
   await gw.descendCell(cx, cy);

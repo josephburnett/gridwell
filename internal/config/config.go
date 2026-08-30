@@ -74,7 +74,7 @@ type ServerConfig struct {
 	// one and every browser must log in again (owner decision 2026-08-26).
 	WebPassword string `yaml:"-"`
 	// CacheDir is derived by serve (never stored): <home>/cache, where the
-	// node keeps the mount cache. Empty disables caching (tests, headless
+	// node keeps the source cache. Empty disables caching (tests, headless
 	// probes). Cache files are disposable and excluded from backup.
 	CacheDir string `yaml:"-"`
 }
@@ -169,7 +169,7 @@ func DBFile(home string) string {
 	return filepath.Join(home, "gridwell.db")
 }
 
-// CacheFile is the node's mount cache: <home>/cache.db — disposable,
+// CacheFile is the node's source cache: <home>/cache.db — disposable,
 // excluded from backup.
 func CacheFile(home string) string {
 	return filepath.Join(home, "cache.db")

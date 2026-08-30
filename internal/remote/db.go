@@ -3,7 +3,7 @@ package remote
 // The transport's store: what the node REMEMBERS about its connections
 // beyond what server.yaml declares — the learned landing (the remote's
 // home grid id, so a dark remote still has a room to show through the
-// mount cache) and the graveyard (a retired name never returns: its
+// source cache) and the graveyard (a retired name never returns: its
 // namespace stays reserved forever, because stored references through it
 // must stay dangling rather than re-routed). Everything else about a
 // connection — where it is, how to reach it, what it is called — is

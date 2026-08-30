@@ -24,7 +24,7 @@ import (
 // to a well link; a url whose preview is unreachable copies faceless (its
 // fact — the address — is present). The degrade keys on TRANSPORT failures
 // only: a source that ANSWERS "gone" still aborts the walk (gone is never
-// a link). darkSource simulates the future mountcache's offline shape —
+// a link). darkSource simulates the source cache's offline shape —
 // metadata served, selected reads Unavailable.
 
 // darkSource wraps a real plugin client, failing selected calls the way a

@@ -312,7 +312,7 @@ type Grid struct {
 	// routing namespace (remote-menu, 2026-08-16).
 	NodeNS string `json:"node_ns,omitempty"`
 	// Stale marks a response served from a mount's offline cache (#256):
-	// the remembered answer, not the live one. Wire-only, mountcache-set.
+	// the remembered answer, not the live one. Wire-only, node-set.
 	Stale bool `json:"stale,omitempty"`
 	// ScratchGridID is the owning plugin's ephemeral-url scratch grid,
 	// qualified for this receiver (chained through mounts); "" = none.

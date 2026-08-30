@@ -86,7 +86,7 @@ func ClassifyError(err error) ErrorClass {
 // answer — NotFound, a tombstone, InvalidArgument — is an ANSWER and
 // must pass through verbatim, never resurrected from a cache or turned
 // into a link. The ONE classifier for gRPC hops (the pluginhost
-// read-through cache, the mount cache, the cross-plugin deep copy);
+// read-through cache, the source cache, the cross-plugin deep copy);
 // clientsync.Of is its Connect-wire twin on the client, pinned to the
 // same three codes.
 func IsTransport(err error) bool {

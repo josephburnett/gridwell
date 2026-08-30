@@ -44,7 +44,7 @@ import (
 // config write the node ever makes. Every plugin gets its derived db_file
 // injected (never stored in the config), the home and transport stores
 // are created on first serve, the web password is read (or minted), and
-// CacheDir is derived for the mount cache.
+// CacheDir is derived for the source cache.
 func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	cfg, err := config.Load(cfgPath)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -69,7 +69,7 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	if cfg.Federation.Socket == "" {
 		cfg.Federation.Socket = config.FederationSocket(home)
 	}
-	// The mount cache lives beside (never inside) the DB: disposable,
+	// The source cache lives beside (never inside) the DB: disposable,
 	// excluded from backup.
 	cfg.CacheDir = home
 	if err := ensureStore(home, cfg); err != nil {

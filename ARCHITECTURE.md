@@ -222,8 +222,38 @@ serve (`node.Convert`).
   through it is `<id>/<conn>/<remote-id…>`: `Server.resolve` peels the
   node's own id and hands the rest to the transport, which peels the
   connection name and prepends it on the way back — the same transit
-  rule at both hops. The source cache (`internal/sourcecache`) fronts
-  the transport so a dark remote degrades to stale-but-readable.
+  rule at both hops.
+
+### 4.0.1 One memory of what a source last said
+
+`internal/sourcecache` is the node's ONE read-through cache, put in front
+of every NON-HOME namespace — each content plugin's adapter and the
+transport — in one place, `node.Start`. One disposable file
+(`<home>/cache.db`, shared by every layer: SQLite is single-writer per
+file). Online it passes through and remembers; on a transport-class
+failure it serves the remembered answer, stamped `Grid.stale`. Writes
+always pass through — it is never a write buffer. Policy is per
+namespace, engine is one: the whole-source PREFETCH walk is opted into by
+the transport alone (a connection's absence is a machine going dark), and
+nothing else crawls.
+
+It is a cache, not memory. The node's own facts about a plugin's entries
+— the id it minted for a key, where the user put it, its framing, its
+tombstone — are durable rows in `gridwell.db` (§4's externals engine).
+That split is what an outage divides along:
+
+| what is missing | who answers | what the user sees |
+|---|---|---|
+| the SOURCE (the plugin answers; its directory/API/process table does not) | the adapter, from its durable rows: an empty non-authoritative listing retires nothing | every tile, same ids and placement — including a move made DURING the outage — stamped stale |
+| the PLUGIN (the subprocess is gone) or a remote node | `sourcecache`, from what that namespace last said | the last grid it served, handshake included, stamped stale |
+
+Caching the adapter's own answer instead would replay a JOIN of both
+owners' facts — and with it the OLD placement over a move the user just
+made. For the same reason, an answer already stamped stale is never
+remembered: it would overwrite the good answer it degraded from, and
+nothing would ever put that back. Before 2026-08-29 the plugin half of
+this lived in a `listings` table inside the FOREVER file (schema v12
+retired it — `docs/simplify-plan.md` S7).
 
 ### 4.1 `version` means the user's content bytes — the best-enforced invariant
 

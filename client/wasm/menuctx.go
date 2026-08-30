@@ -8,7 +8,7 @@ package main
 // pane's grid's node_ns ("" = this node, the boot handshake). Remote
 // contexts are fetched through the routed Handshake (ids arrive
 // re-qualified for this receiver) and cached for the session; the
-// mountcache makes the fetch answer even while the mount is dark.
+// the source cache makes the fetch answer even while the mount is dark.
 
 import (
 	"context"

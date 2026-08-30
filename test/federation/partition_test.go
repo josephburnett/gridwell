@@ -92,7 +92,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 		t.Fatalf("warm read = %q (%v)", body, err)
 	}
 	if _, err := os.Stat(filepath.Join(localHome, "cache.db")); err != nil {
-		t.Fatalf("mount cache file missing (the node wiring): %v", err)
+		t.Fatalf("source cache file missing (the node wiring): %v", err)
 	}
 
 	// ── THE PARTITION ──────────────────────────────────────────────────
@@ -118,7 +118,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 		t.Fatalf("dark grid read has %d tiles, want the cached 2", len(g["tiles"].([]any)))
 	}
 	// The memory says so on the wire (#256): the cache-served grid wears
-	// the stale bit through the whole real chain — mountcache → server →
+	// the stale bit through the whole real chain — sourcecache → server →
 	// Connect JSON — which is what the client's offline chip reads.
 	if gm, ok := g["grid"].(map[string]any); !ok || gm["stale"] != true {
 		t.Fatalf("dark grid read grid=%v, want stale=true on the wire", g["grid"])

@@ -105,11 +105,13 @@ type Grid struct {
 	// qualified from the receiver's perspective (chained through mounts) —
 	// same stamping rule as writable. "" when the plugin has none. Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
-	// stale marks a response served from a mount's offline cache (issue
-	// #256): the mount is unreachable and this is the REMEMBERED answer,
-	// not the live one. Stamped only by the node-side mountcache on its
-	// serve-stale path; wire-only, never persisted — the same
-	// derived-fact shape as writable/serves_page.
+	// stale marks a grid the source could not answer for (issue #256):
+	// this is the REMEMBERED answer, not the live one. Two node-side
+	// stampers, one meaning — internal/sourcecache on its serve-stale
+	// path, and a plugin adapter answering a dark source from the rows it
+	// minted. Wire-only, never persisted — the same derived-fact shape as
+	// writable/serves_page. The cache also OBEYS it: an answer already
+	// stamped stale is never remembered.
 	Stale bool `protobuf:"varint,12,opt,name=stale,proto3" json:"stale,omitempty"`
 	// node_ns is the namespace chain of the NODE serving this grid, from
 	// the receiver's perspective: "" for a grid served by the node you are

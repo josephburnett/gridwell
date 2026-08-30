@@ -5,6 +5,16 @@ docs/one-node.md §2.6): home's content — the user's text, URLs, and
 grids (`internal/local`; né localdb) — and, since schema v9, every
 content plugin's memory as namespaced rows of the same tables
 (`external.go`; `ns = ''` is home) plus the transport's connections.
+
+**The forever file holds NODE facts only** (owner decision,
+docs/simplify-plan.md S7): ids the node minted (`ns`,`key` → tile/grid
+id), layout, framing, the user's content bytes, connections, and
+tombstones. What a SOURCE last said — a plugin's listing, a remote's
+tiles, bodies, previews — is cache: it lives in the disposable
+`<home>/cache.db` behind `internal/sourcecache`, never here. That is
+what schema v12 retired the `listings` table for. A dark source costs
+nothing in this file: the adapter merges an empty non-authoritative
+listing and the durable rows answer, unchanged.
 **The home format is out of testing mode. Its v1 schema is frozen and the
 forward-compatibility promise is in effect.**
 
@@ -41,7 +51,9 @@ user-visible meaning carries no such fact, so it may be **retired**:
 - The decision is **recorded in the migration's chain-entry comment**, naming
   what died and when its last reader went. v10 is the first one; v11 is the
   second (`tiles.view_x/view_y`, the integer window ORIGIN, replaced by the
-  float `view_cx/view_cy` center it was only ever read to compute).
+  float `view_cx/view_cy` center it was only ever read to compute); v12 is
+  the third (the `listings` table — a CACHE that had been living under the
+  frozen promise, whose one engine is now `internal/sourcecache`).
 - A retiring column whose MEANING lives on is **converted, not dropped**:
   the rebuild's copy list names the DESTINATION columns and `rebuildSelect`
   supplies the expression that reads them out of the old shape
@@ -137,6 +149,11 @@ plant a row in the old shape. The genuine-old-file tests
 (`TestMigrateV10OverAGenuineV9File`, `TestMigrateV11OverAGenuineV10File`)
 put the retired shape back by hand and run the step over it. A drop or a
 conversion needs one of those, not just a fixture.
+
+The exception is a whole TABLE created by a MIGRATION LITERAL rather than
+by the template: v9 spells `listings` in its own step, so a chain-built
+v11 file really has the table and the v12 fixture really plants the
+retired shape. Check which it is before writing a second test.
 
 **Open's order.** `Open` runs the migration chain BEFORE `bootstrapRoot`:
 bootstrap is a write through the CURRENT column set, and an old file does not

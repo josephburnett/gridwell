@@ -7,7 +7,17 @@ and how each fits, and isolates the sync/conflict problem — the hard
 part — with the owner decisions that would have to be made. Nothing here
 is decided.
 
-> **Stale in one place (2026-08-29):** `object_id` — the per-row
+> **Stale in two places (2026-08-29).** First: the node-side cache this
+> document calls for in P3 EXISTS and now fronts every non-home namespace
+> — content plugins as well as connections — as `internal/sourcecache`
+> over one disposable `cache.db` (`docs/simplify-plan.md` S7). An
+> unreachable mount renders its remembered faces, stamped stale, rather
+> than `grid <id> unavailable`; a plugin whose source goes dark answers
+> from the durable rows the node minted. §1's "the degraded form is
+> blank" and its list of four sweep-rule sites describe the tree of
+> 2026-08-14, before that landed.
+>
+> Second: `object_id` — the per-row
 > provenance marker this document proposes as a sync-correlation and
 > create-idempotency hook — was RETIRED at schema v10 (S1 of
 > `docs/simplify-plan.md`): nothing read it to decide anything, so it

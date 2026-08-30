@@ -80,8 +80,8 @@ Allowed deps: grpc, protobuf, go-plugin. NOTHING else — pinned by test.
 
 ### The server module
 
-Today's `internal/{server,node,rpc,plugin(host side: registry, loader,
-mountcache),config,cli,dbformat,pluginmeta,doctype,...}` plus `client/`
+Today's `internal/{server,node,rpc,plugin(host side: registry,
+loader),sourcecache,config,cli,dbformat,pluginmeta,doctype,...}` plus `client/`
 and `web/`.
 It knows how to OPEN the door (spawn a Command, accept an InProcess
 compiled-in plugin set) and never what's behind it.

@@ -9,7 +9,7 @@ package node
 // one sequence), and the references INTO them — home tiles' child_grid_id
 // (exit wells) and link_target_id, and the anchors/paths inside pane-layout
 // blobs — are rewritten through the mapping. The old files are renamed
-// aside (db.pre-one-node), never deleted; the mount cache is disposable and
+// aside (db.pre-one-node), never deleted; the source cache is disposable and
 // goes.
 
 import (

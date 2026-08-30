@@ -1,7 +1,7 @@
 // Package mobile is the gomobile-bindable Gridwell node (offline-plan
 // phase 2: EVERY DEVICE IS A NODE). The Flutter app calls Start with its
 // app-private directory; a full Gridwell node — plugins, node identity,
-// the embedded web client, the mount cache — comes up on a loopback port
+// the embedded web client, the source cache — comes up on a loopback port
 // and the host webview loads the returned origin. The phone's own tiles
 // live in its own local plugin DB, durable with no network anywhere; other
 // machines are what they are everywhere else — mounts, stale-readable
