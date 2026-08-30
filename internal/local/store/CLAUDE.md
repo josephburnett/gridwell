@@ -70,7 +70,7 @@ user-visible meaning carries no such fact, so it may be **retired**:
   the chain (fresh-stamp / foreign-file refusal / newer-version refusal) is
   the shared `internal/dbformat.EnsureVersion` — one implementation for every
   node DB (this store — home AND every plugin's memory, since v9 — and the
-  mount cache in `internal/plugin/mountcache`); `migrateUp` here is a thin
+  source cache in `internal/sourcecache`); `migrateUp` here is a thin
   adapter.
 
 `TestSchemaEquivalence` proves `tablesV1 + migrations == fresh tablesTemplate`.

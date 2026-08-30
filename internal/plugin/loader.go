@@ -30,12 +30,19 @@ type Factory func(cfg map[string]string) (pluginv1.PluginServer, error)
 // LoadInto registers every content plugin of the server config in reg,
 // keyed by its ID: a plugin.v1 subprocess (binary) or a factories
 // constructor, fronted by the pluginhost adapter over the NODE-owned
-// memory DB at the entry's derived db path. The node registers its own
-// home and transport around this call (internal/node).
-func LoadInto(reg *Registry, cfg *config.ServerConfig, factories map[string]Factory, st *store.Store) error {
+// memory DB. front, when non-nil, wraps each loaded namespace — the node
+// passes the source cache under this plugin's policy, and it is the node
+// (not this loader) that decides who is cached; nil means uncached, the
+// shape tests use. The node registers its own home and transport around
+// this call (internal/node).
+func LoadInto(reg *Registry, cfg *config.ServerConfig, factories map[string]Factory, st *store.Store,
+	front func(namespace.Namespace) namespace.Namespace) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		ns, closer, err := loadPlugin(pc, factories, st)
+		if err == nil && front != nil {
+			ns = front(ns)
+		}
 		if err != nil {
 			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, err)
 		}

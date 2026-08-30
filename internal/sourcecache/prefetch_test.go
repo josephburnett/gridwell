@@ -1,12 +1,15 @@
-package mountcache
+package sourcecache
 
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
 // The #254 promise, pinned: after a prefetch, grids and bodies the user
@@ -17,7 +20,7 @@ import (
 // upstream store, entirely BEHIND the cache (raw client), so nothing is
 // cached by the seeding itself. Returns the nested grid id, the inner
 // well's child grid id, and the text tile id.
-func seedNested(t *testing.T, cc *Client, upstream *darkable, root string) (nested, inner, textID string) {
+func seedNested(t *testing.T, cc *Layer, upstream *darkable, root string) (nested, inner, textID string) {
 	t.Helper()
 	ctx := context.Background()
 	raw := upstream.Namespace
@@ -93,6 +96,49 @@ func TestSubscribeKicksPrefetch(t *testing.T) {
 			t.Fatal("subscribe never warmed the nested grid")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestSubscribeDoesNotCrawlWithoutThePolicy: the walk is a PER-NAMESPACE
+// policy over the one engine, not part of the engine. A local plugin's
+// layer is opened without it and must never traverse — the seam is the
+// Subscribe trigger, so this drives the same door the transport does and
+// asserts nothing was warmed. (Without the policy gate this test fails by
+// finding the nested grid cached: every plugin would crawl its own disk
+// on every reconnect.)
+func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	root, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := &darkable{Namespace: local.New(st, nil)}
+	cc := openLayer(t, upstream, filepath.Join(t.TempDir(), "cache.db"), Options{})
+	nested, _, _ := seedNested(t, cc, upstream, root)
+
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
+	go func() {
+		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(*pb.Event) error { return nil })
+	}()
+	// Give a walk every chance to happen before declaring it didn't: the
+	// positive twin above finds the grid well inside this window.
+	time.Sleep(500 * time.Millisecond)
+	if _, ok := cc.loadGrid(ctx, nested); ok {
+		t.Fatal("a namespace without the prefetch policy crawled itself anyway")
+	}
+	// The layer still caches what is actually READ — the engine is the
+	// same; only the crawl is policy.
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: nested}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cc.loadGrid(ctx, nested); !ok {
+		t.Fatal("a read-through answer was not remembered")
 	}
 }
 

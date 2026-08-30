@@ -222,7 +222,7 @@ serve (`node.Convert`).
   through it is `<id>/<conn>/<remote-id…>`: `Server.resolve` peels the
   node's own id and hands the rest to the transport, which peels the
   connection name and prepends it on the way back — the same transit
-  rule at both hops. The mount cache (`internal/plugin/mountcache`) fronts
+  rule at both hops. The source cache (`internal/sourcecache`) fronts
   the transport so a dark remote degrades to stale-but-readable.
 
 ### 4.1 `version` means the user's content bytes — the best-enforced invariant

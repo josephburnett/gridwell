@@ -1,9 +1,12 @@
-package mountcache
+package sourcecache
 
-// Whole-mount prefetch (issue #254, the phase-1 open decision resolved
+// Whole-source prefetch (issue #254, the phase-1 open decision resolved
 // YES): the cache remembers what you TOUCHED; this walker warms what you
 // DIDN'T, so "everything on the mount is readable offline" is literally
-// true rather than everything-visited. The data is small by construction
+// true rather than everything-visited. It is a PER-NAMESPACE POLICY
+// (Options.Prefetch), not part of the engine: the transport opts in
+// because a connection's absence is a machine going dark; a local
+// plugin's source is right here and never crawls. The data is small by construction
 // (text, previews, metadata — megabytes, not gigabytes; 2026-08-14), so
 // the walk is a full traversal with caps as emergency valves, not a
 // sampling strategy.
@@ -15,7 +18,7 @@ package mountcache
 // runs through the wrapper's OWN read methods, so every answer lands in
 // the cache by the one existing write path (no second writer).
 //
-// A transport failure mid-walk aborts quietly — the mount went dark; the
+// A transport failure mid-walk aborts quietly — the source went dark; the
 // next successful Subscribe walks again. Coded refusals on individual
 // reads (a tombstoned segment, a permission wall) skip that branch and
 // keep walking: the walker must never invent reachability the mount
@@ -67,11 +70,15 @@ type prefetcher struct {
 	wg sync.WaitGroup
 }
 
-// kick starts one walk if none is running. Serialized, never queued: a
+// kick starts one walk if none is running — and only where the walk is
+// this namespace's POLICY (Options.Prefetch). Serialized, never queued: a
 // trigger during a walk is satisfied by that walk's own freshness (each
-// Subscribe re-trigger means the mount is up NOW, which the running walk
+// Subscribe re-trigger means the source is up NOW, which the running walk
 // is already exploiting).
-func (c *Client) kickPrefetch() {
+func (c *Layer) kickPrefetch() {
+	if !c.opts.Prefetch {
+		return
+	}
 	c.pf.mu.Lock()
 	if c.pf.running || c.pf.ctx == nil {
 		c.pf.mu.Unlock()
@@ -96,7 +103,7 @@ func (c *Client) kickPrefetch() {
 // warming grids, tiles, previews, plugin lists, and content bodies.
 // Exported so a deliberate warm (a future pin gesture, a test) can run it
 // synchronously; the Subscribe trigger runs it in the background.
-func (c *Client) Prefetch(ctx context.Context) {
+func (c *Layer) Prefetch(ctx context.Context) {
 	w := &walker{c: c, ctx: ctx, seenGrids: map[string]bool{}, seenTiles: map[string]bool{}, seenNs: map[string]bool{}}
 	info, err := c.Info(ctx, &pb.InfoRequest{})
 	if err != nil {
@@ -119,7 +126,7 @@ func (c *Client) Prefetch(ctx context.Context) {
 }
 
 type walker struct {
-	c         *Client
+	c         *Layer
 	ctx       context.Context
 	seenGrids map[string]bool
 	seenTiles map[string]bool

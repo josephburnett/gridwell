@@ -1,4 +1,4 @@
-package mountcache
+package sourcecache
 
 import (
 	"bytes"
@@ -49,20 +49,16 @@ func (d *doorFake) ServeContent(_ context.Context, in *pb.ServeContentRequest, s
 	})
 }
 
-func doorFixture(t *testing.T) (*Client, *doorFake) {
+func doorFixture(t *testing.T) (*Layer, *doorFake) {
 	t.Helper()
 	fake := &doorFake{bodies: map[string]doorBody{}}
-	cc, closer, err := Open(fake, filepath.Join(t.TempDir(), "cache.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	cc := openLayer(t, fake, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})
 	return cc, fake
 }
 
 // serveDoor drives one door read to completion, returning the status,
 // media type and body it saw, plus the call's error.
-func serveDoor(c *Client, tileID, subpath string) (st int64, mediaType string, data []byte, err error) {
+func serveDoor(c *Layer, tileID, subpath string) (st int64, mediaType string, data []byte, err error) {
 	err = c.ServeContent(context.Background(), &pb.ServeContentRequest{TileId: tileID, Subpath: subpath},
 		func(ch *pb.ServeContentChunk) error {
 			if ch.GetStatus() != 0 {
@@ -198,11 +194,7 @@ func TestPrefetchWalksServesPageBodies(t *testing.T) {
 	fake := &pageFake{doorFake: doorFake{bodies: map[string]doorBody{
 		"7|": {status: 200, mediaType: "image/png", data: bytes.Repeat([]byte("p"), 2048)},
 	}}}
-	cc, closer, err := Open(fake, filepath.Join(t.TempDir(), "cache.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	cc := openLayer(t, fake, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})
 	ctx := context.Background()
 
 	cc.Prefetch(ctx)

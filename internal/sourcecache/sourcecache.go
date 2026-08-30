@@ -1,36 +1,47 @@
-// Package mountcache is the node-side read-through cache in front of a
-// MOUNT (a transit plugin — ssh), phase 1 of docs/offline-plan.md: a
-// mounted machine going dark degrades to STALE-BUT-READABLE instead of
-// blank. It wraps a namespace.Namespace — in production the node's
-// TRANSPORT, so every connection is cached in one place (internal/node
-// startTransport); online it passes through and
-// remembers every successful read; when the mount is unreachable
-// (transport-class failure ONLY — an answered "gone" is never masked) it
-// serves the remembered answer. Writes always pass through: the cache is
-// never a write buffer, and the remote stays the one owner of its truth —
-// this layer owns only the REMEMBERED ANSWER (charter §7: one fact, one
-// owner; no second writer).
+// Package sourcecache is the node's ONE memory of WHAT A SOURCE LAST SAID
+// (docs/simplify-plan.md S7). It sits in front of every non-home
+// namespace — every content plugin's adapter and the transport's
+// connections — as a read-through layer over one disposable file: online
+// it passes through and remembers every successful read; when the source
+// is unreachable (transport-class failure ONLY — an answered "gone" is
+// never masked) it serves the remembered answer, stamped stale. Writes
+// always pass through: the cache is never a write buffer, and the source
+// stays the one owner of its truth — this layer owns only the REMEMBERED
+// ANSWER (charter §7: one fact, one owner; no second writer).
 //
-// Storage is one SQLite DB per mount, EXPLICITLY DISPOSABLE: deleting it
-// is always safe (it re-warms from use), it is not backed up, and it is
-// NOT under the frozen-format promise — dbformat-versioned only so a
-// future shape change can migrate or refuse cleanly. Rows are wire-shaped
-// (marshaled protos keyed by the mount-local ids this wrapper sees), so
-// there is no schema to drift against the contract.
+// It is a cache, not memory: the node's OWN facts about a plugin's
+// entries — the ids it minted, where the user put them, how they are
+// framed — are durable rows in gridwell.db (internal/local/store's
+// externals engine), and an adapter answers a dark source from those
+// rows, not from here. What lives here is only what the source itself
+// said: the handshake, the tile facts of a remote grid, bodies,
+// previews, page bytes.
+//
+// Storage is ONE SQLite DB for the whole node (<home>/cache.db,
+// docs/one-node.md), EXPLICITLY DISPOSABLE: deleting it is always safe
+// (it re-warms from use), it is not backed up, and it is NOT under the
+// frozen-format promise — dbformat-versioned only so a future shape
+// change can migrate or refuse cleanly. Rows are wire-shaped (marshaled
+// protos keyed by the ids this layer sees), so there is no schema to
+// drift against the contract. Ids never collide across namespaces: a
+// local namespace's ids come from the store's one AUTOINCREMENT, and a
+// connection's are qualified by its name segment.
 //
 // Freshness: every successful read replaces its rows, and the Subscribe
-// stream the server already holds through this wrapper is teed — a
+// stream the server already holds through this layer is teed — a
 // TileChanged upserts, a TileRemoved deletes — so the cache tracks the
-// live session without a poller. Deletions that happen while the mount is
-// DARK are caught by the next successful GetGrid (which replaces the
+// live session without a poller. Deletions that happen while the source
+// is DARK are caught by the next successful GetGrid (which replaces the
 // grid's whole tile set); that read-through refresh is the resync, by
 // construction rather than by a sweep.
 //
-// Not cached (deliberate): write responses (the next read refreshes).
-// ServeContent bodies are cached BOUNDED (servecontent.go, issue #255);
-// whole-mount prefetch warms everything else on connect (prefetch.go,
-// issue #254).
-package mountcache
+// Not cached (deliberate): write responses (the next read refreshes) and
+// any answer already stamped stale (remembering a degraded answer would
+// overwrite the good one it degraded from). ServeContent bodies are
+// cached BOUNDED (servecontent.go, issue #255); the whole-source
+// prefetch walk is a PER-NAMESPACE POLICY, off by default and opted into
+// by the transport alone (prefetch.go, issue #254).
+package sourcecache
 
 import (
 	"context"
@@ -38,6 +49,7 @@ import (
 	"fmt"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"log"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -48,8 +60,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// cacheApplicationID stamps a mount-cache file as ours ("gwmc"), so a
+// cacheApplicationID stamps a source-cache file as ours ("gwmc"), so a
 // foreign SQLite file at the cache path is refused, never overwritten.
+// The bytes are the pre-rename mount cache's — the file's identity did
+// not change when the package was renamed (2026-08-29), and re-stamping
+// would refuse every existing cache.db for nothing.
 const cacheApplicationID int64 = 0x67776d63
 
 // cacheSchemaVersion is the current cache generation. The file is
@@ -77,7 +92,8 @@ CREATE TABLE IF NOT EXISTS tiles (
     proto      BLOB NOT NULL,
     fetched_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_mountcache_tiles_grid ON tiles(grid_id);
+DROP INDEX IF EXISTS idx_mountcache_tiles_grid;
+CREATE INDEX IF NOT EXISTS idx_sourcecache_tiles_grid ON tiles(grid_id);
 CREATE TABLE IF NOT EXISTS content (
     tile_id    TEXT PRIMARY KEY,
     media_type TEXT NOT NULL,
@@ -113,45 +129,98 @@ const contentChunkBytes = 256 * 1024
 // still passes through live, just uncached.
 const maxCachedContentBytes = 16 * 1024 * 1024
 
-// Client wraps a namespace with the read-through cache. All methods not
+// Options is the PER-NAMESPACE policy over the one engine. The engine is
+// the same for a local plugin and a remote connection; what differs is
+// how eagerly it warms.
+type Options struct {
+	// Prefetch walks the whole namespace on every successful Subscribe,
+	// warming grids, tiles, previews and bodies nobody has opened yet
+	// (prefetch.go). It is the OFFLINE policy: it belongs to a namespace
+	// whose answers cross a network and whose absence is a machine going
+	// dark — the transport. A local plugin's source is right here; making
+	// it crawl its own disk on every reconnect would buy nothing and cost
+	// a full traversal.
+	Prefetch bool
+}
+
+// Layer is the cache in front of ONE namespace. All methods not
 // overridden here pass through the embedded Namespace untouched (writes,
 // shells, Probe, SetFraming).
-type Client struct {
+type Layer struct {
 	namespace.Namespace
-	db *sql.DB
-	pf prefetcher
+	db   *sql.DB
+	opts Options
+	pf   prefetcher
 }
 
 // The cache is a namespace in front of a namespace, nothing more.
-var _ namespace.Namespace = (*Client)(nil)
+var _ namespace.Namespace = (*Layer)(nil)
 
-// Open opens (or creates) the cache DB at dbPath and returns the wrapped
-// namespace. Close the returned closer with the wrapped one's own.
-func Open(upstream namespace.Namespace, dbPath string) (*Client, func(), error) {
+// Store is the one cache file, shared by every layer over it. SQLite is
+// single-writer per file and this handle runs one connection, so a second
+// handle on the same file would meet an instant SQLITE_BUSY — the same
+// reason the home store exposes its one handle (store.Store.SQL).
+type Store struct {
+	db     *sql.DB
+	mu     sync.Mutex
+	closed bool
+	layers []*Layer
+}
+
+// Open opens (or creates) the node's cache DB at dbPath.
+func Open(dbPath string) (*Store, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("mountcache open %s: %w", dbPath, err)
+		return nil, fmt.Errorf("sourcecache open %s: %w", dbPath, err)
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`); err != nil {
 		db.Close()
-		return nil, nil, fmt.Errorf("mountcache pragmas: %w", err)
+		return nil, fmt.Errorf("sourcecache pragmas: %w", err)
 	}
 	if _, err := db.Exec(schemaDDL); err != nil {
 		db.Close()
-		return nil, nil, fmt.Errorf("mountcache schema: %w", err)
+		return nil, fmt.Errorf("sourcecache schema: %w", err)
 	}
 	if err := dbformat.EnsureVersion(context.Background(), db, cacheApplicationID, cacheSchemaVersion, nil); err != nil {
 		db.Close()
-		return nil, nil, fmt.Errorf("mountcache %s: %w", dbPath, err)
+		return nil, fmt.Errorf("sourcecache %s: %w", dbPath, err)
 	}
-	c := &Client{Namespace: upstream, db: db}
+	return &Store{db: db}, nil
+}
+
+// Front puts the cache in front of one namespace under the given policy.
+// The returned layer is owned by the store: Close shuts every layer down
+// before the file goes away.
+func (s *Store) Front(upstream namespace.Namespace, opts Options) *Layer {
+	c := &Layer{Namespace: upstream, db: s.db, opts: opts}
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
-	return c, func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed { // opened after the store closed: a layer that never warms
+		c.pf.cancel()
+		return c
+	}
+	s.layers = append(s.layers, c)
+	return c
+}
+
+// Close stops every layer's walk and closes the file. Idempotent.
+func (s *Store) Close() error {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.closed = true
+	layers := s.layers
+	s.layers = nil
+	s.mu.Unlock()
+	for _, c := range layers {
 		c.pf.cancel()
 		c.pf.wg.Wait() // the walk is out before its DB goes away
-		_ = db.Close()
-	}, nil
+	}
+	return s.db.Close()
 }
 
 // logErr surfaces a cache-side failure to the server log. A broken cache
@@ -159,7 +228,7 @@ func Open(upstream namespace.Namespace, dbPath string) (*Client, func(), error) 
 // the offline promise degrades invisibly until the day it's needed.
 func logErr(op string, err error) {
 	if err != nil {
-		log.Printf("gridwell: mountcache %s: %v (cache degraded; the live path is unaffected)", op, err)
+		log.Printf("gridwell: sourcecache %s: %v (cache degraded; the live path is unaffected)", op, err)
 	}
 }
 
@@ -167,7 +236,7 @@ func now() int64 { return time.Now().Unix() }
 
 // ── Info ────────────────────────────────────────────────────────────────
 
-func (c *Client) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
+func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
 	resp, err := c.Namespace.Info(ctx, in)
 	if err == nil {
 		if b, merr := proto.Marshal(resp); merr == nil {
@@ -195,7 +264,7 @@ func (c *Client) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse
 // and remembers the answer per namespace, so a remote pane's + menu is
 // readable while the mount is dark — same contract as every other read:
 // serve-stale on transport only, verdicts pass through.
-func (c *Client) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	resp, err := c.Namespace.Handshake(ctx, in)
 	if err == nil {
 		if b, merr := proto.Marshal(resp); merr == nil {
@@ -221,7 +290,7 @@ func (c *Client) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Ha
 
 // ── GetGrid ─────────────────────────────────────────────────────────────
 
-func (c *Client) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	resp, err := c.Namespace.GetGrid(ctx, in)
 	if err == nil {
 		c.storeGrid(ctx, in.GridId, resp)
@@ -247,7 +316,7 @@ func (c *Client) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGri
 // storeGrid replaces the grid row AND its whole tile set in one
 // transaction — a successful GetGrid is by definition the complete list,
 // so this is also how deletions that happened while dark reconcile.
-func (c *Client) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridResponse) {
+func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridResponse) {
 	gb, err := proto.Marshal(resp.GetGrid())
 	if err != nil {
 		logErr("marshal grid", err)
@@ -287,7 +356,7 @@ func (c *Client) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridR
 	logErr("store grid", tx.Commit())
 }
 
-func (c *Client) loadGrid(ctx context.Context, gridID string) (*pb.GetGridResponse, bool) {
+func (c *Layer) loadGrid(ctx context.Context, gridID string) (*pb.GetGridResponse, bool) {
 	var gb []byte
 	if err := c.db.QueryRowContext(ctx, `SELECT proto FROM grids WHERE id = ?`, gridID).Scan(&gb); err != nil {
 		return nil, false
@@ -318,7 +387,7 @@ func (c *Client) loadGrid(ctx context.Context, gridID string) (*pb.GetGridRespon
 
 // ── GetTile ─────────────────────────────────────────────────────────────
 
-func (c *Client) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileResponse, error) {
+func (c *Layer) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.GetTile(ctx, in)
 	if err == nil {
 		c.upsertTile(ctx, resp.GetTile())
@@ -338,7 +407,7 @@ func (c *Client) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileRe
 	return &pb.TileResponse{Tile: t}, nil
 }
 
-func (c *Client) upsertTile(ctx context.Context, t *pb.Tile) {
+func (c *Layer) upsertTile(ctx context.Context, t *pb.Tile) {
 	if t == nil || t.GetId() == "" {
 		return
 	}
@@ -353,7 +422,7 @@ func (c *Client) upsertTile(ctx context.Context, t *pb.Tile) {
 	logErr("upsert tile", werr)
 }
 
-func (c *Client) deleteTile(ctx context.Context, tileID string) {
+func (c *Layer) deleteTile(ctx context.Context, tileID string) {
 	_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID)
 	logErr("delete tile", err)
 	_, err = c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
@@ -364,7 +433,7 @@ func (c *Client) deleteTile(ctx context.Context, tileID string) {
 
 // ── GetTilePreview ──────────────────────────────────────────────────────
 
-func (c *Client) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
+func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	resp, err := c.Namespace.GetTilePreview(ctx, in)
 	if err == nil {
 		if jpeg := resp.GetJpeg(); len(jpeg) > 0 {
@@ -393,7 +462,7 @@ func (c *Client) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewReques
 // failure BEFORE any chunk falls back to the remembered body; after a
 // chunk has flowed the error passes through (splicing cache into a
 // half-live stream would fabricate a body nobody ever had).
-func (c *Client) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
+func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	var mediaType string
 	var version int64
 	var data []byte
@@ -455,7 +524,7 @@ func sendChunked(data []byte, emit func(b []byte, first bool) error) error {
 	}
 }
 
-func (c *Client) loadContent(ctx context.Context, tileID string) (mediaType string, version int64, data []byte, ok bool) {
+func (c *Layer) loadContent(ctx context.Context, tileID string) (mediaType string, version int64, data []byte, ok bool) {
 	if err := c.db.QueryRowContext(ctx, `SELECT media_type, version, data FROM content WHERE tile_id = ?`, tileID).
 		Scan(&mediaType, &version, &data); err != nil {
 		return "", 0, nil, false
@@ -463,7 +532,7 @@ func (c *Client) loadContent(ctx context.Context, tileID string) (mediaType stri
 	return mediaType, version, data, true
 }
 
-func (c *Client) storeContent(ctx context.Context, tileID, mediaType string, version int64, data []byte) {
+func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, version int64, data []byte) {
 	_, err := c.db.ExecContext(ctx, `INSERT INTO content (tile_id, media_type, version, data, fetched_at) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(tile_id) DO UPDATE SET media_type=excluded.media_type, version=excluded.version, data=excluded.data, fetched_at=excluded.fetched_at`,
 		tileID, mediaType, version, data, now())
@@ -476,7 +545,7 @@ func (c *Client) storeContent(ctx context.Context, tileID, mediaType string, ver
 // the live session's mutations as the server relays them. If nothing is
 // subscribed (headless node), reads still refresh on their own — the tee
 // is an accelerator, not the correctness path.
-func (c *Client) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
+func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	// Every (re)subscription is a moment to warm the whole mount (issue
 	// #254): the initial connect and each health-up reconnect land here,
 	// so the walk doubles as the resync for grids nobody re-opened while
@@ -490,7 +559,7 @@ func (c *Client) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fu
 
 // applyEvent folds one mount event into the cache. GridChanged carries
 // only an id — nothing to apply; the next successful GetGrid refreshes.
-func (c *Client) applyEvent(ctx context.Context, ev *pb.Event) {
+func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 	switch p := ev.GetPayload().(type) {
 	case *pb.Event_TileChanged:
 		c.upsertTile(ctx, p.TileChanged.GetTile())

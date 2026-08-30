@@ -136,7 +136,8 @@ a config-time fact, so the wrap point is one line in `LoadAll`):
 server → [mountcache] → sshhost plugin → tunnel → remote node
 ```
 
-New package `internal/plugin/mountcache`. It implements the full client
+New package `internal/plugin/mountcache` (renamed `internal/sourcecache`
+2026-08-29, docs/simplify-plan.md S7). It implements the full client
 interface; non-cached methods pass through untouched. The server, the
 plugins, and the wire contract do not change.
 

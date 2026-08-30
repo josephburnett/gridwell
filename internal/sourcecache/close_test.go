@@ -1,4 +1,4 @@
-package mountcache
+package sourcecache
 
 import (
 	"bytes"
@@ -44,10 +44,12 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	g := &gated{Namespace: local.New(st, nil), entered: make(chan struct{}), release: make(chan struct{})}
-	cc, closer, err := Open(&darkable{Namespace: g}, filepath.Join(t.TempDir(), "cache.db"))
+	cache, err := Open(filepath.Join(t.TempDir(), "cache.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	cc := cache.Front(&darkable{Namespace: g}, Options{Prefetch: true})
+	closer := func() { _ = cache.Close() }
 
 	var logs bytes.Buffer
 	log.SetOutput(&logs)

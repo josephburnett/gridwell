@@ -1,4 +1,4 @@
-package mountcache
+package sourcecache
 
 import (
 	"bytes"
@@ -93,11 +93,7 @@ func (u *linkUpstream) ReadContent(_ context.Context, req *pb.ReadContentRequest
 // prefetch whenever the link was the only path to it.
 func TestPrefetchWarmsLinkTargetBody(t *testing.T) {
 	up := &linkUpstream{}
-	cc, dbClose, err := Open(up, filepath.Join(t.TempDir(), "cache.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(dbClose)
+	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})
 
 	ctx := context.Background()
 	cc.Prefetch(ctx)

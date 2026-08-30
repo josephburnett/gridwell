@@ -60,7 +60,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 		Config: map[string]string{"root": root},
 	}}}
 	reg := plugin.NewRegistry()
-	if err := plugin.LoadInto(reg, cfg, nil, st); err != nil {
+	if err := plugin.LoadInto(reg, cfg, nil, st, nil); err != nil {
 		t.Fatalf("LoadInto: %v", err)
 	}
 	defer reg.Close()

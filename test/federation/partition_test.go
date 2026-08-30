@@ -3,7 +3,7 @@
 // The MID-SESSION PARTITION gate (docs/offline-plan.md phase 1): the gap
 // the spawn tests never covered — a mount that dies UNDER a live session.
 // Runs the production binaries through a real ssh tunnel, reads through
-// the mount to warm the node-side cache (internal/plugin/mountcache), then
+// the mount to warm the node-side cache (internal/sourcecache), then
 // SIGKILLs the remote node and asserts the whole offline story end to end:
 // warmed reads serve stale, never-read bytes fail honestly, the offline
 // deep copy degrades exactly per the owner decision (cached → copy,

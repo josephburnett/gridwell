@@ -1,4 +1,4 @@
-package mountcache
+package sourcecache
 
 // Bounded ServeContent caching (issue #255, deferred from v1): the
 // /content/ door — fs photos, plugin pages — now degrades stale-but-
@@ -32,7 +32,7 @@ var (
 // remember the complete body at a clean end; a transport failure before
 // any chunk falls back to the remembered entry. Only status-200 answers
 // are remembered — an error page is a VERDICT, never served stale.
-func (c *Client) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
+func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	var status int64
 	var mediaType string
 	var data []byte
@@ -71,7 +71,7 @@ func (c *Client) ServeContent(ctx context.Context, in *pb.ServeContentRequest, s
 	return err
 }
 
-func (c *Client) storeServeContent(ctx context.Context, tileID, subpath string, status int64, mediaType string, data []byte) {
+func (c *Layer) storeServeContent(ctx context.Context, tileID, subpath string, status int64, mediaType string, data []byte) {
 	_, err := c.db.ExecContext(ctx, `INSERT INTO servecontent (tile_id, subpath, status, media_type, data, fetched_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(tile_id, subpath) DO UPDATE SET status=excluded.status,
@@ -83,7 +83,7 @@ func (c *Client) storeServeContent(ctx context.Context, tileID, subpath string, 
 
 // evictServeContent drops oldest entries until the table fits the mount
 // cap — the emergency valve.
-func (c *Client) evictServeContent(ctx context.Context) {
+func (c *Layer) evictServeContent(ctx context.Context) {
 	for i := 0; i < 64; i++ { // hard stop; each pass drops one entry
 		var total int64
 		if err := c.db.QueryRowContext(ctx,
@@ -102,7 +102,7 @@ func (c *Client) evictServeContent(ctx context.Context) {
 	}
 }
 
-func (c *Client) loadServeContent(ctx context.Context, tileID, subpath string) (status int64, mediaType string, data []byte, ok bool) {
+func (c *Layer) loadServeContent(ctx context.Context, tileID, subpath string) (status int64, mediaType string, data []byte, ok bool) {
 	err := c.db.QueryRowContext(ctx, `SELECT status, media_type, data FROM servecontent
 		WHERE tile_id = ? AND subpath = ?`, tileID, subpath).Scan(&status, &mediaType, &data)
 	if err != nil {

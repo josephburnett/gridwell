@@ -62,7 +62,7 @@ func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
 		ID: "gl1234a", Label: "todos", Kind: "gitlab", Config: map[string]string{"db_file": filepath.Join(t.TempDir(), "mem.db")},
 	}}}
 	factories := map[string]plugin.Factory{"gitlab": func(map[string]string) (pluginv1.PluginServer, error) { return handshakeRefuser{}, nil }}
-	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories, testStore(t))
+	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories, testStore(t), nil)
 	if err == nil || !strings.Contains(err.Error(), "token_file not configured") || !strings.Contains(err.Error(), "gl1234a") {
 		t.Fatalf("LoadInto = %v, want the plugin's own reason, naming it", err)
 	}
@@ -81,7 +81,7 @@ func TestLoadIntoFailsOnARefusingFactory(t *testing.T) {
 	factories := map[string]plugin.Factory{"proc": func(cfg map[string]string) (pluginv1.PluginServer, error) {
 		return nil, fmt.Errorf("pid %q is not a positive process id", cfg["pid"])
 	}}
-	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories, testStore(t))
+	err := plugin.LoadInto(plugin.NewRegistry(), cfg, factories, testStore(t), nil)
 	if err == nil || !strings.Contains(err.Error(), `pid "abc"`) || !strings.Contains(err.Error(), "pr1234a") {
 		t.Fatalf("LoadInto = %v, want the factory's reason, naming the plugin", err)
 	}

@@ -1,4 +1,4 @@
-package mountcache
+package sourcecache
 
 import (
 	"context"
@@ -88,7 +88,21 @@ func (d *darkable) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send 
 	return d.Namespace.Subscribe(ctx, in, send)
 }
 
-func fixture(t *testing.T) (cc *Client, upstream *darkable, root string, dbPath string) {
+// openLayer is the production wiring in one line: one cache file, one
+// layer in front of one namespace, under the given policy.
+func openLayer(t *testing.T, upstream namespace.Namespace, dbPath string, opts Options) *Layer {
+	t.Helper()
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s.Front(upstream, opts)
+}
+
+// fixture is the TRANSPORT's shape: the cache in front of a namespace
+// whose absence is a machine going dark, so the prefetch policy is on.
+func fixture(t *testing.T) (cc *Layer, upstream *darkable, root string, dbPath string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -101,12 +115,7 @@ func fixture(t *testing.T) (cc *Client, upstream *darkable, root string, dbPath 
 	}
 	upstream = &darkable{Namespace: local.New(st, nil)}
 	dbPath = filepath.Join(t.TempDir(), "cache.db")
-	cc, dbClose, err := Open(upstream, dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(dbClose)
-	return cc, upstream, root, dbPath
+	return openLayer(t, upstream, dbPath, Options{Prefetch: true}), upstream, root, dbPath
 }
 
 func readContent(t *testing.T, c namespace.Namespace, tileID string) (mediaType string, version int64, data []byte) {
@@ -242,11 +251,7 @@ func TestHalfDeliveredStreamIsNeverSpliced(t *testing.T) {
 		t.Fatal(err)
 	}
 	upstream := &halfDark{Namespace: local.New(st, nil)}
-	cc, dbClose, err := Open(upstream, filepath.Join(t.TempDir(), "cache.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(dbClose)
+	cc := openLayer(t, upstream, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})
 	ctx := context.Background()
 
 	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -419,11 +424,7 @@ func TestPersistsAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reopened, closer, err := Open(upstream, dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer closer()
+	reopened := openLayer(t, upstream, dbPath, Options{Prefetch: true})
 	upstream.dark = true
 	if _, err := reopened.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatalf("reopened cache should serve the remembered grid: %v", err)

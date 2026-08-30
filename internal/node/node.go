@@ -31,11 +31,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
 
 // BuildConfig loads server.yaml at cfgPath and prepares it for launch. A
@@ -125,6 +125,7 @@ type Node struct {
 	FedLn net.Listener
 
 	st            *store.Store
+	cache         *sourcecache.Store
 	srv           *server.Server
 	webSrv        *http.Server
 	fedSrv        *http.Server
@@ -146,9 +147,24 @@ func Start(opts Options) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	// THE source cache (docs/simplify-plan.md S7): one disposable file
+	// remembering what every NON-HOME source last said. It is opened here,
+	// once, and put in front of each namespace below — the one place the
+	// node decides who is cached and under what policy. Home is never
+	// cached: its answers ARE the forever file.
+	cache := openCache(cfg)
+	front := func(ns namespace.Namespace, o sourcecache.Options) namespace.Namespace {
+		if cache == nil {
+			return ns
+		}
+		return cache.Front(ns, o)
+	}
 	reg := plugin.NewRegistry()
 	fail := func(err error) (*Node, error) {
 		reg.Close()
+		if cache != nil {
+			_ = cache.Close()
+		}
 		st.Close()
 		return nil, err
 	}
@@ -157,10 +173,20 @@ func Start(opts Options) (*Node, error) {
 	if err := startHome(reg, st, cfg); err != nil {
 		return fail(fmt.Errorf("home: %w", err))
 	}
-	if err := plugin.LoadInto(reg, cfg, opts.Factories, st); err != nil {
+	// A content plugin gets the engine with no prefetch: its source is
+	// local to this machine, so a crawl on every reconnect would warm
+	// what is already at hand.
+	if err := plugin.LoadInto(reg, cfg, opts.Factories, st, func(ns namespace.Namespace) namespace.Namespace {
+		return front(ns, sourcecache.Options{})
+	}); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))
 	}
-	if err := startTransport(reg, st, opts.Home, cfg); err != nil {
+	// The transport gets the engine WITH prefetch: a connection's answers
+	// cross a network, and offline readability means everything on the
+	// far machine, not everything visited (docs/offline.md).
+	if err := startTransport(reg, st, cfg, func(ns namespace.Namespace) namespace.Namespace {
+		return front(ns, sourcecache.Options{Prefetch: true})
+	}); err != nil {
 		return fail(fmt.Errorf("transport: %w", err))
 	}
 	srv, err := server.New(reg, server.Config{
@@ -203,7 +229,7 @@ func Start(opts Options) (*Node, error) {
 			return fail(err)
 		}
 	}
-	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, st: st, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
+	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, st: st, cache: cache, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
 }
 
 // startHome registers the home over the store — a Go value the router
@@ -215,13 +241,32 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 	return nil
 }
 
+// openCache opens the node's one source cache (<home>/cache.db). A cache
+// that cannot open degrades to the UNCACHED node — loudly, never
+// fatally: the cache is an availability layer, and refusing to serve
+// because the optimization broke would invert its purpose.
+func openCache(cfg *config.ServerConfig) *sourcecache.Store {
+	if cfg.CacheDir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(cfg.CacheDir, 0o700); err != nil {
+		log.Printf("gridwell: source cache dir %s: %v (plugins and connections run uncached)", cfg.CacheDir, err)
+		return nil
+	}
+	cache, err := sourcecache.Open(config.CacheFile(cfg.CacheDir))
+	if err != nil {
+		log.Printf("gridwell: source cache: %v (plugins and connections run uncached)", err)
+		return nil
+	}
+	return cache
+}
+
 // startTransport opens the connection store, reconciles it against the
 // declared connections, dials them (bounded — the boot doesn't serve
 // mysteries), and installs the transport as the node's connection
-// namespace ("<id>/<conn>/…"), fronted by the mount cache so a dark
-// remote degrades to stale-but-readable instead of blank. ONE cache, in
-// front of the ONE namespace whose answers come from another machine.
-func startTransport(reg *plugin.Registry, st *store.Store, home string, cfg *config.ServerConfig) error {
+// namespace ("<id>/<conn>/…"), fronted by the source cache so a dark
+// remote degrades to stale-but-readable instead of blank.
+func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig, front func(namespace.Namespace) namespace.Namespace) error {
 	db, err := remote.NewDB(st.SQL())
 	if err != nil {
 		return err
@@ -232,8 +277,6 @@ func startTransport(reg *plugin.Registry, st *store.Store, home string, cfg *con
 		return err
 	}
 	impl.ConnectAll(context.Background())
-	var ns namespace.Namespace = impl
-	closer := func() { closeImpl(impl) }
 	rows := func(ctx context.Context) []plugin.ConnectionRow {
 		out := []plugin.ConnectionRow{}
 		for _, r := range impl.Rows(ctx) {
@@ -242,22 +285,7 @@ func startTransport(reg *plugin.Registry, st *store.Store, home string, cfg *con
 		}
 		return out
 	}
-	if cfg.CacheDir != "" {
-		// A cache that cannot open degrades to the uncached client —
-		// loudly, never fatally: the cache is an availability layer, and
-		// refusing to serve because the OPTIMIZATION broke would invert
-		// its purpose.
-		if mkErr := os.MkdirAll(cfg.CacheDir, 0o700); mkErr != nil {
-			log.Printf("gridwell: mount cache dir %s: %v (connections run uncached)", cfg.CacheDir, mkErr)
-		} else if cached, cacheClose, cErr := mountcache.Open(ns, config.CacheFile(cfg.CacheDir)); cErr != nil {
-			log.Printf("gridwell: mount cache: %v (connections run uncached)", cErr)
-		} else {
-			ns = cached
-			inner := closer
-			closer = func() { cacheClose(); inner() }
-		}
-	}
-	reg.SetTransport(ns, rows, closer)
+	reg.SetTransport(front(impl), rows, func() { closeImpl(impl) })
 	return nil
 }
 
@@ -322,6 +350,12 @@ func (n *Node) Close() error {
 		err := n.webSrv.Shutdown(ctx)
 		if n.FedLn != nil {
 			err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
+		}
+		// The cache closes BEFORE the sources it fronts: its prefetch
+		// walk reads through them and writes into the file, and a walk
+		// must be out before either goes away.
+		if n.cache != nil {
+			err = errors.Join(err, n.cache.Close())
 		}
 		n.Reg.Close()
 		err = errors.Join(err, n.st.Close())
