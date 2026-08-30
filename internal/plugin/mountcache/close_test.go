@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -52,7 +53,12 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(nil) })
+	// Restore the package default, NOT nil: log.SetOutput(nil) leaves the
+	// standard logger with a nil writer, and the next log.Printf from ANY
+	// goroutine — another test's prefetch walk, still running — panics
+	// inside log.Logger.output. That is a whole-package landmine planted
+	// by one test's cleanup.
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
 	if _, err := cc.Subscribe(context.Background(), &pb.SubscribeRequest{}); err != nil {
 		t.Fatal(err)
