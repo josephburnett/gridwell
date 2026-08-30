@@ -3,8 +3,8 @@
 // URL is projected from a Stack (URLStateOf) and decoded back into one
 // (StackAt, after the id walk the client does against its cache).
 //
-// URL shape (anchor-as-path since 2026-07-25 — the owner's "plugin ids are
-// just another part of the path"):
+// URL shape (the anchor is part of the path — a plugin id is just another
+// segment):
 //
 //	/                                home, default viewport
 //	/3/4/5                           descended through tiles 3, 4, 5 (home)
@@ -14,22 +14,21 @@
 //	/3/4/5/9                         file leaf (rendered mode)
 //	/3/4/5/9?c=24&r=10               file leaf in text mode, cursor
 //
-// The grammar has one rule: LEADING NON-NUMERIC segments are the anchor's
-// namespace chain (plugin/node ids — guaranteed non-numeric by config.Load
-// and idshape.NewShortID), the FIRST numeric segment is the anchor grid id,
-// and every following segment is a tile row id in descent order. No leading
-// non-numeric segment means the home anchor ("/" is home — the first
-// configured plugin's root grid, rpc.HomeGrid). The trailing tile id may be
-// a well-tile or a file-tile; the caller resolves which by walking the ids
-// against the cache after a successful DecodeURL. The legacy `?a=<anchor>`
-// query form is still DECODED (old bookmarks) but never emitted.
+// The grammar has one rule: leading non-numeric segments are the anchor's
+// namespace chain (plugin and node ids, guaranteed non-numeric by
+// idshape.NewShortID), the first numeric segment is the anchor grid id, and
+// every following segment is a tile row id in descent order. No leading
+// non-numeric segment means the home anchor: "/" is the node's home grid, the
+// one the handshake names. The trailing tile id may be a well tile or a
+// content tile; the caller resolves which by walking the ids against the
+// cache after a successful DecodeURL. The `?a=<anchor>` query form is still
+// decoded, for old bookmarks, but never emitted.
 //
-// Presence of `c`/`r` (column / row, 0-indexed) implies "file is in
-// text mode with the cursor at this position". Absence means rendered
-// mode. Defaults (`x=0`, `y=0`, `z=1`, `c=0`, `r=0` when in text mode)
-// are still emitted so the URL is unambiguous: `?c=0&r=0` says "text
-// mode, cursor at origin", which differs from "rendered mode" (no
-// query at all).
+// Presence of `c`/`r` (column and row, 0-indexed) means the content tile is
+// in text mode with the cursor at that position. Absence means rendered mode.
+// Defaults (`x=0`, `y=0`, `z=1`, and `c=0`, `r=0` in text mode) are still
+// emitted so the URL is unambiguous: `?c=0&r=0` says "text mode, cursor at
+// origin", which differs from "rendered mode", which has no query at all.
 package pane
 
 import (
@@ -44,35 +43,34 @@ import (
 // URLState is the parsed/about-to-be-encoded URL state.
 type URLState struct {
 	// Anchor is the qualified grid id the pane currently sits inside
-	// ("<plugin_id>/<grid>", chains for remote grids). Empty → HOME (the
-	// first configured plugin's root grid; "/" is home's URL — NOT the node
-	// grid). Encoded as leading path segments; TileIDs are the well descents
-	// within that namespace, relative to Anchor.
+	// ("<plugin_id>/<grid>", chains for remote grids). Empty means home, the
+	// node's own grid, whose URL is "/". It is encoded as leading path
+	// segments; TileIDs are the well descents within that namespace,
+	// relative to Anchor.
 	Anchor string
 
-	// TileIDs is the descent path of tile row ids. Empty means "anchor
-	// grid" (or, with no anchor, the start screen). The trailing id may be a
-	// file-tile (resolved post-DecodeURL). IDs are bare decimal strings (e.g.
-	// "42"); the client qualifies them with the anchor's plugin UUID.
+	// TileIDs is the descent path of tile row ids. Empty means the anchor
+	// grid, or with no anchor, the start screen. The trailing id may be a
+	// content tile, resolved after DecodeURL. Ids are bare decimal strings
+	// ("42"); the client qualifies them with the anchor's namespace.
 	TileIDs []string
 
-	// Viewport — set when the leaf is a grid (or a file in the floating
-	// view, eventually). Encoder only emits these if at least one
-	// differs from its default (0, 0, 1).
+	// Viewport, set when the leaf is a grid. The encoder emits these only
+	// when at least one differs from its default (0, 0, 1).
 	X, Y, Zoom float64
 
-	// CursorMode is true when the leaf is a file in text mode with a
+	// CursorMode is true when the leaf is a content tile in text mode with a
 	// cursor position to preserve. Encoded as `?c=Col&r=Row`.
 	CursorMode bool
 	Col, Row   int
 
-	// Workspace is the qualified TILE id of the pane tile the user is
-	// inside (`?w=`). When set, it is the WHOLE place: the workspace's
-	// interior — every pane's anchor, path, and viewport — is server-owned
-	// (the layout blob), so no path/anchor/viewport is encoded alongside it
-	// (one fact, one owner; the blob wins). Nesting is session-only, so
-	// only the innermost workspace rides the URL; ascending after a reload
-	// falls back to the pane tile's containing grid.
+	// Workspace is the qualified tile id of the pane tile the user is inside
+	// (`?w=`). When set it is the whole place: the interior — every pane's
+	// anchor, path, and viewport — is server-owned in the layout blob, so no
+	// path, anchor, or viewport is encoded alongside it. Nesting is
+	// session-only, so only the innermost pane tile rides the URL, and
+	// ascending after a reload falls back to the pane tile's containing
+	// grid.
 	Workspace string
 }
 
@@ -91,8 +89,8 @@ type URLBootView struct {
 }
 
 // URLBootViewport resolves the root pane's framing when the app opens with no
-// descent path, by this precedence — getting it wrong silently re-frames a
-// pane the user didn't touch (a "things stay where you put them" violation):
+// descent path. Getting the precedence wrong silently re-frames a pane the
+// user did not touch:
 //
 //   - URL viewport present (any of urlX/urlY/urlZoom non-zero): it wins.
 //     Cx/Cy always apply; Zoom applies only when urlZoom>0 (a pan-only URL
@@ -114,10 +112,10 @@ func URLBootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) URLB
 	return URLBootView{}
 }
 
-// URLStateOf projects a pane's place into the URL DTO — the ONE encode
-// half. home is the home grid id, which encodes as an empty anchor so "/"
-// stays home's URL. A content descent rides as the trailing tile id, with
-// its cursor when it is in raw-text mode.
+// URLStateOf projects a pane's place into the URL DTO — the one encode half.
+// home is the home grid id, which encodes as an empty anchor so "/" stays
+// home's URL. A content descent rides as the trailing tile id, with its
+// cursor when it is in raw-text mode.
 func URLStateOf(s *Stack, home string, isText bool, col, row int) URLState {
 	var st URLState
 	anchor, path := s.AnchorPathAt(s.Depth() - 1)
@@ -142,7 +140,7 @@ func URLStateOf(s *Stack, home string, isText bool, col, row int) URLState {
 // entirely when no params are set; defaults are stripped so a fresh
 // pane at root produces just "/".
 func EncodeURL(s URLState) string {
-	// Inside a workspace the pane tile IS the place; nothing else rides.
+	// Inside a pane tile, that tile is the place; nothing else rides.
 	if s.Workspace != "" {
 		q := url.Values{}
 		q.Set("w", s.Workspace)
@@ -201,10 +199,10 @@ func EncodeURL(s URLState) string {
 // ids; no non-numeric prefix means the home anchor. `/` (or empty) decodes to
 // a root state. Anything else is rejected.
 //
-// The leaf type (well vs file) is *not* resolved here — that requires
-// walking the cache. The `CursorMode` flag and `c`/`r` values are set
-// when the URL has them, regardless of leaf type; the caller decides
-// what to do if a non-file leaf has a c/r query.
+// The leaf type (well or content tile) is not resolved here; that requires
+// walking the cache. The CursorMode flag and the `c`/`r` values are set when
+// the URL has them, whatever the leaf type, and the caller decides what to do
+// when a grid leaf carries a c/r query.
 func DecodeURL(raw string) (URLState, error) {
 	// Split off query.
 	pathPart := raw
@@ -272,8 +270,8 @@ func DecodeURL(raw string) (URLState, error) {
 	if err != nil {
 		return s, err
 	}
-	// Legacy anchor form (`?a=<qualified grid>`): still decoded so old
-	// bookmarks resolve; never emitted. The path form wins when both exist.
+	// The `?a=<qualified grid>` form is still decoded so old bookmarks
+	// resolve, and never emitted. The path form wins when both exist.
 	if v, ok := q["a"]; ok && s.Anchor == "" {
 		s.Anchor = v[0]
 	}
@@ -304,8 +302,8 @@ func DecodeURL(raw string) (URLState, error) {
 	return s, nil
 }
 
-// URLPlace identifies the STRUCTURAL location a URL names — everything except
-// framing (viewport, cursor): which pane, which workspace, which anchor,
+// URLPlace identifies the structural location a URL names — everything except
+// framing (viewport, cursor): which pane, which pane tile, which anchor,
 // which descent path. Two URLs with equal Places differ only by framing.
 type URLPlace struct {
 	PaneID    string
@@ -331,21 +329,21 @@ func SameURLPlace(a, b URLPlace) bool {
 	return a.Workspace == b.Workspace && a.Anchor == b.Anchor && a.Path == b.Path
 }
 
-// URLPushesEntry decides pushState vs replaceState for the URL writer — the one
-// owner of "does this navigation deserve a browser history entry" (issue
-// #194: back/forward traverse descend/ascend, never pan/zoom):
+// URLPushesEntry decides pushState against replaceState for the URL writer.
+// It is the one owner of "does this navigation deserve a browser history
+// entry", so back and forward traverse descents and ascents, never pans:
 //
-//   - a framing-only change (same place) REPLACES — panning around is not
+//   - a framing-only change (same place) replaces — panning around is not
 //     navigation, and back must never undo a pan;
-//   - a place change in the SAME pane PUSHES — descend, ascend, portal, and
-//     text descents all move the pane somewhere else;
-//   - a workspace boundary PUSHES regardless of pane identity — entering or
-//     leaving a workspace swaps the whole tree (pane ids change with it),
-//     but it is exactly the kind of navigation back should traverse;
-//   - a pane FOCUS switch (different pane, same workspace) REPLACES — the
-//     user didn't go anywhere, the URL just tracks a different pane now;
-//   - the first write after boot REPLACES (seen=false) — boot restores a
-//     place, it doesn't navigate to one.
+//   - a place change in the same pane pushes — descents, ascents, and text
+//     descents all move the pane somewhere else;
+//   - a pane-tile boundary pushes regardless of pane identity: entering or
+//     leaving one swaps the whole tree, pane ids included, and that is
+//     exactly the navigation back should traverse;
+//   - a pane focus switch (different pane, same tree) replaces — the user
+//     did not go anywhere, the URL just tracks a different pane now;
+//   - the first write after boot replaces (seen=false) — boot restores a
+//     place, it does not navigate to one.
 func URLPushesEntry(prev, next URLPlace, seen bool) bool {
 	if !seen || SameURLPlace(prev, next) {
 		return false

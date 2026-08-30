@@ -8,16 +8,15 @@ import "slices"
 // is.
 
 // FramingOwner names the row that owns the settled framing of a pane's
-// current place — the ONE question every ascent and every settle tick asks
-// (docs/simplify-plan.md S4: one framing writeback).
+// current place — the one question every ascent and every settle tick asks.
 type FramingOwner struct {
 	// Content: the place is a content tile, so what settles is its text
 	// scroll, not grid framing. TileID is the content tile.
 	Content bool
-	// TileID is the DOORWAY tile the pane came into its grid through (the
+	// TileID is the doorway tile the pane came into its grid through (the
 	// content tile when Content). Empty at a root grid with no doorway.
 	TileID string
-	// DoorAnchor/DoorPath locate the doorway's own grid — the row lives
+	// DoorAnchor/DoorPath locate the doorway's own grid: the row lives
 	// there, one level out.
 	DoorAnchor string
 	DoorPath   []string
@@ -56,15 +55,13 @@ type PaneGrid struct {
 	GridID string
 }
 
-// FramingWriters applies the ONE-ACTIVE-SURFACE rule to grid framing
-// (owner decision 2026-08-13, extending #249 from url/shell tiles to
-// grids): when several panes show the SAME grid, exactly one — the
-// focused pane — owns the framing writeback; the others are passive
-// viewers. A pane that shares its grid with nobody always writes (it is
-// trivially the active surface). Focusing a shared grid's sibling IS the
-// takeover, exactly as opening a live tile elsewhere takes the stream.
-// Before this rule every sibling wrote its own rect-derived values each
-// settle tick, so the persisted framing thrashed nondeterministically.
+// FramingWriters applies the one-active-surface rule to grid framing: when
+// several panes show the same grid, exactly one — the focused pane — owns the
+// framing writeback and the others are passive viewers. A pane that shares
+// its grid with nobody always writes, being trivially the active surface.
+// Focusing a shared grid's sibling is the takeover, exactly as opening a live
+// tile elsewhere takes the stream. Letting every sibling write its own
+// rect-derived values each settle tick thrashes the persisted framing.
 func FramingWriters(panes []PaneGrid, focusedID string) map[string]bool {
 	byGrid := map[string]int{}
 	for _, p := range panes {
@@ -85,10 +82,9 @@ type Holder struct {
 }
 
 // ContentPanes lists every pane of t descended into a content tile, in tree
-// order. Liveness follows PANE EXISTENCE (owner decision #249): every pane
-// that exists — including one parked in a stacked level — keeps its
-// surface, so this is the whole answer to "which frames are parked live"
-// for one tree.
+// order. Liveness follows pane existence: every pane that exists, including
+// one parked in a stacked level, keeps its surface. This is the whole answer
+// to "which frames are parked live" for one tree.
 func ContentPanes(t *Tree) []Holder {
 	var out []Holder
 	if t == nil {
@@ -102,11 +98,11 @@ func ContentPanes(t *Tree) []Holder {
 	return out
 }
 
-// TakeOver applies ONE LIVE SURFACE PER CONTENT TILE (owner decision #249):
-// opening tileID live in openerID freezes every OTHER pane's surface on the
-// same content — at any stack level — and returns those panes. The opener
-// takes over; a pane that already holds this tile is not in the list (it
-// keeps what it has, so a keep-alive return is idempotent).
+// TakeOver applies one live surface per content tile: opening tileID live in
+// openerID freezes every other pane's surface on the same content, at any
+// stack level, and returns those panes. The opener takes over. A pane that
+// already holds this tile is not in the list, so a keep-alive return is
+// idempotent.
 func TakeOver(holders []Holder, openerID, tileID string) []string {
 	var out []string
 	for _, h := range holders {

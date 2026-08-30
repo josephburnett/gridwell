@@ -46,9 +46,8 @@ func TestFramingTargetPicksTheDoorway(t *testing.T) {
 	}
 }
 
-// The one-active-surface rule for grid framing (owner decision 2026-08-13,
-// extending #249): among panes showing the same grid, only the FOCUSED one
-// writes; sole viewers always write.
+// The one-active-surface rule for grid framing: among panes showing the same
+// grid, only the focused one writes; a sole viewer always writes.
 func TestFramingWriters(t *testing.T) {
 	panes := []PaneGrid{
 		{PaneID: "a", GridID: "g1"},
@@ -68,9 +67,9 @@ func TestFramingWriters(t *testing.T) {
 	}
 }
 
-// ONE live surface per content tile (#249): the opener takes over, every
-// other holder freezes — at any stack level. A pane already holding the
-// tile is not asked to close (a keep-alive return is idempotent).
+// One live surface per content tile: the opener takes over and every other
+// holder freezes, at any stack level. A pane already holding the tile is not
+// asked to close, so a keep-alive return is idempotent.
 func TestTakeOverFreezesEveryOtherHolder(t *testing.T) {
 	holders := []Holder{
 		{PaneID: "p1", TileID: "u/7"},

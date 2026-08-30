@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// Issue #79: dragging a divider must cascade — the pane adjacent to the
-// divider compresses to its minimum first, then the drag starts compressing
-// the NEXT pane along the axis, tmux-style. The old single-ratio clamp
-// squashed the whole opposite subtree proportionally and stopped at 32px
-// TOTAL for the side, whatever it contained.
+// Dragging a divider cascades: the pane adjacent to the divider compresses to
+// its minimum first, then the drag starts compressing the next pane along the
+// axis, tmux-style. A single-ratio clamp would squash the whole opposite
+// subtree proportionally and stop at 32px for the side as a whole, whatever
+// it contained.
 
 // stack3 builds three panes stacked vertically (two nested Horizontal
 // splits): top = A of the outer split, middle/bottom nested in B.
@@ -123,11 +123,11 @@ func TestResizeThroughGrowGivesAdjacent(t *testing.T) {
 	}
 }
 
-// Issue #80: tmux-like pane zoom. Zoomed, the leaf owns the whole root rect
-// and every other pane vanishes from the layout (their live views park via
-// the missing-rect path); dividers vanish with them so no gesture can arm on
-// an invisible boundary. Structural edits unzoom first. Unzoom restores the
-// exact prior layout — the split ratios were never touched.
+// Tmux-like pane zoom. Zoomed, the leaf owns the whole root rect and every
+// other pane vanishes from the layout, their live views parking through the
+// missing-rect path. Dividers vanish with them, so no gesture can arm on an
+// invisible boundary. Structural edits unzoom first, and unzoom restores the
+// exact prior layout, because the split ratios were never touched.
 func TestZoomLayout(t *testing.T) {
 	tr := NewTree()
 	p2, err := tr.Split(Vertical)
@@ -197,11 +197,11 @@ func TestZoomUnknownPaneIsNoOp(t *testing.T) {
 	}
 }
 
-// TestPlanCrushThresholds pins the crush model (issue #217, thresholds
-// made live by #238): a segment reds when the cursor presses past where it
-// sits at its minimum in the CURRENT layout — its bump on the way in (no
-// traveling to the screen edge to close a middle pane), the wall on the
-// way out. The move loop is Update-then-ResizeThrough, mirrored here.
+// TestPlanCrushThresholds pins the crush model: a segment reds when the
+// cursor presses past where it sits at its minimum in the current layout —
+// its bump on the way in, so closing a middle pane needs no travel to the
+// screen edge, and the wall on the way out. The move loop is Update then
+// ResizeThrough, mirrored here.
 func TestPlanCrushThresholds(t *testing.T) {
 	outer, inner := stack3()
 	root := TreeNode{Split: outer}
@@ -236,19 +236,18 @@ func TestPlanCrushThresholds(t *testing.T) {
 	if r := move(31); len(r) != 2 || r[0] != "middle" || r[1] != "top" {
 		t.Errorf("pressed to the corridor start: %v, want [middle top]", r)
 	}
-	// Backing off past the WALL (64, both at min) clears everything — the
-	// #238 property, asserted end-to-end by the test below.
+	// Backing off past the wall (64, both at min) clears everything. The
+	// test below asserts the same property end to end.
 	if r := move(66); r != nil {
 		t.Errorf("backed off past the wall: %v, want none", r)
 	}
 }
 
-// The #238 reproducer: push THROUGH both upper panes (deep past the wall),
-// then back off to just above the wall — everything sits at its minimum
-// and NOTHING may stay red, so a release keeps all panes at min. Before
-// the fix the adjacent segment's threshold was grab-size-based (132 here):
-// after a deep crush you had to retreat almost to the grab point to
-// un-red it, growing the pane far past its min on the way.
+// Push through both upper panes, deep past the wall, then back off to just
+// above the wall: everything sits at its minimum and nothing stays red, so a
+// release keeps all panes at min. A grab-size-based threshold (132 here)
+// would make un-redding require retreating almost to the grab point, growing
+// the pane far past its min on the way.
 func TestPlanCrushBackOffToWallClearsRed(t *testing.T) {
 	outer, inner := stack3()
 	root := TreeNode{Split: outer}
@@ -273,9 +272,8 @@ func TestPlanCrushBackOffToWallClearsRed(t *testing.T) {
 }
 
 // A neighbor already sitting at its minimum: its live bump is the arm
-// boundary itself, so a bare click reds NOTHING (the #204 one-click-close
-// class) while any real press past it reds immediately ("pressure builds
-// as soon as you hit another border").
+// boundary itself, so a bare click reds nothing while any real press past it
+// reds immediately — pressure builds as soon as you hit another border.
 func TestPlanCrushPreCrushedNeighbor(t *testing.T) {
 	outer, inner := stack3()
 	root := TreeNode{Split: outer}

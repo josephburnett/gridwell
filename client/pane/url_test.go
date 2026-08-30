@@ -332,9 +332,9 @@ func TestBootViewport(t *testing.T) {
 	}
 }
 
-// TestEncodeAnchorAsPath (2026-07-25): the anchor is leading PATH segments —
-// "plugin ids are just another part of the path". The anchor is already a
-// slash-joined qualified grid id, so it drops straight in; tile ids follow.
+// TestEncodeAnchorAsPath: the anchor is leading path segments — a plugin id
+// is just another part of the path. The anchor is already a slash-joined
+// qualified grid id, so it drops straight in, and tile ids follow.
 func TestEncodeAnchorAsPath(t *testing.T) {
 	cases := []struct {
 		in   URLState
@@ -346,7 +346,7 @@ func TestEncodeAnchorAsPath(t *testing.T) {
 		{URLState{Anchor: "ssh4321/remote9/1", TileIDs: []string{"4", "7"}}, "/ssh4321/remote9/1/4/7"},
 		// Node grid: grid id 0 is a valid anchor grid segment.
 		{URLState{Anchor: "abc1234/0"}, "/abc1234/0"},
-		// Legacy 32-hex ids encode the same way.
+		// A 32-hex id encodes the same way.
 		{URLState{Anchor: "0123456789abcdef0123456789abcdef/1", TileIDs: []string{"5"}},
 			"/0123456789abcdef0123456789abcdef/1/5"},
 		// Viewport rides in the query as before.
@@ -390,9 +390,9 @@ func TestAnchorRoundTrip(t *testing.T) {
 	}
 }
 
-// TestDecodeLegacyAnchorQuery: the pre-2026-07-25 `?a=` form still decodes
-// (old bookmarks must keep resolving), but the path form wins when both are
-// present, and EncodeURL never emits `a=` again.
+// TestDecodeLegacyAnchorQuery: the `?a=` form still decodes, so old bookmarks
+// keep resolving, but the path form wins when both are present and EncodeURL
+// never emits `a=`.
 func TestDecodeLegacyAnchorQuery(t *testing.T) {
 	s, err := DecodeURL("/3/4?a=fs-uuid%2F1")
 	if err != nil {
@@ -404,7 +404,7 @@ func TestDecodeLegacyAnchorQuery(t *testing.T) {
 	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4"}) {
 		t.Errorf("tile ids = %v", s.TileIDs)
 	}
-	// Path anchor beats a conflicting legacy query anchor.
+	// The path anchor beats a conflicting query anchor.
 	s2, err := DecodeURL("/k3x9m2q/1/3?a=other%2F9")
 	if err != nil {
 		t.Fatal(err)
@@ -412,7 +412,7 @@ func TestDecodeLegacyAnchorQuery(t *testing.T) {
 	if s2.Anchor != "k3x9m2q/1" {
 		t.Errorf("path anchor should win: %q", s2.Anchor)
 	}
-	// Re-encoding a legacy decode yields the new form.
+	// Re-encoding a query-anchor decode yields the path form.
 	if got := EncodeURL(s); got != "/fs-uuid/1/3/4" {
 		t.Errorf("re-encode of legacy = %q, want /fs-uuid/1/3/4", got)
 	}
@@ -435,8 +435,8 @@ func TestDecodeAnchorGrammarRejects(t *testing.T) {
 }
 
 // TestPushesEntry pins the one owner of "does this navigation deserve a
-// browser history entry" (issue #194): structural moves push, framing and
-// focus switches replace.
+// browser history entry": structural moves push, framing and focus switches
+// replace.
 func TestPushesEntry(t *testing.T) {
 	at := func(pane, ws, anchor, path string) URLPlace {
 		return URLPlace{PaneID: pane, Workspace: ws, Anchor: anchor, Path: path}
@@ -465,10 +465,10 @@ func TestPushesEntry(t *testing.T) {
 	}
 }
 
-// TestWorkspaceURLRoundTrip: inside a workspace the pane tile is the WHOLE
-// place — `?w=<qualified tile id>` and nothing else (the interior is
-// server-owned by the layout blob; encoding a path/viewport alongside would
-// be a second copy of a fact the blob owns).
+// TestWorkspaceURLRoundTrip: inside a pane tile, that tile is the whole place
+// — `?w=<qualified tile id>` and nothing else. The interior is server-owned
+// by the layout blob, so encoding a path or viewport alongside it would be a
+// second copy of a fact the blob owns.
 func TestWorkspaceURLRoundTrip(t *testing.T) {
 	raw := EncodeURL(URLState{Workspace: "abcd-uuid/42", Anchor: "ignored/1", TileIDs: []string{"7"}, X: 3})
 	if raw != "/?w=abcd-uuid%2F42" {
@@ -484,7 +484,7 @@ func TestWorkspaceURLRoundTrip(t *testing.T) {
 	if s.Anchor != "" || len(s.TileIDs) != 0 {
 		t.Fatalf("workspace URL must carry nothing else: %+v", s)
 	}
-	// A chained (remote) workspace id survives the round trip.
+	// A chained (remote) pane-tile id survives the round trip.
 	s2, err := DecodeURL(EncodeURL(URLState{Workspace: "ssh-uuid/plugin-uuid/9"}))
 	if err != nil || s2.Workspace != "ssh-uuid/plugin-uuid/9" {
 		t.Fatalf("chained workspace: %+v err=%v", s2, err)

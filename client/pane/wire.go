@@ -3,24 +3,22 @@
 //
 // This is deliberately a versioned DTO, not json.Marshal(Tree): the in-memory
 // Tree carries unexported state (nextID) and untagged fields, and it changes
-// shape when the model does (the frame stack replaced five representations of
-// a pane's place in 2026-08-29's S8) — neither may become a frozen wire
-// format. LayoutV1's bytes are forever — decoding a v1 blob must work in every future
-// version of Gridwell (the tablesV1 philosophy; the golden fixture in
-// wire_test.go pins it).
+// shape when the model does, so neither may become a frozen wire format.
+// LayoutV1's bytes are forever — decoding a v1 blob must work in every future
+// version of Gridwell, and the golden fixture in wire_test.go pins it.
 //
-// What is NOT in the layout, by design (issue #13 + URL-place semantics):
-// the OUTER frames' viewports, the selection, and the native handles. A leaf
-// persists the place it is AT — the grid it sits in, the doorways it came
-// through, and the viewport there — exactly the URL vocabulary; the
-// viewports it would ascend onto stay session-scoped, so a restored pane
-// falls back to each grid's persisted framing on the way out.
+// What is not in the layout, by design: the outer frames' viewports, the
+// selection, and the native handles. A leaf persists the place it is at — the
+// grid it sits in, the doorways it came through, and the viewport there —
+// exactly the URL vocabulary. The viewports it would ascend onto stay
+// session-scoped, so a restored pane falls back to each grid's persisted
+// framing on the way out.
 //
 // Id relativity: every id in the layout (anchor, path segments, TextFocus) is
-// stored in the OWNING NODE's namespace frame. The encoder strips the pane
-// tile's own transit-chain prefix via rel; the decoder prepends it via abs —
-// the same relativity rule URL path segments follow, so a workspace mounted
-// over ssh restores against the chain the reader used to reach it.
+// stored in the owning node's namespace frame. The encoder strips the pane
+// tile's own transit-chain prefix via rel; the decoder prepends it via abs.
+// URL path segments follow the same rule, so a pane tile mounted over ssh
+// restores against the chain the reader used to reach it.
 package pane
 
 import (
@@ -33,9 +31,9 @@ import (
 )
 
 // The persisted format itself — structs, media type, version — is
-// api/panelayout (CONTRACT: the localdb store reads the same blobs for
-// its reap's protection set; one definition, no second decoder to
-// drift). This file is the CLIENT half: Tree <-> LayoutV1 conversion.
+// api/panelayout. The store reads the same blobs for its reap's protection
+// set, so there is one definition and no second decoder to drift. This file
+// is the client half: Tree to LayoutV1 and back.
 const LayoutMediaType = panelayout.LayoutMediaType
 
 const layoutVersion = panelayout.Version
@@ -73,8 +71,8 @@ func EncodeLayout(t *Tree, rel func(id string) (string, bool)) (data []byte, ski
 	if err != nil {
 		return nil, nil, err
 	}
-	// Pane ids are stored BARE (t.IDPrefix stripped): the blob is the
-	// durable fact; the level namespace is session presentation (#249).
+	// Pane ids are stored bare, with t.IDPrefix stripped: the blob is the
+	// durable fact and the level namespace is session presentation.
 	l := LayoutV1{V: layoutVersion, Root: root,
 		Focus:  strings.TrimPrefix(t.Focus, t.IDPrefix),
 		Zoomed: strings.TrimPrefix(t.Zoomed, t.IDPrefix)}
@@ -155,13 +153,14 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 // abs prepends the reader's transit-chain prefix onto every id (nil = the
 // identity). A blob written by a newer Gridwell fails with ErrLayoutVersion
 // (wrapped); structural corruption fails with a plain error. Decoding is
-// strict on structure (we wrote it) and loose on view state: an unknown
-// Focus falls back to the first leaf, an unknown Zoomed clears, a zero Zoom
-// becomes 1, ratios clamp to [0,1].
-// idPrefix namespaces the decoded panes' ids (issue #249): the blob's
-// bare "p<N>" ids become "<idPrefix>p<N>", and the tree mints with the
-// same prefix, so stacked live trees can never collide in the pane-keyed
-// maps (locals, native views, shell streams). "" decodes verbatim.
+// strict on structure, which Gridwell wrote, and loose on view state: an
+// unknown Focus falls back to the first leaf, an unknown Zoomed clears, a
+// zero Zoom becomes 1, and ratios clamp to [0,1].
+//
+// idPrefix namespaces the decoded panes' ids: the blob's bare "p<N>" ids
+// become "<idPrefix>p<N>", and the tree mints with the same prefix, so
+// stacked live trees cannot collide in the pane-keyed maps (locals, native
+// views, shell streams). "" decodes verbatim.
 func DecodeLayout(data []byte, abs func(id string) string, idPrefix string) (*Tree, error) {
 	var l LayoutV1
 	if err := json.Unmarshal(data, &l); err != nil {
@@ -282,10 +281,10 @@ func paneIDNum(id string) (int, bool) {
 	return n, true
 }
 
-// LeafTextFocusIDs returns the TextFocus tile id of every leaf that has one —
-// the workspace's content descents, in tree order. The delete-time ephemeral
-// reap (issue #174) reads the references this way without any client
-// machinery; ids are in whatever frame the decoder's abs produced.
+// LeafTextFocusIDs returns the TextFocus tile id of every leaf that has one:
+// the pane tile's content descents, in tree order. The delete-time ephemeral
+// reap reads the references this way without any client machinery. The ids
+// are in whatever frame the decoder's abs produced.
 func LeafTextFocusIDs(t *Tree) []string {
 	var out []string
 	var walk func(n TreeNode)

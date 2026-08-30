@@ -79,9 +79,8 @@ func TestBorderColorURLTile(t *testing.T) {
 		t.Errorf("live url + focused: got %q, want URL_LIVE", got)
 	}
 	in.Focused = false
-	// Live fades like every other family when the pane loses focus (issue
-	// #226 — before that, live overrode focus and a url pane read as
-	// permanently active).
+	// Live fades like every other family when the pane loses focus.
+	// Overriding focus would make a url pane read as permanently active.
 	if got := BorderColor(in, testColors()); got != "URL_LIVE_FADED" {
 		t.Errorf("live url + not focused: got %q, want URL_LIVE_FADED", got)
 	}
@@ -192,9 +191,9 @@ func TestBorderColorURLLiveBeatsCacheMiss(t *testing.T) {
 	}
 }
 
-// TestBorderColorEphemeralTile (issue #85): an ephemeral (scratch-grid)
-// descent is GRAY regardless of tile kind — the border is the warning that
-// ascent deletes the tile (a shell's tmux session included).
+// TestBorderColorEphemeralTile: an ephemeral (scratch-grid) descent is gray
+// whatever the tile kind — the border is the warning that ascent deletes the
+// tile, a shell's tmux session included.
 func TestBorderColorEphemeralTile(t *testing.T) {
 	c := testColors()
 	for _, kind := range []string{"url", "shell"} {
@@ -215,9 +214,9 @@ func TestBorderColorEphemeralTile(t *testing.T) {
 	}
 }
 
-// TestFamilyOf pins the one classifier the border AND the bottom bar derive
-// from (issue #223): kind → family, with ephemeral beating the kind and an
-// unknown tile falling back to the grid family.
+// TestFamilyOf pins the one classifier the border and the bottom bar both
+// derive from: kind to family, with ephemeral beating the kind and an unknown
+// tile falling back to the grid family.
 func TestFamilyOf(t *testing.T) {
 	cases := []struct {
 		name string

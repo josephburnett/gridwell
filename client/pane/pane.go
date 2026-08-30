@@ -1,17 +1,13 @@
-// Package pane owns WHERE THE USER IS: the tmux-style pane tree, and each
-// pane's PLACE as one stack of frames (place.go).
+// Package pane owns where the user is: the tmux-style pane tree, and each
+// pane's place as one stack of frames (place.go).
 //
-// One fact, one owner (charter §1). A pane's place used to live in five
-// parallel representations — an in-namespace path, a portal frame stack, a
-// saved-viewport stack, a workspace stack, and the URL — each with its own
-// descent and its own ascent. They are now one Stack; the URL (url.go), the
-// layout blob (wire.go) and the bar's crumbs (chain.go) are ENCODINGS and
-// PROJECTIONS of it. The window's nesting through pane tiles is Levels
-// (levels.go), which speaks the same push/pop vocabulary.
+// The place is one Stack, and it is the only owner of that fact. The URL
+// (url.go), the layout blob (wire.go) and the bar's crumbs (chain.go) are
+// encodings and projections of it. The window's nesting through pane tiles is
+// Levels (levels.go), which speaks the same push/pop vocabulary.
 //
 // All logic here is pure Go: no syscall/js, no network. The package is
-// imported by the WASM entry point and is fully covered by standard
-// `go test`.
+// imported by the wasm entry point and is fully covered by `go test`.
 package pane
 
 import (
@@ -49,11 +45,11 @@ func (s Side) Direction() Direction {
 	return Vertical
 }
 
-// Pane is a leaf in the pane tree: one viewport. Its PLACE — the grid it is
+// Pane is a leaf in the pane tree: one viewport. Its place — the grid it is
 // in, the doorways it came through, the viewport at each of them, and any
-// content descent — is the embedded Stack (place.go), the one owner of
-// "where am I". The stack's top frame is unrolled into the pane, so p.Cx,
-// p.Zoom, p.TextMode and friends read the pane's current level directly.
+// content descent — is the embedded Stack (place.go), the one owner of "where
+// am I". The stack's top frame is unrolled into the pane, so p.Cx, p.Zoom,
+// p.TextMode and friends read the pane's current level directly.
 type Pane struct {
 	ID string
 	Stack
@@ -77,8 +73,8 @@ type Split struct {
 }
 
 // TreeNode is the sum type of pane-tree tiles. Exactly one of *Pane or *Split
-// is non-nil. We model it explicitly rather than as an interface to keep
-// JSON marshaling straightforward.
+// is non-nil. It is an explicit struct rather than an interface to keep JSON
+// marshaling straightforward.
 type TreeNode struct {
 	Pane  *Pane
 	Split *Split
@@ -92,19 +88,19 @@ type Tree struct {
 	Root  TreeNode
 	Focus string
 	// Zoomed, when non-empty, names the leaf pane that temporarily owns the
-	// whole layout (tmux-style zoom, issue #80): Layout returns only it,
-	// Dividers returns none, and the split ratios underneath stay untouched
-	// so unzooming restores the exact prior arrangement. Structural edits
-	// (Split/Swap/Collapse) unzoom first. Session-local view state, like
+	// whole layout (tmux-style zoom): Layout returns only it, Dividers
+	// returns none, and the split ratios underneath stay untouched so
+	// unzooming restores the exact prior arrangement. Structural edits
+	// (Split, Swap, Collapse) unzoom first. Session-local view state, like
 	// Focus.
 	Zoomed string
 	// nextID is incremented on each split to mint fresh pane ids.
 	nextID int
-	// IDPrefix namespaces every pane id this tree mints or decodes (issue
-	// #249: stacked view trees are ALIVE simultaneously, and pane ids key
-	// the wasm locals, the native view registry, and the shell streams —
-	// "w<level>:" keeps levels from colliding). Stored layout blobs stay
-	// bare: EncodeLayout strips it, DecodeLayout applies it.
+	// IDPrefix namespaces every pane id this tree mints or decodes. Stacked
+	// trees are alive simultaneously, and pane ids key the wasm locals, the
+	// native view registry, and the shell streams, so the "w<level>:" prefix
+	// keeps levels from colliding. Stored layout blobs stay bare:
+	// EncodeLayout strips the prefix, DecodeLayout applies it.
 	IDPrefix string
 }
 
@@ -173,8 +169,7 @@ func (t *Tree) FocusedPane() *Pane { return t.FindPane(t.Focus) }
 // valid split (just degenerate), so the caller is responsible for
 // rejecting absurd ratios upstream.
 //
-// New pane inherits the focused pane's path/viewport/file-mode state
-// via Clone.
+// The new pane inherits the focused pane's place through Clone.
 func (t *Tree) SplitOnSideAt(side Side, ratio float64) (*Pane, error) {
 	newP, err := t.Split(side.Direction())
 	if err != nil {
@@ -182,7 +177,7 @@ func (t *Tree) SplitOnSideAt(side Side, ratio float64) (*Pane, error) {
 	}
 	split := findParentSplit(&t.Root, newP.ID)
 	if split == nil {
-		// Shouldn't happen: Split just inserted one. Bail safely.
+		// Split just inserted one, so this is unreachable. Bail safely.
 		t.Focus = newP.ID
 		return newP, nil
 	}
@@ -334,22 +329,21 @@ func (t *Tree) SetFocus(id string) error {
 	return nil
 }
 
-// StillDescended reports whether pane p (nil = closed) is still descended
-// into tileID — THE moved-on guard every async descent path applies
-// after an await (a fetch, a probe, a target-row lookup): the pane may
-// have closed, ascended, or descended elsewhere while the reply was in
-// flight, and a late placement would leave a native surface over a
-// pane that no longer shows that tile (2026-08-27: the url-link target
-// path checked existence only).
+// StillDescended reports whether pane p (nil means closed) is still descended
+// into tileID. It is the moved-on guard every async descent path applies
+// after an await — a fetch, a probe, a target-row lookup: the pane may have
+// closed, ascended, or descended elsewhere while the reply was in flight, and
+// a late placement would leave a native surface over a pane that no longer
+// shows that tile. Checking existence alone is not enough.
 func StillDescended(p *Pane, tileID string) bool {
 	return p != nil && p.ContentID() == tileID
 }
 
-// RelocateTo moves pane p to where dest stands — anchor, path, viewport —
-// and descends it into tileID: the PROMOTE gesture (2026-08-27), where an
-// ephemeral url visit is dragged from the bar onto another pane's grid and
-// becomes a persistent tile there; the visiting pane follows its content,
-// so the nav chain and the next ascent both read the new place.
+// RelocateTo moves pane p to where dest stands — anchor, path, viewport — and
+// descends it into tileID. This is the promote gesture: an ephemeral url
+// visit is dragged from the bar onto another pane's grid and becomes a
+// persistent tile there, and the visiting pane follows its content, so the
+// nav chain and the next ascent both read the new place.
 func (p *Pane) RelocateTo(dest *Pane, tileID string) {
 	p.Stack = dest.Stack.Clone()
 	if p.Content {
@@ -361,11 +355,11 @@ func (p *Pane) RelocateTo(dest *Pane, tileID string) {
 	p.Push(Frame{Door: tileID, Content: true})
 }
 
-// OtherPaneShows reports whether any leaf OTHER than paneID is descended
-// into tileID. It is the one guard on delete-on-ascent for an ephemeral
-// tile: splitting an ephemeral visit clones the descent, and the clone's
-// ascent (or its promotion onto a grid) must not delete the row the source
-// pane still shows (issue #111).
+// OtherPaneShows reports whether any leaf other than paneID is descended into
+// tileID. It is the one guard on delete-on-ascent for an ephemeral tile:
+// splitting an ephemeral visit clones the descent, and the clone's ascent, or
+// its promotion onto a grid, must not delete the row the source pane still
+// shows.
 func (t *Tree) OtherPaneShows(paneID, tileID string) bool {
 	found := false
 	t.Walk(func(p *Pane) {

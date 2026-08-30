@@ -93,11 +93,11 @@ func TestAnchorPathAtEveryLevel(t *testing.T) {
 	}
 }
 
-// StackAt is the ONE decoder both encodings use (a URL after its id walk, a
-// layout blob): a root grid, a path of doorways, an optional content leaf.
-// The frames it builds carry no viewport — nothing encodes the viewports a
-// pane would ascend onto (owner decision #13), so the ascent falls back to
-// each grid's persisted framing.
+// StackAt is the one decoder both encodings use — a URL after its id walk,
+// and a layout blob: a root grid, a path of doorways, an optional content
+// leaf. The frames it builds carry no viewport, because nothing encodes the
+// viewports a pane would ascend onto, so the ascent falls back to each grid's
+// persisted framing.
 func TestStackAtBuildsTheRestoredPlace(t *testing.T) {
 	s := StackAt("home/1", []string{"4", "9"}, "13")
 	if s.Depth() != 4 {

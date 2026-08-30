@@ -9,19 +9,18 @@ package pane
 //	Focused / FocusedFaded — any grid the user is navigating, at any depth
 //	  and in any plugin (every grid is blue). Saturated when this pane has
 //	  the keyboard / cursor focus, faded otherwise.
-//	Root — the node grid (the landing page): the brown home identity.
 //	Text / TextFaded — descent into a markdown text tile.
 //	URL / URLFaded — descent into a URL tile, frozen preview.
 //	URLLive / URLLiveFaded — descent into a URL tile with a live stream
-//	  open (faded added by issue #226 — live used to override focus).
+//	  open.
 //	Shell / ShellFaded — descent into a shell tile (bash runs outside
 //	  Gridwell's data world). Orange.
 //	Exit / ExitFaded — read-only host content (a text tile inside a source
 //	  grid). Brown, echoing the plugin well that led here.
-//	Ephemeral / EphemeralFaded — descent into an EPHEMERAL (scratch-grid)
-//	  tile: gray, overriding the kind color, because ascending DELETES the
-//	  tile (a shell's tmux session included) — the border is the warning
-//	  not to start persistent work there (issue #85).
+//	Ephemeral / EphemeralFaded — descent into an ephemeral (scratch-grid)
+//	  tile: gray, overriding the kind color, because ascending deletes the
+//	  tile, a shell's tmux session included. The border is the warning not
+//	  to start persistent work there.
 type BorderColors struct {
 	Focused, FocusedFaded     string
 	Text, TextFaded           string
@@ -41,8 +40,8 @@ type BorderInput struct {
 	// HasTextFocus mirrors "the pane's place is a content frame": this pane is
 	// descended into a content tile (text or url).
 	HasTextFocus bool
-	// DescentDepth mirrors len(pane.Pane.Path): >0 means we're inside
-	// at least one well.
+	// DescentDepth is the pane's descent depth: greater than 0 means the
+	// pane is inside at least one well.
 	DescentDepth int
 	// TileKnown is true when the descended tile's row is in the
 	// client's cache (so TileKind is meaningful).
@@ -58,21 +57,20 @@ type BorderInput struct {
 	// a URL tile.
 	URLLive bool
 	// InSourceGrid is true when the pane's currently-viewed grid is
-	// source-backed (fs or proc). Drives the brown Exit border for a
-	// read-only host text tile so it echoes the plugin well that led here.
-	// (The grid view itself is still blue — every grid is a grid.)
+	// source-backed (fs or proc). It drives the brown Exit border for a
+	// read-only host text tile, echoing the plugin well that led here. The
+	// grid view itself is still blue: every grid is a grid.
 	InSourceGrid bool
 	// Ephemeral is true when the descended tile lives in the plugin's
-	// scratch grid — it will be DELETED on ascent. Overrides the kind color
-	// with gray (only meaningful when HasTextFocus and TileKnown).
+	// scratch grid, so it is deleted on ascent. It overrides the kind color
+	// with gray, and is only meaningful when HasTextFocus and TileKnown.
 	Ephemeral bool
 }
 
-// Family names the color family a pane belongs to — the ONE
-// classification behind Gridwell's color grammar. BorderColor picks the
-// pane outline from it, and the bottom bar picks its band + button shades
-// from the same fact (issue #223), so the frame and the bar can never
-// disagree about what the pane is showing.
+// Family names the color family a pane belongs to — the one classification
+// behind Gridwell's color grammar. BorderColor picks the pane outline from
+// it, and the bottom bar picks its band and button shades from the same fact,
+// so the frame and the bar cannot disagree about what the pane is showing.
 type Family int
 
 const (
@@ -90,8 +88,8 @@ const (
 	// FamilyExit is a read-only host content descent (a text tile inside a
 	// source grid): brown, echoing the plugin well that led here.
 	FamilyExit
-	// FamilyEphemeral is a descent into an EPHEMERAL (scratch-grid) tile:
-	// gray beats the kind color, because ascending DELETES it (issue #85).
+	// FamilyEphemeral is a descent into an ephemeral (scratch-grid) tile:
+	// gray beats the kind color, because ascending deletes it.
 	FamilyEphemeral
 )
 

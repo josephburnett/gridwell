@@ -2,36 +2,29 @@ package pane
 
 import "slices"
 
-// A pane's place is ONE STACK OF FRAMES.
+// A pane's place is one stack of frames.
 //
 // A frame is one doorway crossing: the grid you landed in, the tile you came
-// through, and the viewport you have there. Descending through ANY doorway
+// through, and the viewport you have there. Descending through any doorway
 // pushes a frame — a well, a link into another namespace, a text/url/shell
-// tile (a frame with no grid: the tile IS the place) — and every ascent pops
-// one. The viewport you left a level at is simply the frame you left; there
-// is no second "saved viewport" stack, no separate portal stack, and no
-// separate in-namespace path. The URL (url.go) and the pane-tile layout blob
-// (wire.go) are ENCODINGS of this stack; the bar's crumbs (chain.go) are a
-// projection of it (charter §1: one fact, one owner, derived once).
-//
-// This replaced five parallel representations of "where am I"
-// (docs/architecture-review.md finding 1): pane.Path, the pane.Up portal
-// frames, client/panestate's ascent stack, client/workspace's Stack, and the
-// URL's own decode. Each had its own descent and its own ascent — eight
-// ascents in the wasm shim, each "mirroring its animated twin's writebacks".
+// tile (a frame with no grid: the tile is the place) — and every ascent pops
+// one. The viewport you left a level at is the frame you left; there is no
+// second saved-viewport stack and no separate in-namespace path. The URL
+// (url.go) and the pane-tile layout blob (wire.go) are encodings of this
+// stack; the bar's crumbs (chain.go) are a projection of it.
 
 // Frame is one level of a pane's place.
 //
-// GridID is set only where it is AUTHORITATIVE: the bottom frame (the root
-// grid the pane sits in) and a namespace crossing (a link's target grid).
-// On an ordinary well frame it is empty and the grid is DERIVED by walking
-// Door from the frame below (gridpath.ResolveLeafGrid) — the client cannot
-// know a well's child grid until the parent grid is cached, and a derived
-// fact must not be copied (charter §1).
+// GridID is set only where it is authoritative: the bottom frame (the root
+// grid the pane sits in) and a namespace crossing (a link's target grid). On
+// an ordinary well frame it is empty and the grid is derived by walking Door
+// from the frame below (gridpath.ResolveLeafGrid): the client cannot know a
+// well's child grid until the parent grid is cached, and a derived fact must
+// not be copied.
 //
-// Content marks a frame whose place IS the door tile — a text, url, shell or
+// Content marks a frame whose place is the door tile — a text, url, shell or
 // page descent. Such a frame has no grid of its own; the viewport fields
-// carry the text scroll/zoom instead.
+// carry the text scroll and zoom instead.
 type Frame struct {
 	GridID  string
 	Door    string
@@ -40,9 +33,9 @@ type Frame struct {
 	Cx, Cy, Zoom float64
 
 	// TextMode picks between "text" (raw markdown in the textarea overlay)
-	// and "rendered" (the sanitized-HTML overlay, issue #218) on a content
-	// frame. TextScroll* is the scroll inside the content's interior in
-	// logical pixels; TextZoom is the content's rendering scale.
+	// and "rendered" (the sanitized-HTML overlay) on a content frame.
+	// TextScroll* is the scroll inside the content's interior in logical
+	// pixels; TextZoom is the content's rendering scale.
 	TextMode    string
 	TextScrollX float64
 	TextScrollY float64
@@ -55,15 +48,15 @@ type Frame struct {
 }
 
 // HasView reports whether the frame carries a viewport the pane was actually
-// left at. A frame restored from a URL or a layout blob (which encode the
-// descent path but not the outer viewports — those are session-ephemeral by
-// owner decision #13) has none, and the ascent onto it falls back to the
-// grid's PERSISTED framing instead of an arbitrary origin.
+// left at. A frame restored from a URL or a layout blob has none — those
+// encode the descent path, not the outer viewports, which are
+// session-ephemeral — and the ascent onto it falls back to the grid's
+// persisted framing instead of an arbitrary origin.
 func (f Frame) HasView() bool { return f.Zoom > 0 }
 
 // Stack is a pane's place: the frames it descended through, bottom first.
 //
-// The TOP frame is unrolled as the embedded Frame — "where the pane is now"
+// The top frame is unrolled as the embedded Frame, so "where the pane is now"
 // and "where it was" are the same shape, read through the same field names,
 // with no copying between them. below holds the outer frames, outermost
 // first. Push and Pop are the only writers of that boundary.
@@ -140,9 +133,9 @@ func (s *Stack) Popped(n int) Stack {
 	return c
 }
 
-// Reset replaces the whole stack with a single frame: the boot / URL-restore
-// / history-restore door. Nothing else may clear the stack — a place is left
-// by popping it.
+// Reset replaces the whole stack with a single frame: the boot, URL-restore,
+// and history-restore door. Nothing else clears the stack; a place is left by
+// popping it.
 func (s *Stack) Reset(f Frame) {
 	s.below = nil
 	s.Frame = f
@@ -157,7 +150,7 @@ func (s *Stack) Anchor() string {
 }
 
 // Path is the doorway tile ids from Anchor down to the pane's current grid.
-// A content frame contributes nothing: it sits IN the grid below it.
+// A content frame contributes nothing: it sits in the grid below it.
 func (s *Stack) Path() []string {
 	_, path := s.AnchorPathAt(len(s.below))
 	return path
@@ -174,7 +167,7 @@ func (s *Stack) AnchorPathAt(i int) (anchor string, path []string) {
 	if i > len(frames)-1 {
 		i = len(frames) - 1
 	}
-	// Walk back to the frame that OPENS the current namespace level.
+	// Walk back to the frame that opens the current namespace level.
 	start := 0
 	for k := i; k >= 0; k-- {
 		if frames[k].Content {

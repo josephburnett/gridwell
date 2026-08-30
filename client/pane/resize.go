@@ -1,27 +1,24 @@
 package pane
 
-// resize.go — cascading ("resize-through") divider drags, issue #79. Dragging
-// a divider moves that BOUNDARY LINE tmux-style: the pane adjacent to it
-// compresses to its minimum first, then the next pane along the axis, and so
-// on — including across same-axis ancestor splits — until the sum of minimums
-// walls the drag. The old behavior wrote one Split.Ratio and squashed the
-// whole opposite subtree proportionally, stopping at minPx for the side as a
-// whole.
+// Cascading ("resize-through") divider drags. Dragging a divider moves that
+// boundary line tmux-style: the pane adjacent to it compresses to its minimum
+// first, then the next pane along the axis, and so on — across same-axis
+// ancestor splits included — until the sum of minimums walls the drag.
 //
-// The implementation flattens the CORRIDOR — the maximal run of same-axis
+// The implementation flattens the corridor — the maximal run of same-axis
 // subtrees around the dragged boundary — into an ordered size list, moves the
 // boundary with sequential compression, and writes the sizes back as ratios.
 // Perpendicular subtrees ride along whole: their cross-size changes, their
-// internal ratios never do. Pure; unit-tested without a canvas.
+// internal ratios never do. Pure, and unit-tested without a canvas.
 
 // CorridorWalls returns the [lo, hi] cursor bounds of target's boundary
 // drag: the positions where everything between the boundary and the
-// corridor's start (lo) or end (hi) sits at its minimum. This is THE wall —
+// corridor's start (lo) or end (hi) sits at its minimum. This is the wall:
 // the same bounds ResizeThrough clamps the live drag to, and the bounds the
-// release compares the cursor against to decide a collapse (crushing PAST
-// the wall is the close gesture). One owner: the release verdict reading a
-// different geometry (the grabbed split's own container) is exactly the bug
-// that closed panes on a legal mid-corridor release.
+// release compares the cursor against to decide a collapse, since crushing
+// past the wall is the close gesture. One owner — a release verdict that read
+// a different geometry, such as the grabbed split's own container, would
+// close panes on a legal mid-corridor release.
 func CorridorWalls(root TreeNode, rootRect Rect, target *Split, minPx float64) (lo, hi float64, ok bool) {
 	top, topRect, ok := corridorTop(root, rootRect, target)
 	if !ok {
@@ -52,22 +49,21 @@ func CorridorWalls(root TreeNode, rootRect Rect, target *Split, minPx float64) (
 // already-minimal neighbor) never closes anything.
 const crushEps = 0.5
 
-// CrushPlan is the progressive close model (issue #217, thresholds made
-// live by #238): for each corridor segment outward from the grabbed
-// boundary, red state driven by a per-move threshold — the position where
-// that segment sits pressed to its minimum in the CURRENT layout (its
-// live edge + its min). On the way in, segments beyond the pressed one
-// still hold their slack, so the bump is where the pane visibly bottoms
-// out ("pressure builds as soon as you hit another border" — and closing
-// a middle pane needs no travel to the screen edge). On the way out after
-// a deep multi-segment crush, those outer segments sit at min, so the red
-// clears just past the wall — backing off ~a minimum-width leaves every
+// CrushPlan is the progressive close model: for each corridor segment outward
+// from the grabbed boundary, red state driven by a per-move threshold — the
+// position where that segment sits pressed to its minimum in the current
+// layout (its live edge plus its min). On the way in, segments beyond the
+// pressed one still hold their slack, so the bump is where the pane visibly
+// bottoms out: pressure builds as soon as you hit another border, and closing
+// a middle pane needs no travel to the screen edge. On the way out after a
+// deep multi-segment crush those outer segments sit at min, so the red clears
+// just past the wall — backing off about one minimum width leaves every
 // crushed pane at min and closes nothing.
 //
-// The grab-time-size thresholds this replaces were #238's hysteresis: the
-// adjacent segment's bump assumed the outer segments still held their
-// GRAB sizes, so after a deep crush, un-redding it required retreating
-// almost to the grab point, regrowing the pane far past its min.
+// Thresholds read from grab-time sizes would behave differently: the adjacent
+// segment's bump would assume the outer segments still held their grab sizes,
+// so after a deep crush, clearing the red would mean retreating almost to the
+// grab point and regrowing the pane far past its min.
 type CrushPlan struct {
 	// ASegs: segments before the boundary, adjacent-first; BSegs mirror
 	// after the boundary. aRed/bRed is the sticky per-segment red state,
@@ -76,8 +72,8 @@ type CrushPlan struct {
 	aRed, bRed   []bool
 }
 
-// PlanCrush captures the corridor segments for target's boundary at arm;
-// red state starts empty (a bare click closes nothing, the #204 class).
+// PlanCrush captures the corridor segments for target's boundary at arm. Red
+// state starts empty, so a bare click closes nothing.
 func PlanCrush(root TreeNode, rootRect Rect, target *Split, minPx float64) (CrushPlan, bool) {
 	top, _, ok := corridorTop(root, rootRect, target)
 	if !ok {
@@ -99,13 +95,13 @@ func PlanCrush(root TreeNode, rootRect Rect, target *Split, minPx float64) (Crus
 	return plan, true
 }
 
-// Update folds one cursor move into the red state, reading thresholds off
-// the layout BEFORE the move is applied — call it before ResizeThrough.
-// The pre-move read is the point: while a crushed segment rides the drag
-// at its min, its live threshold tracks the boundary exactly, and only
-// the pre-move snapshot can tell "pressed deeper" (stays red) from
-// "backed off" (clears). crushEps makes each threshold a small sticky
-// band, so sub-pixel jitter never flickers the verdict.
+// Update folds one cursor move into the red state, reading thresholds off the
+// layout before the move is applied — call it before ResizeThrough. The
+// pre-move read is the point: while a crushed segment rides the drag at its
+// min, its live threshold tracks the boundary exactly, and only the pre-move
+// snapshot can tell "pressed deeper", which stays red, from "backed off",
+// which clears. crushEps makes each threshold a small sticky band, so
+// sub-pixel jitter never flickers the verdict.
 func (cp *CrushPlan) Update(root TreeNode, rootRect Rect, target *Split, minPx, cursorPx float64) {
 	top, topRect, ok := corridorTop(root, rootRect, target)
 	if !ok {
@@ -169,9 +165,9 @@ func (cp *CrushPlan) Red() []TreeNode {
 	return out
 }
 
-// SegmentRects returns the LIVE rects of the given corridor segments (for
-// the red close overlay) — recomputed from current sizes so the overlay
-// tracks the crush, never a stale arm-time copy.
+// SegmentRects returns the live rects of the given corridor segments, for the
+// red close overlay. They are recomputed from current sizes, so the overlay
+// tracks the crush rather than a stale arm-time copy.
 func SegmentRects(root TreeNode, rootRect Rect, target *Split, want []TreeNode) []Rect {
 	top, topRect, ok := corridorTop(root, rootRect, target)
 	if !ok {
@@ -236,9 +232,9 @@ func (t *Tree) RemoveSegment(seg TreeNode) bool {
 	return true
 }
 
-// LocateSplit returns target's CURRENT laid-out container rect within the
-// tree. The live geometry — a drag preview reading a rect captured at arm
-// time goes stale the moment a cascade moves an ancestor ratio.
+// LocateSplit returns target's current laid-out container rect within the
+// tree. It must be the live geometry: a rect captured at arm time goes stale
+// the moment a cascade moves an ancestor ratio.
 func LocateSplit(root TreeNode, rootRect Rect, target *Split) (Rect, bool) {
 	var locate func(n TreeNode, r Rect) (Rect, bool)
 	locate = func(n TreeNode, r Rect) (Rect, bool) {
@@ -308,9 +304,9 @@ func ResizeThrough(root TreeNode, rootRect Rect, target *Split, cursorPx, minPx 
 	applySizes(topNode, target.Dir, segs, sizes)
 }
 
-// corridorTop returns target's topmost SAME-AXIS ancestor split (possibly
+// corridorTop returns target's topmost same-axis ancestor split (possibly
 // target itself) and its laid-out rect: the corridor the boundary drag can
-// reach. A perpendicular parent (or the root) ends the climb.
+// reach. A perpendicular parent, or the root, ends the climb.
 func corridorTop(root TreeNode, rootRect Rect, target *Split) (*Split, Rect, bool) {
 	// Path from root to target, parents first.
 	var path []*Split
@@ -362,7 +358,7 @@ func corridorTop(root TreeNode, rootRect Rect, target *Split) (*Split, Rect, boo
 }
 
 // flattenCorridor lists, in axis order, the maximal subtrees of n that are
-// NOT same-axis splits — the corridor segments.
+// not same-axis splits — the corridor segments.
 func flattenCorridor(n TreeNode, dir Direction) []TreeNode {
 	if n.Split == nil || n.Split.Dir != dir {
 		return []TreeNode{n}
@@ -380,7 +376,7 @@ func segmentSizes(n TreeNode, dir Direction, total float64) []float64 {
 	return append(a, segmentSizes(n.Split.B, dir, total*(1-n.Split.Ratio))...)
 }
 
-// boundaryIndex finds the segment index the dragged boundary sits AFTER: the
+// boundaryIndex finds the segment index the dragged boundary sits after: the
 // last segment of target.A's flattened run.
 func boundaryIndex(segs []TreeNode, target *Split) int {
 	aSegs := flattenCorridor(target.A, target.Dir)
@@ -442,8 +438,8 @@ func applySizes(n TreeNode, dir Direction, segs []TreeNode, sizes []float64) {
 }
 
 // minSize is the smallest extent a subtree can be squeezed to along dir:
-// minPx for a leaf, the SUM of both children for a same-axis split, the MAX
-// for a perpendicular one (its children share the extent).
+// minPx for a leaf, the sum of both children for a same-axis split, the max
+// for a perpendicular one, whose children share the extent.
 func minSize(n TreeNode, dir Direction, minPx float64) float64 {
 	if n.Split == nil {
 		return minPx

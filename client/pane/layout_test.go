@@ -256,9 +256,9 @@ func TestDividersThicknessDefault(t *testing.T) {
 }
 
 func TestSplitClampedPosition(t *testing.T) {
-	// Issue #167: the clamp leaves MinPanePx (32) on each side — the SAME
-	// universal minimum every other sizing path enforces. 1000x800 pane at
-	// origin -> valid Y range [32, 768], valid X range [32, 968].
+	// The clamp leaves MinPanePx (32) on each side — the same universal
+	// minimum every other sizing path enforces. A 1000x800 pane at the
+	// origin has valid Y range [32, 768] and valid X range [32, 968].
 	pr := Rect{X: 0, Y: 0, W: 1000, H: 800}
 
 	pos, ok := SplitClampedPosition(SideTop, pr, 500, 400)
@@ -289,9 +289,9 @@ func TestSplitClampedPosition(t *testing.T) {
 	}
 }
 
-// TestMinPanePxValue pins the universal minimum (issue #167): every sizing
-// path — left-drag clamp, right-drag crush threshold, split clamp, the
-// programmatic ephemeral split — reads THIS constant. Change it consciously.
+// TestMinPanePxValue pins the universal minimum: every sizing path —
+// left-drag clamp, right-drag crush threshold, split clamp, the programmatic
+// ephemeral split — reads this constant.
 func TestMinPanePxValue(t *testing.T) {
 	if MinPanePx != 32.0 {
 		t.Errorf("MinPanePx = %v, want 32", MinPanePx)

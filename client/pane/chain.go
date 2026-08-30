@@ -1,9 +1,9 @@
 package pane
 
-// Crumb is one level of a pane's place: the bottom bar renders one square
-// per crumb and clicking a crumb ascends the pane back to that level (issue
-// #212). The chain is a PROJECTION of the frame stack — one crumb per frame,
-// in order — so it cannot drift from the place it describes (charter §1).
+// Crumb is one level of a pane's place: the bottom bar renders one square per
+// crumb, and clicking a crumb ascends the pane back to that level. The chain
+// is a projection of the frame stack — one crumb per frame, in order — so it
+// cannot drift from the place it describes.
 //
 // Exactly one of Anchor (a frame that opens a namespace level: its root
 // grid) or TileID (a doorway or content tile) is set. Level is the frame's
@@ -40,11 +40,9 @@ func (s *Stack) Crumbs() []Crumb {
 	return out
 }
 
-// AscentsTo is how many ascents reach crumb c from where the pane is now:
-// 0 when the pane is already there (clicking the crumb you are on does
-// nothing), never negative. This is the ONE ascent arithmetic — the old
-// depth-key ordering, the "does one ascent reach it" test and the bounded
-// re-walk loop were three encodings of it.
+// AscentsTo is how many ascents reach crumb c from where the pane is now: 0
+// when the pane is already there, so clicking the crumb you are on does
+// nothing. Never negative. This is the one ascent arithmetic.
 func (s *Stack) AscentsTo(c Crumb) int {
 	n := s.Depth() - 1 - c.Level
 	if n < 0 {

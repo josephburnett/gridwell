@@ -17,9 +17,9 @@ func TestNavChainOutsideAnyView(t *testing.T) {
 	}
 }
 
-// Inside two nested views: ROOT (close-all, wearing the origin's root
-// face), one boundary crumb per view in stack order, then the live pane's
-// own chain — and never the intermediate trees' chains (#245 tweak).
+// Inside two nested levels: the root crumb (close-all, wearing the origin's
+// root face), one boundary crumb per level in stack order, then the live
+// pane's own chain — never the intermediate trees' chains.
 func TestNavChainInsideViews(t *testing.T) {
 	outer := NewTree()
 	op := outer.FocusedPane()

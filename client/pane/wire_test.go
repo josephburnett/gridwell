@@ -313,9 +313,9 @@ func TestLayoutLooseViewState(t *testing.T) {
 	}
 }
 
-// TestLayoutDropsOuterFrames: the frames a pane would ascend THROUGH are
-// session-only by design (issue #13); only the place it is AT reaches the
-// blob, and a restored pane starts at depth 1 (plus its own path).
+// TestLayoutDropsOuterFrames: the frames a pane would ascend through are
+// session-only by design. Only the place it is at reaches the blob, and a
+// restored pane starts at depth 1 plus its own path.
 func TestLayoutDropsOuterFrames(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
@@ -338,9 +338,9 @@ func TestLayoutDropsOuterFrames(t *testing.T) {
 	}
 }
 
-// TestLeafTextFocusIDs: the delete-time ephemeral reap (issue #174) reads a
-// workspace's content descents straight off the decoded tree — every leaf's
-// TextFocus, in tree order, empty ones skipped.
+// TestLeafTextFocusIDs: the delete-time ephemeral reap reads a pane tile's
+// content descents straight off the decoded tree — every leaf's TextFocus, in
+// tree order, empty ones skipped.
 func TestLeafTextFocusIDs(t *testing.T) {
 	blob := []byte(`{"v":1,"root":{"split":{"dir":"v","ratio":0.5,` +
 		`"a":{"pane":{"id":"p1","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"u/7"}},` +
@@ -357,9 +357,9 @@ func TestLeafTextFocusIDs(t *testing.T) {
 	}
 }
 
-// IDPrefix round trip (issue #249): decode applies the level namespace to
-// every pane id (Focus/Zoomed included) and minting follows; encode
-// strips it, so the stored blob is byte-identical to a bare tree's.
+// IDPrefix round trip: decode applies the level namespace to every pane id,
+// Focus and Zoomed included, and minting follows. Encode strips it, so the
+// stored blob is byte-identical to a bare tree's.
 func TestLayoutIDPrefixRoundTrip(t *testing.T) {
 	src := NewTree()
 	p1 := src.FocusedPane()

@@ -31,10 +31,10 @@ func TestStackPushPopRestoresOuterTrees(t *testing.T) {
 	}
 }
 
-// TestPopCountTo pins the one-chain nav semantics (issue #245): a crumb
-// click GOES THERE — level k means inside workspace k (pop what's
-// deeper; the current boundary pops nothing), level 0 the session — the
-// same verb everywhere, so the bar never means two different things.
+// TestPopCountTo pins the one-chain nav semantics: a crumb click goes there.
+// Level k means inside level k, so everything deeper pops and the current
+// boundary pops nothing; level 0 is the session. One verb everywhere, so the
+// bar never means two different things.
 func TestPopCountTo(t *testing.T) {
 	var s Levels
 	s.Push(Level{Name: "A"})

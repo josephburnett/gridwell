@@ -1,13 +1,13 @@
 package pane
 
-// Rect is THE screen-space rectangle in logical pixels — the one shape,
-// aliased by client/palette (formerly a structural duplicate).
+// Rect is the screen-space rectangle in logical pixels — one shape, aliased
+// by client/palette.
 type Rect struct {
 	X, Y, W, H float64
 }
 
-// CellPx is the renderer's base cell size at zoom 1.0 — the one copy
-// (formerly duplicated as a wasm const and palette.Default's literal).
+// CellPx is the renderer's base cell size at zoom 1.0 — the one copy, read
+// by the wasm renderer and palette.Default alike.
 const CellPx = 64.0
 
 // Contains reports whether (x, y) lies inside the rectangle (half-open
@@ -92,8 +92,8 @@ func Dividers(t *Tree, root Rect, bandPx float64) []Divider {
 	if t == nil {
 		return out
 	}
-	// A zoomed layout has no visible boundaries — offering dividers would
-	// arm resizes on invisible splits (issue #80).
+	// A zoomed layout has no visible boundaries: offering dividers would
+	// arm resizes on invisible splits.
 	if t.Zoomed != "" && t.FindPane(t.Zoomed) != nil {
 		return out
 	}
@@ -154,9 +154,8 @@ func nearHalfPx(a, b float64) bool {
 //   - The remaining annular middle, sectorized by closest edge: the
 //     four split regions.
 //
-// At small pane sizes the inner region collapses naturally — when
-// 2*bandPx ≥ W (or H), the entire pane is resize zones, which is the
-// degenerate-degradation behavior we want.
+// At small pane sizes the inner region collapses naturally: when
+// 2*bandPx ≥ W (or H), the entire pane is resize zones.
 type Region int
 
 const (
@@ -262,12 +261,12 @@ func ClassifyRegion(r Rect, bandPx, sx, sy float64) Region {
 	return RegionNone
 }
 
-// MinPanePx is THE minimum size of a pane side, universal across every way
-// a pane can acquire a size (issue #167): the left-drag resize clamp, the
-// right-drag crush-to-collapse threshold, the drag-to-split clamp, and the
-// programmatic ephemeral split. One owner — a pane below this cannot be
-// produced, whatever the gesture. (The resize BAND, resizeBandPx=10, is a
-// different fact: how thick the grab zone is, not how small a pane may be.)
+// MinPanePx is the minimum size of a pane side, universal across every way a
+// pane can acquire a size: the left-drag resize clamp, the right-drag
+// crush-to-collapse threshold, the drag-to-split clamp, and the programmatic
+// ephemeral split. One owner, so a pane below this cannot be produced by any
+// gesture. The resize band (resizeBandPx=10) is a different fact: how thick
+// the grab zone is, not how small a pane may be.
 const MinPanePx = 32.0
 
 // SplitClampedPosition projects the cursor onto the split's axis and
@@ -277,10 +276,9 @@ const MinPanePx = 32.0
 // cursor is outside the valid range (or the pane is too small to split at
 // all), letting the caller render the preview in a "won't commit" style.
 // CanSplit reports whether a pane of rect r can be split on side at all:
-// both halves need MinPanePx, so the axis must exceed twice the minimum.
-// The ONE sub-minimum rule — the gesture clamp (SplitClampedPosition)
-// and programmatic splits (openLinkBelow) read it; they used to disagree
-// at exactly 2×MinPanePx.
+// both halves need MinPanePx, so the axis must exceed twice the minimum. It
+// is the one sub-minimum rule, read by the gesture clamp
+// (SplitClampedPosition) and by programmatic splits alike.
 func CanSplit(side Side, r Rect) bool {
 	switch side {
 	case SideTop, SideBottom:
