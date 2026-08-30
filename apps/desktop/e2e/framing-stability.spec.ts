@@ -138,5 +138,6 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
   }
   const after = await well();
   expect(after.viewZoom, 'sibling must not overwrite (one active surface)').toEqual(settled.viewZoom);
-  expect(after.viewX, 'origin stable').toEqual(settled.viewX);
+  expect(after.viewCx, 'center stable').toEqual(settled.viewCx);
+  expect(after.viewCy, 'center stable').toEqual(settled.viewCy);
 });

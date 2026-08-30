@@ -62,9 +62,10 @@ test('wheel over a well zooms the well; over empty space, the pane (#210)', asyn
 // Issue #219: the well wheel-zoom is cursor-ANCHORED — the child point
 // under the cursor stays under the cursor, so a burst of notches with the
 // cursor off-center DRIFTS the stored view toward the cursor (zooming as
-// small navigation). Before the fix each notch quantized the origin to
-// integer cells, the sub-cell drift rounded away, and the persisted origin
-// never moved.
+// small navigation). Before the fix each notch quantized the stored window
+// origin to integer cells, the sub-cell drift rounded away, and the
+// persisted framing never moved; since schema v11 the framing IS a float
+// center (view_cx/view_cy), so the drift survives all the way to the store.
 test('an off-center wheel burst drifts the well view toward the cursor (#219)', async ({
   gw,
   window,
@@ -78,12 +79,16 @@ test('an off-center wheel burst drifts the well view toward the cursor (#219)', 
   await gw.dragCreate('well', cx, cy);
   const before = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   expect(before, 'well created').toBeTruthy();
-  const vx0 = Number(before.viewX ?? 0);
-  const vy0 = Number(before.viewY ?? 0);
+  // Nothing is stored yet: a never-visited well FRAMES the center of its
+  // own footprint (zoomtrans.EffectiveCenter), and that — not the absent
+  // row's zeros — is the center the drift has to beat.
+  expect(Number(before.viewZoom ?? 0), 'a fresh well has no stored framing').toBe(0);
+  const vx0 = Number(before.w ?? 1) / 2;
+  const vy0 = Number(before.h ?? 1) / 2;
 
   // Cursor near the well's bottom-right corner (inside the tile), then a
   // long zoom-in burst: the view center must chase the cursor's child
-  // point, moving the persisted origin down-right.
+  // point, moving the persisted center down-right.
   const pt = await gw.cellCenter((await gw.focused()).id, cx, cy);
   await window.mouse.move(pt.x + 18, pt.y + 18);
   for (let i = 0; i < 10; i++) {
@@ -93,9 +98,9 @@ test('an off-center wheel burst drifts the well view toward the cursor (#219)', 
     .poll(
       async () => {
         const t = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy);
-        return Number(t?.viewX ?? 0) + Number(t?.viewY ?? 0);
+        return Number(t?.viewCx ?? 0) + Number(t?.viewCy ?? 0);
       },
-      { message: 'the stored origin must drift toward the cursor', timeout: 10_000 },
+      { message: 'the stored center must drift toward the cursor', timeout: 10_000 },
     )
     .toBeGreaterThan(vx0 + vy0);
 });
