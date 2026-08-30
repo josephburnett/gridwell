@@ -27,22 +27,22 @@ func (a *App) paletteLayoutFor(p *pane.Pane) palette.Layout {
 		PlusX:    cx,
 		PlusY:    cy,
 		NumTiles: len(items),
-		// Plugins fill the top row; the primitives (if any) drop to a second
-		// row below. Both counts come from the ONE item list.
+		// Plugins fill the top row; the primitives, if any, drop to a second
+		// row below. Both counts come from the one item list.
 		TopRow: paletteTopRow(items),
 	}
 }
 
-// plusButtonCenter returns the screen-space center of the FOCUSED pane's
-// circle button (issues #214/#220) — the position click hit-tests and the
-// open palette anchor to. Falls back to the window corner only when no
-// pane is focused (boot frame).
+// plusButtonCenter returns the screen-space center of the focused pane's
+// circle button — the position clicks hit-test against and the open palette
+// anchors to. It falls back to the window corner only when no pane is
+// focused, on the boot frame.
 func (a *App) plusButtonCenter() (float64, float64) {
 	return a.plusButtonCenterFor(a.tree.FocusedPane())
 }
 
-// plusButtonCenterFor is the circle-slot center of pane p's own band —
-// every pane wears one (#267).
+// plusButtonCenterFor is the circle-slot center of pane p's own band; every
+// pane wears one.
 func (a *App) plusButtonCenterFor(p *pane.Pane) (float64, float64) {
 	bx, top, bw, ok := a.bottomBarRectFor(p)
 	if !ok {
@@ -68,9 +68,9 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 	cx, cy := a.plusButtonCenterFor(p)
 	deleting := a.tileDragInFlight()
 	hot := deleting && a.pointInPlus(a.dragging.curScreenX, a.dragging.curScreenY)
-	// The button wears the pane's family hue (issue #223): saturated on the
-	// subtle dark band, so it stands out while still matching the scheme.
-	// The hot trashcan goes danger-red; an open menu gets a brighter ring.
+	// The button wears the pane's family hue, saturated on the subtle dark
+	// band so it stands out while still matching the scheme. The hot
+	// trashcan goes danger-red; an open menu gets a brighter ring.
 	band, button := a.barThemeFor(p)
 	bg := button
 	if hot {
@@ -145,10 +145,11 @@ func (a *App) drawPalette(p *pane.Pane) {
 func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
 	n := paletteItemGhostNode(item)
 	if item.isPlugin {
-		// Plugin swatch == the linked well it drops into a grid: a blue,
-		// DASHED-bordered well (dashed = a cross-plugin link you can unlink),
-		// its kind glyph, and its name banner (AltText = the server.yaml
-		// label). Drawn identically here, as the drag ghost, and once dropped.
+		// A plugin swatch is the linked well it drops into a grid: a blue,
+		// dashed-bordered well (dashed means a cross-plugin link you can
+		// unlink), its kind glyph, and its name banner (AltText is the
+		// server.yaml label). Drawn identically here, as the drag ghost, and
+		// once dropped.
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", x, y, w, h)
 		setTileDash(a.cctx)
@@ -156,7 +157,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		clearTileDash(a.cctx)
 		a.drawPluginGlyph(item.plugin.Glyph, x, y, w, h)
 		a.drawTileBannerLabel(&n, x, y, w, h, false)
-		// Broken/rootless plugins get the same health tint their node-grid
+		// Broken and rootless plugins get the same health tint their link
 		// tiles do; the click guard explains on click.
 		a.drawPluginHealthTint(&n, x, y, w, h)
 	} else {
@@ -180,14 +181,13 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 	}
 }
 
-// drawPluginGlyph overlays a plugin's identity glyph — all in the grid
-// blue — chosen by the plugin's own DECLARATION (InfoResponse.glyph:
-// "folder", "process", "well"; anything else — including a third-party
-// plugin's unknown value — falls back to the generic globe). Never a
-// kind switch: the client must not know its plugins (charter,
-// 2026-08-15). Full size (glyphBox). One drawing shared by the menu
-// swatch, the drag ghost, and a cross-plugin well that has no preview
-// yet, so all three read identically.
+// drawPluginGlyph overlays a plugin's identity glyph, all in the grid blue,
+// chosen by the plugin's own declaration (InfoResponse.glyph: "folder",
+// "process", "well"; anything else, a third-party plugin's unknown value
+// included, falls back to the generic globe). Never a kind switch: the client
+// must not know its plugins. Full size (glyphBox). One drawing shared by the
+// menu swatch, the drag ghost, and a cross-plugin well with no preview yet,
+// so all three read identically.
 func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 	switch glyph {
 	case rpc.GlyphFolder:
@@ -203,21 +203,20 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 	}
 }
 
-// drawPluginHealthTint overlays a node-grid plugin tile with its
-// pluginhealth-decided tint (drawn atop the normal tile so the glyph/preview
-// underneath still reads); an enterable plugin gets no overlay. The decision
-// (which status, if any) is pluginhealth.Classify — this function only maps
-// that decision to pixels, per charter §5. Only tiles of THIS node's node
-// grid have local health; a remote node's plugin tiles surface their state
-// through descent errors instead.
+// drawPluginHealthTint overlays a plugin link tile with its
+// pluginhealth-decided tint, drawn atop the normal tile so the glyph or
+// preview underneath still reads; an enterable plugin gets no overlay. Which
+// status, if any, is pluginhealth.Classify's decision, and this function only
+// maps it to pixels. Only this node's own plugins have local health; a remote
+// node's plugin tiles surface their state through descent errors instead.
 func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
-	// A LINK with no target is not enterable wherever it lives — a broken or
-	// rootless plugin link (including one to a remote plugin, whose health
-	// the local plugin list cannot know). Dim it; the descent guard explains
+	// A link with no target is not enterable wherever it lives: a broken or
+	// rootless plugin link, one to a remote plugin included, whose health
+	// the local plugin list cannot know. Dim it; the descent guard explains
 	// on click.
 	if n.Reference && rpc.IsWellKind(n.Kind) && n.ChildGridID == "" {
 		color := colorLauncherRootlessTint
-		// The LOCAL plugin list knows more: broken (Info failed) gets the
+		// The local plugin list knows more: broken (Info failed) gets the
 		// alarm tint, rootless the softer one.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.ID)); ok {
 			if pluginhealth.Classify(pl) == pluginhealth.Broken {

@@ -14,9 +14,8 @@ import (
 // native URL-tile machinery, exposed by the preload script as
 // window.gridwell. When Gridwell runs inside the Electron shell this object
 // is present and live URL tiles render as native WebContentsViews. When the
-// app is loaded in a plain browser (e.g. `make serve` for a quick look) the
-// object is absent and the live path is simply unavailable — URL tiles show
-// their frozen preview and nothing panics.
+// app is loaded in a plain browser the object is absent and the live path is
+// unavailable: URL tiles show their frozen preview and nothing panics.
 
 // bridge returns the window.gridwell object, or a zero js.Value if it isn't
 // present (non-Electron host).
@@ -28,12 +27,11 @@ func bridge() js.Value {
 	return g
 }
 
-// bridgeCaps reads the host's OWN capability declaration
-// (window.gridwell.caps — 2026-08-13): which bridge halves it implements.
-// A bridge without the field is the legacy Electron preload, the only
-// shape that ever shipped without one. caps.Derive is the one reader.
-// Shells are not on this list since 2026-08-29 — the PTY rides the web
-// door, so no host implements anything for it.
+// bridgeCaps reads the host's own capability declaration
+// (window.gridwell.caps): which bridge halves it implements. A bridge without
+// the field is the full Electron preload. caps.Derive is the one reader.
+// Shells are not on this list — the PTY rides the web door, so no host
+// implements anything for it.
 func bridgeCaps() caps.Bridge {
 	g := bridge()
 	if !g.Truthy() {
@@ -65,9 +63,9 @@ func (b viewBounds) toJS() js.Value {
 	return o
 }
 
-// bridgePlace asks main to create/attach a WebContentsView for paneID showing
-// url at bounds. Every live view shares the ONE host-local session (owner
-// decision 2026-07-26 — there is no per-plugin partition or session key).
+// bridgePlace asks main to create or attach a WebContentsView for paneID
+// showing url at bounds. Every live view shares the one host-local session:
+// there is no per-plugin partition or session key.
 func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden bool) {
 	g := bridge()
 	if !g.Truthy() {
@@ -80,11 +78,11 @@ func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom fl
 	args.Set("bounds", b.toJS())
 	args.Set("contentZoom", contentZoom)
 	args.Set("history", history)
-	// hidden: this frame's gesture-hide verdict — a view placed mid-drag
-	// or under the palette starts parked (the registry no longer guesses).
+	// hidden: this frame's gesture-hide verdict. A view placed mid-drag or
+	// under the palette starts parked; the registry never guesses.
 	args.Set("hidden", hidden)
-	// durable gates the context menu's Freeze Page (issue #240): an
-	// ephemeral visit has nothing to re-descend into.
+	// durable gates the context menu's Freeze Page: an ephemeral visit has
+	// nothing to re-descend into.
 	args.Set("durable", durable)
 	g.Call("placeWebview", args)
 }
@@ -101,10 +99,9 @@ func bridgeSetBounds(paneID string, b viewBounds) {
 	g.Call("setBounds", args)
 }
 
-// bridgeSetHidden parks/unparks the view so canvas overlays (palette, drag
-// ghosts, modals) can paint where the native view would otherwise occlude.
-// focused is bookkeeping for main's focus-steal guard (the per-pane corner
-// control it used to show/hide is gone — issue #214).
+// bridgeSetHidden parks and unparks the view so canvas overlays (palette,
+// drag ghosts, modals) can paint where the native view would otherwise
+// occlude. focused is bookkeeping for main's focus-steal guard.
 func bridgeSetHidden(paneID string, hidden, focused bool) {
 	g := bridge()
 	if !g.Truthy() {
@@ -117,9 +114,9 @@ func bridgeSetHidden(paneID string, hidden, focused bool) {
 	g.Call("setHidden", args)
 }
 
-// bridgeSetZoom sets the USER content zoom for the live view on paneID (the
-// tile's content_zoom, issue #82). The main process composes it with the
-// min-width layout zoom — the two multiply; neither overwrites the other.
+// bridgeSetZoom sets the user content zoom for the live view on paneID (the
+// tile's content_zoom). The main process composes it with the min-width
+// layout zoom: the two multiply, and neither overwrites the other.
 func bridgeSetZoom(paneID string, zoom float64) {
 	g := bridge()
 	if !g.Truthy() {
@@ -145,13 +142,12 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 	args.Set("paneId", paneID)
 	promise := g.Call("removeWebview", args)
 
-	// Exactly ONE of the two arms fires — promise.then(onFulfilled,
+	// Exactly one of the two arms fires: promise.then(onFulfilled,
 	// onRejected), the two-argument form. The chained form
-	// .then(a).catch(b) is NOT exclusive: a throw inside the fulfilled arm
+	// .then(a).catch(b) is not exclusive — a throw inside the fulfilled arm
 	// rejects the derived promise and runs the catch arm too, releasing
-	// twice and writing a second, empty freeze (2026-08-27). Each arm
-	// releases BOTH funcs (the old per-arm defer leaked the other on every
-	// close).
+	// twice and writing a second, empty freeze. Each arm releases both
+	// funcs; a per-arm defer would leak the other on every close.
 	var then, catch js.Func
 	release := func() { then.Release(); catch.Release() }
 	then = js.FuncOf(func(_ js.Value, p []js.Value) any {
@@ -172,8 +168,8 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 	promise.Call("then", then, catch)
 }
 
-// bridgeGoBack navigates the view for paneID back in its history — the bar
-// slot's back button (issue #214; the native corner control is gone).
+// bridgeGoBack navigates the view for paneID back in its history: the bar
+// slot's back button.
 func bridgeGoBack(paneID string) {
 	g := bridge()
 	if !g.Truthy() {
@@ -237,62 +233,65 @@ func (a *App) installWebviewListeners() {
 		}
 		return nil
 	})
-	// A right-button press over a LIVE URL view can't reach the canvas (the
-	// native WebContentsView owns it), so the view's preload forwards it here
-	// in canvas coords. We begin the same pane gesture the canvas would, then
-	// park the view so the rest of the drag lands on the canvas.
+	// A right-button press over a live URL view cannot reach the canvas,
+	// because the native WebContentsView owns it, so the view's preload
+	// forwards it here in canvas coords. Begin the same pane gesture the
+	// canvas would, then park the view so the rest of the drag lands on the
+	// canvas.
 	onRightForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		a.onForwardedRightDown(ev.Get("x").Float(), ev.Get("y").Float())
 		return nil
 	})
-	// A middle-button press over a LIVE URL view is the ascend gesture; the
+	// A middle-button press over a live URL view is the ascend gesture; the
 	// native view swallows it, so main forwards it here in canvas coords.
 	onMiddleForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		a.onForwardedMiddleDown(ev.Get("x").Float(), ev.Get("y").Float())
 		return nil
 	})
-	// A left-button press over a LIVE URL view is a focus-transfer intent; the
-	// native view swallows the canvas's own mousedown, so main forwards it here in
-	// canvas coords. The click was NOT prevented in the preload — in-page
-	// interaction stays with the page — so we only transfer pane focus here.
+	// A left-button press over a live URL view is a focus-transfer intent.
+	// The native view swallows the canvas's own mousedown, so main forwards
+	// it here in canvas coords. The click was not prevented in the preload —
+	// in-page interaction stays with the page — so this only transfers pane
+	// focus.
 	onLeftForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		a.onForwardedLeftDown(ev.Get("x").Float(), ev.Get("y").Float())
 		return nil
 	})
-	// The page in a LIVE URL view tried to open a NEW WINDOW (target=_blank,
-	// window.open, ctrl/cmd-click). Main denies the popup and forwards the
-	// url here; the pane splits and the link opens as an ephemeral visit in
-	// the lower half (issue #111).
+	// The page in a live URL view tried to open a new window (target=_blank,
+	// window.open, ctrl or cmd-click). Main denies the popup and forwards
+	// the url here; the pane splits and the link opens as an ephemeral visit
+	// in the lower half.
 	onOpenBelow := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
 		return nil
 	})
-	// The user picked "Freeze Page" in a live view's context menu (issue
-	// #237): freeze the pane's view and store the standing intent.
+	// The user picked "Freeze Page" in a live view's context menu: freeze the
+	// pane's view and store the standing intent.
 	onFreezeURL := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
 		return nil
 	})
-	// The content-zoom chord was pressed while a LIVE URL view owned OS
-	// keyboard focus (issue #170): the window-level keydown never fires, so
-	// main intercepts the chord in before-input-event and relays it here,
-	// keyed by pane. Routed through the same one zoom owner as the canvas
-	// chord (applyContentZoom: cache + live surface + persistence).
+	// The content-zoom chord was pressed while a live URL view owned OS
+	// keyboard focus: the window-level keydown never fires, so main
+	// intercepts the chord in before-input-event and relays it here, keyed by
+	// pane. Routed through the same zoom owner as the canvas chord
+	// (applyContentZoom: cache, live surface, persistence).
 	onZoomKey := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		a.zoomKeyRelays++
 		a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
 		return nil
 	})
-	// The Electron main process reports every webview/session/sidecar failure
-	// it detects (issue #46) over this one channel; feed it straight into the
-	// same error surface every other failure path uses (a.reportErr) — one
-	// owner, whether the failure originated in wasm or in the native host.
+	// The Electron main process reports every webview, session, and sidecar
+	// failure it detects over this one channel. Feed it straight into the
+	// error surface every other failure path uses (a.reportErr), so there is
+	// one owner whether the failure originated in wasm or in the native
+	// host.
 	onError := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		source := jsString(ev.Get("source"))

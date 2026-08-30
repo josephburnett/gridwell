@@ -13,38 +13,35 @@ import (
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
-// This file paints text tiles on the CANVAS: always the raw monospace
-// source, soft-wrapped like the editing textarea (issue #216). The styled
-// rendered view is a sanitized-HTML overlay div since issue #218
-// (rendered_overlay.go, markdown.RenderHTML) — the custom canvas layout
-// engine is deleted.
+// This file paints text tiles on the canvas: always the raw monospace source,
+// soft-wrapped like the editing textarea. The styled rendered view is a
+// sanitized-HTML overlay div (rendered_overlay.go, markdown.RenderHTML).
 
-// textContentWidth is the logical width rendered markdown wraps at for pane p:
-// the pane's inner reading-box width. Using the pane's own width (not a fixed
-// 800px constant) is what reflows the doc to the pane — a split pane is narrower
-// than 800px, so the old fixed width laid the doc out at 800 and the pane clip
-// chopped the right edge ("cut off"). The painter and the textarea sizing
-// read this one width so they stay in agreement; the preview
-// lays out at the framing width it cover-crops (PreviewFrame.ContentW), which
-// for a focused tile is this same value — so an unfocused pane is a true scaled
-// copy of the focused one, not a re-wrap. (Scale is fixed at 1.0 in a descended
-// file pane, so screen px and logical px coincide here.)
+// textContentWidth is the logical width rendered markdown wraps at for pane
+// p: the pane's inner reading-box width. Using the pane's own width is what
+// reflows the doc to the pane; a fixed width would lay the doc out wider than
+// a split pane and the pane clip would chop the right edge. The painter and
+// the textarea sizing read this one width, so they stay in agreement, and the
+// preview lays out at the framing width it windows (PreviewFrame.ContentW),
+// which for a focused tile is this same value — so an unfocused pane is a
+// true scaled copy of the focused one, not a re-wrap. Scale is fixed at 1.0
+// in a descended text pane, so screen px and logical px coincide here.
 func (a *App) textContentWidth(p *pane.Pane) float64 {
 	_, _, w, _ := textInnerBox(paneRectFor(a, p))
-	// LOGICAL width: the wrap width the layout runs at, which the render
-	// transform (textScaleFor) blows back up — so zooming re-wraps lines to
-	// keep filling the pane, browser-style (issue #82).
+	// Logical width: the wrap width the layout runs at, which the render
+	// transform (textScaleFor) blows back up, so zooming re-wraps lines to
+	// keep filling the pane, browser-style.
 	return w / a.textScaleFor(p)
 }
 
 // drawMarkdownInPane renders a text document as the contents of the pane
 // currently descended into it, using that pane's live TextScroll so split
-// panes scroll independently. The FOCUSED pane is covered by its overlay —
-// the editing textarea in text mode, the rendered-HTML div in rendered mode
-// (issue #218) — once the overlay has content; every other descended pane
-// paints the raw source on canvas (HTML cannot be painted here, and an
-// unfocused pane must still show the doc), soft-wrapped to the pane width
-// exactly like the textarea (issue #216).
+// panes scroll independently. The focused pane is covered by its overlay —
+// the editing textarea in text mode, the rendered-HTML div in rendered mode —
+// once the overlay has content. Every other descended pane paints the raw
+// source on canvas, because HTML cannot be painted here and an unfocused pane
+// must still show the doc, soft-wrapped to the pane width exactly like the
+// textarea.
 func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	scale := a.textScaleFor(p)
 	originX := x - p.TextScrollX*scale
@@ -64,16 +61,16 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 		ready = a.renderedReady
 	}
 	// textedit.CanvasHiddenByOverlay is the single owner of "canvas paints
-	// vs overlay covers" — mode-agnostic since #218 (both modes are DOM
-	// overlays on the focused pane); the ready guard keeps the canvas
-	// painting through the loading race (issue #35).
+	// or overlay covers". It is mode-agnostic, since both modes are DOM
+	// overlays on the focused pane, and the ready guard keeps the canvas
+	// painting through the loading race.
 	if !textedit.CanvasHiddenByOverlay(true, p.ID == a.tree.Focus, ready) {
-		// A RENDERED-mode pane the overlay isn't covering (an unfocused
-		// sibling; the focused pane during the overlay's load) paints the
-		// rendered RASTER (#233's cache) — the pane must not flip to raw
-		// source just because focus moved (#261: things stay as you leave
-		// them; the overlay-vs-raster swap is an implementation detail the
-		// user never sees). Raw is only the raster's own loading frame.
+		// A rendered-mode pane the overlay is not covering — an unfocused
+		// sibling, or the focused pane during the overlay's load — paints
+		// the rendered raster. The pane must not flip to raw source just
+		// because focus moved: the overlay-to-raster swap is an
+		// implementation detail the user never sees. Raw is only the
+		// raster's own loading frame.
 		if mode == rpc.TextModeRendered {
 			frame := markdown.PreviewFrame{
 				Scale:    scale,
@@ -81,8 +78,8 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 				ContentW: a.textContentWidth(p),
 			}
 			if a.drawRenderedPreview(n, frame, x, y, w, h, 0) {
-				// e2e attribution (renderedPreviews testhook): the pane
-				// painted the RENDERED raster, not raw — the #261 pin.
+				// e2e attribution (the renderedPreviews testhook): the pane
+				// painted the rendered raster, not raw.
 				a.renderedPanePaints[n.ID]++
 				a.cctx.Call("restore")
 				return
@@ -99,14 +96,13 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	a.cctx.Call("restore")
 }
 
-// drawMarkdownNode renders a text tile at (x, y, w, h) as a grid preview.
-// Constant-scale window (issue #205): the type size never follows grid
-// zoom, the doc wraps to the tile's width (issue #216's raw wrap), and the
-// stored scroll (TextX/TextY) places the window. The preview follows the
-// tile's stored text_mode (issue #233): "rendered" draws the rasterized
-// RenderHTML output (rendered_preview.go — no second layout engine, #218
-// stands), anything else the raw source; the raw source also covers the
-// async raster gap.
+// drawMarkdownNode renders a text tile at (x, y, w, h) as a grid preview. It
+// is a constant-scale window: the type size never follows grid zoom, the doc
+// wraps to the tile's width, and the stored scroll (TextX/TextY) places the
+// window. The preview follows the tile's stored text_mode: "rendered" draws
+// the rasterized RenderHTML output (rendered_preview.go, no second layout
+// engine), anything else the raw source. The raw source also covers the async
+// raster gap.
 func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	frame := markdown.PreviewWindowFrame(w, textFixedScale, contentZoomOf(n), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
@@ -144,10 +140,9 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outsid
 
 	a.cctx.Call("restore")
 
-	// Host (outside) file tiles color by RENDERABILITY (issue #236, owner
-	// decision revising the uniform brown): a file the markdown renderer
-	// can show is text-green like any document; one it can't (metadata
-	// only on descent) is muted grey. markdown.Renderable is the same rule
+	// Host file tiles color by renderability: a file the markdown renderer
+	// can show is text-green like any document, and one it cannot — metadata
+	// only on descent — is muted grey. markdown.Renderable is the same rule
 	// the fs plugin serves bodies by, so the color never lies.
 	outlineColor := colorMarkdownLine
 	if outside && !markdown.Renderable(n.AltText) {
@@ -165,10 +160,9 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outsid
 	}
 }
 
-// markdownStyle holds the raw-text painter's font/spacing/color parameters
-// in logical pixels (before scale). The rest of the old canvas layout
-// engine's parameters died with it (#218); these four are what the raw
-// soft-wrap painter and the textarea sizing still read.
+// markdownStyle holds the raw-text painter's font, spacing, and color
+// parameters in logical pixels, before scale. These four are what the raw
+// soft-wrap painter and the textarea sizing read.
 type markdownStyle struct {
 	codePx    float64
 	pad       float64
@@ -205,10 +199,10 @@ func setFont(c js.Value, sizePx float64, family string, bold bool) {
 const rawTextLineHeight = 1.35
 
 // drawMarkdownText paints src as raw monospace text at the given scale. Used
-// for source-mode preview and as a faint backdrop behind the textarea overlay.
-// Text mode soft-wraps to the SAME columns the editing textarea shows
-// (markdown.WrapRawText, issue #216) — the face is monospace, so the budget
-// is a pure column count and the text cannot reflow when focus moves.
+// for source-mode preview and as a faint backdrop behind the textarea
+// overlay. Text mode soft-wraps to the same columns the editing textarea
+// shows (markdown.WrapRawText): the face is monospace, so the budget is a
+// pure column count and the text cannot reflow when focus moves.
 func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
 	wrap func(src string, cols int) []string) {
 	st := defaultMarkdownStyle()
@@ -227,9 +221,9 @@ func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64
 	m := c.Call("measureText", "M")
 	asc := m.Get("fontBoundingBoxAscent").Float()
 	desc := m.Get("fontBoundingBoxDescent").Float()
-	// Slot/baseline/top math is the pure markdown.RawTextLineSlot — the
-	// pixel-match-the-textarea contract. asc/desc come from the scaled canvas
-	// font above.
+	// Slot, baseline, and top math is markdown.RawTextLineSlot, the
+	// pixel-match-the-textarea contract. asc and desc come from the scaled
+	// canvas font above.
 	slotted := markdown.RawTextLineSlot(fontPx, rawTextLineHeight, scale, st.pad, scrollY, asc, desc)
 	slotTop := slotted.Top0
 	for _, ln := range wrap(src, rawWrapCols(m, w, scale, st.pad)) {
@@ -243,14 +237,14 @@ func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64
 	}
 }
 
-// memoWrap is drawMarkdownText's wrap plugin backed by a render cache:
-// re-wrapping a whole document every frame for every visible file tile
-// was O(doc × tiles) per frame (#265). Keyed by content id + version +
-// length + columns — the version bump (the one content door) invalidates
-// committed edits; the length guards the brief in-flight-edit window
-// (same-length uncommitted edits may render one debounce-cycle stale in
-// a background preview, which the save's version bump then corrects).
-// Bounded by wholesale reset: it is a derived cache, never a fact.
+// memoWrap is drawMarkdownText's wrapper backed by a render cache: re-wrapping
+// a whole document every frame for every visible text tile costs
+// O(doc × tiles) per frame. Keyed by content id, version, length, and
+// columns: the version bump — the one content door — invalidates committed
+// edits, and the length guards the brief in-flight-edit window, where
+// same-length uncommitted edits may render one debounce cycle stale in a
+// background preview until the save's version bump corrects it. Bounded by
+// wholesale reset: it is a derived cache, never a fact.
 func (a *App) memoWrap(n *rpc.Tile) func(string, int) []string {
 	return func(src string, cols int) []string {
 		key := n.ContentID() + "\x00" + strconv.FormatInt(n.Version, 10) + "\x00" +

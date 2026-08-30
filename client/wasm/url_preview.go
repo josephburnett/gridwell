@@ -11,16 +11,14 @@ import (
 	"github.com/josephburnett/gridwell/client/preview"
 )
 
-// Live-tab presence is no longer modeled as tile state. A URL tile in
-// the grid view always shows its cached preview JPEG, written back at the
-// ascent freeze.
+// A URL tile in the grid view always shows its cached preview JPEG, written
+// back at the ascent freeze. Live-tab presence is not tile state.
 
-// drawImageContain draws img into the (x,y,w,h) rect using object-fit:
-// contain semantics: black bars fill the rect, then the image is uniformly
-// scaled to FIT and centered — bars remain on at most one axis. The owner's
-// call (issue #89): a preview is always shown whole, never cover-cropped, so
-// radically different aspect ratios still read as what they are. The single
-// wasm chokepoint every raster preview draw flows through.
+// drawImageContain draws img into the (x,y,w,h) rect with object-fit: contain
+// semantics: black bars fill the rect, then the image is uniformly scaled to
+// fit and centered, so bars remain on at most one axis. A preview is always
+// shown whole, never cover-cropped, so a radically different aspect ratio
+// still reads as what it is. Every raster preview draw flows through here.
 func drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
 	c.Set("fillStyle", "#000")
 	c.Call("fillRect", x, y, w, h)
@@ -36,11 +34,11 @@ func drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
 	c.Call("drawImage", img, dx, dy, dw, dh)
 }
 
-// pagePreviewBlobID is the cache/fetch key for a serves_page tile's preview
-// (2026-08-11). Page tiles have no preview_blob_id — the owning plugin
-// DERIVES the frozen face from the content itself (fs: a thumbnail of the
-// file), so there is no server-side generation counter to key freshness by.
-// A fixed sentinel means: fetch once per session, keep until reload.
+// pagePreviewBlobID is the cache and fetch key for a serves_page tile's
+// preview. Page tiles have no preview_blob_id: the owning plugin derives the
+// frozen face from the content itself (fs serves a thumbnail of the file), so
+// there is no server-side generation counter to key freshness by. A fixed
+// sentinel means fetch once per session and keep until reload.
 const pagePreviewBlobID = -1
 
 // previewBlobKey resolves the urlPreview cache key for a tile: the stored
@@ -57,13 +55,11 @@ func previewBlobKey(n *rpc.Tile) int64 {
 	return 0
 }
 
-// drawURLTileInPane renders a URL tile that is the pane's current place
-// (i.e., the user descended into it). The pane's inner-rect
-// (x, y, w, h) gets the cached preview image letterboxed to fit. While a
-// live view is attached, mirror frames flow into the same urlPreview cache, so
-// this draw call automatically reflects them. (The old frozen-descent
-// cover-crop pan is gone with cover mode itself — under fit there is no
-// overflow to pan into.)
+// drawURLTileInPane renders a URL tile that is the pane's current place: the
+// user descended into it. The pane's inner rect (x, y, w, h) gets the cached
+// preview image letterboxed to fit. While a live view is attached, mirror
+// frames flow into the same urlPreview cache, so this draw call reflects
+// them.
 func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 	// When live, the native WebContentsView paints over this content box;
 	// the JPEG drawn here is the fallback shown while the view is parked
@@ -96,12 +92,12 @@ func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Call("restore")
 }
 
-// drawPageTile renders a serves_page tile in the parent grid view (the
-// text-kind arm of drawNodeWithPreview): the plugin-derived preview image
-// letterboxed into the footprint — an image file looks like the image —
-// inside the text family's border (it IS a file; only its presentation is
-// web content). Falls back to the file name while the thumbnail loads (or
-// when the plugin serves none).
+// drawPageTile renders a serves_page tile in the parent grid view — the
+// text-kind arm of drawNodeWithPreview: the plugin-derived preview image
+// letterboxed into the footprint, so an image file looks like the image,
+// inside the text family's border, because it is a file and only its
+// presentation is web content. Falls back to the file name while the
+// thumbnail loads, or when the plugin serves none.
 func (a *App) drawPageTile(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
@@ -163,11 +159,12 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
 			// Stand-in geometry, not letterbox: the live xterm canvas sits
-			// top-left at integer-cell size, so the snapshot must go back
-			// exactly there — contain-fit centered and scaled it by the
-			// leftover cell fraction, visibly shifting the terminal every
-			// time the overlay parked (issue #224). shellStandinRect is the
-			// one owner of this rect; the e2e hook reads the same function.
+			// top-left at integer-cell size, so the snapshot goes back
+			// exactly there. Contain-fit would center it and scale it by
+			// the leftover cell fraction, visibly shifting the terminal
+			// every time the overlay parks. shellStandinRect is the one
+			// owner of this rect, and the e2e hook reads the same
+			// function.
 			if dx, dy, dw, dh, ok := a.shellStandinRect(img, x, y); ok {
 				a.cctx.Call("drawImage", img, dx, dy, dw, dh)
 			}
@@ -175,9 +172,9 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 	} else if n.PreviewBlobID != 0 {
 		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 	} else if !a.hasShellStream(p.ID) {
-		// No preview yet, no live stream — pre-refresh state. Show
-		// the shell glyph so the descent reads as a frozen shell
-		// rather than a blank box.
+		// No preview yet and no live stream: the pre-refresh state. Show
+		// the shell glyph so the descent reads as a frozen shell rather
+		// than a blank box.
 		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 	}
 
@@ -206,8 +203,8 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bo
 	} else if n.PreviewBlobID != 0 {
 		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 	} else if w > 20 && h > 20 {
-		// No preview yet (palette drop never refreshed) — paint the
-		// shell glyph so the swatch reads as a shell rather than a
+		// No preview yet, because a palette drop never refreshed: paint
+		// the shell glyph so the swatch reads as a shell rather than a
 		// blank box.
 		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 	}
@@ -265,13 +262,12 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool
 	a.cctx.Call("restore")
 }
 
-// previewImage is the wasm-side cast: the cache stores a
-// preview.Image interface, but the canvas drawing helpers want a raw
-// HTMLImageElement (js.Value) to hand to drawImage. Every Get
-// callsite funnels through this helper so the cast lives in one place.
-// Returns false when the entry's underlying type isn't a *preview.JSImage
-// (defensive; the only Decoder registered with this cache produces
-// JSImage values).
+// previewImage is the wasm-side cast: the cache stores a preview.Image
+// interface, but the canvas drawing helpers want a raw HTMLImageElement
+// (js.Value) to hand to drawImage. Every Get call site funnels through this
+// helper, so the cast lives in one place. Returns false when the entry's
+// underlying type is not a *preview.JSImage, which the only Decoder
+// registered with this cache never produces.
 func previewImage(img preview.Image) (js.Value, bool) {
 	ji, ok := img.(*preview.JSImage)
 	if !ok || ji == nil {
@@ -303,9 +299,9 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 		jpeg, err := a.cl.GetTilePreview(context.Background(), tileID)
 		a.urlPreview.ClearFetching(tileID)
 		if err != nil {
-			// A plugin that serves no previews answers Unimplemented — a
-			// normal capability property (the tile shows its label), not a
-			// failure. Anything else surfaces (charter §6).
+			// A plugin that serves no previews answers Unimplemented: a
+			// capability property, so the tile shows its label. Anything
+			// else surfaces.
 			if !isUnimplemented(err) {
 				a.surfaceRPCError("GetTilePreview", err)
 				return // transient — the next draw may retry
@@ -314,9 +310,9 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 			return
 		}
 		if len(jpeg) == 0 {
-			// A completed answer settles the cache (PutEmpty) — leaving
-			// the miss unrecorded re-fired this fetch on EVERY draw, one
-			// RPC per non-decodable tile per frame, forever (#265).
+			// A completed answer settles the cache (PutEmpty). Leaving the
+			// miss unrecorded re-fires this fetch on every draw: one RPC
+			// per non-decodable tile per frame, forever.
 			a.urlPreview.PutEmpty(tileID, blobID)
 			return
 		}
@@ -324,10 +320,10 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	}()
 }
 
-// shellStandinRect is the ONE owner of where a shell snapshot draws inside a
-// pane: preview.StandinDstRect at the current device pixel ratio. The
-// in-pane draw and the e2e testhook (thShellStandin) both read it, so the
-// spec asserts the exact rect the renderer uses.
+// shellStandinRect is the one owner of where a shell snapshot draws inside a
+// pane: preview.StandinDstRect at the current device pixel ratio. The in-pane
+// draw and the e2e testhook (thShellStandin) both read it, so the spec
+// asserts the exact rect the renderer uses.
 func (a *App) shellStandinRect(img js.Value, x, y float64) (dx, dy, dw, dh float64, ok bool) {
 	dpr := a.win.Get("devicePixelRatio").Float()
 	return preview.StandinDstRect(

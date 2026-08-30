@@ -29,21 +29,17 @@ type dropTarget struct {
 	originY  float64
 }
 
-// previewDrop updates the active ghost for an in-flight tile drag from
-// the SAME dragdrop.DecideDrop verdict the commit path uses, so a
-// previewed action can never diverge from the committed one (the
-// trashcan-delete regression was exactly such a divergence). clone picks
-// the right-drag flavor: Clone=true, Forbidden never (issue #200 — a
-// solid well can't deep-copy across a namespace), and no no-entry badge
-// on a read-only doc (the clone preview never drew one). The left flavor
-// feeds MoveForbidden and, across a namespace, previews the LINK (dashed
-// ghost + chain badge — the teaching signal).
+// previewDrop updates the active ghost for an in-flight tile drag from the
+// same dragdrop.DecideDrop verdict the commit path uses, so a previewed
+// action cannot diverge from the committed one. clone picks the right-drag
+// flavor: Clone=true, Forbidden never, and no no-entry badge on a read-only
+// doc. The left flavor feeds MoveForbidden and, across a namespace, previews
+// the link (dashed ghost plus chain badge — the teaching signal).
 //
-// SameCell/Occupied are intentionally NOT fed here: the preview is
-// optimistic about placement (it shows the snap-to-cell even over an
-// occupied cell, matching the pre-unification behavior); the commit does
-// the authoritative overlap check and snaps back. The unification covers
-// the action CLASS (delete/link/place/reject) — where the bug lived.
+// SameCell and Occupied are deliberately not fed here: the preview is
+// optimistic about placement and shows the snap-to-cell even over an occupied
+// cell, while the commit does the authoritative overlap check and snaps back.
+// What the two share is the action class: delete, link, place, or reject.
 func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	if a.ghost == nil {
 		return
@@ -69,9 +65,9 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	}
 
 	// The verdict picks the action; GhostPlanForDrop picks the styling. Both
-	// are pure + tested in client/dragdrop, so preview and commit (and the
-	// styling itself) can't drift. The ghost rests in a different pane per
-	// verdict, so feed all three candidate pane ids + sizes.
+	// are pure and tested in client/dragdrop, so preview, commit, and the
+	// styling cannot drift. The ghost rests in a different pane per verdict,
+	// so feed all three candidate pane ids and sizes.
 	var targetPaneID string
 	var targetCellSize float64
 	if haveT {
@@ -92,15 +88,14 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	a.ghost.screenY = sy - d.cellOffsetY*size
 }
 
-// dropTargetAt resolves the cursor at (sx, sy) to a drop target.
-// Returns false when the cursor is over a file-mode pane or off-canvas
-// — neither is a valid drop destination.
+// dropTargetAt resolves the cursor at (sx, sy) to a drop target. Returns
+// false when the cursor is over a content descent or off-canvas: neither is a
+// valid drop destination.
 //
-// excludeTileID, if non-zero, prevents a well at that row id from
-// being treated as a drop-into-well target — used so a user dragging
-// well X around can't accidentally drop X into its own child grid
-// when the cursor is still on top of X. Pass d.tileID from the
-// dragState; it's a safe no-op when the source isn't a well.
+// excludeTileID, when set, prevents a well at that row id from being treated
+// as a drop-into-well target, so dragging well X cannot drop X into its own
+// child grid while the cursor is still on top of X. Pass d.tileID from the
+// dragState; it is a safe no-op when the source is not a well.
 func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
@@ -141,18 +136,17 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	}, true
 }
 
-// tileCopy returns a copy of *n owned by the caller — the cache may
-// rewrite its tile map underneath us, so callers that retain a tile
-// across event boundaries should hold their own copy.
+// tileCopy returns a copy of *n owned by the caller. The cache may rewrite
+// its tile map underneath, so a caller retaining a tile across event
+// boundaries holds its own copy.
 func tileCopy(n *rpc.Tile) *rpc.Tile {
 	c := *n
 	return &c
 }
 
-// gridSourceKind returns the grid's source kind (fs/proc), or "" for a
-// regular Gridwell-owned grid or an unknown grid id. Wraps the cache
-// lookup so callers can use the SourceKind comparison directly without
-// repeating the Meta-field dance.
+// gridSourceKind returns the grid's source kind (fs or proc), or "" for a
+// Gridwell-owned grid or an unknown grid id. It wraps the cache lookup so
+// callers compare SourceKind directly.
 func (a *App) gridSourceKind(gridID string) string {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
@@ -163,9 +157,10 @@ func (a *App) gridSourceKind(gridID string) string {
 
 // dropCrossNamespace reports whether the drag's source grid and t's
 // destination grid live in different id namespaces — the one predicate the
-// 2026-07-19 gestures branch on (left-drag becomes a LINK, a solid well's
-// right-drag is refused). One reader of NamespaceOf for all three gather
-// sites (left preview, left commit, right commit) so they cannot disagree.
+// cross-plugin gestures branch on: a left-drag becomes a link, and a solid
+// well's right-drag is refused. One reader of NamespaceOf for all three
+// gather sites (left preview, left commit, right commit), so they cannot
+// disagree.
 func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false
@@ -174,13 +169,13 @@ func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 }
 
 // dropForbiddenForMove reports whether a left-drag from the dragState's
-// source grid to t's destination grid is rejected up front: a SAME-namespace
-// cross-grid move with a source-backed endpoint (host mv unimplemented; host
-// dirs aren't a placement medium). A cross-namespace left-drag is never a
-// move — it verdicts DropLink — so it is exempt here (the read-only
-// destination case is the separate TargetReadOnly gate). The UI flags the
-// forbidden gestures so the cursor and the ghost render "no entry" instead
-// of inviting the failed drop.
+// source grid to t's destination grid is rejected up front: a same-namespace
+// cross-grid move with a source-backed endpoint, since host mv is
+// unimplemented and host directories are not a placement medium. A
+// cross-namespace left-drag is never a move — it verdicts DropLink — so it is
+// exempt here, and the read-only destination case is the separate
+// TargetReadOnly gate. The UI flags the forbidden gestures so the cursor and
+// the ghost render "no entry" instead of inviting a drop that fails.
 func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false
@@ -217,7 +212,7 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, s
 	cp := wellPreviewFor(paneToDragdrop(p, r), well)
 	// Which child cell does the cursor sit in? FloorCellAt floors toward
 	// -inf (math.Floor), the correct hit-test answer in a well's negative
-	// quadrant — int64() truncates toward zero and would mis-target there.
+	// quadrant; int64() truncates toward zero and would mis-target there.
 	cellX, cellY := dragdrop.FloorCellAt(cp.OriginX, cp.OriginY, cp.CellPx, sx, sy)
 	for _, n := range g.Tiles {
 		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
@@ -227,12 +222,12 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, s
 	return nil
 }
 
-// wellPreviewFor is the ONE way a well's stored framing becomes a child
-// preview transform: BOTH halves of the framing resolved through
-// zoomtrans' unvisited sentinel — the ratio (EffectiveViewZoom) and the
-// center (EffectiveCenter) — so the drop target, the pull-out-of-well hit
-// test and the renderer place a never-visited well's preview at the same
-// pixels instead of each remembering the fallback for itself.
+// wellPreviewFor is the one way a well's stored framing becomes a child
+// preview transform: both halves of the framing resolved through zoomtrans'
+// unvisited sentinel — the ratio (EffectiveViewZoom) and the center
+// (EffectiveCenter) — so the drop target, the pull-out-of-well hit test, and
+// the renderer place a never-visited well's preview at the same pixels
+// instead of each remembering the fallback for itself.
 func wellPreviewFor(ps dragdrop.Pane, n *rpc.Tile) dragdrop.ChildPreview {
 	cx, cy := zoomtrans.EffectiveCenter(wellOf(n))
 	return dragdrop.ChildPreviewFor(ps, struct {

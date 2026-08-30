@@ -13,31 +13,31 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// Naming — "name the room you're in" (issues #61, #118, #213). The focused
-// pane's name renders as the bottom bar's centered TITLE (bottombar.go),
-// not in a pill floating over pane content: the band is carved out of
-// every native surface's rect (panebox.BarInset), so the label and the
-// inline rename input work identically over canvas, shells, and live url
-// panes with no native twin.
-// RIGHT-click on the title opens the rename input when the name is
-// user-editable (Enter or blur commits the versioned SetTile rename — a
-// USER-owned name the automatic captures never overwrite; Escape cancels,
-// and an unchanged value never writes);
-// read-only contexts (a plugin root, an ephemeral visit, a
-// text tile's derived name) just show their label. LEFT-click on the title
-// toggles the tmux-style pane zoom (Tree.ToggleZoom).
+// Naming: name the room you are in. The focused pane's name renders as the
+// bottom bar's centered title (bottombar.go), not in a pill floating over
+// pane content. The band is carved out of every native surface's rect
+// (panebox.BarInset), so the label and the inline rename input work
+// identically over canvas, shells, and live url panes, with no native twin.
 //
-// This file owns the DECISIONS: what the name is (bubbleLabel), what it
-// edits (renameTarget), the shared inline input, and the one rename door.
+// A right-click on the title opens the rename input when the name is
+// user-editable: Enter or blur commits the versioned SetTile rename, a
+// user-owned name the automatic captures never overwrite; Escape cancels; and
+// an unchanged value never writes. Read-only contexts — a plugin root, an
+// ephemeral visit, a text tile's derived name — just show their label. A
+// left-click on the title toggles the tmux-style pane zoom
+// (Tree.ToggleZoom).
+//
+// This file owns the decisions: what the name is (bubbleLabel), what it edits
+// (renameTarget), the shared inline input, and the one rename door.
 
 // renameTarget returns the tile the focused pane's rename input edits, or
 // ok=false when nothing here is renamable:
-//   - descended into a url/shell tile → that tile ("rename the tmux pane").
-//     Text tiles derive their name from their first line (refused server-side
-//     too); ephemeral tiles die on ascent, so naming one is a lie.
-//   - inside a well's grid → the CONTAINING well (the last path segment),
+//   - descended into a url or shell tile: that tile. Text tiles derive their
+//     name from their first line, which the server refuses to override, and
+//     ephemeral tiles die on ascent, so naming one is a lie.
+//   - inside a well's grid: the containing well (the last path segment),
 //     resolved from the parent grid — renaming the room names its door.
-//   - a plugin root → nothing (plugin names are config-owned).
+//   - a plugin root: nothing, since plugin names are config-owned.
 func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 	if p == nil {
 		return rpc.Tile{}, false
@@ -50,11 +50,10 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 		return t, true
 	}
 	if len(p.Path()) == 0 {
-		// A portal level (a connection, a linked world): the door tile —
-		// the well descended through, or the instance well naming the same
-		// place — is a real row, and renaming the room names its door,
-		// exactly like the containing-well arm below (#263). Declarations
-		// (plugin roots, menu entries) stay unrenamable.
+		// A namespace level (a connection, a linked world): the door tile,
+		// the well descended through, is a real row, and renaming the room
+		// names its door, exactly like the containing-well arm below.
+		// Declarations — plugin roots, menu entries — stay unrenamable.
 		if t, kind := a.doorFind(p); kind == door.Well {
 			return t, true
 		}
@@ -76,9 +75,9 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 // it is user-editable: the renameTarget's name when one exists; otherwise a
 // read-only context label (the plugin's config label at its root,
 // "ephemeral" inside a dying visit, a text tile's derived first-line name).
-// bubbleDecorate applies pane-state markers to the title text — currently
-// the zoom indicator (issue #124). ONE owner: everything that shows the
-// name renders bubbleLabel's output.
+// bubbleDecorate applies pane-state markers to the title text, currently the
+// zoom indicator. One owner: everything that shows the name renders
+// bubbleLabel's output.
 func (a *App) bubbleDecorate(p *pane.Pane, label string) string {
 	if a.tree.Zoomed == p.ID {
 		return "⛶ " + label
@@ -104,9 +103,9 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 		}
 		return "unnamed", false, true
 	}
-	// A portal level: the DOOR's identity (#263) — the entry's or plugin's
-	// declared label, read-only. (A renamable door was already answered by
-	// the renameTarget arm above.)
+	// A namespace level: the door's identity — the entry's or the plugin's
+	// declared label, read-only. A renamable door was already answered by
+	// the renameTarget arm above.
 	if len(p.Path()) == 0 {
 		if t, kind := a.doorFind(p); kind != door.None {
 			if t.AltText == "" {
@@ -143,8 +142,8 @@ func (a *App) doorFind(p *pane.Pane) (rpc.Tile, door.Kind) {
 	return door.Find(p.Anchor(), parent, a.allPlugins())
 }
 
-// togglePaneZoom zooms the focused pane to the full layout, or back —
-// left-click on the bar's centered title (issues #118, #213, #220).
+// togglePaneZoom zooms the focused pane to the full layout, or back: the
+// left-click on the bar's centered title.
 func (a *App) togglePaneZoom() {
 	p := a.tree.FocusedPane()
 	if p == nil {
@@ -156,16 +155,16 @@ func (a *App) togglePaneZoom() {
 	a.scheduleURLUpdate()
 }
 
-// openRenameInput lives in bottombar.go (issue #213): the input opens over
-// the bar's current crumb, whose geometry the bar owns.
-
-// openNameInputAt spawns the ONE inline rename input — the same DOM shape
-// and commit/cancel keys for every rename surface (the current-pane crumb,
-// the workspace bar crumb). position sets the placement styles; onCommit
-// receives the trimmed value on Enter OR blur (2026-08-13: on a phone the
-// keyboard's done key blurs, and "typed a name, tapped elsewhere" must
-// not silently discard). Escape cancels; an UNCHANGED value never writes
-// (a no-op close must not bump the version — reading never mutates).
+// openRenameInput lives in bottombar.go: the input opens over the bar's
+// current crumb, whose geometry the bar owns.
+//
+// openNameInputAt spawns the one inline rename input — the same DOM shape and
+// commit and cancel keys for every rename surface (the current-pane crumb,
+// the pane-tile bar crumb). position sets the placement styles; onCommit
+// receives the trimmed value on Enter or on blur, because on a phone the
+// keyboard's done key blurs and "typed a name, tapped elsewhere" must not
+// silently discard. Escape cancels, and an unchanged value never writes: a
+// no-op close must not bump the version, because reading never mutates.
 func (a *App) openNameInputAt(value string, width float64, position func(st js.Value), onCommit func(string)) {
 	doc := js.Global().Get("document")
 	in := doc.Call("createElement", "input")
@@ -235,11 +234,10 @@ func (a *App) commitRename(tileID, alt string) {
 }
 
 // commitRenameRetained is the one rename commit: the versioned rename, then
-// `apply` on success. The TYPED NAME is retained on a transport failure
-// (audit #10, 2026-08-14): the input element is gone by the time the RPC
-// fails, so the closure parked in the outbox is the only copy of what the
-// user typed — it lands on the retry kick. A server verdict surfaces and
-// stands.
+// `apply` on success. The typed name is retained on a transport failure: the
+// input element is gone by the time the RPC fails, so the closure parked in
+// the outbox is the only copy of what the user typed, and it lands on the
+// retry kick. A server verdict surfaces and stands.
 func (a *App) commitRenameRetained(tileID, alt string, apply func(*rpc.Tile)) {
 	var tile *rpc.Tile
 	a.post(write{
@@ -259,16 +257,13 @@ func (a *App) commitRenameRetained(tileID, alt string, apply func(*rpc.Tile)) {
 	})
 }
 
-// postRename is the one rename door: the versioned SetTile rename arm
-// (2026-07-26 redesign — a name the user types is a content edit, so it
-// claims a version and bumps one). The claim comes from the cached row.
+// postRename is the one rename door: the versioned SetTile rename arm. A name
+// the user types is a content edit, so it claims a version and bumps one, and
+// the claim comes from the cached row.
 //
-// A conflict SURFACES rather than re-claiming: it used to retry once,
-// because the racing writer of alt was "only ever an automatic capture the
-// latch will out-rank anyway" — and captures bumped the row. They no longer
-// do (docs/simplify-plan.md S5), so a conflict here means a genuine
-// concurrent content edit, and silently re-claiming over it is the stomp
-// class the save-basis rule exists to prevent.
+// A conflict surfaces rather than re-claiming. Captures do not bump the row,
+// so a conflict here means a genuine concurrent content edit, and silently
+// re-claiming over it would overwrite it.
 func (a *App) postRename(ctx context.Context, tileID, alt string) (*rpc.Tile, error) {
 	version := int64(0)
 	if t := a.cachedTileByID(tileID); t != nil {
@@ -279,8 +274,8 @@ func (a *App) postRename(ctx context.Context, tileID, alt string) (*rpc.Tile, er
 
 // gridIDOfTile answers "which grid's cache reconciles if this write is
 // refused" for a call site that holds only an id. "" when the row is in no
-// cached grid — the dispatcher's refetch is then a no-op, which is right: a
-// grid this client never loaded has nothing to reconcile.
+// cached grid, which makes the dispatcher's refetch a no-op: a grid this
+// client never loaded has nothing to reconcile.
 func (a *App) gridIDOfTile(tileID string) string {
 	if t := a.cachedTileByID(tileID); t != nil {
 		return t.GridID

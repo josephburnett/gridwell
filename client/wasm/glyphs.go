@@ -16,12 +16,12 @@ func glyphLineWidth(w, h float64) float64 {
 	return math.Max(1.0, math.Min(w, h)/34)
 }
 
-// glyphBox returns the centered square footprint (center + half-extent)
-// every glyph draws within, so they sit at a uniform size side by side.
-// half is ~38% of the smaller side, so a glyph mostly fills its tile — the
+// glyphBox returns the centered square footprint (center plus half-extent)
+// every glyph draws within, so they sit at a uniform size side by side. half
+// is about 38% of the smaller side, so a glyph mostly fills its tile — the
 // same proportion a tile renders at in the menu, as a drag ghost, and once
-// dropped on a grid ("things stay as you left them"). The strokes stay thin
-// via glyphLineWidth, so a big glyph still reads as a clean line icon.
+// dropped on a grid. The strokes stay thin through glyphLineWidth, so a big
+// glyph still reads as a clean line icon.
 func glyphBox(x, y, w, h float64) (cx, cy, half float64) {
 	return x + w/2, y + h/2, math.Min(w, h) * 0.38
 }
@@ -106,11 +106,10 @@ func drawGlobeGlyph(c js.Value, x, y, w, h float64, color string) {
 	endGlyph(c)
 }
 
-// drawFolderGlyph paints a simple folder icon centered in (x, y, w, h):
-// a rectangle body with a slanted tab on its upper-left edge. The whole
-// outline is one closed path so the tab's right edge is part of the
-// stroke (previously a separate body strokeRect left the tab open on
-// the right).
+// drawFolderGlyph paints a folder icon centered in (x, y, w, h): a rectangle
+// body with a slanted tab on its upper-left edge. The whole outline is one
+// closed path, so the tab's right edge is part of the stroke; a separate body
+// strokeRect would leave the tab open on the right.
 func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
 	beginGlyph(c, w, h, color)
 	cx, cy, half := glyphBox(x, y, w, h)
@@ -237,11 +236,11 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 	c.Set("lineWidth", 1.0)
 }
 
-// drawPaneGlyph paints a stylized split-workspace cue centered in
-// (x, y, w, h): a rectangle divided by one vertical line, with the right
-// half divided again horizontally — the smallest drawing that reads
-// "arranged panes" at any zoom. Used for the pane-tile palette swatch and
-// the face of a workspace whose layout isn't loaded (or arranged) yet.
+// drawPaneGlyph paints a split-layout cue centered in (x, y, w, h): a
+// rectangle divided by one vertical line, with the right half divided again
+// horizontally — the smallest drawing that reads "arranged panes" at any
+// zoom. Used for the pane-tile palette swatch and the face of a pane tile
+// whose layout is not loaded, or not arranged, yet.
 func drawPaneGlyph(c js.Value, x, y, w, h float64, color string) {
 	beginGlyph(c, w, h, color)
 	cx, cy, half := glyphBox(x, y, w, h)
@@ -259,9 +258,9 @@ func drawPaneGlyph(c js.Value, x, y, w, h float64, color string) {
 	endGlyph(c)
 }
 
-// drawTrashGlyph paints a small trashcan centered in (x, y, w, h): a
-// tapered bin body with a lid line and handle. Declared by the local
-// plugin's trash root entry (issue #262).
+// drawTrashGlyph paints a small trashcan centered in (x, y, w, h): a tapered
+// bin body with a lid line and handle. Declared by the home's trash root
+// entry.
 func drawTrashGlyph(c js.Value, x, y, w, h float64, color string) {
 	beginGlyph(c, w, h, color)
 	cx, cy, half := glyphBox(x, y, w, h)

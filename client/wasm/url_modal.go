@@ -13,13 +13,11 @@ import (
 // short enough to stay a glanceable list rather than a scroll.
 const maxURLSuggestions = 8
 
-// urlSuggestCandidates collects the address + captured page title of every
-// url tile in the given plugin that is currently cached, for the new-url
-// modal's autocomplete (issue #235).
-// Scoped to one plugin (the session boundary, CLAUDE.md): you autocomplete only
-// from url tiles in the space you're creating the tile in. Cache-bound — grids
-// not opened this session don't contribute (a server query could broaden it;
-// the cache is the set you've actually browsed).
+// urlSuggestCandidates collects the address and captured page title of every
+// cached url tile in the given plugin, for the new-url modal's autocomplete.
+// It is scoped to one plugin, so you autocomplete only from url tiles in the
+// space you are creating the tile in, and bound to the cache, so grids not
+// opened this session do not contribute.
 func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 	var out []urlnorm.Candidate
 	for _, gid := range a.c.KnownGridIDs() {
@@ -32,8 +30,8 @@ func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 		}
 		for _, t := range g.Tiles {
 			if t.Kind == rpc.KindURL && t.URLString != "" {
-				// AltText is the page title captured at freeze (issue
-				// #235: typing title words finds the address).
+				// AltText is the page title captured at freeze, so typing
+				// title words finds the address.
 				out = append(out, urlnorm.Candidate{URL: t.URLString, Title: t.AltText})
 			}
 		}
@@ -59,8 +57,8 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 		return
 	}
 	a.urlModalOpen = true
-	// Park live views NOW (liveOverlaysHidden) so none paints over the
-	// dialog (issue #131).
+	// Park live views now (liveOverlaysHidden) so none paints over the
+	// dialog.
 	a.draw()
 
 	doc := a.doc
@@ -220,8 +218,9 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 			return nil
 		}
 		ev := args[0]
-		// mousedown (not click) so we win before the input blurs; preventDefault
-		// keeps focus in the input. The li carries its url in data-url.
+		// mousedown, not click, so this fires before the input blurs;
+		// preventDefault keeps focus in the input. The li carries its url in
+		// data-url.
 		url := ev.Get("target").Get("dataset").Get("url")
 		if url.Type() != js.TypeString || url.String() == "" {
 			return nil
@@ -234,7 +233,7 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 
 	form.Call("addEventListener", "submit", submitCb)
 	cancelBtn.Call("addEventListener", "click", cancelCb)
-	// Listen on the modal (not document) so we don't intercept other
+	// Listen on the modal rather than the document, so this intercepts no
 	// keydowns while the modal is closed.
 	modal.Call("addEventListener", "keydown", keydownCb)
 	modal.Call("addEventListener", "mousedown", backdropCb)

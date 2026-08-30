@@ -13,12 +13,11 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 )
 
-// The read-only rendered view (issue #218): a singleton DOM overlay div —
-// the textarea pattern, one element positioned over the focused rendered
-// text descent each frame — whose innerHTML is markdown.RenderHTML's
-// sanitized output (goldmark for markdown, go-org for .org names). The
-// custom canvas markdown engine is gone; the canvas paints raw source for
-// every non-focused view, and this div is the one styled surface.
+// The read-only rendered view: a singleton DOM overlay div — the textarea
+// pattern, one element positioned over the focused rendered text descent each
+// frame — whose innerHTML is markdown.RenderHTML's sanitized output (goldmark
+// for markdown, go-org for org names). The canvas paints raw source for every
+// non-focused view, and this div is the one styled surface.
 
 // ensureRenderedView creates (once) the overlay div and its scoped
 // stylesheet.
@@ -41,11 +40,11 @@ func (a *App) ensureRenderedView() {
 	s.Set("zIndex", "5")
 	s.Set("padding", "6px 10px")
 
-	// Links: never navigate the app page. An http(s) link opens as an
-	// ephemeral visit in a split below — the one live-link vocabulary
-	// (issue #207); everything else is inert. Task-list checkboxes are the
-	// one interactive control (owner decision 2026-08-09): clicking one
-	// toggles its source marker through the normal text-edit door.
+	// Links never navigate the app page. An http(s) link opens as an
+	// ephemeral visit in a split below — the one live-link vocabulary — and
+	// everything else is inert. Task-list checkboxes are the one interactive
+	// control: clicking one toggles its source marker through the normal
+	// text-edit door.
 	clickCb := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) == 0 {
 			return nil
@@ -114,11 +113,10 @@ func (a *App) refreshRenderedOverlay() {
 	if mode == "" {
 		mode = rpc.TextModeRendered
 	}
-	// A READ-ONLY tile always shows its rendered (selectable) face,
-	// whatever mode the session carried in — the display-time guard that
-	// makes descentTextMode's rule unfalsifiable from any entry point
-	// (#268: a restored read-only file used to fall to canvas-drawn,
-	// unselectable text).
+	// A read-only tile always shows its rendered, selectable face, whatever
+	// mode the session carried in. This display-time guard makes
+	// descentTextMode's rule hold from every entry point, including a
+	// restored session.
 	if a.tileReadOnly(&t) {
 		mode = rpc.TextModeRendered
 	}
@@ -154,15 +152,15 @@ func (a *App) refreshRenderedOverlay() {
 	a.renderedReady = true
 }
 
-// onRenderedCheckboxClick toggles the task marker behind a clicked
-// checkbox: the input's DOM position among the overlay's checkboxes is its
-// document-order index, markdown.ToggleTask maps that index to the ONE
-// source byte to flip (unit-tested, parity-pinned), and the edit rides the
-// same content-store entry + debounced flush a keystroke does — no second
+// onRenderedCheckboxClick toggles the task marker behind a clicked checkbox.
+// The input's DOM position among the overlay's checkboxes is its
+// document-order index; markdown.ToggleTask maps that index to the one source
+// byte to flip, unit-tested and parity-pinned; and the edit rides the same
+// cache entry and debounced flush a keystroke does, so there is no second
 // write path. The overlay then re-renders from the toggled source, so what
-// the checkbox shows is always the document's truth, never bare DOM state.
-// A refused toggle preventDefaults so the native flip reverts (charter §6:
-// the box must not LOOK saved when nothing was).
+// the checkbox shows is the document's truth rather than bare DOM state. A
+// refused toggle preventDefaults so the native flip reverts: the box must not
+// look saved when nothing was.
 func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 	p := a.tree.FocusedPane()
 	if p == nil || p.ContentID() == "" {
@@ -196,8 +194,8 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 	}
 	toggled, ok := markdown.ToggleTask(body, idx)
 	if !ok {
-		// The DOM index found no matching source marker — refuse loudly
-		// rather than flip the wrong byte (isTaskMarker's whole point).
+		// The DOM index found no matching source marker: refuse loudly
+		// rather than flip the wrong byte.
 		ev.Call("preventDefault")
 		a.reportErr(errsurface.Error, "textedit",
 			"checkbox did not map to a task marker — nothing was changed")
@@ -213,13 +211,13 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 }
 
 // The overlay's stylesheet lives in markdown.RenderedCSS — one stylesheet
-// shared with the rasterized grid preview (issue #233), scoped per surface.
+// shared with the rasterized grid preview, scoped per surface.
 
-// presentationHTML routes a text body to its declared renderer: the
-// plugin's text_presentation "plain" shows verbatim preformatted text
-// (markdown.RenderPlainHTML); everything else is the document renderer.
-// ONE router for the descent overlay and the grid preview rasterizer, so
-// the two faces of a tile can never disagree.
+// presentationHTML routes a text body to its declared renderer: the plugin's
+// text_presentation "plain" shows verbatim preformatted text
+// (markdown.RenderPlainHTML), and everything else takes the document
+// renderer. One router for the descent overlay and the grid preview
+// rasterizer, so the two faces of a tile cannot disagree.
 func presentationHTML(t *rpc.Tile, body []byte) string {
 	if t.TextPresentation == rpc.TextPresentationPlain {
 		return markdown.RenderPlainHTML(body)
