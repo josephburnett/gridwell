@@ -19,12 +19,12 @@ import (
 // empty leaves blob_id NULL ("never arranged": descent installs the default
 // single pane). alt is the user-given workspace name (the + palette's name
 // field; the bottom bar's breadcrumb reads it).
-func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64, alt string, data []byte, objectID string) (*rpc.Tile, error) {
+func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64, alt string, data []byte) (*rpc.Tile, error) {
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, gridID, x, y, w, h, objectID,
-		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
+	return s.createTile(ctx, gridID, x, y, w, h,
+		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			var blob sql.NullInt64
 			if len(data) > 0 {
 				blobID, err := s.putBlob(ctx, tx, hashBytes(data), data, panelayout.LayoutMediaType)
@@ -34,10 +34,10 @@ func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64,
 				blob = sql.NullInt64{Int64: blobID, Valid: true}
 			}
 			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+				INSERT INTO tiles (grid_id, kind, x, y, w, h,
 					blob_id, alt_text, created_at, updated_at)
-				VALUES (?, ?, 'pane', ?, ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gid, x, y, w, h, blob, alt, now, now)
+				VALUES (?, 'pane', ?, ?, ?, ?, ?, ?, ?, ?)`,
+				gid, x, y, w, h, blob, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert pane tile: %w", err)
 			}

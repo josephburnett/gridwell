@@ -21,8 +21,8 @@ func isWellKind(kind string) bool {
 
 // cloneSubtree deep-copies a grid and everything beneath it into fresh rows,
 // returning the new grid id. It is the eager copy the clone gesture performs
-// for an interior well: each grid and tile gets a brand-new row id (object_id
-// and version preserved as a provenance marker), so no tile is ever shared
+// for an interior well: each grid and tile gets a brand-new row id
+// (version preserved), so no tile is ever shared
 // between two clones — editing one can never touch the other, and no id is
 // ever reassigned. Blobs (immutable content) are shared by reference
 // (refcount bumped); host-backed source grids behind file/process wells are
@@ -36,8 +36,8 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 	}
 	now := s.now().Unix()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (object_id, version, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-		old.ObjectID, old.Version, now, now)
+		`INSERT INTO grids (version, created_at, updated_at) VALUES (?, ?, ?)`,
+		old.Version, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert cloned grid: %w", err)
 	}
@@ -98,12 +98,11 @@ func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) 
 // that drift lint is what makes "add a column, forget the clone path" a loud
 // failure instead of a silently incomplete copy.
 var tileCopyColumns = []string{
-	"object_id", "version", "grid_id", "kind", "x", "y", "w", "h",
+	"version", "grid_id", "kind", "x", "y", "w", "h",
 	"view_x", "view_y", "view_zoom", "child_grid_id",
 	"text_x", "text_y", "text_w", "text_h", "text_mode", "blob_id",
 	"url_string", "preview_blob_id", "alt_text", "alt_user",
 	"content_zoom", "url_history", "link_target_id", "url_frozen",
-	"configure_plugin_id",
 	"created_at", "updated_at",
 }
 
@@ -113,7 +112,7 @@ func placeholders(n int) string {
 }
 
 // insertTileCopy inserts a copy of tile n into gridID at (x, y) with the given
-// child grid, preserving object_id + version (provenance) and sharing the
+// child grid, preserving version and sharing the
 // blob (refcount bumped). The per-kind column nullability mirrors the schema
 // CHECK constraint. Used by CloneTile (one tile) and cloneSubtree (every tile
 // in a subtree).
@@ -178,12 +177,11 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO tiles (`+strings.Join(tileCopyColumns, ", ")+`)
 		VALUES (`+placeholders(len(tileCopyColumns))+`)`,
-		n.ObjectID, n.Version, gridID, n.Kind, x, y, n.W, n.H,
+		n.Version, gridID, n.Kind, x, y, n.W, n.H,
 		n.ViewX, n.ViewY, n.ViewZoom, child,
 		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
 		urlStr, previewBlob, n.AltText, altUser,
 		n.ContentZoom, urlHist, linkTarget, boolToInt(n.URLFrozen),
-		n.ConfigurePluginID,
 		now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert tile copy: %w", err)

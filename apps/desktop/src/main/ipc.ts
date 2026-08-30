@@ -142,9 +142,6 @@ export interface PlaceArgs {
   // registry used to infer it from the LAST setHidden it happened to
   // receive, which ranged over a Go map (2026-08-27).
   hidden?: boolean;
-  // objectId identifies which tile a pane is showing (the content-owning
-  // row; the freeze lands there).
-  objectId: string;
   url: string;
   bounds: Bounds;
   // contentZoom is the tile's persisted USER content zoom (issue #82),

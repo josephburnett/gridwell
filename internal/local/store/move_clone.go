@@ -10,8 +10,8 @@ import (
 )
 
 // CloneTile duplicates a tile into a destination grid at (x, y) as an eager,
-// independent copy. The new row carries the source's object_id + version as a
-// provenance marker but gets a fresh row id. An interior well's whole child
+// independent copy. The new row carries the source's version (the two stay
+// "the same content" until one diverges) but gets a fresh row id. An interior well's whole child
 // subtree is deep-copied (new grid + tile rows; blobs shared); an exit well
 // keeps its qualified cross-plugin child_grid_id (the child grid is owned by
 // another plugin, not duplicated); a text/url/shell tile shares its

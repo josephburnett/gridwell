@@ -83,12 +83,11 @@ func FloorCellAt(originX, originY, cellSize, sx, sy float64) (int64, int64) {
 // ghost following the cursor; the source's static row in the cache
 // needs to be hidden underneath it so we don't see two copies.
 //
-// Important: matches by *tile id* (primary-key row), not by object
-// lineage. Two tiles can share an ObjectID — CloneTile deliberately
-// copies the source's ObjectID into the new row so the two pieces
-// share a lineage. Hiding by ObjectID therefore makes every clone of
-// the dragged tile vanish during the drag; hiding by row id keeps
-// each clone visible.
+// Important: matches by *tile id* — the primary-key row, the only
+// identity a tile has. A clone is a DIFFERENT row that looks the same;
+// matching on anything a clone shares with its source (the retired
+// object_id lineage mint was exactly that) would make every clone of the
+// dragged tile vanish during the drag. Row id keeps each one visible.
 func HiddenMatch(hiddenTileID string, hiddenPaneID, currentPaneID string, tileID string) bool {
 	return hiddenTileID != "" && hiddenPaneID == currentPaneID && tileID == hiddenTileID
 }

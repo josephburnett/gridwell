@@ -11,12 +11,11 @@ import (
 // swaps or drops any field is caught (a same-valued fixture would hide it).
 func fullTile() *Tile {
 	return &Tile{
-		ID:       "id-1",
-		ObjectID: "obj-2",
-		Version:  3,
-		GridID:   "grid-4",
-		Kind:     KindURL,
-		X:        5, Y: 6, W: 7, H: 8,
+		ID:      "id-1",
+		Version: 3,
+		GridID:  "grid-4",
+		Kind:    KindURL,
+		X:       5, Y: 6, W: 7, H: 8,
 		ViewX: 9, ViewY: 10, ViewZoom: 11,
 		ChildGridID: "child-12",
 		TextX:       13, TextY: 14, TextW: 15, TextH: 16,
@@ -32,8 +31,6 @@ func fullTile() *Tile {
 		URLFrozen:        true,
 		ServesPage:       true,
 		TextPresentation: "both",
-
-		ConfigurePluginID: "cfg-25",
 	}
 }
 
@@ -58,7 +55,7 @@ func TestTileProtoNil(t *testing.T) {
 }
 
 func TestGridProtoRoundTrip(t *testing.T) {
-	in := &Grid{ID: "g1", ObjectID: "o2", Version: 3, SourceKind: "fs", SourceID: "/tmp"}
+	in := &Grid{ID: "g1", Version: 3, SourceKind: "fs", SourceID: "/tmp"}
 	got := GridFromProto(GridToProto(in))
 	if !reflect.DeepEqual(in, got) {
 		t.Errorf("grid round-trip diverged:\n in = %+v\nout = %+v", in, got)

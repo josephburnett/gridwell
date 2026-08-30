@@ -17,7 +17,7 @@ func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "workbench", nil, "")
+	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "workbench", nil)
 	if err != nil {
 		t.Fatalf("CreatePane: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "", nil, "")
+	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 	ctx := context.Background()
 
 	orig, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "ws",
-		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`), "")
+		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
 	// The production identity: a config id DIFFERENT from the minted uuid.
 	s.SetPluginID("k3x9m2q")
 
-	pt, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil, "")
+	pt, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil)
 	if err != nil {
 		t.Fatalf("create pane: %v", err)
 	}

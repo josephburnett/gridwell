@@ -100,12 +100,11 @@ test('right-drag deep-copies a solid well across nodes; a text left-drag links a
 
   // RIGHT-drag (clone) of the SOLID well across the boundary DEEP-COPIES
   // (#200): home gains an independent SOLID well (not dashed — a copy,
-  // not a link) carrying the source's provenance; the source is untouched.
+  // not a link) over its own subtree; the source is untouched.
   await gw.cloneDragAcrossPanes(b.id, tx, ty, a.id, cx, cy);
   const copied = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(copied, 'the deep copy landed in home').toBeTruthy();
   expect(copied.reference ?? false, 'the copy is SOLID (owned), not a link').toBe(false);
-  expect(copied.objectId, 'provenance carried').toBe(srcWell.objectId);
   expect(copied.childGridId, 'an independent subtree, not the shared grid').not.toBe(srcWell.childGridId);
   expect(tileAt(await gw.getGrid(b.gridID), 'well', tx, ty), 'source well untouched').toBeTruthy();
 

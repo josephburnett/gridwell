@@ -7,5 +7,5 @@ import "github.com/josephburnett/gridwell/api/idshape"
 // the host validating a hand-edited config must agree without importing
 // each other. Only the store's own call site remains.
 
-// newUUID returns a fresh 128-bit provenance id (Tile.object_id).
+// newUUID returns a fresh 128-bit id (system.plugin_uuid).
 func newUUID() string { return idshape.NewUUID() }

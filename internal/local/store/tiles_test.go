@@ -364,15 +364,14 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 	if framed.Version != w.Version {
 		t.Errorf("framed clone version = %d, want %d (still shared)", framed.Version, w.Version)
 	}
-	// The original is untouched and at the same version: still "the same
-	// tile" by (object_id, version).
+	// The original is untouched and at the same version.
 	wIDInt, _ := parseID(w.ID)
 	orig, err := s.loadTile(ctx, s.db, wIDInt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if orig.Version != w.Version || orig.ObjectID != framed.ObjectID {
-		t.Errorf("original drifted: version=%d obj=%s vs framed obj=%s", orig.Version, orig.ObjectID, framed.ObjectID)
+	if orig.Version != w.Version {
+		t.Errorf("original drifted: version=%d, want %d", orig.Version, w.Version)
 	}
 	if orig.ViewX == framed.ViewX && orig.ViewY == framed.ViewY {
 		t.Error("framing did not diverge between clones")

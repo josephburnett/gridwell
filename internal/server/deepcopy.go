@@ -34,9 +34,6 @@ import (
 //   - url → url_string + the frozen preview/history via the SetTile freeze;
 //   - shell → a fresh shell (a PTY session is plugin-local) + its frozen
 //     preview.
-//
-// Provenance: every copied row carries its source's object_id, exactly as a
-// within-plugin clone does (insertTileCopy).
 
 // deepCopyWell copies the qualified source well st (whose plugin-local row
 // is srcLocalTile) into destination grid dstGrid (dest-local id) at (x, y).
@@ -54,7 +51,7 @@ func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient
 	created, err := dst.CreateTile(ctx, &pb.CreateTileRequest{
 		GridId: dstGrid,
 		Tile: &pb.Tile{Kind: "well", X: x, Y: y, W: srcLocalTile.W, H: srcLocalTile.H,
-			AltText: srcLocalTile.AltText, ObjectId: srcLocalTile.ObjectId},
+			AltText: srcLocalTile.AltText},
 	})
 	if err != nil {
 		return nil, err
@@ -95,7 +92,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 		_, err := dst.CreateTile(ctx, &pb.CreateTileRequest{
 			GridId: dstGrid,
 			Tile: &pb.Tile{Kind: "well", X: t.X, Y: t.Y, W: t.W, H: t.H,
-				AltText: t.AltText, ObjectId: t.ObjectId, ChildGridId: q.ChildGridId,
+				AltText: t.AltText, ChildGridId: q.ChildGridId,
 				ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom},
 		})
 		return err
@@ -117,7 +114,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 			_, lerr := dst.CreateTile(ctx, &pb.CreateTileRequest{
 				GridId: dstGrid,
 				Tile: &pb.Tile{Kind: "well", X: t.X, Y: t.Y, W: t.W, H: t.H,
-					AltText: t.AltText, ObjectId: t.ObjectId, ChildGridId: q.ChildGridId,
+					AltText: t.AltText, ChildGridId: q.ChildGridId,
 					ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom},
 			})
 			return lerr
@@ -127,7 +124,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 		_, err := dst.CreateTile(ctx, &pb.CreateTileRequest{
 			GridId: dstGrid,
 			Tile: &pb.Tile{Kind: t.Kind, X: t.X, Y: t.Y, W: t.W, H: t.H,
-				AltText: t.AltText, ObjectId: t.ObjectId, LinkTargetId: q.LinkTargetId},
+				AltText: t.AltText, LinkTargetId: q.LinkTargetId},
 		})
 		return err
 	}
@@ -143,7 +140,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 			_, lerr := dst.CreateTile(ctx, &pb.CreateTileRequest{
 				GridId: dstGrid,
 				Tile: &pb.Tile{Kind: t.Kind, X: t.X, Y: t.Y, W: t.W, H: t.H,
-					AltText: t.AltText, ObjectId: t.ObjectId, LinkTargetId: q.Id},
+					AltText: t.AltText, LinkTargetId: q.Id},
 			})
 			return lerr
 		}
@@ -155,7 +152,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 	created, err := dst.CreateTile(ctx, &pb.CreateTileRequest{
 		GridId: dstGrid,
 		Tile: &pb.Tile{Kind: t.Kind, X: t.X, Y: t.Y, W: t.W, H: t.H,
-			AltText: t.AltText, ObjectId: t.ObjectId, UrlString: t.UrlString},
+			AltText: t.AltText, UrlString: t.UrlString},
 	})
 	if err != nil {
 		return err

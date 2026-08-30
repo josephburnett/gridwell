@@ -295,9 +295,8 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// A LEAF LINK: any leaf kind whose content lives in another plugin's
 		// tile (the cross-plugin left-drag). One create for all four kinds;
 		// the store validates the kind set and the qualified-target shape.
-		// t.ObjectId carries provenance (the link names the same origin).
 		return tileResp(p.st.CreateLeafLink(ctx, req.GridId, t.X, t.Y, t.W, t.H,
-			t.Kind, t.LinkTargetId, t.AltText, t.ObjectId))
+			t.Kind, t.LinkTargetId, t.AltText))
 	}
 	switch t.Kind {
 	case rpc.KindWell:
@@ -308,11 +307,11 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// user-given grid name (the + palette's name field); empty = unnamed.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
-				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom, t.ObjectId))
+				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom))
 		}
-		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText, ObjectID: t.ObjectId}))
+		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
 	case rpc.KindText:
-		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, ObjectID: t.ObjectId}))
+		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
 	case rpc.KindURL:
 		// A url create targeting this plugin's scratch grid is an EPHEMERAL
 		// visit ("descend into a url") — route it path-free (the off-grid
@@ -334,7 +333,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// A durable workspace, created with no layout blob (NULL blob_id =
 		// never arranged; the first arrangement rides WriteContent); alt_text
 		// is the workspace name the bottom bar shows.
-		return tileResp(p.st.CreatePane(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, nil, t.ObjectId))
+		return tileResp(p.st.CreatePane(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, nil))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
 	}

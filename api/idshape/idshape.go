@@ -1,7 +1,7 @@
 // Package idshape owns the IDENTITY SHAPES of the Gridwell contract —
 // facts every module shares and none may re-derive: the short plugin/node
-// id mint, the 128-bit provenance mint (Tile.object_id), and the validity
-// rules a namespace segment must satisfy. Moved out of the localdb store
+// id mint, the 128-bit random mint behind system.plugin_uuid, and the
+// validity rules a namespace segment must satisfy. Moved out of the localdb store
 // (2026-08-15): id shape is CONTRACT, not storage — a third-party plugin
 // minting a connection namespace and the host validating a hand-edited
 // server.yaml must agree without either importing the other.
@@ -16,11 +16,11 @@ import (
 	"strings"
 )
 
-// NewUUID returns a fresh random 128-bit id as a 32-character hex string —
-// the provenance (object_id) format, defined in exactly one place. Raw hex
-// rather than 8-4-4-4-12 grouping because no caller parses these — they
-// exist only to compare origin equality across rows and nodes, so the
-// space must never meaningfully collide.
+// NewUUID returns a fresh random 128-bit id as a 32-character hex string,
+// defined in exactly one place. Raw hex rather than 8-4-4-4-12 grouping
+// because no caller parses these. (It also minted the per-row object_id
+// provenance marker until schema v10 retired that column — nothing read
+// it to decide anything.)
 func NewUUID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])

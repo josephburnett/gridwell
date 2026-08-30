@@ -92,8 +92,8 @@ func (n *Namespace) ContextID(key string) (int64, error) {
 		return 0, err
 	}
 	now := n.s.now().UnixNano()
-	res, err := n.s.db.Exec(`INSERT INTO grids (object_id, version, created_at, updated_at, ns, context_key)
-		VALUES (?, 0, ?, ?, ?, ?)`, n.s.newID(), now, now, n.ns, key)
+	res, err := n.s.db.Exec(`INSERT INTO grids (version, created_at, updated_at, ns, context_key)
+		VALUES (0, ?, ?, ?, ?)`, now, now, n.ns, key)
 	if err != nil {
 		return 0, err
 	}
@@ -241,10 +241,10 @@ func (n *Namespace) Merge(gridID int64, entries []Entry, authoritative bool) ([]
 		} else {
 			x, y = nextEmptyCell(occupied, DefaultGridWidth, &cur)
 		}
-		if _, err := tx.Exec(`INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
+		if _, err := tx.Exec(`INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
 			child_grid_id, url_string, alt_text, created_at, updated_at, ns, key)
-			VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			n.s.newID(), gridID, kind, x, y, w, h, childID, url, e.Label, now, now, n.ns, e.Key); err != nil {
+			VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			gridID, kind, x, y, w, h, childID, url, e.Label, now, now, n.ns, e.Key); err != nil {
 			return nil, fmt.Errorf("store: mint %q: %w", e.Key, err)
 		}
 	}
@@ -448,11 +448,11 @@ func (s *Store) InsertExternalRow(ctx context.Context, ns string, gridID int64, 
 	if tombstoned {
 		tomb = 1
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
+	res, err := s.db.ExecContext(ctx, `INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
 		view_x, view_y, view_zoom, child_grid_id, text_x, text_y, text_w, text_h, text_mode, content_zoom,
 		url_string, alt_text, created_at, updated_at, ns, key, tombstoned)
-		VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.newID(), gridID, kind, place[0], place[1], place[2], place[3],
+		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		gridID, kind, place[0], place[1], place[2], place[3],
 		view[0], view[1], viewZoom, child, text[0], text[1], text[2], text[3], mode, contentZoom,
 		u, label, now, now, ns, key, tomb)
 	if err != nil {

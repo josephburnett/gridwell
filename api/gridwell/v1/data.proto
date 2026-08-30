@@ -27,7 +27,10 @@ option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridw
 // for the process table. source_id carries the path or PID.
 message Grid {
   string id = 1;
-  string object_id = 2;
+  // 2 (object_id): removed 2026-08-29 with the column (schema v10) — a
+  // 128-bit provenance mint copied through every clone and link that no
+  // reader anywhere consulted to decide anything. Identity is the id.
+  reserved 2;
   int64 version = 3;
   string source_kind = 4;
   string source_id = 5;
@@ -95,7 +98,8 @@ message MenuEntry {
 // enforces it.
 message Tile {
   string id = 1;
-  string object_id = 2;
+  reserved 2; // object_id: removed 2026-08-29, see Grid.object_id
+
   int64 version = 3;
   string grid_id = 4;
   string kind = 5;
@@ -178,12 +182,11 @@ message Tile {
   // written by the SetTile url_frozen arm only, never bumps version.
   bool url_frozen = 30;
 
-  // configure_plugin_id (issue #251) marked a CHILDLESS well as an
-  // UNCONFIGURED PLUGIN WELL. VESTIGIAL: the instance picker retired
-  // 2026-08-23 (connections are config rows) and the create/adopt verbs
-  // went 2026-08-29, so nothing mints or reads one — only stale rows in
-  // old stores still carry it. Retired with the column at schema v10.
-  string configure_plugin_id = 31;
+  // 31 (configure_plugin_id): removed 2026-08-29 with the column (schema
+  // v10). It marked a CHILDLESS well as an UNCONFIGURED PLUGIN WELL
+  // (#251); the instance picker retired 2026-08-23 and the create/adopt
+  // verbs went with it. v10 adopts any stale row into an ordinary well.
+  reserved 31;
 
   // serves_page (2026-08-11): the owning plugin serves this tile's content
   // as WEB CONTENT through the /content/ door (rpc ServeContent) — an image

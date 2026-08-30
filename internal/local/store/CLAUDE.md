@@ -16,10 +16,37 @@ data to be thrown away.
 
 - **Never delete the DB to absorb a schema change.** That was the testing-mode
   habit; it is now forbidden for the home store.
-- **Never drop, rename, retype, or repurpose an existing column or table.** Old
-  rows were written against the old meaning and must keep reading back the same.
-- Evolution is **additive only**: new columns (with a default), new tables, new
-  indexes. That is the whole vocabulary.
+- **Never rename, retype, or repurpose an existing column or table.** Old rows
+  were written against the old meaning and must keep reading back the same.
+- Evolution is **additive by default**: new columns (with a default), new
+  tables, new indexes. Reach for anything else only for the case below.
+
+### Retiring dead storage (owner decision, docs/simplify-plan.md 2026-08-29)
+
+The promise is that data written by a released binary stays **readable** —
+that a newer binary always brings an older file forward with every
+user-visible fact intact. Storage that no released binary reads for any
+user-visible meaning carries no such fact, so it may be **retired**:
+
+- The bar is evidence, not opinion: grep every read (store, clone, link,
+  conv, server, client, tests) and show that no reader DECIDES anything on
+  it. A pass-through copy is not a reader; a test asserting the value
+  survives a round-trip is not a reader either.
+- The step is a **rebuild migration** (below) that preserves every surviving
+  row and the `sqlite_sequence` seeds. A row the new shape can no longer
+  hold is CONVERTED, never deleted — the guiding rule ("things stay as you
+  left them") outranks the tidiness of the drop. v10's stale unconfigured
+  plugin wells are the worked example: each is given a fresh empty child
+  grid so the user's tile stays where they put it.
+- The decision is **recorded in the migration's chain-entry comment**, naming
+  what died and when its last reader went. v10 is the first one.
+- A wire field removed alongside a column gets `reserved <n>` in the proto —
+  numbers are never reused. (`TestProtoMatchesDDL` pairs columns with proto
+  fields, so a column and its field must retire in the SAME change.)
+- A **rebuild always materializes the current `tilesTableDDL`**, so an older
+  rebuild step replays onto the latest shape: after a drop, every earlier
+  rebuild's copy list must stop naming the dropped column. The chain and a
+  fresh Open still converge — `TestSchemaEquivalence` proves it.
 
 ## How the schema is represented
 
@@ -76,16 +103,29 @@ version bookkeeping and equivalence stay honest.
 therefore needs a **table-rebuild migration**, all inside the migration tx:
 create `tiles_new` with the new CHECK → `INSERT INTO tiles_new (explicit
 columns, id included) SELECT … FROM tiles` → `DROP TABLE tiles` → `ALTER TABLE
-tiles_new RENAME TO tiles` → recreate the three `idx_tiles_*` indexes — **and
+tiles_new RENAME TO tiles` → recreate the `idx_tiles_*` indexes (BOTH
+sources: `tilesIndexDDL` and, at or after v9, `externalsIndexDDL`'s
+`idx_tiles_live_key`, which `DROP TABLE` takes with it) — **and
 save/restore the `sqlite_sequence` row for `tiles`**: `DROP TABLE` deletes it,
 and the copy re-seeds at the max *surviving* id, so without the restore the ids
 of previously-deleted tiles get REUSED (violating the identity invariant below;
 embeds and deep links would resolve to the wrong tile). The v5 migration
 (`rebuildTilesForPaneKind`, the first executed rebuild) is the worked example:
 it builds `tiles_new` from the same `tilesTableDDL` text a fresh Open uses (one
-DDL source, no drift), and its fixture pins the id-reuse trap. The equivalence
-and chain tests still guard the result. Reach for this only when a CHECK must
-change.
+DDL source, no drift), and its fixture pins the id-reuse trap. `migrateV10` is
+the worked example for a DROP (and for `grids`, which has no CHECK: `DROP
+INDEX` then `ALTER TABLE … DROP COLUMN`, so the table is never dropped and its
+seed is never disturbed). The equivalence and chain tests still guard the
+result. Reach for a rebuild only when a CHECK must change or storage retires.
+
+**Fixture handles.** A rebuild does not renumber rows, but it does drop
+columns, so a fixture must find its rows again by a column that survives the
+whole chain — `alt_text` today. (`object_id` was the handle until v10 retired
+it.)
+
+**Open's order.** `Open` runs the migration chain BEFORE `bootstrapRoot`:
+bootstrap is a write through the CURRENT column set, and an old file does not
+have that shape until the chain has run.
 
 ## Test discipline (must stay green)
 

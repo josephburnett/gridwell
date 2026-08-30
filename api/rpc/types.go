@@ -288,7 +288,6 @@ const (
 // the red color theme on descent.
 type Grid struct {
 	ID         string `json:"id"`
-	ObjectID   string `json:"object_id"`
 	Version    int64  `json:"version"`
 	SourceKind string `json:"source_kind,omitempty"`
 	SourceID   string `json:"source_id,omitempty"`
@@ -321,15 +320,14 @@ type Grid struct {
 // Tile is the persistent unit of content in a grid. Kind selects which subset
 // of the optional fields is meaningful.
 type Tile struct {
-	ID       string `json:"id"`
-	ObjectID string `json:"object_id"`
-	Version  int64  `json:"version"`
-	GridID   string `json:"grid_id"`
-	Kind     string `json:"kind"`
-	X        int64  `json:"x"`
-	Y        int64  `json:"y"`
-	W        int64  `json:"w"`
-	H        int64  `json:"h"`
+	ID      string `json:"id"`
+	Version int64  `json:"version"`
+	GridID  string `json:"grid_id"`
+	Kind    string `json:"kind"`
+	X       int64  `json:"x"`
+	Y       int64  `json:"y"`
+	W       int64  `json:"w"`
+	H       int64  `json:"h"`
 	// well-only: ViewX/Y/Zoom is the child grid's framing — the preview
 	// frame, the descent target, and the ascent return value.
 	ViewX       int64   `json:"view_x,omitempty"`
@@ -384,11 +382,6 @@ type Tile struct {
 	// descending does not auto-go-live. Framing — written by the SetTile
 	// url_frozen arm only, never bumps version.
 	URLFrozen bool `json:"url_frozen,omitempty"`
-	// ConfigurePluginID marked a CHILDLESS well as an UNCONFIGURED PLUGIN
-	// WELL (issue #251). VESTIGIAL: nothing mints one (the picker retired
-	// 2026-08-23) and nothing reads it — only stale rows in old stores
-	// still carry a value. Retired with the column at schema v10.
-	ConfigurePluginID string `json:"configure_plugin_id,omitempty"`
 	// ServesPage: the owning plugin serves this tile's content as WEB
 	// CONTENT through the /content/ door (2026-08-11) — the client gives
 	// the descent url-tile semantics at the derived address
@@ -522,24 +515,19 @@ type CreateWellRequest struct {
 	ViewX    int64   `json:"view_x,omitempty"`
 	ViewY    int64   `json:"view_y,omitempty"`
 	ViewZoom float64 `json:"view_zoom,omitempty"`
-	// ObjectID carries the source's provenance marker — a cross-plugin LINK
-	// to an existing well, or a deep-copied interior well (#200) — "" = mint
-	// fresh.
-	ObjectID string `json:"object_id,omitempty"`
 }
 
-// (The unconfigured plugin well's verbs are gone — 2026-08-29. The
-// instance picker retired 2026-08-23 (connections are config rows), so
-// nothing could mint or adopt one: CreateWellRequest.ConfigurePluginID,
-// the CreateTile configure arm, SetTile's adopt arm and store's
-// CreatePluginWell/AdoptChildGrid all went. Tile.ConfigurePluginID
-// lingers as a vestige until the column goes at schema v10.)
+// (The unconfigured plugin well is gone — 2026-08-29. The instance
+// picker retired 2026-08-23 (connections are config rows), so nothing
+// could mint or adopt one: CreateWellRequest.ConfigurePluginID, the
+// CreateTile configure arm, SetTile's adopt arm, store's
+// CreatePluginWell/AdoptChildGrid, Tile.ConfigurePluginID and the
+// column itself (schema v10) all went.)
 
 // CreateLeafLinkRequest creates a LEAF LINK: a text/url/shell/pane tile whose
 // content lives in another plugin's tile (the cross-plugin left-drag). Kind is
 // the target's kind; LinkTargetID is the qualified "<uuid>/<tile-id>"
-// reference; Label is the link's local alt_text (usually the source's);
-// ObjectID carries provenance ("" = fresh).
+// reference; Label is the link's local alt_text (usually the source's).
 type CreateLeafLinkRequest struct {
 	GridID       string `json:"grid_id"`
 	X            int64  `json:"x"`
@@ -549,7 +537,6 @@ type CreateLeafLinkRequest struct {
 	Kind         string `json:"kind"`
 	LinkTargetID string `json:"link_target_id"`
 	Label        string `json:"label,omitempty"`
-	ObjectID     string `json:"object_id,omitempty"`
 }
 
 type CreateTextRequest struct {
@@ -559,9 +546,6 @@ type CreateTextRequest struct {
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
 	Data   []byte `json:"data"`
-	// ObjectID carries the source's provenance marker on a cross-plugin
-	// clone ("" = mint fresh). See store createTile.
-	ObjectID string `json:"object_id,omitempty"`
 }
 
 type CreatePaneRequest struct {
@@ -575,9 +559,6 @@ type CreatePaneRequest struct {
 	// Data is the optional initial layout blob; empty = never arranged
 	// (descent installs the default single pane).
 	Data []byte `json:"data,omitempty"`
-	// ObjectID carries the source's provenance marker on a cross-plugin
-	// clone ("" = mint fresh). See store createTile.
-	ObjectID string `json:"object_id,omitempty"`
 }
 
 type CreateURLRequest struct {
@@ -587,9 +568,6 @@ type CreateURLRequest struct {
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
 	URL    string `json:"url"`
-	// ObjectID carries the source's provenance marker on a cross-plugin
-	// clone ("" = mint fresh). See store createTile.
-	ObjectID string `json:"object_id,omitempty"`
 }
 
 // CreateShellRequest creates a shell tile. The bash session is not
@@ -604,9 +582,6 @@ type CreateShellRequest struct {
 	Y      int64  `json:"y"`
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
-	// ObjectID carries the source's provenance marker on a cross-plugin
-	// clone ("" = mint fresh). See store createTile.
-	ObjectID string `json:"object_id,omitempty"`
 }
 
 // Mutations: Version is the claimed current version of TileID.

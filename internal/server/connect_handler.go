@@ -403,8 +403,8 @@ func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb
 // CloneTile clones within a plugin, or — when the destination grid belongs to
 // a DIFFERENT plugin — applies the cross-plugin clone contract (owner decision
 // 2026-07-19: right-drag = COPY everywhere, left-drag across a boundary =
-// LINK): a leaf copies its bytes into the destination plugin (provenance
-// object_id carried); a solid well deep-copies (deepcopy.go, issue #200),
+// LINK): a leaf copies its bytes into the destination plugin; a solid
+// well deep-copies (deepcopy.go, issue #200),
 // degrading to a LINK when the source is unreachable (the offline-plan
 // decision, 2026-08-14). The LINK gesture is the left-drag, which arrives
 // here as a plain CreateTile carrying a qualified child_grid_id or
@@ -443,13 +443,9 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 			fmt.Errorf("version conflict: tile %s is at %d, request has %d", m.TileId, st.Version, m.Version))
 	}
 
-	// Provenance rides every cross-plugin copy: object_id is a random 128-bit
-	// hex, globally unique with no per-plugin qualification, so the copy and
-	// the source share a lineage exactly as a within-plugin clone's rows do
-	// (insertTileCopy preserves it).
 	create := &pb.CreateTileRequest{
 		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H,
-			AltText: st.AltText, ObjectId: st.ObjectId},
+			AltText: st.AltText},
 	}
 	var copyBody []byte
 	switch {

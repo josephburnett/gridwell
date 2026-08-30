@@ -154,14 +154,15 @@ func TestFloorCellAtCoversWholeCell(t *testing.T) {
 	}
 }
 
-// TestHiddenMatchByTileIDNotObjectID guards against the "cloned tile
-// disappears when its sibling is picked up" bug. The render path used
-// to compare tiles by ObjectID, but CloneTile deliberately copies the
-// source's ObjectID — so a hide-by-ObjectID predicate suppresses every
-// clone of the dragged tile, not just the dragged tile itself.
-func TestHiddenMatchByTileIDNotObjectID(t *testing.T) {
+// TestHiddenMatchByTileIDNotLineage guards against the "cloned tile
+// disappears when its sibling is picked up" bug. A clone is a DIFFERENT
+// row that looks the same, so the predicate must key on the row id: any
+// by-lineage match (the retired object_id mint was exactly that, copied
+// verbatim onto every clone) suppresses every clone of the dragged tile,
+// not just the dragged tile itself.
+func TestHiddenMatchByTileIDNotLineage(t *testing.T) {
 	const sourceID = "5"
-	const cloneID = "7" // different row, same ObjectID upstream
+	const cloneID = "7" // a different row showing the same content
 	const otherID = "9"
 
 	if !HiddenMatch(sourceID, "p1", "p1", sourceID) {

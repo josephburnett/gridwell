@@ -60,11 +60,11 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 	}
 	root, _ := st.RootGridID(ctx)
 	// Old plugin ids: grid 1 (root), grid 2 (a dir), tiles 1..3.
-	exit, err := st.CreateExitWell(ctx, root, 0, 0, 1, 1, pid+"/2", "docs", 0, 0, 0, "obj-exit")
+	exit, err := st.CreateExitWell(ctx, root, 0, 0, 1, 1, pid+"/2", "docs", 0, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	link, err := st.CreateLeafLink(ctx, root, 1, 0, 1, 1, "text", pid+"/3", "notes", "obj-link")
+	link, err := st.CreateLeafLink(ctx, root, 1, 0, 1, 1, "text", pid+"/3", "notes")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		"id": "a", "anchor": pid + "/1", "path": []string{pid + "/3"},
 		"up": []map[string]any{{"anchor": nodeID + "/" + root, "path": []string{}}},
 	}}})
-	paneTile, err := st.CreatePane(ctx, root, 2, 0, 1, 1, "ws", layout, "obj-pane")
+	paneTile, err := st.CreatePane(ctx, root, 2, 0, 1, 1, "ws", layout)
 	if err != nil {
 		t.Fatal(err)
 	}

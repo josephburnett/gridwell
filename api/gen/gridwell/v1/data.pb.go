@@ -92,7 +92,6 @@ func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
 type Grid struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ObjectId   string                 `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	Version    int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	SourceKind string                 `protobuf:"bytes,4,opt,name=source_kind,json=sourceKind,proto3" json:"source_kind,omitempty"`
 	SourceId   string                 `protobuf:"bytes,5,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
@@ -161,13 +160,6 @@ func (*Grid) Descriptor() ([]byte, []int) {
 func (x *Grid) GetId() string {
 	if x != nil {
 		return x.Id
-	}
-	return ""
-}
-
-func (x *Grid) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
 	}
 	return ""
 }
@@ -320,16 +312,15 @@ func (x *MenuEntry) GetGridId() string {
 // subset of the optional fields is meaningful; the DDL CHECK constraint
 // enforces it.
 type Tile struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ObjectId string                 `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	Version  int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	GridId   string                 `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	Kind     string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
-	X        int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
-	Y        int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
-	W        int64                  `protobuf:"varint,8,opt,name=w,proto3" json:"w,omitempty"`
-	H        int64                  `protobuf:"varint,9,opt,name=h,proto3" json:"h,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	GridId  string                 `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	Kind    string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
+	X       int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
+	Y       int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
+	W       int64                  `protobuf:"varint,8,opt,name=w,proto3" json:"w,omitempty"`
+	H       int64                  `protobuf:"varint,9,opt,name=h,proto3" json:"h,omitempty"`
 	// well-only: the child grid's framing — at once the preview frame,
 	// the descent target, and the ascent return value.
 	ViewX       int64   `protobuf:"varint,10,opt,name=view_x,json=viewX,proto3" json:"view_x,omitempty"`
@@ -391,12 +382,6 @@ type Tile struct {
 	// navigate-away freeze, which auto-revives on return). Framing-class —
 	// written by the SetTile url_frozen arm only, never bumps version.
 	UrlFrozen bool `protobuf:"varint,30,opt,name=url_frozen,json=urlFrozen,proto3" json:"url_frozen,omitempty"`
-	// configure_plugin_id (issue #251) marked a CHILDLESS well as an
-	// UNCONFIGURED PLUGIN WELL. VESTIGIAL: the instance picker retired
-	// 2026-08-23 (connections are config rows) and the create/adopt verbs
-	// went 2026-08-29, so nothing mints or reads one — only stale rows in
-	// old stores still carry it. Retired with the column at schema v10.
-	ConfigurePluginId string `protobuf:"bytes,31,opt,name=configure_plugin_id,json=configurePluginId,proto3" json:"configure_plugin_id,omitempty"`
 	// serves_page (2026-08-11): the owning plugin serves this tile's content
 	// as WEB CONTENT through the /content/ door (rpc ServeContent) — an image
 	// file, an HTML page. The client gives the descent url-tile semantics (a
@@ -458,13 +443,6 @@ func (*Tile) Descriptor() ([]byte, []int) {
 func (x *Tile) GetId() string {
 	if x != nil {
 		return x.Id
-	}
-	return ""
-}
-
-func (x *Tile) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
 	}
 	return ""
 }
@@ -642,13 +620,6 @@ func (x *Tile) GetUrlFrozen() bool {
 		return x.UrlFrozen
 	}
 	return false
-}
-
-func (x *Tile) GetConfigurePluginId() string {
-	if x != nil {
-		return x.ConfigurePluginId
-	}
-	return ""
 }
 
 func (x *Tile) GetServesPage() bool {
@@ -3344,10 +3315,9 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xc5\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xae\x02\n" +
 	"\x04Grid\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
-	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1f\n" +
 	"\vsource_kind\x18\x04 \x01(\tR\n" +
 	"sourceKind\x12\x1b\n" +
@@ -3357,17 +3327,16 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05stale\x18\f \x01(\bR\x05stale\x12\x17\n" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x129\n" +
-	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"\"\x82\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
 	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x14\n" +
 	"\x05color\x18\x04 \x01(\tR\x05color\x12\x17\n" +
-	"\agrid_id\x18\a \x01(\tR\x06gridIdJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xe5\x06\n" +
+	"\agrid_id\x18\a \x01(\tR\x06gridIdJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xa4\x06\n" +
 	"\x04Tile\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
-	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
 	"\agrid_id\x18\x04 \x01(\tR\x06gridId\x12\x12\n" +
 	"\x04kind\x18\x05 \x01(\tR\x04kind\x12\f\n" +
@@ -3396,12 +3365,11 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"urlHistory\x12$\n" +
 	"\x0elink_target_id\x18\x1d \x01(\tR\flinkTargetId\x12\x1d\n" +
 	"\n" +
-	"url_frozen\x18\x1e \x01(\bR\turlFrozen\x12.\n" +
-	"\x13configure_plugin_id\x18\x1f \x01(\tR\x11configurePluginId\x12\x1f\n" +
+	"url_frozen\x18\x1e \x01(\bR\turlFrozen\x12\x1f\n" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
-	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\"\x10#\"\r\n" +
+	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\x02\x10\x03J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
 	"\vInfoRequest\"\xd5\x03\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +

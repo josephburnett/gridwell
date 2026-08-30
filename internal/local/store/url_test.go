@@ -22,7 +22,7 @@ func createURLTileForTest(t *testing.T, s *Store, root string, x int64, url stri
 }
 
 // TestCloneURLTile verifies that CloneTile of a URL tile carries the URL
-// and preview JPEG, and that the clone shares the source's object_id.
+// and preview JPEG onto a fresh row.
 func TestCloneURLTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -52,9 +52,6 @@ func TestCloneURLTile(t *testing.T) {
 	}
 	if clone.ID == src.ID {
 		t.Error("clone has same row id as source")
-	}
-	if clone.ObjectID != src.ObjectID {
-		t.Errorf("clone object_id = %q, want %q (shared identity)", clone.ObjectID, src.ObjectID)
 	}
 	if clone.Version != src.Version {
 		t.Errorf("clone version = %d, want %d (shared until divergence)", clone.Version, src.Version)

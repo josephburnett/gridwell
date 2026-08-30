@@ -21,7 +21,6 @@ func GridToProto(g *Grid) *pb.Grid {
 	}
 	return &pb.Grid{
 		Id:            g.ID,
-		ObjectId:      g.ObjectID,
 		Version:       g.Version,
 		SourceKind:    g.SourceKind,
 		SourceId:      g.SourceID,
@@ -40,7 +39,6 @@ func GridFromProto(g *pb.Grid) *Grid {
 	}
 	return &Grid{
 		ID:            g.Id,
-		ObjectID:      g.ObjectId,
 		Version:       g.Version,
 		SourceKind:    g.SourceKind,
 		SourceID:      g.SourceId,
@@ -59,7 +57,6 @@ func TileToProto(t *Tile) *pb.Tile {
 	}
 	return &pb.Tile{
 		Id:               t.ID,
-		ObjectId:         t.ObjectID,
 		Version:          t.Version,
 		GridId:           t.GridID,
 		Kind:             t.Kind,
@@ -88,8 +85,6 @@ func TileToProto(t *Tile) *pb.Tile {
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
 		StatusDetail:     t.StatusDetail,
-
-		ConfigurePluginId: t.ConfigurePluginID,
 	}
 }
 
@@ -100,7 +95,6 @@ func TileFromProto(t *pb.Tile) *Tile {
 	}
 	return &Tile{
 		ID:               t.Id,
-		ObjectID:         t.ObjectId,
 		Version:          t.Version,
 		GridID:           t.GridId,
 		Kind:             t.Kind,
@@ -129,8 +123,6 @@ func TileFromProto(t *pb.Tile) *Tile {
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
 		StatusDetail:     t.StatusDetail,
-
-		ConfigurePluginID: t.ConfigurePluginId,
 	}
 }
 
@@ -214,24 +206,24 @@ func EventFromProto(e *pb.Event) Event {
 func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindWell, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, AltText: r.Label,
-			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom, ObjectId: r.ObjectID}}
+			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
 }
 
 func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}}
+		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H}}
 }
 func CreateURLToProto(r *CreateURLRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindURL, X: r.X, Y: r.Y, W: r.W, H: r.H, UrlString: r.URL, ObjectId: r.ObjectID}}
+		Tile: &pb.Tile{Kind: KindURL, X: r.X, Y: r.Y, W: r.W, H: r.H, UrlString: r.URL}}
 }
 func CreateShellToProto(r *CreateShellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindShell, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}}
+		Tile: &pb.Tile{Kind: KindShell, X: r.X, Y: r.Y, W: r.W, H: r.H}}
 }
 func CreatePaneToProto(r *CreatePaneRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label, ObjectId: r.ObjectID}}
+		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label}}
 }
 
 // CreateLeafLinkToProto builds the CreateTile for a LEAF LINK: any leaf kind
@@ -241,7 +233,7 @@ func CreatePaneToProto(r *CreatePaneRequest) *pb.CreateTileRequest {
 func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: r.Kind, X: r.X, Y: r.Y, W: r.W, H: r.H,
-			LinkTargetId: r.LinkTargetID, AltText: r.Label, ObjectId: r.ObjectID}}
+			LinkTargetId: r.LinkTargetID, AltText: r.Label}}
 }
 
 // SetTile converters. The wire has a single SetTile dispatched on the target

@@ -85,21 +85,17 @@ func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64,
 
 // createTile is the shared scaffolding for the Create* methods: sequence
 // validation → overlap check → kind-specific insert → grid version bump →
-// load → publish. The insert closure receives the canonical gridID, the
-// current unix timestamp, and the row's object_id; it inserts the tile row and
-// returns its id.
+// load → publish. The insert closure receives the canonical gridID and the
+// current unix timestamp; it inserts the tile row and returns its id.
 //
-// objectID is the PROVENANCE override: a cross-plugin clone or link carries
-// the source's object_id (a random 128-bit hex, globally unique with no
-// per-plugin qualification) so lineage survives the boundary the same way it
-// survives a within-plugin clone (insertTileCopy). "" mints a fresh id — the
-// normal user-create path. This is the one place the fresh-vs-carried
-// decision lives.
+// (It used to take an object_id PROVENANCE override so a cross-plugin
+// clone or link could carry the source's lineage marker. object_id was
+// retired at schema v10 — nothing ever read it to decide anything, and
+// identity is the row id.)
 func (s *Store) createTile(
 	ctx context.Context,
 	gridIDStr string, x, y, w, h int64,
-	objectID string,
-	insert func(tx *sql.Tx, gridID, now int64, objID string) (tileID int64, err error),
+	insert func(tx *sql.Tx, gridID, now int64) (tileID int64, err error),
 ) (*rpc.Tile, error) {
 	gridID, err := parseID(gridIDStr)
 	if err != nil {
@@ -125,11 +121,7 @@ func (s *Store) createTile(
 			return ErrOverlap
 		}
 
-		objID := objectID
-		if objID == "" {
-			objID = s.newID()
-		}
-		tileID, err := insert(tx, gid, s.now().Unix(), objID)
+		tileID, err := insert(tx, gid, s.now().Unix())
 		if err != nil {
 			return err
 		}
@@ -148,12 +140,11 @@ func (s *Store) createTile(
 // alt_text — the user-given name of the grid (the + palette's name field).
 // Wells have no content to derive an alt from, so this is alt's only writer.
 func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rpc.Tile, error) {
-	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
-		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
-			childObj := s.newID()
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H,
+		func(tx *sql.Tx, gridID, now int64) (int64, error) {
 			res, err := tx.ExecContext(ctx,
-				`INSERT INTO grids (object_id, created_at, updated_at) VALUES (?, ?, ?)`,
-				childObj, now, now)
+				`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
+				now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert child grid: %w", err)
 			}
@@ -162,11 +153,11 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 				return 0, err
 			}
 			res, err = tx.ExecContext(ctx, `
-				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+				INSERT INTO tiles (grid_id, kind, x, y, w, h,
 					view_x, view_y, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
-				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, req.Label, now, now)
+				VALUES (?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+				gridID, req.X, req.Y, req.W, req.H, childGridID, req.Label, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert well: %w", err)
 			}
@@ -183,18 +174,18 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 // grid). viewX/viewY/viewZoom carry the source's framing when the exit well
 // is a cross-plugin CLONE of a framed well — the link must preview and
 // descend to exactly where the source did; zeros are the default view.
-func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, viewX, viewY int64, viewZoom float64, objectID string) (*rpc.Tile, error) {
+func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, viewX, viewY int64, viewZoom float64) (*rpc.Tile, error) {
 	if childGridID == "" {
 		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, gridID, x, y, w, h, objectID,
-		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
+	return s.createTile(ctx, gridID, x, y, w, h,
+		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+				INSERT INTO tiles (grid_id, kind, x, y, w, h,
 					view_x, view_y, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
-				VALUES (?, ?, 'well', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gid, x, y, w, h, viewX, viewY, viewZoom, childGridID, alt, now, now)
+				VALUES (?, 'well', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				gid, x, y, w, h, viewX, viewY, viewZoom, childGridID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert exit well: %w", err)
 			}
@@ -209,17 +200,17 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 	}
 	hash := hashBytes(req.Data)
 	alt := doctype.AltFromSource(string(req.Data))
-	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
-		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H,
+		func(tx *sql.Tx, gridID, now int64) (int64, error) {
 			blobID, err := s.putBlob(ctx, tx, hash, req.Data, mediaMarkdown)
 			if err != nil {
 				return 0, err
 			}
 			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+				INSERT INTO tiles (grid_id, kind, x, y, w, h,
 					blob_id, alt_text, created_at, updated_at)
-				VALUES (?, ?, 'text', ?, ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, blobID, alt, now, now)
+				VALUES (?, 'text', ?, ?, ?, ?, ?, ?, ?, ?)`,
+				gridID, req.X, req.Y, req.W, req.H, blobID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert text tile: %w", err)
 			}
@@ -237,12 +228,12 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 // insertURLRow inserts one url tile row and returns its id. The single place
 // the url INSERT lives, shared by the on-grid CreateURL and the off-grid
 // CreateScratchURL so they can't drift.
-func insertURLRow(ctx context.Context, tx *sql.Tx, objID string, gridID, x, y, w, h int64, url string, now int64) (int64, error) {
+func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url string, now int64) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+		INSERT INTO tiles (grid_id, kind, x, y, w, h,
 			url_string, created_at, updated_at)
-		VALUES (?, ?, 'url', ?, ?, ?, ?, ?, ?, ?)`,
-		objID, gridID, x, y, w, h, url, now, now)
+		VALUES (?, 'url', ?, ?, ?, ?, ?, ?, ?)`,
+		gridID, x, y, w, h, url, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert url tile: %w", err)
 	}
@@ -258,9 +249,9 @@ func (s *Store) CreateURL(ctx context.Context, req *rpc.CreateURLRequest) (*rpc.
 	if urlString != "" && !urlSchemeAllowed(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
-		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
-			return insertURLRow(ctx, tx, objID, gridID, req.X, req.Y, req.W, req.H, urlString, now)
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H,
+		func(tx *sql.Tx, gridID, now int64) (int64, error) {
+			return insertURLRow(ctx, tx, gridID, req.X, req.Y, req.W, req.H, urlString, now)
 		})
 }
 
@@ -288,7 +279,7 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*rpc.Tile, er
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		now := s.now().Unix()
-		tileID, err := insertURLRow(ctx, tx, s.newID(), gridID, 0, 0, 1, 1, urlString, now)
+		tileID, err := insertURLRow(ctx, tx, gridID, 0, 0, 1, 1, urlString, now)
 		if err != nil {
 			return err
 		}
@@ -319,10 +310,10 @@ func (s *Store) CreateScratchShell(ctx context.Context) (*rpc.Tile, error) {
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		now := s.now().Unix()
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+			INSERT INTO tiles (grid_id, kind, x, y, w, h,
 				alt_text, created_at, updated_at)
-			VALUES (?, ?, 'shell', 0, 0, 1, 1, 'shell', ?, ?)`,
-			s.newID(), gridID, now, now)
+			VALUES (?, 'shell', 0, 0, 1, 1, 'shell', ?, ?)`,
+			gridID, now, now)
 		if err != nil {
 			return fmt.Errorf("insert scratch shell tile: %w", err)
 		}

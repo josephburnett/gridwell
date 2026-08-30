@@ -29,7 +29,6 @@ const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js
 interface Entry {
   view: WebContentsView;
   tileId: string;
-  objectId: string;
   bounds: Bounds;
   hidden: boolean;
   // focused is whether this pane is the focused pane, as the renderer last
@@ -235,7 +234,7 @@ export class WebviewRegistry {
   // for the tile already live in the pane and closes any other view first)
   // and half-implemented (it ignored durable/history/hidden and skipped the
   // min-width zoom).
-  async place(paneId: string, tileId: string, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false): Promise<void> {
+  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false): Promise<void> {
     const rounded = roundBounds(bounds);
     // ONE host-local session (owner decision 2026-07-26): every live url
     // tile, local or through a mount, browses on the shared persistent
@@ -328,7 +327,7 @@ export class WebviewRegistry {
     // random.) syncURLViews will call setHidden for this pane on
     // the next draw() and reaffirm the correct state.
     const startHidden = hidden;
-    const e: Entry = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
+    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
     this.entries.set(paneId, e);
     this.win.contentView.addChildView(view);
     view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);

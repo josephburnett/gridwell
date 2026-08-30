@@ -53,16 +53,12 @@ CREATE TABLE IF NOT EXISTS system (
 -- Keys: root_grid_id, root_view_cx, root_view_cy, root_zoom.
 `
 
-// sessionDDL is the singleton Chromium-session blob for this DB — the plugin is
-// the session boundary, so a DB carries exactly one session (cookies + web
-// storage), moved over the wire by GetSession/PutSession. Storage-only (not a
-// wire record), so it is invisible to the proto/DDL drift lint.
-const sessionDDL = `
-CREATE TABLE IF NOT EXISTS session (
-    id   INTEGER PRIMARY KEY CHECK (id = 1),
-    data BLOB NOT NULL
-);
-`
+// (The `session` table is gone — 2026-08-29, schema v10. It held one
+// Chromium session per DB, moved over the wire by GetSession/PutSession;
+// both RPCs died 2026-07-26 when the session became host-local, and
+// nothing read or wrote the table afterwards. The v10 migration drops it
+// from old files; the frozen v1 text lives on in the migration test
+// harness, which still builds genuine old files that have it.)
 
 // tablesDDL returns the grids/tiles/blobs DDL for the main database. This is
 // the canonical, always-current schema a fresh Open materializes directly, and
@@ -88,7 +84,6 @@ CREATE TABLE IF NOT EXISTS grids (
     -- No refcount: grids are owned 1:1 by their parent well (copy-on-clone
     -- never shares a grid), so only blobs are reference-counted.
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    object_id   TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 0,
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL DEFAULT 0,
@@ -104,7 +99,6 @@ CREATE TABLE IF NOT EXISTS grids (
     root_cy     REAL,
     root_zoom   REAL
 );
-CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
 -- listings: a plugin context's last good listing (an opaque blob the
 -- adapter serializes) — the offline answer (v2 tenet 6). Schema v9.
 CREATE TABLE IF NOT EXISTS listings (
@@ -141,7 +135,6 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     -- collide with the client's per-tile caches (e.g. the URL preview cache
     -- keyed by tile id), showing a deleted tile's frozen frame on a new one.
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    object_id     TEXT NOT NULL,
     version       INTEGER NOT NULL DEFAULT 0,
     grid_id       INTEGER NOT NULL REFERENCES grids(id),
     kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','shell','pane')),
@@ -206,12 +199,6 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     -- clears it. Framing, never bumps version. Added post-v1 (schema v7,
     -- additive).
     url_frozen    INTEGER NOT NULL DEFAULT 0,
-    -- configure_plugin_id marks a CHILDLESS well as an UNCONFIGURED PLUGIN
-    -- WELL (issue #251): the uuid of the parameterized plugin whose
-    -- instance will fill it. Adoption sets child_grid_id and the uuid
-    -- stays as provenance. '' for every other tile. Added post-v1 (schema
-    -- v8, rebuild — the well CHECK branch gained the childless variant).
-    configure_plugin_id TEXT NOT NULL DEFAULT '',
     -- ns/key/tombstoned: an EXTERNAL's row (docs/one-node.md §2.6). ns is
     -- the owning plugin id ('' = home); key is the plugin's stable key
     -- for the entry; tombstoned=1 retires the key forever (the id is
@@ -224,9 +211,10 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     updated_at    INTEGER NOT NULL,
     CHECK (
        (link_target_id IS NULL AND (
-          -- well: an interior/exit well has a child grid; the one childless
-          -- shape is the unconfigured plugin well (configure_plugin_id set).
-          (kind = 'well'  AND (child_grid_id IS NOT NULL OR configure_plugin_id != '') AND blob_id IS NULL AND url_string IS NULL AND preview_blob_id IS NULL AND text_mode IS NULL)
+          -- well: an interior/exit well always has a child grid. (v8's
+          -- childless variant — the unconfigured plugin well — went with
+          -- configure_plugin_id at v10.)
+          (kind = 'well'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL AND preview_blob_id IS NULL AND text_mode IS NULL)
        OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
        OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
        OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
@@ -252,7 +240,6 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
 // tilesTableDDL.
 const tilesIndexDDL = `
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
-CREATE INDEX IF NOT EXISTS idx_tiles_object_id ON tiles(object_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
 `
 

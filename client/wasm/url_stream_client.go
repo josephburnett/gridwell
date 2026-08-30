@@ -221,8 +221,8 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	}
 	a.local(p.ID).urlView.durable = durable
 	addr := a.webAddress(&t)
-	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, addr)
-	bridgePlace(p.ID, t.ID, t.ObjectID, addr, b, contentZoomOf(&t), t.URLHistory, durable, a.liveOverlaysHidden())
+	urlLog("place pane=%s tile=%s url=%s", p.ID, t.ID, addr)
+	bridgePlace(p.ID, t.ID, addr, b, contentZoomOf(&t), t.URLHistory, durable, a.liveOverlaysHidden())
 	a.draw()
 }
 

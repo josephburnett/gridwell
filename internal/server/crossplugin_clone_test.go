@@ -24,8 +24,8 @@ import (
 // pinned in deepcopy_dark_test.go). The left-drag arrives at the server as a
 // plain CreateTile carrying a qualified reference — the same request shape a
 // + menu plugin-swatch drop uses — so these tests drive both faces through
-// the real router seam. Provenance (object_id, globally unique) rides every
-// cross-plugin link and copy, so lineage survives the boundary.
+// the real router seam. Framing and labels ride every cross-plugin link
+// and copy, so a link looks like what it points at.
 
 // twoPluginServer stands up a server with two localdb plugins and returns the
 // client plus each plugin's uuid and qualified root grid id.
@@ -105,7 +105,6 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 		GridID: rootB, X: 3, Y: 3, W: well.W, H: well.H,
 		ChildGridID: well.ChildGridID, Label: framed.AltText,
 		ViewX: framed.ViewX, ViewY: framed.ViewY, ViewZoom: framed.ViewZoom,
-		ObjectID: framed.ObjectID,
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin link (CreateWell): %v", err)
@@ -126,10 +125,6 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	if link.AltText != "recipes" {
 		t.Errorf("link label = %q, want the source's name", link.AltText)
 	}
-	if link.ObjectID != well.ObjectID {
-		t.Errorf("link provenance = %q, want the source's object_id %q", link.ObjectID, well.ObjectID)
-	}
-
 	// The grid is SHARED: reading the link's child sees the source's content.
 	g, err := cl.GetGrid(ctx, link.ChildGridID)
 	if err != nil {
@@ -210,9 +205,6 @@ func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
 	if got := uuidOfTest(copyTop.ID); got != uuidB {
 		t.Fatalf("copy landed in %s, want plugin B (%s)", got, uuidB)
 	}
-	if copyTop.ObjectID != well.ObjectID {
-		t.Error("provenance object_id not carried")
-	}
 	if copyTop.ViewX != 7 || copyTop.ViewY != 8 || copyTop.ViewZoom != 2.5 {
 		t.Errorf("framing lost: %+v", copyTop)
 	}
@@ -285,7 +277,7 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	link, err := cl.CreateLeafLink(ctx, &rpc.CreateLeafLinkRequest{
 		GridID: rootB, X: 2, Y: 2, W: 1, H: 1,
 		Kind: rpc.KindText, LinkTargetID: txt.ID,
-		Label: txt.AltText, ObjectID: txt.ObjectID,
+		Label: txt.AltText,
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin leaf link: %v", err)
@@ -299,10 +291,6 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	if !link.Reference {
 		t.Error("leaf link must be marked Reference (dashed border, unlink-only delete)")
 	}
-	if link.ObjectID != txt.ObjectID {
-		t.Errorf("link provenance = %q, want the source's object_id %q", link.ObjectID, txt.ObjectID)
-	}
-
 	// One copy: content is read THROUGH the target id the link carries.
 	body, _, _, err := cl.ReadContent(ctx, link.LinkTargetID)
 	if err != nil {
@@ -340,10 +328,6 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	}
 	if u, _, _ := rpc.SplitID(copyT.ID); u != uuidB {
 		t.Errorf("copy lives in %q, want %q", u, uuidB)
-	}
-	if copyT.ObjectID != txt.ObjectID {
-		t.Errorf("copy provenance = %q, want the source's object_id %q (lineage survives the boundary)",
-			copyT.ObjectID, txt.ObjectID)
 	}
 	body, _, _, err := cl.ReadContent(ctx, copyT.ID)
 	if err != nil {
@@ -508,7 +492,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	// (the one it is dragging) — no read from the fs plugin is needed.
 	link, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
 		GridID: dstRoot, X: 1, Y: 1, W: sub.W, H: sub.H,
-		ChildGridID: sub.ChildGridID, Label: sub.AltText, ObjectID: sub.ObjectID,
+		ChildGridID: sub.ChildGridID, Label: sub.AltText,
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin link from fs: %v", err)

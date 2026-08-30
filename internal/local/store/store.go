@@ -87,20 +87,17 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
-	if _, err := db.Exec(sessionDDL); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("apply session schema: %w", err)
-	}
 	s := &Store{
 		db:    db,
 		now:   time.Now,
 		newID: newUUID,
 		hub:   eventhub.New(eventKey),
 	}
-	if err := s.bootstrapRoot(context.Background()); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("bootstrap root: %w", err)
-	}
+	// Migrate BEFORE bootstrapping. bootstrapRoot is a WRITE through the
+	// current column set, and an old file does not have it until the chain
+	// has run — a genuine v1 file's grids still carries the (NOT NULL)
+	// object_id v10 removed, so a pre-migration insert fails its
+	// constraint. Schema first, then writes.
 	if err := s.applyMigrations(context.Background()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
@@ -108,6 +105,10 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec(externalsIndexDDL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply externals indexes: %w", err)
+	}
+	if err := s.bootstrapRoot(context.Background()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("bootstrap root: %w", err)
 	}
 	// Guard against an out-of-contract shape that user_version alone can't catch
 	// (e.g. a pre-freeze DB the fast-path stamped as v1 without checking columns).
@@ -132,10 +133,9 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 	}
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		now := s.now().Unix()
-		objID := s.newID()
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO grids (object_id, created_at, updated_at) VALUES (?, ?, ?)`,
-			objID, now, now)
+			`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
+			now, now)
 		if err != nil {
 			return err
 		}
@@ -213,8 +213,8 @@ func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 		}
 		now := s.now().Unix()
 		res, e := tx.ExecContext(ctx,
-			`INSERT INTO grids (object_id, created_at, updated_at) VALUES (?, ?, ?)`,
-			s.newID(), now, now)
+			`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
+			now, now)
 		if e != nil {
 			return e
 		}

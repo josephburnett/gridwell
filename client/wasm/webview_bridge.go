@@ -68,7 +68,7 @@ func (b viewBounds) toJS() js.Value {
 // bridgePlace asks main to create/attach a WebContentsView for paneID showing
 // url at bounds. Every live view shares the ONE host-local session (owner
 // decision 2026-07-26 — there is no per-plugin partition or session key).
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, contentZoom float64, history string, durable, hidden bool) {
+func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden bool) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -76,7 +76,6 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
 	args.Set("tileId", tileID)
-	args.Set("objectId", objectID)
 	args.Set("url", url)
 	args.Set("bounds", b.toJS())
 	args.Set("contentZoom", contentZoom)

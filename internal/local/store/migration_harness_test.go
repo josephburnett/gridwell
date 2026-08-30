@@ -194,6 +194,19 @@ func storeOver(db *sql.DB) *Store {
 	return s
 }
 
+// sessionDDLV1 is the FROZEN `session` table as every pre-v10 binary
+// created it: one Chromium session per DB, moved by GetSession/PutSession
+// (both RPCs retired 2026-07-26). Production stopped creating the table at
+// schema v10 and the v10 migration DROPS it — but a genuine old file HAS
+// it, so the harness must still build one that does, or the drop would be
+// tested against a table that was never there.
+const sessionDDLV1 = `
+CREATE TABLE IF NOT EXISTS session (
+    id   INTEGER PRIMARY KEY CHECK (id = 1),
+    data BLOB NOT NULL
+);
+`
+
 // buildDBAtV1 creates a file DB whose tables come from the FROZEN tablesV1 text
 // (never tablesTemplate), bootstraps a root grid, and stamps our application_id
 // + user_version=1 — a faithful "DB written by a v1 binary". Returns the open
@@ -208,15 +221,34 @@ func buildDBAtV1(t *testing.T, path string) (*sql.DB, string) {
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
 
-	for _, ddl := range []string{pragmas, systemDDL, tablesV1, sessionDDL} {
+	for _, ddl := range []string{pragmas, systemDDL, tablesV1, sessionDDLV1} {
 		if _, err := db.Exec(ddl); err != nil {
 			t.Fatalf("apply v1 ddl: %v", err)
 		}
 	}
-	s := storeOver(db)
-	if err := s.bootstrapRoot(ctx); err != nil {
-		t.Fatalf("bootstrap v1 root: %v", err)
+	// The v1 root is seeded with RAW inserts against the v1 columns, not
+	// through bootstrapRoot: the production bootstrap writes the CURRENT
+	// grids shape, which no longer carries the (NOT NULL) v1 object_id.
+	// A genuine old file is built from the frozen text, not from today's
+	// writer.
+	res, err := db.ExecContext(ctx,
+		`INSERT INTO grids (object_id, created_at, updated_at) VALUES ('v1-root', 100, 100)`)
+	if err != nil {
+		t.Fatalf("seed v1 root grid: %v", err)
 	}
+	rootRow := mustID(t, res)
+	for _, kv := range [][2]string{
+		{systemKeyRootGridID, strconv.FormatInt(rootRow, 10)},
+		{systemKeyRootViewCx, "0"},
+		{systemKeyRootViewCy, "0"},
+		{systemKeyRootZoom, "0"},
+	} {
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO system (key, value) VALUES (?, ?)`, kv[0], kv[1]); err != nil {
+			t.Fatalf("seed v1 system key %s: %v", kv[0], err)
+		}
+	}
+	s := storeOver(db)
 	if err := s.setPragmaInt(ctx, "application_id", applicationID); err != nil {
 		t.Fatalf("stamp application_id: %v", err)
 	}
@@ -417,6 +449,10 @@ type migrationFixture struct {
 
 var migrationFixtures []migrationFixture
 
+// Fixture handle: rows are found again by alt_text, not by object_id.
+// object_id was the natural stable handle until schema v10 retired it —
+// and a REBUILD migration renumbers nothing but does drop columns, so the
+// handle must be a column that survives every step of the chain.
 func init() {
 	// v2: alt_user (issue #61). Seed a v1 tile with a name; verify the column
 	// arrives defaulted to 0 and the old row (and its name) survived.
@@ -433,7 +469,7 @@ func init() {
 			t.Helper()
 			var alt string
 			var altUser int
-			if err := db.QueryRow(`SELECT alt_text, alt_user FROM tiles WHERE object_id = 'fixt-v2'`).Scan(&alt, &altUser); err != nil {
+			if err := db.QueryRow(`SELECT alt_text, alt_user FROM tiles WHERE alt_text = 'named-before-v2'`).Scan(&alt, &altUser); err != nil {
 				t.Fatalf("read migrated tile: %v", err)
 			}
 			if alt != "named-before-v2" {
@@ -458,7 +494,7 @@ func init() {
 		verify: func(t *testing.T, db *sql.DB) {
 			t.Helper()
 			var zoom float64
-			if err := db.QueryRow(`SELECT content_zoom FROM tiles WHERE object_id = 'fixt-v3'`).Scan(&zoom); err != nil {
+			if err := db.QueryRow(`SELECT content_zoom FROM tiles WHERE alt_text = 'v2-row'`).Scan(&zoom); err != nil {
 				t.Fatalf("read migrated tile: %v", err)
 			}
 			if zoom != 0 {
@@ -473,14 +509,14 @@ func init() {
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
 			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
-				VALUES ('fixt-v4', ` + rootID + `, 'url', 4, 4, 1, 1, 'https://example.com', '', 100, 100)`); err != nil {
+				VALUES ('fixt-v4', ` + rootID + `, 'url', 4, 4, 1, 1, 'https://example.com', 'v3-row', 100, 100)`); err != nil {
 				t.Fatalf("seed v3 tile: %v", err)
 			}
 		},
 		verify: func(t *testing.T, db *sql.DB) {
 			t.Helper()
 			var hist sql.NullString
-			if err := db.QueryRow(`SELECT url_history FROM tiles WHERE object_id = 'fixt-v4'`).Scan(&hist); err != nil {
+			if err := db.QueryRow(`SELECT url_history FROM tiles WHERE alt_text = 'v3-row'`).Scan(&hist); err != nil {
 				t.Fatalf("read migrated tile: %v", err)
 			}
 			if hist.Valid {
@@ -502,39 +538,39 @@ func init() {
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
 			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, content_zoom, url_history, created_at, updated_at)
-				VALUES ('fixt-v5-survivor', ` + rootID + `, 'url', 6, 6, 2, 1, 'https://survivor.example', 'named', 1.5, '{"index":0,"entries":[]}', 100, 100)`); err != nil {
+				VALUES ('fixt-v5-survivor', ` + rootID + `, 'url', 6, 6, 2, 1, 'https://survivor.example', 'v5-survivor', 1.5, '{"index":0,"entries":[]}', 100, 100)`); err != nil {
 				t.Fatalf("seed survivor tile: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES ('fixt-v5-deleted', ` + rootID + `, 'shell', 8, 8, 1, 1, '', 100, 100)`); err != nil {
+				VALUES ('fixt-v5-deleted', ` + rootID + `, 'shell', 8, 8, 1, 1, 'v5-doomed', 100, 100)`); err != nil {
 				t.Fatalf("seed doomed tile: %v", err)
 			}
-			if _, err := db.Exec(`DELETE FROM tiles WHERE object_id = 'fixt-v5-deleted'`); err != nil {
+			if _, err := db.Exec(`DELETE FROM tiles WHERE alt_text = 'v5-doomed'`); err != nil {
 				t.Fatalf("delete doomed tile: %v", err)
 			}
 		},
 		verify: func(t *testing.T, db *sql.DB) {
 			t.Helper()
 			// The survivor crossed the rebuild intact, id included.
-			var kind, url, alt, hist string
+			var kind, url, hist string
 			var zoom float64
 			var survivorID, deletedMax int64
-			if err := db.QueryRow(`SELECT id, kind, url_string, alt_text, content_zoom, url_history
-				FROM tiles WHERE object_id = 'fixt-v5-survivor'`).
-				Scan(&survivorID, &kind, &url, &alt, &zoom, &hist); err != nil {
+			if err := db.QueryRow(`SELECT id, kind, url_string, content_zoom, url_history
+				FROM tiles WHERE alt_text = 'v5-survivor'`).
+				Scan(&survivorID, &kind, &url, &zoom, &hist); err != nil {
 				t.Fatalf("read survivor: %v", err)
 			}
-			if kind != "url" || url != "https://survivor.example" || alt != "named" || zoom != 1.5 || hist == "" {
-				t.Errorf("survivor row damaged by rebuild: kind=%q url=%q alt=%q zoom=%v hist=%q", kind, url, alt, zoom, hist)
+			if kind != "url" || url != "https://survivor.example" || zoom != 1.5 || hist == "" {
+				t.Errorf("survivor row damaged by rebuild: kind=%q url=%q zoom=%v hist=%q", kind, url, zoom, hist)
 			}
 			deletedMax = survivorID + 1 // the doomed tile was minted right after the survivor
 			// The id-reuse trap: a fresh insert must mint ABOVE the deleted id.
 			var gridID int64
-			if err := db.QueryRow(`SELECT grid_id FROM tiles WHERE object_id = 'fixt-v5-survivor'`).Scan(&gridID); err != nil {
+			if err := db.QueryRow(`SELECT grid_id FROM tiles WHERE alt_text = 'v5-survivor'`).Scan(&gridID); err != nil {
 				t.Fatalf("read grid id: %v", err)
 			}
-			res, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES ('fixt-v5-post', ?, 'pane', 10, 10, 2, 2, 'workspace', 100, 100)`, gridID)
+			res, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (?, 'pane', 10, 10, 2, 2, 'workspace', 100, 100)`, gridID)
 			if err != nil {
 				t.Fatalf("insert pane tile after rebuild (new CHECK should accept it): %v", err)
 			}
@@ -547,18 +583,18 @@ func init() {
 			}
 			// The rebuilt CHECK still rejects a malformed row (a well without
 			// a child grid) — the constraint moved, it didn't loosen.
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES ('fixt-v5-bad', ?, 'well', 12, 12, 1, 1, '', 100, 100)`, gridID); err == nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (?, 'well', 12, 12, 1, 1, '', 100, 100)`, gridID); err == nil {
 				t.Errorf("rebuilt CHECK accepted a well without child_grid_id")
 			}
-			// The three tiles indexes survived the rebuild.
+			// The tiles indexes survived the rebuild.
 			var nIdx int
 			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master
 				WHERE type = 'index' AND tbl_name = 'tiles' AND name LIKE 'idx_tiles_%'`).Scan(&nIdx); err != nil {
 				t.Fatalf("count indexes: %v", err)
 			}
-			if nIdx != 3 {
-				t.Errorf("tiles indexes after rebuild = %d, want 3", nIdx)
+			if nIdx != 2 {
+				t.Errorf("tiles indexes after rebuild = %d, want 2", nIdx)
 			}
 		},
 	})
@@ -574,8 +610,8 @@ func init() {
 		version: 6,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
-				VALUES ('fixt-v6-url', ` + rootID + `, 'url', 20, 6, 2, 1, 'https://v5.example', 'v5 url', 100, 100)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'url', 20, 6, 2, 1, 'https://v5.example', 'v5 url', 100, 100)`); err != nil {
 				t.Fatalf("seed v5 url tile: %v", err)
 			}
 		},
@@ -585,30 +621,30 @@ func init() {
 			var linkTarget sql.NullString
 			var gridID int64
 			if err := db.QueryRow(`SELECT grid_id, url_string, link_target_id
-				FROM tiles WHERE object_id = 'fixt-v6-url'`).Scan(&gridID, &url, &linkTarget); err != nil {
+				FROM tiles WHERE alt_text = 'v5 url'`).Scan(&gridID, &url, &linkTarget); err != nil {
 				t.Fatalf("read v5 url tile: %v", err)
 			}
 			if url != "https://v5.example" || linkTarget.Valid {
 				t.Errorf("v5 row damaged: url=%q link_target=%v (want url intact, link NULL)", url, linkTarget)
 			}
 			// The link branch: a url LINK row (no url_string) is now legal.
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
-				VALUES ('fixt-v6-link', ?, 'url', 22, 6, 1, 1, 'aabbccddeeff00112233445566778899/7', 'linked url', 100, 100)`, gridID); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
+				VALUES (?, 'url', 22, 6, 1, 1, 'aabbccddeeff00112233445566778899/7', 'linked url', 100, 100)`, gridID); err != nil {
 				t.Errorf("new CHECK rejected a url link row: %v", err)
 			}
 			// Still rejects a url row with neither url_string nor link.
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES ('fixt-v6-bad1', ?, 'url', 24, 6, 1, 1, '', 100, 100)`, gridID); err == nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (?, 'url', 24, 6, 1, 1, '', 100, 100)`, gridID); err == nil {
 				t.Errorf("CHECK accepted a url row with no url_string and no link_target_id")
 			}
 			// Rejects a link row smuggling content (url_string on a link).
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, link_target_id, alt_text, created_at, updated_at)
-				VALUES ('fixt-v6-bad2', ?, 'url', 26, 6, 1, 1, 'https://smuggled.example', 'aabbccddeeff00112233445566778899/8', '', 100, 100)`, gridID); err == nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, link_target_id, alt_text, created_at, updated_at)
+				VALUES (?, 'url', 26, 6, 1, 1, 'https://smuggled.example', 'aabbccddeeff00112233445566778899/8', '', 100, 100)`, gridID); err == nil {
 				t.Errorf("CHECK accepted a link row carrying url_string content")
 			}
 			// And a link row on the well kind (wells link via child_grid_id).
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
-				VALUES ('fixt-v6-bad3', ?, 'well', 28, 6, 1, 1, 'aabbccddeeff00112233445566778899/9', '', 100, 100)`, gridID); err == nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
+				VALUES (?, 'well', 28, 6, 1, 1, 'aabbccddeeff00112233445566778899/9', '', 100, 100)`, gridID); err == nil {
 				t.Errorf("CHECK accepted link_target_id on a well")
 			}
 		},
@@ -619,8 +655,8 @@ func init() {
 		version: 7,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
-				VALUES ('fixt-v7-url', ` + rootID + `, 'url', 30, 6, 1, 1, 'https://v6.example', 'v6 url', 100, 100)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'url', 30, 6, 1, 1, 'https://v6.example', 'v6 url', 100, 100)`); err != nil {
 				t.Fatalf("seed v6 url tile: %v", err)
 			}
 		},
@@ -629,7 +665,7 @@ func init() {
 			var frozen int
 			var url string
 			if err := db.QueryRow(`SELECT url_frozen, url_string
-				FROM tiles WHERE object_id = 'fixt-v7-url'`).Scan(&frozen, &url); err != nil {
+				FROM tiles WHERE alt_text = 'v6 url'`).Scan(&frozen, &url); err != nil {
 				t.Fatalf("read v6 url tile: %v", err)
 			}
 			if frozen != 0 || url != "https://v6.example" {
@@ -638,57 +674,49 @@ func init() {
 		},
 	})
 
-	// v8: configure_plugin_id — the unconfigured plugin well (issue #251).
-	// A REBUILD reading a v7 table: the trap it pins is the copy list — the
-	// v5-era list would silently reset every post-v5 column, so the seed
-	// plants a LINK row and a FROZEN url (the two post-v5 facts) and the
-	// verify proves both survive alongside the new column's default.
+	// v8 was the configure_plugin_id rebuild (the unconfigured plugin well,
+	// issue #251). The column is gone again at v10, and a rebuild always
+	// materializes the CURRENT tilesTableDDL — so what v8 still pins is the
+	// REBUILD's copy list: the v5-era list would silently reset every
+	// post-v5 column, so the seed plants a LINK row and a FROZEN url (the
+	// two post-v5 facts) and the verify proves both survive.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 8,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
-				VALUES ('fixt-v8-link', ` + rootID + `, 'text', 40, 6, 1, 1, 'aplugin/77', 'v7 link', 100, 100)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'text', 40, 6, 1, 1, 'aplugin/77', 'v7 link', 100, 100)`); err != nil {
 				t.Fatalf("seed v7 link tile: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, url_frozen, created_at, updated_at)
-				VALUES ('fixt-v8-frozen', ` + rootID + `, 'url', 42, 6, 1, 1, 'https://v7.example', 1, 100, 100)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, url_frozen, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'url', 42, 6, 1, 1, 'https://v7.example', 1, 'v7 frozen', 100, 100)`); err != nil {
 				t.Fatalf("seed v7 frozen url tile: %v", err)
 			}
 		},
 		verify: func(t *testing.T, db *sql.DB) {
 			t.Helper()
-			var target, cfg string
-			if err := db.QueryRow(`SELECT link_target_id, configure_plugin_id
-				FROM tiles WHERE object_id = 'fixt-v8-link'`).Scan(&target, &cfg); err != nil {
+			var target string
+			var gridID int64
+			if err := db.QueryRow(`SELECT grid_id, link_target_id
+				FROM tiles WHERE alt_text = 'v7 link'`).Scan(&gridID, &target); err != nil {
 				t.Fatalf("read v7 link tile: %v", err)
 			}
 			if target != "aplugin/77" {
 				t.Errorf("link_target_id = %q, want the v7 link to survive the rebuild", target)
 			}
-			if cfg != "" {
-				t.Errorf("configure_plugin_id = %q, want the '' default on an old row", cfg)
-			}
 			var frozen int
 			if err := db.QueryRow(`SELECT url_frozen
-				FROM tiles WHERE object_id = 'fixt-v8-frozen'`).Scan(&frozen); err != nil {
+				FROM tiles WHERE alt_text = 'v7 frozen'`).Scan(&frozen); err != nil {
 				t.Fatalf("read v7 frozen url tile: %v", err)
 			}
 			if frozen != 1 {
 				t.Errorf("url_frozen = %d, want the v7 standing freeze to survive the rebuild", frozen)
 			}
-			// The new well shape is accepted: childless + configure_plugin_id.
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, configure_plugin_id, alt_text, created_at, updated_at)
-				SELECT 'fixt-v8-plugin-well', grid_id, 'well', 44, 6, 1, 1, 'sshpluginuuid', '', 100, 100
-				FROM tiles WHERE object_id = 'fixt-v8-link'`); err != nil {
-				t.Fatalf("insert unconfigured plugin well post-migration: %v", err)
-			}
-			// And the old refusal still holds: a childless well with NO
-			// configure_plugin_id stays a CHECK violation.
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				SELECT 'fixt-v8-bad-well', grid_id, 'well', 46, 6, 1, 1, '', 100, 100
-				FROM tiles WHERE object_id = 'fixt-v8-link'`); err == nil {
-				t.Error("a childless well with no configure_plugin_id must still violate the CHECK")
+			// A childless well is a CHECK violation — it was for one
+			// generation (v8) the unconfigured plugin well, and is again.
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (?, 'well', 46, 6, 1, 1, '', 100, 100)`, gridID); err == nil {
+				t.Error("a childless well must violate the CHECK")
 			}
 		},
 	})
@@ -696,8 +724,8 @@ func init() {
 		version: 9,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES ('fixt-v9-home', ` + rootID + `, 'text', 50, 6, 1, 1, 'v8 text', 100, 100)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'text', 50, 6, 1, 1, 'v8 text', 100, 100)`); err != nil {
 				t.Fatalf("seed v8 text tile: %v", err)
 			}
 		},
@@ -705,7 +733,7 @@ func init() {
 			t.Helper()
 			var ns, key string
 			var tomb int
-			if err := db.QueryRow(`SELECT ns, key, tombstoned FROM tiles WHERE object_id = 'fixt-v9-home'`).Scan(&ns, &key, &tomb); err != nil {
+			if err := db.QueryRow(`SELECT ns, key, tombstoned FROM tiles WHERE alt_text = 'v8 text'`).Scan(&ns, &key, &tomb); err != nil {
 				t.Fatalf("read v8 tile: %v", err)
 			}
 			if ns != "" || key != "" || tomb != 0 {
@@ -716,8 +744,8 @@ func init() {
 			if _, err := db.Exec(`INSERT INTO grids (object_id, created_at, ns, context_key) VALUES ('fixt-v9-ctx', 100, 'plug1', 'root')`); err != nil {
 				t.Fatalf("insert context grid post-migration: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
-				SELECT 'fixt-v9-ext', id, 'text', 0, 0, 1, 1, 'a', 100, 100, 'plug1', 'a' FROM grids WHERE object_id = 'fixt-v9-ctx'`); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
+				SELECT id, 'text', 0, 0, 1, 1, 'a', 100, 100, 'plug1', 'a' FROM grids WHERE object_id = 'fixt-v9-ctx'`); err != nil {
 				t.Fatalf("insert external row post-migration: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO listings (grid_id, entries) SELECT id, X'00' FROM grids WHERE object_id = 'fixt-v9-ctx'`); err != nil {
@@ -725,4 +753,132 @@ func init() {
 			}
 		},
 	})
+
+	// v10: DEAD STORAGE RETIRED (the owner decision in migrations.go). The
+	// seed plants one of each thing that goes and one of each thing that
+	// must NOT: a session row, an ordinary well and its child grid, a url
+	// tile carrying framing facts, and a deleted high-id tile for the
+	// rebuild's id-reuse trap. The verify proves the table and both
+	// columns are gone, every surviving row is still there with its facts,
+	// the ids of deleted tiles stay dead, and the tightened well CHECK
+	// holds. (The stale-plugin-well arm has its own test — see the note in
+	// the verify.)
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 10,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO session (id, data) VALUES (1, X'0102')`); err != nil {
+				t.Fatalf("seed session row: %v", err)
+			}
+			res, err := db.Exec(`INSERT INTO grids (object_id, created_at, updated_at) VALUES ('fixt-v10-child', 100, 100)`)
+			if err != nil {
+				t.Fatalf("seed child grid: %v", err)
+			}
+			child := mustID(t, res)
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, child_grid_id, alt_text, created_at, updated_at)
+				VALUES (`+rootID+`, 'well', 60, 6, 1, 1, ?, 'v9 well', 100, 100)`, child); err != nil {
+				t.Fatalf("seed v9 well: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, url_frozen, content_zoom, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'url', 64, 6, 1, 1, 'https://v9.example', 1, 2.25, 'v9 url', 100, 100)`); err != nil {
+				t.Fatalf("seed v9 url: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'shell', 66, 6, 1, 1, 'v9 doomed', 100, 100)`); err != nil {
+				t.Fatalf("seed doomed tile: %v", err)
+			}
+			if _, err := db.Exec(`DELETE FROM tiles WHERE alt_text = 'v9 doomed'`); err != nil {
+				t.Fatalf("delete doomed tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			// The session table is gone.
+			var nTab int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'session'`).Scan(&nTab); err != nil {
+				t.Fatalf("look for session table: %v", err)
+			}
+			if nTab != 0 {
+				t.Error("the session table survived v10")
+			}
+			// Both object_id columns and both their indexes are gone.
+			for _, tbl := range []string{"grids", "tiles"} {
+				if _, ok := tableColumnsFP(t, db, tbl)[objectIDColumn]; ok {
+					t.Errorf("%s.object_id survived v10", tbl)
+				}
+			}
+			if _, ok := tableColumnsFP(t, db, "tiles")["configure_plugin_id"]; ok {
+				t.Error("tiles.configure_plugin_id survived v10")
+			}
+			var nIdx int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master
+				WHERE type = 'index' AND name LIKE '%object_id%'`).Scan(&nIdx); err != nil {
+				t.Fatalf("count object_id indexes: %v", err)
+			}
+			if nIdx != 0 {
+				t.Errorf("%d object_id index(es) survived v10", nIdx)
+			}
+			// The v9 url row kept every fact the user can see.
+			var url string
+			var frozen int
+			var zoom float64
+			if err := db.QueryRow(`SELECT url_string, url_frozen, content_zoom FROM tiles WHERE alt_text = 'v9 url'`).
+				Scan(&url, &frozen, &zoom); err != nil {
+				t.Fatalf("read v9 url: %v", err)
+			}
+			if url != "https://v9.example" || frozen != 1 || zoom != 2.25 {
+				t.Errorf("v9 url damaged: url=%q frozen=%d zoom=%v", url, frozen, zoom)
+			}
+			// The ordinary well still points at its child grid, and the
+			// child grid row survived the grids DROP COLUMN.
+			var wellChild int64
+			if err := db.QueryRow(`SELECT child_grid_id FROM tiles WHERE alt_text = 'v9 well'`).Scan(&wellChild); err != nil {
+				t.Fatalf("read v9 well: %v", err)
+			}
+			var nGrid int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM grids WHERE id = ?`, wellChild).Scan(&nGrid); err != nil {
+				t.Fatalf("read child grid: %v", err)
+			}
+			if nGrid != 1 {
+				t.Error("the well's child grid did not survive the grids column drop")
+			}
+			// (The stale unconfigured plugin well cannot be seeded through
+			// the chain — the v5 rebuild already materialized the v10 tiles
+			// shape, so a chain-built v9 file has no configure_plugin_id
+			// column. TestMigrateV10AdoptsStalePluginWells builds the
+			// genuine v9 row shape and covers that arm.)
+			// The id-reuse trap across the v10 rebuild.
+			res, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (?, 'shell', 68, 6, 1, 1, 'v10 post', 100, 100)`, wellChild)
+			if err != nil {
+				t.Fatalf("insert after rebuild: %v", err)
+			}
+			newID := mustID(t, res)
+			var maxOld int64
+			if err := db.QueryRow(`SELECT MAX(id) FROM tiles WHERE alt_text != 'v10 post'`).Scan(&maxOld); err != nil {
+				t.Fatalf("read max surviving id: %v", err)
+			}
+			if newID <= maxOld+1 {
+				t.Errorf("id REUSED after the v10 rebuild: new id %d, deleted id was %d", newID, maxOld+1)
+			}
+			// The tightened CHECK: no childless well of any kind.
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (?, 'well', 70, 6, 1, 1, '', 100, 100)`, wellChild); err == nil {
+				t.Error("the v10 CHECK accepted a childless well")
+			}
+			// v9's live-key index came back after DROP TABLE tiles.
+			var nLive int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master
+				WHERE type = 'index' AND name = 'idx_tiles_live_key'`).Scan(&nLive); err != nil {
+				t.Fatalf("look for idx_tiles_live_key: %v", err)
+			}
+			if nLive != 1 {
+				t.Error("idx_tiles_live_key did not survive the v10 rebuild")
+			}
+		},
+	})
 }
+
+// objectIDColumn names the retired provenance column. Spelled once so the
+// v10 fixture's "it is gone" assertions can't drift from each other.
+const objectIDColumn = "object_id"

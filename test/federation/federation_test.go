@@ -317,16 +317,13 @@ func TestFederationSpawn(t *testing.T) {
 	link := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": homeRoot,
 		"tile": map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1,
-			"childGridId": wellChild, "altText": "remote grid", "objectId": well["objectId"]},
+			"childGridId": wellChild, "altText": "remote grid"},
 	})["tile"].(map[string]any)
 	if link["childGridId"] != wellChild {
 		t.Fatalf("link child = %v, want the shared remote grid %s", link["childGridId"], wellChild)
 	}
 	if link["reference"] != true {
 		t.Fatal("the link must arrive as a dashed reference")
-	}
-	if link["objectId"] != well["objectId"] {
-		t.Fatalf("link provenance = %v, want the remote well's object id %v", link["objectId"], well["objectId"])
 	}
 	got, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), txt["id"].(string))
 	if err != nil {

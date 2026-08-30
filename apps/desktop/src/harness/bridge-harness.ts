@@ -33,7 +33,7 @@ const PAGE =
           return;
         }
         await window.gridwell.placeWebview({
-          paneId: 'p1', tileId: 'u1/7', objectId: 'obj-bridge',
+          paneId: 'p1', tileId: 'u1/7',
           url: 'data:text/html,' + encodeURIComponent('<title>Inner</title><body style="margin:0;background:#2980b9">y</body>'),
           bounds: { x: 0, y: 0, width: 400, height: 300 },
         });

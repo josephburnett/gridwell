@@ -6,5 +6,5 @@ import "time"
 func (s *Store) SetClock(now func() time.Time) { s.now = now }
 
 // SetIDGenerator overrides UUID generation (test-only: deterministic
-// object_ids).
+// system.plugin_uuid).
 func (s *Store) SetIDGenerator(f func() string) { s.newID = f }

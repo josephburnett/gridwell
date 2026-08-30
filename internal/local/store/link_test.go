@@ -32,7 +32,7 @@ func TestCreateLeafLinkStoresQualifiedReference(t *testing.T) {
 	ctx := context.Background()
 
 	for i, kind := range []string{rpc.KindText, rpc.KindURL, rpc.KindShell, rpc.KindPane} {
-		ln, err := s.CreateLeafLink(ctx, root, int64(i*2), 10, 1, 1, kind, remoteTarget, "linked "+kind, "")
+		ln, err := s.CreateLeafLink(ctx, root, int64(i*2), 10, 1, 1, kind, remoteTarget, "linked "+kind)
 		if err != nil {
 			t.Fatalf("create %s link: %v", kind, err)
 		}
@@ -53,12 +53,12 @@ func TestCreateLeafLinkRejectsWellAndBareTargets(t *testing.T) {
 
 	// The well kind links via child_grid_id (the exit well), never
 	// link_target_id — one link shape per kind, no second copy of the fact.
-	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindWell, remoteTarget, "", ""); err == nil {
+	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindWell, remoteTarget, ""); err == nil {
 		t.Error("CreateLeafLink accepted kind=well; wells link via child_grid_id")
 	}
 	// A bare (unqualified) target would be ambiguous outside the allocating
 	// plugin — same rule as an exit well's qualified child.
-	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, "42", "", ""); err == nil {
+	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, "42", ""); err == nil {
 		t.Error("CreateLeafLink accepted a bare integer target")
 	}
 }
@@ -68,7 +68,7 @@ func TestDeleteLeafLinkUnlinksOnly(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", "")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,17 +81,14 @@ func TestDeleteLeafLinkUnlinksOnly(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-func TestCloneLeafLinkCopiesReferenceAndProvenance(t *testing.T) {
+func TestCloneLeafLinkCopiesReference(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindURL, remoteTarget, "linked", "prov-1234")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindURL, remoteTarget, "linked")
 	if err != nil {
 		t.Fatal(err)
-	}
-	if ln.ObjectID != "prov-1234" {
-		t.Errorf("provenance object_id not carried on create: %q", ln.ObjectID)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		TileID: ln.ID, Version: ln.Version,
@@ -106,9 +103,6 @@ func TestCloneLeafLinkCopiesReferenceAndProvenance(t *testing.T) {
 	if clone.LinkTargetID != remoteTarget {
 		t.Errorf("clone target = %q, want the shared reference %q", clone.LinkTargetID, remoteTarget)
 	}
-	if clone.ObjectID != ln.ObjectID {
-		t.Errorf("clone provenance = %q, want %q", clone.ObjectID, ln.ObjectID)
-	}
 	verifyRefcounts(t, s)
 }
 
@@ -117,7 +111,7 @@ func TestContentMutationOnLeafLinkRejected(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", "")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +139,7 @@ func TestSetTextViewOnLinkKeepsModeNull(t *testing.T) {
 	ctx := context.Background()
 
 	link, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText,
-		"aabbccddeeff00112233445566778899/7", "linked doc", "")
+		"aabbccddeeff00112233445566778899/7", "linked doc")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,7 +49,7 @@ func TestWriteContentPaneLayoutNeverBumps(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	pane, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil, "")
+	pane, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil)
 	if err != nil {
 		t.Fatalf("create pane: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestWriteContentLinkRefused(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	link, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1,
-		rpc.KindText, "aabbccddaabbccddaabbccddaabbccdd/9", "linked", "")
+		rpc.KindText, "aabbccddaabbccddaabbccddaabbccdd/9", "linked")
 	if err != nil {
 		t.Fatalf("create leaf link: %v", err)
 	}

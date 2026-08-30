@@ -60,7 +60,7 @@ func TestOpenAcceptsGenuineV1DB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	for _, ddl := range []string{pragmas, systemDDL, tablesV1, sessionDDL} {
+	for _, ddl := range []string{pragmas, systemDDL, tablesV1, sessionDDLV1} {
 		if _, err := db.Exec(ddl); err != nil {
 			t.Fatalf("apply v1 ddl: %v", err)
 		}

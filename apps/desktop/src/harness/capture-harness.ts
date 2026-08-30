@@ -48,7 +48,7 @@ app.whenReady().then(async () => {
   const win = new BaseWindow({ width: 800, height: 600, show: true });
   const registry = new WebviewRegistry(win, { onNav: (ev) => navEvents.push(ev) });
 
-  await registry.place('pane1', 'u1/42', 'obj-harness', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
+  await registry.place('pane1', 'u1/42', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
 
   const jpeg = await waitForNonEmptyCapture(registry, 'pane1', 6000);
   if (jpeg.length === 0) fail('capturePage produced no frame within 6s');
@@ -76,7 +76,7 @@ app.whenReady().then(async () => {
   // on a real view: two loads, one goBack, the first url is current again.
   const FIRST_URL = 'data:text/html,' + encodeURIComponent('<title>First</title>first');
   const SECOND_URL = 'data:text/html,' + encodeURIComponent('<title>Second</title>second');
-  await registry.place('paneb', 'u1/46', 'obj-back', FIRST_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await registry.place('paneb', 'u1/46', FIRST_URL, { x: 0, y: 0, width: 400, height: 300 });
   const wcb = (
     registry as unknown as { entries: Map<string, { view: { webContents: Electron.WebContents } }> }
   ).entries.get('paneb')!.view.webContents;
@@ -107,7 +107,7 @@ app.whenReady().then(async () => {
   // PARK_COORD, never on top of the canvas overlay for one round-trip, and
   // the next setHidden(false) moves it to its real bounds.
   const hiddenBounds = { x: 10, y: 20, width: 300, height: 200 };
-  await registry.place('pane1h', 'u1/45', 'obj-hidden', DATA_URL, hiddenBounds, 0, '', false, true);
+  await registry.place('pane1h', 'u1/45', DATA_URL, hiddenBounds, 0, '', false, true);
   const parked = registry.viewBoundsFor('pane1h');
   if (parked?.x !== PARK_COORD) fail(`place(hidden=true) did not park the view (x=${parked?.x})`);
   registry.setHidden('pane1h', false, true);
@@ -126,7 +126,7 @@ app.whenReady().then(async () => {
   // Chromium session is host-local now — Chromium's own disk persistence is
   // the system of record, so a crashed view no longer risks losing logins.)
   const reg2 = new WebviewRegistry(win, {});
-  await reg2.place('pane2', 'u1/43', 'obj-dead', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await reg2.place('pane2', 'u1/43', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   if ((await waitForNonEmptyCapture(reg2, 'pane2', 6000)).length === 0) {
     fail('dead-view scenario: view produced no frame within 6s');
   }
@@ -153,7 +153,7 @@ app.whenReady().then(async () => {
   registerWebviewIpc(reg3, rootWin.webContents, win);
   const TALL_URL =
     'data:text/html,' + encodeURIComponent('<body style="margin:0;height:20000px">tall</body>');
-  await reg3.place('pane3', 'u1/44', 'obj-touch', TALL_URL, { x: 0, y: 0, width: 800, height: 600 });
+  await reg3.place('pane3', 'u1/44', TALL_URL, { x: 0, y: 0, width: 800, height: 600 });
   if ((await waitForNonEmptyCapture(reg3, 'pane3', 6000)).length === 0) {
     fail('touch scenario: view produced no frame within 6s');
   }

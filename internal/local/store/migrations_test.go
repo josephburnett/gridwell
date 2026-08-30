@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -174,5 +175,73 @@ func TestMigrateUpRunsRealMigrations(t *testing.T) {
 	// Idempotent: re-running to the same target is a no-op (user_version==target).
 	if err := s.migrateUp(ctx, migs, 3); err != nil {
 		t.Fatalf("migrateUp re-run: %v", err)
+	}
+}
+
+// TestMigrateV10AdoptsStalePluginWells covers the one v10 arm the per-migration
+// fixture cannot reach. A DB written by a v8/v9 binary has tiles.
+// configure_plugin_id and a CHECK that admits a CHILDLESS well — the
+// unconfigured plugin well (#251). A chain-built v9 file does not: the v5
+// rebuild already materializes the CURRENT tiles shape, so the column was
+// never there to plant a row in. Here the genuine v9 row shape is rebuilt by
+// hand (add the column back; plant the row with the CHECK suspended, exactly
+// the shape a v8 binary wrote) and v10 is run over it.
+//
+// The invariant under test is the guiding rule: a tile the user placed must
+// still be there afterwards, at the SAME id, and must now work — deleting it
+// because its feature retired would be a change the user did not make.
+func TestMigrateV10AdoptsStalePluginWells(t *testing.T) {
+	ctx := context.Background()
+	db, root := buildDBAtV1(t, filepath.Join(t.TempDir(), "stalewell.db"))
+	applyMigrationsUpTo(t, db, 9)
+
+	if _, err := db.ExecContext(ctx,
+		`ALTER TABLE tiles ADD COLUMN configure_plugin_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		t.Fatalf("restore the v8 column: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `PRAGMA ignore_check_constraints = true`); err != nil {
+		t.Fatalf("suspend the CHECK: %v", err)
+	}
+	res, err := db.ExecContext(ctx,
+		`INSERT INTO tiles (grid_id, kind, x, y, w, h, configure_plugin_id, alt_text, created_at, updated_at)
+		 VALUES (`+root+`, 'well', 3, 3, 2, 2, 'sshpluginuuid', 'gpu box', 100, 100)`)
+	if err != nil {
+		t.Fatalf("plant the v8 unconfigured plugin well: %v", err)
+	}
+	staleID := mustID(t, res)
+	if _, err := db.ExecContext(ctx, `PRAGMA ignore_check_constraints = false`); err != nil {
+		t.Fatalf("restore the CHECK: %v", err)
+	}
+
+	if err := storeOver(db).migrateUp(ctx, migrations, 10); err != nil {
+		t.Fatalf("migrate to v10 over a stale plugin well: %v", err)
+	}
+
+	var child sql.NullInt64
+	var alt string
+	var x, y, w, h int64
+	if err := db.QueryRowContext(ctx,
+		`SELECT child_grid_id, alt_text, x, y, w, h FROM tiles WHERE id = ?`, staleID).
+		Scan(&child, &alt, &x, &y, &w, &h); err != nil {
+		t.Fatalf("the stale well was DELETED by v10, not adopted: %v", err)
+	}
+	if !child.Valid {
+		t.Fatal("the adopted well has no child grid; the new CHECK could not have admitted it")
+	}
+	if alt != "gpu box" || x != 3 || y != 3 || w != 2 || h != 2 {
+		t.Errorf("the adopted well moved or was renamed: alt=%q at (%d,%d %dx%d)", alt, x, y, w, h)
+	}
+	var nGrid, nTiles int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM grids WHERE id = ?`, child.Int64).Scan(&nGrid); err != nil {
+		t.Fatal(err)
+	}
+	if nGrid != 1 {
+		t.Error("the minted child grid is missing")
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tiles WHERE grid_id = ?`, child.Int64).Scan(&nTiles); err != nil {
+		t.Fatal(err)
+	}
+	if nTiles != 0 {
+		t.Errorf("the minted child grid holds %d tiles, want an empty room", nTiles)
 	}
 }

@@ -26,8 +26,8 @@ var leafLinkKinds = map[string]bool{
 // well's qualified child_grid_id). The row carries no content of its own —
 // readers resolve bytes/preview/session through the target id — so deleting
 // it later only unlinks (tileRefs: a link owns nothing). alt is the link's
-// local label; objectID carries the source's provenance marker ("" = fresh).
-func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h int64, kind, linkTargetID, alt, objectID string) (*rpc.Tile, error) {
+// local label.
+func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h int64, kind, linkTargetID, alt string) (*rpc.Tile, error) {
 	if !leafLinkKinds[kind] {
 		return nil, fmt.Errorf("%w: kind %q has no leaf-link variant", ErrInvalidArgument, kind)
 	}
@@ -37,13 +37,13 @@ func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h in
 		// which plugin allocated it. Same rule as an exit well's child.
 		return nil, fmt.Errorf("%w: link_target_id %q is not a qualified <uuid>/<tile-id> reference", ErrInvalidArgument, linkTargetID)
 	}
-	return s.createTile(ctx, gridID, x, y, w, h, objectID,
-		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
+	return s.createTile(ctx, gridID, x, y, w, h,
+		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+				INSERT INTO tiles (grid_id, kind, x, y, w, h,
 					link_target_id, alt_text, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gid, kind, x, y, w, h, linkTargetID, alt, now, now)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				gid, kind, x, y, w, h, linkTargetID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert leaf link: %w", err)
 			}

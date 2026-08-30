@@ -11,8 +11,8 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// seedDeterministic pins a fixed clock and counter-based object_ids so tests
-// are reproducible. Shared by the in-memory and file-backed constructors.
+// seedDeterministic pins a fixed clock and counter-based ids so tests are
+// reproducible. Shared by the in-memory and file-backed constructors.
 func seedDeterministic(s *Store) {
 	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	s.SetClock(func() time.Time { return fixed })

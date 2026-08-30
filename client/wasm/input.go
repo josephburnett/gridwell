@@ -550,10 +550,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 					targetCellSize:    size,
 				}
 				if d.tileID != "" {
-					// Hide by ROW id, not ObjectID — clones share an
-					// ObjectID with the source, so a by-lineage hide
-					// makes every clone vanish whenever its sibling
-					// is picked up. (dragdrop.HiddenMatch + its test
+					// Hide by ROW id — a clone is a different row that
+					// looks the same, so a by-lineage hide would make
+					// every clone vanish whenever its sibling is
+					// picked up. (dragdrop.HiddenMatch + its test
 					// cover the predicate.) Lives on the ghost: the
 					// hide must outlive the drag (snap-back) and die
 					// with the ghost.
@@ -826,8 +826,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 // identical to what a + menu plugin-swatch drop or a node-grid mount
 // produces), a leaf link for text/url/shell/pane (link_target_id names the
 // dragged tile — or, when the dragged tile is itself a leaf link, its
-// TARGET, so links never chain through middleman tiles). Provenance
-// object_id rides along; the source tile is not touched.
+// TARGET, so links never chain through middleman tiles). The source tile
+// is not touched.
 func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	src := d.snapshotTile
 	dstGridID := t.gridID
@@ -836,7 +836,6 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 			GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
 			ChildGridID: src.ChildGridID, Label: src.AltText,
 			ViewX: src.ViewX, ViewY: src.ViewY, ViewZoom: src.ViewZoom,
-			ObjectID: src.ObjectID,
 		}
 		a.postTileMutate("CreateWell", dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
 			return a.cl.CreateWell(ctx, req)
@@ -850,7 +849,6 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	req := &rpc.CreateLeafLinkRequest{
 		GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
 		Kind: src.Kind, LinkTargetID: target, Label: src.AltText,
-		ObjectID: src.ObjectID,
 	}
 	a.postTileMutate("CreateLeafLink", dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateLeafLink(ctx, req)

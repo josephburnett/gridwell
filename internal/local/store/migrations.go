@@ -29,12 +29,15 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 9
+const schemaVersion = 10
 
-// migration is one additive, non-destructive step that brings a DB from
-// version to-1 up to version to. Migrations must only add columns/tables
-// (with defaults) — never drop, rename, or repurpose existing columns, so
-// data written under any prior version stays readable forever.
+// migration is one step that brings a DB from version to-1 up to version
+// to. Additive (a column with a default, a table, an index) is the
+// DEFAULT and covers almost every change. A DROP is possible but is an
+// OWNER DECISION recorded in the chain entry's comment: only storage no
+// released binary reads for any user-visible meaning may go, and the step
+// must preserve every surviving row and the sqlite_sequence seeds (see
+// internal/local/store/CLAUDE.md).
 type migration struct {
 	to  int
 	run func(ctx context.Context, tx *sql.Tx) error
@@ -82,14 +85,48 @@ var migrations = []migration{
 	// defaults. (IfMissing: a rebuild at an earlier version materializes
 	// the current template, columns included.)
 	{to: 9, run: migrateV9},
+	// v10 (2026-08-29): DEAD STORAGE RETIRED. Owner decision, recorded
+	// here per docs/simplify-plan.md — the forever promise is that data
+	// written by a released binary stays READABLE, and none of these
+	// three carried a user-visible meaning any binary read:
+	//
+	//   - the `session` table: one Chromium session per DB, moved by
+	//     GetSession/PutSession. Both RPCs died 2026-07-26 (the session
+	//     became host-local); nothing has read or written the table
+	//     since, so every row that could exist is stale bytes.
+	//   - tiles.configure_plugin_id and the well CHECK's childless
+	//     branch: the unconfigured plugin well (#251). The instance
+	//     picker retired 2026-08-23 and the create/adopt verbs went
+	//     2026-08-29, so no row can be minted and no reader remains.
+	//     Rows that DO exist (minted 2026-08-08..23) are preserved as
+	//     ORDINARY wells — each is given a fresh empty child grid, so
+	//     the user's tile stays where they put it and now opens.
+	//   - object_id on tiles and grids: a 128-bit provenance mint
+	//     written on every row and copied through every clone and link,
+	//     with no reader anywhere that decides anything on it (verified
+	//     across store, clone, link, conv, client and tests — the one
+	//     place lineage COULD have been read, dragdrop.HiddenMatch,
+	//     deliberately matches row id and has a test saying so).
+	//
+	// Shape: tiles is a REBUILD (the CHECK must change), grids is a
+	// DROP COLUMN (no CHECK involved). Both preserve every row and the
+	// AUTOINCREMENT seeds.
+	{to: 10, run: migrateV10},
 }
 
 // tilesRebuildColumns is the explicit column list a rebuild copies — every
-// tiles column as of v5, id included (identity is preserved byte-for-byte;
-// a rebuild changes the CHECK, never the data). The v5 and v6 rebuilds copy
-// this same list: the v6 rebuild reads a v5-shaped table, and the new
-// link_target_id column fills with its NULL default.
-const tilesRebuildColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
+// tiles column as of v5 that still exists, id included (identity is
+// preserved byte-for-byte; a rebuild changes the CHECK, never the data).
+// The v5 and v6 rebuilds copy this same list: the v6 rebuild reads a
+// v5-shaped table, and the new link_target_id column fills with its NULL
+// default.
+//
+// object_id is NOT here: it was retired at v10, and a rebuild always
+// materializes the CURRENT tilesTableDDL, so a v4 file replaying v5 lands
+// on the v10 shape and simply does not carry the column forward. That is
+// the convergence contract working as designed — the fresh and migrated
+// routes must end at the same schema.
+const tilesRebuildColumns = `id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
 	url_string, preview_blob_id, alt_text, alt_user, content_zoom, url_history,
@@ -130,6 +167,10 @@ func rebuildTilesForConfigurePlugin(ctx context.Context, tx *sql.Tx) error {
 // tiles_new from the SAME DDL text a fresh Open uses (tilesTableDDL — one
 // source, no drift), copy every row id-for-id, drop the old table, rename,
 // recreate the indexes.
+//
+// Caution: it recreates only tilesIndexDDL's indexes. A rebuild running at
+// or after v9 must ALSO recreate externalsIndexDDL's idx_tiles_live_key,
+// which DROP TABLE takes with it (migrateV10 does).
 //
 // The sqlite_sequence save/restore is load-bearing: DROP TABLE tiles deletes
 // its sqlite_sequence row, and the copy re-seeds at the max SURVIVING id — so
@@ -226,30 +267,151 @@ CREATE TABLE IF NOT EXISTS listings (
 	return err
 }
 
-func addColumnIfMissingDDL(table, column, ddl string) func(ctx context.Context, tx *sql.Tx) error {
-	return func(ctx context.Context, tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
+// migrateV10 retires the dead storage listed in the chain entry above:
+// the `session` table, tiles.configure_plugin_id (and the well CHECK's
+// childless branch), and object_id on both record tables.
+//
+// Order matters. grids.object_id goes FIRST, by ALTER TABLE DROP COLUMN
+// (SQLite refuses while an index names the column, so its index goes
+// first); grids is never DROPped, so its AUTOINCREMENT seed is untouched.
+// Then the stale childless wells are ADOPTED — each gets a fresh empty
+// child grid, minted through the now-current grids shape — because the
+// rebuilt tiles CHECK no longer admits a well without one, and dropping
+// the user's tile instead of keeping it would break the guiding rule
+// (things stay as you left them). tiles goes last, through the shared
+// rebuild, which saves and restores its seed.
+func migrateV10(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS session`); err != nil {
+		return fmt.Errorf("drop session table: %w", err)
+	}
+	// The column exists on every file that reaches v10 through the chain,
+	// but a file whose earlier REBUILD already materialized the current
+	// (v10) template has neither the index nor the column — the same
+	// convergence case addColumnIfMissingDDL covers on the additive side.
+	has, err := hasColumn(ctx, tx, "grids", "object_id")
+	if err != nil {
+		return err
+	}
+	if has {
+		for _, ddl := range []string{
+			`DROP INDEX IF EXISTS idx_grids_object_id`,
+			`ALTER TABLE grids DROP COLUMN object_id`,
+		} {
+			if _, err := tx.ExecContext(ctx, ddl); err != nil {
+				return fmt.Errorf("drop grids.object_id: %w", err)
+			}
+		}
+	}
+	if err := adoptStalePluginWells(ctx, tx); err != nil {
+		return err
+	}
+	// idx_tiles_object_id is not recreated by tilesIndexDDL any more, but
+	// an old file still carries it and DROP TABLE tiles would leave it
+	// behind only if it survived — drop it explicitly so the migrated and
+	// fresh index sets match exactly.
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_tiles_object_id`); err != nil {
+		return fmt.Errorf("drop idx_tiles_object_id: %w", err)
+	}
+	if err := rebuildTiles(ctx, tx, tilesRebuildColumnsV10); err != nil {
+		return err
+	}
+	// DROP TABLE tiles took idx_tiles_live_key with it — that index is
+	// created by externalsIndexDDL (v9), not tilesIndexDDL, so the shared
+	// rebuild cannot know about it. Recreate it here; both statements are
+	// IF NOT EXISTS, so the grids half is a no-op. (Any FUTURE rebuild
+	// after v9 must do the same — see rebuildTiles.)
+	_, err = tx.ExecContext(ctx, externalsIndexDDL)
+	return err
+}
+
+// tilesRebuildColumnsV10 is the copy list for the v10 rebuild: every tiles
+// column of the version it READS (v9) that SURVIVES v10 — so the post-v5
+// columns and the v9 externals' columns ride across, and object_id +
+// configure_plugin_id are simply not carried. A rebuild's copy list is
+// always "every surviving column of the version it reads".
+const tilesRebuildColumnsV10 = tilesRebuildColumnsV8 + `,
+	ns, key, tombstoned`
+
+// adoptStalePluginWells turns every UNCONFIGURED PLUGIN WELL (#251: a
+// childless well carrying configure_plugin_id) into an ordinary interior
+// well by minting it a fresh empty child grid. Those wells could only be
+// created between 2026-08-08 and 2026-08-23; the picker that would have
+// filled them is gone, so the alternative to adoption is deleting a tile
+// the user placed — which the guiding rule forbids. After this the well
+// CHECK's childless branch has nothing left to admit.
+func adoptStalePluginWells(ctx context.Context, tx *sql.Tx) error {
+	has, err := hasColumn(ctx, tx, "tiles", "configure_plugin_id")
+	if err != nil || !has {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id, created_at FROM tiles
+		WHERE kind = 'well' AND child_grid_id IS NULL AND configure_plugin_id != ''`)
+	if err != nil {
+		return fmt.Errorf("find stale plugin wells: %w", err)
+	}
+	type stale struct{ id, createdAt int64 }
+	var wells []stale
+	for rows.Next() {
+		var w stale
+		if err := rows.Scan(&w.id, &w.createdAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan stale plugin well: %w", err)
+		}
+		wells = append(wells, w)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, w := range wells {
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`, w.createdAt, w.createdAt)
+		if err != nil {
+			return fmt.Errorf("mint child grid for stale plugin well %d: %w", w.id, err)
+		}
+		gid, err := res.LastInsertId()
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var (
-				cid       int
-				name, typ string
-				notnull   int
-				dflt      sql.NullString
-				pk        int
-			)
-			if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
-				return err
-			}
-			if name == column {
-				return nil // the rebuild already materialized it
-			}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tiles SET child_grid_id = ? WHERE id = ?`, gid, w.id); err != nil {
+			return fmt.Errorf("adopt stale plugin well %d: %w", w.id, err)
 		}
-		if err := rows.Err(); err != nil {
-			return err
+	}
+	return nil
+}
+
+// hasColumn reports whether table already has the named column — the one
+// PRAGMA table_info read the migration steps share.
+func hasColumn(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid       int
+			name, typ string
+			notnull   int
+			dflt      sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func addColumnIfMissingDDL(table, column, ddl string) func(ctx context.Context, tx *sql.Tx) error {
+	return func(ctx context.Context, tx *sql.Tx) error {
+		has, err := hasColumn(ctx, tx, table, column)
+		if err != nil || has {
+			return err // has: the rebuild already materialized it
 		}
 		_, err = tx.ExecContext(ctx, ddl)
 		return err

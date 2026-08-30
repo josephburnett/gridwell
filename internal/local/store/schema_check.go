@@ -121,7 +121,7 @@ func canonicalSchema(ctx context.Context) (map[string]map[string]colFP, error) {
 	}
 	defer ref.Close()
 	ref.SetMaxOpenConns(1)
-	for _, ddl := range []string{systemDDL, tablesDDL(), sessionDDL} {
+	for _, ddl := range []string{systemDDL, tablesDDL()} {
 		if _, err := ref.ExecContext(ctx, ddl); err != nil {
 			return nil, fmt.Errorf("apply reference ddl: %w", err)
 		}

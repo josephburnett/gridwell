@@ -88,8 +88,8 @@ func TestSwapTileBlob(t *testing.T) {
 }
 
 // TestCloneCopiesChildGrid: cloning a well deep-copies its child subtree into
-// fresh, independent rows — a new child grid id, and re-rowed inner tiles that
-// keep the source's object_id as provenance. Nothing is shared.
+// fresh, independent rows — a new child grid id and re-rowed inner tiles.
+// Nothing is shared.
 func TestCloneCopiesChildGrid(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -115,9 +115,6 @@ func TestCloneCopiesChildGrid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-	if clone.ObjectID != w.ObjectID {
-		t.Errorf("clone object_id = %s, original = %s (should carry as provenance)", clone.ObjectID, w.ObjectID)
-	}
 	if clone.ID == w.ID {
 		t.Errorf("clone has same row id as original")
 	}
@@ -135,9 +132,6 @@ func TestCloneCopiesChildGrid(t *testing.T) {
 	ct := cloneChild.Tiles[0]
 	if ct.ID == inner.ID {
 		t.Errorf("inner tile should be re-rowed in the copy, still has id %s", inner.ID)
-	}
-	if ct.ObjectID != inner.ObjectID {
-		t.Errorf("copied inner object_id = %s, want %s (provenance)", ct.ObjectID, inner.ObjectID)
 	}
 	verifyRefcounts(t, s)
 }
@@ -218,11 +212,10 @@ func TestCloneOneLevelByteIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := []byte("# original")
-	text, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+	if _, err := s.CreateText(ctx, &rpc.CreateTextRequest{
 		GridID: outer.ChildGridID,
 		X:      0, Y: 0, W: 1, H: 1, Data: original,
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -265,9 +258,6 @@ func TestCloneOneLevelByteIdentity(t *testing.T) {
 	}
 	if updated.ID != cText.ID {
 		t.Error("update re-rowed the clone's text; edits must be in place")
-	}
-	if updated.ObjectID != text.ObjectID {
-		t.Errorf("object identity drift: %s -> %s", text.ObjectID, updated.ObjectID)
 	}
 
 	if got := snap(outer.ID); string(got) != string(original) {

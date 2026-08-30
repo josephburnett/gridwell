@@ -1125,8 +1125,8 @@ func (a *App) tileBody(n *rpc.Tile) ([]byte, bool) {
 // hiddenTileID, if non-zero, suppresses the child tile with that row
 // id — used so that a tile being dragged out of a well preview
 // disappears from its original spot while the ghost flies. Matches
-// by row id (not ObjectID) so cloned siblings stay visible during
-// the drag.
+// by row id — the only identity a tile has — so cloned siblings stay
+// visible during the drag.
 func (a *App) drawChildPreview(child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
