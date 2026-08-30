@@ -359,7 +359,7 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		t.Fatalf("beacon-shaped SetRootView POST = %d, want 200", res.StatusCode)
+		t.Fatalf("beacon-shaped SetFraming POST = %d, want 200", res.StatusCode)
 	}
 	pl2, err := cl.Handshake(ctx)
 	if err != nil {

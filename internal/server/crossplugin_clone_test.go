@@ -90,7 +90,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 		Framing: rpc.Framing{Cx: 7, Cy: -2, Zoom: 1.75},
 	})
 	if err != nil {
-		t.Fatalf("SetWellView: %v", err)
+		t.Fatalf("SetFraming: %v", err)
 	}
 
 	// LEFT-drag the well into plugin B: the client commits a CreateWell

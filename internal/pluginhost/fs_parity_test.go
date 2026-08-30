@@ -2,7 +2,7 @@ package pluginhost_test
 
 // The v2 fs stack (fs plugin + adapter + layout engine) through a full
 // server: placement and framing persist, sweeps remove only the dead,
-// the read-through cache answers when the source goes dark, and a
+// the node's own rows answer when the source goes dark, and a
 // retired id never returns. (Until the 2026-08 cutover these behaviors
 // were pinned by crawling this stack against the legacy fs plugin; the
 // legacy twin is gone, so the assertions are direct now.)
@@ -79,9 +79,9 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 }
 
 func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
-	// The v2 read-through cache (tenet 6): after one good read, a source
-	// that stops answering serves the remembered listing, stamped stale,
-	// and retires nothing.
+	// Tenet 6: a source that stops answering costs the user nothing. The
+	// adapter merges an EMPTY non-authoritative listing, so the durable
+	// rows still read — stamped stale, retiring nothing.
 	root := seedTree(t)
 	v2, prov := pluginNode(t, root)
 	ctx := context.Background()

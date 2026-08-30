@@ -1,5 +1,7 @@
 // Package rpc declares the Go-side types for the Gridwell RPC service and
-// their conversions to the proto wire form (conv.go). The wire itself is
+// their conversions to the proto wire form. The records and their
+// mechanical mirrors are GENERATED from data.proto into wire_gen.go; conv.go
+// holds only the conversions a human has to write. The wire itself is
 // Connect/gRPC on /gridwell.v1.Gridwell/<Method> — data.proto is the
 // source of truth for the encoding.
 package rpc

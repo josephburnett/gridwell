@@ -76,7 +76,7 @@ type Server struct {
 	// re-handshake every plugin (a consistently slow remote made every
 	// palette open pay pluginInfoTimeout). Failures are never cached — the
 	// next call retries. Invalidated when a plugin's declared facts change
-	// under one uuid (invalidateInfoCache: a SetRootView framing write).
+	// under one uuid (invalidateInfoCache: a root SetFraming write).
 	infoMu    sync.Mutex
 	infoCache map[string]*pb.InfoResponse
 }
@@ -189,10 +189,10 @@ func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse,
 }
 
 // invalidateInfoCache drops the cached Info for uuid so the next call re-fetches
-// it from the plugin. Called by SetRootView after updating the root viewport:
-// root_view_* are part of Info but change on every portal ascent, so the
-// cache entry must be dropped to reflect the new framing on the next Handshake
-// (page refresh).
+// it from the plugin. Called by SetFraming's ROOT arm after updating the
+// root viewport: root_view_* are part of Info but change on every ascent out
+// of a plugin root, so the cache entry must be dropped to reflect the new
+// framing on the next Handshake (page refresh).
 func (s *Server) invalidateInfoCache(uuid string) {
 	s.infoMu.Lock()
 	delete(s.infoCache, uuid)
