@@ -1,11 +1,11 @@
-// Package shellws dials the web door's /shell WebSocket and presents it as
-// a shellstream.Dialer. It is the ONE client implementation of
-// client/shellwire's grammar: the wasm client uses it in the browser, and
-// the server's seam test uses it off-browser, so the test exercises the
-// code the app runs rather than a second spelling of the protocol.
+// Package shellws dials the web door's /shell WebSocket and presents it as a
+// shellstream.Dialer. It is the one client implementation of
+// client/shellwire's grammar: the wasm client uses it in the browser, and the
+// server's seam test uses it off-browser, so the test exercises the code the
+// app runs rather than a second spelling of the protocol.
 //
-// Everything about WHEN a stream opens, closes, or reports its end lives in
-// client/shellstream; this package only turns those calls into frames.
+// When a stream opens, closes, or reports its end is client/shellstream's
+// business; this package only turns those calls into frames.
 package shellws
 
 import (
@@ -29,10 +29,10 @@ type Options struct {
 	// Origin is the page's own http(s) origin. The door is same-origin by
 	// construction: it is the page's own server.
 	Origin string
-	// HTTPClient and Header are honored OFF-BROWSER only (tests, a CLI): a
+	// HTTPClient and Header are honored off-browser only (tests, a CLI): a
 	// browser attaches the page's own cookies to a same-origin upgrade and
 	// forbids setting handshake headers, so the wasm client leaves both nil
-	// and is authenticated by the very cookie that served the page.
+	// and is authenticated by the cookie that served the page.
 	HTTPClient *http.Client
 	Header     http.Header
 }
@@ -57,10 +57,10 @@ type frame struct {
 	data []byte
 }
 
-// conn is one attachment. Frames are QUEUED rather than written inline:
-// keystrokes arrive from the terminal's callback the instant the user
-// types, which can be before the socket has finished opening, and a
-// dropped keystroke is a lost character. One goroutine owns the write side.
+// conn is one attachment. Frames are queued rather than written inline:
+// keystrokes arrive from the terminal's callback the instant the user types,
+// which can be before the socket has finished opening, and a dropped
+// keystroke is a lost character. One goroutine owns the write side.
 type conn struct {
 	mu     sync.Mutex
 	ws     *websocket.Conn
@@ -218,12 +218,12 @@ func (c *conn) Close() {
 	ws := c.ws
 	c.mu.Unlock()
 	if ws != nil {
-		// The close HANDSHAKE waits for the peer's close frame, which in a
+		// The close handshake waits for the peer's close frame, which in a
 		// browser can only arrive through the JS event loop — and Close is
-		// called FROM that loop (a pane teardown inside a click handler).
-		// Waiting here would block the very loop that must deliver the
-		// answer: the page freezes, permanently. Hand the wait to a
-		// goroutine; the caller returns immediately.
+		// called from that loop (a pane teardown inside a click handler).
+		// Waiting here would block the loop that must deliver the answer and
+		// freeze the page permanently. Hand the wait to a goroutine; the
+		// caller returns immediately.
 		go func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
 	}
 	c.end("", false)

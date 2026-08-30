@@ -5,10 +5,7 @@ import (
 	"testing"
 )
 
-// The lifecycle rules, pinned. Ported from the Electron registry's node
-// tests (apps/desktop/src/main/shellstreams.test.ts) when the PTY moved
-// onto the web door: the transport changed, the rules did not, so the
-// tests came with them.
+// The lifecycle rules, pinned.
 
 type fakeStream struct {
 	tileID  string
@@ -161,10 +158,9 @@ func TestTwoPanesHoldIndependentStreams(t *testing.T) {
 	}
 }
 
-// A dial that fails INSTANTLY (a bad origin, a refused upgrade) still
-// reports: the pane must not sit forever on a stream that never opened.
-// The Electron registry could not see this case — its gRPC dialer was
-// always asynchronous — and would have swallowed it.
+// A dial that fails instantly (a bad origin, a refused upgrade) still
+// reports, so the pane does not sit forever on a stream that never opened.
+// An always-asynchronous dialer hides this case.
 func TestASynchronousDialFailureIsReported(t *testing.T) {
 	var closed bool
 	reg := New(
@@ -183,7 +179,7 @@ func TestASynchronousDialFailureIsReported(t *testing.T) {
 	reg.Write("p1", []byte{1})
 }
 
-// The initial size rides the DIAL (it is the bind), not a later resize.
+// The initial size rides the dial — it is the bind — not a later resize.
 func TestOpenCarriesTheInitialSize(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("p1", "u/1", 132, 43)

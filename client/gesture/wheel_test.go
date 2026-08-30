@@ -10,12 +10,12 @@ func TestClassifyWheel(t *testing.T) {
 	}{
 		{"grid view zooms", WheelInput{}, WheelZoomPane},
 		{"grid view zooms even with live view flags", WheelInput{LiveURLView: true, InContentBox: true}, WheelZoomPane},
-		// Issue #210: hovering an enterable well zooms the WELL's preview;
-		// empty space (no well under the cursor) is the pane-zoom escape.
+		// Hovering an enterable well zooms the well's preview; empty space
+		// (no well under the cursor) is the pane-zoom escape.
 		{"over an enterable well zooms the well", WheelInput{OverEnterableWell: true}, WheelZoomWell},
-		// 2026-08-13: a well filling most of the view hides the outer
-		// context — zooming OUT over it goes to the pane ("back out"),
-		// zooming IN stays the #210 well-preview zoom at any coverage.
+		// A well filling most of the view hides the outer context, so
+		// zooming out over it goes to the pane, while zooming in stays the
+		// well-preview zoom at any coverage.
 		{"zoom OUT over a dominant well redirects to the pane",
 			WheelInput{OverEnterableWell: true, ZoomOut: true, WellCoverage: 0.8}, WheelZoomPane},
 		{"zoom OUT over a small well stays on the well",
@@ -31,8 +31,8 @@ func TestClassifyWheel(t *testing.T) {
 		{"rendered doc scrolls", WheelInput{TextFocused: true, TextModeRendered: true}, WheelScrollDoc},
 		{"rendered doc scrolls in content box", WheelInput{TextFocused: true, TextModeRendered: true, InContentBox: true}, WheelScrollDoc},
 		{"text mode ignored (textarea owns scrolling)", WheelInput{TextFocused: true}, WheelIgnore},
-		// A live url descent that somehow reports rendered mode still swallows
-		// over the box — the native view outranks the doc scroll.
+		// A live url descent that reports rendered mode still swallows over
+		// the box: the native view outranks the doc scroll.
 		{"live view outranks rendered scroll", WheelInput{TextFocused: true, URLDescent: true, LiveURLView: true, InContentBox: true, TextModeRendered: true}, WheelSwallow},
 	}
 	for _, c := range cases {

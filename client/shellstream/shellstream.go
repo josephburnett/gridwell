@@ -1,28 +1,24 @@
-// Package shellstream owns the LIFECYCLE of the client's live shell
-// attachments: which pane holds which stream, what a replacement does to
-// the one it replaced, and when the renderer is told a stream ended.
+// Package shellstream owns the lifecycle of the client's live shell
+// attachments: which pane holds which stream, what a replacement does to the
+// one it replaced, and when the renderer is told a stream ended. The PTY
+// rides a WebSocket on the web door (client/shellwire); this package is
+// js-free and unit-tested, and the wasm shim is glue that hands over a dialer
+// and two callbacks.
 //
-// These rules used to live in the Electron main process
-// (apps/desktop/src/main/shellstreams.ts) because that is where the gRPC
-// relay lived. The PTY now rides a WebSocket on the web door
-// (client/shellwire), so the rules belong to the client — and, per charter
-// §5, to a js-free package with unit tests rather than to the untested
-// wasm shim. The shim is glue: it hands over a dialer and two callbacks.
+// The rules:
 //
-// The rules, each one paid for by a bug:
-//
-//   - Open for a pane REPLACES that pane's existing stream (close first).
-//   - Write/Resize after Close (or before Open) are silent no-ops: a race
+//   - Open for a pane replaces that pane's existing stream (close first).
+//   - Write and Resize after Close, or before Open, are silent no-ops: a race
 //     between a teardown and an in-flight keystroke is expected, not an
 //     error.
-//   - An end fires AT MOST ONCE per stream, and only while that stream is
-//     still the pane's CURRENT one. A local Close or a replacement
-//     suppresses it — the caller initiated those and already knows.
-//     Without the suppression, a replaced stream's late end would freeze
-//     the pane right after its NEW stream attached.
-//   - Output routes through the REGISTRY, not the closure: a replaced
-//     stream's late bytes must never reach the renderer as the new
-//     stream's output.
+//   - An end fires at most once per stream, and only while that stream is
+//     still the pane's current one. A local Close or a replacement suppresses
+//     it — the caller initiated those and already knows. Without the
+//     suppression, a replaced stream's late end would freeze the pane right
+//     after its new stream attached.
+//   - Output routes through the registry, not the closure: a replaced
+//     stream's late bytes must never reach the renderer as the new stream's
+//     output.
 package shellstream
 
 import "sync"
@@ -67,8 +63,8 @@ type Registry struct {
 }
 
 // New wires a registry to its dialer and the two renderer callbacks. Both
-// callbacks run OUTSIDE the registry's lock, so a callback may call back in
-// (a freeze that closes the pane, say) without deadlocking.
+// callbacks run outside the registry's lock, so a callback may call back in —
+// a freeze that closes the pane, say — without deadlocking.
 func New(dial Dialer, onData func(paneID string, data []byte), onExit func(Exit)) *Registry {
 	return &Registry{dial: dial, onData: onData, onExit: onExit, streams: map[string]*entry{}}
 }
@@ -76,10 +72,9 @@ func New(dial Dialer, onData func(paneID string, data []byte), onExit func(Exit)
 // Open attaches paneID to tileID's PTY, replacing whatever that pane held.
 func (r *Registry) Open(paneID, tileID string, cols, rows int) {
 	r.Close(paneID)
-	// The slot is claimed BEFORE the dial: a dialer that fails instantly
+	// The slot is claimed before the dial: a dialer that fails instantly
 	// calls onEnd synchronously, and an unclaimed slot would swallow that
-	// report — the pane would sit forever on a stream that never opened
-	// (charter §6: no failure disappears).
+	// report, leaving the pane forever on a stream that never opened.
 	e := &entry{}
 	r.mu.Lock()
 	r.streams[paneID] = e

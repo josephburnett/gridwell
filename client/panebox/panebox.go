@@ -1,7 +1,7 @@
-// Package panebox holds the pure-Go geometry for the pane's interior
-// boxes — content area, file-overlay textarea, hit-tests inside the
-// pane border. These were originally inlined in client/wasm; pulling
-// them here lets `go test` exercise the math without a browser.
+// Package panebox holds the pure-Go geometry for the pane's interior boxes:
+// content area, text-overlay textarea, and hit-tests inside the pane border.
+// It lives outside client/wasm so `go test` exercises the math without a
+// browser.
 //
 // All functions take `pane.Rect` so they share the same screen-space
 // rectangle type as the layout / dragdrop code.
@@ -13,7 +13,7 @@ import (
 )
 
 // LiveViewInsetPx is the inset applied on every side of a pane's live content
-// view (URL WebContentsView, shell overlay). It is the SINGLE owner of the
+// view (URL WebContentsView, shell overlay). It is the single owner of the
 // grab-gutter value.
 //
 // The gap between two horizontally adjacent live panes = 2 × LiveViewInsetPx;
@@ -43,13 +43,11 @@ func ContentBox(r pane.Rect, borderPx float64) pane.Rect {
 }
 
 // PointInContent reports whether (sx, sy) lies inside ContentBox(r, borderPx).
-// LiveContentBox is THE content box of a live surface — a url/page
-// view, a shell overlay — and of the canvas frame drawn in its place
-// while it is parked: the pane minus the bar band minus the border. One
-// derivation for the native bounds AND the fallback draw, so the two
-// cannot disagree (2026-08-27: the fallback drew into the un-inset pane
-// and contain-fit letterboxed the frame half a bar lower — the "jump"
-// on every click that parks the views).
+// LiveContentBox is the content box of a live surface — a url or page view, a
+// shell overlay — and of the canvas frame drawn in its place while it is
+// parked: the pane minus the bar band minus the border. One derivation for
+// the native bounds and the fallback draw, so a parked frame lands exactly
+// where the live view was instead of jumping.
 func LiveContentBox(r pane.Rect, barH, borderPx float64) pane.Rect {
 	return ContentBox(BarInset(r, barH), borderPx)
 }
@@ -59,7 +57,7 @@ func PointInLiveContent(r pane.Rect, barH, borderPx, sx, sy float64) bool {
 	return LiveContentBox(r, barH, borderPx).Contains(sx, sy)
 }
 
-// TextareaBox returns the file-overlay textarea rectangle and its
+// TextareaBox returns the text-overlay textarea rectangle and its
 // rendered font size, both at the application's fixed text scale.
 // `sideInset` is the gap between the pane edge and the text content;
 // `baseFontPx` is the unscaled font size; `scale` multiplies it.
@@ -78,8 +76,8 @@ func TextareaBox(r pane.Rect, sideInset, baseFontPx, scale float64) (rect pane.R
 	return pane.Rect{X: x, Y: y, W: w, H: h}, fontPx
 }
 
-// InnerBox is the file-focused pane's inner reading area — currently
-// identical to the textarea's rectangle (without font size).
+// InnerBox is the text-focused pane's inner reading area, identical to the
+// textarea's rectangle without the font size.
 func InnerBox(r pane.Rect, sideInset float64) pane.Rect {
 	b, _ := TextareaBox(r, sideInset, 0, 0)
 	return b
@@ -91,9 +89,8 @@ func PointInInner(r pane.Rect, sideInset, sx, sy float64) bool {
 }
 
 // FitZoom returns the zoom factor at which a text tile of footprint
-// (fileW × fileH) cells just FITS the pane's inner box (zoomtrans.Fit — the
-// min dim ratio; formerly misnamed OvertakeZoom, which is the max). Returns
-// 1 when the inner box is degenerate.
+// (fileW × fileH) cells just fits the pane's inner box: zoomtrans.Fit, the
+// min dimension ratio. Returns 1 when the inner box is degenerate.
 func FitZoom(r pane.Rect, fileW, fileH int64, sideInset, cellPx float64) float64 {
 	inner := InnerBox(r, sideInset)
 	if inner.W <= 0 || inner.H <= 0 {
@@ -102,13 +99,11 @@ func FitZoom(r pane.Rect, fileW, fileH int64, sideInset, cellPx float64) float64
 	return zoomtrans.Fit(fileW, fileH, inner.W, inner.H, cellPx)
 }
 
-// BarInset carves the bottom-bar band out of a pane rect before content
-// boxes are computed from it — so no native surface (live view, shell
-// overlay, textarea, rendered div) can occlude the band. Since #267
-// (owner decision 2026-08-21, reversing #220's focused-only band) EVERY
-// pane wears its bar, so the inset is unconditional: content no longer
-// resizes when focus moves — focus shows only in the border color. A
-// no-op for degenerate rects.
+// BarInset carves the bottom-bar band out of a pane rect before content boxes
+// are computed from it, so no native surface (live view, shell overlay,
+// textarea, rendered div) can occlude the band. Every pane wears its bar, so
+// the inset is unconditional and content does not resize when focus moves;
+// focus shows only in the border color. A no-op for degenerate rects.
 func BarInset(r pane.Rect, barH float64) pane.Rect {
 	if r.H <= barH {
 		return r
@@ -117,12 +112,12 @@ func BarInset(r pane.Rect, barH float64) pane.Rect {
 	return r
 }
 
-// ModalCardPos places a modal card CENTERED ON THE ACTIVE PANE (issue #251)
-// rather than the screen: the pane you acted in is where the dialog appears.
-// Returns the card's top-left. Clamped so the card stays fully on-screen
-// (a small pane near an edge must not push the card off the window); when
-// the card is larger than the window on an axis, it pins to 0 so the
-// top-left — where the first input lives — stays reachable.
+// ModalCardPos places a modal card centered on the active pane rather than
+// the screen: the pane you acted in is where the dialog appears. Returns the
+// card's top-left, clamped so the card stays fully on-screen, since a small
+// pane near an edge must not push it off the window. When the card is larger
+// than the window on an axis it pins to 0, so the top-left — where the first
+// input lives — stays reachable.
 func ModalCardPos(paneRect pane.Rect, cardW, cardH, winW, winH float64) (x, y float64) {
 	x = paneRect.X + paneRect.W/2 - cardW/2
 	y = paneRect.Y + paneRect.H/2 - cardH/2

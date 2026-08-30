@@ -7,11 +7,10 @@
 // is there a divider on this side? is this a URL descent?) from its own
 // lookups and hands them in as an Input; gesture.Classify encodes the
 // priority ordering between those facts — the piece worth testing in
-// isolation. On release, the gestures whose outcome is pure geometry
-// (Split, Resize, URLRefresh, Ascend) resolve here; the gestures whose
-// outcome is a drop resolution (TileCenter→clone, drop-on-+-button→delete)
-// are the job of the (still-pending) drop unification and stay in the App
-// for now.
+// isolation. On release, the gestures whose outcome is pure geometry (Split,
+// Resize, URLRefresh, Ascend) resolve here; the gestures whose outcome is a
+// drop resolution (TileCenter clone, drop-on-+-button delete) stay in the
+// App.
 package gesture
 
 import "github.com/josephburnett/gridwell/client/pane"
@@ -36,10 +35,10 @@ const (
 	// Swap exchanges the origin pane with the pane under the cursor at
 	// release.
 	Swap
-	// Split splits the pane along the armed side at the release ratio.
-	// Since 2026-07-26 (issue #203) the right button ALWAYS splits from a
-	// border — over a divider or at a screen edge alike; resizing (and
-	// closing, under pressure) is the LEFT button's job.
+	// Split splits the pane along the armed side at the release ratio. The
+	// right button always splits from a border, over a divider or at a
+	// screen edge alike; resizing, and closing under pressure, is the left
+	// button's job.
 	Split
 )
 
@@ -62,12 +61,10 @@ type Input struct {
 }
 
 // Classify maps the resolved facts to a gesture Kind. The two switches
-// mirror onRightDown exactly: the special target (a tile under the
-// cursor) takes priority; only if it doesn't claim the down does the
-// pane sub-region decide. (The corner-circle Ascend arm is gone: the
-// circle lives in the bottom bar since issue #214, and the bar's ascent
-// is the crumb LEFT-click, #222 — bar left-clicks never reach the pane
-// gesture layer.)
+// mirror onRightDown exactly: the special target (a tile under the cursor)
+// takes priority, and only if it doesn't claim the down does the pane
+// sub-region decide. The circle lives in the bottom bar and the bar's ascent
+// is a crumb left-click, so no bar gesture reaches this layer.
 func Classify(in Input) Kind {
 	switch {
 	case in.InGridView && in.OverTile:
@@ -78,11 +75,9 @@ func Classify(in Input) Kind {
 	}
 	switch {
 	case in.Region.IsResize():
-		// One behavior per button (issue #203): a border right-drag is a
-		// SPLIT wherever it starts — over a divider exactly like at a
-		// screen edge (the two cases used to diverge; now they unify).
-		// Divider resizing (and pressure-closing) belongs to the left
-		// button alone.
+		// One behavior per button: a border right-drag is a split wherever
+		// it starts, over a divider exactly like at a screen edge. Divider
+		// resizing, and pressure-closing, belongs to the left button.
 		return Split
 	case in.Region.IsSwap():
 		return Swap
@@ -96,9 +91,8 @@ func Classify(in Input) Kind {
 // ratio for the HOST pane (the pane the cursor is in at release), with the
 // side already resolved by SplitSideFromDrag: the cursor must land in a
 // position that leaves both children at least pane.MinPanePx
-// (SplitClampedPosition — the universal minimum, issue #167), and that
-// position maps to a ratio (SplitRatioFromPos). ok is false for a silent
-// cancel.
+// (SplitClampedPosition), and that position maps to a ratio
+// (SplitRatioFromPos). ok is false for a silent cancel.
 func SplitOutcome(side pane.Side, paneRect pane.Rect, curX, curY float64) (ratio float64, ok bool) {
 	pos, ok := pane.SplitClampedPosition(side, paneRect, curX, curY)
 	if !ok {
@@ -107,11 +101,11 @@ func SplitOutcome(side pane.Side, paneRect pane.Rect, curX, curY float64) (ratio
 	return pane.SplitRatioFromPos(side, paneRect, pos), true
 }
 
-// SplitSideFromDrag resolves a right-drag split's side from the DRAG, not
-// the grab (issue #217): dragging toward the axis-positive direction opens
-// the new pane on the leading side of whatever pane the cursor is in (the
-// space between the grabbed border and the cursor), so either side of a
-// border behaves identically and the direction can flip mid-gesture.
+// SplitSideFromDrag resolves a right-drag split's side from the drag, not the
+// grab: dragging toward the axis-positive direction opens the new pane on the
+// leading side of whatever pane the cursor is in — the space between the
+// grabbed border and the cursor — so either side of a border behaves
+// identically and the direction can flip mid-gesture.
 // active is false until the drag clears SplitArmPx — a bare click or jitter
 // commits nothing.
 func SplitSideFromDrag(axis pane.Direction, startX, startY, curX, curY float64) (side pane.Side, active bool) {
@@ -140,15 +134,13 @@ const SplitArmPx = 8.0
 
 // ResizeAffordance is the shared decision behind a left-button pane-boundary
 // resize: whether a drag would arm a resize at the cursor, and the CSS cursor
-// to advertise it. The hover-cursor path and the arm path MUST agree — the
-// resize cursor has to appear exactly where a left-drag would actually resize
-// — so both route through this one function instead of each re-deriving the
-// gating (the two used to be hand-mirrored copies that could drift).
+// to advertise it. The hover-cursor path and the arm path must agree — the
+// resize cursor has to appear exactly where a left-drag would resize — so
+// both route through this one function instead of each re-deriving the
+// gating.
 //
 // Inputs: the region the cursor classifies into, and whether a grabbable
-// divider exists on that region's side. (The corner circle no longer sits
-// inside any pane's resize band — it moved to the bottom bar, issue #214 —
-// so there is no precedence to arbitrate.)
+// divider exists on that region's side.
 func ResizeAffordance(region pane.Region, hasDivider bool) (arm bool, cursor string) {
 	if !region.IsResize() || !hasDivider {
 		return false, ""

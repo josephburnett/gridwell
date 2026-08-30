@@ -18,8 +18,8 @@ func TestContentBoxInsetsByBorder(t *testing.T) {
 }
 
 func TestContentBoxClampsToZero(t *testing.T) {
-	// If 2*border exceeds the side, W or H goes negative without
-	// clamping. Verify we floor at zero in both dimensions.
+	// If 2*border exceeds the side, W or H goes negative without clamping.
+	// Both dimensions floor at zero.
 	r := pane.Rect{X: 0, Y: 0, W: 5, H: 4}
 	got := ContentBox(r, 10)
 	if got.W != 0 || got.H != 0 {
@@ -109,11 +109,11 @@ func TestOvertakeZoomDegenerate(t *testing.T) {
 	}
 }
 
-// TestLiveViewInsetPinned pins the intended grab-gutter width. A
-// WebContentsView eats all mouse input over its bounds, so the only pixels
-// a user can click to grab a divider between two adjacent live panes are
-// the 2×LiveViewInsetPx canvas strip between them. This test catches any
-// accidental reduction below the comfortable-grab threshold (~10px total).
+// TestLiveViewInsetPinned pins the grab-gutter width. A WebContentsView eats
+// all mouse input over its bounds, so the only pixels a user can click to
+// grab a divider between two adjacent live panes are the 2×LiveViewInsetPx
+// canvas strip between them. A reduction below roughly 10px total makes the
+// divider hard to grab.
 func TestLiveViewInsetPinned(t *testing.T) {
 	const wantInset = 5.0
 	if LiveViewInsetPx != wantInset {
@@ -125,9 +125,8 @@ func TestLiveViewInsetPinned(t *testing.T) {
 
 // TestLiveViewGapBetweenAdjacentPanes verifies that two horizontally adjacent
 // panes whose content boxes are computed with LiveViewInsetPx leave a gap of
-// exactly 2×LiveViewInsetPx between them — the grabbable canvas strip.
-// This is the seam test: it crosses the layout→contentbox boundary that was
-// previously untested ("no test pins the live-view gap").
+// exactly 2×LiveViewInsetPx between them — the grabbable canvas strip. It
+// crosses the layout-to-contentbox seam.
 func TestLiveViewGapBetweenAdjacentPanes(t *testing.T) {
 	// Two 200×300 panes side by side, touching at x=200.
 	left := pane.Rect{X: 0, Y: 0, W: 200, H: 300}
@@ -160,9 +159,8 @@ func TestLiveViewContentBoxDegeneratePane(t *testing.T) {
 }
 
 func TestBarInset(t *testing.T) {
-	// #267 (2026-08-21, reversing #220's focused-only band): EVERY pane
-	// wears the bar, so the inset is unconditional — content must not
-	// resize when focus moves.
+	// Every pane wears the bar, so the inset is unconditional: content does
+	// not resize when focus moves.
 	r := pane.Rect{X: 10, Y: 20, W: 300, H: 200}
 	got := BarInset(r, 32)
 	if got.H != 168 || got.X != 10 || got.Y != 20 || got.W != 300 {
@@ -174,7 +172,7 @@ func TestBarInset(t *testing.T) {
 	}
 }
 
-// Pane-centered modals (issue #251): the dialog appears where you acted.
+// Pane-centered modals: the dialog appears where you acted.
 func TestModalCardPos_CentersOnThePane(t *testing.T) {
 	// Right half of a 1000×800 window; a 400×200 card.
 	r := pane.Rect{X: 500, Y: 0, W: 500, H: 800}
@@ -200,11 +198,10 @@ func TestModalCardPos_ClampsToTheWindow(t *testing.T) {
 	}
 }
 
-// The parked frame and the live view share ONE box (2026-08-27): a
-// capture taken at the live bounds, contain-fit into the fallback box,
-// lands pixel-for-pixel where the view was — no letterbox, no shift.
-// Drawn into the un-inset content box instead (the old fallback), the
-// same frame sat half a bar lower behind black bands.
+// The parked frame and the live view share one box: a capture taken at the
+// live bounds, contain-fit into the fallback box, lands pixel-for-pixel where
+// the view was — no letterbox, no shift. Drawn into the un-inset content box
+// the same frame would sit half a bar lower behind black bands.
 func TestLiveContentBoxIsTheFallbackBox(t *testing.T) {
 	r := pane.Rect{X: 100, Y: 40, W: 600, H: 400}
 	live := LiveContentBox(r, 28, 2)

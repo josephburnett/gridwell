@@ -1,23 +1,22 @@
 package gesture
 
-// WheelAction is what a wheel event over a pane should do. The routing used
-// to live inline in the wasm onWheel handler with no test; the rules are pure
-// classification, so they live here (the gesture-classification home) and the
-// wasm handler is glue.
+// WheelAction is what a wheel event over a pane should do. The rules are pure
+// classification, so they live here and the wasm onWheel handler is glue.
 type WheelAction int
 
 const (
 	// WheelZoomPane: pane-wide cursor-anchored zoom (zoomtrans.WheelZoom).
 	WheelZoomPane WheelAction = iota
-	// WheelZoomWell: the cursor hovers an enterable well in a grid view —
-	// the wheel zooms the grid IN the well (its stored view_zoom preview
-	// framing), not the grid the pane shows (issue #210). Empty space is
-	// the escape hatch back to the pane zoom.
+	// WheelZoomWell: the cursor hovers an enterable well in a grid view, so
+	// the wheel zooms the grid inside the well (its stored preview framing),
+	// not the grid the pane shows. Empty space is the escape hatch back to
+	// the pane zoom.
 	WheelZoomWell
 	// WheelScrollDoc: scroll a rendered-mode text descent vertically.
 	WheelScrollDoc
-	// WheelSwallow: a live URL view owns the content box; a stray wheel that
-	// reaches the canvas must do NOTHING (not zoom the pane underneath).
+	// WheelSwallow: a live URL view owns the content box, so a stray wheel
+	// that reaches the canvas does nothing — in particular it must not zoom
+	// the pane underneath.
 	WheelSwallow
 	// WheelIgnore: no canvas action (e.g. text-mode focus — the textarea
 	// overlay handles its own scrolling and this event is stray).
@@ -50,12 +49,11 @@ type WheelInput struct {
 	WellCoverage float64
 }
 
-// WellZoomOutRedirect is the coverage past which zooming OUT over a well
-// goes to the PANE instead of the well (2026-08-13): when a single well
-// fills most of the view there is no visible outer context, and wheel-out
-// inside it reads as "let me back out" — the same intent the bar-band
-// wheel serves, without needing to find the bar. Zoom IN keeps the #210
-// well-preview behavior at any coverage: leaning in is about the well.
+// WellZoomOutRedirect is the coverage past which zooming out over a well goes
+// to the pane instead of the well: when a single well fills most of the view
+// there is no visible outer context, and wheel-out inside it reads as "let me
+// back out". Zoom in keeps the well-preview behavior at any coverage, because
+// leaning in is about the well.
 const WellZoomOutRedirect = 0.5
 
 // RectCoverage reports how much of the box (bx,by,bw,bh) the rect
@@ -76,13 +74,13 @@ func RectCoverage(rx, ry, rw, rh, bx, by, bw, bh float64) float64 {
 }
 
 // ClassifyWheel routes a wheel event. Outside any content descent the wheel
-// zooms the pane — unless the cursor hovers an enterable well, whose OWN
-// preview zooms instead (issue #210; empty space still zooms the pane, and
-// zooming OUT over a well that covers most of the view redirects to the
-// pane — WellZoomOutRedirect).
-// Inside a descent: a live URL view over the content box swallows strays
-// (the view scrolls itself); rendered mode scrolls the document; anything
-// else (text mode, a frozen url) is ignored by the canvas.
+// zooms the pane, unless the cursor hovers an enterable well, whose own
+// preview zooms instead; empty space still zooms the pane, and zooming out
+// over a well that covers most of the view redirects to the pane
+// (WellZoomOutRedirect). Inside a descent: a live URL view over the content
+// box swallows strays, since the view scrolls itself; rendered mode scrolls
+// the document; anything else (text mode, a frozen url) is ignored by the
+// canvas.
 func ClassifyWheel(in WheelInput) WheelAction {
 	if !in.TextFocused {
 		if in.OverEnterableWell {

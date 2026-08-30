@@ -1,23 +1,19 @@
-// Package shellwire is the shell transport's wire grammar — the ONE place
-// the client and the server agree on how PTY bytes cross the web door.
-//
-// Owner decision (docs/simplify-plan.md, 2026-08-29): "Shells are a
-// WebSocket on the web door", so the primitive set is identical on every
-// host. Before that, PTY bytes rode a second client stack (Electron main →
-// gRPC → the federation socket) and only the desktop had shells; every
-// other primitive already rode the page's own origin.
+// Package shellwire is the shell transport's wire grammar — the one place the
+// client and the server agree on how PTY bytes cross the web door. Shells
+// ride a WebSocket on that door, so the primitive set is identical on every
+// host.
 //
 // The grammar, in full:
 //
 //	GET <origin>/shell?tile_id=<qualified>&cols=N&rows=N   (Upgrade: websocket)
-//	  · gated by the SAME auth cookie as every other page request
+//	  · gated by the same auth cookie as every other page request
 //	    (internal/server/auth.go) and strict same-origin;
-//	  · BINARY frames, both directions, are raw PTY bytes — keystrokes up,
+//	  · binary frames, both directions, are raw PTY bytes — keystrokes up,
 //	    terminal output down. Nothing wraps them: a shell is a byte pipe.
-//	  · TEXT frames are JSON Control messages. Up: "resize". Down: "exit",
-//	    sent once, immediately before the close, carrying the verdict the
-//	    gRPC status used to carry (why it ended, and whether the session
-//	    itself is GONE — the fact the refresh affordance reads).
+//	  · text frames are JSON Control messages. Up: "resize". Down: "exit",
+//	    sent once, immediately before the close, carrying why the stream
+//	    ended and whether the session itself is gone — the fact the refresh
+//	    affordance reads.
 //
 // Both ends read the codec here rather than spelling the JSON twice, and a
 // seam test dials the real handler with these very functions
@@ -34,10 +30,10 @@ import (
 // Path is the door's address on the web mux.
 const Path = "/shell"
 
-// ReadLimit bounds ONE frame, at both ends. PTY output arrives in kilobyte
-// chunks and a keystroke frame is a handful of bytes — but a PASTE is one
-// frame of whatever the user pasted, and the library default (32 KiB)
-// would tear the socket down on a large one.
+// ReadLimit bounds one frame, at both ends. PTY output arrives in kilobyte
+// chunks and a keystroke frame is a handful of bytes, but a paste is one
+// frame of whatever the user pasted, and the library default of 32 KiB would
+// tear the socket down on a large one.
 const ReadLimit = 8 << 20
 
 // Query keys of the bind. The bind rides the handshake rather than a first
@@ -67,8 +63,8 @@ type Control struct {
 	Cols int `json:"cols,omitempty"`
 	Rows int `json:"rows,omitempty"`
 	// Message/SessionGone: KindExit. SessionGone is the server's definitive
-	// "this PTY session no longer exists" (as opposed to a transport
-	// failure) — the client flips the refresh affordance off for it.
+	// "this PTY session no longer exists", as opposed to a transport
+	// failure; the client flips the refresh affordance off for it.
 	Message     string `json:"message,omitempty"`
 	SessionGone bool   `json:"session_gone,omitempty"`
 }

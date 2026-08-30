@@ -5,10 +5,9 @@ import (
 	"testing"
 )
 
-// The grammar is pinned to ITSELF: what AttachURL writes is exactly what
-// ParseAttach reads. The client/server URL grammar for content is pinned
-// this way too (rpc.PageURL) — a round trip is the only test that catches
-// one side drifting.
+// The grammar is pinned to itself: what AttachURL writes is exactly what
+// ParseAttach reads. A round trip is the only test that catches one side
+// drifting. The content URL grammar (rpc.PageURL) is pinned the same way.
 func TestAttachURLRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
 		origin string
@@ -42,7 +41,7 @@ func TestAttachURLRoundTrip(t *testing.T) {
 	}
 }
 
-// A qualified id is a chain with slashes; it must survive the query string
+// A qualified id is a chain with slashes; it survives the query string
 // intact, or a mounted remote's shell attaches to the wrong tile.
 func TestAttachURLQualifiedChain(t *testing.T) {
 	const id = "abc1234/desk/xyz9876/41"
@@ -69,7 +68,7 @@ func TestAttachURLRejectsNonHTTPOrigin(t *testing.T) {
 	}
 }
 
-// No tile id, nothing to attach to: the door must refuse rather than open a
+// No tile id, nothing to attach to: the door refuses rather than opening a
 // socket bound to nothing.
 func TestParseAttachRequiresTileID(t *testing.T) {
 	if _, err := ParseAttach(url.Values{QueryCols: {"80"}}); err == nil {
@@ -77,7 +76,7 @@ func TestParseAttachRequiresTileID(t *testing.T) {
 	}
 }
 
-// Absent/garbage sizes mean "no opinion" (0), NOT a fabricated default:
+// Absent or garbage sizes mean "no opinion" (0), not a fabricated default:
 // shellsvc.ClampSize is the one owner of the bounds.
 func TestParseAttachSizesAreOptional(t *testing.T) {
 	a, err := ParseAttach(url.Values{QueryTileID: {"a/1"}, QueryCols: {"nonsense"}})
@@ -104,8 +103,8 @@ func TestControlRoundTrip(t *testing.T) {
 	if c.Kind != KindExit || c.Message != "session gone" || !c.SessionGone {
 		t.Fatalf("exit round trip gave %+v", c)
 	}
-	// A clean end carries no verdict: the client must not read "gone" out
-	// of an ordinary detach.
+	// A clean end carries no verdict: the client cannot read "gone" out of
+	// an ordinary detach.
 	c, err = DecodeControl(EncodeExit("", false))
 	if err != nil {
 		t.Fatal(err)

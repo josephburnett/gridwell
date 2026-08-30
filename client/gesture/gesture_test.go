@@ -62,8 +62,8 @@ func TestClassifyPriority(t *testing.T) {
 			want: Swap,
 		},
 		{
-			// Issue #203: the right button ALWAYS splits from a border —
-			// divider or screen edge alike; resize/close is the left button.
+			// The right button always splits from a border, divider or
+			// screen edge alike; resize and close are the left button.
 			name: "resize region splits (divider resizing is the left button's)",
 			in: Input{
 				Region: resize,
@@ -107,9 +107,9 @@ func TestSplitOutcome(t *testing.T) {
 	}
 }
 
-// The side follows the DRAG (issue #217): either side of a border behaves
-// identically, the direction can flip mid-gesture, and a sub-threshold drag
-// is inactive (a bare right-click on a border never splits).
+// The side follows the drag: either side of a border behaves identically, the
+// direction can flip mid-gesture, and a sub-threshold drag is inactive, so a
+// bare right-click on a border never splits.
 func TestSplitSideFromDrag(t *testing.T) {
 	cases := []struct {
 		name       string
