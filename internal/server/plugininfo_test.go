@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,12 +11,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/local"
-	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/proxytest"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // buildPluginInfo is the pure assembly behind Handshake. These tests pin the
@@ -309,99 +303,4 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	if !strings.Contains(p.InfoError, "plugin exploded") {
 		t.Errorf("InfoError = %q, want it to mention the underlying failure", p.InfoError)
 	}
-}
-
-// The #198 creation-form mechanism is RETIRED (2026-08-23, with the
-// instance picker): a plugin may still declare create_schemas in Info,
-// but the serving node stamps NOTHING onto grids — no client reads it,
-// and a declared form that could only fail must never render. This pins
-// the retirement so the stamp cannot quietly return.
-func TestCreateSchemasStampAndTransit(t *testing.T) {
-	ctx := context.Background()
-
-	// A "remote" node whose one plugin declares a schema for well creation.
-	remoteStore, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = remoteStore.Close() })
-	remotePlugin := &schemaPlugin{
-		Plugin: local.New(remoteStore, nil),
-		schemas: map[string]string{
-			"well": `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`,
-		},
-	}
-	remoteClient, remoteCloser, err := plugin.ServeInProcess(remotePlugin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(remoteCloser)
-	remoteReg := plugin.NewRegistry()
-	remoteReg.Register("rp1", "home", remoteClient, nil)
-	remoteSrv := mustNew(t, remoteReg, Config{})
-	remoteHTTP := httptest.NewUnstartedServer(nil)
-	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
-	remoteHTTP.Config.Protocols = NodeProtocols()
-	remoteHTTP.EnableHTTP2 = true
-	remoteHTTP.Start()
-	t.Cleanup(remoteHTTP.Close)
-
-	// LEAF stamping: the remote's own front door carries the schema on the
-	// plugin's grid.
-	remoteWeb := serveWeb(t, remoteSrv) // the browser door: a second listener
-	remoteCl := rpc.NewClient(remoteWeb.Client(), remoteWeb.URL, connect.WithProtoJSON())
-	rootBare, err := remoteStore.RootGridID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	g, err := remoteCl.GetGrid(ctx, "rp1/"+rootBare)
-	if err != nil {
-		t.Fatalf("remote GetGrid: %v", err)
-	}
-	if len(g.Grid.CreateSchemas) != 0 {
-		t.Fatalf("the retired mechanism stamped a schema: %v", g.Grid.CreateSchemas)
-	}
-
-	// TRANSIT: whatever the remote GRID carries (nothing, since the
-	// retirement) rides verbatim — the local node adds nothing either.
-	grpcConn, err := grpc.NewClient(strings.TrimPrefix(remoteHTTP.URL, "http://"),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = grpcConn.Close() })
-	mountClient, mountCloser, err := plugin.ServeInProcess(proxytest.New(pb.NewGridwellClient(grpcConn)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(mountCloser)
-	localReg := plugin.NewRegistry()
-	localReg.Register("sshm", "remote", mountClient, nil)
-	localReg.SetTransit("sshm", true) // the declared transit (loader reads it from Info in production)
-	localSrv := mustNew(t, localReg, Config{})
-	localHTTP := serveWeb(t, localSrv)
-	localCl := rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
-
-	chained, err := localCl.GetGrid(ctx, "sshm/rp1/"+rootBare)
-	if err != nil {
-		t.Fatalf("chained GetGrid: %v", err)
-	}
-	if len(chained.Grid.CreateSchemas) != 0 {
-		t.Fatalf("transit invented a schema: %v", chained.Grid.CreateSchemas)
-	}
-}
-
-// schemaPlugin wraps a localdb with a create_schemas declaration.
-type schemaPlugin struct {
-	*local.Plugin
-	schemas map[string]string
-}
-
-func (p *schemaPlugin) Info(ctx context.Context, req *pb.InfoRequest) (*pb.InfoResponse, error) {
-	info, err := p.Plugin.Info(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	info.CreateSchemas = p.schemas
-	return info, nil
 }

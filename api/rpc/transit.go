@@ -46,7 +46,7 @@ func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 // the grid's own id, its scratch grid, node_ns (the serving node is one
 // segment further away, remote-menu 2026-08-16), and the menu entries'
 // root targets (#258). Everything else rides verbatim: the far node
-// already stamped its owning plugin's facts (writable, create_schemas).
+// already stamped its owning plugin's facts (writable, menu entries).
 // The ONE grid rule for both hops (the server's transit stamp and the
 // builtin remote transport) — extracted 2026-08-24 from two hand-kept
 // copies.

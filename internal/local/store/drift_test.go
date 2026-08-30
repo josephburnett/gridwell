@@ -36,7 +36,7 @@ func TestProtoMatchesDDL(t *testing.T) {
 			storageOnly: []string{"created_at", "updated_at", "ns", "context_key", "root_cx", "root_cy", "root_zoom"},
 			// menu_entries is stamped by the serving node from the owning
 			// plugin's Info (#258) — wire-only, like writable.
-			protoOnly: []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint", "create_schemas", "node_ns", "menu_entries", "stale"},
+			protoOnly: []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint", "node_ns", "menu_entries", "stale"},
 		},
 		{
 			table:   "tiles",

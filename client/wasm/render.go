@@ -298,9 +298,8 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 		}
 	}
 	// The grid's CREATION entries follow the primitives (#258): the
-	// owning plugin's declared tools, stamped per grid like
-	// create_schemas — dropping one mints a tile the plugin recognizes
-	// by MenuEntry. Deliberately OUTSIDE the writable gate: writable is
+	// owning plugin's declared tools, stamped per grid like writable —
+	// dropping one mints a tile the plugin recognizes by MenuEntry. Deliberately OUTSIDE the writable gate: writable is
 	// the "+ palette primitives" capability, and a read-only projection
 	// (fs) declaring a tool is precisely how tools exist there — the
 	// declaration IS the permission.

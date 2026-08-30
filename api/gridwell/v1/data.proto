@@ -44,18 +44,11 @@ message Grid {
   // 8 (proxy_endpoint): removed 2026-07-26 with the network-context surface
   // (live url tiles always browse from the host's own network).
   reserved 8;
-  // create_schemas maps a tile kind to the JSON Schema (a small subset —
-  // string/number/enum/required, plus a "secret" format hint that masks
-  // INPUT only) describing the parameters a creation of that kind needs in
-  // THIS grid's plugin (issue #198). Stamped by the serving node from the
-  // owning plugin's Info exactly like writable; a transit hop passes it
-  // VERBATIM, so through any chain the schema is always the plugin that
-  // owns the grid you're dropping into. Empty/absent kind = no parameters
-  // (today's flow). The params themselves are the created tile's CONTENT —
-  // a JSON document committed through WriteContent; the plugin validates
-  // authoritatively at commit (the client's form is UX, never authority).
-  // Wire-only, never persisted.
-  map<string, string> create_schemas = 9;
+  // 9 (create_schemas): removed 2026-08-29. The #198 creation-parameter
+  // form retired with the instance picker (2026-08-23) — no plugin ever
+  // declared a schema and no client ever read one; the server stopped
+  // stamping it, so the field only ever carried the empty map.
+  reserved 9;
   // stale marks a response served from a mount's offline cache (issue
   // #256): the mount is unreachable and this is the REMEMBERED answer,
   // not the live one. Stamped only by the node-side mountcache on its
@@ -253,9 +246,9 @@ message InfoResponse {
   string root_grid_id   = 5;
   reserved 6; // network (NetworkContext): removed 2026-07-26 — host network always
   reserved 7; // has_session: removed 2026-07-26 — the session is host-local
-  // create_schemas: per-kind creation-parameter schemas (see
-  // Grid.create_schemas — this is the declaration the grid stamp reads).
-  map<string, string> create_schemas = 13;
+  // 13 (create_schemas): removed 2026-08-29 with Grid.create_schemas —
+  // no plugin declared one, no client read one.
+  reserved 13;
   // scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
   // ("descend into a url" without placing a tile). Never rendered, never
   // mounted; persists as visited-url history. Empty for plugins that don't

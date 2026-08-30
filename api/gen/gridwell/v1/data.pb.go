@@ -106,18 +106,6 @@ type Grid struct {
 	// qualified from the receiver's perspective (chained through mounts) —
 	// same stamping rule as writable. "" when the plugin has none. Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
-	// create_schemas maps a tile kind to the JSON Schema (a small subset —
-	// string/number/enum/required, plus a "secret" format hint that masks
-	// INPUT only) describing the parameters a creation of that kind needs in
-	// THIS grid's plugin (issue #198). Stamped by the serving node from the
-	// owning plugin's Info exactly like writable; a transit hop passes it
-	// VERBATIM, so through any chain the schema is always the plugin that
-	// owns the grid you're dropping into. Empty/absent kind = no parameters
-	// (today's flow). The params themselves are the created tile's CONTENT —
-	// a JSON document committed through WriteContent; the plugin validates
-	// authoritatively at commit (the client's form is UX, never authority).
-	// Wire-only, never persisted.
-	CreateSchemas map[string]string `protobuf:"bytes,9,rep,name=create_schemas,json=createSchemas,proto3" json:"create_schemas,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// stale marks a response served from a mount's offline cache (issue
 	// #256): the mount is unreachable and this is the REMEMBERED answer,
 	// not the live one. Stamped only by the node-side mountcache on its
@@ -217,13 +205,6 @@ func (x *Grid) GetScratchGridId() string {
 		return x.ScratchGridId
 	}
 	return ""
-}
-
-func (x *Grid) GetCreateSchemas() map[string]string {
-	if x != nil {
-		return x.CreateSchemas
-	}
-	return nil
 }
 
 func (x *Grid) GetStale() bool {
@@ -774,9 +755,6 @@ type InfoResponse struct {
 	// root_grid_id is the plugin's default root (fs uses its configured root,
 	// proc pid 1, localdb its singleton root). Click-enter descends here.
 	RootGridId string `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
-	// create_schemas: per-kind creation-parameter schemas (see
-	// Grid.create_schemas — this is the declaration the grid stamp reads).
-	CreateSchemas map[string]string `protobuf:"bytes,13,rep,name=create_schemas,json=createSchemas,proto3" json:"create_schemas,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
 	// ("descend into a url" without placing a tile). Never rendered, never
 	// mounted; persists as visited-url history. Empty for plugins that don't
@@ -881,13 +859,6 @@ func (x *InfoResponse) GetRootGridId() string {
 		return x.RootGridId
 	}
 	return ""
-}
-
-func (x *InfoResponse) GetCreateSchemas() map[string]string {
-	if x != nil {
-		return x.CreateSchemas
-	}
-	return nil
 }
 
 func (x *InfoResponse) GetScratchGridId() string {
@@ -3407,7 +3378,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xce\x03\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xc5\x02\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3416,15 +3387,12 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"sourceKind\x12\x1b\n" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
-	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12K\n" +
-	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x12\x14\n" +
+	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12\x14\n" +
 	"\x05stale\x18\f \x01(\bR\x05stale\x12\x17\n" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x129\n" +
-	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x1a@\n" +
-	"\x12CreateSchemasEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xad\x01\n" +
+	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\"\xad\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
@@ -3472,15 +3440,14 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"menu_entry\x18\" \x01(\tR\tmenuEntry\x12#\n" +
 	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\"\r\n" +
-	"\vInfoRequest\"\xe6\x04\n" +
+	"\vInfoRequest\"\xd5\x03\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
 	"\x0eschema_version\x18\x03 \x01(\x03R\rschemaVersion\x12\x14\n" +
 	"\x05watch\x18\x04 \x01(\bR\x05watch\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
-	"rootGridId\x12S\n" +
-	"\x0ecreate_schemas\x18\r \x03(\v2,.gridwell.v1.InfoResponse.CreateSchemasEntryR\rcreateSchemas\x12&\n" +
+	"rootGridId\x12&\n" +
 	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\x12\x1a\n" +
 	"\bwritable\x18\t \x01(\bR\bwritable\x12 \n" +
 	"\froot_view_cx\x18\n" +
@@ -3491,10 +3458,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x18\n" +
 	"\atransit\x18\x0f \x01(\bR\atransit\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x1a@\n" +
-	"\x12CreateSchemasEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\x0e\x10\x0f\"'\n" +
+	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0f\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +
@@ -3701,7 +3665,7 @@ func file_gridwell_v1_data_proto_rawDescGZIP() []byte {
 }
 
 var file_gridwell_v1_data_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_gridwell_v1_data_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),       // 0: gridwell.v1.ProbeResponse.Presence
 	(*Grid)(nil),                      // 1: gridwell.v1.Grid
@@ -3748,75 +3712,71 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*TileRemoved)(nil),               // 42: gridwell.v1.TileRemoved
 	(*EventPluginHealth)(nil),         // 43: gridwell.v1.EventPluginHealth
 	(*Event)(nil),                     // 44: gridwell.v1.Event
-	nil,                               // 45: gridwell.v1.Grid.CreateSchemasEntry
-	nil,                               // 46: gridwell.v1.InfoResponse.CreateSchemasEntry
 }
 var file_gridwell_v1_data_proto_depIdxs = []int32{
-	45, // 0: gridwell.v1.Grid.create_schemas:type_name -> gridwell.v1.Grid.CreateSchemasEntry
-	2,  // 1: gridwell.v1.Grid.menu_entries:type_name -> gridwell.v1.MenuEntry
-	46, // 2: gridwell.v1.InfoResponse.create_schemas:type_name -> gridwell.v1.InfoResponse.CreateSchemasEntry
-	2,  // 3: gridwell.v1.InfoResponse.menu_entries:type_name -> gridwell.v1.MenuEntry
-	0,  // 4: gridwell.v1.ProbeResponse.presence:type_name -> gridwell.v1.ProbeResponse.Presence
-	10, // 5: gridwell.v1.OpenShellRequest.resize:type_name -> gridwell.v1.PTYSize
-	1,  // 6: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
-	3,  // 7: gridwell.v1.GetGridResponse.tiles:type_name -> gridwell.v1.Tile
-	3,  // 8: gridwell.v1.SearchResult.tile:type_name -> gridwell.v1.Tile
-	3,  // 9: gridwell.v1.SearchResult.path:type_name -> gridwell.v1.Tile
-	23, // 10: gridwell.v1.SearchResponse.results:type_name -> gridwell.v1.SearchResult
-	2,  // 11: gridwell.v1.PluginInfo.menu_entries:type_name -> gridwell.v1.MenuEntry
-	26, // 12: gridwell.v1.HandshakeResponse.plugins:type_name -> gridwell.v1.PluginInfo
-	27, // 13: gridwell.v1.HandshakeResponse.connections:type_name -> gridwell.v1.ConnectionInfo
-	3,  // 14: gridwell.v1.TileResponse.tile:type_name -> gridwell.v1.Tile
-	3,  // 15: gridwell.v1.CreateTileRequest.tile:type_name -> gridwell.v1.Tile
-	3,  // 16: gridwell.v1.SetTileRequest.tile:type_name -> gridwell.v1.Tile
-	3,  // 17: gridwell.v1.TileChanged.tile:type_name -> gridwell.v1.Tile
-	40, // 18: gridwell.v1.Event.grid_changed:type_name -> gridwell.v1.GridChanged
-	41, // 19: gridwell.v1.Event.tile_changed:type_name -> gridwell.v1.TileChanged
-	42, // 20: gridwell.v1.Event.tile_removed:type_name -> gridwell.v1.TileRemoved
-	43, // 21: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
-	4,  // 22: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
-	6,  // 23: gridwell.v1.Gridwell.Probe:input_type -> gridwell.v1.ProbeRequest
-	25, // 24: gridwell.v1.Gridwell.Handshake:input_type -> gridwell.v1.HandshakeRequest
-	8,  // 25: gridwell.v1.Gridwell.OpenShell:input_type -> gridwell.v1.OpenShellRequest
-	11, // 26: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
-	21, // 27: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
-	13, // 28: gridwell.v1.Gridwell.GetTilePreview:input_type -> gridwell.v1.GetTilePreviewRequest
-	22, // 29: gridwell.v1.Gridwell.Search:input_type -> gridwell.v1.SearchRequest
-	15, // 30: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
-	17, // 31: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
-	18, // 32: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
-	20, // 33: gridwell.v1.Gridwell.PlaceTile:input_type -> gridwell.v1.PlaceTileRequest
-	30, // 34: gridwell.v1.Gridwell.CreateTile:input_type -> gridwell.v1.CreateTileRequest
-	34, // 35: gridwell.v1.Gridwell.SetTile:input_type -> gridwell.v1.SetTileRequest
-	33, // 36: gridwell.v1.Gridwell.CloneTile:input_type -> gridwell.v1.CloneTileRequest
-	35, // 37: gridwell.v1.Gridwell.DeleteTile:input_type -> gridwell.v1.DeleteTileRequest
-	37, // 38: gridwell.v1.Gridwell.SetRootView:input_type -> gridwell.v1.SetRootViewRequest
-	31, // 39: gridwell.v1.Gridwell.ShellSessionAlive:input_type -> gridwell.v1.ShellSessionAliveRequest
-	39, // 40: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
-	5,  // 41: gridwell.v1.Gridwell.Info:output_type -> gridwell.v1.InfoResponse
-	7,  // 42: gridwell.v1.Gridwell.Probe:output_type -> gridwell.v1.ProbeResponse
-	28, // 43: gridwell.v1.Gridwell.Handshake:output_type -> gridwell.v1.HandshakeResponse
-	9,  // 44: gridwell.v1.Gridwell.OpenShell:output_type -> gridwell.v1.OpenShellResponse
-	12, // 45: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
-	29, // 46: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse
-	14, // 47: gridwell.v1.Gridwell.GetTilePreview:output_type -> gridwell.v1.GetTilePreviewResponse
-	24, // 48: gridwell.v1.Gridwell.Search:output_type -> gridwell.v1.SearchResponse
-	16, // 49: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
-	29, // 50: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
-	19, // 51: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk
-	29, // 52: gridwell.v1.Gridwell.PlaceTile:output_type -> gridwell.v1.TileResponse
-	29, // 53: gridwell.v1.Gridwell.CreateTile:output_type -> gridwell.v1.TileResponse
-	29, // 54: gridwell.v1.Gridwell.SetTile:output_type -> gridwell.v1.TileResponse
-	29, // 55: gridwell.v1.Gridwell.CloneTile:output_type -> gridwell.v1.TileResponse
-	36, // 56: gridwell.v1.Gridwell.DeleteTile:output_type -> gridwell.v1.DeleteTileResponse
-	38, // 57: gridwell.v1.Gridwell.SetRootView:output_type -> gridwell.v1.SetRootViewResponse
-	32, // 58: gridwell.v1.Gridwell.ShellSessionAlive:output_type -> gridwell.v1.ShellSessionAliveResponse
-	44, // 59: gridwell.v1.Gridwell.Subscribe:output_type -> gridwell.v1.Event
-	41, // [41:60] is the sub-list for method output_type
-	22, // [22:41] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	2,  // 0: gridwell.v1.Grid.menu_entries:type_name -> gridwell.v1.MenuEntry
+	2,  // 1: gridwell.v1.InfoResponse.menu_entries:type_name -> gridwell.v1.MenuEntry
+	0,  // 2: gridwell.v1.ProbeResponse.presence:type_name -> gridwell.v1.ProbeResponse.Presence
+	10, // 3: gridwell.v1.OpenShellRequest.resize:type_name -> gridwell.v1.PTYSize
+	1,  // 4: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
+	3,  // 5: gridwell.v1.GetGridResponse.tiles:type_name -> gridwell.v1.Tile
+	3,  // 6: gridwell.v1.SearchResult.tile:type_name -> gridwell.v1.Tile
+	3,  // 7: gridwell.v1.SearchResult.path:type_name -> gridwell.v1.Tile
+	23, // 8: gridwell.v1.SearchResponse.results:type_name -> gridwell.v1.SearchResult
+	2,  // 9: gridwell.v1.PluginInfo.menu_entries:type_name -> gridwell.v1.MenuEntry
+	26, // 10: gridwell.v1.HandshakeResponse.plugins:type_name -> gridwell.v1.PluginInfo
+	27, // 11: gridwell.v1.HandshakeResponse.connections:type_name -> gridwell.v1.ConnectionInfo
+	3,  // 12: gridwell.v1.TileResponse.tile:type_name -> gridwell.v1.Tile
+	3,  // 13: gridwell.v1.CreateTileRequest.tile:type_name -> gridwell.v1.Tile
+	3,  // 14: gridwell.v1.SetTileRequest.tile:type_name -> gridwell.v1.Tile
+	3,  // 15: gridwell.v1.TileChanged.tile:type_name -> gridwell.v1.Tile
+	40, // 16: gridwell.v1.Event.grid_changed:type_name -> gridwell.v1.GridChanged
+	41, // 17: gridwell.v1.Event.tile_changed:type_name -> gridwell.v1.TileChanged
+	42, // 18: gridwell.v1.Event.tile_removed:type_name -> gridwell.v1.TileRemoved
+	43, // 19: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
+	4,  // 20: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
+	6,  // 21: gridwell.v1.Gridwell.Probe:input_type -> gridwell.v1.ProbeRequest
+	25, // 22: gridwell.v1.Gridwell.Handshake:input_type -> gridwell.v1.HandshakeRequest
+	8,  // 23: gridwell.v1.Gridwell.OpenShell:input_type -> gridwell.v1.OpenShellRequest
+	11, // 24: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
+	21, // 25: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
+	13, // 26: gridwell.v1.Gridwell.GetTilePreview:input_type -> gridwell.v1.GetTilePreviewRequest
+	22, // 27: gridwell.v1.Gridwell.Search:input_type -> gridwell.v1.SearchRequest
+	15, // 28: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
+	17, // 29: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
+	18, // 30: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
+	20, // 31: gridwell.v1.Gridwell.PlaceTile:input_type -> gridwell.v1.PlaceTileRequest
+	30, // 32: gridwell.v1.Gridwell.CreateTile:input_type -> gridwell.v1.CreateTileRequest
+	34, // 33: gridwell.v1.Gridwell.SetTile:input_type -> gridwell.v1.SetTileRequest
+	33, // 34: gridwell.v1.Gridwell.CloneTile:input_type -> gridwell.v1.CloneTileRequest
+	35, // 35: gridwell.v1.Gridwell.DeleteTile:input_type -> gridwell.v1.DeleteTileRequest
+	37, // 36: gridwell.v1.Gridwell.SetRootView:input_type -> gridwell.v1.SetRootViewRequest
+	31, // 37: gridwell.v1.Gridwell.ShellSessionAlive:input_type -> gridwell.v1.ShellSessionAliveRequest
+	39, // 38: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
+	5,  // 39: gridwell.v1.Gridwell.Info:output_type -> gridwell.v1.InfoResponse
+	7,  // 40: gridwell.v1.Gridwell.Probe:output_type -> gridwell.v1.ProbeResponse
+	28, // 41: gridwell.v1.Gridwell.Handshake:output_type -> gridwell.v1.HandshakeResponse
+	9,  // 42: gridwell.v1.Gridwell.OpenShell:output_type -> gridwell.v1.OpenShellResponse
+	12, // 43: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
+	29, // 44: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse
+	14, // 45: gridwell.v1.Gridwell.GetTilePreview:output_type -> gridwell.v1.GetTilePreviewResponse
+	24, // 46: gridwell.v1.Gridwell.Search:output_type -> gridwell.v1.SearchResponse
+	16, // 47: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
+	29, // 48: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
+	19, // 49: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk
+	29, // 50: gridwell.v1.Gridwell.PlaceTile:output_type -> gridwell.v1.TileResponse
+	29, // 51: gridwell.v1.Gridwell.CreateTile:output_type -> gridwell.v1.TileResponse
+	29, // 52: gridwell.v1.Gridwell.SetTile:output_type -> gridwell.v1.TileResponse
+	29, // 53: gridwell.v1.Gridwell.CloneTile:output_type -> gridwell.v1.TileResponse
+	36, // 54: gridwell.v1.Gridwell.DeleteTile:output_type -> gridwell.v1.DeleteTileResponse
+	38, // 55: gridwell.v1.Gridwell.SetRootView:output_type -> gridwell.v1.SetRootViewResponse
+	32, // 56: gridwell.v1.Gridwell.ShellSessionAlive:output_type -> gridwell.v1.ShellSessionAliveResponse
+	44, // 57: gridwell.v1.Gridwell.Subscribe:output_type -> gridwell.v1.Event
+	39, // [39:58] is the sub-list for method output_type
+	20, // [20:39] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_gridwell_v1_data_proto_init() }
@@ -3837,7 +3797,7 @@ func file_gridwell_v1_data_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gridwell_v1_data_proto_rawDesc), len(file_gridwell_v1_data_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   46,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
