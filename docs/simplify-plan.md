@@ -98,3 +98,14 @@ FRESH writes, so anything an earlier outage had parked died at quit (S5);
 `pluginhealth` read an id's SHAPE to recover a fact the row declares (S1);
 and a `mountcache` test restored the process logger to nil, panicking
 other tests in the package (S3).
+
+### After the gates (2026-08-30)
+
+The full native gate run on the merged tree found seven e2e failures that
+a bisect against the pre-program tree proved were ours, not the box's:
+five specs still passed the `objectId` S1 removed from
+`WebviewRegistry.place()` (`8d068ad`), and S4 had moved every
+never-visited grid half a footprint (`7dd7c4a`, `zoomtrans.EffectiveCenter`)
+while two specs read the retired origin field names (`66e7c2c`; those names
+are now retired words, so `make check` catches the class). Gap closed:
+S1 and S4 touched the native layer without running the native gates.
