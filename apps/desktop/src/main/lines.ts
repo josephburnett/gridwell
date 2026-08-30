@@ -3,19 +3,19 @@
 // Electron.
 
 // ServingAddr is the address announced by the serve banner. host is the raw
-// WEB listener host: it may be a wildcard ("0.0.0.0", "::", or "") — Go
-// announces a wildcard bind as its dual-stack listener address "[::]:<port>".
-// auth, when present, is the web-UI auth token (server.AuthToken — the value
-// of the gridwell_auth cookie): the server prints it (the door always has a
-// password, so this window can authenticate without prompting.
+// web listener host and may be a wildcard ("0.0.0.0", "::", or ""); Go
+// announces a wildcard bind as the dual-stack address "[::]:<port>". auth,
+// when present, is the web auth token (the value of the gridwell_auth
+// cookie) that the server prints, so this window authenticates without
+// prompting.
 interface ServingAddr {
   host: string;
   port: number;
   auth?: string;
   // external: the banner came from the "gridwell: already serving on ..."
-  // reprint — a server SOMEONE ELSE started holds this home's serve lock
-  // (one serve per home; internal/cli/servelock.go). The app connects to
-  // it and must never treat its own exited probe child as the server.
+  // reprint, meaning another process holds this home's serve lock (one serve
+  // per home; internal/cli/servelock.go). The app connects to that server and
+  // must never treat its own exited probe child as the server.
   external?: boolean;
 }
 
@@ -23,16 +23,16 @@ interface ServingAddr {
 // for any other line. This is the boot contract with `gridwell serve`
 // (internal/cli/serve.go servingBanner): the server prints
 //   "gridwell: serving on <host>:<port> (static=... plugins=N auth=<hex> federation=<socket path>)"
-// with the listener's ACTUAL bound address, only once both doors are up.
-// federation= is NOT read here: the desktop app has no business with the
-// node door since the PTY moved onto the web door (2026-08-29), and
-// requiring it would refuse to boot against a node that serves no
-// federation socket at all. The server — not this spawner — owns the "where am I listening" fact,
-// because server.yaml `web.bind` may override the sidecar's --bind-default
-// (one stable origin shared with a phone over e.g. Tailscale).
+// with the listener's actual bound address, once both doors are up.
+// federation= is not read here. The desktop app reaches everything it needs
+// over the web door, and requiring the federation socket would refuse to boot
+// against a node that serves none. The server, not this spawner, owns where
+// it is listening: server.yaml `web.bind` may override the sidecar's
+// --bind-default so a phone and this window share one origin.
 // "already serving on" is the same banner re-emitted by a serve (or
-// `gridwell status`) that found the home's lock held: the address/auth are
-// the RUNNING holder's, and external marks that this process is not it.
+// `gridwell status`) that found the home's lock held: the address and auth
+// belong to the running holder, and external marks that this process is not
+// it.
 export function parseServingLine(line: string): ServingAddr | null {
   const m = /^gridwell: (already )?serving on (\S+) /.exec(line);
   if (!m) return null;

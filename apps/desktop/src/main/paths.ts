@@ -9,9 +9,9 @@ import * as fs from 'node:fs';
 //   <repo>/gridwell                          ← sidecar binary
 //   <repo>/web                               ← static assets
 //
-// Packaged layout: the sidecar + web are bundled as resources
-// under process.resourcesPath. We check that first, then fall back to the
-// dev tree, then to env overrides.
+// Packaged layout: the sidecar and web are bundled as resources under
+// process.resourcesPath. Env overrides win, then the packaged resources,
+// then the dev tree.
 
 function repoRoot(): string {
   // apps/desktop → ../../ is the repo root in the dev tree.
@@ -29,16 +29,12 @@ export function sidecarBinary(): string {
   return dev;
 }
 
-// staticDir is the OVERRIDE only (null = none): the gridwell binary embeds
-// the web client (web/embed.go), so the server serves it with no --static
-// at all — packaged and dev alike. GRIDWELL_STATIC remains the pin for the
-// e2e harness (and anyone iterating on web/ without rebuilding the binary).
+// staticDir is the override only; null means none. The gridwell binary
+// embeds the web client (web/embed.go), so the server serves it with no
+// --static in either layout. GRIDWELL_STATIC is for the e2e harness and for
+// iterating on web/ without rebuilding the binary.
 export function staticDir(): string | null {
   const env = process.env.GRIDWELL_STATIC;
   if (env && fs.existsSync(env)) return env;
   return null;
 }
-
-// The DB path is no longer resolved here: the Go server derives each plugin's
-// DB from its id under the Gridwell home (GRIDWELL_HOME, else ~/.gridwell), so
-// there is nothing for the Electron main process to compute or pass through.

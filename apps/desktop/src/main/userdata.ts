@@ -1,16 +1,16 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-// e2eUserDataDir returns the Electron userData path to use when GRIDWELL_HOME
-// is set in the given environment. Returns null when GRIDWELL_HOME is absent
-// (normal launch → keep the default ~/.config/gridwell-desktop).
+// e2eUserDataDir returns the Electron userData path for a given environment,
+// or null when GRIDWELL_HOME is absent (a normal launch keeps the default
+// ~/.config/gridwell-desktop).
 //
-// One owner: userData derives from GRIDWELL_HOME. The live app (which does not
-// set GRIDWELL_HOME) keeps its default Chromium profile; every e2e run that
-// sets GRIDWELL_HOME gets a private <home>/electron profile that never
-// touches the live app's profile or lock file.
+// One owner: userData derives from GRIDWELL_HOME. The live app does not set
+// it and keeps its default Chromium profile; every e2e run that sets it gets
+// a private <home>/electron profile, never touching the live app's profile
+// or lock file.
 //
-// Pure function (no Electron import); exercised through applyUserDataOverride.
+// Pure: no Electron import. Exercised through applyUserDataOverride.
 function e2eUserDataDir(env: Record<string, string | undefined>): string | null {
   const home = env['GRIDWELL_HOME'];
   if (!home) return null;
@@ -31,11 +31,10 @@ export function applyUserDataOverride(
   if (!dir) return;
   fs.mkdirSync(dir, { recursive: true });
   setPath('userData', dir);
-  // Electron 28+ introduced sessionData as a separately-settable path for the
-  // default session's cookies, localStorage, cache, and IndexedDB. Without an
-  // explicit override it inherits userData, but once userData is redirected we
-  // set sessionData explicitly to keep them co-located and avoid any subtle
-  // path-inheritance ordering surprises.
+  // Electron 28+ has sessionData as a separate path for the default session's
+  // cookies, localStorage, cache, and IndexedDB. It inherits userData when
+  // unset, but setting it explicitly keeps the two co-located regardless of
+  // the order the paths are resolved in.
   try {
     setPath('sessionData', dir);
   } catch {

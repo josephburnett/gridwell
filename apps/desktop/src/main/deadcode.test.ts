@@ -8,23 +8,22 @@ import ts from 'typescript';
 // Unused-export check for the Electron main process and its preloads.
 //
 // tsc's noUnusedLocals catches a dead local but says nothing about a dead
-// EXPORT: a function, constant, or type nothing in the shipped tree imports
-// compiles clean forever, and the audit that found ten of them found them by
-// reading. This walks the real program with the vendored TypeScript compiler
-// (no new dependency): for every export of src/main/*.ts and src/preload/*.ts
-// it counts references from OTHER non-test files under src/ — main, preload,
-// and the harnesses (src/harness is a shipped gate, check-electron, so an
-// export only it uses is live). Zero references is a failure naming the
-// symbol. *.test.ts files do not count: an export whose only reader is its
-// own unit test goes in ALLOWED below with the reason, so the exception is
-// written down rather than silent.
+// export: a function, constant, or type that nothing imports compiles clean
+// forever. This walks the real program with the vendored TypeScript compiler,
+// so it adds no dependency. For every export of src/main/*.ts and
+// src/preload/*.ts it counts references from other non-test files under src/:
+// main, preload, and the harnesses (src/harness ships as the check-electron
+// gate, so an export only it uses is live). Zero references fails, naming the
+// symbol. *.test.ts files do not count; an export whose only reader is its own
+// unit test goes in ALLOWED below with a reason, so the exception is written
+// down rather than silent.
 
 const here = dirname(fileURLToPath(import.meta.url)); // apps/desktop/src/main
 const desktop = resolve(here, '../..');
 const srcDir = join(desktop, 'src');
 
 // ALLOWED: "<file relative to src>:<export>" → why the export is kept with no
-// non-test reader. Keep this short; every entry is a copy of a decision.
+// non-test reader. Keep it short; every entry is a standing exception.
 const ALLOWED: Record<string, string> = {
   'main/viewutil.ts:parseHistory':
     'the pure validator behind reviveNavigation; its clamping and rejection cases are unit-tested directly',

@@ -1,19 +1,14 @@
-// contextmenu.ts — builds the context menu for a live URL WebContentsView.
+// contextmenu.ts builds the context menu for a live url WebContentsView.
 //
-// Electron's WebContentsView has NO built-in context menu: right-clicking a
-// page emits a `context-menu` event on the webContents, and if nothing handles
-// it nothing appears. So "copy this link" only works if WE build and pop the
-// menu. (This is the bug the file exists to fix: the live URL view forwarded
-// right-DRAGs as pane gestures but a plain right-click fell through to a page
-// menu that Electron never renders — so it did nothing.)
+// A WebContentsView has no built-in context menu: right-clicking a page emits
+// a `context-menu` event on the webContents, and nothing appears unless
+// something handles it. So this app has to build and pop the menu itself.
 //
-// The TEMPLATE is built here as a pure function so it can be unit-tested
-// without Electron: it takes a minimal params subset and a bag of injected
-// actions, and returns plain menu items whose `click` calls those actions.
-// webviews.ts supplies the real actions (clipboard / webContents) and feeds
-// the template to Menu.buildFromTemplate. Keeping the policy (what items, when,
-// what each does) here and the Electron plumbing there is the seam that makes
-// the menu testable.
+// The template is a pure function of a minimal params subset and a bag of
+// injected actions, returning plain menu items whose `click` calls those
+// actions. webviews.ts supplies the real actions (clipboard, webContents) and
+// feeds the template to Menu.buildFromTemplate. Policy lives here, Electron
+// plumbing lives there, and that seam is what makes the menu testable.
 
 // ContextParams is the subset of Electron's ContextMenuParams the menu needs,
 // plus the two navigation flags (which live on webContents, not the params).
@@ -29,8 +24,8 @@ interface ContextParams {
   // canGoBack/canGoForward gate the navigation items (from navigationHistory).
   canGoBack: boolean;
   canGoForward: boolean;
-  // canFreeze is whether the view's tile is DURABLE: an ephemeral visit has
-  // nothing to re-descend into, so it gets no Freeze Page item (issue #240).
+  // canFreeze is whether the view's tile is durable. An ephemeral visit has
+  // nothing to re-descend into, so it gets no Freeze Page item.
   canFreeze: boolean;
 }
 
@@ -46,20 +41,16 @@ interface ContextActions {
   back(): void;
   forward(): void;
   reload(): void;
-  // (clearSiteData is gone, issue #240: clearing browser state is the
-  // `gridwell clear-browser-data` CLI now — an operator action on the
-  // profile, not an in-page gesture.)
-  // freeze is the explicit freeze gesture (issue #237): tear the live view
-  // down (with the usual freeze writeback) and store the user's standing
-  // frozen intent on the tile, so re-descending stays frozen until the
-  // reconnect button clears it.
+  // freeze is the explicit freeze gesture: tear the live view down with the
+  // usual freeze writeback and store the user's standing frozen intent on the
+  // tile, so re-descending stays frozen until the reconnect button clears it.
   freeze(): void;
 }
 
 // MenuTemplateItem is the structural subset of Electron's
-// MenuItemConstructorOptions this builder emits — declared locally so the
-// module imports nothing from electron and can run under plain node/tsx in the
-// unit test. It is assignable to MenuItemConstructorOptions at the call site.
+// MenuItemConstructorOptions this builder emits. It is declared locally so the
+// module imports nothing from electron and runs under plain node in the unit
+// test; it stays assignable to MenuItemConstructorOptions at the call site.
 interface MenuTemplateItem {
   label?: string;
   type?: 'separator';
@@ -68,10 +59,10 @@ interface MenuTemplateItem {
 }
 
 // urlContextMenuTemplate assembles the menu for a right-click over live web
-// content, in the familiar Chromium order: link actions, then text/edit
-// actions, then page navigation. Items that don't apply (no link, no selection,
-// not editable) are omitted so the menu never shows dead entries — except the
-// always-present navigation block, whose items disable rather than vanish.
+// content, in the familiar Chromium order: link actions, then text and edit
+// actions, then page navigation. Items that do not apply (no link, no
+// selection, not editable) are omitted so the menu shows no dead entries. The
+// navigation block is always present; its items disable rather than vanish.
 export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): MenuTemplateItem[] {
   const items: MenuTemplateItem[] = [];
 
