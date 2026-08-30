@@ -16,13 +16,13 @@ import (
 	"github.com/josephburnett/gridwell/client/urlnorm"
 )
 
-// shellStreamConn is one live shell attachment: the pane's slot on the
-// /shell WebSocket (client/shellstream over client/shellws — the web door,
-// this page's own origin, 2026-08-29) + its xterm.js host. A DOM container holds the terminal instance; the
-// container's CSS is positioned per-frame so it tracks the pane through
-// resize / pan / split-tree edits. js.Func handlers are tracked so we
-// Release them on close (FuncOf-allocated callbacks pin Go memory until
-// released).
+// shellStreamConn is one live shell attachment: the pane's slot on the /shell
+// WebSocket (client/shellstream over client/shellws, on this page's own
+// origin) plus its xterm.js host. A DOM container holds the terminal
+// instance, and the container's CSS is positioned per frame so it tracks the
+// pane through resizes, pans, and split-tree edits. js.Func handlers are
+// tracked and Released on close, because FuncOf-allocated callbacks pin Go
+// memory until released.
 type shellStreamConn struct {
 	term         js.Value // xterm.Terminal
 	fitAddon     js.Value // FitAddon — proposeDimensions + fit
@@ -32,12 +32,12 @@ type shellStreamConn struct {
 
 	tileID string
 	paneID string
-	// anchor + path are the plugin-root grid id and the descent path to the
-	// grid that holds this shell tile, captured when the stream opened. The
-	// freeze (SetShellPreview) needs them to resolve this tile's leaf grid —
-	// same contract as urlView.anchor/path; without them the writeback
-	// resolves against the plugin ROOT grid and fails for any shell inside a
-	// descended sub-grid (issue #77).
+	// anchor and path are the plugin-root grid id and the descent path to
+	// the grid that holds this shell tile, captured when the stream opened.
+	// The freeze (SetShellPreview) needs them to resolve this tile's leaf
+	// grid, the same contract as urlView.anchor and path. Without them the
+	// writeback resolves against the plugin root grid and fails for any
+	// shell inside a descended sub-grid.
 	anchor string
 	path   []string
 
@@ -53,13 +53,13 @@ type shellStreamConn struct {
 
 	lastCols, lastRows uint16
 
-	// lastFit* are the inputs the last fit() derived from — the container
-	// box and the font size (content zoom changes the font without touching
-	// the box). The per-frame overlay sync only re-fits when one of them
-	// changed: an unconditional per-frame fit() forces a style read (layout)
-	// every frame and lets sub-pixel box wobble churn resizes — each one a
-	// render-service clear + SIGWINCH + full tmux redraw interleaved with
-	// in-flight output (issue #211).
+	// lastFit* are the inputs the last fit() derived from: the container box
+	// and the font size, since content zoom changes the font without
+	// touching the box. The per-frame overlay sync re-fits only when one of
+	// them changed. An unconditional per-frame fit() forces a style read
+	// every frame and lets sub-pixel box wobble churn resizes, each one a
+	// render-service clear, a SIGWINCH, and a full tmux redraw interleaved
+	// with in-flight output.
 	lastFitW, lastFitH float64
 	lastFitFont        int
 }
@@ -113,7 +113,7 @@ func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
 	if tile == nil {
 		return false
 	}
-	// A shell LINK probes (and attaches) the TARGET's session: the PTY is
+	// A shell link probes, and attaches to, the target's session: the PTY is
 	// keyed by the owner tile's id, and the link is a second door to the
 	// same session — one shell, seen from two grids.
 	alive, known := a.shellAlive[tile.ContentID()]
@@ -132,12 +132,12 @@ func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
 // caller's continuation is dropped; the auto-live path re-decides from the
 // cache on the next descent, and the refresh button remains the retry).
 func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
-	// Single-flight COALESCES callers — it must never drop a callback.
-	// The entry's presence marks the in-flight probe; late callers park
-	// their callbacks on it and the one answer fires them all. (Dropping
-	// the later caller lost the restore's attach when the bar's
-	// callback-less badge probe happened to fire first — #267 made that
-	// race the common case, since every pane's slot now probes.)
+	// Single-flight coalesces callers and never drops a callback. The
+	// entry's presence marks the in-flight probe; late callers park their
+	// callbacks on it and the one answer fires them all. Dropping the later
+	// caller would lose a restore's attach whenever the bar's callback-less
+	// badge probe fired first, which is the common case: every pane's slot
+	// probes.
 	if waiters, inflight := a.shellAliveProbing[tileID]; inflight {
 		if then != nil {
 			a.shellAliveProbing[tileID] = append(waiters, then)
@@ -157,8 +157,8 @@ func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 		delete(a.shellAliveProbing, tileID)
 		if err != nil {
 			shellLog("ShellSessionAlive tile=%s err=%v", tileID, err)
-			// Without a verdict the refresh control just doesn't appear —
-			// distinguish "probe failed" from "session gone" (charter §6).
+			// Without a verdict the refresh control does not appear:
+			// distinguish "probe failed" from "session gone".
 			a.reportErr(errsurface.Error, "shell", "shell session probe failed: "+rpcErrText(err))
 			return
 		}
@@ -195,15 +195,15 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// Resolve a shell LINK to its target: the PTY session, the alive cache,
 	// and the freeze writeback all key by the id that owns the session.
 	tileID = a.contentKey(tileID)
-	// Idempotent: this pane is already attached to this session (a
-	// keep-alive return, issue #249).
+	// Idempotent: this pane is already attached to this session, a
+	// keep-alive return.
 	if conn := a.shellConnFor(p.ID); conn != nil && conn.tileID == tileID {
 		return
 	}
-	// ONE live surface per content tile (issue #249): another pane
-	// attached to this tmux session detaches (with a freeze) — two
-	// attachments would fight over the terminal size. pane.TakeOver is the
-	// rule, shared with the url side.
+	// One live surface per content tile: another pane attached to this tmux
+	// session detaches, with a freeze, because two attachments would fight
+	// over the terminal size. pane.TakeOver is the rule, shared with the url
+	// side.
 	for _, otherID := range pane.TakeOver(a.shellSurfaces(), p.ID, tileID) {
 		a.closeShellStream(otherID, true)
 	}
@@ -228,13 +228,14 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	doc.Get("body").Call("appendChild", container)
 
 	// The overlay paints above the canvas and would otherwise swallow the
-	// right-button mousedown that starts a pane gesture — so a split/clone/
-	// resize could only be begun from the thin border ring. Forward the
-	// right button into the same canvas gesture pipeline every other tile
-	// uses; the left button stays with xterm (typing / caret / selection)
-	// except for its pane-focus side effect, handled inline below.
-	// Once onMouseDown sets a right gesture, draw() parks this overlay
-	// (liveOverlaysHidden), so the rest of the drag lands on the canvas.
+	// right-button mousedown that starts a pane gesture, leaving split,
+	// clone, and resize reachable only from the thin border ring. Forward
+	// the right button into the same canvas gesture pipeline every other
+	// tile uses; the left button stays with xterm — typing, caret,
+	// selection — except for its pane-focus side effect, handled inline
+	// below. Once onMouseDown sets a right gesture, draw() parks this
+	// overlay (liveOverlaysHidden), so the rest of the drag lands on the
+	// canvas.
 	onMouse := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
 		if ev.Get("type").String() == "contextmenu" {
@@ -242,13 +243,12 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 			return nil
 		}
 		if ev.Get("button").Int() != 2 {
-			// Left/middle stay with xterm (typing, caret, selection), but pane
-			// focus must still follow the click: the overlay swallows the
-			// mousedown, so the canvas path that normally transfers focus never
-			// runs. Without this, clicking into a terminal from another pane
-			// leaves Gridwell focus behind — and the focus-gated ascend circle
-			// stays hidden over the shell you are typing in (issue #78). Same
-			// contract as the URL view's forwarded VIEW_LEFTDOWN.
+			// Left and middle stay with xterm — typing, caret, selection —
+			// but pane focus still follows the click: the overlay swallows
+			// the mousedown, so the canvas path that normally transfers
+			// focus never runs. Without this, clicking into a terminal from
+			// another pane leaves Gridwell focus behind. The same contract
+			// as the URL view's forwarded left-down.
 			if cur := a.tree.FindPane(p.ID); cur != nil {
 				a.focusToPane(cur)
 			}
@@ -257,11 +257,11 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		ev.Call("preventDefault")
 		ev.Call("stopPropagation")
 		a.onMouseDown(js.Null(), args)
-		// onRightDown arms the gesture but doesn't redraw for a
-		// split/swap/resize. Park the overlay now (it consults
-		// liveOverlaysHidden) so the rest of the drag — every mousemove and
-		// the mouseup — lands on the canvas instead of this still-visible
-		// div, which we don't forward.
+		// onRightDown arms the gesture but does not redraw for a split,
+		// swap, or resize. Park the overlay now — it consults
+		// liveOverlaysHidden — so the rest of the drag, every mousemove and
+		// the mouseup, lands on the canvas instead of this still-visible
+		// div, which is not forwarded.
 		a.draw()
 		return nil
 	})
@@ -275,32 +275,31 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	if !Terminal.Truthy() {
 		shellLog("xterm.Terminal not loaded; index.html missing script tag?")
 		// The user just descended into a shell: a console line alone
-		// presents as an empty pane that "just disappeared" (charter §6) —
-		// say so on the error surface like the alive-probe above does.
+		// presents as an empty pane that "just disappeared", so say it on
+		// the error surface, as the alive probe above does.
 		a.reportErr(errsurface.Error, "shell", "terminal engine unavailable on this host (xterm not loaded)")
 		doc.Get("body").Call("removeChild", container)
 		return
 	}
 	opts := js.Global().Get("Object").New()
-	// xterm 6 gates its "proposed" APIs — parser.registerOscHandler (the
-	// gridwell-open OSC 5522 hook) and term.unicode.activeVersion (the
-	// Unicode 11 widths) — behind this flag (issue #175). Both are load-
-	// bearing here; without it Terminal method calls panic the wasm.
+	// xterm 6 gates its proposed APIs behind this flag:
+	// parser.registerOscHandler (the gridwell-open OSC 5522 hook) and
+	// term.unicode.activeVersion (the Unicode 11 widths). Both are
+	// load-bearing here; without the flag, Terminal method calls panic the
+	// wasm.
 	opts.Set("allowProposedApi", true)
 	opts.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
-	// Base font scaled by the tile's persisted content zoom (issue #82), so a
-	// zoomed terminal comes back at your size on every descent.
+	// The base font scaled by the tile's persisted content zoom, so a zoomed
+	// terminal comes back at your size on every descent.
 	fontSize := int(shellBaseFontPx)
 	if t := a.findTileByID(tileID); t != nil {
 		fontSize = int(shellBaseFontPx*contentZoomOf(t) + 0.5)
 	}
 	opts.Set("fontSize", fontSize)
-	// NO convertEol: the PTY line discipline (ONLCR) already delivers CRLF.
-	// With it set, xterm snaps the cursor to column 0 on every BARE LF too —
-	// and TUI output that positions with index/LF (scroll-region feeds; how
-	// Claude Code paints rows) lost its column, scattering text down the
-	// left margin (issue #211). It had been set since the first shell commit,
-	// for no recoverable reason.
+	// No convertEol: the PTY line discipline (ONLCR) already delivers CRLF.
+	// With it set, xterm snaps the cursor to column 0 on every bare LF too,
+	// and TUI output that positions with index or LF — scroll-region feeds —
+	// loses its column and scatters text down the left margin.
 	opts.Set("cursorBlink", true)
 	// Dark theme tuned to the shell-fill / markdown-body backgrounds.
 	theme := js.Global().Get("Object").New()
@@ -310,26 +309,26 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	opts.Set("theme", theme)
 	term := Terminal.New(opts)
 
-	// Unicode 11 widths (issue #175): the default table is Unicode 6 —
-	// modern emoji/wide glyphs get the wrong cell width, shifting every
-	// following cell on the line (heavy-TUI scatter, worst at the edges).
-	// Loaded BEFORE open so the first paint already measures correctly.
+	// Unicode 11 widths: the default table is Unicode 6, so modern emoji and
+	// wide glyphs get the wrong cell width and shift every following cell on
+	// the line. Loaded before open, so the first paint measures correctly.
 	if u11 := js.Global().Get("Unicode11Addon"); u11.Truthy() {
 		term.Call("loadAddon", u11.Get("Unicode11Addon").New())
 		term.Get("unicode").Set("activeVersion", "11")
 	}
 
-	// Fit addon resizes the buffer dimensions to fit the container, which we
-	// then mirror to the server. The renderer addon (WebGL, DOM fallback) is
-	// attached AFTER open — the WebGL addon requires an opened terminal.
+	// The fit addon resizes the buffer dimensions to fit the container, which
+	// is then mirrored to the server. The renderer addon (WebGL, with a DOM
+	// fallback) is attached after open, because the WebGL addon requires an
+	// opened terminal.
 	fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
 	term.Call("loadAddon", fitAddon)
 	term.Call("open", container)
 	renderAddon, rendererKind := attachShellRenderer(term)
 
-	// Touch: multi-finger gestures feed the shared translation (issue #191);
-	// single fingers stay native to the terminal. The ascend handle is the
-	// bottom bar's slot (issue #214) — the canvas touch layer covers it.
+	// Touch: multi-finger gestures feed the shared translation, and single
+	// fingers stay native to the terminal. The ascend handle is the bottom
+	// bar's slot, which the canvas touch layer covers.
 	touchFns := a.installOverlayTouch(container, shellTouchClaim())
 
 	// Initial size — the fit addon will overwrite it, but the bind message
@@ -409,9 +408,9 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// OSC 5522: the gridwell-open browser shim ($BROWSER in every session,
 	// internal/tmux) hands back a url a terminal app tried to open — emacs
 	// browse-url, xdg-open — so it descends into an ephemeral url tile here
-	// instead of spawning a browser on the host (issue #90). The sequence
-	// rides the PTY byte stream (tmux passthrough → WS → term.write), so it
-	// works unchanged for remote shells through ssh mounts.
+	// instead of spawning a browser on the host. The sequence rides the PTY
+	// byte stream (tmux passthrough, then the socket, then term.write), so
+	// it works unchanged for remote shells through ssh mounts.
 	conn.onOSCURL = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) >= 1 && args[0].Type() == js.TypeString {
 			a.shellURLActivate(p.ID, args[0].String())
@@ -445,9 +444,8 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	})
 	term.Call("onResize", conn.onResize)
 
-	// The pane owns the conn BEFORE the dial: a socket that fails
-	// instantly reports through onShellExit, which needs the conn to find
-	// the pane (charter §6 — no failure disappears).
+	// The pane owns the conn before the dial: a socket that fails instantly
+	// reports through onShellExit, which needs the conn to find the pane.
 	a.local(p.ID).shellConn = conn
 	// Open the socket; PTY output arrives at onShellData and an unexpected
 	// end at onShellExit, both routed by pane id from the registry.
@@ -460,23 +458,20 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 }
 
 // attachShellRenderer gives the opened terminal a GPU renderer: the WebGL
-// addon, falling back to the legacy canvas addon when WebGL2 is unavailable
-// (headless/xvfb without GL, an exotic browser in web mode) or when the GPU
-// context is later lost. The retired canvas addon's dirty-region tracking
-// missed cursor-addressed rewrites and scroll-region scrolls (issue #84);
-// the WebGL renderer redraws from buffer state every frame, and the DOM
-// fallback repaints rows wholesale, so that artifact class cannot occur.
-// Returns the active addon (held on shellStreamConn to pin it; the terminal's
-// dispose tears it down).
+// addon, falling back to xterm's DOM renderer when WebGL2 is unavailable —
+// headless xvfb without GL, an exotic browser in web mode — or when the GPU
+// context is later lost. The WebGL renderer redraws from buffer state every
+// frame and the DOM fallback repaints rows wholesale, so neither can leave
+// the stale-region artifacts a dirty-region canvas renderer does. Returns the
+// active addon, held on shellStreamConn to pin it; the terminal's dispose
+// tears it down.
 func attachShellRenderer(term js.Value) (js.Value, string) {
 	if addon, ok := tryWebglAddon(term); ok {
 		return addon, "webgl"
 	}
-	// No renderer addon → xterm's built-in DOM renderer. Slower, but free of
-	// the canvas addon's dirty-region artifact class (#84) — and the canvas
-	// addon has no stable xterm-6 release, so it's gone (issue #175). The
-	// kind is recorded and e2e-asserted so a downgrade can never be silent
-	// (issue #128).
+	// No renderer addon means xterm's built-in DOM renderer: slower, but
+	// free of dirty-region artifacts. The kind is recorded and e2e-asserted,
+	// so a downgrade can never be silent.
 	shellLog("shell renderer: DOM FALLBACK (webgl unavailable)")
 	return js.Value{}, "dom"
 }
@@ -512,12 +507,11 @@ func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
 	return a, true
 }
 
-// shellContentCanvas returns the canvas the terminal CONTENT is painted on —
-// NOT merely the first canvas in the container. The WebGL renderer's main
-// canvas is class-less while its link layer (transparent, glyph-free) comes
-// first in the DOM; capturing the first canvas produced an all-black preview.
-// (The retired canvas addon painted glyphs on a class="xterm-text-layer"
-// canvas; the DOM fallback has no canvas at all — callers handle nil.)
+// shellContentCanvas returns the canvas the terminal content is painted on,
+// not merely the first canvas in the container. The WebGL renderer's main
+// canvas is class-less while its link layer — transparent and glyph-free —
+// comes first in the DOM, so capturing the first canvas yields an all-black
+// preview. The DOM fallback has no canvas at all; callers handle nil.
 func shellContentCanvas(container js.Value) js.Value {
 	list := container.Call("querySelectorAll", "canvas")
 	n := list.Get("length").Int()
@@ -575,8 +569,7 @@ func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 		delete(a.shellAlive, conn.tileID)
 	}
 	if message != "" {
-		// The terminal just broke under the user's prompt — say why
-		// (charter §6).
+		// The terminal just broke under the user's prompt: say why.
 		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+message)
 	}
 	conn.closed = true
@@ -585,11 +578,11 @@ func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 }
 
 // shellMirrorIntervalMs is how often a live shell terminal is snapshotted and
-// pushed to the shared preview cache so OTHER panes (and well child-previews)
-// showing the same shell tile mirror it live. It's the shell analogue of the
-// URL MirrorPump, which lives in the Electron main process and so can't see the
-// renderer-side xterm canvas. Modest by design (toDataURL isn't free and a
-// mirrored preview doesn't need 60fps); matches MIRROR_INTERVAL_MS.
+// pushed to the shared preview cache, so other panes, and well child
+// previews, showing the same shell tile mirror it live. It is the shell
+// analogue of the URL mirror pump, which lives in the Electron main process
+// and cannot see the renderer-side xterm canvas. Modest by design: toDataURL
+// is not free and a mirrored preview does not need 60fps.
 const shellMirrorIntervalMs = 250
 
 // installShellMirror starts the periodic shell-preview mirror. One interval for
@@ -626,15 +619,14 @@ func (a *App) mirrorLiveShells() {
 	}
 }
 
-// closeShellStream is the freeze path: capture a JPEG of the terminal (so
-// the next descent shows it as the frozen preview), POST it via
-// SetShellPreview, then end the stream (the registry closes the socket and
-// suppresses the exit report — this side asked). The stream close just
-// detaches the tmux client — the shell keeps running inside the tmux
-// session so a future refresh reattaches to the same state. An ephemeral
-// shell's ascent passes freeze=false: the tile (and its tmux session) is
-// about to be deleted, so there is nothing to freeze for (issue #85).
-// Idempotent.
+// closeShellStream is the freeze path: capture a JPEG of the terminal, so the
+// next descent shows it as the frozen preview, post it through
+// SetShellPreview, then end the stream. The registry closes the socket and
+// suppresses the exit report, because this side asked. The stream close only
+// detaches the tmux client: the shell keeps running inside the tmux session,
+// so a future refresh reattaches to the same state. An ephemeral shell's
+// ascent passes freeze=false — the tile, and its tmux session, is about to be
+// deleted, so there is nothing to freeze for. Idempotent.
 func (a *App) closeShellStream(paneID string, freeze bool) {
 	conn := a.shellConnFor(paneID)
 	if conn == nil {
@@ -642,16 +634,16 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 	}
 	conn.closed = true
 	// Best-effort JPEG capture from the renderer's content canvas. If
-	// anything goes wrong we just skip the preview update — the cwd
-	// still persists via the server's close handler.
+	// anything goes wrong the preview update is skipped; the cwd still
+	// persists through the server's close handler.
 	if jpegBytes := snapshotShellCanvas(conn.container); freeze && jpegBytes != nil {
 		tileID := conn.tileID
-		// Update the local preview cache immediately so the next
-		// descent shows this frame instead of the previous one. The
-		// server-side blob id this snapshot will get isn't known
-		// until SetShellPreview returns, so store as wildcard — Get
-		// will satisfy any expected blob id until a specific Put
-		// supersedes (which happens on the next GetTilePreview).
+		// Update the local preview cache immediately so the next descent
+		// shows this frame instead of the previous one. The server-side
+		// blob id this snapshot will get is unknown until SetShellPreview
+		// returns, so store it as a wildcard: Get satisfies any expected
+		// blob id until a specific Put supersedes it, on the next
+		// GetTilePreview.
 		a.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
 		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
@@ -744,17 +736,17 @@ func (a *App) syncShellOverlayPosition() {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}
-		// Hide the shell overlay when the pane isn't currently descended in
-		// THIS shell — e.g. it descended further into an ephemeral url from a
-		// shell link. The stream stays alive (the session persists); only the
-		// overlay parks, reappearing when the pane returns.
+		// Hide the shell overlay when the pane is not currently descended
+		// in this shell — it descended further into an ephemeral url from a
+		// shell link, say. The stream stays alive and the session persists;
+		// only the overlay parks, reappearing when the pane returns.
 		if p := a.tree.FindPane(paneID); p == nil || p.ContentID() != conn.tileID {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}
-		// The one live content box (liveContentBox): the same rect the
-		// URL view and the canvas fallback use, so every live-tile kind
-		// sits flush inside the chrome and above the bar.
+		// The one live content box (liveContentBox): the same rect the URL
+		// view and the canvas fallback use, so every live-tile kind sits
+		// flush inside the chrome and above the bar.
 		cx, cy, cw, ch := liveContentBox(r)
 		cb := pane.Rect{X: cx, Y: cy, W: cw, H: ch}
 		if cb.W < 1 || cb.H < 1 {
@@ -764,11 +756,11 @@ func (a *App) syncShellOverlayPosition() {
 		style := conn.container.Get("style")
 		style.Set("display", "block")
 		setBoundsPx(style, cb.X, cb.Y, cb.W, cb.H)
-		// Ask xterm to re-fit — only when an input the fit depends on
-		// changed (the container box, or the font size content zoom sets).
+		// Ask xterm to re-fit, but only when an input the fit depends on
+		// changed: the container box, or the font size content zoom sets.
 		// The FitAddon emits an onResize event if the cell grid changed,
-		// which we forward via the registered onResize callback. See
-		// lastFit* on the struct for why this is guarded (issue #211).
+		// forwarded through the registered onResize callback. See lastFit*
+		// on the struct for why this is guarded.
 		fontPx := 0
 		if fs := conn.term.Get("options").Get("fontSize"); fs.Truthy() {
 			fontPx = fs.Int()
@@ -796,8 +788,9 @@ func snapshotShellCanvas(container js.Value) []byte {
 	if !dataURL.Truthy() {
 		return nil
 	}
-	// Prefix-validate + base64-decode in Go (not JS atob) via the pure
-	// shellconn.DecodeJPEGDataURL — see there for the atob-corruption reason.
+	// Prefix-validate and base64-decode in Go, not through JS atob, using
+	// shellconn.DecodeJPEGDataURL; see there for why atob corrupts the
+	// bytes.
 	out, ok := shellconn.DecodeJPEGDataURL(dataURL.String())
 	if !ok {
 		return nil
@@ -805,18 +798,17 @@ func snapshotShellCanvas(container js.Value) []byte {
 	return out
 }
 
-// postSetShellPreview sends a SetShellPreview RPC with the captured
-// JPEG. The anchor+path locate the tile's leaf grid (the server
-// validates the tile against the path — a shell inside a well needs
-// the real descent path, issue #77).
+// postSetShellPreview sends a SetShellPreview RPC with the captured JPEG. The
+// anchor and path locate the tile's leaf grid; the server validates the tile
+// against the path, so a shell inside a well needs the real descent path.
 func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
-	// One dispatcher, keyed in the outbox by the tile: the frozen frame is a
-	// CAPTURE — no claim, no bump (docs/simplify-plan.md S5) — so the stream
-	// close racing this freeze can no longer refuse it. A transport failure
-	// PARKS the closure, which holds the only remaining copy of the jpeg once
-	// the live surface is gone; a verdict surfaces AND resyncs the grid
-	// (issue #156 — the terminal frame the user just left is not persisted;
-	// the preview will show an older state, charter §6).
+	// One dispatcher, keyed in the outbox by the tile. The frozen frame is a
+	// capture — no claim, no version bump — so the stream close racing this
+	// freeze cannot refuse it. A transport failure parks the closure, which
+	// holds the only remaining copy of the jpeg once the live surface is
+	// gone. A verdict surfaces and resyncs the grid: the terminal frame the
+	// user just left was not persisted, and the preview will show an older
+	// state.
 	req := &rpc.SetShellPreviewRequest{TileID: tileID, JPEG: jpeg}
 	a.do(write{
 		label: "SetShellPreview", gid: a.gridIDForPathFrom(anchor, path), id: tileID,
