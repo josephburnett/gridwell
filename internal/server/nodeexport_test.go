@@ -285,7 +285,7 @@ func TestNodeExportContentStreams(t *testing.T) {
 	}
 
 	placed, err := c.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
-		TileId: created.Tile.Id, Version: resp.Tile.Version, GridId: pluginRoot, X: 5, Y: 5, W: 3, H: 3,
+		TileId: created.Tile.Id, GridId: pluginRoot, X: 5, Y: 5, W: 3, H: 3,
 	})
 	if err != nil {
 		t.Fatalf("PlaceTile: %v", err)

@@ -146,12 +146,13 @@ func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	// client-only until the next descent snapped it back — audit #7,
 	// 2026-08-14). The cache patch above is the optimistic write the
 	// dispatcher's policy expects.
-	tileID, version := t.ID, t.Version
-	a.postFramingPersist("SetContentZoom", nt.GridID, tileID, version,
-		func(ctx context.Context, version int64) (*rpc.Tile, error) {
-			return a.cl.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
-				TileID: tileID, Version: version, ContentZoom: z,
+	tileID := t.ID
+	a.postFramingPersist("SetContentZoom", nt.GridID, tileID,
+		func(ctx context.Context) error {
+			_, err := a.cl.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
+				TileID: tileID, ContentZoom: z,
 			})
+			return err
 		})
 }
 

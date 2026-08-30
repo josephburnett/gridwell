@@ -818,22 +818,19 @@ func snapshotShellCanvas(container js.Value) []byte {
 // postSetShellPreview sends a SetShellPreview RPC with the captured
 // JPEG. The anchor+path locate the tile's leaf grid (the server
 // validates the tile against the path — a shell inside a well needs
-// the real descent path, issue #77). The previous tile version is
-// needed for optimistic concurrency; we look it up from the cache to
-// avoid a synchronous GetTile round-trip in the ascent path.
+// the real descent path, issue #77).
 func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
-	// doFreezeWrite owns the leaving-gesture rule: a version conflict (the
-	// stream close racing this freeze triggers the plugin's detach-time
-	// title capture, a version bump) re-claims once and retries; a remaining
-	// failure surfaces AND resyncs the grid (issue #156 — the terminal frame
-	// the user just left is not persisted; the preview will show an older
-	// state, charter §6).
+	// doFreezeWrite owns the leaving-gesture rule. The frozen frame is a
+	// CAPTURE — no claim, no bump (docs/simplify-plan.md S5) — so the stream
+	// close racing this freeze can no longer refuse it; a failure surfaces
+	// AND resyncs the grid (issue #156 — the terminal frame the user just
+	// left is not persisted; the preview will show an older state, charter
+	// §6).
 	a.doFreezeWrite("SetShellPreview", a.gridIDForPathFrom(anchor, path), tileID,
-		a.tileVersionAt(anchor, path, tileID),
 		"shell", "shell preview save failed",
-		func(version int64) error {
+		func() error {
 			_, err := a.cl.SetShellPreview(context.Background(), &rpc.SetShellPreviewRequest{
-				TileID: tileID, Version: version, JPEG: jpeg,
+				TileID: tileID, JPEG: jpeg,
 			})
 			if err != nil {
 				shellLog("SetShellPreview tile=%s err=%v", tileID, err)

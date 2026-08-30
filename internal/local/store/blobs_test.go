@@ -72,7 +72,7 @@ func TestBlobSelfDescribing(t *testing.T) {
 		t.Fatal(err)
 	}
 	frozen, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: url.ID, Version: url.Version, JPEG: []byte{0xFF, 0xD8, 0xFF},
+		TileID: url.ID, JPEG: []byte{0xFF, 0xD8, 0xFF},
 	})
 	if err != nil {
 		t.Fatal(err)

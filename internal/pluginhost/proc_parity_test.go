@@ -113,7 +113,7 @@ func TestProcPluginSweepAndPlacement(t *testing.T) {
 		t.Fatal("child 300 not found")
 	}
 	if _, err := v2.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: child.ID, Version: child.Version, GridID: rootGrid, X: 5, Y: 5, W: 1, H: 1,
+		TileID: child.ID, GridID: rootGrid, X: 5, Y: 5, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -35,9 +35,6 @@ type Frame struct {
 	// TileID is the pane tile's qualified id — the owner of the layout blob
 	// and the routing handle for the layout WriteContent.
 	TileID string
-	// TileVersion is the OCC claim the layout WriteContent sends. Layout writes never
-	// bump it; it moves only when something else edits the tile (rename).
-	TileVersion int64
 	// Name is the tile's display label at descent time (the bar's crumb).
 	Name string
 	// ReadOnly latches when the layout blob could not be decoded (corrupt,
@@ -71,7 +68,7 @@ func (s *Stack) Pop() (Frame, bool) {
 }
 
 // Top returns the current workspace's frame (mutable: the persister updates
-// savedHash/TileVersion in place), or nil at depth 0.
+// savedHash in place), or nil at depth 0.
 func (s *Stack) Top() *Frame {
 	if len(s.frames) == 0 {
 		return nil
@@ -80,8 +77,8 @@ func (s *Stack) Top() *Frame {
 }
 
 // At returns the frame at a 1-based nesting level (leftmost crumb = 1),
-// mutable (the crumb rename updates Name/TileVersion in place), or nil when
-// out of range.
+// mutable (the crumb rename updates Name in place), or nil when out of
+// range.
 func (s *Stack) At(level int) *Frame {
 	if level < 1 || level > len(s.frames) {
 		return nil

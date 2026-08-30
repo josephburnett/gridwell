@@ -233,18 +233,20 @@ func TestResizeAndSetFramingRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	id, v := tile.ID, tile.Version
+	id := tile.ID
 
-	tile, err = cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: id, Version: v, GridID: root, X: 0, Y: 0, W: 2, H: 2,
+	resized, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: id, GridID: root, X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatalf("resize: %v", err)
 	}
-	v = tile.Version
+	if resized.W != 2 || resized.H != 2 {
+		t.Errorf("after resize: %+v", resized)
+	}
 
 	tile, err = cl.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: id, Version: v, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 1.5},
+		TileID: id, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 1.5},
 	})
 	if err != nil {
 		t.Fatalf("set well view: %v", err)
@@ -264,11 +266,11 @@ func TestSetTextViewRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create text: %v", err)
 	}
-	id, v := tile.ID, tile.Version
+	id := tile.ID
 
 	tile, err = cl.SetTextView(ctx, &rpc.SetTextViewRequest{
-		TileID: id, Version: v,
-		TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: rpc.TextModeRendered,
+		TileID: id,
+		TextX:  1, TextY: 2, TextW: 3, TextH: 4, TextMode: rpc.TextModeRendered,
 	})
 	if err != nil {
 		t.Fatalf("set text view: %v", err)
@@ -288,7 +290,7 @@ func TestDeleteTileRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: tile.Version}); err != nil {
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 }
@@ -323,14 +325,14 @@ func TestCloneAndMoveRPCs(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	clone, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: tile.ID, Version: tile.Version,
+		TileID:     tile.ID,
 		DestGridID: root, X: 5, Y: 5,
 	})
 	if err != nil {
 		t.Fatalf("clone: %v", err)
 	}
 	moved, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: clone.ID, Version: clone.Version,
+		TileID: clone.ID,
 		GridID: root, X: 8, Y: 8, W: clone.W, H: clone.H,
 	})
 	if err != nil {
@@ -522,7 +524,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 		t.Fatal(err)
 	}
 	set, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: well.ID, Version: well.Version, Framing: want,
+		TileID: well.ID, Framing: want,
 	})
 	if err != nil {
 		t.Fatalf("SetFraming(doorway): %v", err)
@@ -575,7 +577,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 
 	// And the guiding rule: re-writing the SAME framing changes nothing.
 	if _, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: well.ID, Version: set.Version, Framing: want,
+		TileID: well.ID, Framing: want,
 	}); err != nil {
 		t.Fatalf("SetFraming(doorway, again): %v", err)
 	}

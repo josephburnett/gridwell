@@ -83,24 +83,18 @@ func (a *App) flushWellWheelSaves() {
 	for id, st := range a.wellWheelPending {
 		gid := st.gridID
 		delete(a.wellWheelPending, id)
-		version := st.version
-		if g, ok := a.c.Grid(gid); ok {
-			if t, ok := g.Tiles[id]; ok {
-				version = t.Version
-			}
-		}
 		tileID := id
 		req := &rpc.SetFramingRequest{
-			TileID: tileID, Version: version,
+			TileID:  tileID,
 			Framing: rpc.Framing{Cx: st.cx, Cy: st.cy, Zoom: st.ratio},
 		}
 		if a.unloading && a.sendBeaconJSON(rpc.SetFramingBeacon(req)) {
 			continue
 		}
-		a.postFramingPersist("SetFraming", gid, tileID, version,
-			func(ctx context.Context, version int64) (*rpc.Tile, error) {
-				req.Version = version
-				return a.cl.SetFraming(ctx, req)
+		a.postFramingPersist("SetFraming", gid, tileID,
+			func(ctx context.Context) error {
+				_, err := a.cl.SetFraming(ctx, req)
+				return err
 			})
 	}
 }
@@ -178,7 +172,7 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 		foot = zoomtrans.Well{W: door.W, H: door.H}
 		cur = rpc.Framing{Cx: door.ViewCx, Cy: door.ViewCy, Zoom: door.ViewZoom}
 		gridID = a.gridIDForPathFrom(doorAnchor, doorPath)
-		req = rpc.SetFramingRequest{TileID: door.ID, Version: door.Version}
+		req = rpc.SetFramingRequest{TileID: door.ID}
 		commit = func(f rpc.Framing) {
 			door.ViewCx, door.ViewCy, door.ViewZoom = f.Cx, f.Cy, f.Zoom
 			updated := *door
@@ -219,21 +213,15 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 	if a.unloading && a.sendBeaconJSON(rpc.SetFramingBeacon(&req)) {
 		return
 	}
-	if req.TileID != "" {
-		// Framing dispatcher: one conflict retry with a fresh claim, then
-		// the optimistic reaction (roll the patch above back on a
-		// remaining failure).
-		a.postFramingPersist("SetFraming", gridID, req.TileID, req.Version,
-			func(ctx context.Context, version int64) (*rpc.Tile, error) {
-				req.Version = version
-				return a.cl.SetFraming(ctx, &req)
-			})
-		return
+	// One dispatcher for both rows a framing can live on: the doorway tile
+	// and the root grid. They differ only in which id keys the parked write
+	// (a grid id and a tile id are separate sequences), never in policy —
+	// neither carries a claim.
+	key := req.TileID
+	if key == "" {
+		key = req.RootGridID
 	}
-	// A root write claims no version (there is no tile row to claim), so
-	// it rides the void dispatcher — its own pending key, since a grid id
-	// and a tile id are separate sequences.
-	a.postVoidPersist("SetFraming root", gridID, func(ctx context.Context) error {
+	a.postFramingPersist("SetFraming", gridID, key, func(ctx context.Context) error {
 		_, err := a.cl.SetFraming(ctx, &req)
 		return err
 	})
@@ -262,8 +250,8 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 		return
 	}
 	req := &rpc.SetTextViewRequest{
-		TileID: file.ID, Version: file.Version,
-		TextX: next.X, TextY: next.Y,
+		TileID: file.ID,
+		TextX:  next.X, TextY: next.Y,
 		TextW: next.W, TextH: next.H,
 		TextMode: next.Mode,
 	}
@@ -275,10 +263,10 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	if a.unloading && a.sendBeaconJSON(rpc.SetTextViewBeacon(req)) {
 		return
 	}
-	a.postFramingPersist("SetTextView", gid, file.ID, file.Version,
-		func(ctx context.Context, version int64) (*rpc.Tile, error) {
-			req.Version = version
-			return a.cl.SetTextView(ctx, req)
+	a.postFramingPersist("SetTextView", gid, file.ID,
+		func(ctx context.Context) error {
+			_, err := a.cl.SetTextView(ctx, req)
+			return err
 		})
 }
 

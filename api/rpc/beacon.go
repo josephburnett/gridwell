@@ -16,9 +16,13 @@ package rpc
 // text survives a tab close. That envelope is pinned to the real Connect
 // handler by a seam test in internal/server — if the protocol framing
 // ever shifts, the pin fails, not the user's last paragraph.
-// Known tradeoff: a beacon cannot retry a version conflict (the page is
-// gone) — a version bump racing the final instant of a session can still
-// cost that one write; the settle persister covers every earlier one.
+// The framing and url-state beacons carry no version claim at all
+// (docs/simplify-plan.md S5), so nothing they send can be refused for losing
+// a race the page is no longer around to re-run. The WriteContent beacon
+// still claims the save basis, as every content write must; a conflict there
+// is a genuine concurrent edit, and the beacon cannot resolve it (the page is
+// gone) — that one write is lost visibly on the next load rather than
+// silently overwriting the other edit.
 
 import (
 	"encoding/binary"

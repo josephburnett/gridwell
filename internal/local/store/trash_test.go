@@ -55,11 +55,10 @@ func hardDelete(t *testing.T, s *Store, tileID string) {
 	t.Helper()
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
-		cur, err := s.GetTile(ctx, tileID)
-		if err != nil {
+		if _, err := s.GetTile(ctx, tileID); err != nil {
 			t.Fatalf("hardDelete load (round %d): %v", i+1, err)
 		}
-		if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tileID, Version: cur.Version}); err != nil {
+		if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tileID}); err != nil {
 			t.Fatalf("hardDelete (round %d): %v", i+1, err)
 		}
 	}
@@ -73,7 +72,7 @@ func TestDeleteMovesToMonthTrashGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID, Version: txt.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID}); err != nil {
 		t.Fatal(err)
 	}
 	// The SAME tile — id continues, content intact. The version does NOT
@@ -120,23 +119,15 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cur, err := s.GetTile(ctx, w.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	// First delete: to the trash, subtree intact.
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: cur.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetTile(ctx, inner.ID); err != nil {
 		t.Fatalf("inner well must survive the trash move: %v", err)
 	}
 	// Second delete (the tile now sits in the month grid): real, cascades.
-	cur, err = s.GetTile(ctx, w.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: cur.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetTile(ctx, w.ID); !errors.Is(err, ErrNotFound) {
@@ -152,14 +143,14 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: deep.ID, Version: deep.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: deep.ID}); err != nil {
 		t.Fatal(err)
 	}
 	kid, err := s.CreateText(ctx, &rpc.CreateTextRequest{GridID: deep.ChildGridID, X: 0, Y: 0, W: 1, H: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: kid.ID, Version: kid.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: kid.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetTile(ctx, kid.ID); !errors.Is(err, ErrNotFound) {
@@ -174,7 +165,7 @@ func TestDeleteScratchTileBypassesTrash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: u.ID, Version: u.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: u.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetTile(ctx, u.ID); !errors.Is(err, ErrNotFound) {
@@ -191,7 +182,7 @@ func TestTrashMonthMintingIsIdempotent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID, Version: txt.Version}); err != nil {
+		if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -225,7 +216,7 @@ func TestTrashMonthMintingIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID, Version: txt.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID}); err != nil {
 		t.Fatal(err)
 	}
 	g, _ = s.GetGrid(ctx, trash)
@@ -244,7 +235,7 @@ func TestDeleteToTrashEmitsMoveShape(t *testing.T) {
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID, Version: txt.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID}); err != nil {
 		t.Fatal(err)
 	}
 	evs := drainEvents(t, ch)
@@ -270,15 +261,11 @@ func TestRestoreFromTrashIsAPlainMove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID, Version: txt.Version}); err != nil {
-		t.Fatal(err)
-	}
-	cur, err := s.GetTile(ctx, txt.ID)
-	if err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID}); err != nil {
 		t.Fatal(err)
 	}
 	back, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: txt.ID, Version: cur.Version, GridID: root, X: 4, Y: 4, W: 1, H: 1,
+		TileID: txt.ID, GridID: root, X: 4, Y: 4, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatalf("restore (PlaceTile out of trash): %v", err)
@@ -288,7 +275,7 @@ func TestRestoreFromTrashIsAPlainMove(t *testing.T) {
 	}
 	// And a delete AFTER restore trashes again (the route is by location,
 	// not history).
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: back.ID, Version: back.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: back.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetTile(ctx, back.ID); err != nil {

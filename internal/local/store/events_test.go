@@ -116,7 +116,7 @@ func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID,
 		GridID: w.GridID, X: 0, Y: 0, W: 3, H: 3,
 	}); err != nil {
 		t.Fatal(err)
@@ -138,7 +138,7 @@ func TestEventSetFramingEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:  w.ID,
 		Framing: rpc.Framing{Cx: 5, Cy: 7, Zoom: 1.0},
 	}); err != nil {
 		t.Fatal(err)
@@ -178,18 +178,14 @@ func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {
 	// Park it in the trash first (#262): this test pins the DESTRUCTION
 	// event shape; the trash-move shape is TestDeleteToTrashEmitsMoveShape.
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID,
 	}); err != nil {
-		t.Fatal(err)
-	}
-	cur, err := s.GetTile(ctx, w.ID)
-	if err != nil {
 		t.Fatal(err)
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: w.ID, Version: cur.Version,
+		TileID: w.ID,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +206,7 @@ func TestEventMoveTileWithinGridEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID,
 		GridID: root, X: 5, Y: 5, W: w.W, H: w.H,
 	}); err != nil {
 		t.Fatal(err)
@@ -238,7 +234,7 @@ func TestEventMoveTileAcrossGridsEmitsRemovedAndChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: target.ID, Version: target.Version,
+		TileID: target.ID,
 		GridID: a.ChildGridID, X: 0, Y: 0, W: target.W, H: target.H,
 	}); err != nil {
 		t.Fatal(err)
@@ -263,7 +259,7 @@ func TestEventCloneTileEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:     w.ID,
 		DestGridID: root, X: 5, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
@@ -300,7 +296,7 @@ func TestEventCloneURLEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: src.ID, Version: src.Version,
+		TileID:     src.ID,
 		DestGridID: root, X: 5, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
@@ -328,7 +324,7 @@ func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:     w.ID,
 		DestGridID: root, X: 5, Y: 0,
 	})
 	if err != nil {
@@ -343,7 +339,7 @@ func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: cInner.ID, Version: cInner.Version,
+		TileID: cInner.ID,
 		GridID: cInner.GridID, X: 0, Y: 0, W: 2, H: 2,
 	}); err != nil {
 		t.Fatal(err)

@@ -30,15 +30,15 @@ func TestCloneURLTile(t *testing.T) {
 	src := createURLTileForTest(t, s, root, 0, "https://example.com/a")
 	// Seed a preview (via the freeze RPC) so we can verify it carries over.
 	src, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: src.ID, Version: src.Version,
-		JPEG: []byte("jpegbytes"),
+		TileID: src.ID,
+		JPEG:   []byte("jpegbytes"),
 	})
 	if err != nil {
 		t.Fatalf("seed preview: %v", err)
 	}
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: src.ID, Version: src.Version,
+		TileID:     src.ID,
 		DestGridID: root, X: 2, Y: 0,
 	})
 	if err != nil {
@@ -109,8 +109,8 @@ func TestSetURLState(t *testing.T) {
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com/a")
 
 	out, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: tile.Version,
-		JPEG: []byte("frozenjpeg"), URL: "https://example.com/b", Title: "Example B",
+		TileID: tile.ID,
+		JPEG:   []byte("frozenjpeg"), URL: "https://example.com/b", Title: "Example B",
 	})
 	if err != nil {
 		t.Fatalf("SetURLState: %v", err)
@@ -142,18 +142,17 @@ func TestSetURLStateSkipsEmptyFields(t *testing.T) {
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com/keep")
 	tileIDInt, _ := parseID(tile.ID)
 	// Seed preview + title we expect to survive an empty-field update.
-	seed, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: tile.Version,
-		JPEG: []byte("keepjpeg"), Title: "Keep Title",
-	})
-	if err != nil {
+	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		TileID: tile.ID,
+		JPEG:   []byte("keepjpeg"), Title: "Keep Title",
+	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	// A capture that failed (empty jpeg) and reported no url/title must not
 	// clobber the good state.
 	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: seed.Version,
+		TileID: tile.ID,
 	}); err != nil {
 		t.Fatalf("empty update: %v", err)
 	}
@@ -187,7 +186,7 @@ func TestSetURLStateRefusesNonURLTile(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.SetURLState(context.Background(), &rpc.SetURLStateRequest{
-		TileID: w.ID, Version: w.Version, JPEG: []byte("x"),
+		TileID: w.ID, JPEG: []byte("x"),
 	})
 	if !errors.Is(err, ErrNotURLTile) {
 		t.Errorf("got %v, want ErrNotURLTile", err)
@@ -220,7 +219,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	// Clone the well: copy-on-clone deep-copies the child grid, so wellB gets
 	// its own independent URL tile (a re-rowed copy of wellA's).
 	wellB, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: wellA.ID, Version: wellA.Version,
+		TileID:     wellA.ID,
 		DestGridID: root, X: 50, Y: 0,
 	})
 	if err != nil {
@@ -243,8 +242,8 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		t.Fatalf("no URL tile in wellB's child grid %s", wellB.ChildGridID)
 	}
 	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: bURL.ID, Version: bURL.Version,
-		JPEG: []byte("frozen-b"), URL: "https://b.example", Title: "B",
+		TileID: bURL.ID,
+		JPEG:   []byte("frozen-b"), URL: "https://b.example", Title: "B",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +300,7 @@ func TestURLHistoryRoundTrip(t *testing.T) {
 	}
 	hist := `{"index":1,"entries":[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"}]}`
 	out, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: tile.Version, URL: "https://b", History: hist,
+		TileID: tile.ID, URL: "https://b", History: hist,
 	})
 	if err != nil {
 		t.Fatalf("SetURLState: %v", err)
@@ -311,7 +310,7 @@ func TestURLHistoryRoundTrip(t *testing.T) {
 	}
 	// A later freeze with NO history (partial capture) keeps the stored one.
 	out2, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: out.Version, URL: "https://b",
+		TileID: tile.ID, URL: "https://b",
 	})
 	if err != nil {
 		t.Fatalf("second SetURLState: %v", err)

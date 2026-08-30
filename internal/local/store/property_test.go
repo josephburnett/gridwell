@@ -51,13 +51,14 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 
 	// liveVersion reads the current version of a tile id, returning 0 and
 	// reporting not-found if the row is gone.
-	liveVersion := func(id string) (int64, error) {
+	// stillLive reports whether a tile the harness remembers is still in the
+	// store — a cascading delete may have taken it. (It used to also hand
+	// back the version each op claimed; nothing claims one now except a
+	// content write, so only the liveness half survives.)
+	stillLive := func(id string) bool {
 		idInt, _ := parseID(id)
-		t, err := s.loadTile(ctx, s.db, idInt)
-		if err != nil {
-			return 0, err
-		}
-		return t.Version, nil
+		_, err := s.loadTile(ctx, s.db, idInt)
+		return err == nil
 	}
 
 	for i := range iters {
@@ -118,14 +119,13 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				continue
 			}
 			src := tiles[rng.IntN(len(tiles))]
-			ver, err := liveVersion(src.id)
-			if err != nil {
+			if !stillLive(src.id) {
 				continue
 			}
 			x := int64(rng.IntN(20))*2 + 100
 			y := int64(rng.IntN(20)) * 2
 			n, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-				TileID: src.id, Version: ver,
+				TileID:     src.id,
 				DestGridID: root, X: x, Y: y,
 			})
 			if err != nil {
@@ -142,14 +142,13 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			pickIdx := rng.IntN(len(tiles))
 			pick := tiles[pickIdx]
-			ver, err := liveVersion(pick.id)
-			if err != nil {
+			if !stillLive(pick.id) {
 				continue
 			}
 			w := int64(1 + rng.IntN(3))
 			h := int64(1 + rng.IntN(3))
 			n, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-				TileID: pick.id, Version: ver,
+				TileID: pick.id,
 				GridID: pick.gridID, X: pick.x, Y: pick.y, W: w, H: h,
 			})
 			if err != nil {
@@ -169,14 +168,13 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			pickIdx := rng.IntN(len(tiles))
 			pick := tiles[pickIdx]
-			ver, err := liveVersion(pick.id)
-			if err != nil {
+			if !stillLive(pick.id) {
 				// gone; drop from harness
 				tiles = append(tiles[:pickIdx], tiles[pickIdx+1:]...)
 				continue
 			}
-			err = s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-				TileID: pick.id, Version: ver,
+			err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+				TileID: pick.id,
 			})
 			if err != nil && !isBenignPropError(err) {
 				t.Fatalf("iter %d delete: %v", i, err)
@@ -208,12 +206,11 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			if pick.kind != rpc.KindWell {
 				continue
 			}
-			ver, err := liveVersion(pick.id)
-			if err != nil {
+			if !stillLive(pick.id) {
 				continue
 			}
 			n, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
-				TileID: pick.id, Version: ver,
+				TileID:  pick.id,
 				Framing: rpc.Framing{Cx: rng.Float64() * 50, Cy: rng.Float64() * 50, Zoom: 1.0},
 			})
 			if err != nil && !isBenignPropError(err) {
@@ -236,13 +233,12 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			if pick.kind != rpc.KindShell {
 				continue
 			}
-			ver, err := liveVersion(pick.id)
-			if err != nil {
+			if !stillLive(pick.id) {
 				continue
 			}
 			n, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-				TileID: pick.id, Version: ver,
-				JPEG: []byte{byte('a' + rng.IntN(3))},
+				TileID: pick.id,
+				JPEG:   []byte{byte('a' + rng.IntN(3))},
 			})
 			if err != nil && !isBenignPropError(err) {
 				t.Fatalf("iter %d set shell preview: %v", i, err)

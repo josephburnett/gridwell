@@ -91,7 +91,7 @@ func TestCreateURLEmptyString(t *testing.T) {
 func TestMountUnknownPlugin(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	_, err := cl.CloneTile(context.Background(), &rpc.CloneTileRequest{
-		TileID: "no-such-plugin/1", Version: 0, DestGridID: root, X: 0, Y: 0,
+		TileID: "no-such-plugin/1", DestGridID: root, X: 0, Y: 0,
 	})
 	if got := errCode(err); got != connect.CodeNotFound {
 		t.Errorf("unknown plugin: code %v, want NotFound", got)

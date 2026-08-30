@@ -70,7 +70,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
-	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt.ID, Version: pt.Version}); err != nil {
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt.ID}); err != nil {
 		t.Fatalf("DeleteTile(pane): %v", err)
 	}
 
@@ -79,13 +79,12 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	if _, err := cl.GetTile(ctx, eph.ID); err != nil {
 		t.Fatalf("a trashed workspace must keep its ephemeral shell: %v", err)
 	}
-	cur, err := cl.GetTile(ctx, pt.ID)
-	if err != nil {
+	if _, err := cl.GetTile(ctx, pt.ID); err != nil {
 		t.Fatalf("trashed pane tile must still read: %v", err)
 	}
 	// The second delete (inside the trash) DESTROYS — and only then does
 	// the router reap what the arrangement owned.
-	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt.ID, Version: cur.Version}); err != nil {
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt.ID}); err != nil {
 		t.Fatalf("DeleteTile(pane, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph.ID); err == nil {
@@ -108,14 +107,13 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	if _, err := cl.WriteContent(ctx, pt2.ID, pt2.Version, []byte(`{"v":999,"root":{}}`)); err != nil {
 		t.Fatalf("SetPaneLayout (future version): %v", err)
 	}
-	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt2.ID, Version: pt2.Version}); err != nil {
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt2.ID}); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob): %v", err)
 	}
-	cur2, err := cl.GetTile(ctx, pt2.ID)
-	if err != nil {
+	if _, err := cl.GetTile(ctx, pt2.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt2.ID, Version: cur2.Version}); err != nil {
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt2.ID}); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph2.ID); err != nil {

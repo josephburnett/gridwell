@@ -213,7 +213,6 @@ func SetFramingToProto(req *SetFramingRequest) *pb.SetFramingRequest {
 	return &pb.SetFramingRequest{
 		TileId:     req.TileID,
 		RootGridId: req.RootGridID,
-		Version:    req.Version,
 		Cx:         req.Cx,
 		Cy:         req.Cy,
 		Zoom:       req.Zoom,
@@ -306,20 +305,21 @@ func (c *Client) RenameTile(ctx context.Context, tileID string, version int64, a
 	})))
 }
 
-// SetContentZoom persists a tile's content scale (framing; never bumps
-// version) — the text/terminal font or page zoom (issue #82). Rides the
+// SetContentZoom persists a tile's content scale (framing; no claim, never
+// bumps version) — the text/terminal font or page zoom (issue #82). Rides the
 // absorbed SetTile content_zoom arm (2026-07-26 redesign).
 func (c *Client) SetContentZoom(ctx context.Context, req *SetContentZoomRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
-		TileId: req.TileID, Version: req.Version, ContentZoom: &req.ContentZoom,
+		TileId: req.TileID, ContentZoom: &req.ContentZoom,
 	})))
 }
 
 // SetURLFrozen persists the user's standing freeze on a url tile (issue
-// #237; framing, never bumps version). Rides the SetTile url_frozen arm.
+// #237; framing, no claim, never bumps version). Rides the SetTile
+// url_frozen arm.
 func (c *Client) SetURLFrozen(ctx context.Context, req *SetURLFrozenRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
-		TileId: req.TileID, Version: req.Version, UrlFrozen: &req.Frozen,
+		TileId: req.TileID, UrlFrozen: &req.Frozen,
 	})))
 }
 

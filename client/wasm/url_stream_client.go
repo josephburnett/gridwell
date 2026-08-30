@@ -27,11 +27,6 @@ type urlView struct {
 	// (copy-on-clone: tiles are unshared, so the write is in-place — no fork).
 	anchor string
 	path   []string
-	// version is the target tile's version at place time — the freeze
-	// fallback when the tile isn't in any cached grid (a url LINK's target
-	// lives in a foreign grid the client may never have loaded). 0 = rely
-	// on the cache lookup (the ordinary same-plugin case).
-	version int64
 	// page marks a serves_page view (2026-08-11): the address is the
 	// derived /content/ door URL, and the close skips the SetURLState
 	// freeze writeback — the owning plugin (fs) derives its frozen face
@@ -106,21 +101,6 @@ func (a *App) webAddress(t *rpc.Tile) string {
 	return ""
 }
 
-// tileVersionAt returns the cached version of the tile at (anchor, path,
-// tileID), or 0 if it isn't cached. Read at freeze time so the url/shell
-// preview writebacks can claim the right version for their in-place,
-// versioned edits.
-func (a *App) tileVersionAt(anchor string, path []string, tileID string) int64 {
-	g, ok := a.c.Grid(a.gridIDForPathFrom(anchor, path))
-	if !ok {
-		return 0
-	}
-	if t, ok := g.Tiles[tileID]; ok {
-		return t.Version
-	}
-	return 0
-}
-
 // openURLStream goes live: it asks the Electron main process to place a
 // native WebContentsView for (pane, tile) over the pane's content box, on
 // the tile's persistent session partition. Bounds are computed from the
@@ -141,10 +121,10 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 		// (Auto-live never reaches here while the intent is set —
 		// DecideAutoLive blocks it — so this only fires on the explicit
 		// reconnect click.)
-		tid, version := t.ID, t.Version
+		tid := t.ID
 		go func() {
 			cleared, err := a.cl.SetURLFrozen(context.Background(), &rpc.SetURLFrozenRequest{
-				TileID: tid, Version: version, Frozen: false,
+				TileID: tid, Frozen: false,
 			})
 			if err != nil {
 				a.surfaceRPCError("SetTile", err)
@@ -154,7 +134,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 		}()
 	}
 	if t.LinkTargetID == "" {
-		a.placeURLView(p.ID, t, 0)
+		a.placeURLView(p.ID, t)
 		return
 	}
 	// A url LINK goes live as its TARGET: the url string, session partition
@@ -175,14 +155,13 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 		if !pane.StillDescended(a.tree.FindPane(paneID), t.ID) {
 			return
 		}
-		a.placeURLView(paneID, *target, target.Version)
+		a.placeURLView(paneID, *target)
 	}()
 }
 
 // placeURLView places the native WebContentsView for pane paneID showing
 // tile t (always the CONTENT-owning row — a link never reaches here).
-// version is the freeze fallback for a foreign target (see urlView.version).
-func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
+func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
 		return
@@ -209,7 +188,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	r := a.barAwarePaneRect(p)
 	b := contentViewBounds(r)
 	page := t.Kind != rpc.KindURL && t.ServesPage
-	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version, page: page}
+	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), page: page}
 	// durable = the DESCENDED row survives ascent: false for an ephemeral
 	// visit, which gets no Freeze Page in the context menu (issue #240).
 	// A page view is never durable in this sense either: it carries no
@@ -231,16 +210,16 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 // captures the ephemeral visit's final frame onto the persistent tile
 // that replaces it.
 type freezeTarget struct {
-	tileID  string
-	gridID  string
-	version int64
+	tileID string
+	gridID string
 }
 
 // closeURLStream tears down the live view for paneID: it removes the
 // WebContentsView, captures a final frame, and (when freeze is true) persists
 // the frozen preview + address + title via SetURLState. An ephemeral tile's
-// ascent passes freeze=false — the tile is about to be deleted, and a freeze
-// would bump its version out from under the delete (issue #85). Idempotent.
+// ascent passes freeze=false — the tile is about to be deleted, and freezing
+// a row that is being discarded is work nobody will ever see (issue #85).
+// Idempotent.
 func (a *App) closeURLStream(paneID string, freeze bool) {
 	a.closeURLStreamTo(paneID, nil, freeze)
 }
@@ -275,32 +254,25 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 		// url state to write. The wildcard put below still shows the final
 		// frame for the rest of the session.
 		if freeze && !v.page && (len(jpeg) > 0 || url != "" || title != "") {
-			// Look up the tile's current version from cache so the freeze is
-			// a versioned, in-place content edit (copy-on-clone: nothing is
-			// shared, so there is no fork — the write lands on this tile's row).
-			// A foreign target (live through a url link) isn't in any cached
-			// grid; fall back to the version captured at place time.
-			version := a.tileVersionAt(anchor, path, tileID)
-			if version == 0 {
-				version = v.version
-			}
 			gid := a.gridIDForPathFrom(anchor, path)
 			if target != nil {
-				version, gid = target.version, target.gridID
+				gid = target.gridID
 			}
-			// doFreezeWrite owns the leaving-gesture rule: a version conflict
-			// (a foreign writer or auto title capture racing the close)
-			// re-claims once and retries; a remaining failure surfaces AND
-			// resyncs the grid — the freeze the user just saw is not
-			// persisted and the preview will revert on next load (charter
-			// §6; issue #156 — this path used to bypass the dispatcher).
-			go a.doFreezeWrite("SetURLState", gid, tileID, version,
+			// doFreezeWrite owns the leaving-gesture rule. The freeze is an
+			// in-place CAPTURE on this tile's own row (copy-on-clone: nothing
+			// is shared, so there is no fork) — no claim, no bump
+			// (docs/simplify-plan.md S5), so a foreign writer or an auto
+			// title capture racing the close can no longer refuse it. A
+			// failure surfaces AND resyncs the grid — the freeze the user
+			// just saw is not persisted and the preview will revert on next
+			// load (charter §6; issue #156 — this path used to bypass the
+			// dispatcher).
+			go a.doFreezeWrite("SetURLState", gid, tileID,
 				"urlfreeze", "page preview save failed",
-				func(version int64) error {
+				func() error {
 					_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
-						TileID:  tileID,
-						Version: version,
-						JPEG:    jpeg, URL: url, Title: title, History: history,
+						TileID: tileID,
+						JPEG:   jpeg, URL: url, Title: title, History: history,
 					})
 					if err != nil {
 						urlLog("SetURLState tile=%s err=%v", tileID, err)
@@ -324,10 +296,9 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 // intent lands on the DESCENDED row (p.TextFocus) — for a url link that
 // is the link row itself: the freeze is this reference's presentation,
 // not the content owner's, and it is the row the next descent's
-// DecideAutoLive reads. The intent write goes first: it is framing
-// (version untouched), while the teardown's SetURLState bumps the
-// version. Ephemeral visits are skipped — they die on ascent and carry
-// no durable intent.
+// DecideAutoLive reads. The intent write goes first, then the teardown's
+// SetURLState capture; neither touches the version. Ephemeral visits are
+// skipped — they die on ascent and carry no durable intent.
 func (a *App) freezeURLPaneByIntent(paneID string) {
 	p := a.tree.FindPane(paneID)
 	pl, ok := a.localIf(paneID)
@@ -338,10 +309,10 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 	if !ok || tile.Kind != rpc.KindURL || a.isEphemeralTile(p, &tile) {
 		return
 	}
-	tid, version := tile.ID, tile.Version
+	tid := tile.ID
 	go func() {
 		t, err := a.cl.SetURLFrozen(context.Background(), &rpc.SetURLFrozenRequest{
-			TileID: tid, Version: version, Frozen: true,
+			TileID: tid, Frozen: true,
 		})
 		if err != nil {
 			// The freeze the user asked for did not stick — surface it

@@ -56,7 +56,7 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 		Tile: &gridwellv1.Tile{Kind: "well", ViewCx: 3, ViewCy: 4, ViewZoom: 2}}); err == nil {
 		t.Error("SetTile still accepts well framing; it must route through SetFraming")
 	}
-	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: well.Id, Version: well.Version,
+	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: well.Id,
 		Cx: 3, Cy: 4, Zoom: 2}); err != nil {
 		t.Fatalf("SetFraming well: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestCloneTileThroughPlugin(t *testing.T) {
 
 	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}, nil)
 	clone, err := p.CloneTile(ctx, &gridwellv1.CloneTileRequest{
-		TileId: well.Id, Version: well.Version, DestGridId: root, X: 5, Y: 0,
+		TileId: well.Id, DestGridId: root, X: 5, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("CloneTile: %v", err)
@@ -148,7 +148,7 @@ func TestDeleteExitWellThroughPluginNoCascade(t *testing.T) {
 	if ew.ChildGridId != "remote-uuid/7" {
 		t.Fatalf("exit well child = %q, want remote-uuid/7", ew.ChildGridId)
 	}
-	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: ew.Id, Version: ew.Version}); err != nil {
+	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: ew.Id}); err != nil {
 		t.Fatalf("DeleteTile exit well: %v", err)
 	}
 	// It's gone from the grid, and the delete didn't error trying to GC a

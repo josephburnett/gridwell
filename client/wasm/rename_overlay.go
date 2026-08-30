@@ -266,22 +266,21 @@ func (a *App) commitRenameRetained(tileID, alt string, apply func(*rpc.Tile)) {
 }
 
 // postRename is the one rename door: the versioned SetTile rename arm
-// (2026-07-26 redesign — a rename is a real user edit and claims a version).
-// The claim comes from the cached row; a conflict retries once with a fresh
-// read, since the racing writer of alt is only ever an automatic capture the
-// latch will out-rank anyway.
+// (2026-07-26 redesign — a name the user types is a content edit, so it
+// claims a version and bumps one). The claim comes from the cached row.
+//
+// A conflict SURFACES rather than re-claiming: it used to retry once,
+// because the racing writer of alt was "only ever an automatic capture the
+// latch will out-rank anyway" — and captures bumped the row. They no longer
+// do (docs/simplify-plan.md S5), so a conflict here means a genuine
+// concurrent content edit, and silently re-claiming over it is the stomp
+// class the save-basis rule exists to prevent.
 func (a *App) postRename(tileID, alt string) (*rpc.Tile, error) {
 	version := int64(0)
 	if t := a.cachedTileByID(tileID); t != nil {
 		version = t.Version
 	}
-	var tile *rpc.Tile
-	err := a.claimOnce(tileID, version, nil, func(v int64) error {
-		var e error
-		tile, e = a.cl.RenameTile(context.Background(), tileID, v, alt)
-		return e
-	})
-	return tile, err
+	return a.cl.RenameTile(context.Background(), tileID, version, alt)
 }
 
 // pxOf formats a float as a CSS pixel length.

@@ -151,8 +151,7 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 	// Two-stage (#262): the first delete PARKS the tile in the trash — it
 	// moved, it didn't die, so Probe still answers PRESENT.
 	_, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
-		TileId:  tile.Id,
-		Version: tile.Version,
+		TileId: tile.Id,
 	})
 	if err != nil {
 		t.Fatalf("DeleteTile: %v", err)
@@ -161,14 +160,12 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 	if pr.Presence != gridwellv1.ProbeResponse_PRESENCE_PRESENT {
 		t.Error("trashed tile must still probe PRESENT (it moved, it didn't die)")
 	}
-	cur, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: tile.Id})
-	if err != nil {
+	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: tile.Id}); err != nil {
 		t.Fatal(err)
 	}
 	// The second delete (inside the trash) destroys for real.
 	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
-		TileId:  tile.Id,
-		Version: cur.Tile.Version,
+		TileId: tile.Id,
 	}); err != nil {
 		t.Fatalf("DeleteTile (in trash): %v", err)
 	}
@@ -331,9 +328,8 @@ func TestWellFramingNoVersionBump(t *testing.T) {
 		t.Fatalf("CreateTile(well): %v", err)
 	}
 	set, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId:  well.Tile.Id,
-		Version: well.Tile.Version,
-		Cx:      5, Cy: 6, Zoom: 2,
+		TileId: well.Tile.Id,
+		Cx:     5, Cy: 6, Zoom: 2,
 	})
 	if err != nil {
 		t.Fatalf("SetFraming(well): %v", err)
@@ -514,7 +510,7 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	// Delete the pane tile: the first delete PARKS it in the trash (#262)
 	// and its workspace layout keeps holding its ephemerals — a restored
 	// workspace must come back whole, so nothing is reclaimable yet.
-	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id, Version: pt.Tile.Version}); err != nil {
+	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id}); err != nil {
 		t.Fatal(err)
 	}
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 0 {
@@ -523,11 +519,10 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	// The second delete destroys the pane tile; the reference dies with the
 	// blob and the next sweep reclaims the formerly-owned ephemeral. (The
 	// server-level delete reap usually gets there first; the sweep is the net.)
-	cur, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: pt.Tile.Id})
-	if err != nil {
+	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: pt.Tile.Id}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id, Version: cur.Tile.Version}); err != nil {
+	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id}); err != nil {
 		t.Fatal(err)
 	}
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 1 {

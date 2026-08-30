@@ -128,13 +128,8 @@ func (a *App) flushURLStateOnUnload() {
 		if url == "" {
 			continue
 		}
-		version := a.tileVersionAt(v.anchor, v.path, v.tileID)
-		if version == 0 {
-			version = v.version
-		}
 		if path, body := rpc.SetURLStateBeacon(&rpc.SetURLStateRequest{
-			TileID: v.tileID, Version: version,
-			URL: url, Title: v.lastTitle,
+			TileID: v.tileID, URL: url, Title: v.lastTitle,
 		}); body != nil {
 			a.sendBeacon(path, body, rpc.BeaconJSONType)
 		}

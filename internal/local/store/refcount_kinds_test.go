@@ -35,7 +35,7 @@ func TestCloneShellCarriesScreenshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	framed, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
+		TileID: sh.ID, JPEG: []byte("frozen-shell"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestCloneShellCarriesScreenshot(t *testing.T) {
 	}
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: framed.ID, Version: framed.Version,
+		TileID:     framed.ID,
 		DestGridID: root, X: 50, Y: 0,
 	})
 	if err != nil {
@@ -84,7 +84,7 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
+		TileID: sh.ID, JPEG: []byte("frozen-shell"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	// shell-with-preview. The copy shares the immutable preview blob, so its
 	// refcount must rise to 2 — the case cloneSubtree must get right.
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: well.Version,
+		TileID:     well.ID,
 		DestGridID: root, X: 50, Y: 0,
 	})
 	if err != nil {
@@ -140,7 +140,7 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 		t.Fatal(err)
 	}
 	framed, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
+		TileID: sh.ID, JPEG: []byte("frozen-shell"),
 	})
 	if err != nil {
 		t.Fatal(err)

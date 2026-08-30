@@ -11,7 +11,8 @@ import (
 
 // TestCreatePaneDefaultsAndGuards: a fresh pane tile has no layout blob
 // ("never arranged" — descent installs the default single pane), carries its
-// workspace name, and SetPaneLayout enforces the kind and version guards.
+// workspace name, and SetPaneLayout enforces the kind guard (and no version
+// guard — a layout write carries no claim).
 func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -102,7 +103,7 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 		t.Fatal("initial layout not stored")
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: orig.ID, Version: orig.Version,
+		TileID:     orig.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {

@@ -802,17 +802,18 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 
 	// Same-namespace left-drag is a move; clone is handled by the right-drag
 	// path (commitRightClone in right_button.go) and never reaches here.
-	// PlaceTile is the one placement writeback: id + version claim + the full
-	// (grid, x, y, w, h) fact — no descent paths (2026-07-26 redesign; the
-	// well-into-own-subtree refusal is the server's own ancestor walk now).
+	// PlaceTile is the one placement writeback: id + the full (grid, x, y, w,
+	// h) fact — no descent paths (2026-07-26 redesign; the
+	// well-into-own-subtree refusal is the server's own ancestor walk now)
+	// and no version claim (docs/simplify-plan.md S5: placement is layout,
+	// last-writer-wins; the overlap check is what protects the grid).
 	req := &rpc.PlaceTileRequest{
-		TileID:  d.tileID,
-		Version: d.snapshotTile.Version,
-		GridID:  dstGridID,
-		X:       dropX,
-		Y:       dropY,
-		W:       d.snapshotTile.W,
-		H:       d.snapshotTile.H,
+		TileID: d.tileID,
+		GridID: dstGridID,
+		X:      dropX,
+		Y:      dropY,
+		W:      d.snapshotTile.W,
+		H:      d.snapshotTile.H,
 	}
 	a.postCrossGridMutate("PlaceTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.PlaceTile(ctx, req)
@@ -1787,7 +1788,7 @@ func (a *App) startTextAscent(p *pane.Pane) {
 		a.closeShellStream(p.ID, !ephemeral)
 	}
 	if ephemeral {
-		a.deleteEphemeralTile(file.ID, file.Version)
+		a.deleteEphemeralTile(file.ID)
 	}
 
 	// (Mode + framed window are persisted by saveTextBeforeAscent, which
@@ -1849,7 +1850,7 @@ func (a *App) exitTextInstant(p *pane.Pane, restoreStash bool) {
 		a.saveTextBeforeAscent(p, t)
 		if a.leavingEphemeral(p, &t) {
 			ephemeral = true
-			defer a.deleteEphemeralTile(t.ID, t.Version)
+			defer a.deleteEphemeralTile(t.ID)
 		}
 	}
 	a.closeURLStream(p.ID, !ephemeral)   // no-op if not a URL descent
@@ -1982,7 +1983,6 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		}
 		req := &rpc.SetTextViewRequest{
 			TileID:   file.ID,
-			Version:  curVersion,
 			TextX:    scrollX,
 			TextY:    scrollY,
 			TextW:    viewW,
@@ -2201,7 +2201,11 @@ func (a *App) createURLAtCell(p *pane.Pane, cellX, cellY int64) {
 // goes live (issue #202), so no special go-live handling.
 func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 	gid := a.gridIDForPane(p)
-	paneID, id, version := p.ID, t.ID, t.Version
+	paneID, id := p.ID, t.ID
+	// The address IS content, so this write claims a version like every
+	// content write (docs/simplify-plan.md S5) — the row as the descent saw
+	// it, which is exactly the value the user is filling in.
+	version := t.Version
 	candidates := a.urlSuggestCandidates(uuidOf(gid))
 	a.openURLModal(candidates, func(url string) {
 		go func() {
@@ -2212,9 +2216,9 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 			// (audit #10, 2026-08-14) and the address lands on the retry
 			// kick; only the descend is skipped.
 			var tile rpc.Tile
-			err := a.doFreezeWrite("ConfigureURL", gid, id, version, "url", "url save failed",
-				func(v int64) error {
-					t, werr := a.cl.WriteContent(context.Background(), id, v, []byte(url))
+			err := a.doFreezeWrite("ConfigureURL", gid, id, "url", "url save failed",
+				func() error {
+					t, werr := a.cl.WriteContent(context.Background(), id, version, []byte(url))
 					if werr == nil {
 						tile = *t
 					}
@@ -2338,17 +2342,16 @@ func (a *App) leavingEphemeral(p *pane.Pane, t *rpc.Tile) bool {
 // (all processes) as part of the delete. A failure surfaces on the strip
 // (charter §6); otherwise the tile would silently leak in the scratch grid
 // until the startup sweep.
-func (a *App) deleteEphemeralTile(tileID string, version int64) {
+func (a *App) deleteEphemeralTile(tileID string) {
 	go func() {
-		// The stream close that precedes this delete triggers the plugin's
-		// detach-time title capture — a version bump racing the claim
-		// (deterministically since the gRPC transport made teardown fast,
-		// 2026-07-26). claimOnce absorbs it: the delete is the USER's
-		// explicit action and an automatic capture must never outrank it.
-		err := a.claimOnce(tileID, version, nil, func(v int64) error {
-			return a.cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
-				TileID: tileID, Version: v,
-			})
+		// No claim: a delete is the USER's explicit action, and the stream
+		// close that precedes it triggers the plugin's detach-time title
+		// capture — which used to bump the row and refuse this delete,
+		// forcing a one-shot re-claim here. Captures no longer bump and a
+		// delete no longer claims (docs/simplify-plan.md S5), so the whole
+		// race is gone rather than absorbed.
+		err := a.cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
+			TileID: tileID,
 		})
 		if err != nil {
 			a.reportErr(errsurface.Error, "ephemeral",
@@ -2485,12 +2488,12 @@ func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cell
 	}
 	gid := a.gridIDForPane(destPane)
 	destID := destPane.ID
-	oldID, oldVersion := t.ID, t.Version
+	oldID := t.ID
 	req := &rpc.CreateURLRequest{GridID: gid, X: cellX, Y: cellY, W: 1, H: 1, URL: url}
 	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateURL(ctx, req)
 	}, func(created rpc.Tile) {
-		a.finishPromote(originPaneID, destID, oldID, oldVersion, created)
+		a.finishPromote(originPaneID, destID, oldID, created)
 	})
 }
 
@@ -2502,25 +2505,25 @@ func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cell
 // grid (pane.RelocateTo — the nav chain and the next ascent read the new
 // place, its ascent viewport being the destination pane's); and the page
 // goes live again on the new tile.
-func (a *App) finishPromote(originPaneID, destPaneID, oldID string, oldVersion int64, created rpc.Tile) {
+func (a *App) finishPromote(originPaneID, destPaneID, oldID string, created rpc.Tile) {
 	op := a.tree.FindPane(originPaneID)
 	dp := a.tree.FindPane(destPaneID)
 	if !pane.StillDescended(op, oldID) || dp == nil {
 		return // moved on mid-flight: the tile stays where it was dropped
 	}
-	a.closeURLStreamTo(op.ID, &freezeTarget{tileID: created.ID, gridID: created.GridID, version: created.Version}, true)
+	a.closeURLStreamTo(op.ID, &freezeTarget{tileID: created.ID, gridID: created.GridID}, true)
 	// The row dies only if no sibling pane still shows the visit (a split
 	// clone keeps it, and deletes it on ITS ascent) — the same guard every
 	// ascent applies, through the same door.
 	if old := a.cachedTileByID(oldID); old != nil && a.leavingEphemeral(op, old) {
-		a.deleteEphemeralTile(oldID, oldVersion)
+		a.deleteEphemeralTile(oldID)
 	}
 	op.RelocateTo(dp, created.ID)
 	// The ascent viewport is now the destination's: pop the visit's saved
 	// origin and push where the tile lives.
 	a.popPaneState(op.ID)
 	a.pushPaneState(op.ID, paneState{Cx: dp.Cx, Cy: dp.Cy, Zoom: dp.Zoom})
-	a.placeURLView(op.ID, created, created.Version)
+	a.placeURLView(op.ID, created)
 	a.refreshFileOverlay()
 	a.scheduleURLUpdate()
 	a.draw()

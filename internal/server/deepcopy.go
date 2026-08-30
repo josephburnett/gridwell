@@ -57,11 +57,12 @@ func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient
 		return nil, err
 	}
 	// Preserve the well's framing (preview = descent target = ascent
-	// return). Framing-class: no version bump. The writeback's response is
-	// the current row — return THAT, not the pre-framing create response.
+	// return). Framing-class: no claim, no version bump. The writeback's
+	// response is the current row — return THAT, not the pre-framing create
+	// response.
 	framed, err := dst.SetFraming(ctx, &pb.SetFramingRequest{
-		TileId: created.GetTile().GetId(), Version: created.GetTile().GetVersion(),
-		Cx: srcLocalTile.ViewCx, Cy: srcLocalTile.ViewCy, Zoom: srcLocalTile.ViewZoom,
+		TileId: created.GetTile().GetId(),
+		Cx:     srcLocalTile.ViewCx, Cy: srcLocalTile.ViewCy, Zoom: srcLocalTile.ViewZoom,
 	})
 	if err != nil {
 		return created, fmt.Errorf("well framing: %w", err)

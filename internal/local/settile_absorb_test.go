@@ -159,7 +159,7 @@ func TestPlaceTileDispatch(t *testing.T) {
 
 	text := createTile(t, p, root, &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}, []byte("x"))
 	r, err := p.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
-		TileId: text.Id, Version: text.Version, GridId: root, X: 4, Y: 5, W: 2, H: 3,
+		TileId: text.Id, GridId: root, X: 4, Y: 5, W: 2, H: 3,
 	})
 	if err != nil {
 		t.Fatalf("place: %v", err)

@@ -487,10 +487,8 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 	tileID := d.tileID
-	version := d.snapshotTile.Version
 	req := &rpc.CloneTileRequest{
 		TileID:     tileID,
-		Version:    version,
 		DestGridID: dstGridID,
 		X:          dropX,
 		Y:          dropY,
@@ -509,10 +507,7 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	if t != nil {
 		dstGridID = t.gridID
 	}
-	req := &rpc.DeleteTileRequest{
-		TileID:  d.tileID,
-		Version: d.snapshotTile.Version,
-	}
+	req := &rpc.DeleteTileRequest{TileID: d.tileID}
 	// Drop any cached liveness probe for this tile — the row is
 	// about to vanish and so will the tmux session the server side
 	// kills behind it.
@@ -537,13 +532,12 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	}
 	gid := a.gridIDForPane(p)
 	req := &rpc.PlaceTileRequest{
-		TileID:  n.ID,
-		Version: n.Version,
-		GridID:  n.GridID,
-		X:       rd.tileNewX,
-		Y:       rd.tileNewY,
-		W:       rd.tileNewW,
-		H:       rd.tileNewH,
+		TileID: n.ID,
+		GridID: n.GridID,
+		X:      rd.tileNewX,
+		Y:      rd.tileNewY,
+		W:      rd.tileNewW,
+		H:      rd.tileNewH,
 	}
 	a.postTileMutate("PlaceTile", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.PlaceTile(ctx, req)

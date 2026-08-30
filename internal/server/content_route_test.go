@@ -114,7 +114,7 @@ func TestPreviewDoorResolvesLeafLink(t *testing.T) {
 	}
 	jpeg := []byte("\xff\xd8fake-jpeg-bytes")
 	if _, err := cl.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: src.ID, Version: src.Version, JPEG: jpeg,
+		TileID: src.ID, JPEG: jpeg,
 	}); err != nil {
 		t.Fatalf("freeze: %v", err)
 	}

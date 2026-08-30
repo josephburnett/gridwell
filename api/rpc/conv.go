@@ -240,33 +240,35 @@ func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
 // tile's Kind; these helpers map each kind's framing/preview writeback onto it.
 
 func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
+	return &pb.SetTileRequest{TileId: r.TileID,
 		Tile: &pb.Tile{Kind: KindText, TextX: r.TextX, TextY: r.TextY, TextW: r.TextW, TextH: r.TextH, TextMode: r.TextMode}}
 }
 func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
+	return &pb.SetTileRequest{TileId: r.TileID,
 		Tile: &pb.Tile{Kind: KindShell}, Preview: r.JPEG}
 }
 func SetURLStateToProto(r *SetURLStateRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
+	return &pb.SetTileRequest{TileId: r.TileID,
 		Tile: &pb.Tile{Kind: KindURL, UrlString: r.URL, AltText: r.Title, UrlHistory: r.History}, Preview: r.JPEG}
 }
 
-// Mutation request converters.
+// Mutation request converters. None of these carries a version: layout is
+// last-writer-wins (docs/simplify-plan.md S5), and the reserved proto field
+// numbers say so on the wire.
 
 func CloneTileFromProto(r *pb.CloneTileRequest) *CloneTileRequest {
-	return &CloneTileRequest{TileID: r.TileId, Version: r.Version, DestGridID: r.DestGridId, X: r.X, Y: r.Y}
+	return &CloneTileRequest{TileID: r.TileId, DestGridID: r.DestGridId, X: r.X, Y: r.Y}
 }
 func CloneTileToProto(r *CloneTileRequest) *pb.CloneTileRequest {
-	return &pb.CloneTileRequest{TileId: r.TileID, Version: r.Version, DestGridId: r.DestGridID, X: r.X, Y: r.Y}
+	return &pb.CloneTileRequest{TileId: r.TileID, DestGridId: r.DestGridID, X: r.X, Y: r.Y}
 }
 
 func PlaceTileFromProto(r *pb.PlaceTileRequest) *PlaceTileRequest {
-	return &PlaceTileRequest{TileID: r.TileId, Version: r.Version, GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
+	return &PlaceTileRequest{TileID: r.TileId, GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
 }
 
 func PlaceTileToProto(r *PlaceTileRequest) *pb.PlaceTileRequest {
-	return &pb.PlaceTileRequest{TileId: r.TileID, Version: r.Version, GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
+	return &pb.PlaceTileRequest{TileId: r.TileID, GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
 }
 
 func ShellSessionAliveToProto(r *ShellSessionAliveRequest) *pb.ShellSessionAliveRequest {
@@ -277,10 +279,10 @@ func ShellSessionAliveResponseFromProto(r *pb.ShellSessionAliveResponse) *ShellS
 }
 
 func DeleteTileFromProto(r *pb.DeleteTileRequest) *DeleteTileRequest {
-	return &DeleteTileRequest{TileID: r.TileId, Version: r.Version}
+	return &DeleteTileRequest{TileID: r.TileId}
 }
 func DeleteTileToProto(r *DeleteTileRequest) *pb.DeleteTileRequest {
-	return &pb.DeleteTileRequest{TileId: r.TileID, Version: r.Version}
+	return &pb.DeleteTileRequest{TileId: r.TileID}
 }
 
 // MenuEntriesToProto / FromProto convert the plugin menu-entry lists

@@ -48,15 +48,23 @@ func tileVersion(t *testing.T, s *Store, tileID string) int64 {
 
 // versionCase is one store mutation and what the version rule says about it.
 // subject builds the fixture row the mutation runs against; mutate runs the
-// write with the claim it is handed (mutations that carry no claim ignore
-// it, which is exactly what the claims=false subtest proves).
+// write truthfully.
+//
+// staleClaim is the same write with a version the world has moved past. It is
+// nil for every mutation whose request carries NO version at all — which is
+// most of them since docs/simplify-plan.md S5 reserved those wire fields, and
+// is the strongest form of the rule: for those writes a stale claim is not
+// ignored, it is unrepresentable, and the compiler is the pin. Where a
+// version is still on the signature (WriteContent's kind dispatch), claims
+// says whether that arm actually reads it.
 type versionCase struct {
-	name    string
-	subject func(t *testing.T, s *Store, ctx context.Context, root string) *rpc.Tile
-	mutate  func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error
-	// bumps: a truthful claim advances the row's version.
+	name       string
+	subject    func(t *testing.T, s *Store, ctx context.Context, root string) *rpc.Tile
+	mutate     func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error
+	staleClaim func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error
+	// bumps: the write advances the row's version.
 	bumps bool
-	// claims: a STALE claim is refused with ErrVersionConflict.
+	// claims: staleClaim is refused with ErrVersionConflict.
 	claims bool
 }
 
@@ -109,24 +117,36 @@ var versionCases = []versionCase{
 	// ── Content: the user's own bytes. Bumps, and claims. ──────────────
 	{
 		name: "WriteContent/text body", subject: textSubject, bumps: true, claims: true,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
-			_, err := s.WriteContent(ctx, tile.ID, claim, []byte("# edited"))
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.WriteContent(ctx, tile.ID, tile.Version, []byte("# edited"))
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.WriteContent(ctx, tile.ID, tile.Version+7, []byte("# edited"))
 			return err
 		},
 	},
 	{
 		// Byte-identical bytes are a true no-op: reading and no-op writes
-		// never mutate (the primary rule).
+		// never mutate (the primary rule). The claim is still checked.
 		name: "WriteContent/text body unchanged", subject: textSubject, bumps: false, claims: true,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
-			_, err := s.WriteContent(ctx, tile.ID, claim, []byte("# hi"))
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.WriteContent(ctx, tile.ID, tile.Version, []byte("# hi"))
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.WriteContent(ctx, tile.ID, tile.Version+7, []byte("# hi"))
 			return err
 		},
 	},
 	{
 		name: "WriteContent/url address", subject: urlSubject, bumps: true, claims: true,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
-			_, err := s.WriteContent(ctx, tile.ID, claim, []byte("https://elsewhere.example"))
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.WriteContent(ctx, tile.ID, tile.Version, []byte("https://elsewhere.example"))
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.WriteContent(ctx, tile.ID, tile.Version+7, []byte("https://elsewhere.example"))
 			return err
 		},
 	},
@@ -134,8 +154,12 @@ var versionCases = []versionCase{
 		// alt_text IS content when the USER types it (it changes the
 		// markdown a drop produces), and the rename latches alt_user.
 		name: "RenameTile/user rename", subject: urlSubject, bumps: true, claims: true,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
-			_, err := s.RenameTile(ctx, tile.ID, claim, "a name I typed")
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.RenameTile(ctx, tile.ID, tile.Version, "a name I typed")
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.RenameTile(ctx, tile.ID, tile.Version+7, "a name I typed")
 			return err
 		},
 	},
@@ -143,27 +167,27 @@ var versionCases = []versionCase{
 	// ── Captures: what the server observed. No bump, no claim. ─────────
 	{
 		// The shell detach path baking in the tmux foreground command.
-		name: "SetTileAlt/automatic capture", subject: shellSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "SetTileAlt/automatic capture", subject: shellSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			return s.SetTileAlt(ctx, mustParseID(t, tile.ID), "vim CLAUDE.md", false)
 		},
 	},
 	{
-		name: "SetURLState/freeze capture", subject: urlSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "SetURLState/freeze capture", subject: urlSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-				TileID: tile.ID, Version: claim,
-				JPEG: []byte("jpegbytes"), URL: "https://example.com/deep",
+				TileID: tile.ID,
+				JPEG:   []byte("jpegbytes"), URL: "https://example.com/deep",
 				Title: "Example", History: `["https://example.com"]`,
 			})
 			return err
 		},
 	},
 	{
-		name: "SetShellPreview/frozen frame", subject: shellSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "SetShellPreview/frozen frame", subject: shellSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-				TileID: tile.ID, Version: claim, JPEG: []byte("jpegbytes"),
+				TileID: tile.ID, JPEG: []byte("jpegbytes"),
 			})
 			return err
 		},
@@ -171,47 +195,55 @@ var versionCases = []versionCase{
 
 	// ── Framing: how it looked. No bump, no claim. ─────────────────────
 	{
-		name: "SetTextView/window and mode", subject: textSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "SetTextView/window and mode", subject: textSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.SetTextView(ctx, &rpc.SetTextViewRequest{
-				TileID: tile.ID, Version: claim,
-				TextX: 10, TextY: 20, TextW: 300, TextH: 400, TextMode: "rendered",
+				TileID: tile.ID,
+				TextX:  10, TextY: 20, TextW: 300, TextH: 400, TextMode: "rendered",
 			})
 			return err
 		},
 	},
 	{
-		name: "SetContentZoom/content scale", subject: shellSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "SetContentZoom/content scale", subject: shellSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
-				TileID: tile.ID, Version: claim, ContentZoom: 1.5,
+				TileID: tile.ID, ContentZoom: 1.5,
 			})
 			return err
 		},
 	},
 	{
-		name: "SetURLFrozen/standing freeze", subject: urlSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "SetURLFrozen/standing freeze", subject: urlSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.SetURLFrozen(ctx, &rpc.SetURLFrozenRequest{
-				TileID: tile.ID, Version: claim, Frozen: true,
+				TileID: tile.ID, Frozen: true,
 			})
 			return err
 		},
 	},
 	{
-		name: "SetFraming/doorway viewport", subject: wellSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "SetFraming/doorway viewport", subject: wellSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
-				TileID: tile.ID, Version: claim,
+				TileID:  tile.ID,
 				Framing: rpc.Framing{Cx: 3, Cy: 4, Zoom: 1.25},
 			})
 			return err
 		},
 	},
 	{
+		// The one framing write that still SEES a version: a pane layout
+		// rides WriteContent's kind dispatch, whose signature carries one
+		// for the text and url arms. This arm must ignore it.
 		name: "SetPaneLayout/workspace arrangement", subject: paneSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
-			_, err := s.SetPaneLayout(ctx, mustParseID(t, tile.ID), claim,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.SetPaneLayout(ctx, mustParseID(t, tile.ID), tile.Version,
+				[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			_, err := s.SetPaneLayout(ctx, mustParseID(t, tile.ID), tile.Version+7,
 				[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 			return err
 		},
@@ -219,10 +251,10 @@ var versionCases = []versionCase{
 
 	// ── Layout: where it sits. No bump, no claim. ──────────────────────
 	{
-		name: "PlaceTile/move and resize", subject: textSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "PlaceTile/move and resize", subject: textSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-				TileID: tile.ID, Version: claim, GridID: tile.GridID, X: 6, Y: 7, W: 3, H: 3,
+				TileID: tile.ID, GridID: tile.GridID, X: 6, Y: 7, W: 3, H: 3,
 			})
 			return err
 		},
@@ -230,10 +262,10 @@ var versionCases = []versionCase{
 	{
 		// The SOURCE row is untouched by a clone; the copy carries its
 		// version so the two stay "the same content" until one diverges.
-		name: "CloneTile/source row", subject: textSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
+		name: "CloneTile/source row", subject: textSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
 			_, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-				TileID: tile.ID, Version: claim, DestGridID: tile.GridID, X: 6, Y: 6,
+				TileID: tile.ID, DestGridID: tile.GridID, X: 6, Y: 6,
 			})
 			return err
 		},
@@ -241,9 +273,9 @@ var versionCases = []versionCase{
 	{
 		// A delete on an ordinary grid MOVES the row into the trash (same
 		// id, same row) — layout, so the version is untouched there too.
-		name: "DeleteTile/move to trash", subject: textSubject, bumps: false, claims: false,
-		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile, claim int64) error {
-			return s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: claim})
+		name: "DeleteTile/move to trash", subject: textSubject, bumps: false,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *rpc.Tile) error {
+			return s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID})
 		},
 	},
 }
@@ -257,8 +289,8 @@ func TestVersionRuleBump(t *testing.T) {
 			ctx := context.Background()
 			tile := c.subject(t, s, ctx, rootID(t, s))
 			v0 := tile.Version
-			if err := c.mutate(t, s, ctx, tile, v0); err != nil {
-				t.Fatalf("mutate with a truthful claim: %v", err)
+			if err := c.mutate(t, s, ctx, tile); err != nil {
+				t.Fatalf("mutate: %v", err)
 			}
 			got := tileVersion(t, s, tile.ID)
 			want := v0
@@ -273,17 +305,28 @@ func TestVersionRuleBump(t *testing.T) {
 }
 
 // TestVersionRuleClaim: a STALE version is refused only by the writes that
-// carry the user's content claim. Everything else is last-writer-wins and
-// must accept it — an automatic capture, a framing settle, or a drag that
-// raced someone else's edit may not be turned into a conflict the user has
-// to notice.
+// carry the user's content claim. Everything else is last-writer-wins — an
+// automatic capture, a framing settle, or a drag that raced someone else's
+// edit may not be turned into a conflict the user has to notice.
+//
+// Most cases have no staleClaim at all: their requests carry no version
+// field, so the claim is unrepresentable rather than ignored. Those are
+// counted here so a case can never quietly grow one back without saying so.
 func TestVersionRuleClaim(t *testing.T) {
+	claimable := 0
 	for _, c := range versionCases {
+		if c.staleClaim == nil {
+			if c.claims {
+				t.Errorf("%s: claims=true but there is no way to send a stale claim", c.name)
+			}
+			continue
+		}
+		claimable++
 		t.Run(c.name, func(t *testing.T) {
 			s := newTestStore(t)
 			ctx := context.Background()
 			tile := c.subject(t, s, ctx, rootID(t, s))
-			err := c.mutate(t, s, ctx, tile, tile.Version+7)
+			err := c.staleClaim(t, s, ctx, tile)
 			if c.claims && !errors.Is(err, ErrVersionConflict) {
 				t.Errorf("stale claim: got %v, want ErrVersionConflict", err)
 			}
@@ -291,6 +334,11 @@ func TestVersionRuleClaim(t *testing.T) {
 				t.Errorf("stale claim was refused, but this write carries no claim: %v", err)
 			}
 		})
+	}
+	// The four content arms plus the pane arm that must IGNORE its version.
+	// A change to this number is a change to the rule: say so in the commit.
+	if claimable != 5 {
+		t.Errorf("%d writes can be handed a version, want 5 — a new one appeared, or one lost its claim", claimable)
 	}
 }
 
@@ -307,7 +355,7 @@ func TestContentZoomRefusesWells(t *testing.T) {
 		t.Fatalf("CreateWell: %v", err)
 	}
 	if _, err := s.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
-		TileID: well.ID, Version: well.Version, ContentZoom: 2,
+		TileID: well.ID, ContentZoom: 2,
 	}); err == nil {
 		t.Error("SetContentZoom on a well must be refused")
 	}

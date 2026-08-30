@@ -36,13 +36,6 @@ type voidCall func(ctx context.Context) error
 // clientsync's (the one wire-code classifier).
 func isUnimplemented(err error) bool { return clientsync.IsUnimplemented(err) }
 
-// isVersionConflict reports whether an RPC error came back as a
-// version/overlap conflict (the one-retry loops re-claim on exactly this).
-// The classification itself is owned by clientsync.Of.
-func isVersionConflict(err error) bool {
-	return clientsync.Of(err) == clientsync.OutcomeConflict
-}
-
 // surfaceRPCError surfaces a non-nil RPC error as an on-canvas notice (the
 // errsurface strip — what the user actually sees); reportErr also writes the
 // one console/log line. It is only reached for real failures — the
@@ -127,60 +120,33 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, cal
 	}()
 }
 
-// postFramingPersist dispatches a versioned FRAMING write with the freeze
-// path's one-retry rule (framing-audit decision 2026-08-13, "less cases,
-// less code"): on a version conflict, re-claim ONCE via GetTile and retry
-// — a racing version-bumping writer (a rename, a resize, a title capture)
-// must not silently cost the user's settled viewport. The caller already
-// patched the cache, so any REMAINING failure follows reactFraming: a
+// postFramingPersist dispatches a FRAMING write. Framing carries no version
+// claim (2026-08-29, docs/simplify-plan.md S5: version is the user's content
+// claim, framing is last-writer-wins), so there is no conflict to re-claim
+// through — the one-retry rule the old dispatcher needed existed only
+// because automatic captures bumped the row out from under a settle. The
+// caller already patched the cache, so a failure follows reactFraming: a
 // verdict refetches (rolls the patch back to server truth); a transport
-// failure keeps the patch and PARKS the write in the pending ledger — the
-// retry kick re-enters here, where the conflict re-claim absorbs any
-// version the world moved while the link was down.
-func (a *App) postFramingPersist(label, gid, tileID string, version int64, call func(ctx context.Context, version int64) (*rpc.Tile, error)) {
+// failure keeps the patch and PARKS the write in the pending ledger for the
+// retry kick.
+func (a *App) postFramingPersist(label, gid, tileID string, call func(ctx context.Context) error) {
 	a.persistPosts[label]++
 	go func() {
-		err := a.claimOnce(tileID, version, nil, func(v int64) error {
-			_, e := call(context.Background(), v)
-			return e
-		})
+		err := call(context.Background())
 		a.reactFraming(label, gid, pending.Key{Op: label, ID: tileID},
-			func() { a.postFramingPersist(label, gid, tileID, version, call) }, err)
+			func() { a.postFramingPersist(label, gid, tileID, call) }, err)
 	}()
 }
 
-// claimOnce is THE one-retry conflict rule (framing-audit decision
-// 2026-08-13, "less cases, less code"), in exactly one place: run call
-// with version; on a version conflict re-claim ONCE via GetTile and
-// retry with the fresh claim — an automatic version-bumping writer (a
-// rename, a resize, a detach-time title capture, a foreign framing
-// write) must never outrank the user's action. onFresh (nil ok) hands
-// the re-claimed row to callers that track a captured version of their
-// own before the retry runs. Every conflict-retrying write goes through
-// here; a sixth hand-rolled copy is how the rule drifts.
-func (a *App) claimOnce(tileID string, version int64, onFresh func(*rpc.Tile), call func(version int64) error) error {
-	err := call(version)
-	if err != nil && isVersionConflict(err) {
-		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
-			if onFresh != nil {
-				onFresh(fresh)
-			}
-			err = call(fresh.Version)
-		}
-	}
-	return err
-}
-
 // doFreezeWrite runs a leaving-gesture freeze writeback (url page / shell
-// terminal preview) with the one retry rule: claim `version`; on a version
-// conflict re-claim ONCE via GetTile and retry — an automatic writer racing
-// the user's leaving gesture (the detach-time title capture, a foreign
-// framing write) must not cost the freeze. Any remaining error surfaces as
-// `source`/`failText` AND goes through the conflict-reconcile dispatcher so
-// the cache resyncs instead of drifting (issue #156 — these paths used to
-// bypass reactToErr). Blocking; callers run it from a goroutine.
-func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, failText string, write func(version int64) error) error {
-	err := a.claimOnce(tileID, version, nil, write)
+// terminal preview). A freeze is an automatic CAPTURE: no version claim, no
+// bump (docs/simplify-plan.md S5) — so nothing here can conflict, and the
+// re-claim this path used to need is gone with the bump that caused it. Any
+// error surfaces as `source`/`failText` AND goes through the reconcile
+// dispatcher so the cache resyncs instead of drifting (issue #156).
+// Blocking; callers run it from a goroutine.
+func (a *App) doFreezeWrite(label, gid, tileID, source, failText string, write func() error) error {
+	err := write()
 	k := pending.Key{Op: label, ID: tileID}
 	if clientsync.Of(err) == clientsync.OutcomeTransport {
 		// Park the freeze: the write closure holds the captured payload
@@ -189,7 +155,7 @@ func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, fa
 		// one blip at ascent cost the tile its page, its trail, and its
 		// frozen face until the next live visit.
 		a.pend.Put(k, func() {
-			go a.doFreezeWrite(label, gid, tileID, version, source, failText, write)
+			go a.doFreezeWrite(label, gid, tileID, source, failText, write)
 		})
 		a.reportErr(errsurface.Info, source, failText+": server unreachable — will retry")
 		return err

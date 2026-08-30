@@ -256,7 +256,7 @@ func TestResizeNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	r, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID,
 		GridID: w.GridID, X: 0, Y: 0, W: 3, H: 4,
 	})
 	if err != nil {
@@ -277,7 +277,7 @@ func TestResizeNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: r.ID, Version: r.Version,
+		TileID: r.ID,
 		GridID: r.GridID, X: 0, Y: 0, W: 5, H: 4,
 	})
 	if !errors.Is(err, ErrOverlap) {
@@ -299,7 +299,7 @@ func TestResizeIgnoresStaleClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	r, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: w.ID, Version: w.Version + 99,
+		TileID: w.ID,
 		GridID: w.GridID, X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
@@ -321,7 +321,7 @@ func TestSetFraming(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:  w.ID,
 		Framing: rpc.Framing{Cx: 5.25, Cy: 7.5, Zoom: 1.5},
 	})
 	if err != nil {
@@ -351,7 +351,7 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:     w.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
@@ -362,7 +362,7 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 	}
 	// Frame only the clone.
 	framed, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: clone.ID, Version: clone.Version,
+		TileID:  clone.ID,
 		Framing: rpc.Framing{Cx: 3, Cy: 4, Zoom: 2.0},
 	})
 	if err != nil {
@@ -400,8 +400,8 @@ func TestSetTextViewPersistsWindowAndMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.SetTextView(ctx, &rpc.SetTextViewRequest{
-		TileID: f.ID, Version: f.Version,
-		TextX: 10, TextY: 20, TextW: 640, TextH: 480, TextMode: rpc.TextModeRendered,
+		TileID: f.ID,
+		TextX:  10, TextY: 20, TextW: 640, TextH: 480, TextMode: rpc.TextModeRendered,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -441,7 +441,7 @@ func TestSetFramingRejectsNonWell(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: f.ID, Version: f.Version, Framing: rpc.Framing{Cx: 1, Cy: 1, Zoom: 1},
+		TileID: f.ID, Framing: rpc.Framing{Cx: 1, Cy: 1, Zoom: 1},
 	})
 	if !errors.Is(err, ErrNotWellTile) {
 		t.Errorf("got %v, want ErrNotWellTile", err)
@@ -459,7 +459,7 @@ func TestSetTextViewRejectsNonText(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.SetTextView(ctx, &rpc.SetTextViewRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID,
 	})
 	if !errors.Is(err, ErrNotTextTile) {
 		t.Errorf("got %v, want ErrNotTextTile", err)
@@ -531,7 +531,7 @@ func TestDeleteTileIgnoresStaleClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: w.Version + 1}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID}); err != nil {
 		t.Errorf("stale claim must be accepted: %v", err)
 	}
 }

@@ -109,7 +109,7 @@ func TestCloneCopiesChildGrid(t *testing.T) {
 	}
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:     w.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
@@ -156,7 +156,7 @@ func TestCloneIndependentEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:     w.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
@@ -169,7 +169,7 @@ func TestCloneIndependentEdit(t *testing.T) {
 	}
 	cInner := cloneChild.Tiles[0]
 	resized, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: cInner.ID, Version: cInner.Version,
+		TileID: cInner.ID,
 		GridID: cInner.GridID, X: 0, Y: 0, W: 3, H: 3,
 	})
 	if err != nil {
@@ -240,7 +240,7 @@ func TestCloneOneLevelByteIdentity(t *testing.T) {
 	}
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: outer.ID, Version: outer.Version,
+		TileID:     outer.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
@@ -325,7 +325,7 @@ func TestCloneTwoLevelByteIdentity(t *testing.T) {
 	}
 
 	a2, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: a.ID, Version: a.Version,
+		TileID:     a.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
@@ -395,14 +395,14 @@ func TestCloneThreeIndependentCopies(t *testing.T) {
 	}
 
 	a2, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: a.ID, Version: a.Version,
+		TileID:     a.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("clone A -> A2: %v", err)
 	}
 	a3, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: a2.ID, Version: a2.Version,
+		TileID:     a2.ID,
 		DestGridID: root, X: 20, Y: 0,
 	})
 	if err != nil {
@@ -441,7 +441,7 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: a.ID, Version: a.Version,
+		TileID:     a.ID,
 		DestGridID: root, X: 5, Y: 0,
 	})
 	if err != nil {
