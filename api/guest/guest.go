@@ -8,8 +8,7 @@
 //	    guest.Main(myplugin.FromConfig)
 //	}
 //
-// where FromConfig is the plugin's one config→plugin derivation (the
-// same function a bundled binary hands the loader as its Factory).
+// where FromConfig is the plugin's one config→plugin derivation.
 package guest
 
 import (
@@ -49,9 +48,8 @@ func Config() (map[string]string, error) {
 }
 
 // Factory is the plugin's config→plugin derivation: the one owner of how
-// server.yaml config becomes a running plugin, shared by the subprocess
-// main (Main) and the bundled binaries (the loader's Factory has the same
-// shape). An error is the verdict "I do not have the config I need".
+// server.yaml config becomes a running plugin, and the argument Main takes.
+// An error is the verdict "I do not have the config I need".
 type Factory func(cfg map[string]string) (pluginv1.PluginServer, error)
 
 // Main decodes the spawn config, builds the plugin, and serves it. A

@@ -1,23 +1,18 @@
 package compose
 
-// The content-plugin half of compose: a plugin binary serves plugin.v1.
-// PluginInProcess is the compiled-in shape — a real gRPC loopback on an
-// in-memory listener, so the caller holds the same client interface a
-// subprocess dial would give.
+// The content-plugin half of compose: a plugin binary serves plugin.v1, and
+// LoadPlugin is the one way a host reaches it.
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
@@ -105,31 +100,4 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient
 		return nil, nil, fmt.Errorf("plugin %q: unexpected type %T", binaryPath, raw)
 	}
 	return cp, client.Kill, nil
-}
-
-// PluginInProcess serves a Plugin implementation over a
-// loopback gRPC server and returns the connected client — the plugin
-// twin of the subprocess dial.
-func PluginInProcess(impl pluginv1.PluginServer) (pluginv1.PluginClient, func(), error) {
-	// In-memory listener: no socket, no reach from
-	// outside the process.
-	lis := bufconn.Listen(1 << 20)
-
-	srv := grpc.NewServer()
-	pluginv1.RegisterPluginServer(srv, impl)
-	go srv.Serve(lis)
-
-	cc, err := grpc.NewClient("passthrough:///in-process",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }))
-	if err != nil {
-		srv.Stop()
-		return nil, nil, fmt.Errorf("in-process plugin dial: %w", err)
-	}
-
-	closer := func() {
-		cc.Close()
-		srv.GracefulStop()
-	}
-	return pluginv1.NewPluginClient(cc), closer, nil
 }

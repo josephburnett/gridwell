@@ -14,7 +14,6 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/node"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/web"
 )
@@ -142,17 +141,13 @@ func isExecutable(path string) bool {
 	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
 }
 
-// resolvePluginBinaries fills each entry's binary: a kind with a bundled
-// plugin factory runs in-process, and every other kind spawns
+// resolvePluginBinaries fills each entry's binary: every kind spawns
 // gridwell-plugin-<kind>. server.yaml may pin an explicit binary: path
 // instead.
-func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.Factory) error {
+func resolvePluginBinaries(cfg *config.ServerConfig) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		if pc.Binary != "" {
-			continue
-		}
-		if _, bundled := plugins[pc.Kind]; bundled {
 			continue
 		}
 		bin, err := resolveBinary("gridwell-plugin-" + pc.Kind)
@@ -164,18 +159,14 @@ func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.F
 	return nil
 }
 
-// RunServeWith starts the backend HTTP server: the data plane for the
+// RunServe starts the backend HTTP server: the data plane for the
 // desktop app and any plain-browser client, carrying Connect-RPC, the event
 // stream, the wasm client, and shell PTYs. Live url tiles are hosted
 // natively by the Electron shell, so there is no browser driver here. The
 // listen address comes from resolveBind: loopback by default, and
 // server.yaml web.bind pins it, for instance to a Tailscale address for
 // phone access. SIGINT and SIGTERM trigger graceful shutdown.
-//
-// plugins is the bundled-binary door: kinds present in it load in-process,
-// and every other plugin spawns out-of-process. The stock host passes
-// nil.
-func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
+func RunServe(args []string) int {
 	home, err := config.Home()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
@@ -220,21 +211,19 @@ func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	defer lock.Release()
 
 	// Resolve each plugin's binary; server.yaml may pin an explicit path
-	// instead. Bundled kinds stay in-process.
-	if err := resolvePluginBinaries(cfg, plugins); err != nil {
+	// instead.
+	if err := resolvePluginBinaries(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
 
-	// The node core, internal/node, shared with the mobile bind: plugin
-	// loading, identity, the server assembly, and the two listeners — the
-	// web door where config says, and the federation door's unix socket.
-	// The CLI's own concerns wrap it: the lock above, the banner below,
-	// signals.
+	// The node core, internal/node: plugin loading, identity, the server
+	// assembly, and the two listeners — the web door where config says, and
+	// the federation door's unix socket. The CLI's own concerns wrap it: the
+	// lock above, the banner below, signals.
 	n, err := node.Start(node.Options{
-		Home:      home,
-		Cfg:       cfg,
-		Factories: plugins,
+		Home: home,
+		Cfg:  cfg,
 		// The embedded web client by default; the binary is self-contained.
 		// server.yaml static: and --static serve a checkout from disk
 		// instead.

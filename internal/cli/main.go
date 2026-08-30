@@ -3,16 +3,11 @@ package cli
 import (
 	"fmt"
 	"os"
-
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// Main is the shared CLI dispatch for every composed gridwell binary. The
-// stock host passes nil, so every plugin runs out-of-process; a leaf binary
-// passes its compiled-in plugin factories. Everything else — status,
-// backup, the whole serve wiring — is identical. Returns the process exit
-// code.
-func Main(args []string, plugins map[string]plugin.Factory) int {
+// Main is the CLI dispatch: serve, status, backup, clear-browser-data.
+// Returns the process exit code.
+func Main(args []string) int {
 	if len(args) < 1 {
 		usage()
 		return 2
@@ -21,7 +16,7 @@ func Main(args []string, plugins map[string]plugin.Factory) int {
 	rest := args[1:]
 	switch cmd {
 	case "serve":
-		return RunServeWith(rest, plugins)
+		return RunServe(rest)
 	case "status":
 		return RunStatus(rest)
 	case "backup":

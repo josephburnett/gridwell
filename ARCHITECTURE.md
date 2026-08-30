@@ -297,6 +297,6 @@ api                → nothing of ours
 
 `test/boundary` enforces the arrows with `go list -deps`, pins the api
 module's dependency budget, and `make check` builds every module standalone
-without go.work. The e2e suite runs the same specs against subprocess and
-in-process plugins; identical behavior is the pin that the compose door hides
-the process boundary.
+without go.work. A plugin loads exactly one way — `compose.LoadPlugin` spawns
+its binary — which `internal/plugin`'s subprocess tests and
+`make check-federation` exercise for real.

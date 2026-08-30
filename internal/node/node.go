@@ -106,10 +106,6 @@ type Options struct {
 	// Cfg is the prepared config: BuildConfig plus any caller adjustments,
 	// such as the bind, a static override, or a forced DisableShells.
 	Cfg *config.ServerConfig
-	// Factories, when non-nil, provides in-process constructors for plugin
-	// entries whose Binary is empty: bundled binaries, mobile, where iOS
-	// forbids fork and exec, and tests.
-	Factories map[string]plugin.Factory
 	// StaticFS serves the web client at /; nil disables static files.
 	StaticFS fs.FS
 }
@@ -174,7 +170,7 @@ func Start(opts Options) (*Node, error) {
 	// A content plugin gets the engine with no prefetch: its source is
 	// local to this machine, so a crawl on every reconnect would warm
 	// what is already at hand.
-	if err := plugin.LoadInto(reg, cfg, opts.Factories, st, func(ns namespace.Namespace) namespace.Namespace {
+	if err := plugin.LoadInto(reg, cfg, st, func(ns namespace.Namespace) namespace.Namespace {
 		return front(ns, sourcecache.Options{})
 	}); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))

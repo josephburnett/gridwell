@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -58,7 +59,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 		Config: map[string]string{"root": root},
 	}}}
 	reg := plugin.NewRegistry()
-	if err := plugin.LoadInto(reg, cfg, nil, st, nil); err != nil {
+	if err := plugin.LoadInto(reg, cfg, st, nil); err != nil {
 		t.Fatalf("LoadInto: %v", err)
 	}
 	defer reg.Close()
@@ -107,5 +108,34 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	// wrote nothing anywhere: its config carries no db path at all.
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Fatalf("node database missing: %v", err)
+	}
+}
+
+// TestLoadIntoFailsOnARefusedHandshake crosses the whole refusal path in the
+// one shape that ships: a real gridwell-plugin-proc spawned with a pid the
+// plugin's FromConfig refuses. guest.Main serves the refusal as an Info that
+// answers FailedPrecondition, and LoadInto must stop the launch carrying that
+// reason and naming the plugin — never come up as an empty grid. The two
+// tests this replaces staged the refusal through the deleted in-process
+// factory door, so neither ever spawned anything.
+func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a plugin binary; skipped under -short")
+	}
+	bin := buildPluginBinary(t, "proc")
+
+	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{
+		ID: "pr1234a", Label: "procs", Kind: "proc", Binary: bin,
+		Config: map[string]string{"pid": "abc"},
+	}}}
+	err = plugin.LoadInto(plugin.NewRegistry(), cfg, st, nil)
+	if err == nil || !strings.Contains(err.Error(), `pid "abc"`) || !strings.Contains(err.Error(), "pr1234a") {
+		t.Fatalf("LoadInto = %v, want the plugin's own reason, naming it", err)
 	}
 }

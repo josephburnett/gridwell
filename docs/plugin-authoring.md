@@ -25,7 +25,7 @@ its own Go module importing only the api. `gitlab` is the worked example.
   keys). The first serve mints the entry's id.
 - **Main**: `guest.Serve(yourImpl)`. Config arrives as a JSON map in
   `GRIDWELL_PLUGIN_CONFIG` (`guest.Config()`): your keys plus `uuid` and
-  `kind`. An in-process factory (`plugin.Factory`) gets the same map.
+  `kind`.
 - **Keys are forever**: a key names the same thing for the life of the
   plugin. Changing your key scheme orphans every stored reference.
 - **Unimplemented is fine**: a minimal plugin is `Info` + `List` +
@@ -52,12 +52,6 @@ one means "not seen this pass", and the node keeps the entry until `Probe`
 answers GONE. A `placement_hint` seeds an entry's first placement only. An
 entry with `serves_page` presents its `ServeContent` HTML on descent,
 sandboxed by the node.
-
-## In-process
-
-A bundled binary skips the subprocess: provide a `plugin.Factory` and hand
-it to `cli.Main`. The node cannot tell the difference. This is how plugins
-run on iOS.
 
 ## Gates
 
