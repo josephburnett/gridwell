@@ -1,8 +1,8 @@
-// Package todos is the PURE half of the gitlab todos plugin: the todo
-// record, the week calendar, the memory of every todo seen, and the
-// derivations (entries, labels, placement hints) the plugin answers
-// with. No network, no gRPC — everything here is unit-tested against
-// fakes, and the plugin package only wires it to the wire.
+// Package todos is the pure half of the gitlab todos plugin: the todo record,
+// the week calendar, the memory of every todo seen, and the derivations —
+// entries, labels, placement hints — the plugin answers with. There is no
+// network and no gRPC here, so everything is unit-tested against fakes, and
+// the plugin package only wires it to the wire.
 package todos
 
 import (
@@ -12,19 +12,18 @@ import (
 	"time"
 )
 
-// Todo is the subset of GitLab's todo object the plugin uses
-// (docs.gitlab.com/api/todos). Only the fields that survive every
-// target_type are read from the nested target — Commit and Project
-// targets carry no iid, for instance.
+// Todo is the subset of GitLab's todo object the plugin uses. Only the fields
+// that survive every target_type are read from the nested target; a Commit or
+// Project target carries no iid, for instance.
 type Todo struct {
 	ID         int64  `json:"id"`
 	ActionName string `json:"action_name"`
 	TargetType string `json:"target_type"`
 	TargetURL  string `json:"target_url"`
 	Body       string `json:"body"`
-	// State is "pending" or "done" — GitLab's word, and the ONE fact
-	// the plugin re-derives locally (see Memory.Sync): a todo absent
-	// from the pending set is done, whatever GitLab says about it.
+	// State is "pending" or "done", GitLab's word, and the one fact the
+	// plugin re-derives locally; see Memory.Sync. A todo absent from the
+	// pending set is done, whatever GitLab says about it.
 	State     string    `json:"state"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -54,7 +53,7 @@ const (
 // Done reports the derived completion state.
 func (t *Todo) Done() bool { return t.State == StateDone }
 
-// Ref is the GitLab short reference of the target ("!42", "#7", "&3"),
+// Ref is the GitLab short reference of the target, such as "!42" or "#7", and
 // "" when the target type has none.
 func (t *Todo) Ref() string {
 	if t.Target.IID == 0 {
@@ -98,8 +97,8 @@ var actionPhrases = map[string]string{
 	"review_submitted":        "review submitted",
 }
 
-// Action is the human phrase for the todo's action_name; an unknown
-// action rides verbatim with underscores opened.
+// Action is the human phrase for the todo's action_name. An unknown action
+// rides verbatim with its underscores opened.
 func (t *Todo) Action() string {
 	if p, ok := actionPhrases[t.ActionName]; ok {
 		return p
@@ -126,7 +125,7 @@ func (t *Todo) Label() string {
 	return b.String()
 }
 
-// Key is the todo's plugin key — stable forever, GitLab's own id.
+// Key is the todo's plugin key: GitLab's own id, stable forever.
 func (t *Todo) Key() string { return KeyPrefix + strconv.FormatInt(t.ID, 10) }
 
 // KeyPrefix namespaces todo keys; WeekPrefix namespaces week contexts;
@@ -149,9 +148,9 @@ func ParseKey(key string) (int64, bool) {
 
 // ── weeks ──────────────────────────────────────────────────────────────
 
-// WeekStart is the Monday 00:00 UTC that begins the week containing t.
-// UTC because GitLab timestamps are UTC and a week key must never shift
-// with the host's zone — a key names the same thing forever.
+// WeekStart is the Monday 00:00 UTC that begins the week containing t. It is
+// UTC because GitLab timestamps are UTC and a week key must never shift with
+// the host's zone: a key names the same thing forever.
 func WeekStart(t time.Time) time.Time {
 	u := t.UTC()
 	wd := (int(u.Weekday()) + 6) % 7 // Monday = 0
@@ -175,16 +174,16 @@ func ParseWeekKey(key string) (time.Time, bool) {
 	return t, true
 }
 
-// HintEpoch anchors the root calendar: the month containing it is row
-// y=0, later months climb (negative y), earlier months descend. A fixed
-// date, so a week's hint is the same on every host and every restart —
+// HintEpoch anchors the root calendar: the month containing it is row y=0,
+// later months climb into negative y, and earlier months descend. It is a
+// fixed date, so a week's hint is the same on every host and every restart and
 // two nodes never disagree about where a week first lands.
 var HintEpoch = time.Date(2026, time.August, 24, 0, 0, 0, 0, time.UTC)
 
-// WeekCell is the root hint for the week starting at start: one ROW per
-// month (the month the Monday falls in), the month's weeks left to
-// right by their Monday's position in the month (x = 0..4). A calendar
-// page, read newest at the top.
+// WeekCell is the root hint for the week starting at start: one row per month,
+// the month the Monday falls in, with the month's weeks left to right by their
+// Monday's position in the month, x from 0 to 4. It reads as a calendar page,
+// newest at the top.
 func WeekCell(start time.Time) (x, y int64) {
 	u := start.UTC()
 	months := (u.Year()-HintEpoch.Year())*12 + int(u.Month()-HintEpoch.Month())

@@ -15,45 +15,44 @@ type Source interface {
 	Page(ctx context.Context, state string, page int) (todos []Todo, more bool, err error)
 }
 
-// Memory is everything the plugin has seen this process lifetime,
-// keyed by todo id. It is the "plugin cache" of the design: a todo that
-// vanishes from GitLab keeps its record here and shows as done; nothing
-// is ever removed. Durable memory is the NODE's (the read-through
-// listing cache) — a plugin is stateless by contract, so a restart
-// re-walks GitLab and the node bridges the gap.
+// Memory is everything the plugin has seen this process lifetime, keyed by
+// todo id. A todo that vanishes from GitLab keeps its record here and shows as
+// done; nothing is ever removed. Durable memory is the node's, in its
+// read-through cache: a plugin is stateless by contract, so a restart re-walks
+// GitLab and the node bridges the gap.
 type Memory struct {
 	mu    sync.Mutex
 	todos map[int64]*Todo
-	// doneComplete records that some walk reached the END of the done
-	// list. Only then does "a page of already-known done todos" prove
-	// every older one is known: a targeted week walk stops at the week
-	// boundary having absorbed one page past it, so until a walk has
-	// run to the end, a fully-known page proves nothing about the rest.
+	// doneComplete records that some walk reached the end of the done list.
+	// Only then does a page of already-known done todos prove every older one
+	// is known: a targeted week walk stops at the week boundary having
+	// absorbed one page past it, so until a walk has run to the end, a
+	// fully-known page proves nothing about the rest.
 	doneComplete bool
 }
 
 // NewMemory builds an empty memory.
 func NewMemory() *Memory { return &Memory{todos: map[int64]*Todo{}} }
 
-// Sync refreshes the memory from src. since = zero walks EVERYTHING
-// (the outset: every pending page, then done pages to the end; once a
-// walk has reached the end, later walks stop at the first page that
-// carries nothing new — a page of already-known done todos then means
-// every older one is known too, because done todos only enter at their
-// own position). A non-zero since is the TARGETED walk for one week:
-// both states stop as soon as a page reaches todos created before since.
+// Sync refreshes the memory from src. A zero since walks everything: every
+// pending page, then done pages to the end. Once a walk has reached that end,
+// later walks stop at the first page that carries nothing new, because a page
+// of already-known done todos then means every older one is known too, since
+// done todos only enter at their own position. A non-zero since is the
+// targeted walk for one week: both states stop as soon as a page reaches todos
+// created before since.
 //
-// Completion is DERIVED: a remembered pending todo that the pending
-// walk did not see — within the walk's coverage — is done, whether it
-// was marked done, or deleted with its target. That derivation is the
-// only place a todo's state changes without GitLab saying so, and it
-// is only safe when the walk really covered the todo's creation time:
-// a page that is not newest-first disables the early stop (the walk
-// runs to the end) rather than risk marking live todos done.
+// Completion is derived: a remembered pending todo the pending walk did not
+// see, within the walk's coverage, is done, whether it was marked done or
+// deleted with its target. That derivation is the only place a todo's state
+// changes without GitLab saying so, and it is only safe when the walk really
+// covered the todo's creation time. A page that is not newest-first therefore
+// disables the early stop, and the walk runs to the end, rather than risk
+// marking live todos done.
 func (m *Memory) Sync(ctx context.Context, src Source, since time.Time) error {
 	seenPending := map[int64]bool{}
 	// coverage is the oldest creation time the pending walk provably
-	// enumerated past; zero = everything.
+	// enumerated past; zero means everything.
 	coverage := since
 	fullWalk := false
 	for page := 1; ; page++ {
@@ -118,9 +117,9 @@ func (m *Memory) Sync(ctx context.Context, src Source, since time.Time) error {
 	return nil
 }
 
-// absorb records a page, GitLab's record replacing the remembered one
-// (its state included — a restored todo goes back to pending). Returns
-// how many were new.
+// absorb records a page, with GitLab's record replacing the remembered one,
+// its state included, so a restored todo goes back to pending. It returns how
+// many were new.
 func (m *Memory) absorb(todos []Todo) (unknown int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

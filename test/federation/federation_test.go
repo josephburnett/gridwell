@@ -1,16 +1,15 @@
 //go:build federation
 
-// Package federation_test is the SPAWN GATE (`make check-federation`): it runs
-// the real, separately-compiled binaries — `gridwell` (init + serve) and the
-// go-plugin subprocesses including `gridwell-ssh` — through a real ssh tunnel
-// and asserts one write/read crossing every hop. The in-process seam tests
-// cannot see go-plugin spawn: the pluginmeta sqlite-driver bug (b648691) kept
-// every test green while every production spawn failed. This gate closes that
-// class (issue #58).
+// Package federation_test is the spawn gate, run by `make check-federation`:
+// it runs the real, separately-compiled binaries — `gridwell serve` and the
+// go-plugin subprocesses — through a real ssh tunnel and asserts one write and
+// read crossing every hop. The in-process seam tests cannot see go-plugin
+// spawn, so a failure that only happens in a spawned process leaves them
+// green.
 //
-// Requires the binaries already built at the repo root (`make build` — the
-// make target depends on it); guarded by the `federation` build tag so plain
-// `go test ./...` (make check) stays fast.
+// It requires the binaries already built at the repo root, which the make
+// target depends on, and is guarded by the `federation` build tag so plain
+// `go test ./...` stays fast.
 package federation_test
 
 import (
@@ -36,10 +35,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
 )
 
-// repoRoot walks up from the test binary's source dir to the REPO root —
-// the directory holding go.work (this test lives in its own module now,
-// so the nearest go.mod is its own; the binaries land at the workspace
-// root).
+// repoRoot walks up from the test binary's source dir to the repo root, the
+// directory holding go.work. This test is its own module, so the nearest
+// go.mod is its own, and the binaries land at the workspace root.
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -59,17 +57,16 @@ func repoRoot(t *testing.T) string {
 }
 
 // startServe launches the real `gridwell serve` for a home and returns its
-// origin and the federation door's socket path once the banner announces
-// them (the socket lives under the home, so two nodes on one box never
-// collide).
+// origin and the federation door's socket path once the banner announces them.
+// The socket lives under the home, so two nodes on one box never collide.
 func startServe(t *testing.T, bin, home, bind string) (origin, fedSocket string) {
 	origin, fedSocket, _ = startServeProc(t, bin, home, bind)
 	return origin, fedSocket
 }
 
-// startServeProc is startServe returning a stop() as well, for tests that
-// PARTITION a node mid-session (kill it hard) and bring it back on the
-// same address. stop is idempotent with the registered cleanup.
+// startServeProc is startServe returning a stop as well, for a test that
+// partitions a node mid-session and brings it back on the same address. stop
+// is idempotent with the registered cleanup.
 func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket string, stop func()) {
 	t.Helper()
 	cmd := exec.Command(bin, "serve", "--bind", bind, "--static", "")
@@ -92,8 +89,8 @@ func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket str
 	}
 	t.Cleanup(stop)
 
-	// The "serving on <addr>" banner is the readiness contract (the desktop
-	// sidecar parses this exact line).
+	// The "serving on <addr>" banner is the readiness contract; the desktop
+	// sidecar parses this exact line.
 	sc := bufio.NewScanner(stderr)
 	deadline := time.After(30 * time.Second)
 	lines := make(chan string, 64)
@@ -136,9 +133,9 @@ func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket str
 	}
 }
 
-// The web door is always password-gated (2026-08-26): startServeProc
-// records each origin's auth token from the serve banner, and every
-// helper below rides it as the cookie a logged-in browser would carry.
+// The web door is always password-gated: startServeProc records each origin's
+// auth token from the serve banner, and every helper below rides it as the
+// cookie a logged-in browser would carry.
 var (
 	tokensMu sync.Mutex
 	tokens   = map[string]string{} // origin → server.AuthToken
@@ -165,8 +162,8 @@ func clientFor(origin string) *gwrpc.Client {
 	return gwrpc.NewClient(httpFor(origin), origin, connect.WithProtoJSON())
 }
 
-// rpcRaw posts one Connect-JSON call and returns the raw status + body —
-// for asserting on DESIGNED refusals (rpc t.Fatals on any non-200).
+// rpcRaw posts one Connect-JSON call and returns the raw status and body, for
+// asserting on a deliberate refusal; rpc t.Fatals on any non-200.
 func rpcRaw(t *testing.T, origin, method string, req any) (int, []byte) {
 	t.Helper()
 	body, _ := json.Marshal(req)
@@ -199,8 +196,8 @@ func rpc(t *testing.T, origin, method string, req any) map[string]any {
 	return out
 }
 
-// freshHome seeds a home with an EMPTY server.yaml — the first serve mints
-// the node's id and creates its store (the one door, node.BuildConfig).
+// freshHome seeds a home with an empty server.yaml: the first serve mints the
+// node's id and creates its store, through node.BuildConfig.
 func freshHome(t *testing.T, home string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(home, "server.yaml"), nil, 0o600); err != nil {
@@ -220,21 +217,20 @@ func TestFederationSpawn(t *testing.T) {
 	freshHome(t, remoteHome)
 	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 
-	// A real ssh server fronting it (shared helper — the same sshd the seam
-	// test uses, here with the PRODUCTION gridwell-ssh dialing it).
+	// A real ssh server fronting it: the same sshd the seam test uses, here
+	// with the production binary dialing it.
 	creds := dialtest.Server(t, t.TempDir())
 
-	// Local node: one localdb + the builtin transport; the connection is
-	// server.yaml CONFIG (v2 #269), declared before first serve and
-	// reconciled at boot.
+	// Local node: home plus the transport. The connection is server.yaml
+	// config, declared before first serve and reconciled at boot.
 	localHome := t.TempDir()
 	freshHome(t, localHome)
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedconn1", creds, remoteAddr))
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 
-	// 1. The connection presents as its own menu row and gains its root
-	//    — the remote's HOME through the declared segment: the chained
-	//    <ssh>/<conn>/<rplugin>/<grid> mount root the rest drives.
+	// 1. The connection presents as its own menu row and gains its root: the
+	//    remote's home through the declared segment, the chained mount root
+	//    the rest of the test drives.
 	lp := rpc(t, localOrigin, "Handshake", map[string]any{})
 	var homeRoot string
 	for _, p := range lp["plugins"].([]any) {
@@ -245,10 +241,9 @@ func TestFederationSpawn(t *testing.T) {
 	}
 	sshRoot := awaitConnRoot(t, localOrigin, "fedconn1")
 
-	// 2. The landing is the remote's HOME, where a direct client of that
-	//    node boots (remote-menu, 2026-08-16). The remote's own + menu is
-	//    the ROUTED plugin list for the landing's node. (No network
-	//    context rides the grid anymore — 2026-07-26.)
+	// 2. The landing is the remote's home, where a direct client of that node
+	//    boots. The remote's own + menu is the routed plugin list for the
+	//    landing's node.
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	if pe, ok := ng["grid"].(map[string]any)["proxyEndpoint"]; ok && pe != "" {
 		t.Fatalf("transit grid still carries a proxyEndpoint %v — the network-context surface should be gone", pe)
@@ -279,7 +274,7 @@ func TestFederationSpawn(t *testing.T) {
 		"gridId": wellChild,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
-	// Creation is metadata-only; the body follows through the ONE content
+	// Creation is metadata-only; the body follows through the one content
 	// write, routed through the chain by the qualified id.
 	txtRow, err := clientFor(localOrigin).WriteContent(context.Background(),
 		txt["id"].(string), num(txt["version"]), []byte("# across the spawn gate"))
@@ -287,12 +282,12 @@ func TestFederationSpawn(t *testing.T) {
 		t.Fatalf("WriteContent through the chain: %v", err)
 	}
 
-	// 4. Link the remote well into the LOCAL home grid — the 2026-07-19
-	//    left-drag gesture, committed as a plain CreateTile carrying the
-	//    qualified child (the chain id routes it) — and read the content
-	//    back through the link. A right-drag DEEP-COPIES through the chain
-	//    (#200): the local home gains an independent solid well whose text
-	//    body matches the remote's, walked over the real spawn + ssh seam.
+	// 4. Link the remote well into the local home grid — the left-drag
+	//    gesture, committed as a plain CreateTile carrying the qualified
+	//    child, whose chain id routes it — and read the content back through
+	//    the link. A right-drag deep-copies through the chain: the local home
+	//    gains an independent solid well whose text body matches the
+	//    remote's, walked over the real spawn and ssh seam.
 	deepCopy := rpc(t, localOrigin, "CloneTile", map[string]any{
 		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
@@ -333,16 +328,12 @@ func TestFederationSpawn(t *testing.T) {
 		t.Fatalf("content through the chain = %q", got)
 	}
 
-	// (Step 5, the /session/ chain, is gone — 2026-07-26, owner decision 1:
-	// the Chromium session is host-local; no session blob crosses the wire.)
-
-	// 6. LIVE EVENTS cross the mount (the user-visible contract behind "things
-	//    stay as you left them" on a remote view): a write made DIRECTLY on the
-	//    remote node (another device talking to rtb, not through this mount)
-	//    must arrive on the LOCAL node's Subscribe stream as a TileChanged
-	//    carrying the fully chained tile id. This is the seam no in-process
-	//    test can see: remote localdb → remote node export fan-in → gridwell-ssh
-	//    relay → local fan-in (transit re-qualification) → the client stream.
+	// 5. Live events cross the mount: a write made directly on the remote
+	//    node, by another client rather than through this mount, must arrive
+	//    on the local node's Subscribe stream as a TileChanged carrying the
+	//    fully chained tile id. This is the seam no in-process test can see:
+	//    the remote's home, the remote node export's fan-in, the tunnel, the
+	//    local fan-in's transit re-qualification, and the client stream.
 	// The Subscribe open blocks until the server flushes its first event
 	// (Connect holds response headers until the first Send), so the open and
 	// the receive loop both live in the goroutine; the main loop keeps making
@@ -372,9 +363,8 @@ func TestFederationSpawn(t *testing.T) {
 		}
 	}()
 
-	// The remote-direct ids are the chained ids with the ssh plugin AND
-	// connection hops peeled (two segments since the #251 migration turned
-	// the mount into a connection).
+	// The remote-direct ids are the chained ids with the node and connection
+	// segments peeled.
 	peel := func(id string) string { return strings.SplitN(id, "/", 2)[1] }
 	// protojson omits zero fields, so a fresh tile's "version" key is absent.
 	txtID := txt["id"].(string)
@@ -434,11 +424,11 @@ func TestFederationSpawn(t *testing.T) {
 	fmt.Println("federation spawn gate: production binaries, real tunnel, chained write/read + session + live events OK")
 }
 
-// v2 (#269): connections are server.yaml CONFIG through REAL binaries —
-// declared before first serve, presented as a menu row of their own,
-// mutation-refused on the wire, bytes flowing through the real tunnel,
-// and RETIRED by removing the declaration and restarting: the row
-// disappears, the namespace stops resolving, the remote is untouched.
+// Connections are server.yaml config, here through real binaries: declared
+// before first serve, presented as a menu row of their own, mutation-refused
+// on the wire, with bytes flowing through the real tunnel, and retired by
+// removing the declaration and restarting — the row disappears, the namespace
+// stops resolving, and the remote is untouched.
 func TestConnectionsModeSpawn(t *testing.T) {
 	root := repoRoot(t)
 	bin := filepath.Join(root, "gridwell")
@@ -446,30 +436,29 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
 	}
 
-	// Remote node: one localdb, served for real; a real sshd fronting it.
+	// The remote node, served for real, with a real sshd fronting it.
 	remoteHome := t.TempDir()
 	freshHome(t, remoteHome)
 	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
 
-	// Local node: localdb + the builtin transport, the connection declared
+	// The local node: home plus the transport, with the connection declared
 	// in server.yaml before first serve.
 	localHome := t.TempDir()
 	freshHome(t, localHome)
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "cmconn1", creds, remoteAddr))
 	localOrigin, _, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0")
 
-	// 1. The connection is a menu row of its own; the transport's row is
-	//    hidden behind it; the learned root is the chained
-	//    <ssh>/<conn>/<rplugin>/<grid> mount root (the remote's home).
+	// 1. The connection is a menu row of its own, the transport's row is
+	//    hidden behind it, and the learned root is the chained mount root:
+	//    the remote's home.
 	child := awaitConnRoot(t, localOrigin, "cmconn1")
 	if strings.Count(child, "/") != 3 {
 		t.Fatalf("root = %q, want the four-segment <ssh>/<conn>/<rplugin>/<grid>", child)
 	}
 
-	// (2. The picker door is gone from the wire: a connection's well row is
-	//    not addressable — "<id>/0" is the home store's grid 0, which does
-	//    not exist.)
+	// 2. A connection has no well row on the wire: "<id>/0" is the home
+	//    store's grid 0, which does not exist.
 
 	// 3. Real bytes through all three peels: local server → connection
 	//    segment → remote node → back.
@@ -496,11 +485,11 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatalf("ReadContent through the connection chain = %q (%v)", got, err)
 	}
 
-	// 4. RETIREMENT is a config edit + restart: the declaration goes, the
-	//    row goes, the namespace stops resolving forever — and the REMOTE
-	//    keeps its tile (verified on its own front door).
+	// 4. Retirement is a config edit plus a restart: the declaration goes, the
+	//    row goes, the namespace stops resolving forever, and the remote keeps
+	//    its tile, verified on its own front door.
 	stopLocal()
-	// Keep the node's minted id (the first serve wrote it); replace the
+	// Keep the node's minted id, which the first serve wrote, and replace the
 	// connection list with the retirement.
 	cur, err := os.ReadFile(filepath.Join(localHome, "server.yaml"))
 	if err != nil {
@@ -533,9 +522,8 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	fmt.Println("federation spawn gate: connections mode — yaml-declared, real tunnel, chained bytes, config-refused edits, clean retirement OK")
 }
 
-// appendConnectionsYAML writes the v2 connections section into a home's
-// server.yaml BEFORE first serve (v2 #269: connections are config — the
-// picker flow this suite used to wire is deleted).
+// appendConnectionsYAML writes the connections section into a home's
+// server.yaml before its first serve.
 func appendConnectionsYAML(t *testing.T, home, section string) {
 	t.Helper()
 	f, err := os.OpenFile(filepath.Join(home, "server.yaml"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
@@ -566,9 +554,8 @@ func sshConnectionYAML(t *testing.T, name string, creds dialtest.Creds, remoteAd
 `, name, sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
 }
 
-// awaitConnRoot polls the plugin list until the named connection's menu
-// row (v2 #269: instances present as rows of their own) carries its
-// learned root — the real tunnel answered.
+// awaitConnRoot polls the plugin list until the named connection's menu row
+// carries its learned root, meaning the real tunnel answered.
 func awaitConnRoot(t *testing.T, origin, name string) string {
 	t.Helper()
 	deadline := time.After(30 * time.Second)

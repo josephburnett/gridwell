@@ -1,11 +1,10 @@
 // Package plugin is the gitlab todos plugin: the wire half over
-// plugins/gitlab/todos. Contexts: the root ("todos") lists weeks; a
-// week ("week:<monday>") lists the todos created that week as markdown
-// text tiles (todos.Markdown). Keys are GitLab's todo ids, stable
-// forever. Listings are NON-authoritative and Probe never answers GONE:
-// a todo never disappears from the grid — it changes state (done) when
-// refreshed, and the node's read-through cache remembers it across
-// plugin restarts (the plugin itself is stateless by contract).
+// plugins/gitlab/todos. The root context, "todos", lists weeks; a week,
+// "week:<monday>", lists the todos created that week as markdown text tiles.
+// Keys are GitLab's todo ids, stable forever. Listings are non-authoritative
+// and Probe never answers GONE: a todo never disappears from the grid, it
+// changes state when refreshed, and the node's read-through cache remembers it
+// across plugin restarts, since the plugin itself is stateless by contract.
 package plugin
 
 import (
@@ -22,19 +21,17 @@ import (
 	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
 
-// Kind is the plugin's declared kind — and the binary suffix
-// (gridwell-plugin-gitlab).
+// Kind is the plugin's declared kind, and the suffix of its binary name.
 const Kind = "gitlab"
 
-// displayName is the plugin's own name for itself. The name the user
-// sees is server.yaml's `name` (the registry label, one owner); this is
-// the fallback when none is configured, and the root grid's source
-// label.
+// displayName is the plugin's own name for itself. The name the user sees is
+// server.yaml's `name`, the registry label; this is the fallback when none is
+// configured, and the root grid's source label.
 const displayName = "gitlab todos"
 
-// DefaultRefresh bounds how often one context re-walks GitLab: the node
-// lists a context on EVERY GetGrid/GetTile, and a descent must feel
-// instant, not cost a round of API pages each time.
+// DefaultRefresh bounds how often one context re-walks GitLab. The node lists
+// a context on every GetGrid and GetTile, and a descent must feel instant
+// rather than cost a round of API pages each time.
 const DefaultRefresh = 30 * time.Second
 
 // Plugin implements pluginv1.PluginServer.
@@ -47,9 +44,9 @@ type Plugin struct {
 
 	mu       sync.Mutex
 	syncedAt map[string]time.Time // context → last successful walk
-	// flights are the walks in progress, by context: a List that finds
-	// one WAITS for it instead of starting its own — the node lists a
-	// context on every GetGrid/GetTile, and a burst of reads must cost
+	// flights are the walks in progress, by context. A List that finds one
+	// waits for it instead of starting its own, because the node lists a
+	// context on every GetGrid and GetTile and a burst of reads must cost
 	// GitLab one walk, not one per reader.
 	flights map[string]*flight
 }
@@ -66,9 +63,9 @@ type Options struct {
 	Now     func() time.Time
 }
 
-// New builds a plugin over src. Whether there IS a source is decided
-// before this point: FromConfig refuses a missing token, and the doors
-// (guest.Main, the loader) stop the launch with its reason.
+// New builds a plugin over src. Whether there is a source is decided before
+// this point: FromConfig refuses a missing token, and both doors stop the
+// launch with its reason.
 func New(src todos.Source, o Options) *Plugin {
 	p := &Plugin{src: src, mem: todos.NewMemory(), refresh: o.Refresh, now: o.Now, syncedAt: map[string]time.Time{}, flights: map[string]*flight{}}
 	if p.refresh <= 0 {
@@ -88,9 +85,9 @@ func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRes
 	}, nil
 }
 
-// freshLocked reports whether ctxKey was walked within the refresh
-// window — a root walk covers every week, so a week is fresh under
-// either. Caller holds p.mu.
+// freshLocked reports whether ctxKey was walked within the refresh window. A
+// root walk covers every week, so a week is fresh under either. The caller
+// holds p.mu.
 func (p *Plugin) freshLocked(ctxKey string) bool {
 	now := p.now()
 	for _, k := range []string{ctxKey, todos.RootContext} {
@@ -101,10 +98,10 @@ func (p *Plugin) freshLocked(ctxKey string) bool {
 	return false
 }
 
-// sync walks GitLab for ctxKey unless it is fresh. since is zero for
-// the root (everything) and the Monday for a week (targeted). A walk
-// already in flight for the context (or the root, which covers every
-// week) is shared: this call waits for its verdict.
+// sync walks GitLab for ctxKey unless it is fresh. since is zero for the root,
+// meaning everything, and the Monday for a week. A walk already in flight for
+// the context, or for the root, which covers every week, is shared: this call
+// waits for its verdict.
 func (p *Plugin) sync(ctx context.Context, ctxKey string, since time.Time) error {
 	p.mu.Lock()
 	if p.freshLocked(ctxKey) {
@@ -138,9 +135,9 @@ func (p *Plugin) sync(ctx context.Context, ctxKey string, since time.Time) error
 	return err
 }
 
-// List answers the root (weeks) or one week (todos). A walk failure
-// with a transport-shaped code degrades at the node to the remembered
-// listing, stamped stale; a verdict (bad token) surfaces.
+// List answers the root, listing weeks, or one week, listing todos. A walk
+// failure with a transport-shaped code degrades at the node to the remembered
+// listing, stamped stale; a verdict such as a bad token surfaces.
 func (p *Plugin) List(ctx context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	switch {
 	case req.Context == todos.RootContext:
@@ -169,9 +166,9 @@ func (p *Plugin) List(ctx context.Context, req *pluginv1.ListRequest) (*pluginv1
 	}
 }
 
-// ReadContent answers the todo's markdown (Markdown): the text tile's
-// face and rendered document, whose target link opens an ephemeral
-// visit. An unknown key reads as a one-line notice.
+// ReadContent answers the todo's markdown: the text tile's face and rendered
+// document, whose target link opens an ephemeral visit. An unknown key reads as
+// a one-line notice.
 func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.Plugin_ReadContentServer) error {
 	id, ok := todos.ParseKey(req.Key)
 	if !ok {
@@ -184,9 +181,9 @@ func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.P
 	return stream.Send(&pluginv1.ContentChunk{Data: todos.Markdown(&t), MediaType: "text/markdown"})
 }
 
-// Probe never says GONE: a remembered todo is PRESENT; one this process
-// has not seen is UNSPECIFIED — "cannot say", which keeps the node's
-// remembered tile (I12). Todos do not magically go away.
+// Probe never says GONE: a remembered todo is PRESENT, and one this process
+// has not seen is UNSPECIFIED, meaning "cannot say", which keeps the node's
+// remembered tile.
 func (p *Plugin) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
 	if id, ok := todos.ParseKey(req.Key); ok {
 		if _, known := p.mem.Get(id); known {

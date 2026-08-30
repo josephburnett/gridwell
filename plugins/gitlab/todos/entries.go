@@ -31,12 +31,11 @@ func RootEntries(weeks []WeekSummary) []*pluginv1.Entry {
 // reads; weekday columns are spaced to match.
 const TodoTileW = 2
 
-// WeekEntries derives one week's grid: every todo created that week as
-// a markdown text tile (Markdown — its face and its rendered document;
-// the target link opens an ephemeral visit), hinted like a calendar
-// — weekday columns Monday..Sunday, rows in creation order within the
-// day. The hint seeds first placement only; the user's arrangement
-// wins from then on (the layout engine's rule).
+// WeekEntries derives one week's grid: every todo created that week as a
+// markdown text tile, which is its face and its rendered document, hinted like
+// a calendar — weekday columns Monday to Sunday, rows in creation order within
+// the day. The hint seeds first placement only; the user's arrangement wins
+// from then on.
 func WeekEntries(start time.Time, todos []Todo) []*pluginv1.Entry {
 	perDay := map[int]int64{}
 	out := make([]*pluginv1.Entry, 0, len(todos))
@@ -44,7 +43,7 @@ func WeekEntries(start time.Time, todos []Todo) []*pluginv1.Entry {
 		t := &todos[i]
 		day := int(t.CreatedAt.UTC().Sub(start).Hours() / 24)
 		if day < 0 || day > 6 {
-			continue // not this week's — the caller filtered, but a hint must never land off-grid
+			continue // not this week's: a hint must never land off-grid
 		}
 		row := perDay[day]
 		perDay[day] = row + 1

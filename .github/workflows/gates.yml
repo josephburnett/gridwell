@@ -1,11 +1,9 @@
-# The heavy gates (issue #260), on PRs and main: the browser suite, the
-# the
-# federation spawn/direct/partition gates (self-contained sshd via
-# dialtest), and the full Electron e2e under xvfb. One retry per suite
-# (PW_FLAGS=--retries=1) is the CI face of the repo's vindicated-isolated
-# flake discipline. Every gate here is a Makefile target — the Makefile
-# is the one recipe; this file only sequences them (test/boundary pins
-# that every check-* target is invoked from a workflow).
+# The heavy gates, on PRs and main: the browser suite, the federation spawn,
+# direct, and partition gates, whose sshd is self-contained through dialtest,
+# and the full Electron e2e under xvfb. One retry per suite
+# (PW_FLAGS=--retries=1) is the CI face of the repo's flake discipline. Every
+# gate here is a Makefile target: the Makefile is the one recipe and this file
+# only sequences them, which test/boundary pins.
 name: gates
 on:
   push:

@@ -84,17 +84,14 @@ func yamlBlockList(t *testing.T, path, after, key string) []string {
 	return nil
 }
 
-// TestGoCacheKeyCoversEveryModule pins that the check workflow's Go
-// cache key (setup-go's cache-dependency-path) hashes EVERY module's
-// go.sum: a module missing from it is a module whose dependency change
-// never invalidates the cache — CI restores a stale module cache and
-// re-downloads on every run (or, worse, keeps building against what the
-// old sums pinned). The list once named go.sum, api/go.sum, and
-// plugins/*/go.sum, missing mobile, apps/*, internal/doctype, and
-// test/federation.
+// TestGoCacheKeyCoversEveryModule pins that the check workflow's Go cache key,
+// setup-go's cache-dependency-path, hashes every module's go.sum. A module
+// missing from it is a module whose dependency change never invalidates the
+// cache, so CI restores a stale module cache and re-downloads on every run,
+// or keeps building against what the old sums pinned.
 func TestGoCacheKeyCoversEveryModule(t *testing.T) {
 	root := repoRoot(t)
-	// The setup-go step's key, not setup-node's (both use the name).
+	// The setup-go step's key, not setup-node's; both use the name.
 	patterns := yamlBlockList(t, filepath.Join(root, ".github", "workflows", "check.yml"), "actions/setup-go", "cache-dependency-path")
 	matches := func(rel string) bool {
 		for _, p := range patterns {
@@ -118,12 +115,10 @@ func TestGoCacheKeyCoversEveryModule(t *testing.T) {
 	}
 }
 
-// TestIOSCanaryPathsCoverTheBind pins that mobile-ios.yml's `paths:`
-// filter names every top-level dir the mobile bind compiles: the trigger
-// once listed mobile/ api/ internal/ plugins/ but not client/ (the bind
-// imports client/markdown) or web/ (the server package embeds the wasm
-// from it), so a break in either shipped to main without the only gate
-// that compiles for iOS ever running.
+// TestIOSCanaryPathsCoverTheBind pins that mobile-ios.yml's `paths:` filter
+// names every top-level directory the mobile bind compiles. A directory
+// missing from the trigger lets a break there ship without the only gate that
+// compiles for iOS ever running.
 func TestIOSCanaryPathsCoverTheBind(t *testing.T) {
 	root := repoRoot(t)
 	paths := yamlBlockList(t, filepath.Join(root, ".github", "workflows", "mobile-ios.yml"), "", "paths")

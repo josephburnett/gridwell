@@ -8,10 +8,9 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
 
-// FromConfig is the one config→plugin derivation: a missing pid is the
-// documented default (1), a pid that is not a positive integer is a
-// refusal naming it — never a silent fallback to the whole tree, which
-// is what `pid, _ := strconv.ParseInt(...)` in four leaves used to do.
+// FromConfig is the one config-to-plugin derivation: a missing pid takes the
+// documented default of 1, and a pid that is not a positive integer is a
+// refusal naming it, never a silent fallback to the whole process tree.
 func TestFromConfigOwnsThePidDerivation(t *testing.T) {
 	for _, bad := range []string{"abc", "0", "-3", "12x"} {
 		if impl, err := FromConfig(map[string]string{"pid": bad}); err == nil || !strings.Contains(err.Error(), bad) {

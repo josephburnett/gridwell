@@ -24,7 +24,7 @@ const PerPage = 100
 
 // Client pages one GitLab instance's todo list for one token.
 type Client struct {
-	base  string // "https://gitlab.com" — no trailing slash
+	base  string // "https://gitlab.com", with no trailing slash
 	token string
 	http  *http.Client
 }
@@ -38,9 +38,9 @@ func New(base, token string, httpClient *http.Client) *Client {
 }
 
 // Page implements todos.Source. Failures map to gRPC codes the node
-// understands: a network or 5xx/429 failure is Unavailable ("not right
-// now" — the node serves its remembered listing, stamped stale); 401/
-// 403 is PermissionDenied (a verdict; it surfaces).
+// understands: a network failure, a 5xx, or a 429 is Unavailable, meaning "not
+// right now", so the node serves its remembered listing stamped stale; a 401
+// or 403 is PermissionDenied, a verdict, and it surfaces.
 func (c *Client) Page(ctx context.Context, state string, page int) ([]todos.Todo, bool, error) {
 	q := url.Values{}
 	q.Set("state", state)

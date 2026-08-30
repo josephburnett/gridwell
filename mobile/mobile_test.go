@@ -12,18 +12,17 @@ import (
 	"testing"
 )
 
-// The embedded-node contract (offline-plan phase 2), exercised as plain
-// Go — the same code gomobile binds, minus the platform packaging (which
-// only the real-hardware pass can prove): first Start auto-inits a home,
-// serves the embedded web client and the RPC surface on loopback with
-// in-process plugins, refuses shells node-wide; a restart reopens the
-// SAME durable home (ids stable — the phone's tiles are as permanent as
-// any node's).
+// The embedded-node contract, exercised as plain Go: the same code gomobile
+// binds, minus the platform packaging, which only a real-hardware pass can
+// prove. The first Start creates a home, serves the embedded web client and
+// the RPC surface on loopback with in-process plugins, and refuses shells
+// node-wide; a restart reopens the same durable home with stable ids, so the
+// phone's tiles are as permanent as any node's.
 
-// webview plays the phone's webview: it loads the URL Start returned (the
-// token login — the web door is always gated, 2026-08-26), keeps the
-// cookie it was issued, and returns the origin it landed on plus the
-// client that holds the session.
+// webview plays the phone's webview: it loads the URL Start returned, the
+// token login, since the web door is always gated; keeps the cookie it was
+// issued; and returns the origin it landed on plus the client that holds the
+// session.
 func webview(t *testing.T, loginURL string) (string, *http.Client) {
 	t.Helper()
 	jar, _ := cookiejar.New(nil)
@@ -34,7 +33,8 @@ func webview(t *testing.T, loginURL string) (string, *http.Client) {
 	}
 	page, _ := io.ReadAll(res.Body)
 	res.Body.Close()
-	// The embedded web client serves — the webview's first load lands home.
+	// The embedded web client serves, so the webview's first load lands
+	// home.
 	if res.StatusCode != 200 || !bytes.Contains(page, []byte("gridwell.wasm")) {
 		t.Fatalf("GET %s = %d (%d bytes), want the embedded index after the token login", loginURL, res.StatusCode, len(page))
 	}
@@ -76,12 +76,13 @@ func TestEmbeddedNodeLifecycle(t *testing.T) {
 		t.Fatalf("second Start = (%q, %v), want the same URL", again, err)
 	}
 	origin, client := webview(t, loginURL)
-	// Unauthenticated, the door is shut: init minted the password.
+	// Unauthenticated, the door is shut: the first serve minted the
+	// password.
 	if res, err := http.Get(origin + "/"); err != nil || res.StatusCode != 401 {
 		t.Fatalf("GET / without the cookie = %v %v, want 401", res, err)
 	}
 
-	// The handshake: one auto-inited localdb named "home", shells off.
+	// The handshake: one home namespace named "home", shells off.
 	lp := post(t, client, origin, "Handshake", map[string]any{})
 	plugins := lp["plugins"].([]any)
 	if len(plugins) != 1 {
@@ -103,8 +104,8 @@ func TestEmbeddedNodeLifecycle(t *testing.T) {
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 
-	// Restart: the SAME home, the same identity, the tile still there —
-	// the phone's tiles are as durable as any node's.
+	// Restart: the same home, the same identity, and the tile still there.
+	// The phone's tiles are as durable as any node's.
 	Stop()
 	loginURL2, err := Start(home)
 	if err != nil {
@@ -133,11 +134,10 @@ func TestEmbeddedNodeLifecycle(t *testing.T) {
 	Stop()
 }
 
-// The phone honors `connections:` config exactly as the desktop does
-// (2026-08-27): mobile used to compose its OWN remote factory, which
-// skipped the config-mode reconcile — the same server.yaml declared a
-// connection on a laptop and nothing on a phone. The native factories
-// are the node's now; this pins the seam from the yaml to the menu.
+// The phone honors `connections:` config exactly as the desktop does. The
+// transport is the node's, not something the mobile bind composes, so the same
+// server.yaml declares the same connection on either. This pins the seam from
+// the yaml to the menu.
 func TestEmbeddedNodeHonorsConnectionsConfig(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "gwhome")
 	loginURL, err := Start(home)
@@ -150,8 +150,8 @@ func TestEmbeddedNodeHonorsConnectionsConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// addr points at a closed socket path: the boot-time connect fails
-	// fast and the row still exists, pending.
+	// addr points at a closed socket path: the boot-time connect fails fast
+	// and the row still exists, pending.
 	if _, err := f.WriteString("connections:\n    - name: phoneconn\n      label: Laptop\n      addr: /nonexistent/federation.sock\n"); err != nil {
 		t.Fatal(err)
 	}

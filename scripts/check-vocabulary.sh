@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# check-vocabulary: retired words do not come back. A rename decided by the
-# owner ("one word: plugin", 2026-08-27; kinds local→home) erodes when it
-# is left to intention — comments keep the old word, the next reader copies
-# it, and the halfway world returns. Each line of scripts/retired-words.txt
-# is "<word> [<allowed path regex>]": the word (whole-word, case-insensitive)
-# may appear only in paths matching the regex (historical design records,
-# the migration shim that must spell the old name).
+# check-vocabulary: retired words do not come back. A rename erodes when it is
+# left to intention — comments keep the old word, the next reader copies it, and
+# the halfway world returns. Each line of scripts/retired-words.txt is
+# "<word> [<allowed path regex>]": the word, whole and case-insensitive, may
+# appear only in paths matching the regex, such as a migration shim that must
+# still spell the old name.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

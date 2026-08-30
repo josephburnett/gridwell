@@ -14,13 +14,12 @@ import (
 // DefaultURL is the GitLab instance when config names none.
 const DefaultURL = "https://gitlab.com"
 
-// FromConfig builds the production plugin from the shared config
-// vocabulary — the ONE owner of the config→plugin derivation, so the
-// subprocess main (guest.Main) and the bundled binaries (the mobile bind,
-// mobile) compose exactly the same plugin. A missing or unreadable
-// token is a REFUSAL: the error is the verdict, and both doors turn it
-// into a launch that stops with the reason (owner decision 2026-08-27)
-// instead of a plugin serving an empty grid.
+// FromConfig builds the production plugin from the shared config vocabulary.
+// It is the one owner of the config-to-plugin derivation, so the subprocess
+// main and a bundled binary compose exactly the same plugin. A missing or
+// unreadable token is a refusal: the error is the verdict, and both doors turn
+// it into a launch that stops with the reason instead of a plugin serving an
+// empty grid.
 func FromConfig(cfg map[string]string) (pluginv1.PluginServer, error) {
 	base := strings.TrimSpace(cfg["url"])
 	if base == "" {

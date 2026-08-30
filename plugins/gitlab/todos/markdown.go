@@ -5,14 +5,11 @@ import (
 	"strings"
 )
 
-// The tile CONTENT is markdown: a text tile renders it on its grid face
-// and, descended, as the rendered (read-only, selectable) document — and
-// a link in a rendered document opens an ephemeral visit in a split
-// below (issue #207's gesture), which is the whole point of the target
-// link (Joe, 2026-08-27: "a url so I can click on it and open an
-// ephemeral pane ... to the issue or whatever the todo is about"). A
-// plugin-served HTML page cannot do that: it is sandboxed, and its links
-// stay inside the sandbox.
+// The tile content is markdown: a text tile renders it on its grid face and,
+// descended, as the read-only selectable document. A link in a rendered
+// document opens an ephemeral visit in a split below, which is the whole point
+// of the target link. A plugin-served HTML page cannot do that: it is
+// sandboxed, and its links stay inside the sandbox.
 
 // SnippetRunes bounds the body excerpt on the face.
 const SnippetRunes = 240
@@ -42,10 +39,10 @@ func (t *Todo) From() string {
 	return ""
 }
 
-// Markdown renders the todo as its tile content: the subject as the
-// heading, who it is from and what they did, the project, the date,
-// the body excerpt, and the link to the TARGET (the issue, the merge
-// request) — not the todo itself.
+// Markdown renders the todo as its tile content: the subject as the heading,
+// who it is from and what they did, the project, the date, the body excerpt,
+// and the link to the target — the issue or the merge request — rather than to
+// the todo itself.
 func Markdown(t *Todo) []byte {
 	var b strings.Builder
 	head := t.Title()
@@ -81,9 +78,9 @@ func Markdown(t *Todo) []byte {
 	return []byte(b.String())
 }
 
-// GoneMarkdown is the content for a key the memory does not hold: the
-// node remembers the tile (a todo never disappears), but this process
-// has not seen its content since it started — say so.
+// GoneMarkdown is the content for a key the memory does not hold. The node
+// remembers the tile, because a todo never disappears, but this process has
+// not seen its content since it started, so say so.
 func GoneMarkdown(key string) []byte {
 	return []byte("_This todo (`" + key + "`) is no longer in GitLab, or has not been seen since the plugin started._\n")
 }

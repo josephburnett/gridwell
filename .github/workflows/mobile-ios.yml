@@ -1,7 +1,7 @@
-# The iOS bind-surface canary (issues #260/#252): GOOS=ios needs a macOS
-# toolchain, and macOS minutes are expensive — main pushes and manual
-# runs only. No signing, no SDK packaging: just proof the mobile module
-# still compiles for the platform that forbids fork/exec.
+# The iOS bind-surface canary: GOOS=ios needs a macOS toolchain and macOS
+# minutes are expensive, so this runs on main pushes and manual runs only.
+# There is no signing and no SDK packaging: it is proof the mobile module still
+# compiles for the platform that forbids fork and exec.
 name: mobile-ios
 on:
   push:

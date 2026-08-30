@@ -1,7 +1,7 @@
-// Package fssource reads a host directory and projects its contents into
-// the abstract entries an fs-grid is reconciled against. Pure-Go, no DB,
-// no Gridwell types — the reconciler in internal/store turns these
-// entries into tile rows.
+// Package fssource reads a host directory and projects its contents into the
+// abstract entries an fs grid is reconciled against. It is pure Go, with no
+// database and no Gridwell types; the fs plugin turns these entries into
+// listing entries and the node mints the tile rows.
 package fssource
 
 import (
@@ -13,10 +13,9 @@ import (
 	"time"
 )
 
-// EntryKind classifies a directory entry: a subdirectory (which the fs plugin
-// projects as a well) or a file (projected as a text tile whose descent body
-// is a metadata blurb — file contents themselves are not rendered yet). The
-// string values are internal markers; callers compare by constant.
+// EntryKind classifies a directory entry: a subdirectory, which the fs plugin
+// projects as a well, or a file, projected as a text tile. The string values
+// are internal markers; callers compare by constant.
 type EntryKind string
 
 const (
@@ -100,11 +99,10 @@ func entryFromFileInfo(dir string, info os.FileInfo) Entry {
 	return e
 }
 
-// Stat builds an Entry for a single path — the single-item counterpart to
-// Read, used by the fs source's ReadBlob to regenerate a file tile's
-// metadata body lazily (after List handed back only a hash). Symlink and
-// kind handling match Read exactly so a path listed by Read and stat'd
-// here project identically.
+// Stat builds an Entry for a single path: the single-item counterpart to Read,
+// used to regenerate a file tile's metadata body lazily. Symlink and kind
+// handling match Read exactly, so a path listed by Read and stat'd here
+// project identically.
 func Stat(path string) (Entry, error) {
 	path = filepath.Clean(path)
 	info, err := os.Lstat(path)
@@ -114,10 +112,9 @@ func Stat(path string) (Entry, error) {
 	return entryFromFileInfo(filepath.Dir(path), info), nil
 }
 
-// MetadataMarkdown returns a small markdown blob describing one Entry —
-// used as the descent body for file tiles in V1, where actual file
-// content rendering is deferred. The output is deterministic so the
-// blob hash dedupes for unchanged files.
+// MetadataMarkdown returns a small markdown blob describing one Entry: the
+// descent body for a file tile whose own bytes are not rendered. The output is
+// deterministic, so the blob hash dedupes for unchanged files.
 func MetadataMarkdown(e Entry) string {
 	var b strings.Builder
 	b.WriteString("# ")

@@ -1,14 +1,12 @@
 //go:build federation
 
-// The MID-SESSION PARTITION gate (docs/offline-plan.md phase 1): the gap
-// the spawn tests never covered — a mount that dies UNDER a live session.
-// Runs the production binaries through a real ssh tunnel, reads through
-// the mount to warm the node-side cache (internal/sourcecache), then
-// SIGKILLs the remote node and asserts the whole offline story end to end:
-// warmed reads serve stale, never-read bytes fail honestly, the offline
-// deep copy degrades exactly per the owner decision (cached → copy,
-// uncached → link), and a revived remote answers live again — the cache
-// never masks a healed mount.
+// The mid-session partition gate: a mount that dies under a live session. It
+// runs the production binaries through a real ssh tunnel, reads through the
+// mount to warm the node-side cache in internal/sourcecache, then SIGKILLs the
+// remote node and asserts the whole offline story end to end: a warmed read
+// serves stale, never-read bytes fail honestly, the offline deep copy degrades
+// as decided — cached copies, uncached links — and a revived remote answers
+// live again, so the cache never masks a healed mount.
 
 package federation_test
 
