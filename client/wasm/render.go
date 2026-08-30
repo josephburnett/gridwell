@@ -851,27 +851,6 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
 		return
 	}
-	// A STALE UNCONFIGURED PLUGIN WELL (pre-config-managed connections):
-	// no child to fetch or preview — the plugin's identity glyph inside a
-	// SOLID plugin-family border (owned, not a link; dashed stays reserved
-	// for links) says "a plugin thing waits here"; descending explains the
-	// well predates yaml connections and offers deletion.
-	if n.ChildGridID == "" && n.ConfigurePluginID != "" {
-		a.cctx.Set("fillStyle", colorBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-		glyph := ""
-		if pl, ok := a.pluginByUUID(n.ConfigurePluginID); ok {
-			glyph = pl.Glyph
-		}
-		a.drawPluginGlyph(glyph, x, y, w, h)
-		strokeTileBorder(a.cctx, x, y, w, h, colorPluginBorder, tileBorderPx)
-		if selected {
-			drawSelectedTileOutline(a.cctx, x, y, w, h)
-		}
-		a.drawTileBannerLabel(n, x, y, w, h, outside)
-		return
-	}
-
 	// Trigger prefetch if we don't have the child grid yet. Recursion
 	// stops naturally at one level because drawChildPreview paints its
 	// children via the flat drawNode — no further fetches. Off-screen
@@ -1213,14 +1192,7 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 	case rpc.KindWell:
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
-		border := colorFocusBorder
-		if n.ChildGridID == "" && n.ConfigurePluginID != "" {
-			// A stale unconfigured plugin well: the plugin family color
-			// says "a plugin thing waits here". SOLID border — it is
-			// owned, not a link; dashed stays reserved for links.
-			border = colorPluginBorder
-		}
-		strokeTileBorder(c, x, y, w, h, border, borderPx)
+		strokeTileBorder(c, x, y, w, h, colorFocusBorder, borderPx)
 	case rpc.KindURL:
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)

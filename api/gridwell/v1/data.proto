@@ -190,12 +190,11 @@ message Tile {
   // written by the SetTile url_frozen arm only, never bumps version.
   bool url_frozen = 30;
 
-  // configure_plugin_id (issue #251) marks a CHILDLESS well as an
-  // UNCONFIGURED PLUGIN WELL: the uuid of the parameterized plugin whose
-  // instance will fill it (dropping the ssh plugin onto a grid lands one).
-  // First descent opens that plugin's instance picker; adopting an
-  // instance sets child_grid_id (the SetTile adopt_child_grid arm) and the
-  // uuid stays as provenance. "" for every other tile.
+  // configure_plugin_id (issue #251) marked a CHILDLESS well as an
+  // UNCONFIGURED PLUGIN WELL. VESTIGIAL: the instance picker retired
+  // 2026-08-23 (connections are config rows) and the create/adopt verbs
+  // went 2026-08-29, so nothing mints or reads one — only stale rows in
+  // old stores still carry it. Retired with the column at schema v10.
   string configure_plugin_id = 31;
 
   // serves_page (2026-08-11): the owning plugin serves this tile's content
@@ -644,10 +643,10 @@ message SetTileRequest {
   bytes  preview = 5;   // jpeg to freeze (url/shell)
 
   // 2026-07-26 (interface-redesign-plan.md): the absorbed scalar writebacks.
-  // Exactly ONE operation per call — rename, content_zoom, url_frozen,
-  // adopt_child_grid, or the kind-dispatched tile writeback above; a request
-  // setting more than one is refused, so the "empty fields are skipped" rule
-  // never turns ambiguous.
+  // Exactly ONE operation per call — rename, content_zoom, url_frozen, or
+  // the kind-dispatched tile writeback above; a request setting more than
+  // one is refused, so the "empty fields are skipped" rule never turns
+  // ambiguous.
   //
   // rename is the USER rename gesture (formerly SetTileAlt): sets alt_text
   // and latches alt_user so automatic captures (url page title, shell
@@ -666,24 +665,9 @@ message SetTileRequest {
   // Framing — never bumps version; refused for non-url tiles. optional so
   // clearing (false) is distinct from absent.
   optional bool url_frozen = 8;
-  // adopt_child_grid (issue #251): turn a CHILDLESS well into a link by
-  // setting its child grid — the moment an unconfigured plugin well
-  // becomes a configured instance link. A versioned user edit (bumps).
-  // Refused for non-wells and for wells that already have a child grid: a
-  // well's target never silently changes.
-  AdoptChildGrid adopt_child_grid = 9;
-}
-
-// AdoptChildGrid carries the SetTile adopt arm's payload: the qualified
-// child grid plus the same birth fields CreateTile's exit-well arm takes.
-// label applies only when the well is unnamed (alt_text empty, alt_user
-// unlatched) — the copy-from-source-at-birth naming rule links follow.
-message AdoptChildGrid {
-  string child_grid_id = 1;
-  string label         = 2;
-  int64  view_x        = 3;
-  int64  view_y        = 4;
-  double view_zoom     = 5;
+  // 9 (adopt_child_grid): removed 2026-08-29 with the unconfigured plugin
+  // well (issue #251) — nothing can mint a childless well any more.
+  reserved 9;
 }
 
 // (UpdateTextRequest is gone — text bodies ride WriteContent, whose

@@ -1481,15 +1481,6 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 			a.openEntryParamsForm(p, well)
 			return
 		}
-		if well.ConfigurePluginID != "" {
-			// A pre-v2 UNCONFIGURED plugin well: the picker that once
-			// configured it died with config-managed connections
-			// (2026-08-23). Deleting the well is the cleanup; the
-			// connection itself is a menu row now.
-			a.reportErr(errsurface.Info, "descend",
-				"this well predates config-managed connections — delete it and drag the connection from the menu instead")
-			return
-		}
 		a.reportErr(errsurface.Info, "descend", "nothing to descend into: "+well.AltText)
 		return
 	}
