@@ -196,9 +196,15 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 		t.Fatal("the server took the write while the link was down")
 	}
 
-	// A drain against a STILL-dead link must converge, not lose the entry.
+	// A drain against a STILL-dead link must converge, not lose the entry —
+	// and it must actually reach the wire, not skip a key it thinks is
+	// already in flight.
+	before := link.tries.Load()
 	for _, retry := range out.Drain() {
 		retry()
+	}
+	if link.tries.Load() <= before {
+		t.Error("the drain did not re-attempt the write")
 	}
 	if out.Len() != 1 {
 		t.Fatalf("a failed retry left %d parked, want 1 (re-parked)", out.Len())
