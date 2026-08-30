@@ -46,7 +46,7 @@ test('setBounds() while hidden keeps the view parked and un-parks at the new bou
     const newBounds = { x: 200, y: 150, width: 500, height: 350 };
 
     // Place a live view at its initial position.
-    await reg.place(paneId, 1, 'obj-park-resize', args.dataURL, initialBounds);
+    await reg.place(paneId, 1, args.dataURL, initialBounds);
 
     // Wait for the view to appear in webContents (the preload + data URL load).
     const deadline = Date.now() + 8_000;
@@ -110,7 +110,7 @@ test('a new view placed with hidden=true starts parked (new-view-path fix)', asy
 
     // Place a brand-new view with the renderer's "overlay is open" verdict
     // (PlaceArgs.hidden = true). It must start parked, not at its bounds.
-    await reg.place(paneId, 2, 'obj-new-while-hidden', args.dataURL, bounds, 0, '', false, true);
+    await reg.place(paneId, 2, args.dataURL, bounds, 0, '', false, true);
     const boundsAfterPlace = reg.viewBoundsFor(paneId);
     const dLoad = Date.now() + 8_000;
     while (!webContents.getAllWebContents().some((w: any) => w.getURL().includes(args.marker)) && Date.now() < dLoad) {

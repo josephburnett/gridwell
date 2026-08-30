@@ -33,7 +33,7 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
       // Place a REAL live URL view (preload + context-menu handler wired by the
       // production code), at a fixed on-screen rect, with no plugin (shared
       // partition, no session hydrate / network).
-      await reg.place('e2e-ctx', 1, 'e2e-obj-1', args.dataURL, { x: 0, y: 0, width: 800, height: 600 });
+      await reg.place('e2e-ctx', 1, args.dataURL, { x: 0, y: 0, width: 800, height: 600 });
 
       // place() returns once loadURL is kicked off; the view's getURL() is
       // empty until the load commits, so poll until our slug appears.
@@ -124,7 +124,7 @@ test('a jittery right-click (5px movement, fast release) still produces the cont
       const reg = (globalThis as { __gwRegistry?: any }).__gwRegistry;
       if (!reg) throw new Error('registry not exposed (GRIDWELL_E2E not set?)');
 
-      await reg.place('e2e-jitter', 1, 'e2e-obj-jitter', args.dataURL, { x: 0, y: 0, width: 800, height: 600 });
+      await reg.place('e2e-jitter', 1, args.dataURL, { x: 0, y: 0, width: 800, height: 600 });
 
       let wc: any = null;
       const findDeadline = Date.now() + 8_000;
