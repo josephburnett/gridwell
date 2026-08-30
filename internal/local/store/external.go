@@ -14,6 +14,15 @@ package store
 // a recreated key mints a fresh id — enforced by a partial unique index
 // on LIVE rows only. Plugin rows are unversioned (version 0 on the wire)
 // and emit no store events: the plugin's own listing is the truth.
+//
+// These rows are the node's OWN facts, and they are the whole of what
+// the forever file keeps about an external (docs/simplify-plan.md S7):
+// the id it minted for a key, where the user put it, how it is framed,
+// and the tombstone of a key that went away. What the SOURCE last said —
+// listings, bodies, previews — is cache and lives in cache.db
+// (internal/sourcecache). That is why a dark source costs nothing here:
+// the adapter merges an empty non-authoritative listing and these rows
+// answer, unchanged.
 
 import (
 	"context"
@@ -110,26 +119,6 @@ func (n *Namespace) ContextKey(gridID int64) (string, error) {
 		return "", ErrNotFound
 	}
 	return key, err
-}
-
-// RetiredKeys returns the keys with a tombstoned row in the grid. The
-// adapter's cache filter reads it: a remembered (cached) entry whose key
-// was retired must not re-enter the merge — a retired key stays retired.
-func (n *Namespace) RetiredKeys(gridID int64) (map[string]bool, error) {
-	rows, err := n.s.db.Query(`SELECT DISTINCT key FROM tiles WHERE ns = ? AND grid_id = ? AND tombstoned = 1`, n.ns, gridID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[string]bool{}
-	for rows.Next() {
-		var k string
-		if err := rows.Scan(&k); err != nil {
-			return nil, err
-		}
-		out[k] = true
-	}
-	return out, rows.Err()
 }
 
 // TileKey resolves a minted tile id to its (grid id, plugin key).
@@ -362,35 +351,6 @@ func (n *Namespace) RootFraming(gridID int64) (f rpc.Framing, ok bool, err error
 		return rpc.Framing{}, false, nil
 	}
 	return rpc.Framing{Cx: ncx.Float64, Cy: ncy.Float64, Zoom: nzoom.Float64}, true, nil
-}
-
-// CacheListing remembers a context's last good listing — an opaque blob
-// the caller (the plugin adapter) serializes; the store never
-// interprets it. Disposable in principle, durable in practice: it is the
-// offline answer.
-func (n *Namespace) CacheListing(gridID int64, blob []byte, authoritative bool) error {
-	auth := 0
-	if authoritative {
-		auth = 1
-	}
-	_, err := n.s.db.Exec(`INSERT INTO listings (grid_id, entries, authoritative) VALUES (?, ?, ?)
-		ON CONFLICT(grid_id) DO UPDATE SET entries = excluded.entries, authoritative = excluded.authoritative`,
-		gridID, blob, auth)
-	return err
-}
-
-// CachedListing returns the remembered listing, ok=false when none.
-func (n *Namespace) CachedListing(gridID int64) (blob []byte, authoritative, ok bool, err error) {
-	var auth int64
-	err = n.s.db.QueryRow(`SELECT entries, authoritative FROM listings WHERE grid_id = ?`, gridID).
-		Scan(&blob, &auth)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, false, nil
-	}
-	if err != nil {
-		return nil, false, false, err
-	}
-	return blob, auth != 0, true, nil
 }
 
 // ── auto-place ───────────────────────────────────────────────────────────────

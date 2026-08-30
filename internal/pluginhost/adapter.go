@@ -10,8 +10,18 @@
 // the store's externals engine (store.Namespace, unit-tested), every content
 // derivation lives in the plugin, and the adapter only converts and
 // forwards. Presentation verbs terminate here; content verbs pass
-// through; a plugin outage degrades to the remembered listing (the
-// read-through cache, tenet 6 — I12 as node machinery).
+// through.
+//
+// Outages split by WHOSE fact is missing (docs/simplify-plan.md S7). A
+// dark SOURCE (the plugin answers; its directory, its API, its process
+// table does not) costs only what the source says: the adapter merges an
+// empty non-authoritative listing, so every row it minted still reads —
+// same ids, same placement, same labels, whatever the user has since
+// moved — stamped stale, retiring nothing. A dark PLUGIN (the subprocess
+// is gone) costs the node-side answer too, and THAT is what
+// internal/sourcecache remembers, one layer up. The adapter keeps no
+// memory of its own: the durable rows are the node's memory of what it
+// minted, and the cache is the memory of what the source said.
 package pluginhost
 
 import (
@@ -20,11 +30,9 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"sync"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
@@ -42,14 +50,6 @@ type Adapter struct {
 	namespace.Unimplemented
 	cp  pluginv1.PluginClient
 	mem *store.Namespace
-
-	// kind memoizes the plugin's declared Kind after the first
-	// successful handshake. Identity-stable for the plugin's lifetime
-	// — remembered so a DARK plugin (crashed subprocess) degrades to
-	// the cached listing instead of failing every GetGrid on the Info
-	// call (tenet 6: the remembered answer, stamped stale).
-	kindMu sync.Mutex
-	kind   string
 }
 
 // A plugin reaches the router as a Go value; the compiler is what says so.
@@ -115,91 +115,6 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 	return resp, nil
 }
 
-// listing fetches a context's listing, degrading to the remembered
-// answer on a transport-shaped failure. stale reports a cache serve.
-// facts is the entry-fact lookup: the live entries, UNIONED (for a
-// non-authoritative listing) with previously remembered ones — a pid
-// unreadable this pass still has its kind and label from the last pass
-// it was seen (the legacy stored-row behavior, now cache behavior).
-func (a *Adapter) listing(ctx context.Context, gid int64, key string) (resp *pluginv1.ListResponse, facts []*pluginv1.Entry, stale bool, err error) {
-	prev := a.cachedListing(gid)
-	resp, err = a.cp.List(ctx, &pluginv1.ListRequest{Context: key})
-	if err == nil {
-		facts = resp.Entries
-		if !resp.Authoritative && prev != nil {
-			// A remembered key that was RETIRED and is not in the live
-			// listing stays retired: unioning it back would re-mint a
-			// fresh id every read (mint → probe → GONE → retire → cache
-			// remembers → mint …) — unbounded id burn on a read path.
-			// A retired key that IS live again (a recycled pid) enters
-			// as a live entry and mints fresh, which is the identity
-			// rule for a recreated thing.
-			remembered := prev.Entries
-			if retired, rerr := a.mem.RetiredKeys(gid); rerr == nil && len(retired) > 0 {
-				liveKeys := map[string]bool{}
-				for _, e := range resp.Entries {
-					liveKeys[e.Key] = true
-				}
-				kept := make([]*pluginv1.Entry, 0, len(remembered))
-				for _, e := range remembered {
-					if retired[e.Key] && !liveKeys[e.Key] {
-						continue
-					}
-					kept = append(kept, e)
-				}
-				remembered = kept
-			}
-			facts = unionEntries(resp.Entries, remembered)
-		}
-		// Remember the UNION so facts survive repeated unreadable
-		// passes. A cache write failing must not fail the read.
-		toCache := resp
-		if !resp.Authoritative {
-			toCache = &pluginv1.ListResponse{Entries: facts, Authoritative: false, SourceLabel: resp.SourceLabel}
-		}
-		if blob, merr := proto.Marshal(toCache); merr == nil {
-			_ = a.mem.CacheListing(gid, blob, resp.Authoritative)
-		}
-		return resp, facts, false, nil
-	}
-	if !gwerr.IsTransport(err) {
-		return nil, nil, false, err
-	}
-	if prev == nil {
-		return nil, nil, false, err // no remembered answer: the failure stands
-	}
-	return prev, prev.Entries, true, nil
-}
-
-// cachedListing loads the remembered listing, nil when none/corrupt.
-func (a *Adapter) cachedListing(gid int64) *pluginv1.ListResponse {
-	blob, _, ok, err := a.mem.CachedListing(gid)
-	if err != nil || !ok {
-		return nil
-	}
-	cached := &pluginv1.ListResponse{}
-	if uerr := proto.Unmarshal(blob, cached); uerr != nil {
-		return nil
-	}
-	return cached
-}
-
-// unionEntries returns live entries plus remembered ones live didn't
-// include (live wins on a shared key).
-func unionEntries(live, remembered []*pluginv1.Entry) []*pluginv1.Entry {
-	seen := map[string]bool{}
-	for _, e := range live {
-		seen[e.Key] = true
-	}
-	out := append([]*pluginv1.Entry(nil), live...)
-	for _, e := range remembered {
-		if !seen[e.Key] {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
 // engineEntries converts listing entries for the layout engine.
 func engineEntries(entries []*pluginv1.Entry) []store.Entry {
 	out := make([]store.Entry, len(entries))
@@ -255,26 +170,6 @@ func buildTiles(gridID string, tiles []store.ExtTile, entries []*pluginv1.Entry)
 	return out
 }
 
-// sourceKind answers the plugin's declared Kind, from the memo when
-// the plugin is unreachable — a read that already degraded to the
-// remembered listing must not fail on this identity-stable stamp.
-func (a *Adapter) sourceKind(ctx context.Context) (string, error) {
-	a.kindMu.Lock()
-	memo := a.kind
-	a.kindMu.Unlock()
-	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
-	if err != nil {
-		if memo != "" && gwerr.IsTransport(err) {
-			return memo, nil
-		}
-		return "", err
-	}
-	a.kindMu.Lock()
-	a.kind = ci.Kind
-	a.kindMu.Unlock()
-	return ci.Kind, nil
-}
-
 // synthesized is one grid as the adapter derives it: the wire grid, the
 // merged rows (which carry the plugin keys), and the wire tiles, row i
 // ↔ tile i.
@@ -305,14 +200,21 @@ func (a *Adapter) synthesize(ctx context.Context, gid int64) (*synthesized, erro
 	if err != nil {
 		return nil, err
 	}
-	resp, facts, stale, err := a.listing(ctx, gid, key)
+	// The listing is the source's half. When it fails transport-shaped —
+	// "not right now", not a verdict — the adapter carries on with an
+	// EMPTY, non-authoritative one: nothing is authoritatively absent, so
+	// Merge retires nothing and answers the rows the node minted. That is
+	// the whole degradation; there is no remembered listing to serve,
+	// because the rows ARE the remembered answer and they are durable.
+	stale := false
+	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Context: key})
 	if err != nil {
-		return nil, err
+		if !gwerr.IsTransport(err) {
+			return nil, err
+		}
+		stale, resp = true, &pluginv1.ListResponse{}
 	}
-	// A stale (remembered) listing must never retire rows — the source
-	// didn't answer; nothing is authoritatively absent.
-	authoritative := resp.Authoritative && !stale
-	tiles, err := a.mem.Merge(gid, engineEntries(facts), authoritative)
+	tiles, err := a.mem.Merge(gid, engineEntries(resp.Entries), resp.Authoritative)
 	if err != nil {
 		return nil, err
 	}
@@ -341,13 +243,17 @@ func (a *Adapter) synthesize(ctx context.Context, gid int64) (*synthesized, erro
 		}
 		tiles = kept
 	}
-	kind, err := a.sourceKind(ctx)
+	// The plugin's declared kind stamps the grid. A dark PLUGIN fails
+	// here, and the source cache one layer up answers the whole read from
+	// what this namespace last said.
+	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, err
 	}
+	kind := ci.Kind
 	gridID := strconv.FormatInt(gid, 10)
 	g := &gridwellv1.Grid{Id: gridID, SourceKind: kind, SourceId: resp.SourceLabel, Stale: stale}
-	return &synthesized{grid: g, rows: tiles, tiles: buildTiles(gridID, tiles, facts)}, nil
+	return &synthesized{grid: g, rows: tiles, tiles: buildTiles(gridID, tiles, resp.Entries)}, nil
 }
 
 func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {

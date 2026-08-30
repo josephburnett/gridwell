@@ -163,6 +163,12 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 	if f, ok, _ := p.RootFraming(rootGID); !ok || f.Cx != 3 || f.Cy != -0.5 || f.Zoom != 0.75 {
 		t.Fatalf("root framing lost: %+v ok=%v", f, ok)
 	}
+	// The retired key stayed retired across the conversion: a listing
+	// that says nothing — non-authoritative, so nothing is absent, the
+	// shape a dark source now takes — answers the two LIVE rows only.
+	if live, lerr := p.Merge(rootGID, nil, false); lerr != nil || len(live) != 2 {
+		t.Fatalf("retired key came back live: %+v err=%v", live, lerr)
+	}
 	tiles, err := p.Merge(rootGID, []store.Entry{{Key: "docs", Kind: "well", Label: "docs", ChildContext: "root/docs"}, {Key: "notes.md", Kind: "text", Label: "notes.md"}}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -187,12 +193,6 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 	}
 	if notes.TextY != 120 || notes.TextMode != "rendered" || notes.ContentZoom != 1.25 {
 		t.Fatalf("text window lost: %+v", notes)
-	}
-	if retired, _ := p.RetiredKeys(rootGID); !retired["gone.md"] {
-		t.Fatal("the retired key must stay retired")
-	}
-	if _, _, ok, _ := p.CachedListing(rootGID); !ok {
-		t.Fatal("the remembered listing must come along")
 	}
 	// Every reference into the plugin points at the re-minted rows.
 	e, _ := ns.GetTile(ctx, exit.ID)

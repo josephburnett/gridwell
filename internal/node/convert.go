@@ -169,28 +169,28 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 		}
 	}
 
-	// The remembered listings give each key its kind, label, child
-	// context and url; a key with no remembered entry converts as text
-	// named by its key (the next listing refreshes the facts).
+	// The old file's remembered listings give each key its kind, label,
+	// child context and url — facts that become DURABLE ROWS here; a key
+	// with no remembered entry converts as text named by its key (the
+	// next listing refreshes the facts). The listing blob itself does not
+	// come along: what the source last said is cache, and the new home
+	// keeps none (docs/simplify-plan.md S7).
 	facts := map[int64]map[string]*pluginv1.Entry{}
-	lrows, err := old.QueryContext(ctx, `SELECT grid_id, entries, authoritative FROM cache_listings`)
+	lrows, err := old.QueryContext(ctx, `SELECT grid_id, entries FROM cache_listings`)
 	if err != nil {
 		return nil, err
 	}
 	type listing struct {
 		gid  int64
 		blob []byte
-		auth bool
 	}
 	var listings []listing
 	for lrows.Next() {
 		var l listing
-		var auth int64
-		if err := lrows.Scan(&l.gid, &l.blob, &auth); err != nil {
+		if err := lrows.Scan(&l.gid, &l.blob); err != nil {
 			lrows.Close()
 			return nil, err
 		}
-		l.auth = auth != 0
 		listings = append(listings, l)
 	}
 	lrows.Close()
@@ -204,11 +204,6 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 			byKey[e.Key] = e
 		}
 		facts[l.gid] = byKey
-		if gid, ok := m.grids[l.gid]; ok {
-			if err := n.CacheListing(gid, l.blob, l.auth); err != nil {
-				return nil, err
-			}
-		}
 	}
 
 	// idmap + layout → tiles, id-for-id in old order (stable output).

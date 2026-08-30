@@ -293,7 +293,17 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	resp, err := c.Namespace.GetGrid(ctx, in)
 	if err == nil {
-		c.storeGrid(ctx, in.GridId, resp)
+		// A STALE answer is never remembered. The layer below degrades
+		// too — a plugin adapter whose source went dark answers from the
+		// rows it minted and stamps the grid — and storing that would
+		// overwrite the good answer it degraded FROM with a poorer one,
+		// permanently (the degraded read succeeds, so nothing would ever
+		// correct it but a live read that may never come). The stale bit
+		// is the one place that fact is known; this is the one place it
+		// is obeyed.
+		if !resp.GetGrid().GetStale() {
+			c.storeGrid(ctx, in.GridId, resp)
+		}
 		return resp, nil
 	}
 	if !gwerr.IsTransport(err) {
@@ -314,8 +324,8 @@ func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 }
 
 // storeGrid replaces the grid row AND its whole tile set in one
-// transaction — a successful GetGrid is by definition the complete list,
-// so this is also how deletions that happened while dark reconcile.
+// transaction — a successful LIVE GetGrid is by definition the complete
+// list, so this is also how deletions that happened while dark reconcile.
 func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridResponse) {
 	gb, err := proto.Marshal(resp.GetGrid())
 	if err != nil {

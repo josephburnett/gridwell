@@ -10,6 +10,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
 // The #254 promise, pinned: after a prefetch, grids and bodies the user
@@ -168,5 +169,63 @@ func TestStaleBitMarksCacheServedGrids(t *testing.T) {
 	}
 	if again.GetGrid().GetStale() {
 		t.Error("the stale bit leaked into the stored row")
+	}
+}
+
+// degrading is an upstream that answers, but with a DEGRADED grid: the
+// shape a plugin adapter takes when its source goes dark (the rows it
+// minted, no source facts, stamped stale). The cache must not remember
+// it — the degraded answer succeeds, so nothing else would ever put the
+// good one back.
+type degrading struct {
+	namespace.Namespace
+	degraded bool
+}
+
+func (d *degrading) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	resp, err := d.Namespace.GetGrid(ctx, in)
+	if err != nil || !d.degraded {
+		return resp, err
+	}
+	resp.Grid.Stale = true
+	resp.Tiles = nil // whatever the source said is missing
+	return resp, nil
+}
+
+func TestAStaleAnswerIsNeverRemembered(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	root, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := local.New(st, nil)
+	if _, err := raw.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	up := &degrading{Namespace: raw}
+	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	up.degraded = true
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	cached, ok := cc.loadGrid(ctx, root)
+	if !ok {
+		t.Fatal("the good answer was dropped")
+	}
+	if len(cached.GetTiles()) != 1 {
+		t.Fatalf("a stale answer overwrote the good one: %d tiles remembered, want 1", len(cached.GetTiles()))
+	}
+	if cached.GetGrid().GetStale() {
+		t.Fatal("the stale bit was stored")
 	}
 }

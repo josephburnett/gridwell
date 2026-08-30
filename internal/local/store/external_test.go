@@ -176,9 +176,6 @@ func TestExtAuthoritativeAbsenceRetiresAndRecreationMintsFresh(t *testing.T) {
 	if newA := extByKey(t, tiles, "a"); newA.ID == oldA.ID {
 		t.Fatal("recreated key reused the retired id")
 	}
-	if retired, _ := d.RetiredKeys(gid); !retired["a"] {
-		t.Fatal("the retired key must stay listed as retired")
-	}
 }
 
 func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
@@ -249,7 +246,7 @@ func TestExtRetireIsTheDeleteGesture(t *testing.T) {
 	}
 }
 
-func TestExtRootFramingAndListings(t *testing.T) {
+func TestExtRootFraming(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.ContextID("root")
 	if _, ok, err := d.RootFraming(gid); err != nil || ok {
@@ -260,15 +257,6 @@ func TestExtRootFramingAndListings(t *testing.T) {
 	}
 	if f, ok, err := d.RootFraming(gid); err != nil || !ok || f.Cx != 1.5 || f.Cy != -2.25 || f.Zoom != 0.8 {
 		t.Fatalf("root framing round trip: %+v ok=%v err=%v", f, ok, err)
-	}
-	if _, _, ok, err := d.CachedListing(gid); err != nil || ok {
-		t.Fatalf("fresh listing: ok=%v err=%v", ok, err)
-	}
-	if err := d.CacheListing(gid, []byte{1, 2}, true); err != nil {
-		t.Fatal(err)
-	}
-	if blob, auth, ok, err := d.CachedListing(gid); err != nil || !ok || !auth || len(blob) != 2 {
-		t.Fatalf("listing round trip: %v %v %v %v", blob, auth, ok, err)
 	}
 }
 
