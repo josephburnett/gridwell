@@ -1,14 +1,13 @@
-// Package panelayout is the PERSISTED pane-layout format — a workspace
-// (pane tile) blob's wire shape. It is CONTRACT, not client machinery
-// (moved out of client/pane, 2026-08-15): the localdb store scans blobs
-// for the text tiles a workspace references (the ephemeral reap's
-// protection set) and the client encodes/decodes full trees from the same
-// structs — one format definition, no second decoder to drift.
+// Package panelayout is the persisted pane-layout format: a pane tile's
+// blob wire shape. It is contract, not client machinery — the home store
+// scans blobs for the text tiles a pane tile references (the ephemeral
+// reap's protection set) and the client encodes and decodes full trees
+// from the same structs, so there is no second decoder to drift.
 //
-// Versioning: bump layoutVersion only with a new DTO type and a decoder
-// that still accepts every older version; a blob written by a NEWER
-// Gridwell is ErrLayoutVersion and callers must treat the workspace
-// read-only — never overwrite a newer format with a downgrade.
+// Versioning: bump Version only with a new DTO type and a decoder that
+// still accepts every older version. A blob written by a newer Gridwell is
+// ErrLayoutVersion, and callers must treat that pane tile read-only rather
+// than overwrite a newer format with a downgrade.
 package panelayout
 
 import (
@@ -49,8 +48,8 @@ type LayoutSplit struct {
 	B     LayoutNode `json:"b"`
 }
 
-// LayoutPane is a leaf's persisted place: anchor + path + viewport, plus
-// the text-descent state. All ids are in the owning node's namespace
+// LayoutPane is a leaf's persisted place: anchor, path, and viewport, plus
+// the content-descent state. All ids are in the owning node's namespace
 // frame.
 type LayoutPane struct {
 	ID          string   `json:"id"`
@@ -78,9 +77,9 @@ func Parse(data []byte) (*LayoutV1, error) {
 	return &l, nil
 }
 
-// TextFocusIDs returns every leaf's TextFocus id in the blob — the text
-// tiles a workspace references. The store's reap reads this to protect a
-// workspace's documents without holding any client tree machinery.
+// TextFocusIDs returns every leaf's TextFocus id in the blob: the content
+// tiles a pane tile references. The store's reap reads this to protect
+// those documents without holding any client tree machinery.
 func TextFocusIDs(data []byte) ([]string, error) {
 	l, err := Parse(data)
 	if err != nil {

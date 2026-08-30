@@ -1,8 +1,7 @@
-// Package idshape owns the IDENTITY SHAPES of the Gridwell contract —
-// facts every module shares and none may re-derive: the short plugin/node
-// id mint, the 128-bit random mint behind system.plugin_uuid, and the
-// validity rules a namespace segment must satisfy. Moved out of the localdb store
-// (2026-08-15): id shape is CONTRACT, not storage — a third-party plugin
+// Package idshape owns the identity shapes of the Gridwell contract: the
+// short plugin/node id mint, the 128-bit random mint behind
+// system.plugin_uuid, and the validity rules a namespace segment must
+// satisfy. Id shape is contract, not storage — a third-party plugin
 // minting a connection namespace and the host validating a hand-edited
 // server.yaml must agree without either importing the other.
 package idshape
@@ -18,9 +17,7 @@ import (
 
 // NewUUID returns a fresh random 128-bit id as a 32-character hex string,
 // defined in exactly one place. Raw hex rather than 8-4-4-4-12 grouping
-// because no caller parses these. (It also minted the per-row object_id
-// provenance marker until schema v10 retired that column — nothing read
-// it to decide anything.)
+// because no caller parses these.
 func NewUUID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
@@ -34,8 +31,8 @@ func NewUUID() string {
 const shortIDLen = 7
 
 // NewShortID returns a fresh plugin/node/namespace identity: shortIDLen
-// characters of lowercase base36 whose FIRST character is a letter (owner
-// decision 2026-07-25). The shape is load-bearing, not cosmetic:
+// characters of lowercase base36 whose first character is a letter. The
+// shape is load-bearing, not cosmetic:
 //   - lowercase-only because the id names a directory (~/.gridwell/db/<id>)
 //     on case-insensitive filesystems and a tmux socket;
 //   - no '/' so the qualified-id codec (rpc.SplitID) stays delimiter-clean;
@@ -43,9 +40,9 @@ const shortIDLen = 7
 //     which is how URL paths tell a namespace segment from a tile id
 //     (ValidateSegment enforces the same rules on hand-edited ids).
 //
-// Existing ids of the older 32-hex shape stay valid forever — an id is
-// immutable once minted (it lives in other plugins' stored references,
-// session partitions, and socket names); every consumer accepts both.
+// Ids of the 32-hex shape stay valid forever. An id is immutable once
+// minted — it lives in other plugins' stored references, session
+// partitions, and socket names — and every consumer accepts both shapes.
 func NewShortID() string {
 	const letters = "abcdefghijklmnopqrstuvwxyz"
 	const alnum = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -59,9 +56,9 @@ func NewShortID() string {
 
 // ValidateSegment enforces the two load-bearing properties on an id used
 // as a namespace segment (a plugin id, a node id, a connection namespace):
-// no '/' (the qualified-id delimiter) and never purely numeric
-// (indistinguishable from a tile id in a URL path). `what` names the id in
-// the error.
+// no '/', the qualified-id delimiter, and never purely numeric, which
+// would be indistinguishable from a tile id in a URL path. what names the
+// id in the error.
 func ValidateSegment(what, id string) error {
 	if id == "" {
 		return nil

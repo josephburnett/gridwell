@@ -1,10 +1,9 @@
-// This file holds the conversions that are NOT a mechanical message
-// mirror. The mirrors — every record and every request/response whose Go
-// shape is the proto message field for field — are GENERATED into
-// wire_gen.go from api/gridwell/v1/data.proto, which is the one
-// description of them (docs/simplify-plan.md S6). What is left here is
-// where the Go shape deliberately differs from the wire shape and a
-// human has to say how:
+// This file holds the conversions that are not a mechanical message
+// mirror. The mirrors — every record and every request or response whose Go
+// shape is the proto message field for field — are generated into
+// wire_gen.go from api/gridwell/v1/data.proto, which is the one description
+// of them. What is left here is where the Go shape deliberately differs
+// from the wire shape and a human has to say how:
 //
 //   - Event: the proto's oneof payload becomes a discriminator string
 //     plus optional pointers on the Go side.
@@ -82,10 +81,10 @@ func CreatePaneToProto(r *CreatePaneRequest) *pb.CreateTileRequest {
 		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label}}
 }
 
-// CreateLeafLinkToProto builds the CreateTile for a LEAF LINK: any leaf kind
-// plus a qualified link_target_id. The one create for all four linkable leaf
-// kinds — the destination plugin stores the reference verbatim and no content
-// rides along (bytes live in the target).
+// CreateLeafLinkToProto builds the CreateTile for a leaf link: any leaf kind
+// plus a qualified link_target_id. It is the one create for every linkable
+// leaf kind. The destination stores the reference verbatim and no content
+// rides along, because the bytes live in the target.
 func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: r.Kind, X: r.X, Y: r.Y, W: r.W, H: r.H,
@@ -93,7 +92,8 @@ func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
 }
 
 // SetTile converters. The wire has a single SetTile dispatched on the target
-// tile's Kind; these helpers map each kind's framing/preview writeback onto it.
+// tile's Kind; these helpers map each kind's framing and preview writeback
+// onto it.
 
 func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTileRequest {
 	return &pb.SetTileRequest{TileId: r.TileID,

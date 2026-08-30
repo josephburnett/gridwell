@@ -2,8 +2,9 @@ package rpc
 
 import "testing"
 
-// The ONE selector grammar (issue #244): id: is exact; everything else is
-// plugin-interpreted text. New selectors extend the parser, never a plugin.
+// The one selector grammar: id: is exact, everything else is
+// plugin-interpreted text. New selectors extend the parser, never a
+// plugin.
 func TestParseSearchQuery(t *testing.T) {
 	cases := []struct {
 		in       string

@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// The beacon bodies must be the EXACT Connect-unary wire form the ordinary
-// client calls send — same converters, same procedures — so the unload
-// flush and the settle flush can never write different shapes.
+// The beacon bodies must be the exact Connect-unary wire form the ordinary
+// client calls send: same converters, same procedures, so the unload flush
+// and the settle flush cannot write different shapes.
 func TestBeaconBodies(t *testing.T) {
 	path, body := SetFramingBeacon(&SetFramingRequest{
 		TileID: "u1/5", Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.5},
@@ -24,7 +24,7 @@ func TestBeaconBodies(t *testing.T) {
 	}
 
 	path, body = SetFramingBeacon(&SetFramingRequest{RootGridID: "u1/1", Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.3}})
-	// The SAME procedure for a root: one verb, both rows.
+	// The same procedure for a root: one verb, both rows.
 	if path != "/gridwell.v1.Gridwell/SetFraming" {
 		t.Errorf("root framing path = %q", path)
 	}

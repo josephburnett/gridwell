@@ -7,12 +7,10 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// The Tile/Grid round trips and the drift lint that used to live here are
-// GONE, not moved: rpc.Tile, rpc.Grid and their conversions are generated
-// from the proto (wire_gen.go), so there is no second spelling left to
-// diverge from. What a test can still add is the wire's exhaustive round
-// trip and its JSON shape — wire_test.go — and the hand-written shapes
-// below, which the generator deliberately does not produce.
+// rpc.Tile, rpc.Grid and their conversions are generated from the proto
+// into wire_gen.go, and wire_test.go pins the wire's exhaustive round trip
+// and JSON shape. What this file covers is the hand-written shapes below,
+// which the generator deliberately does not produce.
 
 // TestTilesSliceProto: nil slices stay nil (not []), and a populated slice
 // round-trips element-for-element.
@@ -30,8 +28,9 @@ func TestTilesSliceProto(t *testing.T) {
 	}
 }
 
-// TestEventProtoRoundTrip covers all four event kinds through the proto oneof
-// and back — the discriminator + the one populated payload must survive.
+// TestEventProtoRoundTrip covers all four event kinds through the proto
+// oneof and back: the discriminator and the one populated payload must
+// survive.
 func TestEventProtoRoundTrip(t *testing.T) {
 	cases := []Event{
 		{Kind: EventGridChanged, GridChanged: &GridChanged{GridID: "g-1"}},
@@ -48,7 +47,7 @@ func TestEventProtoRoundTrip(t *testing.T) {
 	}
 }
 
-// TestEventFromProtoNil: a nil/empty wire event decodes to the zero Event
+// TestEventFromProtoNil: a nil or empty wire event decodes to the zero Event
 // rather than panicking on a nil payload.
 func TestEventFromProtoNil(t *testing.T) {
 	if got := EventFromProto(nil); got.Kind != "" {
@@ -60,16 +59,17 @@ func TestEventFromProtoNil(t *testing.T) {
 }
 
 // TestCreateConvertersSelectKindAndFields: each typed create maps onto the
-// unified CreateTile shape with the right Kind and the kind-specific fields in
-// the right place (the one spot per primitive where this mapping lives).
+// unified CreateTile shape with the right Kind and the kind-specific fields
+// in the right place. This mapping lives in one spot per primitive.
 func TestCreateConvertersSelectKindAndFields(t *testing.T) {
 	well := CreateWellToProto(&CreateWellRequest{GridID: "g", X: 1, Y: 2, W: 3, H: 4, ChildGridID: "cg", Label: "home",
 		Framing: Framing{Cx: 7, Cy: 8, Zoom: 0.5}})
 	if well.Tile.Kind != KindWell || well.Tile.ChildGridId != "cg" || well.Tile.AltText != "home" || well.GridId != "g" {
 		t.Errorf("CreateWell mapping wrong: %+v", well.Tile)
 	}
-	// The framing seed rides the create so an exit well (a plugin link dropped
-	// from the + menu) starts at the target's persisted root view.
+	// The framing seed rides the create so an exit well, such as a plugin
+	// link dropped from the + menu, starts at the target's persisted root
+	// view.
 	if well.Tile.ViewCx != 7 || well.Tile.ViewCy != 8 || well.Tile.ViewZoom != 0.5 {
 		t.Errorf("CreateWell dropped the view framing seed: %+v", well.Tile)
 	}
@@ -87,12 +87,13 @@ func TestCreateConvertersSelectKindAndFields(t *testing.T) {
 	}
 }
 
-// TestSetConvertersAreFramingByKind: the SetTile converters carry framing/
-// preview fields under the right Kind, and route the JPEG preview via the
-// Preview field (not the tile body). This is the framing-vs-content boundary.
+// TestSetConvertersAreFramingByKind: the SetTile converters carry framing
+// and preview fields under the right Kind, and route the JPEG preview
+// through the Preview field rather than the tile body. This is the
+// framing-versus-content boundary.
 func TestSetConvertersAreFramingByKind(t *testing.T) {
-	// Grid framing is NOT here: it rides its own verb (SetFraming), the
-	// one door for both rows that can own it.
+	// Grid framing is not here: it rides its own verb, SetFraming, the one
+	// door for both rows that can own it.
 	f := SetFramingToProto(&SetFramingRequest{TileID: "t", Framing: Framing{Cx: 4, Cy: 5, Zoom: 6}})
 	if f.TileId != "t" || f.Cx != 4 || f.Cy != 5 || f.Zoom != 6 {
 		t.Errorf("SetFraming mapping wrong: %+v", f)

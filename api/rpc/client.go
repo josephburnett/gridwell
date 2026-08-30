@@ -62,8 +62,8 @@ type PluginList struct {
 	// every plugin-served page URL as
 	// <origin>/content/<ContentToken>/<tile-id>/ (see data.proto).
 	ContentToken string
-	// HomeGridID is where "/" lands (a field, docs/one-node.md); HomeView*
-	// its persisted viewport (zero zoom = never set).
+	// HomeGridID is where "/" lands; HomeView* is its persisted
+	// viewport (zero zoom means never set).
 	HomeGridID   string
 	HomeViewCx   float64
 	HomeViewCy   float64
@@ -76,11 +76,10 @@ func (c *Client) Handshake(ctx context.Context) (PluginList, error) {
 	return c.HandshakeNS(ctx, "")
 }
 
-// HandshakeNS is the ROUTED plugin list (remote-menu, 2026-08-16):
-// ns "" answers for the node this client talks to (the boot handshake);
-// a namespace chain answers for the node it names, ids re-qualified per
-// hop and node-local fields zeroed. The + menu inside a remote pane is
-// built from this.
+// HandshakeNS is the routed plugin list. ns "" answers for the node this
+// client talks to (the boot handshake); a namespace chain answers for the
+// node it names, with ids re-qualified per hop and node-local fields
+// zeroed. The + menu inside a remote pane is built from this.
 func (c *Client) HandshakeNS(ctx context.Context, ns string) (PluginList, error) {
 	r, err := c.cl.Handshake(ctx, connect.NewRequest(&pb.HandshakeRequest{Namespace: ns}))
 	if err != nil {
@@ -167,10 +166,10 @@ func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Til
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetURLStateToProto(req))))
 }
 
-// SetFraming persists a grid's framing — the ONE framing write. The
-// server routes on whichever target the request names (the doorway tile
-// or the root grid). Returns the updated doorway tile; nil for a root,
-// which has no tile row.
+// SetFraming persists a grid's framing: the one framing write. The server
+// routes on whichever target the request names, the doorway tile or the
+// root grid. Returns the updated doorway tile, or nil for a root, which has
+// no tile row.
 func (c *Client) SetFraming(ctx context.Context, req *SetFramingRequest) (*Tile, error) {
 	resp, err := c.cl.SetFraming(ctx, connect.NewRequest(SetFramingToProto(req)))
 	if err != nil {
@@ -191,11 +190,11 @@ func SetFramingToProto(req *SetFramingRequest) *pb.SetFramingRequest {
 	}
 }
 
-// ReadContent fetches a tile's content bytes — the one content read
-// (2026-07-26 redesign). The stream is assembled here: chunk 1 carries the
-// media type and the row version the bytes belong to (the save basis, paired
-// with the bytes at the owner). A leaf link resolves to its target at the
-// serving node, so callers never reimplement link semantics.
+// ReadContent fetches a tile's content bytes: the one content read. The
+// stream is assembled here, and chunk 1 carries the media type and the row
+// version the bytes belong to — the save basis, paired with the bytes at
+// the owner. A leaf link resolves to its target at the serving node, so
+// callers never reimplement link semantics.
 func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, mediaType string, version int64, err error) {
 	stream, err := c.cl.ReadContent(ctx, connect.NewRequest(&pb.ReadContentRequest{TileId: tileID}))
 	if err != nil {
@@ -221,9 +220,10 @@ func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, m
 // and commits once, at clean close.
 const writeContentChunkBytes = 256 * 1024
 
-// WriteContent writes a tile's content bytes — the one content write:
-// version-claimed, commit-at-close (a failure anywhere leaves the old value
-// intact). data is the complete new value; chunking is a transport detail.
+// WriteContent writes a tile's content bytes: the one content write. It is
+// version-claimed and commits at close, so a failure anywhere leaves the
+// old value intact. data is the complete new value; chunking is a transport
+// detail.
 func (c *Client) WriteContent(ctx context.Context, tileID string, version int64, data []byte) (*Tile, error) {
 	stream := c.cl.WriteContent(ctx)
 	end := min(writeContentChunkBytes, len(data))
@@ -252,7 +252,7 @@ func (c *Client) WriteContent(ctx context.Context, tileID string, version int64,
 }
 
 // PlaceTile is the single placement writeback: one verb owns
-// (grid, x, y, w, h) — a move, a resize, or both in one write.
+// (grid, x, y, w, h), whether that is a move, a resize, or both.
 func (c *Client) PlaceTile(ctx context.Context, req *PlaceTileRequest) (*Tile, error) {
 	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(PlaceTileRequestToProto(req))))
 }
@@ -268,26 +268,26 @@ func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRe
 	return ShellSessionAliveResponseFromProto(r.Msg), nil
 }
 
-// RenameTile is the versioned rename (2026-07-26 redesign: the absorbed
-// SetTile rename arm) — a real user edit with an optimistic-concurrency
-// claim; the server latches alt_user so automatic captures defer.
+// RenameTile is the versioned rename, over the SetTile rename arm. It is a
+// real user edit with an optimistic-concurrency claim, and the server
+// latches alt_user so automatic captures defer.
 func (c *Client) RenameTile(ctx context.Context, tileID string, version int64, alt string) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
 		TileId: tileID, Version: version, Rename: alt,
 	})))
 }
 
-// SetContentZoom persists a tile's content scale (framing; no claim, never
-// bumps version) — the text/terminal font or page zoom (issue #82). Rides the
-// absorbed SetTile content_zoom arm (2026-07-26 redesign).
+// SetContentZoom persists a tile's content scale — the text or terminal
+// font size, or the page zoom. It is framing: no claim, and it never bumps
+// version. Rides the SetTile content_zoom arm.
 func (c *Client) SetContentZoom(ctx context.Context, req *SetContentZoomRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
 		TileId: req.TileID, ContentZoom: &req.ContentZoom,
 	})))
 }
 
-// SetURLFrozen persists the user's standing freeze on a url tile (issue
-// #237; framing, no claim, never bumps version). Rides the SetTile
+// SetURLFrozen persists the user's standing freeze on a url tile. It is
+// framing: no claim, and it never bumps version. Rides the SetTile
 // url_frozen arm.
 func (c *Client) SetURLFrozen(ctx context.Context, req *SetURLFrozenRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{

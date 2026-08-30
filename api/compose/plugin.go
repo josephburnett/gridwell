@@ -1,10 +1,9 @@
 package compose
 
-// The content-plugin half of the compose sugar (docs/v2-design.md): a
-// plugin binary serves plugin.v1. PluginInProcess is the compiled-in
-// shape — a real gRPC loopback on an in-memory listener, so the caller
-// holds the same client interface a subprocess dial would give, and the
-// bundled plugin is isolated from the host exactly like a spawned one.
+// The content-plugin half of compose: a plugin binary serves plugin.v1.
+// PluginInProcess is the compiled-in shape — a real gRPC loopback on an
+// in-memory listener, so the caller holds the same client interface a
+// subprocess dial would give.
 
 import (
 	"context"
@@ -28,8 +27,8 @@ import (
 const ConfigEnvVar = "GRIDWELL_PLUGIN_CONFIG"
 
 // HostPIDEnvVar carries the spawning host's pid to the guest, which
-// watches it and exits when the host dies (guest's watchdog, issue #197):
-// go-plugin gives the guest no host-death detection in our configuration.
+// watches it and exits when the host dies. go-plugin gives the guest no
+// host-death detection in our configuration.
 const HostPIDEnvVar = "GRIDWELL_HOST_PID"
 
 // PluginName is the go-plugin dispatch key for the plugin

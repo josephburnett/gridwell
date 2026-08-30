@@ -6,21 +6,20 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// The TRANSIT qualification rule — how a hop that fronts a whole namespace
-// (a node mount's server-side stamp, or the ssh plugin's per-connection
-// sub-namespace) prepends one segment to ids that are already qualified from
-// the far side's perspective. It lives here, next to the id codec, because
-// two layers apply it: the server (qualifyTilesTransit / qualifyEvent) and
-// the multi-connection ssh plugin, which peels a connection segment exactly
-// as a node peels a plugin segment. One implementation, so the two hops can
-// never disagree about what a chain looks like.
+// The transit qualification rule: how a hop that fronts a whole namespace
+// prepends one segment to ids that are already qualified from the far
+// side's perspective. It lives here, next to the id codec, because two
+// layers apply it — the server's transit stamp and the remote transport,
+// which peels a connection segment exactly as a node peels a plugin
+// segment. One implementation, so the two hops can never disagree about
+// what a chain looks like.
 
 // TransitQualifyTiles rewrites ids from a transit namespace: every id gets
-// prefix prepended — including an already-qualified child, which is a
+// prefix prepended, including an already-qualified child, which is a
 // reference within the far namespace reachable only through this hop. The
-// wire Reference bit is trusted verbatim: the far side already decided what
-// is a link and what is owned content, and a remote plugin's interior well
-// must stay solid (owned) even though its child id contains "/". Chains
+// wire Reference bit is trusted verbatim — the far side already decided
+// what is a link and what is owned content, and a remote plugin's interior
+// well must stay owned even though its child id contains "/". Chains
 // compose: each hop prepends exactly one segment.
 func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
@@ -42,14 +41,12 @@ func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 	return out
 }
 
-// TransitQualifyGrid rewrites a Grid's ids from a transit namespace —
-// the grid's own id, its scratch grid, node_ns (the serving node is one
-// segment further away, remote-menu 2026-08-16), and the menu entries'
-// root targets (#258). Everything else rides verbatim: the far node
-// already stamped its owning plugin's facts (writable, menu entries).
-// The ONE grid rule for both hops (the server's transit stamp and the
-// builtin remote transport) — extracted 2026-08-24 from two hand-kept
-// copies.
+// TransitQualifyGrid rewrites a Grid's ids from a transit namespace: the
+// grid's own id, its scratch grid, node_ns (the serving node is one segment
+// further away), and the menu entries' root targets. Everything else rides
+// verbatim, because the far node already stamped its owning plugin's facts.
+// It is the one grid rule for both hops, the server's transit stamp and the
+// remote transport.
 func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	if g == nil {
 		return nil
@@ -121,16 +118,15 @@ func TransitQualifyEvent(prefix string, ev *pb.Event) *pb.Event {
 	})
 }
 
-// TransitQualifyPluginList re-qualifies a FORWARDED Handshake response
-// with one hop segment (remote-menu, 2026-08-16): every id the answer
-// carries — the plugin namespaces themselves and their grid addresses —
-// gains the hop prefix, so the receiving side holds ids routable from
-// ITS perspective, exactly like every other transit response. Node-local
-// fields are ZEROED: the content token, node identity, and node view
-// answer only for the node asked directly (they are capabilities of THAT
-// handshake, meaningless — and unsafe to forward — through a chain).
-// shells_disabled and per-plugin InfoError ride verbatim: they describe
-// the answering node. Chains compose: each hop calls this once.
+// TransitQualifyPluginList re-qualifies a forwarded Handshake response with
+// one hop segment: every id the answer carries — the plugin namespaces
+// themselves and their grid addresses — gains the hop prefix, so the
+// receiving side holds ids routable from its own perspective. Node-local
+// fields are zeroed: the content token, node identity, and node view answer
+// only for the node asked directly, and are capabilities of that handshake,
+// meaningless and unsafe to forward through a chain. shells_disabled and
+// per-plugin InfoError ride verbatim, because they describe the answering
+// node. Chains compose: each hop calls this once.
 func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.HandshakeResponse {
 	if resp == nil {
 		return nil
@@ -179,9 +175,9 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 }
 
 // QualifyMenuEntries prepends one hop segment to the grid targets of a
-// plugin's menu entries (issue #258) — root entries chain like every
-// other id; creation entries ride verbatim. Returns fresh values so a
-// hop never mutates the response it forwards.
+// plugin's menu entries. Root entries chain like every other id; creation
+// entries ride verbatim. Returns fresh values so a hop never mutates the
+// response it forwards.
 func QualifyMenuEntries(prefix string, in []*pb.MenuEntry) []*pb.MenuEntry {
 	if len(in) == 0 {
 		return nil

@@ -13,32 +13,28 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// The wire is FROZEN. These tests are the pin for that: the Go record types
+// The wire is frozen and these tests are the pin. The Go record types
 // (rpc.Tile, rpc.Grid) travel to the client as protojson over the generated
-// pb messages — connect.WithProtoJSON in NewDefaultClient — so the JSON
-// NAMES on the wire are the proto field names, not the json tags on the Go
-// structs. Two properties are locked here:
+// pb messages, through connect.WithProtoJSON in NewDefaultClient, so the
+// JSON names on the wire are the proto field names, not the json tags on the
+// Go structs. Two properties are locked here:
 //
-//   - EXHAUSTIVE round trip. The fixture is built by REFLECTION over the Go
-//     struct, so it fills every field automatically. The hand-written fixture
-//     it replaces (fullTile) had gone stale — it never set status_detail, so
-//     a converter that dropped that field round-tripped green.
-//   - The JSON SHAPE is golden. api/rpc/testdata/*.json records the exact
+//   - An exhaustive round trip. The fixture is built by reflection over the
+//     Go struct, so it fills every field automatically and a converter that
+//     drops a newly added field cannot round-trip green.
+//   - The JSON shape is golden. api/rpc/testdata/*.json records the exact
 //     field names and values a fully-populated record marshals to; the client
 //     and the e2e specs read those names, so a rename is a wire break and
 //     must fail here.
-//
-// Both must hold however the Go types are produced — hand-written or
-// generated from the proto.
 
 // fill populates every exported field of the struct pointed at by v with a
-// DISTINCT non-zero value, so a converter that drops or swaps a field cannot
+// distinct non-zero value, so a converter that drops or swaps a field cannot
 // round-trip clean.
 //
-// The value is derived from the field NAME, never from its position. That is
-// what makes the golden a wire pin rather than a struct-layout pin: reorder
-// the Go fields (a generator emits them in proto declaration order) and the
-// golden is byte-identical; rename or drop one and it changes.
+// The value is derived from the field name, never from its position. That is
+// what makes the golden a wire pin rather than a struct-layout pin:
+// reordering the Go fields leaves the golden byte-identical, while renaming
+// or dropping one changes it.
 func fill(t *testing.T, v reflect.Value) {
 	t.Helper()
 	rt := v.Type()
@@ -90,7 +86,7 @@ func exhaustiveGrid(t *testing.T) *Grid {
 }
 
 // TestTileWireRoundTrip: rpc.Tile → pb → the Connect JSON codec → pb →
-// rpc.Tile is the identity for a tile with EVERY field set.
+// rpc.Tile is the identity for a tile with every field set.
 func TestTileWireRoundTrip(t *testing.T) {
 	in := exhaustiveTile(t)
 	if got := TileFromProto(throughJSON(t, TileToProto(in))); !reflect.DeepEqual(in, got) {
@@ -121,9 +117,9 @@ func throughJSON[M proto.Message](t *testing.T, m M) M {
 	return out
 }
 
-// TestTileJSONGolden / TestGridJSONGolden pin the JSON field names and value
-// encodings of a fully-populated record. Update the golden ONLY with a
-// deliberate wire change (and never for a Go-side refactor).
+// TestTileJSONGolden and TestGridJSONGolden pin the JSON field names and
+// value encodings of a fully-populated record. Update the golden only with a
+// deliberate wire change, never for a Go-side refactor.
 func TestTileJSONGolden(t *testing.T) {
 	checkGolden(t, "tile.json", TileToProto(exhaustiveTile(t)))
 }
@@ -134,8 +130,8 @@ func TestGridJSONGolden(t *testing.T) {
 
 // checkGolden compares m's Connect-JSON encoding with testdata/<name>.
 // protojson deliberately randomizes its whitespace, so the bytes are
-// re-normalized through encoding/json (which sorts map keys) before the
-// comparison — what is pinned is the NAMES and VALUES, not the spacing.
+// re-normalized through encoding/json, which sorts map keys, before the
+// comparison. What is pinned is the names and values, not the spacing.
 func checkGolden(t *testing.T, name string, m proto.Message) {
 	t.Helper()
 	raw, err := protojson.Marshal(m)
