@@ -54,8 +54,8 @@ test('navigation items are always present', () => {
   assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload']);
 });
 
-// THE REGRESSION GUARD for the reported bug: a right-click over a link must
-// offer "Copy Link Address", and clicking it must copy that exact URL.
+// A right-click over a link must offer "Copy Link Address", and clicking it
+// must copy that exact href.
 test('a link yields Open Link + Copy Link Address that copy the href', () => {
   const { actions, calls } = spyActions();
   const url = 'https://example.com/target?x=1';
@@ -130,11 +130,10 @@ test('Back/Forward enablement tracks the history flags', () => {
   assert.equal(calls.reload?.length, 1);
 });
 
-// The explicit freeze gesture (issue #237), gated by durability (issue
-// #240): a DURABLE tile's menu offers Freeze Page and its click fires the
-// injected action; an ephemeral visit — nothing to re-descend into — gets
-// no item at all. (Clear Site Data is gone entirely: clearing browser
-// state is the `gridwell clear-browser-data` CLI now.)
+// Freeze Page is gated by durability: a durable tile's menu offers it and the
+// click fires the injected action, while an ephemeral visit has nothing to
+// re-descend into and gets no item. Clearing browser state is not a menu item
+// at all; it is the `gridwell clear-browser-data` CLI.
 test('Freeze Page appears only for a durable tile and fires the action', () => {
   const { actions, calls } = spyActions();
   const t = urlContextMenuTemplate(baseParams({ canFreeze: true }), actions);

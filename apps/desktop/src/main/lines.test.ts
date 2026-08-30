@@ -41,9 +41,9 @@ test('parseServingLine extracts the auth token when a password is configured', (
 });
 
 test('parseServingLine marks the "already serving" reprint external', () => {
-  // A serve (or `gridwell status`) that found the home's lock held re-emits
-  // the RUNNING holder's banner — same fields, external so the app connects
-  // instead of treating its exited probe child as the server.
+  // A serve (or `gridwell status`) that found the home's lock held re-emits the
+  // running holder's banner: same fields, plus external so the app connects to
+  // it instead of treating its own exited probe child as the server.
   const token = 'd'.repeat(64);
   assert.deepEqual(
     parseServingLine(`gridwell: already serving on 127.0.0.1:10010 (static=embedded plugins=2 auth=${token} federation=/tmp/gw home/federation.sock)`),
@@ -63,9 +63,9 @@ test('parseServingLine rejects every other line', () => {
   // A banner-shaped line with a garbage address must not resolve boot.
   assert.equal(parseServingLine('gridwell: serving on nonsense (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
   assert.equal(parseServingLine('gridwell: serving on 127.0.0.1:notaport (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
-  // A banner with NO federation= still resolves boot: the desktop app has
-  // no business with the node door since the PTY moved onto the web door
-  // (2026-08-29), and a node may serve no federation socket at all.
+  // A banner with no federation= still resolves boot: the desktop app reaches
+  // everything it needs over the web door, and a node may serve no federation
+  // socket at all.
   assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1)'), {
     host: '127.0.0.1',
     port: 8099,

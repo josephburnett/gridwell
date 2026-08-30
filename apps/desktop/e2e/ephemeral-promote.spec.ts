@@ -1,11 +1,10 @@
 import { test, expect } from './fixtures';
 
-// PROMOTE (2026-08-27): an ephemeral url visit's crumb — the bar's current
-// square — drags onto another pane's grid and becomes a persistent url
-// tile there with the visit's address; the visiting pane relocates onto
-// the new tile (its nav chain reads the new place), and the ephemeral
-// row is deleted from the scratch grid. The crumb itself shows the
-// visit's live face rather than a grey placeholder.
+// Promote: an ephemeral url visit's crumb, the bar's current square, drags onto
+// another pane's grid and becomes a persistent url tile there carrying the
+// visit's address. The visiting pane relocates onto the new tile, so its nav
+// chain reads the new place, and the ephemeral row is deleted from the scratch
+// grid. The crumb itself shows the visit's live face, not a grey placeholder.
 test('dragging the ephemeral visit crumb onto another pane promotes it to a real tile', async ({
   electronApp,
   window,
@@ -15,7 +14,7 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
   const home = await gw.focused();
   const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
 
-  // Two panes on the home grid; the visit happens in the second (focused).
+  // Two panes on the home grid; the visit happens in the second, focused one.
   await gw.splitFocusedPaneVertical();
   const panes = await gw.panes();
   expect(panes.length, 'split into two panes').toBe(2);
@@ -57,8 +56,8 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
     .toBe(1);
   const promoted = (await gw.getGrid(home.gridID)).tiles!.find((t) => String(t.urlString ?? '').includes('promote-me'))!;
 
-  // The visiting pane followed its content: descended into the new tile,
-  // on the destination's grid; the ephemeral row is gone.
+  // The visiting pane followed its content: it is descended into the new tile on
+  // the destination's grid, and the ephemeral row is gone.
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 10_000 }).toBe(promoted.id);
   expect((await gw.focused()).gridID, 'the pane relocated to where the tile lives').toBe(home.gridID);
   await expect

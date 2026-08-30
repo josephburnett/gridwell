@@ -1,12 +1,12 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Issue #233: how you leave a text tile is how it presents. Ascending out
-// of RENDERED mode must (1) persist text_mode on the tile, (2) switch the
-// parent-grid preview to the rasterized rendered document (the
-// foreignObject raster of markdown.RenderHTML — no second layout engine),
-// and (3) restore rendered mode on the next descent. The raster state is
-// read through the renderedPreviews testhook; the mode through GetGrid.
+// How you leave a text tile is how it presents. Ascending out of rendered mode
+// must persist text_mode on the tile, switch the parent-grid preview to the
+// rasterized rendered document — a foreignObject raster of markdown.RenderHTML,
+// so there is no second layout engine — and restore rendered mode on the next
+// descent. The raster state is read through the renderedPreviews hook and the
+// mode through GetGrid.
 
 test('ascending in rendered mode persists it, renders the preview, and restores on descent', async ({
   gw,
@@ -23,7 +23,7 @@ test('ascending in rendered mode persists it, renders the preview, and restores 
   const created = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
   expect(created, 'markdown tile created').toBeTruthy();
 
-  // Descend (text mode by default), write a heading, flip to rendered.
+  // Descend, which starts in text mode, write a heading, flip to rendered.
   await gw.descendCell(cx, cy);
   await gw.typeText('# Big Heading\n\nbody text');
   await window.locator('#gw-text-toggle').click();
@@ -50,7 +50,7 @@ test('ascending in rendered mode persists it, renders the preview, and restores 
     )
     .toMatchObject({ ready: true, failed: false });
 
-  // Re-descending lands back in rendered mode — the overlay, not the textarea.
+  // Re-descending lands back in rendered mode: the overlay, not the textarea.
   await gw.descendCell(cx, cy);
   await expect(window.locator('#gw-rendered-view')).toBeVisible();
 });

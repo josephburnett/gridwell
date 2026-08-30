@@ -1,8 +1,8 @@
-// L3 integration harness for the IPC contract. Unlike capture-
-// harness (which calls the registry directly), this drives the *full* path
-// the wasm renderer uses: a real renderer page calls window.gridwell.* from
-// the preload bridge, which invokes ipcMain handlers, which drive the
-// registry. Proves preload exposure + IPC round-trip + capture/freeze.
+// Integration harness for the IPC contract. Where capture-harness calls the
+// registry directly, this drives the whole path the wasm renderer uses: a real
+// renderer page calls window.gridwell.* from the preload bridge, which invokes
+// the ipcMain handlers, which drive the registry. It covers preload exposure,
+// the IPC round trip, and capture and freeze.
 //
 //   npm run build && xvfb-run -a electron dist/harness/bridge-harness.js
 import { app, BaseWindow, WebContentsView } from 'electron';

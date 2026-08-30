@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Issue #82: Ctrl/Cmd +/-/0 zooms a descended tile's CONTENT. The zoom is
-// per-tile FRAMING — persisted server-side (content_zoom), never bumping the
-// version — so a zoomed doc comes back at your size on every descent.
+// Ctrl/Cmd with +, - or 0 zooms a descended tile's content. The zoom is
+// per-tile framing, persisted server-side as content_zoom and never bumping the
+// version, so a zoomed doc comes back at that size on every descent.
 
 test('Ctrl+= zooms a text tile: persisted as framing, no version bump', async ({
   gw,
@@ -20,11 +20,11 @@ test('Ctrl+= zooms a text tile: persisted as framing, no version bump', async ({
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
-  // Zoom in three steps: 1.1^3 ≈ 1.331, persisted on the tile. Settle
-  // between presses — on a slow runner a rapid-fire chord can land while
-  // the previous step's redraw is still in flight and the middle press
-  // vanished (observed persisting exactly 1.1^2); the pin here is that
-  // the zoom PERSISTS as framing, not keyboard rapid-fire.
+  // Zoom in three steps: 1.1^3, about 1.331, persisted on the tile. Settle
+  // between presses. On a slow runner a rapid-fire chord can land while the
+  // previous step's redraw is still in flight, and the middle press is lost;
+  // what this pins is that the zoom persists as framing, not keyboard
+  // rapid-fire.
   for (let i = 0; i < 3; i++) {
     await window.keyboard.press('Control+=');
     await gw.waitIdle();
@@ -89,17 +89,17 @@ test('Ctrl+= zooms a live url view (composed with the layout zoom)', async ({
     .toBeCloseTo(Math.min(base * 1.331, 3), 1);
 });
 
-// Issue #170: the chord must ALSO work when the live view itself owns OS
-// keyboard focus — the real descended state, where the window-level keydown
-// never fires. Main intercepts the chord in before-input-event (like F11)
-// and relays it to the wasm zoom owner, so cache + persistence still run.
+// The chord must also work when the live view itself owns OS keyboard focus,
+// which is the real descended state and where the window-level keydown never
+// fires. Main intercepts the chord in before-input-event, as it does F11, and
+// relays it to the wasm zoom owner, so the cache update and the write still run.
 test('the zoom chord works when the live view owns keyboard focus', async ({
   electronApp,
   window,
   gw,
 }) => {
-  // The scratch grid id (where the ephemeral url tile lands) is advertised
-  // on the plugin's entry.
+  // The scratch grid id, where the ephemeral url tile lands, is advertised on
+  // the plugin's entry.
   const scratch = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
   expect(scratch, 'localdb advertises a scratch grid').toBeTruthy();
   await gw.enterPlugin('home');
@@ -134,8 +134,8 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
   await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(0);
   const base = await factorOf();
 
-  // Send the chord TO the live view's webContents — the input path a user
-  // hits after clicking into the page.
+  // Send the chord to the live view's webContents: the input path a user hits
+  // after clicking into the page.
   const sendChord = () =>
     electronApp.evaluate(({ webContents }) => {
       const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('zoom=170'));
@@ -144,24 +144,22 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
       wc.sendInputEvent({ type: 'keyDown', keyCode: '=', modifiers: ['control'] });
       wc.sendInputEvent({ type: 'keyUp', keyCode: '=', modifiers: ['control'] });
     });
-  // The two ack counters bracket the relay: main's before-input-event
-  // interception (registry.zoomChordRelays) and the wasm owner's receipt
-  // across the IPC hop (zoomKeyRelays). They make a lost chord
-  // ATTRIBUTABLE instead of a silent stuck factor — the 2026-08-06
-  // failure mode, where one of three verified-sequential chords vanished
-  // with nothing to say where.
+  // Two ack counters bracket the relay: main's before-input-event interception
+  // (registry.zoomChordRelays) and the wasm owner's receipt across the IPC hop
+  // (zoomKeyRelays). They make a lost chord attributable instead of leaving a
+  // stuck zoom factor with nothing to say where it was lost.
   const mainRelays = () =>
     electronApp.evaluate(() => ((globalThis as any).__gwRegistry?.zoomChordRelays as number) ?? 0);
   const wasmRelays = () =>
     window.evaluate(() => (window as any).__gridwellTest.zoomKeyRelays() as number);
 
-  // sendInputEvent is fire-and-forget, and under xvfb the synthetic event
-  // is occasionally dropped BEFORE the input pipeline — which is not the
-  // property under test (#170 is the relay: interception → wasm owner →
-  // persistence; a real keyboard's autorepeat recovers a swallowed
-  // keypress the same way). Resend until main acks the interception.
-  // Everything downstream of the ack is product path and must work on the
-  // first delivery — those assertions stay hard.
+  // sendInputEvent is fire-and-forget, and under xvfb the synthetic event is
+  // occasionally dropped before the input pipeline. That is not the property
+  // under test: the relay is interception, then the wasm owner, then the write,
+  // and a real keyboard's autorepeat recovers a swallowed keypress the same way.
+  // So resend until main acks the interception. Everything downstream of the ack
+  // is product path and must work on the first delivery, so those assertions
+  // stay hard.
   const sendChordAcked = async () => {
     for (let attempt = 0; attempt < 5; attempt++) {
       const before = await mainRelays();
@@ -170,27 +168,28 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
         await expect.poll(mainRelays, { timeout: 2_000 }).toBeGreaterThan(before);
         return;
       } catch {
-        // never intercepted — the synthetic event was lost; send again
+        // Never intercepted: the synthetic event was lost, so send again.
       }
     }
     throw new Error('zoom chord never reached before-input-event after 5 sends');
   };
   for (let i = 1; i <= 3; i++) {
     await sendChordAcked();
-    // The intercepted chord crossed the IPC hop to the one zoom owner…
+    // The intercepted chord crossed the IPC hop to the one zoom owner...
     await expect
       .poll(wasmRelays, {
         message: `chord ${i}: intercepted by main but never received by the wasm owner`,
         timeout: 5_000,
       })
       .toBeGreaterThanOrEqual(i);
-    // …and the owner applied it to the composed live-view factor.
+    // ...and the owner applied it to the composed live-view factor.
     const want = base * Math.pow(1.1, i);
     await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(want * 0.97);
   }
 
-  // …and the zoom is PERSISTED as framing on the (scratch) tile — proof the
-  // forward ran through the wasm owner, not a main-side setZoomFactor.
+  // ...and the zoom is persisted as framing on the scratch tile, which proves
+  // the forward ran through the wasm owner rather than a main-side
+  // setZoomFactor.
   await expect
     .poll(
       async () => {

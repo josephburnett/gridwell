@@ -1,18 +1,18 @@
 import { test, expect } from './fixtures';
 
-// Issue #90: a terminal app that "opens a browser" (emacs browse-url,
-// xdg-open — both consult $BROWSER) must open an ephemeral url visit
-// instead of spawning Chrome on the host. Every new shell session carries
-// BROWSER=<gridwell-open shim>; the shim emits the url as OSC 5522 through
-// tmux's DCS passthrough; the terminal's OSC handler routes it into the
-// live-tile link path — since #207 that opens the visit in a SPLIT BELOW,
-// the shell staying live above. This spec crosses the WHOLE chain by
-// running the real $BROWSER inside the real PTY — env injection → sh shim →
-// tmux passthrough → the /shell WebSocket → xterm OSC → open below.
+// A terminal app that opens a browser (emacs browse-url, xdg-open; both consult
+// $BROWSER) must open an ephemeral url visit rather than spawn Chrome on the
+// host. Every new shell session carries BROWSER set to the gridwell-open shim.
+// The shim emits the url as OSC 5522 through tmux's DCS passthrough, and the
+// terminal's OSC handler routes it into the live-tile link path, which opens
+// the visit in a split below with the shell staying live above. This spec
+// crosses the whole chain by running the real $BROWSER inside the real PTY: env
+// injection, sh shim, tmux passthrough, the /shell WebSocket, xterm OSC, open
+// below.
 
-// shimCleanup ascends the ephemeral lower pane (deleting the visit),
-// refocuses the shell pane, exits the shell, and deletes its tile so tmux
-// dies pre-teardown.
+// shimCleanup ascends the ephemeral lower pane, deleting the visit, refocuses
+// the shell pane, exits the shell, and deletes its tile so tmux dies before
+// teardown.
 async function shimCleanup(
   gw: any,
   window: any,
@@ -57,7 +57,7 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
 
   await gw.openPalette();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // a drop lands bare (#241); the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPane = await gw.focused();
   const shellFocus = shellPane.textFocus;
@@ -66,12 +66,12 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
   );
 
   // What a terminal app does: exec "$BROWSER" <url>. The local origin loads
-  // instantly with no network.
+  // with no network.
   await window.keyboard.type(`"$BROWSER" ${gw.origin}/?opened=via-shim`);
   await window.keyboard.press('Enter');
 
-  // The url comes back through the PTY as OSC 5522 and opens a live
-  // ephemeral visit in a split BELOW; the shell pane never leaves its shell.
+  // The url comes back through the PTY as OSC 5522 and opens a live ephemeral
+  // visit in a split below; the shell pane never leaves its shell.
   await expect
     .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
       timeout: 15_000,
@@ -86,14 +86,14 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
   await shimCleanup(gw, window, shellPane.id, cx, cy);
 });
 
-// Issue #166: $BROWSER is not enough — emacs browse-url execs xdg-open
-// directly, and under a desktop session (XDG_CURRENT_DESKTOP set) the real
-// xdg-open resolves via the DE mime handler, never reading $BROWSER, so the
-// url leaks to the host browser. Every new shell session gets a shadow-bin
-// dir prepended to PATH whose xdg-open (and friends) routes web urls into
-// the same OSC 5522 descent. Simulating the DE makes this spec fail without
-// the shadow even on a DE-less CI box (where bare xdg-open would fall back
-// to $BROWSER and mask the gap).
+// $BROWSER alone is not enough: emacs browse-url execs xdg-open directly, and
+// under a desktop session (XDG_CURRENT_DESKTOP set) the real xdg-open resolves
+// through the desktop's mime handler and never reads $BROWSER, leaking the url
+// to the host browser. So every new shell session gets a shadow-bin dir
+// prepended to PATH whose xdg-open, and its friends, route web urls into the
+// same OSC 5522 descent. Simulating the desktop environment makes this spec
+// fail without the shadow even on a CI box that has none, where bare xdg-open
+// would fall back to $BROWSER and mask the gap.
 test('xdg-open under a desktop session opens an ephemeral url visit below', async ({
   electronApp,
   window,
@@ -106,7 +106,7 @@ test('xdg-open under a desktop session opens an ephemeral url visit below', asyn
 
   await gw.openPalette();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // a drop lands bare (#241); the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPane = await gw.focused();
   const shellFocus = shellPane.textFocus;
@@ -114,8 +114,8 @@ test('xdg-open under a desktop session opens an ephemeral url visit below', asyn
     ({ webContents }) => webContents.getAllWebContents().length,
   );
 
-  // What emacs browse-url does: exec xdg-open <url>, with the DE visible in
-  // the environment.
+  // What emacs browse-url does: exec xdg-open <url>, with the desktop
+  // environment visible in the env.
   await window.keyboard.type(
     `XDG_CURRENT_DESKTOP=GNOME xdg-open ${gw.origin}/?opened=via-shadow`,
   );

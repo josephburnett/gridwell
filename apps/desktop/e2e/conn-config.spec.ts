@@ -1,10 +1,9 @@
 import { test, expect } from './fixtures';
 
-// Config-managed connections (v2 #269, reversing #199): server.yaml owns
-// the list, and each connection presents as its OWN menu row — one icon
-// per configured thing. The transport's own row (once the picker door)
-// is gone entirely: with creation, rename, and delete all config-side,
-// the connection dialog had no job left and was deleted (2026-08-23).
+// Connections are config: server.yaml owns the list, and each connection
+// presents as its own menu row, one icon per configured thing. The transport
+// has no row of its own, and there is no connection dialog: creation, rename,
+// and delete all happen in the config.
 
 test.use({
   extraYaml: `connections:
@@ -18,8 +17,8 @@ test('one menu row per connection; the picker row is gone', async ({ gw }) => {
   await gw.enterPlugin('home');
   const pls = await gw.plugins();
 
-  // The declared label, not the auto-label (the latch bug, 2026-08-23);
-  // unreachable here, so it lists rootless-inert until the remote answers.
+  // The declared label, not an auto-label. The remote is unreachable here, so
+  // the row lists rootless-inert until it answers.
   const rtb = pls.find((p) => p.label === 'rtb');
   expect(rtb, 'the connection is a menu row of its own').toBeTruthy();
   expect(rtb!.uuid.includes('/'), 'a chained namespace identifies it').toBe(true);
@@ -35,14 +34,14 @@ test('clicking a pending connection says WHY, not nothing-to-descend-into', asyn
   gw,
   window,
 }) => {
-  // The 2026-08-23 laptop bug: the descent guard looked the plugin up by
-  // LocalOf(id), which mangles a chained connection uuid, so the click
-  // fell to the generic "nothing to descend into" instead of the
-  // connection's own status.
+  // The descent guard must look the row up by its full id. Resolving through
+  // LocalOf(id) mangles a chained connection uuid, and the click then falls to
+  // the generic "nothing to descend into" instead of the connection's own
+  // status.
   await gw.enterPlugin('home');
   const rtb = (await gw.plugins()).find((p) => p.label === 'rtb')!;
   await gw.clickPluginSwatch('rtb');
-  // The notice keys by UUID — labels can collide across connections.
+  // The notice keys by uuid, since labels can collide across connections.
   await expect
     .poll(async () => {
       const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());

@@ -5,18 +5,17 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-// Every shipped plugin kind, crawled through the browser client: proc
-// (a live process tree) and gitlab (todos against a fake GitLab API).
-// This spec is what makes the bundled-plugin composition mean what it says — the
-// composition-parity gate runs the SAME suite against `gridwell` (each
-// plugin a spawned gridwell-plugin-<kind> subprocess) and against
-// the mobile bind (every plugin in-process through the compose door),
-// and until this spec the suite only ever seeded fs, so proc and gitlab
-// were never crossed in either composition. test/boundary pins that
-// every bundled plugin kind is seeded by some web spec.
+// Every shipped plugin kind, crawled through the browser client: proc, a live
+// process tree, and gitlab, todos against a fake GitLab API. This is what makes
+// the bundled-plugin composition mean what it says. The composition-parity gate
+// runs the same suite against `gridwell`, where each plugin is a spawned
+// gridwell-plugin-<kind> subprocess, and against the mobile bind, where every
+// plugin runs in-process through the compose door. Seeding only fs would leave
+// proc and gitlab uncrossed in both. test/boundary pins that every bundled
+// plugin kind is seeded by some web spec.
 
-// A todo the fake serves: the JSON shape is plugins/gitlab/todos.Todo's
-// wire form (GET /api/v4/todos). One pending review request from Ada.
+// A todo the fake serves. The JSON shape is the wire form of
+// plugins/gitlab/todos.Todo, from GET /api/v4/todos: one pending review request.
 const TODO = {
   id: 7,
   action_name: 'review_requested',
@@ -32,9 +31,9 @@ const TODO = {
 };
 const TOKEN = 'glpat-e2e-fake';
 
-// fakeGitLab answers the ONE endpoint the plugin pages, and refuses a
-// wrong token the way GitLab does (401) — so a seeded token_file that
-// did not reach the plugin is a visible failure, not an empty grid.
+// fakeGitLab answers the one endpoint the plugin pages, and refuses a wrong
+// token with a 401 the way GitLab does, so a seeded token_file that did not
+// reach the plugin is a visible failure rather than an empty grid.
 function fakeGitLab(): Promise<http.Server> {
   const srv = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -54,8 +53,8 @@ function fakeGitLab(): Promise<http.Server> {
 }
 
 test.use({
-  // The seeded plugins need the fake API's port, so the option is a
-  // fixture here: stand the fake up, seed both plugins against it.
+  // The seeded plugins need the fake API's port, so the option is a fixture here:
+  // stand the fake up, then seed both plugins against it.
   extraPlugins: async ({}, use) => {
     const api = await fakeGitLab();
     const port = (api.address() as net.AddressInfo).port;
@@ -63,7 +62,7 @@ test.use({
     const tokenFile = path.join(dir, 'token');
     fs.writeFileSync(tokenFile, TOKEN + '\n', { mode: 0o600 });
     await use([
-      // proc rooted at THIS worker process: the served node is its child.
+      // proc rooted at this worker process: the served node is its child.
       { kind: 'proc', name: 'procs', config: { pid: String(process.pid) } },
       { kind: 'gitlab', name: 'todos', config: { url: `http://127.0.0.1:${port}`, token_file: tokenFile } },
     ]);
@@ -83,8 +82,8 @@ test('proc: the root grid lists the served node as a child of this worker', asyn
   expect(child, `pid ${serve.child.pid} (gridwell serve) is a child well of ${process.pid}`).toBeTruthy();
   expect(child!.kind).toBe('well');
 
-  // Descend into the served node's process: its own @info tile is there —
-  // the child context round-trips through the node's id space.
+  // Descend into the served node's process: its own @info tile is there, so the
+  // child context round-trips through the node's id space.
   await gw.descendCell(Number(child!.x ?? 0), Number(child!.y ?? 0));
   const inner = await gw.focused();
   expect(inner.gridID).not.toBe(f.gridID);
@@ -105,7 +104,7 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   const todo = todos.find((t) => String(t.altText).startsWith('Ada: !7'));
   expect(todo, `the todo tile is labeled by author and ref; have ${JSON.stringify(todos.map((t) => t.altText))}`).toBeTruthy();
 
-  // ReadContent is the todo's markdown — served through the node exactly
-  // like any text tile (the oracle is the RPC, not the plugin).
+  // ReadContent is the todo's markdown, served through the node exactly like any
+  // text tile: the oracle is the RPC, not the plugin.
   expect(await gw.getTileContent(todo!.id)).toContain('please **review**');
 });

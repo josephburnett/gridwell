@@ -2,10 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sidecarExitMessage } from './sidecar-messages';
 
-// Regression guard for issue #46 point 1: a post-boot sidecar crash was
-// completely unobserved (the exit listener that could report it only acted
-// before the boot promise settled). The message must tell the user something
-// actionable rather than nothing at all.
+// A post-boot sidecar crash must reach the user, so the message has to name
+// the cause and say what to do.
 test('sidecarExitMessage reports a signal kill', () => {
   const msg = sidecarExitMessage(null, 'SIGKILL');
   assert.ok(msg.includes('SIGKILL'));

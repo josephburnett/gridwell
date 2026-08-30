@@ -4,14 +4,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-// The framing-audit program (decisions 2026-08-13): saves survive races,
-// unloads, and sibling panes; every root grid persists its viewport.
+// Framing saves survive races, unloads, and sibling panes, and every root grid
+// persists its viewport.
 
 const FS_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-framing-'));
 test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: FS_ROOT } }] });
 
-// Gap 9: a framing save that races a version-bumping write retries with a
-// fresh claim instead of silently dropping.
+// A framing save that races a version-bumping write retries with a fresh claim
+// instead of dropping silently.
 test('a framing save survives a racing version bump', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const home = await gw.focused();
@@ -21,8 +21,8 @@ test('a framing save survives a racing version bump', async ({ gw, window }) => 
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.wheelAtFocusedCenter(-240); // reframe the child
-  // Race: a foreign placement bumps the WELL's version inside the settle
-  // window, so the framing flush's claim is stale.
+  // Race: a foreign placement bumps the well's version inside the settle window,
+  // so the framing flush's claim is stale.
   const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   await placeTile(gw.origin, well.id, well.version as number, home.gridID, cx, cy, 2, 2);
   await expect
@@ -38,8 +38,8 @@ test('a framing save survives a racing version bump', async ({ gw, window }) => 
   void window;
 });
 
-// Gaps 3/4 class: an fs plugin ROOT persists its viewport (the root framing write was
-// silently swallowed by fs/proc before).
+// An fs plugin root persists its viewport; the root framing write must not be
+// swallowed on the plugin side.
 test('an fs root grid keeps its viewport across leave and re-entry', async ({ gw }) => {
   await gw.enterPlugin('pics');
   const grid = (await gw.focused()).gridID;
@@ -55,8 +55,8 @@ test('an fs root grid keeps its viewport across leave and re-entry', async ({ gw
   expect(Math.abs(back.cx - left.cx), 'fs root cx restored').toBeLessThan(0.51);
 });
 
-// Gaps 7/8: a reload fired INSIDE the settle window still lands the save —
-// the unload flush rides beacons that outlive the page.
+// A reload fired inside the settle window still lands the save: the unload flush
+// rides beacons that outlive the page.
 test('a reload inside the settle window does not lose the framing', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const home = await gw.focused();
@@ -81,7 +81,7 @@ test('a reload inside the settle window does not lose the framing', async ({ gw,
     .toBeGreaterThan(0);
 });
 
-// Gap 5: text scroll persists on the settle tick, not just at ascent.
+// Text scroll persists on the settle tick, not only at ascent.
 test('text scroll persists without an ascent', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const home = await gw.focused();
@@ -109,8 +109,8 @@ test('text scroll persists without an ascent', async ({ gw, window }) => {
     .toBeGreaterThan(0);
 });
 
-// Gap 6: one active surface per grid — a passive sibling pane never
-// overwrites the focused pane's persisted framing.
+// One active surface per grid: a passive sibling pane never overwrites the
+// focused pane's persisted framing.
 test('a split sibling never overwrites the focused pane framing', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const home = await gw.focused();
@@ -120,18 +120,18 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
-  // Split: two panes now show the SAME child grid with different rects.
+  // Split: two panes now show the same child grid with different rects.
   await gw.splitFocusedPaneVertical();
   await gw.waitIdle();
-  // Reframe the FOCUSED pane and let it persist.
+  // Reframe the focused pane and let it persist.
   await gw.wheelAtFocusedCenter(-240);
   const well = () => gw.getGrid(home.gridID).then((g) => tileAt(g, 'well', cx, cy)!);
   await expect
     .poll(async () => Number((await well()).viewZoom ?? 0), { timeout: 10_000 })
     .toBeGreaterThan(0.125);
   const settled = await well();
-  // Provoke more settle ticks (draws) without touching either viewport:
-  // the PASSIVE sibling must not write its own rect-derived framing back.
+  // Provoke more settle ticks, through draws, without touching either viewport:
+  // the passive sibling must not write its own rect-derived framing back.
   for (let i = 0; i < 3; i++) {
     await window.mouse.move(100 + i, 100);
     await window.waitForTimeout(800);

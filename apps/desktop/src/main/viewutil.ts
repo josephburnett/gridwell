@@ -1,43 +1,40 @@
 import type { Bounds } from './ipc';
 
-// SESSION_PARTITION is THE Electron partition for live url tiles (owner
-// decision 2026-07-26: the Chromium session is host-local): every live url
-// tile, local or through a mount, shares this one durable cookie jar /
-// DOM-storage area — your logins are your logins everywhere. The
-// `persist:` prefix makes it durable on disk across app restarts.
+// SESSION_PARTITION is the one Electron partition for live url tiles. Every
+// live url tile, local or through a mount, shares this cookie jar and
+// DOM-storage area, so a login made in one tile holds in all of them. The
+// `persist:` prefix keeps it on disk across app restarts.
 export const SESSION_PARTITION = 'persist:gridwell';
 
 
 
-// allowPermission decides the live-view session's permission requests
-// (issue #232). 'openExternal' is Chromium handing a non-web protocol
-// (zoommtg:, mailto:, …) to the OS — Electron grants it BY DEFAULT and
-// calls shell.openExternal, and on Linux xdg-open bounces an unhandled
-// protocol into the default browser: the "link opened in a pane AND in an
-// outside browser" leak. A tile is Gridwell's only browsing surface, so
-// nothing may escape to the OS. Every other permission keeps Electron's
-// default (granted).
+// allowPermission decides the live-view session's permission requests.
+// 'openExternal' is Chromium handing a non-web protocol (zoommtg:, mailto:, …)
+// to the OS: Electron grants it by default and calls shell.openExternal, and on
+// Linux xdg-open bounces an unhandled protocol into the default browser, so the
+// link opens both in a pane and in an outside browser. A tile is Gridwell's
+// only browsing surface, so nothing may escape to the OS. Every other
+// permission keeps Electron's default grant.
 export function allowPermission(permission: string): boolean {
   return permission !== 'openExternal';
 }
 
-// openBelowUrl returns the url a denied popup (window.open / target=_blank)
-// should open in the pane below, or null when the target must not open at
-// all: only web urls belong in a tile — a non-web protocol has no in-grid
-// meaning, and forwarding it would just re-trigger the external-protocol
-// path the permission handler blocks (issue #232).
+// openBelowUrl returns the url a denied popup (window.open, target=_blank)
+// should open in the pane below, or null when the target must not open at all.
+// Only web urls belong in a tile: a non-web protocol has no in-grid meaning,
+// and forwarding it would re-trigger the external-protocol path the permission
+// handler blocks.
 export function openBelowUrl(target: string): string | null {
   return /^https?:\/\//i.test(target) ? target : null;
 }
 
 // sanitizeUserAgent strips the two tokens that mark Chromium's default UA as a
-// non-browser embedding — `Electron/<ver>` and the app's own `<AppName>/<ver>` —
-// leaving the genuine `Chrome/<ver>` token (and everything else) intact. A live
-// url tile IS real Chromium, so the honest fix is to drop the embedding tokens
-// rather than fake a different engine: sites that gate on an unknown/outdated
-// browser (Slack's "Electron/" check) then see a plain Chrome string. Applied
-// once as app.userAgentFallback (the default for every partition and view), so
-// it covers all plugins' url tiles. Idempotent: re-running removes nothing.
+// non-browser embedding, `Electron/<ver>` and the app's own `<AppName>/<ver>`,
+// leaving the genuine `Chrome/<ver>` token and everything else intact. A live
+// url tile is real Chromium, so dropping the embedding tokens is honest where
+// faking another engine would not be; sites that gate on an unknown browser
+// then see a plain Chrome string. Applied once as app.userAgentFallback, the
+// default for every partition and view. Idempotent: re-running removes nothing.
 export function sanitizeUserAgent(ua: string, appName: string): string {
   let out = ua.replace(/\sElectron\/\S+/g, '');
   if (appName) {
@@ -65,10 +62,10 @@ export function boundsEqual(a: Bounds, b: Bounds): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
-// zoomChordKey normalizes a before-input-event Input to the content-zoom
-// chord key it carries ('+', '=', '-', '0'), or '' when the input is not the
-// chord (issue #170). Same key set the wasm handleContentZoomKey accepts —
-// keep them in step or the two focus states zoom differently.
+// zoomChordKey normalizes a before-input-event Input to the content-zoom chord
+// key it carries ('+', '=', '-', '0'), or '' when the input is not the chord.
+// This is the key set the wasm handleContentZoomKey accepts; keep them in step
+// or the two focus states zoom differently.
 export function zoomChordKey(input: { key: string; control?: boolean; meta?: boolean }): string {
   if (!input.control && !input.meta) return '';
   switch (input.key) {
@@ -85,35 +82,34 @@ export function zoomChordKey(input: { key: string; control?: boolean; meta?: boo
 // visible; the registry parks rather than destroys so the page keeps running.
 export const PARK_COORD = -100000;
 
-// parkedBounds is the off-screen rect a view is moved to while it is
-// "hidden" — during a drag/gesture/modal so canvas overlays can paint where the
-// native view sits. Width/height are
-// preserved (some platforms reject a 0-sized view) so un-parking is a pure move.
+// parkedBounds is the off-screen rect a view moves to while it is hidden,
+// during a drag, gesture, or modal, so canvas overlays can paint where the
+// native view sits. Width and height are preserved, both because some platforms
+// reject a 0-sized view and so un-parking is a pure move.
 export function parkedBounds(width: number, height: number): Bounds {
   return { x: PARK_COORD, y: PARK_COORD, width, height };
 }
 
-// URL_MIN_LAYOUT_WIDTH is the narrowest layout width (CSS px) a live URL view
-// renders at; below it the page is zoomed to fit instead of reflowed to a
-// cramped semi-mobile layout. 800 keeps a proper desktop layout, only slightly
-// scaled, in the pane widths where 640 used to produce awkward reflow
-// (issue #87). Lives here (not webviews.ts) so the production value is pinned
-// by a unit test.
+// URL_MIN_LAYOUT_WIDTH is the narrowest layout width in CSS px a live url view
+// renders at; below it the page is zoomed to fit rather than reflowed to a
+// cramped semi-mobile layout. 800 keeps a desktop layout, only slightly scaled,
+// at ordinary pane widths. It lives here rather than in webviews.ts so a unit
+// test can pin the production value.
 export const URL_MIN_LAYOUT_WIDTH = 800;
 
-// minWidthZoomFactor is the page zoom that keeps a narrow live URL view laying
+// minWidthZoomFactor is the page zoom that keeps a narrow live url view laying
 // out at minWidth instead of reflowing to a cramped mobile layout: 1 at or above
-// minWidth, else width/minWidth clamped to a 0.25 floor. A native WebContentsView
-// can't render wider than its bounds and be clipped, so scaling the page to fit
-// is the closest thing to "min width + horizontal scroll". Pure, so the clamp and
-// the threshold are pinned by a test rather than only observable in the live app.
+// minWidth, else width/minWidth clamped to a 0.25 floor. A native
+// WebContentsView cannot render wider than its bounds and be clipped, so scaling
+// the page to fit is the closest thing to a min width with horizontal scroll.
+// Pure, so a test pins the clamp and the threshold.
 export function minWidthZoomFactor(width: number, minWidth: number): number {
   return width >= minWidth ? 1 : Math.max(0.25, width / minWidth);
 }
 
-// UrlHistory is the persisted shape of a url tile's navigation back-stack
-// (issue #113): the entry list (pageState stripped — urls+titles only, so the
-// blob stays small and schema-stable) and the active index.
+// UrlHistory is the persisted shape of a url tile's navigation back-stack: the
+// entry list and the active index. pageState is stripped, leaving urls and
+// titles, so the blob stays small and its shape stable.
 interface UrlHistory {
   index: number;
   entries: { url: string; title: string }[];
@@ -143,14 +139,11 @@ export function serializeHistory(
 }
 
 // reviveNavigation decides how a placed url tile comes back: restore the
-// persisted back-stack (issue #113), or plain-load the address. The address
-// (url_string) is a fact the user can EDIT through the content door, while
-// the back-stack is written only by the freeze (SetURLState) — so the two
-// can disagree, and when they do the ADDRESS wins: restoring the stack
-// would navigate to the page the user just typed over ("I changed the url
-// and it went back to the old page"). Pure, so the tie-break is pinned by a
-// unit test instead of only observable by editing a frozen tile's address
-// in the live app.
+// persisted back-stack, or plain-load the address. The address (url_string) is
+// a fact the user can edit through the content door, while the back-stack is
+// written only by the freeze writeback, so the two can disagree. When they do
+// the address wins; restoring the stack would navigate to the page the user
+// just typed over. Pure, so a unit test pins the tie-break.
 export function reviveNavigation(
   url: string,
   history: string | undefined,
@@ -162,8 +155,8 @@ export function reviveNavigation(
 }
 
 // parseHistory validates persisted history JSON back into a restorable shape,
-// or null when absent/invalid (the caller falls back to a plain loadURL — a
-// corrupt blob must never break revive).
+// or null when it is absent or invalid. The caller then falls back to a plain
+// loadURL: a corrupt blob must never break revive.
 export function parseHistory(json: string | undefined): UrlHistory | null {
   if (!json) return null;
   try {
@@ -177,43 +170,41 @@ export function parseHistory(json: string | undefined): UrlHistory | null {
   }
 }
 
-// composeZoom multiplies the layout min-width zoom with the USER content zoom
-// (the tile's persisted content_zoom, issue #82) — the two are independent
-// facts and neither may overwrite the other. Clamped to Chromium's
-// setZoomFactor floor.
+// composeZoom multiplies the layout min-width zoom with the user content zoom
+// (the tile's persisted content_zoom). The two are independent facts and
+// neither may overwrite the other. Clamped to Chromium's setZoomFactor floor.
 export function composeZoom(minWidthZoom: number, userZoom: number): number {
   const u = userZoom > 0 ? userZoom : 1;
   return Math.max(0.25, minWidthZoom * u);
 }
 
-// RIGHT_DRAG_THRESHOLD is how far (CSS px) the cursor must move with the right
-// button held before a press over a live URL view becomes a Gridwell pane
-// gesture rather than a plain right-click. Mirrors the canvas dragThreshold
-// (client/wasm/main.go) so the live-view and canvas feel identical.
+// RIGHT_DRAG_THRESHOLD is how far in CSS px the cursor must move with the right
+// button held before a press over a live url view becomes a pane gesture rather
+// than a plain right-click. It mirrors the canvas dragThreshold
+// (client/wasm/main.go) so live view and canvas feel identical.
 const RIGHT_DRAG_THRESHOLD = 4;
 
-// RIGHT_DRAG_TIME_MS is the minimum duration (ms) that a right-button press must
-// be held before a distance-exceeding move counts as a pane gesture. A quick
-// trackpad tap that drifts a few pixels past the threshold in under this window
-// is still classified as a click — so the native context menu fires. Mirrored
-// verbatim in urlview-preload.ts (can't import there; gesture-threshold.test.ts
-// drift-lints both copies).
+// RIGHT_DRAG_TIME_MS is the minimum time in ms a right-button press must be held
+// before a distance-exceeding move counts as a pane gesture. A quick trackpad
+// tap that drifts a few pixels past the threshold within this window is still a
+// click, so the native context menu fires. Mirrored verbatim in
+// urlview-preload.ts, which cannot import from here; gesture-threshold.test.ts
+// lints both copies.
 const RIGHT_DRAG_TIME_MS = 200;
 
-// RIGHT_DRAG_FAR_THRESHOLD is the distance (CSS px) beyond which a right-drag
-// is unambiguous on its own — no trackpad tap drifts this far, so the time
-// gate no longer applies. A fast flick (large distance, short duration) used
-// to read as a click and pop the context menu instead of arming the pane
-// gesture (issue #119).
+// RIGHT_DRAG_FAR_THRESHOLD is the distance in CSS px beyond which a right-drag
+// is unambiguous on its own: no trackpad tap drifts this far, so the time gate
+// does not apply. Without it a fast flick, large in distance and short in
+// duration, reads as a click and pops the context menu.
 const RIGHT_DRAG_FAR_THRESHOLD = 24;
 
 
-// classifyRightPress returns true (= drag) when the distance and time
-// thresholds are BOTH exceeded — or when the distance alone is past the far
-// threshold, which no accidental tap-drift reaches (a fast flick is a
-// gesture, issue #119; a jittery trackpad tap stays a click and produces the
-// context menu, issue #33 mechanism B). Pure function, unit-tested;
-// urlview-preload.ts inlines equivalent logic (can't import).
+// classifyRightPress returns true, meaning a drag, when the distance and time
+// thresholds are both exceeded, or when the distance alone is past the far
+// threshold that no accidental tap-drift reaches. So a fast flick is a gesture
+// and a jittery trackpad tap stays a click and produces the context menu. Pure
+// and unit-tested; urlview-preload.ts inlines equivalent logic because it
+// cannot import.
 export function classifyRightPress(
   dx: number,
   dy: number,
@@ -227,49 +218,45 @@ export function classifyRightPress(
   return d2 > distThreshold * distThreshold && durationMs >= timeThresholdMs;
 }
 
-// ERR_ABORTED is Chromium's net error code for a navigation the page/user
-// itself cancelled (a redirect superseded by another navigation, window.stop(),
-// a same-document replace) — not a genuine failure. did-fail-load fires for
-// this constantly during ordinary navigation, so it must never surface.
+// ERR_ABORTED is Chromium's net error code for a navigation the page or user
+// cancelled: a redirect superseded by another navigation, window.stop(), a
+// same-document replace. It is not a failure, and did-fail-load fires for it
+// constantly during ordinary navigation, so it must never surface.
 const ERR_ABORTED = -3;
 
-// shouldSurfaceFailLoad decides whether a WebContents `did-fail-load` event is
-// a genuine, user-visible navigation failure (issue #46 point 3: the event was
-// unhandled entirely, so a live URL view could go blank with zero signal).
-// Two benign cases must NOT surface: ERR_ABORTED (any cancelled/superseded
-// navigation) and any subframe failure (isMainFrame false — an ad iframe or
-// tracking pixel failing is not "the page failed to load"). Pure so the filter
-// is pinned by a test rather than only observable by loading pages in the live
-// app.
+// shouldSurfaceFailLoad decides whether a WebContents `did-fail-load` event is a
+// genuine, user-visible navigation failure; unhandled, a live url view goes
+// blank with no signal. Two benign cases must not surface: ERR_ABORTED, for any
+// cancelled or superseded navigation, and any subframe failure, since an ad
+// iframe or tracking pixel failing is not the page failing to load. Pure, so a
+// test pins the filter.
 export function shouldSurfaceFailLoad(errorCode: number, isMainFrame: boolean): boolean {
   return isMainFrame && errorCode !== ERR_ABORTED;
 }
 
 // failLoadMessage formats the notice text for a genuine main-frame load
-// failure, including the URL that failed so the user knows which tile/address
-// is affected.
+// failure, including the url that failed so the user knows which tile and
+// address it is about.
 export function failLoadMessage(validatedURL: string, errorDescription: string, errorCode: number): string {
   const reason = errorDescription || `error ${errorCode}`;
   return `page failed to load (${reason}): ${validatedURL}`;
 }
 
 // renderProcessGoneMessage formats the notice text for a live view whose
-// renderer process crashed (`render-process-gone`), which — like did-fail-load
-// — was previously unhandled anywhere (issue #46 point 3): the view just went
-// blank. url may be unavailable post-crash (best-effort read), in which case
-// it's omitted rather than shown as an empty pair of colons.
+// renderer process crashed (`render-process-gone`); unreported, the view simply
+// goes blank. The url may be unreadable after a crash, in which case it is
+// omitted rather than shown as an empty pair of colons.
 export function renderProcessGoneMessage(url: string, reason: string): string {
   return url ? `page crashed (${reason}): ${url}` : `page crashed (${reason})`;
 }
 
-// rendererLogLine decides whether a renderer console-message (level 0–3:
-// verbose, info, warning, error) belongs in the main process's log, and
-// formats it if so. The wasm client logs every surfaced notice to its console
+// rendererLogLine decides whether a renderer console-message belongs in the main
+// process's log, and formats it if so. Levels run 0 to 3: verbose, info,
+// warning, error. The wasm client logs every surfaced notice to its console
 // (reportErr, client/wasm/main.go), but that console is invisible outside
-// devtools — forwarding warnings and errors makes "all errors are printed to
-// the logs" true for the whole renderer, notices included, even after they
-// expire off the strip. Info/verbose chatter stays out. Pure so the
-// level cut and the prefix are pinned by a test.
+// devtools, so forwarding warnings and errors keeps every renderer failure in
+// the log even after the notice expires off the strip. Info and verbose chatter
+// stays out. Pure, so a test pins the level cut and the prefix.
 export function rendererLogLine(level: number, message: string): string | null {
   if (level < 2) return null;
   return `[renderer:${level === 2 ? 'warning' : 'error'}] ${message}`;

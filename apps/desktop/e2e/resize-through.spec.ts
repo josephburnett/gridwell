@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures';
 
-// Issue #79: dragging a divider cascades tmux-style — the adjacent pane
-// compresses to its 32px minimum first, then the drag starts compressing the
-// NEXT pane along the axis. The old behavior clamped the drag as soon as the
-// whole opposite side hit 32px combined, squashing its panes proportionally.
+// Dragging a divider cascades tmux-style: the adjacent pane compresses to its
+// 32px minimum first, then the drag starts compressing the next pane along the
+// axis. Clamping the drag once the whole opposite side hits 32px combined would
+// instead squash its panes proportionally.
 
 test('a border drag compresses the middle pane to its min, then the third; backing off un-reds', async ({
   gw,
@@ -11,16 +11,16 @@ test('a border drag compresses the middle pane to its min, then the third; backi
 }) => {
   await gw.enterPlugin('home');
 
-  // Three columns: split twice (each split halves the focused pane).
+  // Three columns: split twice, since each split halves the focused pane.
   await gw.splitFocusedPaneVertical();
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(3);
   const [p1, p2, p3] = before;
 
-  // Drag the FIRST divider (right edge of pane 1) rightward, far enough to
-  // consume all of pane 2's slack and bite into pane 3 — assert the cascade
-  // MID-DRAG (releasing there would close the crushed pane, issue #217).
+  // Drag the first divider, the right edge of pane 1, rightward far enough to
+  // consume all of pane 2's slack and bite into pane 3. Assert the cascade
+  // mid-drag: releasing there would close the crushed pane.
   const gx = p1.x + p1.w;
   const gy = p1.y + p1.h / 2;
   const travel = p2.w - 32 + 60; // p2's full slack, plus 60px into p3
@@ -38,8 +38,8 @@ test('a border drag compresses the middle pane to its min, then the third; backi
     expect(m.w).toBeGreaterThanOrEqual(31.5);
   }
 
-  // Back off to within pane 2's slack and release: pressure released, the
-  // crushed pane un-reds — NOTHING closes (issue #217).
+  // Back off to within pane 2's slack and release: the pressure is gone, the
+  // crushed pane un-reds, and nothing closes.
   await window.mouse.move(gx + 60, gy, { steps: 8 });
   await window.mouse.up();
   await gw.waitIdle();
@@ -48,9 +48,8 @@ test('a border drag compresses the middle pane to its min, then the third; backi
   expect(after[0].w, 'the resize applied at the release point').toBeCloseTo(p1.w + 60, 0);
 });
 
-// Issue #112 (property carried to the LEFT button by #203): a border drag
-// must move only the grabbed border — the old single-ratio write visibly
-// slid nested borders the user never touched.
+// A border drag must move only the grabbed border. A single-ratio write slides
+// nested borders the user never touched.
 test('a left-button border drag moves only the grabbed border', async ({ gw }) => {
   await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
@@ -58,7 +57,7 @@ test('a left-button border drag moves only the grabbed border', async ({ gw }) =
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   const [p1, p2, p3] = before;
 
-  // Left-drag the FIRST divider right by 60px — well within pane 2's slack.
+  // Left-drag the first divider right by 60px, well within pane 2's slack.
   const gx = p1.x + p1.w;
   const gy = p1.y + p1.h / 2;
   await gw.leftDragScreen(gx - 2, gy, gx + 60, gy);
@@ -77,17 +76,17 @@ test('a left-button drag far past the wall collapses on release (#203)', async (
   expect(before).toHaveLength(2);
   const left = before.slice().sort((a, b) => a.x - b.x)[0];
 
-  // Drag the divider almost to the left edge: the applied cursor puts the
-  // left side under the close threshold → release collapses it.
+  // Drag the divider almost to the left edge: the applied cursor puts the left
+  // side under the close threshold, so the release collapses it.
   const gx = left.x + left.w;
   await gw.leftDragScreen(gx - 2, left.y + left.h / 2, left.x + 4, left.y + left.h / 2);
   await expect.poll(async () => (await gw.panes()).length).toBe(1);
 });
 
-// The middle-pane close (issue #217, superseding #204's corridor-edge
-// band): pressure builds at each bump. Dragging a MIDDLE pane's border all
-// the way across it — past the point where it reached its minimum — reds
-// it, and release closes exactly it: no traveling to the screen edge.
+// Closing a middle pane: pressure builds at each bump. Dragging a middle pane's
+// border all the way across it, past the point where it reached its minimum,
+// reds it, and the release closes exactly that pane, with no travel to the
+// screen edge.
 test('crushing a middle pane past its bump closes it on release (#217)', async ({
   gw,
 }) => {
@@ -98,9 +97,9 @@ test('crushing a middle pane past its bump closes it on release (#217)', async (
   expect(before).toHaveLength(3);
   const [p1, p2] = before;
 
-  // Grab the NESTED divider (between panes 2 and 3) and drag LEFT through
-  // pane 2's slack and 60px past its bump into pane 1's territory: pane 2
-  // is pressed to close; pane 1 (still far from its own bump) is not.
+  // Grab the nested divider, between panes 2 and 3, and drag left through pane
+  // 2's slack and 60px past its bump into pane 1's territory: pane 2 is pressed
+  // to close, while pane 1, still far from its own bump, is not.
   const gx = p2.x + p2.w;
   const gy = p2.y + p2.h / 2;
   const releaseX = p2.x - 60;
@@ -112,10 +111,9 @@ test('crushing a middle pane past its bump closes it on release (#217)', async (
   expect(after[0].id, 'the first pane survives untouched').toBe(p1.id);
 });
 
-// The one-click close class (#204): a bare divider click must never close.
-// Under the crush model (#217) the guard is the strict pressed-past-the-
-// bump compare — a click's cursor sits AT the boundary, past no bump, even
-// when the neighbor already rests at its minimum.
+// A bare divider click must never close a pane. The guard is the strict
+// pressed-past-the-bump compare: a click's cursor sits at the boundary, past no
+// bump, even when the neighbor already rests at its minimum.
 test('a bare click on a divider closes nothing (#204)', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
@@ -136,15 +134,15 @@ test('pressing just past the bump closes on release — no travel to the edge ne
   expect(before).toHaveLength(2);
   const [left] = before;
   const gy = left.y + left.h / 2;
-  // The left pane's bump is at left.x+32 (its minimum). Releasing at +20 is
-  // pressed past it — under #204's model this resized; pressure closes now.
+  // The left pane's bump is at left.x+32, its minimum, so releasing at +20 is
+  // pressed past it and closes.
   await gw.leftDragScreen(left.x + left.w - 2, gy, left.x + 20, gy);
   await expect.poll(async () => (await gw.panes()).length).toBe(1);
 });
 
-// Requirement (#217): which SIDE of a border you grab must not matter. The
-// B-side band (2px right of the divider) resolves the same divider and
-// produces the same resize as the A-side grab every other test uses.
+// Which side of a border you grab must not matter. The B-side band, 2px right of
+// the divider, resolves the same divider and produces the same resize as the
+// A-side grab every other test uses.
 test('grabbing the border from its far side behaves identically (#217)', async ({ gw }) => {
   await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
@@ -153,7 +151,7 @@ test('grabbing the border from its far side behaves identically (#217)', async (
   const [p1, p2, p3] = before;
   const gx = p1.x + p1.w;
   const gy = p1.y + p1.h / 2;
-  // Grab 2px RIGHT of the divider (inside pane 2's band) and drag right.
+  // Grab 2px right of the divider, inside pane 2's band, and drag right.
   await gw.leftDragScreen(gx + 2, gy, gx + 60, gy);
   const after = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(after[0].w, 'grabbed border moved').toBeCloseTo(p1.w + 60, 0);
@@ -161,8 +159,9 @@ test('grabbing the border from its far side behaves identically (#217)', async (
   expect(after[2].w, 'the untouched border did not move').toBeCloseTo(p3.w, 0);
 });
 
-// "More and more panes go red until I let go — they all close" (#217):
-// pressing the nested divider past BOTH bumps on its side closes both.
+// Panes go red as the pressure reaches each of them, and the release closes
+// every red one: pressing the nested divider past both bumps on its side closes
+// both panes.
 test('pressing past two bumps closes both panes on release (#217)', async ({ gw }) => {
   await gw.enterPlugin('home');
   await gw.splitFocusedPaneVertical();
@@ -171,8 +170,8 @@ test('pressing past two bumps closes both panes on release (#217)', async ({ gw 
   expect(before).toHaveLength(3);
   const [p1, p2, p3] = before;
 
-  // Grab the nested divider (right edge of pane 2) and drag to 4px from the
-  // screen's left edge: past pane 2's bump AND pane 1's.
+  // Grab the nested divider, the right edge of pane 2, and drag to 4px from the
+  // screen's left edge: past pane 2's bump and pane 1's.
   const gx = p2.x + p2.w;
   const gy = p2.y + p2.h / 2;
   await gw.leftDragScreen(gx - 2, gy, p1.x + 4, gy);
@@ -181,10 +180,10 @@ test('pressing past two bumps closes both panes on release (#217)', async ({ gw 
   expect(survivor.id, 'the pressed-into pane survives').toBe(p3.id);
 });
 
-// The #238 fix: crush deep through BOTH panes on a side, back off a hair
-// past the wall, release — everything survives at its minimum. Under the
-// old grab-size bump model the adjacent pane stayed red until the cursor
-// retreated almost to the grab point, regrowing it far past its min.
+// Crush deep through both panes on a side, back off a hair past the wall, and
+// release: everything survives at its minimum. A grab-size bump model would keep
+// the adjacent pane red until the cursor retreated almost to the grab point,
+// regrowing it far past its minimum.
 test('backing off just past the wall after a deep crush closes nothing (#238)', async ({
   gw,
   window,
@@ -199,11 +198,11 @@ test('backing off just past the wall after a deep crush closes nothing (#238)', 
   const gy = p1.y + p1.h / 2;
   const rightEdge = p3.x + p3.w;
 
-  // Deep press: panes 2 and 3 both crush to min and go red.
+  // Deep press: panes 2 and 3 both crush to their minimum and go red.
   await window.mouse.move(gx - 2, gy);
   await window.mouse.down();
   await window.mouse.move(rightEdge - 10, gy, { steps: 8 });
-  // Back off to just past the wall (both mins plus a little) and release.
+  // Back off to just past the wall, both minimums plus a little, and release.
   await window.mouse.move(rightEdge - 64 - 12, gy, { steps: 4 });
   await window.mouse.up();
   await gw.waitIdle();
@@ -221,8 +220,8 @@ test('the same divider closes either side by drag direction (#204)', async ({ gw
   expect(before).toHaveLength(2);
   const [left, right] = before;
   const gy = left.y + left.h / 2;
-  // Drag the divider RIGHT, all the way across the right pane to its far
-  // edge: the RIGHT side closes.
+  // Drag the divider right, all the way across the right pane to its far edge:
+  // the right side closes.
   await gw.leftDragScreen(left.x + left.w - 2, gy, right.x + right.w - 4, gy);
   await expect.poll(async () => (await gw.panes()).length).toBe(1);
   const [survivor] = await gw.panes();

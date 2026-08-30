@@ -5,51 +5,51 @@ import { sidecarBinary, staticDir } from './paths';
 import { makeLineSplitter, parseServingLine, windowOrigin } from './lines';
 
 export interface Sidecar {
-  // The window origin, read back from the serve banner — loopback by
-  // default, but server.yaml `web.bind` may pin another address (e.g. a
-  // Tailscale IP shared with a phone browser).
+  // The window origin, read back from the serve banner. Loopback by default,
+  // but server.yaml `web.bind` may pin another address, such as a Tailscale IP
+  // shared with a phone browser.
   origin: string;
-  // The web-UI auth token from the banner (the door is always gated; the
-  // password is the minted web-password file — lines.ts owns the contract).
-  // index.ts pre-sets it as the auth cookie so this window never prompts —
-  // the password gate is for OTHER browsers reaching the shared origin.
+  // The web auth token from the banner. The door is always gated by the minted
+  // web-password file; lines.ts owns the banner contract. index.ts pre-sets
+  // this as the auth cookie so this window never prompts, since the gate is for
+  // other browsers reaching the shared origin.
   auth?: string;
-  // external: the server was ALREADY RUNNING (someone else holds the home's
-  // serve lock — internal/cli/servelock.go) and this app merely connected
-  // to it. child is the exited probe process, not the server: never watch
-  // it, never kill anything on stop.
+  // external: the server was already running (another process holds the home's
+  // serve lock, internal/cli/servelock.go) and this app only connected to it.
+  // child is then the exited probe process, not the server: never watch it, and
+  // kill nothing on stop.
   external: boolean;
   child: ChildProcess;
   stop: () => void;
 }
 
 interface StartOptions {
-  // Override the default bind port (otherwise a free ephemeral port is
-  // chosen). Passed as --bind-default: an explicit `web.bind` in server.yaml
-  // still wins — the server owns the listen-address decision.
+  // Override the default bind port; otherwise a free ephemeral port is chosen.
+  // Passed as --bind-default, so an explicit `web.bind` in server.yaml still
+  // wins: the server owns the listen-address decision.
   port?: number;
   // Milliseconds to wait for the ready line before giving up.
   timeoutMs?: number;
   // Sink for sidecar stdout/stderr lines (defaults to console).
   onLog?: (line: string) => void;
-  // noServer: never START a server — run `gridwell status` instead of
-  // `gridwell serve` and connect to a separately-run server (the advanced
-  // split: `gridwell serve` in a terminal, the app with --no-server).
-  // Rejects with a clear message when nothing is running.
+  // noServer: never start a server. Runs `gridwell status` instead of
+  // `gridwell serve` and connects to a separately-run one, for the split where
+  // `gridwell serve` runs in a terminal and the app is launched with
+  // --no-server. Rejects with a clear message when nothing is running.
   noServer?: boolean;
-  // Test seams (sidecar.test.ts): a fake child process + fixed paths, so the
-  // spawn/ready/error/exit/timeout settle rules — the logic that decides
-  // whether the app boots or hangs — run under `node --test` with no binary
-  // and no Electron. Production callers leave these unset.
+  // Test seams (sidecar.test.ts): a fake child process and fixed paths, so the
+  // spawn, ready, error, exit, and timeout settle rules run under `node --test`
+  // with no binary and no Electron. Those rules decide whether the app boots or
+  // hangs. Production callers leave these unset.
   spawnFn?: (bin: string, args: string[]) => ChildProcess;
   binaryPath?: string;
   staticPath?: string;
 }
 
-// startSidecar spawns the Go backend (Connect-RPC + static files) and resolves once it
-// announces its actual bound address ("gridwell: serving on ..."). Rejects if
-// the process exits first or the timeout elapses. The returned stop()
-// terminates the child.
+// startSidecar spawns the Go backend (Connect-RPC plus static files) and
+// resolves once it announces its actual bound address ("gridwell: serving on
+// ..."). It rejects if the process exits first or the timeout elapses. The
+// returned stop() terminates the child.
 export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   const bin = opts.binaryPath ?? sidecarBinary();
   if (!opts.spawnFn && !fs.existsSync(bin)) {
@@ -58,28 +58,26 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   const port = opts.port ?? (await freePort());
 
   const onLog = opts.onLog ?? ((l: string) => console.log('[sidecar]', l));
-  // No --db: the server derives every plugin's DB path from its id under the
-  // Gridwell home (GRIDWELL_HOME, inherited from this process's env, else
-  // ~/.gridwell). A missing server.yaml is healed below: the one no-config
-  // retry runs `gridwell init --kind local --name home` — first-run
-  // friendliness in the app, while the server keeps its strict contract.
-  // --bind-default (not --bind): the ephemeral loopback port applies only when
-  // ~/.gridwell/server.yaml declares no web.bind of its own. A declared one
-  // wins, so one server instance serves both this window and a phone browser
-  // on a stable origin. The actual address comes back in the serve banner.
+  // No --db: the server resolves its own database under the Gridwell home
+  // (GRIDWELL_HOME, inherited from this process's env, else ~/.gridwell), and
+  // mints a missing server.yaml itself.
+  // --bind-default, not --bind: the ephemeral loopback port applies only when
+  // server.yaml declares no web.bind of its own. A declared one wins, so one
+  // server serves both this window and a phone browser on a stable origin. The
+  // actual address comes back in the serve banner.
   //
-  // noServer runs `gridwell status` instead: it never starts anything, only
-  // re-emits a running server's banner ("already serving on ...") — the
-  // server owns lock, discovery, and home resolution; this process never
-  // learns what a home is.
+  // noServer runs `gridwell status` instead. It starts nothing and only
+  // re-emits a running server's banner ("already serving on ..."). The server
+  // owns the lock, discovery, and home resolution; this process never learns
+  // what a home is.
   const args = opts.noServer
     ? ['status']
     : [
         'serve',
         '--bind-default', `127.0.0.1:${port}`,
-        // --static only when explicitly overridden: the binary embeds the
-        // web client (web/embed.go), and the dev tree / e2e harness still
-        // pin their checkout via GRIDWELL_STATIC.
+        // --static only when explicitly overridden: the binary embeds the web
+        // client (web/embed.go), and the dev tree and e2e harness pin their
+        // checkout through GRIDWELL_STATIC.
         ...staticArgs(opts.staticPath ?? envStaticDir()),
       ];
   const child = opts.spawnFn
@@ -90,11 +88,9 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
     if (!child.killed) child.kill('SIGTERM');
   };
 
-  // The one no-config heal: seen on stderr, remembered until the child
-  // exits, then `gridwell init` and a single respawn.
-  // The server prints its actionable diagnostics ("no database at …",
-  // "plugin binary not found") to stderr/stdout before exiting; keep the
-  // tail so a boot failure dialog says WHY, not just an exit code.
+  // The server prints its actionable diagnostics ("no database at …", "plugin
+  // binary not found") to stdout or stderr before exiting. Keeping the tail
+  // lets the boot failure dialog say why, not just an exit code.
   const lastLines: string[] = [];
 
   return await new Promise<Sidecar>((resolve, reject) => {
@@ -139,12 +135,10 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
     attachLineReader(child.stdout, handleLine);
     attachLineReader(child.stderr, handleLine);
 
-    // A spawn failure (e.g. the binary isn't executable, or the fs.existsSync
-    // check above raced a removal) emits 'error' on the child instead of
-    // 'exit' — before this listener existed nothing here reacted to it, so
-    // boot just hung until the 10s ready-timeout fired with a generic
-    // "did not report ready" message (issue #46 point 1). Reject immediately
-    // with the real cause instead.
+    // A spawn failure emits 'error' on the child instead of 'exit': the binary
+    // is not executable, or the fs.existsSync check above raced a removal.
+    // Without this listener boot would hang until the ready-timeout fired with
+    // a generic "did not report ready"; reject with the real cause instead.
     child.once('error', (err) => {
       if (settled) return;
       settled = true;
@@ -162,13 +156,13 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   });
 }
 
-// staticArgs maps a static override to serve flags: none means the server
-// serves its EMBEDDED web client (the packaged default).
+// staticArgs maps a static override to serve flags. None means the server
+// serves its embedded web client, which is the packaged default.
 function staticArgs(dir: string | undefined): string[] {
   return dir ? ['--static', dir] : [];
 }
 
-// envStaticDir is the dev/e2e override only — the packaged app passes
+// envStaticDir is the dev and e2e override only. The packaged app passes
 // nothing and the embedded client serves.
 function envStaticDir(): string | undefined {
   return staticDir() ?? undefined;

@@ -1,22 +1,21 @@
 import type { WebContentsView } from 'electron';
 
-// JPEG quality for mirrored/frozen frames. The frozen preview is the durable
-// "screenshot" of a URL tile — it's what you see when you descend without
-// going live, and it gets zoomed in larger panes — so it's worth keeping
-// crisp. High quality; the base64 payload over IPC is still modest.
+// JPEG quality for mirrored and frozen frames. The frozen preview is the
+// durable picture of a url tile: it is what you see without going live, and
+// it is zoomed up in larger panes, so it stays crisp. The base64 payload
+// over IPC is still modest at this quality.
 const JPEG_QUALITY = 92;
 
-// captureJpegBase64 grabs the current rendered contents of a view as a JPEG,
-// base64-encoded for transport over IPC to the renderer. capturePage works
-// on the visible, attached view (no offscreen-rendering mode needed) — the
-// live pane shows native pixels; this capture only feeds the *other* panes'
-// frozen previews and the freeze-on-ascend snapshot.
+// captureJpegBase64 grabs a view's rendered contents as a base64 JPEG for
+// IPC to the renderer. capturePage works on the visible attached view, so no
+// offscreen-rendering mode is needed. The live pane shows native pixels;
+// this capture feeds the other panes' frozen previews and the
+// freeze-on-ascend snapshot.
 //
-// capturePage is time-boxed: a parked/offscreen or busy renderer can leave
-// the promise pending indefinitely, and the freeze path detaches the view
-// only after this resolves — an unbounded wait there would strand the native
-// view on top of the pane the user just ascended out of. On timeout we return
-// '' (no frame) so teardown proceeds.
+// capturePage is time-boxed. A parked or busy renderer can leave the promise
+// pending forever, and the freeze path detaches the view only after this
+// resolves, which would strand the native view on top of the pane the user
+// just left. On timeout it returns '' (no frame) so teardown proceeds.
 export async function captureJpegBase64(view: WebContentsView, timeoutMs = 1500): Promise<string> {
   const image = await withTimeout(view.webContents.capturePage(), timeoutMs);
   if (!image || image.isEmpty()) return '';
@@ -41,8 +40,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 
 // MirrorPump periodically captures every live pane and pushes frames to a
 // sink (index.ts sweeps reg.paneIds() each tick), so a tile mirrored in a
-// second pane stays fresh. Cadence is intentionally modest — mirrored
-// previews don't need 60fps.
+// second pane stays fresh. The cadence is modest; mirrored previews do not
+// need to run at frame rate.
 export class MirrorPump {
   private timer: NodeJS.Timeout | null = null;
   private readonly intervalMs: number;

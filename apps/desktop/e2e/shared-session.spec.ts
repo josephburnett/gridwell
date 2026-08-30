@@ -1,14 +1,12 @@
 import { test, expect } from './fixtures';
 
-// Owner decision 2026-07-26: ONE host-local Chromium session. Every live url
-// tile — whichever plugin owns it, local or through a mount — browses on the
-// same persistent partition, so your logins are your logins everywhere. This
-// replaced the per-plugin partitions and their hydrate/dehydrate blob
-// choreography (GetSession/PutSession), which daily-driver use falsified.
+// One host-local Chromium session. Every live url tile, whichever namespace owns
+// it, local or through a mount, browses on the same persistent partition, so a
+// login holds everywhere.
 //
-// The seam: a cookie set while live in PLUGIN A's tile is visible to a live
-// tile owned by PLUGIN B. Under the old model these were different
-// partitions by construction and this spec would fail.
+// The seam: a cookie set while live in one plugin's tile is visible to a live
+// tile owned by another. Per-plugin partitions would make these different
+// sessions by construction and this spec would fail.
 
 test.use({ extraNodes: ['second'] });
 
@@ -36,7 +34,7 @@ test('live tiles in different plugins share the one local session', async ({
       .toBe(true);
   };
 
-  // A live tile in the FIRST plugin sets a cookie in-page.
+  // A live tile in the first namespace sets a cookie in-page.
   await gw.enterPlugin('home');
   await goLiveURL('plug=one');
   await electronApp.evaluate(async ({ webContents }) => {
@@ -45,14 +43,14 @@ test('live tiles in different plugins share the one local session', async ({
     await wc.executeJavaScript(`document.cookie = 'gwshared=yes; path=/'; true`);
   });
 
-  // Ascend out (freezes + tears the view down), portal home, then enter the
-  // SECOND plugin and go live there.
+  // Ascend out, which freezes and tears the view down, portal home, then enter
+  // the second namespace and go live there.
   await gw.ascendViaCrumb(); // ascend the url descent
-  await gw.ascendViaCrumb(); // ascend the plugin portal
+  await gw.ascendViaCrumb(); // ascend the menu portal
   await gw.enterPlugin('second');
   await goLiveURL('plug=two');
 
-  // The second plugin's live view sees the first's cookie: one session.
+  // The second live view sees the first's cookie: one session.
   const cookie = await electronApp.evaluate(async ({ webContents }) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('plug=two'));
     if (!wc) throw new Error('second live view not found');

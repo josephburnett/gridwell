@@ -1,10 +1,10 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Issue #83: after any ascent, an ephemeral yellow outline marks the tile the
-// pane just came out of — so the user can tell WHICH shell/well they just left
-// before, say, throwing one away. The trace arms when the ascent transition
-// lands, fades over ~2s, and expires; strictly view state, nothing persists.
+// After any ascent an ephemeral yellow outline marks the tile the pane just
+// came out of, so the user can tell which shell or well they just left before,
+// say, throwing one away. The trace arms when the ascent transition lands,
+// fades over about two seconds, and expires. It is view state; nothing persists.
 
 async function traces(window: any) {
   return window.evaluate(() => (window as any).__gridwellTest.traces());
@@ -36,10 +36,10 @@ test('ascending arms a fading trace on the tile just left, then it expires', asy
   expect(armed[0].paneId).toBe((await gw.focused()).id);
   expect(armed[0].alpha).toBeGreaterThan(0.3);
 
-  // And it expires on its own (~2s fade), leaving no residue.
+  // And it expires on its own after the fade, leaving no residue.
   await expect.poll(async () => (await traces(window)).length, { timeout: 5_000 }).toBe(0);
 
-  // The guiding rule: the trace changed nothing — the well is byte-identical.
+  // The trace changed nothing: the well is byte-identical.
   const after = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   expect(after.version, 'no version bump from the trace').toBe(well.version);
 });

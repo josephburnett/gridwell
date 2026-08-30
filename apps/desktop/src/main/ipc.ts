@@ -2,11 +2,11 @@
 // process (ipcMain handlers) and the preload bridge import this module for
 // the channel names and payload types, so the two sides can't drift.
 //
-// Geometry: `bounds` is the URL tile's content box in CSS pixels, relative
-// to the window's content area — exactly what the WASM canvas computes via
-// panebox.ContentBox. Electron's WebContentsView.setBounds takes DIP, which
-// equals CSS px in the renderer's coordinate space, so the mapping is 1:1
-// (DPR scaling of page content is handled inside the view).
+// Geometry: `bounds` is the url tile's content box in CSS pixels relative to
+// the window's content area, exactly what the wasm canvas computes through
+// panebox.ContentBox. WebContentsView.setBounds takes DIP, which equals CSS px
+// in the renderer's coordinate space, so the mapping is 1:1. DPR scaling of
+// page content happens inside the view.
 
 export interface Bounds {
   x: number;
@@ -20,7 +20,7 @@ export const CH = {
   place: 'gw:place',       // PlaceArgs → void
   setBounds: 'gw:setBounds', // SetBoundsArgs → void
   setHidden: 'gw:setHidden', // SetHiddenArgs → void
-  setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom, issue #82)
+  setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom)
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
   showMenu: 'gw:showMenu', // PaneRef → void — pop the live view's context
@@ -29,10 +29,11 @@ export const CH = {
                            // hijacks contextmenu.
 } as const;
 
-// Live URL view's injected preload → main (send, fire-and-forget). The view
+// Live url view's injected preload → main (send, fire-and-forget). The view
 // swallows the renderer's own mouse events, so its preload forwards button
-// presses here. Left button (focus intent only — the click still reaches the
-// page, no preventDefault) transfers pane focus. Right/middle are gesture paths.
+// presses here. The left button transfers pane focus and nothing more: the
+// click still reaches the page, with no preventDefault. Right and middle are
+// gesture paths.
 export const VIEW = {
   rightdown: 'gw:view-rightdown',   // ViewRightdown
   middledown: 'gw:view-middledown', // ViewRightdown (same payload: screen coords)
@@ -44,16 +45,15 @@ export const VIEW = {
 export const EV = {
   frame: 'gw:frame', // FrameEvent
   nav: 'gw:nav',     // NavEvent
-  rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
-  middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
-  leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
-  error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
-                     // (electron:webview | electron:backend)
-                     // that must reach the user. Charter §6: one owner, no
-                     // second "silent" path for a main-process failure.
-  openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
-  freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture (issue #237)
-  zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus (issue #170)
+  rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live url view
+  middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live url view (ascend)
+  leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live url view (focus intent)
+  error: 'gw:error', // ErrorEvent — the one wire for every main-process failure
+                     // (electron:webview | electron:backend) that must reach
+                     // the user. There is no second, silent path.
+  openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window or ctrl-click link
+  freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture
+  zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus
 } as const;
 
 // ViewRightdown carries the press in physical screen coordinates
@@ -67,10 +67,10 @@ export interface ViewRightdown {
 // ViewTouchScroll is one movement step of a single-finger drag over live web
 // content. Chromium does not turn raw touches into scroll gestures inside an
 // embedded WebContentsView, so the view's preload forwards the finger's
-// per-move delta here; main injects an equivalent mouseWheel into the SAME
+// per-move delta here, and main injects an equivalent mouseWheel into the same
 // view at the finger's position, scrolling whatever scrollable element sits
-// under it. sx/sy are physical screen px (like ViewRightdown); dx/dy are the
-// finger's movement since the previous step, same units.
+// under it. sx/sy are physical screen px, as in ViewRightdown; dx/dy are the
+// finger's movement since the previous step, in the same units.
 export interface ViewTouchScroll {
   sx: number;
   sy: number;
@@ -79,7 +79,7 @@ export interface ViewTouchScroll {
 }
 
 // ForwardedRightdown carries the press in window-content coordinates, which
-// equal the renderer's canvas pixels (1:1, DIP == CSS px) — ready to feed
+// equal the renderer's canvas pixels 1:1 (DIP == CSS px), ready to feed
 // straight into the canvas gesture pipeline.
 export interface ForwardedRightdown {
   x: number;
@@ -94,21 +94,20 @@ export interface PlaceArgs {
   paneId: string;
   tileId: string;
   // hidden: the renderer's per-frame gesture-hide verdict at the moment of
-  // placement (liveOverlaysHidden) — a view placed during a drag or under
-  // an open palette starts parked. The renderer owns this fact; the
-  // registry used to infer it from the LAST setHidden it happened to
-  // receive, which ranged over a Go map (2026-08-27).
+  // placement (liveOverlaysHidden), so a view placed during a drag or under an
+  // open palette starts parked. The renderer owns this fact; the registry must
+  // not infer it from whichever setHidden happened to arrive last.
   hidden?: boolean;
   url: string;
   bounds: Bounds;
-  // contentZoom is the tile's persisted USER content zoom (issue #82),
-  // composed with the min-width layout zoom. 0/absent = 1.0.
+  // contentZoom is the tile's persisted user content zoom, composed with the
+  // min-width layout zoom. Zero or absent means 1.0.
   contentZoom?: number;
-  // history is the tile's persisted navigation back-stack; when valid the
-  // view restores it instead of a bare loadURL (issue #113).
+  // history is the tile's persisted navigation back-stack; when valid the view
+  // restores it instead of a bare loadURL.
   history?: string;
-  // durable is whether the tile survives ascent (false = ephemeral visit);
-  // gates the context menu's Freeze Page (issue #240). Absent = false.
+  // durable is whether the tile survives ascent; false is an ephemeral visit.
+  // It gates the context menu's Freeze Page. Absent means false.
   durable?: boolean;
 }
 
@@ -125,9 +124,8 @@ export interface SetBoundsArgs {
 export interface SetHiddenArgs {
   paneId: string;
   hidden: boolean;
-  // focused is whether this pane is the focused pane. Feeds the registry's
-  // focus-steal guard: only the focused pane's view may hold OS keyboard
-  // focus (issue #172).
+  // focused is whether this pane is the focused pane. It feeds the registry's
+  // focus-steal guard: only the focused pane's view may hold OS keyboard focus.
   focused: boolean;
 }
 
@@ -135,15 +133,15 @@ export interface RemoveArgs {
   paneId: string;
 }
 
-// FreezeResult is returned by `remove`: the final capture + the page's last
-// URL/title, so the renderer can persist the frozen preview via SetURLState.
+// FreezeResult is returned by `remove`: the final capture plus the page's last
+// url and title, which the renderer persists as the tile's frozen face.
 export interface FreezeResult {
   // JPEG bytes of the final frame, base64-encoded (empty if capture failed).
   jpegBase64: string;
   url: string;
   title: string;
   // history is the serialized navigation back-stack (viewutil.serializeHistory)
-  // so a revived tile can still go back (issue #113). '' when not captured.
+  // so a revived tile can still go back. '' when not captured.
   history: string;
 }
 
@@ -160,37 +158,37 @@ export interface NavEvent {
   title: string;
 }
 
-// OpenBelowEvent carries a link a live view tried to open in a NEW WINDOW
-// (target=_blank, window.open, ctrl/cmd-click — everything Chromium routes to
-// the window-open handler). The renderer splits the pane and opens the url as
-// an ephemeral visit in the lower half (issue #111).
+// OpenBelowEvent carries a link a live view tried to open in a new window:
+// target=_blank, window.open, ctrl or cmd-click, everything Chromium routes to
+// the window-open handler. The renderer splits the pane and opens the url as an
+// ephemeral visit in the lower half.
 export interface OpenBelowEvent {
   paneId: string;
   url: string;
 }
 
-// FreezeURLEvent: the user picked "Freeze Page" in a live view's context
-// menu (issue #237). The renderer tears the view down with the usual freeze
-// writeback and persists the standing frozen intent on the tile.
+// FreezeURLEvent: the user picked "Freeze Page" in a live view's context menu.
+// The renderer tears the view down with the usual freeze writeback and persists
+// the standing frozen intent on the tile.
 export interface FreezeURLEvent {
   paneId: string;
 }
 
-// ZoomKeyEvent: Ctrl/Cmd +/=/-/0 pressed while a live URL view owns OS
-// keyboard focus (issue #170). Main intercepts it in before-input-event and
-// relays it here so the renderer's applyContentZoom — the one owner of the
-// cache update + SetContentZoom persistence — runs, exactly as if the chord
-// had been typed on the canvas.
+// ZoomKeyEvent: Ctrl/Cmd with +, =, - or 0 pressed while a live url view owns
+// OS keyboard focus. Main intercepts it in before-input-event and relays it
+// here, so the renderer's applyContentZoom runs exactly as if the chord had
+// been typed on the canvas. applyContentZoom is the one owner of the cache
+// update and the SetContentZoom write.
 export interface ZoomKeyEvent {
   paneId: string;
   key: string;
 }
 
-// ErrorEvent is the one payload shape for EV.error: every main-process
-// failure site (webview lifecycle, sidecar boot/exit) reports through this
-// same wire, never a bespoke one. `source` is a stable key the wasm
-// errsurface groups notices by (one row per source — see
-// client/errsurface): 'electron:webview' | 'electron:backend'. `message` is the human-readable text shown verbatim.
+// ErrorEvent is the one payload shape for EV.error. Every main-process failure
+// site (webview lifecycle, sidecar boot and exit) reports through this wire,
+// never a bespoke one. `source` is a stable key the wasm errsurface groups
+// notices by, one row per source: 'electron:webview' or 'electron:backend'.
+// `message` is shown to the user verbatim.
 export interface ErrorEvent {
   source: string;
   message: string;

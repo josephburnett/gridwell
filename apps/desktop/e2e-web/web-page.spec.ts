@@ -3,11 +3,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-// The web-content door, browser side (2026-08-11): with no Electron bridge a
-// serves_page tile cannot go live in place, so the descent shows the frozen
-// face and the bar circle opens the DERIVED /content/ address in a new tab —
-// the same degradation a url tile gets, because it is the same code path.
-// The door itself must serve the image bytes sandboxed, with no cookie.
+// The web-content door, browser side: with no Electron bridge a serves_page tile
+// cannot go live in place, so the descent shows the frozen face and the bar
+// circle opens the derived /content/ address in a new tab. That is the same
+// degradation a url tile gets, over the same code path. The door itself must
+// serve the image bytes sandboxed, with no cookie.
 
 const PNG_1X1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -30,14 +30,14 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   expect(cat, 'the fs root grid lists cat.png').toBeTruthy();
   expect(cat.servesPage, 'an image file declares serves_page on the wire').toBe(true);
 
-  // Descend: no bridge, so the tile stays frozen (DecideAutoLive's browser
-  // arm) — no dead modal, no error; the pane presents the frozen face.
+  // Descend: with no bridge the tile stays frozen, through DecideAutoLive's
+  // browser arm. No dead modal, no error; the pane presents the frozen face.
   await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
 
-  // The circle is the open-in-new-tab affordance, exactly like a frozen url
-  // tile on a browser host (owner decision 2026-08-09) — at the derived
-  // door address, which serves the REAL image bytes.
+  // The circle is the open-in-new-tab affordance, exactly as for a frozen url
+  // tile on a browser host, pointing at the derived door address, which serves
+  // the real image bytes.
   const pal = await gw.palette();
   const [popup] = await Promise.all([
     window.context().waitForEvent('page', { timeout: 10_000 }),
@@ -46,9 +46,9 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   await popup.waitForURL(/\/content\//, { timeout: 10_000 });
   expect(popup.url()).toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}/$`));
 
-  // The page the tab shows IS the file: same bytes, image content type,
-  // sandboxed by the door (the token in the path is the whole credential —
-  // this popup carries no auth cookie).
+  // The page the tab shows is the file: same bytes, image content type, sandboxed
+  // by the door. The token in the path is the whole credential; this popup
+  // carries no auth cookie.
   const res = await popup.request.get(popup.url());
   expect(res.status()).toBe(200);
   expect(res.headers()['content-type']).toBe('image/png');

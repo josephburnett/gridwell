@@ -1,19 +1,17 @@
-// The mobile half of the window.gridwell bridge (2026-08-13): the same
-// contract the Electron preload implements, backed by Flutter-hosted
-// native webviews instead of WebContentsViews. This file is deliberately
-// FLUTTER-FREE (dart:core only) so the decision logic — the view
-// registry, the call dispatch, the injected JS — runs under plain
-// `flutter test` with no platform channel (the charter §5 rule: extract
-// the logic from the untestable shell).
+// The mobile half of the window.gridwell bridge: the same contract the Electron
+// preload implements, backed by Flutter-hosted native webviews instead of
+// WebContentsViews. This file is Flutter-free, using dart:core only, so the
+// decision logic — the view registry, the call dispatch, the injected JS — runs
+// under plain `flutter test` with no platform channel.
 //
-// Capability declaration: liveUrl only — and since 2026-08-29 that is the
-// whole list. Shells no longer ride a host bridge at all: the PTY is a
-// WebSocket on the web door, which the host webview speaks like any other
-// same-origin request, so a phone gets live shells for free.
+// The capability declaration is liveUrl, and that is the whole list. Shells ride
+// no host bridge: the PTY is a WebSocket on the web door, which the host webview
+// speaks like any other same-origin request, so a phone gets live shells for
+// free.
 
-/// Bounds of a live view in CSS px of the host page (identical to logical
-/// px here: the host webview is full-screen at 1:1 viewport scale — the
-/// same 1:1 the Electron shell relies on).
+/// Bounds of a live view in CSS px of the host page. That is the same as logical
+/// px here, because the host webview is full-screen at 1:1 viewport scale, the
+/// same 1:1 the Electron shell relies on.
 class Bounds {
   final double x, y, width, height;
   const Bounds(this.x, this.y, this.width, this.height);
@@ -28,8 +26,8 @@ class Bounds {
   String toString() => 'Bounds($x,$y ${width}x$height)';
 }
 
-/// LiveView is one placed url view — the registry's value object the
-/// widget layer renders as a positioned native webview.
+/// LiveView is one placed url view: the registry's value object the widget layer
+/// renders as a positioned native webview.
 class LiveView {
   final String paneId;
   final String tileId;
@@ -39,9 +37,9 @@ class LiveView {
   LiveView(this.paneId, this.tileId, this.url, this.bounds, {this.hidden = false});
 }
 
-/// FreezeCapture is removeWebview's answer — the final frame and page
-/// facts the wasm persists as the frozen preview. Empty fields are legal
-/// (a failed capture degrades; the client tolerates it).
+/// FreezeCapture is removeWebview's answer: the final frame and page facts the
+/// wasm persists as the frozen preview. Empty fields are legal, since a failed
+/// capture degrades and the client tolerates it.
 class FreezeCapture {
   final String jpegBase64;
   final String url;
@@ -52,24 +50,24 @@ class FreezeCapture {
         'jpegBase64': jpegBase64,
         'url': url,
         'title': title,
-        // History persistence is a desktop feature (url_history rides
-        // SetURLState); the mobile shell sends none — an empty value on a
-        // write leaves the stored history untouched by contract.
+        // History persistence is a desktop feature; the mobile shell sends
+        // none. By contract an empty value on a write leaves the stored history
+        // untouched.
         'history': '',
       };
 }
 
-/// ViewHost is what the widget layer provides per live view: navigation
-/// and capture against the real webview controller. Injected so
-/// BridgeState stays platform-free.
+/// ViewHost is what the widget layer provides per live view: navigation and
+/// capture against the real webview controller. It is injected so BridgeState
+/// stays platform-free.
 abstract class ViewHost {
   Future<FreezeCapture> capture(String paneId);
   Future<void> goBack(String paneId);
 }
 
-/// BridgeState owns the live-view registry and dispatches every
-/// window.gridwell call. One writer: handleCall. The widget layer
-/// observes [views] (via [onChanged]) and renders it verbatim.
+/// BridgeState owns the live-view registry and dispatches every window.gridwell
+/// call. handleCall is the one writer. The widget layer observes [views] through
+/// [onChanged] and renders it verbatim.
 class BridgeState {
   final ViewHost host;
   final void Function() onChanged;
@@ -77,14 +75,14 @@ class BridgeState {
 
   BridgeState({required this.host, required this.onChanged});
 
-  /// Views in placement order — what the Stack renders.
+  /// Views in placement order: what the Stack renders.
   List<LiveView> get views => List.unmodifiable(_views.values);
 
   LiveView? view(String paneId) => _views[paneId];
 
-  /// handleCall is the single dispatcher for host-bound bridge calls.
-  /// Unknown methods are ignored (an older shell under a newer wasm must
-  /// degrade, never throw — the same skew rule as the Electron preload).
+  /// handleCall is the one dispatcher for host-bound bridge calls. Unknown
+  /// methods are ignored: an older shell under a newer wasm must degrade rather
+  /// than throw, the same skew rule the Electron preload follows.
   Future<Object?> handleCall(String method, Map<dynamic, dynamic> args) async {
     final paneId = (args['paneId'] ?? '') as String;
     switch (method) {
@@ -93,8 +91,8 @@ class BridgeState {
         final b = Bounds.fromMap(args['bounds'] as Map?);
         final existing = _views[paneId];
         if (existing != null) {
-          // Reuse: re-navigate only on a different address (the Electron
-          // registry's rule — a keep-alive return must not reload).
+          // Reuse: re-navigate only on a different address, so a keep-alive
+          // return does not reload.
           existing.bounds = b;
           existing.hidden = false;
           if (url.isNotEmpty && existing.url != url) existing.url = url;
@@ -122,20 +120,20 @@ class BridgeState {
         await host.goBack(paneId);
         return null;
       default:
-        // setZoom, showMenu — declared-away or desktop-only; reaching
-        // here is legal and inert.
+        // setZoom and showMenu are desktop-only; reaching here is legal and
+        // inert.
         return null;
     }
   }
 }
 
-/// gridwellUserScript is the JS injected into the HOST webview at document
-/// start — it must exist before wasm boot reads window.gridwell. Calls
-/// flow out through one flutter_inappwebview handler ('gridwell');
-/// callbacks flow back in through window.__gwDispatch. EVERY onX
-/// registrar the wasm installs exists (installWebviewListeners calls them
-/// unconditionally at boot — a missing one is a boot TypeError), even the
-/// ones this shell never fires.
+/// gridwellUserScript is the JS injected into the host webview at document
+/// start; it must exist before wasm boot reads window.gridwell. Calls flow out
+/// through one flutter_inappwebview handler, 'gridwell', and callbacks flow back
+/// in through window.__gwDispatch. Every onX registrar the wasm installs must
+/// exist here, even the ones this shell never fires: installWebviewListeners
+/// calls them all unconditionally at boot, and a missing one is a boot
+/// TypeError.
 const String gridwellUserScript = '''
 (function () {
   if (window.gridwell) return;
@@ -173,9 +171,9 @@ const String gridwellUserScript = '''
 })();
 ''';
 
-/// dispatchJS builds the host-page call that fires a registered wasm
-/// callback: window.__gwDispatch(name, event). The event object is
-/// encoded by the caller (jsonEncode) so this stays a pure formatter.
+/// dispatchJS builds the host-page call that fires a registered wasm callback,
+/// window.__gwDispatch(name, event). The caller encodes the event object with
+/// jsonEncode, so this stays a pure formatter.
 String dispatchJS(String name, String jsonEvent) {
   return 'window.__gwDispatch(${_quote(name)}, $jsonEvent);';
 }

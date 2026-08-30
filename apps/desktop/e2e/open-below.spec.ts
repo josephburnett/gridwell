@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures';
 
-// Issue #111: a link a live view would open in a NEW WINDOW (target=_blank,
-// window.open, ctrl/cmd-click) splits the pane and opens as an EPHEMERAL
-// visit in the lower half — next to the page it came from, on the same plugin
-// session, deleted on ascent like every ephemeral visit.
+// A link a live view would open in a new window, through target=_blank,
+// window.open, or a ctrl/cmd-click, splits the pane and opens as an ephemeral
+// visit in the lower half: beside the page it came from, on the same session,
+// deleted on ascent like every ephemeral visit.
 
 test('window.open from a live view splits the pane and opens ephemeral below', async ({
   electronApp,
@@ -16,9 +16,9 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   await gw.enterPlugin('home');
   const panesBefore = (await gw.panes()).length;
 
-  // A live ephemeral visit to the local origin. Poll for the NAVIGATED
-  // view, not a webContents count: the count grows at view creation,
-  // before loadURL lands.
+  // A live ephemeral visit to the local origin. Poll for the navigated view
+  // rather than a webContents count: the count grows at view creation, before
+  // loadURL lands.
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?src=page`);
@@ -34,10 +34,10 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
     )
     .toBe(true);
 
-  // A NON-WEB protocol popup first (issue #232): it must open NOTHING — no
-  // pane split, and no OS hand-off (the session denies openExternal). The
-  // web url that follows proves the path itself still works, so a silent
-  // swallow of everything would fail below.
+  // A non-web protocol popup first: it must open nothing, neither a pane split
+  // nor an OS hand-off, since the session denies openExternal. The web url that
+  // follows proves the path still works, so swallowing everything would fail
+  // below.
   await electronApp.evaluate(async ({ webContents }) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('src=page'));
     if (!wc) throw new Error('live view not found');
@@ -46,14 +46,14 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   await gw.waitIdle();
   expect((await gw.panes()).length, 'a non-web protocol opens no pane').toBe(panesBefore);
 
-  // The page opens a link the way target=_blank / ctrl-click would.
+  // The page opens a link the way target=_blank or a ctrl-click would.
   await electronApp.evaluate(async ({ webContents }, org: string) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('src=page'));
     if (!wc) throw new Error('live view not found');
     await wc.executeJavaScript(`window.open(${JSON.stringify(`${org}/wasm_exec.js?opened=below`)})`, true);
   }, gw.origin);
 
-  // A new pane appears BELOW, focused, descended into an ephemeral url tile.
+  // A new pane appears below, focused, descended into an ephemeral url tile.
   await expect.poll(async () => (await gw.panes()).length, { timeout: 15_000 }).toBe(
     panesBefore + 1,
   );
@@ -61,8 +61,8 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   const lower = panes[panes.length - 1];
   expect(lower.focused, 'the new lower pane took focus').toBe(true);
   expect(lower.y, 'the new pane sits below').toBeGreaterThan(panes[0].y);
-  // The universal pane minimum (issue #167) holds for the programmatic
-  // ephemeral split too: neither half may be born below MinPanePx (32).
+  // The universal pane minimum holds for the programmatic ephemeral split too:
+  // neither half may be born below MinPanePx, which is 32.
   for (const p of panes) {
     expect(p.h, `pane ${p.id} height respects the universal minimum`).toBeGreaterThanOrEqual(32);
   }
@@ -74,8 +74,8 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
     }, { timeout: 10_000 })
     .toBe(1);
 
-  // The SOURCE pane's visit is untouched (its tile still exists) — the
-  // clone's file-level ascent must not have deleted it.
+  // The source pane's visit is untouched and its tile still exists: the clone's
+  // file-level ascent must not delete it.
   const sc = await gw.getGrid(scratchGridID);
   expect(
     (sc.tiles ?? []).filter((t) => String(t.urlString ?? '').includes('src=page')),
@@ -83,17 +83,17 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   ).toHaveLength(1);
 
   // Ascending the new pane deletes its ephemeral visit. Wait out the descent
-  // transition first — a click mid-animation is deliberately swallowed — then
-  // raw middle-click at the LOWER pane's center (cell math could land in the
-  // upper pane).
+  // transition first, since a click mid-animation is deliberately swallowed, then
+  // middle-click at the lower pane's center; cell math could land in the upper
+  // pane.
   await expect
     .poll(async () => (await gw.panes()).find((p) => p.id === lower.id)?.textFocus ?? '', {
       timeout: 10_000,
     })
     .not.toBe('');
   await gw.waitIdle();
-  // RETRYABLE ascent: a single click can land mid-animation under suite load
-  // (deliberately swallowed) — re-click until the descent actually clears.
+  // Retry the ascent: under suite load a single click can land mid-animation and
+  // be swallowed, so re-click until the descent clears.
   const m = window.mouse;
   await expect
     .poll(

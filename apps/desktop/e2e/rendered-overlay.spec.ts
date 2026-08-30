@@ -1,11 +1,10 @@
 import { test, expect } from './fixtures';
 
-// Issue #218: the rendered view is a sanitized-HTML overlay div fed by
-// goldmark (markdown.RenderHTML), replacing the custom canvas engine.
-// Read-only: the raw textarea is the one editor; the toggle flips between
-// them. This spec crosses the whole seam — source bytes typed in the
-// editor come back as real HTML elements in #gw-rendered-view, and the
-// toggle round-trips.
+// The rendered view is a sanitized-HTML overlay div fed by goldmark through
+// markdown.RenderHTML. It is read-only: the raw textarea is the one editor, and
+// the toggle flips between them. This spec crosses the whole seam: source bytes
+// typed in the editor come back as real HTML elements in #gw-rendered-view, and
+// the toggle round-trips.
 
 test('rendered mode shows sanitized HTML; the toggle round-trips to the editor', async ({
   gw,
@@ -32,7 +31,7 @@ test('rendered mode shows sanitized HTML; the toggle round-trips to the editor',
   // The editor is hidden while rendered.
   await expect(window.locator('#gw-text-editor')).toBeHidden();
 
-  // Toggle back: the editor returns with the same source; the overlay hides.
+  // Toggle back: the editor returns with the same source and the overlay hides.
   await gw.toggleTextMode();
   await expect(window.locator('#gw-text-editor')).toBeVisible();
   await expect(view).toBeHidden();

@@ -1,10 +1,10 @@
 import { test, expect, authHeaders } from './fixtures';
 import { tileAt } from '../e2e/oracle';
 
-// Crosses the browser-mode seam: the full core loop — boot, enter a plugin,
-// create a tile, descend, type, persist — must work with NO Electron shell
-// and no window.gridwell bridge, against the same server the desktop uses.
-// The errors() hook at the end is the "nothing degraded silently" oracle.
+// Crosses the browser-mode seam: the full core loop, boot, enter a plugin,
+// create a tile, descend, type, persist, must work with no Electron shell and no
+// window.gridwell bridge, against the same server the desktop uses. The errors()
+// hook at the end is the oracle for nothing having degraded silently.
 test('the plain-browser client boots, creates, and edits', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
@@ -23,18 +23,15 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
     .poll(async () => gw.getTileContent(created.id), { timeout: 10_000 })
     .toContain('written from a plain browser');
 
-  // No notice on the strip: browser mode must not be quietly erroring its
-  // way through the core loop.
+  // No notice on the strip: browser mode must not error its way quietly through
+  // the core loop.
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(errs.notices).toEqual([]);
 });
 
-// Shells in a plain browser (2026-08-29): the PTY rides a WebSocket on
-// the web door, so a browser has the same attach capability the desktop
-// has and the palette offers the shell swatch. This REVERSES #259 ("shell
-// creation needs an attach capability, not just node policy") — the
-// premise that a browser has no PTY door is no longer true. A shell tile
-// made elsewhere still renders here, as it always did.
+// Shells in a plain browser: the PTY rides a WebSocket on the web door, so a
+// browser has the same attach capability the desktop has and the palette offers
+// the shell swatch. A shell tile made elsewhere renders here too.
 test('the browser offers shell creation and views shell tiles fine', async ({ gw, window, serve }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
@@ -47,7 +44,7 @@ test('the browser offers shell creation and views shell tiles fine', async ({ gw
   await window.keyboard.press("Escape");
   await gw.waitIdle();
 
-  // A shell tile made elsewhere (oracle create, as the desktop would) still
+  // A shell tile made elsewhere, created through the oracle as the desktop would,
   // lands in the client's world.
   const cx = Math.round(f.cx) + 2;
   const cy = Math.round(f.cy);

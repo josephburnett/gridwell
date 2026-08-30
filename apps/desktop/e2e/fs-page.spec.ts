@@ -3,12 +3,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-// The web-content door, desktop side (2026-08-11): an fs image tile declares
-// serves_page, and DESCENDING it goes live — a native WebContentsView at the
-// derived /content/<token>/<tile-id>/ address — with exactly the url-tile
-// semantics (#202: descending is the engagement gesture). Ascending closes
-// the view and persists NOTHING: the frozen face is the plugin's own
-// thumbnail derivation, so the tile row stays byte-for-byte as it was.
+// The web-content door, desktop side: an fs image tile declares serves_page, and
+// descending it goes live as a native WebContentsView at the derived
+// /content/<token>/<tile-id>/ address, with exactly the url-tile semantics.
+// Ascending closes the view and persists nothing: the frozen face is the
+// plugin's own thumbnail derivation, so the tile row stays byte-for-byte as it
+// was.
 
 // A real 1x1 PNG so the fs plugin classifies and serves an actual image.
 const PNG_1X1 = Buffer.from(
@@ -33,9 +33,9 @@ test('descending an fs image opens it live through the /content/ door', async ({
   expect(cat.servesPage, 'an image file declares serves_page on the wire').toBe(true);
   const versionBefore = Number(cat.version ?? 0);
 
-  // Descend: the one auto-live owner gives serves_page the url verdict, so
-  // a native view opens at the DERIVED door address — token + qualified
-  // tile id + the load-bearing trailing slash.
+  // Descend: the one auto-live owner gives serves_page the url verdict, so a
+  // native view opens at the derived door address: token, qualified tile id, and
+  // the load-bearing trailing slash.
   await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));
   await expect
     .poll(
@@ -50,8 +50,8 @@ test('descending an fs image opens it live through the /content/ door', async ({
     )
     .toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}/$`));
 
-  // Ascend: the view closes, and NOTHING was persisted — no SetURLState,
-  // no version bump; the row is byte-identical (the guiding rule).
+  // Ascend: the view closes and nothing was persisted. No freeze writeback, no
+  // version bump; the row is byte-identical.
   await gw.ascendViaCrumb();
   await expect
     .poll(

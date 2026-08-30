@@ -1,13 +1,12 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Issue #246: clicking a url rendered in a live shell opens the ephemeral
-// visit below — and NOTHING ELSE. Every exit is instrumented: renderer
-// window.open and confirm (xterm's OSC-8 default path), main-process
-// shell.openExternal, and the BrowserWindow count. The app-wide seals
-// (openExternal denied on every session, window.open denied on every
-// webContents without the live-view handler) keep it that way even for
-// paths this spec's plain click cannot reach.
+// Clicking a url rendered in a live shell opens the ephemeral visit below and
+// nothing else. Every exit is instrumented: renderer window.open and confirm,
+// which is xterm's OSC-8 default path, main-process shell.openExternal, and the
+// BrowserWindow count. The app-wide seals keep it that way even on paths this
+// spec's plain click cannot reach: openExternal is denied on every session, and
+// window.open is denied on every webContents without the live-view handler.
 
 test('a shell url click opens the visit below and nothing escapes', async ({
   electronApp,
@@ -28,7 +27,7 @@ test('a shell url click opens the visit below and nothing escapes', async ({
     })
     .toBe('webgl');
 
-  // Instrument every exit BEFORE the click.
+  // Instrument every exit before the click.
   await electronApp.evaluate(({ shell, BrowserWindow }) => {
     (global as any).__extOpens = [];
     shell.openExternal = ((u: string) => {
@@ -54,11 +53,11 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   const url = `${gw.origin}/wasm_exec.js?shell-link=1`;
   await window.keyboard.type(`echo visit ${url} end`);
   await window.keyboard.press('Enter');
-  // Wait for echo's OUTPUT line — the exact predicate the row selection
-  // below consumes. (A whole-buffer `toContain` was satisfied by the TYPED
-  // COMMAND line, which also carries the marker, so on a slow echo the
-  // selection ran before the output existed and indexed lines[-1] — the
-  // 2026-08-06 "load flake" that was really this spec racing itself.)
+  // Wait for echo's output line, the exact predicate the row selection below
+  // consumes. A whole-buffer `toContain` is satisfied by the typed command line,
+  // which also carries the marker, so on a slow echo the selection runs before
+  // the output exists and indexes the wrong row: this spec's flake was it racing
+  // itself.
   const outputRow = (t: string) =>
     t.split('\n').findIndex((l) => l.includes('shell-link=1 end') && !l.includes('echo '));
   await expect
@@ -68,8 +67,9 @@ test('a shell url click opens the visit below and nothing escapes', async ({
     )
     .toBeGreaterThanOrEqual(0);
 
-  // Click the rendered link (buffer row/col → screen px via the hook). The
-  // buffer only appends, so the row found by the poll is stable.
+  // Click the rendered link, mapping buffer row and column to screen pixels
+  // through the hook. The buffer only appends, so the row the poll found is
+  // stable.
   const text: string = await window.evaluate(() => (window as any).__gridwellTest.shellText());
   const lines = text.split('\n');
   const row = outputRow(text);
@@ -78,10 +78,10 @@ test('a shell url click opens the visit below and nothing escapes', async ({
     ([c, r]: number[]) => (window as any).__gridwellTest.shellCellPx(c, r),
     [col, row],
   );
-  // Hover, then wait for xterm's own decoration ACK — it marks a hovered
-  // link by putting xterm-cursor-pointer on the screen element — instead of
-  // sleeping and hoping the linkifier ran. The first move is a step away so
-  // a pointer already at the target still produces a mousemove.
+  // Hover, then wait for xterm's own decoration ack: it marks a hovered link by
+  // putting xterm-cursor-pointer on the screen element. That beats sleeping and
+  // hoping the linkifier ran. The first move is a step away, so a pointer
+  // already at the target still produces a mousemove.
   await window.mouse.move(pt.x, pt.y - 40);
   await window.mouse.move(pt.x, pt.y);
   await expect
@@ -116,10 +116,10 @@ test('a shell url click opens the visit below and nothing escapes', async ({
     await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),
   ).toBe(winBefore);
 
-  // The app-wide seal: a bare window.open from the ROOT renderer (any
-  // library trying to leave) is denied — no new window, no external.
+  // The app-wide seal: a bare window.open from the root renderer, which is any
+  // library trying to leave, is denied. No new window, nothing external.
   await window.evaluate(() => {
-    (window as any).open = (window as any).__realOpen; // real one for the seal probe
+    (window as any).open = (window as any).__realOpen; // the real one, for the seal probe
   });
   await window.evaluate(() => globalThis.open('https://example.com/sealed'));
   await window.waitForTimeout(500);
@@ -128,8 +128,8 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   ).toBe(winBefore);
   expect(await electronApp.evaluate(() => (global as any).__extOpens)).toEqual([]);
 
-  // Teardown (the shell ledger): ascend the visit, ascend the shell,
-  // delete the shell tile so tmux never hangs the harness close.
+  // Teardown: ascend the visit, ascend the shell, and delete the shell tile so
+  // tmux never hangs the harness close.
   const panes = (await gw.panes()).slice().sort((a: any, b: any) => a.y - b.y);
   const lower = panes[panes.length - 1];
   await window.mouse.move(lower.x + lower.w / 2, lower.y + lower.h / 2);

@@ -1,8 +1,8 @@
-// Unit tests for the sidecar lifecycle (issue #10): the settle rules that
-// decide whether the app boots, fails fast with a cause, or hangs. A fake
-// child process (EventEmitter + PassThrough stdio) drives every path under
-// `node --test` — no Go binary, no Electron, no network. The real spawn and
-// path resolution stay untouched (test seams in StartOptions).
+// Unit tests for the sidecar lifecycle: the settle rules that decide whether
+// the app boots, fails fast with a cause, or hangs. A fake child process
+// (EventEmitter plus PassThrough stdio) drives every path under `node --test`,
+// with no Go binary, no Electron, and no network. Real spawn and path
+// resolution are left alone through the test seams in StartOptions.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -36,7 +36,7 @@ function boot(child: FakeChild, timeoutMs = 200) {
 test('resolves on the serving banner with the ANNOUNCED address, not the requested one', async () => {
   const child = new FakeChild();
   const p = boot(child);
-  // The banner arrives split across chunks and on stderr — both real.
+  // The banner arrives split across chunks and on stderr; both happen.
   child.stderr.write('gridwell: serving on 127.0');
   child.stderr.write('.0.1:9999 (static=/x plugins=1 federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
