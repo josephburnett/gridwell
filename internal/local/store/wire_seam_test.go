@@ -94,8 +94,8 @@ func wireFixtures(t *testing.T) map[string]*rpc.Tile {
 		t.Fatal(err)
 	}
 
-	// A user rename: the one writeback that bumps `version`
-	// (docs/simplify-plan.md S5), so the fixture carries a non-zero version.
+	// A user rename: the one writeback that bumps `version`, so the fixture
+	// carries a non-zero version.
 	well, err = s.RenameTile(ctx, well.ID, well.Version, "a renamed well")
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func wireFixtures(t *testing.T) map[string]*rpc.Tile {
 		JPEG:  []byte("\xff\xd8\xff not really a jpeg"),
 		URL:   "https://example.com/page",
 		Title: "Example",
-		// A back-stack captured at freeze (issue #113).
+		// A back-stack captured at freeze.
 		History: `{"index":1,"entries":[{"url":"https://example.com"}]}`,
 	}); err != nil {
 		t.Fatal(err)

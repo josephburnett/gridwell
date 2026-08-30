@@ -8,8 +8,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// This file is the ONE pin on what a tile row's `version` MEANS
-// (docs/simplify-plan.md S5, owner decision 2026-08-29):
+// This file is the one pin on what a tile row's `version` means:
 //
 //	version = "the USER'S CONTENT BYTES changed".
 //
@@ -52,8 +51,8 @@ func tileVersion(t *testing.T, s *Store, tileID string) int64 {
 //
 // staleClaim is the same write with a version the world has moved past. It is
 // nil for every mutation whose request carries NO version at all — which is
-// most of them since docs/simplify-plan.md S5 reserved those wire fields, and
-// is the strongest form of the rule: for those writes a stale claim is not
+// most of them, because those wire fields are reserved. That is the
+// strongest form of the rule: for those writes a stale claim is not
 // ignored, it is unrepresentable, and the compiler is the pin. Where a
 // version is still on the signature (WriteContent's kind dispatch), claims
 // says whether that arm actually reads it.
@@ -342,7 +341,7 @@ func TestVersionRuleClaim(t *testing.T) {
 	}
 }
 
-// TestContentZoomRefusesWells (issue #82): a well's view_zoom is the grid
+// TestContentZoomRefusesWells: a well's view_zoom is the grid
 // viewport, a different fact with its own writer — SetContentZoom refuses it.
 // (The version half of this rule lives in the table above.)
 func TestContentZoomRefusesWells(t *testing.T) {

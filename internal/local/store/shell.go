@@ -8,13 +8,12 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// CreateShell creates a new shell tile. The bash session is NOT
-// started here — matching the URL tile model, the tile begins frozen
-// with an empty preview, and an explicit refresh from the client
-// kicks off the PTY. Once kicked off, the bash session lives in a
-// gridwell-private tmux session keyed by the tile id and survives
-// ascents until the tile is deleted (or the machine reboots, which
-// takes the whole tmux server with it).
+// CreateShell creates a new shell tile. The session is not started here: the
+// tile begins frozen with an empty preview, and an explicit refresh from the
+// client starts the PTY. Once started, the session lives in a
+// gridwell-private tmux session keyed by the tile id and survives ascents
+// until the tile is deleted, or the machine reboots and takes the whole tmux
+// server with it.
 func (s *Store) CreateShell(ctx context.Context, req *rpc.CreateShellRequest) (*rpc.Tile, error) {
 	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H,
 		func(tx *sql.Tx, gridID, now int64) (int64, error) {
@@ -30,17 +29,15 @@ func (s *Store) CreateShell(ctx context.Context, req *rpc.CreateShellRequest) (*
 		})
 }
 
-// SetShellPreview overwrites the frozen-state JPEG. Bytes are hash-
-// deduped through the blobs table the same way URL preview bytes are.
-// Empty JPEG (length 0) clears the preview — useful as a reset after a
-// failed refresh.
+// SetShellPreview overwrites the frozen-state JPEG. Bytes are hash-deduped
+// through the blobs table the same way url preview bytes are. An empty JPEG
+// clears the preview, which is the reset after a failed refresh.
 //
-// The frozen frame is a CAPTURE — what the terminal was observed to look
-// like when the user left — so it carries no version claim and makes no
-// version bump (docs/simplify-plan.md S5). It rides the tile event to every
-// client as last-writer-wins state, which is also the right answer for a
-// tile whose real concurrency primitive is the live PTY session (one per
-// tile at a time).
+// The frozen frame is a capture — what the terminal was observed to look like
+// when the user left — so it carries no version claim and makes no version
+// bump. It rides the tile event to every client as last-writer-wins state,
+// which is the right answer for a tile whose real concurrency primitive is the
+// live PTY session, one per tile at a time.
 func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -61,11 +58,12 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 				return err
 			}
 		} else {
-			// An empty capture (failed refresh) clears the frozen frame to
-			// NULL — unlike URL, which skips empties to preserve the last
-			// good frame. swapTileBlob can't express a NULL set, so the
-			// clear stays explicit. Drop the reference (NULL) BEFORE releasing
-			// the blob, or the FK trips when decBlobRefcount GCs it.
+			// An empty capture, from a failed refresh, clears the frozen frame
+			// to NULL. A url tile skips empties instead, to preserve the last
+			// good frame. swapTileBlob cannot express a NULL set, so the clear
+			// stays explicit. Drop the reference to NULL before releasing the
+			// blob, or the foreign key trips when decBlobRefcount collects
+			// it.
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET preview_blob_id = NULL, updated_at = ? WHERE id = ?`,
 				s.now().Unix(), tileID); err != nil {

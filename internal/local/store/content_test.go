@@ -9,9 +9,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// The content-stream suite (2026-07-26 redesign): WriteContent/ReadContent
-// are the one way content bytes move, and the version-semantics table is
-// kind-determined in the store — text bumps, pane layout never does.
+// The content-stream suite: WriteContent and ReadContent are the one way
+// content bytes move, and the version semantics are kind-determined in the
+// store — text bumps, a pane layout never does.
 
 func TestWriteContentTextBumpsAndPairsWithRead(t *testing.T) {
 	s := newTestStore(t)
@@ -74,10 +74,9 @@ func TestWriteContentRefusesKindsWithoutContent(t *testing.T) {
 	}
 }
 
-// Issue #209 (drop first, prompt on first descent): a url tile's ADDRESS is
-// its content — the tile is created empty at drop and the address arrives as
-// a versioned WriteContent at the first-descent prompt. Changing where a
-// tile points is a content edit and bumps.
+// A url tile's address is its content: the tile is created empty at drop and
+// the address arrives as a versioned WriteContent at the first-descent
+// prompt. Changing where a tile points is a content edit and bumps.
 func TestWriteContentURLSetsAddress(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

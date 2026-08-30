@@ -194,12 +194,11 @@ func storeOver(db *sql.DB) *Store {
 	return s
 }
 
-// sessionDDLV1 is the FROZEN `session` table as every pre-v10 binary
-// created it: one Chromium session per DB, moved by GetSession/PutSession
-// (both RPCs retired 2026-07-26). Production stopped creating the table at
-// schema v10 and the v10 migration DROPS it — but a genuine old file HAS
-// it, so the harness must still build one that does, or the drop would be
-// tested against a table that was never there.
+// sessionDDLV1 is the frozen `session` table as every pre-v10 binary created
+// it: one Chromium session per DB. Production stopped creating the table at
+// schema v10 and the v10 migration drops it, but a genuine old file has it,
+// so the harness must still build one that does, or the drop would be tested
+// against a table that was never there.
 const sessionDDLV1 = `
 CREATE TABLE IF NOT EXISTS session (
     id   INTEGER PRIMARY KEY CHECK (id = 1),
@@ -226,11 +225,10 @@ func buildDBAtV1(t *testing.T, path string) (*sql.DB, string) {
 			t.Fatalf("apply v1 ddl: %v", err)
 		}
 	}
-	// The v1 root is seeded with RAW inserts against the v1 columns, not
-	// through bootstrapRoot: the production bootstrap writes the CURRENT
-	// grids shape, which no longer carries the (NOT NULL) v1 object_id.
-	// A genuine old file is built from the frozen text, not from today's
-	// writer.
+	// The v1 root is seeded with raw inserts against the v1 columns, not
+	// through bootstrapRoot: the production bootstrap writes the current
+	// grids shape, which does not carry the NOT NULL v1 object_id. A genuine
+	// old file is built from the frozen text, not from today's writer.
 	res, err := db.ExecContext(ctx,
 		`INSERT INTO grids (object_id, created_at, updated_at) VALUES ('v1-root', 100, 100)`)
 	if err != nil {
@@ -453,13 +451,12 @@ type migrationFixture struct {
 
 var migrationFixtures []migrationFixture
 
-// Fixture handle: rows are found again by alt_text, not by object_id.
-// object_id was the natural stable handle until schema v10 retired it —
-// and a REBUILD migration renumbers nothing but does drop columns, so the
-// handle must be a column that survives every step of the chain.
+// Fixture handle: rows are found again by alt_text. A rebuild migration
+// renumbers nothing but does drop columns, so the handle must be a column
+// that survives every step of the chain.
 func init() {
-	// v2: alt_user (issue #61). Seed a v1 tile with a name; verify the column
-	// arrives defaulted to 0 and the old row (and its name) survived.
+	// v2: alt_user. Seed a v1 tile with a name; verify the column arrives
+	// defaulted to 0 and the old row, with its name, survived.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 2,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -484,8 +481,8 @@ func init() {
 			}
 		},
 	})
-	// v3: content_zoom (issue #82). Seed a v2 tile; verify the column arrives
-	// defaulted to 0 and the row survived.
+	// v3: content_zoom. Seed a v2 tile; verify the column arrives defaulted
+	// to 0 and the row survived.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 3,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -506,8 +503,8 @@ func init() {
 			}
 		},
 	})
-	// v4: url_history (issue #113). Seed a v3 url tile; verify the column
-	// arrives NULL and the row survived.
+	// v4: url_history. Seed a v3 url tile; verify the column arrives NULL and
+	// the row survived.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 4,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -654,7 +651,7 @@ func init() {
 		},
 	})
 
-	// v7: url_frozen — the user's standing freeze (issue #237).
+	// v7: url_frozen, the user's standing freeze.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 7,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -678,12 +675,11 @@ func init() {
 		},
 	})
 
-	// v8 was the configure_plugin_id rebuild (the unconfigured plugin well,
-	// issue #251). The column is gone again at v10, and a rebuild always
-	// materializes the CURRENT tilesTableDDL — so what v8 still pins is the
-	// REBUILD's copy list: the v5-era list would silently reset every
-	// post-v5 column, so the seed plants a LINK row and a FROZEN url (the
-	// two post-v5 facts) and the verify proves both survive.
+	// v8 was the configure_plugin_id rebuild. The column is gone again at
+	// v10, and a rebuild always materializes the current tilesTableDDL, so
+	// what v8 pins is the rebuild's copy list: a v5-era list would silently
+	// reset every post-v5 column. The seed plants a link row and a frozen
+	// url, the two post-v5 facts, and the verify proves both survive.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 8,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -758,15 +754,14 @@ func init() {
 		},
 	})
 
-	// v10: DEAD STORAGE RETIRED (the owner decision in migrations.go). The
-	// seed plants one of each thing that goes and one of each thing that
-	// must NOT: a session row, an ordinary well and its child grid, a url
+	// v10 retires dead storage; the chain entry in migrations.go lists what.
+	// The seed plants one of each thing that goes and one of each thing that
+	// must not: a session row, an ordinary well and its child grid, a url
 	// tile carrying framing facts, and a deleted high-id tile for the
-	// rebuild's id-reuse trap. The verify proves the table and both
-	// columns are gone, every surviving row is still there with its facts,
-	// the ids of deleted tiles stay dead, and the tightened well CHECK
-	// holds. (The stale-plugin-well arm has its own test — see the note in
-	// the verify.)
+	// rebuild's id-reuse trap. The verify proves the table and both columns
+	// are gone, every surviving row is still there with its facts, the ids of
+	// deleted tiles stay dead, and the tightened well CHECK holds. The
+	// stale-plugin-well arm has its own test.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 10,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -1000,22 +995,20 @@ func init() {
 		},
 	})
 
-	// v12: the `listings` table retires (the owner decision in
-	// migrations.go). It stood alone — no CHECK, no AUTOINCREMENT seed,
-	// nothing referencing it — so the step is a plain DROP and the two
-	// record tables must come through completely untouched. The seed
+	// v12 retires the `listings` table. It stood alone — no CHECK, no
+	// AUTOINCREMENT seed, nothing referencing it — so the step is a plain
+	// drop and the two record tables must come through untouched. The seed
 	// plants a listing row on a real plugin context plus the durable row
-	// beside it; the verify proves the table is gone AND that the row the
-	// user can actually see (its id, its placement, its label, its
-	// tombstone) survived, because THAT is the memory a dark source now
-	// reads from.
+	// beside it; the verify proves the table is gone and that the row the
+	// user can see — its id, its placement, its label, its tombstone —
+	// survived, because that is the memory a dark source reads from.
 	//
-	// This fixture IS the genuine-old-file test the drop rule asks for
-	// (internal/local/store/CLAUDE.md). The usual problem — a chain-built
-	// file at N-1 already has the current shape, so it cannot hold what N
-	// drops — does not apply to a table created by a MIGRATION LITERAL:
-	// v9 spells `listings` itself, so a chain-built v11 file really has
-	// it, and the seed below really plants the retired shape.
+	// This fixture is the genuine-old-file test the drop rule in
+	// internal/local/store/CLAUDE.md asks for. The usual problem, that a
+	// chain-built file at N-1 already has the current shape and so cannot
+	// hold what N drops, does not apply to a table created by a migration
+	// literal: v9 spells `listings` itself, so a chain-built v11 file really
+	// has it and the seed below really plants the retired shape.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 12,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {

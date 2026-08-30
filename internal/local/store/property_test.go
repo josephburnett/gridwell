@@ -52,9 +52,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	// liveVersion reads the current version of a tile id, returning 0 and
 	// reporting not-found if the row is gone.
 	// stillLive reports whether a tile the harness remembers is still in the
-	// store — a cascading delete may have taken it. (It used to also hand
-	// back the version each op claimed; nothing claims one now except a
-	// content write, so only the liveness half survives.)
+	// store; a cascading delete may have taken it.
 	stillLive := func(id string) bool {
 		idInt, _ := parseID(id)
 		_, err := s.loadTile(ctx, s.db, idInt)
@@ -221,10 +219,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 		case 5:
 			// Freeze a preview onto a shell tile so preview_blob_id
-			// refcounting gets exercised when that tile is later cloned,
-			// forked, or deleted. A tiny fixed byte alphabet makes previews
-			// dedupe across tiles, so a shared preview blob reaches
-			// refcount > 1 — the case fork/clone used to mishandle.
+			// refcounting gets exercised when that tile is later cloned or
+			// deleted. A tiny fixed byte alphabet makes previews dedupe
+			// across tiles, so a shared preview blob reaches refcount > 1.
 			if len(tiles) == 0 {
 				continue
 			}

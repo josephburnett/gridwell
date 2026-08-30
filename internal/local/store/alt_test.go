@@ -7,10 +7,10 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Issue #61: a USER-set name (the rename gesture) owns alt_text — the
-// automatic captures (a url's page title on freeze, a shell's foreground
-// command on detach) must never overwrite it. The latch is the alt_user
-// column; SetTileAlt's user flag is its only writer.
+// A user-set name, from the rename gesture, owns alt_text: the automatic
+// captures — a url's page title on freeze, a shell's foreground command on
+// detach — must never overwrite it. The latch is the alt_user column, and
+// SetTileAlt's user flag is its only writer.
 
 func TestUserRenameWinsOverCaptures(t *testing.T) {
 	s := newTestStore(t)
@@ -71,7 +71,7 @@ func TestUserRenameWinsOverCaptures(t *testing.T) {
 }
 
 // TestURLTitleCaptureStillWorksUnnamed: without a user rename, the title
-// capture keeps stamping alt (the pre-#61 behavior stays for unnamed tiles).
+// capture keeps stamping alt, which is the behavior for an unnamed tile.
 func TestURLTitleCaptureStillWorksUnnamed(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

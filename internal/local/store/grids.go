@@ -9,10 +9,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// GetGrid returns the grid plus all of its tiles. It is a pure read: the
-// local store holds only Gridwell-owned grids now, so there is no host-state
-// reconciliation here — that lives in the fs/proc plugins, which the server
-// routes to directly.
+// GetGrid returns the grid plus all of its tiles. It is a pure read: home
+// holds only Gridwell-owned grids, so there is no host-state reconciliation
+// here. That lives in the plugins, which the server routes to.
 func (s *Store) GetGrid(ctx context.Context, gridID string) (*rpc.GetGridResponse, error) {
 	id, err := parseID(gridID)
 	if err != nil {
@@ -29,18 +28,17 @@ func (s *Store) GetGrid(ctx context.Context, gridID string) (*rpc.GetGridRespons
 	return &rpc.GetGridResponse{Grid: *g, Tiles: tiles}, nil
 }
 
-// gridReader is the interface needed to read grid/tile rows. Both *sql.DB and
-// *sql.Tx satisfy it. It is also used by helpers that only need QueryRowContext
-// (e.g. rootGridID, readFloatKey) since *sql.DB and *sql.Tx satisfy the
-// superset anyway.
+// gridReader is the interface needed to read grid and tile rows. Both *sql.DB
+// and *sql.Tx satisfy it, so helpers that need only QueryRowContext take it
+// too.
 type gridReader interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-// gridColumns is the SELECT list for a grid row — the grids columns that are
-// on the wire. Everything else on rpc.Grid is derived by the serving node
-// (writable, node_ns, menu_entries, …) and never read from a row.
+// gridColumns is the SELECT list for a grid row: the grids columns that are on
+// the wire. Everything else on rpc.Grid — writable, node_ns, menu_entries —
+// is derived by the serving node and never read from a row.
 var gridColumns = wireColumns(gridsColumns)
 
 func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.Grid, error) {
@@ -57,9 +55,9 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 	return &g, nil
 }
 
-// tileColumns is the SELECT list for reading a tile row and scanTile reads
-// it back — both derived from the ONE column descriptor (columns.go), in the
-// same order, so the list and the scan cannot fall out of step.
+// tileColumns is the SELECT list for reading a tile row, and scanTile reads it
+// back. Both derive from the one column descriptor in columns.go, in the same
+// order, so the list and the scan cannot fall out of step.
 var tileColumns = wireColumns(tilesColumns)
 
 // scanTile scans a single row into an rpc.Tile.
@@ -111,10 +109,9 @@ func (s *Store) GetTile(ctx context.Context, tileID string) (*rpc.Tile, error) {
 	return s.loadTile(ctx, s.db, id)
 }
 
-// GetTilePreview returns the JPEG bytes for a tile's current preview —
-// URL tiles store the last-frozen page render; shell tiles store the
-// last-frozen terminal frame. Returns nil for tiles that don't have a
-// preview yet (fresh palette drop, never refreshed).
+// GetTilePreview returns the JPEG bytes for a tile's current preview: a url
+// tile stores the last-frozen page render, a shell tile the last-frozen
+// terminal frame. Returns nil for a tile that has no preview yet.
 func (s *Store) GetTilePreview(ctx context.Context, tileID string) ([]byte, error) {
 	id, err := parseID(tileID)
 	if err != nil {
@@ -134,11 +131,11 @@ func (s *Store) GetTilePreview(ctx context.Context, tileID string) ([]byte, erro
 	return s.GetBlob(ctx, previewBID.Int64)
 }
 
-// ShellTileExists reports whether a shell tile with the given row id is
-// still present. The DeleteTile handler uses it to decide whether the tmux
-// session keyed to that id is now orphaned: the session must die only when
-// this exact id is truly gone. (A cloned shell is an independent copy with
-// its own id and no session, so deleting it never affects the original.)
+// ShellTileExists reports whether a shell tile with the given row id is still
+// present. The DeleteTile handler uses it to decide whether the tmux session
+// keyed to that id is orphaned: the session must die only when this exact id
+// is gone. A cloned shell is an independent copy with its own id and no
+// session, so deleting it never affects the original.
 func (s *Store) ShellTileExists(ctx context.Context, id string) (bool, error) {
 	idInt, err := parseID(id)
 	if err != nil {
@@ -157,10 +154,9 @@ func bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) error {
 	return err
 }
 
-// bumpGridVersion increments a grid row's version by 1 and stamps
-// updated_at. A grid's version moves on structural change (tile added /
-// removed / moved, source reconcile), so this is the right place to record
-// "last touched" for the planned recency feature.
+// bumpGridVersion increments a grid row's version by 1 and stamps updated_at.
+// A grid's version moves on a structural change: a tile added, removed, or
+// moved, or a source reconcile.
 func (s *Store) bumpGridVersion(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	_, err := tx.ExecContext(ctx,
 		`UPDATE grids SET version = version + 1, updated_at = ? WHERE id = ?`,

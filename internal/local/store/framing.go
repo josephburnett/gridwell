@@ -1,25 +1,24 @@
 package store
 
-// Framing — "how this grid looked when I left it through this doorway" —
-// is ONE fact with ONE shape everywhere in this store: a float CENTER in
-// the grid's own coordinates plus a pane-size-independent zoom (the
-// intrinsic ratio live/overtake, so a window resize never moves a saved
-// view). It lives on the row that owns the doorway:
+// Framing — "how this grid looked when I left it through this doorway" — is
+// one fact with one shape everywhere in this store: a float center in the
+// grid's own coordinates plus a pane-size-independent zoom, the intrinsic
+// ratio live over overtake, so a window resize never moves a saved view. It
+// lives on the row that owns the doorway:
 //
-//   - a tile row (view_cx, view_cy, view_zoom) for a grid entered through
-//     a well — interior, exit, or link; each doorway keeps its own;
-//   - a grid row (root_cx, root_cy, root_zoom) for a ROOT grid, which has
-//     no doorway. Home's root is that row at ns = '' (schema v11), so
-//     there is no home-vs-plugin second shape.
+//   - a tile row (view_cx, view_cy, view_zoom) for a grid entered through a
+//     well, interior or exit or link, since each doorway keeps its own;
+//   - a grid row (root_cx, root_cy, root_zoom) for a root grid, which has no
+//     doorway. Home's root is that row at ns = '', so there is no second
+//     shape for home.
 //
-// view_zoom / root_zoom == 0 (or NULL) is the ONE "never visited"
-// convention: cx/cy carry no meaning then and the reader falls back to
-// the preview calibration.
+// A view_zoom or root_zoom of 0, or NULL, is the one "never visited"
+// convention: cx and cy carry no meaning then and the reader falls back to the
+// preview calibration.
 //
-// This file holds the single SQL writer. Everything that persists framing
-// — home's versioned door (Store.SetFraming), a plugin's memory
-// (Namespace.SetFraming), a migration — goes through it, so there is one
-// place where the shape is written and none where it can drift.
+// This file holds the single SQL writer. Everything that persists framing —
+// Store.SetFraming, Namespace.SetFraming, a migration — goes through it, so
+// there is one place the shape is written and none where it can drift.
 
 import (
 	"context"
@@ -28,18 +27,18 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// execer is the write half of a *sql.DB / *sql.Tx.
+// execer is the write half of a *sql.DB or *sql.Tx.
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// updateFraming writes f onto the one row that owns it and reports how
-// many rows it touched (0 = no such live row). Exactly one of tileID and
-// gridID is non-zero: tileID names a doorway tile in namespace ns (a
-// tombstoned row refuses the write — a retired key stays retired), gridID
-// a root grid in that namespace. now stamps the tile row's updated_at;
-// a grid row has no framing timestamp (framing never bumps a version, and
-// updated_at on grids follows content).
+// updateFraming writes f onto the one row that owns it and reports how many
+// rows it touched; 0 means no such live row. Exactly one of tileID and gridID
+// is non-zero: tileID names a doorway tile in namespace ns, where a tombstoned
+// row refuses the write because a retired key stays retired, and gridID names
+// a root grid in that namespace. now stamps the tile row's updated_at; a grid
+// row has no framing timestamp, since framing never bumps a version and
+// updated_at on grids follows content.
 func updateFraming(ctx context.Context, x execer, ns string, tileID, gridID int64, f rpc.Framing, now int64) (int64, error) {
 	var (
 		res sql.Result

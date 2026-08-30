@@ -128,11 +128,10 @@ func TestContentMutationOnLeafLinkRejected(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// Issue #239: text framing on a LINK row persists x/y/w/h but never
-// text_mode — the v6 CHECK requires text_mode NULL on links (framing is
-// per-link local; the mode is not). Before the fix the unconditional
-// text_mode write failed the whole ascent framing save with a CHECK
-// violation.
+// Text framing on a link row persists x, y, w, and h but never text_mode: the
+// CHECK requires text_mode NULL on a link, because framing is per-link local
+// and the mode is not. An unconditional text_mode write fails the whole
+// ascent framing save with a CHECK violation.
 func TestSetTextViewOnLinkKeepsModeNull(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)

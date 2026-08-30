@@ -81,7 +81,7 @@ func TestScratchGridHoldsEphemeralURL(t *testing.T) {
 	}
 }
 
-// TestScratchTileMutationsNeedNoPath (issue #85): a scratch-grid tile is
+// TestScratchTileMutationsNeedNoPath: a scratch-grid tile is
 // off-grid — no descent path can reach it, so checkPathLeaf must treat the
 // scratch grid as its own leaf. Before this, EVERY mutation on an ephemeral
 // tile failed "descent path is invalid" (the ascent freeze surfaced it on the
@@ -110,7 +110,7 @@ func TestScratchTileMutationsNeedNoPath(t *testing.T) {
 	}
 }
 
-// TestCreateScratchShell (issue #85): the ephemeral-shell twin of
+// TestCreateScratchShell: the ephemeral-shell twin of
 // CreateScratchURL — a shell tile created off-grid in the scratch grid,
 // deletable with no path.
 func TestCreateScratchShell(t *testing.T) {

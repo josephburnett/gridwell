@@ -8,26 +8,20 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A tiles or grids column is described ONCE — here. Everything that used to
-// spell a column list out again is derived from this table: the CREATE TABLE
-// text (schema.go), the SELECT list and the Scan argument order (grids.go),
-// the clone INSERT (clone.go), and every rebuild migration's copy list
-// (migrations.go). Adding a column is one entry here plus a migration.
+// A tiles or grids column is described once, here. Everything that would
+// otherwise spell a column list out again is derived from this table: the
+// CREATE TABLE text (schema.go), the SELECT list and the Scan argument order
+// (grids.go), the clone INSERT (clone.go), and every rebuild migration's copy
+// list (migrations.go). Adding a column is one entry here plus a migration. A
+// list that cannot be spelled twice cannot be spelled inconsistently.
 //
-// That is the fix for a class, not an instance. The lists were five separate
-// spellings of one fact, held together by two drift lints — and the class
-// still bit: insertTileCopy's hand-listed INSERT had silently omitted
-// content_zoom, url_history and alt_user, so clones lost a user's content
-// zoom, their back-stack, and the "this name is the user's" latch. A list
-// that cannot be spelled twice cannot be spelled inconsistently.
-//
-// (The per-kind CREATE statements — insert a well, a url, an external's row —
-// are NOT in this class. Each names only the columns that kind sets and
+// The per-kind CREATE statements — insert a well, a url, a plugin-memory row
+// — are not in this class. Each names only the columns that kind sets and
 // leaves the rest at their DDL defaults, so a new column does not touch
-// them.)
+// them.
 type column[T any] struct {
 	// name is the SQL column name. For a column that is on the wire it is
-	// also the proto field name — TestDescriptorMatchesProto pins that.
+	// also the proto field name; TestDescriptorMatchesProto pins that.
 	name string
 	// ddl is the SQL that follows the name in CREATE TABLE: type, NOT NULL,
 	// DEFAULT, REFERENCES, CHECK.
@@ -36,17 +30,17 @@ type column[T any] struct {
 	// column's documentation, so it lives with the column and not in a
 	// separate block of prose that can go stale.
 	comment string
-	// since is the schema version whose DATA this column carries, which is
+	// since is the schema version whose data this column carries, which is
 	// what a rebuild migration needs to know: a rebuild copies every column
-	// the version it READS already had. Usually the version that added the
-	// column; for view_cx/view_cy it is 1, because the data existed at v1 as
-	// view_x/view_y and rebuildSelect converts it in flight.
+	// the version it reads already had. It is usually the version that added
+	// the column; for view_cx and view_cy it is 1, because the data existed
+	// at v1 as view_x and view_y and rebuildSelect converts it in flight.
 	since int
-	// bind, when non-nil, makes this column part of the RECORD on the wire:
+	// bind, when non-nil, makes this column part of the record on the wire:
 	// it returns the destination a row scan reads this column into. nil is
-	// storage-only — a fact the store keeps for itself.
+	// storage-only, a fact the store keeps for itself.
 	bind func(*T) any
-	// noCopy, when non-empty, is the reason a clone deliberately does NOT
+	// noCopy, when non-empty, is the reason a clone deliberately does not
 	// copy this column. Every column is one or the other, and
 	// TestEveryTileColumnIsCopiedOrExcused holds that line.
 	noCopy string
@@ -80,14 +74,13 @@ keyed by tile id), showing a deleted tile's frozen frame on a new one.`,
 	{name: "h", ddl: "INTEGER NOT NULL DEFAULT 1 CHECK (h > 0)", since: 1, bind: func(t *rpc.Tile) any { return &t.H }},
 	{
 		name: "view_cx", ddl: "REAL NOT NULL DEFAULT 0", since: 1,
-		comment: `well: the framing this doorway was left at — a float CENTER in the
+		comment: `well: the framing this doorway was left at — a float center in the
 child grid's coordinates plus the pane-size-independent intrinsic
-zoom (live / overtake). One shape, shared with a root grid's
+zoom (live over overtake). One shape, shared with a root grid's
 root_cx/cy/zoom. view_zoom = 0 is the one "never visited"
 convention: cx/cy carry no meaning then and the reader falls back
-to the preview calibration. (view_x/view_y — an integer window
-ORIGIN — retired at v11, docs/simplify-plan.md S4; the data is the
-same data, which is why since is 1.)`,
+to the preview calibration. since is 1 because the data existed at
+v1 as the integer origin view_x/view_y, which v11 converted.`,
 		bind: func(t *rpc.Tile) any { return &t.ViewCx },
 	},
 	{name: "view_cy", ddl: "REAL NOT NULL DEFAULT 0", since: 1, bind: func(t *rpc.Tile) any { return &t.ViewCy }},
@@ -125,63 +118,63 @@ is — clones that haven't navigated independently share one row.`,
 	},
 	{
 		name: "alt_text", ddl: "TEXT NOT NULL DEFAULT ''", since: 1,
-		comment: `Canonical display label. Stamped at insert time. The client renders
-alt_text verbatim (no derivation). Empty string until something stamps
-it (e.g. a URL tile before its page title is captured).`,
+		comment: `The canonical display label, stamped at insert time. The client
+renders alt_text verbatim, with no derivation. It is the empty string
+until something stamps it, as on a url tile before its page title is
+captured.`,
 		bind: func(t *rpc.Tile) any { return &t.AltText },
 	},
 	{
 		name: "alt_user", ddl: "INTEGER NOT NULL DEFAULT 0", since: 2,
-		comment: `alt_user=1 marks alt_text as USER-OWNED (the rename gesture, issue
-#61): automatic captures (a url's page title on freeze, a shell's
-foreground command on detach) must not overwrite a name the user set.
+		comment: `alt_user=1 marks alt_text as user-owned, set by the rename gesture:
+automatic captures (a url's page title on freeze, a shell's foreground
+command on detach) must not overwrite a name the user set.
 Storage-only — the latch is the store's rule, never a client's to set.
-Added post-v1 (schema v2, additive).`,
+Added at schema v2, additive.`,
 	},
 	{
 		name: "content_zoom", ddl: "REAL NOT NULL DEFAULT 0", since: 3,
-		comment: `content_zoom scales the content rendered INSIDE a text/shell/url tile
-(the text font, the terminal font, the page zoom — issue #82).
-Framing, never bumps version; 0 = unset (renders at 1.0). Added
-post-v1 (schema v3, additive).`,
+		comment: `content_zoom scales the content rendered inside a text, shell, or url
+tile: the text font, the terminal font, the page zoom. It is framing
+and never bumps version; 0 is unset and renders at 1.0. Added at
+schema v3, additive.`,
 		bind: func(t *rpc.Tile) any { return &t.ContentZoom },
 	},
 	{
 		name: "url_history", ddl: "TEXT", since: 4,
-		comment: `url_history is a url tile's persisted navigation back-stack (JSON
-{index, entries:[{url,title}]}, capped) captured at freeze so a
-revived tile can still go "back" (issue #113). Content, rides the
-versioned freeze writeback. Added post-v1 (schema v4, additive).`,
+		comment: `url_history is a url tile's persisted navigation back-stack — JSON
+{index, entries:[{url,title}]}, capped — captured at freeze so a
+revived tile can still go back. Content; it rides the freeze
+writeback. Added at schema v4, additive.`,
 		bind: func(t *rpc.Tile) any { return nullString{&t.URLHistory} },
 	},
 	{
 		name: "link_target_id", ddl: "TEXT", since: 6,
-		comment: `link_target_id makes a LEAF tile (text/url/shell/pane) a LINK: a
+		comment: `link_target_id makes a leaf tile (text, url, shell, pane) a link: a
 qualified "<uuid>/<tile-id>" reference to the tile that owns the
-content. NULL = an ordinary owned tile. A link row stores no content
-of its own (the CHECK's link branch enforces it) — readers resolve
-bytes/preview/session through the target id. The well kind's link
-variant remains a qualified child_grid_id (the exit well); this
-column is never set on wells. Added post-v1 (schema v6, rebuild —
-the CHECK gained the link branch).`,
+content. NULL is an ordinary owned tile. A link row stores no content
+of its own, which the CHECK's link branch enforces, and readers
+resolve bytes, preview, and session through the target id. The well
+kind's link variant is a qualified child_grid_id, the exit well, so
+this column is never set on wells. Added at schema v6, by rebuild:
+the CHECK gained the link branch.`,
 		bind: func(t *rpc.Tile) any { return nullString{&t.LinkTargetID} },
 	},
 	{
 		name: "url_frozen", ddl: "INTEGER NOT NULL DEFAULT 0", since: 7,
-		comment: `url_frozen=1 is the USER'S standing freeze on a url tile (issue
-#237): descending does not auto-go-live until the reconnect gesture
-clears it. Framing, never bumps version. Added post-v1 (schema v7,
-additive).`,
+		comment: `url_frozen=1 is the user's standing freeze on a url tile: descending
+does not auto-go-live until the reconnect gesture clears it. Framing;
+it never bumps version. Added at schema v7, additive.`,
 		bind: func(t *rpc.Tile) any { return intBool{&t.URLFrozen} },
 	},
 	{
 		name: "ns", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
-		comment: `ns/key/tombstoned: an EXTERNAL's row (docs/one-node.md §2.6). ns is
-the owning plugin id ('' = home); key is the plugin's stable key
-for the entry; tombstoned=1 retires the key forever (the id is
-never reused; a recreated key mints fresh). Home rows carry the
-defaults. Added post-v1 (schema v9, additive).`,
-		noCopy: "a clone is home's (ns ''): externals' rows are never cloned, they are re-listed",
+		comment: `ns/key/tombstoned describe a plugin-memory row. ns is the owning
+plugin id ('' is home); key is the plugin's stable key for the entry;
+tombstoned=1 retires the key forever, so the id is never reused and a
+recreated key mints fresh. Home rows carry the defaults. Added at
+schema v9, additive.`,
+		noCopy: "a clone lands in home (ns ''): plugin rows are re-listed, never cloned",
 	},
 	{
 		name: "key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
@@ -215,20 +208,20 @@ never shares a grid), so only blobs are reference-counted.`,
 	{name: "updated_at", ddl: "INTEGER NOT NULL DEFAULT 0", since: 1},
 	{
 		name: "ns", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
-		comment: `ns names the grid's owner: '' = home; a plugin id = that plugin's
-memory (docs/one-node.md §2.6 — one table for every namespace).
-context_key is the plugin's stable key for the context this grid
-projects ('' for home grids). Added post-v1 (schema v9, additive).`,
+		comment: `ns names the grid's owner: '' is home, a plugin id is that plugin's
+memory. One table serves every namespace. context_key is the plugin's
+stable key for the context this grid projects, and is '' for home
+grids. Added at schema v9, additive.`,
 	},
 	{name: "context_key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9},
 	{
 		name: "root_cx", ddl: "REAL", since: 11,
-		comment: `root_cx/cy/zoom: the framing of a ROOT grid — one with no doorway
+		comment: `root_cx/cy/zoom is the framing of a root grid — one with no doorway
 tile to carry it — in exactly the shape a doorway's view_cx/cy/zoom
-uses. NULL or zero zoom = never visited. Home's root is this row
-with ns = '' (schema v11); a plugin context's is its own. It reaches
-the client through the Info handshake's root_view_* fields, never as
-a Grid field, which is why it is storage-only here.`,
+uses. A NULL or zero zoom means never visited. Home's root is this
+row with ns = ''; a plugin context's is its own. It reaches the client
+through the Info handshake's root_view_* fields, never as a Grid
+field, which is why it is storage-only here.`,
 	},
 	{name: "root_cy", ddl: "REAL", since: 11},
 	{name: "root_zoom", ddl: "REAL", since: 11},
@@ -270,7 +263,7 @@ func createTable[T any](name string, cols []column[T], trailing string) string {
 
 // wireColumns is the SELECT list for reading a record: every column that is
 // part of the row on the wire, in DDL order. scanDests produces destinations
-// in the SAME order from the same table, so the two cannot disagree.
+// in the same order from the same table, so the two cannot disagree.
 func wireColumns[T any](cols []column[T]) string {
 	var names []string
 	for _, c := range cols {
@@ -307,9 +300,9 @@ func copyColumns() []string {
 
 // copyBinding renders the clone INSERT's column list and its arguments from
 // vals, in descriptor order. It refuses a vals map that is missing a copied
-// column or names one that is not copied — so "add a column, forget the clone
-// path" is a named error at the one place the copy happens, not a silently
-// incomplete copy.
+// column or names one that is not copied, so adding a column and forgetting
+// the clone path is a named error at the one place the copy happens rather
+// than a silently incomplete copy.
 func copyBinding(vals map[string]any) (cols string, args []any, err error) {
 	names := copyColumns()
 	args = make([]any, 0, len(names))
@@ -336,10 +329,10 @@ func copyBinding(vals map[string]any) (cols string, args []any, err error) {
 }
 
 // rebuildColumns is a rebuild migration's copy list: every tiles column whose
-// data the schema version it READS already had. A rebuild always materializes
-// the CURRENT tilesTableDDL, so columns added later simply take their DDL
-// defaults, and columns since dropped are not carried at all — the
-// convergence contract, derived instead of retyped per migration.
+// data the schema version it reads already had. A rebuild always materializes
+// the current tilesTableDDL, so columns added later take their DDL defaults
+// and columns since dropped are not carried at all. That is the convergence
+// contract, derived rather than retyped per migration.
 func rebuildColumns(reads int) string {
 	var names []string
 	for _, c := range tilesColumns {
@@ -350,11 +343,12 @@ func rebuildColumns(reads int) string {
 	return strings.Join(names, ", ")
 }
 
-// nullString / nullInt64 / intBool are the scan adapters for columns whose
+// nullString, nullInt64, and intBool are the scan adapters for columns whose
 // SQL shape is not the Go shape: a NULL reads as the Go zero value, and
-// SQLite's 0/1 integer reads as a bool. One adapter per shape, named on the
-// descriptor entry, so a nullable column cannot be scanned as non-nullable
-// (which fails only on the first NULL row in production).
+// SQLite's 0 or 1 integer reads as a bool. One adapter per shape, named on
+// the descriptor entry, so a nullable column cannot be scanned as
+// non-nullable, which would fail only on the first NULL row in
+// production.
 type nullString struct{ p *string }
 
 func (n nullString) Scan(v any) error {

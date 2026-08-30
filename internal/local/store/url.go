@@ -8,23 +8,20 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// SetURLState freezes a live URL tile in one mutation: it writes the
-// preview JPEG (with blob refcounting), the address the page ended on, the
-// page title, and the navigation history, then publishes a single
-// tile_changed event. Empty jpeg/url/title arguments are skipped so a partial
-// capture (e.g. a failed final frame) never clobbers good state. This is the
-// RPC the Electron shell calls on ascend, replacing the old server-side rod
-// freeze.
+// SetURLState freezes a live url tile in one mutation: it writes the preview
+// JPEG, with blob refcounting, the address the page ended on, the page title,
+// and the navigation history, then publishes a single tile_changed event.
+// Empty jpeg, url, and title arguments are skipped so a partial capture never
+// clobbers good state. The desktop shell calls it on ascent.
 //
-// Every field here is a CAPTURE — what the live surface was observed to be,
-// not something the user typed — so it carries NO version claim and makes no
-// version bump (docs/simplify-plan.md S5). Last-writer-wins: the capture
-// rides the tile event to every client. (A url the user TYPES is a different
-// verb — WriteContent's url arm — and that one claims and bumps.)
+// Every field here is a capture — what the live surface was observed to be,
+// not something the user typed — so it carries no version claim and makes no
+// version bump. It is last-writer-wins, and the capture rides the tile event
+// to every client. A url the user types is a different verb, WriteContent's
+// url arm, and that one claims and bumps.
 //
-// Freezing is an in-place edit of this URL tile: copy-on-clone keeps tiles
-// unshared, so the frozen frame and address write straight to the tile's own
-// row.
+// Freezing is an in-place edit of this url tile: tiles are unshared, so the
+// frozen frame and address write straight to the tile's own row.
 func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -36,8 +33,8 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 			return err
 		}
 
-		// Empty JPEG is skipped (a partial capture must not clobber a good
-		// frozen frame); the blob-swap kernel handles dedup + refcounting.
+		// An empty JPEG is skipped, so a partial capture cannot clobber a good
+		// frozen frame. The blob swap handles dedup and refcounting.
 		if len(req.JPEG) > 0 {
 			if _, _, err := s.swapTileBlob(ctx, tx, tileID, "preview_blob_id", req.JPEG, mediaJPEG); err != nil {
 				return err
@@ -51,8 +48,8 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 			}
 		}
 		if req.Title != "" {
-			// The page-title capture defers to a user-set name (alt_user,
-			// issue #61) — renaming a url tile must survive every freeze.
+			// The page-title capture defers to a user-set name, the alt_user
+			// latch, so renaming a url tile survives every freeze.
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ? AND alt_user = 0`,
 				req.Title, s.now().Unix(), tileID); err != nil {
@@ -60,9 +57,9 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 			}
 		}
 		if req.History != "" {
-			// The navigation back-stack captured at freeze (issue #113). Empty
-			// is skipped like the JPEG — a partial capture must not clobber a
-			// good stored history.
+			// The navigation back-stack captured at freeze. Empty is skipped
+			// like the JPEG, so a partial capture cannot clobber a good
+			// stored history.
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET url_history = ?, updated_at = ? WHERE id = ?`,
 				req.History, s.now().Unix(), tileID); err != nil {
@@ -80,13 +77,12 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 	return out, nil
 }
 
-// SetTileAlt updates a tile's stored alt-text. Two writers, one rule (issue
-// #61): user=true is the RENAME gesture — it sets the name and latches
-// alt_user so it is owned by the user from then on; user=false is an
-// automatic capture (the shell detach path baking in the tmux foreground
-// command) — it silently no-ops once the user owns the name. The versioned
-// user rename on the wire is RenameTile (content.go), which shares setAltTx
-// so the latch arbitration has exactly one implementation.
+// SetTileAlt updates a tile's stored alt-text. Two writers, one rule:
+// user=true is the rename gesture, which sets the name and latches alt_user so
+// the name is the user's from then on; user=false is an automatic capture, as
+// on the shell detach path, and it no-ops once the user owns the name. The
+// versioned user rename on the wire is RenameTile, in content.go, which shares
+// setAltTx so the latch arbitration has exactly one implementation.
 func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string, user bool) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		if _, err := s.loadTile(ctx, tx, tileID); err != nil {
@@ -96,15 +92,15 @@ func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string, user b
 	})
 }
 
-// setAltTx is the ONE alt-text write: the alt_user latch rule lives here and
+// setAltTx is the one alt-text write: the alt_user latch rule lives here and
 // nowhere else. user=true sets the name and latches ownership; user=false is
-// an automatic capture that no-ops (no write, no event) once the user owns
-// the name.
+// an automatic capture that no-ops, with no write and no event, once the user
+// owns the name.
 //
-// The version follows the same fork (docs/simplify-plan.md S5): the USER's
-// rename is a content edit and bumps; the automatic capture is an observation
-// and rides the tile event unversioned. Before, a shell's foreground command
-// changing bumped the row and cost whichever client was mid-edit its claim.
+// The version follows the same fork: the user's rename is a content edit and
+// bumps, while the automatic capture is an observation and rides the tile
+// event unversioned. A bumping capture would cost whichever client was
+// mid-edit its claim.
 func (s *Store) setAltTx(ctx context.Context, tx *sql.Tx, tileID int64, alt string, user bool, events *[]rpc.Event) error {
 	q := `UPDATE tiles SET alt_text = ?, alt_user = 1, updated_at = ? WHERE id = ?`
 	if !user {
@@ -117,7 +113,7 @@ func (s *Store) setAltTx(ctx context.Context, tx *sql.Tx, tileID int64, alt stri
 	if n, err := res.RowsAffected(); err != nil {
 		return err
 	} else if n == 0 {
-		return nil // capture deferred to a user-owned name: no edit happened
+		return nil // the capture deferred to a user-owned name: no edit
 	}
 	if user {
 		_, err = s.finishContentEdit(ctx, tx, tileID, events)
@@ -127,10 +123,10 @@ func (s *Store) setAltTx(ctx context.Context, tx *sql.Tx, tileID int64, alt stri
 	return err
 }
 
-// SetContentZoom persists the per-tile content scale (text font, terminal
-// font, page zoom — issue #82). Framing: no claim, no version bump — the
-// enforced split (CLAUDE.md face #3). Wells are refused: their view_zoom is
-// the grid viewport, a different concept with its own writer.
+// SetContentZoom persists the per-tile content scale: the text font, the
+// terminal font, the page zoom. It is framing, so no claim and no version
+// bump. Wells are refused: their view_zoom is the grid viewport, a different
+// concept with its own writer.
 func (s *Store) SetContentZoom(ctx context.Context, req *rpc.SetContentZoomRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -159,11 +155,10 @@ func (s *Store) SetContentZoom(ctx context.Context, req *rpc.SetContentZoomReque
 	return out, err
 }
 
-// SetURLFrozen persists the user's standing freeze on a url tile (issue
-// #237): frozen=true means descending must not auto-go-live until the
-// reconnect gesture clears it. Framing: no claim, no version bump — the
-// enforced split (CLAUDE.md face #3). Refused for every other kind: the fact
-// only means something for a url tile.
+// SetURLFrozen persists the user's standing freeze on a url tile: frozen=true
+// means descending must not auto-go-live until the reconnect gesture clears
+// it. It is framing, so no claim and no version bump. Refused for every other
+// kind: the fact only means something for a url tile.
 func (s *Store) SetURLFrozen(ctx context.Context, req *rpc.SetURLFrozenRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -189,15 +184,10 @@ func (s *Store) SetURLFrozen(ctx context.Context, req *rpc.SetURLFrozenRequest) 
 	return out, err
 }
 
-// boolToInt maps a bool onto SQLite's 0/1 integer convention.
+// boolToInt maps a bool onto SQLite's 0 and 1 integer convention.
 func boolToInt(b bool) int64 {
 	if b {
 		return 1
 	}
 	return 0
 }
-
-// Navigation no longer has its own RPC: in the Electron model the live
-// WebContentsView reports its final address back through SetURLState at
-// freeze time, so the old rod-era SetURLString (driven by a server-side
-// browser tab) had no caller and was removed.
