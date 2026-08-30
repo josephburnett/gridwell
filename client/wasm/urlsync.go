@@ -411,12 +411,20 @@ func (a *App) textareaCursorRowCol() (int, int) {
 // still resolve down to 12. After applying, replaceState the cleaned
 // URL so what's in the bar matches what's on screen.
 func (a *App) applyURLOnBoot() {
+	a.applyURLState(locationPath())
+}
+
+// locationPath is what the browser's address bar currently says, in the exact
+// form pane.DecodeURL reads: path plus query. The one reader of
+// window.location — boot and the popstate restore must decode the same
+// bytes, or they land in different places from one address.
+func locationPath() string {
 	loc := js.Global().Get("location")
 	raw := loc.Get("pathname").String()
 	if s := loc.Get("search").String(); s != "" {
 		raw += s
 	}
-	a.applyURLState(raw)
+	return raw
 }
 
 // applyURLState decodes raw and places the focused pane there — the

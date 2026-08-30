@@ -773,11 +773,7 @@ func main() {
 	// navigated to. The restore itself fetches, so it runs on a goroutine.
 	app.win.Call("addEventListener", "popstate", js.FuncOf(func(this js.Value, args []js.Value) any {
 		app.urlRestoring = true
-		loc := js.Global().Get("location")
-		raw := loc.Get("pathname").String()
-		if s := loc.Get("search").String(); s != "" {
-			raw += s
-		}
+		raw := locationPath()
 		go app.restoreFromHistory(raw)
 		return nil
 	}))
