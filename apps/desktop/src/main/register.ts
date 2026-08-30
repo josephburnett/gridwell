@@ -20,12 +20,10 @@ import {
 } from './ipc';
 import { WebviewRegistry } from './webviews';
 
-// safeSend is the one guard every main→renderer push goes through: the
-// window can close mid-flight (quit, crash, boot failure racing teardown),
-// and calling .send on a destroyed WebContents throws. One owner instead of
-// each call site repeating its own isDestroyed() check (charter §8 — this
-// used to be duplicated three times across makeNavForwarder/sendFrame/the
-// control-click handler; sendError below would have made a fourth).
+// safeSend is the one guard every main→renderer push goes through. The window
+// can close mid-flight (quit, crash, a boot failure racing teardown), and
+// calling .send on a destroyed WebContents throws. One owner, rather than every
+// call site repeating its own isDestroyed() check.
 function safeSend(wc: WebContents, channel: string, payload: unknown): void {
   if (!wc.isDestroyed()) wc.send(channel, payload);
 }
@@ -39,40 +37,41 @@ export function registerWebviewIpc(
   rootWC: WebContents,
   win: BaseWindow,
 ): void {
-  // A live URL view's preload forwards a right-button press here so the
+  // A live url view's preload forwards a right-button press here so the
   // renderer can begin a pane gesture over live content. The press arrives in
-  // physical screen coords; subtract the window's content origin to get
-  // renderer/canvas coords, then relay to the renderer (which starts the
-  // gesture and parks the view so the rest of the drag lands on the canvas).
+  // physical screen coords; subtracting the window's content origin gives
+  // canvas coords. The renderer then starts the gesture and parks the view, so
+  // the rest of the drag lands on the canvas.
   ipcMain.on(VIEW.rightdown, (_event, p: ViewRightdown): void => {
     const cb = win.getContentBounds();
     safeSend(rootWC, EV.rightForward, { x: p.sx - cb.x, y: p.sy - cb.y });
   });
 
-  // A middle-button press over a live URL view is the ascend gesture; the
-  // native view swallows it, so its preload forwards it here. Relay to the
-  // renderer in canvas coords, where it resolves the pane and ascends.
+  // A middle-button press over a live url view is the ascend gesture. The
+  // native view swallows it, so its preload forwards it here, and it is relayed
+  // in canvas coords, where the renderer resolves the pane and ascends.
   ipcMain.on(VIEW.middledown, (_event, p: ViewRightdown): void => {
     const cb = win.getContentBounds();
     safeSend(rootWC, EV.middleForward, { x: p.sx - cb.x, y: p.sy - cb.y });
   });
 
-  // A left-button press over a live URL view is a focus-transfer intent; the
+  // A left-button press over a live url view is a focus-transfer intent. The
   // native WebContentsView swallows the canvas's own mousedown, so the preload
-  // forwards a (non-suppressed) left-down here. Relay to the renderer in canvas
-  // coords so it can call focusToPane without breaking in-page interaction.
+  // forwards the left-down here without suppressing it. Relaying in canvas
+  // coords lets the renderer call focusToPane without breaking in-page
+  // interaction.
   ipcMain.on(VIEW.leftdown, (event, p: ViewRightdown): void => {
-    // The press is the one legitimate path to OS focus for a live view —
-    // stamp it so the focus guard doesn't bounce the click (issue #172).
+    // The press is the one legitimate path to OS focus for a live view. Stamp
+    // it so the focus guard does not bounce the click.
     registry.noteUserClick(event.sender);
     const cb = win.getContentBounds();
     const fwd: ForwardedRightdown = { x: p.sx - cb.x, y: p.sy - cb.y };
     safeSend(rootWC, EV.leftForward, fwd);
   });
 
-  // A single-finger drag over a live URL view: the view's preload forwards
-  // each move's delta; the registry injects an equivalent mouseWheel back
-  // into that view (Chromium won't gesture-scroll raw touches there).
+  // A single-finger drag over a live url view: the view's preload forwards each
+  // move's delta, and the registry injects an equivalent mouseWheel back into
+  // that view. Chromium will not gesture-scroll raw touches there.
   ipcMain.on(VIEW.touchscroll, (event, p: ViewTouchScroll): void => {
     registry.touchScroll(event.sender, p);
   });
@@ -116,21 +115,21 @@ export function makeNavForwarder(rootWC: WebContents) {
 }
 
 // makeOpenBelowForwarder relays a live view's new-window link to the renderer
-// (EV.openBelow), which splits the pane and opens it ephemeral (issue #111).
+// (EV.openBelow), which splits the pane and opens it as an ephemeral visit.
 export function makeOpenBelowForwarder(rootWC: WebContents): (ev: OpenBelowEvent) => void {
   return (ev) => safeSend(rootWC, EV.openBelow, ev);
 }
 
-// makeFreezeURLForwarder relays the context menu's explicit freeze gesture
-// (issue #237) to the renderer (EV.freezeUrl), where the wasm tears the view
-// down and persists the standing frozen intent.
+// makeFreezeURLForwarder relays the context menu's explicit freeze gesture to
+// the renderer (EV.freezeUrl), where the wasm tears the view down and persists
+// the standing frozen intent.
 export function makeFreezeURLForwarder(rootWC: WebContents): (ev: FreezeURLEvent) => void {
   return (ev) => safeSend(rootWC, EV.freezeUrl, ev);
 }
 
 // makeZoomKeyForwarder relays the content-zoom chord from a focused live view
-// to the renderer (EV.zoomKey), where the one zoom owner applies + persists it
-// (issue #170).
+// to the renderer (EV.zoomKey), where the one zoom owner applies and persists
+// it.
 export function makeZoomKeyForwarder(rootWC: WebContents): (ev: ZoomKeyEvent) => void {
   return (ev) => safeSend(rootWC, EV.zoomKey, ev);
 }
@@ -140,10 +139,10 @@ export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, j
   if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 });
 }
 
-// sendError is the ONE main-process entry point onto EV.error (issue #46):
-// every failure site — webview lifecycle, sidecar boot/exit — calls this
-// instead of console.error-and-return, so the wasm
-// errsurface (client/errsurface) is the single place failures become visible.
+// sendError is the one main-process entry point onto EV.error. Every failure
+// site (webview lifecycle, sidecar boot and exit) calls this instead of
+// console.error-and-return, so the wasm errsurface (client/errsurface) is the
+// single place a failure becomes visible.
 export function sendError(rootWC: WebContents, source: string, message: string): void {
   // Also the log line: a main-process failure must reach the app's log even
   // when the renderer is gone (safeSend no-ops on a destroyed webContents).
