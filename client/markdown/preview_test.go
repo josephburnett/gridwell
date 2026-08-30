@@ -7,37 +7,35 @@ import (
 
 func almost(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
-// Issue #205 (owner decision, reversing the 2026-05-27 framed-window
-// design): a text preview renders at a CONSTANT scale — the type size never
-// follows grid zoom or the stored framing; the tile is a window that
-// reveals more as it grows.
+// A text preview renders at a constant scale: the type size never follows
+// grid zoom or the stored framing, and the tile is a window that reveals more
+// as it grows.
 func TestPreviewWindowFrame(t *testing.T) {
 	const fixed = 1.0
 
-	// The scale is footprint-independent: the SAME frame scale at wildly
-	// different tile sizes (this is the whole point — zoom changes the tile
-	// px, never the type size).
+	// The scale is footprint-independent: the same frame scale at wildly
+	// different tile sizes. Zoom changes the tile px, never the type size.
 	for _, innerW := range []float64{40, 160, 640} {
 		f := PreviewWindowFrame(innerW, fixed, 1.0, 0, 0)
 		if !almost(f.Scale, fixed) {
 			t.Errorf("innerW %v: Scale = %v, want the constant %v", innerW, f.Scale, fixed)
 		}
-		// The doc wraps to the tile: layout width IS the inner width (at
-		// scale 1) — a bigger tile shows more, same-size type.
+		// The doc wraps to the tile: layout width is the inner width at
+		// scale 1, so a bigger tile shows more at the same type size.
 		if !almost(f.ContentW, innerW/fixed) {
 			t.Errorf("innerW %v: ContentW = %v, want %v (wrap to the tile)", innerW, f.ContentW, innerW/fixed)
 		}
 	}
 
-	// content_zoom is the one owner of "make the text big" now: it scales
-	// the type and narrows the logical wrap width to match.
+	// content_zoom is the one owner of "make the text big": it scales the
+	// type and narrows the logical wrap width to match.
 	f := PreviewWindowFrame(200, fixed, 2.0, 0, 0)
 	if !almost(f.Scale, 2.0) || !almost(f.ContentW, 100) {
 		t.Errorf("contentZoom 2: frame = %+v, want scale 2 contentW 100", f)
 	}
 
-	// The stored scroll still places the window — the preview keeps showing
-	// the PLACE you left (guiding rule), just not its magnification.
+	// The stored scroll places the window, so the preview keeps showing the
+	// place you left.
 	f = PreviewWindowFrame(200, fixed, 1.0, 3, 47)
 	if f.ScrollX != 3 || f.ScrollY != 47 {
 		t.Errorf("scroll = (%v, %v), want (3, 47)", f.ScrollX, f.ScrollY)
@@ -50,9 +48,9 @@ func TestPreviewWindowFrame(t *testing.T) {
 	}
 }
 
-// The level-of-detail gate (issue #205): with the type size constant, a
-// small tile shows the alt-text banner alone — content only paints when at
-// least one body line fits.
+// The level-of-detail gate: with the type size constant, a small tile shows
+// the alt-text banner alone. Content paints only when at least one body line
+// fits.
 func TestPreviewContentVisible(t *testing.T) {
 	if PreviewContentVisible(PreviewBodyLinePx-1, 1.0) {
 		t.Error("below one line: content must not paint")
@@ -66,11 +64,10 @@ func TestPreviewContentVisible(t *testing.T) {
 	}
 }
 
-// The issue #35 guard, restated for the #205 design: the preview frame is a
-// pure function of the tile's OWN facts (inner width, content zoom, stored
-// scroll) — no other pane's geometry appears in the signature at all, so
-// the cross-pane re-wrap bug (a sibling pane's width leaking into a
-// preview) is unrepresentable rather than merely tested against.
+// The preview frame is a pure function of the tile's own facts: inner width,
+// content zoom, stored scroll. No other pane's geometry appears in the
+// signature, so a sibling pane's width cannot leak into a preview and re-wrap
+// it.
 func TestPreviewFrameHasNoCrossPaneInputs(t *testing.T) {
 	// Same tile facts → identical frame, whatever any other pane is doing.
 	a := PreviewWindowFrame(160, 1.0, 1.5, 2, 9)

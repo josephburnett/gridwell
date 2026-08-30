@@ -15,14 +15,13 @@ const (
 	UnloadAsync
 )
 
-// DecideUnloadFlush is the ONE rule for what a dying page does with a
-// dirty text body (audit #8). The subtle case is rowKnown=false: the
-// owner row living in no cached grid is NOT a dead end (audit #6 — a
-// leaf link's target in a never-fetched foreign grid), because the
-// SaveBasis alone is the claim, and only editable text ever becomes
-// dirty; the server issues the verdict either way. The unload path used
-// to skip that case silently — the one flush with no next sweep behind
-// it, so the edit was guaranteed lost.
+// DecideUnloadFlush is the one rule for what a dying page does with a dirty
+// text body. The subtle case is rowKnown=false: an owner row living in no
+// cached grid (a leaf link's target in a never-fetched foreign grid) is not a
+// dead end, because the SaveBasis alone is the claim and only editable text
+// ever becomes dirty. The server issues the verdict either way. Skipping that
+// case would lose the edit outright: unload is the one flush with no next
+// sweep behind it.
 func DecideUnloadFlush(rowKnown, rowEditableText bool, rowVersion int64, basis int64, haveBasis bool) (claim int64, do UnloadFlush) {
 	if rowKnown && !rowEditableText {
 		return 0, UnloadSkip
@@ -36,13 +35,12 @@ func DecideUnloadFlush(rowKnown, rowEditableText bool, rowVersion int64, basis i
 	return 0, UnloadAsync
 }
 
-// Framing is a text tile's persisted window: scroll, size, and mode —
-// the SetTextView payload. FramingOf reads it off a tile; Changed is the
-// ONE rule both framing writers (the settle-persist and the ascent save)
-// gate on, so a pure descend-and-ascent, or a resize that only changed
-// the window size, writes exactly when something differs (2026-08-27: the
-// settle path ignored W/H and the ascent path wrote unconditionally —
-// reading mutated updated_at and broadcast an event).
+// Framing is a text tile's persisted window: scroll, size, and mode — the
+// SetTextView payload. FramingOf reads it off a tile; FramingChanged is the
+// one rule both framing writers (the settle-persist and the ascent save) gate
+// on, so a pure descend-and-ascent, or a resize that only changed the window
+// size, writes exactly when something differs. Writing unconditionally would
+// mutate updated_at and broadcast an event for a read.
 type Framing struct {
 	X, Y, W, H int64
 	Mode       string
@@ -70,15 +68,14 @@ type ModeInput struct {
 	Stored    string
 }
 
-// DescentMode is the ONE owner of which mode a text descent shows. URL
-// and serves_page tiles have no text/rendered mode ("": the textarea
-// overlay never shows). A READ-ONLY text tile always shows RENDERED —
-// never a caret over content the user can't change, and rendered is the
-// selectable DOM surface (#268). A cursor URL forces text. Otherwise the
-// stored mode, defaulting to raw text for a never-opened or uncached
-// tile. Every path that decides a text mode — descent, session restore —
-// reads this, never re-derives it (2026-08-27: the restore path carried
-// two extra arms of its own).
+// DescentMode is the one owner of which mode a text descent shows. URL and
+// serves_page tiles have no text/rendered mode ("" — the textarea overlay
+// never shows). A read-only text tile always shows rendered: never a caret
+// over content the user can't change, and rendered is the selectable DOM
+// surface. A cursor URL forces text. Otherwise the stored mode, defaulting to
+// raw text for a never-opened or uncached tile. Every path that decides a
+// text mode — descent, session restore — reads this and never re-derives
+// it.
 func DescentMode(in ModeInput) string {
 	if in.Kind != rpc.KindText || in.ServesPage {
 		return ""

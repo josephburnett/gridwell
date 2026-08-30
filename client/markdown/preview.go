@@ -3,18 +3,17 @@ package markdown
 // This file holds the pure scale/scroll/baseline math the canvas painter
 // (client/wasm/markdown_render.go) uses to render a markdown tile's preview
 // and its raw-text mode. It is what keeps "preview = descent = ascent"
-// honest: the frozen preview must cover-crop and place lines identically to
-// the live descended pane, and the raw-text canvas must match the editing
-// <textarea> to the pixel. That math was previously inline in build-tagged
-// wasm (never executed by `go test`); here it is testable.
+// honest: the frozen preview places lines identically to the live descended
+// pane, and the raw-text canvas matches the editing <textarea> to the pixel.
+// It lives here, not in the wasm shim, so `go test` executes it.
 
 // PreviewFrame is the scale + scroll offset a markdown tile preview renders
 // with.
 type PreviewFrame struct {
 	Scale            float64
 	ScrollX, ScrollY float64
-	// ContentW is the LOGICAL width the markdown must be laid out at for this
-	// frame — the tile's own inner width divided by Scale, so the doc wraps to
+	// ContentW is the logical width the markdown is laid out at for this
+	// frame: the tile's own inner width divided by Scale, so the doc wraps to
 	// the tile like a window and the painter merely scales the ops back up.
 	ContentW float64
 }
@@ -23,15 +22,13 @@ type PreviewFrame struct {
 // 1.35 line spacing, rounded up) — the unit PreviewContentVisible gates on.
 const PreviewBodyLinePx = 19.0
 
-// PreviewWindowFrame is how a text tile preview is scaled (issue #205,
-// reversing the 2026-05-27 framed-window cover-scale): CONSTANT type size —
-// like the alt-text banner, the font never follows grid zoom — wrapped to
+// PreviewWindowFrame is how a text tile preview is scaled: constant type size
+// — like the alt-text banner, the font never follows grid zoom — wrapped to
 // the tile's inner width and clipped to its height, so the tile is a window
-// that reveals more of the document as it grows. fixedScale × contentZoom
-// is the whole scale: "make the text big" is content_zoom's job now, not a
-// one-line ascent framing. Scroll still comes from the stored framing —
-// the preview keeps showing the PLACE you left, just no longer at the
-// framed window's magnification.
+// that reveals more of the document as it grows. fixedScale × contentZoom is
+// the whole scale; content_zoom is the one owner of "make the text big".
+// Scroll comes from the stored framing, so the preview keeps showing the
+// place you left.
 func PreviewWindowFrame(innerW, fixedScale, contentZoom float64, storedX, storedY int64) PreviewFrame {
 	s := fixedScale * contentZoom
 	if s <= 0 {
@@ -45,11 +42,11 @@ func PreviewWindowFrame(innerW, fixedScale, contentZoom float64, storedX, stored
 	}
 }
 
-// PreviewContentVisible gates the content paint (issue #205): with the type
-// size constant, a small tile can't show a legible line — below one body
-// line of room the preview is the alt-text banner alone (mirroring the
-// well's previewCell >= 0.5 level-of-detail gate). availH is the tile's
-// inner height minus whatever the banner occupies.
+// PreviewContentVisible gates the content paint: with the type size
+// constant, a small tile cannot show a legible line, so below one body line
+// of room the preview is the alt-text banner alone. This mirrors the well's
+// previewCell >= 0.5 level-of-detail gate. availH is the tile's inner height
+// minus whatever the banner occupies.
 func PreviewContentVisible(availH, scale float64) bool {
 	return availH >= PreviewBodyLinePx*scale
 }

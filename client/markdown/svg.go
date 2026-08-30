@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-// renderedCSSRules is the ONE reading stylesheet for rendered text: the
+// renderedCSSRules is the one reading stylesheet for rendered text: the
 // focused overlay div (#gw-rendered-view) and the rasterized grid preview
-// (issue #233) both wear it, scoped through RenderedCSS, so a preview can
-// never drift from what the descent shows. goldmark emits bare semantic
+// both wear it, scoped through RenderedCSS, so a preview can never drift
+// from what the descent shows. goldmark emits bare semantic
 // HTML; this supplies the app's dark reading style, em-relative so the
 // base font size scales everything.
 const renderedCSSRules = `
@@ -36,10 +36,10 @@ func RenderedCSS(sel string) string {
 }
 
 // PreviewSVG wraps an XML-serialized rendered body in an SVG foreignObject
-// document — the standard way to rasterize styled HTML onto a canvas
-// without a second layout engine (issue #233, honoring #218:
-// markdown.RenderHTML stays the ONE renderer; the preview draws its output
-// as an image). xhtml must be well-formed XML — the wasm caller serializes
+// document — the standard way to rasterize styled HTML onto a canvas without
+// a second layout engine. markdown.RenderHTML stays the one renderer and the
+// preview draws its output as an image. xhtml must be well-formed XML: the
+// wasm caller serializes
 // the sanitized DOM through XMLSerializer, since foreignObject is an XML
 // context and goldmark's HTML5 output (unclosed <br>, <img>) is not. The
 // base font size is the overlay's 14px at scale 1; the caller's drawImage

@@ -1,16 +1,16 @@
 package markdown
 
-// Interactive task-list checkboxes: the rendered view's <input> elements
-// map back to "[ ]"/"[x]" markers in the SOURCE, and toggling one edits the
-// source through the normal text-edit door (the content-store entry — the
-// wasm overlay owns that wiring; this file owns the pure mapping).
+// Interactive task-list checkboxes: the rendered view's <input> elements map
+// back to "[ ]" and "[x]" markers in the source, and toggling one edits the
+// source through the normal text-edit door. The wasm overlay owns that
+// wiring; this file owns the pure mapping.
 //
-// The mapping invariant: the N-th checkbox the renderer emits corresponds
-// to the N-th TaskCheckBox node in the parsed AST, because RenderHTML and
-// this scan share ONE parser configuration (gmRenderer — the same "one
-// dialect" rule doctype.AltFromSource leans on). A literal "- [ ]" inside a code
-// fence is not a TaskCheckBox in either place, so it can't shift the
-// numbering. TestToggleTaskRenderParity pins the invariant.
+// The mapping invariant: the N-th checkbox the renderer emits corresponds to
+// the N-th TaskCheckBox node in the parsed AST, because RenderHTML and this
+// scan share one parser configuration (gmRenderer, the same dialect
+// doctype.AltFromSource leans on). A literal "- [ ]" inside a code fence is
+// not a TaskCheckBox in either place, so it cannot shift the numbering.
+// TestToggleTaskRenderParity pins the invariant.
 
 import (
 	"github.com/yuin/goldmark/ast"

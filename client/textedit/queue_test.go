@@ -6,9 +6,8 @@ import (
 	"time"
 )
 
-// Issue #140: pipelined saves for one tile must run strictly one-after-
-// another (so version reads at send time chain); different tiles never
-// block each other.
+// Pipelined saves for one tile run strictly one after another, so version
+// reads at send time chain. Different tiles never block each other.
 func TestSaveQueueSerializesPerKey(t *testing.T) {
 	q := NewSaveQueue()
 	var mu sync.Mutex

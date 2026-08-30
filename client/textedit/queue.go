@@ -2,13 +2,12 @@ package textedit
 
 import "sync"
 
-// SaveQueue serializes content writes PER TILE: one in flight, the rest FIFO.
+// SaveQueue serializes content writes per tile: one in flight, the rest FIFO.
 // Text saves are optimistic-concurrency writes — each claims the tile's
-// version — so two pipelined saves (the raw→rendered toggle's flush and the
-// keystroke typed right after it, issue #140) both claimed the SAME version
-// and the loser's edit was rejected and reconciled away: typed input lost.
+// version — so two pipelined saves would claim the same version and the
+// loser's edit would be rejected and reconciled away, losing typed input.
 // Serializing means each task runs after the previous write's response has
-// advanced the cached version, so tasks that read the version AT SEND TIME
+// advanced the cached version, so tasks that read the version at send time
 // chain instead of race.
 type SaveQueue struct {
 	mu      sync.Mutex

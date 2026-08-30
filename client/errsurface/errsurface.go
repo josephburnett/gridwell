@@ -1,7 +1,7 @@
 // Package errsurface owns the client's queue of user-visible failure
 // notices — the single answer to "what has gone wrong that the user has not
-// yet seen." Charter §6: a failure that only reaches the console presents to
-// the user as "it just disappeared." Every layer that detects a failure
+// yet seen." A failure that only reaches the console presents to the user as
+// "it just disappeared." Every layer that detects a failure
 // (wasm RPC dispatch, stream clients, the Electron host via its error IPC
 // event, server health events) *reports* here; only the render layer *reads*
 // here. No other code holds or draws error state.
@@ -172,8 +172,8 @@ func (s *Surface) Dismiss(id int) {
 }
 
 // Resolve removes the notice for source, if any. The "condition cleared"
-// path: e.g. the SSE stream reconnecting resolves its own disconnect notice
-// so a healed failure does not linger as stale bad news.
+// path: the event stream reconnecting resolves its own disconnect notice, so
+// a healed failure does not linger as stale bad news.
 func (s *Surface) Resolve(source string) {
 	for i := range s.notices {
 		if s.notices[i].Source == source {

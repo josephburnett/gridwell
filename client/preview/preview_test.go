@@ -91,10 +91,10 @@ func TestGetEmptyReturnsNotOK(t *testing.T) {
 	}
 }
 
-// TestPutEmptySettlesTheMiss (#265): a completed "no preview" answer is
-// RECORDED — KnownEmpty for that blob id — so the caller stops re-asking
-// every frame. A changed blob id (the server minted a real preview)
-// invalidates it, and a real image is never downgraded to a miss.
+// TestPutEmptySettlesTheMiss: a completed "no preview" answer is recorded —
+// KnownEmpty for that blob id — so the caller stops re-asking every frame. A
+// changed blob id (the server minted a real preview) invalidates it, and a
+// real image is never downgraded to a miss.
 func TestPutEmptySettlesTheMiss(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
@@ -144,11 +144,9 @@ func TestPutGetRoundTrip(t *testing.T) {
 	}
 }
 
-// TestGetWithMismatchedBlobIDReturnsNotOK locks in the headline
-// invariant: when the server says the tile's preview is now blob N+1
-// but the cache still holds blob N, Get must miss so the renderer
-// re-fetches. This is exactly the bug class that motivated the
-// extraction.
+// TestGetWithMismatchedBlobIDReturnsNotOK locks in the headline invariant:
+// when the server says the tile's preview is now blob N+1 but the cache still
+// holds blob N, Get misses so the renderer re-fetches.
 func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
@@ -190,15 +188,15 @@ func TestPutWildcardMatchesAnyBlobID(t *testing.T) {
 			t.Errorf("wildcard entry missed Get(42, %d)", want)
 		}
 	}
-	// And wantBlobID=0 hits TOO: a tile that has never had a server-side
+	// wantBlobID=0 hits too: a tile that has never had a server-side
 	// preview advertises PreviewBlobID 0, and the very first freeze parks
-	// its frame under the wildcard before SetURLState/SetShellPreview
-	// round-trips. If zero missed, the just-frozen frame stayed invisible
-	// (placeholder glyph) until the SSE echo landed — the regression this
-	// case pins. Zero-miss protection is only for entries keyed to a REAL
-	// blob id (see TestGetWithZeroBlobIDAlwaysMisses): those are server
-	// state that may be stale; a wildcard is a local capture that is by
-	// definition fresher than the server.
+	// its frame under the wildcard before SetURLState or SetShellPreview
+	// round-trips. If zero missed, the just-frozen frame would stay a
+	// placeholder glyph until the event echo landed. Zero-miss protection
+	// is only for entries keyed to a real blob id (see
+	// TestGetWithZeroBlobIDAlwaysMisses): those are server state that may be
+	// stale, while a wildcard is a local capture that is fresher than the
+	// server by definition.
 	if _, ok := c.Get("42", 0); !ok {
 		t.Errorf("wildcard entry missed Get(42, 0); the first-ever freeze of a tile must show immediately")
 	}
@@ -250,10 +248,9 @@ func TestPutLateResultIsDiscarded(t *testing.T) {
 	}
 }
 
-// TestPutWithEmptyBytesIsNoOp: defensive — a zero-length payload
-// from a misbehaving caller (e.g. canvas.toDataURL returning nothing)
-// must not poison the cache. Without this guard we'd queue a decode
-// the Decoder would have to handle gracefully.
+// TestPutWithEmptyBytesIsNoOp: a zero-length payload from a misbehaving
+// caller (canvas.toDataURL returning nothing, say) must not poison the cache.
+// Without this guard the Decoder would have to handle an empty decode.
 func TestPutWithEmptyBytesIsNoOp(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)

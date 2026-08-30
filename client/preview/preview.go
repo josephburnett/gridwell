@@ -60,10 +60,10 @@ type entry struct {
 	blobID int64
 	image  Image
 	gen    int64
-	// empty records a COMPLETED fetch that answered "no preview" for
+	// empty records a completed fetch that answered "no preview" for
 	// blobID — a settled miss, not an unanswered one. Without it every
-	// frame re-asks the server for tiles that will never have a preview
-	// (one RPC per non-decodable tile per draw, forever — #265).
+	// frame re-asks the server for tiles that will never have a preview:
+	// one RPC per non-decodable tile per draw, forever.
 	empty bool
 }
 
@@ -90,12 +90,12 @@ func NewCache(dec Decoder) *Cache {
 //     wildcard).
 //
 // wantBlobID == 0 means the tile has no server-side preview yet. An entry
-// keyed to a REAL blob id misses in that case (it is server state that may
-// be stale — don't show a cached image on a tile the server says is blank),
-// but a WILDCARD entry hits: it is a local capture parked ahead of the
-// server (the first-ever freeze of a url/shell tile, whose PreviewBlobID is
-// still 0 until the SetURLState/SetShellPreview echo lands), by definition
-// fresher than anything the server knows.
+// keyed to a real blob id misses in that case: it is server state that may be
+// stale, so don't show a cached image on a tile the server says is blank. A
+// wildcard entry hits — it is a local capture parked ahead of the server (the
+// first-ever freeze of a url or shell tile, whose PreviewBlobID stays 0 until
+// the SetURLState or SetShellPreview echo lands), by definition fresher than
+// anything the server knows.
 func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -122,10 +122,10 @@ func (c *Cache) Put(tileID string, blobID int64, bytes []byte, onReady func()) {
 	c.put(tileID, blobID, bytes, onReady)
 }
 
-// PutEmpty records that the server ANSWERED with no preview for
-// (tileID, blobID). A completed fetch must settle the cache either way;
-// an unsettled empty result re-fires the fetch on every draw. A later
-// Put with real bytes, or a changed blob id, supersedes it.
+// PutEmpty records that the server answered with no preview for
+// (tileID, blobID). A completed fetch settles the cache either way; an
+// unsettled empty result re-fires the fetch on every draw. A later Put with
+// real bytes, or a changed blob id, supersedes it.
 func (c *Cache) PutEmpty(tileID string, blobID int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

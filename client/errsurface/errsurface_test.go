@@ -164,7 +164,7 @@ func TestSticky(t *testing.T) {
 		{"electron:backend", true},
 		// One-shot events: fade once they stop recurring.
 		{"rpc:MoveTile", false},
-		{"events", false},         // the SSE retry loop re-reports every second while down
+		{"events", false},         // the event retry loop re-reports every second while down
 		{"launcher:files", false}, // a click answer, not a condition — must fade
 		{"electron:webview", false},
 		{"electron:session", false},

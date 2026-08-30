@@ -64,8 +64,8 @@ func TestContainDstRectDegenerate(t *testing.T) {
 }
 
 // TestStandinDstRect: the snapshot goes back exactly where the live canvas
-// was — top-left of the box, intrinsic CSS size, no scaling, no centering
-// (issue #224: contain-fit shifted terminal pixels on every overlay park).
+// was — top-left of the box, intrinsic CSS size, no scaling, no centering.
+// Contain-fitting it would shift terminal pixels on every overlay park.
 func TestStandinDstRect(t *testing.T) {
 	// A 2528×1432 device-pixel snapshot at dpr 2 is a 1264×716 CSS canvas.
 	dx, dy, dw, dh, ok := StandinDstRect(2528, 1432, 2, 10, 20)
