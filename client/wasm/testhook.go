@@ -604,7 +604,7 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		} else {
 			e["kind"] = templateKindName(item.primitive)
 		}
-		// A plugin-declared ROOT entry (#258) reports its identity so a
+		// A plugin-declared root entry reports its identity so a
 		// test can tell it from the declaring plugin's own row.
 		if item.entry != nil {
 			e["entry"] = item.entry.ID
@@ -673,13 +673,13 @@ func stringsToAny(ss []string) []any {
 	return out
 }
 
-// thBar exposes the bottom bar (issue #212): the band's top edge and every
-// segment's rect + identity — workspace crumbs by level, chain crumbs by
-// index with the tile/anchor they stand for. Read-only over the exact
-// layout drawBottomBar renders and bottomBarClick hit-tests, so a spec's
-// click at a segment center is the click the user would make.
+// thBar exposes the bottom bar: the band's top edge and every segment's rect
+// and identity — level crumbs by level, chain crumbs by index with the tile
+// or anchor they stand for. Read-only over the exact layout drawBottomBar
+// renders and bottomBarClick hit-tests, so a spec's click at a segment center
+// is the click the user would make.
 func (a *App) thBar(_ js.Value, args []js.Value) any {
-	// Optional arg: a pane id — every pane wears a band since #267; no
+	// Optional arg: a pane id, since every pane wears a band. With no
 	// arg reads the focused pane's, as always.
 	p := a.tree.FocusedPane()
 	if len(args) > 0 && args[0].Type() == js.TypeString && args[0].String() != "" {
@@ -693,9 +693,9 @@ func (a *App) thBar(_ js.Value, args []js.Value) any {
 	segs := a.bottomBarSegmentsFor(p, chain)
 	out := make([]any, 0, len(segs))
 	for _, s := range segs {
-		// Segment X is emitted ABSOLUTE (the band lives inside the focused
-		// pane since #220), so specs click hook coordinates verbatim. Index
-		// addresses the FULL chain (left-truncation drops leading crumbs).
+		// Segment X is emitted absolute, since the band lives inside the
+		// pane, so specs click hook coordinates verbatim. Index addresses
+		// the full chain, and left-truncation drops leading crumbs.
 		e := map[string]any{
 			"x": bx + s.X, "w": s.W, "index": s.Index,
 		}
@@ -711,9 +711,9 @@ func (a *App) thBar(_ js.Value, args []js.Value) any {
 			e["tileID"] = nc.Crumb.TileID
 			e["text"] = nc.Crumb.Text
 			if nc.Crumb.Anchor != "" {
-				// The root crumb's face — the exact selector drawChainCrumb
-				// renders ("" = the globe), so a spec can pin crumb identity
-				// (#264) without reading pixels.
+				// The root crumb's face: the exact selector drawChainCrumb
+				// renders, with "" meaning the globe, so a spec can pin
+				// crumb identity without reading pixels.
 				e["glyph"] = a.pluginGlyph(nc.Crumb.Anchor)
 			}
 		}
@@ -729,8 +729,8 @@ func (a *App) thBar(_ js.Value, args []js.Value) any {
 		"button":   button,
 		"segments": out,
 	}
-	// The centered current-pane title (2026-07-30 tweak): the exact rect
-	// drawBarTitle renders and bottomBarClick hit-tests.
+	// The centered current-pane title: the exact rect drawBarTitle renders
+	// and bottomBarClick hit-tests.
 	if x, w, label, editable, muted, ok := a.barTitleGeomFor(p); ok {
 		res["title"] = map[string]any{
 			"x": x, "w": w, "label": label, "editable": editable, "muted": muted,
@@ -739,11 +739,11 @@ func (a *App) thBar(_ js.Value, args []js.Value) any {
 	return res
 }
 
-// thRawRows returns how many visual rows the CANVAS painter would produce
-// for the focused text descent's current textarea content — the wrap-parity
-// oracle (issue #216). A spec compares this against the textarea's own
-// scrollHeight-derived row count, crossing the browser-soft-wrap vs
-// canvas-wrap seam with the SAME bytes on both sides.
+// thRawRows returns how many visual rows the canvas painter would produce for
+// the focused text descent's current textarea content: the wrap-parity
+// oracle. A spec compares it against the textarea's own scrollHeight-derived
+// row count, crossing the browser-soft-wrap against canvas-wrap seam with the
+// same bytes on both sides.
 func (a *App) thRawRows(js.Value, []js.Value) any {
 	p := a.tree.FocusedPane()
 	if p == nil || p.ContentID() == "" || !a.textTextarea.Truthy() {

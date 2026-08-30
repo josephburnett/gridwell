@@ -281,10 +281,10 @@ func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 	//                            = cellPx × Overtake × ViewZoom
 	//   liveCell_just_after     = cellPx × childZoom
 	//                            = cellPx × LiveFromIntrinsic(ViewZoom, Overtake)
-	// These must be equal — that's what makes the descent feel
-	// continuous. The old TestDescentMidIsOvertakeAndContinuity tests
-	// the ViewZoom == 0 path (PreviewFactor calibration); this one
-	// tests the populated-ratio path.
+	// These must be equal; that is what makes the descent feel continuous.
+	// TestDescentMidIsOvertakeAndContinuity covers the ViewZoom == 0 path,
+	// the PreviewFactor calibration; this one covers the populated-ratio
+	// path.
 	from := Endpoints{Zoom: 1}
 	for _, vz := range []float64{0.1, 0.25, 0.671, 1.0, 3.0} {
 		w := Well{ID: "1", W: 3, H: 2, ViewZoom: vz}

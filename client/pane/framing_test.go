@@ -24,9 +24,9 @@ func TestFramingTargetPicksTheDoorway(t *testing.T) {
 		t.Fatalf("well = %+v", got)
 	}
 
-	// A namespace crossing: the LINK tile is the doorway, and it lives in
-	// the level below — the old code searched the parent grid for a well
-	// whose child matched the anchor; the frame simply remembers it.
+	// A namespace crossing: the link tile is the doorway, and it lives in
+	// the level below. The frame remembers it, so nothing has to search the
+	// parent grid for a well whose child matches the anchor.
 	s.Push(Frame{GridID: "k3x9m2q/1", Door: "lnk"})
 	got = s.FramingTarget()
 	if got.TileID != "lnk" || got.DoorAnchor != "home/1" ||

@@ -520,10 +520,10 @@ func (a *App) applyURLState(raw string) {
 			return tiles, true
 		})
 
-	// The decoded place, built by the ONE decoder: a root grid, the walked
+	// The decoded place, built by the one decoder: a root grid, the walked
 	// doorway path, and the content leaf when there is one. The outer frames
-	// carry no viewport (nothing encodes those — owner decision #13), so the
-	// ascent out of here lands on each grid's persisted framing.
+	// carry no viewport, because nothing encodes those, so the ascent out of
+	// here lands on each grid's persisted framing.
 	viewport := p.Frame
 	p.Stack = pane.StackAt(state.Anchor, resolvedPath, textTileID)
 	p.Cx, p.Cy, p.Zoom = viewport.Cx, viewport.Cy, viewport.Zoom
@@ -543,13 +543,13 @@ func (a *App) applyURLState(raw string) {
 			// Uncached: no row to read; the one owner decides the default.
 			p.TextMode = textedit.DescentMode(textedit.ModeInput{Kind: rpc.KindText, CursorURL: state.CursorMode})
 		}
-		p.TextZoom = a.textScaleFor(p) // base × the tile's content zoom (issue #82)
+		p.TextZoom = a.textScaleFor(p) // base × the tile's content zoom
 		a.fetchBlobAndSetCursor(textTileID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()
-		// A reload lands back INSIDE the descent — re-engage it (issue
-		// #202): the shell reconnects, the url reopens, through the same
-		// one-owner decision every descent applies.
+		// A reload lands back inside the descent, so re-engage it: the shell
+		// reconnects and the url reopens, through the same one-owner
+		// decision every descent applies.
 		a.autoLiveOnRestore(p.ID, textTileID)
 	} else {
 		p.Cx = state.X
@@ -605,11 +605,11 @@ func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
 	}
 	go func() {
 		// Content is routable by tile id (ReadContent); blob ids carry no
-		// plugin namespace and aren't routable on their own. Store it in the
-		// content store — the single text-body store the overlay reads from.
+		// plugin namespace and are not routable on their own. Store it in
+		// the cache, the one text-body store the overlay reads from.
 		data, _, version, err := a.cl.ReadContent(context.Background(), textTileID)
 		if err != nil {
-			// The file the URL pointed at stays blank — say why (charter §6).
+			// The tile the URL pointed at stays blank: say why.
 			a.surfaceRPCError("ReadContent", err)
 			return
 		}

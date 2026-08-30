@@ -1269,8 +1269,8 @@ func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 // refetchGridOnConflict handles a 409 version-conflict: refetches the
 // affected grid so the cache catches up to the server's authoritative
 // version, and posts an Info notice so the reconciliation is visible —
-// the user's optimistic change lost a race and is about to be replaced
-// on screen; that must not look like spontaneous mutation (charter §6).
+// the user's optimistic change lost a race and is about to be replaced on
+// screen, which must not look like spontaneous mutation.
 func (a *App) refetchGridOnConflict(gridID string, where string) {
 	a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
 	a.fetchGrid(gridID)

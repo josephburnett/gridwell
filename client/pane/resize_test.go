@@ -66,9 +66,9 @@ func TestResizeThroughCascades(t *testing.T) {
 }
 
 func TestResizeThroughCompressesAdjacentFirst(t *testing.T) {
-	// A smaller drag (to y=150): only the ADJACENT pane (middle) shrinks —
-	// 100→50 — and bottom is untouched. The old proportional squash would
-	// have taken 25px from each.
+	// A smaller drag, to y=150: only the adjacent pane, the middle one,
+	// shrinks — 100 to 50 — and the bottom is untouched. A proportional
+	// squash would take 25px from each instead.
 	c := Rect{X: 0, Y: 0, W: 100, H: 300}
 	outer, _ := stack3()
 	ResizeThrough(TreeNode{Split: outer}, c, outer, 150, 32)

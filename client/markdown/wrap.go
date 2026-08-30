@@ -1,8 +1,8 @@
 package markdown
 
 // WrapRawLine wraps one raw source line into the visual rows the editing
-// <textarea> produces (issue #216: the canvas painter must agree with the
-// textarea, or the text visibly reflows when pane focus moves). Chromium's
+// <textarea> produces. The canvas painter must agree with the textarea, or
+// the text visibly reflows when pane focus moves. Chromium's
 // UA stylesheet gives a textarea `white-space: pre-wrap; overflow-wrap:
 // break-word`, which means, for a monospace face where every rune is one
 // column:
