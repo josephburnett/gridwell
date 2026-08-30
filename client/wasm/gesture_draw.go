@@ -125,8 +125,9 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	cy := r.Y + r.H/2
 	drawSwapGlyph(a.cctx, cx, cy, 16, colorMuted)
 
-	a.cctx.Set("lineCap", "butt")
-	a.cctx.Set("lineJoin", "miter")
+	// drawSwapGlyph left the line width back at 1.0, the same default
+	// endGlyph restores, so the whole overlay closes through the one bracket.
+	endGlyph(a.cctx)
 }
 
 // drawRefreshIcon draws a circular-arrow refresh icon centred at (cx, cy)
@@ -135,10 +136,7 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 // the open end pointing in the direction of rotation (clockwise).
 // Style: 2px line, round lineCap and lineJoin, matching drawURLBackButton.
 func drawRefreshIcon(c js.Value, cx, cy, radius float64, color string) {
-	c.Set("strokeStyle", color)
-	c.Set("lineWidth", 2.0)
-	c.Set("lineCap", "round")
-	c.Set("lineJoin", "round")
+	beginSlotGlyph(c, color)
 
 	// Arc: starts at ~20° past top (top-right gap), sweeps clockwise 290°.
 	// In canvas coords y points down, so clockwise is the positive direction.
@@ -168,9 +166,7 @@ func drawRefreshIcon(c js.Value, cx, cy, radius float64, color string) {
 		tipY+math.Sin(tangent+math.Pi-headAngle)*headLen)
 	c.Call("stroke")
 
-	c.Set("lineWidth", 1.0)
-	c.Set("lineCap", "butt")
-	c.Set("lineJoin", "miter")
+	endGlyph(c)
 }
 
 // drawTileHotspotOverlay paints the affordance overlay over the tile

@@ -35,6 +35,17 @@ func beginGlyph(c js.Value, w, h float64, color string) {
 	c.Set("lineJoin", "round")
 }
 
+// beginSlotGlyph is the same bracket at the fixed 2px weight the bar-slot
+// glyphs draw at — the back arrow, the refresh ring — where the stroke sizes
+// to the button circle rather than to a tile. endGlyph closes it, like every
+// other glyph.
+func beginSlotGlyph(c js.Value, color string) {
+	c.Set("strokeStyle", color)
+	c.Set("lineWidth", 2.0)
+	c.Set("lineCap", "round")
+	c.Set("lineJoin", "round")
+}
+
 // endGlyph restores the canvas line defaults the rest of the renderer
 // assumes (square caps, 1px).
 func endGlyph(c js.Value) {

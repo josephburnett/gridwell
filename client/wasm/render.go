@@ -697,10 +697,7 @@ func (a *App) drawURLBackButton(p *pane.Pane) {
 
 	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
 	band, _ := a.barThemeFor(p)
-	a.cctx.Set("strokeStyle", band)
-	a.cctx.Set("lineWidth", 2.0)
-	a.cctx.Set("lineCap", "round")
-	a.cctx.Set("lineJoin", "round")
+	beginSlotGlyph(a.cctx, band)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("moveTo", cx+6, cy)
 	a.cctx.Call("lineTo", cx-6, cy)
@@ -708,9 +705,7 @@ func (a *App) drawURLBackButton(p *pane.Pane) {
 	a.cctx.Call("lineTo", cx-6, cy)
 	a.cctx.Call("lineTo", cx-2, cy+5)
 	a.cctx.Call("stroke")
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Set("lineCap", "butt")
-	a.cctx.Set("lineJoin", "miter")
+	endGlyph(a.cctx)
 }
 
 // drawURLRefreshButton paints the bar-slot button on a frozen URL-tile
