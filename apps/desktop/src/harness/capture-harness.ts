@@ -1,11 +1,11 @@
-// L3 integration harness for the registry. Boots a real Electron main process,
-// creates a window + WebviewRegistry, hosts a real WebContentsView on a
-// data: URL, then asserts that (a) capturePage yields non-empty JPEG bytes
-// and (b) a nav event fires. Run with:
+// Integration harness for the registry. Boots a real Electron main process,
+// creates a window and a WebviewRegistry, hosts a real WebContentsView on a
+// data: url, then asserts that capturePage yields non-empty JPEG bytes and that
+// a nav event fires. Run with:
 //
 //   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
 //
-// Prints "HARNESS PASS" / "HARNESS FAIL: ..." and exits with 0/1.
+// Prints "HARNESS PASS" or "HARNESS FAIL: ..." and exits 0 or 1.
 import { app, BaseWindow, BrowserWindow } from 'electron';
 import { WebviewRegistry } from '../main/webviews';
 import { registerWebviewIpc } from '../main/register';
@@ -13,10 +13,10 @@ import type { NavEvent } from '../main/ipc';
 import { PARK_COORD } from '../main/viewutil';
 
 // The touch-scroll scenario synthesizes TouchEvents inside the hosted page.
-// Chromium only exposes the Touch/TouchEvent constructors when touch events
-// are on — a real touchscreen turns them on by detection; the harness forces
-// them so the synthetic gesture can be built. The production app sets no such
-// switch (detection is the product behavior).
+// Chromium exposes the Touch and TouchEvent constructors only when touch events
+// are on. A real touchscreen turns them on by detection; the harness forces them
+// so the synthetic gesture can be built. The production app sets no such switch,
+// because detection is the product behavior.
 app.commandLine.appendSwitch('touch-events', 'enabled');
 
 const DATA_URL =
@@ -71,9 +71,9 @@ app.whenReady().then(async () => {
   console.log(`freeze ok: ${freeze.jpegBase64.length} base64 chars, title=${JSON.stringify(freeze.title)}`);
 
   // ── goBack walks the view's real navigation history ─────────────────────
-  // The bar's back button and the context menu's Back share ONE owner
-  // (registry.goBack); this pins it against Electron's navigationHistory
-  // on a real view: two loads, one goBack, the first url is current again.
+  // The bar's back button and the context menu's Back share one owner,
+  // registry.goBack. This pins it against Electron's navigationHistory on a
+  // real view: two loads, one goBack, and the first url is current again.
   const FIRST_URL = 'data:text/html,' + encodeURIComponent('<title>First</title>first');
   const SECOND_URL = 'data:text/html,' + encodeURIComponent('<title>Second</title>second');
   await registry.place('paneb', 'u1/46', FIRST_URL, { x: 0, y: 0, width: 400, height: 300 });
@@ -102,10 +102,10 @@ app.whenReady().then(async () => {
   console.log('goBack ok: second → first, no-op at the start');
 
   // ── a view placed while an overlay is open starts parked ────────────────
-  // PlaceArgs.hidden is the renderer's verdict for THIS frame (issue #33
-  // mechanism A): a view placed while the palette is open must land at
-  // PARK_COORD, never on top of the canvas overlay for one round-trip, and
-  // the next setHidden(false) moves it to its real bounds.
+  // PlaceArgs.hidden is the renderer's verdict for this frame. A view placed
+  // while the palette is open must land at PARK_COORD, never on top of the
+  // canvas overlay for even one round trip, and the next setHidden(false) moves
+  // it to its real bounds.
   const hiddenBounds = { x: 10, y: 20, width: 300, height: 200 };
   await registry.place('pane1h', 'u1/45', DATA_URL, hiddenBounds, 0, '', false, true);
   const parked = registry.viewBoundsFor('pane1h');
@@ -119,18 +119,16 @@ app.whenReady().then(async () => {
   console.log('hidden place ok: parked at PARK_COORD, un-parked to its bounds');
 
   // ── a dead view yields an empty freeze, never a throw ──────────────────
-  // The crashed-tab ascent: every view-bound read in remove() throws once
-  // the webContents is gone; remove() must still complete and hand back an
-  // empty freeze (the wasm side skips SetURLState on an all-empty result).
-  // (The session-dehydrate half of this scenario died 2026-07-26: the
-  // Chromium session is host-local now — Chromium's own disk persistence is
-  // the system of record, so a crashed view no longer risks losing logins.)
+  // The crashed-tab ascent: every view-bound read in remove() throws once the
+  // webContents is gone, and remove() must still complete and hand back an
+  // empty freeze. The wasm side skips the freeze writeback on an all-empty
+  // result, so nothing overwrites the good preview.
   const reg2 = new WebviewRegistry(win, {});
   await reg2.place('pane2', 'u1/43', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   if ((await waitForNonEmptyCapture(reg2, 'pane2', 6000)).length === 0) {
     fail('dead-view scenario: view produced no frame within 6s');
   }
-  // Destroy the renderer out from under the registry — the crashed-tab shape.
+  // Destroy the renderer out from under the registry: the crashed-tab shape.
   (reg2 as unknown as { entries: Map<string, { view: { webContents: { close(): void } } }> })
     .entries.get('pane2')!
     .view.webContents.close();
@@ -140,14 +138,14 @@ app.whenReady().then(async () => {
   console.log('dead-view remove ok: empty freeze, no throw');
 
   // ── single-finger touch scroll over a live view ─────────────────────────
-  // A finger drag over live web content must scroll the page, content
-  // following the finger (the preload forwards per-move deltas; the registry
-  // injects mouseWheel back into the view — see urlview-preload.ts). This
-  // crosses the REAL seam: page TouchEvents → preload listener → IPC
-  // (production registerWebviewIpc wiring) → registry.touchScroll →
-  // sendInputEvent → Chromium scrolls. It also pins the delta SIGN against
-  // real Chromium: start mid-page, drag the finger UP, and the scroll offset
-  // must INCREASE — a flipped convention would decrease it.
+  // A finger drag over live web content must scroll the page, with the content
+  // following the finger: the preload forwards per-move deltas and the registry
+  // injects mouseWheel back into the view (see urlview-preload.ts). This crosses
+  // the real seam: page TouchEvents, preload listener, IPC through the
+  // production registerWebviewIpc wiring, registry.touchScroll, sendInputEvent,
+  // and Chromium scrolls. It also pins the delta sign against real Chromium:
+  // start mid-page, drag the finger up, and the scroll offset must increase; a
+  // flipped convention would decrease it.
   const rootWin = new BrowserWindow({ show: false });
   const reg3 = new WebviewRegistry(win, {});
   registerWebviewIpc(reg3, rootWin.webContents, win);
@@ -163,9 +161,9 @@ app.whenReady().then(async () => {
     }
   ).entries.get('pane3')!.view.webContents;
   await wc3.executeJavaScript('window.scrollTo(0, 1000)');
-  // The preload forwards physical screen coords; the registry converts them
-  // back through getContentBounds + view bounds. The view sits at content
-  // (0,0), so screen = content origin + client.
+  // The preload forwards physical screen coords, and the registry converts them
+  // back through getContentBounds and the view bounds. The view sits at content
+  // (0,0), so screen equals the content origin plus the client position.
   const cb3 = win.getContentBounds();
   await wc3.executeJavaScript(
     `(() => {
