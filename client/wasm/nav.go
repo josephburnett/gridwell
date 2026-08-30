@@ -372,14 +372,11 @@ func (a *App) ascendOnce(p *pane.Pane, animate bool) bool {
 		ID: doorTile.ID, X: doorTile.X, Y: doorTile.Y, W: doorTile.W, H: doorTile.H,
 		ViewCx: doorTile.ViewCx, ViewCy: doorTile.ViewCy, ViewZoom: doorTile.ViewZoom,
 	}
+	// The switch state is the doorway's own footprint at overtake — the
+	// inverse of the descent's approach, and the same for a well and for a
+	// namespace crossing (the child grid's coordinates mean nothing out
+	// here, so zoomtrans.Ascent hands back the PARENT-grid center).
 	mid, switchTo := zoomtrans.Ascent(from, w, landing.Path(), r.W, r.H, cellPx)
-	if landing.GridID != "" && p.GridID != "" {
-		// A namespace crossing lands ON the link tile's footprint (the
-		// inverse of the descent's recentre), not on the child's stored view
-		// center — the child grid's coordinates mean nothing out here.
-		switchTo.Cx = float64(doorTile.X) + float64(doorTile.W)/2
-		switchTo.Cy = float64(doorTile.Y) + float64(doorTile.H)/2
-	}
 	if !haveSaved {
 		saved = pane.Frame{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
 	}
