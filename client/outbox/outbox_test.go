@@ -21,7 +21,7 @@ func TestParkAckDrain(t *testing.T) {
 		t.Fatalf("Len = %d, want 3", o.Len())
 	}
 
-	// A completed attempt (success OR verdict) clears its key.
+	// A completed attempt (success or verdict) clears its key.
 	o.Ack(k("SetTextView", "2"))
 	if o.Len() != 2 {
 		t.Fatalf("Len after Ack = %d, want 2", o.Len())
@@ -40,10 +40,10 @@ func TestParkAckDrain(t *testing.T) {
 	}
 }
 
-// TestParkReplacesLastWriterWins pins the LWW rule: a newer parked value for
-// the same key replaces the older thunk (these writes are LWW by design — the
-// drain must land the newest viewport, not replay history), keeping the
-// original drain position.
+// TestParkReplacesLastWriterWins pins the last-writer-wins rule: a newer
+// parked value for the same key replaces the older thunk — the drain lands
+// the newest viewport rather than replaying history — and keeps the original
+// drain position.
 func TestParkReplacesLastWriterWins(t *testing.T) {
 	o := New()
 	var fired []string
@@ -92,7 +92,7 @@ func TestReparkDuringDrain(t *testing.T) {
 	}
 }
 
-// TestRecordIsTheOneRule is the whole reconcile table: ONLY a transport
+// TestRecordIsTheOneRule is the whole reconcile table: only a transport
 // failure parks. Every other outcome means the server spoke — the write
 // landed, lost a version race, or was refused — and the caller's own reaction
 // (refetch, surface, drop the local copy) resolves it from there. A parked
@@ -116,10 +116,10 @@ func TestRecordIsTheOneRule(t *testing.T) {
 	}
 }
 
-// TestRecordAcksAStaleParkOnSuccess: a write that lands must clear an entry
-// an EARLIER attempt parked, or the next drain replays old state over the
-// value the server now holds. Acking on every completion (not just failures)
-// is what makes the last-writer-wins rule hold across a reconnect.
+// TestRecordAcksAStaleParkOnSuccess: a write that lands clears an entry an
+// earlier attempt parked, or the next drain replays old state over the value
+// the server now holds. Acking on every completion, not just failures, is
+// what makes the last-writer-wins rule hold across a reconnect.
 func TestRecordAcksAStaleParkOnSuccess(t *testing.T) {
 	o := New()
 	o.Park(k("SetFraming", "1"), func() { t.Error("stale parked write was replayed") })
@@ -133,8 +133,8 @@ func TestRecordAcksAStaleParkOnSuccess(t *testing.T) {
 }
 
 // TestRecordWithNoRetryStillAcks: a write with nothing to park (a create, a
-// drag whose ghost snaps back — the failure is visible on screen and IS the
-// reconcile) must not leave a stale entry behind when it completes.
+// drag whose ghost snaps back — the failure is visible on screen and is the
+// reconcile) leaves no stale entry behind when it completes.
 func TestRecordWithNoRetryStillAcks(t *testing.T) {
 	o := New()
 	o.Park(k("CreateText", "1"), func() { t.Error("replayed") })

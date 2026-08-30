@@ -1,10 +1,8 @@
-// Package outbox is the ONE ordered record of writes the server has not
-// acknowledged, and the ONE rule for what to do about them
-// (docs/simplify-plan.md S5; it absorbed client/pending, 2026-08-14's
-// per-write-family ledger).
+// Package outbox is the one ordered record of writes the server has not
+// acknowledged, and the one rule for what to do about them.
 //
-// The rule, in one sentence: LOCAL STATE MAY BE DROPPED ONLY ON A SERVER
-// VERDICT. A dispatcher that fails on TRANSPORT — the server never spoke,
+// The rule: local state may be dropped only on a server verdict. A
+// dispatcher that fails on transport — the server never spoke,
 // clientsync.OutcomeTransport — parks its write here as a retry thunk; every
 // completed attempt for the same key (success, conflict, rejection) acks it
 // away. Record is that fork, in exactly one place, so no dispatcher can
@@ -13,21 +11,18 @@
 //
 // # What it holds, and what it does not
 //
-// Entries are ORDER and RETRY, never a copy of the user's value. One live
+// Entries are order and retry, never a copy of the user's value. One live
 // entry per key: writes here are last-writer-wins by design (a viewport, a
-// frozen face, a workspace arrangement, a name), so a newer parked thunk
-// REPLACES an older one for the same key and keeps its drain position, and a
-// newer SUCCESSFUL write clears a stale parked one — which is why Record acks
-// on every completion, not only on failures.
+// frozen face, a pane arrangement, a name), so a newer parked thunk replaces
+// an older one for the same key and keeps its drain position, and a newer
+// successful write clears a stale parked one — which is why Record acks on
+// every completion, not only on failures.
 //
 // A content write parks like everything else, but its thunk re-reads the
 // bytes from the cache's content entry, which is their one owner (the
 // textarea is a view of that entry, not a second copy). So the outbox knows
-// WHICH tiles still owe the server a write and IN WHAT ORDER, while the bytes
-// stay where the renderer reads them. Before this package there were two
-// ledgers — this one for framing and freezes, the cache's dirty flags for
-// text — with two drains and two reconcile rules, and the unload flush ran
-// only the second: everything parked by an earlier outage died with the page.
+// which tiles still owe the server a write and in what order, while the
+// bytes stay where the renderer reads them.
 package outbox
 
 import (
@@ -62,7 +57,7 @@ func New() *Outbox {
 	return &Outbox{m: map[Key]func(){}}
 }
 
-// Record is THE reconcile rule: a transport failure parks the write for the
+// Record is the reconcile rule: a transport failure parks the write for the
 // retry kick; any other outcome — it landed, it conflicted, it was refused —
 // acknowledges the key, because the server spoke and the caller's own
 // reaction (refetch, surface, drop) is what resolves it from here.
@@ -89,7 +84,7 @@ func (o *Outbox) Park(k Key, retry func()) {
 	o.m[k] = retry
 }
 
-// Ack clears k: an attempt for this key COMPLETED.
+// Ack clears k: an attempt for this key completed.
 func (o *Outbox) Ack(k Key) {
 	o.mu.Lock()
 	defer o.mu.Unlock()

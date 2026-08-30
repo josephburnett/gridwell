@@ -1,9 +1,9 @@
 // Package cache holds the client-side per-grid tile cache and the
 // reconciliation logic that applies Subscribe events to it.
 //
-// Splitting this out of the WASM main lets us test the merge semantics
-// without a browser: the WASM layer just calls Apply on each event from the
-// SSE stream.
+// It is a separate package so the merge semantics are testable without a
+// browser: the wasm layer calls Apply on each event from the subscribe
+// stream.
 package cache
 
 import (
@@ -28,15 +28,14 @@ type Cache struct {
 	// not-yet-saved edits. Keying by tile id makes every write tile-scoped:
 	// editing one clone never touches a sibling's body.
 	//
-	// Each entry binds the bytes to the server version they derive from (Base)
-	// — ONE fact, "the content state this client has seen", with one owner.
-	// Splitting them (bytes here, version on the grid row) was the stomp bug:
-	// a foreign writer's event advanced the row version while the stale bytes
-	// stayed cached, so the next save carried current-version + old-bytes and
-	// sailed through the server's optimistic-concurrency check, silently
-	// destroying the foreign edit. Saves now claim SaveBasis (the entry's
-	// Base), which only fetches and save responses ever advance — a version
-	// can never be claimed apart from the bytes it vouches for.
+	// Each entry binds the bytes to the server version they derive from
+	// (Base): one fact, "the content state this client has seen", with one
+	// owner. Keeping the version anywhere else (on the grid row, say) lets a
+	// foreign writer's event advance it while the stale bytes stay cached,
+	// and the next save carries current-version with old-bytes past the
+	// server's concurrency check. Saves claim SaveBasis (the entry's Base),
+	// which only fetches and save responses advance, so a version is never
+	// claimed apart from the bytes it vouches for.
 	content map[string]*contentEntry
 }
 
@@ -64,20 +63,20 @@ func New() *Cache {
 // row version the server read it under (ReadContent chunk-1 version). The
 // entry is clean: server truth, no local edits riding on it.
 //
-// A DIRTY entry is never replaced: the fetch raced local unsaved edits (a
+// A dirty entry is never replaced: the fetch raced local unsaved edits (a
 // keystroke typed during the fetch's flight, or an ascent flush that queued a
-// save while the fetch was out). Overwriting would both destroy the typing on
-// screen AND advance the basis a queued save claims at send time — re-forging
-// exactly the stale-bytes-with-current-version claim SaveBasis exists to
-// prevent. The dirty entry's own save resolves it: accepted (basis current) or
+// save while the fetch was out). Overwriting would destroy the typing on
+// screen and advance the basis a queued save claims at send time — the
+// stale-bytes-with-current-version claim SaveBasis exists to prevent. The
+// dirty entry's own save resolves it: accepted (basis current) or
 // 409-reconciled (basis stale), either way through a path the user can see.
 //
-// A STALE reply never regresses the basis (issue #189): a fetch that was in
-// flight while typing + an autosave completed lands last, carrying pre-edit
-// bytes under an older version — the entry is clean by then, so only the
-// version comparison stands between it and a visible rollback (the overlay
-// repaints old bytes, the caret jumps, and the regressed basis manufactures
-// a 409 on the next save). The basis moves forward or not at all.
+// A stale reply never regresses the basis. A fetch that was in flight while
+// typing and an autosave completed lands last, carrying pre-edit bytes under
+// an older version; the entry is clean by then, so only the version
+// comparison stands between it and a visible rollback (the overlay repaints
+// old bytes, the caret jumps, and the regressed basis manufactures a 409 on
+// the next save). The basis moves forward or not at all.
 func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -106,16 +105,16 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 	e.dirty = true
 }
 
-// PutSavedContent stores the body a completed UpdateText confirmed, with the
-// response tile's version as the new base — the next queued save chains from
-// it (issue #140). The entry is clean again: the server holds these bytes.
+// PutSavedContent stores the body a completed content write confirmed, with
+// the response tile's version as the new base, so the next queued save chains
+// from it. The entry is clean again: the server holds these bytes.
 //
-// EXCEPT when newer local edits landed while the save was in flight: the
-// entry is dirty with DIFFERENT bytes than the ones this save confirmed.
-// The cache entry is the ONE owner of unsaved typing (there is no DOM buffer
-// to fall back on), so replacing it would destroy those keystrokes. Keep the
-// newer bytes and their dirty mark; only the basis advances — the follow-up
-// save chains from the version this write established.
+// Except when newer local edits landed while the save was in flight: the
+// entry is dirty with different bytes than the ones this save confirmed. The
+// cache entry is the one owner of unsaved typing — there is no DOM buffer to
+// fall back on — so replacing it would destroy those keystrokes. Keep the
+// newer bytes and their dirty mark; only the basis advances, and the
+// follow-up save chains from the version this write established.
 func (c *Cache) PutSavedContent(tileID string, data []byte, base int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -126,10 +125,10 @@ func (c *Cache) PutSavedContent(tileID string, data []byte, base int64) {
 	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
 }
 
-// SaveBasis returns the version an UpdateText for this tile must claim: the
-// version of the bytes the user's edit is actually based on. Only content
+// SaveBasis returns the version a content write for this tile must claim:
+// the version of the bytes the user's edit is based on. Only content
 // fetches and save responses advance it — a foreign writer's event advances
-// the grid ROW version but never this, so a save based on bytes the client
+// the grid row version but never this, so a save based on bytes the client
 // hasn't refreshed claims the old version and is rejected by the server
 // instead of silently overwriting the foreign edit.
 func (c *Cache) SaveBasis(tileID string) (int64, bool) {
@@ -144,8 +143,8 @@ func (c *Cache) SaveBasis(tileID string) (int64, bool) {
 
 // DirtyContent returns a copy of the tile's body iff the entry carries an
 // unsaved local edit. The read every flush path uses: bytes come out keyed by
-// the tile id they were edited under, so a flush can never attribute one
-// tile's buffer to another (the cross-tile stomp becomes unrepresentable).
+// the tile id they were edited under, so a flush cannot attribute one tile's
+// buffer to another.
 func (c *Cache) DirtyContent(tileID string) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -181,7 +180,7 @@ func cloneBytes(b []byte) []byte {
 // DropTileContent forgets a tile's cached body so the next read refetches it
 // from the server. The reconcile hook for a rejected optimistic edit: the
 // server refused the write, so the cached bytes are client-only fiction and
-// must not keep rendering as if saved (charter §6/§7).
+// must not keep rendering as if saved.
 func (c *Cache) DropTileContent(tileID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -202,9 +201,9 @@ func (c *Cache) TileContent(tileID string) ([]byte, bool) {
 
 // PutGrid replaces a grid's metadata and tile set. Used after a fresh
 // GetGrid call. Each replaced row runs the same content reconciliation as a
-// Subscribe event (reconcileContent) — a refetch and an event are the same
+// Subscribe event (reconcileContent): a refetch and an event are the same
 // fact arriving on two paths and must age cached bodies identically, or one
-// path silently advances the version past the bytes (the stomp class).
+// path silently advances the version past the bytes.
 func (c *Cache) PutGrid(g rpc.Grid, tiles []rpc.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -226,11 +225,11 @@ func (c *Cache) PutGrid(g rpc.Grid, tiles []rpc.Tile) {
 // Callers hold c.mu.
 //
 // Text tiles: a row version beyond the entry's base means a foreign writer
-// changed the content — drop a CLEAN entry so the next render refetches (the
-// foreign edit becomes visible), keep a DIRTY one (the user's unsaved typing;
-// its save claims the old base, the server rejects it, and the conflict path
-// reconciles visibly). Same-version rows never drop: framing writes don't
-// bump version and must not evict the body.
+// changed the content. Drop a clean entry so the next render refetches and
+// the foreign edit becomes visible; keep a dirty one — the user's unsaved
+// typing, whose save claims the old base, is rejected, and reconciles
+// visibly through the conflict path. Same-version rows never drop: framing
+// writes don't bump version and must not evict the body.
 //
 // Non-text tiles: version is not the content key (a pane tile's layout blob
 // is framing-class and never bumps version), so a changed blob id is the
@@ -313,14 +312,14 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		if !ok {
 			return false
 		}
-		// The optimistic-echo interlock (I11 residual, issue #5): an event
-		// STRICTLY OLDER than the cached row is a stale echo — a Subscribe
-		// event that lost the race against the mutation response that already
-		// landed here (postPersist writes the response row, version N; the
-		// echo of the PREVIOUS state, N-1, may still be in flight). Applying
-		// it would visibly roll the tile back and then forward — spontaneous
-		// mutation the user never made. Same-version events still apply:
-		// framing changes never bump version but do change view_*.
+		// The optimistic-echo interlock: an event strictly older than the
+		// cached row is a stale echo — a Subscribe event that lost the race
+		// against the mutation response that already landed here (the
+		// response row is version N; the echo of the previous state, N-1,
+		// may still be in flight). Applying it would visibly roll the tile
+		// back and then forward: mutation the user never made. Same-version
+		// events still apply, because framing changes never bump version but
+		// do change the framing columns.
 		if cur, exists := g.Tiles[n.ID]; exists && n.Version < cur.Version {
 			return false
 		}
@@ -338,13 +337,13 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 			return false
 		}
 		_, present := g.Tiles[ev.TileRemoved.TileID]
-		// Drop the removed tile's CLEAN cached body so a delete doesn't
-		// strand content in the map forever — but SPARE a dirty one. A
-		// cross-grid MOVE emits TileRemoved(src) then TileChanged(dst) for
-		// the SAME tile (store/place.go), so unsaved keystrokes must survive
-		// the hop; and even for a genuine delete, silently discarding the
-		// user's unsaved words is the transport-loss class (2026-08-14) —
-		// the flush sweep surfaces the orphan visibly instead.
+		// Drop the removed tile's clean cached body so a delete doesn't
+		// strand content in the map forever, but spare a dirty one. A
+		// cross-grid move emits TileRemoved(src) then TileChanged(dst) for
+		// the same tile (store/place.go), so unsaved keystrokes must survive
+		// the hop. Even for a genuine delete, discarding the user's unsaved
+		// words silently is data loss: the flush sweep surfaces the orphan
+		// instead.
 		if e, ok := c.content[ev.TileRemoved.TileID]; !ok || !e.dirty {
 			delete(c.content, ev.TileRemoved.TileID)
 		}

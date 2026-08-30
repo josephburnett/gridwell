@@ -42,12 +42,11 @@ func TestOf(t *testing.T) {
 	}
 }
 
-// TestOfPinsWireCodes crosses the seam Of's transport set depends on: a
-// REAL connect-go client (the same generated stub the wasm client uses)
-// against a dead port, and with a canceled context, must classify
-// Transport. If a connect-go upgrade ever changes how it codes transport
-// failures, this fails loudly instead of silently reopening the
-// drop-user-data-on-a-blip class (2026-08-14).
+// TestOfPinsWireCodes crosses the seam Of's transport set depends on: a real
+// connect-go client (the same generated stub the wasm client uses) against a
+// dead port, and with a canceled context, classifies Transport. If a
+// connect-go upgrade changes how it codes transport failures, this fails
+// loudly instead of silently reopening the drop-user-data-on-a-blip class.
 func TestOfPinsWireCodes(t *testing.T) {
 	// Connection refused: nothing listens on port 1.
 	cl := gridwellv1connect.NewGridwellClient(http.DefaultClient, "http://127.0.0.1:1", connect.WithProtoJSON())
@@ -65,12 +64,12 @@ func TestOfPinsWireCodes(t *testing.T) {
 	}
 }
 
-// TestReactTables pins all three policy tables side by side. The single
-// load-bearing row is Transport: NO table may set DropLocal there — local
-// state (a dirty buffer, a pending framing value) may only reconcile away
-// on a server verdict. And no table may Refetch on Transport: against a
-// flapping link a refetch can succeed and revert an optimistic patch whose
-// write never landed.
+// TestReactTables pins all three policy tables side by side. The
+// load-bearing row is Transport: no table sets DropLocal there — local state
+// (a dirty buffer, a pending framing value) reconciles away only on a server
+// verdict — and no table Refetches there, because against a flapping link a
+// refetch can succeed and revert an optimistic patch whose write never
+// landed.
 func TestReactTables(t *testing.T) {
 	tables := []struct {
 		name  string
@@ -90,9 +89,9 @@ func TestReactTables(t *testing.T) {
 			OutcomeTransport: {Log: true, Retry: true},
 		}},
 		// ReactSave differs from the other two on Conflict alone, and
-		// deliberately (docs/simplify-plan.md S5): a save conflict now means
-		// a real concurrent edit is about to replace the user's words, so it
-		// is surfaced instead of reconciled in silence.
+		// deliberately: a save conflict means a real concurrent edit is
+		// about to replace the user's words, so it is surfaced instead of
+		// reconciled in silence.
 		{"ReactSave", ReactSave, map[Outcome]Reaction{
 			OutcomeOK:        {},
 			OutcomeConflict:  {Refetch: true, Log: true, DropLocal: true},
