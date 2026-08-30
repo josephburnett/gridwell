@@ -16,7 +16,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -26,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -36,22 +34,25 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/eventhub"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
 
-// Dialer builds a client of a remote node's export from a resolved config.
-// Production is dial.Dial (whose ssh session is itself lazy and
-// self-healing); tests inject in-process remotes.
-type Dialer func(cfg dial.Config) (gridwellv1.GridwellClient, func(), error)
+// Dialer builds a namespace over a remote node's export from a resolved
+// config. Production is dial.Dial (whose ssh session is itself lazy and
+// self-healing, and which reads the far node's gridwell.v1 through the one
+// client codec, namespace.FromClient); tests inject in-process remotes.
+type Dialer func(cfg dial.Config) (namespace.Namespace, func(), error)
 
 // bootDialWait bounds how long ConnectAll waits for each connection at
 // boot before serving anyway (the dial keeps trying in the background).
 var bootDialWait = 5 * time.Second
 
-// Server is the transport: a GridwellServer whose ids are chains through
-// its connections.
+// Server is the transport: a namespace.Namespace whose ids are chains
+// through its connections — each connection itself a Namespace, read off
+// the far node's federation socket by namespace.FromClient.
 type Server struct {
-	gridwellv1.UnimplementedGridwellServer
+	namespace.Unimplemented
 
 	db   *DB
 	dial Dialer
@@ -81,7 +82,7 @@ type Conn struct {
 // and non-blocking (sshdial's ssh layer is lazy); a liveConn exists as soon
 // as the connection dialed.
 type liveConn struct {
-	client gridwellv1.GridwellClient
+	client namespace.Namespace
 	closer func()
 	cancel context.CancelFunc // stops the root-fetch/fan-in goroutines
 	// rootFetching single-flights the remote-root learn.
@@ -99,6 +100,9 @@ type Row struct {
 	ViewCy       float64
 	ViewZoom     float64
 }
+
+// The router calls the transport as a Go value; the compiler says so.
+var _ namespace.Namespace = (*Server)(nil)
 
 // New builds the transport and RECONCILES the store against the declared
 // connections (server.yaml is authoritative): a declared name that is
@@ -233,7 +237,7 @@ func (s *Server) Rows(ctx context.Context) []Row {
 // prepending response ids.
 type forward struct {
 	ns     string
-	client gridwellv1.GridwellClient
+	client namespace.Namespace
 }
 
 // route resolves the connection an id chains through: the first segment
@@ -456,7 +460,7 @@ func (s *Server) kickRootFetch(c *Conn) {
 // re-subscribes — never silently: each transition is logged and published
 // as an EventPluginHealth (the same contract the node's fanInEvents keeps
 // per namespace, issue #47).
-func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.GridwellClient) {
+func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Namespace) {
 	healthy := true
 	report := func(up bool, detail string) {
 		s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
@@ -464,36 +468,31 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.G
 		}}})
 	}
 	for {
-		stream, err := client.Subscribe(ctx, &gridwellv1.SubscribeRequest{})
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			log.Printf("gridwell: remote %s: event subscribe failed: %v (retrying in 5s)", ns, err)
-			if healthy {
-				healthy = false
-				report(false, err.Error())
-			}
-		} else {
-			if !healthy {
-				healthy = true
-				report(true, "")
-			}
-			for {
-				ev, rerr := stream.Recv()
-				if rerr != nil {
-					if ctx.Err() != nil {
-						return
-					}
-					log.Printf("gridwell: remote %s: event stream ended: %v (retrying in 5s)", ns, rerr)
-					if healthy {
-						healthy = false
-						report(false, rerr.Error())
-					}
-					break
-				}
+		// ESTABLISHED, not "opened": a callback stream has no open to
+		// report, so namespace.Follow decides the moment (the one
+		// definition the node's own fan-in reads too).
+		err := namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{},
+			func(ev *gridwellv1.Event) error {
 				s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
-			}
+				return nil
+			},
+			func() {
+				if !healthy {
+					healthy = true
+					report(true, "")
+				}
+			})
+		if ctx.Err() != nil {
+			return
+		}
+		detail := "the remote's event stream ended"
+		if err != nil {
+			detail = err.Error()
+		}
+		log.Printf("gridwell: remote %s: event stream ended: %v (retrying in 5s)", ns, detail)
+		if healthy {
+			healthy = false
+			report(false, detail)
 		}
 		select {
 		case <-ctx.Done():
@@ -683,76 +682,55 @@ func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	return fw.client.DeleteTile(ctx, out)
 }
 
-func (s *Server) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
-	ctx := stream.Context()
+func (s *Server) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
 	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
 		return err
 	}
-	cs, err := fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local})
-	if err != nil {
-		return err
-	}
-	return relay(cs, stream)
+	return fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local}, send)
 }
 
-func (s *Server) ServeContent(req *gridwellv1.ServeContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ServeContentChunk]) error {
-	ctx := stream.Context()
+func (s *Server) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {
 	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
 		return err
 	}
-	cs, err := fw.client.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: local, Subpath: req.Subpath})
-	if err != nil {
-		return err
-	}
-	return relay(cs, stream)
+	return fw.client.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: local, Subpath: req.Subpath}, send)
 }
 
-func (s *Server) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.WriteContentRequest, gridwellv1.TileResponse]) error {
-	ctx := stream.Context()
-	first, err := stream.Recv()
+func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
+	first, err := recv()
 	if err != nil {
-		return status.Error(codes.InvalidArgument, "remote: write: empty stream")
+		return nil, status.Error(codes.InvalidArgument, "remote: write: empty stream")
 	}
 	if first.TileId == "" {
-		return status.Error(codes.InvalidArgument, "remote: write: first message must bind tile_id")
+		return nil, status.Error(codes.InvalidArgument, "remote: write: first message must bind tile_id")
 	}
 	fw, local, err := s.route(ctx, first.TileId)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cs, err := fw.client.WriteContent(ctx)
-	if err != nil {
-		return err
-	}
+	// CLONE before rewriting: without a wire between the caller and this
+	// hop, the request is the caller's own message (namespace.Namespace's
+	// ownership contract).
 	rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
 	rewritten.TileId = local
-	if err := cs.Send(rewritten); err != nil {
-		return err
-	}
-	for {
-		msg, rerr := stream.Recv()
-		if errors.Is(rerr, io.EOF) {
-			break
+	sentFirst := false
+	resp, err := fw.client.WriteContent(ctx, func() (*gridwellv1.WriteContentRequest, error) {
+		if !sentFirst {
+			sentFirst = true
+			return rewritten, nil
 		}
-		if rerr != nil {
-			return rerr
-		}
-		if err := cs.Send(msg); err != nil {
-			return err
-		}
-	}
-	resp, err := cs.CloseAndRecv()
+		return recv()
+	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return stream.SendAndClose(prependTileResp(fw.ns, resp))
+	return prependTileResp(fw.ns, resp), nil
 }
 
-func (s *Server) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellRequest, gridwellv1.OpenShellResponse]) error {
-	ctx := stream.Context()
-	first, err := stream.Recv()
+func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) error {
+	first, err := recv()
 	if err != nil {
 		return err
 	}
@@ -760,52 +738,22 @@ func (s *Server) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 	if err != nil {
 		return err
 	}
-	cs, err := fw.client.OpenShell(ctx)
-	if err != nil {
-		return err
-	}
+	// CLONE before rewriting the bind: the caller still owns `first`.
 	rewritten := proto.Clone(first).(*gridwellv1.OpenShellRequest)
 	rewritten.TileId = local
-	if err := cs.Send(rewritten); err != nil {
-		return err
-	}
-	errc := make(chan error, 2)
-	go func() {
-		for {
-			msg, err := stream.Recv()
-			if err != nil {
-				_ = cs.CloseSend()
-				errc <- err
-				return
-			}
-			if err := cs.Send(msg); err != nil {
-				errc <- err
-				return
-			}
+	sentBind := false
+	return fw.client.OpenShell(ctx, func() (*gridwellv1.OpenShellRequest, error) {
+		if !sentBind {
+			sentBind = true
+			return rewritten, nil
 		}
-	}()
-	go func() {
-		for {
-			msg, err := cs.Recv()
-			if err != nil {
-				errc <- err
-				return
-			}
-			if err := stream.Send(msg); err != nil {
-				errc <- err
-				return
-			}
-		}
-	}()
-	if err := <-errc; err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	return nil
+		return recv()
+	}, send)
 }
 
 // Subscribe streams every connection's remote events (prefixed) and the
 // connections' own health transitions.
-func (s *Server) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStreamingServer[gridwellv1.Event]) error {
+func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := s.hub.Subscribe()
 	defer cancel()
 	for {
@@ -814,10 +762,13 @@ func (s *Server) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStr
 			if !ok {
 				return nil
 			}
-			if err := stream.Send(ev); err != nil {
+			// The hub hands the SAME event to every subscriber; nobody
+			// mutates it (the router's qualification clones — see
+			// namespace's ownership contract).
+			if err := send(ev); err != nil {
 				return err
 			}
-		case <-stream.Context().Done():
+		case <-ctx.Done():
 			return nil
 		}
 	}
@@ -888,24 +839,6 @@ func stripPrefix(id, ns string) string {
 		return id[len(ns)+1:]
 	}
 	return id
-}
-
-type recvStream[T any] interface{ Recv() (*T, error) }
-type sendStream[T any] interface{ Send(*T) error }
-
-func relay[T any](from recvStream[T], to sendStream[T]) error {
-	for {
-		msg, err := from.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if err := to.Send(msg); err != nil {
-			return err
-		}
-	}
 }
 
 // eventKey names the entity a wire event is about, so the hub

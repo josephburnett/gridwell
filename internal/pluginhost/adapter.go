@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"sync"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -32,12 +31,15 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// Adapter implements gridwellv1.GridwellServer over one plugin + its
-// namespace of the node's store (docs/one-node.md §2.6).
+// Adapter implements namespace.Namespace over one plugin + its namespace
+// of the node's store (docs/one-node.md §2.6): the router calls it as a Go
+// value, and the ONE gRPC hop left underneath is the plugin.v1 subprocess
+// — the third-party door (charter, 2026-08-15).
 type Adapter struct {
-	gridwellv1.UnimplementedGridwellServer
+	namespace.Unimplemented
 	cp  pluginv1.PluginClient
 	mem *store.Namespace
 
@@ -49,6 +51,9 @@ type Adapter struct {
 	kindMu sync.Mutex
 	kind   string
 }
+
+// A plugin reaches the router as a Go value; the compiler is what says so.
+var _ namespace.Namespace = (*Adapter)(nil)
 
 // New builds the adapter. The caller owns both halves' lifecycles.
 func New(cp pluginv1.PluginClient, mem *store.Namespace) *Adapter {
@@ -584,12 +589,12 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	return &gridwellv1.SetFramingResponse{Tile: t.GetTile()}, nil
 }
 
-func (a *Adapter) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
+func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
 	_, key, err := a.key(req.TileId)
 	if err != nil {
 		return err
 	}
-	cs, err := a.cp.ReadContent(stream.Context(), &pluginv1.ReadContentRequest{Key: key})
+	cs, err := a.cp.ReadContent(ctx, &pluginv1.ReadContentRequest{Key: key})
 	if err != nil {
 		return err
 	}
@@ -603,18 +608,18 @@ func (a *Adapter) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.Se
 		}
 		// Plugin content is not version-edited: version 0, the legacy
 		// fs/proc wire fact.
-		if serr := stream.Send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType}); serr != nil {
+		if serr := send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType}); serr != nil {
 			return serr
 		}
 	}
 }
 
-func (a *Adapter) ServeContent(req *gridwellv1.ServeContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ServeContentChunk]) error {
+func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {
 	_, key, err := a.key(req.TileId)
 	if err != nil {
 		return err
 	}
-	cs, err := a.cp.ServeContent(stream.Context(), &pluginv1.ServeContentRequest{Key: key, Subpath: req.Subpath})
+	cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: key, Subpath: req.Subpath})
 	if err != nil {
 		return err
 	}
@@ -626,7 +631,7 @@ func (a *Adapter) ServeContent(req *gridwellv1.ServeContentRequest, stream grpc.
 		if rerr != nil {
 			return rerr
 		}
-		if serr := stream.Send(&gridwellv1.ServeContentChunk{Status: chunk.Status, MediaType: chunk.MediaType, Data: chunk.Data}); serr != nil {
+		if serr := send(&gridwellv1.ServeContentChunk{Status: chunk.Status, MediaType: chunk.MediaType, Data: chunk.Data}); serr != nil {
 			return serr
 		}
 	}

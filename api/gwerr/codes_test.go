@@ -8,28 +8,26 @@ import (
 )
 
 // TestCodeTableIsTotal pins that every gRPC error code (Canceled..
-// Unauthenticated) and every Connect code has a distinct partner and
-// round-trips through the table unchanged. This is the drift lint for the
-// two transport hops: a code absent here would fall to Internal on one
-// wire and lose its meaning (a transport failure read as a verdict) on
-// the next.
+// Unauthenticated) has a DISTINCT Connect partner, and that every Connect
+// code is reachable. This is the drift lint for the one hop that
+// translates (server.asConnectError): a code absent here would fall to
+// Internal on the browser's wire and lose its meaning — a transport
+// failure read as a verdict, and clientsync dropping a parked write.
 func TestCodeTableIsTotal(t *testing.T) {
+	seen := map[connect.Code]codes.Code{}
 	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {
 		cc := ConnectCode(c)
 		if cc == connect.CodeInternal && c != codes.Internal {
 			t.Errorf("gRPC %v has no Connect partner (fell to Internal)", c)
 		}
-		if back := GRPCCode(cc); back != c {
-			t.Errorf("gRPC %v → Connect %v → gRPC %v; want the original", c, cc, back)
+		if prev, dup := seen[cc]; dup {
+			t.Errorf("gRPC %v and %v both map to Connect %v; the codes must stay distinguishable", prev, c, cc)
 		}
+		seen[cc] = c
 	}
 	for cc := connect.CodeCanceled; cc <= connect.CodeUnauthenticated; cc++ {
-		g := GRPCCode(cc)
-		if g == codes.Internal && cc != connect.CodeInternal {
-			t.Errorf("Connect %v has no gRPC partner (fell to Internal)", cc)
-		}
-		if back := ConnectCode(g); back != cc {
-			t.Errorf("Connect %v → gRPC %v → Connect %v; want the original", cc, g, back)
+		if _, ok := seen[cc]; !ok {
+			t.Errorf("Connect %v is unreachable: no gRPC code maps to it", cc)
 		}
 	}
 	if ConnectCode(codes.OK) != connect.CodeInternal {

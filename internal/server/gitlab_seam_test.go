@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
@@ -53,7 +54,7 @@ func gitlabTodo(id int64, created string) todos.Todo {
 
 // gitlabStackAt stands the plugin up over an EXISTING memory DB path
 // (a restart reuses it) and returns the adapter client plus a closer.
-func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (gridwellv1.GridwellClient, func()) {
+func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (namespace.Namespace, func()) {
 	t.Helper()
 	memStore, err := store.Open(memPath)
 	if err != nil {
@@ -63,11 +64,8 @@ func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (gr
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, memStore.Namespace("p1")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return client, func() { closer(); cpCloser(); _ = memStore.Close() }
+	client := pluginhost.New(cp, memStore.Namespace("p1"))
+	return client, func() { cpCloser(); _ = memStore.Close() }
 }
 
 func tileByLabelPrefix(tiles []*gridwellv1.Tile, prefix string) *gridwellv1.Tile {
@@ -181,19 +179,12 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 }
 
 // readContent drains a tile's ReadContent stream through the adapter client.
-func readContent(t *testing.T, client gridwellv1.GridwellClient, tileID string) string {
+func readContent(t *testing.T, client namespace.Namespace, tileID string) string {
 	t.Helper()
-	rs, err := client.ReadContent(context.Background(), &gridwellv1.ReadContentRequest{TileId: tileID})
-	if err != nil {
-		t.Fatal(err)
-	}
 	var out []byte
-	for {
-		c, err := rs.Recv()
-		if err != nil {
-			break
-		}
-		out = append(out, c.Data...)
+	if err := client.ReadContent(context.Background(), &gridwellv1.ReadContentRequest{TileId: tileID},
+		func(c *gridwellv1.ContentChunk) error { out = append(out, c.Data...); return nil }); err != nil {
+		t.Fatal(err)
 	}
 	return string(out)
 }

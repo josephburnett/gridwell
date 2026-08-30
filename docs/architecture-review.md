@@ -95,6 +95,11 @@ is copy-and-lint.
 
 ### 5. Home crosses a gRPC hop to reach itself
 
+RESOLVED 2026-08-29 (`docs/simplify-plan.md` S2): namespaces are Go values
+(`internal/namespace`); gRPC survives only at the plugin subprocess and the
+federation socket, and `api/compose/compose.go` — the bufconn loopback — is
+deleted.
+
 Browser → Connect → `connectHandler.route` → bufconn gRPC
 (`api/compose/compose.go`) → `internal/local.Plugin` → store. The
 uniformity ("everything is a `GridwellClient`") bought the router one

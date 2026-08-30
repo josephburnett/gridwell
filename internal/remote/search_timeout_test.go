@@ -2,11 +2,10 @@ package remote
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"google.golang.org/grpc"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -14,19 +13,19 @@ import (
 // hangingSearchClient blocks Search until the caller's context dies —
 // what a wedged ssh tunnel looks like to the fan-out.
 type hangingSearchClient struct {
-	gridwellv1.GridwellClient
+	namespace.Namespace
 }
 
-func (hangingSearchClient) Search(ctx context.Context, _ *gridwellv1.SearchRequest, _ ...grpc.CallOption) (*gridwellv1.SearchResponse, error) {
+func (hangingSearchClient) Search(ctx context.Context, _ *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
 
 type answeringSearchClient struct {
-	gridwellv1.GridwellClient
+	namespace.Namespace
 }
 
-func (answeringSearchClient) Search(context.Context, *gridwellv1.SearchRequest, ...grpc.CallOption) (*gridwellv1.SearchResponse, error) {
+func (answeringSearchClient) Search(context.Context, *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	return &gridwellv1.SearchResponse{Results: []*gridwellv1.SearchResult{{
 		Tile: &gridwellv1.Tile{Id: "farplug/7", GridId: "farplug/1", Kind: "text"},
 	}}}, nil

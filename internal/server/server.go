@@ -1,5 +1,5 @@
 // Package server is the HTTP layer of Gridwell. The RPC surface is
-// served by a Connect-RPC handler at /gridwell.v1.Gridwell/<Method>
+// served by a Connect-RPC codec at /gridwell.v1.Gridwell/<Method>
 // (binary-proto and JSON-over-proto codecs both supported); the static
 // web/ directory is served at /. Live URL tiles are hosted natively by the
 // Electron shell (WebContentsView); shell PTY bytes ride a WebSocket on
@@ -28,6 +28,7 @@ import (
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/shellwire"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"strconv"
 )
@@ -97,23 +98,30 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 	return srv, nil
 }
 
-// routeClient resolves a namespace uuid to its client (home or a plugin).
-// Connections are not addressable by uuid alone — they live under the
-// node's id ("<ID>/<conn>/…"); resolve is the lookup that sees them.
-func (s *Server) routeClient(uuid string) (pb.GridwellClient, bool) {
+// routeClient resolves a namespace uuid to its Namespace (home or a
+// plugin). Connections are not addressable by uuid alone — they live under
+// the node's id ("<ID>/<conn>/…"); resolve is the lookup that sees them.
+func (s *Server) routeClient(uuid string) (namespace.Namespace, bool) {
 	return s.pluginReg.Get(uuid)
 }
 
 // resolve is THE routing lookup: the namespace that owns a qualified id,
-// its client, the local (unprefixed) id the namespace understands, the
-// uuid to re-qualify answers with, and whether the namespace is TRANSIT
-// (its ids are chains from another node — the transit qualification
-// rule). "<ID>/<digits>" is the home store; "<ID>/<letters>/…" is a
-// connection, owned by the transport, whose local id keeps the
-// connection segment ("<conn>/…" — the transport peels it); anything
-// else is a plugin by uuid. The Connect handler, the export's streams,
-// the content door and the shell door all resolve through here.
-func (s *Server) resolve(id string) (client pb.GridwellClient, local, uuid string, transit, ok bool) {
+// the local (unprefixed) id it understands, the uuid to re-qualify answers
+// with, and whether the namespace is TRANSIT (its ids are chains from
+// another node — the transit qualification rule). "<ID>/<digits>" is the
+// home store; "<ID>/<letters>/…" is a connection, owned by the transport,
+// whose local id keeps the connection segment ("<conn>/…" — the transport
+// peels it); anything else is a plugin by uuid. The Connect codec, the
+// federation codec, the content door and the shell door all resolve
+// through here.
+//
+// The TRANSPORT is the only transit namespace, and that is structural, not
+// a declaration: a plugin's ids are its own (the node mints them), while a
+// connection's arrive already qualified from the far node's frame. There
+// used to be a per-plugin `transit` bit read from Info at spawn — it was
+// how a node mount was a plugin, before connections became config
+// (2026-08-29, docs/one-node.md); nothing declares it now.
+func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string, transit, ok bool) {
 	uuid, local, split := rpc.SplitID(id)
 	if !split {
 		return nil, "", "", false, false
@@ -123,7 +131,7 @@ func (s *Server) resolve(id string) (client pb.GridwellClient, local, uuid strin
 		return t, local, uuid, true, has
 	}
 	c, found := s.pluginReg.Get(uuid)
-	return c, local, uuid, s.pluginReg.Transit(uuid), found
+	return c, local, uuid, false, found
 }
 
 // localIsHome reports whether a local id under the node's own segment
@@ -146,9 +154,9 @@ func localIsHome(local string) bool {
 }
 
 // clientForID resolves the namespace that owns a qualified id, returning
-// its client and the local id. Used by the shell + preview infrastructure
-// to address a tile wherever it lives.
-func (s *Server) clientForID(id string) (client pb.GridwellClient, local string, ok bool) {
+// it and the local id. Used by the shell + preview infrastructure to
+// address a tile wherever it lives.
+func (s *Server) clientForID(id string) (ns namespace.Namespace, local string, ok bool) {
 	c, local, _, _, found := s.resolve(id)
 	return c, local, found
 }
@@ -192,9 +200,10 @@ func (s *Server) invalidateInfoCache(uuid string) {
 }
 
 func (s *Server) routes() {
-	// Connect-RPC handler covers the entire data plane. Subscribe is
-	// the one server-streaming RPC; everything else is unary.
-	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(s))
+	// Connect-RPC handler covers the browser's data plane: a thin codec
+	// over the one in-process router (router.go), the same router the
+	// federation door serves through the other codec.
+	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(newRouter(s)))
 	s.mux.Handle(path, handler)
 
 	// The /shell door: one live PTY per WebSocket, on the SAME gated mux as
@@ -282,6 +291,7 @@ func serveGzipSidecar(w http.ResponseWriter, r *http.Request, fsys fs.FS, name s
 }
 
 // The sentinel→class table lives in internal/store (gwerr.ClassifyError),
-// next to the sentinel declarations, so every transport — Connect
-// (asConnectError) and the plugin gRPC hop (local.errToStatus) — maps
-// from the one classification. Do not re-enumerate the sentinels here.
+// next to the sentinel declarations, so every codec — Connect
+// (asConnectError) and the namespaces' own status mapping
+// (local.errToStatus) — maps from the one classification. Do not
+// re-enumerate the sentinels here.

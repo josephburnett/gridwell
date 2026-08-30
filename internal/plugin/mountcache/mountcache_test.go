@@ -3,43 +3,34 @@ package mountcache
 import (
 	"context"
 	"io"
-	"net"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// serveInProcess is plugin.ServeInProcess's shape, inlined: the loader now
-// imports THIS package (the cache interposition), so the test cannot
-// import the loader back without a cycle.
-func serveInProcess(t *testing.T, impl pb.GridwellServer) pb.GridwellClient {
+// writeOne sends one complete value through a namespace's WriteContent —
+// the caller's half of the stream, ending at io.EOF (the clean end that
+// commits).
+func writeOne(t *testing.T, c namespace.Namespace, tileID string, version int64, data []byte) {
 	t.Helper()
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	sent := false
+	if _, err := c.WriteContent(context.Background(), func() (*pb.WriteContentRequest, error) {
+		if sent {
+			return nil, io.EOF
+		}
+		sent = true
+		return &pb.WriteContentRequest{TileId: tileID, Version: version, Data: data}, nil
+	}); err != nil {
+		t.Fatalf("WriteContent: %v", err)
 	}
-	srv := grpc.NewServer()
-	pb.RegisterGridwellServer(srv, impl)
-	go srv.Serve(lis)
-	cc, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		srv.Stop()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cc.Close()
-		srv.GracefulStop()
-	})
-	return pb.NewGridwellClient(cc)
 }
 
 // The mount-cache contract (docs/offline-plan.md phase 1): every
@@ -54,47 +45,47 @@ func serveInProcess(t *testing.T, impl pb.GridwellServer) pb.GridwellClient {
 // a dead tunnel does. Writes are not intercepted — write behavior under
 // darkness is the pass-through error path, not cache behavior.
 type darkable struct {
-	pb.GridwellClient
+	namespace.Namespace
 	dark bool
 }
 
 func (d *darkable) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
 
-func (d *darkable) Info(ctx context.Context, in *pb.InfoRequest, opts ...grpc.CallOption) (*pb.InfoResponse, error) {
+func (d *darkable) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
 	if d.dark {
 		return nil, d.offline()
 	}
-	return d.GridwellClient.Info(ctx, in, opts...)
+	return d.Namespace.Info(ctx, in)
 }
-func (d *darkable) GetGrid(ctx context.Context, in *pb.GetGridRequest, opts ...grpc.CallOption) (*pb.GetGridResponse, error) {
+func (d *darkable) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if d.dark {
 		return nil, d.offline()
 	}
-	return d.GridwellClient.GetGrid(ctx, in, opts...)
+	return d.Namespace.GetGrid(ctx, in)
 }
-func (d *darkable) GetTile(ctx context.Context, in *pb.GetTileRequest, opts ...grpc.CallOption) (*pb.TileResponse, error) {
+func (d *darkable) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileResponse, error) {
 	if d.dark {
 		return nil, d.offline()
 	}
-	return d.GridwellClient.GetTile(ctx, in, opts...)
+	return d.Namespace.GetTile(ctx, in)
 }
-func (d *darkable) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest, opts ...grpc.CallOption) (*pb.GetTilePreviewResponse, error) {
+func (d *darkable) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	if d.dark {
 		return nil, d.offline()
 	}
-	return d.GridwellClient.GetTilePreview(ctx, in, opts...)
+	return d.Namespace.GetTilePreview(ctx, in)
 }
-func (d *darkable) ReadContent(ctx context.Context, in *pb.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ContentChunk], error) {
+func (d *darkable) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	if d.dark {
-		return nil, d.offline()
+		return d.offline()
 	}
-	return d.GridwellClient.ReadContent(ctx, in, opts...)
+	return d.Namespace.ReadContent(ctx, in, send)
 }
-func (d *darkable) Subscribe(ctx context.Context, in *pb.SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.Event], error) {
+func (d *darkable) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	if d.dark {
-		return nil, d.offline()
+		return d.offline()
 	}
-	return d.GridwellClient.Subscribe(ctx, in, opts...)
+	return d.Namespace.Subscribe(ctx, in, send)
 }
 
 func fixture(t *testing.T) (cc *Client, upstream *darkable, root string, dbPath string) {
@@ -104,12 +95,11 @@ func fixture(t *testing.T) (cc *Client, upstream *darkable, root string, dbPath 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	raw := serveInProcess(t, local.New(st, nil))
 	root, err = st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream = &darkable{GridwellClient: raw}
+	upstream = &darkable{Namespace: local.New(st, nil)}
 	dbPath = filepath.Join(t.TempDir(), "cache.db")
 	cc, dbClose, err := Open(upstream, dbPath)
 	if err != nil {
@@ -119,24 +109,22 @@ func fixture(t *testing.T) (cc *Client, upstream *darkable, root string, dbPath 
 	return cc, upstream, root, dbPath
 }
 
-func drainContent(t *testing.T, s grpc.ServerStreamingClient[pb.ContentChunk]) (mediaType string, version int64, data []byte) {
+func readContent(t *testing.T, c namespace.Namespace, tileID string) (mediaType string, version int64, data []byte) {
 	t.Helper()
-	for {
-		ch, err := s.Recv()
-		if err == io.EOF {
-			return
-		}
-		if err != nil {
-			t.Fatalf("content recv: %v", err)
-		}
-		if ch.GetMediaType() != "" {
-			mediaType = ch.GetMediaType()
-		}
-		if ch.GetVersion() != 0 {
-			version = ch.GetVersion()
-		}
-		data = append(data, ch.GetData()...)
+	if err := c.ReadContent(context.Background(), &pb.ReadContentRequest{TileId: tileID},
+		func(ch *pb.ContentChunk) error {
+			if ch.GetMediaType() != "" {
+				mediaType = ch.GetMediaType()
+			}
+			if ch.GetVersion() != 0 {
+				version = ch.GetVersion()
+			}
+			data = append(data, ch.GetData()...)
+			return nil
+		}); err != nil {
+		t.Fatalf("ReadContent: %v", err)
 	}
+	return mediaType, version, data
 }
 
 func TestServesStaleWhenDark(t *testing.T) {
@@ -149,17 +137,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Body via the upstream write door (writes pass through the cache).
-	stream, err := cc.WriteContent(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := stream.Send(&pb.WriteContentRequest{TileId: txt.GetTile().GetId(),
-		Version: txt.GetTile().GetVersion(), Data: []byte("remembered words")}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := stream.CloseAndRecv(); err != nil {
-		t.Fatal(err)
-	}
+	writeOne(t, cc, txt.GetTile().GetId(), txt.GetTile().GetVersion(), []byte("remembered words"))
 	urlT, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "url", X: 2, Y: 0, W: 1, H: 1, UrlString: "https://example.com"}})
 	if err != nil {
@@ -183,11 +161,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	if _, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: txt.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
-	rs, err := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: txt.GetTile().GetId()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, liveVer, liveBody := drainContent(t, rs)
+	_, liveVer, liveBody := readContent(t, cc, txt.GetTile().GetId())
 	if _, err := cc.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: urlT.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
@@ -209,11 +183,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	if err != nil || tr.GetTile().GetKind() != "text" {
 		t.Fatalf("dark GetTile = (%v, %v)", tr, err)
 	}
-	rs, err = cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: txt.GetTile().GetId()})
-	if err != nil {
-		t.Fatalf("dark ReadContent should serve stale: %v", err)
-	}
-	mt, ver, body := drainContent(t, rs)
+	mt, ver, body := readContent(t, cc, txt.GetTile().GetId())
 	if string(body) != "remembered words" || string(body) != string(liveBody) {
 		t.Fatalf("stale body = %q, want the live bytes", body)
 	}
@@ -234,42 +204,44 @@ func TestServesStaleWhenDark(t *testing.T) {
 	}
 }
 
-// failAtRecv is a ReadContent stream whose OPEN succeeded but whose first
-// Recv fails — the shape a dark mount actually has on a CHAINED read: the
-// open only reaches the local transit plugin (alive); the remote's
-// unreachability arrives as the first frame's error. Found by the real
-// federation partition gate, not by any open-fails fixture.
-type failAtRecv struct {
-	noopClientStream
-	err error
-}
-
-func (f *failAtRecv) Recv() (*pb.ContentChunk, error) { return nil, f.err }
-
-type recvDark struct {
-	pb.GridwellClient
+// halfDark fails a ReadContent AFTER letting one chunk through — the
+// tunnel dropping mid-body. The cache must NOT splice its remembered bytes
+// onto the half-delivered stream: that would hand the caller a body nobody
+// ever had. (Before S2 this shape was "the open succeeded but the first
+// Recv failed", because a chained read opened only as far as the local
+// transit plugin; in-process there is no open to succeed separately, so
+// the surviving distinction is the one that always mattered — before any
+// chunk, or after.)
+type halfDark struct {
+	namespace.Namespace
 	dark bool
 }
 
-func (d *recvDark) ReadContent(ctx context.Context, in *pb.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ContentChunk], error) {
-	if d.dark {
-		return &failAtRecv{err: status.Error(codes.Unavailable, "tunnel down at first frame")}, nil
+func (d *halfDark) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
+	if !d.dark {
+		return d.Namespace.ReadContent(ctx, in, send)
 	}
-	return d.GridwellClient.ReadContent(ctx, in, opts...)
+	if err := send(&pb.ContentChunk{MediaType: "text/markdown", Version: 1, Data: []byte("half a ")}); err != nil {
+		return err
+	}
+	return status.Error(codes.Unavailable, "tunnel down mid-body")
 }
 
-func TestStaleServedWhenStreamFailsAtFirstRecv(t *testing.T) {
+// TestHalfDeliveredStreamIsNeverSpliced: once a chunk has flowed, a
+// failure passes through as itself. Serving the remembered body from
+// halfway would fabricate a value the caller never saw whole — silent
+// corruption, the one thing a cache must never do.
+func TestHalfDeliveredStreamIsNeverSpliced(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	raw := serveInProcess(t, local.New(st, nil))
 	root, err := st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream := &recvDark{GridwellClient: raw}
+	upstream := &halfDark{Namespace: local.New(st, nil)}
 	cc, dbClose, err := Open(upstream, filepath.Join(t.TempDir(), "cache.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -282,40 +254,18 @@ func TestStaleServedWhenStreamFailsAtFirstRecv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ws, err := cc.WriteContent(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ws.Send(&pb.WriteContentRequest{TileId: txt.GetTile().GetId(),
-		Version: txt.GetTile().GetVersion(), Data: []byte("first-frame words")}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ws.CloseAndRecv(); err != nil {
-		t.Fatal(err)
-	}
-	rs, err := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: txt.GetTile().GetId()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	drainContent(t, rs) // warm
+	writeOne(t, cc, txt.GetTile().GetId(), txt.GetTile().GetVersion(), []byte("first-frame words"))
+	readContent(t, cc, txt.GetTile().GetId()) // warm
 
 	upstream.dark = true
-	rs, err = cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: txt.GetTile().GetId()})
-	if err != nil {
-		t.Fatal(err)
+	var got []byte
+	rerr := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: txt.GetTile().GetId()},
+		func(ch *pb.ContentChunk) error { got = append(got, ch.GetData()...); return nil })
+	if status.Code(rerr) != codes.Unavailable {
+		t.Fatalf("half-delivered read = %v, want the honest Unavailable", rerr)
 	}
-	_, _, body := drainContent(t, rs)
-	if string(body) != "first-frame words" {
-		t.Fatalf("first-recv-dark read = %q, want the cached body", body)
-	}
-
-	// A miss stays the honest error — at Recv, exactly where it happened.
-	rs, err = cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: "424242"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, rerr := rs.Recv(); status.Code(rerr) != codes.Unavailable {
-		t.Fatalf("dark miss recv = %v, want Unavailable", rerr)
+	if string(got) != "half a " {
+		t.Fatalf("caller saw %q; the cache must not splice its %q onto a half-live stream", got, "first-frame words")
 	}
 }
 
@@ -373,25 +323,24 @@ func TestEventTeeTracksMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sub, err := cc.Subscribe(ctx, &pb.SubscribeRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
 	evs := make(chan *pb.Event, 64)
 	go func() {
-		for {
-			ev, rerr := sub.Recv()
-			if rerr != nil {
-				close(evs)
-				return
+		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(ev *pb.Event) error {
+			select {
+			case evs <- ev:
+			case <-subCtx.Done():
 			}
-			evs <- ev
-		}
+			return nil
+		})
+		close(evs)
 	}()
-	// PRIME the subscription: a gRPC stream open is lazy, so a mutation
-	// fired before the server registers the subscriber is missed forever
-	// (this test hung exactly that way once). Re-fire a framing write (no
-	// version bump — the same claim stays valid) until its event arrives.
+	// PRIME the subscription: the fan-in goroutine registers with the
+	// store's hub asynchronously, so a mutation fired before it lands is
+	// missed forever (this test hung exactly that way once). Re-fire a
+	// framing write (no version bump — the same claim stays valid) until
+	// its event arrives.
 	primed := false
 	for i := 0; i < 50 && !primed; i++ {
 		if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
@@ -498,7 +447,7 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Deleted UPSTREAM directly — the cache never sees an event.
-	if _, err := upstream.GridwellClient.DeleteTile(ctx, &pb.DeleteTileRequest{
+	if _, err := upstream.Namespace.DeleteTile(ctx, &pb.DeleteTileRequest{
 		TileId: doomed.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}

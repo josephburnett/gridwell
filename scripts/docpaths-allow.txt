@@ -43,3 +43,9 @@ docs/architecture-review.md apps/desktop/src/main/shellgrpc.ts
 # written:
 docs/offline-plan.md client/pending
 docs/architecture-review.md client/pending
+# docs/architecture-review.md names the in-process gRPC loopback its
+# finding 5 is about, DELETED 2026-08-29 (docs/simplify-plan.md S2):
+docs/architecture-review.md api/compose/compose.go
+# docs/plugin.md names the test proxy DELETED 2026-08-29 with the
+# in-process hop (docs/simplify-plan.md S2):
+docs/plugin.md internal/plugin/proxytest

@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
 // Config is the remote plugin's connection settings. Host is the
@@ -173,7 +174,7 @@ func (r *redialer) close() {
 // tunnel dies later, heals by itself the moment the remote is reachable
 // again; until then every RPC fails loudly and the server's fan-in health
 // machinery (issue #47) tells the user.
-func Dial(cfg Config) (client gridwellv1.GridwellClient, closer func(), err error) {
+func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 	if cfg.Host == "" {
 		return dialDirect(cfg.Addr)
 	}
@@ -235,7 +236,7 @@ func Dial(cfg Config) (client gridwellv1.GridwellClient, closer func(), err erro
 		_ = conn.Close()
 		rd.close()
 	}
-	return gridwellv1.NewGridwellClient(conn), closer, nil
+	return namespace.FromClient(gridwellv1.NewGridwellClient(conn)), closer, nil
 }
 
 // dialDirect is the DIRECT transport: a plain gRPC connection to another
@@ -244,7 +245,7 @@ func Dial(cfg Config) (client gridwellv1.GridwellClient, closer func(), err erro
 // silent stale stream) and a revived one heals in seconds. No auth on
 // this path: the socket's 0600 mode is the gate (same uid only); across
 // machines the ssh bridge is the one authenticated transport.
-func dialDirect(addr string) (gridwellv1.GridwellClient, func(), error) {
+func dialDirect(addr string) (namespace.Namespace, func(), error) {
 	conn, err := grpc.NewClient("unix:"+addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
@@ -263,5 +264,5 @@ func dialDirect(addr string) (gridwellv1.GridwellClient, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("direct dial %s: %w", addr, err)
 	}
-	return gridwellv1.NewGridwellClient(conn), func() { _ = conn.Close() }, nil
+	return namespace.FromClient(gridwellv1.NewGridwellClient(conn)), func() { _ = conn.Close() }, nil
 }

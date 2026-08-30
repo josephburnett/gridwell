@@ -3,6 +3,7 @@ package mountcache
 import (
 	"bytes"
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,8 +11,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"google.golang.org/grpc"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/local"
@@ -22,16 +21,16 @@ import (
 // closed — the walk held mid-flight, deterministically, ignoring ctx the
 // way a slow network read does.
 type gated struct {
-	pb.GridwellClient
+	namespace.Namespace
 	once    sync.Once
 	entered chan struct{}
 	release chan struct{}
 }
 
-func (g *gated) GetGrid(ctx context.Context, in *pb.GetGridRequest, opts ...grpc.CallOption) (*pb.GetGridResponse, error) {
+func (g *gated) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	g.once.Do(func() { close(g.entered) })
 	<-g.release
-	return g.GridwellClient.GetGrid(ctx, in, opts...)
+	return g.Namespace.GetGrid(ctx, in)
 }
 
 // Closing the cache mid-walk: the closer must cancel AND wait for the
@@ -44,9 +43,8 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	raw := serveInProcess(t, local.New(st, nil))
-	g := &gated{GridwellClient: raw, entered: make(chan struct{}), release: make(chan struct{})}
-	cc, closer, err := Open(&darkable{GridwellClient: g}, filepath.Join(t.TempDir(), "cache.db"))
+	g := &gated{Namespace: local.New(st, nil), entered: make(chan struct{}), release: make(chan struct{})}
+	cc, closer, err := Open(&darkable{Namespace: g}, filepath.Join(t.TempDir(), "cache.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,9 +58,11 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 	// parallel `go test ./...`).
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
-	if _, err := cc.Subscribe(context.Background(), &pb.SubscribeRequest{}); err != nil {
-		t.Fatal(err)
-	}
+	subCtx, subCancel := context.WithCancel(context.Background())
+	defer subCancel()
+	go func() {
+		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(*pb.Event) error { return nil })
+	}()
 	<-g.entered // the walk is inside GetGrid, its store of that grid still ahead
 	closed := make(chan struct{})
 	go func() { closer(); close(closed) }()

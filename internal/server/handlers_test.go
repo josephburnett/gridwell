@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/compose"
-	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -39,7 +39,7 @@ const (
 // node-side pluginhost adapter over a fresh layout memory DB — and
 // returns the adapter's client. The SHIPPED fs/proc stack: server tests
 // must exercise it, not a stand-in.
-func newPluginClient(t *testing.T, kind string, impl pluginv1.PluginServer) pb.GridwellClient {
+func newPluginClient(t *testing.T, kind string, impl pluginv1.PluginServer) namespace.Namespace {
 	t.Helper()
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
@@ -51,11 +51,7 @@ func newPluginClient(t *testing.T, kind string, impl pluginv1.PluginServer) pb.G
 		t.Fatalf("%s plugin serve: %v", kind, err)
 	}
 	t.Cleanup(cpCloser)
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, memStore.Namespace("p1")))
-	if err != nil {
-		t.Fatalf("%s adapter serve: %v", kind, err)
-	}
-	t.Cleanup(closer)
+	client := pluginhost.New(cp, memStore.Namespace("p1"))
 	return client
 }
 

@@ -3,15 +3,14 @@ package mountcache
 import (
 	"bytes"
 	"context"
-	"io"
 	"path/filepath"
 	"testing"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
 // linkUpstream is a fake REMOTE NODE (qualified ids, the shape a mount
@@ -20,27 +19,27 @@ import (
 // path, exactly the case the walker's doc promises to cover ("warm the
 // target row and its face/body even if its own grid is never walked").
 type linkUpstream struct {
-	pb.GridwellClient
+	namespace.Namespace
 	dark bool
 }
 
 func (u *linkUpstream) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
 
-func (u *linkUpstream) Info(context.Context, *pb.InfoRequest, ...grpc.CallOption) (*pb.InfoResponse, error) {
+func (u *linkUpstream) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
 	return &pb.InfoResponse{Kind: "remote", RootGridId: "u1/g1"}, nil
 }
 
-func (u *linkUpstream) Handshake(context.Context, *pb.HandshakeRequest, ...grpc.CallOption) (*pb.HandshakeResponse, error) {
+func (u *linkUpstream) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
 	return &pb.HandshakeResponse{}, nil
 }
 
-func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest, _ ...grpc.CallOption) (*pb.GetGridResponse, error) {
+func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
@@ -57,7 +56,7 @@ func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest, _ ...g
 	}, nil
 }
 
-func (u *linkUpstream) GetTile(_ context.Context, req *pb.GetTileRequest, _ ...grpc.CallOption) (*pb.TileResponse, error) {
+func (u *linkUpstream) GetTile(_ context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
@@ -70,36 +69,22 @@ func (u *linkUpstream) GetTile(_ context.Context, req *pb.GetTileRequest, _ ...g
 	return nil, status.Error(codes.NotFound, "no tile")
 }
 
-func (u *linkUpstream) GetTilePreview(_ context.Context, _ *pb.GetTilePreviewRequest, _ ...grpc.CallOption) (*pb.GetTilePreviewResponse, error) {
+func (u *linkUpstream) GetTilePreview(_ context.Context, _ *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
 	return &pb.GetTilePreviewResponse{}, nil
 }
 
-func (u *linkUpstream) ReadContent(_ context.Context, req *pb.ReadContentRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ContentChunk], error) {
+func (u *linkUpstream) ReadContent(_ context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	if u.dark {
-		return nil, u.offline()
+		return u.offline()
 	}
 	switch req.TileId {
 	case "u1/1", "u1/2":
-		return &chunkStream{chunks: []*pb.ContentChunk{{Data: []byte("linked note"), MediaType: "text/markdown"}}}, nil
+		return send(&pb.ContentChunk{Data: []byte("linked note"), MediaType: "text/markdown"})
 	}
-	return nil, status.Error(codes.NotFound, "no content")
-}
-
-type chunkStream struct {
-	grpc.ClientStream
-	chunks []*pb.ContentChunk
-}
-
-func (s *chunkStream) Recv() (*pb.ContentChunk, error) {
-	if len(s.chunks) == 0 {
-		return nil, io.EOF
-	}
-	ch := s.chunks[0]
-	s.chunks = s.chunks[1:]
-	return ch, nil
+	return status.Error(codes.NotFound, "no content")
 }
 
 // The link arm used to pre-mark the target seen before recursing, so
@@ -118,11 +103,7 @@ func TestPrefetchWarmsLinkTargetBody(t *testing.T) {
 	cc.Prefetch(ctx)
 	up.dark = true
 
-	s, err := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: "u1/2"})
-	if err != nil {
-		t.Fatalf("link target's body must be prefetched: %v", err)
-	}
-	_, _, data := drainContent(t, s)
+	_, _, data := readContent(t, cc, "u1/2")
 	if !bytes.Equal(data, []byte("linked note")) {
 		t.Errorf("link target body = %q, want the linked note", data)
 	}

@@ -2,11 +2,11 @@ package server
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -31,7 +31,7 @@ import (
 // dark mount does (codes.Unavailable) — or with an injected verdict, for
 // the gone-is-not-a-link pin.
 type darkSource struct {
-	pb.GridwellClient
+	namespace.Namespace
 	darkContent  map[string]bool // local tile id → ReadContent unavailable
 	darkGrids    map[string]bool // local grid id → GetGrid unavailable
 	darkPreviews map[string]bool // local tile id → GetTilePreview unavailable
@@ -43,36 +43,36 @@ type darkSource struct {
 	framingCalls    int
 }
 
-func (d *darkSource) SetFraming(ctx context.Context, in *pb.SetFramingRequest, opts ...grpc.CallOption) (*pb.SetFramingResponse, error) {
+func (d *darkSource) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	d.framingCalls++
 	if d.darkFramingFrom > 0 && d.framingCalls >= d.darkFramingFrom {
 		return nil, status.Error(codes.Unavailable, "mount dark: tunnel dropped")
 	}
-	return d.GridwellClient.SetFraming(ctx, in, opts...)
+	return d.Namespace.SetFraming(ctx, in)
 }
 
-func (d *darkSource) ReadContent(ctx context.Context, in *pb.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ContentChunk], error) {
+func (d *darkSource) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	if err, ok := d.verdict[in.TileId]; ok {
-		return nil, err
+		return err
 	}
 	if d.darkContent[in.TileId] {
-		return nil, status.Error(codes.Unavailable, "mount dark: content not cached")
+		return status.Error(codes.Unavailable, "mount dark: content not cached")
 	}
-	return d.GridwellClient.ReadContent(ctx, in, opts...)
+	return d.Namespace.ReadContent(ctx, in, send)
 }
 
-func (d *darkSource) GetGrid(ctx context.Context, in *pb.GetGridRequest, opts ...grpc.CallOption) (*pb.GetGridResponse, error) {
+func (d *darkSource) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if d.darkGrids[in.GridId] {
 		return nil, status.Error(codes.Unavailable, "mount dark: grid not cached")
 	}
-	return d.GridwellClient.GetGrid(ctx, in, opts...)
+	return d.Namespace.GetGrid(ctx, in)
 }
 
-func (d *darkSource) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest, opts ...grpc.CallOption) (*pb.GetTilePreviewResponse, error) {
+func (d *darkSource) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	if d.darkPreviews[in.TileId] {
 		return nil, status.Error(codes.Unavailable, "mount dark: preview not cached")
 	}
-	return d.GridwellClient.GetTilePreview(ctx, in, opts...)
+	return d.Namespace.GetTilePreview(ctx, in)
 }
 
 // darkTwoPluginServer is twoPluginServer with plugin A's client wrapped in
@@ -91,12 +91,8 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientA, closerA, err := plugin.ServeInProcess(local.New(stA, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closerA)
-	dark = &darkSource{GridwellClient: clientA,
+	clientA := local.New(stA, nil)
+	dark = &darkSource{Namespace: clientA,
 		darkContent: map[string]bool{}, darkGrids: map[string]bool{},
 		darkPreviews: map[string]bool{}, verdict: map[string]error{}}
 	reg.Register(uuidA, "home", dark, nil)
@@ -115,11 +111,7 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientB, closerB, err := plugin.ServeInProcess(local.New(stB, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closerB)
+	clientB := local.New(stB, nil)
 	reg.Register(uuidB, "home", clientB, nil)
 	bareRootB, err := stB.RootGridID(ctx)
 	if err != nil {

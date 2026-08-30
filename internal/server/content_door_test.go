@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"image"
 	"image/png"
 	"net/http"
@@ -14,9 +15,12 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/proxytest"
+	"github.com/josephburnett/gridwell/internal/remote"
+	"github.com/josephburnett/gridwell/internal/remote/dial"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
@@ -231,10 +235,13 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 	}
 }
 
-// TestContentDoorTransit: the id "ssh1/<tile>" forwards through a transit
-// plugin (the proxy — the ssh shape) and streams back — federation for
-// pages is the same one-hop-per-segment composition as every content read.
-func TestContentDoorTransit(t *testing.T) {
+// TestContentDoorThroughAConnection: the id "<node>/<conn>/<tile>"
+// forwards through the node's TRANSPORT — the only transit namespace there
+// is (docs/one-node.md) — and streams back, so federation for pages is the
+// same one-hop-per-segment composition as every content read. The dialer
+// lands the connection on an in-process namespace; there is no proxy stand-in
+// any more, because the transport itself is a Go value now.
+func TestContentDoorThroughAConnection(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
@@ -244,25 +251,37 @@ func TestContentDoorTransit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "remote.png"), img, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	fsClient := newPluginClient(t, "fs", fsplugin.New(dir, nil))
-	proxied, proxClose, err := plugin.ServeInProcess(proxytest.New(fsClient))
+	farNode := newPluginClient(t, "fs", fsplugin.New(dir, nil))
+
+	sqlDB, err := sql.Open("sqlite", t.TempDir()+"/conns.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(proxClose)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := remote.NewDB(sqlDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, err := remote.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
+		return farNode, func() {}, nil
+	}, "", []config.ConnectionConfig{{Name: "far", Addr: "/tmp/far.sock"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = transport.Close() })
+	transport.ConnectAll(context.Background())
 
 	reg := plugin.NewRegistry()
-	reg.Register("ssh1", "remote", proxied, nil)
-	reg.SetTransit("ssh1", true) // the declaration the loader reads from Info in production
-	srv := mustNew(t, reg, Config{})
+	reg.SetTransport(transport, nil, nil)
+	srv := mustNew(t, reg, Config{ID: "lnode1"})
 	hs := serveWeb(t, srv)
 
 	ctx := context.Background()
-	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
+	info, err := farNode.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	grid, err := fsClient.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.RootGridId})
+	grid, err := farNode.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.RootGridId})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,9 +291,9 @@ func TestContentDoorTransit(t *testing.T) {
 			tid = tl.Id
 		}
 	}
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/ssh1/"+tid+"/", "")
+	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/lnode1/far/"+tid+"/", "")
 	if res.StatusCode != http.StatusOK || body != string(img) {
-		t.Fatalf("transit GET = %d, %d bytes; want the remote image's %d", res.StatusCode, len(body), len(img))
+		t.Fatalf("connection GET = %d, %d bytes; want the remote image's %d", res.StatusCode, len(body), len(img))
 	}
 }
 

@@ -2,11 +2,11 @@ package remote
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -16,11 +16,11 @@ import (
 // deadSubscribeClient's event stream never opens — a mount whose tunnel
 // is down.
 type deadSubscribeClient struct {
-	gridwellv1.GridwellClient
+	namespace.Namespace
 }
 
-func (deadSubscribeClient) Subscribe(context.Context, *gridwellv1.SubscribeRequest, ...grpc.CallOption) (grpc.ServerStreamingClient[gridwellv1.Event], error) {
-	return nil, status.Error(codes.Unavailable, "tunnel down")
+func (deadSubscribeClient) Subscribe(context.Context, *gridwellv1.SubscribeRequest, func(*gridwellv1.Event) error) error {
+	return status.Error(codes.Unavailable, "tunnel down")
 }
 
 // A connection whose event stream dies must SAY so: the fan-in publishes

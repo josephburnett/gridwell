@@ -1,7 +1,9 @@
 // Package mountcache is the node-side read-through cache in front of a
 // MOUNT (a transit plugin — ssh), phase 1 of docs/offline-plan.md: a
 // mounted machine going dark degrades to STALE-BUT-READABLE instead of
-// blank. It wraps the mount's gRPC client; online it passes through and
+// blank. It wraps a namespace.Namespace — in production the node's
+// TRANSPORT, so every connection is cached in one place (internal/node
+// startTransport); online it passes through and
 // remembers every successful read; when the mount is unreachable
 // (transport-class failure ONLY — an answered "gone" is never masked) it
 // serves the remembered answer. Writes always pass through: the cache is
@@ -38,11 +40,11 @@ import (
 	"log"
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/dbformat"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	_ "modernc.org/sqlite"
 )
 
@@ -111,18 +113,21 @@ const contentChunkBytes = 256 * 1024
 // still passes through live, just uncached.
 const maxCachedContentBytes = 16 * 1024 * 1024
 
-// Client wraps a mount's gRPC client with the read-through cache. All
-// methods not overridden here pass through the embedded client untouched
-// (writes, shells, Probe, SetFraming).
+// Client wraps a namespace with the read-through cache. All methods not
+// overridden here pass through the embedded Namespace untouched (writes,
+// shells, Probe, SetFraming).
 type Client struct {
-	pb.GridwellClient
+	namespace.Namespace
 	db *sql.DB
 	pf prefetcher
 }
 
+// The cache is a namespace in front of a namespace, nothing more.
+var _ namespace.Namespace = (*Client)(nil)
+
 // Open opens (or creates) the cache DB at dbPath and returns the wrapped
-// client. Close the returned closer with the plugin's own.
-func Open(upstream pb.GridwellClient, dbPath string) (*Client, func(), error) {
+// namespace. Close the returned closer with the wrapped one's own.
+func Open(upstream namespace.Namespace, dbPath string) (*Client, func(), error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("mountcache open %s: %w", dbPath, err)
@@ -140,7 +145,7 @@ func Open(upstream pb.GridwellClient, dbPath string) (*Client, func(), error) {
 		db.Close()
 		return nil, nil, fmt.Errorf("mountcache %s: %w", dbPath, err)
 	}
-	c := &Client{GridwellClient: upstream, db: db}
+	c := &Client{Namespace: upstream, db: db}
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
 	return c, func() {
 		c.pf.cancel()
@@ -162,8 +167,8 @@ func now() int64 { return time.Now().Unix() }
 
 // ── Info ────────────────────────────────────────────────────────────────
 
-func (c *Client) Info(ctx context.Context, in *pb.InfoRequest, opts ...grpc.CallOption) (*pb.InfoResponse, error) {
-	resp, err := c.GridwellClient.Info(ctx, in, opts...)
+func (c *Client) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
+	resp, err := c.Namespace.Info(ctx, in)
 	if err == nil {
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO info (k, proto) VALUES ('info', ?)
@@ -190,8 +195,8 @@ func (c *Client) Info(ctx context.Context, in *pb.InfoRequest, opts ...grpc.Call
 // and remembers the answer per namespace, so a remote pane's + menu is
 // readable while the mount is dark — same contract as every other read:
 // serve-stale on transport only, verdicts pass through.
-func (c *Client) Handshake(ctx context.Context, in *pb.HandshakeRequest, opts ...grpc.CallOption) (*pb.HandshakeResponse, error) {
-	resp, err := c.GridwellClient.Handshake(ctx, in, opts...)
+func (c *Client) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+	resp, err := c.Namespace.Handshake(ctx, in)
 	if err == nil {
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
@@ -216,8 +221,8 @@ func (c *Client) Handshake(ctx context.Context, in *pb.HandshakeRequest, opts ..
 
 // ── GetGrid ─────────────────────────────────────────────────────────────
 
-func (c *Client) GetGrid(ctx context.Context, in *pb.GetGridRequest, opts ...grpc.CallOption) (*pb.GetGridResponse, error) {
-	resp, err := c.GridwellClient.GetGrid(ctx, in, opts...)
+func (c *Client) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	resp, err := c.Namespace.GetGrid(ctx, in)
 	if err == nil {
 		c.storeGrid(ctx, in.GridId, resp)
 		return resp, nil
@@ -313,8 +318,8 @@ func (c *Client) loadGrid(ctx context.Context, gridID string) (*pb.GetGridRespon
 
 // ── GetTile ─────────────────────────────────────────────────────────────
 
-func (c *Client) GetTile(ctx context.Context, in *pb.GetTileRequest, opts ...grpc.CallOption) (*pb.TileResponse, error) {
-	resp, err := c.GridwellClient.GetTile(ctx, in, opts...)
+func (c *Client) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.GetTile(ctx, in)
 	if err == nil {
 		c.upsertTile(ctx, resp.GetTile())
 		return resp, nil
@@ -359,8 +364,8 @@ func (c *Client) deleteTile(ctx context.Context, tileID string) {
 
 // ── GetTilePreview ──────────────────────────────────────────────────────
 
-func (c *Client) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest, opts ...grpc.CallOption) (*pb.GetTilePreviewResponse, error) {
-	resp, err := c.GridwellClient.GetTilePreview(ctx, in, opts...)
+func (c *Client) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
+	resp, err := c.Namespace.GetTilePreview(ctx, in)
 	if err == nil {
 		if jpeg := resp.GetJpeg(); len(jpeg) > 0 {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO previews (tile_id, jpeg, fetched_at) VALUES (?, ?, ?)
@@ -382,22 +387,72 @@ func (c *Client) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewReques
 
 // ── ReadContent ─────────────────────────────────────────────────────────
 
-func (c *Client) ReadContent(ctx context.Context, in *pb.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ContentChunk], error) {
-	stream, err := c.GridwellClient.ReadContent(ctx, in, opts...)
+// ReadContent TEES the live stream: the bytes are remembered as they pass
+// and stored only at a CLEAN end — the cache holds complete values only, a
+// partial body served later would be silent corruption. A transport-shaped
+// failure BEFORE any chunk falls back to the remembered body; after a
+// chunk has flowed the error passes through (splicing cache into a
+// half-live stream would fabricate a body nobody ever had).
+func (c *Client) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
+	var mediaType string
+	var version int64
+	var data []byte
+	var gotChunk, oversized bool
+	err := c.Namespace.ReadContent(ctx, in, func(ch *pb.ContentChunk) error {
+		gotChunk = true
+		// Chunk 1 carries media_type + version (a plugin sends it even for
+		// empty content, so both always arrive before the end).
+		if mediaType == "" && ch.GetMediaType() != "" {
+			mediaType = ch.GetMediaType()
+		}
+		if version == 0 && ch.GetVersion() != 0 {
+			version = ch.GetVersion()
+		}
+		if !oversized {
+			data = append(data, ch.GetData()...)
+			if len(data) > maxCachedContentBytes {
+				oversized = true
+				data = nil
+			}
+		}
+		return send(ch)
+	})
 	if err == nil {
-		// Tee: remember the bytes as they stream through. (The open
-		// itself succeeding does not mean the stream will — a mid-stream
-		// transport failure surfaces to the caller AND skips the store.)
-		return &teeContentStream{ServerStreamingClient: stream, c: c, ctx: ctx, tileID: in.TileId}, nil
+		if !oversized {
+			c.storeContent(ctx, in.TileId, mediaType, version, data)
+		}
+		return nil
 	}
-	if !gwerr.IsTransport(err) {
-		return nil, err
+	if !gotChunk && gwerr.IsTransport(err) {
+		if mt, ver, cached, ok := c.loadContent(ctx, in.TileId); ok {
+			return sendChunked(cached, func(b []byte, first bool) error {
+				if first {
+					return send(&pb.ContentChunk{MediaType: mt, Version: ver, Data: b})
+				}
+				return send(&pb.ContentChunk{Data: b})
+			})
+		}
 	}
-	mediaType, version, data, ok := c.loadContent(ctx, in.TileId)
-	if !ok {
-		return nil, err
+	return err
+}
+
+// sendChunked replays a remembered body in the live chunk shape — chunk 1
+// carries the metadata, later chunks data only — so a caller cannot tell a
+// remembered answer from a live one by its framing. One empty first chunk
+// still goes out for an empty body: the metadata always arrives.
+func sendChunked(data []byte, emit func(b []byte, first bool) error) error {
+	first := true
+	for {
+		n := min(len(data), contentChunkBytes)
+		if err := emit(data[:n], first); err != nil {
+			return err
+		}
+		data = data[n:]
+		first = false
+		if len(data) == 0 {
+			return nil
+		}
 	}
-	return newMemContentStream(ctx, mediaType, version, data), nil
 }
 
 func (c *Client) loadContent(ctx context.Context, tileID string) (mediaType string, version int64, data []byte, ok bool) {
@@ -421,17 +476,16 @@ func (c *Client) storeContent(ctx context.Context, tileID, mediaType string, ver
 // the live session's mutations as the server relays them. If nothing is
 // subscribed (headless node), reads still refresh on their own — the tee
 // is an accelerator, not the correctness path.
-func (c *Client) Subscribe(ctx context.Context, in *pb.SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.Event], error) {
-	stream, err := c.GridwellClient.Subscribe(ctx, in, opts...)
-	if err != nil {
-		return nil, err
-	}
-	// Every successful (re)subscription means the mount is up NOW — the
-	// moment to warm the whole mount (issue #254): the initial connect
-	// and each health-up reconnect land here, so the walk doubles as the
-	// resync for grids nobody re-opened while the mount was dark.
+func (c *Client) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	// Every (re)subscription is a moment to warm the whole mount (issue
+	// #254): the initial connect and each health-up reconnect land here,
+	// so the walk doubles as the resync for grids nobody re-opened while
+	// the mount was dark.
 	c.kickPrefetch()
-	return &teeEventStream{ServerStreamingClient: stream, c: c, ctx: ctx}, nil
+	return c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
+		c.applyEvent(ctx, ev)
+		return send(ev)
+	})
 }
 
 // applyEvent folds one mount event into the cache. GridChanged carries

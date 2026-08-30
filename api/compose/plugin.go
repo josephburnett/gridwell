@@ -1,9 +1,10 @@
 package compose
 
-// The v2 content-plugin half of the compose sugar (docs/v2-design.md):
-// a plugin binary serves plugin.v1 instead of gridwell.v1;
-// this helper is the in-process shape — a real gRPC loopback, so the
-// caller holds the same client interface a subprocess dial would give.
+// The content-plugin half of the compose sugar (docs/v2-design.md): a
+// plugin binary serves plugin.v1. PluginInProcess is the compiled-in
+// shape — a real gRPC loopback on an in-memory listener, so the caller
+// holds the same client interface a subprocess dial would give, and the
+// bundled plugin is isolated from the host exactly like a spawned one.
 
 import (
 	"context"
@@ -109,9 +110,9 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient
 
 // PluginInProcess serves a Plugin implementation over a
 // loopback gRPC server and returns the connected client — the plugin
-// twin of ServeInProcess.
+// twin of the subprocess dial.
 func PluginInProcess(impl pluginv1.PluginServer) (pluginv1.PluginClient, func(), error) {
-	// In-memory listener, like ServeInProcess: no socket, no reach from
+	// In-memory listener: no socket, no reach from
 	// outside the process.
 	lis := bufconn.Listen(1 << 20)
 

@@ -12,7 +12,6 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 )
 
@@ -42,11 +41,7 @@ func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(cpCloser)
-	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, memStore.Namespace("p1")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := pluginhost.New(cp, memStore.Namespace("p1"))
 	ctx := context.Background()
 
 	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
@@ -57,16 +52,14 @@ func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
 		t.Errorf("Info = watch %v writable %v; the adapter opens neither door", info.Watch, info.Writable)
 	}
 	// The declarations must agree with the verbs.
-	if s, err := client.Subscribe(ctx, &gridwellv1.SubscribeRequest{}); err == nil {
-		if _, rerr := s.Recv(); status.Code(rerr) != codes.Unimplemented {
-			t.Errorf("Subscribe answered %v; a false watch declaration must mean no stream", rerr)
-		}
+	serr := client.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(*gridwellv1.Event) error { return nil })
+	if status.Code(serr) != codes.Unimplemented {
+		t.Errorf("Subscribe answered %v; a false watch declaration must mean no stream", serr)
 	}
-	ws, err := client.WriteContent(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ws.CloseAndRecv(); status.Code(err) != codes.Unimplemented {
-		t.Errorf("WriteContent answered %v; a false writable declaration must mean no write door", err)
+	_, werr := client.WriteContent(ctx, func() (*gridwellv1.WriteContentRequest, error) {
+		return &gridwellv1.WriteContentRequest{TileId: "1"}, nil
+	})
+	if status.Code(werr) != codes.Unimplemented {
+		t.Errorf("WriteContent answered %v; a false writable declaration must mean no write door", werr)
 	}
 }

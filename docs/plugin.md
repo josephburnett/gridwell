@@ -13,8 +13,14 @@ included plugins themselves become the strangers.
 
 ## The decided objectives
 
-- ONE gRPC interface for plugins and the server (the proto stays the
-  contract; nothing decays into a Go-interface side channel).
+- ONE interface for plugins and the server (the proto stays the
+  contract; nothing decays into a side channel that carries meaning the
+  proto doesn't). Since 2026-08-29 the proto is a WIRE only where a
+  boundary forces it — the plugin.v1 subprocess and the federation
+  socket; inside the node it is `internal/namespace`, the same method set
+  in Go (`docs/simplify-plan.md` S2). That is not a side channel: it is
+  the same contract, generated from the same messages, with exactly two
+  adapters between the forms (`namespace.FromClient`, `namespace.Server`).
 - An **api library** a plugin author needs and nothing more — and the
   composition sugar: a binary composer says `InProcess(factory)` or
   `Command("gridwell-plugin-fs")` and the server cannot tell which it
@@ -165,7 +171,7 @@ replace graph is the whole story.
 
 | Site | Coupling | Fix |
 |---|---|---|
-| `internal/plugin/registry.go` `TransitKind` | routing semantics by `kind == "ssh"` | Info declaration (`transit`), cached from the spawn handshake |
+| `internal/plugin/registry.go` `TransitKind` | routing semantics by `kind == "ssh"` | RETIRED, twice over: first to an Info declaration (`transit`), then — with connections becoming config (2026-08-29) — to nothing at all. The node's own TRANSPORT is the only transit namespace; the registry keeps no transit bit and `InfoResponse.transit` is `reserved 15` |
 | `internal/cli/sshmigrate.go` | the CLI imports `sshhost` and writes its DB (pre-#251 bridge) | DELETE (flagged assumption: every home is migrated) |
 | `internal/cli/init.go` | ssh-specific config-key refusal in the generic init door | goes with sshmigrate |
 | `client/wasm/palette_draw.go` `drawPluginGlyph` | glyph by kind switch (fs/proc/localdb) | Info glyph declaration; globe stays the fallback |
@@ -214,6 +220,16 @@ Deviations from the letter of the plan, each deliberate:
   mechanics show through.
 - Cross-seam tests that build a server around a plugin moved to the
   server side (they are the server's seam tests).
+- The in-process gRPC loopback that used to front the node's OWN code
+  (`compose.ServeInProcess`, an in-memory bufconn) is DELETED
+  (2026-08-29): it served the node's home and transport to the node's own
+  router, which is a codec between two halves of one process. The
+  subprocess door — the part that admits strangers — is untouched, and
+  it is the only reason go-plugin was chosen. `internal/plugin/proxytest`
+  (a `GridwellServer` forwarding to a `GridwellClient`, kept only to
+  exercise transit qualification without an sshd) went with it: the
+  transport is a Go value now, so the transit tests run through the real
+  transport.
 
 ## Execution — staged, each stage green and pushed alone
 

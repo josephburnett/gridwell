@@ -42,11 +42,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	if secondUUID == primaryUUID {
 		t.Fatal("two stores produced the same plugin uuid")
 	}
-	client2, closer2, err := plugin.ServeInProcess(local.New(st2, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer2)
+	client2 := local.New(st2, nil)
 	reg.Register(secondUUID, "home", client2, nil)
 	secondBareRoot, err := st2.RootGridID(ctx)
 	if err != nil {

@@ -33,12 +33,14 @@ lists where that still needs doing.
 │ Local server                 internal/server, api/rpc               │
 │   STATELESS router: splits <uuid>/<id>, forwards, re-qualifies       │
 └───────────────┬──────────────────────────────────────────────────────┘
-                │  go-plugin gRPC  (the SAME Gridwell service)
+                │  a Go call  (namespace.Namespace — no wire, no codec)
 ┌───────────────▼──────────────────────────────────────────────────────┐
 │ Namespaces     home (internal/local) · connections (internal/remote)  │
 │   · plugins/{fs,proc,gitlab} as CONTENT PLUGINS (plugin.v1)          │
 │   a plugin is stateless (keys + content); the node mints ids and      │
 │   keeps every namespace's arrangement in the ONE store (gridwell.db) │
+│   ↓ the two gRPC hops that cross a real boundary:                    │
+│     go-plugin subprocess (plugin.v1) · federation socket (gridwell.v1)│
 └───────────────┬──────────────────────────────────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────────────────────────────────┐
@@ -49,14 +51,26 @@ lists where that still needs doing.
 ```
 
 **One contract, every hop.** `api/gridwell/v1/data.proto` defines a single
-17-RPC service implemented identically by the local server, every
-namespace, and a remote node reached through a connection. "Remote" adds
-no vocabulary — the transport forwards to a remote node's **export**
-(`nodeexport.go`: the same service over raw gRPC, routed by the qualified
-ids each request carries). Ids chain one segment per hop
+service implemented identically by the router, every namespace, and a
+remote node reached through a connection. "Remote" adds no vocabulary —
+the transport forwards to a remote node's **export** (`nodeexport.go`:
+the same service over raw gRPC, routed by the qualified ids each request
+carries). Ids chain one segment per hop
 (`<id>/<conn>/<remote-id>/<tile>`), so any depth of mounting routes
 generically. Every byte — content streams and the live PTY
 included — crosses this one interface.
+
+**The contract is an INTERFACE in process, a wire only where it must be**
+(2026-08-29, `docs/simplify-plan.md` S2). Inside the node a namespace is
+`namespace.Namespace` — the same method set as Go, with streams as
+idiomatic callbacks — and the router simply calls it. gRPC survives at
+exactly two hops, both of which cross a boundary that has to serialize
+anyway: the **plugin.v1 subprocess** (`compose.LoadPlugin` — the
+third-party door, process isolation and a separate dependency graph) and
+the **federation socket** (`nodeexport.go` writing the router onto
+gridwell.v1, `internal/remote/dial` reading it back). Connect over HTTP
+is the third codec, and it crosses to the browser. Home reaching itself
+crosses nothing.
 
 **A node has no grid of its own** (2026-08-29, `docs/one-node.md`; the
 node grid — `<node_id>/0`, one link tile per plugin — was deleted). The
@@ -116,12 +130,13 @@ Three fields encode the product rules directly:
 The server holds no Gridwell state. It routes every call to the owning
 plugin and translates ids at the boundary:
 
-1. `Server.resolve(id)` peels the FIRST segment: the node's own id
-   followed by a numeric segment is HOME; the node's id followed by a
-   letter-leading segment is a CONNECTION (the transport peels that
-   segment next); any other first segment is a plugin. The remainder
-   passes through verbatim, so `<id>/<conn>/<remote-id>/<tile>` chains
-   resolve one hop at a time.
+1. `Server.resolve(id)` peels the FIRST segment and answers with the
+   `namespace.Namespace` that owns it: the node's own id followed by a
+   numeric segment is HOME; the node's id followed by a letter-leading
+   segment is a CONNECTION (the transport peels that segment next); any
+   other first segment is a plugin. The remainder passes through
+   verbatim, so `<id>/<conn>/<remote-id>/<tile>` chains resolve one hop
+   at a time.
 2. The namespace answers in its own id space — bare ints for home and
    plugins, chains for the transport (whose ids arrive already qualified
    from the remote's perspective).
@@ -131,17 +146,32 @@ plugin and translates ids at the boundary:
    implementation). Transit is the namespace's TYPE (the transport), not
    a declaration, so it holds while the remote is down.
 
-**Two wire surfaces, one implementation, two doors.** `WebHandler` is the
-Connect handler behind the password gate — the `web.bind` listener,
-bindable to a network; `FederationHandler` is the raw-gRPC node export,
-whose unary methods delegate straight into the Connect handler and whose
-streams (`OpenShell`, `WriteContent`) route by the id in their first
-message — served on its own listener, the 0600 unix socket at
-`federation.socket`, never TCP (the kernel gates it to the owning uid;
-ssh's direct-streamlocal forwarding is the authenticated transport
-between nodes). The web door always has a password — the 0600
-`web-password` file serve mints and prints; delete it to rotate. A remote mounter and a browser exercise the same routing
-code through different doors.
+**One router, two codecs, two doors.** The routing lives in `router.go`
+as a `namespace.Namespace` of QUALIFIED ids — a space whose verbs peel one
+segment and forward. Over it stand two thin codecs that route nothing of
+their own: `connect_codec.go` (the browser's Connect handler, mapping the
+router's gRPC status codes through gwerr's one table) and
+`namespace.Server` (`nodeexport.go`, the raw-gRPC export). They cannot
+drift, because they are the same value. `WebHandler` serves the Connect
+codec behind the password gate — the `web.bind` listener, bindable to a
+network; `FederationHandler` serves the export on its own listener, the
+0600 unix socket at `federation.socket`, never TCP (the kernel gates it
+to the owning uid; ssh's direct-streamlocal forwarding is the
+authenticated transport between nodes). The web door always has a
+password — the 0600 `web-password` file serve mints and prints; delete it
+to rotate. The Connect codec is deliberately not total: `Info`, `Probe`
+and `OpenShell` are federation verbs (the browser learns the node from
+`Handshake` and takes its PTY bytes over the /shell WebSocket).
+
+**Message ownership.** With no wire between the router and its
+namespaces, a request and a response are shared by pointer. The contract
+(`internal/namespace`): a namespace never retains or mutates a request
+after returning, and never mutates a response it handed back; a caller
+never rewrites ids in place — the qualification layer CLONES
+(`rpc.TransitQualifyTiles`, `server.qualifyTiles`). That clone is the
+whole protection, so there is no general copy layer; the seam test is
+`TestTwoSubscribersEachSeeExactlyOnePrefix` (one hub event, four
+subscribers, one prefix each).
 
 `Info` handshakes are timeout-bounded and cached per uuid after first
 success (invalidated on a ROOT `SetFraming`, since root framing rides
@@ -388,6 +418,8 @@ same truth twice. The templates:
 | `shellconn.DecideAutoLive` | "does this descent go live" | one decision | every descent/restore path |
 | `client/shellwire` | the shell door's address + frames | one grammar | the server door and the wasm client |
 | `local.OpenVerified` | the plugin's identity | verify+open+inject fused | every identity read |
+| `server.router` | "who owns this qualified id, and what does the answer look like" | one `namespace.Namespace` | the Connect codec, the federation codec, the content door, the shell door |
+| `namespace.Follow` | "this event stream is established" | one definition | the node's fan-in and the transport's |
 
 Each makes a bug class unrepresentable. That is the goal of every change:
 prefer the design where the bug cannot be written over the design where it
@@ -420,7 +452,9 @@ for the §7 cure.
 Cured and closed: the menu (single owner `client/menu`); the corner-control
 visibility predicate (the control views were deleted outright, #214); the
 source-sweep policy (fs/proc, both tested); plugin capabilities (declared
-once in `Info`).
+once in `Info`); the two ROUTERS (the node export used to re-implement
+every stream and delegate every unary by hand — both doors are codecs over
+one `namespace.Namespace` since 2026-08-29, `docs/simplify-plan.md` S2).
 
 ---
 
@@ -503,6 +537,8 @@ invariants are where bugs are born.
 | I4 | Blobs immutable, content-addressed, refcounted | store blob layer | ✅ construction |
 | I5 | "Is a link" is one derived fact | `qualifyTiles` → `Tile.reference` | ✅ construction |
 | I6 | Qualified-id routing | server `route` + transit rules | ✅ construction |
+| I6b | Two wire surfaces cannot drift | both are codecs over one `namespace.Namespace` (`connect_codec.go`, `namespace.Server`) | ✅ construction |
+| I6c | An answer is never mutated under another reader | qualification clones (`rpc.TransitQualifyTiles`, `server.qualifyTiles`); `internal/namespace`'s ownership contract | ✅ construction + tested (`TestTwoSubscribersEachSeeExactlyOnePrefix`) |
 | I7 | preview = descent target = ascent return | five client roles synced by convention | ⚠️ convention, round trip tested (`framing-roundtrip.spec.ts`); the preview-bytes half still has no oracle (issue #19) |
 | I8 | Text preview == what you left (no re-wrap) | `PreviewWindowFrame` takes only the tile's own facts | ✅ construction + tested |
 | I9 | Focus steal is impossible | the registry's focus guard; wasm owns focus | ✅ tested (`control-focus.spec.ts`) |

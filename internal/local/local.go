@@ -1,11 +1,12 @@
-// Package localdb implements a Gridwell plugin that wraps the local SQLite
-// store. It satisfies gridwellv1.GridwellServer by delegating every RPC to
-// store.Store and translating between the proto wire types and the internal
-// rpc.* types via the existing rpc.ConvXxx functions.
+// Package local is the node's HOME: the namespace over the local SQLite
+// store. It satisfies namespace.Namespace — an in-process Go value the
+// router calls directly (docs/simplify-plan.md S2) — by delegating every
+// verb to store.Store and translating between the proto wire types and the
+// internal rpc.* types via the existing rpc.ConvXxx functions.
 //
-// This is the "main" plugin: it owns the full Gridwell space — wells, text,
-// URL, and shell tiles. The fs and proc plugins project external state; this
-// plugin owns everything the user creates inside Gridwell.
+// This is where the user's own space lives: wells, text, URL, and shell
+// tiles. The fs and proc plugins project external state; home owns
+// everything the user creates inside Gridwell.
 package local
 
 import (
@@ -19,19 +20,22 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"google.golang.org/grpc"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// Plugin wraps store.Store as a gridwellv1.GridwellServer. It also owns the
-// shell PTY lifecycle (shellsvc.Manager) so OpenShell — the live shell bytes —
-// crosses the Gridwell gRPC interface like every other call.
+// Plugin wraps store.Store as a namespace.Namespace. It also owns the
+// shell PTY lifecycle (shellsvc.Manager) so OpenShell — the live shell
+// bytes — crosses the namespace interface like every other verb.
 type Plugin struct {
-	gridwellv1.UnimplementedGridwellServer
+	namespace.Unimplemented
 	st    *store.Store
 	shell *shellsvc.Manager // nil → this instance hosts no live shells
 }
+
+// The router calls home as a Go value; the compiler is what says so.
+var _ namespace.Namespace = (*Plugin)(nil)
 
 // New wraps an open store. shell may be nil (no live-shell host: ShellSessionAlive
 // returns false, OpenShell is unimplemented, and DeleteTile skips reaping).
@@ -226,23 +230,23 @@ const contentChunkBytes = 256 * 1024
 // save basis, paired with the bytes at the owner; later chunks carry data
 // only. Empty content still sends the one meta chunk so the version always
 // arrives.
-func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
-	data, mediaType, version, err := p.st.ReadContent(stream.Context(), req.TileId)
+func (p *Plugin) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
+	data, mediaType, version, err := p.st.ReadContent(ctx, req.TileId)
 	if err != nil {
 		return errToStatus(err)
 	}
 	first := &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}
 	if len(data) <= contentChunkBytes {
 		first.Data = data
-		return stream.Send(first)
+		return send(first)
 	}
 	first.Data = data[:contentChunkBytes]
-	if err := stream.Send(first); err != nil {
+	if err := send(first); err != nil {
 		return err
 	}
 	for off := contentChunkBytes; off < len(data); off += contentChunkBytes {
 		end := min(off+contentChunkBytes, len(data))
-		if err := stream.Send(&gridwellv1.ContentChunk{Data: data[off:end]}); err != nil {
+		if err := send(&gridwellv1.ContentChunk{Data: data[off:end]}); err != nil {
 			return err
 		}
 	}
@@ -256,34 +260,34 @@ func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.Ser
 // semantics). The first message binds tile_id and claims the version;
 // accumulation is capped at the store's blob limit so an oversized stream
 // fails fast instead of buffering without bound.
-func (p *Plugin) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.WriteContentRequest, gridwellv1.TileResponse]) error {
-	first, err := stream.Recv()
+func (p *Plugin) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
+	first, err := recv()
 	if err != nil {
-		return status.Error(codes.InvalidArgument, "write: empty stream")
+		return nil, status.Error(codes.InvalidArgument, "write: empty stream")
 	}
 	tileID, version := first.TileId, first.Version
 	if tileID == "" {
-		return status.Error(codes.InvalidArgument, "write: first message must bind tile_id")
+		return nil, status.Error(codes.InvalidArgument, "write: first message must bind tile_id")
 	}
 	data := append([]byte(nil), first.Data...)
 	for {
-		msg, err := stream.Recv()
-		if err == io.EOF {
+		msg, err := recv()
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return err // broken stream: no commit, old value intact
+			return nil, err // broken stream: no commit, old value intact
 		}
 		data = append(data, msg.Data...)
 		if int64(len(data)) > store.MaxBlobBytes {
-			return status.Error(codes.InvalidArgument, "write: content too large")
+			return nil, status.Error(codes.InvalidArgument, "write: content too large")
 		}
 	}
-	tile, err := p.st.WriteContent(stream.Context(), tileID, version, data)
+	tile, err := p.st.WriteContent(ctx, tileID, version, data)
 	if err != nil {
-		return errToStatus(err)
+		return nil, errToStatus(err)
 	}
-	return stream.SendAndClose(&gridwellv1.TileResponse{Tile: rpc.TileToProto(tile)})
+	return &gridwellv1.TileResponse{Tile: rpc.TileToProto(tile)}, nil
 }
 
 // ── Creates ──────────────────────────────────────────────────────────────────
@@ -433,11 +437,11 @@ func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessi
 // tile id (data empty), then keystrokes/resizes flow up and terminal output
 // flows down. The plugin owns the tmux/PTY, so these bytes cross the Gridwell
 // interface like everything else; the server only bridges a WebSocket to it.
-func (p *Plugin) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellRequest, gridwellv1.OpenShellResponse]) error {
+func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) error {
 	if p.shell == nil {
-		return status.Error(codes.Unimplemented, "this plugin hosts no live shells")
+		return status.Error(codes.Unimplemented, "this namespace hosts no live shells")
 	}
-	first, err := stream.Recv()
+	first, err := recv()
 	if err != nil {
 		return err
 	}
@@ -454,7 +458,7 @@ func (p *Plugin) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 	// A fresh tile (no frozen snapshot) may spawn a new bash; a snapshotted tile
 	// must not — we won't fabricate state behind the JPEG.
 	allowCreate := true
-	if tile, gerr := p.st.GetTile(stream.Context(), tileID); gerr == nil {
+	if tile, gerr := p.st.GetTile(sctx, tileID); gerr == nil {
 		allowCreate = tile.PreviewBlobID == 0
 	}
 
@@ -467,7 +471,7 @@ func (p *Plugin) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 	}
 	defer p.shell.Release(tileID, session, stopOld, func() { p.captureShellTitle(tileID) })
 
-	ctx, cancel := context.WithCancel(stream.Context())
+	ctx, cancel := context.WithCancel(sctx)
 	defer cancel()
 
 	// Reader: keystrokes / resizes up. Exits on stream EOF/error or a dead PTY,
@@ -475,7 +479,7 @@ func (p *Plugin) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 	go func() {
 		defer cancel()
 		for {
-			msg, rerr := stream.Recv()
+			msg, rerr := recv()
 			if rerr != nil {
 				return
 			}
@@ -506,7 +510,7 @@ func (p *Plugin) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 			if !ok {
 				return nil
 			}
-			if serr := stream.Send(&gridwellv1.OpenShellResponse{Data: chunk}); serr != nil {
+			if serr := send(&gridwellv1.OpenShellResponse{Data: chunk}); serr != nil {
 				return serr
 			}
 		}
@@ -545,7 +549,7 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 
 // ── Subscribe (server-streaming) ─────────────────────────────────────────────
 
-func (p *Plugin) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStreamingServer[gridwellv1.Event]) error {
+func (p *Plugin) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := p.st.SubscribeEvents()
 	defer cancel()
 	for {
@@ -554,10 +558,13 @@ func (p *Plugin) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStr
 			if !ok {
 				return nil
 			}
-			if err := stream.Send(rpc.EventToProto(ev)); err != nil {
+			// A FRESH proto per subscriber: the store's hub hands the same
+			// internal event to every listener, and without a wire between
+			// them an in-place qualification would reach them all.
+			if err := send(rpc.EventToProto(ev)); err != nil {
 				return err
 			}
-		case <-stream.Context().Done():
+		case <-ctx.Done():
 			return nil
 		}
 	}

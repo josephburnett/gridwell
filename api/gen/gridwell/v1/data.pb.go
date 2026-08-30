@@ -709,15 +709,6 @@ type InfoResponse struct {
 	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
-	// transit declares that this plugin's ids are CHAINS from another node —
-	// a mount, forwarding to a remote gridwell, whose ids arrive already
-	// qualified from the remote's perspective. The host's qualification layer
-	// prepends one segment instead of applying leaf rules, and the mount
-	// cache interposes. Declared by the LOCAL transport binary (which is
-	// alive even when its remote isn't) and cached from the spawn-time
-	// handshake — the host must never re-derive it from the kind string
-	// (charter, 2026-08-15: the host must not know its plugins).
-	Transit bool `protobuf:"varint,15,opt,name=transit,proto3" json:"transit,omitempty"`
 	// glyph is the plugin's identity glyph for the launcher/menu/ghost faces:
 	// "folder", "process", "well", or "" for the generic globe. A declaration,
 	// never a kind switch in the client; unknown values also fall back to the
@@ -829,13 +820,6 @@ func (x *InfoResponse) GetRootViewZoom() float64 {
 		return x.RootViewZoom
 	}
 	return 0
-}
-
-func (x *InfoResponse) GetTransit() bool {
-	if x != nil {
-		return x.Transit
-	}
-	return false
 }
 
 func (x *InfoResponse) GetGlyph() string {
@@ -3381,7 +3365,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
 	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
-	"\vInfoRequest\"\xd5\x03\n" +
+	"\vInfoRequest\"\xc1\x03\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
@@ -3396,10 +3380,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCx\x12 \n" +
 	"\froot_view_cy\x18\v \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
-	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x18\n" +
-	"\atransit\x18\x0f \x01(\bR\atransit\x12\x14\n" +
+	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0f\"'\n" +
+	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +

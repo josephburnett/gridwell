@@ -3,31 +3,40 @@ package local_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// The content-stream seam tests run over REAL gRPC (plugin.ServeInProcess),
-// because the property under test — commit-at-close, and a broken stream
-// committing nothing — lives in the stream lifecycle, which a direct method
-// call cannot exercise.
+// The content-stream seam tests drive home as the Go value the router holds
+// (namespace.Namespace — docs/simplify-plan.md S2). The property under test
+// — commit-at-close, and a broken stream committing nothing — lives in the
+// stream lifecycle, and the lifecycle is now the recv/send contract: a recv
+// that fails must leave the old value byte-for-byte intact.
 
-func serveGRPC(t *testing.T) (gridwellv1.GridwellClient, string) {
+func homeNamespace(t *testing.T) (namespace.Namespace, string) {
 	t.Helper()
 	p := openPlugin(t)
-	root := rootGrid(t, p)
-	client, closer, err := compose.ServeInProcess(p)
-	if err != nil {
-		t.Fatalf("serve in-process: %v", err)
-	}
-	t.Cleanup(closer)
-	return client, root
+	return p, rootGrid(t, p)
 }
 
-func grpcCreateText(t *testing.T, c gridwellv1.GridwellClient, gridID string, body []byte) *gridwellv1.Tile {
+// sendParts is the caller's half of a WriteContent: the parts in order,
+// then io.EOF — the clean end that commits.
+func sendParts(parts ...*gridwellv1.WriteContentRequest) func() (*gridwellv1.WriteContentRequest, error) {
+	i := 0
+	return func() (*gridwellv1.WriteContentRequest, error) {
+		if i >= len(parts) {
+			return nil, io.EOF
+		}
+		i++
+		return parts[i-1], nil
+	}
+}
+
+func grpcCreateText(t *testing.T, c namespace.Namespace, gridID string, body []byte) *gridwellv1.Tile {
 	t.Helper()
 	r, err := c.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
 		GridId: gridID,
@@ -39,16 +48,10 @@ func grpcCreateText(t *testing.T, c gridwellv1.GridwellClient, gridID string, bo
 	tile := r.Tile
 	if len(body) > 0 {
 		// Creation is metadata-only; the body follows through the one write.
-		w, err := c.WriteContent(context.Background())
+		resp, err := c.WriteContent(context.Background(),
+			sendParts(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: body}))
 		if err != nil {
-			t.Fatalf("WriteContent open: %v", err)
-		}
-		if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: body}); err != nil {
-			t.Fatalf("WriteContent send: %v", err)
-		}
-		resp, err := w.CloseAndRecv()
-		if err != nil {
-			t.Fatalf("WriteContent close: %v", err)
+			t.Fatalf("WriteContent: %v", err)
 		}
 		tile = resp.Tile
 	}
@@ -57,51 +60,37 @@ func grpcCreateText(t *testing.T, c gridwellv1.GridwellClient, gridID string, bo
 
 // readAll drains a ReadContent stream, returning the reassembled bytes and
 // the meta from chunk 1.
-func readAll(t *testing.T, c gridwellv1.GridwellClient, tileID string) (data []byte, mediaType string, version int64, chunks int) {
+func readAll(t *testing.T, c namespace.Namespace, tileID string) (data []byte, mediaType string, version int64, chunks int) {
 	t.Helper()
-	stream, err := c.ReadContent(context.Background(), &gridwellv1.ReadContentRequest{TileId: tileID})
+	err := c.ReadContent(context.Background(), &gridwellv1.ReadContentRequest{TileId: tileID},
+		func(ch *gridwellv1.ContentChunk) error {
+			chunks++
+			if chunks == 1 {
+				mediaType, version = ch.MediaType, ch.Version
+			} else if ch.MediaType != "" || ch.Version != 0 {
+				t.Errorf("chunk %d carries meta (media %q, version %d); meta rides chunk 1 only", chunks, ch.MediaType, ch.Version)
+			}
+			data = append(data, ch.Data...)
+			return nil
+		})
 	if err != nil {
 		t.Fatalf("ReadContent: %v", err)
 	}
-	for {
-		ch, err := stream.Recv()
-		if err == io.EOF {
-			return data, mediaType, version, chunks
-		}
-		if err != nil {
-			t.Fatalf("recv: %v", err)
-		}
-		chunks++
-		if chunks == 1 {
-			mediaType, version = ch.MediaType, ch.Version
-		} else if ch.MediaType != "" || ch.Version != 0 {
-			t.Errorf("chunk %d carries meta (media %q, version %d); meta rides chunk 1 only", chunks, ch.MediaType, ch.Version)
-		}
-		data = append(data, ch.Data...)
-	}
+	return data, mediaType, version, chunks
 }
 
 func TestContentStreamRoundTrip(t *testing.T) {
-	c, root := serveGRPC(t)
+	c, root := homeNamespace(t)
 	tile := grpcCreateText(t, c, root, []byte("old"))
 
-	// Write in several chunks; the value commits at CloseAndRecv.
-	w, err := c.WriteContent(context.Background())
+	// Write in several chunks; the value commits at the clean end.
+	resp, err := c.WriteContent(context.Background(), sendParts(
+		&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: []byte("# Streamed\n")},
+		&gridwellv1.WriteContentRequest{Data: []byte("part two, ")},
+		&gridwellv1.WriteContentRequest{Data: []byte("part three")},
+	))
 	if err != nil {
-		t.Fatalf("WriteContent open: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: []byte("# Streamed\n")}); err != nil {
-		t.Fatalf("send 1: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{Data: []byte("part two, ")}); err != nil {
-		t.Fatalf("send 2: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{Data: []byte("part three")}); err != nil {
-		t.Fatalf("send 3: %v", err)
-	}
-	resp, err := w.CloseAndRecv()
-	if err != nil {
-		t.Fatalf("close: %v", err)
+		t.Fatalf("WriteContent: %v", err)
 	}
 	if resp.Tile.Version <= tile.Version {
 		t.Errorf("text write must bump version: %d -> %d", tile.Version, resp.Tile.Version)
@@ -123,20 +112,23 @@ func TestContentStreamRoundTrip(t *testing.T) {
 // TestWriteContentBrokenStreamCommitsNothing is the commit-at-close seam
 // test: a stream that dies mid-write must leave the old value byte-for-byte
 // intact — partial delivery is never visible. (The value-vs-wire split:
-// content is a value; a torn write would be corruption.)
+// content is a value; a torn write would be corruption.) The break is a
+// recv that FAILS instead of reaching io.EOF — the in-process shape of the
+// stream that dropped.
 func TestWriteContentBrokenStreamCommitsNothing(t *testing.T) {
-	c, root := serveGRPC(t)
+	c, root := homeNamespace(t)
 	tile := grpcCreateText(t, c, root, []byte("the old value"))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	w, err := c.WriteContent(ctx)
-	if err != nil {
-		t.Fatalf("WriteContent open: %v", err)
-	}
-	_ = w.Send(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: []byte("half a new va")})
-	cancel() // the stream breaks before close: no commit
-	if _, err := w.CloseAndRecv(); err == nil {
-		t.Fatal("a cancelled write must not report success")
+	sent := false
+	_, err := c.WriteContent(context.Background(), func() (*gridwellv1.WriteContentRequest, error) {
+		if sent {
+			return nil, errors.New("the caller's stream broke")
+		}
+		sent = true
+		return &gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: []byte("half a new va")}, nil
+	})
+	if err == nil {
+		t.Fatal("a broken write must not report success")
 	}
 
 	data, _, version, _ := readAll(t, c, tile.Id)
@@ -149,19 +141,13 @@ func TestWriteContentBrokenStreamCommitsNothing(t *testing.T) {
 }
 
 func TestReadContentChunksLargeBodies(t *testing.T) {
-	c, root := serveGRPC(t)
+	c, root := homeNamespace(t)
 	big := bytes.Repeat([]byte("0123456789abcdef"), 40*1024) // 640 KiB > 2 chunks
 	tile := grpcCreateText(t, c, root, nil)
 
-	w, err := c.WriteContent(context.Background())
-	if err != nil {
-		t.Fatalf("WriteContent open: %v", err)
-	}
-	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: big}); err != nil {
-		t.Fatalf("send: %v", err)
-	}
-	if _, err := w.CloseAndRecv(); err != nil {
-		t.Fatalf("close: %v", err)
+	if _, err := c.WriteContent(context.Background(),
+		sendParts(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: big})); err != nil {
+		t.Fatalf("WriteContent: %v", err)
 	}
 
 	data, _, _, chunks := readAll(t, c, tile.Id)

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -22,7 +22,7 @@ import (
 // transition — a unit test on fanInEvents in isolation would not prove the
 // transition reaches a real client stream over the real wire; this does.
 type flakyWatchPlugin struct {
-	pb.UnimplementedGridwellServer
+	namespace.Unimplemented
 	subCalls      atomic.Int32
 	failSubFirstN int32
 }
@@ -31,12 +31,12 @@ func (p *flakyWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoRespo
 	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1", Watch: true}, nil
 }
 
-func (p *flakyWatchPlugin) Subscribe(_ *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.Event]) error {
+func (p *flakyWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
 	n := p.subCalls.Add(1)
 	if n <= p.failSubFirstN {
 		return errors.New("simulated plugin stream failure")
 	}
-	<-stream.Context().Done()
+	<-ctx.Done()
 	return nil
 }
 
@@ -66,11 +66,7 @@ func recvHealth(t *testing.T, stream *rpc.EventStream) *rpc.PluginHealth {
 // instead of the client silently going stale with tiles that stop updating.
 func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	fake := &flakyWatchPlugin{failSubFirstN: 1}
-	client, closer, err := plugin.ServeInProcess(fake)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := fake
 	reg := plugin.NewRegistry()
 	reg.Register("u-1", "test", client, nil)
 	srv := mustNew(t, reg, Config{})
@@ -110,7 +106,7 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 // before the fix, a single failed Info AT SUBSCRIBE TIME permanently excluded
 // the plugin from that stream's fan-in — retrying never happened.
 type alwaysFailInfoWatchPlugin struct {
-	pb.UnimplementedGridwellServer
+	namespace.Unimplemented
 	infoCalls      atomic.Int32
 	failInfoFirstN int32
 }
@@ -123,8 +119,8 @@ func (p *alwaysFailInfoWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.
 	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1", Watch: true}, nil
 }
 
-func (p *alwaysFailInfoWatchPlugin) Subscribe(_ *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.Event]) error {
-	<-stream.Context().Done()
+func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
+	<-ctx.Done()
 	return nil
 }
 
@@ -140,11 +136,7 @@ func (p *alwaysFailInfoWatchPlugin) Subscribe(_ *pb.SubscribeRequest, stream grp
 // followed by a health-recovery event (the retried Info succeeded).
 func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) {
 	fake := &alwaysFailInfoWatchPlugin{failInfoFirstN: 1}
-	client, closer, err := plugin.ServeInProcess(fake)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := fake
 	reg := plugin.NewRegistry()
 	reg.Register("u-2", "test", client, nil)
 	srv := mustNew(t, reg, Config{})
@@ -176,7 +168,7 @@ func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) 
 // noWatchAfterInfoFailPlugin fails Info once, then succeeds with Watch: false
 // (the fs/proc shape — no event stream to fan in).
 type noWatchAfterInfoFailPlugin struct {
-	pb.UnimplementedGridwellServer
+	namespace.Unimplemented
 	infoCalls atomic.Int32
 }
 
@@ -195,11 +187,7 @@ func (p *noWatchAfterInfoFailPlugin) Info(context.Context, *pb.InfoRequest) (*pb
 // live updates to begin with.
 func TestWatchPluginResolvesHealthBeforeNoWatchReturn(t *testing.T) {
 	fake := &noWatchAfterInfoFailPlugin{}
-	client, closer, err := plugin.ServeInProcess(fake)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := fake
 	reg := plugin.NewRegistry()
 	reg.Register("u-3", "fs", client, nil)
 	srv := mustNew(t, reg, Config{})

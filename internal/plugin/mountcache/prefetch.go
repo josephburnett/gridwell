@@ -27,11 +27,9 @@ package mountcache
 import (
 	"context"
 	"github.com/josephburnett/gridwell/api/gwerr"
-	"io"
 	"sync"
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -199,15 +197,14 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		if !w.pause() {
 			return false
 		}
-		s, err := w.c.ReadContent(w.ctx, &pb.ReadContentRequest{TileId: t.GetId()})
-		if err != nil {
-			return !gwerr.IsTransport(err)
-		}
-		if n, ok := drainStream(s); !ok {
+		n, ok := drain(func(count func(int)) error {
+			return w.c.ReadContent(w.ctx, &pb.ReadContentRequest{TileId: t.GetId()},
+				func(ch *pb.ContentChunk) error { count(len(ch.GetData())); return nil })
+		})
+		if !ok {
 			return false
-		} else {
-			w.spent += n
 		}
+		w.spent += n
 	}
 	// A serves_page tile's face-value body is its door page at the root
 	// subpath (rpc.PageURL's target). Bounded like every body: the entry
@@ -216,15 +213,14 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		if !w.pause() {
 			return false
 		}
-		s, err := w.c.ServeContent(w.ctx, &pb.ServeContentRequest{TileId: t.GetId(), Subpath: ""})
-		if err != nil {
-			return !gwerr.IsTransport(err)
-		}
-		if n, ok := drainServeStream(s); !ok {
+		n, ok := drain(func(count func(int)) error {
+			return w.c.ServeContent(w.ctx, &pb.ServeContentRequest{TileId: t.GetId(), Subpath: ""},
+				func(ch *pb.ServeContentChunk) error { count(len(ch.GetData())); return nil })
+		})
+		if !ok {
 			return false
-		} else {
-			w.spent += n
 		}
+		w.spent += n
 	}
 	// A leaf link's target is what the link renders and resolves through:
 	// warm the target row (and its face/body) even if its own grid is
@@ -249,36 +245,18 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	return true
 }
 
-// drainServeStream is drainStream for the door's chunk shape.
-func drainServeStream(s grpc.ServerStreamingClient[pb.ServeContentChunk]) (n int, ok bool) {
+// drain runs one content read purely to WARM the cache (the tee behind it
+// stores what passes), reporting the bytes seen. ok=false means the mount
+// went dark before a single chunk — abort the walk; a failure after bytes
+// have flowed, or a coded refusal, just ends this branch.
+func drain(read func(count func(int)) error) (n int, ok bool) {
 	first := true
-	for {
-		ch, err := s.Recv()
-		if err == io.EOF {
-			return n, true
-		}
-		if err != nil {
-			return n, !(first && gwerr.IsTransport(err))
-		}
+	err := read(func(size int) {
 		first = false
-		n += len(ch.GetData())
+		n += size
+	})
+	if err != nil {
+		return n, !(first && gwerr.IsTransport(err))
 	}
-}
-
-// drainStream consumes a ReadContent stream so the tee stores it at EOF,
-// reporting the byte count; ok=false means transport-dark before any
-// frame (abort the walk).
-func drainStream(s grpc.ServerStreamingClient[pb.ContentChunk]) (n int, ok bool) {
-	first := true
-	for {
-		ch, err := s.Recv()
-		if err == io.EOF {
-			return n, true
-		}
-		if err != nil {
-			return n, !(first && gwerr.IsTransport(err))
-		}
-		first = false
-		n += len(ch.GetData())
-	}
+	return n, true
 }

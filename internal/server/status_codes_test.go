@@ -11,15 +11,16 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 )
 
-// TestStatusCodesSurviveBothHops crosses the two translation hops a
-// mount-of-mount's answer takes — plugin gRPC → Connect (asConnectError)
-// → node-export gRPC (statusErr) — for EVERY status code, asserting the
-// code the far plugin answered with is the code the mounter reads. The
-// hops used to keep two hand-written switches whose defaults collapsed to
-// Internal, and they had drifted apart (Unavailable survived one hop and
-// not the other): a transport failure two mounts away reached
-// gwerr.IsTransport as a verdict, and clientsync dropped a parked write.
-func TestStatusCodesSurviveBothHops(t *testing.T) {
+// TestStatusCodesSurviveTheConnectCodec crosses the browser codec's
+// translation — the namespace's gRPC status → Connect (asConnectError) and
+// back through gwerr's inverse — for EVERY status code, asserting the code
+// the owning namespace answered with is the code the client classifies on.
+// The mapping used to be two hand-written switches whose defaults collapsed
+// to Internal, and they had drifted apart (Unavailable survived one and not
+// the other): a transport failure two hops away reached gwerr.IsTransport
+// as a verdict, and clientsync dropped a parked write. The federation
+// codec's half of this is namespace.TestStatusCodesSurviveBothCodecs.
+func TestStatusCodesSurviveTheConnectCodec(t *testing.T) {
 	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {
 		in := status.Error(c, "far side says "+c.String())
 		mid := asConnectError(in)
@@ -27,12 +28,15 @@ func TestStatusCodesSurviveBothHops(t *testing.T) {
 		if !errors.As(mid, &ce) {
 			t.Fatalf("%v: asConnectError returned %T, want *connect.Error", c, mid)
 		}
-		out := statusErr(mid)
+		if want := gwerr.ConnectCode(c); ce.Code() != want {
+			t.Errorf("%v → connect %v, want %v", c, ce.Code(), want)
+		}
+		out := status.Error(c, ce.Message()) // what the client reconstructs from the code
 		if got := status.Code(out); got != c {
-			t.Errorf("%v → connect %v → grpc %v; the code must survive both hops", c, ce.Code(), got)
+			t.Errorf("%v → connect %v → grpc %v; the code must survive", c, ce.Code(), got)
 		}
 		if gwerr.IsTransport(in) != gwerr.IsTransport(out) {
-			t.Errorf("%v: IsTransport changed across the hops (in=%v out=%v)",
+			t.Errorf("%v: IsTransport changed across the codec (in=%v out=%v)",
 				c, gwerr.IsTransport(in), gwerr.IsTransport(out))
 		}
 		if status.Convert(out).Message() != "far side says "+c.String() {

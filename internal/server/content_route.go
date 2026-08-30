@@ -8,9 +8,10 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// contentRoute resolves the plugin client + local id that serves a tile's
+// contentRoute resolves the namespace + local id that serves a tile's
 // CONTENT — body bytes and preview. It is the ONE link-resolution point
 // (owner decision 8, 2026-07-26): if the tile is a leaf link, the route
 // follows link_target_id at the serving node, so every caller — our client,
@@ -28,7 +29,7 @@ import (
 // Writes never resolve: a link owns no content, and content writes address
 // the target the caller names explicitly (the store refuses a write to a
 // link row).
-func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (pb.GridwellClient, string, error) {
+func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, error) {
 	if _, _, ok := rpc.SplitID(qualifiedID); !ok {
 		return nil, "", status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
 	}

@@ -70,11 +70,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 	}
 	t.Cleanup(cpCloser)
 	adapter := pluginhost.New(cp, memStore.Namespace("p1"))
-	client, closer, err := plugin.ServeInProcess(adapter)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
+	client := adapter
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
 	srv := servertest.New(t, reg, server.Config{})
