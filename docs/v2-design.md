@@ -9,6 +9,11 @@ now, and so on); `ARCHITECTURE.md` describes the result. Successor to
 is deliberately the most detailed: the data is a daily driver's, and the
 switchover was one-time.
 
+Superseded twice since (2026-08-29): `docs/one-node.md` folded home and
+the transport into the node itself, and `docs/simplify-plan.md` collapsed
+the framing, `version`, namespace, cache and place models this document
+sketched. Read it for the reasoning, never for the present shape.
+
 ## 1. Tenets
 
 1. **Things stay as the user left them.** Arrangement is the USER's
