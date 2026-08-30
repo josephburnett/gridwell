@@ -596,23 +596,15 @@ func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
 		return
 	}
 	go func() {
-		// Content is routable by tile id (ReadContent); blob ids carry no
-		// plugin namespace and are not routable on their own. Store it in
-		// the cache, the one text-body store the overlay reads from.
-		data, _, version, err := a.cl.ReadContent(context.Background(), textTileID)
-		if err != nil {
-			// The tile the URL pointed at stays blank: say why.
-			a.surfaceRPCError("ReadContent", err)
-			return
-		}
-		a.c.PutFetchedContent(textTileID, data, version)
-		// Refresh the overlay (in text mode this seeds the textarea
-		// from the blob), then place the cursor.
-		a.refreshFileOverlay()
-		if state.CursorMode {
-			a.placeCursorAt(state.Col, state.Row)
-		}
-		a.draw()
+		// loadTileContent stores the bytes and refreshes the overlay (in
+		// text mode that seeds the textarea from the body); the cursor is
+		// what this path adds, and it goes after the seeding.
+		a.loadTileContent(textTileID, func() {
+			if state.CursorMode {
+				a.placeCursorAt(state.Col, state.Row)
+			}
+			a.draw()
+		})
 	}()
 }
 
