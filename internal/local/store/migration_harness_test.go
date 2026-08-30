@@ -845,8 +845,8 @@ func init() {
 			// (The stale unconfigured plugin well cannot be seeded through
 			// the chain — the v5 rebuild already materialized the v10 tiles
 			// shape, so a chain-built v9 file has no configure_plugin_id
-			// column. TestMigrateV10AdoptsStalePluginWells builds the
-			// genuine v9 row shape and covers that arm.)
+			// column. TestMigrateV10OverAGenuineV9File builds the
+			// genuine v9 shape and covers that arm.)
 			// The id-reuse trap across the v10 rebuild.
 			res, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
 				VALUES (?, 'shell', 68, 6, 1, 1, 'v10 post', 100, 100)`, wellChild)

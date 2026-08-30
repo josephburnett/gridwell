@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -178,26 +179,35 @@ func TestMigrateUpRunsRealMigrations(t *testing.T) {
 	}
 }
 
-// TestMigrateV10AdoptsStalePluginWells covers the one v10 arm the per-migration
-// fixture cannot reach. A DB written by a v8/v9 binary has tiles.
-// configure_plugin_id and a CHECK that admits a CHILDLESS well — the
-// unconfigured plugin well (#251). A chain-built v9 file does not: the v5
-// rebuild already materializes the CURRENT tiles shape, so the column was
-// never there to plant a row in. Here the genuine v9 row shape is rebuilt by
-// hand (add the column back; plant the row with the CHECK suspended, exactly
-// the shape a v8 binary wrote) and v10 is run over it.
+// TestMigrateV10OverAGenuineV9File covers what the per-migration fixture
+// cannot reach. A file written by a v9 BINARY carries tiles.object_id, its
+// index, tiles.configure_plugin_id, and a CHECK that admits a CHILDLESS well
+// — the unconfigured plugin well (#251). A chain-built v9 file carries none
+// of those: the v5 rebuild already materializes the CURRENT tiles shape (the
+// convergence contract), so there was nothing there to plant a row in. Here
+// the genuine v9 shape is put back by hand and v10 is run over it.
 //
 // The invariant under test is the guiding rule: a tile the user placed must
 // still be there afterwards, at the SAME id, and must now work — deleting it
 // because its feature retired would be a change the user did not make.
-func TestMigrateV10AdoptsStalePluginWells(t *testing.T) {
+func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 	ctx := context.Background()
-	db, root := buildDBAtV1(t, filepath.Join(t.TempDir(), "stalewell.db"))
+	path := filepath.Join(t.TempDir(), "genuinev9.db")
+	db, root := buildDBAtV1(t, path)
 	applyMigrationsUpTo(t, db, 9)
 
-	if _, err := db.ExecContext(ctx,
-		`ALTER TABLE tiles ADD COLUMN configure_plugin_id TEXT NOT NULL DEFAULT ''`); err != nil {
-		t.Fatalf("restore the v8 column: %v", err)
+	// The v9 columns and index a chain-built file no longer has. (object_id
+	// was TEXT NOT NULL with no default on a real v9 file; the added default
+	// only lets this test insert without naming it — v10 never copies the
+	// column either way.)
+	for _, ddl := range []string{
+		`ALTER TABLE tiles ADD COLUMN object_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX idx_tiles_object_id ON tiles(object_id)`,
+		`ALTER TABLE tiles ADD COLUMN configure_plugin_id TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := db.ExecContext(ctx, ddl); err != nil {
+			t.Fatalf("restore the v9 shape (%s): %v", ddl, err)
+		}
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA ignore_check_constraints = true`); err != nil {
 		t.Fatalf("suspend the CHECK: %v", err)
@@ -243,5 +253,42 @@ func TestMigrateV10AdoptsStalePluginWells(t *testing.T) {
 	}
 	if nTiles != 0 {
 		t.Errorf("the minted child grid holds %d tiles, want an empty room", nTiles)
+	}
+	// Both v9 columns and the index went with the migration.
+	for _, tbl := range []string{"grids", "tiles"} {
+		if _, ok := tableColumnsFP(t, db, tbl)[objectIDColumn]; ok {
+			t.Errorf("%s.object_id survived v10 on a genuine v9 file", tbl)
+		}
+	}
+	if _, ok := tableColumnsFP(t, db, "tiles")["configure_plugin_id"]; ok {
+		t.Error("tiles.configure_plugin_id survived v10 on a genuine v9 file")
+	}
+	var nIdx int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master
+		WHERE type = 'index' AND name = 'idx_tiles_object_id'`).Scan(&nIdx); err != nil {
+		t.Fatal(err)
+	}
+	if nIdx != 0 {
+		t.Error("idx_tiles_object_id survived v10 on a genuine v9 file")
+	}
+	// And the file OPENS through the production door: Open re-runs the
+	// chain (a no-op now), passes verifySchema, and reads the adopted well
+	// back as an ordinary tile. This is the storage promise itself — a file
+	// a released binary wrote still opens and still holds what the user put
+	// in it.
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("a genuine v9 file must open after v10: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	reopened, err := s.GetTile(ctx, strconv.FormatInt(staleID, 10))
+	if err != nil {
+		t.Fatalf("read the adopted well after reopen: %v", err)
+	}
+	if reopened.Kind != "well" || reopened.ChildGridID == "" || reopened.AltText != "gpu box" {
+		t.Errorf("adopted well after reopen = %+v, want a named well with a child grid", reopened)
 	}
 }
