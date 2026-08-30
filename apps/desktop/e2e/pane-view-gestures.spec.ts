@@ -216,8 +216,7 @@ test.describe('stack hygiene', () => {
 
     await gw.descendCell(cx, cy); // well descent (session stack pushed)
     let cur = (await gw.panes()).find((p) => p.id === f.id)!;
-    expect(cur.frameDepth, 'one portal frame while inside the plugin').toBe(1);
-    expect(cur.ascentDepth, 'one well level saved').toBe(1);
+    expect(cur.placeDepth, 'two doorways deep: a well, then the plugin link').toBe(2);
 
     // Pane-center clicks: the ascend is position-independent, and a
     // computed cell center can be OFF-PANE at the child grid's high zoom
@@ -227,7 +226,6 @@ test.describe('stack hygiene', () => {
 
     cur = (await gw.panes()).find((p) => p.id === f.id)!;
     expect(cur.anchor, 'back home (the boot anchor)').toBe(home);
-    expect(cur.frameDepth, 'no frame leaked').toBe(0);
-    expect(cur.ascentDepth, 'no session-stack entry leaked (the orphan bug)').toBe(0);
+    expect(cur.placeDepth, 'no frame leaked (the orphan bug)').toBe(0);
   });
 });

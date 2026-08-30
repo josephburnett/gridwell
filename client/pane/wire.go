@@ -8,10 +8,12 @@
 // version of Gridwell (the tablesV1 philosophy; the golden fixture in
 // wire_test.go pins it).
 //
-// What is NOT in the layout, by design (issue #13 + URL-place semantics): the
-// Up portal frames, the in-namespace ascent stack, selection, and
-// native handles. A leaf persists a *place* — anchor + path + viewport —
-// exactly the URL vocabulary; the return stacks stay session-scoped.
+// What is NOT in the layout, by design (issue #13 + URL-place semantics):
+// the OUTER frames' viewports, the selection, and the native handles. A leaf
+// persists the place it is AT — the grid it sits in, the doorways it came
+// through, and the viewport there — exactly the URL vocabulary; the
+// viewports it would ascend onto stay session-scoped, so a restored pane
+// falls back to each grid's persisted framing on the way out.
 //
 // Id relativity: every id in the layout (anchor, path segments, TextFocus) is
 // stored in the OWNING NODE's namespace frame. The encoder strips the pane
@@ -111,18 +113,19 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)
 	home := &LayoutPane{ID: bareID, Zoom: 1}
+	panchor, ppath := p.AnchorPathAt(p.Depth() - 1)
 	anchor := ""
-	if p.Anchor != "" {
-		a, ok := rel(p.Anchor)
+	if panchor != "" {
+		a, ok := rel(panchor)
 		if !ok {
 			return home, false
 		}
 		anchor = a
 	}
 	var path []string
-	if len(p.Path) > 0 {
-		path = make([]string, len(p.Path))
-		for i, seg := range p.Path {
+	if len(ppath) > 0 {
+		path = make([]string, len(ppath))
+		for i, seg := range ppath {
 			s, ok := rel(seg)
 			if !ok {
 				return home, false
@@ -131,8 +134,8 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 		}
 	}
 	textFocus := ""
-	if p.TextFocus != "" {
-		tf, ok := rel(p.TextFocus)
+	if id := p.ContentID(); id != "" {
+		tf, ok := rel(id)
 		if !ok {
 			return home, false
 		}
@@ -243,24 +246,22 @@ func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNod
 }
 
 func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane {
-	p := &Pane{
-		ID: idPrefix + lp.ID,
-		Cx: lp.Cx, Cy: lp.Cy, Zoom: lp.Zoom,
-		TextMode:    lp.TextMode,
-		TextScrollX: lp.TextScrollX, TextScrollY: lp.TextScrollY, TextZoom: lp.TextZoom,
-	}
+	anchor := ""
 	if lp.Anchor != "" {
-		p.Anchor = abs(lp.Anchor)
+		anchor = abs(lp.Anchor)
 	}
-	if len(lp.Path) > 0 {
-		p.Path = make([]string, len(lp.Path))
-		for i, seg := range lp.Path {
-			p.Path[i] = abs(seg)
-		}
+	path := make([]string, len(lp.Path))
+	for i, seg := range lp.Path {
+		path[i] = abs(seg)
 	}
+	textFocus := ""
 	if lp.TextFocus != "" {
-		p.TextFocus = abs(lp.TextFocus)
+		textFocus = abs(lp.TextFocus)
 	}
+	p := &Pane{ID: idPrefix + lp.ID, Stack: StackAt(anchor, path, textFocus)}
+	p.Cx, p.Cy, p.Zoom = lp.Cx, lp.Cy, lp.Zoom
+	p.TextMode = lp.TextMode
+	p.TextScrollX, p.TextScrollY, p.TextZoom = lp.TextScrollX, lp.TextScrollY, lp.TextZoom
 	if p.Zoom == 0 {
 		p.Zoom = 1
 	}
@@ -288,8 +289,10 @@ func LeafTextFocusIDs(t *Tree) []string {
 	var out []string
 	var walk func(n TreeNode)
 	walk = func(n TreeNode) {
-		if n.Pane != nil && n.Pane.TextFocus != "" {
-			out = append(out, n.Pane.TextFocus)
+		if n.Pane != nil {
+			if id := n.Pane.ContentID(); id != "" {
+				out = append(out, id)
+			}
 		}
 		if n.Split != nil {
 			walk(n.Split.A)

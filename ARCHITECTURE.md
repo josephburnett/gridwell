@@ -268,13 +268,22 @@ pane), the grid/tile cache, and the native handles. Gesture handlers and
 stream callbacks both mutate it with no serialization point — which is why
 every fact here must have exactly one writer.
 
-**Framing lives in five roles** that must agree for the round trip to be
-idempotent: the live pane (`Cx/Cy/Zoom/Anchor/Path`), the ascent stack, the
-server tile's `view_*`, the portal `Up` frames, and the URL bar. They are
-kept consistent by convention; the round trip is locked by
+**A pane's place is ONE STACK OF FRAMES** (`client/pane`, `place.go`). A
+frame is the grid you landed in, the tile you came through, and the
+viewport you have there; descending through ANY doorway pushes one and
+ascending pops one. The viewport you left a level at IS the frame you left
+— there is no separate ascent stack, no separate portal stack, and no
+separate in-namespace path (S8 collapsed those five representations, and
+with them the shim's eight ascents). The URL (`url.go`) and the pane-tile
+layout blob (`wire.go`) are ENCODINGS of the stack, one codec each and both
+round-trip tested; the bar's crumbs (`chain.go`) are a projection, one crumb
+per frame, so a crumb click is arithmetic: `AscentsTo`. Framing therefore
+lives in exactly two places that must agree — the stack and the server
+tile's `view_*` — and the round trip is locked by
 `framing-roundtrip.spec.ts`. A debounced settle persister (armed from
 `draw()` — every state change redraws, so there is no per-gesture hook to
-forget) writes settled framing back without waiting for an ascent.
+forget) writes settled framing back without waiting for an ascent, through
+the same `pane.FramingTarget` projection an ascent uses.
 
 **Text content has one door.** A content-store entry ({bytes, base version,
 dirty}, keyed by tile id) owns a text tile's current body. Every keystroke
@@ -323,8 +332,8 @@ signature).
 `bottombar.go` glue; #267, 2026-08-21 — the band was focused-pane-only
 under #220, but content resizing on every focus change was distracting;
 focus shows only in the border color): workspace crumbs, the anchor
-block, the descent chain as clickable square previews (derived per frame
-from `pane.DescentChain` — never stored), the centered title, and the
+block, the descent chain as clickable square previews (one crumb per
+place frame, projected by `pane.Crumbs` — never stored), the centered title, and the
 circle slot (the + menu / back / refresh button). Native surfaces carve
 the band out of their rects unconditionally (`panebox.BarInset`), so
 nothing can occlude it and nothing reflows on focus moves. Clicks act in
@@ -445,23 +454,28 @@ file. What remains:
   pane's URL is its anchor as leading path segments, then tile ids:
   `/<plugin>/<grid>/3/4`. Leading non-numeric segments are the namespace
   chain — sound because a plugin id can never be purely numeric.
-- **Descend into a well.** The pane reads the tile's `view_*`, pushes its
-  current state onto the ascent stack, appends to `Path`, restores the
-  stored viewport. A link tile descends as a PORTAL instead: push an `Up`
-  frame, swap the anchor to the link's target — so path ids never mix
-  namespaces.
+- **Descend.** ONE verb (`descend`, `client/wasm/nav.go`): it pushes a
+  frame, and WHICH KIND is the doorway tile's own declaration, never the
+  call site's. A well pushes a grid frame (the pane reads the tile's
+  `view_*` and restores the stored viewport); a LINK pushes a grid frame
+  carrying the target grid id, so path ids never mix namespaces; a
+  text/url/shell/page tile pushes a content frame (no grid — the tile is
+  the place); a pane tile descends the WINDOW a level instead
+  (`descendLevel`).
 - **Descend into content.** Entering a url tile reopens the page; a shell
   reconnects its still-running tmux session (a fresh tile creates one; a
   dead session stays frozen). One owner decides (`shellconn.DecideAutoLive`)
   and every re-entry path — reload restore, workspace swap, a stacked
   ascent — applies the same rule. The frozen preview is what a tile looks
   like from outside; going live never mutates the row.
-- **Ascend.** The intrinsic viewport writes back via `SetFraming` (framing —
-  no claim, no version bump); a url/shell descent freezes its preview (an
-  automatic capture — also no claim and no bump); the parent frame pops. A portal ascent writes through the
-  containing link tile, or the root grid row when there is none (the same
-  verb, the other target). Clicking a bar
-  crumb ascends all the way to that level.
+- **Ascend.** ONE verb (`ascend(p, n, animate)`): pop n frames, the last
+  hop animated, the ones above it instant. Every hop performs the same
+  writebacks through one `leaveFrame`: the intrinsic viewport writes back
+  via `SetFraming` (framing — no claim, no version bump) onto the doorway
+  the frame came in by, or the root grid row when there is none (the same
+  verb, the other target); a url/shell descent freezes its preview (an
+  automatic capture — also no claim and no bump). Clicking a bar crumb is
+  `ascend(p.AscentsTo(crumb))`.
 - **Drop a tile.** Gesture → `CreateTile`/`PlaceTile`/`CloneTile`,
   id-addressed (layout carries no version claim) → server routes → store mutates →
   `Subscribe` event → `cache.Apply` → redraw. Across a plugin boundary
@@ -474,14 +488,15 @@ file. What remains:
 - **Open a live URL tile.** The canvas places a rect; IPC asks the native
   layer for a `WebContentsView` on the shared partition; `syncURLViews`
   tracks its bounds every frame and parks it during overlays.
-- **Enter a workspace (pane tile).** The third descent verb: flush every
-  outer leaf, push a `client/workspace` frame (outer tree + origin), decode
-  the layout blob, swap `App.tree`. While inside, a debounced persister
+- **Enter a workspace (pane tile).** `descend`'s window arm: push a
+  `pane.Level` (outer tree + origin), decode the layout blob, swap
+  `App.tree`. The outer level stays ALIVE (#249) — nothing is flushed
+  away. While inside, a debounced persister
   encodes the live tree, hash-diffs, and posts the layout as a
   `WriteContent` (framing-class — no claim, never bumps version) only on
   change. The
-  URL is `?w=<tile id>`. The workspace stack itself is session-only, like
-  portal frames.
+  URL is `?w=<tile id>`. The level stack itself is session-only, like the
+  outer frames of a pane's place (#13); `ascendLevels` is its pop.
 - **Show the menu.** `menu.Open(paneID)` on the focused pane, toggled from
   the bar slot; native views park; the popover paints above every pane. A
   click inside the open popover routes BEFORE pane resolution — resolving
@@ -503,7 +518,7 @@ invariants are where bugs are born.
 | I4 | Blobs immutable, content-addressed, refcounted | store blob layer | ✅ construction |
 | I5 | "Is a link" is one derived fact | `qualifyTiles` → `Tile.reference` | ✅ construction |
 | I6 | Qualified-id routing | server `route` + transit rules | ✅ construction |
-| I7 | preview = descent target = ascent return | five client roles synced by convention | ⚠️ convention, round trip tested (`framing-roundtrip.spec.ts`); the preview-bytes half still has no oracle (issue #19) |
+| I7 | preview = descent target = ascent return | one place stack + the tile row | ⚠️ convention, round trip tested (`framing-roundtrip.spec.ts`); the preview-bytes half still has no oracle (issue #19) |
 | I8 | Text preview == what you left (no re-wrap) | `PreviewWindowFrame` takes only the tile's own facts | ✅ construction + tested |
 | I9 | Focus steal is impossible | the registry's focus guard; wasm owns focus | ✅ tested (`control-focus.spec.ts`) |
 | I10 | Menu changes only by user action | one owner `client/menu` | ✅ construction + tested |

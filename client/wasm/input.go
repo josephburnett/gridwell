@@ -6,17 +6,14 @@ import (
 	"context"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"math"
-	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/caps"
-	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
-	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
@@ -182,7 +179,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// empty spot remains.
 	if bx, top, bw, barOK := a.bottomBarRectFor(p); barOK &&
 		sy >= top && sy < top+wsbar.RowH && sx >= bx && sx < bx+bw {
-		if p.TextFocus == "" {
+		if p.ContentID() == "" {
 			a.wheelZoomPaneAt(p, r, dy, r.X+r.W/2, r.Y+r.H/2)
 		}
 		return nil
@@ -193,7 +190,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// and executes the verdict.
 	var hoverWell *rpc.Tile
 	wellCoverage := 0.0
-	if p.TextFocus == "" {
+	if p.ContentID() == "" {
 		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsWellKind(t.Kind) && t.ChildGridID != "" {
 			hoverWell = t
 			ps := paneToDragdrop(p, r)
@@ -206,7 +203,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		}
 	}
 	switch gesture.ClassifyWheel(gesture.WheelInput{
-		TextFocused:       p.TextFocus != "",
+		TextFocused:       p.ContentID() != "",
 		URLDescent:        a.isURLDescent(p),
 		LiveURLView:       a.urlViewFor(p.ID) != nil,
 		InContentBox:      pointInLiveContent(r, sx, sy),
@@ -383,7 +380,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// (issue #214). A canvas left-click reaching here is pane chrome or
 	// margin — ascent lives on the middle button and the bar crumbs — so
 	// it is swallowed whole.
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		return nil
 	}
 
@@ -633,18 +630,14 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// A plugin swatch clicked without dragging (no movement past the
 	// threshold) enters that plugin: the + menu "click to descend" gesture.
 	// A drag instead drops an exit-well link (commitTemplateDrop). The
-	// descent is the SAME portal path a node-grid link tile takes —
-	// startDescent pushes the return frame and swaps the anchor — through a
-	// synthetic link tile placed at the pane's view centre, so ascent lands
-	// back exactly here.
+	// descent is the SAME one a node-grid link tile takes — one verb, one
+	// pushed frame — through a synthetic link tile placed at the pane's view
+	// centre, so ascent lands back exactly here.
 	if d.isTemplate && d.item.isPlugin && !d.started {
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
-			// Portal is a place change: flush framing still inside the
-			// settle window first (issue #190).
-			a.flushFramingSave()
 			well := paletteItemGhostNode(d.item)
 			well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
-			a.startDescent(fp, &well)
+			a.descend(fp, &well, nil)
 		}
 		return nil
 	}
@@ -998,7 +991,7 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 // Returns true if a navigation gesture was performed (caller should skip
 // further interpretation of the click).
 func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		// Inside a text/url/shell descent, a bare click isn't navigation:
 		// ascent lives on the middle button and the bar's crumb click.
 		return false
@@ -1008,31 +1001,21 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 	if hit == nil {
 		return false
 	}
-	// The pane is about to change place: flush framing still inside the
-	// settle window (issue #190), while the viewport still belongs to the
-	// place it describes.
-	a.flushFramingSave()
-	switch {
-	case rpc.IsWellKind(hit.Kind):
-		a.startDescent(p, hit)
-		return true
-	case rpc.IsContentDescentKind(hit.Kind):
-		// An address-less url tile (dropped bare — issue #209): the first
-		// descent is where the address gets asked for. A url LINK resolves
-		// its address through the target and never prompts.
-		if hit.Kind == rpc.KindURL && hit.URLString == "" && hit.LinkTargetID == "" {
-			a.openConfigureURL(p, hit)
-			return true
-		}
-		a.startTextDescent(p, hit, nil)
-		return true
-	case rpc.IsWorkspaceKind(hit.Kind):
-		// The third descent verb: swap the whole pane tree for the stored
-		// workspace. The way back out is the bar.
-		a.startWorkspaceDescent(p, hit)
+	// An address-less url tile (dropped bare — issue #209): the first
+	// descent is where the address gets asked for. A url LINK resolves its
+	// address through the target and never prompts.
+	if hit.Kind == rpc.KindURL && hit.URLString == "" && hit.LinkTargetID == "" {
+		a.openConfigureURL(p, hit)
 		return true
 	}
-	return false
+	if !rpc.IsWellKind(hit.Kind) && !rpc.IsContentDescentKind(hit.Kind) &&
+		!rpc.IsWorkspaceKind(hit.Kind) {
+		return false
+	}
+	// ONE descent: which kind of frame it pushes is the TILE's declaration
+	// (nav.go), not this call site's.
+	a.descend(p, hit, nil)
+	return true
 }
 
 // totalTransitionMs is the total wall-clock duration of a descent or
@@ -1051,80 +1034,9 @@ var totalTransitionMs = 350.0
 // action" and the pan is "the setup".
 const zoomDistFactor = 4.0
 
-// panDist is the wasm-side adapter for zoomtrans.PanDist, binding the
-// renderer's base cell size.
-func panDist(dx, dy, zoom float64) float64 {
-	return zoomtrans.PanDist(dx, dy, zoom, cellPx)
-}
-
-// zoomDist is the wasm-side adapter for zoomtrans.ZoomDist, binding
-// the renderer's base cell size and the zoom-vs-pan weighting factor.
-func zoomDist(z1, z2 float64) float64 {
-	return zoomtrans.ZoomDist(z1, z2, cellPx, zoomDistFactor)
-}
-
-// ascendPane performs the appropriate ascent for pane p: a file ascent
-// when it's descended into a text/url/shell tile, a well ascent when it's
-// in a child grid, a portal ascent (pop the + menu entry stack) when it
-// entered a plugin at its root, nothing at the launcher. This is the single
-// entry point for every ascent gesture (the middle button, the bar's
-// crumb click).
-func (a *App) ascendPane(p *pane.Pane) {
-	switch {
-	case p.TextFocus != "":
-		a.startTextAscent(p)
-	case len(p.Path) > 0:
-		a.startAscent(p)
-	case len(p.Up) > 0:
-		a.ascendPortal(p)
-	}
-}
-
 // Portal descents (anchor swaps through a link tile) live in startDescent:
 // a mounted well and a cross-plugin clone descend through the SAME path a
 // normal well does, with a frame pushed so ascent returns exactly here.
-
-// ascendPortal returns the pane to wherever it jumped into the current plugin
-// from (another plugin, or the launcher), reopening the + menu if it was open
-// when the user entered.
-//
-// Returning to the launcher animates a symmetric zoom-out — the exact inverse
-// of enterPlugin's zoom-in, landing back on the plugin's launcher tile (now a
-// live grid preview). Returning to another plugin's grid via an in-grid + menu
-// portal stays an instant cut: that entry footprint isn't reconstructed here.
-func (a *App) ascendPortal(p *pane.Pane) {
-	f, ok := p.TopFrame()
-	if !ok {
-		return
-	}
-	// The portal's containing tile: the link well in the frame's leaf grid
-	// whose child is the pane's current anchor. When it resolves, the ascent
-	// writes the pane's framing back onto it (the SAME writeback a normal
-	// well ascent does — one verb, one shape) and animates onto its
-	// footprint.
-	well := a.portalWellForFrame(p, f)
-	if well != nil {
-		framePath := slices.Clone(f.Path)
-		a.persistFraming(p, well, f.Anchor, framePath)
-		a.animatePortalAscent(p, f, well)
-		return
-	}
-	// No containing link tile — a + menu portal (the origin grid holds no
-	// tile for it). The framing writeback still happens, just without a
-	// doorway to carry it: the root GRID row owns it instead (the same
-	// fact, the same verb), so re-entering the plugin from the menu lands
-	// at the left-off view.
-	a.persistFraming(p, nil, "", nil)
-	if !p.PopFrame() {
-		return
-	}
-	if f.MenuOpen {
-		a.menu.Open(p.ID)
-	}
-	a.fetchGrid(a.gridIDForPane(p))
-	a.draw()
-	a.scheduleURLUpdate()
-}
 
 // descentTextMode applies textedit.DescentMode (the one owner) to a
 // cached tile row at descent; cursorURL is the restore path's extra
@@ -1133,195 +1045,6 @@ func (a *App) descentTextMode(file *rpc.Tile, cursorURL bool) string {
 	return textedit.DescentMode(textedit.ModeInput{
 		Kind: file.Kind, ServesPage: file.ServesPage, ReadOnly: a.tileReadOnly(file),
 		Cached: true, CursorURL: cursorURL, Stored: file.TextMode,
-	})
-}
-
-// portalWellForFrame finds the link tile the pane descended through: the well
-// in frame f's leaf grid whose child grid is the pane's current anchor. Nil
-// when that grid isn't cached or the tile is gone (the ascent then pops
-// instantly instead of animating).
-func (a *App) portalWellForFrame(p *pane.Pane, f pane.Frame) *rpc.Tile {
-	parentGridID := a.gridIDForPathFrom(f.Anchor, f.Path)
-	if parentGridID == "" {
-		return nil
-	}
-	g, ok := a.c.Grid(parentGridID)
-	if !ok {
-		a.fetchGrid(parentGridID)
-		return nil
-	}
-	if w, ok := door.WellInto(p.Anchor, g.Tiles); ok {
-		return &w
-	}
-	return nil
-}
-
-// animatePortalAscent zooms the pane out of the portal's grid back onto the
-// link tile it descended through — the inverse of the portal descent. It
-// mirrors startAscent's two-segment motion (child zoom-out to the calibrated
-// swap state, then an atomic anchor swap and a parent pan+zoom to the saved
-// viewport).
-func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, well *rpc.Tile) {
-	r := paneRectFor(a, p)
-	w := zoomtrans.Well{
-		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewCx: well.ViewCx, ViewCy: well.ViewCy, ViewZoom: well.ViewZoom,
-	}
-
-	from := zoomtrans.Endpoints{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
-	mid, to := zoomtrans.Ascent(from, w, nil, r.W, r.H, cellPx)
-	to.Cx, to.Cy = float64(well.X)+float64(well.W)/2, float64(well.Y)+float64(well.H)/2
-	saved := zoomtrans.Endpoints{Cx: f.Cx, Cy: f.Cy, Zoom: f.Zoom}
-
-	childDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
-		zoomDist(from.Zoom, mid.Zoom)
-	parentDist := panDist(saved.Cx-to.Cx, saved.Cy-to.Cy, saved.Zoom) +
-		zoomDist(to.Zoom, saved.Zoom)
-	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
-
-	p.DropFrame() // the transition (below) drives the restore, not an instant pop
-	menuOpen := f.MenuOpen
-	a.startTransition(&paneTransition{
-		paneID:      p.ID,
-		traceTileID: well.ID,
-		segments: []transSegment{
-			// Child: the plugin's root grid zooms out to the calibrated swap.
-			{
-				path:   nil,
-				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: durations[0],
-			},
-			// Parent: swap the anchor back to the frame's namespace (and its
-			// path), then pan+zoom to the saved viewport.
-			{
-				setAnchor: true, anchor: f.Anchor,
-				path:   slices.Clone(f.Path),
-				fromCx: to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
-				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: durations[1],
-			},
-		},
-		onComplete: func() {
-			if !menuOpen {
-				return
-			}
-			a.menu.Open(p.ID)
-			a.draw()
-		},
-	})
-	a.scheduleURLUpdate()
-}
-
-// startAscent zooms a pane out of a child grid and back to the parent
-// grid in two concurrent-motion segments: one that finishes the child's
-// trip to the calibrated path-switch state, and one in the parent that
-// pans-and-zooms back to the user's saved viewport in a single motion.
-// Pan and zoom interpolate together within each segment, so they begin
-// and end at the same moment regardless of which has more "distance".
-//
-// If no saved state is available (cleared localStorage, reload), we land
-// on the well at zoom 1.
-func (a *App) startAscent(p *pane.Pane) {
-	if len(p.Path) == 0 {
-		return
-	}
-	// Walk back from the leaf looking for the deepest ancestor we can
-	// actually animate from — the tested gridpath.AscentWalk; this closure
-	// only resolves one level (cache lookup + a background fetch on a miss)
-	// and captures the resolved well row.
-	var well rpc.Tile
-	level := gridpath.AscentWalk(p.Path, func(parentPath []string, wellID string) bool {
-		parentGridID := a.gridIDForPathFrom(p.Anchor, parentPath)
-		g, ok := a.c.Grid(parentGridID)
-		if !ok {
-			a.fetchGrid(parentGridID)
-			return false
-		}
-		w, ok := g.Tiles[wellID]
-		if !ok {
-			return false
-		}
-		well = w
-		return true
-	})
-	switch gridpath.ClassifyAscent(level, len(p.Path)) {
-	case gridpath.AscentToRoot:
-		a.instantAscend(p, nil)
-		return
-	case gridpath.AscentSnapToLevel:
-		// We skipped one or more missing levels. The animation math
-		// expects to be ascending out of the leaf grid; jumping mid-
-		// path would render badly. Snap directly to the resolved level
-		// and let the user ascend again from there if they want.
-		a.instantAscend(p, slices.Clone(p.Path[:level]))
-		return
-	}
-	parentPath := slices.Clone(p.Path[:level])
-	r := paneRectFor(a, p)
-
-	// Persist the user's current center as the well's view region so
-	// the parent-grid preview reflects where they were when they left.
-	// Mutates `well` in-place and updates the cache; queues the RPC
-	// in a goroutine. Done before calibrating the ascent transition so
-	// the path-swap point matches the user's actual position rather
-	// than snapping back to the well's stored origin.
-	a.saveWellViewBeforeAscent(p, &well, parentPath)
-
-	from := zoomtrans.Endpoints{
-		Path: slices.Clone(p.Path),
-		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
-	}
-	w := zoomtrans.Well{
-		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewCx: well.ViewCx, ViewCy: well.ViewCy, ViewZoom: well.ViewZoom,
-	}
-	mid, switchTo := zoomtrans.Ascent(from, w, parentPath, r.W, r.H, cellPx)
-
-	saved := a.popPaneState(p.ID)
-	if saved == nil {
-		// No in-session saved state (e.g., user reloaded mid-descent and is
-		// now ascending). Restore the parent's PERSISTED framing — what a
-		// fresh descent into it would show — not an arbitrary zoom 1.
-		if cx, cy, zoom, ok := a.persistedGridView(p, p.Anchor, parentPath); ok {
-			saved = &paneState{Cx: cx, Cy: cy, Zoom: zoom}
-		} else {
-			saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
-		}
-	}
-
-	// Distances in shared px-equivalent units so SplitN can apportion
-	// time so each phase moves at a comparable visual speed.
-	childDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
-		zoomDist(from.Zoom, mid.Zoom)
-	parentDist := panDist(saved.Cx-switchTo.Cx, saved.Cy-switchTo.Cy, saved.Zoom) +
-		zoomDist(switchTo.Zoom, saved.Zoom)
-	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
-
-	a.startTransition(&paneTransition{
-		paneID:      p.ID,
-		traceTileID: well.ID,
-		segments: []transSegment{
-			// Child grid: combined pan+zoom to land on calibrated state.
-			{
-				path:   from.Path,
-				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: durations[0],
-			},
-			// Parent grid: combined pan+zoom from well center back to saved.
-			{
-				path:   switchTo.Path,
-				fromCx: switchTo.Cx, fromCy: switchTo.Cy, fromZoom: switchTo.Zoom,
-				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: durations[1],
-			},
-		},
-		onComplete: func() {
-			if fp := a.tree.FindPane(p.ID); fp != nil {
-				a.restoreStashedDescent(fp, saved)
-			}
-		},
 	})
 }
 
@@ -1368,259 +1091,6 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 	return cx, cy, zoom, true
 }
 
-// instantAscend is the fallback path when the parent grid isn't cached or
-// the well row vanished. We just drop the last entry of the path; the user
-// can wait for the parent to load and reposition manually.
-func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
-	// Still an ascent: flush the leaf framing if its parent is resolvable
-	// (issue #190 — these fallback branches used to skip the writeback the
-	// animated path performs, losing the viewport on an actual ascent).
-	a.persistPaneFraming(p)
-	a.popPaneState(p.ID) // discard whatever was saved; we can't honor it.
-	p.Path = parentPath
-	if cx, cy, zoom, ok := a.persistedGridView(p, p.Anchor, parentPath); ok {
-		p.Cx, p.Cy, p.Zoom = cx, cy, zoom
-	} else {
-		p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
-	}
-	a.clearSelected(p.ID)
-	a.draw()
-	a.scheduleURLUpdate()
-}
-
-// startDescent pushes the pane's current state onto the saved-state stack
-// and installs a multi-segment transition into the well's child grid.
-//
-// Phases:
-//
-//	A. Combined pan+zoom in parent to (wellCenter, OvertakeZoom).
-//	B. Atomic install of the calibrated child state at the path swap.
-//	C. (Optional) animate the child to the well's stored ViewZoom so
-//	   re-descent lands at the same zoom the user left at. Only fires
-//	   when well.ViewZoom > 0; the default for never-entered wells is
-//	   0 (calibrated zoom).
-//
-// Total time is split between A and C proportional to motion distance
-// so neither feels rushed. C is zero-length when ViewZoom is unset.
-func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
-	if well.ChildGridID == "" {
-		// A link tile whose target isn't available — a broken or rootless
-		// plugin, or a connection whose remote hasn't answered. Say why
-		// instead of silently doing nothing (charter §6); pluginhealth
-		// owns the wording. The id is the plugin uuid itself on a MENU
-		// row (chained for a connection — i9sm6ff/ltvv2f9), and
-		// node-qualified on a node-grid tile — try both shapes, or a
-		// connection's dial status never surfaces (the 2026-08-23
-		// nothing-to-descend-into bug).
-		pl, ok := a.pluginByUUID(well.ID)
-		if !ok {
-			pl, ok = a.pluginByUUID(rpc.LocalOf(well.ID))
-		}
-		if ok {
-			if sev, source, message, ok := pluginhealth.ClickNotice(pl); ok {
-				a.reportErr(sev, source, message)
-				return
-			}
-		}
-		a.reportErr(errsurface.Info, "descend", "nothing to descend into: "+well.AltText)
-		return
-	}
-	r := paneRectFor(a, p)
-	from := zoomtrans.Endpoints{
-		Path: slices.Clone(p.Path),
-		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
-	}
-	w := zoomtrans.Well{
-		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewCx: well.ViewCx, ViewCy: well.ViewCy, ViewZoom: well.ViewZoom,
-	}
-	if isLinkTile(well) {
-		// A LINK crosses into another id space (a plugin tile on the node
-		// grid, a mounted well, a cross-plugin clone). Descend as a PORTAL:
-		// push the current level onto the ascent stack and swap the pane's
-		// anchor to the link's target, so the URL and every path id stay
-		// within one anchor's namespace. Ascent pops the frame and lands
-		// back on this tile.
-		// The pane.Up FRAME is the one owner of the portal return (anchor,
-		// path, viewport, menu). Deliberately NOT pushed onto the session
-		// ascent stack: portal ascent pops the frame only, so a second copy
-		// there would be orphaned — and a boot-descended pane (whose stack
-		// starts empty) could later mis-consume the orphan as a well-ascent
-		// viewport. Two stacks, two disjoint owners: frames own namespace
-		// CROSSINGS, the session stack owns in-namespace well/file descents.
-		wasMenu := a.menu.OpenOn(p.ID)
-		a.menu.Close()
-		p.PushFrame(wasMenu)
-		a.installDescent(p, r, from, w, well.ChildGridID, well.ChildGridID,
-			float64(well.X)+float64(well.W)/2, float64(well.Y)+float64(well.H)/2)
-		return
-	}
-	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
-	a.installDescent(p, r, from, w, well.ChildGridID, "", 0, 0)
-}
-
-// installDescent computes the standard two-segment descent transition into a
-// well's child grid and starts it. A portal jump (portalAnchor != "") swaps
-// the pane's plugin anchor at the path swap instead of appending to the path,
-// and recentres the parent zoom on (portalCx, portalCy) — the launcher tile,
-// or the pane centre for an in-grid menu — so that is what grows to fill the
-// pane. Same machinery as a same-plugin well descent, so the motion is
-// identical.
-func (a *App) installDescent(p *pane.Pane, r pane.Rect, from zoomtrans.Endpoints, w zoomtrans.Well, childGridID, portalAnchor string, portalCx, portalCy float64) {
-	mid, swap, final := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
-	if portalAnchor != "" {
-		// The synthetic well's integer cell rounds the launcher tile's
-		// position; recentre the parent zoom on the exact footprint center so
-		// the descent lands square on the tile.
-		mid.Cx, mid.Cy = portalCx, portalCy
-	}
-	a.fetchGrid(childGridID)
-
-	parentDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
-		zoomDist(from.Zoom, mid.Zoom)
-	childDist := zoomDist(swap.Zoom, final.Zoom)
-	var durations []float64
-	if childDist > 0 {
-		durations = anim.SplitN([]float64{parentDist, childDist}, totalTransitionMs)
-	} else {
-		durations = []float64{totalTransitionMs, 0}
-	}
-
-	// C: after the atomic swap, ease the child zoom out to the stored ratio
-	// (zero-length when swap == final). A portal swaps the plugin anchor and
-	// resets the path to the plugin root instead of appending a well id.
-	segC := transSegment{
-		path:   swap.Path,
-		fromCx: swap.Cx, fromCy: swap.Cy, fromZoom: swap.Zoom,
-		toCx: final.Cx, toCy: final.Cy, toZoom: final.Zoom,
-		durationMs: durations[1],
-	}
-	if portalAnchor != "" {
-		segC.setAnchor = true
-		segC.anchor = portalAnchor
-		segC.path = nil
-	}
-
-	a.startTransition(&paneTransition{
-		paneID: p.ID,
-		segments: []transSegment{
-			// A: parent pan+zoom toward the well/footprint center at Overtake.
-			{
-				path:   from.Path,
-				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: durations[0],
-			},
-			segC,
-		},
-	})
-}
-
-// startTextDescent zooms a pane into a text tile in a single
-// concurrent pan+zoom motion, then flips to text-editing mode. Unlike
-// well descent, the path is not extended (the tile lives in the parent
-// grid as a leaf tile) and the meaningful screen area in live mode is
-// the inner box (textarea region), not the full pane — so the descent
-// targets TextOvertake (parent zoom that makes the footprint fit the
-// inner box), one notch further in than the legacy OvertakeZoom. At
-// the path-swap, the footprint screen size = inner-box, and the live
-// TextZoom is reconstructed from the tile's intrinsic ViewZoom ratio
-// for visual continuity.
-//
-// afterDescend, if non-nil, is called after the transition completes and
-// TextFocus has been installed. Use this to chain actions that need the
-// pane to be fully descended (e.g., opening the URL stream after a new
-// URL tile is created).
-func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()) {
-	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
-
-	r := paneRectFor(a, p)
-	from := zoomtrans.Endpoints{
-		Path: slices.Clone(p.Path),
-		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
-	}
-	wellCx := float64(file.X) + float64(file.W)/2
-	wellCy := float64(file.Y) + float64(file.H)/2
-	target := textFitZoom(r, file.W, file.H)
-	if target < from.Zoom {
-		target = from.Zoom
-	}
-
-	// Eagerly fetch the blob so it's likely cached by the time the
-	// transition lands. URL tiles don't have a blob; their preview
-	// path goes through urlPreview instead — and so does a serves_page
-	// tile's (its descent is the page, not the document body).
-	if file.Kind == rpc.KindText && !file.ServesPage {
-		// Source-backed bodies (fs files, the proc @info tile) are host
-		// state, not versioned content: their version is always 0, so the
-		// cache entry from the FIRST open matched forever and the descent
-		// showed stale bytes no matter how the file changed on disk
-		// (decision 2026-08-13: every open re-reads — it is all
-		// read-only). Drop before fetching so the fetch really refetches.
-		if a.tileReadOnly(file) {
-			a.c.DropTileContent(file.ContentID())
-			a.fetchGrid(a.gridIDForPane(p))
-		}
-		a.fetchTileContent(file.ID)
-	}
-
-	fileID := file.ID
-	// Captured by value for the auto-live decision: an ephemeral (scratch-
-	// grid) tile is in no cached grid, so a cache lookup at transition end
-	// would miss it and silently skip going live.
-	fileCopy := *file
-	initialScroll := float64(file.TextY)
-	initialScrollX := float64(file.TextX)
-	mode := a.descentTextMode(file, false)
-	a.startTransition(&paneTransition{
-		paneID: p.ID,
-		segments: []transSegment{
-			// Single combined pan+zoom segment: pan to the file center
-			// while simultaneously zooming to the overtake target.
-			{
-				path:   from.Path,
-				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: wellCx, toCy: wellCy, toZoom: target,
-				durationMs: totalTransitionMs,
-			},
-		},
-		onComplete: func() {
-			fp := a.tree.FindPane(p.ID)
-			if fp == nil {
-				return
-			}
-			fp.TextFocus = fileID
-			fp.TextMode = mode
-			fp.TextScrollY = initialScroll
-			fp.TextScrollX = initialScrollX
-			fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
-			// Unsaved-edit state is NOT touched here: it lives tile-scoped
-			// in the content store, so descending this pane elsewhere can't
-			// strand a previous document's typing.
-			a.refreshFileOverlay()
-			// Descending IS the engagement gesture (owner decision
-			// 2026-07-26, issue #202): a url reopens, a shell reconnects
-			// (or creates, when fresh). The decision lives HERE, once —
-			// call sites no longer hand-roll go-live callbacks, so every
-			// door into a descent behaves identically. afterDescend
-			// remains for the callers that need something ELSE to run
-			// after the swap (none currently go live by hand).
-			a.autoLiveOnDescent(fp.ID, &fileCopy)
-			// The completed descent IS the new place — write it (the one
-			// history writer derives push-vs-replace from the diff). The
-			// gesture-time write above ran mid-transition with TextFocus
-			// still empty; editable files papered over that via later
-			// textarea cursor events, but a READ-ONLY file has no textarea,
-			// so its descent never reached the URL and a reload restored
-			// the parent grid instead (#268).
-			a.scheduleURLUpdate()
-			if afterDescend != nil {
-				afterDescend()
-			}
-		},
-	})
-}
-
 // autoLiveOnRestore is autoLiveOnDescent for the RESTORE paths — reload
 // (applyURLState), workspace install, an ascent landing back on a stashed
 // descent (restoreStashedDescent). The tile row is not necessarily cached at
@@ -1662,7 +1132,7 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 		// would re-anchor the pane into the scratch grid.
 		return
 	}
-	if a.gridIDForPathFrom(fp.Anchor, fp.Path) == tile.GridID {
+	if a.gridIDForPathFrom(fp.Anchor(), fp.Path()) == tile.GridID {
 		return
 	}
 	res, err := a.cl.Search(context.Background(), "id:"+tile.ID, tile.ID, 1)
@@ -1671,7 +1141,7 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	}
 	wells := res[0].Path
 	fp = a.tree.FindPane(paneID)
-	if fp == nil || fp.TextFocus != tile.ID {
+	if fp == nil || fp.ContentID() != tile.ID {
 		return // the user moved on while the locate was in flight
 	}
 	anchor := tile.GridID
@@ -1682,8 +1152,7 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 			path = append(path, w.ID)
 		}
 	}
-	fp.Anchor = anchor
-	fp.Path = path
+	fp.Stack = pane.StackAt(anchor, path, tile.ID)
 	// Center the healed viewport on the tile in its new grid, so ascending
 	// out of the descent lands looking at the tile, not a stale offset.
 	fp.Cx = float64(tile.X) + float64(tile.W)/2
@@ -1723,164 +1192,11 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 		a.probeShellSessionAlive(cid, func(nowAlive bool) {
 			// Re-check the pane is still in THIS descent when the verdict
 			// lands — the probe is async and the user may have moved on.
-			if p := a.tree.FindPane(paneID); nowAlive && p != nil && p.TextFocus == tileID {
+			if p := a.tree.FindPane(paneID); nowAlive && p != nil && p.ContentID() == tileID {
 				a.openShellStream(p, tileID)
 			}
 		})
 	}
-}
-
-// restoreStashedDescent applies a saved paneState's stacked-descent fields to
-// fp when an ascent's saved state carries a TextFocus — the descent the pane
-// was in when a deeper ephemeral visit was stacked on top of it
-// (descendEphemeral: a url opened over a live shell descent). One ascent
-// lands back on the stashed descent — and, for a cross-grid stash, its
-// anchor + path — rather than in the grid behind it. No-op when the saved
-// state carries no focus (an ordinary ascent).
-func (a *App) restoreStashedDescent(fp *pane.Pane, saved *paneState) {
-	if saved == nil || !saved.RestoreDescent(fp) {
-		return
-	}
-	fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
-	a.refreshFileOverlay()
-	// Landing back on a stashed url/shell descent re-engages it (issue
-	// #202) — the same one-owner decision every descent applies.
-	a.autoLiveOnRestore(fp.ID, fp.TextFocus)
-}
-
-func (a *App) startTextAscent(p *pane.Pane) {
-	if p.TextFocus == "" {
-		return
-	}
-	// descendedTile resolves an ephemeral url visit (focused off the pane's grid),
-	// so its ascent animates like any other rather than snapping instantly.
-	file, ok := a.descendedTile(p)
-	if !ok {
-		a.exitFileFocusInstant(p)
-		return
-	}
-	r := paneRectFor(a, p)
-	wellCx := float64(file.X) + float64(file.W)/2
-	wellCy := float64(file.Y) + float64(file.H)/2
-	overtake := textFitZoom(r, file.W, file.H)
-	if overtake > p.Zoom {
-		overtake = p.Zoom
-	}
-
-	saved := a.popPaneState(p.ID)
-	if saved == nil {
-		saved = &paneState{Cx: wellCx, Cy: wellCy, Zoom: 1.0}
-	}
-
-	// Save before transition: capture the editor buffer (if text mode is
-	// active) and post UpdateText + SetTextView. The animation runs
-	// concurrently with the network round-trip; the user doesn't have
-	// to wait.
-	a.saveTextBeforeAscent(p, file)
-
-	// Ascending out of an EPHEMERAL tile deletes it — gray means gone
-	// (issue #85): no freeze (pointless for a tile about to die, and a url
-	// freeze would bump the version out from under the delete), then the
-	// row goes away (for a shell, the plugin kills its tmux session too).
-	ephemeral := a.leavingEphemeral(p, &file)
-
-	// If we're ascending out of web content (a url tile or a serves_page
-	// tile), close the live view (if any).
-	if file.WebContent() {
-		a.closeURLStream(p.ID, !ephemeral)
-	}
-	// Shell ascent: capture the JPEG, persist it as the frozen
-	// preview, close the WS. closeShellStream handles all three.
-	if file.Kind == rpc.KindShell {
-		a.closeShellStream(p.ID, !ephemeral)
-	}
-	if ephemeral {
-		a.deleteEphemeralTile(file.ID)
-	}
-
-	// (Mode + framed window are persisted by saveTextBeforeAscent, which
-	// also patches the cache so the preview is correct immediately.)
-
-	// Reset parent-grid zoom to the overtake value so the animation
-	// begins from "well filling the pane", regardless of how the user
-	// zoomed within the text tile. Then clear TextFocus so the chrome (toggle
-	// button, textarea) goes away as the animation begins.
-	p.Zoom = overtake
-	p.Cx, p.Cy = wellCx, wellCy
-	p.TextFocus = ""
-	a.refreshFileOverlay()
-
-	// If the saved state had a TextFocus, a deeper ephemeral visit was
-	// stacked over that descent — restore it (and, for a cross-grid
-	// follow, its anchor + path) as the ascent landing on complete.
-	a.startTransition(&paneTransition{
-		paneID:      p.ID,
-		traceTileID: file.ID,
-		segments: []transSegment{
-			// Single combined pan+zoom segment back to the saved viewport.
-			{
-				path:   slices.Clone(p.Path),
-				fromCx: wellCx, fromCy: wellCy, fromZoom: overtake,
-				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: totalTransitionMs,
-			},
-		},
-		onComplete: func() {
-			if fp := a.tree.FindPane(p.ID); fp != nil {
-				a.restoreStashedDescent(fp, saved)
-			}
-		},
-	})
-}
-
-// exitFileFocusInstant is the fallback path when the parent grid isn't
-// cached or the text tile row vanished while we were focused on it. We just
-// clear TextFocus and reset the viewport to whatever was saved.
-func (a *App) exitFileFocusInstant(p *pane.Pane) {
-	a.exitTextInstant(p, true)
-	a.draw()
-	a.scheduleURLUpdate()
-}
-
-// exitTextInstant pops a text/url/shell descent with no animation,
-// performing the same saves and stream teardown the animated ascent does.
-// restoreStash controls whether a stashed descent is restored (a single
-// ascent lands back on it) or consumed and discarded (a multi-level crumb
-// jump is heading ABOVE the stash origin — bottombar.go).
-func (a *App) exitTextInstant(p *pane.Pane, restoreStash bool) {
-	// The freeze is kept here (streams may be live) except for an ephemeral
-	// tile, which is deleted instead — same rule as startTextAscent.
-	ephemeral := false
-	if t, ok := a.descendedTile(p); ok {
-		// The buffer/framing save the animated path performs — resolvable
-		// rows get it here too, so an instant pop never loses an edit.
-		a.saveTextBeforeAscent(p, t)
-		if a.leavingEphemeral(p, &t) {
-			ephemeral = true
-			defer a.deleteEphemeralTile(t.ID)
-		}
-	}
-	a.closeURLStream(p.ID, !ephemeral)   // no-op if not a URL descent
-	a.closeShellStream(p.ID, !ephemeral) // no-op if not a shell descent
-	saved := a.popPaneState(p.ID)
-	p.TextFocus = ""
-	if saved != nil {
-		p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
-		// If the saved state captured a stacked text descent, restore it
-		// (and its anchor/path for a cross-grid follow) so a single ascent
-		// lands on it, not the grid behind it.
-		if restoreStash {
-			a.restoreStashedDescent(p, saved)
-		}
-	}
-	a.refreshFileOverlay()
-}
-
-// saveWellViewBeforeAscent is persistFraming under the pane's own anchor —
-// the ascent-flush entry point (the settle persister passes an explicit
-// anchor because a portal's containing well lives under the FRAME's anchor).
-func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []string) {
-	a.persistFraming(p, well, p.Anchor, parentPath)
 }
 
 // saveTextBeforeAscent posts the editor buffer (if text mode is active)
@@ -2247,10 +1563,10 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 			}
 			a.c.UpdateTile(tile.GridID, tile)
 			fp := a.tree.FindPane(paneID)
-			if fp == nil || fp.TextFocus != "" {
+			if fp == nil || fp.ContentID() != "" {
 				return
 			}
-			a.startTextDescent(fp, &tile, nil)
+			a.descend(fp, &tile, nil)
 			a.draw()
 		}()
 	}, func() {
@@ -2301,38 +1617,9 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 		return a.cl.CreateURL(ctx, req)
 	}, func(tile rpc.Tile) {
 		if fp := a.tree.FindPane(paneID); fp != nil {
-			a.descendEphemeral(fp, &tile)
+			a.descend(fp, &tile, nil)
 		}
 	})
-}
-
-// descendEphemeral descends fp into the off-grid ephemeral tile (url or
-// shell) and goes live. The pane keeps its grid — the tile is resolved by id
-// (render / streams / ascent all use descendedTile) — so one ordinary ascent
-// lands right back here, and the ascent DELETES the tile (issue #85): gone
-// means gone, tmux session included. If fp is ALREADY descended (a live
-// shell, from the shell-link click) that descent is stashed so one ascent
-// returns to it — the underlying shell goes inactive, not gone — rather than
-// clearing straight to the grid.
-func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
-	// Place change: flush framing still inside the settle window (issue
-	// #190). A no-op when fp is already descended (TextFocus set).
-	a.flushFramingSave()
-	if fp.TextFocus == "" {
-		a.startTextDescent(fp, tile, nil)
-		return
-	}
-	// Stash the current descent (shell): restoreStashedDescent lands back on it.
-	var stash paneState
-	stash.StashDescent(fp)
-	fp.TextFocus = ""
-	fp.TextMode = ""
-	a.refreshFileOverlay()
-	a.startTextDescent(fp, tile, nil)
-	if top := a.local(fp.ID).PeekAscent(); top != nil {
-		stash.Cx, stash.Cy, stash.Zoom = top.Cx, top.Cy, top.Zoom
-		*top = stash
-	}
 }
 
 // isEphemeralTile reports whether t is an ephemeral (scratch-grid) tile of
@@ -2395,7 +1682,7 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 		return a.cl.CreateShell(ctx, req)
 	}, func(tile rpc.Tile) {
 		if fp := a.tree.FindPane(paneID); fp != nil {
-			a.descendEphemeral(fp, &tile)
+			a.descend(fp, &tile, nil)
 		}
 	})
 }
@@ -2436,8 +1723,8 @@ func (a *App) openLinkBelow(paneID, url string) {
 	// level so the visit descends from the containing grid. (The ephemeral
 	// delete-on-ascent is guarded by leavingEphemeral, so this ascent
 	// never deletes the tile the SOURCE pane still shows.)
-	if newP.TextFocus != "" {
-		a.startTextAscent(newP)
+	if newP.ContentID() != "" {
+		a.ascend(newP, 1, true)
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -2451,7 +1738,7 @@ func (a *App) openLinkBelow(paneID, url string) {
 // any place-restore dropped — the issue #208 double-ascend). A no-op if the
 // shell is no longer the pane's active descent.
 func (a *App) shellURLActivate(paneID, url string) {
-	if p := a.tree.FindPane(paneID); p != nil && p.TextFocus != "" {
+	if p := a.tree.FindPane(paneID); p != nil && p.ContentID() != "" {
 		a.openLinkBelow(paneID, url)
 	}
 }
@@ -2536,11 +1823,11 @@ func (a *App) finishPromote(originPaneID, destPaneID, oldID string, created rpc.
 	if old := a.cachedTileByID(oldID); old != nil && a.leavingEphemeral(op, old) {
 		a.deleteEphemeralTile(oldID)
 	}
+	// The pane follows its content: RelocateTo replaces the visit's frame
+	// with one on the destination's stack, so the next ascent lands where
+	// the tile now lives (one owner — there is no separate saved viewport
+	// to keep in step).
 	op.RelocateTo(dp, created.ID)
-	// The ascent viewport is now the destination's: pop the visit's saved
-	// origin and push where the tile lives.
-	a.popPaneState(op.ID)
-	a.pushPaneState(op.ID, paneState{Cx: dp.Cx, Cy: dp.Cy, Zoom: dp.Zoom})
 	a.placeURLView(op.ID, created)
 	a.refreshFileOverlay()
 	a.scheduleURLUpdate()

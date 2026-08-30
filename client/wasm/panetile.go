@@ -129,7 +129,7 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 	if leaf.PreviewCell < 0.5 {
 		return
 	}
-	gid := a.gridIDForPathFrom(leaf.Pane.Anchor, leaf.Pane.Path)
+	gid := a.gridIDForPathFrom(leaf.Pane.Anchor(), leaf.Pane.Path())
 	if gid == "" {
 		return
 	}

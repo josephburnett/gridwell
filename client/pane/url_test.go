@@ -1,4 +1,4 @@
-package url
+package pane
 
 import (
 	"reflect"
@@ -6,13 +6,13 @@ import (
 )
 
 func TestEncodeRoot(t *testing.T) {
-	if got := Encode(State{}); got != "/" {
+	if got := EncodeURL(URLState{}); got != "/" {
 		t.Errorf("empty state = %q, want /", got)
 	}
 }
 
 func TestEncodeRootWithViewport(t *testing.T) {
-	got := Encode(State{X: 5.5, Y: -2, Zoom: 1.5})
+	got := EncodeURL(URLState{X: 5.5, Y: -2, Zoom: 1.5})
 	want := "/?x=5.5&y=-2&z=1.5"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -20,14 +20,14 @@ func TestEncodeRootWithViewport(t *testing.T) {
 }
 
 func TestEncodePath(t *testing.T) {
-	got := Encode(State{TileIDs: []string{"3", "4", "5"}})
+	got := EncodeURL(URLState{TileIDs: []string{"3", "4", "5"}})
 	if got != "/3/4/5" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeFileText(t *testing.T) {
-	got := Encode(State{TileIDs: []string{"3", "4", "5", "9"}, CursorMode: true, Col: 24, Row: 10})
+	got := EncodeURL(URLState{TileIDs: []string{"3", "4", "5", "9"}, CursorMode: true, Col: 24, Row: 10})
 	want := "/3/4/5/9?c=24&r=10"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -36,7 +36,7 @@ func TestEncodeFileText(t *testing.T) {
 
 func TestEncodeFileTextAtOrigin(t *testing.T) {
 	// Cursor at (0, 0) is still emitted: presence implies text mode.
-	got := Encode(State{TileIDs: []string{"9"}, CursorMode: true})
+	got := EncodeURL(URLState{TileIDs: []string{"9"}, CursorMode: true})
 	want := "/9?c=0&r=0"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -44,20 +44,20 @@ func TestEncodeFileTextAtOrigin(t *testing.T) {
 }
 
 func TestEncodeOmitsDefaultZoom(t *testing.T) {
-	if got := Encode(State{TileIDs: []string{"1"}, Zoom: 1.0}); got != "/1" {
+	if got := EncodeURL(URLState{TileIDs: []string{"1"}, Zoom: 1.0}); got != "/1" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeOmitsZeroXY(t *testing.T) {
-	got := Encode(State{TileIDs: []string{"1"}, Zoom: 1.5})
+	got := EncodeURL(URLState{TileIDs: []string{"1"}, Zoom: 1.5})
 	if got != "/1?z=1.5" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeStripsTrailingZeros(t *testing.T) {
-	got := Encode(State{TileIDs: []string{"1"}, X: 0.5, Y: 1.0, Zoom: 2.0})
+	got := EncodeURL(URLState{TileIDs: []string{"1"}, X: 0.5, Y: 1.0, Zoom: 2.0})
 	// X=0.5 → "0.5"; Y=1.0 → "1"; Zoom=2.0 → "2"
 	want := "/1?x=0.5&y=1&z=2"
 	if got != want {
@@ -65,9 +65,9 @@ func TestEncodeStripsTrailingZeros(t *testing.T) {
 	}
 }
 
-// Encode strips plugin UUID prefix so URLs stay readable.
+// EncodeURL strips plugin UUID prefix so URLs stay readable.
 func TestEncodeStripsUUIDPrefix(t *testing.T) {
-	got := Encode(State{TileIDs: []string{"abc-uuid/3", "abc-uuid/4"}})
+	got := EncodeURL(URLState{TileIDs: []string{"abc-uuid/3", "abc-uuid/4"}})
 	if got != "/3/4" {
 		t.Errorf("got %q, want /3/4", got)
 	}
@@ -75,18 +75,18 @@ func TestEncodeStripsUUIDPrefix(t *testing.T) {
 
 func TestDecodeRoot(t *testing.T) {
 	for _, in := range []string{"", "/"} {
-		s, err := Decode(in)
+		s, err := DecodeURL(in)
 		if err != nil {
-			t.Fatalf("Decode(%q) err: %v", in, err)
+			t.Fatalf("DecodeURL(%q) err: %v", in, err)
 		}
 		if len(s.TileIDs) != 0 {
-			t.Errorf("Decode(%q) TileIDs = %v, want empty", in, s.TileIDs)
+			t.Errorf("DecodeURL(%q) TileIDs = %v, want empty", in, s.TileIDs)
 		}
 	}
 }
 
 func TestDecodePath(t *testing.T) {
-	s, err := Decode("/3/4/5")
+	s, err := DecodeURL("/3/4/5")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestDecodePath(t *testing.T) {
 }
 
 func TestDecodeWithViewport(t *testing.T) {
-	s, err := Decode("/3?x=5.5&y=-2&z=1.5")
+	s, err := DecodeURL("/3?x=5.5&y=-2&z=1.5")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestDecodeWithViewport(t *testing.T) {
 }
 
 func TestDecodeWithCursor(t *testing.T) {
-	s, err := Decode("/9?c=24&r=10")
+	s, err := DecodeURL("/9?c=24&r=10")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,13 +120,13 @@ func TestDecodeWithCursor(t *testing.T) {
 
 func TestDecodeRejectsNonNumericSegments(t *testing.T) {
 	// "/foo" can't be a tile-id path — non-numeric segment.
-	if _, err := Decode("/foo"); err == nil {
+	if _, err := DecodeURL("/foo"); err == nil {
 		t.Error("expected error for /foo")
 	}
 }
 
 func TestDecodeIgnoresTrailingSlash(t *testing.T) {
-	s, err := Decode("/3/4/")
+	s, err := DecodeURL("/3/4/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestDecodeIgnoresTrailingSlash(t *testing.T) {
 }
 
 func TestRoundTrip(t *testing.T) {
-	cases := []State{
+	cases := []URLState{
 		{},
 		{TileIDs: []string{"3", "4", "5"}, X: 12.5, Y: -3.25, Zoom: 1.5},
 		{TileIDs: []string{"9"}, CursorMode: true, Col: 0, Row: 0},
@@ -144,10 +144,10 @@ func TestRoundTrip(t *testing.T) {
 		{TileIDs: []string{"7"}, Zoom: 1.234},
 	}
 	for _, in := range cases {
-		raw := Encode(in)
-		got, err := Decode(raw)
+		raw := EncodeURL(in)
+		got, err := DecodeURL(raw)
 		if err != nil {
-			t.Fatalf("Decode(%q) err: %v", raw, err)
+			t.Fatalf("DecodeURL(%q) err: %v", raw, err)
 		}
 		if !reflect.DeepEqual(got, in) {
 			t.Errorf("round trip: in=%+v out=%+v (raw=%q)", in, got, raw)
@@ -170,15 +170,15 @@ func TestDecodeMalformed(t *testing.T) {
 		{"negative id ok", "/-2/3", false},
 	}
 	for _, c := range cases {
-		_, err := Decode(c.raw)
+		_, err := DecodeURL(c.raw)
 		if (err != nil) != c.wantErr {
-			t.Errorf("%s: Decode(%q) err=%v wantErr=%v", c.name, c.raw, err, c.wantErr)
+			t.Errorf("%s: DecodeURL(%q) err=%v wantErr=%v", c.name, c.raw, err, c.wantErr)
 		}
 	}
 }
 
 func TestDecodeEmptyMiddleSegment(t *testing.T) {
-	s, err := Decode("/3//5")
+	s, err := DecodeURL("/3//5")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestDecodeEmptyMiddleSegment(t *testing.T) {
 }
 
 func TestDecodeNegativeID(t *testing.T) {
-	s, err := Decode("/-2/3")
+	s, err := DecodeURL("/-2/3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,9 +198,9 @@ func TestDecodeNegativeID(t *testing.T) {
 }
 
 // Bad float values in x/y/z are silently ignored (ParseFloat error ->
-// the field stays 0), and Decode returns no error. Lock that contract.
+// the field stays 0), and DecodeURL returns no error. Lock that contract.
 func TestDecodeBadFloatIgnored(t *testing.T) {
-	s, err := Decode("/3?x=notnum&y=2&z=bad")
+	s, err := DecodeURL("/3?x=notnum&y=2&z=bad")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestDecodeBadFloatIgnored(t *testing.T) {
 // `c` present without `r` is not enough for cursor mode, and because the
 // c-branch is taken, x/y/z are NOT read either. Lock this exact shape.
 func TestDecodeCursorRequiresBothCAndR(t *testing.T) {
-	s, err := Decode("/9?c=5&x=12")
+	s, err := DecodeURL("/9?c=5&x=12")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestDecodeCursorRequiresBothCAndR(t *testing.T) {
 
 // Non-numeric c/r leaves CursorMode false (Atoi error path).
 func TestDecodeBadCursorIgnored(t *testing.T) {
-	s, err := Decode("/9?c=foo&r=bar")
+	s, err := DecodeURL("/9?c=foo&r=bar")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,58 +241,67 @@ func TestDecodeBadCursorIgnored(t *testing.T) {
 	}
 }
 
-func TestTextStateRendered(t *testing.T) {
-	// Rendered text leaf: no cursor encoded.
-	s := TextState([]string{"3", "4"}, "9", false, 12, 7)
-	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4", "9"}) {
-		t.Errorf("TileIDs = %v, want [3 4 9]", s.TileIDs)
-	}
-	if s.CursorMode {
-		t.Error("rendered leaf should not set CursorMode")
-	}
-	if s.Col != 0 || s.Row != 0 {
-		t.Errorf("cursor leaked: col=%d row=%d", s.Col, s.Row)
-	}
-}
-
-func TestTextStateTextMode(t *testing.T) {
-	s := TextState([]string{"3"}, "9", true, 12, 7)
-	if !reflect.DeepEqual(s.TileIDs, []string{"3", "9"}) {
-		t.Errorf("TileIDs = %v", s.TileIDs)
-	}
-	if !s.CursorMode || s.Col != 12 || s.Row != 7 {
-		t.Errorf("cursor = (mode=%v, c=%d, r=%d)", s.CursorMode, s.Col, s.Row)
-	}
-}
-
-func TestTextStateClonesPath(t *testing.T) {
-	path := []string{"3", "4"}
-	s := TextState(path, "9", false, 0, 0)
-	s.TileIDs[0] = "99" // mutating the result must not touch the caller's slice
-	if path[0] != "3" {
-		t.Errorf("TextState retained/aliased caller path: %v", path)
-	}
-}
-
-func TestGridState(t *testing.T) {
-	s := GridState([]string{"3", "4", "5"}, 12.5, -3, 1.5)
+// URLStateOf is the ONE encode half: the pane's frame stack projected into
+// the URL DTO. A grid place carries its viewport; a content place carries
+// the tile id and, in raw-text mode, the cursor.
+func TestURLStateOfGridPlace(t *testing.T) {
+	p := &Pane{ID: "p1", Stack: StackAt("u1/1", []string{"3", "4", "5"}, "")}
+	p.Cx, p.Cy, p.Zoom = 12.5, -3, 1.5
+	s := URLStateOf(&p.Stack, "home/1", false, 0, 0)
 	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4", "5"}) {
 		t.Errorf("TileIDs = %v", s.TileIDs)
+	}
+	if s.Anchor != "u1/1" {
+		t.Errorf("Anchor = %q", s.Anchor)
 	}
 	if s.X != 12.5 || s.Y != -3 || s.Zoom != 1.5 {
 		t.Errorf("viewport = (%v,%v,%v)", s.X, s.Y, s.Zoom)
 	}
 	if s.CursorMode {
-		t.Error("grid state should not set CursorMode")
+		t.Error("grid place should not set CursorMode")
 	}
 }
 
-func TestGridStateClonesPath(t *testing.T) {
-	path := []string{"7"}
-	s := GridState(path, 0, 0, 1)
-	s.TileIDs[0] = "99"
-	if path[0] != "7" {
-		t.Errorf("GridState retained/aliased caller path: %v", path)
+// Home encodes as an empty anchor, so "/" stays home's URL.
+func TestURLStateOfHomeAnchorIsEmpty(t *testing.T) {
+	p := &Pane{ID: "p1", Stack: StackAt("home/1", nil, "")}
+	if s := URLStateOf(&p.Stack, "home/1", false, 0, 0); s.Anchor != "" {
+		t.Errorf("home anchor = %q, want empty", s.Anchor)
+	}
+}
+
+func TestURLStateOfContentPlace(t *testing.T) {
+	p := &Pane{ID: "p1", Stack: StackAt("home/1", []string{"3", "4"}, "9")}
+	s := URLStateOf(&p.Stack, "home/1", false, 12, 7)
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4", "9"}) {
+		t.Errorf("TileIDs = %v, want [3 4 9]", s.TileIDs)
+	}
+	if s.CursorMode || s.Col != 0 || s.Row != 0 {
+		t.Errorf("rendered leaf leaked a cursor: %+v", s)
+	}
+	s = URLStateOf(&p.Stack, "home/1", true, 12, 7)
+	if !s.CursorMode || s.Col != 12 || s.Row != 7 {
+		t.Errorf("cursor = (mode=%v, c=%d, r=%d)", s.CursorMode, s.Col, s.Row)
+	}
+	if s.X != 0 || s.Zoom != 0 {
+		t.Errorf("a content place carries no grid viewport: %+v", s)
+	}
+}
+
+// The URL is an ENCODING of the stack, not a second model: encode → decode
+// → StackAt round-trips the place (the id walk the client does against its
+// cache is the only step this test stands in for).
+func TestURLRoundTripsThePlace(t *testing.T) {
+	p := &Pane{ID: "p1", Stack: StackAt("u1/1", []string{"3", "4"}, "9")}
+	raw := EncodeURL(URLStateOf(&p.Stack, "home/1", true, 2, 3))
+	st, err := DecodeURL(raw)
+	if err != nil {
+		t.Fatalf("decode %q: %v", raw, err)
+	}
+	back := StackAt(st.Anchor, st.TileIDs[:len(st.TileIDs)-1], st.TileIDs[len(st.TileIDs)-1])
+	if back.Anchor() != p.Anchor() || !reflect.DeepEqual(back.Path(), p.Path()) ||
+		back.ContentID() != p.ContentID() || back.Depth() != p.Depth() {
+		t.Fatalf("round trip: %+v -> %+v", p.Crumbs(), back.Crumbs())
 	}
 }
 
@@ -301,24 +310,24 @@ func TestBootViewport(t *testing.T) {
 		name       string
 		ux, uy, uz float64
 		rx, ry, rz float64
-		want       BootView
+		want       URLBootView
 	}{
 		{"url viewport with zoom wins", 5, -3, 1.5, 9, 9, 2,
-			BootView{Apply: true, Cx: 5, Cy: -3, SetZoom: true, Zoom: 1.5}},
+			URLBootView{Apply: true, Cx: 5, Cy: -3, SetZoom: true, Zoom: 1.5}},
 		{"url pan only (no zoom) keeps pane zoom", 5, -3, 0, 9, 9, 2,
-			BootView{Apply: true, Cx: 5, Cy: -3, SetZoom: false}},
+			URLBootView{Apply: true, Cx: 5, Cy: -3, SetZoom: false}},
 		{"url zoom only (x,y zero) still applies", 0, 0, 1.5, 9, 9, 2,
-			BootView{Apply: true, Cx: 0, Cy: 0, SetZoom: true, Zoom: 1.5}},
+			URLBootView{Apply: true, Cx: 0, Cy: 0, SetZoom: true, Zoom: 1.5}},
 		{"no url -> stored root view", 0, 0, 0, 9, 8, 2,
-			BootView{Apply: true, Cx: 9, Cy: 8, SetZoom: true, Zoom: 2}},
+			URLBootView{Apply: true, Cx: 9, Cy: 8, SetZoom: true, Zoom: 2}},
 		{"no url, no stored zoom -> nothing", 0, 0, 0, 9, 8, 0,
-			BootView{}},
+			URLBootView{}},
 		{"url negative zoom ignored as zoom, but x/y still apply", 4, 0, -1, 9, 8, 2,
-			BootView{Apply: true, Cx: 4, Cy: 0, SetZoom: false}},
+			URLBootView{Apply: true, Cx: 4, Cy: 0, SetZoom: false}},
 	}
 	for _, c := range cases {
-		if got := BootViewport(c.ux, c.uy, c.uz, c.rx, c.ry, c.rz); got != c.want {
-			t.Errorf("%s: BootViewport = %+v, want %+v", c.name, got, c.want)
+		if got := URLBootViewport(c.ux, c.uy, c.uz, c.rx, c.ry, c.rz); got != c.want {
+			t.Errorf("%s: URLBootViewport = %+v, want %+v", c.name, got, c.want)
 		}
 	}
 }
@@ -328,39 +337,39 @@ func TestBootViewport(t *testing.T) {
 // slash-joined qualified grid id, so it drops straight in; tile ids follow.
 func TestEncodeAnchorAsPath(t *testing.T) {
 	cases := []struct {
-		in   State
+		in   URLState
 		want string
 	}{
-		{State{Anchor: "k3x9m2q/1", TileIDs: []string{"3", "4"}}, "/k3x9m2q/1/3/4"},
-		{State{Anchor: "k3x9m2q/1"}, "/k3x9m2q/1"},
+		{URLState{Anchor: "k3x9m2q/1", TileIDs: []string{"3", "4"}}, "/k3x9m2q/1/3/4"},
+		{URLState{Anchor: "k3x9m2q/1"}, "/k3x9m2q/1"},
 		// Chained remote anchor: each hop is one more leading segment.
-		{State{Anchor: "ssh4321/remote9/1", TileIDs: []string{"4", "7"}}, "/ssh4321/remote9/1/4/7"},
+		{URLState{Anchor: "ssh4321/remote9/1", TileIDs: []string{"4", "7"}}, "/ssh4321/remote9/1/4/7"},
 		// Node grid: grid id 0 is a valid anchor grid segment.
-		{State{Anchor: "abc1234/0"}, "/abc1234/0"},
+		{URLState{Anchor: "abc1234/0"}, "/abc1234/0"},
 		// Legacy 32-hex ids encode the same way.
-		{State{Anchor: "0123456789abcdef0123456789abcdef/1", TileIDs: []string{"5"}},
+		{URLState{Anchor: "0123456789abcdef0123456789abcdef/1", TileIDs: []string{"5"}},
 			"/0123456789abcdef0123456789abcdef/1/5"},
 		// Viewport rides in the query as before.
-		{State{Anchor: "k3x9m2q/1", TileIDs: []string{"3"}, X: 5.5, Zoom: 1.5}, "/k3x9m2q/1/3?x=5.5&z=1.5"},
+		{URLState{Anchor: "k3x9m2q/1", TileIDs: []string{"3"}, X: 5.5, Zoom: 1.5}, "/k3x9m2q/1/3?x=5.5&z=1.5"},
 	}
 	for _, c := range cases {
-		if got := Encode(c.in); got != c.want {
-			t.Errorf("Encode(%+v) = %q, want %q", c.in, got, c.want)
+		if got := EncodeURL(c.in); got != c.want {
+			t.Errorf("EncodeURL(%+v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
 
 // TestEncodeOmitsEmptyAnchor: home has no anchor segments — "/" is home.
 func TestEncodeOmitsEmptyAnchor(t *testing.T) {
-	if got := Encode(State{}); got != "/" {
+	if got := EncodeURL(URLState{}); got != "/" {
 		t.Errorf("got %q, want /", got)
 	}
 }
 
-// TestAnchorRoundTrip: Encode then Decode preserves the anchor and path, for
+// TestAnchorRoundTrip: EncodeURL then DecodeURL preserves the anchor and path, for
 // single and chained namespaces, both id shapes.
 func TestAnchorRoundTrip(t *testing.T) {
-	cases := []State{
+	cases := []URLState{
 		{Anchor: "k3x9m2q/9", TileIDs: []string{"12", "7"}},
 		{Anchor: "k3x9m2q/9"},
 		{Anchor: "ssh4321/remote9/1", TileIDs: []string{"4"}},
@@ -368,9 +377,9 @@ func TestAnchorRoundTrip(t *testing.T) {
 		{Anchor: "0123456789abcdef0123456789abcdef/1", TileIDs: []string{"5"}},
 	}
 	for _, in := range cases {
-		out, err := Decode(Encode(in))
+		out, err := DecodeURL(EncodeURL(in))
 		if err != nil {
-			t.Fatalf("Decode(Encode(%+v)): %v", in, err)
+			t.Fatalf("DecodeURL(EncodeURL(%+v)): %v", in, err)
 		}
 		if out.Anchor != in.Anchor {
 			t.Errorf("anchor = %q, want %q", out.Anchor, in.Anchor)
@@ -383,9 +392,9 @@ func TestAnchorRoundTrip(t *testing.T) {
 
 // TestDecodeLegacyAnchorQuery: the pre-2026-07-25 `?a=` form still decodes
 // (old bookmarks must keep resolving), but the path form wins when both are
-// present, and Encode never emits `a=` again.
+// present, and EncodeURL never emits `a=` again.
 func TestDecodeLegacyAnchorQuery(t *testing.T) {
-	s, err := Decode("/3/4?a=fs-uuid%2F1")
+	s, err := DecodeURL("/3/4?a=fs-uuid%2F1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +405,7 @@ func TestDecodeLegacyAnchorQuery(t *testing.T) {
 		t.Errorf("tile ids = %v", s.TileIDs)
 	}
 	// Path anchor beats a conflicting legacy query anchor.
-	s2, err := Decode("/k3x9m2q/1/3?a=other%2F9")
+	s2, err := DecodeURL("/k3x9m2q/1/3?a=other%2F9")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +413,7 @@ func TestDecodeLegacyAnchorQuery(t *testing.T) {
 		t.Errorf("path anchor should win: %q", s2.Anchor)
 	}
 	// Re-encoding a legacy decode yields the new form.
-	if got := Encode(s); got != "/fs-uuid/1/3/4" {
+	if got := EncodeURL(s); got != "/fs-uuid/1/3/4" {
 		t.Errorf("re-encode of legacy = %q, want /fs-uuid/1/3/4", got)
 	}
 }
@@ -419,8 +428,8 @@ func TestDecodeAnchorGrammarRejects(t *testing.T) {
 		"/k3x9m2q/1/x/3", // non-numeric mid-descent
 		"/a/b/c",         // namespace chain, never a grid
 	} {
-		if _, err := Decode(raw); err == nil {
-			t.Errorf("Decode(%q) accepted; want error", raw)
+		if _, err := DecodeURL(raw); err == nil {
+			t.Errorf("DecodeURL(%q) accepted; want error", raw)
 		}
 	}
 }
@@ -429,12 +438,12 @@ func TestDecodeAnchorGrammarRejects(t *testing.T) {
 // browser history entry" (issue #194): structural moves push, framing and
 // focus switches replace.
 func TestPushesEntry(t *testing.T) {
-	at := func(pane, ws, anchor, path string) Place {
-		return Place{PaneID: pane, Workspace: ws, Anchor: anchor, Path: path}
+	at := func(pane, ws, anchor, path string) URLPlace {
+		return URLPlace{PaneID: pane, Workspace: ws, Anchor: anchor, Path: path}
 	}
 	cases := []struct {
 		name       string
-		prev, next Place
+		prev, next URLPlace
 		seen       bool
 		want       bool
 	}{
@@ -450,8 +459,8 @@ func TestPushesEntry(t *testing.T) {
 		{"inside a workspace the URL is constant — replaces", at("w-p1", "k/42", "", ""), at("w-p2", "k/42", "", ""), true, false},
 	}
 	for _, c := range cases {
-		if got := PushesEntry(c.prev, c.next, c.seen); got != c.want {
-			t.Errorf("%s: PushesEntry = %v, want %v", c.name, got, c.want)
+		if got := URLPushesEntry(c.prev, c.next, c.seen); got != c.want {
+			t.Errorf("%s: URLPushesEntry = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
@@ -461,11 +470,11 @@ func TestPushesEntry(t *testing.T) {
 // server-owned by the layout blob; encoding a path/viewport alongside would
 // be a second copy of a fact the blob owns).
 func TestWorkspaceURLRoundTrip(t *testing.T) {
-	raw := Encode(State{Workspace: "abcd-uuid/42", Anchor: "ignored/1", TileIDs: []string{"7"}, X: 3})
+	raw := EncodeURL(URLState{Workspace: "abcd-uuid/42", Anchor: "ignored/1", TileIDs: []string{"7"}, X: 3})
 	if raw != "/?w=abcd-uuid%2F42" {
-		t.Fatalf("Encode workspace = %q", raw)
+		t.Fatalf("EncodeURL workspace = %q", raw)
 	}
-	s, err := Decode(raw)
+	s, err := DecodeURL(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,7 +485,7 @@ func TestWorkspaceURLRoundTrip(t *testing.T) {
 		t.Fatalf("workspace URL must carry nothing else: %+v", s)
 	}
 	// A chained (remote) workspace id survives the round trip.
-	s2, err := Decode(Encode(State{Workspace: "ssh-uuid/plugin-uuid/9"}))
+	s2, err := DecodeURL(EncodeURL(URLState{Workspace: "ssh-uuid/plugin-uuid/9"}))
 	if err != nil || s2.Workspace != "ssh-uuid/plugin-uuid/9" {
 		t.Fatalf("chained workspace: %+v err=%v", s2, err)
 	}

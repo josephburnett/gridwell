@@ -75,7 +75,7 @@ func shellLog(format string, args ...any) {
 // gestures to PTY input forwarding (and to gate ascent on a freeze
 // capture).
 func (a *App) isShellDescent(p *pane.Pane) bool {
-	if p == nil || p.TextFocus == "" {
+	if p == nil || p.ContentID() == "" {
 		return false
 	}
 	gid := a.gridIDForPane(p)
@@ -83,7 +83,7 @@ func (a *App) isShellDescent(p *pane.Pane) bool {
 	if !ok {
 		return false
 	}
-	t, ok := g.Tiles[p.TextFocus]
+	t, ok := g.Tiles[p.ContentID()]
 	if !ok {
 		return false
 	}
@@ -202,11 +202,10 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	}
 	// ONE live surface per content tile (issue #249): another pane
 	// attached to this tmux session detaches (with a freeze) — two
-	// attachments would fight over the terminal size.
-	for otherID, pl := range a.locals {
-		if otherID != p.ID && pl.shellConn != nil && pl.shellConn.tileID == tileID {
-			a.closeShellStream(otherID, true)
-		}
+	// attachments would fight over the terminal size. pane.TakeOver is the
+	// rule, shared with the url side.
+	for _, otherID := range pane.TakeOver(a.shellSurfaces(), p.ID, tileID) {
+		a.closeShellStream(otherID, true)
 	}
 	a.closeShellStream(p.ID, true)
 
@@ -347,8 +346,8 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		container:    container,
 		tileID:       tileID,
 		paneID:       p.ID,
-		anchor:       p.Anchor,
-		path:         slices.Clone(p.Path),
+		anchor:       p.Anchor(),
+		path:         slices.Clone(p.Path()),
 		onMouse:      onMouse,
 		touchFns:     touchFns,
 		lastCols:     uint16(cols),
@@ -749,7 +748,7 @@ func (a *App) syncShellOverlayPosition() {
 		// THIS shell — e.g. it descended further into an ephemeral url from a
 		// shell link. The stream stays alive (the session persists); only the
 		// overlay parks, reappearing when the pane returns.
-		if p := a.tree.FindPane(paneID); p == nil || p.TextFocus != conn.tileID {
+		if p := a.tree.FindPane(paneID); p == nil || p.ContentID() != conn.tileID {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}

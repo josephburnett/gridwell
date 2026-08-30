@@ -3,13 +3,11 @@
 package main
 
 import (
-	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/workspace"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
@@ -82,9 +80,9 @@ func (a *App) barThemeFor(p *pane.Pane) (band, button string) {
 	return "#151b2e", colorFocusBorder
 }
 
-// navCrumb is workspace.NavCrumb; navChain is the stack's NavChain for the
+// navCrumb is pane.NavCrumb; navChain is the stack's NavChain for the
 // focused pane (the decision is pure and unit-tested there).
-type navCrumb = workspace.NavCrumb
+type navCrumb = pane.NavCrumb
 
 func (a *App) navChain() []navCrumb {
 	return a.navChainFor(a.tree.FocusedPane())
@@ -284,7 +282,7 @@ func (a *App) drawBarSlotFor(p *pane.Pane) {
 	if p == nil {
 		return
 	}
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		switch {
 		case a.isURLDescent(p):
 			if a.urlViewFor(p.ID) != nil {
@@ -301,7 +299,7 @@ func (a *App) drawBarSlotFor(p *pane.Pane) {
 			// remains. shellRefreshButtonVisible decides (and kicks off the
 			// ShellSessionAlive probe if the answer isn't cached yet).
 			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-				if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
+				if file, ok := g.Tiles[p.ContentID()]; ok && a.shellRefreshButtonVisible(&file) {
 					a.drawURLRefreshButton(p)
 				}
 			}
@@ -329,7 +327,7 @@ func (a *App) barSlotClick(button int) {
 	case a.isShellDescent(p):
 		if !a.hasShellStream(p.ID) {
 			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-				if tile, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&tile) {
+				if tile, ok := g.Tiles[p.ContentID()]; ok && a.shellRefreshButtonVisible(&tile) {
 					a.openShellStream(p, tile.ID)
 				}
 			}
@@ -347,12 +345,12 @@ func (a *App) barSlotClick(button int) {
 		} else {
 			// Frozen: go live (place the native view).
 			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-				if tile, ok := g.Tiles[p.TextFocus]; ok {
+				if tile, ok := g.Tiles[p.ContentID()]; ok {
 					a.openURLStream(p, tile.ID)
 				}
 			}
 		}
-	case p.TextFocus != "":
+	case p.ContentID() != "":
 		// A markdown descent's slot is the DOM toggle button, which handles
 		// its own clicks; a canvas click reaching here just missed it.
 	default:
@@ -527,9 +525,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		// GO THERE: be inside view wsLevel — or, for the root crumb, back
 		// in the session (closeOnly: views close; the session's own state
 		// is never touched from the bar).
-		if n := a.ws.PopCountTo(nc.WsLevel); n > 0 {
-			a.ascendWorkspaceLevels(n)
-		}
+		a.ascendLevels(a.ws.PopCountTo(nc.WsLevel))
 		return true
 	}
 	// The CURRENT crumb of an ephemeral url visit is a drag handle: onto
@@ -544,9 +540,11 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 			}
 		}
 	}
-	// A current-chain crumb: ascend within the live tree.
+	// A current-chain crumb: ascend the focused pane to that level. How many
+	// ascents that is, is the crumb's own arithmetic (pane.AscentsTo) — the
+	// last hop animates, the ones above it are instant.
 	if p := a.tree.FocusedPane(); p != nil {
-		a.ascendToChainCrumb(p, nc.Crumb)
+		a.ascend(p, p.AscentsTo(nc.Crumb), true)
 	}
 	return true
 }
@@ -653,71 +651,4 @@ func (a *App) openRenameInput() {
 	}, func(val string) {
 		a.commitRename(tileID, val)
 	})
-}
-
-// ascendToChainCrumb ascends pane p back to crumb c's level: instant
-// single-level ascents — each performing the SAME writebacks its animated
-// twin does (text/framing saves, well-view persistence, portal root views,
-// panestate pops) — until one ordinary ascent remains, which runs through
-// ascendPane so the final landing keeps the familiar animation and any
-// stashed-descent restore. Clicking the crumb you are already on is a no-op.
-func (a *App) ascendToChainCrumb(p *pane.Pane, c pane.Crumb) {
-	if !pane.DeeperThan(p, c) {
-		return
-	}
-	// A bounded loop: each step strictly decreases the pane's depth key
-	// (pane.DeeperThan's order), so this converges; the bound is a backstop.
-	for i := 0; i < 64 && pane.DeeperThan(p, c); i++ {
-		if pane.OneAscentReaches(p, c) {
-			a.ascendPane(p)
-			return
-		}
-		a.ascendOneLevelInstant(p)
-	}
-	a.refreshFileOverlay()
-	a.draw()
-	a.scheduleURLUpdate()
-}
-
-// ascendOneLevelInstant pops exactly one descent level with no animation:
-// the intermediate step of a multi-level crumb jump. Each arm mirrors its
-// animated twin's writebacks; stashed-descent restores are deliberately
-// skipped — the user asked for a level ABOVE the stash origin, so the
-// stashed return is consumed and discarded, not re-descended into.
-func (a *App) ascendOneLevelInstant(p *pane.Pane) {
-	switch {
-	case p.TextFocus != "":
-		a.exitTextInstant(p, false)
-	case len(p.Path) > 0:
-		parentPath := slices.Clone(p.Path[:len(p.Path)-1])
-		if g, ok := a.c.Grid(a.gridIDForPathFrom(p.Anchor, parentPath)); ok {
-			if w, ok := g.Tiles[p.Path[len(p.Path)-1]]; ok {
-				well := w
-				a.saveWellViewBeforeAscent(p, &well, parentPath)
-			}
-		}
-		saved := a.popPaneState(p.ID)
-		p.Path = parentPath
-		if saved != nil {
-			p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
-		} else if cx, cy, zoom, ok := a.persistedGridView(p, p.Anchor, parentPath); ok {
-			// Post-reload ascent: the parent's persisted framing, never an
-			// arbitrary origin (see persistedGridView).
-			p.Cx, p.Cy, p.Zoom = cx, cy, zoom
-		} else {
-			p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
-		}
-		a.clearSelected(p.ID)
-	case len(p.Up) > 0:
-		f, _ := p.TopFrame()
-		// The same face-#3 writeback a portal ascent performs: onto the
-		// containing link tile when it resolves, else the plugin root view.
-		if well := a.portalWellForFrame(p, f); well != nil {
-			a.persistFraming(p, well, f.Anchor, slices.Clone(f.Path))
-		} else {
-			a.persistFraming(p, nil, "", nil)
-		}
-		p.PopFrame()
-		a.fetchGrid(a.gridIDForPane(p))
-	}
 }

@@ -1,4 +1,7 @@
-// Package url is the encoder/decoder for Gridwell's client URL state.
+// The URL codec: one of the two ENCODINGS of a pane's frame stack (the
+// other is the layout blob, wire.go). It is not a second place model — a
+// URL is projected from a Stack (URLStateOf) and decoded back into one
+// (StackAt, after the id walk the client does against its cache).
 //
 // URL shape (anchor-as-path since 2026-07-25 — the owner's "plugin ids are
 // just another part of the path"):
@@ -18,7 +21,7 @@
 // non-numeric segment means the home anchor ("/" is home — the first
 // configured plugin's root grid, rpc.HomeGrid). The trailing tile id may be
 // a well-tile or a file-tile; the caller resolves which by walking the ids
-// against the cache after a successful Decode. The legacy `?a=<anchor>`
+// against the cache after a successful DecodeURL. The legacy `?a=<anchor>`
 // query form is still DECODED (old bookmarks) but never emitted.
 //
 // Presence of `c`/`r` (column / row, 0-indexed) implies "file is in
@@ -27,20 +30,19 @@
 // are still emitted so the URL is unambiguous: `?c=0&r=0` says "text
 // mode, cursor at origin", which differs from "rendered mode" (no
 // query at all).
-package url
+package pane
 
 import (
 	"errors"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// State is the parsed/about-to-be-encoded URL state.
-type State struct {
+// URLState is the parsed/about-to-be-encoded URL state.
+type URLState struct {
 	// Anchor is the qualified grid id the pane currently sits inside
 	// ("<plugin_id>/<grid>", chains for remote grids). Empty → HOME (the
 	// first configured plugin's root grid; "/" is home's URL — NOT the node
@@ -50,7 +52,7 @@ type State struct {
 
 	// TileIDs is the descent path of tile row ids. Empty means "anchor
 	// grid" (or, with no anchor, the start screen). The trailing id may be a
-	// file-tile (resolved post-Decode). IDs are bare decimal strings (e.g.
+	// file-tile (resolved post-DecodeURL). IDs are bare decimal strings (e.g.
 	// "42"); the client qualifies them with the anchor's plugin UUID.
 	TileIDs []string
 
@@ -74,36 +76,21 @@ type State struct {
 	Workspace string
 }
 
-// DefaultZoom is the implicit zoom value when `z` is absent.
-const DefaultZoom = 1.0
+// URLDefaultZoom is the implicit zoom value when `z` is absent.
+const URLDefaultZoom = 1.0
 
-// TextState builds the State for a text-tile descent: the descent path
-// plus the focused text tile as the trailing id. When isTextMode is true
-// the leaf is in raw-text mode and carries its cursor (col, row) so the
-// position is restored on reload; in rendered mode no cursor is encoded.
-// path is cloned — the caller's slice is never retained.
-func TextState(path []string, textFocusTileID string, isTextMode bool, col, row int) State {
-	s := State{TileIDs: append(slices.Clone(path), textFocusTileID)}
-	if isTextMode {
-		s.CursorMode = true
-		s.Col = col
-		s.Row = row
-	}
-	return s
-}
-
-// BootView is how the root pane should be framed at boot — the result of
-// BootViewport. Apply is false when nothing should change (keep the
+// URLBootView is how the root pane should be framed at boot — the result of
+// URLBootViewport. Apply is false when nothing should change (keep the
 // bootstrap default). SetZoom distinguishes "write this zoom" from "leave
 // the pane's current zoom" (a URL can carry an X/Y pan without a zoom).
-type BootView struct {
+type URLBootView struct {
 	Apply   bool
 	Cx, Cy  float64
 	SetZoom bool
 	Zoom    float64
 }
 
-// BootViewport resolves the root pane's framing when the app opens with no
+// URLBootViewport resolves the root pane's framing when the app opens with no
 // descent path, by this precedence — getting it wrong silently re-frames a
 // pane the user didn't touch (a "things stay where you put them" violation):
 //
@@ -112,9 +99,9 @@ type BootView struct {
 //     keeps the pane's existing zoom).
 //   - else the stored root view, if it has a positive zoom: apply all three.
 //   - else: nothing — keep the bootstrap-supplied default (Apply=false).
-func BootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) BootView {
+func URLBootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) URLBootView {
 	if urlX != 0 || urlY != 0 || urlZoom != 0 {
-		v := BootView{Apply: true, Cx: urlX, Cy: urlY}
+		v := URLBootView{Apply: true, Cx: urlX, Cy: urlY}
 		if urlZoom > 0 {
 			v.SetZoom = true
 			v.Zoom = urlZoom
@@ -122,28 +109,39 @@ func BootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) BootVie
 		return v
 	}
 	if rootZoom > 0 {
-		return BootView{Apply: true, Cx: rootCx, Cy: rootCy, SetZoom: true, Zoom: rootZoom}
+		return URLBootView{Apply: true, Cx: rootCx, Cy: rootCy, SetZoom: true, Zoom: rootZoom}
 	}
-	return BootView{}
+	return URLBootView{}
 }
 
-// GridState builds the State for a grid (or rendered-file) descent: the
-// descent path as the tile ids and the pane viewport (center + zoom).
-// path is cloned.
-func GridState(path []string, cx, cy, zoom float64) State {
-	return State{
-		TileIDs: slices.Clone(path),
-		X:       cx,
-		Y:       cy,
-		Zoom:    zoom,
+// URLStateOf projects a pane's place into the URL DTO — the ONE encode
+// half. home is the home grid id, which encodes as an empty anchor so "/"
+// stays home's URL. A content descent rides as the trailing tile id, with
+// its cursor when it is in raw-text mode.
+func URLStateOf(s *Stack, home string, isText bool, col, row int) URLState {
+	var st URLState
+	anchor, path := s.AnchorPathAt(s.Depth() - 1)
+	st.TileIDs = append([]string(nil), path...)
+	if id := s.ContentID(); id != "" {
+		st.TileIDs = append(st.TileIDs, id)
+		if isText {
+			st.CursorMode = true
+			st.Col, st.Row = col, row
+		}
+	} else {
+		st.X, st.Y, st.Zoom = s.Cx, s.Cy, s.Zoom
 	}
+	if anchor != home {
+		st.Anchor = anchor
+	}
+	return st
 }
 
-// Encode renders s into a path+query string suitable for
+// EncodeURL renders s into a path+query string suitable for
 // history.replaceState. Always begins with '/'. The query is omitted
 // entirely when no params are set; defaults are stripped so a fresh
 // pane at root produces just "/".
-func Encode(s State) string {
+func EncodeURL(s URLState) string {
 	// Inside a workspace the pane tile IS the place; nothing else rides.
 	if s.Workspace != "" {
 		q := url.Values{}
@@ -153,7 +151,7 @@ func Encode(s State) string {
 	var path strings.Builder
 	// The anchor is path segments: it is already a slash-joined qualified
 	// grid id ("<ns>/.../<grid>"), so writing it verbatim yields exactly the
-	// namespace-chain-then-grid prefix the Decode grammar reads back.
+	// namespace-chain-then-grid prefix the DecodeURL grammar reads back.
 	if s.Anchor != "" {
 		path.WriteByte('/')
 		path.WriteString(s.Anchor)
@@ -181,13 +179,13 @@ func Encode(s State) string {
 		// Grid (or rendered file) leaf: only emit non-default viewport
 		// values to keep the URL short.
 		if s.X != 0 {
-			q.Set("x", trimFloat(s.X, 2))
+			q.Set("x", urlTrimFloat(s.X, 2))
 		}
 		if s.Y != 0 {
-			q.Set("y", trimFloat(s.Y, 2))
+			q.Set("y", urlTrimFloat(s.Y, 2))
 		}
-		if s.Zoom != 0 && s.Zoom != DefaultZoom {
-			q.Set("z", trimFloat(s.Zoom, 3))
+		if s.Zoom != 0 && s.Zoom != URLDefaultZoom {
+			q.Set("z", urlTrimFloat(s.Zoom, 3))
 		}
 	}
 	encoded := q.Encode()
@@ -197,7 +195,7 @@ func Encode(s State) string {
 	return path.String() + "?" + encoded
 }
 
-// Decode parses a path+query string back into a State. The grammar (see the
+// DecodeURL parses a path+query string back into a URLState. The grammar (see the
 // package comment): leading non-numeric segments are the anchor's namespace
 // chain, the first numeric segment is the anchor grid id, the rest are tile
 // ids; no non-numeric prefix means the home anchor. `/` (or empty) decodes to
@@ -207,7 +205,7 @@ func Encode(s State) string {
 // walking the cache. The `CursorMode` flag and `c`/`r` values are set
 // when the URL has them, regardless of leaf type; the caller decides
 // what to do if a non-file leaf has a c/r query.
-func Decode(raw string) (State, error) {
+func DecodeURL(raw string) (URLState, error) {
 	// Split off query.
 	pathPart := raw
 	queryPart := ""
@@ -215,14 +213,14 @@ func Decode(raw string) (State, error) {
 		pathPart, queryPart = raw[:i], raw[i+1:]
 	}
 
-	var s State
+	var s URLState
 	if pathPart == "" || pathPart == "/" {
 		// Root.
 		s.TileIDs = nil
 	} else {
 		if !strings.HasPrefix(pathPart, "/") {
 			// Unknown URL shape; treat as root.
-			return State{}, errors.New("path does not start with /")
+			return URLState{}, errors.New("path does not start with /")
 		}
 		var segs []string
 		for seg := range strings.SplitSeq(pathPart[1:], "/") {
@@ -247,7 +245,7 @@ func Decode(raw string) (State, error) {
 		case first == len(segs):
 			// Namespace segments with no grid id — not a Gridwell place
 			// (this also catches arbitrary external-looking paths).
-			return State{}, errors.New("namespace segments with no grid id")
+			return URLState{}, errors.New("namespace segments with no grid id")
 		default:
 			s.Anchor = strings.Join(segs[:first+1], "/")
 			tileSegs = segs[first+1:]
@@ -258,7 +256,7 @@ func Decode(raw string) (State, error) {
 			// detection); returned as strings — the client qualifies them
 			// with the anchor's namespace after decoding.
 			if _, err := strconv.ParseInt(seg, 10, 64); err != nil {
-				return State{}, err
+				return URLState{}, err
 			}
 			ids = append(ids, seg)
 		}
@@ -306,19 +304,19 @@ func Decode(raw string) (State, error) {
 	return s, nil
 }
 
-// Place identifies the STRUCTURAL location a URL names — everything except
+// URLPlace identifies the STRUCTURAL location a URL names — everything except
 // framing (viewport, cursor): which pane, which workspace, which anchor,
 // which descent path. Two URLs with equal Places differ only by framing.
-type Place struct {
+type URLPlace struct {
 	PaneID    string
 	Workspace string
 	Anchor    string
 	Path      string
 }
 
-// PlaceOf derives the Place a State occupies for pane paneID.
-func PlaceOf(paneID string, s State) Place {
-	return Place{
+// URLPlaceOf derives the URLPlace a URLState occupies for pane paneID.
+func URLPlaceOf(paneID string, s URLState) URLPlace {
+	return URLPlace{
 		PaneID:    paneID,
 		Workspace: s.Workspace,
 		Anchor:    s.Anchor,
@@ -326,14 +324,14 @@ func PlaceOf(paneID string, s State) Place {
 	}
 }
 
-// SamePlace reports whether two Places name the same structural location
+// SameURLPlace reports whether two Places name the same structural location
 // (pane identity aside — a focus switch changes PaneID but not where either
 // pane is).
-func SamePlace(a, b Place) bool {
+func SameURLPlace(a, b URLPlace) bool {
 	return a.Workspace == b.Workspace && a.Anchor == b.Anchor && a.Path == b.Path
 }
 
-// PushesEntry decides pushState vs replaceState for the URL writer — the one
+// URLPushesEntry decides pushState vs replaceState for the URL writer — the one
 // owner of "does this navigation deserve a browser history entry" (issue
 // #194: back/forward traverse descend/ascend, never pan/zoom):
 //
@@ -348,8 +346,8 @@ func SamePlace(a, b Place) bool {
 //     user didn't go anywhere, the URL just tracks a different pane now;
 //   - the first write after boot REPLACES (seen=false) — boot restores a
 //     place, it doesn't navigate to one.
-func PushesEntry(prev, next Place, seen bool) bool {
-	if !seen || SamePlace(prev, next) {
+func URLPushesEntry(prev, next URLPlace, seen bool) bool {
+	if !seen || SameURLPlace(prev, next) {
 		return false
 	}
 	if next.Workspace != prev.Workspace {
@@ -358,10 +356,10 @@ func PushesEntry(prev, next Place, seen bool) bool {
 	return next.PaneID == prev.PaneID
 }
 
-// trimFloat formats a float with `prec` decimals, then strips trailing
+// urlTrimFloat formats a float with `prec` decimals, then strips trailing
 // zeros and a trailing decimal point so the URL bar isn't cluttered
 // with "0.50" / "1.000".
-func trimFloat(x float64, prec int) string {
+func urlTrimFloat(x float64, prec int) string {
 	s := strconv.FormatFloat(x, 'f', prec, 64)
 	if strings.ContainsRune(s, '.') {
 		s = strings.TrimRight(s, "0")

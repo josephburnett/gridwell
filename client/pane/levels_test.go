@@ -1,19 +1,17 @@
-package workspace
+package pane
 
 import (
 	"testing"
-
-	"github.com/josephburnett/gridwell/client/pane"
 )
 
 func TestStackPushPopRestoresOuterTrees(t *testing.T) {
-	var s Stack
+	var s Levels
 	if s.Depth() != 0 || s.Top() != nil {
 		t.Fatal("fresh stack not empty")
 	}
-	outer1, outer2 := pane.NewTree(), pane.NewTree()
-	s.Push(Frame{OuterTree: outer1, OriginPane: "p1", TileID: "u/7", Name: "A"})
-	s.Push(Frame{OuterTree: outer2, OriginPane: "p3", TileID: "u/9", Name: "B"})
+	outer1, outer2 := NewTree(), NewTree()
+	s.Push(Level{OuterTree: outer1, OriginPane: "p1", TileID: "u/7", Name: "A"})
+	s.Push(Level{OuterTree: outer2, OriginPane: "p3", TileID: "u/9", Name: "B"})
 	if s.Depth() != 2 || s.Top().TileID != "u/9" {
 		t.Fatalf("stack shape: depth=%d top=%+v", s.Depth(), s.Top())
 	}
@@ -38,10 +36,10 @@ func TestStackPushPopRestoresOuterTrees(t *testing.T) {
 // deeper; the current boundary pops nothing), level 0 the session — the
 // same verb everywhere, so the bar never means two different things.
 func TestPopCountTo(t *testing.T) {
-	var s Stack
-	s.Push(Frame{Name: "A"})
-	s.Push(Frame{Name: "B"})
-	s.Push(Frame{Name: "C"})
+	var s Levels
+	s.Push(Level{Name: "A"})
+	s.Push(Level{Name: "B"})
+	s.Push(Level{Name: "C"})
 	cases := []struct{ level, want int }{
 		{3, 0},  // the current boundary: already there (issue #245)
 		{2, 1},  // be inside B: leave C
@@ -62,7 +60,7 @@ func TestPopCountTo(t *testing.T) {
 // goes quiet after MarkSaved, and a read-only frame (undecodable blob) never
 // writes no matter what.
 func TestShouldPersistDiffsAndReadOnly(t *testing.T) {
-	f := &Frame{}
+	f := &Level{}
 	base := []byte(`{"v":1,"a":1}`)
 	MarkSaved(f, base)
 	if ShouldPersist(f, base) {
@@ -76,7 +74,7 @@ func TestShouldPersistDiffsAndReadOnly(t *testing.T) {
 	if ShouldPersist(f, edited) {
 		t.Fatal("saved bytes must go quiet")
 	}
-	ro := &Frame{ReadOnly: true}
+	ro := &Level{ReadOnly: true}
 	if ShouldPersist(ro, edited) {
 		t.Fatal("a read-only frame must NEVER write (it could not read the blob it would overwrite)")
 	}

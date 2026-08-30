@@ -1,4 +1,13 @@
-// Package pane implements the tmux-style pane tree used by the Gridwell client.
+// Package pane owns WHERE THE USER IS: the tmux-style pane tree, and each
+// pane's PLACE as one stack of frames (place.go).
+//
+// One fact, one owner (charter §1). A pane's place used to live in five
+// parallel representations — an in-namespace path, a portal frame stack, a
+// saved-viewport stack, a workspace stack, and the URL — each with its own
+// descent and its own ascent. They are now one Stack; the URL (url.go), the
+// layout blob (wire.go) and the bar's crumbs (chain.go) are ENCODINGS and
+// PROJECTIONS of it. The window's nesting through pane tiles is Levels
+// (levels.go), which speaks the same push/pop vocabulary.
 //
 // All logic here is pure Go: no syscall/js, no network. The package is
 // imported by the WASM entry point and is fully covered by standard
@@ -8,7 +17,6 @@ package pane
 import (
 	"errors"
 	"fmt"
-	"slices"
 )
 
 // Direction identifies a split orientation. "h" is a horizontal divider
@@ -41,127 +49,22 @@ func (s Side) Direction() Direction {
 	return Vertical
 }
 
-// Pane is a leaf in the pane tree: one viewport. Path is the descent path
-// (well row ids) from root to the currently-viewed grid. Cx, Cy are the
-// viewport center in cells; Zoom is the pane's zoom multiplier.
-//
-// TextFocus, when nonzero, marks the pane as "descended into" a text tile:
-// the pane still sits in the parent grid (Path is unchanged), but the
-// chrome and input semantics switch to text-editing mode. TextMode picks
-// between "text" (raw markdown in a textarea overlay) and "rendered" (the
-// sanitized-HTML overlay div, issue #218). TextScrollY is the vertical
-// scroll inside the text's interior in logical pixels; mirrored to the
-// text tile's view_y on save.
+// Pane is a leaf in the pane tree: one viewport. Its PLACE — the grid it is
+// in, the doorways it came through, the viewport at each of them, and any
+// content descent — is the embedded Stack (place.go), the one owner of
+// "where am I". The stack's top frame is unrolled into the pane, so p.Cx,
+// p.Zoom, p.TextMode and friends read the pane's current level directly.
 type Pane struct {
 	ID string
-	// Anchor is the qualified grid id of the plugin root this pane is currently
-	// inside; Path's well ids are relative to it. Anchor == "" means the pane is
-	// still boot-blank (bootstrap sets it to home).
-	Anchor string `json:"anchor,omitempty"`
-	Path   []string
-	Cx     float64
-	Cy     float64
-	Zoom   float64
-
-	TextFocus   string  `json:"text_focus,omitempty"`
-	TextMode    string  `json:"text_mode,omitempty"`
-	TextScrollX float64 `json:"file_scroll_x,omitempty"`
-	TextScrollY float64 `json:"file_scroll_y,omitempty"`
-	// TextZoom is the rendering scale for text-mode (independent of
-	// parent-grid Zoom). 1.0 means "natural reading size"; the wheel
-	// adjusts this directly when TextFocus != 0.
-	TextZoom float64 `json:"file_zoom,omitempty"`
-
-	// Up is the portal ascent stack: each frame is the pane state at a previous
-	// plugin level, restored on ascent when Path is empty. Entering a plugin
-	// (a portal jump that crosses plugin boundaries without a well tile in the
-	// current grid) pushes the current level here.
-	Up []Frame `json:"up,omitempty"`
+	Stack
 }
 
-// Frame snapshots a pane's per-plugin navigation level so a portal ascent can
-// restore the exact level the user jumped from.
-type Frame struct {
-	Anchor      string   `json:"anchor,omitempty"`
-	Path        []string `json:"path,omitempty"`
-	Cx          float64  `json:"cx,omitempty"`
-	Cy          float64  `json:"cy,omitempty"`
-	Zoom        float64  `json:"zoom,omitempty"`
-	TextFocus   string   `json:"text_focus,omitempty"`
-	TextMode    string   `json:"text_mode,omitempty"`
-	TextScrollX float64  `json:"text_scroll_x,omitempty"`
-	TextScrollY float64  `json:"text_scroll_y,omitempty"`
-	TextZoom    float64  `json:"text_zoom,omitempty"`
-	// MenuOpen records whether the + menu was open on this pane when the user
-	// entered a plugin from it, so ascending back restores it — you come back
-	// with the menu open, just as you left it.
-	MenuOpen bool `json:"menu_open,omitempty"`
-}
-
-// Clone returns a deep copy of the pane (including the path + Up slices).
+// Clone returns a deep copy of the pane, place included.
 func (p *Pane) Clone(newID string) *Pane {
 	c := *p
 	c.ID = newID
-	if len(p.Path) > 0 {
-		c.Path = slices.Clone(p.Path)
-	}
-	if len(p.Up) > 0 {
-		c.Up = slices.Clone(p.Up)
-		for i := range c.Up {
-			c.Up[i].Path = slices.Clone(p.Up[i].Path)
-		}
-	}
+	c.Stack = p.Stack.Clone()
 	return &c
-}
-
-// PushFrame snapshots the pane's current level onto the Up stack (called when
-// entering a plugin). menuOpen records whether the + menu was open on the pane
-// at that moment, so a later ascent can reopen it.
-func (p *Pane) PushFrame(menuOpen bool) {
-	p.Up = append(p.Up, Frame{
-		Anchor: p.Anchor, Path: slices.Clone(p.Path),
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom,
-		TextFocus: p.TextFocus, TextMode: p.TextMode,
-		TextScrollX: p.TextScrollX, TextScrollY: p.TextScrollY, TextZoom: p.TextZoom,
-		MenuOpen: menuOpen,
-	})
-}
-
-// TopFrame returns the most recent Up frame (the level a portal ascent would
-// return to), or false when the stack is empty.
-func (p *Pane) TopFrame() (Frame, bool) {
-	if len(p.Up) == 0 {
-		return Frame{}, false
-	}
-	return p.Up[len(p.Up)-1], true
-}
-
-// PopFrame restores the most recent Up frame into the pane and returns true.
-// Returns false when the stack is empty.
-func (p *Pane) PopFrame() bool {
-	if len(p.Up) == 0 {
-		return false
-	}
-	f := p.Up[len(p.Up)-1]
-	p.Up = p.Up[:len(p.Up)-1]
-	p.Anchor, p.Path = f.Anchor, f.Path
-	p.Cx, p.Cy, p.Zoom = f.Cx, f.Cy, f.Zoom
-	p.TextFocus, p.TextMode = f.TextFocus, f.TextMode
-	p.TextScrollX, p.TextScrollY, p.TextZoom = f.TextScrollX, f.TextScrollY, f.TextZoom
-	return true
-}
-
-// DropFrame removes the most recent Up frame without applying it, returning
-// true on success. Used by an animated portal ascent: the transition itself
-// drives the pane back to the frame's viewport and anchor, so the frame is
-// dropped from the stack but its values are restored by the animation rather
-// than instantly (unlike PopFrame).
-func (p *Pane) DropFrame() bool {
-	if len(p.Up) == 0 {
-		return false
-	}
-	p.Up = p.Up[:len(p.Up)-1]
-	return true
 }
 
 // Split is an internal tile in the pane tree. Ratio is in [0, 1]; A is the
@@ -220,7 +123,7 @@ func (t *Tree) ToggleZoom(paneID string) {
 // NewTree returns a fresh tree with a single pane at root.
 func NewTree() *Tree {
 	t := &Tree{nextID: 1}
-	pane := &Pane{ID: "p1", Zoom: 1.0}
+	pane := &Pane{ID: "p1", Stack: NewStack("")}
 	t.Root = TreeNode{Pane: pane}
 	t.Focus = pane.ID
 	return t
@@ -439,7 +342,7 @@ func (t *Tree) SetFocus(id string) error {
 // pane that no longer shows that tile (2026-08-27: the url-link target
 // path checked existence only).
 func StillDescended(p *Pane, tileID string) bool {
-	return p != nil && p.TextFocus == tileID
+	return p != nil && p.ContentID() == tileID
 }
 
 // RelocateTo moves pane p to where dest stands — anchor, path, viewport —
@@ -448,12 +351,14 @@ func StillDescended(p *Pane, tileID string) bool {
 // becomes a persistent tile there; the visiting pane follows its content,
 // so the nav chain and the next ascent both read the new place.
 func (p *Pane) RelocateTo(dest *Pane, tileID string) {
-	p.Anchor = dest.Anchor
-	p.Path = append([]string(nil), dest.Path...)
-	p.Cx, p.Cy, p.Zoom = dest.Cx, dest.Cy, dest.Zoom
-	p.TextFocus = tileID
-	p.TextMode = ""
-	p.TextScrollX, p.TextScrollY = 0, 0
+	p.Stack = dest.Stack.Clone()
+	if p.Content {
+		// The destination is itself in a content descent: the promoted tile
+		// replaces it rather than stacking on it (the pane follows its
+		// content to where the tile now lives, one level deep).
+		p.Pop()
+	}
+	p.Push(Frame{Door: tileID, Content: true})
 }
 
 // OtherPaneShows reports whether any leaf OTHER than paneID is descended
@@ -464,7 +369,7 @@ func (p *Pane) RelocateTo(dest *Pane, tileID string) {
 func (t *Tree) OtherPaneShows(paneID, tileID string) bool {
 	found := false
 	t.Walk(func(p *Pane) {
-		if p.ID != paneID && p.TextFocus == tileID {
+		if p.ID != paneID && p.ContentID() == tileID {
 			found = true
 		}
 	})

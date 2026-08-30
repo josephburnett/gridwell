@@ -94,7 +94,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   segs = await chainSegs(window);
   expect(segs.map((s: any) => s.tileID || 'root')).toEqual(['root', W1.id, W2.id, MD.id]);
   expect(segs[3].text, 'the leaf crumb is a text descent').toBe(true);
-  expect((await gw.focused()).ascentDepth, 'three saved viewports on the stack').toBe(3);
+  expect((await gw.focused()).placeDepth, 'three doorways deep').toBe(3);
 
   // ONE click on the root crumb: out of the text descent, out of W2
   // (instant), out of W1 (the animated final hop) — landing at the root
@@ -107,7 +107,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   expect(landed.zoom, 'the root viewport zoom survives the jump').toBeCloseTo(before.zoom, 5);
   expect(landed.cx).toBeCloseTo(before.cx, 5);
   expect(landed.cy).toBeCloseTo(before.cy, 5);
-  expect(landed.ascentDepth, 'every saved viewport consumed — none orphaned').toBe(0);
+  expect(landed.placeDepth, 'every frame popped — none orphaned').toBe(0);
   expect((await chainSegs(window)).length).toBe(1);
 
   // EMPTY bar space owns no gesture anymore (issue #222, reversing #215):

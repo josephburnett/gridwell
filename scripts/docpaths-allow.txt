@@ -11,6 +11,10 @@ docs/plugin.md internal/store
 docs/plugin.md internal/plugin/guest
 docs/plugin.md internal/cli/sshmigrate.go
 docs/plugin.md plugins/griddb
+# The 2026-08-29 review names the five place representations as they stood
+# before S8 folded them into client/pane:
+docs/architecture-review.md client/url
+docs/architecture-review.md client/workspace
 # A proposed package that does not exist yet (offline options, 2026-08-14):
 docs/offline.md client/oplog
 # A gitignored runtime cache dir that `make vendor` creates:

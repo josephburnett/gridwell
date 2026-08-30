@@ -198,7 +198,7 @@ func (a *App) ensureFileTextarea() {
 		// in a stale-binding window, tile A's scroll offset landed on tile
 		// B's pane and persisted as B's text_y.
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == "" || p.TextFocus != a.lastTextareaTileID {
+		if p == nil || p.ContentID() == "" || p.ContentID() != a.lastTextareaTileID {
 			return nil
 		}
 		p.TextScrollY = a.textTextarea.Get("scrollTop").Float()
@@ -253,13 +253,13 @@ func (a *App) ensureFileTextarea() {
 			return nil
 		}
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == "" {
+		if p == nil || p.ContentID() == "" {
 			return nil
 		}
 		r := paneRectFor(a, p)
 		if !pointInFileInner(r, sx, sy) {
 			ev.Call("preventDefault")
-			a.startTextAscent(p)
+			a.ascend(p, 1, true)
 		}
 		return nil
 	})
@@ -351,7 +351,7 @@ func (a *App) ensureFileToggle() {
 		ev.Call("preventDefault")
 		ev.Call("stopPropagation")
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == "" {
+		if p == nil || p.ContentID() == "" {
 			return nil
 		}
 		// LEFT-click toggles rendered/raw; right-click does nothing — the
@@ -387,7 +387,7 @@ func (a *App) refreshFileToggle() {
 	hide := func() { style.Set("display", "none") }
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" || a.isURLDescent(p) {
+	if p == nil || p.ContentID() == "" || a.isURLDescent(p) {
 		hide()
 		return
 	}
@@ -397,7 +397,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	file, ok := g.Tiles[p.TextFocus]
+	file, ok := g.Tiles[p.ContentID()]
 	if !ok || file.Kind != rpc.KindText {
 		hide()
 		return
@@ -441,7 +441,7 @@ func (a *App) refreshFileOverlay() {
 	ta := a.textTextarea
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
+	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
 		ta.Get("style").Set("display", "none")
 		// Move focus back to the canvas so ascent and other gestures
 		// continue to work.
@@ -453,7 +453,7 @@ func (a *App) refreshFileOverlay() {
 	// and can outlive the source-key being set, so this is the only
 	// place we can enforce the invariant client-side.)
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) {
+		if file, ok := g.Tiles[p.ContentID()]; ok && a.tileReadOnly(&file) {
 			ta.Get("style").Set("display", "none")
 			a.focusCanvas()
 			return
@@ -483,13 +483,13 @@ func (a *App) refreshFileOverlay() {
 	gid := a.gridIDForPane(p)
 	_, pendingEdit := a.c.DirtyContent(a.contentKey(a.lastTextareaTileID))
 	in := textedit.TextareaSyncInput{
-		FocusedTileID: p.TextFocus,
+		FocusedTileID: p.ContentID(),
 		LastTileID:    a.lastTextareaTileID,
 		CurrentValue:  ta.Get("value").String(),
 		PendingEdit:   pendingEdit,
 	}
 	if g, ok := a.c.Grid(gid); ok {
-		if file, ok := g.Tiles[p.TextFocus]; ok {
+		if file, ok := g.Tiles[p.ContentID()]; ok {
 			if body, ok := a.tileBody(&file); ok {
 				in.BlobCached = true
 				in.BlobContent = string(body)
@@ -545,7 +545,7 @@ func (a *App) syncTextOverlayPosition() {
 		return
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
+	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
 		a.textTextarea.Get("style").Set("display", "none")
 		return
 	}
@@ -583,21 +583,21 @@ const textSideInset = 6.0
 // rendered→text just shows the textarea (the buffer is the cached blob
 // from the last save).
 func (a *App) onToggleFileMode(p *pane.Pane) {
-	if p.TextFocus == "" {
+	if p.ContentID() == "" {
 		return
 	}
 	// A read-only NON-renderable tile has no mode to flip to; a renderable
 	// host file flips rendered/raw source (issue #236) — the textarea
 	// guard in refreshFileOverlay keeps raw mode caret-free either way.
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if file, ok := g.Tiles[p.TextFocus]; ok && !textToggleVisible(&file, a.tileReadOnly(&file)) {
+		if file, ok := g.Tiles[p.ContentID()]; ok && !textToggleVisible(&file, a.tileReadOnly(&file)) {
 			return
 		}
 	}
 	if p.TextMode == rpc.TextModeText {
 		// Flush any pending typing before switching to rendered — from the
 		// content store (the keystrokes already live there), never the DOM.
-		a.flushTileContent(p.TextFocus)
+		a.flushTileContent(p.ContentID())
 		p.TextMode = rpc.TextModeRendered
 	} else {
 		p.TextMode = rpc.TextModeText

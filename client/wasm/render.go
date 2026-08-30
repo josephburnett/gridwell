@@ -538,14 +538,14 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// inner box is just a plain ascent zone. (URL content fills the pane
 	// and covers this anyway.) The node grid (the landing page) is a real
 	// grid and renders like one.
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
 		a.drawGridLines(colorGridLineInterior, pscreen, r)
 	}
 
-	if !gridOK && gid != "" && p.TextFocus == "" {
+	if !gridOK && gid != "" && p.ContentID() == "" {
 		// The grid is not cached yet — a fetch is in flight, or a plugin is
 		// still building its first listing (a gitlab walk can take a
 		// while) — or its last fetch failed. Say which instead of showing
@@ -561,7 +561,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// pattern is visible). Inner-box bounds match the textarea
 		// exactly so the user's "outside textarea = grid rules"
 		// mental model is consistent.
-		if p.TextFocus != "" {
+		if p.ContentID() != "" {
 			// descendedTile (not g.Tiles[...]) so an ephemeral url visit — focused
 			// off the pane's grid, in the scratch grid — still renders.
 			if file, ok := a.descendedTile(p); ok {
@@ -1276,12 +1276,12 @@ func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focus
 // the band can never disagree about what the pane is showing.
 func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) pane.BorderInput {
 	in := pane.BorderInput{
-		HasTextFocus: p.TextFocus != "",
-		DescentDepth: len(p.Path),
+		HasTextFocus: p.ContentID() != "",
+		DescentDepth: len(p.Path()),
 		Focused:      focused,
 		URLLive:      urlLive,
 	}
-	if p.TextFocus != "" {
+	if p.ContentID() != "" {
 		// descendedTile (not g.Tiles) so an EPHEMERAL descent — focused off
 		// the pane's grid, in the scratch grid — resolves too; its border
 		// goes gray because ascent deletes it (issue #85).

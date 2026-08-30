@@ -26,7 +26,7 @@ test('touch: tap opens the + menu and descends into a plugin', async ({ gw, wind
   await gw.waitIdle();
   const f = await gw.focused();
   expect(f.gridID, 'tap descended to the plugin root').toBe(before.gridID);
-  expect(f.frameDepth, 'the tap ran the portal descent (frame pushed)').toBe(1);
+  expect(f.placeDepth, 'the tap ran the descent (one frame pushed)').toBe(1);
 });
 
 test('touch: pinch zooms the focused grid at the pinch midpoint', async ({ gw, window }) => {

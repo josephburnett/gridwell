@@ -23,17 +23,18 @@ func nodesEqual(a, b TreeNode) bool {
 	}
 	if a.IsLeaf() {
 		pa, pb := a.Pane, b.Pane
-		if len(pa.Path) != len(pb.Path) {
+		ja, jb := pa.Path(), pb.Path()
+		if len(ja) != len(jb) {
 			return false
 		}
-		for i := range pa.Path {
-			if pa.Path[i] != pb.Path[i] {
+		for i := range ja {
+			if ja[i] != jb[i] {
 				return false
 			}
 		}
-		return pa.ID == pb.ID && pa.Anchor == pb.Anchor &&
+		return pa.ID == pb.ID && pa.Anchor() == pb.Anchor() &&
 			pa.Cx == pb.Cx && pa.Cy == pb.Cy && pa.Zoom == pb.Zoom &&
-			pa.TextFocus == pb.TextFocus && pa.TextMode == pb.TextMode &&
+			pa.ContentID() == pb.ContentID() && pa.TextMode == pb.TextMode &&
 			pa.TextScrollX == pb.TextScrollX && pa.TextScrollY == pb.TextScrollY &&
 			pa.TextZoom == pb.TextZoom
 	}
@@ -59,9 +60,8 @@ func TestLayoutGoldenV1(t *testing.T) {
 	want := &Tree{
 		Root: TreeNode{Split: &Split{
 			Dir: Vertical, Ratio: 0.25,
-			A: TreeNode{Pane: &Pane{ID: "p1", Anchor: "aaaa/1", Path: []string{"aaaa/7", "aaaa/9"}, Cx: 3.5, Cy: -2, Zoom: 1.5}},
-			B: TreeNode{Pane: &Pane{ID: "p3", Anchor: "bbbb/1", Cx: 1, Cy: 2, Zoom: 1,
-				TextFocus: "bbbb/12", TextMode: "rendered", TextScrollX: 10, TextScrollY: 80, TextZoom: 1.25}},
+			A: TreeNode{Pane: goldenLeaf("p1", "aaaa/1", []string{"aaaa/7", "aaaa/9"}, "", 3.5, -2, 1.5)},
+			B: TreeNode{Pane: goldenTextLeaf("p3", "bbbb/1", "bbbb/12")},
 		}},
 		Focus:  "p3",
 		Zoomed: "p3",
@@ -99,14 +99,19 @@ func randomTree(r *rand.Rand) *Tree {
 	i := 0
 	t.Walk(func(p *Pane) {
 		i++
-		p.Anchor = fmt.Sprintf("uuid-%d/1", i%3)
+		var path []string
 		for range r.Intn(3) {
-			p.Path = append(p.Path, fmt.Sprintf("uuid-%d/%d", i%3, r.Intn(90)+2))
+			path = append(path, fmt.Sprintf("uuid-%d/%d", i%3, r.Intn(90)+2))
 		}
+		content := ""
+		text := r.Intn(3) == 0
+		if text {
+			content = fmt.Sprintf("uuid-%d/%d", i%3, r.Intn(90)+2)
+		}
+		p.Stack = StackAt(fmt.Sprintf("uuid-%d/1", i%3), path, content)
 		p.Cx, p.Cy = float64(r.Intn(41)-20), float64(r.Intn(41)-20)
 		p.Zoom = 0.25 * float64(r.Intn(8)+1)
-		if r.Intn(3) == 0 {
-			p.TextFocus = fmt.Sprintf("uuid-%d/%d", i%3, r.Intn(90)+2)
+		if text {
 			p.TextMode = []string{"text", "rendered"}[r.Intn(2)]
 			p.TextScrollX, p.TextScrollY = float64(r.Intn(200)), float64(r.Intn(200))
 			p.TextZoom = 1 + r.Float64()
@@ -181,9 +186,8 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 
 	tr := NewTree()
 	p := tr.FocusedPane()
-	p.Anchor = prefix + "plugin-uuid/1"
-	p.Path = []string{prefix + "plugin-uuid/4", prefix + "plugin-uuid/9"}
-	p.TextFocus = prefix + "plugin-uuid/12"
+	p.Stack = StackAt(prefix+"plugin-uuid/1",
+		[]string{prefix + "plugin-uuid/4", prefix + "plugin-uuid/9"}, prefix+"plugin-uuid/12")
 	p.Zoom = 2
 
 	data, skipped, err := EncodeLayout(tr, rel)
@@ -200,7 +204,7 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	gp := got.FocusedPane()
-	if gp.Anchor != p.Anchor || gp.Path[0] != p.Path[0] || gp.Path[1] != p.Path[1] || gp.TextFocus != p.TextFocus {
+	if gp.Anchor() != p.Anchor() || gp.Path()[0] != p.Path()[0] || gp.Path()[1] != p.Path()[1] || gp.ContentID() != p.ContentID() {
 		t.Fatalf("prefix round trip mismatch: %+v", gp)
 	}
 
@@ -209,8 +213,8 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode via other chain: %v", err)
 	}
-	if op := other.FocusedPane(); op.Anchor != "tunnel-z/plugin-uuid/1" {
-		t.Fatalf("other-chain anchor: %q", op.Anchor)
+	if op := other.FocusedPane(); op.Anchor() != "tunnel-z/plugin-uuid/1" {
+		t.Fatalf("other-chain anchor: %q", op.Anchor())
 	}
 }
 
@@ -226,14 +230,14 @@ func TestLayoutLeafOutsidePrefix(t *testing.T) {
 
 	tr := NewTree()
 	inside := tr.FocusedPane()
-	inside.Anchor = prefix + "plugin/1"
+	inside.Stack = StackAt(prefix+"plugin/1", nil, "")
 	inside.Cx, inside.Cy, inside.Zoom = 5, 6, 2
 	outside, err := tr.Split(Vertical)
 	if err != nil {
 		t.Fatal(err)
 	}
-	outside.Anchor = "local-plugin/1" // reachable by the reader, not by the owner
-	outside.Path = []string{"local-plugin/3"}
+	// reachable by the reader, not by the owner
+	outside.Stack = StackAt("local-plugin/1", []string{"local-plugin/3"}, "")
 	outside.Cx, outside.Zoom = 9, 3
 
 	data, skipped, err := EncodeLayout(tr, rel)
@@ -248,10 +252,10 @@ func TestLayoutLeafOutsidePrefix(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	gi, go_ := got.FindPane(inside.ID), got.FindPane(outside.ID)
-	if gi.Anchor != inside.Anchor || gi.Cx != 5 {
+	if gi.Anchor() != inside.Anchor() || gi.Cx != 5 {
 		t.Fatalf("inside leaf damaged: %+v", gi)
 	}
-	if go_.Anchor != "" || len(go_.Path) != 0 || go_.Zoom != 1 {
+	if go_.Anchor() != "" || len(go_.Path()) != 0 || go_.Zoom != 1 {
 		t.Fatalf("outside leaf should be home: %+v", go_)
 	}
 }
@@ -308,28 +312,28 @@ func TestLayoutLooseViewState(t *testing.T) {
 	}
 }
 
-// TestLayoutDropsUpFrames: the portal ascent stack is session-only by design
-// (issue #13); it must never reach the blob.
-func TestLayoutDropsUpFrames(t *testing.T) {
+// TestLayoutDropsOuterFrames: the frames a pane would ascend THROUGH are
+// session-only by design (issue #13); only the place it is AT reaches the
+// blob, and a restored pane starts at depth 1 (plus its own path).
+func TestLayoutDropsOuterFrames(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
-	p.Anchor = "plugin/1"
-	p.PushFrame(true)
-	p.Anchor = "other/1"
+	p.Stack = StackAt("plugin/1", []string{"plugin/4"}, "")
+	p.Push(Frame{GridID: "other/1", Door: "plugin/9", Zoom: 1})
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bytes.Contains(data, []byte(`"up"`)) || bytes.Contains(data, []byte("plugin/1")) {
-		t.Fatalf("Up frames leaked into the blob: %s", data)
+		t.Fatalf("outer frames leaked into the blob: %s", data)
 	}
 	got, err := DecodeLayout(data, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.FocusedPane().Up) != 0 {
-		t.Fatal("decoded pane has Up frames")
+	if gp := got.FocusedPane(); gp.Depth() != 1 || gp.Anchor() != "other/1" {
+		t.Fatalf("decoded pane place = %+v (depth %d)", gp.Crumbs(), gp.Depth())
 	}
 }
 
@@ -358,7 +362,7 @@ func TestLeafTextFocusIDs(t *testing.T) {
 func TestLayoutIDPrefixRoundTrip(t *testing.T) {
 	src := NewTree()
 	p1 := src.FocusedPane()
-	p1.Anchor = "aabb/1"
+	p1.Stack = StackAt("aabb/1", nil, "")
 	if _, err := src.Split(Vertical); err != nil {
 		t.Fatal(err)
 	}
@@ -406,4 +410,20 @@ func TestLayoutIDPrefixRoundTrip(t *testing.T) {
 			t.Errorf("bare re-decode kept a namespace: %q", p.ID)
 		}
 	})
+}
+
+// goldenLeaf / goldenTextLeaf build the expected decode of the golden blob:
+// a place is constructed through StackAt, the one decoder, never by poking
+// fields.
+func goldenLeaf(id, anchor string, path []string, content string, cx, cy, zoom float64) *Pane {
+	p := &Pane{ID: id, Stack: StackAt(anchor, path, content)}
+	p.Cx, p.Cy, p.Zoom = cx, cy, zoom
+	return p
+}
+
+func goldenTextLeaf(id, anchor, content string) *Pane {
+	p := goldenLeaf(id, anchor, nil, content, 1, 2, 1)
+	p.TextMode = "rendered"
+	p.TextScrollX, p.TextScrollY, p.TextZoom = 10, 80, 1.25
+	return p
 }

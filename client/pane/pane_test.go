@@ -52,7 +52,7 @@ func TestNewTreeHasOneFocusedPane(t *testing.T) {
 func TestSplitHorizontalCreatesSibling(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
-	first.Path = []string{"1", "2", "3"}
+	first.Stack = StackAt("u/1", []string{"1", "2", "3"}, "")
 	first.Cx, first.Cy, first.Zoom = 10, 20, 2.0
 
 	newP, err := tr.Split(Horizontal)
@@ -69,13 +69,13 @@ func TestSplitHorizontalCreatesSibling(t *testing.T) {
 	if newP.Cx != 10 || newP.Cy != 20 || newP.Zoom != 2.0 {
 		t.Errorf("new pane state not cloned: %+v", newP)
 	}
-	if len(newP.Path) != 3 {
-		t.Errorf("path not cloned: %+v", newP.Path)
+	if len(newP.Path()) != 3 {
+		t.Errorf("path not cloned: %+v", newP.Path())
 	}
 	// Mutating the original should not affect the clone (deep copy).
-	first.Path[0] = "99"
-	if newP.Path[0] == "99" {
-		t.Error("path was shallow-copied")
+	first.Pop()
+	if len(newP.Path()) != 3 {
+		t.Error("place was shallow-copied")
 	}
 }
 
@@ -88,113 +88,107 @@ func TestSetFocusUnknown(t *testing.T) {
 }
 
 func TestCloneCarriesTextFields(t *testing.T) {
-	src := &Pane{
-		ID:   "p1",
-		Path: []string{"1", "2"},
-		Cx:   3, Cy: 4, Zoom: 5,
-		TextFocus:   "42",
-		TextMode:    "text",
-		TextScrollX: 1.5,
-		TextScrollY: 7.25,
-		TextZoom:    1.1,
-	}
+	src := &Pane{ID: "p1", Stack: StackAt("u/1", []string{"1", "2"}, "42")}
+	src.Cx, src.Cy, src.Zoom = 3, 4, 5
+	src.TextMode = "text"
+	src.TextScrollX, src.TextScrollY, src.TextZoom = 1.5, 7.25, 1.1
 	dst := src.Clone("p2")
-	if dst.TextFocus != "42" || dst.TextMode != "text" {
-		t.Errorf("text focus/mode not cloned: %+v", dst)
+	if dst.ContentID() != "42" || dst.TextMode != "text" {
+		t.Errorf("content focus/mode not cloned: %+v", dst)
 	}
 	if dst.TextScrollX != 1.5 || dst.TextScrollY != 7.25 || dst.TextZoom != 1.1 {
 		t.Errorf("text scroll/zoom not cloned: %+v", dst)
 	}
 	// And changing the source post-clone shouldn't bleed through.
-	src.TextFocus = "99"
-	if dst.TextFocus == "99" {
-		t.Error("clone shares TextFocus with source")
+	src.Pop()
+	if dst.ContentID() != "42" {
+		t.Error("clone shares its place with the source")
 	}
 }
 
-// TestPortalStackRoundTrip: entering a plugin pushes the current level onto
-// the Up stack; ascending pops it back, restoring the exact level — anchor,
-// path, viewport, and text focus. STACK semantics: ascend returns where you
-// were.
-func TestPortalStackRoundTrip(t *testing.T) {
-	p := &Pane{
-		ID:     "p1",
-		Anchor: "db-uuid/1",
-		Path:   []string{"3", "4"},
-		Cx:     5, Cy: 6, Zoom: 1.5,
-		TextFocus: "9", TextMode: "text", TextScrollY: 2.0, TextZoom: 1.2,
-	}
-	p.PushFrame(true) // menu was open when we entered
-	if f, ok := p.TopFrame(); !ok || !f.MenuOpen {
-		t.Errorf("TopFrame MenuOpen = %v, want true", f.MenuOpen)
-	}
-	// Jump into another plugin at its root.
-	p.Anchor = "fs-uuid/1"
-	p.Path = nil
-	p.Cx, p.Cy, p.Zoom = 0, 0, 1
-	p.TextFocus = ""
+// TestPortalRoundTrip: crossing into another namespace pushes a frame;
+// ascending pops it back, restoring the exact level — grid, path, viewport,
+// content descent and the + menu. STACK semantics: ascend returns where you
+// were, and there is only ONE stack to return through.
+func TestPortalRoundTrip(t *testing.T) {
+	p := &Pane{ID: "p1", Stack: StackAt("db-uuid/1", []string{"3", "4"}, "9")}
+	p.Cx, p.Cy, p.Zoom = 5, 6, 1.5
+	p.TextMode, p.TextScrollY, p.TextZoom = "text", 2.0, 1.2
+	p.MenuOpen = true
 
-	if !p.PopFrame() {
-		t.Fatal("PopFrame returned false with a frame on the stack")
+	// Jump into another plugin at its root.
+	p.Push(Frame{GridID: "fs-uuid/1", Door: "lnk", Zoom: 1})
+	if p.Anchor() != "fs-uuid/1" || len(p.Path()) != 0 || p.ContentID() != "" {
+		t.Fatalf("after portal: anchor=%q path=%v content=%q", p.Anchor(), p.Path(), p.ContentID())
 	}
-	if p.Anchor != "db-uuid/1" {
-		t.Errorf("anchor = %q, want db-uuid/1", p.Anchor)
+
+	if !p.Pop() {
+		t.Fatal("Pop returned false with a frame on the stack")
 	}
-	if len(p.Path) != 2 || p.Path[0] != "3" || p.Path[1] != "4" {
-		t.Errorf("path = %v, want [3 4]", p.Path)
+	if p.Anchor() != "db-uuid/1" {
+		t.Errorf("anchor = %q, want db-uuid/1", p.Anchor())
+	}
+	if got := p.Path(); len(got) != 2 || got[0] != "3" || got[1] != "4" {
+		t.Errorf("path = %v, want [3 4]", got)
 	}
 	if p.Cx != 5 || p.Cy != 6 || p.Zoom != 1.5 {
 		t.Errorf("viewport = (%v,%v,%v), want (5,6,1.5)", p.Cx, p.Cy, p.Zoom)
 	}
-	if p.TextFocus != "9" || p.TextMode != "text" {
-		t.Errorf("text focus/mode not restored: %+v", p)
+	if p.ContentID() != "9" || p.TextMode != "text" {
+		t.Errorf("content descent not restored: %+v", p.Frame)
 	}
-	// Stack is now empty: nothing left to ascend to.
-	if p.PopFrame() {
-		t.Error("PopFrame returned true on an empty stack")
+	if !p.MenuOpen {
+		t.Error("menu state not restored with the frame")
 	}
-}
-
-// TestDropFrameRemovesWithoutApplying: an animated portal ascent drops the
-// frame (so it can't be ascended to twice) but leaves the pane's live state
-// alone — the transition, not the pop, drives the pane back to that viewport.
-func TestDropFrameRemovesWithoutApplying(t *testing.T) {
-	p := &Pane{ID: "p1", Anchor: "fs-uuid/1", Cx: 9, Cy: 9, Zoom: 2}
-	p.Up = []Frame{{Anchor: "", Cx: 1, Cy: 2, Zoom: 1}}
-
-	if !p.DropFrame() {
-		t.Fatal("DropFrame returned false with a frame on the stack")
+	// Three more pops empty the stack: the content frame, the two wells.
+	for i := 0; i < 3; i++ {
+		if !p.Pop() {
+			t.Fatalf("pop %d returned false", i)
+		}
 	}
-	if len(p.Up) != 0 {
-		t.Errorf("Up len = %d, want 0", len(p.Up))
+	if p.Pop() {
+		t.Error("Pop returned true at the bottom of the stack")
 	}
-	// Live state is untouched — unlike PopFrame, DropFrame does not restore.
-	if p.Anchor != "fs-uuid/1" || p.Cx != 9 || p.Cy != 9 || p.Zoom != 2 {
-		t.Errorf("DropFrame mutated live state: %+v", p)
-	}
-	if p.DropFrame() {
-		t.Error("DropFrame returned true on an empty stack")
+	if p.Anchor() != "db-uuid/1" || p.Depth() != 1 {
+		t.Errorf("bottom frame = %+v", p.Frame)
 	}
 }
 
-// TestCloneDeepCopiesUpStack: a clone must not share the Up stack (or its
-// frame paths) with the source, else editing one pane's nav history mutates
-// the other's.
-func TestCloneDeepCopiesUpStack(t *testing.T) {
-	src := &Pane{ID: "p1", Anchor: "fs-uuid/1"}
-	src.Up = []Frame{{Anchor: "db-uuid/1", Path: []string{"3", "4"}}}
+// TestPoppedDoesNotTouchTheLiveStack: an animated ascent computes the place
+// it is heading for without moving the pane — the transition drives the
+// landing, then installs it.
+func TestPoppedDoesNotTouchTheLiveStack(t *testing.T) {
+	p := &Pane{ID: "p1", Stack: StackAt("fs-uuid/1", []string{"3", "4"}, "")}
+	p.Cx, p.Cy, p.Zoom = 9, 9, 2
+	after := p.Popped(2)
+	if after.Depth() != 1 || after.Anchor() != "fs-uuid/1" || len(after.Path()) != 0 {
+		t.Errorf("Popped(2) = %+v", after)
+	}
+	if p.Depth() != 3 || p.Cx != 9 || p.Zoom != 2 {
+		t.Errorf("Popped mutated the live stack: %+v", p.Frame)
+	}
+	// Clamped at the bottom, never below it.
+	if got := p.Popped(99); got.Depth() != 1 {
+		t.Errorf("Popped(99) depth = %d, want 1", got.Depth())
+	}
+}
+
+// TestCloneDeepCopiesTheStack: a clone must not share its frames with the
+// source, else editing one pane's nav history mutates the other's.
+func TestCloneDeepCopiesTheStack(t *testing.T) {
+	src := &Pane{ID: "p1", Stack: StackAt("db-uuid/1", []string{"3", "4"}, "")}
 	dst := src.Clone("p2")
-	// Mutate the source frame's path in place.
-	src.Up[0].Path[0] = "99"
-	if dst.Up[0].Path[0] != "3" {
-		t.Error("clone shares Up frame path slice with source")
+	src.Pop()
+	src.Pop()
+	if dst.Depth() != 3 {
+		t.Errorf("clone shares its frames with the source: depth %d", dst.Depth())
 	}
 }
 
 func TestSplitInheritsTextFields(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
-	first.TextFocus = "77"
+	first.Push(Frame{Door: "77", Content: true, Zoom: 1})
 	first.TextMode = "rendered"
 	first.TextScrollY = 12.5
 	first.TextZoom = 0.85
@@ -203,7 +197,7 @@ func TestSplitInheritsTextFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if newP.TextFocus != "77" || newP.TextMode != "rendered" {
+	if newP.ContentID() != "77" || newP.TextMode != "rendered" {
 		t.Errorf("text fields not inherited: %+v", newP)
 	}
 	if newP.TextScrollY != 12.5 || newP.TextZoom != 0.85 {
@@ -403,7 +397,7 @@ func TestPropertyAtLeastOnePane(t *testing.T) {
 }
 
 func TestStillDescended(t *testing.T) {
-	p := &Pane{ID: "p", TextFocus: "u1/7"}
+	p := &Pane{ID: "p", Stack: StackAt("u1/0", nil, "u1/7")}
 	if !StillDescended(p, "u1/7") {
 		t.Fatal("descended pane must still count")
 	}
@@ -413,32 +407,39 @@ func TestStillDescended(t *testing.T) {
 }
 
 func TestRelocateToFollowsTheDestination(t *testing.T) {
-	p := &Pane{ID: "a", Anchor: "u1/0", Path: []string{"u1/3"}, Cx: 1, Cy: 2, Zoom: 0.5, TextFocus: "u1/9", TextMode: "text", TextScrollY: 40}
-	dest := &Pane{ID: "b", Anchor: "u2/0", Path: []string{"u2/7", "u2/8"}, Cx: 10, Cy: 20, Zoom: 2}
+	p := &Pane{ID: "a", Stack: StackAt("u1/0", []string{"u1/3"}, "u1/9")}
+	p.TextMode, p.TextScrollY = "text", 40
+	dest := &Pane{ID: "b", Stack: StackAt("u2/0", []string{"u2/7", "u2/8"}, "")}
+	dest.Cx, dest.Cy, dest.Zoom = 10, 20, 2
 	p.RelocateTo(dest, "u2/44")
-	if p.Anchor != "u2/0" || len(p.Path) != 2 || p.Path[1] != "u2/8" || p.Cx != 10 || p.Cy != 20 || p.Zoom != 2 {
-		t.Fatalf("location not taken: %+v", p)
+	if p.Anchor() != "u2/0" || len(p.Path()) != 2 || p.Path()[1] != "u2/8" {
+		t.Fatalf("location not taken: %+v", p.Crumbs())
 	}
-	if p.TextFocus != "u2/44" || p.TextMode != "" || p.TextScrollY != 0 {
-		t.Fatalf("descent not reset onto the new tile: %+v", p)
+	if p.ContentID() != "u2/44" || p.TextMode != "" || p.TextScrollY != 0 {
+		t.Fatalf("descent not reset onto the new tile: %+v", p.Frame)
 	}
-	dest.Path[1] = "changed"
-	if p.Path[1] == "changed" {
-		t.Fatal("path must be a copy, not shared with the destination pane")
+	// The pane ascends into the destination's viewport, not the origin's.
+	if !p.Pop() || p.Cx != 10 || p.Cy != 20 || p.Zoom != 2 {
+		t.Fatalf("ascent does not land where the destination stood: %+v", p.Frame)
+	}
+	dest.Pop()
+	if len(p.Path()) != 2 {
+		t.Fatal("place must be a copy, not shared with the destination pane")
 	}
 }
 
 func TestOtherPaneShows(t *testing.T) {
 	tr, a, b := twoPaneTree(t)
-	tr.FindPane(a).TextFocus = "tile-1"
+	tr.FindPane(a).Push(Frame{Door: "tile-1", Content: true})
 	if tr.OtherPaneShows(a, "tile-1") {
 		t.Fatal("the pane's own descent is not another pane's")
 	}
-	tr.FindPane(b).TextFocus = "tile-1" // a split clones the descent
+	tr.FindPane(b).Push(Frame{Door: "tile-1", Content: true}) // a split clones the descent
 	if !tr.OtherPaneShows(a, "tile-1") || !tr.OtherPaneShows(b, "tile-1") {
 		t.Fatal("each pane must see the other's clone of the same visit")
 	}
-	tr.FindPane(b).TextFocus = "tile-2"
+	tr.FindPane(b).Pop()
+	tr.FindPane(b).Push(Frame{Door: "tile-2", Content: true})
 	if tr.OtherPaneShows(a, "tile-1") {
 		t.Fatal("a sibling on a different tile does not hold tile-1")
 	}

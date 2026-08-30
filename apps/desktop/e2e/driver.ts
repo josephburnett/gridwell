@@ -31,8 +31,7 @@ export interface PaneInfo {
   zoom: number;
   // Depth of the portal Up stack / the saved-ascent stack — the wasm hook
   // emits both and specs assert on them.
-  frameDepth: number;
-  ascentDepth: number;
+  placeDepth: number;
   // The ids of the tiles this pane renders (its cache contents). A tile present
   // on the server (the getGrid oracle) but missing here is the "disappeared" bug.
   tileIds: string[];
