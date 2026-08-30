@@ -53,9 +53,9 @@ CREATE TABLE IF NOT EXISTS system (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- Keys: root_grid_id. (root_view_cx/root_view_cy/root_zoom retired at
--- schema v11: home's root framing lives on its root GRID row, ns = '',
--- in the same three columns every other root uses.)
+-- Keys: root_grid_id. Home's root framing is not here: it lives on its
+-- root grid row, ns = '', in the same three columns every other root
+-- uses.
 `
 
 // tablesDDL returns the grids, tiles, and blobs DDL for the main database:
