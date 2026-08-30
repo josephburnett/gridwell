@@ -1399,8 +1399,8 @@ func (x *ContentChunk) GetVersion() int64 {
 // COMMIT AT CLOSE: the write is transactional — the new value becomes visible
 // only when the stream closes cleanly, and a broken stream leaves the old
 // value byte-for-byte intact. Version semantics are kind-determined in the
-// store's one table: a text body is a content edit (bumps version); a pane
-// layout is framing-class (never bumps). Not accepted on link tiles: content
+// store's one table: a text body is a content edit (claims + bumps); a pane
+// layout is framing-class (no claim, never bumps). Not accepted on link tiles: content
 // ops write through the target the caller names explicitly.
 type WriteContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1598,14 +1598,17 @@ func (x *ServeContentChunk) GetData() []byte {
 // crosses a plugin boundary (there is no cross-plugin move — link or clone
 // instead).
 type PlaceTileRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	GridId        string                 `protobuf:"bytes,3,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	X             int64                  `protobuf:"varint,4,opt,name=x,proto3" json:"x,omitempty"`
-	Y             int64                  `protobuf:"varint,5,opt,name=y,proto3" json:"y,omitempty"`
-	W             int64                  `protobuf:"varint,6,opt,name=w,proto3" json:"w,omitempty"`
-	H             int64                  `protobuf:"varint,7,opt,name=h,proto3" json:"h,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TileId string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	// placement is LAYOUT, not content. version claims the user's
+	// content bytes and nothing else, so a drag no longer loses to
+	// a title capture that bumped the row. Overlap is still refused
+	// server-side, in the same transaction.
+	GridId        string `protobuf:"bytes,3,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	X             int64  `protobuf:"varint,4,opt,name=x,proto3" json:"x,omitempty"`
+	Y             int64  `protobuf:"varint,5,opt,name=y,proto3" json:"y,omitempty"`
+	W             int64  `protobuf:"varint,6,opt,name=w,proto3" json:"w,omitempty"`
+	H             int64  `protobuf:"varint,7,opt,name=h,proto3" json:"h,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1645,13 +1648,6 @@ func (x *PlaceTileRequest) GetTileId() string {
 		return x.TileId
 	}
 	return ""
-}
-
-func (x *PlaceTileRequest) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
 }
 
 func (x *PlaceTileRequest) GetGridId() string {
@@ -2553,8 +2549,8 @@ type CloneTileRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// subtree copy completes before the insert, so no cycle
 	// can form and no client-supplied location is needed)
-	TileId        string `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
-	Version       int64  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	TileId string `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	// clone leaves the SOURCE row untouched; layout carries no claim.
 	DestGridId    string `protobuf:"bytes,4,opt,name=dest_grid_id,json=destGridId,proto3" json:"dest_grid_id,omitempty"`
 	X             int64  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
@@ -2599,13 +2595,6 @@ func (x *CloneTileRequest) GetTileId() string {
 	return ""
 }
 
-func (x *CloneTileRequest) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
 func (x *CloneTileRequest) GetDestGridId() string {
 	if x != nil {
 		return x.DestGridId
@@ -2627,26 +2616,29 @@ func (x *CloneTileRequest) GetY() int64 {
 	return 0
 }
 
-// SetTileRequest is the single framing/preview writeback. It is dispatched on
-// tile.kind to the one operation that kind supports, and that mapping fixes the
-// version semantics (face #3 of the primary rule — framing is not a content
-// edit):
+// SetTileRequest is the single framing/capture writeback. It is dispatched on
+// tile.kind to the one operation that kind supports:
 //
 //	(well framing left for SetFraming — one verb for both rows that can
 //	 own it, doorway tile and root grid alike.)
-//	text  → text_x/text_y/text_w/text_h/text_mode (framing; never bumps version)
-//	url   → url_string, alt_text (page title), preview jpeg  (content; bumps)
-//	shell → preview jpeg                          (content; bumps version)
+//	text  → text_x/text_y/text_w/text_h/text_mode  (framing)
+//	url   → url_string, alt_text (page title), preview jpeg, url_history
+//	                                              (automatic capture)
+//	shell → preview jpeg                          (automatic capture)
 //
+// NOTHING this message can write is a user content edit, so no arm bumps the
+// version and no arm carries a claim (2026-08-29, docs/simplify-plan.md S5).
 // Empty preview/url_string/alt_text fields are skipped so a partial capture
-// never clobbers good state. path + version make a content write a proper
-// versioned, in-place edit.
+// never clobbers good state.
 type SetTileRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	TileId  string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
-	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	Tile    *Tile                  `protobuf:"bytes,4,opt,name=tile,proto3" json:"tile,omitempty"`       // the fields to write for tile.kind
-	Preview []byte                 `protobuf:"bytes,5,opt,name=preview,proto3" json:"preview,omitempty"` // jpeg to freeze (url/shell)
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TileId string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	// version is the RENAME ARM'S claim, and only that arm's: a rename is the
+	// user typing a name, the one user content edit this message carries. Every
+	// other arm leaves it zero and the server ignores it.
+	Version int64  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Tile    *Tile  `protobuf:"bytes,4,opt,name=tile,proto3" json:"tile,omitempty"`       // the fields to write for tile.kind
+	Preview []byte `protobuf:"bytes,5,opt,name=preview,proto3" json:"preview,omitempty"` // jpeg to freeze (url/shell)
 	// 2026-07-26 (interface-redesign-plan.md): the absorbed scalar writebacks.
 	// Exactly ONE operation per call — rename, content_zoom, url_frozen, or
 	// the kind-dispatched tile writeback above; a request setting more than
@@ -2663,12 +2655,12 @@ type SetTileRequest struct {
 	// (their name derives from the first line).
 	Rename string `protobuf:"bytes,6,opt,name=rename,proto3" json:"rename,omitempty"`
 	// content_zoom (formerly SetContentZoom): the per-tile content scale.
-	// Framing — never bumps version; refused for wells. optional so presence
-	// is explicit (0 is a meaningful "unset" stored value).
+	// Framing — no claim, never bumps version; refused for wells. optional so
+	// presence is explicit (0 is a meaningful "unset" stored value).
 	ContentZoom *float64 `protobuf:"fixed64,7,opt,name=content_zoom,json=contentZoom,proto3,oneof" json:"content_zoom,omitempty"`
 	// url_frozen: the user's standing freeze on a url tile (issue #237).
-	// Framing — never bumps version; refused for non-url tiles. optional so
-	// clearing (false) is distinct from absent.
+	// Framing — no claim, never bumps version; refused for non-url tiles.
+	// optional so clearing (false) is distinct from absent.
 	UrlFrozen     *bool `protobuf:"varint,8,opt,name=url_frozen,json=urlFrozen,proto3,oneof" json:"url_frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2756,7 +2748,6 @@ func (x *SetTileRequest) GetUrlFrozen() bool {
 type DeleteTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2796,13 +2787,6 @@ func (x *DeleteTileRequest) GetTileId() string {
 		return x.TileId
 	}
 	return ""
-}
-
-func (x *DeleteTileRequest) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
 }
 
 type DeleteTileResponse struct {
@@ -2851,17 +2835,16 @@ func (*DeleteTileResponse) Descriptor() ([]byte, []int) {
 // Exactly one target, and it is also what routes the call to the owning
 // plugin: tile_id names the DOORWAY tile a grid was entered through (a
 // well — interior, exit, or link; each doorway keeps its own framing),
-// root_grid_id a ROOT grid, which has no doorway to carry it. version is
-// the doorway tile's claim; a root carries none.
+// root_grid_id a ROOT grid, which has no doorway to carry it.
 //
-// Framing only — never bumps a content version. A plugin that keeps no
-// framing answers Unimplemented, which the node treats as "nothing to
-// store", not an error.
+// Framing only — no version claim and no version bump (2026-08-29,
+// docs/simplify-plan.md S5: version is the user's content claim, and framing
+// is last-writer-wins by design). A plugin that keeps no framing answers
+// Unimplemented, which the node treats as "nothing to store", not an error.
 type SetFramingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`               // qualified "<plugin-uuid>/<id>"; the doorway
 	RootGridId    string                 `protobuf:"bytes,2,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified "<plugin-uuid>/<id>"; a root grid
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`                          // the doorway tile's version claim
 	Cx            float64                `protobuf:"fixed64,4,opt,name=cx,proto3" json:"cx,omitempty"`
 	Cy            float64                `protobuf:"fixed64,5,opt,name=cy,proto3" json:"cy,omitempty"`
 	Zoom          float64                `protobuf:"fixed64,6,opt,name=zoom,proto3" json:"zoom,omitempty"`
@@ -2911,13 +2894,6 @@ func (x *SetFramingRequest) GetRootGridId() string {
 		return x.RootGridId
 	}
 	return ""
-}
-
-func (x *SetFramingRequest) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
 }
 
 func (x *SetFramingRequest) GetCx() float64 {
@@ -3468,15 +3444,14 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x06status\x18\x01 \x01(\x03R\x06status\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\x96\x01\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\x82\x01\n" +
 	"\x10PlaceTileRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x17\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x17\n" +
 	"\agrid_id\x18\x03 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x04 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x05 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x06 \x01(\x03R\x01w\x12\f\n" +
-	"\x01h\x18\a \x01(\x03R\x01h\")\n" +
+	"\x01h\x18\a \x01(\x03R\x01hJ\x04\b\x02\x10\x03\")\n" +
 	"\x0eGetTileRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"Q\n" +
 	"\rSearchRequest\x12\x14\n" +
@@ -3543,14 +3518,13 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x18ShellSessionAliveRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"1\n" +
 	"\x19ShellSessionAliveResponse\x12\x14\n" +
-	"\x05alive\x18\x01 \x01(\bR\x05alive\"\x8f\x01\n" +
+	"\x05alive\x18\x01 \x01(\bR\x05alive\"{\n" +
 	"\x10CloneTileRequest\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversion\x12 \n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12 \n" +
 	"\fdest_grid_id\x18\x04 \x01(\tR\n" +
 	"destGridId\x12\f\n" +
 	"\x01x\x18\x06 \x01(\x03R\x01x\x12\f\n" +
-	"\x01y\x18\a \x01(\x03R\x01yJ\x04\b\x01\x10\x02J\x04\b\x05\x10\x06\"\x94\x02\n" +
+	"\x01y\x18\a \x01(\x03R\x01yJ\x04\b\x01\x10\x02J\x04\b\x05\x10\x06J\x04\b\x03\x10\x04\"\x94\x02\n" +
 	"\x0eSetTileRequest\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12%\n" +
@@ -3562,19 +3536,17 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"url_frozen\x18\b \x01(\bH\x01R\turlFrozen\x88\x01\x01B\x0f\n" +
 	"\r_content_zoomB\r\n" +
 	"\v_url_frozenJ\x04\b\x01\x10\x02J\x04\b\t\x10\n" +
-	"\"L\n" +
+	"\"8\n" +
 	"\x11DeleteTileRequest\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversionJ\x04\b\x01\x10\x02\"\x14\n" +
-	"\x12DeleteTileResponse\"\x9c\x01\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileIdJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04\"\x14\n" +
+	"\x12DeleteTileResponse\"\x88\x01\n" +
 	"\x11SetFramingRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12 \n" +
 	"\froot_grid_id\x18\x02 \x01(\tR\n" +
-	"rootGridId\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x0e\n" +
+	"rootGridId\x12\x0e\n" +
 	"\x02cx\x18\x04 \x01(\x01R\x02cx\x12\x0e\n" +
 	"\x02cy\x18\x05 \x01(\x01R\x02cy\x12\x12\n" +
-	"\x04zoom\x18\x06 \x01(\x01R\x04zoom\";\n" +
+	"\x04zoom\x18\x06 \x01(\x01R\x04zoomJ\x04\b\x03\x10\x04\";\n" +
 	"\x12SetFramingResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"\x12\n" +
 	"\x10SubscribeRequest\"&\n" +

@@ -90,7 +90,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	// gesture carries along. Descending the link must land exactly where
 	// descending the source would.
 	framed, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: well.ID, Version: well.Version,
+		TileID:  well.ID,
 		Framing: rpc.Framing{Cx: 7, Cy: -2, Zoom: 1.75},
 	})
 	if err != nil {
@@ -135,7 +135,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	}
 
 	// Deleting the link only unlinks — the source well and its content survive.
-	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: link.ID, Version: link.Version}); err != nil {
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: link.ID}); err != nil {
 		t.Fatalf("delete link: %v", err)
 	}
 	if _, err := cl.GetTile(ctx, well.ID); err != nil {
@@ -189,15 +189,14 @@ func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Framing on the well (preview = descent = ascent).
-	framed, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: well.ID, Version: well.Version, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 2.5},
-	})
-	if err != nil {
+	if _, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
+		TileID: well.ID, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 2.5},
+	}); err != nil {
 		t.Fatal(err)
 	}
 
 	copyTop, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: framed.Version, DestGridID: rootB, X: 3, Y: 3,
+		TileID: well.ID, DestGridID: rootB, X: 3, Y: 3,
 	})
 	if err != nil {
 		t.Fatalf("deep copy: %v", err)
@@ -301,7 +300,7 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	}
 
 	// Deleting the link only unlinks — the source and its bytes survive.
-	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: link.ID, Version: link.Version}); err != nil {
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: link.ID}); err != nil {
 		t.Fatalf("delete leaf link: %v", err)
 	}
 	if body, _, _, err := cl.ReadContent(ctx, txt.ID); err != nil || string(body) != "# the one copy" {
@@ -320,7 +319,7 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 		t.Fatalf("CreateText: %v", err)
 	}
 	copyT, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: txt.ID, Version: txt.Version,
+		TileID:     txt.ID,
 		DestGridID: rootB, X: 1, Y: 1,
 	})
 	if err != nil {
@@ -361,7 +360,7 @@ func TestCloneURLAcrossPluginsCopiesAddress(t *testing.T) {
 		t.Fatalf("CreateURL: %v", err)
 	}
 	cp, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: u.ID, Version: u.Version, DestGridID: rootB, X: 0, Y: 0,
+		TileID: u.ID, DestGridID: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin url clone: %v", err)
@@ -371,7 +370,12 @@ func TestCloneURLAcrossPluginsCopiesAddress(t *testing.T) {
 	}
 }
 
-func TestCloneAcrossPluginsChecksVersion(t *testing.T) {
+// TestCloneAcrossPluginsCopiesCurrentContent: a clone carries no version
+// claim (docs/simplify-plan.md S5 — the SOURCE row is untouched, so a copy is
+// layout), and the handler's own hand-rolled re-derivation of the store's
+// claim went with it. What the copy must carry is what the source says NOW,
+// even though the source's version moved after it was created.
+func TestCloneAcrossPluginsCopiesCurrentContent(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -381,11 +385,23 @@ func TestCloneAcrossPluginsChecksVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: txt.ID, Version: txt.Version + 7, DestGridID: rootB, X: 0, Y: 0,
+	// A real content edit: the source's version is now past what the clone
+	// caller last saw.
+	if _, err := cl.WriteContent(ctx, txt.ID, txt.Version, []byte("v1")); err != nil {
+		t.Fatalf("WriteContent: %v", err)
+	}
+	cp, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: txt.ID, DestGridID: rootB, X: 0, Y: 0,
 	})
-	if err == nil {
-		t.Fatal("stale-version cross-plugin clone succeeded, want conflict")
+	if err != nil {
+		t.Fatalf("cross-plugin clone after a content edit: %v", err)
+	}
+	body, _, _, err := cl.ReadContent(ctx, cp.ID)
+	if err != nil {
+		t.Fatalf("ReadContent(copy): %v", err)
+	}
+	if string(body) != "v1" {
+		t.Errorf("copied body = %q, want the source's current bytes %q", body, "v1")
 	}
 }
 
@@ -406,7 +422,7 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 		t.Fatalf("CreatePane: %v", err)
 	}
 	cp, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: pt.ID, Version: pt.Version, DestGridID: rootB, X: 1, Y: 1,
+		TileID: pt.ID, DestGridID: rootB, X: 1, Y: 1,
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin pane clone: %v", err)
@@ -511,7 +527,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	// The right-drag (clone) of a dir well is refused loudly — deep copy of a
 	// host directory is unimplemented.
 	if _, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: sub.ID, Version: sub.Version, DestGridID: dstRoot, X: 3, Y: 3,
+		TileID: sub.ID, DestGridID: dstRoot, X: 3, Y: 3,
 	}); connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Errorf("clone of an fs dir well: err=%v, want unimplemented refusal", err)
 	}
@@ -530,7 +546,7 @@ func TestClonePaneAcrossPluginsNeverArranged(t *testing.T) {
 		t.Fatalf("CreatePane: %v", err)
 	}
 	cp, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: pt.ID, Version: pt.Version, DestGridID: rootB, X: 0, Y: 0,
+		TileID: pt.ID, DestGridID: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin clone of never-arranged pane: %v", err)

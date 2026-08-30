@@ -487,17 +487,20 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 	tileID := d.tileID
-	version := d.snapshotTile.Version
 	req := &rpc.CloneTileRequest{
 		TileID:     tileID,
-		Version:    version,
 		DestGridID: dstGridID,
 		X:          dropX,
 		Y:          dropY,
 	}
-	a.postCrossGridMutate("CloneTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.CloneTile(ctx, req)
-	}, d)
+	a.post(write{
+		label: "CloneTile", gid: srcGridID, alsoGID: dstGridID, refetchOnOK: true,
+		call: func(ctx context.Context) error {
+			_, err := a.cl.CloneTile(ctx, req)
+			return err
+		},
+		undo: func() { a.snapBackToOrigin(d) },
+	})
 }
 
 // runDeleteTile fires DeleteTile against the dragged source tile. Used when
@@ -509,17 +512,27 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	if t != nil {
 		dstGridID = t.gridID
 	}
-	req := &rpc.DeleteTileRequest{
-		TileID:  d.tileID,
-		Version: d.snapshotTile.Version,
-	}
+	req := &rpc.DeleteTileRequest{TileID: d.tileID}
 	// Drop any cached liveness probe for this tile — the row is
 	// about to vanish and so will the tmux session the server side
 	// kills behind it.
 	delete(a.shellAlive, d.tileID)
 	delete(a.shellAliveProbing, d.tileID)
-	a.postTwoGridMutate("DeleteTile", d.srcGridID, dstGridID, func(ctx context.Context) error {
-		return a.cl.DeleteTile(ctx, req)
+	// No snapback and no parked value: the tile is going to vanish either
+	// way, so there is no ghost to roll back — both grids refetch whatever
+	// the server said, and a failed delete putting the row back on screen IS
+	// the reconcile.
+	src, dst := d.srcGridID, dstGridID
+	refetch := func() {
+		a.fetchGrid(src)
+		if dst != "" && dst != src {
+			a.fetchGrid(dst)
+		}
+	}
+	a.post(write{
+		label: "DeleteTile", gid: src, alsoGID: dst, refetchOnOK: true,
+		call: func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
+		undo: refetch,
 	})
 }
 
@@ -537,13 +550,12 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	}
 	gid := a.gridIDForPane(p)
 	req := &rpc.PlaceTileRequest{
-		TileID:  n.ID,
-		Version: n.Version,
-		GridID:  n.GridID,
-		X:       rd.tileNewX,
-		Y:       rd.tileNewY,
-		W:       rd.tileNewW,
-		H:       rd.tileNewH,
+		TileID: n.ID,
+		GridID: n.GridID,
+		X:      rd.tileNewX,
+		Y:      rd.tileNewY,
+		W:      rd.tileNewW,
+		H:      rd.tileNewH,
 	}
 	a.postTileMutate("PlaceTile", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.PlaceTile(ctx, req)

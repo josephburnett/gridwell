@@ -57,10 +57,12 @@ func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64,
 // SetPaneLayout writes a pane tile's layout blob. Framing-class: the whole
 // layout is arrangement of references to other content — the SetFraming of
 // workspaces — so it goes through emitTileChanged and NEVER bumps version
-// (owner decision 2026-07-08: no layout history; edit in place). Version is
-// still claimed for the in-place-edit check like every tile write, and
-// identical bytes are a pure no-op (swapTileBlob dedups), so the client's
-// hash-diff persister and a pure re-save cannot churn the DB.
+// (owner decision 2026-07-08: no layout history; edit in place). It carries
+// no claim either (docs/simplify-plan.md S5): framing is last-writer-wins,
+// and version is the content claim only. The version parameter survives as
+// WriteContent's kind-dispatched signature; this arm ignores it. Identical
+// bytes are a pure no-op (swapTileBlob dedups), so the client's hash-diff
+// persister and a pure re-save cannot churn the DB.
 func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data []byte) (*rpc.Tile, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("%w: empty layout", ErrInvalidArgument)
@@ -70,7 +72,7 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 	}
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, tileID, version)
+		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
 		}

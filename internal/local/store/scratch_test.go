@@ -97,16 +97,12 @@ func TestScratchTileMutationsNeedNoPath(t *testing.T) {
 	}
 	// A content writeback with an EMPTY path succeeds.
 	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: tile.Version, URL: "https://example.com/eph2",
+		TileID: tile.ID, URL: "https://example.com/eph2",
 	}); err != nil {
 		t.Fatalf("SetURLState on a scratch tile: %v", err)
 	}
-	// And so does delete (version bumped by the url write above).
-	cur, err := s.GetTile(ctx, tile.ID)
-	if err != nil {
-		t.Fatalf("GetTile: %v", err)
-	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: cur.Version}); err != nil {
+	// And so does delete.
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID}); err != nil {
 		t.Fatalf("DeleteTile on a scratch tile: %v", err)
 	}
 	if _, err := s.GetTile(ctx, tile.ID); err == nil {
@@ -142,7 +138,7 @@ func TestCreateScratchShell(t *testing.T) {
 			t.Fatal("ephemeral shell leaked onto the root grid")
 		}
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: tile.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID}); err != nil {
 		t.Fatalf("DeleteTile: %v", err)
 	}
 }

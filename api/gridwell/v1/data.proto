@@ -372,8 +372,8 @@ message ContentChunk {
 // COMMIT AT CLOSE: the write is transactional — the new value becomes visible
 // only when the stream closes cleanly, and a broken stream leaves the old
 // value byte-for-byte intact. Version semantics are kind-determined in the
-// store's one table: a text body is a content edit (bumps version); a pane
-// layout is framing-class (never bumps). Not accepted on link tiles: content
+// store's one table: a text body is a content edit (claims + bumps); a pane
+// layout is framing-class (no claim, never bumps). Not accepted on link tiles: content
 // ops write through the target the caller names explicitly.
 message WriteContentRequest {
   string tile_id = 1;
@@ -416,7 +416,11 @@ message ServeContentChunk {
 // instead).
 message PlaceTileRequest {
   string tile_id = 1;
-  int64 version = 2;
+  reserved 2; // version: retired 2026-08-29 (docs/simplify-plan.md S5) —
+              // placement is LAYOUT, not content. version claims the user's
+              // content bytes and nothing else, so a drag no longer loses to
+              // a title capture that bumped the row. Overlap is still refused
+              // server-side, in the same transaction.
   string grid_id = 3;
   int64 x = 4;
   int64 y = 5;
@@ -616,27 +620,31 @@ message CloneTileRequest {
                  // subtree copy completes before the insert, so no cycle
                  // can form and no client-supplied location is needed)
   string tile_id = 2;
-  int64 version = 3;
+  reserved 3; // version: retired 2026-08-29 (docs/simplify-plan.md S5) — a
+              // clone leaves the SOURCE row untouched; layout carries no claim.
   string dest_grid_id = 4;
   int64 x = 6;
   int64 y = 7;
 }
 
-// SetTileRequest is the single framing/preview writeback. It is dispatched on
-// tile.kind to the one operation that kind supports, and that mapping fixes the
-// version semantics (face #3 of the primary rule — framing is not a content
-// edit):
+// SetTileRequest is the single framing/capture writeback. It is dispatched on
+// tile.kind to the one operation that kind supports:
 //   (well framing left for SetFraming — one verb for both rows that can
 //    own it, doorway tile and root grid alike.)
-//   text  → text_x/text_y/text_w/text_h/text_mode (framing; never bumps version)
-//   url   → url_string, alt_text (page title), preview jpeg  (content; bumps)
-//   shell → preview jpeg                          (content; bumps version)
+//   text  → text_x/text_y/text_w/text_h/text_mode  (framing)
+//   url   → url_string, alt_text (page title), preview jpeg, url_history
+//                                                 (automatic capture)
+//   shell → preview jpeg                          (automatic capture)
+// NOTHING this message can write is a user content edit, so no arm bumps the
+// version and no arm carries a claim (2026-08-29, docs/simplify-plan.md S5).
 // Empty preview/url_string/alt_text fields are skipped so a partial capture
-// never clobbers good state. path + version make a content write a proper
-// versioned, in-place edit.
+// never clobbers good state.
 message SetTileRequest {
   reserved 1; // path: removed 2026-07-26 (id-addressed)
   string tile_id = 2;
+  // version is the RENAME ARM'S claim, and only that arm's: a rename is the
+  // user typing a name, the one user content edit this message carries. Every
+  // other arm leaves it zero and the server ignores it.
   int64  version = 3;
   Tile   tile    = 4;   // the fields to write for tile.kind
   bytes  preview = 5;   // jpeg to freeze (url/shell)
@@ -657,12 +665,12 @@ message SetTileRequest {
   // (their name derives from the first line).
   string rename = 6;
   // content_zoom (formerly SetContentZoom): the per-tile content scale.
-  // Framing — never bumps version; refused for wells. optional so presence
-  // is explicit (0 is a meaningful "unset" stored value).
+  // Framing — no claim, never bumps version; refused for wells. optional so
+  // presence is explicit (0 is a meaningful "unset" stored value).
   optional double content_zoom = 7;
   // url_frozen: the user's standing freeze on a url tile (issue #237).
-  // Framing — never bumps version; refused for non-url tiles. optional so
-  // clearing (false) is distinct from absent.
+  // Framing — no claim, never bumps version; refused for non-url tiles.
+  // optional so clearing (false) is distinct from absent.
   optional bool url_frozen = 8;
   // 9 (adopt_child_grid): removed 2026-08-29 with the unconfigured plugin
   // well (issue #251) — nothing can mint a childless well any more.
@@ -675,7 +683,9 @@ message SetTileRequest {
 message DeleteTileRequest {
   reserved 1; // path: removed 2026-07-26 (id-addressed)
   string tile_id = 2;
-  int64 version = 3;
+  reserved 3; // version: retired 2026-08-29 (docs/simplify-plan.md S5) — a
+              // delete is layout (the row MOVES to the trash) and recoverable;
+              // it must not be refused because a capture bumped the row.
 }
 message DeleteTileResponse {}
 
@@ -689,16 +699,16 @@ message DeleteTileResponse {}
 // Exactly one target, and it is also what routes the call to the owning
 // plugin: tile_id names the DOORWAY tile a grid was entered through (a
 // well — interior, exit, or link; each doorway keeps its own framing),
-// root_grid_id a ROOT grid, which has no doorway to carry it. version is
-// the doorway tile's claim; a root carries none.
+// root_grid_id a ROOT grid, which has no doorway to carry it.
 //
-// Framing only — never bumps a content version. A plugin that keeps no
-// framing answers Unimplemented, which the node treats as "nothing to
-// store", not an error.
+// Framing only — no version claim and no version bump (2026-08-29,
+// docs/simplify-plan.md S5: version is the user's content claim, and framing
+// is last-writer-wins by design). A plugin that keeps no framing answers
+// Unimplemented, which the node treats as "nothing to store", not an error.
 message SetFramingRequest {
   string tile_id      = 1;  // qualified "<plugin-uuid>/<id>"; the doorway
   string root_grid_id = 2;  // qualified "<plugin-uuid>/<id>"; a root grid
-  int64  version      = 3;  // the doorway tile's version claim
+  reserved 3; // version: retired 2026-08-29 — framing carries no claim.
   double cx           = 4;
   double cy           = 5;
   double zoom         = 6;

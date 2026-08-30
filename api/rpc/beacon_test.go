@@ -10,7 +10,7 @@ import (
 // flush and the settle flush can never write different shapes.
 func TestBeaconBodies(t *testing.T) {
 	path, body := SetFramingBeacon(&SetFramingRequest{
-		TileID: "u1/5", Version: 3, Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.5},
+		TileID: "u1/5", Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.5},
 	})
 	if path != "/gridwell.v1.Gridwell/SetFraming" {
 		t.Errorf("doorway framing path = %q", path)

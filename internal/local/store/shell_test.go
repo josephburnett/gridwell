@@ -49,7 +49,7 @@ func TestSetShellPreviewStoresAndDedupes(t *testing.T) {
 	}
 	jpeg := []byte("fake-jpeg-bytes")
 	v1, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: tile.ID, Version: tile.Version, JPEG: jpeg,
+		TileID: tile.ID, JPEG: jpeg,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestSetShellPreviewStoresAndDedupes(t *testing.T) {
 
 	// Identical second write — blob row should dedupe.
 	v2, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: v1.ID, Version: v1.Version, JPEG: jpeg,
+		TileID: v1.ID, JPEG: jpeg,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -77,13 +77,13 @@ func TestSetShellPreviewStoresAndDedupes(t *testing.T) {
 	}
 }
 
-// TestSetShellPreviewIgnoresStaleVersion locks in the version-
-// relaxation: SetShellPreview is content-only and the WebSocket
-// session is the real concurrency primitive for shell tiles. The
-// freeze path can race other mutations (e.g. a concurrent
-// SetShellPreview from a takeover handler), so this RPC must accept
-// any version.
-func TestSetShellPreviewIgnoresStaleVersion(t *testing.T) {
+// TestSetShellPreviewOverwritesFrozenFrame: the frozen frame is a capture,
+// so the freeze path can race other mutations (a concurrent SetShellPreview
+// from a takeover handler, the detach-time title capture) and must simply
+// land — last writer wins, no claim to lose. (version_rule_test.go pins the
+// no-claim/no-bump half; this pins that a second capture replaces the
+// first.)
+func TestSetShellPreviewOverwritesFrozenFrame(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -93,20 +93,17 @@ func TestSetShellPreviewIgnoresStaleVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Bump the version via a real Set so we have an older version
-	// to claim; do a SetShellPreview at the current version first
-	// so the tile is at v1, then another at v0 (stale).
+	// A first capture, then a second one over it.
 	if _, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: tile.ID, Version: tile.Version, JPEG: []byte("first"),
+		TileID: tile.ID, JPEG: []byte("first"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Stale-version write must succeed regardless.
 	got, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: tile.ID, Version: tile.Version, JPEG: []byte("frozen"),
+		TileID: tile.ID, JPEG: []byte("frozen"),
 	})
 	if err != nil {
-		t.Fatalf("SetShellPreview with stale version: %v", err)
+		t.Fatalf("second SetShellPreview: %v", err)
 	}
 	if got.PreviewBlobID == 0 {
 		t.Errorf("preview did not land")
@@ -127,13 +124,13 @@ func TestSetShellPreviewClearsOnEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	v1, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: tile.ID, Version: tile.Version, JPEG: []byte("abc"),
+		TileID: tile.ID, JPEG: []byte("abc"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	v2, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: v1.ID, Version: v1.Version, JPEG: nil,
+		TileID: v1.ID, JPEG: nil,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +154,7 @@ func TestDeleteShellDropsPreviewBlob(t *testing.T) {
 		t.Fatal(err)
 	}
 	stamped, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		TileID: tile.ID, Version: tile.Version, JPEG: []byte("frozen-frame"),
+		TileID: tile.ID, JPEG: []byte("frozen-frame"),
 	})
 	if err != nil {
 		t.Fatal(err)

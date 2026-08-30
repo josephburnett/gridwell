@@ -9,11 +9,8 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/door"
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/pending"
 )
 
 // Naming — "name the room you're in" (issues #61, #118, #213). The focused
@@ -237,51 +234,58 @@ func (a *App) commitRename(tileID, alt string) {
 	})
 }
 
-// commitRenameRetained is the one rename commit: postRename (versioned,
-// one conflict re-claim), then `apply` on success. The TYPED NAME is
-// retained on a transport failure (audit #10, 2026-08-14): the input
-// element is gone by the time the RPC fails, so the closure parked in
-// the pending ledger is the only copy of what the user typed — it lands
-// on the retry kick. A server verdict surfaces and stands.
+// commitRenameRetained is the one rename commit: the versioned rename, then
+// `apply` on success. The TYPED NAME is retained on a transport failure
+// (audit #10, 2026-08-14): the input element is gone by the time the RPC
+// fails, so the closure parked in the outbox is the only copy of what the
+// user typed — it lands on the retry kick. A server verdict surfaces and
+// stands.
 func (a *App) commitRenameRetained(tileID, alt string, apply func(*rpc.Tile)) {
-	go func() {
-		tile, err := a.postRename(tileID, alt)
-		k := pending.Key{Op: "Rename", ID: tileID}
-		if err != nil {
-			if clientsync.Of(err) == clientsync.OutcomeTransport {
-				a.pend.Put(k, func() { a.commitRenameRetained(tileID, alt, apply) })
-				a.reportErr(errsurface.Info, "rename", "rename kept — server unreachable, will retry")
-			} else {
-				a.pend.Ack(k)
-				a.reportErr(errsurface.Error, "rename", "rename failed: "+rpcErrText(err))
+	var tile *rpc.Tile
+	a.post(write{
+		label: "Rename", gid: a.gridIDOfTile(tileID), id: tileID,
+		source: "rename", failText: "rename",
+		call: func(ctx context.Context) error {
+			var err error
+			tile, err = a.postRename(ctx, tileID, alt)
+			return err
+		},
+		then: func() {
+			if tile != nil {
+				apply(tile)
 			}
-			return
-		}
-		a.pend.Ack(k)
-		if tile != nil {
-			apply(tile)
-		}
-		a.draw()
-	}()
+			a.draw()
+		},
+	})
 }
 
 // postRename is the one rename door: the versioned SetTile rename arm
-// (2026-07-26 redesign — a rename is a real user edit and claims a version).
-// The claim comes from the cached row; a conflict retries once with a fresh
-// read, since the racing writer of alt is only ever an automatic capture the
-// latch will out-rank anyway.
-func (a *App) postRename(tileID, alt string) (*rpc.Tile, error) {
+// (2026-07-26 redesign — a name the user types is a content edit, so it
+// claims a version and bumps one). The claim comes from the cached row.
+//
+// A conflict SURFACES rather than re-claiming: it used to retry once,
+// because the racing writer of alt was "only ever an automatic capture the
+// latch will out-rank anyway" — and captures bumped the row. They no longer
+// do (docs/simplify-plan.md S5), so a conflict here means a genuine
+// concurrent content edit, and silently re-claiming over it is the stomp
+// class the save-basis rule exists to prevent.
+func (a *App) postRename(ctx context.Context, tileID, alt string) (*rpc.Tile, error) {
 	version := int64(0)
 	if t := a.cachedTileByID(tileID); t != nil {
 		version = t.Version
 	}
-	var tile *rpc.Tile
-	err := a.claimOnce(tileID, version, nil, func(v int64) error {
-		var e error
-		tile, e = a.cl.RenameTile(context.Background(), tileID, v, alt)
-		return e
-	})
-	return tile, err
+	return a.cl.RenameTile(ctx, tileID, version, alt)
+}
+
+// gridIDOfTile answers "which grid's cache reconciles if this write is
+// refused" for a call site that holds only an id. "" when the row is in no
+// cached grid — the dispatcher's refetch is then a no-op, which is right: a
+// grid this client never loaded has nothing to reconcile.
+func (a *App) gridIDOfTile(tileID string) string {
+	if t := a.cachedTileByID(tileID); t != nil {
+		return t.GridID
+	}
+	return ""
 }
 
 // pxOf formats a float as a CSS pixel length.

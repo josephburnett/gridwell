@@ -59,13 +59,14 @@ and P2 needs everything in this document.
 
 "We write through a cache, so we can operate without a connection" — the
 cache exists, but the write path is mostly **RPC-first, refetch-after**,
-not cache-first. `doTileMutate` posts the RPC and then `fetchGrid` resyncs
-(`client/wasm/mutate.go:281-298`); the cache is not touched before the
+not cache-first. The plain dispatcher posts the RPC and then `fetchGrid`
+resyncs (`client/wasm/mutate.go`); the cache is not touched before the
 call. Only two families are genuinely optimistic today:
 
-- **Framing** — `persistWellView` patches the cache and pushes a synthetic
-  `EventTileChanged` before the RPC (`input.go:1996-2006`), then
-  `postFramingPersist` with one conflict retry (`mutate.go:147-164`).
+- **Framing** — the settle persister patches the cache and pushes a
+  synthetic `EventTileChanged` before the RPC, then `postFramingPersist`.
+  (2026-08-29, `docs/simplify-plan.md` S5: framing carries no version claim
+  any more, so the one-shot conflict retry this used to need is gone.)
 - **Text keystrokes** — every keystroke mirrors into the content entry
   (`PutEditedContent`), debounced 600 ms, flushed through the save queue.
 
@@ -316,7 +317,7 @@ The existing RPC surface sorts cleanly:
 
 | Op class | Ops | Offline replay behavior | Conflict character |
 |---|---|---|---|
-| Framing | `SetFraming` (doorway tile or root grid), `SetTextView`, `content_zoom`, `url_frozen`, pane-layout `WriteContent` | Idempotent overwrites; last replay wins | Benign — two devices disagreeing about a viewport has a trivial resolution (latest engagement wins), matching today's guarded-LWW semantics. One wrinkle: framing ops *carry* a version claim, so replay after a remote content edit 409s; the existing one-shot re-claim retry (`postFramingPersist`) already handles exactly this shape |
+| Framing | `SetFraming` (doorway tile or root grid), `SetTextView`, `content_zoom`, `url_frozen`, pane-layout `WriteContent` | Idempotent overwrites; last replay wins | Benign — two devices disagreeing about a viewport has a trivial resolution (latest engagement wins), matching today's guarded-LWW semantics. Simpler since 2026-08-29 (`docs/simplify-plan.md` S5): framing ops carry no version claim at all, so a replay after a remote content edit cannot 409 |
 | Content | text `WriteContent`, url address, rename | CAS on version; concurrent edit → 409 | The real conflicts. Rare (self-conflict only) but must be handled visibly (§5.3) |
 | Create | `CreateTile` (+ the body write that follows) | No precondition; replay is safe against lost-ack duplication *only* by the overlap refusal at the same (x,y) | Needs provisional ids + a NEW client-minted idempotency key per create (the `object_id` this row once pointed at was retired at schema v10) |
 | Structural | `PlaceTile`, `CloneTile`, `DeleteTile` | All version-claimed; replay after remote change → 409 | Move-vs-edit and delete-vs-edit races surface as conflicts, which is correct; the asymmetric case is edit-vs-*remote-delete* — replay gets NotFound, and with no tombstones the client cannot distinguish "deleted while I was away" from data loss |

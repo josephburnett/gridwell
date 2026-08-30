@@ -85,7 +85,7 @@ func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
 		if refs[t.ID] {
 			continue // a workspace's ephemeral — owned, not leaked
 		}
-		if err := p.st.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: t.ID, Version: t.Version}); err != nil {
+		if err := p.st.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: t.ID}); err != nil {
 			return n, err
 		}
 		n++
@@ -148,15 +148,14 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 }
 
 // SetFraming persists a grid's framing — the ONE framing write, both
-// rows it can live on. A doorway tile's framing is a versioned in-place
-// write on that tile; a root grid has no doorway, so the same three
-// numbers land on the grid row. Framing only — never bumps a content
-// version. The server routes on whichever target the request names.
+// rows it can live on. A doorway tile's framing is an in-place write on that
+// tile; a root grid has no doorway, so the same three numbers land on the
+// grid row. Framing only — no version claim, never bumps a content version.
+// The server routes on whichever target the request names.
 func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	t, err := p.st.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID:     req.TileId,
 		RootGridID: req.RootGridId,
-		Version:    req.Version,
 		Framing:    rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom},
 	})
 	if err != nil {
@@ -389,12 +388,12 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	}
 	if req.ContentZoom != nil {
 		return tileResp(p.st.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
-			TileID: req.TileId, Version: req.Version, ContentZoom: *req.ContentZoom,
+			TileID: req.TileId, ContentZoom: *req.ContentZoom,
 		}))
 	}
 	if req.UrlFrozen != nil {
 		return tileResp(p.st.SetURLFrozen(ctx, &rpc.SetURLFrozenRequest{
-			TileID: req.TileId, Version: req.Version, Frozen: *req.UrlFrozen,
+			TileID: req.TileId, Frozen: *req.UrlFrozen,
 		}))
 	}
 	t := req.Tile
@@ -408,11 +407,11 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		// own framing (a doorway tile and a root grid).
 		return nil, status.Error(codes.InvalidArgument, "set: well framing rides SetFraming")
 	case rpc.KindText:
-		return tileResp(p.st.SetTextView(ctx, &rpc.SetTextViewRequest{TileID: req.TileId, Version: req.Version, TextX: t.TextX, TextY: t.TextY, TextW: t.TextW, TextH: t.TextH, TextMode: t.TextMode}))
+		return tileResp(p.st.SetTextView(ctx, &rpc.SetTextViewRequest{TileID: req.TileId, TextX: t.TextX, TextY: t.TextY, TextW: t.TextW, TextH: t.TextH, TextMode: t.TextMode}))
 	case rpc.KindShell:
-		return tileResp(p.st.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{TileID: req.TileId, Version: req.Version, JPEG: req.Preview}))
+		return tileResp(p.st.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{TileID: req.TileId, JPEG: req.Preview}))
 	case rpc.KindURL:
-		return tileResp(p.st.SetURLState(ctx, &rpc.SetURLStateRequest{TileID: req.TileId, Version: req.Version, JPEG: req.Preview, URL: t.UrlString, Title: t.AltText, History: t.UrlHistory}))
+		return tileResp(p.st.SetURLState(ctx, &rpc.SetURLStateRequest{TileID: req.TileId, JPEG: req.Preview, URL: t.UrlString, Title: t.AltText, History: t.UrlHistory}))
 	case rpc.KindPane:
 		// Refused so the kind→operation mapping stays total: the layout blob
 		// rides the content door (WriteContent — framing-class for layouts).

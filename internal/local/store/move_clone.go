@@ -11,7 +11,9 @@ import (
 
 // CloneTile duplicates a tile into a destination grid at (x, y) as an eager,
 // independent copy. The new row carries the source's version (the two stay
-// "the same content" until one diverges) but gets a fresh row id. An interior well's whole child
+// "the same content" until one diverges) but gets a fresh row id. The SOURCE
+// row is untouched, so the clone is layout, not content: no claim, no bump
+// (docs/simplify-plan.md S5). An interior well's whole child
 // subtree is deep-copied (new grid + tile rows; blobs shared); an exit well
 // keeps its qualified cross-plugin child_grid_id (the child grid is owned by
 // another plugin, not duplicated); a text/url/shell tile shares its
@@ -28,7 +30,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, tileID, req.Version)
+		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
 		}
@@ -81,7 +83,7 @@ func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version 
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, tileID, version)
+		n, err := s.claimContentVersion(ctx, tx, tileID, version)
 		if err != nil {
 			return err
 		}

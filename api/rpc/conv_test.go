@@ -112,19 +112,21 @@ func TestEventFromProtoNil(t *testing.T) {
 
 // TestMutationRequestRoundTrips: the symmetric *FromProto/*ToProto request
 // converters preserve every field both ways. These are the wire boundary for
-// the placement mutations and the optimistic-concurrency Version key.
+// the LAYOUT mutations, which carry no Version key at all since
+// docs/simplify-plan.md S5 — version is the user's content claim, and the
+// proto numbers those fields used are reserved.
 func TestMutationRequestRoundTrips(t *testing.T) {
-	place := &PlaceTileRequest{TileID: "t", Version: 2, GridID: "dg", X: 3, Y: 4, W: 5, H: 6}
+	place := &PlaceTileRequest{TileID: "t", GridID: "dg", X: 3, Y: 4, W: 5, H: 6}
 	if got := PlaceTileFromProto(PlaceTileToProto(place)); !reflect.DeepEqual(place, got) {
 		t.Errorf("place round-trip: in=%+v out=%+v", place, got)
 	}
 
-	clone := &CloneTileRequest{TileID: "t", Version: 5, DestGridID: "dg", X: 6, Y: 7}
+	clone := &CloneTileRequest{TileID: "t", DestGridID: "dg", X: 6, Y: 7}
 	if got := CloneTileFromProto(CloneTileToProto(clone)); !reflect.DeepEqual(clone, got) {
 		t.Errorf("clone round-trip: in=%+v out=%+v", clone, got)
 	}
 
-	del := &DeleteTileRequest{TileID: "t", Version: 14}
+	del := &DeleteTileRequest{TileID: "t"}
 	if got := DeleteTileFromProto(DeleteTileToProto(del)); !reflect.DeepEqual(del, got) {
 		t.Errorf("delete round-trip: in=%+v out=%+v", del, got)
 	}
@@ -171,8 +173,8 @@ func TestCreateConvertersSelectKindAndFields(t *testing.T) {
 func TestSetConvertersAreFramingByKind(t *testing.T) {
 	// Grid framing is NOT here: it rides its own verb (SetFraming), the
 	// one door for both rows that can own it.
-	f := SetFramingToProto(&SetFramingRequest{TileID: "t", Version: 1, Framing: Framing{Cx: 4, Cy: 5, Zoom: 6}})
-	if f.TileId != "t" || f.Version != 1 || f.Cx != 4 || f.Cy != 5 || f.Zoom != 6 {
+	f := SetFramingToProto(&SetFramingRequest{TileID: "t", Framing: Framing{Cx: 4, Cy: 5, Zoom: 6}})
+	if f.TileId != "t" || f.Cx != 4 || f.Cy != 5 || f.Zoom != 6 {
 		t.Errorf("SetFraming mapping wrong: %+v", f)
 	}
 	txt := SetTextViewToProto(&SetTextViewRequest{TileID: "t", TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: "rendered"})

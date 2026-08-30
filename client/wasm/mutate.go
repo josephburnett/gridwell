@@ -11,43 +11,92 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/pending"
+	"github.com/josephburnett/gridwell/client/outbox"
 )
 
-// This file is the mutation dispatch layer: the handful of helpers every
-// tile RPC funnels through so the optimistic-cache / conflict-resync / error
-// surfacing policy lives in exactly one place. The *decision* — what the
-// outcome was and what it permits — is the pure clientsync package
-// (Of + the React* tables); this layer applies the reaction against App
-// state. The one rule (2026-08-14): local state is dropped only on a
-// server verdict, never on a transport failure.
+// This file is the mutation dispatch layer, and since docs/simplify-plan.md
+// S5 it is TWO paths, not a family of six:
+//
+//   - do / post — every write that carries no version claim: framing, an
+//     automatic capture, a layout move, a create, a delete. One policy body.
+//   - postWriteContent — the one write that claims a version, because it is
+//     the only one that changes the user's content bytes.
+//
+// The *decision* — what an outcome was and what it permits — is the pure
+// clientsync package (Of + the React* tables); the *record* of what the
+// server has not yet acknowledged is the pure client/outbox. This layer is
+// the glue that applies both against App state.
+//
+// The rule both paths serve (2026-08-14, the transport-loss class): LOCAL
+// STATE IS DROPPED ONLY ON A SERVER VERDICT, never on a transport failure.
+// There used to be six dispatchers because there were six version-claim
+// stories; there is one claim story now, so the shapes that differed only in
+// their retry ceremony collapsed into `write`.
 
-// tileCall is the closure shape every tile-producing mutation takes.
-// Callers wrap the matching a.cl method (CreateText, MoveTile, etc.)
-// so the dispatcher helpers don't need to know the request type.
+// tileCall is the closure shape a tile-producing mutation takes. Callers wrap
+// the matching a.cl method (CreateText, PlaceTile, …) so the dispatcher
+// doesn't need to know the request type.
 type tileCall func(ctx context.Context) (*rpc.Tile, error)
 
-// voidCall is the closure shape for mutations that return no tile
-// (DeleteTile, SetRootView).
-type voidCall func(ctx context.Context) error
+// write is ONE non-content mutation and everything the dispatcher needs in
+// order to react to it. Policy (which reaction table, whether the write
+// parks, what the notices say) lives in `do`; `then` and `undo` are the
+// caller's own business.
+type write struct {
+	// label names the op in the notice strip, the persist counters, and the
+	// outbox key.
+	label string
+	// gid is the grid whose cache reconciles on a server verdict.
+	gid string
+	// alsoGID is a second grid the write touched (a cross-grid drag),
+	// refetched alongside gid on success. Empty, or equal to gid, is one
+	// grid.
+	alsoGID string
+	// id keys the outbox entry: a tile id, or a GRID id for a root framing
+	// write (the two are separate sequences, so the key must carry which).
+	// EMPTY means this write is not parked — its value is still on screen
+	// and the failure notice IS the reconcile (a create; a drag whose ghost
+	// snaps back). Nothing user-made may be parked-less unless the user can
+	// see that it did not happen.
+	id string
+	// optimistic marks a caller that patched the cache BEFORE the RPC, so a
+	// server verdict must roll the cache back to truth (issue #156).
+	optimistic bool
+	// refetchOnOK refetches gid (and alsoGID) after the write lands.
+	refetchOnOK bool
+	// call is the RPC.
+	call func(ctx context.Context) error
+	// then runs after a successful call, before the refetch is scheduled.
+	then func()
+	// undo runs after a failure — the visible reconcile for a write that
+	// showed the user something optimistic with no cache patch behind it
+	// (the drag ghost snapping back to its origin). It is the ALTERNATIVE to
+	// parking: a write that reconciles visibly must not also be retried
+	// later, so `undo` and `id` are never both set.
+	undo func()
+	// source/failText name the DOMAIN notice for a write whose failure the
+	// user must see in its own words ("shell preview save failed"), on top
+	// of the generic rpc: notice. Empty source = the generic notice alone.
+	source, failText string
+	// beacon is this write's navigator.sendBeacon form — the transport that
+	// survives the page (api/rpc's *Beacon builders: one request builder,
+	// two transports; contentType picks unary proto-JSON or the WriteContent
+	// streaming envelope). Consulted ONLY during beforeunload. A write with
+	// no beacon form is fired and hoped for at unload; it can never block the
+	// unload handler waiting for a reply that cannot arrive.
+	beacon func() (path string, body []byte, contentType string)
+}
 
 // isUnimplemented reports a plugin's "I don't serve this" answer — a
 // capability property, never a failure to surface. The judgment is
 // clientsync's (the one wire-code classifier).
 func isUnimplemented(err error) bool { return clientsync.IsUnimplemented(err) }
 
-// isVersionConflict reports whether an RPC error came back as a
-// version/overlap conflict (the one-retry loops re-claim on exactly this).
-// The classification itself is owned by clientsync.Of.
-func isVersionConflict(err error) bool {
-	return clientsync.Of(err) == clientsync.OutcomeConflict
-}
-
 // surfaceRPCError surfaces a non-nil RPC error as an on-canvas notice (the
 // errsurface strip — what the user actually sees); reportErr also writes the
 // one console/log line. It is only reached for real failures — the
-// conflict-vs-surface decision is owned by clientsync.Of (reactToErr),
-// which never routes a conflict here.
+// conflict-vs-surface decision is owned by clientsync.Of, whose tables never
+// route a conflict here.
 func (a *App) surfaceRPCError(label string, err error) {
 	if err == nil {
 		return
@@ -65,173 +114,191 @@ func rpcErrText(err error) string {
 	return err.Error()
 }
 
-// reactToErr applies the plain-mutation policy (clientsync.React) to an
-// RPC error: a version/overlap conflict refetches the grid (cache resync);
-// a rejection or a transport failure is surfaced. Returns true when err
-// was nil (success), so callers can early-out on failure.
-func (a *App) reactToErr(label string, gid string, err error) bool {
-	r := clientsync.React(clientsync.Of(err))
-	if r.Refetch {
-		a.refetchGridOnConflict(gid, label)
-	}
-	if r.Log {
-		a.surfaceRPCError(label, err)
-	}
-	return err == nil
-}
-
-// reactFraming applies the optimistic-writer policy
-// (clientsync.ReactOptimistic) for a caller that patched the cache BEFORE
-// the RPC, and keeps the pending ledger honest: EVERY completed attempt
-// (success or server verdict) acks the key, a transport failure parks the
-// retry. A verdict rolls the cache back to truth (refetch — issue #156);
-// transport KEEPS the patch (it is the user's value, and a refetch
-// against a flapping link could succeed and silently revert it), parks
-// the write for the retry kick, and surfaces the failure.
-func (a *App) reactFraming(label, gid string, k pending.Key, retry func(), err error) {
-	o := clientsync.Of(err)
-	if o == clientsync.OutcomeTransport {
-		a.pend.Put(k, retry)
-	} else {
-		a.pend.Ack(k)
-	}
-	r := clientsync.ReactOptimistic(o)
-	if r.Refetch {
-		a.refetchGridOnConflict(gid, label)
-	}
-	if r.Log {
-		a.surfaceRPCError(label, err)
-	}
-}
-
-// postCrossGridMutate is the shared body of left-drag (MoveTile) and
-// right-drag (CloneTile) ghost commits. Both call an RPC that touches
-// two grids (source + destination), and both have to roll the ghost
-// back to its origin on failure so the user sees the stone return
-// instead of vanishing.
+// do runs one non-content mutation and applies the whole policy: record the
+// outcome in the outbox (transport parks a retry, any verdict acks), react
+// per clientsync's table for this caller's shape, surface what failed, and
+// run the caller's own then/undo. Blocking; `post` is the goroutine form.
 //
-// On success it refetches both grids; on any error it triggers a
-// refetch of the source grid (if version-conflict) and snaps the
-// dragged ghost back. `label` is the breadcrumb name for the
-// conflict log.
-func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, call tileCall, d *dragState) {
-	go func() {
-		_, err := call(context.Background())
-		if err != nil {
-			a.reactToErr(label, srcGridID, err)
-			a.snapBackToOrigin(d)
-			return
-		}
-		a.fetchGrid(srcGridID)
-		a.fetchGrid(dstGridID)
-	}()
-}
+// The retry thunk re-enters here with the same `write`, so a retry that fails
+// on transport again re-parks itself and the outbox converges rather than
+// losing the value.
+func (a *App) do(w write) error {
+	if a.unloading {
+		return a.doOnUnload(w)
+	}
+	err := w.call(context.Background())
+	o := clientsync.Of(err)
 
-// postFramingPersist dispatches a versioned FRAMING write with the freeze
-// path's one-retry rule (framing-audit decision 2026-08-13, "less cases,
-// less code"): on a version conflict, re-claim ONCE via GetTile and retry
-// — a racing version-bumping writer (a rename, a resize, a title capture)
-// must not silently cost the user's settled viewport. The caller already
-// patched the cache, so any REMAINING failure follows reactFraming: a
-// verdict refetches (rolls the patch back to server truth); a transport
-// failure keeps the patch and PARKS the write in the pending ledger — the
-// retry kick re-enters here, where the conflict re-claim absorbs any
-// version the world moved while the link was down.
-func (a *App) postFramingPersist(label, gid, tileID string, version int64, call func(ctx context.Context, version int64) (*rpc.Tile, error)) {
-	a.persistPosts[label]++
-	go func() {
-		err := a.claimOnce(tileID, version, nil, func(v int64) error {
-			_, e := call(context.Background(), v)
-			return e
-		})
-		a.reactFraming(label, gid, pending.Key{Op: label, ID: tileID},
-			func() { a.postFramingPersist(label, gid, tileID, version, call) }, err)
-	}()
-}
+	if w.id != "" {
+		// The closure holds the captured payload — a settled viewport, a
+		// freeze's jpeg/url/title/trail, a workspace arrangement, a typed
+		// name — which is the ONLY copy once the gesture that made it is
+		// over. Abandoning it on a blip was audit bug #2 (2026-08-14).
+		a.out.Record(o, outbox.Key{Op: w.label, ID: w.id}, func() { a.post(w) })
+	}
 
-// claimOnce is THE one-retry conflict rule (framing-audit decision
-// 2026-08-13, "less cases, less code"), in exactly one place: run call
-// with version; on a version conflict re-claim ONCE via GetTile and
-// retry with the fresh claim — an automatic version-bumping writer (a
-// rename, a resize, a detach-time title capture, a foreign framing
-// write) must never outrank the user's action. onFresh (nil ok) hands
-// the re-claimed row to callers that track a captured version of their
-// own before the retry runs. Every conflict-retrying write goes through
-// here; a sixth hand-rolled copy is how the rule drifts.
-func (a *App) claimOnce(tileID string, version int64, onFresh func(*rpc.Tile), call func(version int64) error) error {
-	err := call(version)
-	if err != nil && isVersionConflict(err) {
-		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
-			if onFresh != nil {
-				onFresh(fresh)
-			}
-			err = call(fresh.Version)
+	r := clientsync.React(o)
+	if w.optimistic {
+		r = clientsync.ReactOptimistic(o)
+	}
+	if r.Refetch {
+		a.refetchGridOnConflict(w.gid, w.label)
+	}
+	// A write with its own words says them; the generic rpc: notice rides
+	// along on a VERDICT (the developer half of "why did that fail") but not
+	// on a transport blip, where "will retry" is the whole story and a
+	// second red line beside it is noise.
+	if r.Log && !(w.source != "" && o == clientsync.OutcomeTransport) {
+		a.surfaceRPCError(w.label, err)
+	}
+	if w.source != "" {
+		switch {
+		case o == clientsync.OutcomeTransport:
+			a.reportErr(errsurface.Info, w.source, w.failText+": server unreachable — will retry")
+		case err != nil:
+			a.reportErr(errsurface.Error, w.source, w.failText+": "+rpcErrText(err))
 		}
 	}
-	return err
-}
-
-// doFreezeWrite runs a leaving-gesture freeze writeback (url page / shell
-// terminal preview) with the one retry rule: claim `version`; on a version
-// conflict re-claim ONCE via GetTile and retry — an automatic writer racing
-// the user's leaving gesture (the detach-time title capture, a foreign
-// framing write) must not cost the freeze. Any remaining error surfaces as
-// `source`/`failText` AND goes through the conflict-reconcile dispatcher so
-// the cache resyncs instead of drifting (issue #156 — these paths used to
-// bypass reactToErr). Blocking; callers run it from a goroutine.
-func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, failText string, write func(version int64) error) error {
-	err := a.claimOnce(tileID, version, nil, write)
-	k := pending.Key{Op: label, ID: tileID}
-	if clientsync.Of(err) == clientsync.OutcomeTransport {
-		// Park the freeze: the write closure holds the captured payload
-		// (jpeg frame, url, title, history) — the ONLY copy once the live
-		// surface is gone. Abandoning it here was audit bug #2 (2026-08-14):
-		// one blip at ascent cost the tile its page, its trail, and its
-		// frozen face until the next live visit.
-		a.pend.Put(k, func() {
-			go a.doFreezeWrite(label, gid, tileID, version, source, failText, write)
-		})
-		a.reportErr(errsurface.Info, source, failText+": server unreachable — will retry")
+	if err != nil {
+		if w.undo != nil {
+			w.undo()
+		}
 		return err
 	}
-	a.pend.Ack(k)
-	if err != nil {
-		a.reportErr(errsurface.Error, source, failText+": "+rpcErrText(err))
-		a.reactToErr(label, gid, err)
+	// The refetch is scheduled BEFORE `then`, the order the plain tile
+	// dispatcher always used: a success hook that relocates a pane wants the
+	// catch-up fetch already in flight.
+	if w.refetchOnOK {
+		a.fetchGrid(w.gid)
+		if w.alsoGID != "" && w.alsoGID != w.gid {
+			a.fetchGrid(w.alsoGID)
+		}
 	}
-	return err
+	if w.then != nil {
+		w.then()
+	}
+	return nil
 }
 
-// postVoidPersist is postPersist for RPCs that return no tile — used by
-// SetRootView, the plugin-root framing writeback of a + menu portal
-// ascent. Framing-class, so it rides the pending ledger like every other
-// framing write: transport parks a retry, any completion acks.
-func (a *App) postVoidPersist(label string, gid string, call voidCall) {
-	go func() {
-		err := call(context.Background())
-		k := pending.Key{Op: label, ID: gid}
-		if clientsync.Of(err) == clientsync.OutcomeTransport {
-			a.pend.Put(k, func() { a.postVoidPersist(label, gid, call) })
-		} else {
-			a.pend.Ack(k)
-		}
-		a.reactToErr(label, gid, err)
-	}()
+// post runs do in a goroutine — except during beforeunload, where a
+// goroutine started here would never be scheduled before the page dies, so
+// the write runs inline through the beacon transport instead.
+func (a *App) post(w write) {
+	if a.unloading {
+		a.do(w)
+		return
+	}
+	go a.do(w)
 }
 
-// postTwoGridMutate is the no-snapback variant of postCrossGridMutate.
-// Used by DeleteTile, where the tile is going to vanish either way —
-// a failed delete still needs the cache refreshed but there's no
-// ghost to roll back to. Skips the dstGrid refetch when it equals
-// srcGrid (delete onto a black hole in the same grid).
-func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID string, call voidCall) {
-	go func() {
-		a.reactToErr(label, srcGridID, call(context.Background()))
-		a.fetchGrid(srcGridID)
-		if dstGridID != "" && dstGridID != srcGridID {
-			a.fetchGrid(dstGridID)
+// doOnUnload is `do` during beforeunload: the page is dying, so the ordinary
+// RPC's reply can never arrive and there is no outbox left to park into (the
+// outbox is session-local — it dies with the page too). The write's BEACON
+// form is what survives; navigator.sendBeacon hands the body to the browser,
+// which completes it after the page is gone.
+//
+// A write with no beacon form, or one the browser refused (the queue budget),
+// is fired asynchronously and hoped for — it beats guaranteeing the loss —
+// but never waited on: blocking the unload handler on a reply that cannot
+// arrive is how a quit turns into a hang.
+func (a *App) doOnUnload(w write) error {
+	if w.beacon != nil {
+		if path, body, ct := w.beacon(); body != nil && a.sendBeacon(path, body, ct) {
+			if w.then != nil {
+				w.then()
+			}
+			return nil
 		}
-	}()
+	}
+	go w.call(context.Background())
+	return nil
+}
+
+// postTileMutate is the adapter for the plain single-grid tile mutations
+// (every Create*, a resize): no claim, no parked value — the tile either
+// appears or the failure notice says it didn't — and a refetch on success so
+// the cache catches up to the server's authoritative row. onSuccess (nil ok)
+// fires with the response tile.
+func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess func(rpc.Tile)) {
+	var tile *rpc.Tile
+	a.post(write{
+		label: label, gid: gid, refetchOnOK: true,
+		call: func(ctx context.Context) error {
+			var err error
+			tile, err = call(ctx)
+			return err
+		},
+		then: func() {
+			if onSuccess != nil && tile != nil {
+				onSuccess(*tile)
+			}
+		},
+	})
+}
+
+// postFramingPersist dispatches a settle-persister FRAMING write: the caller
+// already patched the cache, so a server verdict rolls that patch back to
+// truth, and a transport failure keeps it and parks the write. id is the
+// doorway TILE's id, or the ROOT GRID's id when the framing lives on a grid
+// row — one dispatcher for both rows framing can live on.
+//
+// Framing carries no version claim (docs/simplify-plan.md S5), so there is no
+// conflict to re-claim through: the one-retry rule this path used to need
+// existed only because automatic captures bumped the row out from under a
+// settle.
+func (a *App) postFramingPersist(label, gid, id string, call func(ctx context.Context) error) {
+	a.postFramingPersistBeacon(label, gid, id, call, nil)
+}
+
+// postFramingPersistBeacon is postFramingPersist for a write that HAS an
+// unload form. Every settle persister passes one: the transport choice is the
+// dispatcher's, so a framing write reaches the beacon whether it is being
+// posted fresh or drained out of the outbox at unload. (Content zoom has no
+// beacon builder and rides the plain form.)
+func (a *App) postFramingPersistBeacon(label, gid, id string,
+	call func(ctx context.Context) error, beacon func() (string, []byte, string)) {
+	a.persistPosts[label]++
+	a.post(write{label: label, gid: gid, id: id, optimistic: true, call: call, beacon: beacon})
+}
+
+// recordContent syncs the tile's OUTBOX entry to the one owner of its bytes,
+// the cache's content entry: still dirty means the server is still owed this
+// write, clean means it is not. The outbox therefore knows WHICH tiles owe a
+// write and in what order, while the bytes stay where the renderer reads them
+// — one fact, one owner, and no second copy of the user's words (charter §1).
+//
+// Every path that can change dirtiness calls this: the keystroke that makes
+// an entry dirty, and each completed save (which leaves it clean, drops it on
+// a verdict, or leaves it dirty on a transport failure — the three outcomes
+// that decide parked-or-acked without this function having to know which
+// happened).
+func (a *App) recordContent(cid string) {
+	k := outbox.Key{Op: outbox.OpContent, ID: cid}
+	if _, dirty := a.c.DirtyContent(cid); dirty {
+		a.out.Park(k, func() { a.flushTileContent(cid) })
+		return
+	}
+	a.out.Ack(k)
+}
+
+// syncContentOutbox re-derives the outbox's content entries from their one
+// owner, the cache. recordContent already runs on every path that changes
+// dirtiness, so this is belt and braces before a drain — and it is worth
+// having: a drift between the two would cost exactly the words the user typed
+// last, silently, at the one moment (a quit) with no next sweep behind it.
+func (a *App) syncContentOutbox() {
+	for _, cid := range a.c.DirtyTileIDs() {
+		a.recordContent(cid)
+	}
+}
+
+// putEditedContent is the ONE door for an optimistic local edit: store the
+// bytes with their owner and record that the server is owed them. Splitting
+// the two was how an edit typed during an outage stayed out of the outbox and
+// rode a separate dirty-sweep with its own retry rule.
+func (a *App) putEditedContent(cid string, data []byte) {
+	a.c.PutEditedContent(cid, data)
+	a.recordContent(cid)
 }
 
 // postWriteContent fires the one content write (WriteContent — id-addressed,
@@ -240,6 +307,11 @@ func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID string, call 
 // On version-conflict it triggers a grid refetch. Returns the updated
 // tile and ok=true on success; ok=false on any failure (callers
 // should stop further work).
+//
+// This is the ONE path that carries a version claim, because content bytes
+// are the one thing version means (docs/simplify-plan.md S5). Its outbox
+// bookkeeping is recordContent's: the cache entry's dirtiness IS whether the
+// write is still owed, so all three outcomes below resolve through one line.
 func (a *App) postWriteContent(gid, tileID string, version int64, newContent []byte) (rpc.Tile, bool) {
 	tile, err := a.cl.WriteContent(context.Background(), tileID, version, newContent)
 	if err != nil {
@@ -254,8 +326,8 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 			// (grid refetch alone never evicts content) — without this the
 			// rejected edit lingers looking saved, then vanishes on some
 			// later refetch: the silent-disappearance class (charter §6).
-			// The conflict/reject notice tells the user why their text
-			// just reverted.
+			// ReactSave logs on a conflict too, so the notice above always
+			// tells the user why their text just reverted.
 			a.c.DropTileContent(tileID)
 			if o == clientsync.OutcomeConflict {
 				a.refetchGridOnConflict(gid, "WriteContent")
@@ -276,6 +348,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 			a.reportErr(errsurface.Info, "textsave",
 				"unsaved changes kept — server unreachable, will retry")
 		}
+		a.recordContent(tileID)
 		return rpc.Tile{}, false
 	}
 	// Advance the cached tile AND the save basis to the response row NOW —
@@ -288,6 +361,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 	// would plant a foreign tile row in the wrong grid map.
 	a.c.UpdateTile(tile.GridID, *tile)
 	a.c.PutSavedContent(tile.ID, newContent, tile.Version)
+	a.recordContent(tile.ID)
 	return *tile, true
 }
 
@@ -315,29 +389,4 @@ func (a *App) enqueueTextSave(gid string, tileID string, fallbackVersion int64, 
 		}
 		a.postWriteContent(gid, tileID, version, data)
 	})
-}
-
-// doTileMutate is the synchronous core of a single-grid tile RPC.
-// On version-conflict it triggers a grid refetch and returns
-// ok=false (so callers can stop early). On success it schedules a
-// grid refetch so the cache catches up to the server's authoritative
-// tile state and returns the response tile. All "Create<X>",
-// "ResizeTile", "SetTextView" calls fit this shape.
-func (a *App) doTileMutate(label string, gid string, call tileCall) (rpc.Tile, bool) {
-	tile, err := call(context.Background())
-	if !a.reactToErr(label, gid, err) {
-		return rpc.Tile{}, false
-	}
-	a.fetchGrid(gid)
-	return *tile, true
-}
-
-// postTileMutate runs doTileMutate in a goroutine; onSuccess (if
-// non-nil) fires once the success-path refetch is scheduled.
-func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess func(rpc.Tile)) {
-	go func() {
-		if tile, ok := a.doTileMutate(label, gid, call); ok && onSuccess != nil {
-			onSuccess(tile)
-		}
-	}()
 }

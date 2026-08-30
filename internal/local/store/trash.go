@@ -150,7 +150,8 @@ func gridInSubtree(ctx context.Context, tx *sql.Tx, gridID, rootID int64) (bool,
 
 // moveTileToTrash files t under the current month's subgrid of the trash
 // grid, minting the month well on first use. The move is PlaceTile's
-// cross-grid shape exactly: same row, same id, version bumped, both grid
+// cross-grid shape exactly: same row, same id, tile version UNTOUCHED (a
+// move is layout, not content — docs/simplify-plan.md S5), both grid
 // versions bumped, TileRemoved(src) + TileChanged(dest) — so every
 // client reconciles it as the move it is.
 func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]rpc.Event, t *rpc.Tile) error {
@@ -178,9 +179,6 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]rpc.E
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE tiles SET grid_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?`,
 		monthGrid, x, y, s.now().Unix(), tileID); err != nil {
-		return err
-	}
-	if err := bumpTileVersion(ctx, tx, tileID); err != nil {
 		return err
 	}
 	if err := s.bumpGridVersion(ctx, tx, srcGrid); err != nil {

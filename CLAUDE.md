@@ -261,8 +261,8 @@ Before you commit, every one of these is true:
 - [ ] For every RPC call site I touched: what happens to local state on a
       TRANSPORT failure (`clientsync.OutcomeTransport` — the server never
       spoke)? Nothing user-made may be dropped without a server verdict;
-      unacknowledged writes park (`client/pending` / the dirty content
-      ledger) and the retry kick lands them.
+      unacknowledged writes park in the one outbox (`client/outbox`) and
+      the retry kick lands them.
 - [ ] Nothing the user can change lives only on the client.
 - [ ] No new host/client import of a plugin implementation and no new
       switch on a plugin kind — plugin-specific behavior rides a wire

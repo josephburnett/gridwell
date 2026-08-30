@@ -37,3 +37,9 @@ docs/architecture-review.md client/wasm/entry_params.go
 # The 2026-08-29 review's finding 8 names the Electron shell relay it asked
 # for; S3 deleted it (shells ride the web door):
 docs/architecture-review.md apps/desktop/src/main/shellgrpc.ts
+# The 2026-08-14 offline plan and the 2026-08-29 review name client/pending,
+# the per-write-family ledger that docs/simplify-plan.md S5 folded into
+# client/outbox; both docs describe the tree as it stood when they were
+# written:
+docs/offline-plan.md client/pending
+docs/architecture-review.md client/pending

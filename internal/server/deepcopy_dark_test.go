@@ -182,8 +182,8 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	urlTile, err = cl.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: urlTile.ID, Version: urlTile.Version,
-		JPEG: []byte("\xff\xd8fakejpeg"), URL: "https://example.com/album", Title: "album",
+		TileID: urlTile.ID,
+		JPEG:   []byte("\xff\xd8fakejpeg"), URL: "https://example.com/album", Title: "album",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -194,12 +194,8 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	dark.darkGrids[localID(t, nested.ChildGridID)] = true
 	dark.darkPreviews[localID(t, urlTile.ID)] = true
 
-	fresh, err := cl.GetTile(ctx, well.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	copyTop, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: fresh.Version, DestGridID: rootB, X: 0, Y: 0,
+		TileID: well.ID, DestGridID: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("offline deep copy must not refuse: %v", err)
@@ -258,7 +254,7 @@ func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
 	}
 	dark.darkContent[localID(t, txt.ID)] = true
 	got, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: txt.ID, Version: txt.Version, DestGridID: rootB, X: 0, Y: 0,
+		TileID: txt.ID, DestGridID: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("dark leaf clone must degrade, not fail: %v", err)
@@ -275,15 +271,14 @@ func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	framed, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: well.ID, Version: well.Version, Framing: rpc.Framing{Cx: 5, Cy: 6, Zoom: 1.5},
-	})
-	if err != nil {
+	if _, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
+		TileID: well.ID, Framing: rpc.Framing{Cx: 5, Cy: 6, Zoom: 1.5},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	dark.darkGrids[localID(t, well.ChildGridID)] = true
 	gotWell, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: framed.Version, DestGridID: rootB, X: 3, Y: 0,
+		TileID: well.ID, DestGridID: rootB, X: 3, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("dark well clone must degrade, not fail: %v", err)
@@ -318,12 +313,8 @@ func TestGoneIsNeverALink(t *testing.T) {
 	}
 	dark.verdict[localID(t, txt.ID)] = status.Error(codes.NotFound, "no such tile")
 
-	fresh, err := cl.GetTile(ctx, well.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	_, err = cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: fresh.Version, DestGridID: rootB, X: 0, Y: 0,
+		TileID: well.ID, DestGridID: rootB, X: 0, Y: 0,
 	})
 	if err == nil || !strings.Contains(err.Error(), "deep copy incomplete") {
 		t.Fatalf("a verdict mid-walk must abort with the partial contract, got: %v", err)
@@ -361,12 +352,8 @@ func TestMidCopyFailureNeverDoublesTheWell(t *testing.T) {
 	// up through the child arm with the inner copy already created.
 	dark.darkFramingFrom = 2
 
-	fresh, err := cl.GetTile(ctx, well.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	_, cerr := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: fresh.Version, DestGridID: rootA, X: 0, Y: 0,
+		TileID: well.ID, DestGridID: rootA, X: 0, Y: 0,
 	})
 	if cerr == nil {
 		t.Fatal("a dest-dark mid-copy must surface, not pretend success")

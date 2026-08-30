@@ -40,7 +40,7 @@ func TestSearchByID(t *testing.T) {
 
 	// Move it two levels deep: the chain is [outer, inner].
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: text.ID, Version: text.Version,
+		TileID: text.ID,
 		GridID: inner.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("move into inner: %v", err)

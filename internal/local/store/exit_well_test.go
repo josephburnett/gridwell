@@ -38,7 +38,7 @@ func TestCloneExitWellSharesReferenceNoNewGrid(t *testing.T) {
 	before := gridRowCount(t, s)
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: ew.ID, Version: ew.Version,
+		TileID:     ew.ID,
 		DestGridID: root, X: 2, Y: 0,
 	})
 	if err != nil {
@@ -99,7 +99,7 @@ func TestMoveExitWellPreservesReference(t *testing.T) {
 		t.Fatal(err)
 	}
 	moved, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: ew.ID, Version: ew.Version,
+		TileID: ew.ID,
 		GridID: root, X: 3, Y: 3, W: ew.W, H: ew.H,
 	})
 	if err != nil {

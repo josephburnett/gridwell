@@ -29,16 +29,15 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 
 	// A freeze that stored a navigation back-stack (issue #113)...
 	history := `[{"url":"https://example.com"},{"url":"https://example.com/page"}]`
-	frozen, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: tile.Version,
-		URL: "https://example.com/page", History: history,
-	})
-	if err != nil {
+	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		TileID: tile.ID,
+		URL:    "https://example.com/page", History: history,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// ...a content zoom (issue #82; framing, no version bump)...
 	if _, err := s.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
-		TileID: tile.ID, Version: frozen.Version, ContentZoom: 1.5,
+		TileID: tile.ID, ContentZoom: 1.5,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -48,12 +47,8 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	src, err := s.GetTile(ctx, tile.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: tile.ID, Version: src.Version,
+		TileID:     tile.ID,
 		DestGridID: root, X: 5, Y: 0,
 	})
 	if err != nil {

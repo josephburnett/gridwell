@@ -590,12 +590,14 @@ type CreateShellRequest struct {
 	H      int64  `json:"h"`
 }
 
-// Mutations: Version is the claimed current version of TileID.
-// Server returns 409 / ErrVersionConflict if it does not match.
+// Mutations. Only the CONTENT writes carry a Version claim — WriteContent
+// and RenameTile (2026-08-29, docs/simplify-plan.md S5: version means "the
+// user's content bytes changed"). Framing, automatic captures and LAYOUT
+// (place / clone / delete) are last-writer-wins and carry none; the server
+// returns 409 / ErrVersionConflict only for a stale content claim.
 
 type CloneTileRequest struct {
 	TileID     string `json:"tile_id"`
-	Version    int64  `json:"version"`
 	DestGridID string `json:"dest_grid_id"`
 	X          int64  `json:"x"`
 	Y          int64  `json:"y"`
@@ -605,15 +607,16 @@ type CloneTileRequest struct {
 // interface-redesign-plan.md): placement is one fact — (grid, x, y, w, h) —
 // and one verb owns it. GridID is the DESTINATION grid (the tile's current
 // grid for a pure resize). Id-addressed + version-claimed; no Path — the
-// well-into-own-subtree refusal is a server-side ancestor walk.
+// well-into-own-subtree refusal is a server-side ancestor walk. No Version:
+// placement is layout, so it is last-writer-wins and the overlap check — not
+// a claim — is what protects the grid (docs/simplify-plan.md S5).
 type PlaceTileRequest struct {
-	TileID  string `json:"tile_id"`
-	Version int64  `json:"version"`
-	GridID  string `json:"grid_id"`
-	X       int64  `json:"x"`
-	Y       int64  `json:"y"`
-	W       int64  `json:"w"`
-	H       int64  `json:"h"`
+	TileID string `json:"tile_id"`
+	GridID string `json:"grid_id"`
+	X      int64  `json:"x"`
+	Y      int64  `json:"y"`
+	W      int64  `json:"w"`
+	H      int64  `json:"h"`
 }
 
 // Framing is the ONE shape of "how this grid looked when I left it through
@@ -646,19 +649,19 @@ func (f Framing) SameAs(g Framing) bool {
 // SetFramingRequest persists a Framing onto the row that owns it. Exactly
 // one target: TileID names the DOORWAY tile a grid was entered through (a
 // well — interior, exit, or link; each doorway keeps its own framing),
-// RootGridID a ROOT grid, which has no doorway. Version is the doorway
-// tile's claim (unused by the root arm). Framing only — never bumps a
-// content version.
+// RootGridID a ROOT grid, which has no doorway. Framing only — no claim and
+// no version bump: framing is last-writer-wins by design, so there is
+// nothing here for a racing capture to conflict with.
 type SetFramingRequest struct {
 	TileID     string `json:"tile_id,omitempty"`
 	RootGridID string `json:"root_grid_id,omitempty"`
-	Version    int64  `json:"version,omitempty"`
 	Framing
 }
 
+// SetTextViewRequest persists a text tile's framed window and rendered/text
+// mode. Framing: no claim, no bump.
 type SetTextViewRequest struct {
 	TileID   string `json:"tile_id"`
-	Version  int64  `json:"version"`
 	TextX    int64  `json:"text_x"`
 	TextY    int64  `json:"text_y"`
 	TextW    int64  `json:"text_w"`
@@ -667,11 +670,11 @@ type SetTextViewRequest struct {
 }
 
 // SetShellPreviewRequest stores the JPEG frame captured at ascent as
-// the frozen preview. Bytes are hash-deduped through the blobs table.
+// the frozen preview. Bytes are hash-deduped through the blobs table. An
+// automatic capture: no claim, no version bump.
 type SetShellPreviewRequest struct {
-	TileID  string `json:"tile_id"`
-	Version int64  `json:"version"`
-	JPEG    []byte `json:"jpeg"`
+	TileID string `json:"tile_id"`
+	JPEG   []byte `json:"jpeg"`
 }
 
 // ShellSessionAliveRequest asks whether the gridwell-private tmux
@@ -688,39 +691,40 @@ type ShellSessionAliveResponse struct {
 }
 
 // SetURLStateRequest freezes a live URL tile (preview JPEG + address +
-// title) when its Electron WebContentsView is torn down on ascend. The
-// Version claim makes the freeze a proper versioned content edit — an in-place
-// write to this tile's row (copy-on-clone: clones are independent, so there
-// is no fork). Empty jpeg/url/title fields are skipped.
+// title + history) when its Electron WebContentsView is torn down on ascend.
+// Every field is a CAPTURE — what the live surface was observed to be — so
+// it carries no version claim and makes no bump (docs/simplify-plan.md S5);
+// it is an in-place write to this tile's row (copy-on-clone: clones are
+// independent, so there is no fork). Empty jpeg/url/title fields are skipped.
 type SetURLStateRequest struct {
-	TileID  string `json:"tile_id"`
-	Version int64  `json:"version"`
-	JPEG    []byte `json:"jpeg"`
-	URL     string `json:"url"`
-	Title   string `json:"title"`
+	TileID string `json:"tile_id"`
+	JPEG   []byte `json:"jpeg"`
+	URL    string `json:"url"`
+	Title  string `json:"title"`
 	// History is the JSON back-stack captured at freeze ("" = leave the
 	// stored history untouched — a partial capture must not clobber it).
 	History string `json:"history,omitempty"`
 }
 
-// SetContentZoomRequest persists a tile's content scale (framing; no bump).
+// SetContentZoomRequest persists a tile's content scale (framing; no claim,
+// no bump).
 type SetContentZoomRequest struct {
 	TileID      string  `json:"tile_id"`
-	Version     int64   `json:"version"`
 	ContentZoom float64 `json:"content_zoom"`
 }
 
 // SetURLFrozenRequest persists the user's standing freeze on a url tile
-// (issue #237; framing, no bump).
+// (issue #237; framing, no claim, no bump).
 type SetURLFrozenRequest struct {
-	TileID  string `json:"tile_id"`
-	Version int64  `json:"version"`
-	Frozen  bool   `json:"frozen"`
+	TileID string `json:"tile_id"`
+	Frozen bool   `json:"frozen"`
 }
 
+// DeleteTileRequest discards a tile. Layout, not content: no claim (the row
+// moves to the trash, and the gesture is the user's own — see
+// docs/simplify-plan.md S5).
 type DeleteTileRequest struct {
-	TileID  string `json:"tile_id"`
-	Version int64  `json:"version"`
+	TileID string `json:"tile_id"`
 }
 type DeleteTileResponse struct{}
 

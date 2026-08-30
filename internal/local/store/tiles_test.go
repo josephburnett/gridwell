@@ -256,7 +256,7 @@ func TestResizeNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	r, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID,
 		GridID: w.GridID, X: 0, Y: 0, W: 3, H: 4,
 	})
 	if err != nil {
@@ -265,8 +265,9 @@ func TestResizeNode(t *testing.T) {
 	if r.W != 3 || r.H != 4 {
 		t.Errorf("after resize %+v", r)
 	}
-	if r.Version != w.Version+1 {
-		t.Errorf("version after resize = %d, want %d", r.Version, w.Version+1)
+	// A resize is layout: the version stays put (version_rule_test.go).
+	if r.Version != w.Version {
+		t.Errorf("resize moved the version %d -> %d; layout does not bump", w.Version, r.Version)
 	}
 	// Resize to overlap another tile should fail.
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
@@ -276,7 +277,7 @@ func TestResizeNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: r.ID, Version: r.Version,
+		TileID: r.ID,
 		GridID: r.GridID, X: 0, Y: 0, W: 5, H: 4,
 	})
 	if !errors.Is(err, ErrOverlap) {
@@ -284,7 +285,10 @@ func TestResizeNode(t *testing.T) {
 	}
 }
 
-func TestResizeVersionConflict(t *testing.T) {
+// TestResizeIgnoresStaleClaim: resize rides PlaceTile, which carries no
+// version claim (docs/simplify-plan.md S5) — see TestPlaceTileIgnoresStaleClaim
+// for the rule and version_rule_test.go for the whole table.
+func TestResizeIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -294,12 +298,15 @@ func TestResizeVersionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: w.ID, Version: w.Version + 99,
+	r, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: w.ID,
 		GridID: w.GridID, X: 0, Y: 0, W: 2, H: 2,
 	})
-	if !errors.Is(err, ErrVersionConflict) {
-		t.Errorf("got %v, want ErrVersionConflict", err)
+	if err != nil {
+		t.Fatalf("stale claim must be accepted: %v", err)
+	}
+	if r.W != 2 || r.H != 2 {
+		t.Errorf("resized to %dx%d, want 2x2", r.W, r.H)
 	}
 }
 
@@ -314,7 +321,7 @@ func TestSetFraming(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:  w.ID,
 		Framing: rpc.Framing{Cx: 5.25, Cy: 7.5, Zoom: 1.5},
 	})
 	if err != nil {
@@ -344,7 +351,7 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID:     w.ID,
 		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
@@ -355,7 +362,7 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 	}
 	// Frame only the clone.
 	framed, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: clone.ID, Version: clone.Version,
+		TileID:  clone.ID,
 		Framing: rpc.Framing{Cx: 3, Cy: 4, Zoom: 2.0},
 	})
 	if err != nil {
@@ -393,8 +400,8 @@ func TestSetTextViewPersistsWindowAndMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.SetTextView(ctx, &rpc.SetTextViewRequest{
-		TileID: f.ID, Version: f.Version,
-		TextX: 10, TextY: 20, TextW: 640, TextH: 480, TextMode: rpc.TextModeRendered,
+		TileID: f.ID,
+		TextX:  10, TextY: 20, TextW: 640, TextH: 480, TextMode: rpc.TextModeRendered,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -434,7 +441,7 @@ func TestSetFramingRejectsNonWell(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: f.ID, Version: f.Version, Framing: rpc.Framing{Cx: 1, Cy: 1, Zoom: 1},
+		TileID: f.ID, Framing: rpc.Framing{Cx: 1, Cy: 1, Zoom: 1},
 	})
 	if !errors.Is(err, ErrNotWellTile) {
 		t.Errorf("got %v, want ErrNotWellTile", err)
@@ -452,7 +459,7 @@ func TestSetTextViewRejectsNonText(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.SetTextView(ctx, &rpc.SetTextViewRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID,
 	})
 	if !errors.Is(err, ErrNotTextTile) {
 		t.Errorf("got %v, want ErrNotTextTile", err)
@@ -509,7 +516,12 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	}
 }
 
-func TestDeleteTileVersionConflict(t *testing.T) {
+// TestDeleteTileIgnoresStaleClaim: the delete gesture is the user's, on a
+// tile they can see, and it is recoverable (the row moves to the trash). A
+// version that moved under it — a page title capture on the very tile being
+// discarded — must not turn the gesture into an error the user has to
+// re-issue. No claim (docs/simplify-plan.md S5).
+func TestDeleteTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -519,8 +531,7 @@ func TestDeleteTileVersionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: w.Version + 1})
-	if !errors.Is(err, ErrVersionConflict) {
-		t.Errorf("got %v, want ErrVersionConflict", err)
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID}); err != nil {
+		t.Errorf("stale claim must be accepted: %v", err)
 	}
 }

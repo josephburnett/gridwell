@@ -91,7 +91,7 @@ func TestCloneLeafLinkCopiesReference(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: ln.ID, Version: ln.Version,
+		TileID:     ln.ID,
 		DestGridID: root, X: 2, Y: 0,
 	})
 	if err != nil {
@@ -144,8 +144,8 @@ func TestSetTextViewOnLinkKeepsModeNull(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.SetTextView(ctx, &rpc.SetTextViewRequest{
-		TileID: link.ID, Version: link.Version,
-		TextX: 3, TextY: 40, TextW: 300, TextH: 200, TextMode: rpc.TextModeRendered,
+		TileID: link.ID,
+		TextX:  3, TextY: 40, TextW: 300, TextH: 200, TextMode: rpc.TextModeRendered,
 	})
 	if err != nil {
 		t.Fatalf("SetTextView on a link: %v", err)

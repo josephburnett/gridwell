@@ -95,6 +95,17 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
+		// outbox lists the writes the server has not acknowledged, in drain
+		// order, as "<op>:<id>" — the observable behind "did that outage
+		// actually park my work, and did the reconnect land it?", which a
+		// spec previously could only infer from the far-end effect.
+		"outbox": js.FuncOf(func(js.Value, []js.Value) any {
+			out := []any{}
+			for _, k := range a.out.Keys() {
+				out = append(out, k.Op+":"+k.ID)
+			}
+			return out
+		}),
 		"shellStandin": js.FuncOf(a.thShellStandin),
 		"shellText":    js.FuncOf(a.thShellText),
 		"shellFeed":    js.FuncOf(a.thShellFeed),

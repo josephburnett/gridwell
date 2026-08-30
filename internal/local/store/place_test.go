@@ -9,9 +9,11 @@ import (
 )
 
 // The PlaceTile suite (2026-07-26 redesign): placement is one verb owning one
-// fact, id-addressed + version-claimed, with NO descent path anywhere — the
+// fact, id-addressed, with NO descent path anywhere — the
 // well-into-own-subtree refusal must come from the store's own ancestor walk,
 // where the old MoveTile trusted a client-supplied DestPath membership check.
+// It carries no version claim either (docs/simplify-plan.md S5): the overlap
+// refusal below, not a claim, is what protects the grid.
 
 func placeText(t *testing.T, s *Store, gridID string, x, y int64) *rpc.Tile {
 	t.Helper()
@@ -43,7 +45,7 @@ func TestPlaceTileResizeInPlace(t *testing.T) {
 
 	// Growing in place must not collide with the tile's own old footprint.
 	got, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: tile.ID, Version: tile.Version, GridID: root, X: 0, Y: 0, W: 3, H: 2,
+		TileID: tile.ID, GridID: root, X: 0, Y: 0, W: 3, H: 2,
 	})
 	if err != nil {
 		t.Fatalf("place: %v", err)
@@ -51,8 +53,10 @@ func TestPlaceTileResizeInPlace(t *testing.T) {
 	if got.W != 3 || got.H != 2 || got.GridID != root {
 		t.Errorf("placed = grid %s (%d,%d %dx%d), want grid %s 3x2", got.GridID, got.X, got.Y, got.W, got.H, root)
 	}
-	if got.Version <= tile.Version {
-		t.Errorf("placement is a real edit: version %d should exceed %d", got.Version, tile.Version)
+	// Placement is layout, not content: the version stays put
+	// (version_rule_test.go owns the whole rule).
+	if got.Version != tile.Version {
+		t.Errorf("placement moved the version %d -> %d; layout does not bump", tile.Version, got.Version)
 	}
 }
 
@@ -64,7 +68,7 @@ func TestPlaceTileMoveAndResizeAtOnce(t *testing.T) {
 	tile := placeText(t, s, root, 0, 0)
 
 	got, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: tile.ID, Version: tile.Version, GridID: well.ChildGridID, X: 2, Y: 3, W: 2, H: 2,
+		TileID: tile.ID, GridID: well.ChildGridID, X: 2, Y: 3, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatalf("place: %v", err)
@@ -106,24 +110,40 @@ func TestPlaceTileOverlapRefused(t *testing.T) {
 	b := placeText(t, s, root, 5, 0)
 
 	_, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: b.ID, Version: b.Version, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		TileID: b.ID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if !errors.Is(err, ErrOverlap) {
 		t.Fatalf("placing onto an occupied cell: got %v, want ErrOverlap", err)
 	}
 }
 
-func TestPlaceTileVersionConflict(t *testing.T) {
+// TestPlaceTileIgnoresStaleClaim: a drag is an explicit act on a tile the
+// user can see, so a version that moved under it (a title capture, a foreign
+// rename) must not cost the user the move. Placement carries no claim
+// (docs/simplify-plan.md S5); the overlap check below is what actually
+// protects the grid, and it runs in the same transaction either way.
+func TestPlaceTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
 	tile := placeText(t, s, root, 0, 0)
 
-	_, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: tile.ID, Version: tile.Version + 41, GridID: root, X: 1, Y: 1, W: 1, H: 1,
+	got, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: tile.ID, GridID: root, X: 1, Y: 1, W: 1, H: 1,
 	})
-	if !errors.Is(err, ErrVersionConflict) {
-		t.Fatalf("stale claim: got %v, want ErrVersionConflict", err)
+	if err != nil {
+		t.Fatalf("stale claim must be accepted: %v", err)
+	}
+	if got.X != 1 || got.Y != 1 {
+		t.Errorf("placed at (%d,%d), want (1,1)", got.X, got.Y)
+	}
+	// The grid is still protected: an overlapping place is refused whatever
+	// the claim says.
+	other := placeText(t, s, root, 5, 5)
+	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: other.ID, GridID: root, X: 1, Y: 1, W: 1, H: 1,
+	}); !errors.Is(err, ErrOverlap) {
+		t.Fatalf("overlap with a stale claim: got %v, want ErrOverlap", err)
 	}
 }
 
@@ -141,19 +161,19 @@ func TestPlaceTileCycleRefusedWithoutPath(t *testing.T) {
 
 	// Into its own child grid: refused.
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: wellA.ID, Version: wellA.Version, GridID: wellA.ChildGridID, X: 3, Y: 3, W: 1, H: 1,
+		TileID: wellA.ID, GridID: wellA.ChildGridID, X: 3, Y: 3, W: 1, H: 1,
 	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("well into own child: got %v, want ErrInvalidArgument", err)
 	}
 	// Into a grandchild grid: refused (the walk crosses two levels).
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: wellA.ID, Version: wellA.Version, GridID: wellB.ChildGridID, X: 3, Y: 3, W: 1, H: 1,
+		TileID: wellA.ID, GridID: wellB.ChildGridID, X: 3, Y: 3, W: 1, H: 1,
 	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("well into grandchild: got %v, want ErrInvalidArgument", err)
 	}
 	// The inner well hoisted OUT to the root is legal (no cycle upward).
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: wellB.ID, Version: wellB.Version, GridID: root, X: 7, Y: 7, W: 1, H: 1,
+		TileID: wellB.ID, GridID: root, X: 7, Y: 7, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("hoisting the inner well out: %v", err)
 	}
@@ -174,7 +194,7 @@ func TestPlaceTileExitWellHasNoLocalSubtree(t *testing.T) {
 	}
 
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: exit.ID, Version: exit.Version, GridID: interior.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+		TileID: exit.ID, GridID: interior.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("placing an exit well into an interior grid: %v", err)
 	}

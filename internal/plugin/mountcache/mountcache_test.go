@@ -338,14 +338,13 @@ func TestVerdictNeverMasked(t *testing.T) {
 	}
 	// Two deletes: the first parks the tile in the local plugin's trash
 	// (#262 — it still reads), the second destroys it for real.
-	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id, Version: txt.GetTile().GetVersion()}); err != nil {
+	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id}); err != nil {
 		t.Fatal(err)
 	}
-	cur, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: id})
-	if err != nil {
+	if _, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: id}); err != nil {
 		t.Fatalf("trashed tile must still read: %v", err)
 	}
-	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id, Version: cur.GetTile().GetVersion()}); err != nil {
+	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: id}); status.Code(err) != codes.NotFound {
@@ -396,8 +395,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	primed := false
 	for i := 0; i < 50 && !primed; i++ {
 		if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
-			Version: well.GetTile().GetVersion(),
-			Cx:      1, Cy: 1, Zoom: 2}); err != nil {
+			Cx: 1, Cy: 1, Zoom: 2}); err != nil {
 			t.Fatal(err)
 		}
 		select {
@@ -411,12 +409,10 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	}
 
 	if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
-		Version: well.GetTile().GetVersion(),
-		Cx:      9, Cy: 9, Zoom: 3}); err != nil {
+		Cx: 9, Cy: 9, Zoom: 3}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: doomed.GetTile().GetId(),
-		Version: doomed.GetTile().GetVersion()}); err != nil {
+	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: doomed.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
 	// Pump the tee until both mutations have flowed through it.
@@ -503,7 +499,7 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 	}
 	// Deleted UPSTREAM directly — the cache never sees an event.
 	if _, err := upstream.GridwellClient.DeleteTile(ctx, &pb.DeleteTileRequest{
-		TileId: doomed.GetTile().GetId(), Version: doomed.GetTile().GetVersion()}); err != nil {
+		TileId: doomed.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
 	// The refresh read replaces the grid's whole tile set.

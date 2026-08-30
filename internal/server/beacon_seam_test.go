@@ -113,8 +113,8 @@ func TestSetURLStateBeaconSeam(t *testing.T) {
 	}
 
 	path, body := rpc.SetURLStateBeacon(&rpc.SetURLStateRequest{
-		TileID: tile.ID, Version: tile.Version,
-		URL: "https://deep.example/page/40", Title: "page 40",
+		TileID: tile.ID,
+		URL:    "https://deep.example/page/40", Title: "page 40",
 		History: `["https://start.example","https://deep.example/page/40"]`,
 	})
 	res := postBeacon(t, hs, path, rpc.BeaconJSONType, body)

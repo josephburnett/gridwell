@@ -438,10 +438,10 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 	// "<srcUUID>/<grid>", an exit well's already-qualified target stays put —
 	// either way the link target below is exactly what the client would see.
 	st := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{resp.GetTile()})[0]
-	if m.Version != st.Version {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("version conflict: tile %s is at %d, request has %d", m.TileId, st.Version, m.Version))
-	}
+	// No version claim: a clone is LAYOUT (the source row is untouched), and
+	// version means the user's content bytes and nothing else
+	// (docs/simplify-plan.md S5). The old hand-rolled check here re-derived
+	// the local store's claim across the seam; both are gone.
 
 	create := &pb.CreateTileRequest{
 		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H,
@@ -714,9 +714,7 @@ func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, candidates
 		if err != nil || et.GetTile() == nil || et.GetTile().GridId != info.ScratchGridId {
 			continue // not an ephemeral — viewed content, never touched
 		}
-		if _, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{
-			TileId: elocal, Version: et.GetTile().Version,
-		}); err != nil {
+		if _, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal}); err != nil {
 			log.Printf("gridwell: delete %s: reaping ephemeral %s failed: %v", qualifiedID, id, err)
 		}
 	}
@@ -743,7 +741,7 @@ func (h *connectHandler) SetFraming(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.SetFramingRequest{Version: m.Version, Cx: m.Cx, Cy: m.Cy, Zoom: m.Zoom}
+	out := &pb.SetFramingRequest{Cx: m.Cx, Cy: m.Cy, Zoom: m.Zoom}
 	if root {
 		out.RootGridId = local
 	} else {

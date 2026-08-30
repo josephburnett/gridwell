@@ -13,7 +13,14 @@ import (
 // interface-redesign-plan.md decision 7): placement is one fact —
 // (grid_id, x, y, w, h) — and this verb owns all of it. A move is a grid
 // change, a resize a footprint change, and both at once are one write.
-// Id-addressed + version-claimed; there is no descent path.
+// Id-addressed; there is no descent path.
+//
+// Placement is LAYOUT, not content: no version claim, no version bump
+// (docs/simplify-plan.md S5). A drag is an explicit act on a tile the user
+// can see, so when two clients race, "whoever moved it last moved it" is the
+// physical-world answer and the tile event reconciles it. The one thing a
+// race could actually corrupt — two tiles in one cell — is refused by the
+// overlap check below, inside this same transaction, claim or no claim.
 //
 // Moving a well into its own subtree is refused by walking ANCESTORS of the
 // destination grid (wellWouldContainItself) — a fact the server derives
@@ -33,7 +40,7 @@ func (s *Store) PlaceTile(ctx context.Context, req *rpc.PlaceTileRequest) (*rpc.
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, tileID, req.Version)
+		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
 		}
@@ -64,9 +71,6 @@ func (s *Store) PlaceTile(ctx context.Context, req *rpc.PlaceTileRequest) (*rpc.
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET grid_id = ?, x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
 			destGridID, req.X, req.Y, req.W, req.H, s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
 			return err
 		}
 		if crossGrid {

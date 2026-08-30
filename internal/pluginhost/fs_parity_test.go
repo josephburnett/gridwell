@@ -155,7 +155,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 			bin = tile
 		}
 	}
-	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: bin.ID, Version: bin.Version}); err != nil {
+	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: bin.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "data.bin")); !os.IsNotExist(err) {
@@ -164,7 +164,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	if _, err := v2.GetTile(ctx, bin.ID); err == nil {
 		t.Fatal("a retired tile still reads")
 	}
-	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: bin.ID, Version: bin.Version}); err != nil {
+	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: bin.ID}); err != nil {
 		t.Fatalf("delete must be idempotent: %v", err)
 	}
 	// Recreation mints fresh identity.
@@ -211,12 +211,12 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 	}
 	notes, sub := find("notes.md"), find("sub")
 	if _, err := v2.PlaceTile(ctx, &rpc.PlaceTileRequest{
-		TileID: notes.ID, Version: notes.Version, GridID: rootGrid, X: 6, Y: 2, W: 2, H: 1,
+		TileID: notes.ID, GridID: rootGrid, X: 6, Y: 2, W: 2, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := v2.SetFraming(ctx, &rpc.SetFramingRequest{
-		TileID: sub.ID, Version: sub.Version, Framing: rpc.Framing{Cx: 2, Cy: -1, Zoom: 1.4},
+		TileID: sub.ID, Framing: rpc.Framing{Cx: 2, Cy: -1, Zoom: 1.4},
 	}); err != nil {
 		t.Fatal(err)
 	}
