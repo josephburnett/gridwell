@@ -27,12 +27,11 @@ const urlUpdateDebounceMs = 150
 // intermediate values — only the resting state matters.
 const framingSaveDebounceMs = 600
 
-// scheduleFramingSave arms the debounced framing persister. Armed from
-// draw() — every state change redraws, so there is no per-gesture
-// persistence hook to forget (the workspace-layout persister's shape,
-// charter §1). Before this existed (issue #190) framing was written ONLY
-// at ascent, so leaving a grid any other way — descending deeper, a pane
-// switch, a portal, a URL edit, a reload — silently lost the viewport.
+// scheduleFramingSave arms the debounced framing persister, from draw().
+// Every state change redraws, so there is no per-gesture persistence hook to
+// forget — the same shape as the pane-layout persister. Writing framing only
+// at ascent would lose the viewport whenever a grid is left another way:
+// descending deeper, a pane switch, a URL edit, a reload.
 func (a *App) scheduleFramingSave() {
 	if a.sched.framingSaveScheduled {
 		return
@@ -42,19 +41,18 @@ func (a *App) scheduleFramingSave() {
 }
 
 // flushFramingSave persists every pane's settled grid framing now. The
-// writers it dispatches to no-op when nothing moved, so quiet calls are
-// free. Skipped entirely while a transition animates: animated viewport
-// values are presentation, not user state — persisting one would store
-// framing the user never set (the guiding rule). draw() re-arms the
-// debounce on the next frame, so the flush lands after the animation.
+// writers it dispatches to no-op when nothing moved, so quiet calls are free.
+// It is skipped entirely while a transition animates: animated viewport
+// values are presentation, not user state, and persisting one would store
+// framing the user never set. draw() re-arms the debounce on the next frame,
+// so the flush lands after the animation.
 func (a *App) flushFramingSave() {
 	if a.transition != nil {
 		return
 	}
 	a.framingFlushes++
-	// One active surface per grid (owner decision 2026-08-13, #249
-	// extended): among panes showing the same grid only the FOCUSED one
-	// writes its framing — pane.FramingWriters is the pure rule.
+	// One active surface per grid: among panes showing the same grid, only
+	// the focused one writes its framing. pane.FramingWriters is the rule.
 	var pgs []pane.PaneGrid
 	a.tree.Walk(func(p *pane.Pane) {
 		pgs = append(pgs, pane.PaneGrid{PaneID: p.ID, GridID: a.gridIDForPane(p)})
@@ -68,14 +66,14 @@ func (a *App) flushFramingSave() {
 	a.flushWellWheelSaves()
 }
 
-// flushWellWheelSaves posts the settled hover-wheel well zooms (issue
-// #210): one SetFraming per touched tile, from the PENDING drift state —
-// the one owner of the not-yet-persisted view (decision 2026-08-13). It
-// used to re-read the cache row, and any refetch inside the settle window
-// replaced the patch with server values, so the flush silently reverted
-// the wheel. The version claim prefers the cache row's (fresher when an
-// event landed); the drift's wheel-time claim is the fallback, and the
-// framing dispatcher's conflict retry covers both being stale.
+// flushWellWheelSaves posts the settled hover-wheel well zooms: one
+// SetFraming per touched tile, from the pending drift state, the one owner of
+// the not-yet-persisted view. Re-reading the cache row instead would let any
+// refetch inside the settle window replace the patch with server values and
+// silently revert the wheel. The version claim prefers the cache row's, which
+// is fresher when an event landed; the drift's wheel-time claim is the
+// fallback, and the framing dispatcher's conflict retry covers both being
+// stale.
 func (a *App) flushWellWheelSaves() {
 	for id, st := range a.wellWheelPending {
 		gid := st.gridID
@@ -85,10 +83,9 @@ func (a *App) flushWellWheelSaves() {
 			TileID:  tileID,
 			Framing: rpc.Framing{Cx: st.cx, Cy: st.cy, Zoom: st.ratio},
 		}
-		// The unload transport is the dispatcher's business now (write.beacon):
-		// one place decides whether this write goes as an RPC or as a beacon,
-		// so a PARKED framing write reaches the beacon path too — before, the
-		// check lived here and the unload flush left the outbox untouched.
+		// The unload transport is the dispatcher's business (write.beacon):
+		// one place decides whether this write goes as an RPC or as a
+		// beacon, so a parked framing write reaches the beacon path too.
 		a.postFramingPersistBeacon("SetFraming", gid, tileID,
 			func(ctx context.Context) error {
 				_, err := a.cl.SetFraming(ctx, req)
@@ -101,16 +98,14 @@ func (a *App) flushWellWheelSaves() {
 	}
 }
 
-// persistPaneFraming writes pane p's current place framing — the same
-// write an ascent flushes, fired without waiting for one. WHICH ROW owns it
-// is the place stack's own projection (pane.FramingTarget): the doorway the
-// pane came in by, or the grid row when it came in by nothing. This used to
-// be three hand-written branches here and two more inside the ascents.
+// persistPaneFraming writes pane p's current place framing: the same write an
+// ascent flushes, fired without waiting for one. Which row owns it is the
+// place stack's own projection (pane.FramingTarget): the doorway the pane
+// came in by, or the grid row when it came in by nothing.
 //
-// A content descent settle-persists its SCROLL (decision 2026-08-13 — it
-// used to survive only an ascent, so a reload lost your place in the
-// doc). No-op when the place is unresolvable (uncached parent grid) —
-// the next settle retries.
+// A content descent settle-persists its scroll, so a reload does not lose
+// your place in the doc. A no-op when the place is unresolvable, as with an
+// uncached parent grid; the next settle retries.
 func (a *App) persistPaneFraming(p *pane.Pane) {
 	own := p.FramingTarget()
 	switch {
@@ -129,9 +124,9 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 		}
 		w, ok := g.Tiles[own.TileID]
 		if !ok {
-			// No row for the doorway — a + menu portal. The level's own
-			// root grid owns the framing instead (the same fact, the same
-			// verb).
+			// No row for the doorway: a + menu descent. The level's own
+			// root grid owns the framing instead, the same fact through
+			// the same verb.
 			a.persistFraming(p, nil, "", nil)
 			return
 		}
@@ -139,25 +134,25 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 	}
 }
 
-// persistFraming is the ONE framing writeback (docs/simplify-plan.md S4).
-// It writes the pane's settled place — a float CENTER in the grid it is
-// showing, plus the pane-size-independent intrinsic zoom — onto the row
-// that owns it, through the one wire verb.
+// persistFraming is the one framing writeback. It writes the pane's settled
+// place — a float center in the grid it is showing, plus the
+// pane-size-independent intrinsic zoom — onto the row that owns it, through
+// the one wire verb.
 //
-// `door` is the DOORWAY tile the pane entered its grid through, living
-// under (doorAnchor, doorPath); nil means the pane sits at a ROOT grid,
-// which has no doorway, so the grid row owns the framing and the client's
-// copy of it is the plugin's Info handshake. The zoom is measured against
-// the doorway's footprint — 1×1 for a root, the same synthetic doorway a
-// plugin renders as (rpc.PluginWellTile), so preview and descent agree.
+// `door` is the doorway tile the pane entered its grid through, living under
+// (doorAnchor, doorPath). nil means the pane sits at a root grid, which has no
+// doorway, so the grid row owns the framing and the client's copy of it is
+// the plugin's Info handshake. The zoom is measured against the doorway's
+// footprint — 1×1 for a root, the same synthetic doorway a plugin renders as
+// (rpc.PluginWellTile) — so preview and descent agree.
 //
 // Fired by every ascent flush and by the settle persister
-// (flushFramingSave). No-op when nothing moved (rpc.Framing.SameAs), so
-// quiet calls don't churn the store. The doorway arm mutates `door` in
-// place — the local-side ascent transition uses the new values — and
-// patches the cache so the parent's preview renders them before the
-// server's event arrives. During beforeunload the write rides a beacon
-// instead (unload.go).
+// (flushFramingSave). A no-op when nothing moved (rpc.Framing.SameAs), so
+// quiet calls do not churn the store. The doorway arm mutates `door` in place,
+// because the local-side ascent transition uses the new values, and patches
+// the cache so the parent's preview renders them before the server's event
+// arrives. During beforeunload the write rides a beacon instead
+// (unload.go).
 func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, doorPath []string) {
 	var (
 		req    rpc.SetFramingRequest
@@ -188,9 +183,9 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 		gridID = p.Anchor()
 		req = rpc.SetFramingRequest{RootGridID: p.Anchor()}
 		commit = func(f rpc.Framing) {
-			// The local PluginInfo copy of the root framing (a cache of
-			// the Info handshake) reconciles immediately, so the next
-			// + menu descent frames to what was just saved.
+			// The local PluginInfo copy of the root framing, a cache of the
+			// Info handshake, reconciles immediately, so the next + menu
+			// descent frames to what was just saved.
 			for i := range a.plugins {
 				if a.plugins[i].UUID == pl.UUID {
 					a.plugins[i].RootViewCx = f.Cx
@@ -209,8 +204,8 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 	commit(next)
 	req.Framing = next
 	// One dispatcher for both rows a framing can live on: the doorway tile
-	// and the root grid. They differ only in which id keys the parked write
-	// (a grid id and a tile id are separate sequences), never in policy —
+	// and the root grid. They differ only in which id keys the parked write,
+	// since grid ids and tile ids are separate sequences, never in policy;
 	// neither carries a claim.
 	key := req.TileID
 	if key == "" {
@@ -227,13 +222,12 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 		})
 }
 
-// persistTextScroll is the settle persister's text arm (framing-audit
-// decision 2026-08-13): a text descent's scroll position persists like
-// grid framing does — framing-class, no version bump, one SetTextView
-// when it actually moved. Content stays with the keystroke save queue;
-// read-only host tiles keep session-only scroll (their plugins refuse
-// text framing — the existing #236 decision); url/shell/page descents
-// carry no text framing at all.
+// persistTextScroll is the settle persister's text arm: a text descent's
+// scroll position persists like grid framing does — framing-class, no version
+// bump, one SetTextView when it actually moved. Content stays with the
+// keystroke save queue. Read-only host tiles keep session-only scroll,
+// because their plugins refuse text framing, and url, shell, and page
+// descents carry no text framing at all.
 func (a *App) persistTextScroll(p *pane.Pane) {
 	file, ok := a.descendedTile(p)
 	if !ok || file.Kind != rpc.KindText || file.ServesPage ||
@@ -283,22 +277,21 @@ func (a *App) scheduleURLUpdate() {
 }
 
 // writeURLNow encodes the focused pane's state and writes it to the browser
-// history — the ONE history writer. push-vs-replace is the tested
-// pane.URLPushesEntry decision over the DIFF between this write's place and the
-// last one written (issue #194): structural navigation (descend / ascend /
-// portal / workspace boundary) pushes an entry so back traverses it; framing
+// history: the one history writer. Push against replace is the tested
+// pane.URLPushesEntry decision over the diff between this write's place and
+// the last one written. Structural navigation — a descent, an ascent, a
+// pane-tile boundary — pushes an entry so back traverses it, while framing
 // changes and pane-focus switches replace in place. No call site carries a
-// "structural" bit — the intent is derived from state, so a forgotten flag
-// is unrepresentable. During a popstate restore (urlRestoring) every write
-// replaces: the restore re-encodes the place the browser already navigated
-// to, and pushing would corrupt the very stack being traversed.
+// "structural" bit: the intent is derived from state, so a forgotten flag is
+// unrepresentable. During a popstate restore (urlRestoring) every write
+// replaces, because the restore re-encodes the place the browser already
+// navigated to and pushing would corrupt the stack being traversed.
 //
 // Idempotent; safe even when no user change has happened.
 func (a *App) writeURLNow() {
-	// A restore in flight owns the URL: a write here would clobber the very
-	// entry the browser just navigated to with mid-restore pane state (the
-	// bug the forward half of web-history.spec caught). The restore's final
-	// step re-runs this with the flag down.
+	// A restore in flight owns the URL: a write here would clobber the entry
+	// the browser just navigated to with mid-restore pane state. The
+	// restore's final step re-runs this with the flag down.
 	if a.urlRestoring {
 		return
 	}
@@ -319,12 +312,11 @@ func (a *App) writeURLNow() {
 	}
 }
 
-// withE2EParam re-appends the e2e harness gate. pane.EncodeURL rebuilds the query
-// from scratch, so any param it doesn't know is dropped on the first write —
-// including `e2e=1`. Without this the FIRST write de-instruments the page and
-// any spec that reloads or history-navigates mid-test loses the testhook
-// (found by the #193 reload spec; hook-gating's assert was racing the
-// debounce).
+// withE2EParam re-appends the e2e harness gate. pane.EncodeURL rebuilds the
+// query from scratch, so any param it does not know is dropped on the first
+// write, `e2e=1` included. Without this the first write de-instruments the
+// page and any spec that reloads or history-navigates mid-test loses the
+// testhook.
 func (a *App) withE2EParam(raw string) string {
 	if !strings.Contains(js.Global().Get("location").Get("search").String(), "e2e=1") {
 		return raw
@@ -335,18 +327,17 @@ func (a *App) withE2EParam(raw string) string {
 	return raw + "?e2e=1"
 }
 
-// restoreFromHistory applies a browser back/forward (popstate): a
+// restoreFromHistory applies a browser back or forward (popstate): a
 // reload-equivalent restore of the focused pane at the URL the browser
-// navigated to. Runs on its own goroutine (fetches block). The session
-// scaffolding that a reload would lose — the pane's outer frames, live
-// streams, selection — resets here too, deliberately: back is
-// navigation to a PLACE, and the place's truth (content, framing) is all
-// server-owned by now (#190), so what's dropped is only transient workspace
-// scaffolding, never data.
-// The caller (the popstate listener) has already set urlRestoring and
-// captured raw — both must happen SYNCHRONOUSLY in the event callback,
-// before any pending debounced write can fire and clobber the target
-// entry's URL.
+// navigated to. It runs on its own goroutine, because fetches block. The
+// session scaffolding a reload would lose — the pane's outer frames, live
+// streams, selection — resets here too, deliberately: back is navigation to a
+// place, and the place's truth (content, framing) is server-owned, so what is
+// dropped is transient scaffolding, never data.
+//
+// The caller, the popstate listener, has already set urlRestoring and
+// captured raw. Both must happen synchronously in the event callback, before
+// any pending debounced write can fire and clobber the target entry's URL.
 func (a *App) restoreFromHistory(raw string) {
 	// Leaving the current place: the same boundary flushes every other
 	// navigation performs (pending text + framing still in their debounce
@@ -362,10 +353,10 @@ func (a *App) restoreFromHistory(raw string) {
 		a.writeURLNow()
 	}()
 
-	// The popped URL names the WHOLE place. Interior workspace navigation
-	// never pushes entries (the URL is constant inside a workspace), so a
-	// popstate always crosses a place boundary — exit any workspace stack
-	// through its real exit path (layout flushes included) before restoring.
+	// The popped URL names the whole place. Navigation inside a pane tile
+	// never pushes entries, since the URL is constant there, so a popstate
+	// always crosses a place boundary: exit any level stack through its real
+	// exit path, layout flushes included, before restoring.
 	a.ascendLevels(a.ws.Depth())
 
 	p := a.tree.FocusedPane()
@@ -373,7 +364,7 @@ func (a *App) restoreFromHistory(raw string) {
 		return
 	}
 	// Reload-equivalent per-pane reset: close live streams and clear the
-	// pane's PLACE down to one frame — applyURLState installs the decoded
+	// pane's place down to one frame. applyURLState installs the decoded
 	// place over it, so a deeper frame left standing here would survive a
 	// restore to a shallower place.
 	a.menu.Close()
@@ -386,13 +377,12 @@ func (a *App) restoreFromHistory(raw string) {
 }
 
 // encodeFocusedPaneURL projects the focused pane's place into the URL DTO.
-// The projection itself is pane.URLStateOf (the ONE encode half, unit
-// tested); the only thing the shim adds is the textarea cursor, which is a
-// DOM fact.
+// The projection itself is pane.URLStateOf, the one encode half, unit-tested;
+// the only thing the shim adds is the textarea cursor, which is a DOM fact.
 func (a *App) encodeFocusedPaneURL() pane.URLState {
-	// Inside a pane tile, that tile IS the place: the interior (every pane's
-	// place and viewport) is server-owned by the layout blob, so nothing
-	// else rides the URL (one fact, one owner — the blob wins).
+	// Inside a pane tile, that tile is the place: the interior — every
+	// pane's place and viewport — is server-owned by the layout blob, so
+	// nothing else rides the URL.
 	if top := a.ws.Top(); top != nil {
 		return pane.URLState{Workspace: top.TileID}
 	}
