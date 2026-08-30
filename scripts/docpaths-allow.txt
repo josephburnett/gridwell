@@ -12,9 +12,12 @@ docs/plugin.md internal/plugin/guest
 docs/plugin.md internal/cli/sshmigrate.go
 docs/plugin.md plugins/griddb
 # The 2026-08-29 review names the five place representations as they stood
-# before S8 folded them into client/pane:
+# before S8 folded them into client/pane; the plan's status table names the
+# two packages that fold retired:
 docs/architecture-review.md client/url
 docs/architecture-review.md client/workspace
+docs/simplify-plan.md client/url
+docs/simplify-plan.md client/workspace
 # A proposed package that does not exist yet (offline options, 2026-08-14):
 docs/offline.md client/oplog
 # A gitignored runtime cache dir that `make vendor` creates:
@@ -47,6 +50,7 @@ docs/architecture-review.md apps/desktop/src/main/shellgrpc.ts
 # written:
 docs/offline-plan.md client/pending
 docs/architecture-review.md client/pending
+docs/simplify-plan.md client/pending
 # docs/architecture-review.md names the in-process gRPC loopback its
 # finding 5 is about, DELETED 2026-08-29 (docs/simplify-plan.md S2):
 docs/architecture-review.md api/compose/compose.go
@@ -54,6 +58,7 @@ docs/architecture-review.md api/compose/compose.go
 # 2026-08-29 with the in-process hop (docs/simplify-plan.md S2):
 docs/plugin.md internal/plugin/proxytest
 docs/architecture-review.md internal/plugin/proxytest
+docs/simplify-plan.md internal/plugin/proxytest
 # The 2026-08-29 review's finding 6 names the mount cache by the path it had;
 # S7 renamed it internal/sourcecache and put it in front of plugins too. The
 # 2026-08-14 offline plan names it the same way, and says so inline:

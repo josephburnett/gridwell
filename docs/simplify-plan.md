@@ -66,3 +66,35 @@ disjoint code and run in parallel.
 4. **S8 One place** — last, on the simplified base, under the e2e gate.
 5. **Docs** — `ARCHITECTURE.md`, `CLAUDE.md` owner decisions, the store
    contract; the review's findings marked resolved.
+
+## Status: DONE 2026-08-29
+
+Every workstream landed on `main` in `10c009a..7cf468f`, in the planned
+order, each a series of ordinary commits with `make check` green and the
+native gates where the native layer was touched. Per-finding detail — the
+mechanism now in force, and what each deviation was for — is the
+**Resolution** section of `docs/architecture-review.md`.
+
+| # | Range | Landed | Deviation from this plan |
+|---|---|---|---|
+| S1 Prune | `0a42c34..5279a6b` | The unconfigured plugin well's verbs, `create_schemas`, menu-entry CREATION; schema **v10** drops `session`, `tiles.configure_plugin_id` and `object_id` | `listings` moved with S7 (schema v12) rather than here — its last reader was the adapter's listing memory, which S7 owned |
+| S2 In-process namespaces | `9be7b4d..29eeda1` | `internal/namespace` as Go values; `compose.ServeInProcess` and the second router deleted; `Registry.SetTransit`, `InfoResponse.transit` (reserved 15) and `internal/plugin/proxytest` retired | none. The subprocess door was deliberately not touched |
+| S3 One transport | `e1a4a01..802c09f` | The `/shell` WebSocket on the web door; the Electron shell stack deleted; `caps.LiveShell` = `!shellsDisabled`; a browser shell proved end to end (`web-shell.spec.ts`) | `mobile.Start` still sets `disable_shells` — what a phone cannot HOST is not what its client cannot REACH |
+| S4 One framing | `27bb535..622f8e6` | Schema **v11**: a float centre on the doorway row (`tiles.view_cx/cy/zoom`) or the root grid row (`grids.root_cx/cy/zoom`); one `SetFraming`, one `Store.SetFraming`, one `persistFraming`; `system.root_view_*` and the quantization math gone | `SetTile`'s well arm became a REFUSAL naming `SetFraming`, not a deletion, so the kind→operation mapping stays total |
+| S5 Versions on content | `fe69fb4..b4bd5c0`, `00434b6` | `claimContentVersion`/`loadForWrite` make the rule structural; the retired claim fields are `reserved`; `client/pending` + the dirty ledger become `client/outbox` | `SetTileRequest.version` (its one reader is the rename arm) and `WriteContentRequest.version` stay, with the pane arm's ignored claim pinned as such. LAYOUT was moved to "no claim" on evidence — the plan only named framing |
+| S6 One Tile | `b1be3fe..71f6976` | `api/rpc/wire_gen.go` generated from the proto; `store/columns.go` the one column descriptor; the derived wire fields inventoried with one owner each | "use `pb` types everywhere" rejected on measurement (same binary size; copylocks would force 197 value uses into shared pointers). The Event oneof, the embedded Framing and the per-kind sugar stay hand-written |
+| S7 One memory | `d3e081d..8a39b01` | `internal/sourcecache`: one engine, one `cache.db`, prefetch as per-namespace policy, in front of every non-home namespace; the adapter's listing memory deleted; schema **v12** drops `listings` | The fold is NOT "cache the adapter's answer": a dark SOURCE is answered by the durable rows (a move made during the outage survives), a dark PLUGIN by the cache |
+| S8 One place | `cc44fd3..2a52dc0` | One `pane.Stack` of frames; `client/url` and `client/workspace` folded in; eight ascents and five descents become one `ascend` and one `descend` | The PANE-TILE level stays a second axis (`pane.Levels`), because swapping the whole pane tree is a different gesture |
+| Docs | this workstream | `CLAUDE.md` owner decisions, `ARCHITECTURE.md` read end to end for contradictions, the store contract, the review's Resolution, and the stale comments across the tree | none |
+
+Bugs found and fixed along the way, none of them the point of their
+workstream: a clone had been silently dropping `content_zoom`,
+`url_history` and `alt_user` (S6); `Open` ran `bootstrapRoot` before the
+migration chain (S1); a rebuild did not recreate v9's
+`idx_tiles_live_key` (S1); a shell takeover never repainted, which the old
+single-IPC-queue ordering had been hiding (S3); the shell door raced its
+own exit frame against the teardown (S3); the unload flush knew only about
+FRESH writes, so anything an earlier outage had parked died at quit (S5);
+`pluginhealth` read an id's SHAPE to recover a fact the row declares (S1);
+and a `mountcache` test restored the process logger to nil, panicking
+other tests in the package (S3).
