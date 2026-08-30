@@ -82,7 +82,7 @@ func (a *App) flushWellWheelSaves() {
 		// The unload transport is the dispatcher's business (write.beacon):
 		// one place decides whether this write goes as an RPC or as a
 		// beacon, so a parked framing write reaches the beacon path too.
-		a.postFramingPersistBeacon("SetFraming", gid, tileID,
+		a.postFramingPersist("SetFraming", gid, tileID,
 			func(ctx context.Context) error {
 				_, err := a.cl.SetFraming(ctx, req)
 				return err
@@ -207,7 +207,7 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 	if key == "" {
 		key = req.RootGridID
 	}
-	a.postFramingPersistBeacon("SetFraming", gridID, key,
+	a.postFramingPersist("SetFraming", gridID, key,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetFraming(ctx, &req)
 			return err
@@ -250,7 +250,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	patched.TextW, patched.TextH = req.TextW, req.TextH
 	patched.TextMode = p.TextMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
-	a.postFramingPersistBeacon("SetTextView", gid, file.ID,
+	a.postFramingPersist("SetTextView", gid, file.ID,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetTextView(ctx, req)
 			return err

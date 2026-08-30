@@ -240,16 +240,12 @@ func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess 
 //
 // Framing carries no version claim, so there is no conflict to re-claim
 // through.
-func (a *App) postFramingPersist(label, gid, id string, call func(ctx context.Context) error) {
-	a.postFramingPersistBeacon(label, gid, id, call, nil)
-}
-
-// postFramingPersistBeacon is postFramingPersist for a write that has an
-// unload form. Every settle persister passes one: the transport choice is the
-// dispatcher's, so a framing write reaches the beacon whether it is posted
-// fresh or drained out of the outbox at unload. Content zoom has no beacon
-// builder and rides the plain form.
-func (a *App) postFramingPersistBeacon(label, gid, id string,
+//
+// beacon is the write's unload form, or nil when it has none: the transport
+// choice is the dispatcher's, so a framing write reaches the beacon whether
+// it is posted fresh or drained out of the outbox at unload. Every settle
+// persister passes one except content zoom, which has no *Beacon builder.
+func (a *App) postFramingPersist(label, gid, id string,
 	call func(ctx context.Context) error, beacon func() (string, []byte, string)) {
 	a.persistPosts[label]++
 	a.post(write{label: label, gid: gid, id: id, optimistic: true, call: call, beacon: beacon})
