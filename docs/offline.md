@@ -7,6 +7,13 @@ and how each fits, and isolates the sync/conflict problem — the hard
 part — with the owner decisions that would have to be made. Nothing here
 is decided.
 
+> **Stale in one place (2026-08-29):** `object_id` — the per-row
+> provenance marker this document proposes as a sync-correlation and
+> create-idempotency hook — was RETIRED at schema v10 (S1 of
+> `docs/simplify-plan.md`): nothing read it to decide anything, so it
+> was dead storage. The idea still stands, but it now needs a NEW
+> client-minted idempotency key, not a field that already exists.
+
 ---
 
 ## 1. What "offline" means here — three different partitions
@@ -119,10 +126,11 @@ server assigning the id — so offline creates need either provisional ids
 with remap-on-sync, or a (frozen-format-hostile) move to client-minted
 ids. Stored references (`link_target_id`, `child_grid_id`) key on these
 ids, so a provisional id must never leak into a stored reference before
-remap. Separately, `object_id` — a 128-bit random provenance marker
-carried across clones and cross-plugin copies (`uuid.go:16-24`) — already
-exists and is the one identity that survives a node boundary; it is a
-natural hook for sync correlation.
+remap. (As of 2026-08-14 there was a second identity, `object_id` — a 128-bit
+provenance marker carried across clones and cross-plugin copies — that
+looked like a natural hook for sync correlation. It was retired at
+schema v10, 2026-08-29: nothing read it. A sync key would have to be
+minted fresh.)
 
 **Blobs are content-addressed but the address stays home.** `blobs.hash`
 is sha256, unique, deduped (`clone.go:273-292`) — the perfect validator
@@ -310,7 +318,7 @@ The existing RPC surface sorts cleanly:
 |---|---|---|---|
 | Framing | `SetWellView`, `SetTextView`, `content_zoom`, `url_frozen`, `SetRootView`, pane-layout `WriteContent` | Idempotent overwrites; last replay wins | Benign — two devices disagreeing about a viewport has a trivial resolution (latest engagement wins), matching today's guarded-LWW semantics. One wrinkle: framing ops *carry* a version claim, so replay after a remote content edit 409s; the existing one-shot re-claim retry (`postFramingPersist`) already handles exactly this shape |
 | Content | text `WriteContent`, url address, rename | CAS on version; concurrent edit → 409 | The real conflicts. Rare (self-conflict only) but must be handled visibly (§5.3) |
-| Create | `CreateTile` (+ the body write that follows) | No precondition; replay is safe against lost-ack duplication *only* by the overlap refusal at the same (x,y) | Needs provisional ids + an idempotency key (a client-minted `object_id` per create would make replays exactly-once — the field already exists and is already client-visible provenance) |
+| Create | `CreateTile` (+ the body write that follows) | No precondition; replay is safe against lost-ack duplication *only* by the overlap refusal at the same (x,y) | Needs provisional ids + a NEW client-minted idempotency key per create (the `object_id` this row once pointed at was retired at schema v10) |
 | Structural | `PlaceTile`, `CloneTile`, `DeleteTile` | All version-claimed; replay after remote change → 409 | Move-vs-edit and delete-vs-edit races surface as conflicts, which is correct; the asymmetric case is edit-vs-*remote-delete* — replay gets NotFound, and with no tombstones the client cannot distinguish "deleted while I was away" from data loss |
 
 Two properties of the store actively help: byte-identical content writes
@@ -324,9 +332,10 @@ dangle but can never resolve to the *wrong* thing.
   edit against a deleted tile fail as "deleted at T by you-elsewhere"
   rather than a bare NotFound, and lets the resync sweep report deletions
   without diffing full grid fetches.
-- **Create idempotency**: accept a client-supplied `object_id` (or a
-  dedicated idempotency key) on `CreateTile` and return the existing tile
-  on replay. Turns lost-ack duplication from "second tile appears" into a
+- **Create idempotency**: accept a client-supplied idempotency key on
+  `CreateTile` and return the existing tile on replay. (This would be a
+  NEW field: the `object_id` the 2026-08-14 text pointed at was retired
+  at schema v10.) Turns lost-ack duplication from "second tile appears" into a
   no-op.
 - **A cheap resync summary**: grid-id → grid-version (and possibly
   tile-id → tile-version per grid). Everything else — CAS, no-op writes,
