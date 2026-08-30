@@ -268,13 +268,13 @@ func rebuildSelect(ctx context.Context, tx *sql.Tx, columns string) (string, err
 // migrateV11 folds the three framing representations into one (see the
 // chain entry). Order matters:
 //
-//  1. A plugin context's root (grids.root_cx/cy, ns != ”) was written as
+//  1. A plugin context's root (grids.root_cx/cy, ns != '') was written as
 //     the ORIGIN of a 1×1 synthetic doorway and read back as origin + 1/2,
 //     so it converts by + 0.5. This runs FIRST, while home's root row is
 //     still empty — otherwise step 2's already-converted value would be
 //     shifted a second time.
 //  2. Home's root moves out of the `system` KV table onto its root GRID
-//     row (ns = ”), converted the same way; the three keys are deleted.
+//     row (ns = ''), converted the same way; the three keys are deleted.
 //     A never-visited home (zoom 0, the bootstrap seed) copies nothing —
 //     it stays "never visited" in the one convention the new shape has.
 //  3. tiles rebuilds, converting view_x/view_y into view_cx/view_cy
