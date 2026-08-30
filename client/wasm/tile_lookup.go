@@ -7,10 +7,9 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// Tile-by-id resolution — general helpers that survived the embed
-// deletion (issue #218): an ephemeral url visit focuses a tile off the
-// pane's grid, so the renderer, the url stream, and the ascent still
-// need the cache-wide walk.
+// Tile-by-id resolution: an ephemeral url visit focuses a tile off the pane's
+// grid, so the renderer, the url stream, and the ascent need a cache-wide
+// walk.
 
 // findTileByID walks the client tile cache for any cached row with the
 // given id (ephemeral url visits and urlsync read it). On a miss it kicks a

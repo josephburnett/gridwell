@@ -2,27 +2,22 @@
 
 package main
 
-// The unload flush (framing-audit decisions 2026-08-13): quitting or
-// reloading inside the settle window must not lose the last pan/scroll.
-// Three mechanisms:
+// The unload flush: quitting or reloading inside the settle window must not
+// lose the last pan or scroll. Three mechanisms:
 //
 //   - beacons: during beforeunload a write posts through
-//     navigator.sendBeacon (Chromium completes beacons after the page
-//     dies) instead of a goroutine RPC that dies with the page. The
-//     bodies are the exact wire form the ordinary calls send
-//     (api/rpc's *Beacon helpers — one request builder, two transports).
-//     WHICH transport a write takes is the dispatcher's decision now
-//     (write.beacon, client/wasm/mutate.go), not each call site's.
-//   - the OUTBOX drains here too (docs/simplify-plan.md S5): everything an
-//     earlier outage parked — a settled viewport, a frozen face, a
-//     workspace arrangement, unsaved bytes — leaves through the beacon
-//     transport instead of dying with the page. Before, the unload flush
-//     knew only about fresh framing and dirty text; anything parked was
-//     silently lost at quit.
-//   - a transition in flight persists its DESTINATION: the viewport the
-//     user chose is the transition's end state, and the old flush simply
-//     skipped it (the mid-animation values are presentation; the
-//     destination is user state).
+//     navigator.sendBeacon, which Chromium completes after the page dies,
+//     instead of a goroutine RPC that dies with the page. The bodies are the
+//     exact wire form the ordinary calls send (api/rpc's *Beacon helpers —
+//     one request builder, two transports). Which transport a write takes is
+//     the dispatcher's decision (write.beacon, mutate.go), not each call
+//     site's.
+//   - the outbox drains here too: everything an earlier outage parked — a
+//     settled viewport, a frozen face, a pane arrangement, unsaved bytes —
+//     leaves through the beacon transport instead of dying with the page.
+//   - a transition in flight persists its destination: the viewport the user
+//     chose is the transition's end state. The mid-animation values are
+//     presentation; the destination is user state.
 
 import (
 	"syscall/js"
@@ -56,7 +51,7 @@ func (a *App) sendBeacon(path string, body []byte, contentType string) bool {
 // flushOnUnload is the beforeunload durable-state path: land the in-flight
 // transition on its destination, switch the beacon transport in
 // (a.unloading), run the settle-persister flush for framing the user just
-// changed, DRAIN THE OUTBOX so everything already owed leaves too, and
+// changed, drain the outbox so everything already owed leaves too, and
 // finally beacon the one thing neither covers — a live page's navigation
 // state, which lives in the bridge, not in any ledger.
 func (a *App) flushOnUnload() {
@@ -79,13 +74,13 @@ func (a *App) flushOnUnload() {
 	a.flushURLStateOnUnload()
 }
 
-// flushURLStateOnUnload beacons the address (+title) a live durable page
-// navigated to (audit #2, 2026-08-14): navigation state used to persist
-// exactly once — at a teardown whose bridge IPC reply never arrives
-// during unload — so closing the tab reverted every live url tile to its
-// descent-time address. No jpeg and no history ride the beacon (the
-// bridge holds both, unreachable now; the store skips empty fields, so
-// the previous face and trail survive rather than being blanked).
+// flushURLStateOnUnload beacons the address, and the title, a live durable
+// page navigated to. Persisting it only at teardown would lose it: the
+// bridge's IPC reply never arrives during unload, so closing the tab would
+// revert every live url tile to its descent-time address. No jpeg and no
+// history rides the beacon — the bridge holds both and is unreachable now —
+// and the store skips empty fields, so the previous face and trail survive
+// rather than being blanked.
 func (a *App) flushURLStateOnUnload() {
 	for _, pl := range a.locals {
 		v := pl.urlView

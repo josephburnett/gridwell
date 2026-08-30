@@ -15,13 +15,11 @@ import (
 // returns, so the input handlers need no touch-specific branches and the whole
 // policy is unit-tested without a browser.
 //
-// ONE install (installOverlayTouch) serves every surface — the canvas AND
-// the DOM overlays that implement button semantics (the text-mode toggle,
-// the xterm container, the file textarea). Real mouse
-// events reach those overlays by browser hit-testing; the touch translation
-// must follow the same routing or a long-press right-click never reaches them
-// (issue #191: the canvas-only install was exactly that gap — long-press on
-// the menu button of a text or shell descent did nothing).
+// One install (installOverlayTouch) serves every surface: the canvas and the
+// DOM overlays that implement button semantics (the text-mode toggle, the
+// xterm container, the editing textarea). Real mouse events reach those
+// overlays by browser hit-testing, and the touch translation must follow the
+// same routing, or a long-press right-click never reaches them.
 
 // installTouchInput wires touch→mouse translation on the canvas. touch-action
 // is set to none so the browser doesn't claim the gesture for scrolling/zoom
@@ -39,17 +37,17 @@ func (a *App) installTouchInput() {
 	a.installOverlayTouch(a.canvas, nil)
 }
 
-// touchNow returns the shared clock every machine feed uses. ONE time domain:
-// the long-press Timer compares against performance.now(), so the Start/Move/
-// End feeds must read the same clock — an event's own timeStamp is epoch-based
-// on some engines, which would put t0 in a different domain and silently kill
-// the long-press classification everywhere.
+// touchNow returns the shared clock every machine feed uses. One time domain:
+// the long-press Timer compares against performance.now(), so the Start,
+// Move, and End feeds read the same clock. An event's own timeStamp is
+// epoch-based on some engines, which would put t0 in a different domain and
+// silently kill the long-press classification everywhere.
 func touchNow() float64 {
 	return js.Global().Get("performance").Call("now").Float()
 }
 
-// installOverlayTouch wires the shared touch→mouse translation onto el,
-// feeding the ONE touchgest machine. claim decides at touchstart whether this
+// installOverlayTouch wires the shared touch-to-mouse translation onto el,
+// feeding the one touchgest machine. claim decides at touchstart whether this
 // element takes the gesture (nil claims everything): the textarea claims only
 // multi-finger so native caret/selection/keyboard keep single-finger; the
 // xterm container claims multi-finger plus a single finger starting on the
@@ -58,10 +56,10 @@ func touchNow() float64 {
 // The listeners are non-passive so preventDefault stops the browser's own
 // handling and its duplicate compatibility mouse events.
 //
-// Returns the four allocated js.Funcs: a caller whose element is
-// per-session (the shell container — rebuilt on every descend) MUST
-// Release them on teardown; the one-time surfaces (canvas, textarea,
-// toggle button) may drop the return.
+// Returns the four allocated js.Funcs. A caller whose element is per-session
+// — the shell container, rebuilt on every descent — must Release them on
+// teardown; the one-time surfaces (canvas, textarea, toggle button) may drop
+// the return.
 func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point) bool) []js.Func {
 	active := false
 	opts := js.Global().Get("Object").New()
@@ -76,8 +74,8 @@ func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point)
 					return nil
 				}
 				active = true
-				// MouseDown routes to THIS element for the rest of the
-				// gesture — the same routing the browser gives a real mouse.
+				// MouseDown routes to this element for the rest of the
+				// gesture — the routing the browser gives a real mouse.
 				a.touchDownTarget = el
 			}
 			ev.Call("preventDefault")
@@ -118,13 +116,14 @@ func touchPoints(list js.Value) []touchgest.Point {
 
 // dispatchTouchActions turns the machine's decisions into real DOM events.
 // Routing mirrors the real-mouse flow:
-//   - MouseDown fires at the element the gesture started on (every overlay
-//     acts on mousedown: toggle/ascend, rename/zoom, xterm's forward) —
-//     EXCEPT the middle button, which has no element semantics anywhere and
-//     goes straight to the canvas (the ascend shortcut's owner).
-//   - MouseMove / MouseUp / Wheel fire at the canvas: once a mousedown armed
-//     a canvas gesture the overlay is parked and the drag tail belongs to
-//     the gesture pipeline, exactly as with a real mouse.
+//   - MouseDown fires at the element the gesture started on, since every
+//     overlay acts on mousedown (toggle and ascend, rename and zoom, xterm's
+//     forward). The exception is the middle button, which has no element
+//     semantics anywhere and goes straight to the canvas, the ascend
+//     shortcut's owner.
+//   - MouseMove, MouseUp, and Wheel fire at the canvas: once a mousedown
+//     armed a canvas gesture the overlay is parked and the drag tail belongs
+//     to the gesture pipeline, exactly as with a real mouse.
 func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 	for _, act := range actions {
 		switch act.Kind {
@@ -185,12 +184,12 @@ func (a *App) dispatchWheel(clientX, clientY, deltaY float64) {
 	a.canvas.Call("dispatchEvent", ev)
 }
 
-// installTextareaTouch forwards MULTI-finger touches from the file textarea
-// into the same gesture machine the canvas feeds, so two-finger tap (ascend)
-// and pinch work over a text descent — the touch analogue of the textarea's
-// mouse forwarding in text_overlay.go. Single-finger touches are left
-// entirely native (caret placement, text selection, OS keyboard); the machine
-// accepts a two-finger Start from idle for exactly this case.
+// installTextareaTouch forwards multi-finger touches from the editing
+// textarea into the same gesture machine the canvas feeds, so two-finger tap
+// (ascend) and pinch work over a text descent — the touch analogue of the
+// textarea's mouse forwarding in text_overlay.go. Single-finger touches stay
+// entirely native (caret placement, text selection, OS keyboard), and the
+// machine accepts a two-finger Start from idle for exactly this case.
 func (a *App) installTextareaTouch(ta js.Value) {
 	a.installOverlayTouch(ta, func(pts []touchgest.Point) bool {
 		return len(pts) >= 2
@@ -198,10 +197,10 @@ func (a *App) installTextareaTouch(ta js.Value) {
 }
 
 // shellTouchClaim builds the xterm container's claim: multi-finger gestures
-// (pinch, two-finger-tap ascend) route to the shared translation; single
-// fingers stay native to the terminal (tap-to-focus, xterm's own touch
-// scrolling). The ascend handle lives in the bottom bar now (issue #214),
-// outside the container, so no single-finger claim remains.
+// (pinch, two-finger-tap ascend) route to the shared translation, while
+// single fingers stay native to the terminal (tap-to-focus, xterm's own touch
+// scrolling). The ascend handle lives in the bottom bar, outside the
+// container, so no single-finger claim remains.
 func shellTouchClaim() func(pts []touchgest.Point) bool {
 	return func(pts []touchgest.Point) bool {
 		return len(pts) >= 2

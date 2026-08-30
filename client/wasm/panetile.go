@@ -3,9 +3,9 @@
 package main
 
 // The pane tile's client face: the layout memo and the live mini-render
-// preview. The geometry lives in the pure client/panepreview package (the
-// preview↔descent continuity is unit-tested there); the codec lives in
-// client/pane; this file is only the cache/fetch/draw glue.
+// preview. The geometry lives in client/panepreview, where the
+// preview-to-descent continuity is unit-tested, and the codec lives in
+// client/pane. This file is only the cache, fetch, and draw glue.
 
 import (
 	"context"
@@ -16,20 +16,20 @@ import (
 	"github.com/josephburnett/gridwell/client/panepreview"
 )
 
-// paneLayoutEntry memoizes one pane tile's decoded workspace tree, keyed by
-// the blob generation that produced it. tree == nil records a decode failure
-// for that blob (reported once, not per frame).
+// paneLayoutEntry memoizes one pane tile's decoded pane tree, keyed by the
+// blob generation that produced it. tree == nil records a decode failure for
+// that blob, reported once rather than per frame.
 type paneLayoutEntry struct {
 	blobID int64
 	tree   *pane.Tree
 }
 
 // paneTileChainPrefix returns the transit-chain prefix through which this
-// tile's OWNING NODE is reached — everything before the owning-plugin
-// segment ("" for a local tile, "<ssh>/" for one hop, and so on). The layout
-// blob's ids are stored in the owning node's frame (the codec's relativity
-// rule); the reader prepends this prefix to resolve them in its own view.
-// Built from the shared id codec (NamespaceOf), never a local split.
+// tile's owning node is reached — everything before the owning-plugin segment
+// ("" for a local tile, "<ssh>/" for one hop, and so on). The layout blob's
+// ids are stored in the owning node's frame, per the codec's relativity rule,
+// and the reader prepends this prefix to resolve them in its own view. Built
+// from the shared id codec (NamespaceOf), never a local split.
 func paneTileChainPrefix(tileID string) string {
 	ns := rpc.NamespaceOf(rpc.NamespaceOf(tileID))
 	if ns == "" {
@@ -38,14 +38,14 @@ func paneTileChainPrefix(tileID string) string {
 	return ns + "/"
 }
 
-// paneTileLayout returns the decoded workspace tree for a pane tile,
-// memoized by (tile, blob) generation. A blob change (another view's layout
-// write) invalidates via the tile row — cache.Apply drops the stale content
-// bytes, the memo key mismatches, and the fetch refills; until the new bytes
-// land the last decoded arrangement keeps drawing (stale-but-arranged beats
-// a blank flash). Returns (nil, false) for a never-arranged tile (no blob),
-// a not-yet-fetched layout, or a corrupt/newer-format blob (reported once
-// per blob generation, per charter §6).
+// paneTileLayout returns the decoded pane tree for a pane tile, memoized by
+// (tile, blob) generation. A blob change — another view's layout write —
+// invalidates through the tile row: cache.Apply drops the stale content
+// bytes, the memo key mismatches, and the fetch refills. Until the new bytes
+// land the last decoded arrangement keeps drawing, which beats a blank flash.
+// Returns (nil, false) for a never-arranged tile with no blob, a
+// not-yet-fetched layout, or a corrupt or newer-format blob, reported once
+// per blob generation.
 func (a *App) paneTileLayout(n *rpc.Tile) (*pane.Tree, bool) {
 	if n.BlobID == 0 {
 		return nil, false
@@ -76,11 +76,11 @@ func (a *App) paneTileLayout(n *rpc.Tile) (*pane.Tree, bool) {
 }
 
 // drawPaneTilePreview is the pane tile's parent-grid renderer: the stored
-// workspace drawn small — dividers plus each leaf's grid one level deep at
-// the leaf's stored viewport, via the SAME drawChildPreview machinery well
-// previews use ("one level deep, flat beyond" holds here too: a well or
-// pane tile inside a leaf draws as its flat face). A never-arranged or
-// not-yet-loaded workspace shows the split glyph.
+// layout drawn small — dividers plus each leaf's grid one level deep at the
+// leaf's stored viewport, through the same drawChildPreview machinery well
+// previews use. "One level deep, flat beyond" holds here too: a well or pane
+// tile inside a leaf draws as its flat face. A never-arranged or
+// not-yet-loaded layout shows the split glyph.
 func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	c := a.cctx
 	c.Set("fillStyle", colorPaneTileFill)
@@ -122,9 +122,9 @@ func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, out
 
 // drawPaneLeafPreview paints one leaf of the mini-render: the grid the leaf's
 // place resolves to, centered on the leaf's stored viewport at its preview
-// cell size. A leaf whose place doesn't resolve (remote-owned home, stale
-// path — the loose-walk rule) stays an empty region; the dividers still show
-// the arrangement.
+// cell size. A leaf whose place does not resolve — a remote-owned home, a
+// stale path — stays an empty region, and the dividers still show the
+// arrangement.
 func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 	if leaf.PreviewCell < 0.5 {
 		return
@@ -150,10 +150,10 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 	c.Call("restore")
 }
 
-// createPaneAtCell fires CreatePane at the given cell. Footprint is 1×1;
-// created UNNAMED like wells (naming happens via the bar-title rename) and with
-// no layout blob (never arranged — first descent installs the default
-// single pane).
+// createPaneAtCell fires CreatePane at the given cell. The footprint is 1×1.
+// The tile is created unnamed, like a well — naming happens through the
+// bar-title rename — and with no layout blob, so it is never-arranged and the
+// first descent installs the default single pane.
 func (a *App) createPaneAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	req := &rpc.CreatePaneRequest{

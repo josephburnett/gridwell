@@ -2,13 +2,13 @@
 
 package main
 
-// The MENU CONTEXT (remote-menu, 2026-08-16): the + menu belongs to the
-// NODE a pane is inside — "when I descend into a node, I am there". A
-// context is one node's plugin list + its shells flag, keyed by the
-// pane's grid's node_ns ("" = this node, the boot handshake). Remote
-// contexts are fetched through the routed Handshake (ids arrive
-// re-qualified for this receiver) and cached for the session; the
-// the source cache makes the fetch answer even while the mount is dark.
+// The menu context: the + menu belongs to the node a pane is inside, so
+// descending into a node puts you there. A context is one node's plugin list
+// plus its shells flag, keyed by the pane's grid's node_ns ("" is this node,
+// the boot handshake). Remote contexts are fetched through the routed
+// Handshake, with ids re-qualified for this receiver, and cached for the
+// session; the source cache makes the fetch answer even while the mount is
+// dark.
 
 import (
 	"context"
@@ -26,11 +26,11 @@ type menuContext struct {
 	inflight bool
 }
 
-// paneNodeNS returns the namespace chain of the node serving pane p's
-// current grid — the menu-context key. "" for the local node AND for an
-// uncached grid (honest: until the grid loads, nothing about the pane is
-// renderable anyway, primitives are already hidden by the writable gate,
-// and the local list is the least-wrong face).
+// paneNodeNS returns the namespace chain of the node serving pane p's current
+// grid — the menu-context key. "" for the local node and for an uncached
+// grid: until the grid loads nothing about the pane is renderable, the
+// primitives are already hidden by the writable gate, and the local list is
+// the least-wrong face.
 func (a *App) paneNodeNS(p *pane.Pane) string {
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 		return g.Meta.NodeNS

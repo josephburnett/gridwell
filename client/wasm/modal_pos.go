@@ -9,14 +9,13 @@ import (
 	"github.com/josephburnett/gridwell/client/panebox"
 )
 
-// centerCardOnActivePane positions a modal card over the ACTIVE pane's
-// center: the pane you acted in — clicked the menu, descended the
-// params-pending tile — is where the dialog appears, not the middle of
-// the screen. The ONE centering rule for every modal card (the url modal
-// and the entry-params form): the geometry decision lives in
-// panebox.ModalCardPos; this function only measures and applies styles.
+// centerCardOnActivePane positions a modal card over the active pane's
+// center: the pane you acted in is where the dialog appears, not the middle
+// of the screen. It is the one centering rule for every modal card. The
+// geometry decision lives in panebox.ModalCardPos; this function only
+// measures and applies styles.
 //
-// Call AFTER the modal is visible (the card must have layout to measure).
+// Call it after the modal is visible: the card must have layout to measure.
 // The card is lifted out of the backdrop's flex centering by fixed
 // positioning; margins are zeroed so the measured size is the placed size.
 // With no laid-out focused pane (boot edge), the flex centering stays.

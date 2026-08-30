@@ -12,14 +12,13 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 )
 
-// Rendered grid previews (issue #233): a text tile whose stored text_mode
-// is "rendered" previews as the RENDERED document — how you leave a tile
-// is how it presents from outside. The #218 decision stands untouched:
-// markdown.RenderHTML is the ONE renderer; this file rasterizes its
-// sanitized output through an SVG foreignObject image and draws that
-// bitmap into the preview. There is no second layout engine.
-// Rasterization is async, so the raw source paints until the image
-// decodes (the same "canvas paints until ready" shape as the overlays).
+// Rendered grid previews: a text tile whose stored text_mode is "rendered"
+// previews as the rendered document, so how you leave a tile is how it
+// presents from outside. markdown.RenderHTML stays the one renderer; this
+// file rasterizes its sanitized output through an SVG foreignObject image and
+// draws that bitmap into the preview. There is no second layout engine.
+// Rasterization is async, so the raw source paints until the image decodes,
+// the same "canvas paints until ready" shape the overlays use.
 
 // renderedPreviewMaxH caps the rasterized document height in CSS px. A
 // preview window scrolled beyond the cap falls back to raw source —
@@ -46,14 +45,12 @@ type renderedPreview struct {
 // ok is false until the image has decoded — and stays false on a failed
 // decode — so the caller paints raw source in the meantime.
 //
-// The cache is keyed PER (tile, width bucket), not per tile (#261's
-// investigation): two consumers of the same tile at different widths —
-// two split panes, or two grid previews at different zooms — used to
-// replace a single per-tile entry every frame, each creation revoking
-// the OTHER's still-loading blob URL, so no raster ever decoded (a
-// latent #233 bug; the pane path made it constant). Stale-VERSION
-// entries for the same tile are swept at insert; whole-tile cleanup is
-// dropRenderedPreview (TileRemoved).
+// The cache is keyed per (tile, width bucket), not per tile. Two consumers of
+// the same tile at different widths — two split panes, or two grid previews
+// at different zooms — would otherwise replace a single per-tile entry every
+// frame, each creation revoking the other's still-loading blob URL, so no
+// raster would ever decode. Stale-version entries for the same tile are swept
+// at insert; whole-tile cleanup is dropRenderedPreview, on TileRemoved.
 func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPreview, bool) {
 	bucket := math.Max(renderedPreviewBucket,
 		math.Round(contentW/renderedPreviewBucket)*renderedPreviewBucket)
@@ -68,9 +65,9 @@ func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPrevie
 	if !ok {
 		return nil, false // blob fetch in flight; the raw path warms it too
 	}
-	// Replace a stale same-bucket entry, and sweep OTHER buckets of this
-	// tile whose version moved on (they re-rasterize on next use).
-	// (dropRenderedPreview is the deletion twin of these revokes.)
+	// Replace a stale same-bucket entry, and sweep other buckets of this
+	// tile whose version moved on; they re-rasterize on next use.
+	// dropRenderedPreview is the deletion twin of these revokes.
 	if old, ok := a.renderedPrev[mapKey]; ok && old.url != "" {
 		js.Global().Get("URL").Call("revokeObjectURL", old.url)
 	}
@@ -120,8 +117,9 @@ func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPrevie
 }
 
 // drawRenderedPreview windows the tile's raster into (x, y+topInset, w,
-// h-topInset) at the preview frame's scroll, reporting whether it drew.
-// false (raster pending/failed/scrolled past the cap) → raw fallback.
+// h-topInset) at the preview frame's scroll, reporting whether it drew. False
+// — raster pending, failed, or scrolled past the cap — means the caller
+// paints the raw fallback.
 func (a *App) drawRenderedPreview(n *rpc.Tile, frame markdown.PreviewFrame,
 	x, y, w, h, topInset float64) bool {
 	e, ok := a.renderedPreviewFor(n, frame.ContentW)
@@ -145,11 +143,11 @@ func (a *App) drawRenderedPreview(n *rpc.Tile, frame markdown.PreviewFrame,
 	return true
 }
 
-// dropRenderedPreview releases a removed tile's rendered-preview entry:
-// the blob object URL is revoked and the decoded raster freed with the
-// map entry. Fired from the TileRemoved event arm, beside urlPreview.Drop
-// — the two preview caches must age out together or deleting text tiles
-// leaks image resources for the life of the page.
+// dropRenderedPreview releases a removed tile's rendered-preview entry: the
+// blob object URL is revoked and the decoded raster freed with the map entry.
+// Fired from the TileRemoved event arm, beside urlPreview.Drop — the two
+// preview caches age out together, or deleting text tiles leaks image
+// resources for the life of the page.
 func (a *App) dropRenderedPreview(tileID string) {
 	prefix := tileID + "\x00"
 	for mk, e := range a.renderedPrev {

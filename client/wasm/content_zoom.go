@@ -10,12 +10,11 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// Content zoom (issue #82): Ctrl/Cmd +/‑/0 while descended into a text,
-// shell, or url tile scales the CONTENT — the text font, the terminal font,
-// the page zoom. The zoom is per-tile FRAMING: server-owned (content_zoom,
-// written via SetContentZoom, never bumps version) and restored on every
-// descent, so a zoomed doc reads at your size on every return — face #3 of
-// the guiding rule, one more field riding the same machinery.
+// Content zoom: Ctrl/Cmd +/-/0 while descended into a text, shell, or url
+// tile scales the content — the text font, the terminal font, the page zoom.
+// The zoom is per-tile framing: server-owned (content_zoom, written through
+// SetContentZoom, never bumping version) and restored on every descent, so a
+// zoomed doc reads at your size on every return.
 
 const (
 	contentZoomStep = 1.1
@@ -44,9 +43,9 @@ func clampContentZoom(z float64) float64 {
 }
 
 // textScaleFor is the render transform for a descended text pane: the fixed
-// base scale times the tile's content zoom. The painter,
-// the logical wrap width, and the textarea box all derive from this ONE
-// helper, so they can never disagree about how big the text is.
+// base scale times the tile's content zoom. The painter, the logical wrap
+// width, and the textarea box all derive from this one helper, so they cannot
+// disagree about how big the text is.
 func (a *App) textScaleFor(p *pane.Pane) float64 {
 	if t, ok := a.descendedTile(p); ok {
 		return textFixedScale * contentZoomOf(&t)
@@ -95,10 +94,10 @@ func contentZoomNext(key string) func(cur float64) float64 {
 	return nil
 }
 
-// contentZoomKeyFromView applies a zoom chord forwarded from a LIVE URL view
-// (issue #170): the view owns OS keyboard focus, so the window-level keydown
-// never fires — main intercepts the chord in before-input-event and relays
-// it keyed by pane. Same guard set as handleContentZoomKey, same one owner
+// contentZoomKeyFromView applies a zoom chord forwarded from a live URL view.
+// The view owns OS keyboard focus, so the window-level keydown never fires:
+// main intercepts the chord in before-input-event and relays it keyed by
+// pane. Same guard set as handleContentZoomKey, same one owner
 // (applyContentZoom) underneath.
 func (a *App) contentZoomKeyFromView(paneID, key string) {
 	next := contentZoomNext(key)
@@ -120,9 +119,9 @@ func (a *App) contentZoomKeyFromView(paneID, key string) {
 // pokes the live surface for the kinds that hold native state, and persists.
 func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	if t.ServesPage {
-		// A serves_page descent has no persisted content_zoom (the owning
-		// plugin stores no url state), and a client-only zoom would violate
-		// the no-client-state rule — the chord is simply inert here.
+		// A serves_page descent has no persisted content_zoom, because the
+		// owning plugin stores no url state, and a client-only zoom would
+		// break the no-client-state rule. The chord is inert here.
 		return
 	}
 	nt := *t
@@ -140,13 +139,13 @@ func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	}
 	a.refreshFileOverlay() // textarea font tracks the scale in text mode
 	a.draw()
-	// Through the framing dispatcher like every other framing write (this
-	// call site used to fire-and-forget: no verdict reconcile, and a
-	// transport failure silently left the zoom client-only until the next
-	// descent snapped it back — audit #7, 2026-08-14). The cache patch above
-	// is the optimistic write the dispatcher's policy expects. No beacon
-	// form: content zoom is the one framing write with no *Beacon builder,
-	// so a quit inside its settle window still loses it.
+	// Through the framing dispatcher like every other framing write: a
+	// fire-and-forget call here would reconcile no verdict, and a transport
+	// failure would leave the zoom client-only until the next descent
+	// snapped it back. The cache patch above is the optimistic write the
+	// dispatcher's policy expects. There is no beacon form — content zoom is
+	// the one framing write with no *Beacon builder — so a quit inside its
+	// settle window still loses it.
 	tileID := t.ID
 	a.postFramingPersist("SetContentZoom", nt.GridID, tileID,
 		func(ctx context.Context) error {
