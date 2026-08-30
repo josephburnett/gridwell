@@ -24,10 +24,9 @@ const (
 	colorCloseWarn     = "#e0727a" // red
 )
 
-// resizeBandPx is the thickness of the resize zone near each pane
-// edge — the right-button "grab the divider" zone. Replaces the old
-// dividerHit hit-band; the entire interaction model is region-based
-// now.
+// resizeBandPx is the thickness of the resize zone near each pane edge: the
+// band where a drag grabs the divider. The interaction model is region-based
+// throughout.
 const resizeBandPx = 10.0
 
 // rightDragKind classifies an in-flight right-button gesture. Set on
@@ -64,10 +63,10 @@ type rightDragState struct {
 	// Swap-only.
 	originPaneID string
 
-	// Split-only. The AXIS is fixed by the grabbed border; the SIDE (and
-	// the host pane) follow the drag and are resolved at release (issue
-	// #217 — either side of a border behaves identically, and the
-	// direction can flip mid-gesture).
+	// Split-only. The axis is fixed by the grabbed border; the side, and
+	// the host pane, follow the drag and are resolved at release. Either
+	// side of a border behaves identically, and the direction can flip
+	// mid-gesture.
 	splitAxis pane.Direction
 
 	// Tile-only.
@@ -105,9 +104,9 @@ type rightDragState struct {
 // (sx, sy) is over pane p with screen rect r.
 func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	// Resolve the facts gesture.Classify orders, holding onto the lookups
-	// (tile, divider, region) so the arming switch can reuse them instead
-	// of recomputing. Every lookup here is a pure read; the
-	// state edits happen only in the arming switch below.
+	// (tile, divider, region) so the arming switch reuses them instead of
+	// recomputing. Every lookup here is a pure read; the state edits happen
+	// only in the arming switch below.
 	in := gesture.Input{
 		InGridView: p.ContentID() == "",
 		Region:     pane.ClassifyRegion(r, resizeBandPx, sx, sy),
@@ -165,10 +164,10 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 	if !ok {
 		return
 	}
-	// focusToPane closes the menu on the de-focused pane (via menu.TransferFocus)
-	// and refreshes the file overlay — the same focus semantics as the canvas
-	// path. Previously this block omitted SyncFocus, leaving the menu stranded on
-	// the old pane after a right-drag over a live URL view changed focus.
+	// focusToPane closes the menu on the de-focused pane, through
+	// menu.TransferFocus, and refreshes the text overlay: the same focus
+	// semantics as the canvas path. Omitting it here would strand the menu
+	// on the old pane after a right-drag over a live URL view moved focus.
 	a.focusToPane(p)
 	a.onRightDown(p, r, sx, sy)
 	a.draw()
@@ -197,12 +196,12 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 // without preventing the default, so in-page interaction, selection, and link
 // clicks still reach the page. Two intents are managed here:
 //   - pane focus (and the menu's focused-pane invariant), via focusToPane;
-//   - a boundary resize, when the press lands in a divider's grab band — the
-//     band straddles the divider, so its lower/inner half sits ON the live
-//     view. Mirroring the right-button twin (onForwardedRightDown), arming
-//     parks the view (armLeftResize draws), so the rest of the drag lands on
-//     the canvas. Without this, a left border-drag that grabbed the live-view
-//     half of the band could never start (issue #81).
+//   - a boundary resize, when the press lands in a divider's grab band. The
+//     band straddles the divider, so its inner half sits on the live view.
+//     Mirroring the right-button twin (onForwardedRightDown), arming parks
+//     the view (armLeftResize draws) so the rest of the drag lands on the
+//     canvas. Without this, a left border-drag that grabbed the live-view
+//     half of the band could never start.
 func (a *App) onForwardedLeftDown(sx, sy float64) {
 	if a.transition != nil {
 		return
@@ -430,20 +429,18 @@ func (a *App) commitTileCenter(sx, sy float64) {
 	a.commitRightClone(d, sx, sy)
 }
 
-// commitRightClone resolves the drop target at (sx, sy) and either deletes
-// (drop on the source pane's + / trashcan), fires CloneTile, inserts a
-// markdown reference into a doc, or snap-backs the ghost on a rejected drop.
-// The async RPC fires in a goroutine; the local cache is patched by the SSE
-// event when it lands. Dropping on the trashcan deletes regardless of button —
-// the gesture is button-agnostic; otherwise right-drag is clone-or-link.
+// commitRightClone resolves the drop target at (sx, sy) and either deletes —
+// a drop on the source pane's + button, shown as a trashcan — fires
+// CloneTile, or snaps the ghost back on a rejected drop. The async RPC fires
+// in a goroutine and the local cache is patched by the event when it lands.
+// Dropping on the trashcan deletes whichever button armed the drag;
+// otherwise a right-drag clones or links.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
-	// Same snapshot-then-DecideDrop discipline as the left-drag commit
-	// (onMouseUp): gather every world-read once, then switch on the verdict
-	// so preview (advanceCloneDrag) and commit share one decision. The
-	// right-drag is a CLONE everywhere (a copy of the dragged tile — a link
-	// tile copies as another link); its one Forbidden case is a SOLID well
-	// crossing a namespace, whose deep copy the server refuses
-	// (no clone is forbidden since issue #200).
+	// The same snapshot-then-DecideDrop discipline as the left-drag commit
+	// (onMouseUp): gather every world-read once, then switch on the verdict,
+	// so the preview (advanceCloneDrag) and the commit share one decision. A
+	// right-drag clones everywhere — a copy of the dragged tile, and a link
+	// tile copies as another link.
 	in := dragdrop.DropInput{
 		Started:       d.started,
 		OriginFocused: d.originFocused,
@@ -468,16 +465,16 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 
 	switch dragdrop.DecideDrop(in) {
 	case dragdrop.DropDelete:
-		// Trashcan delete: dropping on the source pane's + button (shown as a
-		// trashcan during the drag) deletes the grabbed tile, regardless of
-		// which button armed the drag — same gesture/outcome as the left-drag
-		// delete path. (advanceCloneDrag previewed this.)
+		// Trashcan delete: dropping on the source pane's + button, shown as
+		// a trashcan during the drag, deletes the grabbed tile whichever
+		// button armed it — the same gesture and outcome as the left-drag
+		// delete path, and what advanceCloneDrag previewed.
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
 		return
 	case dragdrop.DropRejected:
-		// Read-only doc, no target, same cell, or occupied — snap back.
+		// No target, the same cell, or an occupied one: snap back.
 		a.cancelDragSnapBack(d)
 		return
 	}
@@ -519,8 +516,8 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	delete(a.shellAlive, d.tileID)
 	delete(a.shellAliveProbing, d.tileID)
 	// No snapback and no parked value: the tile is going to vanish either
-	// way, so there is no ghost to roll back — both grids refetch whatever
-	// the server said, and a failed delete putting the row back on screen IS
+	// way, so there is no ghost to roll back. Both grids refetch whatever
+	// the server said, and a failed delete putting the row back on screen is
 	// the reconcile.
 	src, dst := d.srcGridID, dstGridID
 	refetch := func() {
@@ -583,9 +580,9 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 			}
 		}
 	}
-	// The dropped pane never hits the ascent save path OR the settle
-	// persister again (it leaves the tree now) — flush its grid framing
-	// here (issue #190; the text half of this gap was closed first).
+	// The dropped pane never reaches the ascent save path or the settle
+	// persister again, since it leaves the tree now, so flush its grid
+	// framing here.
 	a.persistPaneFraming(p)
 	// The pane is vanishing: freeze + close its live sessions and drop all its
 	// per-pane state atomically (forgetPane closes the streams), so nothing is
@@ -593,30 +590,28 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 	a.forgetPane(p.ID)
 }
 
-// leftResizeState carries the in-flight left-button pane-boundary resize.
-// The left button keeps its own state so the right-button routing (which
-// keys off button 2) stays untouched. The dragged split plus the collapse
-// facts (container + direction) the RELEASE decides from — since issue
-// #203 the left drag owns closing too: crush a side past the wall and
-// release, and that side collapses.
+// leftResizeState carries the in-flight left-button pane-boundary resize. The
+// left button keeps its own state so the right-button routing, which keys off
+// button 2, stays untouched. It holds the dragged split plus the collapse
+// facts the release decides from: the left drag owns closing too, so crushing
+// a side past the wall and releasing collapses that side.
 type leftResizeState struct {
 	targetSplit *pane.Split
 	splitDir    pane.Direction
-	// crush is the close-threshold plan (issues #217/#238): the cursor
-	// positions past which each corridor segment outward from the boundary
-	// is pressed to close — the per-segment steps of the corridor wall,
-	// pure geometry, static for the whole drag. The red preview and the
-	// release both read crush.Red(cursor) — one verdict.
+	// crush is the close-threshold plan: the cursor positions past which
+	// each corridor segment outward from the boundary is pressed to close —
+	// the per-segment steps of the corridor wall. The red preview and the
+	// release both read crush.Red(cursor), so there is one verdict.
 	crush pane.CrushPlan
-	// curX/curY is the last cursor the move applied — the preview and the
-	// release read the SAME point, so the red warning can never mark a
-	// different side than the release collapses. Initialized to the ARM
-	// point: leaving it zero made a bare click's verdict read cursor (0,0)
-	// — always past the wall — and close a pane in one click (issue #204).
-	// There is deliberately NO captured container rect: the cascade moves
-	// ancestor ratios mid-drag, and a stale copy of the split's geometry is
-	// what used to close panes on a legal mid-corridor release — everything
-	// derives live from the tree (pane.CorridorSpan / pane.LocateSplit).
+	// curX/curY is the last cursor the move applied. The preview and the
+	// release read the same point, so the red warning cannot mark a
+	// different side than the release collapses. It is initialized to the
+	// arm point: left at zero, a bare click's verdict would read cursor
+	// (0,0), always past the wall, and close a pane in one click. There is
+	// deliberately no captured container rect — the cascade moves ancestor
+	// ratios mid-drag, and a stale copy of the split's geometry closes panes
+	// on a legal mid-corridor release. Everything derives live from the tree
+	// (pane.CorridorSpan, pane.LocateSplit).
 	curX, curY float64
 }
 
@@ -629,9 +624,10 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	if region.IsResize() {
 		d = a.dividerOnSide(p, region.Side())
 	}
-	// gesture.ResizeAffordance owns the gating (band beats a missing
-	// divider); dividerResizeCursor shares it so the hover cursor can't
-	// disagree with where a drag actually arms. When arm is true, d is non-nil.
+	// gesture.ResizeAffordance owns the gating, where the band beats a
+	// missing divider, and dividerResizeCursor shares it so the hover cursor
+	// cannot disagree with where a drag arms. When arm is true, d is
+	// non-nil.
 	arm, _ := gesture.ResizeAffordance(region, d != nil)
 	if !arm {
 		return false
@@ -647,10 +643,10 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 		curX:        sx,
 		curY:        sy,
 	}
-	// Park live overlays NOW (liveOverlaysHidden consults leftResize): the
+	// Park live overlays now; liveOverlaysHidden consults leftResize. The
 	// grab band straddles the divider, so half of it can sit over a live
-	// WebContentsView that would otherwise eat the very next mousemove and
-	// kill the drag (issue #81).
+	// WebContentsView that would otherwise eat the next mousemove and kill
+	// the drag.
 	a.draw()
 	return true
 }
@@ -675,10 +671,10 @@ func (a *App) dividerResizeCursor(sx, sy float64) string {
 }
 
 // onLeftResizeMove applies the live divider move for the in-flight
-// left-button resize. The cascade (pane.ResizeThrough, issue #79) compresses
-// the pane adjacent to the divider to its minimum first, then the next along
-// the axis — across same-axis splits — walled by the sum of minimums, so the
-// left button still never closes a pane.
+// left-button resize. The cascade (pane.ResizeThrough) compresses the pane
+// adjacent to the divider to its minimum first, then the next along the axis,
+// across same-axis splits, walled by the sum of minimums, so the move itself
+// never closes a pane.
 func (a *App) onLeftResizeMove(sx, sy float64) {
 	lr := a.leftResize
 	if lr == nil {
@@ -689,24 +685,24 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 	if lr.targetSplit.Dir == pane.Horizontal {
 		cursor = sy
 	}
-	// Fold the move into the red state BEFORE the layout follows the
-	// cursor (issues #217/#238): the pre-move layout is what tells a
-	// deeper press (stays red) from a back-off (clears) while a crushed
-	// pane rides the drag at its minimum.
+	// Fold the move into the red state before the layout follows the
+	// cursor: the pre-move layout is what tells a deeper press, which stays
+	// red, from a back-off, which clears, while a crushed pane rides the
+	// drag at its minimum.
 	lr.crush.Update(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, pane.MinPanePx, cursor)
-	// Walled at the universal pane minimum (issue #167): the drag itself
-	// never collapses — the adjacent pane visibly crushes toward the wall,
-	// signaling "release now closes it" (the release decides, issue #203).
+	// Walled at the universal pane minimum: the drag itself never
+	// collapses. The adjacent pane visibly crushes toward the wall,
+	// signaling that a release now closes it; the release decides.
 	pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, cursor, pane.MinPanePx)
 	a.draw()
 }
 
-// finishLeftResize is the left release: the live layout was already applied
-// during the move (only-the-grabbed-border, issue #112), so the release
-// only closes what the drag PRESSED (issue #217): every corridor segment
-// red in the preview is flushed and removed, adjacent-first. The release
-// reads the SAME stored red state the last move computed and the preview
-// drew, so the verdict is byte-identical to the warning the user saw.
+// finishLeftResize is the left release. The live layout was already applied
+// during the move, only to the grabbed border, so the release only closes
+// what the drag pressed: every corridor segment red in the preview is flushed
+// and removed, adjacent first. The release reads the same stored red state
+// the last move computed and the preview drew, so the verdict is identical to
+// the warning the user saw.
 func (a *App) finishLeftResize() {
 	lr := a.leftResize
 	a.leftResize = nil
@@ -735,12 +731,12 @@ func (a *App) commitSwap(rd *rightDragState, sx, sy float64) {
 	_ = a.tree.SetFocus(rd.originPaneID)
 }
 
-// commitSplit converts the in-flight preview into a real split. The side
-// and the HOST pane follow the drag (issue #217): the new pane opens on
-// whichever side of the border the cursor traveled to, in the pane the
-// cursor is in at release — between the grabbed border and the cursor. A
-// sub-threshold drag, an off-pane release, or a position that can't leave
-// both children pane.MinPanePx cancels silently.
+// commitSplit converts the in-flight preview into a real split. The side and
+// the host pane follow the drag: the new pane opens on whichever side of the
+// border the cursor traveled to, in the pane the cursor is in at release,
+// between the grabbed border and the cursor. A sub-threshold drag, an
+// off-pane release, or a position that cannot leave both children
+// pane.MinPanePx cancels silently.
 func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	side, active := gesture.SplitSideFromDrag(rd.splitAxis, rd.startX, rd.startY, sx, sy)
 	if !active {
@@ -759,12 +755,12 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	if err != nil {
 		return
 	}
-	// A new pane is a clone of the source — deliberately: "split" means
-	// "another view of where I am" (issue #27), so a grid view clones
-	// verbatim (the same place stack). The ONE exception is a content
-	// frame: a live URL/shell view cannot be duplicated (one
-	// native view / PTY attachment per tile+pane), so the new pane ascends
-	// just the file level and shows the grid containing the tile.
+	// A new pane is a clone of the source, deliberately: a split means
+	// another view of where I am, so a grid view clones verbatim, with the
+	// same place stack. The one exception is a content frame — a live URL or
+	// shell view cannot be duplicated, since there is one native view or PTY
+	// attachment per tile and pane — so the new pane ascends just the
+	// content level and shows the grid containing the tile.
 	if np != nil && np.ContentID() != "" {
 		a.ascend(np, 1, true)
 	}
@@ -775,9 +771,9 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 // sibling on that side.
 func (a *App) dividerOnSide(p *pane.Pane, side pane.Side) *pane.Divider {
 	// One owner for the layout rect: pane rects come from layoutPanes over
-	// rootLayoutRect, so divider geometry must use the SAME rect — a second
-	// copy here (the full window) drifted by the workspace bar's height and
-	// the adjacency match below never fired inside a workspace (issue #173).
+	// rootLayoutRect, so divider geometry uses the same rect. A second copy
+	// here — the full window — would drift by the bar's height and the
+	// adjacency match below would never fire.
 	r := paneRectFor(a, p)
 	divs := pane.Dividers(a.tree, a.rootLayoutRect(), resizeBandPx)
 	// The adjacency match (which divider touches this pane's edge on `side`)

@@ -22,16 +22,15 @@ import (
 // compiled into the normal wasm binary but installs nothing unless the page was
 // loaded with ?e2e=1, so production never sees it.
 //
-// Almost every accessor is a pure READ over state the app already holds,
+// Almost every accessor is a pure read over state the app already holds,
 // reusing the same geometry helpers the input handlers hit-test against
-// (plusButtonCenter, paletteTileRect, paneToDragdrop) — it just lets a test
-// learn where to click and when the world has settled, while the server's
-// GetGrid remains the independent oracle for what was created. The lone
-// exception is shellVisitURL, an e2e-only ACTION that fires the exact callback
-// xterm's link provider invokes on a click — a terminal-cell link click can't
-// be hit-tested from the canvas, so this drives it directly, mirroring the
-// desktop's __gwRegistry e2e seam. Both are gated to ?e2e=1, so production
-// never sees them.
+// (plusButtonCenter, paletteTileRect, paneToDragdrop). It lets a test learn
+// where to click and when the world has settled, while the server's GetGrid
+// remains the independent oracle for what was created. The one exception is
+// shellVisitURL, an e2e-only action that fires the exact callback xterm's
+// link provider invokes on a click: a terminal-cell link click cannot be
+// hit-tested from the canvas, so this drives it directly, mirroring the
+// desktop's __gwRegistry e2e seam. Both are gated to ?e2e=1.
 
 // installTestHook wires window.__gridwellTest when the page carries ?e2e=1.
 func (a *App) installTestHook() {
@@ -48,8 +47,9 @@ func (a *App) installTestHook() {
 		"gridSigs":      js.FuncOf(a.thGridSigs),
 		"transitioning": js.FuncOf(a.thTransitioning),
 		"setTransitionMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
-			// e2e-only ACTION (like shellVisitURL): stretch the transition
-			// clock so a spec can deterministically land an event mid-flight.
+			// An e2e-only action, like shellVisitURL: stretch the transition
+			// clock so a spec can deterministically land an event
+			// mid-flight.
 			if len(args) == 1 {
 				totalTransitionMs = args[0].Float()
 			}
@@ -68,15 +68,14 @@ func (a *App) installTestHook() {
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
 		"zoomKeyRelays": js.FuncOf(func(js.Value, []js.Value) any { return a.zoomKeyRelays }),
-		// leftResizeArmed reports whether a left border-drag resize is armed
-		// (issue #81's forwarded-press path) — the observable a spec polls
-		// instead of sleeping between the forwarded press and the canvas
-		// half of the drag. Arming is also what parks the live view.
+		// leftResizeArmed reports whether a left border-drag resize is
+		// armed: the observable a spec polls instead of sleeping between
+		// the forwarded press and the canvas half of the drag. Arming is
+		// also what parks the live view.
 		"leftResizeArmed": js.FuncOf(func(js.Value, []js.Value) any { return a.leftResize != nil }),
-		// rightDragKind names the armed right-button gesture ("" = none) —
-		// the observable that says WHICH gesture a right-down classified
-		// into, so a spec can distinguish "never armed" from "armed but
-		// didn't commit".
+		// rightDragKind names the armed right-button gesture, "" for none:
+		// which gesture a right-down classified into, so a spec can
+		// distinguish "never armed" from "armed but did not commit".
 		"rightDragKind": js.FuncOf(func(js.Value, []js.Value) any {
 			if a.rightDrag == nil {
 				return ""
@@ -84,10 +83,9 @@ func (a *App) installTestHook() {
 			return fmt.Sprint(a.rightDrag.kind)
 		}),
 		// persistPosts exposes the settle-persist observability counters:
-		// flush passes plus optimistic-persist dispatches by label. Lets a
-		// spec name WHICH stage of gesture → debounce → flush → post went
-		// quiet instead of timing out on the far-end effect (issue #156's
-		// spec, previously an unattributable inverse flake).
+		// flush passes plus optimistic-persist dispatches by label. A spec
+		// can name which stage of gesture, debounce, flush, post went quiet
+		// instead of timing out on the far-end effect.
 		"persistPosts": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{"framingFlushes": a.framingFlushes}
 			for label, n := range a.persistPosts {
@@ -96,9 +94,8 @@ func (a *App) installTestHook() {
 			return out
 		}),
 		// outbox lists the writes the server has not acknowledged, in drain
-		// order, as "<op>:<id>" — the observable behind "did that outage
-		// actually park my work, and did the reconnect land it?", which a
-		// spec previously could only infer from the far-end effect.
+		// order, as "<op>:<id>": the observable behind "did that outage
+		// park my work, and did the reconnect land it?".
 		"outbox": js.FuncOf(func(js.Value, []js.Value) any {
 			out := []any{}
 			for _, k := range a.out.Keys() {
@@ -111,8 +108,8 @@ func (a *App) installTestHook() {
 		"shellFeed":    js.FuncOf(a.thShellFeed),
 		"rawRows":      js.FuncOf(a.thRawRows),
 		"shellCellPx": js.FuncOf(func(_ js.Value, args []js.Value) any {
-			// Screen center of terminal cell (col, row), 0-based — lets a
-			// spec CLICK rendered terminal content (links) at real pixels.
+			// Screen center of terminal cell (col, row), 0-based, so a spec
+			// can click rendered terminal content (links) at real pixels.
 			if len(args) < 2 {
 				return nil
 			}
@@ -134,13 +131,14 @@ func (a *App) installTestHook() {
 			}
 		}),
 		"renderedPreviews": js.FuncOf(func(js.Value, []js.Value) any {
-			// The rendered-raster cache (issue #233): tile id → decode state.
-			// Lets a spec prove a rendered-mode tile's preview switched to
-			// the rasterized path (and the raster actually decoded).
+			// The rendered-raster cache: tile id to decode state. A spec can
+			// prove a rendered-mode tile's preview switched to the
+			// rasterized path, and that the raster decoded.
 			out := map[string]any{}
 			for mk, e := range a.renderedPrev {
-				// The cache keys per (tile, width bucket) since #261; the hook
-				// aggregates per TILE: ready when any bucket's raster decoded.
+				// The cache keys per (tile, width bucket); the hook
+				// aggregates per tile: ready when any bucket's raster
+				// decoded.
 				id := mk
 				if i := strings.IndexByte(mk, 0); i >= 0 {
 					id = mk[:i]
@@ -161,11 +159,11 @@ func (a *App) installTestHook() {
 	}))
 }
 
-// thShellText returns the focused pane's live terminal buffer as text
-// (every line, trimmed of trailing blanks). The WebGL renderer paints to a
-// canvas — the DOM carries no terminal text — so specs that assert PTY
-// state (issue #202's same-session reconnect) read it through the buffer
-// API, the same read the link provider uses per line. "" = no live shell.
+// thShellText returns the focused pane's live terminal buffer as text: every
+// line, trimmed of trailing blanks. The WebGL renderer paints to a canvas and
+// the DOM carries no terminal text, so specs that assert PTY state read it
+// through the buffer API, the same read the link provider uses per line. ""
+// means no live shell.
 func (a *App) thShellText(js.Value, []js.Value) any {
 	conn := a.shellConnFor(a.tree.Focus)
 	if conn == nil || !conn.term.Truthy() {
@@ -184,12 +182,12 @@ func (a *App) thShellText(js.Value, []js.Value) any {
 	return out
 }
 
-// thShellFeed writes a raw string into the focused pane's live terminal —
-// directly, NOT through the PTY. It exists to pin terminal-level contracts
-// the PTY path re-encodes away (issue #211: tmux paints with bare LF as a
-// keep-the-column index, and convertEol silently snapped it to column 0 —
-// unreachable through a shell command, whose LFs the inner PTY's ONLCR
-// rewrites to CRLF before tmux ever re-encodes them).
+// thShellFeed writes a raw string into the focused pane's live terminal
+// directly, not through the PTY. It pins terminal-level contracts the PTY
+// path re-encodes away: tmux paints with a bare LF as a keep-the-column
+// index, and convertEol would snap it to column 0 — unreachable through a
+// shell command, whose LFs the inner PTY's ONLCR rewrites to CRLF before tmux
+// re-encodes them.
 func (a *App) thShellFeed(_ js.Value, args []js.Value) any {
 	conn := a.shellConnFor(a.tree.Focus)
 	if conn == nil || !conn.term.Truthy() {
@@ -200,10 +198,9 @@ func (a *App) thShellFeed(_ js.Value, args []js.Value) any {
 }
 
 // thShellRenderer returns which renderer the focused pane's live shell
-// attached ("webgl" / "canvas"; "" = no live shell). The e2e asserts "webgl"
-// so a platform change can never silently downgrade the terminal renderer
-// again (issue #128 — Chromium dropped the automatic SwiftShader fallback
-// and the #84 artifact class returned unnoticed).
+// attached: "webgl" or "canvas", with "" for no live shell. The e2e asserts
+// "webgl", so a platform change cannot silently downgrade the terminal
+// renderer and bring back the rendering artifacts the canvas renderer has.
 func (a *App) thShellRenderer(js.Value, []js.Value) any {
 	if conn := a.shellConnFor(a.tree.Focus); conn != nil {
 		return conn.rendererKind
@@ -211,11 +208,11 @@ func (a *App) thShellRenderer(js.Value, []js.Value) any {
 	return ""
 }
 
-// thShellStandin returns the rect a pane's shell snapshot would draw at
-// right now — the SAME shellStandinRect the renderer uses (issue #224) —
-// or null when no cached preview exists. args[0] names the pane (default:
-// the focused pane). Lets a spec assert the parked stand-in sits exactly
-// where the live xterm canvas was.
+// thShellStandin returns the rect a pane's shell snapshot would draw at right
+// now — the same shellStandinRect the renderer uses — or null when no cached
+// preview exists. args[0] names the pane, defaulting to the focused one. A
+// spec can assert the parked stand-in sits exactly where the live xterm
+// canvas was.
 func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
 	p := a.tree.FocusedPane()
 	if len(args) > 0 && args[0].Truthy() {
@@ -247,9 +244,9 @@ func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
 }
 
 // thTraces returns the armed ascent-trace highlights as
-// [{paneId, tileId, alpha}] — the fading "you just came from HERE" outlines
-// (issue #83). Pure read; alpha is computed with the same FadeAlpha the
-// renderer uses, so a spec can watch a trace arm and then expire.
+// [{paneId, tileId, alpha}]: the fading "you just came from here" outlines. A
+// pure read; alpha is computed with the same FadeAlpha the renderer uses, so
+// a spec can watch a trace arm and then expire.
 func (a *App) thTraces(_ js.Value, _ []js.Value) any {
 	now := nowMs()
 	out := js.Global().Get("Array").New()
@@ -268,8 +265,7 @@ func (a *App) thTraces(_ js.Value, _ []js.Value) any {
 // (textareaReady). Returns nil when no pane is in raw-text mode.
 //
 // Used by the split-pane text-tile e2e to assert the overlay covers only the
-// focused descended pane and not preview nodes in other panes — the structural
-// invariant that issue #35 mechanism B violated.
+// focused descended pane, never a preview node in another pane.
 func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 	p := a.tree.FocusedPane()
 	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
@@ -289,11 +285,11 @@ func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 	}
 }
 
-// thErrors returns the errsurface notice queue (newest first) as
+// thErrors returns the errsurface notice queue, newest first, as
 // [{source, message, severity, count}], plus the strip's screen geometry so
-// an e2e can click a row to dismiss it. Read-only view of the one error
-// owner — this is also what makes failures assertable in specs instead of
-// invisible (charter §6): any spec can now end with "and no errors surfaced".
+// an e2e can click a row to dismiss it. A read-only view of the one error
+// owner, and what makes failures assertable: a spec can end with "and no
+// errors surfaced".
 func (a *App) thErrors(js.Value, []js.Value) any {
 	notices := a.errs.Notices()
 	stripH := errsurface.StripHeight(len(notices))
@@ -317,11 +313,11 @@ func (a *App) thErrors(js.Value, []js.Value) any {
 	}
 }
 
-// thTextInnerBox returns the focused pane's file inner reading box (the rect
-// rendered markdown is laid out and clipped to) as {x, y, w, h} in screen
-// pixels — the same textInnerBox the painter uses, so an
-// e2e can click a known position inside the rendered text. Empty when the
-// focused pane is not descended into a file.
+// thTextInnerBox returns the focused pane's inner reading box — the rect
+// rendered markdown is laid out and clipped to — as {x, y, w, h} in screen
+// pixels. It is the same textInnerBox the painter uses, so an e2e can click a
+// known position inside the rendered text. Empty when the focused pane is not
+// descended into a text tile.
 func (a *App) thTextInnerBox(js.Value, []js.Value) any {
 	p, r, ok := a.focusedPaneRect()
 	if !ok || p.ContentID() == "" {
@@ -399,14 +395,13 @@ func (a *App) thTransitioning(js.Value, []js.Value) any {
 	return a.transition != nil
 }
 
-// thPreviewSigs returns, for the FOCUSED pane's leaf grid, a per-tile
+// thPreviewSigs returns, for the focused pane's leaf grid, a per-tile
 // signature of everything the preview renderer reads: the tile row's content
-// identity + framing fields, and — for a well whose child grid is cached —
-// the child grid's tile rows too (a well's preview IS its child grid drawn
-// small). Read-only over the same cache render reads, so the signature can't
-// disagree with pixels by construction. Two captures being equal means "the
-// preview is byte-identical"; the I7 spec asserts that across a sibling pane
-// while another pane descends/reframes/ascends.
+// identity and framing fields, and, for a well whose child grid is cached,
+// the child grid's tile rows too, since a well's preview is its child grid
+// drawn small. It reads the same cache render reads, so the signature cannot
+// disagree with pixels. Two equal captures mean the preview is
+// byte-identical.
 func (a *App) thPreviewSigs(js.Value, []js.Value) any {
 	p := a.tree.FocusedPane()
 	if p == nil {
@@ -423,11 +418,10 @@ func (a *App) thPreviewSigs(js.Value, []js.Value) any {
 	return out
 }
 
-// thGridSigs is previewSigs for an EXPLICIT grid id: the same per-tile
-// signatures, read straight from the cache with no gesture. Exists because
-// observing the cache via clicks is self-defeating — a focus click refetches
-// the grid it lands on, healing exactly the divergence a spec wants to see
-// (the #156 rejected-optimistic-patch test needs the cache as it IS).
+// thGridSigs is previewSigs for an explicit grid id: the same per-tile
+// signatures, read straight from the cache with no gesture. Observing the
+// cache through clicks is self-defeating, because a focus click refetches the
+// grid it lands on and heals exactly the divergence a spec wants to see.
 func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
 	if len(args) != 1 {
 		return map[string]any{}
@@ -496,13 +490,14 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"gridID":  a.gridIDForPane(p),
 			"anchor":  p.Anchor(),
 			"path":    stringsToAny(p.Path()),
-			// The tile this pane is descended into ("" when on a grid) — lets a
-			// test tell a shell descent from the url it descended further into.
+			// The tile this pane is descended into, "" when on a grid, so a
+			// test can tell a shell descent from the url it descended
+			// further into.
 			"textFocus": p.ContentID(),
-			// The descent's live raw/rendered mode (#261's spec reads it).
+			// The descent's live raw or rendered mode.
 			"textMode": p.TextMode,
-			// The pane's grid is a cache-served memory (the wire stale bit,
-			// #256) — what the bar's offline chip reads.
+			// The pane's grid is a cache-served memory, from the wire stale
+			// bit: what the bar's offline chip reads.
 			"stale": func() bool {
 				g, ok := a.c.Grid(a.gridIDForPane(p))
 				return ok && g.Meta.Stale
@@ -512,15 +507,14 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"cx":   p.Cx,
 			"cy":   p.Cy,
 			"zoom": p.Zoom,
-			// How many doorways deep the pane is: ONE number, because there
-			// is one place stack (S8). A spec asserts no flow leaks a frame
-			// (issue #26); before this there were two disjoint stacks and a
-			// leak could hide in either.
+			// How many doorways deep the pane is: one number, because there
+			// is one place stack. A spec asserts that no flow leaks a
+			// frame.
 			"placeDepth": p.Depth() - 1,
-			// The ids of the tiles this pane RENDERS (its cache contents). The gap
-			// between this and the server (the GetGrid oracle) is exactly the
-			// create→cache→render / Subscribe-fanout seam where a tile "disappears":
-			// present on the server but never drawn.
+			// The ids of the tiles this pane renders: its cache contents.
+			// The gap between this and the server, the GetGrid oracle, is
+			// the create-cache-render and subscribe-fanout seam where a
+			// tile disappears — present on the server but never drawn.
 			"tileIds": a.paneTileIDs(p),
 		})
 	}
