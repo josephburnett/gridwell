@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -11,19 +12,45 @@ import (
 // grid, so the renderer, the url stream, and the ascent need a cache-wide
 // walk.
 
-// findTileByID walks the client tile cache for any cached row with the
-// given id (ephemeral url visits and urlsync read it). On a miss it kicks a
-// background fetch (fetchTileByID) to pull in the target's grid — the id
-// may name a tile whose grid was never visited — so a later frame resolves.
-func (a *App) findTileByID(id string) *rpc.Tile {
+// forEachCachedGrid walks the grids this client has cached, in no defined
+// order, calling f(gridID, grid); f returns false to stop the walk. It is the
+// one cache-wide sweep: by-id lookup, the nav-event url rewrite and the url
+// autocomplete all ask "what does this client already know" the same way. A
+// grid id whose entry went away between the id list and the read is skipped.
+func (a *App) forEachCachedGrid(f func(gid string, g *cache.Grid) bool) {
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)
 		if !ok {
 			continue
 		}
-		if t, ok := g.Tiles[id]; ok {
-			return &t
+		if !f(gid, g) {
+			return
 		}
+	}
+}
+
+// cachedTileByID walks the cached grids for the tile row without kicking a
+// background fetch on a miss, which is findTileByID's side effect: the flush
+// path stays read-only on the cache.
+func (a *App) cachedTileByID(id string) *rpc.Tile {
+	var found *rpc.Tile
+	a.forEachCachedGrid(func(_ string, g *cache.Grid) bool {
+		t, ok := g.Tiles[id]
+		if !ok {
+			return true
+		}
+		found = &t
+		return false
+	})
+	return found
+}
+
+// findTileByID is cachedTileByID with a miss-side kick: on a miss it starts a
+// background fetch (fetchTileByID) to pull in the target's grid — the id may
+// name a tile whose grid was never visited — so a later frame resolves.
+func (a *App) findTileByID(id string) *rpc.Tile {
+	if t := a.cachedTileByID(id); t != nil {
+		return t
 	}
 	a.fetchTileByID(id)
 	return nil

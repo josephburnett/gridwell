@@ -160,19 +160,3 @@ func (a *App) contentKey(tileID string) string {
 	}
 	return tileID
 }
-
-// cachedTileByID walks the cached grids for the tile row without kicking a
-// background fetch on a miss, which is findTileByID's side effect: the flush
-// path stays read-only on the cache.
-func (a *App) cachedTileByID(id string) *rpc.Tile {
-	for _, gid := range a.c.KnownGridIDs() {
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			continue
-		}
-		if t, ok := g.Tiles[id]; ok {
-			return &t
-		}
-	}
-	return nil
-}

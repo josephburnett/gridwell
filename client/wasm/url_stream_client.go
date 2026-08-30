@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -400,18 +401,14 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 // URL tiles only: a page view's navigations stay within plugin-served
 // content, and the tile row has no url_string fact to shadow.
 func (a *App) updateCachedTileURL(tileID string, newURL string) {
-	for _, gid := range a.c.KnownGridIDs() {
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			continue
-		}
+	a.forEachCachedGrid(func(gid string, g *cache.Grid) bool {
 		t, ok := g.Tiles[tileID]
-		if !ok || t.Kind != rpc.KindURL {
-			continue
+		if ok && t.Kind == rpc.KindURL {
+			t.URLString = newURL
+			a.c.UpdateTile(gid, t)
 		}
-		t.URLString = newURL
-		a.c.UpdateTile(gid, t)
-	}
+		return true
+	})
 }
 
 // paneRectByID looks up the screen rect for the given pane via a fresh
