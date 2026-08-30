@@ -11,7 +11,7 @@ import { tileAt } from './oracle';
 //   - dragging a plugin swatch into a grid drops a dashed exit-well link.
 //
 // Why is this spec here? The three behaviors cross the wasm↔server seam
-// (paletteItems → startDescent/CreateWell → localdb → SQLite) and none of the
+// (paletteItems → descend/CreateWell → the home store → SQLite) and none of the
 // unit layers can see the composition.
 
 test.use({ extraNodes: ['second'] });

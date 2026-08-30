@@ -141,8 +141,8 @@ export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, j
 }
 
 // sendError is the ONE main-process entry point onto EV.error (issue #46):
-// every failure site — webview lifecycle, shell stream, sidecar
-// boot/exit — calls this instead of console.error-and-return, so the wasm
+// every failure site — webview lifecycle, sidecar boot/exit — calls this
+// instead of console.error-and-return, so the wasm
 // errsurface (client/errsurface) is the single place failures become visible.
 export function sendError(rootWC: WebContents, source: string, message: string): void {
   // Also the log line: a main-process failure must reach the app's log even

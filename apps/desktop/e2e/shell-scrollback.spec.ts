@@ -7,8 +7,8 @@ import { test, expect } from './fixtures';
 // the wheel as mouse reports, tmux enters copy-mode on wheel-up and scrolls
 // history, and wheel-down at the bottom drops back to live. This spec
 // crosses the whole seam: real wheel events over the xterm overlay → mouse
-// reports through the PTY relay → tmux copy-mode → redrawn screen content
-// read back through the terminal buffer.
+// reports through the /shell WebSocket → tmux copy-mode → redrawn screen
+// content read back through the terminal buffer.
 
 const shellText = (window: any): Promise<string> =>
   window.evaluate(() => (window as any).__gridwellTest.shellText());
