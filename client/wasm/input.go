@@ -1885,15 +1885,15 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 
 // saveTextBeforeAscent posts the editor buffer (if text mode is active)
 // and the framed window back to the server, through the dispatcher: a
-// failure reacts via clientsync (conflict re-claim, transport park,
-// surfaced rejection) like every other mutation.
+// failure reacts via clientsync (transport parks in the outbox, a verdict
+// refetches and surfaces) like every other mutation.
 func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// SetTextView (and the framed-window cache patch) are text-tile
 	// concerns — URL and shell tiles don't carry text_x/text_y/text_w
 	// /text_h, and the server's SetTextView rejects non-text kinds with
-	// InvalidArgument. Routing them through would surface as a 400 plus
-	// a spurious "version conflict" refetch in the wasm dispatcher. A
-	// serves_page descent is web content — no text framing either.
+	// InvalidArgument. Routing them through would surface as a 400 the
+	// user has to read. A serves_page descent is web content — no text
+	// framing either.
 	if file.Kind != rpc.KindText || file.ServesPage {
 		return
 	}

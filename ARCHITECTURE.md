@@ -43,7 +43,7 @@ lists where that still needs doing.
                 │
 ┌───────────────▼──────────────────────────────────────────────────────┐
 │ Store                        internal/local/store/  (node code, v2)  │
-│   ids, the framing-vs-content version split, clone, blobs            │
+│   ids, version = the user's content bytes only, clone, blobs         │
 │   SOLID BY CONSTRUCTION — the model to emulate                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -195,20 +195,41 @@ serve (`node.Convert`).
   rule at both hops. The mount cache (`internal/plugin/mountcache`) fronts
   the transport so a dark remote degrades to stale-but-readable.
 
-### 4.1 Framing ≠ content — the best-enforced invariant
+### 4.1 `version` means the user's content bytes — the best-enforced invariant
 
-In `internal/local/store/tiles.go`, two named helpers split every mutation:
+`version` says ONE thing (owner decision 2026-08-29,
+`docs/simplify-plan.md` S5): **the user's content bytes changed.** It is the
+optimistic-concurrency claim for exactly those edits and nothing else.
+Three named helpers in `internal/local/store` make that structural rather
+than advisory:
 
-| Helper | Used by | Bumps `version`? |
-|---|---|---|
-| `emitTileChanged` | framing writes (pan/zoom/scroll, workspace layout) | No |
-| `finishContentEdit` | content writes (text bodies, url/shell freeze) | Yes |
+| Helper | Used by | Claims? | Bumps? |
+|---|---|---|---|
+| `claimContentVersion` + `finishContentEdit` | content writes: `WriteContent`'s text and url arms, `RenameTile` | Yes | Yes |
+| `loadForWrite` + `emitTileChanged` | everything else | No | No |
 
-`SetTile` dispatches on `tile.kind` to exactly one of these. Because the
-split lives in one place, "framing is not a content edit" — the thing that
-makes the descend/ascend round trip idempotent — cannot be violated by
-accident. A new mutation physically has to choose a side. This is what
-enforced-by-construction looks like; emulate it.
+"Everything else" is three families, and each was a real bug source when it
+carried a version:
+
+- **Captures** — a page title, a preview jpeg, a url trail, a shell's
+  foreground command. Facts the server OBSERVED. They ride the tile event
+  to every client as last-writer-wins. A capture that bumped could cost a
+  concurrent editor their claim mid-paragraph.
+- **Framing** — `view_*`, a text tile's window and mode, content zoom, a
+  standing url freeze, a pane tile's layout. Last-writer-wins by design.
+- **Layout** — place / move / resize / clone / delete. An explicit act on a
+  tile the user can SEE, so a race resolves as "whoever moved it last moved
+  it"; the one thing a race could corrupt — two tiles in one cell — is
+  refused by the overlap check inside the same transaction, claim or no
+  claim.
+
+A new mutation physically has to choose a side (there is no version to pass
+to `loadForWrite`), and the wire agrees: the request fields that used to
+carry a claim for framing and layout are `reserved`, so a stale claim is
+not ignored — it is unrepresentable. `version_rule_test.go` is the whole
+table, and it counts how many store writes can even be handed a version, so
+a claim cannot reappear silently. This is what enforced-by-construction
+looks like; emulate it.
 
 ### 4.2 Identity and clone
 
@@ -260,10 +281,23 @@ dirty}, keyed by tile id) owns a text tile's current body. Every keystroke
 mirrors into it; every flush goes through `text_flush.go`, which posts by
 tile id and never reads the DOM — so bytes can never be saved under another
 tile's id. Saves claim `SaveBasis` (advanced only by fetches and save
-responses), so a stale save 409s and reconciles visibly. `cache.Apply`
-drops events strictly older than the cached row, and a newer row drops a
-clean body while sparing a dirty one — a foreign writer's edit appears, and
-unsaved typing survives.
+responses), so a stale save 409s and reconciles visibly — and since a
+capture no longer bumps the row, a 409 there can only mean a real
+concurrent edit, which is why `clientsync.ReactSave` surfaces it.
+`cache.Apply` drops events strictly older than the cached row, and a newer
+row drops a clean body while sparing a dirty one — a foreign writer's edit
+appears, and unsaved typing survives.
+
+**Every unacknowledged write has one home.** `client/outbox` is the ordered
+record of what the server has not answered — framing, captures, layout, and
+the user's unsaved bytes alike — with ONE reconcile rule (`Record`: a
+transport failure parks a retry, any verdict acks) and two drains: the
+retry kick on reconnect, and the unload flush, where each entry leaves
+through its `navigator.sendBeacon` form. It holds order and retry, never a
+copy of a value: a content entry's thunk re-reads the bytes from the cache,
+their one owner. On the client side of a mutation there are exactly two
+paths — `postWriteContent` (the one write that claims a version) and
+`write`/`do` (everything else) in `client/wasm/mutate.go`.
 
 **Events never touch framing.** The SSE path flows only into the cache;
 framing writes live only in the gesture/transition code. An event landing
@@ -343,7 +377,9 @@ same truth twice. The templates:
 | Exemplar | The one fact | Where derived | Read by |
 |---|---|---|---|
 | `Tile.reference` | "this tile is a link" | `server.qualifyTiles` | render, delete, clone, descent |
+| `loadForWrite` / `claimContentVersion` | "may this mutation claim a version" | `store/tiles.go` | every store mutation |
 | `emitTileChanged` / `finishContentEdit` | "does this mutation bump version" | `store/tiles.go` | every store mutation |
+| `outbox.Record` | "is this write still owed, or did the server answer" | `client/outbox` | every client mutation |
 | `classifyStoreError` | "what status is this error" | one function | every transport |
 | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` | the viewport transform | one pure pair | preview + descent |
 | `client/menu` | "is the menu open, on which pane" | one state machine | every gesture path (was 14 scattered writes) |
@@ -419,13 +455,13 @@ file. What remains:
   ascent — applies the same rule. The frozen preview is what a tile looks
   like from outside; going live never mutates the row.
 - **Ascend.** The intrinsic viewport writes back via `SetFraming` (framing —
-  no version bump); a url/shell descent freezes its preview (content —
-  version bumps); the parent frame pops. A portal ascent writes through the
+  no claim, no version bump); a url/shell descent freezes its preview (an
+  automatic capture — also no claim and no bump); the parent frame pops. A portal ascent writes through the
   containing link tile, or the root grid row when there is none (the same
   verb, the other target). Clicking a bar
   crumb ascends all the way to that level.
 - **Drop a tile.** Gesture → `CreateTile`/`PlaceTile`/`CloneTile`,
-  id-addressed + version-claimed → server routes → store mutates →
+  id-addressed (layout carries no version claim) → server routes → store mutates →
   `Subscribe` event → `cache.Apply` → redraw. Across a plugin boundary
   there is no move: a left-drag creates a LINK in the destination (exit
   well or `link_target_id`), a right-drag CLONES (leaves copy bytes; a
@@ -440,7 +476,8 @@ file. What remains:
   outer leaf, push a `client/workspace` frame (outer tree + origin), decode
   the layout blob, swap `App.tree`. While inside, a debounced persister
   encodes the live tree, hash-diffs, and posts the layout as a
-  `WriteContent` (framing-class — never bumps version) only on change. The
+  `WriteContent` (framing-class — no claim, never bumps version) only on
+  change. The
   URL is `?w=<tile id>`. The workspace stack itself is session-only, like
   portal frames.
 - **Show the menu.** `menu.Open(paneID)` on the focused pane, toggled from

@@ -61,7 +61,9 @@ of unsaved text on a wifi blip, `client/wasm/mutate.go:216-234`).
    `TileRemoved` arm, which also fires on cross-grid *moves*).
 
 3. **Framing/freeze: a pending-write ledger** (new pure package,
-   `client/pending`). Today's fire-and-forget writes — well view, text
+   `client/pending` — landed, and folded into `client/outbox` on
+   2026-08-29 by `docs/simplify-plan.md` S5, which put content bytes in
+   the same list; read the names below as that package). Today's fire-and-forget writes — well view, text
    view/scroll, root view, content zoom, url freeze state, pane layout,
    the wheel-well drift — each become an entry keyed by target id,
    latest-value-wins (framing is LWW by design). Entries clear on

@@ -141,11 +141,12 @@ func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	a.refreshFileOverlay() // textarea font tracks the scale in text mode
 	a.draw()
 	// Through the framing dispatcher like every other framing write (this
-	// call site used to fire-and-forget: no conflict re-claim, no verdict
-	// reconcile, and a transport failure silently left the zoom
-	// client-only until the next descent snapped it back — audit #7,
-	// 2026-08-14). The cache patch above is the optimistic write the
-	// dispatcher's policy expects.
+	// call site used to fire-and-forget: no verdict reconcile, and a
+	// transport failure silently left the zoom client-only until the next
+	// descent snapped it back — audit #7, 2026-08-14). The cache patch above
+	// is the optimistic write the dispatcher's policy expects. No beacon
+	// form: content zoom is the one framing write with no *Beacon builder,
+	// so a quit inside its settle window still loses it.
 	tileID := t.ID
 	a.postFramingPersist("SetContentZoom", nt.GridID, tileID,
 		func(ctx context.Context) error {
