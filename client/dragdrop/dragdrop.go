@@ -36,10 +36,9 @@ func (p Pane) CellToScreen(cx, cy float64) (float64, float64) {
 	return sx, sy
 }
 
-// CellAt returns the integer cell containing screen point (sx, sy)
-// using floor semantics (see FloorCellAt for the rationale). The
-// wasm hit-testers were each building this same dragdrop.Pane +
-// ScreenToCell + floor combo by hand; this one method captures it.
+// CellAt returns the integer cell containing screen point (sx, sy) using
+// floor semantics (see FloorCellAt for the rationale). It is the one place
+// the dragdrop.Pane + ScreenToCell + floor combination lives.
 func (p Pane) CellAt(sx, sy float64) (int64, int64) {
 	cx, cy := p.ScreenToCell(sx, sy)
 	return int64(math.Floor(cx)), int64(math.Floor(cy))
@@ -83,11 +82,10 @@ func FloorCellAt(originX, originY, cellSize, sx, sy float64) (int64, int64) {
 // ghost following the cursor; the source's static row in the cache
 // needs to be hidden underneath it so we don't see two copies.
 //
-// Important: matches by *tile id* — the primary-key row, the only
-// identity a tile has. A clone is a DIFFERENT row that looks the same;
-// matching on anything a clone shares with its source (the retired
-// object_id lineage mint was exactly that) would make every clone of the
-// dragged tile vanish during the drag. Row id keeps each one visible.
+// It matches by tile id — the primary-key row, the only identity a tile has.
+// A clone is a different row that looks the same, so matching on anything a
+// clone shares with its source would make every clone of the dragged tile
+// vanish during the drag. Row id keeps each one visible.
 func HiddenMatch(hiddenTileID string, hiddenPaneID, currentPaneID string, tileID string) bool {
 	return hiddenTileID != "" && hiddenPaneID == currentPaneID && tileID == hiddenTileID
 }
@@ -144,10 +142,10 @@ func TileContainsCell(x, y, w, h, cx, cy int64) bool {
 	return cx >= x && cx < x+w && cy >= y && cy < y+h
 }
 
-// RectsOverlap reports whether two cell-space footprints intersect — the
-// same predicate the server's overlap check applies, so the client's drop
-// preflight and the authoritative PlaceTile can never disagree about what
-// counts as a collision (#231).
+// RectsOverlap reports whether two cell-space footprints intersect — the same
+// predicate the server's overlap check applies, so the client's drop
+// preflight and the authoritative PlaceTile cannot disagree about what counts
+// as a collision.
 func RectsOverlap(ax, ay, aw, ah, bx, by, bw, bh int64) bool {
 	return ax < bx+bw && bx < ax+aw && ay < by+bh && by < ay+ah
 }
@@ -239,17 +237,17 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 // would be rejected by the server. "" is a regular Gridwell grid; a non-empty
 // kind (fs / proc) is source-backed.
 //
-// The 2026-07-19 gesture decision: crossing an id NAMESPACE is no longer a
-// forbidden move — it is not a move at all. A cross-plugin left-drag creates
-// a LINK (DropLink; identity never migrates, so "there is no move" — the
-// content stays where its id lives and the destination gains a reference),
-// which is why crossPlugin EXEMPTS the source-kind arms here: linking a host
-// file/dir into a Gridwell grid is the mount philosophy, and a read-only
-// destination is rejected by the separate TargetReadOnly gate. What remains
-// forbidden is the same-namespace cross-grid move with a source-backed
-// endpoint: a host file can't migrate into Gridwell, regular tiles can't
-// move into a host directory, and host-side mv between two source dirs isn't
-// implemented. A same-grid move never crosses any boundary — always allowed.
+// Crossing an id namespace is not a forbidden move; it is not a move at all.
+// A cross-plugin left-drag creates a link (DropLink): identity never
+// migrates, the content stays where its id lives, and the destination gains a
+// reference. That is why crossPlugin exempts the source-kind arms here —
+// linking a host file or directory into a Gridwell grid is the mount
+// philosophy, and a read-only destination is rejected by the separate
+// TargetReadOnly gate. What remains forbidden is the same-namespace
+// cross-grid move with a source-backed endpoint: a host file cannot migrate
+// into Gridwell, regular tiles cannot move into a host directory, and
+// host-side mv between two source dirs is not implemented. A same-grid move
+// crosses no boundary and is always allowed.
 func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
 	if sameGrid || crossPlugin {
 		return false
@@ -257,12 +255,11 @@ func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
 	return srcKind != "" || dstKind != ""
 }
 
-// DropAction is the single verdict for a drag release (and the matching
-// in-flight preview). BOTH the commit handlers and the ghost-preview
-// handlers in the wasm client route through DecideDrop so they can never
-// disagree — the trashcan-delete regression (commit 92f9b21) was exactly
-// a preview/commit disagreement caused by reading a torn-down field on
-// the commit side only.
+// DropAction is the single verdict for a drag release and the matching
+// in-flight preview. Both the commit handlers and the ghost-preview handlers
+// in the wasm client route through DecideDrop, so they cannot disagree: a
+// preview that reads one set of facts and a commit that reads another is how
+// the ghost and the outcome drift apart.
 type DropAction int
 
 const (
@@ -278,48 +275,46 @@ const (
 	// DropPanEnd: an empty-space (tileID==0) drag — just persist viewport.
 	DropPanEnd
 	// DropDelete: released over the source pane's + (trashcan) button.
-	// This is the regression branch.
 	DropDelete
-	// DropRejected: nothing legal here (read-only doc, no target,
-	// forbidden cross-grid move, same cell, or occupied) — snap back.
+	// DropRejected: nothing legal here (no target, a forbidden cross-grid
+	// move, the same cell, or an occupied one) — snap back.
 	DropRejected
 	// DropMove: a clean left-drag — MoveTile.
 	DropMove
 	// DropClone: a clean right-drag — CloneTile.
 	DropClone
-	// DropLink: a clean left-drag whose endpoints are in DIFFERENT id
-	// namespaces — create a LINK at the destination (an exit well for a
+	// DropLink: a clean left-drag whose endpoints are in different id
+	// namespaces — create a link at the destination (an exit well for a
 	// grid, a leaf link for text/url/shell/pane). There is no cross-plugin
 	// move: identity never migrates, the content stays where its id lives,
-	// and the source tile is untouched (owner decision 2026-07-19).
+	// and the source tile is untouched.
 	DropLink
 )
 
 // DropInput is the snapshot of every world-read a drop decision needs,
-// gathered ONCE at release (or per preview frame) BEFORE any teardown
-// nils out drag state. It holds no App fields and no js.Value — that is
-// the whole point: gather first, then decide, so a cleared field can
-// never be read late.
+// gathered once at release (or per preview frame) before any teardown nils
+// out drag state. It holds no App fields and no js.Value: gather first, then
+// decide, so a cleared field can never be read late.
 //
 // Field provenance in the wasm caller (impure resolvers stay there):
 //   - OverDelete:  a.overDeleteButton(d, sx, sy)
 //   - HasTarget:   a.dropTargetAt(sx, sy, tileID) resolved
-//   - Forbidden:   move only — a.dropForbiddenForMove(d, t) (MoveForbidden);
-//     since issue #200 no clone is forbidden (a solid well deep-copies, a
-//     link copies as a link), so a clone leaves it false
+//   - Forbidden:   move only — a.dropForbiddenForMove(d, t) (MoveForbidden).
+//     No clone is forbidden (a solid well deep-copies, a link copies as a
+//     link), so a clone leaves it false
 //   - CrossPlugin: dropCrossNamespace(d, t) — NamespaceOf(src) != NamespaceOf(dst)
 //   - SameCell:    target grid == source grid && drop cell == source cell
 //   - Occupied:    a.occupiedForDrop(t.gridID, dropX, dropY, w, h, exclude)
-//     — the dragged FOOTPRINT against the cached tiles, excluding the
+//     — the dragged footprint against the cached tiles, excluding the
 //     moving tile itself on a move (never on a clone), mirroring the
-//     server's PlaceTile self-exclusion (#231)
+//     server's PlaceTile self-exclusion
 type DropInput struct {
 	Started bool
 	// OriginFocused: the origin pane was already focused when the press
-	// landed. A bare click (!Started) on an unfocused pane is FOCUS-ONLY —
-	// the mousedown moved focus; the release must not also navigate or
-	// select, no matter what tile sits under the cursor. Same family as the
-	// +-button / corner-circle rule (act only when previously focused).
+	// landed. A bare click (!Started) on an unfocused pane is focus-only —
+	// the mousedown moved focus, and the release must not also navigate or
+	// select, whatever tile sits under the cursor. The + button and the
+	// corner circle follow the same rule: act only when already focused.
 	OriginFocused bool
 	IsTemplate    bool
 	Clone         bool   // right-drag armed
@@ -327,11 +322,11 @@ type DropInput struct {
 	OverDelete    bool
 	HasTarget     bool
 	Forbidden     bool
-	// TargetReadOnly: the destination grid refuses CREATION (Grid.writable
-	// false — an fs/proc grid): an ARRIVAL there (a
-	// cross-grid drop, a clone) is rejected up front instead of firing an
-	// RPC the server must refuse. A same-grid left-drag is exempt — that
-	// is PLACEMENT, not creation (see DecideDrop).
+	// TargetReadOnly: the destination grid refuses creation (Grid.writable
+	// false — an fs or proc grid), so an arrival there (a cross-grid drop, a
+	// clone) is rejected up front instead of firing an RPC the server must
+	// refuse. A same-grid left-drag is exempt: that is placement, not
+	// creation (see DecideDrop).
 	TargetReadOnly bool
 	// SameGrid: the drop lands in the tile's own grid — a rearrangement,
 	// no arrival anywhere.
@@ -340,7 +335,7 @@ type DropInput struct {
 	Occupied bool
 	// CrossPlugin: the source grid and the target grid live in different id
 	// namespaces. A clean left-drag then verdicts DropLink instead of
-	// DropMove (a clean right-drag stays DropClone — the server copies).
+	// DropMove; a clean right-drag stays DropClone, and the server copies.
 	CrossPlugin bool
 }
 
@@ -377,10 +372,9 @@ func DecideDrop(in DropInput) DropAction {
 	case in.Forbidden:
 		return DropRejected
 	case in.TargetReadOnly && !(in.SameGrid && !in.Clone):
-		// Read-only gates ARRIVALS (creation-class); a same-grid left-drag
-		// is placement, which read-only projections accept and persist
-		// (#266 — the client used to conflate the two and reject moves
-		// fs's own store was designed to keep). Clones stay creation.
+		// Read-only gates arrivals, which are creation-class. A same-grid
+		// left-drag is placement, which read-only projections accept and
+		// persist. Clones stay creation.
 		return DropRejected
 	case in.SameCell:
 		return DropRejected
@@ -404,10 +398,10 @@ type GhostPlan struct {
 	TargetCellSize float64 // size the ghost lerps toward
 	Fragmentation  float64 // 1 = shattering into the trashcan
 	Forbidden      bool    // draw the no-entry badge
-	// Link: this drop will create a LINK, not move the tile — draw the
-	// dashed ghost + chain badge so the user learns mid-drag that the
-	// source stays put and the destination gains a reference. Without this
-	// signal a cross-plugin left-drag would LOOK like a move and the
+	// Link: this drop creates a link rather than moving the tile, so draw
+	// the dashed ghost and chain badge. The user learns mid-drag that the
+	// source stays put and the destination gains a reference; without the
+	// signal a cross-plugin left-drag would look like a move and the
 	// source's survival would read as a surprise duplicate.
 	Link   bool
 	Cursor string // CSS cursor: "" or "not-allowed"
@@ -421,16 +415,15 @@ type GhostPlan struct {
 //
 //   - Delete  → shrink to 1/5 and fully fragment, in the origin pane.
 //   - Rejected, forbidden → source size in the target pane, no-entry badge.
-//   - Rejected, otherwise (off-canvas / file-mode) → source size in origin,
-//     no badge.
+//   - Rejected, otherwise (off-canvas, or a content descent) → source size
+//     in origin, no badge.
 //   - Link → snap to the target cell size in the target pane, chain badge:
-//     the drop creates a reference and the source stays put (the teaching
-//     signal for the cross-plugin left-drag).
+//     the drop creates a reference and the source stays put.
 //   - Move/Clone → snap to the target cell size in the target pane.
 //
-// SameCell/Occupied never reach here as a distinct style: the preview is
-// optimistic about placement and shows the snap-to-cell (the commit does
-// the authoritative overlap check).
+// SameCell and Occupied never reach here as a distinct style: the preview is
+// optimistic about placement and shows the snap-to-cell, while the commit
+// does the authoritative overlap check.
 func GhostPlanForDrop(action DropAction, forbidden, clone bool,
 	originPaneID, targetPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
 	switch action {
@@ -451,10 +444,8 @@ func GhostPlanForDrop(action DropAction, forbidden, clone bool,
 // PromoteToWell reports whether the tile under the cursor promotes a drop
 // target to the tile's child grid: an enterable well (well kind with a child
 // grid) that is not the dragged tile itself — dropping a well into its own
-// subtree would create a parent/child cycle the server rejects. The rule used
-// to live inline in the wasm dropTargetAt; the geometry half
-// (ChildPreviewFor) was already here, so the policy half joins it. isWell is
-// rpc.IsWellKind(tile.Kind) — resolved by the caller to keep this package
+// subtree would create a parent/child cycle the server rejects. isWell is
+// rpc.IsWellKind(tile.Kind), resolved by the caller to keep this package
 // rpc-free.
 func PromoteToWell(isWell bool, childGridID, tileID, draggedTileID string) bool {
 	return isWell && childGridID != "" && tileID != draggedTileID

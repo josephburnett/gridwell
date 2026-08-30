@@ -53,9 +53,9 @@ func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 	if !near(mid.Zoom, 30) {
 		t.Errorf("mid zoom = %v, want 30", mid.Zoom)
 	}
-	// Swap has new path with well appended; viewport on well's view
-	// region; zoom = mid.Zoom / PreviewFactor (legacy calibration check
-	// for the unvisited fallback).
+	// Swap has the new path with the well appended, the viewport on the
+	// well's view region, and zoom = mid.Zoom / PreviewFactor — the
+	// calibration for the unvisited fallback.
 	if len(swap.Path) != 1 || swap.Path[0] != "7" {
 		t.Errorf("swap path = %v", swap.Path)
 	}
@@ -140,10 +140,9 @@ func TestAscentSwitchContinuity(t *testing.T) {
 // ─────────────────────────────────────────────────────────────────────
 // Intrinsic-ratio helpers.
 //
-// The bug that motivated this test suite: startDescent forgot to
-// multiply ViewZoom by Overtake when reconstructing the live zoom, so
-// every ascend→descend round trip shrank the content by a factor of
-// Overtake. The tests below would have failed before that fix.
+// The live zoom is ViewZoom × Overtake. Reconstructing it without the
+// Overtake factor shrinks the content by that factor on every
+// ascend-then-descend round trip.
 
 func TestLiveIntrinsicAreInverses(t *testing.T) {
 	// LiveFromIntrinsic and IntrinsicFromLive must be exact inverses
@@ -342,25 +341,19 @@ func TestFileRoundTripAcrossPaneResize(t *testing.T) {
 	}
 }
 
-// TestFilePreviewMatchesLiveOnAspectMismatch is the test that would
-// have caught the s6/s7 bug. Setup: a 1×1 file in a landscape pane
-// (innerW > innerH). The invariant under test: in the preview, an
-// h1 must fill the file cell's height at the SAME fraction it fills
-// the inner-box height in live. That's "things stay where you put
-// them, including relative sizes" applied to the file/cell pair —
-// for whichever inner-box dimension the user's content fills.
+// TestFilePreviewMatchesLiveOnAspectMismatch: a 1×1 text tile in a landscape
+// pane (innerW > innerH). In the preview, an h1 fills the tile's height at
+// the same fraction it fills the inner-box height when live — relative sizes
+// stay as the user left them, for whichever inner-box dimension the content
+// fills.
 //
-// Files with aspect ≠ inner-box aspect can't preserve both width and
-// height ratios simultaneously through the live→preview transform.
-// Calibrating against the *smaller* inner-box dim (Fit, not Overtake)
-// preserves height ratio in the landscape-pane case below — which is
-// the dim that actually bounds the user's content (a title fills the
-// available vertical room before it overflows the wider horizontal
-// room). Width may overflow the cell on the right; the user accepts
-// that ("starting from the left").
-//
-// Before switching fileOvertakeZoom from Overtake (max) to Fit (min),
-// this test failed.
+// A tile whose aspect differs from the inner box cannot preserve both width
+// and height ratios through the live-to-preview transform. Calibrating
+// against the smaller inner-box dimension (Fit, not Overtake) preserves the
+// height ratio in the landscape-pane case below, and that is the dimension
+// that bounds the user's content: a title fills the available vertical room
+// before it overflows the wider horizontal room. Width may overflow the tile
+// on the right, which the user accepts, reading from the left.
 func TestFilePreviewMatchesLiveOnAspectMismatch(t *testing.T) {
 	innerW, innerH := 2400.0, 1204.0
 	fileW, fileH := int64(1), int64(1)
@@ -517,14 +510,12 @@ func TestWheelZoom(t *testing.T) {
 	}
 }
 
-// TestFramingRoundTripIsByteIdentical: leaving a grid and coming back
-// must store EXACTLY what was stored before — the guiding rule applied to
-// framing. A descent reads the stored framing (StoredView), the user
-// touches nothing, and the ascent recomputes what to store from the live
-// viewport; the two must agree bit for bit, at ANY center, including the
-// sub-cell ones the retired integer window ORIGIN could not hold at all
-// (it quantized 5.37 to 5 and drifted a whole cell per odd-sized round
-// trip — the reason ViewOriginFromCenter existed).
+// TestFramingRoundTripIsByteIdentical: leaving a grid and coming back stores
+// exactly what was stored before. A descent reads the stored framing
+// (StoredView), the user touches nothing, and the ascent recomputes what to
+// store from the live viewport; the two agree bit for bit at any center,
+// sub-cell centers included. Quantizing the center to whole cells would drift
+// a full cell per odd-sized round trip.
 func TestFramingRoundTripIsByteIdentical(t *testing.T) {
 	const paneW, paneH, cell = 1280, 800, 64
 	for _, w := range []Well{
@@ -552,7 +543,7 @@ func TestFramingRoundTripIsByteIdentical(t *testing.T) {
 	}
 }
 
-// WellWheelView (issue #210): the hover-wheel zoom on a well's preview.
+// WellWheelView: the hover-wheel zoom on a well's preview.
 func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 	w := Well{X: 0, Y: 0, W: 2, H: 2, ViewCx: 5, ViewCy: 7, ViewZoom: 0.25}
 	const parentCell = 64.0
@@ -568,9 +559,9 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 		t.Errorf("center-anchored zoom moved the center: (%v, %v) -> (%v, %v)", cx0, cy0, cx1, cy1)
 	}
 
-	// Cursor OFF-center: the child point under the cursor stays EXACTLY
-	// under the cursor — float in, float out; no per-notch quantization to
-	// eat the drift (issue #219).
+	// Cursor off-center: the child point under the cursor stays exactly
+	// under the cursor — float in, float out, with no per-notch
+	// quantization to eat the drift.
 	const dx = 40.0
 	cx1, cy1, r1, changed = WellWheelView(-120, w, parentCell, dx, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
 	if !changed {
@@ -589,10 +580,10 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 		t.Errorf("no vertical cursor offset, but the center moved: %v -> %v", cy0, cy1)
 	}
 
-	// Drift COMPOUNDS across a burst (the #219 repro): each notch feeds the
-	// previous float center back in; N notches toward a corner must keep
-	// moving the center — the old per-notch integer quantization rounded
-	// every step back to the start.
+	// Drift compounds across a burst: each notch feeds the previous float
+	// center back in, so N notches toward a corner keep moving the center.
+	// Per-notch integer quantization would round every step back to the
+	// start.
 	ww := w
 	ccx, ccy := cx0, cy0
 	for i := 0; i < 4; i++ {

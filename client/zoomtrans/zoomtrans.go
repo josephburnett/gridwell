@@ -2,12 +2,12 @@
 // "zoom into / out of a well" transition animation used by the Gridwell
 // client.
 //
-// The math is delicate enough that it deserves an isolated, unit-tested
-// home rather than living inline in render.go. The visual goal is a
-// continuous zoom: at the moment of switching from "viewing parent grid"
-// to "viewing child grid", a child cell rendered as a well preview
-// (scaled by 1/previewFactor inside the well's footprint) must match the
-// pixel size of a child cell rendered natively in the child grid view.
+// The math has its own unit-tested package rather than living inline in
+// render.go. The visual goal is a continuous zoom: at the moment of switching
+// from "viewing parent grid" to "viewing child grid", a child cell rendered
+// as a well preview (scaled by 1/previewFactor inside the well's footprint)
+// matches the pixel size of a child cell rendered natively in the child grid
+// view.
 //
 // Tunable: previewFactor is how many times smaller a child cell is in
 // the well's preview than a parent cell. Bigger previewFactor → finer
@@ -34,15 +34,14 @@ type Endpoints struct {
 // coordinates (ViewCx/ViewCy) plus the intrinsic view ratio.
 //
 // ViewZoom is an intrinsic ratio = liveScale / EffectiveOvertake at the
-// moment of the user's last ascent from this well/file. It is
-// dimensionless and window-independent: the preview formula uses it
-// directly as the per-parentCell child-cell-size multiplier, and the
-// descent formula reconstructs the user's live zoom for the current
-// pane size as ViewZoom × EffectiveOvertake_now. Zero means "never
-// visited" — the one sentinel for the whole framing: the descent and
-// preview then fall back to the PreviewFactor calibration
-// (EffectiveViewZoom) and to the footprint's own center
-// (EffectiveCenter), never to the raw zeros in ViewCx/ViewCy.
+// moment of the user's last ascent from this doorway. It is dimensionless and
+// window-independent: the preview formula uses it directly as the
+// per-parentCell child-cell-size multiplier, and the descent formula
+// reconstructs the user's live zoom for the current pane size as
+// ViewZoom × EffectiveOvertake_now. Zero means "never visited" — the one
+// sentinel for the whole framing. The descent and preview then fall back to
+// the PreviewFactor calibration (EffectiveViewZoom) and to the footprint's
+// own center (EffectiveCenter), never to the raw zeros in ViewCx/ViewCy.
 type Well struct {
 	ID       string
 	X, Y     int64
@@ -59,10 +58,10 @@ type Well struct {
 // previews and the just-switched-to view render at identical scale.
 const PreviewFactor = 8.0
 
-// DefaultWellViewZoom is the intrinsic ratio used in place of a well's
-// stored ViewZoom when it is 0 ("never visited"). Picked so the legacy
-// PreviewFactor calibration falls out of the standard LiveFromIntrinsic
-// formula: live = (1/PreviewFactor) × Overtake = Overtake / PreviewFactor.
+// DefaultWellViewZoom is the intrinsic ratio used in place of a well's stored
+// ViewZoom when it is 0 ("never visited"). Picked so the PreviewFactor
+// calibration falls out of the standard LiveFromIntrinsic formula:
+// live = (1/PreviewFactor) × Overtake = Overtake / PreviewFactor.
 const DefaultWellViewZoom = 1.0 / PreviewFactor
 
 // EffectiveViewZoom returns stored if positive, else fallback. This is
@@ -71,7 +70,7 @@ const DefaultWellViewZoom = 1.0 / PreviewFactor
 // then feeds the result into LiveFromIntrinsic or directly into a
 // preview-cell formula (parentCell × ratio).
 //
-// For wells, fallback is DefaultWellViewZoom. For files, fallback is
+// For wells, fallback is DefaultWellViewZoom. For text tiles, fallback is
 // caller-supplied because the initial reading scale is pane-dependent.
 func EffectiveViewZoom(stored, fallback float64) float64 {
 	if stored > 0 {
@@ -83,17 +82,15 @@ func EffectiveViewZoom(stored, fallback float64) float64 {
 // EffectiveCenter returns the child-grid point a doorway's framing centers
 // on: the stored center, or — for a never-visited doorway — the center of
 // the doorway's own footprint. It is EffectiveViewZoom's other half, and it
-// reads the SAME sentinel (a row nobody has left a view on has ViewZoom 0),
+// reads the same sentinel (a row nobody has left a view on has ViewZoom 0),
 // so "unvisited" stays one fact with one owner.
 //
-// The default is not arbitrary. Before schema v11 the framing was an
-// integer window ORIGIN and every read site derived origin + footprint/2,
-// so an unvisited row's zero origin READ as the footprint center: a plugin
-// root's 1×1 synthetic doorway framed (0.5, 0.5) — the middle of child cell
-// (0,0) — not (0, 0), which is its top-left CORNER. v11 stores the center
-// itself, so that default has to be supplied here or every never-visited
-// grid (preview, descent, ascent, hover-wheel) slides half a footprint
-// up-left from where it has always sat.
+// The default is not arbitrary. The framing stores a center, so a never-
+// visited row's zeros would frame the child grid's top-left corner. The
+// footprint center is the right answer: a plugin root's 1×1 synthetic doorway
+// frames (0.5, 0.5), the middle of child cell (0,0). Without this default
+// every never-visited grid — preview, descent, ascent, hover-wheel — slides
+// half a footprint up and left.
 func EffectiveCenter(w Well) (cx, cy float64) {
 	if w.ViewZoom > 0 {
 		return w.ViewCx, w.ViewCy
@@ -132,15 +129,14 @@ func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax flo
 }
 
 // WellWheelView advances a hover-wheel zoom of a well's stored preview
-// framing (issue #210) by one notch, cursor-anchored: the child-grid point
-// under the cursor stays under the cursor, so zooming drifts the view
-// toward the cursor (issue #219 — small navigation by zooming). The center
-// is FLOAT in, out, and all the way to the store (schema v11), so the
-// sub-cell drift a wheel burst accumulates survives the save; the old
-// integer window ORIGIN rounded it away, which was the #219 bug.
-// cx0/cy0 <= 0 sentinel is not used; pass the well's stored center for
-// the first notch. changed=false when the clamp pinned the
-// ratio or the preview is degenerate; a no-op wheel never mutates.
+// framing by one notch, cursor-anchored: the child-grid point under the
+// cursor stays under the cursor, so zooming drifts the view toward the
+// cursor — navigation by zooming. The center is float in, out, and all the
+// way to the store, so the sub-cell drift a wheel burst accumulates survives
+// the save; rounding it to whole cells would throw the drift away. There is
+// no cx0/cy0 sentinel: pass the well's stored center for the first notch.
+// changed=false when the clamp pinned the ratio or the preview is
+// degenerate, so a no-op wheel never mutates.
 func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, cx0, cy0, factorBase, rMin, rMax float64) (cx1, cy1, ratio float64, changed bool) {
 	r0 := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	previewCell := parentCell * r0
@@ -163,10 +159,10 @@ func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, c
 // dim ratios so neither dimension can fit; the descent target "fills"
 // the rect (one dim exactly, the other overflows).
 //
-// Wells use Overtake: the well's descent target is "well fills pane".
-// Files use Fit (min of ratios) — see below — because the file
-// footprint should match its grey area, calibrated by the bounding
-// dimension that limits user content. Returns 1 on degenerate input.
+// Wells use Overtake: the well's descent target is "well fills pane". Text
+// tiles use Fit (the min of the ratios, below), because the tile footprint
+// should match its reading area, calibrated by the bounding dimension that
+// limits user content. Returns 1 on degenerate input.
 func Overtake(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
 	if footprintW <= 0 || footprintH <= 0 || cellPx <= 0 {
 		return 1
@@ -181,13 +177,12 @@ func Overtake(footprintW, footprintH int64, refW, refH, cellPx float64) float64 
 // rectangle — one dim matches exactly, the other has slack. Uses the
 // smaller of the two dim ratios.
 //
-// Used by files for fileOvertakeZoom. Calibrating against the smaller
-// inner-box dimension means the saved ViewZoom reconstructs the text
-// scale relative to whichever dim was binding the user's editing
-// (the user's content can only grow until it hits the smaller dim;
-// past that they would have wanted a bigger file footprint instead).
-// The preview then renders text at a scale that fills the file cell
-// in that same binding dimension.
+// Used by text tiles. Calibrating against the smaller inner-box dimension
+// means the saved ViewZoom reconstructs the text scale relative to whichever
+// dimension was binding the user's editing: content can only grow until it
+// hits the smaller dimension, and past that the user would have wanted a
+// bigger footprint instead. The preview then renders text at a scale that
+// fills the tile in that same binding dimension.
 //
 // Returns 1 on degenerate input.
 func Fit(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
@@ -199,9 +194,9 @@ func Fit(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
 	return math.Min(zw, zh)
 }
 
-// OvertakeZoom is the well-flavored convenience for Overtake — takes a
-// Well so existing callers stay terse. Files call Overtake directly with
-// the inner-box dimensions as the reference rect.
+// OvertakeZoom is the well-flavored convenience for Overtake: it takes a
+// Well. Text tiles call Overtake directly with the inner-box dimensions as
+// the reference rect.
 func OvertakeZoom(w Well, paneW, paneH, cellPx float64) float64 {
 	return Overtake(w.W, w.H, paneW, paneH, cellPx)
 }
@@ -239,10 +234,9 @@ func IntrinsicFromLive(liveZoom, overtake float64) float64 {
 //   - final: child-grid state at the end of segment C (ease-out to the
 //     well's saved view ratio). Equal to swap unless from.Zoom > Overtake.
 //
-// Returning final from this function (rather than reconstructing it at
-// the call site) ensures the saved-ratio → live-zoom formula lives in
-// exactly one place. A round-trip bug from the call site recomputing
-// this independently is structurally impossible.
+// Returning final from this function, rather than reconstructing it at the
+// call site, keeps the saved-ratio to live-zoom formula in exactly one place:
+// a call site cannot recompute it and drift.
 //
 // `paneW`, `paneH` are the pixel dimensions of the pane the descent is
 // happening in; `cellPx` is the screen pixel size of one cell at zoom
@@ -267,9 +261,9 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 	childPath := append(slices.Clone(from.Path), w.ID)
 	// Calibrated child zoom at the swap moment: live = ratio × zPTarget.
 	// With DefaultWellViewZoom substituted for an unvisited well
-	// (1/PreviewFactor), this collapses to zPTarget/PreviewFactor — the
-	// legacy calibration. Preview and live render at the same cell size
-	// across the path swap, in both cases.
+	// (1/PreviewFactor), this collapses to zPTarget/PreviewFactor. Preview
+	// and live render at the same cell size across the path swap either
+	// way.
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	swapZoom := LiveFromIntrinsic(ratio, zPTarget)
 	swapCx, swapCy := EffectiveCenter(w)
@@ -289,12 +283,11 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 	return
 }
 
-// StoredView is the live framing a well's persisted view describes — the
-// same numbers Descent's `final` lands on, without the transition. The
-// ONE read-side conversion for "what did the user leave this grid at":
-// boot and the no-session-state ascent fallbacks read it, so a reload
-// never lands a pane on a framing the user didn't set (the guiding rule
-// applied on the way OUT, not just the way in).
+// StoredView is the live framing a well's persisted view describes — the same
+// numbers Descent's `final` lands on, without the transition. It is the one
+// read-side conversion for "what did the user leave this grid at": boot and
+// the no-session-state ascent fallbacks read it, so a reload never lands a
+// pane on a framing the user did not set.
 func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	cx, cy = EffectiveCenter(w)

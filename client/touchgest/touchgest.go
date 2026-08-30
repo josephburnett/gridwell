@@ -122,10 +122,10 @@ func (m *Machine) Start(pts []Point, t float64) []Action {
 	case 2:
 		switch m.st {
 		case pending1, idle:
-			// Second finger before classification — or both fingers at once
-			// (idle: the first landed on a DOM overlay that only forwards
-			// multi-finger touches, e.g. the file textarea). Either way, a
-			// two-finger gesture.
+			// Second finger before classification, or both fingers at once
+			// when idle, because the first landed on a DOM overlay that only
+			// forwards multi-finger touches (the editing textarea). Either
+			// way, a two-finger gesture.
 			m.st = twoDown
 			m.mid = midpoint(pts[0], pts[1])
 			m.dist = dist(pts[0], pts[1])

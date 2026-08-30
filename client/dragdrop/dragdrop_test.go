@@ -110,15 +110,11 @@ func TestTileContainsCell(t *testing.T) {
 	}
 }
 
-// TestFloorCellAtCoversWholeCell guards against the "right-half misses"
-// bug: a hit-test using SnapToCell on the same coords would round the
-// lower-right portion of each cell forward to the NEXT cell, making
-// any tile-under-cursor detection miss half its target.
-//
-// Concretely: when the cursor sat in the right or bottom half of a
-// 1×1 tile's cell, tile-under-cursor detection (which originally used
-// SnapToCell) failed to fire over half the target. FloorCellAt is the
-// correct answer for "which cell am I in".
+// TestFloorCellAtCoversWholeCell guards the "right-half misses" class: a
+// hit-test using SnapToCell on the same coordinates rounds the lower-right
+// portion of each cell forward to the next cell, so tile-under-cursor
+// detection misses half its target. FloorCellAt is the correct answer for
+// "which cell am I in".
 func TestFloorCellAtCoversWholeCell(t *testing.T) {
 	const origin = 100.0
 	const cs = 10.0
@@ -146,8 +142,8 @@ func TestFloorCellAtCoversWholeCell(t *testing.T) {
 			t.Errorf("FloorCellAt(%.2f, %.2f) = (%d, %d), want (%d, %d)",
 				c.sx, c.sy, gotX, gotY, c.wantX, c.wantY)
 		}
-		// Sanity: if SnapToCell agreed with FloorCellAt everywhere the
-		// bug couldn't exist. Catch any regression that aliased the two.
+		// If SnapToCell agreed with FloorCellAt everywhere, the class could
+		// not exist. Catch anything that aliases the two.
 		snapX := SnapToCell((c.sx - origin) / cs)
 		snapY := SnapToCell((c.sy - origin) / cs)
 		if c.sx == 105.0 && c.sy == 105.0 && snapX == gotX && snapY == gotY {
@@ -156,12 +152,10 @@ func TestFloorCellAtCoversWholeCell(t *testing.T) {
 	}
 }
 
-// TestHiddenMatchByTileIDNotLineage guards against the "cloned tile
-// disappears when its sibling is picked up" bug. A clone is a DIFFERENT
-// row that looks the same, so the predicate must key on the row id: any
-// by-lineage match (the retired object_id mint was exactly that, copied
-// verbatim onto every clone) suppresses every clone of the dragged tile,
-// not just the dragged tile itself.
+// TestHiddenMatchByTileIDNotLineage: a clone is a different row that looks
+// the same, so the predicate keys on the row id. Any by-lineage match — a
+// field copied verbatim onto every clone — would suppress every clone of the
+// dragged tile, not just the dragged tile itself.
 func TestHiddenMatchByTileIDNotLineage(t *testing.T) {
 	const sourceID = "5"
 	const cloneID = "7" // a different row showing the same content
@@ -297,16 +291,15 @@ func TestPaneCellAt(t *testing.T) {
 }
 
 // TestMoveForbidden pins the move-drop policy to the server's MoveTile rule.
-// The regression is the source->source cross-grid case (e.g. dragging a file
-// from one host directory's grid into another's): the server rejects any
-// cross-grid move touching a source-backed grid, but the UI's old XOR check
-// reported it allowed, inviting a drop that then failed.
-// TestDecideDropFocusOnly: a bare click on a pane that was NOT focused at
-// press time is focus-only — no navigation, no selection — no matter what
-// sits under the cursor. A bare click on an already-focused pane navigates.
-// Same family as the +-button rule (act only when previously focused);
-// closes the "clicking a pane to focus it descends into a tile" ambiguity
-// (issue #28).
+// The case to watch is source to source across grids (dragging a file from
+// one host directory's grid into another's): the server rejects any
+// cross-grid move touching a source-backed grid, and an XOR check here would
+// report it allowed, inviting a drop that then fails.
+// TestDecideDropFocusOnly: a bare click on a pane that was not focused at
+// press time is focus-only — no navigation, no selection — whatever sits
+// under the cursor. A bare click on an already-focused pane navigates. The +
+// button follows the same rule: act only when already focused. Clicking a
+// pane to focus it therefore never descends into a tile.
 func TestDecideDropFocusOnly(t *testing.T) {
 	unfocused := DropInput{Started: false, OriginFocused: false, TileID: "u/1"}
 	if got := DecideDrop(unfocused); got != DropFocusOnly {
@@ -344,11 +337,10 @@ func TestDecideDropTargetReadOnly(t *testing.T) {
 	}
 }
 
-// TestDecideDropReadOnlyPlacement (#266, revised by v2 #269): read-only
-// gates ARRIVALS, not placement. A same-grid left-drag on ANY read-only
-// grid — fs, proc, the launcher — is a rearrangement the node persists
-// ("things stay as you left them" holds on every grid). Clones stay
-// creation-class.
+// TestDecideDropReadOnlyPlacement: read-only gates arrivals, not placement. A
+// same-grid left-drag on any read-only grid — fs, proc, the launcher — is a
+// rearrangement the node persists, so things stay as the user left them on
+// every grid. Clones stay creation-class.
 func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	rearrange := DropInput{Started: true, TileID: "u/1", HasTarget: true,
 		TargetReadOnly: true, SameGrid: true}
@@ -378,11 +370,10 @@ func TestMoveForbidden(t *testing.T) {
 		{"cross source->source (regression)", false, false, "fs", "proc", true},
 		{"cross same-kind source->source", false, false, "fs", "fs", true},
 		// Crossing an id namespace is not a forbidden move — it is not a
-		// move at all: the left-drag becomes a LINK (DropLink), so nothing
-		// is forbidden here (owner decision 2026-07-19). The source-kind
-		// arms are exempted too: linking host content into a grid is the
-		// mount philosophy, and a read-only destination is rejected by the
-		// TargetReadOnly gate, not this one.
+		// move at all: the left-drag becomes a link (DropLink), so nothing
+		// is forbidden here. The source-kind arms are exempted too: linking
+		// host content into a grid is the mount philosophy, and a read-only
+		// destination is rejected by the TargetReadOnly gate, not this one.
 		{"cross-plugin left-drag is a link, not forbidden", false, true, "", "", false},
 		{"cross-plugin from a source grid links too", false, true, "fs", "", false},
 	}
@@ -421,7 +412,7 @@ func TestDecideDrop(t *testing.T) {
 		{"pan (tileID \"\") -> panEnd (beats delete)",
 			DropInput{Started: true, TileID: "", OverDelete: true, HasTarget: true}, DropPanEnd},
 
-		// --- the regression: delete must fire ---
+		// --- delete fires, and outranks the placement arms ---
 		{"over delete button -> delete",
 			DropInput{Started: true, TileID: "7", OverDelete: true}, DropDelete},
 		{"delete wins over an occupied target (precedence)",
@@ -452,7 +443,7 @@ func TestDecideDrop(t *testing.T) {
 		{"forbidden clone -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, Forbidden: true}, DropRejected},
 
-		// --- the 2026-07-19 gestures: cross-namespace left-drag is a LINK ---
+		// --- a cross-namespace left-drag is a link ---
 		{"cross-plugin left drag -> link",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true}, DropLink},
 		{"cross-plugin right drag -> clone (copy, not link)",
@@ -531,8 +522,8 @@ func TestPromoteToWell(t *testing.T) {
 	}
 }
 
-// RectsOverlap is the client half of the placement collision contract
-// (#231): strict interior intersection, edge-adjacency is NOT a collision.
+// RectsOverlap is the client half of the placement collision contract:
+// strict interior intersection, and edge adjacency is not a collision.
 func TestRectsOverlap(t *testing.T) {
 	cases := []struct {
 		name           string
