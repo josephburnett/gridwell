@@ -277,15 +277,15 @@ message InfoResponse {
   // deleted 2026-08-29 (docs/one-node.md) — connections list as
   // HandshakeResponse.connections.
   reserved 14;
-  // transit declares that this plugin's ids are CHAINS from another node —
-  // a mount, forwarding to a remote gridwell, whose ids arrive already
-  // qualified from the remote's perspective. The host's qualification layer
-  // prepends one segment instead of applying leaf rules, and the mount
-  // cache interposes. Declared by the LOCAL transport binary (which is
-  // alive even when its remote isn't) and cached from the spawn-time
-  // handshake — the host must never re-derive it from the kind string
-  // (charter, 2026-08-15: the host must not know its plugins).
-  bool transit = 15;
+  // 15 was transit: a plugin declaring that its ids are CHAINS from
+  // another node. That was how a node MOUNT was a plugin; since
+  // connections became config (2026-08-29, docs/one-node.md) the node's
+  // own TRANSPORT is the only transit namespace there is, and it is
+  // structural — a connection's ids arrive already qualified from the far
+  // node's frame — not a declaration anyone makes. Retired with the
+  // registry's transit slot (docs/simplify-plan.md S2); no plugin set it
+  // and no reader remained. Reserved, never renumbered.
+  reserved 15;
   // glyph is the plugin's identity glyph for the launcher/menu/ghost faces:
   // "folder", "process", "well", or "" for the generic globe. A declaration,
   // never a kind switch in the client; unknown values also fall back to the
