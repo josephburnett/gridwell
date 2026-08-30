@@ -269,7 +269,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
 		a.wellWheelPending[hoverWell.ID] = wellWheelDrift{
 			gridID: a.gridIDForPane(p), cx: cx1, cy: cy1,
-			ratio: ratio, w: hoverWell.W, h: hoverWell.H, version: hoverWell.Version,
+			ratio: ratio, version: hoverWell.Version,
 		}
 		a.draw()
 		return nil

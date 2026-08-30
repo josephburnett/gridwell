@@ -419,15 +419,16 @@ type paneState = panestate.Saved
 // of the not-yet-persisted view (framing-audit decision 2026-08-13): the
 // grid to persist under, the FLOAT view center accumulated across the
 // burst (issue #219 — per-notch integer quantization rounded the cursor-
-// anchor drift away), and the ratio/size/version the flush posts FROM. The
-// flush must never re-read the cache row: any refetch inside the settle
-// window (a conflict resync, an SSE row) replaces the patch with server
-// values, and a cache-reading flush then faithfully reverted the wheel.
+// anchor drift away; since schema v11 the center is float all the way to
+// the store, so nothing rounds it at the flush either), and the
+// ratio/version the flush posts FROM. The flush must never re-read the
+// cache row: any refetch inside the settle window (a conflict resync, an
+// SSE row) replaces the patch with server values, and a cache-reading
+// flush then faithfully reverted the wheel.
 type wellWheelDrift struct {
 	gridID  string
 	cx, cy  float64
 	ratio   float64
-	w, h    int64
 	version int64
 }
 
