@@ -76,7 +76,8 @@ func TestDeleteMovesToMonthTrashGrid(t *testing.T) {
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: txt.ID, Version: txt.Version}); err != nil {
 		t.Fatal(err)
 	}
-	// The SAME tile — id continues, version moved on, content intact.
+	// The SAME tile — id continues, content intact. The version does NOT
+	// move: a trash filing is a move, and a move is layout, not content.
 	got, err := s.GetTile(ctx, txt.ID)
 	if err != nil {
 		t.Fatalf("trashed tile must still exist: %v", err)
@@ -85,8 +86,8 @@ func TestDeleteMovesToMonthTrashGrid(t *testing.T) {
 	if got.GridID != month {
 		t.Errorf("trashed tile grid = %s, want month grid %s", got.GridID, month)
 	}
-	if got.Version <= txt.Version {
-		t.Errorf("move must bump the version: %d -> %d", txt.Version, got.Version)
+	if got.Version != txt.Version {
+		t.Errorf("move moved the version %d -> %d; layout does not bump", txt.Version, got.Version)
 	}
 	if got.W != 2 || got.H != 1 {
 		t.Errorf("footprint must ride along: got %dx%d", got.W, got.H)

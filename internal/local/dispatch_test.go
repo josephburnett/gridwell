@@ -37,9 +37,12 @@ func getTile(t *testing.T, p *local.Plugin, id string) *gridwellv1.Tile {
 }
 
 // TestSetTileDispatchVersionSemantics proves the single SetTile writeback routes
-// each kind to the right store op AND that the version semantics ride along:
-// well/text framing must not bump; url/shell preview (content) must bump. This
-// is the plugin's half of the framing-vs-content rule — one place, four kinds.
+// each kind to the right store op AND that the version rule rides across the
+// dispatch seam: NOTHING SetTile can write is a user content edit — well and
+// text framing, a url freeze, a shell's frozen frame are all framing or
+// automatic captures — so no arm may bump (docs/simplify-plan.md S5;
+// store/version_rule_test.go is the whole table). The user's own edits reach
+// the store by other verbs: WriteContent and the rename arm.
 func TestSetTileDispatchVersionSemantics(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
@@ -71,24 +74,24 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 		t.Errorf("text framing bumped version %d -> %d", text.Version, v)
 	}
 
-	// url preview: content, bumps.
+	// url freeze: an automatic capture, no bump.
 	url := createTile(t, p, root, &gridwellv1.Tile{Kind: "url", X: 4, Y: 0, W: 2, H: 2, UrlString: "https://a"}, nil)
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: url.Id, Version: url.Version,
 		Tile: &gridwellv1.Tile{Kind: "url", UrlString: "https://b", AltText: "B"}, Preview: []byte("jpg")}); err != nil {
 		t.Fatalf("SetTile url: %v", err)
 	}
-	if v := getTile(t, p, url.Id).Version; v != url.Version+1 {
-		t.Errorf("url state version = %d, want %d (content bumps)", v, url.Version+1)
+	if v := getTile(t, p, url.Id).Version; v != url.Version {
+		t.Errorf("url freeze bumped version %d -> %d; a capture is not an edit", url.Version, v)
 	}
 
-	// shell preview: content, bumps.
+	// shell preview: an automatic capture, no bump.
 	shell := createTile(t, p, root, &gridwellv1.Tile{Kind: "shell", X: 6, Y: 0, W: 2, H: 2}, nil)
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: shell.Id, Version: shell.Version,
 		Tile: &gridwellv1.Tile{Kind: "shell"}, Preview: []byte("jpg")}); err != nil {
 		t.Fatalf("SetTile shell: %v", err)
 	}
-	if v := getTile(t, p, shell.Id).Version; v != shell.Version+1 {
-		t.Errorf("shell preview version = %d, want %d (content bumps)", v, shell.Version+1)
+	if v := getTile(t, p, shell.Id).Version; v != shell.Version {
+		t.Errorf("shell preview bumped version %d -> %d; a capture is not an edit", shell.Version, v)
 	}
 }
 

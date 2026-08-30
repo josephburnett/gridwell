@@ -83,8 +83,11 @@ func TestSetTileAlt(t *testing.T) {
 	if got.AltText != "Example Title" {
 		t.Errorf("AltText = %q, want %q", got.AltText, "Example Title")
 	}
-	if got.Version != tile.Version+1 {
-		t.Errorf("version after SetTileAlt = %d, want %d", got.Version, tile.Version+1)
+	// An AUTOMATIC capture (user=false) is an observation, not an edit: it
+	// writes the name and fans the event, but leaves the version alone so it
+	// can never cost a concurrent editor their claim (version_rule_test.go).
+	if got.Version != tile.Version {
+		t.Errorf("automatic capture moved the version %d -> %d", tile.Version, got.Version)
 	}
 	// Setting back to empty clears the column.
 	if err := s.SetTileAlt(ctx, tileIDInt, "", false); err != nil {
@@ -112,15 +115,16 @@ func TestSetURLState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetURLState: %v", err)
 	}
-	// Returned tile reflects all three writes and a single version bump.
+	// Returned tile reflects all three writes. The freeze is a capture, so
+	// the version stays put (version_rule_test.go).
 	if out.URLString != "https://example.com/b" {
 		t.Errorf("URLString = %q, want https://example.com/b", out.URLString)
 	}
 	if out.AltText != "Example B" {
 		t.Errorf("AltText = %q, want %q", out.AltText, "Example B")
 	}
-	if out.Version != tile.Version+1 {
-		t.Errorf("version after SetURLState = %d, want %d (single bump)", out.Version, tile.Version+1)
+	if out.Version != tile.Version {
+		t.Errorf("capture moved the version %d -> %d", tile.Version, out.Version)
 	}
 	jpeg, err := s.GetTilePreview(ctx, tile.ID)
 	if err != nil {

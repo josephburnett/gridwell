@@ -51,8 +51,10 @@ func TestPlaceTileResizeInPlace(t *testing.T) {
 	if got.W != 3 || got.H != 2 || got.GridID != root {
 		t.Errorf("placed = grid %s (%d,%d %dx%d), want grid %s 3x2", got.GridID, got.X, got.Y, got.W, got.H, root)
 	}
-	if got.Version <= tile.Version {
-		t.Errorf("placement is a real edit: version %d should exceed %d", got.Version, tile.Version)
+	// Placement is layout, not content: the version stays put
+	// (version_rule_test.go owns the whole rule).
+	if got.Version != tile.Version {
+		t.Errorf("placement moved the version %d -> %d; layout does not bump", tile.Version, got.Version)
 	}
 }
 
@@ -113,17 +115,33 @@ func TestPlaceTileOverlapRefused(t *testing.T) {
 	}
 }
 
-func TestPlaceTileVersionConflict(t *testing.T) {
+// TestPlaceTileIgnoresStaleClaim: a drag is an explicit act on a tile the
+// user can see, so a version that moved under it (a title capture, a foreign
+// rename) must not cost the user the move. Placement carries no claim
+// (docs/simplify-plan.md S5); the overlap check below is what actually
+// protects the grid, and it runs in the same transaction either way.
+func TestPlaceTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
 	tile := placeText(t, s, root, 0, 0)
 
-	_, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+	got, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
 		TileID: tile.ID, Version: tile.Version + 41, GridID: root, X: 1, Y: 1, W: 1, H: 1,
 	})
-	if !errors.Is(err, ErrVersionConflict) {
-		t.Fatalf("stale claim: got %v, want ErrVersionConflict", err)
+	if err != nil {
+		t.Fatalf("stale claim must be accepted: %v", err)
+	}
+	if got.X != 1 || got.Y != 1 {
+		t.Errorf("placed at (%d,%d), want (1,1)", got.X, got.Y)
+	}
+	// The grid is still protected: an overlapping place is refused whatever
+	// the claim says.
+	other := placeText(t, s, root, 5, 5)
+	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: other.ID, Version: other.Version + 41, GridID: root, X: 1, Y: 1, W: 1, H: 1,
+	}); !errors.Is(err, ErrOverlap) {
+		t.Fatalf("overlap with a stale claim: got %v, want ErrOverlap", err)
 	}
 }
 

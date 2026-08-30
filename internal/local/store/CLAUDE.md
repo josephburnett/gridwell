@@ -165,8 +165,28 @@ existing file's guarantees.
 
 - Grid/tile/blob ids are `AUTOINCREMENT` and **never reused** — client caches
   and stored references (embeds, deep links) are keyed by id.
-- `version` bumps on content edits only; framing writes (view_*, text scroll)
-  must not bump it. The split lives in `finishContentEdit` vs `emitTileChanged`.
+- `version` means ONE thing: **the user's content bytes changed** — a text
+  body, a url the user typed, a name the user typed. It is the
+  optimistic-concurrency claim for exactly those edits (owner decision
+  2026-08-29, docs/simplify-plan.md S5). Three consequences, pinned as a
+  table by `version_rule_test.go`:
+  - **Content** bumps and claims. The claim is `claimContentVersion`, whose
+    only callers are `WriteContent`'s text and url arms and `RenameTile`;
+    the bump is `finishContentEdit`. Who can reach those two functions IS
+    the rule.
+  - **Captures** — a page title, a preview jpeg, a url history, a shell's
+    foreground command — neither bump nor claim. They are facts the server
+    OBSERVED; they ride the tile event to every client as last-writer-wins.
+    A capture that bumped could cost a concurrent editor their claim, and a
+    capture that claimed could be refused for losing a race it never
+    entered.
+  - **Framing** (view_*, text window and mode, content zoom, url freeze,
+    pane layout) and **layout** (place / move / resize / clone / delete)
+    neither bump nor claim. Layout is an explicit act on a tile the user can
+    see, so a race resolves as "whoever moved it last moved it"; the one
+    thing a race could corrupt — two tiles in one cell — is refused by the
+    overlap check inside the same transaction, claim or no claim. These go
+    through `loadForWrite` + `emitTileChanged`.
 - Blobs are content-addressed (sha256), immutable, refcounted, and
   self-describing via `media_type` (read it back; never hard-code a type at the
   read site).

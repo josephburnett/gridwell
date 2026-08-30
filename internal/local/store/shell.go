@@ -35,12 +35,12 @@ func (s *Store) CreateShell(ctx context.Context, req *rpc.CreateShellRequest) (*
 // Empty JPEG (length 0) clears the preview — useful as a reset after a
 // failed refresh.
 //
-// Unlike most mutations this one intentionally does NOT consult
-// req.Version. The preview is a side-channel content blob; the
-// authoritative concurrency primitive for shell tiles is the
-// WebSocket session (one live PTY per tile at a time). The field
-// stays on the wire so clients can still observe versions through
-// TileChanged.
+// The frozen frame is a CAPTURE — what the terminal was observed to look
+// like when the user left — so it carries no version claim and makes no
+// version bump (docs/simplify-plan.md S5). It rides the tile event to every
+// client as last-writer-wins state, which is also the right answer for a
+// tile whose real concurrency primitive is the live PTY session (one per
+// tile at a time).
 func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -77,7 +77,7 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 				}
 			}
 		}
-		out, err = s.finishContentEdit(ctx, tx, tileID, events)
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
 		return err
 	})
 	return out, err

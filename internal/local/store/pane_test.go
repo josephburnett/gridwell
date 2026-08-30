@@ -38,9 +38,10 @@ func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 	if _, err := s.SetPaneLayout(ctx, txtID, txt.Version, []byte(`{"v":1}`)); !errors.Is(err, ErrNotPaneTile) {
 		t.Errorf("SetPaneLayout on text tile: err = %v, want ErrNotPaneTile", err)
 	}
-	// Version guard: a stale claim conflicts.
-	if _, err := s.SetPaneLayout(ctx, id, pt.Version+7, []byte(`{"v":1}`)); !errors.Is(err, ErrVersionConflict) {
-		t.Errorf("stale version: err = %v, want ErrVersionConflict", err)
+	// No version guard: a layout write is framing-class, last-writer-wins,
+	// and carries no claim (docs/simplify-plan.md S5; version_rule_test.go).
+	if _, err := s.SetPaneLayout(ctx, id, pt.Version+7, []byte(`{"v":1}`)); err != nil {
+		t.Errorf("stale claim must be accepted: %v", err)
 	}
 	// An empty layout can never be written (NULL means never-arranged; an
 	// arranged workspace always has at least one pane).

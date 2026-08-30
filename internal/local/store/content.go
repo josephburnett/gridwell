@@ -68,7 +68,7 @@ func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version i
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, tileID, version)
+		n, err := s.claimContentVersion(ctx, tx, tileID, version)
 		if err != nil {
 			return err
 		}
@@ -131,7 +131,7 @@ func (s *Store) RenameTile(ctx context.Context, tileID string, version int64, al
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, id, version)
+		n, err := s.claimContentVersion(ctx, tx, id, version)
 		if err != nil {
 			return err
 		}

@@ -20,9 +20,13 @@ func urlSchemeAllowed(u string) bool {
 // MaxBlobBytes caps a single uploaded text-tile blob size.
 const MaxBlobBytes = 16 * 1024 * 1024
 
-// checkTileVersion loads a tile and verifies its claimed version matches.
-// Returns the loaded tile.
-func (s *Store) checkTileVersion(ctx context.Context, q gridReader, tileID, claimed int64) (*rpc.Tile, error) {
+// claimContentVersion loads a tile and verifies the caller's CONTENT claim
+// against the row. It is the store's only optimistic-concurrency check, and
+// its only callers are the writes that change the user's content bytes
+// (WriteContent's text and url arms, RenameTile) — that is the whole of
+// "version is the claim for content and nothing else" (docs/simplify-plan.md
+// S5), enforced by who can reach this function rather than by comment.
+func (s *Store) claimContentVersion(ctx context.Context, q gridReader, tileID, claimed int64) (*rpc.Tile, error) {
 	t, err := s.loadTile(ctx, q, tileID)
 	if err != nil {
 		return nil, err
@@ -34,33 +38,30 @@ func (s *Store) checkTileVersion(ctx context.Context, q gridReader, tileID, clai
 	return t, nil
 }
 
-// loadForEdit is the shared preamble for a versioned single-tile mutation:
-// version-check the tile (optimistic concurrency) and optionally guard its
+// loadForWrite is the shared preamble for an UNCLAIMED single-tile mutation
+// (framing, a capture, a layout write): load the row and optionally guard its
 // kind. wantKind == "" skips the kind guard (callers with a multi-kind rule,
-// e.g. any well, do their own check on the returned tile). Returns the loaded
-// tile plus its own grid id (the grid the overlap/insert checks run against —
-// the row is the one owner of its location; 2026-07-26: the wire carries no
-// descent path).
-func (s *Store) loadForEdit(ctx context.Context, tx *sql.Tx, tileID, version int64, wantKind string, wrongKindErr error) (*rpc.Tile, int64, error) {
-	n, err := s.checkTileVersion(ctx, tx, tileID, version)
+// e.g. any well, do their own check on the returned tile). No version is
+// consulted — these writes are last-writer-wins by decision, so there is
+// nothing here for a racing capture to conflict with.
+func (s *Store) loadForWrite(ctx context.Context, tx *sql.Tx, tileID int64, wantKind string, wrongKindErr error) (*rpc.Tile, error) {
+	n, err := s.loadTile(ctx, tx, tileID)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if wantKind != "" && n.Kind != wantKind {
-		return nil, 0, wrongKindErr
+		return nil, wrongKindErr
 	}
-	gid, err := parseID(n.GridID)
-	if err != nil {
-		return nil, 0, fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, n.GridID, err)
-	}
-	return n, gid, nil
+	return n, nil
 }
 
 // emitTileChanged reloads tileID and appends a TileChanged event for it. It is
-// the shared tail of every store write that publishes a tile. Framing setters
-// (SetFraming / SetTextView) call it directly — re-framing is NOT a content
-// edit, so it must not bump the version (CLAUDE.md). Content writers go through
-// finishContentEdit instead.
+// the shared tail of every store write that publishes a tile, and the tail of
+// every write that is NOT a content edit — framing, an automatic capture, a
+// layout move — since none of those may bump the version (CLAUDE.md,
+// docs/simplify-plan.md S5). The event carries the whole tile, so a capture
+// still reaches every client; it just arrives as last-writer-wins state
+// instead of a new claim. Content writers go through finishContentEdit.
 func (s *Store) emitTileChanged(ctx context.Context, tx *sql.Tx, tileID int64, events *[]rpc.Event) (*rpc.Tile, error) {
 	out, err := s.loadTile(ctx, tx, tileID)
 	if err != nil {
@@ -70,12 +71,13 @@ func (s *Store) emitTileChanged(ctx context.Context, tx *sql.Tx, tileID int64, e
 	return out, nil
 }
 
-// finishContentEdit is the coda for a content mutation: bump the tile's version
-// (the optimistic-concurrency key + edit-history spine) then publish it via
-// emitTileChanged. Keeping the "content edit bumps version, framing edit does
-// not" rule as a choice between two named helpers — rather than a per-method
-// open-coded bump that a new mutation can forget or wrongly add — is what keeps
-// that invariant from drifting.
+// finishContentEdit is the coda for a USER CONTENT mutation: bump the tile's
+// version (the optimistic-concurrency key + edit-history spine) then publish it
+// via emitTileChanged. Keeping "a user content edit bumps, everything else
+// does not" as a choice between two named helpers — rather than a per-method
+// open-coded bump a new mutation can forget or wrongly add — is what keeps
+// that invariant from drifting. Its callers are exactly the content writes;
+// version_rule_test.go pins the whole table.
 func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64, events *[]rpc.Event) (*rpc.Tile, error) {
 	if err := bumpTileVersion(ctx, tx, tileID); err != nil {
 		return nil, err
@@ -333,7 +335,7 @@ func (s *Store) CreateScratchShell(ctx context.Context) (*rpc.Tile, error) {
 
 // SetTextView updates a text tile's framed-document window and rendered/text
 // mode. Like SetFraming this is framing, not content: an in-place write that
-// does NOT bump the tile version.
+// carries no version claim and does NOT bump the tile version.
 func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -341,7 +343,7 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, rpc.KindText, ErrNotTextTile)
+		n, err := s.loadForWrite(ctx, tx, tileID, rpc.KindText, ErrNotTextTile)
 		if err != nil {
 			return err
 		}
@@ -391,7 +393,7 @@ func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) erro
 		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		t, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
+		t, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
 		}

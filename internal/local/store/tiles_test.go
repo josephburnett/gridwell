@@ -265,8 +265,9 @@ func TestResizeNode(t *testing.T) {
 	if r.W != 3 || r.H != 4 {
 		t.Errorf("after resize %+v", r)
 	}
-	if r.Version != w.Version+1 {
-		t.Errorf("version after resize = %d, want %d", r.Version, w.Version+1)
+	// A resize is layout: the version stays put (version_rule_test.go).
+	if r.Version != w.Version {
+		t.Errorf("resize moved the version %d -> %d; layout does not bump", w.Version, r.Version)
 	}
 	// Resize to overlap another tile should fail.
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
@@ -284,7 +285,10 @@ func TestResizeNode(t *testing.T) {
 	}
 }
 
-func TestResizeVersionConflict(t *testing.T) {
+// TestResizeIgnoresStaleClaim: resize rides PlaceTile, which carries no
+// version claim (docs/simplify-plan.md S5) — see TestPlaceTileIgnoresStaleClaim
+// for the rule and version_rule_test.go for the whole table.
+func TestResizeIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -294,12 +298,15 @@ func TestResizeVersionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+	r, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
 		TileID: w.ID, Version: w.Version + 99,
 		GridID: w.GridID, X: 0, Y: 0, W: 2, H: 2,
 	})
-	if !errors.Is(err, ErrVersionConflict) {
-		t.Errorf("got %v, want ErrVersionConflict", err)
+	if err != nil {
+		t.Fatalf("stale claim must be accepted: %v", err)
+	}
+	if r.W != 2 || r.H != 2 {
+		t.Errorf("resized to %dx%d, want 2x2", r.W, r.H)
 	}
 }
 
@@ -509,7 +516,12 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	}
 }
 
-func TestDeleteTileVersionConflict(t *testing.T) {
+// TestDeleteTileIgnoresStaleClaim: the delete gesture is the user's, on a
+// tile they can see, and it is recoverable (the row moves to the trash). A
+// version that moved under it — a page title capture on the very tile being
+// discarded — must not turn the gesture into an error the user has to
+// re-issue. No claim (docs/simplify-plan.md S5).
+func TestDeleteTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -519,8 +531,7 @@ func TestDeleteTileVersionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: w.Version + 1})
-	if !errors.Is(err, ErrVersionConflict) {
-		t.Errorf("got %v, want ErrVersionConflict", err)
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: w.Version + 1}); err != nil {
+		t.Errorf("stale claim must be accepted: %v", err)
 	}
 }

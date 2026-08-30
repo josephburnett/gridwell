@@ -270,10 +270,10 @@ func (s *Store) RootFraming(ctx context.Context) (f rpc.Framing, ok bool, err er
 // or a well link — the framing is per-doorway, so a link keeps its own),
 // req.RootGridID a ROOT grid, which has no doorway to carry it.
 //
-// Framing is not a content edit: it does NOT bump the tile version. It is
-// an in-place write to the owning row (copy-on-clone means clones are
-// already independent, so there is nothing to fork) — the framing stays
-// exactly as you left it.
+// Framing is not a content edit: it carries no version claim and does NOT
+// bump the tile version. It is an in-place write to the owning row
+// (copy-on-clone means clones are already independent, so there is nothing
+// to fork) — the framing stays exactly as you left it.
 func (s *Store) SetFraming(ctx context.Context, req *rpc.SetFramingRequest) (*rpc.Tile, error) {
 	if req.RootGridID != "" {
 		return nil, s.setRootFraming(ctx, req)
@@ -284,7 +284,7 @@ func (s *Store) SetFraming(ctx context.Context, req *rpc.SetFramingRequest) (*rp
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
+		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
 		}
