@@ -56,10 +56,6 @@
       {
         "from": "../../gridwell-plugin-gitlab",
         "to": "gridwell-plugin-gitlab"
-      },
-      {
-        "from": "../../api/gridwell/v1/data.proto",
-        "to": "data.proto"
       }
     ],
     "linux": {
@@ -78,9 +74,5 @@
         "portable"
       ]
     }
-  },
-  "dependencies": {
-    "@grpc/grpc-js": "^1.14.4",
-    "@grpc/proto-loader": "^0.8.1"
   }
 }

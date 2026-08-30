@@ -27,13 +27,6 @@ export const CH = {
                            // menu with no in-page context: the bar circle's
                            // right-click, reachable even when the page
                            // hijacks contextmenu.
-
-  // Shell transport (2026-07-26: the WS bridge is gone; PTY bytes ride a
-  // main-process gRPC OpenShell stream, relayed here per pane).
-  shellOpen: 'gw:shell-open',     // ShellOpenArgs → void
-  shellWrite: 'gw:shell-write',   // ShellWriteArgs → void
-  shellResize: 'gw:shell-resize', // ShellResizeArgs → void
-  shellClose: 'gw:shell-close',   // PaneRef → void
 } as const;
 
 // Live URL view's injected preload → main (send, fire-and-forget). The view
@@ -54,10 +47,8 @@ export const EV = {
   rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
   middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
   leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
-  shellData: 'gw:shell-data', // ShellDataEvent — PTY output for a pane's terminal
-  shellExit: 'gw:shell-exit', // ShellExitEvent — the pane's stream ended (exactly once)
   error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
-                     // (electron:webview | electron:shell | electron:backend)
+                     // (electron:webview | electron:backend)
                      // that must reach the user. Charter §6: one owner, no
                      // second "silent" path for a main-process failure.
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
@@ -97,40 +88,6 @@ export interface ForwardedRightdown {
 
 export interface PaneRef {
   paneId: string;
-}
-
-// Shell transport payloads. Data crosses as Uint8Array both ways (Electron's
-// structured clone carries it natively — no base64 hop for a keystroke).
-export interface ShellOpenArgs {
-  paneId: string;
-  // tileId is the globally-qualified "<plugin-uuid>/<id>" of the shell tile
-  // that OWNS the PTY session (the renderer resolves a link to its target
-  // before opening — the session is keyed by the owner).
-  tileId: string;
-  cols: number;
-  rows: number;
-}
-export interface ShellWriteArgs {
-  paneId: string;
-  data: Uint8Array;
-}
-export interface ShellResizeArgs {
-  paneId: string;
-  cols: number;
-  rows: number;
-}
-export interface ShellDataEvent {
-  paneId: string;
-  data: Uint8Array;
-}
-export interface ShellExitEvent {
-  paneId: string;
-  // message is '' for a clean end (local close, remote hangup), else the
-  // transport/status error text the renderer surfaces (charter §6).
-  message: string;
-  // sessionGone marks the server's "this tmux session no longer exists"
-  // verdict — the renderer flips the refresh affordance off.
-  sessionGone: boolean;
 }
 
 export interface PlaceArgs {
@@ -230,11 +187,10 @@ export interface ZoomKeyEvent {
 }
 
 // ErrorEvent is the one payload shape for EV.error: every main-process
-// failure site (webview lifecycle, shell stream, sidecar boot/
-// exit) reports through this same wire, never a bespoke one. `source` is a
-// stable key the wasm errsurface groups notices by (one row per source — see
-// client/errsurface): 'electron:webview' | 'electron:shell' |
-// 'electron:backend'. `message` is the human-readable text shown verbatim.
+// failure site (webview lifecycle, sidecar boot/exit) reports through this
+// same wire, never a bespoke one. `source` is a stable key the wasm
+// errsurface groups notices by (one row per source — see
+// client/errsurface): 'electron:webview' | 'electron:backend'. `message` is the human-readable text shown verbatim.
 export interface ErrorEvent {
   source: string;
   message: string;

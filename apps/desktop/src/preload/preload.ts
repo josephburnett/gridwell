@@ -19,21 +19,16 @@ import {
   NavEvent,
   ForwardedRightdown,
   ErrorEvent,
-  ShellOpenArgs,
-  ShellWriteArgs,
-  ShellResizeArgs,
-  ShellDataEvent,
-  ShellExitEvent,
 } from '../main/ipc';
 
 const api = {
   version: 1,
   // The host's OWN capability declaration (2026-08-13): which bridge
   // halves this preload implements. caps.Derive reads it — a host
-  // exposing the bridge no longer implies every native feature (the
-  // mobile shell places url views without the shell relay). Electron
-  // implements both.
-  caps: { liveUrl: true, liveShell: true },
+  // exposing the bridge no longer implies every native feature. Since
+  // 2026-08-29 there is one half left: shells ride the web door, so no
+  // host implements anything for them.
+  caps: { liveUrl: true },
 
   placeWebview(args: PlaceArgs): Promise<void> {
     return ipcRenderer.invoke(CH.place, args);
@@ -62,21 +57,6 @@ const api = {
     return ipcRenderer.invoke(CH.showMenu, args);
   },
 
-  // Shell transport (2026-07-26): the renderer's xterm speaks to the
-  // main-process gRPC OpenShell stream through these four calls plus the
-  // onShellData/onShellExit pushes below.
-  shellOpen(args: ShellOpenArgs): Promise<void> {
-    return ipcRenderer.invoke(CH.shellOpen, args);
-  },
-  shellWrite(args: ShellWriteArgs): Promise<void> {
-    return ipcRenderer.invoke(CH.shellWrite, args);
-  },
-  shellResize(args: ShellResizeArgs): Promise<void> {
-    return ipcRenderer.invoke(CH.shellResize, args);
-  },
-  shellClose(args: PaneRef): Promise<void> {
-    return ipcRenderer.invoke(CH.shellClose, args);
-  },
 
   // onFrame/onNav register renderer-side listeners for main→renderer pushes.
   // They return an unsubscribe function.
@@ -138,22 +118,9 @@ const api = {
     ipcRenderer.on(EV.zoomKey, h);
     return () => ipcRenderer.removeListener(EV.zoomKey, h);
   },
-  // onShellData delivers PTY output for a pane's terminal.
-  onShellData(cb: (ev: ShellDataEvent) => void): () => void {
-    const h = (_e: unknown, ev: ShellDataEvent) => cb(ev);
-    ipcRenderer.on(EV.shellData, h);
-    return () => ipcRenderer.removeListener(EV.shellData, h);
-  },
-  // onShellExit fires exactly once when a pane's shell stream ends —
-  // whatever ended it (clean close, remote hangup, error).
-  onShellExit(cb: (ev: ShellExitEvent) => void): () => void {
-    const h = (_e: unknown, ev: ShellExitEvent) => cb(ev);
-    ipcRenderer.on(EV.shellExit, h);
-    return () => ipcRenderer.removeListener(EV.shellExit, h);
-  },
   // onError fires for every main-process failure that must reach the user
-  // (webview lifecycle, shell stream, sidecar boot/exit) — the
-  // one channel the wasm client feeds into its error surface.
+  // (webview lifecycle, sidecar boot/exit) — the one channel the wasm
+  // client feeds into its error surface.
   onError(cb: (ev: ErrorEvent) => void): () => void {
     const h = (_e: unknown, ev: ErrorEvent) => cb(ev);
     ipcRenderer.on(EV.error, h);

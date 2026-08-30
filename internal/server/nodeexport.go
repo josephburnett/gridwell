@@ -41,8 +41,7 @@ import (
 func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
 
 // FederationHandler is the NODE door: the Gridwell service over raw
-// gRPC, what a remote mounter's ssh tunnel and the desktop's shell relay
-// dial. Ungated by design and served ONLY on the 0600 unix socket
+// gRPC, what a remote mounter's ssh tunnel dials. Ungated by design and served ONLY on the 0600 unix socket
 // node.listenFederation opens (config.FederationSocket; there is no
 // address form) — ssh is the authenticated transport between nodes. Serve
 // it with NodeProtocols: gRPC over a cleartext tunnel needs HTTP/2
@@ -233,28 +232,16 @@ func (n *nodeExport) Subscribe(_ *pb.SubscribeRequest, stream pb.Gridwell_Subscr
 	return statusErr(n.h.subscribe(stream.Context(), stream.Send))
 }
 
-// OpenShell peeks the bind message for the tile id, routes to the owning
-// plugin with the id peeled one segment, and pipes both directions.
+// OpenShell peeks the bind message for the tile id, routes it through the
+// ONE shell route (openShellRoute — the same one the browser's /shell
+// WebSocket enters by), and pipes both directions.
 func (n *nodeExport) OpenShell(stream pb.Gridwell_OpenShellServer) error {
-	// The node-wide shell refusal (server.yaml disable_shells): every PTY
-	// door on this node is closed, whichever plugin (local or mounted)
-	// would hold the session.
-	if n.srv.cfg.DisableShells {
-		return status.Error(gcodes.PermissionDenied, "shell tiles are disabled on this node (server.yaml disable_shells)")
-	}
 	first, err := stream.Recv()
 	if err != nil {
 		return err
 	}
-	c, local, ok := n.srv.clientForID(first.TileId)
-	if !ok {
-		return status.Errorf(gcodes.NotFound, "no plugin for shell tile %q", first.TileId)
-	}
-	up, err := c.OpenShell(stream.Context())
+	up, err := n.srv.openShellRoute(stream.Context(), first)
 	if err != nil {
-		return err
-	}
-	if err := up.Send(&pb.OpenShellRequest{TileId: local, Data: first.Data, Resize: first.Resize}); err != nil {
 		return err
 	}
 	errc := make(chan error, 2)

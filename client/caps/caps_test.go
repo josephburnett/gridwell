@@ -20,15 +20,22 @@ func TestDerive(t *testing.T) {
 	if c := Derive(LegacyBridge(), true); c.Shells || c.LiveShell {
 		t.Errorf("shells_disabled must kill both Shells and LiveShell, got %+v", c)
 	}
-	if c := Derive(NoBridge(), false); c.LiveShell || !c.Shells {
-		t.Errorf("browser host: shells exist (frozen) but never live, got %+v", c)
+	// The whole point of the 2026-08-29 transport move: a plain browser
+	// (a phone pointed at the node) attaches a live PTY exactly like the
+	// desktop, because the PTY rides the web door. Only the NODE can say
+	// no.
+	if c := Derive(NoBridge(), false); !c.LiveShell || !c.Shells {
+		t.Errorf("browser host: shells are live there too, got %+v", c)
+	}
+	if c := Derive(NoBridge(), true); c.LiveShell || c.Shells {
+		t.Errorf("browser host on a shells-disabled node: nothing, got %+v", c)
 	}
 	// The mobile shape (2026-08-13): a bridge that declares live url views
-	// but NOT the shell relay must never light up shell attach — a
-	// dead-click is the launcher lesson (§6).
-	mobile := Bridge{Present: true, LiveURL: true, LiveShell: false}
-	if c := Derive(mobile, false); !c.LiveURL || c.LiveShell || !c.Shells {
-		t.Errorf("url-only bridge: want LiveURL only (+Shells frozen), got %+v", c)
+	// only. It says nothing about shells any more — the host has no shell
+	// half to implement.
+	mobile := Bridge{Present: true, LiveURL: true}
+	if c := Derive(mobile, false); !c.LiveURL || !c.LiveShell || !c.Shells {
+		t.Errorf("url-only bridge: shells still ride the web door, got %+v", c)
 	}
 }
 

@@ -1,10 +1,12 @@
 package server_test
 
 // The disable_shells contract (server.yaml), pinned over the REAL wire —
-// the gRPC node export behind FederationHandler, exactly what the Electron shell
-// dialer and a remote mounter speak. The refusal lives at the node's
-// router, before plugin resolution, so no plugin (local or mounted) can
-// serve a shell while the flag is set:
+// the gRPC node export behind FederationHandler, what a remote mounter
+// speaks. (The BROWSER door's half — the /shell WebSocket — is pinned by
+// shell_door_seam_test.go; both enter through the one shell route, so the
+// refusal cannot hold on one door and not the other.) The refusal lives at
+// the node's router, before plugin resolution, so no plugin (local or
+// mounted) can serve a shell while the flag is set:
 //   - Handshake carries shells_disabled (the client drops the palette
 //     swatch from it),
 //   - CreateTile(kind=shell) is PermissionDenied while other kinds work,

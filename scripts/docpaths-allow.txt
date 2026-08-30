@@ -34,3 +34,6 @@ docs/one-node.md internal/layout
 # The 2026-08-29 architecture review names the dead machinery S1 removed:
 docs/architecture-review.md client/schemaform
 docs/architecture-review.md client/wasm/entry_params.go
+# The 2026-08-29 review's finding 8 names the Electron shell relay it asked
+# for; S3 deleted it (shells ride the web door):
+docs/architecture-review.md apps/desktop/src/main/shellgrpc.ts

@@ -84,9 +84,10 @@ func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault st
 // always configured), so the sidecar can authenticate its own window
 // without ever prompting — local stdout is same-trust as the
 // <home>/web-password file the password is read from; federation= is
-// LAST and runs to the
-// closing paren: the node door's unix socket path (what the shell relay
-// dials), which may contain spaces.
+// LAST and runs to the closing paren: the node door's unix socket path,
+// which may contain spaces. The desktop no longer reads federation= — the
+// PTY rides the web door since 2026-08-29 — but the field stays: it is how
+// an operator sees which socket a mounter must reach.
 func servingBanner(addr, fedSocket, staticDir string, plugins int, password string) string {
 	if staticDir == "" {
 		staticDir = "embedded"

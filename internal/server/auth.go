@@ -12,9 +12,10 @@ package server
 // invalidates every outstanding cookie with no revocation state at all.
 //
 // Deliberately NOT gated: the gRPC node export (FederationHandler) — it
-// carries federation (an ssh mount's tunnel dials it) and the Electron
-// shell PTY relay. Its gate is the kernel: it is served only on the 0600
-// unix socket node.listenFederation opens. The desktop app's own window
+// carries federation (an ssh mount's tunnel dials it). Its gate is the
+// kernel: it is served only on the 0600 unix socket node.listenFederation
+// opens. Everything on the BROWSER door is gated here, the /shell
+// WebSocket (shell_door.go) included — a PTY is not an exception. The desktop app's own window
 // authenticates without prompting: the serve banner carries the token and
 // the sidecar pre-sets the cookie (apps/desktop/src/main/sidecar.ts).
 

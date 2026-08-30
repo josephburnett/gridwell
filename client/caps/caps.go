@@ -4,7 +4,8 @@
 // bridge) and a plain browser (an iPhone pointed at the Go server's origin).
 // The capability difference between them is derived exactly once at boot and
 // read everywhere; no other code asks "is there a bridge" to make a feature
-// decision.
+// decision. Since 2026-08-29 that difference is ONE thing — native live URL
+// views; shells ride the web door on every host.
 //
 // Mirrors client/pluginhealth: a pure classification plus the ready-made
 // errsurface report for the gesture that hits the missing capability, so a
@@ -21,11 +22,12 @@ type Caps struct {
 	// Electron shell can host one (a WebContentsView over the canvas); a
 	// plain browser shows the frozen preview instead.
 	LiveURL bool
-	// LiveShell: a shell tile can attach its live PTY. The bytes ride the
-	// Electron main process's gRPC OpenShell stream over IPC (owner decision
-	// 2026-07-26, reversing the browser-client "shells stay live" call: the
-	// WS bridge is gone, and a plain browser shows the frozen preview like a
-	// url tile).
+	// LiveShell: a shell tile can attach its live PTY. TRUE wherever this
+	// client runs (owner decision 2026-08-29, reversing 2026-07-26): the
+	// PTY rides a WebSocket on the web door — the page's own origin, the
+	// page's own cookie — so a browser attaches exactly as the desktop
+	// does. The only thing that turns it off is the NODE refusing shells
+	// (server.yaml disable_shells), which is not a host capability at all.
 	LiveShell bool
 	// Shells: shell tiles exist on this node at all. False when the server
 	// declares shells_disabled (server.yaml disable_shells): the + palette
@@ -37,23 +39,22 @@ type Caps struct {
 // Bridge is what the native host DECLARES it can do (2026-08-13): the
 // window.gridwell object's own caps field, read once at boot. A host that
 // exposes the bridge no longer implies every native feature — a mobile
-// shell can place live url views without carrying the shell PTY relay.
-// A legacy bridge with no caps field (an older Electron preload under a
-// newer wasm client) declares both — exactly what that host supports.
+// shell can place live url views without carrying the whole desktop's
+// machinery. Shells are NOT on this list: since 2026-08-29 the PTY rides
+// the web door, so no host has to implement anything for it.
 type Bridge struct {
 	// Present: window.gridwell exists at all (false = plain browser).
 	Present bool
-	// LiveURL / LiveShell: the host implements the url-view half
-	// (placeWebview/setBounds/…) / the shell relay half (shellOpen/…).
-	LiveURL   bool
-	LiveShell bool
+	// LiveURL: the host implements the url-view half (placeWebview/
+	// setBounds/…).
+	LiveURL bool
 }
 
 // LegacyBridge is the declaration imputed to a bridge without a caps
 // field: the full Electron feature set, which is the only host that shape
 // ever shipped in.
 func LegacyBridge() Bridge {
-	return Bridge{Present: true, LiveURL: true, LiveShell: true}
+	return Bridge{Present: true, LiveURL: true}
 }
 
 // NoBridge is a plain browser host.
@@ -67,7 +68,7 @@ func NoBridge() Bridge { return Bridge{} }
 func Derive(bridge Bridge, shellsDisabled bool) Caps {
 	return Caps{
 		LiveURL:   bridge.Present && bridge.LiveURL,
-		LiveShell: bridge.Present && bridge.LiveShell && !shellsDisabled,
+		LiveShell: !shellsDisabled,
 		Shells:    !shellsDisabled,
 	}
 }
@@ -84,9 +85,10 @@ func GoLiveNotice() (sev errsurface.Severity, source, message string) {
 }
 
 // ShellNotice returns the errsurface report for a gesture that asked a shell
-// tile to attach when LiveShell is false. Same shape and severity rationale
-// as GoLiveNotice; same stable source, so mixed taps still coalesce into one
-// capability row.
+// tile to attach when LiveShell is false — which now means one thing only:
+// the NODE refuses shells (server.yaml disable_shells). Same shape and
+// severity rationale as GoLiveNotice; same stable source, so mixed taps
+// still coalesce into one capability row.
 func ShellNotice() (sev errsurface.Severity, source, message string) {
-	return errsurface.Info, "livecap", "live shells need the desktop app — showing the frozen preview"
+	return errsurface.Info, "livecap", "this node has shells turned off — showing the frozen preview"
 }

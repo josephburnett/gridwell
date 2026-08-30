@@ -102,7 +102,6 @@ test('"already serving" resolves EXTERNAL: connect, never watch, never kill', as
   const sc = await p;
   assert.equal(sc.external, true);
   assert.equal(sc.origin, 'http://127.0.0.1:7001');
-  assert.equal(sc.dialAddr, 'unix:/tmp/gw home/federation.sock', 'the shell relay dials the federation socket, not the web address');
   assert.equal(sc.auth, token, 'the RUNNING holder\'s token authenticates this window');
   sc.stop();
   assert.equal(child.killed, false, 'stop() must never signal toward an external server');

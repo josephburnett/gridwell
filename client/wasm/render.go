@@ -251,8 +251,8 @@ type paletteItem struct {
 // every configured plugin first (server.yaml order, the palette's top
 // row), then — only when the pane's current grid is writable — the tile
 // primitives. Read-only grids (the node grid, fs/proc grids) therefore
-// show plugins only. A shells-disabled node (caps.Shells false) offers no
-// shell primitive: every palette consumer — layout, hit-testing, drag
+// show plugins only. A shells-disabled node offers no shell primitive:
+// every palette consumer — layout, hit-testing, drag
 // ghosts, the test hook — reads this one list, so the swatch is gone from
 // all of them at once.
 func (a *App) paletteItems(p *pane.Pane) []paletteItem {
@@ -285,13 +285,14 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 	}
 	if a.gridWritable(a.gridIDForPane(p)) {
 		for _, k := range primitiveKinds {
-			// The shell swatch needs BOTH the context node's policy AND
-			// this host's ATTACH capability (#259): a browser has no PTY
-			// bridge, so a shell created there is dead weight from birth —
-			// unlike url tiles, which stay creatable everywhere (recording
-			// an address is useful without a live view). Viewing frozen
-			// shells created elsewhere is untouched.
-			if k == tplShell && (ctx.shellsDisabled || !a.caps.LiveShell) {
+			// The shell swatch obeys the CONTEXT node's policy, and only
+			// that. #259 also required this host's attach capability —
+			// a browser had no PTY bridge, so a shell created there was
+			// dead weight from birth — but since 2026-08-29 the PTY rides
+			// the web door and every host can attach. Reading the local
+			// caps here would now be a second, WRONG owner: a remote
+			// pane's swatch must follow the remote node.
+			if k == tplShell && ctx.shellsDisabled {
 				continue
 			}
 			items = append(items, paletteItem{primitive: k})

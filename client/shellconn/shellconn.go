@@ -1,9 +1,8 @@
 // Package shellconn holds the pure decision logic for the wasm shell
 // attachment (refresh-button visibility, freeze-capture decoding), factored
-// out of the wasm client so it is testable without a browser. The WS-
-// lifecycle half (send queueing, close-code liveness) died with the WS
-// transport (2026-07-26): stream lifecycle now lives in the Electron main
-// process (apps/desktop/src/main/shellstreams.ts), tested there.
+// out of the wasm client so it is testable without a browser. Stream
+// LIFECYCLE is not here: it lives in client/shellstream, over the /shell
+// WebSocket dialer in client/shellws (2026-08-29).
 package shellconn
 
 import "encoding/base64"
@@ -36,8 +35,8 @@ type AutoLive int
 
 const (
 	// AutoLiveNone: stay frozen — a text tile, a capability-gated host (a
-	// plain browser descends silently frozen; notices are for explicit
-	// gestures), or a shell whose session is known dead (nothing to
+	// browser descends silently frozen into a URL tile; notices are for
+	// explicit gestures), or a shell whose session is known dead (nothing to
 	// reconnect; the refresh affordance is hidden for it too).
 	AutoLiveNone AutoLive = iota
 	// AutoLiveURL: open the native url view.

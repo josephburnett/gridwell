@@ -80,8 +80,9 @@ func (l *liveStreamer) PaneCommand(tileID string) (string, error) { return l.ctr
 
 // Manager owns the single live PTY per tile and the takeover semantics: a
 // refresh from another pane evicts the previous holder but reuses the SAME PTY
-// (the tmux session is alive by construction). It is the plugin-side half of
-// OpenShell.
+// (the tmux session is alive by construction) and forces a repaint, because
+// the new holder's terminal is empty and tmux has no way to know a viewer
+// changed. It is the plugin-side half of OpenShell.
 type Manager struct {
 	streamer Streamer
 	mu       sync.Mutex
@@ -100,7 +101,8 @@ func NewManager(s Streamer) *Manager {
 }
 
 // Acquire returns the live session for tileID. Three outcomes:
-//   - an active holder exists  → takeover: signal it to exit, reuse the PTY.
+//   - an active holder exists  → takeover: signal it to exit, reuse the PTY,
+//     and force a repaint for the new holder (see below).
 //   - no holder, session alive → open a fresh PTY in attach mode.
 //   - no holder, no session    → open in create mode iff allowCreate, else
 //     ErrSessionGone.
@@ -115,6 +117,15 @@ func (m *Manager) Acquire(tileID string, allowCreate bool, cols, rows uint16) (S
 	if e, ok := m.active[tileID]; ok {
 		close(e.stopOld)
 		e.stopOld = make(chan struct{})
+		// The PTY is reused, so tmux cannot see that the VIEWER changed:
+		// nothing repaints, and the new pane's terminal — a fresh, empty
+		// one — stays blank until something else happens to resize it.
+		// Bounce the winsize (one row taller, then back): the kernel
+		// raises SIGWINCH only on a REAL change, and that is what makes
+		// tmux repaint the whole screen for whoever is watching now.
+		// Height-only, so nothing rewraps on the way through.
+		_ = e.session.Resize(cols, rows+1)
+		_ = e.session.Resize(cols, rows)
 		return e.session, e.stopOld, nil
 	}
 
