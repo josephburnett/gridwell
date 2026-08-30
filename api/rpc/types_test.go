@@ -158,6 +158,13 @@ func TestPluginWellTile(t *testing.T) {
 	if !IsExitWell(&got) {
 		t.Errorf("PluginWellTile is not an exit well; launcher would draw an inert interior well")
 	}
+	// Reference is the ONE "this is a link" signal, and the client reads it
+	// alone (client/wasm's isLinkTile). This synthetic tile never passes
+	// through the server's qualifyTiles, so it must stamp the bit itself or
+	// the launcher swatch would lose its dashed border.
+	if !got.Reference {
+		t.Error("PluginWellTile does not set Reference; the launcher swatch would render as owned content, not a link")
+	}
 	if got.AltText != pl.Label {
 		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)
 	}

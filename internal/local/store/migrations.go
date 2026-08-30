@@ -27,7 +27,7 @@ const applicationID = 0x4757654C // "GWeL"
 // stays readable forever; never delete the DB to absorb a schema change.
 // Every change is additive — an ALTER TABLE ADD COLUMN, or a new table/index —
 // that bumps schemaVersion by exactly one and appends one entry to `migrations`
-// (plus one test fixture). tablesTemplate (schema.go) stays the readable latest
+// (plus one test fixture). The column descriptor (columns.go) stays the latest
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
@@ -357,7 +357,7 @@ func addColumnDDL(ddl string) func(ctx context.Context, tx *sql.Tx) error {
 
 // addColumnIfMissingDDL is addColumnDDL for a column added AFTER a
 // table-rebuild migration. A rebuild materializes the CURRENT
-// tablesTemplate (one DDL source, no drift — the v5/v6 recipe), so a chain
+// tilesTableDDL (one DDL source, no drift — the v5/v6 recipe), so a chain
 // that passes through it already carries every later column and the plain
 // ALTER would fail with "duplicate column"; a genuinely old file whose
 // rebuild ran under an older binary still needs it. Both paths converge on
@@ -554,7 +554,7 @@ func (s *Store) applyMigrations(ctx context.Context) error {
 // internal/dbformat.EnsureVersion, shared by EVERY plugin DB (localdb, fs,
 // proc): one implementation of the format contract, no copies. The fresh-DB
 // stamp shortcut is sound here because a fresh Open materializes
-// tablesTemplate and TestSchemaEquivalence proves that shape equals tablesV1 +
+// tablesDDL() and TestSchemaEquivalence proves that shape equals tablesV1 +
 // the full chain.
 //
 // migs and target are parameters (not the globals directly) so the engine can

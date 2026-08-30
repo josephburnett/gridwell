@@ -158,14 +158,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tiles_live_key ON tiles(ns, grid_id, key) 
 `
 
 // tablesV1 is the FROZEN v1 grids/tiles/blobs schema. It is an immutable,
-// byte-for-byte copy of what tablesTemplate was at the moment the localdb
+// byte-for-byte copy of what the live tables were at the moment the localdb
 // format was frozen (schemaVersion 1). NEVER edit it: tests build genuine
 // "old files" from this text and migrate them forward, so editing it would
 // rewrite history and hide migration bugs. New columns/tables go into
-// tablesTemplate (the live schema) plus a migration — never here.
+// the column descriptor (columns.go) plus a migration — never here.
 //
 // TestSchemaEquivalence asserts (tablesV1 + all migrations) produces a schema
-// identical to a fresh tablesTemplate; that is the proof that a brand-new DB
+// identical to a fresh tablesDDL(); that is the proof that a brand-new DB
 // and an upgraded old DB converge on the same shape.
 const tablesV1 = `
 CREATE TABLE IF NOT EXISTS grids (
