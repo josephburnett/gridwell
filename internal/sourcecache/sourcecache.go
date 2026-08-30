@@ -157,9 +157,9 @@ type Layer struct {
 var _ namespace.Namespace = (*Layer)(nil)
 
 // Store is the one cache file, shared by every layer over it. SQLite is
-// single-writer per file and this handle runs one connection, so a second
-// handle on the same file would meet an instant SQLITE_BUSY — the same
-// reason the home store exposes its one handle (store.Store.SQL).
+// single-writer per file, so a handle per namespace would put every
+// layer's write behind another handle's busy timeout for no gain — the
+// same reason the home store exposes its one handle (store.Store.SQL).
 type Store struct {
 	db     *sql.DB
 	mu     sync.Mutex
