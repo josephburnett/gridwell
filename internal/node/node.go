@@ -1,10 +1,9 @@
 // Package node is the embeddable Gridwell node: everything `gridwell serve`
 // does between config in hand and listener up, as a library — the home store,
-// the transport, plugin loading whether subprocess or in-process, the server
-// assembly, and the lifecycle. The CLI and the mobile bind share this one
-// wiring: the CLI adds flags, the serve lock, the banner, and signal handling
-// around it, and mobile adds its bundled plugin factories. Neither
-// reimplements the middle.
+// the transport, plugin loading, the server assembly, and the lifecycle. The
+// CLI is the wrapper, not the wiring: it adds flags, the serve lock, the
+// banner, and signal handling around this, and reimplements none of the
+// middle.
 //
 // The node is its home: one id qualifies the home store ("<id>/12") and every
 // connection through this node ("<id>/<conn>/…"). The store and the transport

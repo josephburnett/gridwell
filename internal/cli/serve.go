@@ -105,8 +105,8 @@ func staticFS(dir string) fs.FS {
 }
 
 // buildServeConfig is node.BuildConfig, the load, validate, and inject
-// path. It lives in the embeddable core so the CLI and the mobile bind
-// share one serve wiring; this name keeps the CLI's tests and call sites.
+// path. It lives in the embeddable core, with the rest of the serve wiring;
+// this name keeps the CLI's tests and call sites.
 func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return node.BuildConfig(home, cfgPath)
 }
