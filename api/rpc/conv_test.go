@@ -169,9 +169,11 @@ func TestCreateConvertersSelectKindAndFields(t *testing.T) {
 // preview fields under the right Kind, and route the JPEG preview via the
 // Preview field (not the tile body). This is the framing-vs-content boundary.
 func TestSetConvertersAreFramingByKind(t *testing.T) {
-	well := SetWellViewToProto(&SetFramingRequest{TileID: "t", Version: 1, Framing: Framing{Cx: 4, Cy: 5, Zoom: 6}})
-	if well.Tile.Kind != KindWell || well.Tile.ViewCx != 4 || well.Tile.ViewZoom != 6 {
-		t.Errorf("SetWellView mapping wrong: %+v", well.Tile)
+	// Grid framing is NOT here: it rides its own verb (SetFraming), the
+	// one door for both rows that can own it.
+	f := SetFramingToProto(&SetFramingRequest{TileID: "t", Version: 1, Framing: Framing{Cx: 4, Cy: 5, Zoom: 6}})
+	if f.TileId != "t" || f.Version != 1 || f.Cx != 4 || f.Cy != 5 || f.Zoom != 6 {
+		t.Errorf("SetFraming mapping wrong: %+v", f)
 	}
 	txt := SetTextViewToProto(&SetTextViewRequest{TileID: "t", TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: "rendered"})
 	if txt.Tile.Kind != KindText || txt.Tile.TextMode != "rendered" || txt.Tile.TextW != 3 {

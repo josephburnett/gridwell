@@ -239,10 +239,6 @@ func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
 // SetTile converters. The wire has a single SetTile dispatched on the target
 // tile's Kind; these helpers map each kind's framing/preview writeback onto it.
 
-func SetWellViewToProto(r *SetFramingRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
-		Tile: &pb.Tile{Kind: KindWell, ViewCx: r.Cx, ViewCy: r.Cy, ViewZoom: r.Zoom}}
-}
 func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTileRequest {
 	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
 		Tile: &pb.Tile{Kind: KindText, TextX: r.TextX, TextY: r.TextY, TextW: r.TextW, TextH: r.TextH, TextMode: r.TextMode}}

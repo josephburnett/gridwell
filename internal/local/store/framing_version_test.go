@@ -145,7 +145,7 @@ func TestContentZoomIsFraming(t *testing.T) {
 }
 
 // TestSetPaneLayoutIsFramingNoVersionBump: a pane tile's whole layout is
-// arrangement of references to other content — the SetWellView of workspaces
+// arrangement of references to other content — the SetFraming of workspaces
 // (owner decision 2026-07-08: no layout history; edit in place). Writing it
 // must NOT bump the version, or every casual split/resize would invalidate
 // caches and churn edit history that deliberately doesn't exist.

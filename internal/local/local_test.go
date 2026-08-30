@@ -315,10 +315,10 @@ func TestGetTileAndRename(t *testing.T) {
 	}
 }
 
-// TestSetTile_WellFramingNoVersionBump: framing writes (well view) do not bump
-// version; a content writeback (url freeze) does. This pins the version rule
-// that the merged SetTile inherits from the store operations it dispatches to.
-func TestSetTile_WellFramingNoVersionBump(t *testing.T) {
+// TestWellFramingNoVersionBump: framing writes (a doorway's view) do not
+// bump version; a content writeback (url freeze) does. This pins the
+// version rule the store operations behind SetFraming and SetTile carry.
+func TestWellFramingNoVersionBump(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
@@ -330,13 +330,13 @@ func TestSetTile_WellFramingNoVersionBump(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTile(well): %v", err)
 	}
-	set, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
+	set, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 		TileId:  well.Tile.Id,
 		Version: well.Tile.Version,
-		Tile:    &gridwellv1.Tile{Kind: "well", ViewCx: 5, ViewCy: 6, ViewZoom: 2},
+		Cx:      5, Cy: 6, Zoom: 2,
 	})
 	if err != nil {
-		t.Fatalf("SetTile(well framing): %v", err)
+		t.Fatalf("SetFraming(well): %v", err)
 	}
 	if set.Tile.Version != well.Tile.Version {
 		t.Errorf("framing bumped version: %d → %d, want unchanged", well.Tile.Version, set.Tile.Version)
@@ -346,14 +346,14 @@ func TestSetTile_WellFramingNoVersionBump(t *testing.T) {
 	}
 }
 
-// TestInfoRootViewSeedAndSetRootViewWriteback pins the launcher↔plugin-root
-// seam (issue #32): SetRootView persists the framing, and Info returns it so
+// TestInfoRootFramingSeedAndWriteback pins the launcher↔plugin-root
+// seam (issue #32): SetFraming persists the framing, and Info returns it so
 // the client can restore the left-off viewport on enterPlugin without an extra
-// round-trip. Framing only — SetRootView must not bump a content version.
+// round-trip. Framing only — a root write must not bump a content version.
 //
 // Why was this not caught? framing-roundtrip.spec.ts only tested wells INSIDE
 // a plugin; the launcher↔plugin-root seam (portal entry/ascent) had no test.
-func TestInfoRootViewSeedAndSetRootViewWriteback(t *testing.T) {
+func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	const eps = 1e-9
@@ -368,21 +368,22 @@ func TestInfoRootViewSeedAndSetRootViewWriteback(t *testing.T) {
 		t.Errorf("fresh Info.RootViewZoom = %v, want 0", info0.RootViewZoom)
 	}
 
-	// Write a root view via SetRootView (the ascent-writeback path).
-	_, err = p.SetRootView(ctx, &gridwellv1.SetRootViewRequest{
-		Cx:   3.5,
-		Cy:   -2.25,
-		Zoom: 1.75,
-	})
-	if err != nil {
-		t.Fatalf("SetRootView: %v", err)
+	// Write the root framing through the ONE verb, aimed at the root grid
+	// row (the ascent-writeback path).
+	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{
+		RootGridId: info0.RootGridId,
+		Cx:         3.5,
+		Cy:         -2.25,
+		Zoom:       1.75,
+	}); err != nil {
+		t.Fatalf("SetFraming(root): %v", err)
 	}
 
 	// Info must now reflect the saved values so enterPlugin can seed the
 	// portal-well framing (the read side of the same seam).
 	info1, err := p.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
-		t.Fatalf("Info(after SetRootView): %v", err)
+		t.Fatalf("Info(after SetFraming): %v", err)
 	}
 	if math.Abs(info1.RootViewCx-3.5) > eps {
 		t.Errorf("Info.RootViewCx = %v, want 3.5", info1.RootViewCx)
@@ -394,13 +395,13 @@ func TestInfoRootViewSeedAndSetRootViewWriteback(t *testing.T) {
 		t.Errorf("Info.RootViewZoom = %v, want 1.75", info1.RootViewZoom)
 	}
 
-	// SetRootView is framing-only: the root grid's own version must not change.
-	// We check via Info — schema_version reflects the DB format, not a content
-	// edit; but the SetRootView call above must not have errored with a version
-	// conflict either. A non-zero version bump would surface as a different
+	// A root framing write is framing-only: the root grid's own version
+	// must not change. We check via Info — schema_version reflects the DB
+	// format, not a content edit; but the SetFraming call above must not
+	// have errored with a version conflict either. A non-zero version bump would surface as a different
 	// schema_version here or as an error above.
 	if info1.SchemaVersion != info0.SchemaVersion {
-		t.Errorf("schema_version changed after SetRootView: %d → %d", info0.SchemaVersion, info1.SchemaVersion)
+		t.Errorf("schema_version changed after the root framing write: %d → %d", info0.SchemaVersion, info1.SchemaVersion)
 	}
 }
 

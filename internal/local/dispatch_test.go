@@ -45,11 +45,17 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
-	// well framing: no bump.
+	// well framing rides its OWN verb now (SetFraming — one verb for the
+	// doorway tile and the root grid alike), so SetTile refuses the kind
+	// rather than leaving the mapping ambiguous. Still no version bump.
 	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}, nil)
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: well.Id, Version: well.Version,
-		Tile: &gridwellv1.Tile{Kind: "well", ViewCx: 3, ViewCy: 4, ViewZoom: 2}}); err != nil {
-		t.Fatalf("SetTile well: %v", err)
+		Tile: &gridwellv1.Tile{Kind: "well", ViewCx: 3, ViewCy: 4, ViewZoom: 2}}); err == nil {
+		t.Error("SetTile still accepts well framing; it must route through SetFraming")
+	}
+	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: well.Id, Version: well.Version,
+		Cx: 3, Cy: 4, Zoom: 2}); err != nil {
+		t.Fatalf("SetFraming well: %v", err)
 	}
 	if v := getTile(t, p, well.Id).Version; v != well.Version {
 		t.Errorf("well framing bumped version %d -> %d", well.Version, v)

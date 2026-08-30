@@ -722,37 +722,50 @@ func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, candidates
 	}
 }
 
-// SetRootView persists the plugin root-grid framing (the same fact as SetTile
-// for a well, but for the synthetic plugin root which has no tile row). Routes
-// on root_grid_id; localdb stores to the system KV table; a plugin without a root view store answers Unimplemented
-// (the UnimplementedGridwellServer returns Unimplemented — ignored here so a
-// read-only plugin's ascent doesn't surface an error to the user).
-// After a successful write, the per-plugin Info cache is invalidated so the
-// next Handshake (e.g. after a page refresh) returns fresh root-view fields.
-func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
+// SetFraming persists a grid's framing — the ONE framing write, routed on
+// whichever target the request names: the DOORWAY tile a grid was entered
+// through, or the ROOT grid itself when there is no doorway. A plugin that
+// keeps no framing answers Unimplemented, which is not an error here (a
+// read-only plugin's ascent must not surface one to the user).
+//
+// After a ROOT write the per-plugin Info cache is invalidated: root_view_*
+// travel in the Info handshake and now differ from the cached values, so
+// the next Handshake (a page refresh) must re-fetch Info to see the
+// viewport the user just left.
+func (h *connectHandler) SetFraming(ctx context.Context, req *connect.Request[pb.SetFramingRequest]) (*connect.Response[pb.SetFramingResponse], error) {
 	m := req.Msg
-	c, local, uuid, _, err := h.route(m.RootGridId)
+	root := m.RootGridId != ""
+	ref := m.TileId
+	if root {
+		ref = m.RootGridId
+	}
+	c, local, uuid, transit, err := h.route(ref)
 	if err != nil {
 		return nil, err
 	}
-	_, err = c.SetRootView(ctx, &pb.SetRootViewRequest{
-		RootGridId: local,
-		Cx:         m.Cx,
-		Cy:         m.Cy,
-		Zoom:       m.Zoom,
-	})
+	out := &pb.SetFramingRequest{Version: m.Version, Cx: m.Cx, Cy: m.Cy, Zoom: m.Zoom}
+	if root {
+		out.RootGridId = local
+	} else {
+		out.TileId = local
+	}
+	resp, err := c.SetFraming(ctx, out)
 	if err != nil {
-		// Unimplemented is not an error — some plugins may not persist a root view.
 		if isUnimplemented(err) {
-			return connect.NewResponse(&pb.SetRootViewResponse{}), nil
+			return connect.NewResponse(&pb.SetFramingResponse{}), nil
 		}
 		return nil, asConnectError(err)
 	}
-	// Invalidate the Info cache: root_view_* travel in the Info handshake
-	// and now differ from the cached values. The next Handshake (page
-	// refresh) must re-fetch Info to see the updated viewport.
-	h.srv.invalidateInfoCache(uuid)
-	return connect.NewResponse(&pb.SetRootViewResponse{}), nil
+	if root {
+		h.srv.invalidateInfoCache(uuid)
+		return connect.NewResponse(&pb.SetFramingResponse{}), nil
+	}
+	// A doorway tile comes back qualified like every other tile response.
+	t := resp.GetTile()
+	if t != nil {
+		t = qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
+	}
+	return connect.NewResponse(&pb.SetFramingResponse{Tile: t}), nil
 }
 
 // ShellSessionAlive routes the wasm's per-descent probe to the owning plugin,
@@ -959,7 +972,7 @@ func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, hea
 
 // isUnimplemented reports whether a gRPC/Connect error carries an Unimplemented
 // code. Used to treat a plugin's "method not supported" as a silent no-op
-// (e.g. SetRootView on a plugin with no persistent root view).
+// (e.g. SetFraming on a plugin that keeps no framing).
 func isUnimplemented(err error) bool {
 	if err == nil {
 		return false

@@ -215,7 +215,7 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2.SetWellView(ctx, &rpc.SetFramingRequest{
+	if _, err := v2.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: sub.ID, Version: sub.Version, Framing: rpc.Framing{Cx: 2, Cy: -1, Zoom: 1.4},
 	}); err != nil {
 		t.Fatal(err)

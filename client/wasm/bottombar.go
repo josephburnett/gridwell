@@ -713,9 +713,9 @@ func (a *App) ascendOneLevelInstant(p *pane.Pane) {
 		// The same face-#3 writeback a portal ascent performs: onto the
 		// containing link tile when it resolves, else the plugin root view.
 		if well := a.portalWellForFrame(p, f); well != nil {
-			a.persistWellView(p, well, f.Anchor, slices.Clone(f.Path))
+			a.persistFraming(p, well, f.Anchor, slices.Clone(f.Path))
 		} else {
-			a.persistPluginRootView(p)
+			a.persistFraming(p, nil, "", nil)
 		}
 		p.PopFrame()
 		a.fetchGrid(a.gridIDForPane(p))

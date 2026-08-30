@@ -78,8 +78,8 @@ const (
 	GridwellCloneTileProcedure = "/gridwell.v1.Gridwell/CloneTile"
 	// GridwellDeleteTileProcedure is the fully-qualified name of the Gridwell's DeleteTile RPC.
 	GridwellDeleteTileProcedure = "/gridwell.v1.Gridwell/DeleteTile"
-	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
-	GridwellSetRootViewProcedure = "/gridwell.v1.Gridwell/SetRootView"
+	// GridwellSetFramingProcedure is the fully-qualified name of the Gridwell's SetFraming RPC.
+	GridwellSetFramingProcedure = "/gridwell.v1.Gridwell/SetFraming"
 	// GridwellShellSessionAliveProcedure is the fully-qualified name of the Gridwell's
 	// ShellSessionAlive RPC.
 	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
@@ -115,10 +115,10 @@ type GridwellClient interface {
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
-	// SetRootView persists the plugin root-grid framing (the portal-level
-	// analogue of SetTile for a well). Framing only — never bumps version.
-	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
-	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
+	// SetFraming persists the framing of a grid — onto the DOORWAY tile it
+	// was entered through, or onto the grid row itself for a root that has
+	// no doorway. One verb, one shape, both rows (docs/simplify-plan.md S4).
+	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
 	// ShellSessionAlive gates the wasm refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
@@ -231,10 +231,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("DeleteTile")),
 			connect.WithClientOptions(opts...),
 		),
-		setRootView: connect.NewClient[v1.SetRootViewRequest, v1.SetRootViewResponse](
+		setFraming: connect.NewClient[v1.SetFramingRequest, v1.SetFramingResponse](
 			httpClient,
-			baseURL+GridwellSetRootViewProcedure,
-			connect.WithSchema(gridwellMethods.ByName("SetRootView")),
+			baseURL+GridwellSetFramingProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetFraming")),
 			connect.WithClientOptions(opts...),
 		),
 		shellSessionAlive: connect.NewClient[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse](
@@ -270,7 +270,7 @@ type gridwellClient struct {
 	setTile           *connect.Client[v1.SetTileRequest, v1.TileResponse]
 	cloneTile         *connect.Client[v1.CloneTileRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
-	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
+	setFraming        *connect.Client[v1.SetFramingRequest, v1.SetFramingResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
 }
@@ -355,9 +355,9 @@ func (c *gridwellClient) DeleteTile(ctx context.Context, req *connect.Request[v1
 	return c.deleteTile.CallUnary(ctx, req)
 }
 
-// SetRootView calls gridwell.v1.Gridwell.SetRootView.
-func (c *gridwellClient) SetRootView(ctx context.Context, req *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
-	return c.setRootView.CallUnary(ctx, req)
+// SetFraming calls gridwell.v1.Gridwell.SetFraming.
+func (c *gridwellClient) SetFraming(ctx context.Context, req *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error) {
+	return c.setFraming.CallUnary(ctx, req)
 }
 
 // ShellSessionAlive calls gridwell.v1.Gridwell.ShellSessionAlive.
@@ -398,10 +398,10 @@ type GridwellHandler interface {
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
-	// SetRootView persists the plugin root-grid framing (the portal-level
-	// analogue of SetTile for a well). Framing only — never bumps version.
-	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
-	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
+	// SetFraming persists the framing of a grid — onto the DOORWAY tile it
+	// was entered through, or onto the grid row itself for a root that has
+	// no doorway. One verb, one shape, both rows (docs/simplify-plan.md S4).
+	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
 	// ShellSessionAlive gates the wasm refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
@@ -510,10 +510,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("DeleteTile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellSetRootViewHandler := connect.NewUnaryHandler(
-		GridwellSetRootViewProcedure,
-		svc.SetRootView,
-		connect.WithSchema(gridwellMethods.ByName("SetRootView")),
+	gridwellSetFramingHandler := connect.NewUnaryHandler(
+		GridwellSetFramingProcedure,
+		svc.SetFraming,
+		connect.WithSchema(gridwellMethods.ByName("SetFraming")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellShellSessionAliveHandler := connect.NewUnaryHandler(
@@ -562,8 +562,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellCloneTileHandler.ServeHTTP(w, r)
 		case GridwellDeleteTileProcedure:
 			gridwellDeleteTileHandler.ServeHTTP(w, r)
-		case GridwellSetRootViewProcedure:
-			gridwellSetRootViewHandler.ServeHTTP(w, r)
+		case GridwellSetFramingProcedure:
+			gridwellSetFramingHandler.ServeHTTP(w, r)
 		case GridwellShellSessionAliveProcedure:
 			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
 		case GridwellSubscribeProcedure:
@@ -641,8 +641,8 @@ func (UnimplementedGridwellHandler) DeleteTile(context.Context, *connect.Request
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.DeleteTile is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetRootView is not implemented"))
+func (UnimplementedGridwellHandler) SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetFraming is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {

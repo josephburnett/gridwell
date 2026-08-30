@@ -113,7 +113,7 @@ const maxCachedContentBytes = 16 * 1024 * 1024
 
 // Client wraps a mount's gRPC client with the read-through cache. All
 // methods not overridden here pass through the embedded client untouched
-// (writes, shells, Probe, SetRootView).
+// (writes, shells, Probe, SetFraming).
 type Client struct {
 	pb.GridwellClient
 	db *sql.DB

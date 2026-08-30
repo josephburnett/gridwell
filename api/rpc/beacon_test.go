@@ -9,11 +9,11 @@ import (
 // client calls send — same converters, same procedures — so the unload
 // flush and the settle flush can never write different shapes.
 func TestBeaconBodies(t *testing.T) {
-	path, body := SetWellViewBeacon(&SetFramingRequest{
+	path, body := SetFramingBeacon(&SetFramingRequest{
 		TileID: "u1/5", Version: 3, Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.5},
 	})
-	if path != "/gridwell.v1.Gridwell/SetTile" {
-		t.Errorf("well-view path = %q", path)
+	if path != "/gridwell.v1.Gridwell/SetFraming" {
+		t.Errorf("doorway framing path = %q", path)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(body, &m); err != nil {
@@ -23,9 +23,10 @@ func TestBeaconBodies(t *testing.T) {
 		t.Errorf("body = %s", body)
 	}
 
-	path, body = SetRootViewBeacon(&SetFramingRequest{RootGridID: "u1/1", Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.3}})
-	if path != "/gridwell.v1.Gridwell/SetRootView" {
-		t.Errorf("root-view path = %q", path)
+	path, body = SetFramingBeacon(&SetFramingRequest{RootGridID: "u1/1", Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.3}})
+	// The SAME procedure for a root: one verb, both rows.
+	if path != "/gridwell.v1.Gridwell/SetFraming" {
+		t.Errorf("root framing path = %q", path)
 	}
 	if err := json.Unmarshal(body, &m); err != nil || m["rootGridId"] != "u1/1" {
 		t.Errorf("root body = %s err=%v", body, err)

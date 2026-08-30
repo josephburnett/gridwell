@@ -38,7 +38,7 @@ test('a framing save survives a racing version bump', async ({ gw, window }) => 
   void window;
 });
 
-// Gaps 3/4 class: an fs plugin ROOT persists its viewport (SetRootView was
+// Gaps 3/4 class: an fs plugin ROOT persists its viewport (the root framing write was
 // silently swallowed by fs/proc before).
 test('an fs root grid keeps its viewport across leave and re-entry', async ({ gw }) => {
   await gw.enterPlugin('pics');

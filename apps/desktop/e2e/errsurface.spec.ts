@@ -187,7 +187,7 @@ test('an unreachable live URL tile surfaces a did-fail-load notice from the Elec
 
 // setupWellReframe is the shared body of the two framing-writeback failure
 // specs (#156 + the 2026-08-14 transport split): create a well, descend,
-// note the parent's cached signature, install `route` over SetTile, then
+// note the parent's cached signature, install `route` over SetFraming, then
 // reframe so the settle persister posts into it. Returns what the
 // assertions need.
 async function setupWellReframe(
@@ -215,12 +215,12 @@ async function setupWellReframe(
   expect(wellID, 'the parent grid holds the well').toBeTruthy();
 
   // Every framing writeback now fails, in the shape `route` decides.
-  await window.route('**/gridwell.v1.Gridwell/SetTile', route);
+  await window.route('**/gridwell.v1.Gridwell/SetFraming', route);
 
   // Reframe inside the well — with a delivery ack: a synthetic wheel under
   // xvfb can be dropped, and a lost gesture leaves the settle persister
   // with NOTHING to persist (the pre-2026-08-07 inverse flake: isolated
-  // runs saw zero SetTile posts and this spec timed out on the far-end
+  // runs saw zero SetFraming posts and this spec timed out on the far-end
   // notice with no way to say which stage went quiet). The pane's own
   // framing is the ack; resending an undelivered wheel is harness
   // recovery, not the property under test.
@@ -244,14 +244,14 @@ async function setupWellReframe(
   // can only fail for far-end reasons.
   await expect
     .poll(
-      () => window.evaluate(() => (window as any).__gridwellTest.persistPosts().SetWellView ?? 0),
-      { message: 'the settle persister posts SetWellView for the changed framing', timeout: 10_000 },
+      () => window.evaluate(() => (window as any).__gridwellTest.persistPosts().SetFraming ?? 0),
+      { message: 'the settle persister posts SetFraming for the changed framing', timeout: 10_000 },
     )
     .toBeGreaterThan(0);
   await expect
     .poll(async () => {
       const e = await errors(window);
-      return (e.notices ?? []).some((n: any) => n.source === 'rpc:SetWellView');
+      return (e.notices ?? []).some((n: any) => n.source === 'rpc:SetFraming');
     }, { timeout: 10_000 })
     .toBe(true);
 
@@ -262,7 +262,7 @@ test('a framing writeback REJECTED by the server rolls the optimistic patch back
   gw,
   window,
 }) => {
-  // persistWellView patches the cache BEFORE posting SetWellView (so the
+  // persistFraming patches the cache BEFORE posting SetFraming (so the
   // parent preview updates instantly). If the SERVER REJECTS the write for
   // a non-conflict reason — it spoke, and said no — the patch must roll
   // back: otherwise a sibling pane's well preview shows framing the server
@@ -293,7 +293,7 @@ test('a framing writeback REJECTED by the server rolls the optimistic patch back
       { timeout: 10_000 },
     )
     .toBe(true);
-  await window.unroute('**/gridwell.v1.Gridwell/SetTile');
+  await window.unroute('**/gridwell.v1.Gridwell/SetFraming');
 });
 
 test('a framing writeback lost to TRANSPORT keeps the patch (2026-08-14)', async ({
@@ -319,5 +319,5 @@ test('a framing writeback lost to TRANSPORT keeps the patch (2026-08-14)', async
     expect(sigs[wellID], 'the transport-failed patch must stay').not.toBe(sig0[wellID]);
     await window.waitForTimeout(300);
   }
-  await window.unroute('**/gridwell.v1.Gridwell/SetTile');
+  await window.unroute('**/gridwell.v1.Gridwell/SetFraming');
 });

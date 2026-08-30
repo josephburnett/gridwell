@@ -185,9 +185,6 @@ func (c *Client) CreateLeafLink(ctx context.Context, req *CreateLeafLinkRequest)
 }
 
 // Set* are typed sugar over the single SetTile RPC.
-func (c *Client) SetWellView(ctx context.Context, req *SetFramingRequest) (*Tile, error) {
-	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetWellViewToProto(req))))
-}
 func (c *Client) SetTextView(ctx context.Context, req *SetTextViewRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetTextViewToProto(req))))
 }
@@ -198,18 +195,25 @@ func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Til
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetURLStateToProto(req))))
 }
 
-// SetRootView persists the plugin root-grid framing. The server routes on
-// root_grid_id; framing only — never bumps a content version.
-func (c *Client) SetRootView(ctx context.Context, req *SetFramingRequest) error {
-	_, err := c.cl.SetRootView(ctx, connect.NewRequest(SetRootViewToProto(req)))
-	return err
+// SetFraming persists a grid's framing — the ONE framing write. The
+// server routes on whichever target the request names (the doorway tile
+// or the root grid). Returns the updated doorway tile; nil for a root,
+// which has no tile row.
+func (c *Client) SetFraming(ctx context.Context, req *SetFramingRequest) (*Tile, error) {
+	resp, err := c.cl.SetFraming(ctx, connect.NewRequest(SetFramingToProto(req)))
+	if err != nil {
+		return nil, err
+	}
+	return TileFromProto(resp.Msg.GetTile()), nil
 }
 
-// SetRootViewToProto is the one wire conversion for the root-view write —
+// SetFramingToProto is the one wire conversion for a framing write —
 // shared by the ordinary call above and its unload beacon form.
-func SetRootViewToProto(req *SetFramingRequest) *pb.SetRootViewRequest {
-	return &pb.SetRootViewRequest{
+func SetFramingToProto(req *SetFramingRequest) *pb.SetFramingRequest {
+	return &pb.SetFramingRequest{
+		TileId:     req.TileID,
 		RootGridId: req.RootGridID,
+		Version:    req.Version,
 		Cx:         req.Cx,
 		Cy:         req.Cy,
 		Zoom:       req.Zoom,

@@ -543,10 +543,6 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	default:
 		t := req.GetTile()
 		switch t.GetKind() {
-		case "well":
-			if err := a.mem.SetFraming(id, 0, rpc.Framing{Cx: t.GetViewCx(), Cy: t.GetViewCy(), Zoom: t.GetViewZoom()}); err != nil {
-				return nil, err
-			}
 		case "text":
 			if err := a.mem.SetTextView(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode()); err != nil {
 				return nil, err
@@ -558,17 +554,34 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	return a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: req.TileId})
 }
 
-// SetRootView persists a context's ROOT framing — the same fact, in the
-// same shape, that a doorway tile's framing is (framing-class).
-func (a *Adapter) SetRootView(_ context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
-	gid, err := strconv.ParseInt(req.RootGridId, 10, 64)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid root_grid_id %q", req.RootGridId)
+// SetFraming persists framing into this plugin's memory — the ONE
+// framing write, aimed at a doorway tile row or a context's ROOT grid
+// row. Framing-class: the node's memory of the user's view, never the
+// plugin's content.
+func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
+	f := rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
+	if req.RootGridId != "" {
+		gid, err := strconv.ParseInt(req.RootGridId, 10, 64)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid root_grid_id %q", req.RootGridId)
+		}
+		if err := a.mem.SetFraming(0, gid, f); err != nil {
+			return nil, err
+		}
+		return &gridwellv1.SetFramingResponse{}, nil
 	}
-	if err := a.mem.SetFraming(0, gid, rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}); err != nil {
+	id, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid tile_id %q", req.TileId)
+	}
+	if err := a.mem.SetFraming(id, 0, f); err != nil {
 		return nil, err
 	}
-	return &gridwellv1.SetRootViewResponse{}, nil
+	t, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: req.TileId})
+	if err != nil {
+		return nil, err
+	}
+	return &gridwellv1.SetFramingResponse{Tile: t.GetTile()}, nil
 }
 
 func (a *Adapter) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {

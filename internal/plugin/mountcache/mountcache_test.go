@@ -395,9 +395,9 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	// version bump — the same claim stays valid) until its event arrives.
 	primed := false
 	for i := 0; i < 50 && !primed; i++ {
-		if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: well.GetTile().GetId(),
+		if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
 			Version: well.GetTile().GetVersion(),
-			Tile:    &pb.Tile{Kind: "well", ViewCx: 1, ViewCy: 1, ViewZoom: 2}}); err != nil {
+			Cx:      1, Cy: 1, Zoom: 2}); err != nil {
 			t.Fatal(err)
 		}
 		select {
@@ -410,9 +410,9 @@ func TestEventTeeTracksMutations(t *testing.T) {
 		t.Fatal("subscription never delivered the priming event")
 	}
 
-	if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: well.GetTile().GetId(),
+	if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
 		Version: well.GetTile().GetVersion(),
-		Tile:    &pb.Tile{Kind: "well", ViewCx: 9, ViewCy: 9, ViewZoom: 3}}); err != nil {
+		Cx:      9, Cy: 9, Zoom: 3}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: doomed.GetTile().GetId(),

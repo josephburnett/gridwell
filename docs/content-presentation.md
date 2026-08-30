@@ -20,7 +20,7 @@ framing-vs-content version rule produced:
 
 | Half | Verbs and fields |
 |---|---|
-| **Presentation** (framing-class; never bumps `version`) | `PlaceTile` (x, y, w, h) · `SetTile` well arm (`view_*`) · `SetTile` text arm (`text_*`, scroll/window/mode) · `SetTile` `content_zoom` / `url_frozen` arms · `SetRootView` |
+| **Presentation** (framing-class; never bumps `version`) | `PlaceTile` (x, y, w, h) · `SetFraming` (`view_cx/cy/zoom` on a doorway tile, `root_cx/cy/zoom` on a root grid — one verb, one shape) · `SetTile` text arm (`text_*`, scroll/window/mode) · `SetTile` `content_zoom` / `url_frozen` arms |
 | **Content** (bumps `version`, or creates/destroys) | `ReadContent` / `WriteContent` · `ServeContent` · `CreateTile` · `CloneTile` · `DeleteTile` · `SetTile` url/shell freeze arms, `rename`, `adopt_child_grid` |
 | **Existence & identity** | `Info` · `Probe` · `GetGrid` / `GetTile` / `GetTilePreview` · `Search` · `Subscribe` · `OpenShell` / `ShellSessionAlive` |
 
@@ -62,9 +62,10 @@ Each of these is the same disease — presentation semantics re-decided
 per plugin — surfacing as a user-visible defect:
 
 - **The framing audit (2026-08-13).** fs and proc both silently
-  swallowed `SetRootView`; panning their roots was lost on every
-  re-entry. One gap, two migrations, two plugins — because the fact had
-  two homes.
+  swallowed the root framing write; panning their roots was lost on
+  every re-entry. One gap, two migrations, two plugins — because the
+  fact had two homes. (Since 2026-08-29 there is one verb and one
+  shape: `SetFraming`, doorway tile and root grid alike.)
 - **#266 (2026-08-21).** fs/proc tiles could not be moved or resized:
   `Grid.writable` — a *content* capability — was gating *presentation*.
   The client now distinguishes (same-grid, non-clone placement is
@@ -136,8 +137,8 @@ unimplemented already has clean semantics on this surface (Search =
 no results, ServeContent = 404). In front of it sits an adapter that
 implements the FULL Gridwell service: it owns a SQLite DB with the
 key→id map and every presentation fact, merges placement onto the
-provider's listings, terminates `PlaceTile`/`SetTile`-framing/
-`SetRootView`, and forwards everything else.
+provider's listings, terminates `PlaceTile`/`SetFraming`/`SetTile`
+framing, and forwards everything else.
 
 Ship it twice from one implementation, the compose pattern:
 `compose.WithLayout(inner)` for Go authors, and a stock

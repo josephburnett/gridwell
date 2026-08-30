@@ -58,7 +58,7 @@ func (s *Store) loadForEdit(ctx context.Context, tx *sql.Tx, tileID, version int
 
 // emitTileChanged reloads tileID and appends a TileChanged event for it. It is
 // the shared tail of every store write that publishes a tile. Framing setters
-// (SetWellView / SetTextView) call it directly — re-framing is NOT a content
+// (SetFraming / SetTextView) call it directly — re-framing is NOT a content
 // edit, so it must not bump the version (CLAUDE.md). Content writers go through
 // finishContentEdit instead.
 func (s *Store) emitTileChanged(ctx context.Context, tx *sql.Tx, tileID int64, events *[]rpc.Event) (*rpc.Tile, error) {

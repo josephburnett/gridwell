@@ -147,22 +147,22 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	}, nil
 }
 
-// SetRootView persists the home root-grid framing. Framing only — never
-// bumps a content version; the SAME store writer a well's framing goes
-// through (Store.SetFraming), aimed at the root GRID row instead of a
-// doorway tile. Routed by the server via root_grid_id.
-func (p *Plugin) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
-	root, err := p.st.RootGridID(ctx)
+// SetFraming persists a grid's framing — the ONE framing write, both
+// rows it can live on. A doorway tile's framing is a versioned in-place
+// write on that tile; a root grid has no doorway, so the same three
+// numbers land on the grid row. Framing only — never bumps a content
+// version. The server routes on whichever target the request names.
+func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
+	t, err := p.st.SetFraming(ctx, &rpc.SetFramingRequest{
+		TileID:     req.TileId,
+		RootGridID: req.RootGridId,
+		Version:    req.Version,
+		Framing:    rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom},
+	})
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	if _, err := p.st.SetFraming(ctx, &rpc.SetFramingRequest{
-		RootGridID: root,
-		Framing:    rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom},
-	}); err != nil {
-		return nil, errToStatus(err)
-	}
-	return &gridwellv1.SetRootViewResponse{}, nil
+	return &gridwellv1.SetFramingResponse{Tile: rpc.TileToProto(t)}, nil
 }
 
 func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
@@ -358,9 +358,10 @@ func (p *Plugin) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest
 	return tileResp(p.st.PlaceTile(ctx, rpc.PlaceTileFromProto(req)))
 }
 
-// SetTile is the single framing/preview writeback: tile.kind selects the one
+// SetTile is the single content/preview writeback: tile.kind selects the one
 // store operation that kind supports, and that mapping fixes the version
-// semantics — well/text framing never bumps version, url/shell preview does.
+// semantics — text framing never bumps version, url/shell preview does.
+// (Grid framing left for SetFraming, which owns both rows that carry it.)
 // 2026-07-26: it also carries the absorbed scalar operations — rename (the
 // versioned user rename; latches alt_user), content_zoom (framing), and
 // url_frozen (framing, issue #237) — exactly ONE operation per call,
@@ -402,8 +403,10 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	}
 	switch t.Kind {
 	case rpc.KindWell:
-		return tileResp(p.st.SetFraming(ctx, &rpc.SetFramingRequest{TileID: req.TileId, Version: req.Version,
-			Framing: rpc.Framing{Cx: t.ViewCx, Cy: t.ViewCy, Zoom: t.ViewZoom}}))
+		// Refused so the kind→operation mapping stays total: a well's
+		// framing rides SetFraming, the one verb for both rows that can
+		// own framing (a doorway tile and a root grid).
+		return nil, status.Error(codes.InvalidArgument, "set: well framing rides SetFraming")
 	case rpc.KindText:
 		return tileResp(p.st.SetTextView(ctx, &rpc.SetTextViewRequest{TileID: req.TileId, Version: req.Version, TextX: t.TextX, TextY: t.TextY, TextW: t.TextW, TextH: t.TextH, TextMode: t.TextMode}))
 	case rpc.KindShell:

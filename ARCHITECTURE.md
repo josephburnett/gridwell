@@ -78,7 +78,8 @@ The surface, one method per concept:
 
 | Group | Methods |
 |---|---|
-| Lifecycle | `Info`, `Probe`, `Handshake`, `SetRootView` |
+| Lifecycle | `Info`, `Probe`, `Handshake` |
+| Framing | `SetFraming` — the ONE framing write: a float center plus a pane-size-independent zoom, onto the DOORWAY tile a grid was entered through or onto the grid row itself for a root that has none |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview` |
 | Content bytes | `ReadContent` / `WriteContent` — the ONE way content moves. Versioned; a write commits at close (a broken stream leaves the old value intact); a read on a leaf link resolves to the target at the serving node |
 | Web content | `ServeContent` — the RPC carrier behind the HTTP `/content/<token>/<tile-id>/<subpath>` door: a plugin serves ANY content as web content (an image, a whole HTML page with relative subresources). GET-only; routes/link-resolves/federates exactly like `ReadContent`. The door stamps `CSP: sandbox allow-scripts` (opaque origin — no cookies, no RPC reach) and gates by the content token (its own password derivation, handed out on the authenticated `Handshake`). `Tile.serves_page` (wire-only, plugin-derived) tells the client to present the descent with url-tile semantics at the derived address |
@@ -143,8 +144,8 @@ between nodes). The web door always has a password — the 0600
 code through different doors.
 
 `Info` handshakes are timeout-bounded and cached per uuid after first
-success (invalidated on `SetRootView`, since root framing rides the
-handshake). Capabilities (`watch`, `writable`, `has_session`) are facts a
+success (invalidated on a ROOT `SetFraming`, since root framing rides
+the handshake). Capabilities (`watch`, `writable`, `has_session`) are facts a
 plugin declares once in `Info`, never re-derived from its kind string.
 
 ---
@@ -417,10 +418,11 @@ file. What remains:
   and every re-entry path — reload restore, workspace swap, a stacked
   ascent — applies the same rule. The frozen preview is what a tile looks
   like from outside; going live never mutates the row.
-- **Ascend.** The intrinsic viewport writes back via `SetTile` (framing —
+- **Ascend.** The intrinsic viewport writes back via `SetFraming` (framing —
   no version bump); a url/shell descent freezes its preview (content —
   version bumps); the parent frame pops. A portal ascent writes through the
-  containing link tile, or `SetRootView` when there is none. Clicking a bar
+  containing link tile, or the root grid row when there is none (the same
+  verb, the other target). Clicking a bar
   crumb ascends all the way to that level.
 - **Drop a tile.** Gesture → `CreateTile`/`PlaceTile`/`CloneTile`,
   id-addressed + version-claimed → server routes → store mutates →

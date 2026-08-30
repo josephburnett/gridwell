@@ -278,7 +278,7 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 			}
 			// (The framing zero-out lives in EntryPlugin: the handshake
 			// root view belongs to the MAIN root grid; an entry grid opens
-			// at the default framing — persistPluginRootView's RootGridID
+			// at the default framing — persistFraming's root-arm RootGridID
 			// guard keeps its session framing off the main root's fact.)
 			items = append(items, paletteItem{isPlugin: true, plugin: rpc.EntryPlugin(pl, *e), entry: e})
 		}

@@ -543,14 +543,24 @@ func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 	return fw.client.Probe(ctx, &gridwellv1.ProbeRequest{TileId: local})
 }
 
-func (s *Server) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
-	fw, local, err := s.route(ctx, req.RootGridId)
+// SetFraming forwards the one framing write, routed on whichever target
+// the request names — a doorway tile or a root grid.
+func (s *Server) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
+	ref := req.TileId
+	if ref == "" {
+		ref = req.RootGridId
+	}
+	fw, local, err := s.route(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	out := proto.Clone(req).(*gridwellv1.SetRootViewRequest)
-	out.RootGridId = local
-	return fw.client.SetRootView(ctx, out)
+	out := proto.Clone(req).(*gridwellv1.SetFramingRequest)
+	if out.TileId != "" {
+		out.TileId = local
+	} else {
+		out.RootGridId = local
+	}
+	return fw.client.SetFraming(ctx, out)
 }
 
 func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {

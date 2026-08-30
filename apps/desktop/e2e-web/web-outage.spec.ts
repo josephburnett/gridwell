@@ -163,7 +163,7 @@ test('framing settled during an outage lands after the restart', async ({ gw, ou
 
   await outage.kill();
 
-  // Pan inside the well: the settle persister fires SetWellView into the
+  // Pan inside the well: the settle persister fires SetFraming into the
   // dead socket; the pending ledger must park it (before the class fix
   // the optimistic patch survived on screen but nothing ever re-posted).
   await gw.panFocusedGrid(

@@ -1091,22 +1091,22 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	}
 	// The portal's containing tile: the link well in the frame's leaf grid
 	// whose child is the pane's current anchor. When it resolves, the ascent
-	// writes the pane's framing back onto it (the SAME face-#3 writeback a
-	// normal well ascent does — for a node-grid tile the plugin maps it
-	// onto the plugin's SetRootView) and animates onto its footprint.
+	// writes the pane's framing back onto it (the SAME writeback a normal
+	// well ascent does — one verb, one shape) and animates onto its
+	// footprint.
 	well := a.portalWellForFrame(p, f)
 	if well != nil {
 		framePath := slices.Clone(f.Path)
-		a.persistWellView(p, well, f.Anchor, framePath)
+		a.persistFraming(p, well, f.Anchor, framePath)
 		a.animatePortalAscent(p, f, well)
 		return
 	}
 	// No containing link tile — a + menu portal (the origin grid holds no
-	// tile for it). The framing writeback still happens, just without a tile
-	// to carry it: write the plugin's root view directly (the SAME fact a
-	// node-grid tile write routes onto via SetRootView), so re-entering the
-	// plugin from the menu lands at the left-off view.
-	a.persistPluginRootView(p)
+	// tile for it). The framing writeback still happens, just without a
+	// doorway to carry it: the root GRID row owns it instead (the same
+	// fact, the same verb), so re-entering the plugin from the menu lands
+	// at the left-off view.
+	a.persistFraming(p, nil, "", nil)
 	if !p.PopFrame() {
 		return
 	}
@@ -1116,57 +1116,6 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	a.fetchGrid(a.gridIDForPane(p))
 	a.draw()
 	a.scheduleURLUpdate()
-}
-
-// persistPluginRootView persists the pane's viewport as its plugin's root
-// view when the pane sits at a plugin ROOT grid — the tile-less half of the
-// portal framing writeback, fired at portal ascent and by the settle
-// persister (flushFramingSave). Same intrinsic math as persistWellView over
-// the 1×1 synthetic plugin tile (rpc.PluginWellTile) the pane descended
-// through, and the same no-op guard so quiet calls don't churn the store.
-// The local PluginInfo copy of the root view (a cache of the Info
-// handshake) reconciles immediately so the next + menu descent frames to
-// what was just saved.
-func (a *App) persistPluginRootView(p *pane.Pane) {
-	if len(p.Path) > 0 || p.TextFocus != "" {
-		return
-	}
-	pl, ok := a.pluginByRoot(p.Anchor)
-	if !ok {
-		return
-	}
-	a.persistRootViewCore(p, rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom},
-		func(f rpc.Framing) {
-			for i := range a.plugins {
-				if a.plugins[i].UUID == pl.UUID {
-					a.plugins[i].RootViewCx = f.Cx
-					a.plugins[i].RootViewCy = f.Cy
-					a.plugins[i].RootViewZoom = f.Zoom
-				}
-			}
-		})
-}
-
-// persistRootViewCore is the ONE root-view writeback (the coupling audit
-// found the node arm had grown into a line-for-line twin): the 1×1
-// synthetic-well intrinsic math, the no-op guard against the caller's
-// cached copy, the local reconcile (commit), and the SetRootView post —
-// beacon during unload, ordinary void persist otherwise.
-func (a *App) persistRootViewCore(p *pane.Pane, cur rpc.Framing, commit func(rpc.Framing)) {
-	r := paneRectFor(a, p)
-	overtake := zoomtrans.OvertakeZoom(zoomtrans.Well{W: 1, H: 1}, r.W, r.H, cellPx)
-	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy, Zoom: zoomtrans.IntrinsicFromLive(p.Zoom, overtake)}
-	if cur.SameAs(next) {
-		return
-	}
-	commit(next)
-	req := &rpc.SetFramingRequest{RootGridID: p.Anchor, Framing: next}
-	if a.unloading && a.sendBeaconJSON(rpc.SetRootViewBeacon(req)) {
-		return
-	}
-	a.postVoidPersist("SetRootView", p.Anchor, func(ctx context.Context) error {
-		return a.cl.SetRootView(ctx, req)
-	})
 }
 
 // descentTextMode applies textedit.DescentMode (the one owner) to a
@@ -1382,8 +1331,9 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 		return 0, 0, 0, false
 	}
 	if len(path) == 0 {
-		// A root grid: the read side of persistPluginRootView — the same
-		// 1×1 synthetic well, inverted; a root's view rides its PluginInfo.
+		// A root grid: the read side of persistFraming's root arm — the
+		// same 1×1 synthetic doorway, inverted; a root's framing rides
+		// its PluginInfo.
 		var vcx, vcy, vzoom float64
 		if pl, found := a.pluginByRoot(anchor); found {
 			vcx, vcy, vzoom = pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom
@@ -1918,62 +1868,11 @@ func (a *App) exitTextInstant(p *pane.Pane, restoreStash bool) {
 	a.refreshFileOverlay()
 }
 
-// saveWellViewBeforeAscent is persistWellView under the pane's own anchor —
+// saveWellViewBeforeAscent is persistFraming under the pane's own anchor —
 // the ascent-flush entry point (the settle persister passes an explicit
 // anchor because a portal's containing well lives under the FRAME's anchor).
 func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []string) {
-	a.persistWellView(p, well, p.Anchor, parentPath)
-}
-
-// persistWellView updates `well`'s framing (view center + intrinsic zoom) so its parent-grid
-// preview reflects the user's last position and zoom in the child grid.
-// Fired by every ascent flush and by the settle persister
-// (flushFramingSave). ViewZoom is stored as the intrinsic ratio
-// childZoom_at_ascent / OvertakeZoom_at_ascent — window-independent so
-// the preview stays stable across browser resizes. Mutates well in-place
-// (so the local-side ascent transition uses the new values) and patches
-// the cache so the parent's preview renders the new view immediately on
-// path-swap. Posts SetWellView in a goroutine; the server's event will
-// catch up the cache.
-//
-// No-op if the user's current center hasn't moved from the well's
-// stored view (rounded to int cells), so quiet calls don't churn
-// the DB.
-func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string, parentPath []string) {
-	r := paneRectFor(a, p)
-	zw := zoomtrans.Well{X: well.X, Y: well.Y, W: well.W, H: well.H}
-	overtake := zoomtrans.OvertakeZoom(zw, r.W, r.H, cellPx)
-	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy, Zoom: zoomtrans.IntrinsicFromLive(p.Zoom, overtake)}
-	cur := rpc.Framing{Cx: well.ViewCx, Cy: well.ViewCy, Zoom: well.ViewZoom}
-	if cur.SameAs(next) {
-		return
-	}
-	well.ViewCx = next.Cx
-	well.ViewCy = next.Cy
-	well.ViewZoom = next.Zoom
-
-	// Update local cache so the parent preview renders the new view
-	// before the SSE event from the server arrives.
-	updated := *well
-	a.c.Apply(rpc.Event{
-		Kind:        rpc.EventTileChanged,
-		TileChanged: &rpc.TileChanged{Tile: updated},
-	})
-
-	parentGridID := a.gridIDForPathFrom(parentAnchor, parentPath)
-	// Framing dispatcher: one conflict retry with a fresh claim, then the
-	// optimistic reaction (roll back the patch above on remaining failure).
-	// During beforeunload the write rides a beacon instead (unload.go).
-	tileID := well.ID
-	req := &rpc.SetFramingRequest{TileID: tileID, Version: well.Version, Framing: next}
-	if a.unloading && a.sendBeaconJSON(rpc.SetWellViewBeacon(req)) {
-		return
-	}
-	a.postFramingPersist("SetWellView", parentGridID, tileID, well.Version,
-		func(ctx context.Context, version int64) (*rpc.Tile, error) {
-			req.Version = version
-			return a.cl.SetWellView(ctx, req)
-		})
+	a.persistFraming(p, well, p.Anchor, parentPath)
 }
 
 // saveTextBeforeAscent posts the editor buffer (if text mode is active)

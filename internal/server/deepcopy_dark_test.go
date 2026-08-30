@@ -36,19 +36,19 @@ type darkSource struct {
 	darkGrids    map[string]bool // local grid id → GetGrid unavailable
 	darkPreviews map[string]bool // local tile id → GetTilePreview unavailable
 	verdict      map[string]error
-	// darkSetTileFrom fails the Nth (1-indexed) and every later SetTile —
-	// the dest-goes-dark-MID-copy shape (a framing writeback into a mount
-	// whose tunnel dropped partway through the walk). 0 = never.
-	darkSetTileFrom int
-	setTileCalls    int
+	// darkFramingFrom fails the Nth (1-indexed) and every later SetFraming
+	// — the dest-goes-dark-MID-copy shape (a framing writeback into a
+	// mount whose tunnel dropped partway through the walk). 0 = never.
+	darkFramingFrom int
+	framingCalls    int
 }
 
-func (d *darkSource) SetTile(ctx context.Context, in *pb.SetTileRequest, opts ...grpc.CallOption) (*pb.TileResponse, error) {
-	d.setTileCalls++
-	if d.darkSetTileFrom > 0 && d.setTileCalls >= d.darkSetTileFrom {
+func (d *darkSource) SetFraming(ctx context.Context, in *pb.SetFramingRequest, opts ...grpc.CallOption) (*pb.SetFramingResponse, error) {
+	d.framingCalls++
+	if d.darkFramingFrom > 0 && d.framingCalls >= d.darkFramingFrom {
 		return nil, status.Error(codes.Unavailable, "mount dark: tunnel dropped")
 	}
-	return d.GridwellClient.SetTile(ctx, in, opts...)
+	return d.GridwellClient.SetFraming(ctx, in, opts...)
 }
 
 func (d *darkSource) ReadContent(ctx context.Context, in *pb.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ContentChunk], error) {
@@ -275,7 +275,7 @@ func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	framed, err := cl.SetWellView(ctx, &rpc.SetFramingRequest{
+	framed, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: well.ID, Version: well.Version, Framing: rpc.Framing{Cx: 5, Cy: 6, Zoom: 1.5},
 	})
 	if err != nil {
@@ -357,9 +357,9 @@ func TestMidCopyFailureNeverDoublesTheWell(t *testing.T) {
 	}
 
 	// The dest tunnel drops MID-copy: the outer copy's framing (1st
-	// SetTile) lands, the inner's (2nd) fails — so the failure travels up
-	// through the child arm with the inner copy already created.
-	dark.darkSetTileFrom = 2
+	// SetFraming) lands, the inner's (2nd) fails — so the failure travels
+	// up through the child arm with the inner copy already created.
+	dark.darkFramingFrom = 2
 
 	fresh, err := cl.GetTile(ctx, well.ID)
 	if err != nil {

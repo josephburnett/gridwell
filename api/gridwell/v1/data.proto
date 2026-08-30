@@ -269,7 +269,7 @@ message InfoResponse {
   // center in world cell coords and the live zoom). Filled by localdb from
   // its system KV table; fs/proc return zero (no persistent root view). The
   // client seeds the portal-well framing on enterPlugin so re-entry restores
-  // exactly the left-off view. Purely a read: the write path is SetRootView.
+  // exactly the left-off view. Purely a read: the write path is SetFraming.
   double root_view_cx   = 10;
   double root_view_cy   = 11;
   double root_view_zoom = 12;
@@ -626,7 +626,8 @@ message CloneTileRequest {
 // tile.kind to the one operation that kind supports, and that mapping fixes the
 // version semantics (face #3 of the primary rule — framing is not a content
 // edit):
-//   well  → view_cx/view_cy/view_zoom            (framing; never bumps version)
+//   (well framing left for SetFraming — one verb for both rows that can
+//    own it, doorway tile and root grid alike.)
 //   text  → text_x/text_y/text_w/text_h/text_mode (framing; never bumps version)
 //   url   → url_string, alt_text (page title), preview jpeg  (content; bumps)
 //   shell → preview jpeg                          (content; bumps version)
@@ -678,20 +679,35 @@ message DeleteTileRequest {
 }
 message DeleteTileResponse {}
 
-// SetRootViewRequest persists the plugin root grid's viewport (the same
-// fact that SetTile writes for a well tile, but for the plugin root which
-// has no tile row). root_grid_id routes the call to the owning plugin;
-// cx/cy are the viewport center in world cell coords; zoom is the live zoom.
-// Framing only — never bumps a content version. The home node stores it
-// on the root GRID row (root_cx/cy/zoom, schema v11), the same three
-// columns every root uses; a plugin with no memory of roots is a no-op.
-message SetRootViewRequest {
-  string root_grid_id = 1;  // qualified "<plugin-uuid>/<id>", used for routing
-  double cx           = 2;
-  double cy           = 3;
-  double zoom         = 4;
+// SetFramingRequest persists "how this grid looked when I left it through
+// this doorway" — the ONE framing verb (docs/simplify-plan.md S4; it
+// replaced the SetTile well arm and SetRootView). cx/cy are a float CENTER
+// in the grid's OWN coordinates; zoom is the pane-size-independent
+// intrinsic ratio (live / overtake), so a window resize never moves a
+// saved view. Zoom 0 means never visited.
+//
+// Exactly one target, and it is also what routes the call to the owning
+// plugin: tile_id names the DOORWAY tile a grid was entered through (a
+// well — interior, exit, or link; each doorway keeps its own framing),
+// root_grid_id a ROOT grid, which has no doorway to carry it. version is
+// the doorway tile's claim; a root carries none.
+//
+// Framing only — never bumps a content version. A plugin that keeps no
+// framing answers Unimplemented, which the node treats as "nothing to
+// store", not an error.
+message SetFramingRequest {
+  string tile_id      = 1;  // qualified "<plugin-uuid>/<id>"; the doorway
+  string root_grid_id = 2;  // qualified "<plugin-uuid>/<id>"; a root grid
+  int64  version      = 3;  // the doorway tile's version claim
+  double cx           = 4;
+  double cy           = 5;
+  double zoom         = 6;
 }
-message SetRootViewResponse {}
+// SetFramingResponse carries the updated DOORWAY tile (so the client can
+// reconcile its row); a root write has no tile and leaves it unset.
+message SetFramingResponse {
+  Tile tile = 1;
+}
 
 // Event stream.
 
@@ -770,10 +786,10 @@ service Gridwell {
   rpc CloneTile(CloneTileRequest)   returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
 
-  // SetRootView persists the plugin root-grid framing (the portal-level
-  // analogue of SetTile for a well). Framing only — never bumps version.
-  // The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
-  rpc SetRootView(SetRootViewRequest) returns (SetRootViewResponse);
+  // SetFraming persists the framing of a grid — onto the DOORWAY tile it
+  // was entered through, or onto the grid row itself for a root that has
+  // no doorway. One verb, one shape, both rows (docs/simplify-plan.md S4).
+  rpc SetFraming(SetFramingRequest) returns (SetFramingResponse);
 
   // ShellSessionAlive gates the wasm refresh button on shell descent.
   rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);

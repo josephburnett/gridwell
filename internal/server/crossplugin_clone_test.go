@@ -89,7 +89,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	// The source well has a framing the user set — the preview the link
 	// gesture carries along. Descending the link must land exactly where
 	// descending the source would.
-	framed, err := cl.SetWellView(ctx, &rpc.SetFramingRequest{
+	framed, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: well.ID, Version: well.Version,
 		Framing: rpc.Framing{Cx: 7, Cy: -2, Zoom: 1.75},
 	})
@@ -189,7 +189,7 @@ func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Framing on the well (preview = descent = ascent).
-	framed, err := cl.SetWellView(ctx, &rpc.SetFramingRequest{
+	framed, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: well.ID, Version: well.Version, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 2.5},
 	})
 	if err != nil {

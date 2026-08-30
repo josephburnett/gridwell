@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/urlwalk"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 // urlUpdateDebounceMs is how long we wait after the last state change
@@ -71,7 +72,7 @@ func (a *App) flushFramingSave() {
 }
 
 // flushWellWheelSaves posts the settled hover-wheel well zooms (issue
-// #210): one SetWellView per touched tile, from the PENDING drift state —
+// #210): one SetFraming per touched tile, from the PENDING drift state —
 // the one owner of the not-yet-persisted view (decision 2026-08-13). It
 // used to re-read the cache row, and any refetch inside the settle window
 // replaced the patch with server values, so the flush silently reverted
@@ -93,23 +94,23 @@ func (a *App) flushWellWheelSaves() {
 			TileID: tileID, Version: version,
 			Framing: rpc.Framing{Cx: st.cx, Cy: st.cy, Zoom: st.ratio},
 		}
-		if a.unloading && a.sendBeaconJSON(rpc.SetWellViewBeacon(req)) {
+		if a.unloading && a.sendBeaconJSON(rpc.SetFramingBeacon(req)) {
 			continue
 		}
-		a.postFramingPersist("SetWellView", gid, tileID, version,
+		a.postFramingPersist("SetFraming", gid, tileID, version,
 			func(ctx context.Context, version int64) (*rpc.Tile, error) {
 				req.Version = version
-				return a.cl.SetWellView(ctx, req)
+				return a.cl.SetFraming(ctx, req)
 			})
 	}
 }
 
 // persistPaneFraming writes pane p's current place framing — the same
-// writes an ascent flushes, fired without waiting for one:
-//   - descended into a child grid: the leaf well's view_* (SetWellView);
-//   - at a portal target: the containing link tile's view_* under the
-//     frame's anchor (a node-grid tile write routes onto SetRootView);
-//   - at a plugin root with no containing tile: the root view directly.
+// write an ascent flushes, fired without waiting for one. It resolves
+// WHICH ROW owns the framing and hands it to persistFraming:
+//   - descended into a child grid: the leaf well, the doorway it came in by;
+//   - at a portal target: the containing link tile, under the FRAME's anchor;
+//   - at a root grid with no containing tile: no doorway, so the grid row.
 //
 // A text descent settle-persists its SCROLL (decision 2026-08-13 — it
 // used to survive only an ascent, so a reload lost your place in the
@@ -134,16 +135,108 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 		if !ok {
 			return
 		}
-		a.persistWellView(p, &w, p.Anchor, slices.Clone(parentPath))
+		a.persistFraming(p, &w, p.Anchor, slices.Clone(parentPath))
 		return
 	}
 	if f, ok := p.TopFrame(); ok {
 		if well := a.portalWellForFrame(p, f); well != nil {
-			a.persistWellView(p, well, f.Anchor, slices.Clone(f.Path))
+			a.persistFraming(p, well, f.Anchor, slices.Clone(f.Path))
 			return
 		}
 	}
-	a.persistPluginRootView(p)
+	a.persistFraming(p, nil, "", nil)
+}
+
+// persistFraming is the ONE framing writeback (docs/simplify-plan.md S4).
+// It writes the pane's settled place — a float CENTER in the grid it is
+// showing, plus the pane-size-independent intrinsic zoom — onto the row
+// that owns it, through the one wire verb.
+//
+// `door` is the DOORWAY tile the pane entered its grid through, living
+// under (doorAnchor, doorPath); nil means the pane sits at a ROOT grid,
+// which has no doorway, so the grid row owns the framing and the client's
+// copy of it is the plugin's Info handshake. The zoom is measured against
+// the doorway's footprint — 1×1 for a root, the same synthetic doorway a
+// plugin renders as (rpc.PluginWellTile), so preview and descent agree.
+//
+// Fired by every ascent flush and by the settle persister
+// (flushFramingSave). No-op when nothing moved (rpc.Framing.SameAs), so
+// quiet calls don't churn the store. The doorway arm mutates `door` in
+// place — the local-side ascent transition uses the new values — and
+// patches the cache so the parent's preview renders them before the
+// server's event arrives. During beforeunload the write rides a beacon
+// instead (unload.go).
+func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, doorPath []string) {
+	var (
+		req    rpc.SetFramingRequest
+		foot   = zoomtrans.Well{W: 1, H: 1}
+		cur    rpc.Framing
+		gridID string
+		commit func(rpc.Framing)
+	)
+	if door != nil {
+		foot = zoomtrans.Well{W: door.W, H: door.H}
+		cur = rpc.Framing{Cx: door.ViewCx, Cy: door.ViewCy, Zoom: door.ViewZoom}
+		gridID = a.gridIDForPathFrom(doorAnchor, doorPath)
+		req = rpc.SetFramingRequest{TileID: door.ID, Version: door.Version}
+		commit = func(f rpc.Framing) {
+			door.ViewCx, door.ViewCy, door.ViewZoom = f.Cx, f.Cy, f.Zoom
+			updated := *door
+			a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
+		}
+	} else {
+		if len(p.Path) > 0 || p.TextFocus != "" {
+			return
+		}
+		pl, ok := a.pluginByRoot(p.Anchor)
+		if !ok {
+			return
+		}
+		cur = rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}
+		gridID = p.Anchor
+		req = rpc.SetFramingRequest{RootGridID: p.Anchor}
+		commit = func(f rpc.Framing) {
+			// The local PluginInfo copy of the root framing (a cache of
+			// the Info handshake) reconciles immediately, so the next
+			// + menu descent frames to what was just saved.
+			for i := range a.plugins {
+				if a.plugins[i].UUID == pl.UUID {
+					a.plugins[i].RootViewCx = f.Cx
+					a.plugins[i].RootViewCy = f.Cy
+					a.plugins[i].RootViewZoom = f.Zoom
+				}
+			}
+		}
+	}
+	r := paneRectFor(a, p)
+	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy,
+		Zoom: zoomtrans.IntrinsicFromLive(p.Zoom, zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx))}
+	if cur.SameAs(next) {
+		return
+	}
+	commit(next)
+	req.Framing = next
+	if a.unloading && a.sendBeaconJSON(rpc.SetFramingBeacon(&req)) {
+		return
+	}
+	if req.TileID != "" {
+		// Framing dispatcher: one conflict retry with a fresh claim, then
+		// the optimistic reaction (roll the patch above back on a
+		// remaining failure).
+		a.postFramingPersist("SetFraming", gridID, req.TileID, req.Version,
+			func(ctx context.Context, version int64) (*rpc.Tile, error) {
+				req.Version = version
+				return a.cl.SetFraming(ctx, &req)
+			})
+		return
+	}
+	// A root write claims no version (there is no tile row to claim), so
+	// it rides the void dispatcher — its own pending key, since a grid id
+	// and a tile id are separate sequences.
+	a.postVoidPersist("SetFraming root", gridID, func(ctx context.Context) error {
+		_, err := a.cl.SetFraming(ctx, &req)
+		return err
+	})
 }
 
 // persistTextScroll is the settle persister's text arm (framing-audit

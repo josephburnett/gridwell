@@ -26,7 +26,7 @@ import (
 //
 // What copies as what:
 //   - solid interior well → new well + recursive copy of its child grid,
-//     framing (view_*) preserved via SetTile;
+//     framing (view_cx/cy/zoom) preserved via SetFraming;
 //   - exit well / leaf link inside the subtree → copies AS a reference
 //     (references stay references — the same rule as the top-level clone);
 //   - text/pane bytes → ReadContent → WriteContent (pane layouts stay
@@ -59,14 +59,14 @@ func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient
 	// Preserve the well's framing (preview = descent target = ascent
 	// return). Framing-class: no version bump. The writeback's response is
 	// the current row — return THAT, not the pre-framing create response.
-	framed, err := dst.SetTile(ctx, &pb.SetTileRequest{
+	framed, err := dst.SetFraming(ctx, &pb.SetFramingRequest{
 		TileId: created.GetTile().GetId(), Version: created.GetTile().GetVersion(),
-		Tile: &pb.Tile{Kind: "well", ViewCx: srcLocalTile.ViewCx, ViewCy: srcLocalTile.ViewCy, ViewZoom: srcLocalTile.ViewZoom},
+		Cx: srcLocalTile.ViewCx, Cy: srcLocalTile.ViewCy, Zoom: srcLocalTile.ViewZoom,
 	})
 	if err != nil {
 		return created, fmt.Errorf("well framing: %w", err)
 	}
-	created = framed
+	created = &pb.TileResponse{Tile: framed.GetTile()}
 
 	dstChild := created.GetTile().GetChildGridId()
 	for _, child := range g.Tiles {

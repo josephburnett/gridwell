@@ -45,19 +45,16 @@ func beacon(procedure string, m proto.Message) (path string, body []byte) {
 	return procedure, b
 }
 
-// SetWellViewBeacon is the beacon form of Client.SetWellView.
-func SetWellViewBeacon(req *SetFramingRequest) (path string, body []byte) {
-	return beacon(gridwellv1connect.GridwellSetTileProcedure, SetWellViewToProto(req))
-}
-
 // SetTextViewBeacon is the beacon form of Client.SetTextView.
 func SetTextViewBeacon(req *SetTextViewRequest) (path string, body []byte) {
 	return beacon(gridwellv1connect.GridwellSetTileProcedure, SetTextViewToProto(req))
 }
 
-// SetRootViewBeacon is the beacon form of Client.SetRootView.
-func SetRootViewBeacon(req *SetFramingRequest) (path string, body []byte) {
-	return beacon(gridwellv1connect.GridwellSetRootViewProcedure, SetRootViewToProto(req))
+// SetFramingBeacon is the beacon form of Client.SetFraming — the ONE
+// framing beacon, doorway tile and root grid alike (one verb, one body
+// builder, two transports).
+func SetFramingBeacon(req *SetFramingRequest) (path string, body []byte) {
+	return beacon(gridwellv1connect.GridwellSetFramingProcedure, SetFramingToProto(req))
 }
 
 // SetURLStateBeacon is the beacon form of Client.SetURLState WITHOUT the

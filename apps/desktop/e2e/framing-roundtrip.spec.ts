@@ -17,7 +17,7 @@ import { test, expect } from './fixtures';
 // grid, ascend, re-enter — the viewport must be exactly as left. The seam
 // moved when the launcher landing page was reversed (2026-07-19): a menu
 // portal has no containing link tile, so the ascent writeback goes straight
-// to the plugin's root view (SetRootView) instead of through a node-grid
+// to the plugin's root framing (SetFraming's root arm) instead of through a node-grid
 // tile. This seam was broken once before (every re-entry reset to the
 // default calibrated zoom), so it keeps its crossing test.
 
@@ -76,7 +76,7 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
 
   // The write is SERVER truth, not just a client cache: the handshake
   // serves each plugin's persisted root view, so the reframed zoom must
-  // show up there. Poll — the SetRootView post is async.
+  // show up there. Poll — the root framing post is async.
   await expect
     .poll(
       async () => {
@@ -134,7 +134,7 @@ test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
 
 test('a plugin root reframe persists without ascending (issue #190)', async ({ gw }) => {
   // Same invariant one seam over: pan/zoom a plugin's ROOT grid and the
-  // root view must reach the server without a + menu ascent (SetRootView
+  // root framing must reach the server without a + menu ascent (the root
   // used to fire only from the portal-ascent path).
   await gw.enterPlugin('second');
 
@@ -195,7 +195,7 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
   const left = await gw.focused();
   expect(left.zoom, 'reframe changed the zoom').not.toBeCloseTo(1.0, 2);
   await gw.waitIdle();
-  // Wait on SERVER truth, not a sleep: the settle persister's SetRootView
+  // Wait on SERVER truth, not a sleep: the settle persister's root framing
   // shows up as the home plugin's persisted root view.
   await expect
     .poll(

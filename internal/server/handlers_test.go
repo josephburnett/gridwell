@@ -243,7 +243,7 @@ func TestResizeAndSetFramingRPCs(t *testing.T) {
 	}
 	v = tile.Version
 
-	tile, err = cl.SetWellView(ctx, &rpc.SetFramingRequest{
+	tile, err = cl.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: id, Version: v, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 1.5},
 	})
 	if err != nil {
@@ -499,5 +499,94 @@ func TestMountByClone(t *testing.T) {
 	// only). This is the bit render reads instead of guessing from uuids.
 	if !tile.Reference {
 		t.Error("mounted well must arrive as a reference (dashed link), got reference=false")
+	}
+}
+
+// TestFramingRoundTripsByteIdenticalAcrossTheSeam is the S4 seam pin:
+// store → wire → client, both rows that can own framing, byte for byte.
+// A unit test on either side would not catch it — the bug this shape
+// replaces was exactly a representation mismatch between the two (an
+// integer window origin in the store, a float center in the client), and
+// the whole quantization apparatus existed to survive it. Awkward values
+// on purpose: sub-cell centers, a negative, and a zoom with no exact
+// binary form.
+func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
+
+	want := rpc.Framing{Cx: 5.37, Cy: -7.125, Zoom: 0.1}
+
+	// The doorway row: a well tile.
+	well, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: root, X: 3, Y: 3, W: 3, H: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
+		TileID: well.ID, Version: well.Version, Framing: want,
+	})
+	if err != nil {
+		t.Fatalf("SetFraming(doorway): %v", err)
+	}
+	if got := (rpc.Framing{Cx: set.ViewCx, Cy: set.ViewCy, Zoom: set.ViewZoom}); got != want {
+		t.Errorf("the write's own response = %+v, want %+v", got, want)
+	}
+	// Read it back the way the client actually reads a doorway: through
+	// the grid it lives in.
+	g, err := cl.GetGrid(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, tile := range g.Tiles {
+		if tile.ID != well.ID {
+			continue
+		}
+		found = true
+		if got := (rpc.Framing{Cx: tile.ViewCx, Cy: tile.ViewCy, Zoom: tile.ViewZoom}); got != want {
+			t.Errorf("doorway framing read back = %+v, want %+v", got, want)
+		}
+	}
+	if !found {
+		t.Fatal("the well is not in the grid it was created in")
+	}
+
+	// The root row: the same verb, the same shape, no doorway. It reads
+	// back through the handshake, where a root's framing rides.
+	if _, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{RootGridID: root, Framing: want}); err != nil {
+		t.Fatalf("SetFraming(root): %v", err)
+	}
+	hs, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRow := false
+	for _, pl := range hs.Plugins {
+		if pl.RootGridID != root {
+			continue
+		}
+		rootRow = true
+		if got := (rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}); got != want {
+			t.Errorf("root framing read back = %+v, want %+v", got, want)
+		}
+	}
+	if !rootRow {
+		t.Fatalf("no handshake row for the root grid %s", root)
+	}
+
+	// And the guiding rule: re-writing the SAME framing changes nothing.
+	if _, err := cl.SetFraming(ctx, &rpc.SetFramingRequest{
+		TileID: well.ID, Version: set.Version, Framing: want,
+	}); err != nil {
+		t.Fatalf("SetFraming(doorway, again): %v", err)
+	}
+	again, err := cl.GetTile(ctx, well.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := (rpc.Framing{Cx: again.ViewCx, Cy: again.ViewCy, Zoom: again.ViewZoom}); got != want {
+		t.Errorf("rewriting the same framing moved it: %+v, want %+v", got, want)
+	}
+	if again.Version != set.Version {
+		t.Errorf("a framing write bumped version %d → %d", set.Version, again.Version)
 	}
 }

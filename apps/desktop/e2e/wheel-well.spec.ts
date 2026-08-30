@@ -6,7 +6,7 @@ import { tileAt } from './oracle';
 // shows. Empty space is the escape hatch: wheel there still zooms the pane.
 // The spec crosses the whole seam: real wheel events → classifier →
 // zoomtrans.WellWheelView → per-notch cache patch → the settle persister's
-// SetWellView → server truth read back through GetGrid.
+// SetFraming → server truth read back through GetGrid.
 
 test('wheel over a well zooms the well; over empty space, the pane (#210)', async ({
   gw,

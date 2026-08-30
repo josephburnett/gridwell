@@ -201,8 +201,8 @@ func (n *nodeExport) DeleteTile(ctx context.Context, r *pb.DeleteTileRequest) (*
 	return resp.Msg, nil
 }
 
-func (n *nodeExport) SetRootView(ctx context.Context, r *pb.SetRootViewRequest) (*pb.SetRootViewResponse, error) {
-	resp, err := n.h.SetRootView(ctx, connect.NewRequest(r))
+func (n *nodeExport) SetFraming(ctx context.Context, r *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
+	resp, err := n.h.SetFraming(ctx, connect.NewRequest(r))
 	if err != nil {
 		return nil, statusErr(err)
 	}
