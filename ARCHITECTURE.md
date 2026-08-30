@@ -159,7 +159,7 @@ plugin and translates ids at the boundary:
    implementation). Transit is the namespace's TYPE (the transport), not
    a declaration, so it holds while the remote is down.
 
-**One router, two codecs, two doors.** The routing lives in `router.go`
+**One router, two codecs, two listeners.** The routing lives in `router.go`
 as a `namespace.Namespace` of QUALIFIED ids — a space whose verbs peel one
 segment and forward. Over it stand two thin codecs that route nothing of
 their own: `connect_codec.go` (the browser's Connect handler, mapping the
@@ -480,7 +480,7 @@ same truth twice. The templates:
 | `shellconn.DecideAutoLive` | "does this descent go live" | one decision | every descent/restore path |
 | `client/shellwire` | the shell door's address + frames | one grammar | the server door and the wasm client |
 | `local.OpenVerified` | the plugin's identity | verify+open+inject fused | every identity read |
-| `server.router` | "who owns this qualified id, and what does the answer look like" | one `namespace.Namespace` | the Connect codec, the federation codec, the content door, the shell door |
+| `Server.resolve` + `server.router` | "who owns this qualified id, and what does the answer look like" | one lookup, one `namespace.Namespace` over it | the Connect codec, the federation codec, the content door, the shell door |
 | `namespace.Follow` | "this event stream is established" | one definition | the node's fan-in and the transport's |
 
 Each makes a bug class unrepresentable. That is the goal of every change:
