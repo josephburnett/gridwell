@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/web"
 )
 
-// The compressed-static class (2026-08-12): any static file with a FRESH
+// The compressed-static class: any static file with a fresh
 // .gz sidecar serves gzipped to a client that accepts it — the case that
 // matters is gridwell.wasm (~33 MB raw, ~8 MB gzipped; a phone on a
 // relayed tailscale link reads it every boot, and uncompressed that is
@@ -122,7 +122,7 @@ func TestStaticGzipSidecar(t *testing.T) {
 	}
 }
 
-// TestEmbeddedWebClientServes pins self-containedness (2026-08-12): the
+// TestEmbeddedWebClientServes pins self-containedness: the
 // server, handed the EMBEDDED web.FS (the distributed binary's default),
 // serves the SPA and the wasm — gzipped when accepted, with the type
 // instantiateStreaming requires — with no files on disk at all. This is

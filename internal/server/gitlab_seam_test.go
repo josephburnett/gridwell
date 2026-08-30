@@ -151,9 +151,9 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatalf("after deletion in GitLab: %v", wk.Tiles)
 	}
 
-	// Plugin restart: a fresh process has never seen todo 1, and GitLab
-	// no longer lists it. The NODE remembers: same tile, same id, same
-	// placement, last-seen label; its content says it is not in memory.
+	// Plugin restart: a fresh process has never seen todo 1, and GitLab does
+	// not list it. The node remembers — same tile, same id, same placement,
+	// last-seen label — and its content says it is not in memory.
 	closeStack()
 	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabplugin.New(gl, gitlabplugin.Options{Now: now}))
 	t.Cleanup(closeStack2)

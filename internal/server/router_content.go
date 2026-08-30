@@ -11,10 +11,10 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// The router's content streams and the placement verb (2026-07-26
-// redesign). Routing follows contentRoute for reads (link resolution at the
-// serving node) and plain id routing for writes (a link owns no content;
-// the store refuses a write to a link row).
+// The router's content streams and the placement verb. Reads route through
+// contentRoute, which resolves a link at the serving node; writes take plain
+// id routing, because a link owns no content and the store refuses a write to
+// a link row.
 
 // ReadContent streams a tile's bytes from the namespace that owns it.
 // Chunks carry no ids, so nothing needs re-qualification on the way back.
@@ -67,7 +67,7 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
+// PlaceTile is the single placement writeback.
 func (rt *router) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error) {
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)

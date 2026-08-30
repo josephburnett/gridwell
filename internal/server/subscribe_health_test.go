@@ -62,7 +62,7 @@ func recvHealth(t *testing.T, stream *rpc.EventStream) *rpc.PluginHealth {
 // stream once and asserts the client's Subscribe stream receives an
 // EventPluginHealth(healthy=false) transition followed by
 // EventPluginHealth(healthy=true) on the retry that succeeds — proving
-// fanInEvents' backoff loop (issue #47) tells the client about the outage
+// fanInEvents' backoff loop tells the client about the outage
 // instead of the client silently going stale with tiles that stop updating.
 func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	fake := &flakyWatchPlugin{failSubFirstN: 1}
@@ -125,7 +125,7 @@ func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.Subscri
 }
 
 // TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding is the
-// regression test for the second bug in issue #47: an Info failure at
+// A regression guard for the second half of the class: an Info failure at
 // Subscribe time must not permanently drop a plugin's fan-in for the life of
 // the client stream. Before the fix, Subscribe's Info fetch happened once,
 // synchronously, before launching fanInEvents at all; a failure there meant

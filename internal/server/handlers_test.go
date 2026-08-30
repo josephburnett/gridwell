@@ -27,18 +27,18 @@ const (
 )
 
 // newTestServerWithPlugins builds a server wired to in-process fs and proc
-// plugins (with the localdb UUID set), so file/process-well creation routes
+// plugins (with the home namespace's uuid set), so file/process-well creation routes
 // through the plugins exactly as in production. Returns the client and the
 // bare local root grid id.
 // newTestServerWithPlugins stands up a rootless server with the primary
-// localdb plus built-in fs and proc plugins. The fs plugin is rooted at a
+// a home namespace plus built-in fs and proc plugins. The fs plugin is rooted at a
 // fresh temp dir (returned as fsRoot) so a Mount of fsPluginUUID — which
 // attaches with the plugin's default config — lands there.
-// newPluginClient stands up the v2 plugin stack the way the loader
-// does in production — the plugin served in-process, fronted by the
-// node-side pluginhost adapter over a fresh layout memory DB — and
-// returns the adapter's client. The SHIPPED fs/proc stack: server tests
-// must exercise it, not a stand-in.
+// newPluginClient stands up the plugin stack the way the loader does in
+// production — the plugin served in-process, fronted by the node-side
+// pluginhost adapter over a fresh store — and returns the adapter's client. It
+// is the shipped fs and proc stack, which server tests must exercise rather
+// than a stand-in.
 func newPluginClient(t *testing.T, kind string, impl pluginv1.PluginServer) namespace.Namespace {
 	t.Helper()
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
@@ -401,8 +401,8 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 	}
 }
 
-// TestListPlugins: the launcher source lists configured plugins in config
-// order, with kind, label, and writability (only localdb accepts new tiles).
+// TestListPlugins: the + menu source lists configured plugins in config
+// order, with kind, label, and writability (only home accepts new tiles).
 func TestListPlugins(t *testing.T) {
 	cl, _, _ := newTestServerWithPlugins(t)
 	list, err := cl.Handshake(context.Background())
@@ -410,7 +410,7 @@ func TestListPlugins(t *testing.T) {
 		t.Fatalf("Handshake: %v", err)
 	}
 	plugins := list.Plugins
-	// Registration order: primary localdb, then fs, then proc.
+	// Registration order: home, then fs, then proc.
 	if len(plugins) != 3 {
 		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
 	}
@@ -421,7 +421,7 @@ func TestListPlugins(t *testing.T) {
 	if !strings.HasPrefix(plugins[0].RootGridID, plugins[0].UUID+"/") {
 		t.Errorf("plugin[0] root_grid_id = %q, want %q prefix", plugins[0].RootGridID, plugins[0].UUID)
 	}
-	// The localdb advertises a qualified scratch grid id (the ephemeral-url
+	// Home advertises a qualified scratch grid id (the ephemeral-url
 	// target), distinct from its root. fs/proc have none.
 	if !strings.HasPrefix(plugins[0].ScratchGridID, plugins[0].UUID+"/") {
 		t.Errorf("plugin[0] scratch_grid_id = %q, want %q prefix", plugins[0].ScratchGridID, plugins[0].UUID)
@@ -440,7 +440,7 @@ func TestListPlugins(t *testing.T) {
 	}
 }
 
-// TestCreateScratchURLRoutes: creating a url tile whose grid is the localdb's
+// TestCreateScratchURLRoutes: creating a url tile whose grid is home's
 // qualified scratch grid is an ephemeral visit — it routes path-free into the
 // scratch grid (no descent path leads there) and the tile carries reference=false
 // (it's owned content, just off-grid), with the typed URL. This proves the

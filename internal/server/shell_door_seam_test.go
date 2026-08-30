@@ -170,11 +170,10 @@ func TestShellDoorForwardsResize(t *testing.T) {
 	t.Fatal("resize never reached the PTY")
 }
 
-// The verdict crosses the seam: a snapshotted tile whose tmux session is
-// gone must reach the client as sessionGone — the fact the refresh
-// affordance reads (shellconn.DecideShellRefreshVisible). It used to be a
-// gRPC status code the Electron dialer classified; now it is the door's
-// exit frame, and the classification has ONE owner (shellEndVerdict).
+// The verdict crosses the seam: a snapshotted tile whose tmux session is gone
+// must reach the client as sessionGone, the fact the refresh affordance reads
+// through shellconn.DecideShellRefreshVisible. It rides the door's exit frame,
+// and shellEndVerdict is the one owner of the classification.
 func TestShellDoorReportsSessionGone(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)

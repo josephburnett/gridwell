@@ -19,7 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// registerPrimaryLocaldb serves st as a localdb plugin in reg under its stable
+// registerPrimaryLocaldb serves st as a namespace in reg under its stable
 // uuid — exactly how production registers the primary DB. Returns the uuid and
 // the qualified root grid id the client should open at.
 func registerPrimaryLocaldb(t *testing.T, reg *plugin.Registry, st *store.Store) (uuid, qualifiedRoot string) {
@@ -37,7 +37,7 @@ func registerPrimaryLocaldb(t *testing.T, reg *plugin.Registry, st *store.Store)
 	return uuid, uuid + "/" + bareRoot
 }
 
-// newTestServer wires up a Server whose primary DB is a registered localdb
+// newTestServer wires up a Server whose primary DB is a registered store
 // plugin (the server holds no store of its own for the data plane) and returns
 // the httptest server, a typed Connect client, and the qualified root grid id.
 func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
@@ -180,8 +180,8 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		}
 	}
 
-	// /rpc/ paths — the pre-Connect RPC namespace, no longer registered at
-	// all — must 404 rather than fall through to index.html.
+	// /rpc/ paths are registered by nothing, so they must 404 rather than
+	// fall through to index.html.
 	resp, err := hs.Client().Get(hs.URL + "/rpc/Bogus")
 	if err != nil {
 		t.Fatal(err)

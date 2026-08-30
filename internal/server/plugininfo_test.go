@@ -18,7 +18,7 @@ import (
 // buildPluginInfo is the pure assembly behind Handshake. These tests pin the
 // fallback rules — especially the degraded case where a plugin's Info timed out
 // or failed (info == nil), which must still produce a listed plugin so one slow
-// plugin can't blank or freeze the launcher.
+// plugin can't blank or freeze the + menu.
 
 func TestBuildPluginInfo_InfoPresent(t *testing.T) {
 	got := buildPluginInfo("uuid-1", "home", "Home", &pb.InfoResponse{
@@ -41,7 +41,7 @@ func TestBuildPluginInfo_InfoPresent(t *testing.T) {
 	}
 }
 
-// The point of handshake-declared capabilities: a remote localdb reached
+// The point of handshake-declared capabilities: a remote home reached
 // through the ssh proxy has local kind "remote", but its forwarded Info still
 // says writable — it must be presented writable, not stranded read-only by a
 // kind check.
@@ -71,7 +71,7 @@ func TestBuildPluginInfo_LabelFallsBackToDisplayName(t *testing.T) {
 }
 
 // The degraded case: Info failed or timed out → info is nil. The plugin is still
-// listed (so the launcher never drops a configured plugin), with no clickable
+// listed (so the + menu never drops a configured plugin), with no clickable
 // root/scratch grid and the configured label.
 func TestBuildPluginInfo_NilInfoStillListedWithConfigLabel(t *testing.T) {
 	got := buildPluginInfo("u", "proc", "Processes", nil, errors.New("dial: connection refused"))
@@ -94,7 +94,7 @@ func TestBuildPluginInfo_NilInfoNoLabelFallsBackToKind(t *testing.T) {
 	}
 }
 
-// TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil pins issue #47's fix: the
+// TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil pins the fix: the
 // info_error field is the ONLY thing that distinguishes a broken plugin from a
 // healthy-but-rootless one — both otherwise leave RootGridId == "". It must be
 // populated whenever Info failed, and empty whenever Info succeeded (even with
@@ -113,7 +113,7 @@ func TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil(t *testing.T) {
 		t.Errorf("a successful Info (even with no root) must leave InfoError empty, got %q", rootless.InfoError)
 	}
 
-	// The two must be otherwise identical in the one field the launcher used to
+	// The two must be otherwise identical in the one field the + menu used to
 	// key off of (RootGridId == "") — InfoError is the only signal that tells
 	// them apart.
 	if broken.RootGridId != "" || rootless.RootGridId != "" {
@@ -126,7 +126,7 @@ func TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil(t *testing.T) {
 }
 
 // TestBuildPluginInfo_ErrorRidesAlongsideLiveInfo pins the revised contract
-// (2026-08-24): an error passed WITH a non-nil info is a real post-handshake
+// An error passed with a non-nil info is a real post-handshake
 // failure (the instance-grid read in instanceRows is the producer) and must
 // ride the row verbatim — dropping it made "instance store down" and
 // "healthy but rootless" identical on the wire. The old contract ("info
@@ -151,8 +151,8 @@ func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
 	}
 }
 
-// TestBuildPluginInfo_RootViewForwardedFromInfo pins the launcher↔plugin-root
-// seam (issue #32): the server must forward Info.root_view_* into PluginInfo
+// TestBuildPluginInfo_RootViewForwardedFromInfo pins the menu-to-plugin-root
+// seam: the server must forward Info.root_view_* into PluginInfo
 // so the client's Handshake response carries the framing needed to seed
 // enterPlugin. Zero (never visited) must pass through too — the client
 // distinguishes it from an explicit user view.
@@ -264,7 +264,7 @@ func (alwaysFailInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResp
 // TestListPluginsSurfacesInfoErrorOverTheWire crosses the seam a pure
 // buildPluginInfo unit test cannot reach: server -> Connect wire (proto-JSON)
 // -> rpc.Client.Handshake. InfoError must survive that round trip so the
-// wasm launcher — which only ever sees an internal/rpc.PluginInfo, never the
+// wasm client — which only ever sees an rpc.PluginInfo, never the
 // server's pb.PluginInfo — can classify a broken plugin (client/pluginhealth).
 func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	client := alwaysFailInfoPlugin{}

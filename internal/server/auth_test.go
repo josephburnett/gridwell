@@ -72,7 +72,7 @@ func get(t *testing.T, c *http.Client, url string, cookie string) (*http.Respons
 	return res, string(body)
 }
 
-// The browser door has no open mode (owner decision 2026-08-26): New
+// The browser door has no open mode: New
 // refuses an empty password. Before this, authWrap had a no-password
 // arm that production could never reach (BuildConfig always mints one)
 // — dead in the binary, but a standing shortcut for every test that
@@ -197,7 +197,7 @@ func TestAuthLoginPageDirect(t *testing.T) {
 	}
 }
 
-// The TOKEN LOGIN (2026-08-26): a GET on the login path carrying the
+// The token login: a GET on the login path carrying the
 // banner's token sets the cookie and lands home — how a native shell
 // that owns a webview's cookie jar (mobile) authenticates without a
 // prompt; a wrong token is the login page, 401, no cookie.

@@ -81,7 +81,7 @@ func homeRoot(t *testing.T, c namespace.Namespace) string {
 	return ""
 }
 
-// nodeServer stands up a full Server (one in-process localdb
+// nodeServer stands up a full Server (one in-process store
 // registered as uuid "ur1", label "personal") behind its FederationHandler on a real
 // TCP listener, and returns a raw gRPC client dialed at it — the exact wire a
 // remote ssh-plugin sees after its tunnel. Every request routes by the
@@ -333,7 +333,7 @@ func TestNodeExportSearches(t *testing.T) {
 		t.Fatalf("search results = %+v, want the created tile %s", resp.Results, created.Tile.Id)
 	}
 
-	// The id: form routes too (the pane-path heal, #234, asks exactly this).
+	// The id: form routes too.
 	resp, err = c.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + created.Tile.Id, Limit: 1})
 	if err != nil {
 		t.Fatalf("Search id: via export: %v", err)

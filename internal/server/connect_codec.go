@@ -1,17 +1,15 @@
 package server
 
-// The BROWSER codec: gridwellv1connect.GridwellHandler over the one
-// in-process router (router.go). It routes nothing and decides nothing —
-// it unwraps a connect.Request, calls the router, and wraps the answer.
-// The federation door's codec is namespace.Server over the SAME router
-// value (nodeexport.go), so the two surfaces cannot drift: there is no
-// second implementation to drift from.
+// The browser codec: gridwellv1connect.GridwellHandler over the one
+// in-process router. It routes nothing and decides nothing — it unwraps a
+// connect.Request, calls the router, and wraps the answer. The federation
+// door's codec is namespace.Server over the same router value, so the two
+// surfaces cannot drift: there is no second implementation to drift from.
 //
-// The codec is deliberately NOT total. Info, Probe and OpenShell are
-// federation verbs: the browser learns the node's identity from Handshake
-// on its own door, and its shell bytes ride the /shell WebSocket
-// (shell_door.go). Unimplemented here means "not a browser verb", not
-// "missing".
+// The codec is deliberately not total. Info, Probe, and OpenShell are
+// federation verbs: the browser learns the node's identity from Handshake on
+// its own door, and its shell bytes ride the /shell WebSocket. Unimplemented
+// here means "not a browser verb", not "missing".
 
 import (
 	"context"
@@ -33,8 +31,8 @@ type connectHandler struct {
 
 func newConnectHandler(rt *router) *connectHandler { return &connectHandler{rt: rt} }
 
-// unary lifts one router verb into the Connect shapes: unwrap, call, wrap,
-// and map the router's gRPC status code through gwerr's one table. Written
+// unary lifts one router verb into the Connect shapes: unwrap, call, wrap, and
+// map the router's gRPC status code through gwerr's one table. It is written
 // once so no verb can grow its own error mapping.
 func unary[Req, Resp any](call func(context.Context, *Req) (*Resp, error)) func(context.Context, *connect.Request[Req]) (*connect.Response[Resp], error) {
 	return func(ctx context.Context, req *connect.Request[Req]) (*connect.Response[Resp], error) {
@@ -108,7 +106,7 @@ func (h *connectHandler) WriteContent(ctx context.Context, stream *connect.Clien
 			return stream.Msg(), nil
 		}
 		if err := stream.Err(); err != nil {
-			return nil, err // broken inbound: the owner never commits
+			return nil, err // a broken inbound stream: the owner never commits
 		}
 		return nil, io.EOF
 	})
@@ -122,15 +120,14 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 	return asConnectError(h.rt.Subscribe(ctx, &pb.SubscribeRequest{}, stream.Send))
 }
 
-// asConnectError maps an error returned from a plugin (or, on the borrowed
-// store paths, a raw store sentinel) to a Connect status code. Plugin errors
-// arrive as gRPC status errors — the plugins translate store sentinels into
-// codes (see local.errToStatus) so NotFound / InvalidArgument / overlap and
-// version conflicts survive the routing hop; the code crosses through
-// gwerr's one gRPC↔Connect table so EVERY code survives (a transport
-// failure two mounts away must still read as transport); a non-gRPC error
-// falls through to the same gwerr.ClassifyError categorization used by
-// the raw-HTTP endpoints.
+// asConnectError maps an error returned from a namespace, or a raw store
+// sentinel, to a Connect status code. Namespace errors arrive as gRPC status
+// errors, because a namespace translates store sentinels into codes, so
+// NotFound, InvalidArgument, overlap, and version conflicts survive the
+// routing hop. The code crosses through gwerr's one gRPC-to-Connect table so
+// every code survives, and a transport failure two mounts away still reads as
+// transport. A non-gRPC error falls through to the same gwerr.ClassifyError
+// categorization the raw-HTTP endpoints use.
 func asConnectError(err error) error {
 	if err == nil {
 		return nil

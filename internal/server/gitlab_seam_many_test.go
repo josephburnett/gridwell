@@ -19,7 +19,7 @@ import (
 
 // The real HTTP client against a PAGINATED fake GitLab (X-Next-Page, 100
 // per page, newest first — the shape the first cut was never exercised
-// against; Joe's laptop, 2026-08-27): 260 todos over 14 weeks, 20 of
+// against): 260 todos over 14 weeks, 20 of
 // the newest pending. Pins: the outset walk is one pass per state plus
 // the pages it takes; every week gets its own counts; the root is a
 // calendar (a row per month, weeks left to right); a week descent is

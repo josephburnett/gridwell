@@ -3,7 +3,7 @@ package server_test
 // The connection seam, end to end in-process: a remote node behind a real
 // h2c export ⇐ the node's TRANSPORT (declared connections, a fake dialer
 // landing on that export) ⇐ the local node's front door. Every id crosses
-// "<id>/<conn>/…" (docs/one-node.md): the handshake lists the connection,
+// "<id>/<conn>/…": the handshake lists the connection,
 // its landing is the remote's HOME, reads and writes route through, events
 // arrive prefixed, and a dial failure rides the row as its status.
 

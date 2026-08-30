@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/outbox"
 )
 
-// The persistence seam (docs/simplify-plan.md S5). The store's version rule
+// The persistence seam. The store's version rule
 // and the client's outbox are each unit-tested on their own side; a unit test
 // on each side of a contract cannot catch a mismatch, and the mismatch is the
 // bug (CLAUDE.md §4). These tests run the REAL store through the REAL Connect
@@ -71,7 +71,7 @@ func framingOf(t *testing.T, cl *rpc.Client, tileID string) rpc.Framing {
 // comes back as a CONFLICT the user is shown, not as silence and not as an
 // overwrite. The client's reaction table must say: surface it, refetch, and
 // drop the local copy — the screen may not keep showing bytes the server
-// refused (charter §6).
+// refused.
 func TestContentConflictSurfaces(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx := context.Background()
