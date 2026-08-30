@@ -8,7 +8,7 @@ import { test, expect } from './fixtures';
 // live-tile link path — since #207 that opens the visit in a SPLIT BELOW,
 // the shell staying live above. This spec crosses the WHOLE chain by
 // running the real $BROWSER inside the real PTY — env injection → sh shim →
-// tmux passthrough → PTY relay → xterm OSC → open below.
+// tmux passthrough → the /shell WebSocket → xterm OSC → open below.
 
 // shimCleanup ascends the ephemeral lower pane (deleting the visit),
 // refocuses the shell pane, exits the shell, and deletes its tile so tmux

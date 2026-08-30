@@ -25,7 +25,8 @@ Four faces of the one rule:
    just looking at. One stored framing, read the same way every time.
 4. **Reading never mutates.** Panning, zooming, and scrolling re-frame a
    preview (a real, persisted change), but a tile's version bumps only
-   when you change what it *says* — never how it is framed.
+   when you change what it *says* — never how it is framed, where it
+   sits, or what the machine noticed about it.
 
 When a design decision is unclear, the principle decides — over
 performance, over elegance, over convenience. If a design lets something
@@ -142,7 +143,9 @@ One service (`api/gridwell/v1/data.proto`) is the whole interface — client
 to server, server to namespace, node to node. It travels as a wire only
 where something has to cross: to your browser, out to a plugin's own
 process, and over the socket another machine dials. And the storage format
-is frozen and additive-only: the data is meant to outlast the application.
+grows by addition: whatever a released version wrote stays readable, and a
+newer one always brings an older file forward. The data is meant to
+outlast the application.
 
 ## Running it
 

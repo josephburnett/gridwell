@@ -613,8 +613,10 @@ message ShellSessionAliveResponse {
   bool alive = 1;
 }
 
-// Mutations: version is the claimed current version of tile_id; the
-// server returns a version-conflict error if it doesn't match.
+// Mutations. A version CLAIM rides only the writes that change the user's
+// content bytes — WriteContent and SetTile's rename arm — and the server
+// returns a version-conflict error when it doesn't match. Layout, framing
+// and capture writes carry no claim at all (docs/simplify-plan.md S5).
 // (MoveTileRequest/ResizeTileRequest are gone — PlaceTile owns placement.)
 
 message CloneTileRequest {

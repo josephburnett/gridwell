@@ -6,7 +6,8 @@ import { test, expect } from './fixtures';
 // every bare LF to column 0, scattering characters down the left margin.
 // The PTY path can't reproduce this (the inner PTY's ONLCR rewrites a
 // shell command's LFs to CRLF), so the spec feeds the terminal directly
-// through the shellFeed testhook — the same write path the relay uses.
+// through the shellFeed testhook — the same write path the /shell
+// WebSocket's frames take into the terminal.
 
 const shellText = (window: any): Promise<string> =>
   window.evaluate(() => (window as any).__gridwellTest.shellText());

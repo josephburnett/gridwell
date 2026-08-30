@@ -74,9 +74,11 @@ resyncs (`client/wasm/mutate.go`); the cache is not touched before the
 call. Only two families are genuinely optimistic today:
 
 - **Framing** — the settle persister patches the cache and pushes a
-  synthetic `EventTileChanged` before the RPC, then `postFramingPersist`.
-  (2026-08-29, `docs/simplify-plan.md` S5: framing carries no version claim
-  any more, so the one-shot conflict retry this used to need is gone.)
+  synthetic `EventTileChanged` before the RPC, then posts it through the
+  outbox dispatcher. (2026-08-29, `docs/simplify-plan.md` S5: framing
+  carries no version claim any more, so the one-shot conflict retry this
+  used to need is gone, and the per-family dispatchers this line named are
+  one `client/outbox`.)
 - **Text keystrokes** — every keystroke mirrors into the content entry
   (`PutEditedContent`), debounced 600 ms, flushed through the save queue.
 

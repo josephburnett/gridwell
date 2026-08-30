@@ -2,9 +2,10 @@
 // the content blob of a "pane" tile (a durable workspace).
 //
 // This is deliberately a versioned DTO, not json.Marshal(Tree): the in-memory
-// Tree carries unexported state (nextID), untagged fields (Cx/Cy/Zoom), and
-// legacy json tags (file_scroll_x) that must not become a frozen wire format.
-// LayoutV1's bytes are forever — decoding a v1 blob must work in every future
+// Tree carries unexported state (nextID) and untagged fields, and it changes
+// shape when the model does (the frame stack replaced five representations of
+// a pane's place in 2026-08-29's S8) — neither may become a frozen wire
+// format. LayoutV1's bytes are forever — decoding a v1 blob must work in every future
 // version of Gridwell (the tablesV1 philosophy; the golden fixture in
 // wire_test.go pins it).
 //

@@ -1034,9 +1034,10 @@ var totalTransitionMs = 350.0
 // action" and the pan is "the setup".
 const zoomDistFactor = 4.0
 
-// Portal descents (anchor swaps through a link tile) live in startDescent:
-// a mounted well and a cross-plugin clone descend through the SAME path a
-// normal well does, with a frame pushed so ascent returns exactly here.
+// Descents through a link tile (a namespace crossing) live in descend
+// (nav.go): a mounted well and a cross-plugin clone descend through the
+// SAME path a normal well does, with a frame pushed so ascent returns
+// exactly here.
 
 // descentTextMode applies textedit.DescentMode (the one owner) to a
 // cached tile row at descent; cursorURL is the restore path's extra

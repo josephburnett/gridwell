@@ -3,12 +3,12 @@
 package main
 
 // Workspace navigation: descending into a pane tile swaps the whole pane
-// tree (the THIRD descent verb — neither a path push nor a portal anchor
-// swap), the bottom bar names the nesting and owns the way back out, and a
+// tree — descend()'s WINDOW arm, the second axis beside a pane's own frame
+// stack — the bottom bar names the nesting and owns the way back out, and a
 // debounced snapshot-diff persister keeps the layout blob current while
-// inside. The rules live in pure packages — client/workspace (the stack and
-// the write decision) and client/wsbar (the bar geometry) — this file is
-// the glue: gestures in, RPCs out, draw calls between.
+// inside. The rules live in pure packages — client/pane's Levels (the level
+// stack and the persist decision) and client/wsbar (the bar geometry) —
+// this file is the glue: gestures in, RPCs out, draw calls between.
 //
 // Bar gestures: LEFT-click a workspace crumb LEAVES workspace k and
 // everything deeper; RIGHT-click renames it inline (issues #212, #220).

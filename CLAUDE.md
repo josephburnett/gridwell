@@ -68,11 +68,11 @@ stop creating new copies.
    When you fix a seam bug, the test must cross the seam.
 
 5. **`client/wasm` and the Electron main process are where bugs hide.**
-   The wasm shim (~13.6k LOC) has zero unit tests and `make check` executes
-   none of it. Do not add untested orchestration there: extract the
+   The wasm shim (33 files, ~15k LOC) has zero unit tests and `make check`
+   executes none of it. Do not add untested orchestration there: extract the
    decision into a js-free `client/*` package (as `pane`, `gesture`,
-   `zoomtrans`, `wsbar`, `shellstream` are) and unit-test it. Same rule for
-   `apps/desktop/src/main` — pure-function modules with unit tests
+   `zoomtrans`, `wsbar`, `outbox`, `shellstream` are) and unit-test it. Same
+   rule for `apps/desktop/src/main` — pure-function modules with unit tests
    (`viewutil.ts`, `contextmenu.ts`) and/or e2e coverage. `webviews.ts` is
    the documented bug source and has no direct test; anything you touch
    there needs one.
@@ -84,9 +84,10 @@ stop creating new copies.
 
 7. **No client-only state.** Anything the user can change is a server
    fact, written through the store and reflected by an event. The decided
-   exceptions — the session split-pane tree, the selection, the workspace
-   stack, Chromium's own session storage — are ephemeral by owner decision,
-   not by omission. Do not add to that list without a new owner decision.
+   exceptions — the session split-pane tree, the selection, the outer
+   frames of a pane's place, the pane-tile level stack, Chromium's own
+   session storage — are ephemeral by owner decision, not by omission. Do
+   not add to that list without a new owner decision.
 
 8. **DRY is correctness, not tidiness.** If a fix in one place doesn't fix
    a visibly identical behavior elsewhere, you have found duplication;
@@ -114,6 +115,34 @@ Re-litigating them silently is how churn happens.
   like from outside; DESCENDING is the engagement gesture — a url reopens,
   a shell reconnects. One owner decides (`shellconn.DecideAutoLive`); call
   sites never hand-roll go-live.
+- **A pane's place is ONE STACK OF FRAMES (2026-08-29,
+  `docs/simplify-plan.md` S8).** A frame is `(grid, doorway tile,
+  viewport)`; descending through ANY doorway pushes one and ascending pops
+  one, so the viewport you left a level at IS the frame you left. `client/pane`
+  owns the stack; the URL and the pane-tile layout blob are ENCODINGS of it
+  and the bar's crumbs a projection, never a second model. This replaced
+  five parallel representations and the shim's eight ascents with one
+  `descend` and one `ascend`. The ONE deliberate second axis is the
+  PANE-TILE level (`pane.Levels`): entering a pane tile swaps the whole
+  pane tree, which is a different gesture, not a deeper frame.
+- **Framing is a float center on the doorway row (2026-08-29,
+  `docs/simplify-plan.md` S4; schema v11).** "How this grid looked when I
+  left it" is a float CENTER in the grid's own coordinates plus a
+  pane-size-independent intrinsic zoom, stored on the row that owns the
+  doorway — `tiles.view_cx/cy/zoom` for a well (each doorway keeps its own),
+  `grids.root_cx/cy/zoom` for a root that has none, home's included. ONE
+  wire verb (`SetFraming`), ONE store writer (`Store.SetFraming`), ONE
+  client function (`persistFraming`). The integer window origin and the
+  quantization math that made it survive a round trip are gone.
+- **`version` means the user's content bytes, and nothing else
+  (2026-08-29, `docs/simplify-plan.md` S5).** It is the
+  optimistic-concurrency claim for a text body, a typed url and a typed
+  name — the three writes that reach `claimContentVersion`. Captures (a
+  title, a preview jpeg, a shell's foreground command), framing and layout
+  (place / move / resize / clone / delete) carry NO claim and cause NO
+  bump; the request fields that used to carry one are `reserved`, so a
+  stale claim is unrepresentable rather than ignored. Unacknowledged writes
+  park in ONE ledger, `client/outbox`.
 - **Shells ride the web door (2026-08-29; REVERSES 2026-07-26 "PTY bytes
   ride the Electron main process's gRPC OpenShell stream").** PTY bytes
   cross a WebSocket at `/shell` on the browser door — the page's own
@@ -129,8 +158,9 @@ Re-litigating them silently is how churn happens.
   `mobile.Start` sets `disable_shells`); reaching one on another node is
   unaffected.
 - **Session-ephemeral by decision (#13).** The window-root pane tree, the
-  selection, and the workspace stack live only in the session. The durable
-  home for a layout is the **pane tile** (a workspace as a thing).
+  selection, the pane-tile level stack and the OUTER frames' viewports live
+  only in the session. The durable home for a layout is the **pane tile**
+  (a workspace as a thing).
 - **Cross-plugin: left-drag links, right-drag clones (2026-07-19).** A
   left-drag never duplicates content; a right-drag always does; there is no
   cross-plugin move. Dashed always means link; deleting a link unlinks.
@@ -214,12 +244,45 @@ Re-litigating them silently is how churn happens.
   separation has ERODED REPEATEDLY when left to intention — it must be
   exercised by machinery; the coupling inventory and the enforcement
   options are `docs/plugin.md`.
-- **The storage format is frozen and additive-only.** The contract is
-  `internal/local/store/CLAUDE.md`. Never delete a DB to absorb a schema
-  change. (2026-08-29: ONE database, `gridwell.db` — home and every
-  plugin's memory as namespaced rows, schema v9, additive; a pre-one-node
-  home converts itself at first serve, `node.Convert`, and the old files
-  are set aside, never deleted.)
+- **Inside the node a namespace is a Go value; gRPC only where a boundary
+  forces it (2026-08-29, `docs/simplify-plan.md` S2).** The contract is one
+  method set (`internal/namespace`, the same shape as the proto service),
+  and the router simply calls it — home no longer crosses a wire to reach
+  itself. Exactly TWO gRPC hops survive, both crossing a boundary that has
+  to serialize anyway: the **plugin.v1 subprocess** (the third-party door)
+  and the **federation socket**. Connect over HTTP is the third codec and
+  it crosses to the browser. Both node-side doors are thin CODECS over the
+  one router, so there is no second router to keep in step; the in-memory
+  loopback (`compose.ServeInProcess`) is deleted. With no serializer
+  between a caller and a namespace they share protos by pointer, so
+  qualification CLONES — that clone is the whole protection, and
+  `internal/namespace` writes the ownership contract down.
+- **The storage format is stable and additive by DEFAULT — and dead
+  storage may be retired (2026-08-29, `docs/simplify-plan.md`; supersedes
+  the absolute "never drop").** The promise is that data written by any
+  released binary stays READABLE forever, every user-visible fact intact.
+  Storage that no released binary reads for a user-visible meaning carries
+  no such fact, so it may be retired — by a **rebuild migration** that
+  preserves every surviving row and the `sqlite_sequence` seeds, on
+  EVIDENCE (grep every read; a pass-through is not a reader), with the
+  decision recorded in the migration's chain-entry comment. A row the new
+  shape cannot hold is CONVERTED, never deleted. A wire field removed
+  alongside a column becomes `reserved`, never renumbered. Never delete a
+  DB to absorb a schema change. The contract is
+  `internal/local/store/CLAUDE.md`; v10, v11 and v12 are the worked
+  examples.
+- **The forever file holds NODE facts only (2026-08-29,
+  `docs/simplify-plan.md` S7).** ONE database, `gridwell.db` — home's
+  content and every plugin's memory as namespaced rows of the same tables:
+  the ids the node minted (`ns`,`key` → id), layout, framing, the user's
+  bytes, connections, tombstones. What a SOURCE last SAID — a plugin's
+  listing, a remote's tiles, bodies, previews — is cache and lives in the
+  disposable `cache.db` behind ONE engine (`internal/sourcecache`, in front
+  of every non-home namespace). That is the split an outage divides along:
+  a dark SOURCE costs nothing (the durable rows answer, a move made during
+  the outage included), a dark PLUGIN or node is answered from the cache.
+  A pre-one-node home converts itself at first serve (`node.Convert`) and
+  the old files are set aside, never deleted.
 
 ## The verification gates
 

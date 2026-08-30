@@ -10,9 +10,10 @@ import (
 )
 
 // treesEqual compares two trees on everything the layout persists: structure,
-// split dir/ratio, leaf places and text state, Focus, Zoomed. Up frames and
-// nextID are deliberately excluded — Up is session-only by design, and nextID
-// is covered by the mint-no-collision assertion instead.
+// split dir/ratio, leaf places and text state, Focus, Zoomed. The outer
+// frames' viewports and nextID are deliberately excluded — those viewports
+// are session-only by design (wire.go), and nextID is covered by the
+// mint-no-collision assertion instead.
 func treesEqual(a, b *Tree) bool {
 	return a.Focus == b.Focus && a.Zoomed == b.Zoomed && nodesEqual(a.Root, b.Root)
 }

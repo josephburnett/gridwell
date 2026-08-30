@@ -437,8 +437,7 @@ func (a *App) leaveFrame(p *pane.Pane) (doorID string, doorTile *rpc.Tile) {
 		// the framed window back through the dispatcher.
 		a.saveTextBeforeAscent(p, file)
 		// Ascending out of an EPHEMERAL tile deletes it — gray means gone
-		// (issue #85): no freeze (pointless for a tile about to die, and a
-		// url freeze would bump the version out from under the delete), then
+		// (issue #85): no freeze (pointless for a tile about to die), then
 		// the row goes away (for a shell, the plugin kills its tmux session
 		// too).
 		ephemeral := a.leavingEphemeral(p, &file)

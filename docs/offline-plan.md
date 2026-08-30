@@ -349,7 +349,7 @@ Deliberately last; Phases 0–2 make the states *correct*, this makes them
 - Soft refusal on descent into uncached remote content: error strip, pane
   stays put — never a blank room.
 - A "keep offline" pin gesture on wells/subtrees (prefetch + retention
-  hint for the mountcache) — optional, only if touched-only caching
+  hint for the source cache) — optional, only if touched-only caching
   proves too cold in practice.
 
 ---
@@ -359,9 +359,9 @@ Deliberately last; Phases 0–2 make the states *correct*, this makes them
 | Phase | Depends on | Gates | Status |
 |---|---|---|---|
 | 0 hardening | — | check + electron + e2e (new outage specs) | **LANDED** 2026-08-15 (`938d4f2..c4213cf`) |
-| 1 mountcache | 0 (taxonomy) | check (unit vs fake remote) + federation (partition spec) | **LANDED** 2026-08-15 (`2d3def3`; deep-copy degrade `98f266a`) |
+| 1 source cache | 0 (taxonomy) | check (unit vs fake remote) + federation (partition spec) | **LANDED** 2026-08-15 (`2d3def3`; deep-copy degrade `98f266a`) |
 | 2 flutter node | spike; 1 for cache value | check + mobile build in CI; real-hardware pass | Go half + Dart half **LANDED** (`9fa9510`, mobile-app boot commit); REMAINING: gomobile packaging (AAR/xcframework), the Kotlin/Swift `gridwell/node` channel shim (contract in `apps/mobile/lib/node.dart`), and the real-hardware pass |
-| 3 UX | 0–2 | e2e + web | **LANDED** 2026-08-17: the wire-level `Grid.stale` bit (stamped only by the mountcache's serve-stale path) surfaces as the bar's quiet "offline" chip — bar chrome only, tiles never move or restyle; pinned by the federation partition gate (the bit crosses the real chain) and a web spec (a dark mount re-enters as a marked memory, tiles intact). The pin gesture stays deferred pending real usage |
+| 3 UX | 0–2 | e2e + web | **LANDED** 2026-08-17: the wire-level `Grid.stale` bit (stamped then only by the cache's serve-stale path; since 2026-08-29 a plugin answering a dark source raises it too) surfaces as the bar's quiet "offline" chip — bar chrome only, tiles never move or restyle; pinned by the federation partition gate (the bit crosses the real chain) and a web spec (a dark mount re-enters as a marked memory, tiles intact). The pin gesture stays deferred pending real usage |
 
 Each phase lands and ships alone. Also landed along the way: the
 mid-session partition federation gate (`test/federation/partition_test.go`)

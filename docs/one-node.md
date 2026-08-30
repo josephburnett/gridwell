@@ -30,7 +30,7 @@ The half-fold shows up as six leftovers:
 ~/.gridwell/
   server.yaml      one config
   gridwell.db      one durable DB: home content + every namespace's arrangement
-  cache.db         one disposable DB: mount cache (excluded from backup)
+  cache.db         one disposable DB: the source cache (out of backup)
   web-password     0600, minted
   federation.sock  0600, runtime
 ```
@@ -140,7 +140,10 @@ P4 spec:
   over `tiles`; the store's own framing writers (`SetWellView`,
   `SetTextView`, `SetContentZoom`, `PlaceTile`, `SetRootView`) become the
   ONE set for home and plugins alike — that is the "layout repeated"
-  debt paid. `pluginhost.Adapter` takes the store + its ns.
+  debt paid. `pluginhost.Adapter` takes the store + its ns. (2026-08-29,
+  `docs/simplify-plan.md` S4: that set shrank again — `SetWellView` and
+  `SetRootView` became the single `Store.SetFraming` over one float-centre
+  shape, on the doorway row or the root grid row.)
 - **One `*sql.DB`.** The transport's `connections` table lives in
   `gridwell.db` on the store's handle (two handles on one file is an
   instant `SQLITE_BUSY` — the reason the stores were separate files).
@@ -155,6 +158,9 @@ P4 spec:
   reference resolves), rename the old `db/` to `db.pre-one-node/`, and
   only then serve. `backup` snapshots the one file.
 - Mount cache → `cache.db` (schema unchanged), `cache_listings` with it.
+  (2026-08-29, `docs/simplify-plan.md` S7: that cache is
+  `internal/sourcecache` now, one engine in front of every plugin as well
+  as the transport, and `listings` left the durable file at schema v12.)
 
 This resets the "storage format is frozen" rule at one cut: the format
 contract restarts at v1 of this schema (the home's migration chain is

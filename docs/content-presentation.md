@@ -3,7 +3,9 @@
 Status: options report (commissioned 2026-08-22), plus §9 — the end
 state the walkthrough with Joe converged on (2026-08-22), the seed of a
 plan. §9 supersedes §8's reading; no code changes ride with this
-document.
+document. §9 was then executed by `docs/v2-design.md` (2026-08-24) and
+finished by `docs/one-node.md` (2026-08-29); this is the record of the
+question, not of the answer.
 
 The question, as posed: plugins provide tile content AND store location,
 size, and view information. The whole surface — server (node) and

@@ -3,7 +3,10 @@
 > AND the node grid described below are DELETED — connections are
 > server.yaml config, each a row of the handshake's `connections[]`, and a
 > mount lands on the remote's `home_grid_id`. The routed + menu, node_ns,
-> and qualification mechanics remain accurate.
+> and qualification mechanics remain accurate. Two names below also moved:
+> the mount cache is `internal/sourcecache` and fronts every plugin
+> (`docs/simplify-plan.md` S7), and `configure_plugin_id` was retired with
+> the picker at schema v10.
 
 # The remote menu: "when I descend into a node, I am there"
 

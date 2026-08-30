@@ -129,7 +129,7 @@ func TestSetHoverReportsChangeOnce(t *testing.T) {
 
 // The descent/ascent round trip: a menu open on a pane is snapshotted (OpenOn),
 // closed for the descent, then restored (Open) on ascent — so you return exactly
-// as you left. Mirrors enterPlugin/ascendPortal in the wasm client.
+// as you left. Mirrors descend/ascend in the wasm client.
 func TestDescendAscentRoundTrip(t *testing.T) {
 	s := New()
 	s.Open("p1")
