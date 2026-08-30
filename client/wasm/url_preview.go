@@ -66,30 +66,25 @@ func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 	// during a gesture, and the frozen preview otherwise. Its bounds are
 	// tracked by syncURLViews, not from this draw path.
 
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
+	withClip(a.cctx, x, y, w, h, func() {
+		a.cctx.Set("fillStyle", colorFileInnerBg)
+		a.cctx.Call("fillRect", x, y, w, h)
 
-	a.cctx.Set("fillStyle", colorFileInnerBg)
-	a.cctx.Call("fillRect", x, y, w, h)
-
-	if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
-		if img, ok := previewImage(cached); ok {
-			drawImageContain(a.cctx, img, x, y, w, h)
+		if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
+			if img, ok := previewImage(cached); ok {
+				drawImageContain(a.cctx, img, x, y, w, h)
+			}
+		} else {
+			a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
+			label := n.URLString
+			if label == "" {
+				label = n.AltText // a page tile has no address; its name says what it is
+			}
+			a.cctx.Set("fillStyle", colorMuted)
+			a.cctx.Set("font", "16px monospace")
+			a.cctx.Call("fillText", label, x+16, y+32, w-32)
 		}
-	} else {
-		a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
-		label := n.URLString
-		if label == "" {
-			label = n.AltText // a page tile has no address; its name says what it is
-		}
-		a.cctx.Set("fillStyle", colorMuted)
-		a.cctx.Set("font", "16px monospace")
-		a.cctx.Call("fillText", label, x+16, y+32, w-32)
-	}
-
-	a.cctx.Call("restore")
+	})
 }
 
 // drawPageTile renders a serves_page tile in the parent grid view — the
@@ -99,42 +94,38 @@ func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 // presentation is web content. Falls back to the file name while the
 // thumbnail loads, or when the plugin serves none.
 func (a *App) drawPageTile(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
+	withClip(a.cctx, x, y, w, h, func() {
+		a.cctx.Set("fillStyle", colorFileInnerBg)
+		a.cctx.Call("fillRect", x, y, w, h)
 
-	a.cctx.Set("fillStyle", colorFileInnerBg)
-	a.cctx.Call("fillRect", x, y, w, h)
-
-	if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
-		if img, ok := previewImage(cached); ok {
-			drawImageContain(a.cctx, img, x, y, w, h)
+		if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
+			if img, ok := previewImage(cached); ok {
+				drawImageContain(a.cctx, img, x, y, w, h)
+			}
+		} else {
+			if w > 20 && h > 20 {
+				a.cctx.Set("fillStyle", colorMuted)
+				a.cctx.Set("font", "12px monospace")
+				a.cctx.Call("fillText", n.AltText, x+8, y+18, w-16)
+			}
+			a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
 		}
-	} else {
-		if w > 20 && h > 20 {
-			a.cctx.Set("fillStyle", colorMuted)
-			a.cctx.Set("font", "12px monospace")
-			a.cctx.Call("fillText", n.AltText, x+8, y+18, w-16)
-		}
-		a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
-	}
 
-	line := colorMarkdownLine
-	if outside {
-		line = colorMarkdownLineFaded
-	}
-	if dashed {
-		setTileDash(a.cctx)
-	}
-	strokeTileBorder(a.cctx, x, y, w, h, line, tileBorderPx)
-	if dashed {
-		clearTileDash(a.cctx)
-	}
-	if selected {
-		drawSelectedTileOutline(a.cctx, x, y, w, h)
-	}
-	a.cctx.Call("restore")
+		line := colorMarkdownLine
+		if outside {
+			line = colorMarkdownLineFaded
+		}
+		if dashed {
+			setTileDash(a.cctx)
+		}
+		strokeTileBorder(a.cctx, x, y, w, h, line, tileBorderPx)
+		if dashed {
+			clearTileDash(a.cctx)
+		}
+		if selected {
+			drawSelectedTileOutline(a.cctx, x, y, w, h)
+		}
+	})
 }
 
 // drawShellTileInPane renders a shell tile that is the pane's current place
@@ -148,37 +139,32 @@ func (a *App) drawPageTile(n *rpc.Tile, x, y, w, h float64, selected, outside, d
 // invisible, but painting it costs ~nothing and avoids a flash if the
 // overlay hasn't been positioned yet for the current frame.
 func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
+	withClip(a.cctx, x, y, w, h, func() {
+		a.cctx.Set("fillStyle", colorShellFill)
+		a.cctx.Call("fillRect", x, y, w, h)
 
-	a.cctx.Set("fillStyle", colorShellFill)
-	a.cctx.Call("fillRect", x, y, w, h)
-
-	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
-		if img, ok := previewImage(cached); ok {
-			// Stand-in geometry, not letterbox: the live xterm canvas sits
-			// top-left at integer-cell size, so the snapshot goes back
-			// exactly there. Contain-fit would center it and scale it by
-			// the leftover cell fraction, visibly shifting the terminal
-			// every time the overlay parks. shellStandinRect is the one
-			// owner of this rect, and the e2e hook reads the same
-			// function.
-			if dx, dy, dw, dh, ok := a.shellStandinRect(img, x, y); ok {
-				a.cctx.Call("drawImage", img, dx, dy, dw, dh)
+		if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
+			if img, ok := previewImage(cached); ok {
+				// Stand-in geometry, not letterbox: the live xterm canvas sits
+				// top-left at integer-cell size, so the snapshot goes back
+				// exactly there. Contain-fit would center it and scale it by
+				// the leftover cell fraction, visibly shifting the terminal
+				// every time the overlay parks. shellStandinRect is the one
+				// owner of this rect, and the e2e hook reads the same
+				// function.
+				if dx, dy, dw, dh, ok := a.shellStandinRect(img, x, y); ok {
+					a.cctx.Call("drawImage", img, dx, dy, dw, dh)
+				}
 			}
+		} else if n.PreviewBlobID != 0 {
+			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
+		} else if !a.hasShellStream(p.ID) {
+			// No preview yet and no live stream: the pre-refresh state. Show
+			// the shell glyph so the descent reads as a frozen shell rather
+			// than a blank box.
+			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 		}
-	} else if n.PreviewBlobID != 0 {
-		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
-	} else if !a.hasShellStream(p.ID) {
-		// No preview yet and no live stream: the pre-refresh state. Show
-		// the shell glyph so the descent reads as a frozen shell rather
-		// than a blank box.
-		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
-	}
-
-	a.cctx.Call("restore")
+	})
 }
 
 // drawShellTile renders a shell tile in the parent grid view. Same
@@ -188,38 +174,34 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 // urlPreview as the JPEG cache; the cache is keyed by tile id so URL and
 // shell tiles can share a single decode pool.
 func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool) {
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
+	withClip(a.cctx, x, y, w, h, func() {
+		a.cctx.Set("fillStyle", colorShellFill)
+		a.cctx.Call("fillRect", x, y, w, h)
 
-	a.cctx.Set("fillStyle", colorShellFill)
-	a.cctx.Call("fillRect", x, y, w, h)
-
-	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
-		if img, ok := previewImage(cached); ok {
-			drawImageContain(a.cctx, img, x, y, w, h)
+		if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
+			if img, ok := previewImage(cached); ok {
+				drawImageContain(a.cctx, img, x, y, w, h)
+			}
+		} else if n.PreviewBlobID != 0 {
+			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
+		} else if w > 20 && h > 20 {
+			// No preview yet, because a palette drop never refreshed: paint
+			// the shell glyph so the swatch reads as a shell rather than a
+			// blank box.
+			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 		}
-	} else if n.PreviewBlobID != 0 {
-		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
-	} else if w > 20 && h > 20 {
-		// No preview yet, because a palette drop never refreshed: paint
-		// the shell glyph so the swatch reads as a shell rather than a
-		// blank box.
-		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
-	}
 
-	if dashed {
-		setTileDash(a.cctx)
-	}
-	strokeTileBorder(a.cctx, x, y, w, h, colorShellBorder, tileBorderPx)
-	if dashed {
-		clearTileDash(a.cctx)
-	}
-	if selected {
-		drawSelectedTileOutline(a.cctx, x, y, w, h)
-	}
-	a.cctx.Call("restore")
+		if dashed {
+			setTileDash(a.cctx)
+		}
+		strokeTileBorder(a.cctx, x, y, w, h, colorShellBorder, tileBorderPx)
+		if dashed {
+			clearTileDash(a.cctx)
+		}
+		if selected {
+			drawSelectedTileOutline(a.cctx, x, y, w, h)
+		}
+	})
 }
 
 // drawURLTile renders a URL tile in the parent grid view. Layers:
@@ -228,38 +210,34 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bo
 //     placeholder showing the URL text if no preview is loaded yet
 //  3. the tile outline + selection highlight
 func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool) {
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
+	withClip(a.cctx, x, y, w, h, func() {
+		a.cctx.Set("fillStyle", colorFileInnerBg)
+		a.cctx.Call("fillRect", x, y, w, h)
 
-	a.cctx.Set("fillStyle", colorFileInnerBg)
-	a.cctx.Call("fillRect", x, y, w, h)
-
-	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
-		if img, ok := previewImage(cached); ok {
-			drawImageContain(a.cctx, img, x, y, w, h)
+		if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
+			if img, ok := previewImage(cached); ok {
+				drawImageContain(a.cctx, img, x, y, w, h)
+			}
+		} else {
+			if w > 20 && h > 20 {
+				a.cctx.Set("fillStyle", colorMuted)
+				a.cctx.Set("font", "12px monospace")
+				a.cctx.Call("fillText", n.URLString, x+8, y+18, w-16)
+			}
+			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 		}
-	} else {
-		if w > 20 && h > 20 {
-			a.cctx.Set("fillStyle", colorMuted)
-			a.cctx.Set("font", "12px monospace")
-			a.cctx.Call("fillText", n.URLString, x+8, y+18, w-16)
-		}
-		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
-	}
 
-	if dashed {
-		setTileDash(a.cctx)
-	}
-	strokeTileBorder(a.cctx, x, y, w, h, colorURLLine, tileBorderPx)
-	if dashed {
-		clearTileDash(a.cctx)
-	}
-	if selected {
-		drawSelectedTileOutline(a.cctx, x, y, w, h)
-	}
-	a.cctx.Call("restore")
+		if dashed {
+			setTileDash(a.cctx)
+		}
+		strokeTileBorder(a.cctx, x, y, w, h, colorURLLine, tileBorderPx)
+		if dashed {
+			clearTileDash(a.cctx)
+		}
+		if selected {
+			drawSelectedTileOutline(a.cctx, x, y, w, h)
+		}
+	})
 }
 
 // previewImage is the wasm-side cast: the cache stores a preview.Image

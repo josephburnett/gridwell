@@ -92,19 +92,16 @@ func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, out
 	} else {
 		tileRect := pane.Rect{X: x, Y: y, W: w, H: h}
 		scale := panepreview.Scale(tileRect, a.rootLayoutRect())
-		c.Call("save")
-		c.Call("beginPath")
-		c.Call("rect", x, y, w, h)
-		c.Call("clip")
-		for _, leaf := range panepreview.Leaves(tree, tileRect, scale) {
-			a.drawPaneLeafPreview(leaf)
-		}
-		// Divider lines on top, so the split structure reads at any size.
-		for _, d := range pane.Dividers(tree, tileRect, 1) {
-			c.Set("fillStyle", colorPaneTileBorder)
-			c.Call("fillRect", d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1))
-		}
-		c.Call("restore")
+		withClip(c, x, y, w, h, func() {
+			for _, leaf := range panepreview.Leaves(tree, tileRect, scale) {
+				a.drawPaneLeafPreview(leaf)
+			}
+			// Divider lines on top, so the split structure reads at any size.
+			for _, d := range pane.Dividers(tree, tileRect, 1) {
+				c.Set("fillStyle", colorPaneTileBorder)
+				c.Call("fillRect", d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1))
+			}
+		})
 	}
 
 	if dashed {
@@ -135,19 +132,16 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 	}
 	r := leaf.Rect
 	c := a.cctx
-	c.Call("save")
-	c.Call("beginPath")
-	c.Call("rect", r.X, r.Y, r.W, r.H)
-	c.Call("clip")
-	cx, cy := r.X+r.W/2, r.Y+r.H/2
-	originX := cx - leaf.Pane.Cx*leaf.PreviewCell
-	originY := cy - leaf.Pane.Cy*leaf.PreviewCell
-	drawGridLinesIn(c, colorGridLineInterior, r.X, r.Y, r.W, r.H, leaf.PreviewCell, originX, originY)
-	if g, ok := a.c.Grid(gid); ok {
-		a.drawChildPreview(g, leaf.Pane.Cx, leaf.Pane.Cy, cx, cy, leaf.PreviewCell,
-			r.X, r.Y, r.W, r.H, "")
-	}
-	c.Call("restore")
+	withClip(c, r.X, r.Y, r.W, r.H, func() {
+		cx, cy := r.X+r.W/2, r.Y+r.H/2
+		originX := cx - leaf.Pane.Cx*leaf.PreviewCell
+		originY := cy - leaf.Pane.Cy*leaf.PreviewCell
+		drawGridLinesIn(c, colorGridLineInterior, r.X, r.Y, r.W, r.H, leaf.PreviewCell, originX, originY)
+		if g, ok := a.c.Grid(gid); ok {
+			a.drawChildPreview(g, leaf.Pane.Cx, leaf.Pane.Cy, cx, cy, leaf.PreviewCell,
+				r.X, r.Y, r.W, r.H, "")
+		}
+	})
 }
 
 // createPaneAtCell fires CreatePane at the given cell. The footprint is 1×1.

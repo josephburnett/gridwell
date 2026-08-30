@@ -195,12 +195,9 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 		label = "workspace"
 	}
 	c.Set("fillStyle", "#dff4f4")
-	c.Call("save")
-	c.Call("beginPath")
-	c.Call("rect", s.X+2, top, s.W-4, wsbar.RowH)
-	c.Call("clip")
-	c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
-	c.Call("restore")
+	withClip(c, s.X+2, top, s.W-4, wsbar.RowH, func() {
+		c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
+	})
 }
 
 // barTitleGeom computes the centered current-pane title: the pane's name,
@@ -258,12 +255,9 @@ func (a *App) drawBarTitleFor(p *pane.Pane, top float64) {
 	c.Set("font", "12px system-ui, sans-serif")
 	c.Set("textBaseline", "middle")
 	c.Set("textAlign", "center")
-	c.Call("save")
-	c.Call("beginPath")
-	c.Call("rect", x, top, w, wsbar.RowH)
-	c.Call("clip")
-	c.Call("fillText", label, x+w/2, top+wsbar.RowH/2)
-	c.Call("restore")
+	withClip(c, x, top, w, wsbar.RowH, func() {
+		c.Call("fillText", label, x+w/2, top+wsbar.RowH/2)
+	})
 	c.Set("textAlign", "start")
 }
 
@@ -390,34 +384,31 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 	x := s.X + (square-side)/2
 	y := top + (wsbar.RowH-side)/2
 
-	c.Call("save")
-	c.Call("beginPath")
-	c.Call("rect", x, y, side, side)
-	c.Call("clip")
-	if cr.Anchor != "" {
-		// A root crumb: the namespace's identity glyph — the same drawing as
-		// its menu swatch — bordered in the grid blue, like the grid it is.
-		c.Set("fillStyle", colorBg)
-		c.Call("fillRect", x, y, side, side)
-		a.drawPluginGlyph(a.pluginGlyph(cr.Anchor), x, y, side, side)
-		c.Set("strokeStyle", colorFocusBorder)
-		c.Set("lineWidth", 1.0)
-		c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)
-	} else if t := a.chainCrumbTile(cr); t != nil {
-		cells := float64(max(t.W, t.H))
-		if cells < 1 {
-			cells = 1
+	withClip(c, x, y, side, side, func() {
+		if cr.Anchor != "" {
+			// A root crumb: the namespace's identity glyph — the same drawing as
+			// its menu swatch — bordered in the grid blue, like the grid it is.
+			c.Set("fillStyle", colorBg)
+			c.Call("fillRect", x, y, side, side)
+			a.drawPluginGlyph(a.pluginGlyph(cr.Anchor), x, y, side, side)
+			c.Set("strokeStyle", colorFocusBorder)
+			c.Set("lineWidth", 1.0)
+			c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)
+		} else if t := a.chainCrumbTile(cr); t != nil {
+			cells := float64(max(t.W, t.H))
+			if cells < 1 {
+				cells = 1
+			}
+			a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, false, isLinkTile(t), "")
+		} else {
+			// The row is not cached — a stale level, a fetch in flight — so
+			// draw a muted placeholder square; the fetch kicked by
+			// chainCrumbTile fills it in.
+			c.Set("strokeStyle", "#1d4a4a")
+			c.Set("lineWidth", 1.0)
+			c.Call("strokeRect", x+1, y+1, side-2, side-2)
 		}
-		a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, false, isLinkTile(t), "")
-	} else {
-		// The row is not cached — a stale level, a fetch in flight — so
-		// draw a muted placeholder square; the fetch kicked by
-		// chainCrumbTile fills it in.
-		c.Set("strokeStyle", "#1d4a4a")
-		c.Set("lineWidth", 1.0)
-		c.Call("strokeRect", x+1, y+1, side-2, side-2)
-	}
-	c.Call("restore")
+	})
 }
 
 // chainCrumbTile resolves a tile crumb's row from the cache, kicking a

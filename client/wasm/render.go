@@ -146,6 +146,20 @@ const (
 	tileBorderPx = 2.0
 )
 
+// withClip runs paint with the canvas clipped to (x, y, w, h), restoring the
+// previous state afterwards. Every renderer that has to keep its content
+// inside a rect — a pane, a tile face, a bar crumb — brackets through here,
+// so the save/beginPath/rect/clip/restore sequence is written once and a
+// paint that returns early can never leave an unbalanced save behind.
+func withClip(c js.Value, x, y, w, h float64, paint func()) {
+	c.Call("save")
+	c.Call("beginPath")
+	c.Call("rect", x, y, w, h)
+	c.Call("clip")
+	paint()
+	c.Call("restore")
+}
+
 // strokeTileBorder draws a borderPx-thick outline at `color` that sits
 // entirely inside (x, y, w, h). Canvas centers the stroke on the path,
 // so the rect is inset by half the line width on every side. Most
@@ -516,112 +530,107 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// otherwise paint over the edge. Every pane has a border now
 	// (root included, with its earth-tone hue), so the inset is the
 	// same paneBorderPx for all panes.
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
 	const inset = paneBorderPx
-	a.cctx.Call("rect", r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset)
-	a.cctx.Call("clip")
+	withClip(a.cctx, r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset, func() {
+		pscreen := paneToDragdrop(p, r)
 
-	pscreen := paneToDragdrop(p, r)
-
-	// Grid lines render against the background whether or not the grid has
-	// loaded: they communicate the coordinate system. A focused text tile
-	// has no grid coordinates and no zoom, so it gets a plain background
-	// instead of a grid pattern, and the margin around the inner box is a
-	// plain ascent zone. URL content fills the pane and covers this
-	// anyway.
-	if p.ContentID() != "" {
-		a.cctx.Set("fillStyle", colorBg)
-		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
-	} else {
-		a.drawGridLines(colorGridLineInterior, pscreen, r)
-	}
-
-	if !gridOK && gid != "" && p.ContentID() == "" {
-		// The grid is not cached yet — a fetch is in flight, or a plugin is
-		// still building its first listing — or its last fetch failed. Say
-		// which, instead of showing an empty room.
-		a.drawGridNotice(r, gid)
-	}
-	if gridOK {
-		cellSize := pscreen.CellPx * pscreen.Zoom
-		selected := a.selectedFor(p.ID)
-		// In a content descent the pane is inside the tile: skip the
-		// parent-grid walk and render the focused tile in the inner box,
-		// inset by the text margin so the surrounding grid pattern is
-		// visible. The inner-box bounds match the textarea exactly, so
-		// outside the textarea the grid rules apply.
+		// Grid lines render against the background whether or not the grid has
+		// loaded: they communicate the coordinate system. A focused text tile
+		// has no grid coordinates and no zoom, so it gets a plain background
+		// instead of a grid pattern, and the margin around the inner box is a
+		// plain ascent zone. URL content fills the pane and covers this
+		// anyway.
 		if p.ContentID() != "" {
-			// descendedTile, not g.Tiles[...], so an ephemeral url visit —
-			// focused off the pane's grid, in the scratch grid — renders.
-			if file, ok := a.descendedTile(p); ok {
-				switch {
-				case file.Kind == rpc.KindText && !file.ServesPage:
-					ix, iy, iw, ih := textInnerBox(r)
-					a.cctx.Set("fillStyle", colorFileInnerBg)
-					a.cctx.Call("fillRect", ix, iy, iw, ih)
-					a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
-				case file.WebContent():
-					// url tiles and serves_page tiles take the same web-content
-					// descent: a preview when frozen, a native view when live.
-					ix, iy, iw, ih := liveContentBox(r)
-					a.drawURLTileInPane(&file, ix, iy, iw, ih)
-				case file.Kind == rpc.KindShell:
-					ix, iy, iw, ih := liveContentBox(r)
-					a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
-				default:
-					ix, iy, iw, ih := textInnerBox(r)
-					a.cctx.Set("fillStyle", colorFileInnerBg)
-					a.cctx.Call("fillRect", ix, iy, iw, ih)
-				}
-			}
+			a.cctx.Set("fillStyle", colorBg)
+			a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 		} else {
-			inSource := g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc)
-			for _, n := range g.Tiles {
-				if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.ID) {
-					continue
+			a.drawGridLines(colorGridLineInterior, pscreen, r)
+		}
+
+		if !gridOK && gid != "" && p.ContentID() == "" {
+			// The grid is not cached yet — a fetch is in flight, or a plugin is
+			// still building its first listing — or its last fetch failed. Say
+			// which, instead of showing an empty room.
+			a.drawGridNotice(r, gid)
+		}
+		if gridOK {
+			cellSize := pscreen.CellPx * pscreen.Zoom
+			selected := a.selectedFor(p.ID)
+			// In a content descent the pane is inside the tile: skip the
+			// parent-grid walk and render the focused tile in the inner box,
+			// inset by the text margin so the surrounding grid pattern is
+			// visible. The inner-box bounds match the textarea exactly, so
+			// outside the textarea the grid rules apply.
+			if p.ContentID() != "" {
+				// descendedTile, not g.Tiles[...], so an ephemeral url visit —
+				// focused off the pane's grid, in the scratch grid — renders.
+				if file, ok := a.descendedTile(p); ok {
+					switch {
+					case file.Kind == rpc.KindText && !file.ServesPage:
+						ix, iy, iw, ih := textInnerBox(r)
+						a.cctx.Set("fillStyle", colorFileInnerBg)
+						a.cctx.Call("fillRect", ix, iy, iw, ih)
+						a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
+					case file.WebContent():
+						// url tiles and serves_page tiles take the same web-content
+						// descent: a preview when frozen, a native view when live.
+						ix, iy, iw, ih := liveContentBox(r)
+						a.drawURLTileInPane(&file, ix, iy, iw, ih)
+					case file.Kind == rpc.KindShell:
+						ix, iy, iw, ih := liveContentBox(r)
+						a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
+					default:
+						ix, iy, iw, ih := textInnerBox(r)
+						a.cctx.Set("fillStyle", colorFileInnerBg)
+						a.cctx.Call("fillRect", ix, iy, iw, ih)
+					}
 				}
-				left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
-				w := float64(n.W) * cellSize
-				h := float64(n.H) * cellSize
-				if left+w < r.X || top+h < r.Y || left > r.X+r.W || top > r.Y+r.H {
-					continue
-				}
-				nn := n
-				outside := tileOutside(&nn, inSource)
-				dashed := !inSource && isLinkTile(&nn)
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected, outside, dashed, p.ID)
-				a.drawPluginHealthTint(&nn, left, top, w, h)
-			}
-			// Ascent trace: the fading "you just came from here" outline on
-			// the tile this pane most recently ascended out of. Drawn after
-			// the tiles so it paints on top; the alpha decays through the
-			// frame loop, which pruneTraces keeps ticking before dropping
-			// the entry.
-			if tr, ok := a.traces[p.ID]; ok {
-				if n, ok := g.Tiles[tr.tileID]; ok {
+			} else {
+				inSource := g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc)
+				for _, n := range g.Tiles {
+					if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.ID) {
+						continue
+					}
 					left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
-					drawTraceOutline(a.cctx, left, top,
-						float64(n.W)*cellSize, float64(n.H)*cellSize,
-						anim.FadeAlpha(nowMs(), tr.startMs, traceDurMs))
+					w := float64(n.W) * cellSize
+					h := float64(n.H) * cellSize
+					if left+w < r.X || top+h < r.Y || left > r.X+r.W || top > r.Y+r.H {
+						continue
+					}
+					nn := n
+					outside := tileOutside(&nn, inSource)
+					dashed := !inSource && isLinkTile(&nn)
+					a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected, outside, dashed, p.ID)
+					a.drawPluginHealthTint(&nn, left, top, w, h)
 				}
-			}
-			a.drawEdgeIndicators(g.Tiles, pscreen, r)
-			if a.ghost != nil && a.ghost.paneID == p.ID {
-				gn := a.ghost.tile
-				gcs := a.ghost.displayedCellSize
-				if gcs <= 0 {
-					gcs = cellSize
+				// Ascent trace: the fading "you just came from here" outline on
+				// the tile this pane most recently ascended out of. Drawn after
+				// the tiles so it paints on top; the alpha decays through the
+				// frame loop, which pruneTraces keeps ticking before dropping
+				// the entry.
+				if tr, ok := a.traces[p.ID]; ok {
+					if n, ok := g.Tiles[tr.tileID]; ok {
+						left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
+						drawTraceOutline(a.cctx, left, top,
+							float64(n.W)*cellSize, float64(n.H)*cellSize,
+							anim.FadeAlpha(nowMs(), tr.startMs, traceDurMs))
+					}
 				}
-				w := float64(gn.W) * gcs
-				h := float64(gn.H) * gcs
-				a.drawGhostTile(&gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, r,
-					a.ghost.displayedFragmentation)
+				a.drawEdgeIndicators(g.Tiles, pscreen, r)
+				if a.ghost != nil && a.ghost.paneID == p.ID {
+					gn := a.ghost.tile
+					gcs := a.ghost.displayedCellSize
+					if gcs <= 0 {
+						gcs = cellSize
+					}
+					w := float64(gn.W) * gcs
+					h := float64(gn.H) * gcs
+					a.drawGhostTile(&gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, r,
+						a.ghost.displayedFragmentation)
+				}
 			}
 		}
-	}
-
-	a.cctx.Call("restore")
+	})
 
 	// Border on top so content can paint up to the pane edge without
 	// bleeding visibly into the chrome. The hue follows what we've
@@ -855,34 +864,30 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		// ghost, so it reads identically before, during, and after the drop.
 		a.drawPluginGlyph(a.pluginGlyph(n.ChildGridID), x, y, w, h)
 	} else {
-		a.cctx.Call("save")
-		a.cctx.Call("beginPath")
-		a.cctx.Call("rect", x, y, w, h)
-		a.cctx.Call("clip")
+		withClip(a.cctx, x, y, w, h, func() {
+			// Child grid lines inside the well, aligned so the child point the
+			// well's framing centers on lands at the well's center. This is
+			// exactly where the just-after-descent child viewport would put it,
+			// so the lines glide continuously across the path swap — including
+			// for a never-visited well, whose framing EffectiveCenter resolves
+			// to its footprint's own center (the same value Descent uses).
+			viewCenterX, viewCenterY := zoomtrans.EffectiveCenter(wellOf(n))
+			wellCenterX := x + w/2
+			wellCenterY := y + h/2
+			originX := wellCenterX - viewCenterX*previewCell
+			originY := wellCenterY - viewCenterY*previewCell
+			drawGridLinesIn(a.cctx, colorGridLineInterior, x, y, w, h, previewCell, originX, originY)
 
-		// Child grid lines inside the well, aligned so the child point the
-		// well's framing centers on lands at the well's center. This is
-		// exactly where the just-after-descent child viewport would put it,
-		// so the lines glide continuously across the path swap — including
-		// for a never-visited well, whose framing EffectiveCenter resolves
-		// to its footprint's own center (the same value Descent uses).
-		viewCenterX, viewCenterY := zoomtrans.EffectiveCenter(wellOf(n))
-		wellCenterX := x + w/2
-		wellCenterY := y + h/2
-		originX := wellCenterX - viewCenterX*previewCell
-		originY := wellCenterY - viewCenterY*previewCell
-		drawGridLinesIn(a.cctx, colorGridLineInterior, x, y, w, h, previewCell, originX, originY)
-
-		if showPreview {
-			// The hide scopes to the pane being painted (paintPaneID).
-			var hide string
-			if a.ghost != nil && a.ghost.hiddenPaneID == paintPaneID {
-				hide = a.ghost.hiddenTileID
+			if showPreview {
+				// The hide scopes to the pane being painted (paintPaneID).
+				var hide string
+				if a.ghost != nil && a.ghost.hiddenPaneID == paintPaneID {
+					hide = a.ghost.hiddenTileID
+				}
+				a.drawChildPreview(child, viewCenterX, viewCenterY,
+					wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
 			}
-			a.drawChildPreview(child, viewCenterX, viewCenterY,
-				wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
-		}
-		a.cctx.Call("restore")
+		})
 	}
 
 	// Outline: every well is blue, and a cross-plugin well differs by the
@@ -1015,19 +1020,16 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 		// signal.
 		return
 	}
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", ix, iy, iw, ih)
-	a.cctx.Call("clip")
-	a.cctx.Set("fillStyle", colorSourceLabelBg)
-	a.cctx.Call("fillRect", ix, iy, iw, bannerH)
-	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true)
-	a.cctx.Set("fillStyle", bannerTextColor(n, outside))
-	a.cctx.Set("textBaseline", "middle")
-	a.cctx.Set("textAlign", "start")
-	a.cctx.Call("fillText", label, ix+4, iy+bannerH/2)
-	a.cctx.Set("textBaseline", "top")
-	a.cctx.Call("restore")
+	withClip(a.cctx, ix, iy, iw, ih, func() {
+		a.cctx.Set("fillStyle", colorSourceLabelBg)
+		a.cctx.Call("fillRect", ix, iy, iw, bannerH)
+		setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true)
+		a.cctx.Set("fillStyle", bannerTextColor(n, outside))
+		a.cctx.Set("textBaseline", "middle")
+		a.cctx.Set("textAlign", "start")
+		a.cctx.Call("fillText", label, ix+4, iy+bannerH/2)
+		a.cctx.Set("textBaseline", "top")
+	})
 }
 
 // bannerTextColor picks a banner-text color that echoes the tile's own

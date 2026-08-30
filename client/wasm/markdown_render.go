@@ -47,53 +47,47 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	originX := x - p.TextScrollX*scale
 	originY := y - p.TextScrollY*scale
 
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
-
-	mode := p.TextMode
-	if mode == "" {
-		mode = rpc.TextModeRendered
-	}
-	ready := a.textareaReady
-	if mode == rpc.TextModeRendered {
-		ready = a.renderedReady
-	}
-	// textedit.CanvasHiddenByOverlay is the single owner of "canvas paints
-	// or overlay covers". It is mode-agnostic, since both modes are DOM
-	// overlays on the focused pane, and the ready guard keeps the canvas
-	// painting through the loading race.
-	if !textedit.CanvasHiddenByOverlay(true, p.ID == a.tree.Focus, ready) {
-		// A rendered-mode pane the overlay is not covering — an unfocused
-		// sibling, or the focused pane during the overlay's load — paints
-		// the rendered raster. The pane must not flip to raw source just
-		// because focus moved: the overlay-to-raster swap is an
-		// implementation detail the user never sees. Raw is only the
-		// raster's own loading frame.
+	withClip(a.cctx, x, y, w, h, func() {
+		mode := p.TextMode
+		if mode == "" {
+			mode = rpc.TextModeRendered
+		}
+		ready := a.textareaReady
 		if mode == rpc.TextModeRendered {
-			frame := markdown.PreviewFrame{
-				Scale:    scale,
-				ScrollY:  p.TextScrollY,
-				ContentW: a.textContentWidth(p),
-			}
-			if a.drawRenderedPreview(n, frame, x, y, w, h, 0) {
-				// e2e attribution (the renderedPreviews testhook): the pane
-				// painted the rendered raster, not raw.
-				a.renderedPanePaints[n.ID]++
-				a.cctx.Call("restore")
-				return
-			}
+			ready = a.renderedReady
 		}
-		if body, ok := a.tileBody(n); ok {
-			drawMarkdownText(a.cctx, string(body), originX, originY,
-				a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
+		// textedit.CanvasHiddenByOverlay is the single owner of "canvas paints
+		// or overlay covers". It is mode-agnostic, since both modes are DOM
+		// overlays on the focused pane, and the ready guard keeps the canvas
+		// painting through the loading race.
+		if !textedit.CanvasHiddenByOverlay(true, p.ID == a.tree.Focus, ready) {
+			// A rendered-mode pane the overlay is not covering — an unfocused
+			// sibling, or the focused pane during the overlay's load — paints
+			// the rendered raster. The pane must not flip to raw source just
+			// because focus moved: the overlay-to-raster swap is an
+			// implementation detail the user never sees. Raw is only the
+			// raster's own loading frame.
+			if mode == rpc.TextModeRendered {
+				frame := markdown.PreviewFrame{
+					Scale:    scale,
+					ScrollY:  p.TextScrollY,
+					ContentW: a.textContentWidth(p),
+				}
+				if a.drawRenderedPreview(n, frame, x, y, w, h, 0) {
+					// e2e attribution (the renderedPreviews testhook): the pane
+					// painted the rendered raster, not raw.
+					a.renderedPanePaints[n.ID]++
+					return
+				}
+			}
+			if body, ok := a.tileBody(n); ok {
+				drawMarkdownText(a.cctx, string(body), originX, originY,
+					a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
+			}
+		} else {
+			a.tileBody(n) // warm the cache so the overlay has content when shown
 		}
-	} else {
-		a.tileBody(n) // warm the cache so the overlay has content when shown
-	}
-
-	a.cctx.Call("restore")
+	})
 }
 
 // drawMarkdownNode renders a text tile at (x, y, w, h) as a grid preview. It
@@ -107,38 +101,33 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outsid
 	frame := markdown.PreviewWindowFrame(w, textFixedScale, contentZoomOf(n), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
+	withClip(a.cctx, x, y, w, h, func() {
+		a.cctx.Set("fillStyle", colorFileInnerBg)
+		a.cctx.Call("fillRect", x, y, w, h)
 
-	a.cctx.Set("fillStyle", colorFileInnerBg)
-	a.cctx.Call("fillRect", x, y, w, h)
-
-	// Content starts below the banner strip (drawTileBannerLabel paints over
-	// the same box afterwards; bannerGeom is the shared formula) so the alt
-	// text never overprints the first line.
-	topInset := 0.0
-	if tileBannerLabel(n) != "" {
-		if _, bannerH, shown := bannerGeom(h, h-2*tileBorderPx); shown {
-			topInset = bannerH
-		}
-	}
-	if markdown.PreviewContentVisible(h-topInset, scale) {
-		drawn := false
-		if n.TextMode == rpc.TextModeRendered {
-			drawn = a.drawRenderedPreview(n, frame, x, y, w, h, topInset)
-		}
-		if !drawn {
-			if body, ok := a.tileBody(n); ok {
-				drawMarkdownText(a.cctx, string(body),
-					x-scrollX*scale, y+topInset-scrollY*scale,
-					frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
+		// Content starts below the banner strip (drawTileBannerLabel paints over
+		// the same box afterwards; bannerGeom is the shared formula) so the alt
+		// text never overprints the first line.
+		topInset := 0.0
+		if tileBannerLabel(n) != "" {
+			if _, bannerH, shown := bannerGeom(h, h-2*tileBorderPx); shown {
+				topInset = bannerH
 			}
 		}
-	}
-
-	a.cctx.Call("restore")
+		if markdown.PreviewContentVisible(h-topInset, scale) {
+			drawn := false
+			if n.TextMode == rpc.TextModeRendered {
+				drawn = a.drawRenderedPreview(n, frame, x, y, w, h, topInset)
+			}
+			if !drawn {
+				if body, ok := a.tileBody(n); ok {
+					drawMarkdownText(a.cctx, string(body),
+						x-scrollX*scale, y+topInset-scrollY*scale,
+						frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
+				}
+			}
+		}
+	})
 
 	// Host file tiles color by renderability: a file the markdown renderer
 	// can show is text-green like any document, and one it cannot — metadata
