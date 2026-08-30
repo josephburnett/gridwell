@@ -185,7 +185,7 @@ func TestShellDoorReportsSessionGone(t *testing.T) {
 	// A frozen snapshot means "do not fabricate a new bash behind the
 	// JPEG"; with no live session, the attach is refused.
 	if _, err := f.cl.SetShellPreview(context.Background(), &rpc.SetShellPreviewRequest{
-		TileID: tile.ID, Version: tile.Version, JPEG: []byte("jpegbytes"),
+		TileID: tile.ID, JPEG: []byte("jpegbytes"),
 	}); err != nil {
 		t.Fatalf("SetShellPreview: %v", err)
 	}
