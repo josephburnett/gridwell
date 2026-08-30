@@ -147,6 +147,17 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	}
 }
 
+// forwardedPaneAt resolves a press forwarded from a live URL view's preload
+// to the pane under it, refusing while a viewport transition animates — the
+// same two guards the canvas's own onMouseDown opens with, shared by the
+// three forwarded handlers so none of them can forget the transition gate.
+func (a *App) forwardedPaneAt(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
+	if a.transition != nil {
+		return nil, pane.Rect{}, false
+	}
+	return a.paneAtScreen(sx, sy)
+}
+
 // onForwardedRightDown begins a right-button pane gesture at canvas
 // coordinates (sx, sy) that originated over a live URL view. The native
 // WebContentsView swallows the renderer's own mouse events, so its injected
@@ -157,10 +168,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 // rest of the drag (move/up) lands on it natively. This is the right-button
 // half of onMouseDown, minus the DOM event (the preload already preventDefaulted).
 func (a *App) onForwardedRightDown(sx, sy float64) {
-	if a.transition != nil {
-		return
-	}
-	p, r, ok := a.paneAtScreen(sx, sy)
+	p, r, ok := a.forwardedPaneAt(sx, sy)
 	if !ok {
 		return
 	}
@@ -179,10 +187,7 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 // preload forwards the press here (via main). Middle-click is the universal
 // ascend gesture; this is its live-URL path, mirroring onForwardedRightDown.
 func (a *App) onForwardedMiddleDown(sx, sy float64) {
-	if a.transition != nil {
-		return
-	}
-	p, _, ok := a.paneAtScreen(sx, sy)
+	p, _, ok := a.forwardedPaneAt(sx, sy)
 	if !ok {
 		return
 	}
@@ -203,10 +208,7 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 //     canvas. Without this, a left border-drag that grabbed the live-view
 //     half of the band could never start.
 func (a *App) onForwardedLeftDown(sx, sy float64) {
-	if a.transition != nil {
-		return
-	}
-	p, r, ok := a.paneAtScreen(sx, sy)
+	p, r, ok := a.forwardedPaneAt(sx, sy)
 	if !ok {
 		return
 	}
@@ -375,24 +377,18 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 	ps := paneToDragdrop(p, r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
-	cellSize := cellPx * p.Zoom
 	a.dragging = &dragState{
 		originPaneID:  p.ID,
 		originFocused: true, // right-down focused the pane before arming
-		tileID:        n.ID,
 		clone:         true,
 		startScreenX:  sx,
 		startScreenY:  sy,
 		curScreenX:    sx,
 		curScreenY:    sy,
-		cellOffsetX:   cxF - float64(n.X),
-		cellOffsetY:   cyF - float64(n.Y),
-		snapshotTile:  *n,
-		originScreenX: tlX,
-		originScreenY: tlY,
 		srcGridID:     a.gridIDForPane(p),
-		srcCellSize:   cellSize,
+		srcCellSize:   cellPx * p.Zoom,
 	}
+	a.dragging.grabTile(n, cxF, cyF, tlX, tlY)
 }
 
 // commitTileCenter handles release of a center-zone gesture. With the

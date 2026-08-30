@@ -288,6 +288,22 @@ func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
 	a.scheduleURLUpdate()
 }
 
+// grabTile records that the drag picked up tile n: the id and the snapshot
+// the ghost and the commit read, the cursor's offset inside the tile (in that
+// tile's own cell units, so the grab point tracks the cursor at any zoom),
+// and the tile's top-left in screen coords for the snap-back. The caller
+// resolves the cursor and the corner in whichever space the tile lives —
+// the parent grid, a well's child preview, or the clone arm's parent grid —
+// and every arm records the same six fields the same way.
+func (d *dragState) grabTile(n *rpc.Tile, cursorCellX, cursorCellY, tlX, tlY float64) {
+	d.tileID = n.ID
+	d.snapshotTile = *n
+	d.cellOffsetX = cursorCellX - float64(n.X)
+	d.cellOffsetY = cursorCellY - float64(n.Y)
+	d.originScreenX = tlX
+	d.originScreenY = tlY
+}
+
 func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	// Block all input gestures while a viewport transition is animating
@@ -427,23 +443,15 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			cp := wellPreviewFor(ps, n)
 			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
-			a.dragging.tileID = child.ID
-			a.dragging.snapshotTile = *child
-			a.dragging.cellOffsetX = cxF - float64(child.X)
-			a.dragging.cellOffsetY = cyF - float64(child.Y)
-			a.dragging.originScreenX = tlX
-			a.dragging.originScreenY = tlY
+			a.dragging.grabTile(child, cxF, cyF, tlX, tlY)
 			a.dragging.srcGridID = n.ChildGridID
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
 		}
 		// Regular parent-grid drag of the well (or a non-well tile).
-		a.dragging.tileID = n.ID
 		cx, cy := ps.ScreenToCell(sx, sy)
-		a.dragging.cellOffsetX = cx - float64(n.X)
-		a.dragging.cellOffsetY = cy - float64(n.Y)
-		a.dragging.snapshotTile = *n
-		a.dragging.originScreenX, a.dragging.originScreenY = ps.CellToScreen(float64(n.X), float64(n.Y))
+		tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
+		a.dragging.grabTile(n, cx, cy, tlX, tlY)
 	}
 	return nil
 }
@@ -775,14 +783,14 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			a.ghost.hiddenTileID = ""
 			a.ghost.hiddenPaneID = ""
 		}
-		a.landGhost(t.pane.ID, t.cellSize, t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
+		a.landGhostAtCell(t, dropX, dropY)
 		a.commitLinkDrop(d, t, dropX, dropY)
 		a.draw()
 		return nil
 	}
 
 	// DropMove: animate ghost to the snapped cell in the target grid's coords.
-	a.landGhost(t.pane.ID, t.cellSize, t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
+	a.landGhostAtCell(t, dropX, dropY)
 
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
@@ -872,8 +880,15 @@ func (a *App) occupiedForDrop(gridID string, x, y, w, h int64, excludeID string)
 	return false
 }
 
-// startSnap animates the active ghost from its current position to (toX, toY)
-// over the given duration. Replaces any prior animation.
+// landGhostAtCell lands the ghost on the drop target's cell (dropX, dropY):
+// the target pane, the target's cell size, and the screen position of that
+// cell. The one landing every drop commit uses — move, link, and clone — so
+// the three cannot place the same drop differently.
+func (a *App) landGhostAtCell(t *dropTarget, dropX, dropY int64) {
+	a.landGhost(t.pane.ID, t.cellSize,
+		t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
+}
+
 // landGhost is the one drop landing: the ghost belongs to paneID, drawn at
 // that pane's cell size when cellSize > 0, and snaps to the screen cell
 // (toX, toY).
@@ -887,6 +902,8 @@ func (a *App) landGhost(paneID string, cellSize, toX, toY float64) {
 	a.startSnap(toX, toY, snapMs)
 }
 
+// startSnap animates the active ghost from its current position to (toX, toY)
+// over the given duration. Replaces any prior animation.
 func (a *App) startSnap(toX, toY, duration float64) {
 	if a.ghost == nil {
 		return
