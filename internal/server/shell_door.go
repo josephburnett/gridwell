@@ -170,8 +170,13 @@ func pumpShell(ctx context.Context, cancel context.CancelFunc, conn *websocket.C
 		wcancel()
 		if werr != nil {
 			_ = up.CloseSend()
-			// The viewer's socket broke; nothing to tell it.
-			return "", false
+			// The viewer's socket broke. Say so rather than reporting a
+			// clean end: a broken pipe that presents as "the terminal
+			// closed normally" is the disappearing-failure shape (charter
+			// §6). The frame usually cannot land — the socket is the thing
+			// that broke — but a local close on the client suppresses the
+			// report anyway, so this can only ever add information.
+			return "shell output: " + werr.Error(), false
 		}
 	}
 }
@@ -185,6 +190,13 @@ func shellReadLoop(ctx context.Context, cancel context.CancelFunc, conn *websock
 	for {
 		mt, data, err := conn.Read(ctx)
 		if err != nil {
+			// An ordinary detach is a normal close and says nothing. Any
+			// OTHER end of the client's side is worth a line: the client
+			// sees the attachment vanish, and without this the server has
+			// no record of why.
+			if ctx.Err() == nil && websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+				log.Printf("gridwell: shell door: the client's stream ended: %v", err)
+			}
 			_ = up.CloseSend()
 			return
 		}
