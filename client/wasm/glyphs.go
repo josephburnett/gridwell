@@ -12,6 +12,15 @@ import (
 // swatch, plus the delete trashcan (drawn on the + button during a drag and
 // over the shrinking delete-ghost). All pure canvas drawing — no App state.
 
+// The palette/identity glyphs all share one visual spec so the creation menu
+// reads as a consistent set rather than seven unrelated drawings: the same
+// stroke weight (glyphLineWidth), the same centered footprint (glyphBox),
+// round line ends, and a color that matches the tile's own kind border.
+// beginGlyph/endGlyph bracket each one.
+
+// glyphLineWidth is the shared stroke weight, tied to tile size so icons
+// scale with their swatch but always read at the same relative weight.
+// Deliberately thin — fat strokes read as cartoonish.
 func glyphLineWidth(w, h float64) float64 {
 	return math.Max(1.0, math.Min(w, h)/34)
 }

@@ -1295,15 +1295,6 @@ var paneBorderColors = pane.BorderColors{
 	EphemeralFaded: colorEphemeralBorderFaded,
 }
 
-// The palette/identity glyphs all share one visual spec so the creation
-// menu reads as a consistent set rather than seven unrelated drawings:
-// the same stroke weight (glyphLineWidth), the same centered footprint
-// (glyphBox, ~52% of the smaller side), round line ends, and a color that
-// matches the tile's own kind border. beginGlyph/endGlyph bracket each one.
-
-// glyphLineWidth is the shared stroke weight, tied to tile size so icons
-// scale with their swatch but always read at the same relative weight.
-// Deliberately thin — fat strokes read as cartoonish.
 // drawEdgeIndicators paints small markers along the pane's inner edge for
 // every tile whose footprint lies entirely outside the visible viewport.
 // Each marker is positioned where the ray from the viewport center to the
