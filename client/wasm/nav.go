@@ -525,9 +525,10 @@ func zoomDist(z1, z2 float64) float64 {
 }
 
 // urlSurfaces and shellSurfaces list the panes currently holding a live
-// surface, keyed by the content they show: the input to pane.TakeOver. They
-// read straight off the live handles, the one owner of "this pane has a
-// surface open"; nothing is mirrored.
+// surface, keyed by the content they show: the input to pane.TakeOver, and
+// the snapshot the close-all sweeps walk at unload. They read straight off
+// the live handles, the one owner of "this pane has a surface open"; nothing
+// is mirrored.
 func (a *App) urlSurfaces() []pane.Holder {
 	var out []pane.Holder
 	for id, pl := range a.locals {

@@ -323,16 +323,11 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 }
 
 // closeAllURLStreams tears down every live view. Used on beforeunload so the
-// freeze writes fire before the page goes away.
+// freeze writes fire before the page goes away. urlSurfaces is the snapshot,
+// so closing as we go never walks a map being mutated.
 func (a *App) closeAllURLStreams() {
-	ids := make([]string, 0, len(a.locals))
-	for id, pl := range a.locals {
-		if pl.urlView != nil {
-			ids = append(ids, id)
-		}
-	}
-	for _, id := range ids {
-		a.closeURLStream(id, true)
+	for _, h := range a.urlSurfaces() {
+		a.closeURLStream(h.PaneID, true)
 	}
 }
 

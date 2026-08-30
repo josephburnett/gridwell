@@ -651,16 +651,11 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 
 // closeAllShellStreams closes every open shell stream. Used on
 // beforeunload so the server's freeze-and-destroy runs before the tab
-// goes away.
+// goes away. shellSurfaces is the snapshot, so closing as we go never walks
+// a map being mutated.
 func (a *App) closeAllShellStreams() {
-	ids := make([]string, 0, len(a.locals))
-	for id, pl := range a.locals {
-		if pl.shellConn != nil {
-			ids = append(ids, id)
-		}
-	}
-	for _, id := range ids {
-		a.closeShellStream(id, true)
+	for _, h := range a.shellSurfaces() {
+		a.closeShellStream(h.PaneID, true)
 	}
 }
 
