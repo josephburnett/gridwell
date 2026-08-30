@@ -1,10 +1,5 @@
 package cli
 
-// resolvePluginBinaries: a bundled binary's in-process PLUGIN factory
-// must not swallow a PLUGIN entry's binary lookup — the two serve
-// different services (found 2026-08-23: gridwell-all + a plugin home
-// refused to boot).
-
 import (
 	"os"
 	"path/filepath"
@@ -16,8 +11,7 @@ import (
 )
 
 // Every kind is a plugin: a bundled plugin factory keeps its entry
-// in-process, and everything else resolves gridwell-plugin-<kind> — there
-// is no plugin binary and no flag to get wrong.
+// in-process, and everything else resolves gridwell-plugin-<kind>.
 func TestKindsResolvePluginBinaries(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "gridwell-plugin-fs"), []byte("#!/bin/sh\n"), 0o755); err != nil {

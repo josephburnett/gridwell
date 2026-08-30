@@ -1,18 +1,18 @@
 // Package dbformat is the shared on-disk format contract for a Gridwell
-// plugin database. Every plugin owns a SQLite file holding forever-data
-// (placement, framing, the identity map deep links depend on), so every one
-// of those files carries the same three guarantees, enforced by this ONE
-// engine (extracted from internal/store, which delegates here):
+// SQLite file. Those files hold forever-data — placement, framing, the
+// identity map deep links depend on — so each carries the same three
+// guarantees, enforced by this one engine, which internal/local/store
+// delegates to:
 //
 //   - PRAGMA application_id marks whose file it is, so a foreign SQLite file
 //     is refused instead of misread.
-//   - PRAGMA user_version is the schema generation. A file stamped NEWER than
-//     the binary is refused (an old binary must not misread a future schema);
-//     an OLDER file is brought forward by the additive migration chain.
-//   - Migrations are additive only — new columns (with defaults), new tables,
-//     new indexes. Never drop, rename, retype, or repurpose; data written by
-//     any released binary stays readable forever. Never delete a DB to absorb
-//     a schema change. (See internal/store/CLAUDE.md for the full contract.)
+//   - PRAGMA user_version is the schema generation. A file stamped newer than
+//     the binary is refused, because an old binary must not misread a future
+//     schema; an older file is brought forward by the migration chain.
+//   - Migrations are additive by default: new columns with defaults, new
+//     tables, new indexes. Data written by any released binary stays
+//     readable. Never delete a DB to absorb a schema change. The full
+//     contract is internal/local/store/CLAUDE.md.
 package dbformat
 
 import (
@@ -33,11 +33,11 @@ type Migration struct {
 //
 //   - Fresh DB (application_id and user_version both 0): stamp appID and
 //     target. The caller's Open already materialized the latest shape, so
-//     there is nothing to migrate — sound only if the caller proves
-//     (via an equivalence test) that fresh shape == v1 base + full chain.
-//     An unstamped file that already carries data is treated the same: the
-//     pre-versioning legacy shape is, by definition, the v1 base.
-//   - Foreign DB (application_id set but not appID): refuse — not our file.
+//     there is nothing to migrate. That is sound only if the caller proves,
+//     with an equivalence test, that the fresh shape equals the v1 base plus
+//     the full chain. An unstamped file that already carries data is treated
+//     the same: an unversioned shape is by definition the v1 base.
+//   - Foreign DB (application_id set but not appID): refuse; not our file.
 //   - Newer DB (user_version > target): refuse.
 //   - Older DB: run each pending migration in order in one transaction, then
 //     stamp target.
@@ -52,12 +52,13 @@ func EnsureVersion(ctx context.Context, db *sql.DB, appID int64, target int, mig
 	}
 
 	if gotApp == 0 && userVer == 0 {
-		// Both identity stamps in ONE transaction (header pragmas are
-		// transactional): a crash between them would leave application_id set
+		// Both identity stamps go in one transaction; header pragmas are
+		// transactional. A crash between them would leave application_id set
 		// with user_version 0, and the next Open would run the full migration
-		// chain against the latest-shape tables — non-idempotent ADD COLUMNs
-		// that fail forever. Atomic means the file is either unstamped
-		// (stamped next Open) or fully stamped; no third state.
+		// chain against the latest-shape tables, whose non-idempotent ADD
+		// COLUMNs then fail forever. Atomic means the file is either
+		// unstamped, and stamped next Open, or fully stamped. There is no
+		// third state.
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("begin: %w", err)
@@ -95,13 +96,13 @@ func EnsureVersion(ctx context.Context, db *sql.DB, appID int64, target int, mig
 			return fmt.Errorf("migration to v%d: %w", m.To, err)
 		}
 	}
-	// The stamp rides IN the migration transaction (header pragmas are
-	// transactional): commit-then-stamp had a crash window that persisted the
-	// DDL without the version recording it, after which every Open re-ran the
-	// non-idempotent chain ("duplicate column name") and the file — forever-
-	// data by contract — was unopenable. Atomic means the file is either at
-	// the old version with none of the chain applied, or at target with all
-	// of it; no third state exists to crash into.
+	// The stamp rides inside the migration transaction; header pragmas are
+	// transactional. Stamping after the commit would leave a crash window
+	// that persists the DDL without the version recording it, after which
+	// every Open re-runs the non-idempotent chain and fails on "duplicate
+	// column name", leaving the file unopenable. Atomic means the file is
+	// either at the old version with none of the chain applied, or at target
+	// with all of it. There is no third state to crash into.
 	if err := setPragmaIntTx(ctx, tx, "user_version", int64(target)); err != nil {
 		_ = tx.Rollback()
 		return err

@@ -9,13 +9,14 @@ import (
 )
 
 // RunStatus reports whether a `gridwell serve` currently holds this home's
-// serve lock (servelock.go), without starting anything. The running
+// serve lock, see servelock.go, without starting anything. The running
 // holder's banner is re-emitted in the same "already serving" shape a
-// conflicting serve prints, so the desktop app's --no-server mode uses
-// this one verb to DISCOVER a separately-run server (address + auth token)
-// instead of ever learning what a home or a lock is.
+// conflicting serve prints, so the desktop app's --no-server mode uses this
+// one verb to discover a separately-run server, with its address and auth
+// token, instead of ever learning what a home or a lock is.
 //
-// Exit 0 = a server is running (banner printed); exit 1 = none is.
+// Exit 0 means a server is running and its banner was printed; exit 1 means
+// none is.
 func RunStatus(_ []string) int {
 	home, err := config.Home()
 	if err != nil {

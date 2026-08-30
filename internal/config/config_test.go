@@ -46,7 +46,7 @@ func TestDBPaths(t *testing.T) {
 	}
 }
 
-// The one-node shape, fully populated, round-trips through Load.
+// A fully populated config round-trips through Load.
 func TestLoad_full(t *testing.T) {
 	p := write(t, t.TempDir(), `id: n0deid1
 web:
@@ -107,9 +107,9 @@ func TestLoad_empty_and_defaults(t *testing.T) {
 	}
 }
 
-// The retired shapes fail LOUDLY with the fix, never load silently: a
-// node_id key, the flat bind, a password in the file, a `kind: home`
-// plugin entry, a plugin `name`.
+// The retired shapes fail loudly with the fix, never load silently: a
+// node_id key, the flat bind, a password in the file, a `kind: home` plugin
+// entry, a plugin `name`.
 func TestLoad_refusesRetiredKeys(t *testing.T) {
 	cases := map[string]string{
 		"node_id: abc\n":                               "`id`",

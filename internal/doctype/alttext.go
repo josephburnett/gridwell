@@ -1,10 +1,7 @@
-// alttext.go — alt-text derivation for text tiles. Moved here from
-// client/markdown (2026-08-15): the localdb STORE auto-titles text tiles
-// with it, and persistence importing the client tree was the known
-// layering wrinkle (ARCHITECTURE §4.2) — the same arrow the plugin
-// decoupling forbids. doctype is the neutral home for text-document
-// semantics shared across the seam (Renderable, IsOrg, and now this).
-// The parse dialect is GFM, matching the client renderer's parser, so
+// alttext.go derives alt-text for text tiles. It lives in doctype, the
+// neutral home for text-document semantics shared across the plugin seam,
+// so the store can auto-title a text tile without importing the client
+// tree. The parse dialect is GFM, matching the client renderer's parser, so
 // the derived title always agrees with what the rendered view shows.
 
 package doctype
@@ -18,18 +15,19 @@ import (
 	gmtext "github.com/yuin/goldmark/text"
 )
 
-// altParser parses with the same dialect the client renders (GFM);
-// renderer options are irrelevant here — only the AST is read.
+// altParser parses with the same dialect the client renders, GFM. Renderer
+// options are irrelevant here; only the AST is read.
 var altParser = goldmark.New(goldmark.WithExtensions(extension.GFM))
 
-// AltFromSource derives a short, one-line alt-text from a markdown document:
-// the plain text of the first block, with markdown markers stripped (so
-// "# Heading" becomes "Heading"), all whitespace runs (newlines included)
-// collapsed to single spaces, clamped to altMaxLen runes. Returns "" for empty
-// or content-free input. The store uses it to auto-title text tiles.
+// AltFromSource derives a short one-line alt-text from a markdown document:
+// the plain text of the first block, with markdown markers stripped so that
+// "# Heading" becomes "Heading", every whitespace run including newlines
+// collapsed to a single space, and the result clamped to altMaxLen runes.
+// Returns "" for empty or content-free input. The store uses it to
+// auto-title text tiles.
 //
-// Collapsing to one line matters: a code-block-first doc would otherwise
-// yield a multi-line alt.
+// Collapsing to one line matters: a code-block-first document would
+// otherwise yield a multi-line alt.
 func AltFromSource(src string) string {
 	source := []byte(src)
 	root := altParser.Parser().Parse(gmtext.NewReader(source))
@@ -44,8 +42,8 @@ func AltFromSource(src string) string {
 }
 
 // blockPlainText is the concatenated plain text of one block-level AST node:
-// inline text and code-span text verbatim, code-block lines raw, images (and
-// everything inside them) skipped.
+// inline text and code-span text verbatim, code-block lines raw, and images
+// and everything inside them skipped.
 func blockPlainText(n ast.Node, src []byte) string {
 	var b strings.Builder
 	_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {

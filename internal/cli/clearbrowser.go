@@ -8,13 +8,12 @@ import (
 	"path/filepath"
 )
 
-// RunClearBrowserData implements `gridwell clear-browser-data` (issue
-// #240): it deletes the desktop app's persist:gridwell partition storage —
-// the one host-local Chromium session every live url tile browses on
-// (cookies, local storage, caches). The CLI replacement for the removed
-// per-site context-menu item: clearing browser state is an operator
-// action on the profile, not an in-page gesture. Refuses while the app is
-// running — Chromium owns the profile then (it holds SingletonLock in it)
+// RunClearBrowserData implements `gridwell clear-browser-data`: it deletes
+// the desktop app's persist:gridwell partition storage, the one host-local
+// Chromium session every live url tile browses on, including cookies, local
+// storage, and caches. Clearing browser state is an operator action on the
+// profile, not an in-page gesture. It refuses while the app is running,
+// because Chromium owns the profile then — it holds SingletonLock in it —
 // and would race the delete.
 func RunClearBrowserData(args []string) int {
 	fs := flag.NewFlagSet("clear-browser-data", flag.ExitOnError)

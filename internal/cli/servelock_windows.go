@@ -2,12 +2,11 @@
 
 package cli
 
-// Windows stub: no flock. A windows build serves without the per-home
-// single-server guard (LockFileEx is the faithful port when a windows
-// distribution becomes real; see servelock.go for the contract). The
-// STATUS probe refuses honestly instead of answering "not serving" for a
-// question it cannot ask — a false negative would let the desktop app
-// start a second server over the same DBs.
+// Windows stub: no flock, so a windows build serves without the per-home
+// single-server guard. LockFileEx is the faithful port; servelock.go holds
+// the contract. The status probe refuses honestly instead of answering "not
+// serving" to a question it cannot ask, because a false negative would let
+// the desktop app start a second server over the same database.
 
 import "errors"
 

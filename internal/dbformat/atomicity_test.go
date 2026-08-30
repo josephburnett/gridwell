@@ -11,18 +11,17 @@ import (
 )
 
 // These tests pin the crash-safety property of EnsureVersion: the
-// user_version stamp must be part of the SAME transaction as the work it
-// describes. SQLite header pragmas are transactional, so this is free —
-// but the original code committed the (non-idempotent, ALTER TABLE ADD
-// COLUMN) migrations first and stamped afterwards. A crash in that window
-// left a file with the new columns and the old version: every subsequent
-// Open re-ran the chain, failed on "duplicate column name", and the DB —
-// forever-data by contract — became permanently unopenable. Same window on
-// the fresh-DB path between the application_id and user_version writes.
+// user_version stamp must be part of the same transaction as the work it
+// describes. SQLite header pragmas are transactional, so this is free.
+// Committing the non-idempotent ADD COLUMN migrations first and stamping
+// afterwards leaves a crash window: a file with the new columns and the old
+// version, whose every subsequent Open re-runs the chain, fails on
+// "duplicate column name", and never opens again. The fresh-DB path has the
+// same window between the application_id and user_version writes.
 //
-// A crash between two statements can't be triggered deterministically from a
-// test, so the property is asserted at the statement level instead: a
-// recording driver logs every statement plus BEGIN/COMMIT, and the test
+// A crash between two statements cannot be triggered deterministically from
+// a test, so the property is asserted at the statement level instead: a
+// recording driver logs every statement plus BEGIN and COMMIT, and the test
 // requires the stamp to appear between them.
 
 // ── recording driver ─────────────────────────────────────────────────────────
@@ -41,9 +40,9 @@ func (d *recDriver) Open(name string) (driver.Conn, error) {
 	return &recConn{inner: c, mu: d.mu, log: d.log}, nil
 }
 
-// recConn implements ONLY Prepare/Begin/Close, so database/sql funnels every
-// statement through Prepare (no Execer/Queryer fast paths) and each one is
-// logged. Begin/Commit are logged via recTx.
+// recConn implements only Prepare, Begin, and Close, so database/sql funnels
+// every statement through Prepare, taking no Execer or Queryer fast path,
+// and each one is logged. Begin and Commit are logged through recTx.
 type recConn struct {
 	inner driver.Conn
 	mu    *sync.Mutex
@@ -176,8 +175,8 @@ func TestMigrationStampIsInsideTheTransaction(t *testing.T) {
 
 // The fresh-DB path: application_id and user_version must land atomically. A
 // crash between them leaves application_id stamped with user_version 0, so
-// the next Open runs the FULL migration chain against the latest-shape tables
-// — the same duplicate-column brick.
+// the next Open runs the full migration chain against the latest-shape
+// tables, which is the same duplicate-column failure.
 func TestFreshStampIsAtomic(t *testing.T) {
 	ctx := context.Background()
 	db := openRecordingDB(t)

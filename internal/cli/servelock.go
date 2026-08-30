@@ -2,20 +2,19 @@
 
 package cli
 
-// The per-home serve lock (2026-08-12): one `gridwell serve` per Gridwell
-// home, ever — two servers over the same plugin DBs would each cache and
-// write independently, and SQLite's own locking (WAL allows N processes)
-// would not stop them. The mechanism is an exclusive flock on
-// <home>/serve.lock: kernel-owned, released the instant the holder dies,
-// so there is no stale-pidfile protocol and no cleanup to trust.
+// The per-home serve lock: one `gridwell serve` per Gridwell home. Two
+// servers over the same database would each cache and write independently,
+// and SQLite's own locking would not stop them, because WAL allows many
+// processes. The mechanism is an exclusive flock on <home>/serve.lock:
+// kernel-owned and released the instant the holder dies, so there is no
+// stale-pidfile protocol and no cleanup to trust.
 //
-// The lock file's CONTENT is the holder's serve banner, written once the
-// listener is up. A conflicting serve re-emits it as
-// "gridwell: already serving on ..." on stdout before exiting nonzero —
-// so the desktop app, which parses banners anyway, transparently connects
-// to the running server instead of starting a second one (sidecar.ts
-// marks it external and never kills it). One owner for lock, discovery,
-// and home resolution: this process; the app never learns what a home is.
+// The lock file's content is the holder's serve banner, written once the
+// listener is up. A conflicting serve re-emits it as "gridwell: already
+// serving on …" on stdout before exiting nonzero, so the desktop app, which
+// parses banners anyway, connects to the running server instead of starting
+// a second one. Lock, discovery, and home resolution have one owner, this
+// process; the app never learns what a home is.
 
 import (
 	"fmt"
@@ -30,8 +29,9 @@ type serveLock struct {
 	f *os.File
 }
 
-// errServeLockHeld reports the conflict along with the holder's banner
-// (empty if the holder hasn't written it yet or the file is unreadable).
+// errServeLockHeld reports the conflict along with the holder's banner,
+// which is empty when the holder has not written it yet or the file is
+// unreadable.
 type errServeLockHeld struct {
 	banner string
 }
@@ -56,8 +56,8 @@ func acquireServeLock(home string) (*serveLock, error) {
 		f.Close()
 		return nil, &errServeLockHeld{banner: strings.TrimSpace(string(banner))}
 	}
-	// Won: any content is a previous holder's leftover (crash — a clean
-	// Release removes the file). Empty it until our banner is known.
+	// Won: any content is a crashed holder's leftover, since a clean Release
+	// removes the file. Empty it until our banner is known.
 	if err := f.Truncate(0); err != nil {
 		f.Close()
 		return nil, fmt.Errorf("serve lock: %w", err)
@@ -65,19 +65,18 @@ func acquireServeLock(home string) (*serveLock, error) {
 	return &serveLock{f: f}, nil
 }
 
-// WriteBanner records the holder's serve banner — the line a conflicting
-// serve re-emits so the desktop app can connect to us instead.
+// WriteBanner records the holder's serve banner: the line a conflicting
+// serve re-emits so the desktop app connects to this one instead.
 func (l *serveLock) WriteBanner(banner string) {
 	_, _ = l.f.WriteAt([]byte(banner+"\n"), 0)
 	_ = l.f.Sync()
 }
 
-// probeServeLock answers "is anyone serving this home?" WITHOUT acquiring:
-// a shared (LOCK_SH) non-blocking flock, which coexists with other probes
-// and never truncates or unlinks. The old status probe took the EXCLUSIVE
-// lock for its test, so it could beat a starting serve to the flock and
-// manufacture a "already starting up" failure — a read-only question must
-// never win a write race.
+// probeServeLock answers "is anyone serving this home?" without acquiring:
+// a shared, non-blocking LOCK_SH flock, which coexists with other probes
+// and never truncates or unlinks. Taking the exclusive lock for the test
+// would let a read-only question beat a starting serve to the flock and
+// manufacture a failure.
 func probeServeLock(home string) (banner string, held bool, err error) {
 	path := filepath.Join(home, "serve.lock")
 	f, oerr := os.Open(path)
@@ -89,18 +88,18 @@ func probeServeLock(home string) (banner string, held bool, err error) {
 	}
 	defer f.Close()
 	if flerr := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); flerr != nil {
-		// Exclusively held: a serve is running (or mid-start).
+		// Exclusively held: a serve is running, or mid-start.
 		b, _ := os.ReadFile(path)
 		return strings.TrimSpace(string(b)), true, nil
 	}
-	// We got a shared lock — nobody holds the exclusive one. Drop it with
-	// the close; the file stays (it is the crashed-holder breadcrumb).
+	// A shared lock means nobody holds the exclusive one. Closing drops it;
+	// the file stays, as the crashed-holder breadcrumb.
 	return "", false, nil
 }
 
-// Release drops the lock and removes the file; a leftover serve.lock
-// therefore means the holder crashed (informational only — the flock is
-// what actually gates, and a dead holder's flock is already gone).
+// Release drops the lock and removes the file, so a leftover serve.lock
+// means the holder crashed. That is informational only: the flock is what
+// gates, and a dead holder's flock is already gone.
 func (l *serveLock) Release() {
 	_ = os.Remove(l.f.Name())
 	_ = l.f.Close() // closing drops the flock
