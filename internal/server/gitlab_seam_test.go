@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
 	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
@@ -60,7 +60,7 @@ func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (na
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp, cpCloser, err := compose.PluginInProcess(impl)
+	cp, cpCloser, err := plugintest.Loopback(impl)
 	if err != nil {
 		t.Fatal(err)
 	}

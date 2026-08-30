@@ -12,12 +12,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
@@ -70,7 +70,7 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := compose.PluginInProcess(fsplugin.New(root, osRemoveHost{}))
+	cp, cpCloser, err := plugintest.Loopback(fsplugin.New(root, osRemoveHost{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
 	prov := fsplugin.New(root, osRemoveHost{})
-	cp, cpCloser, err := compose.PluginInProcess(prov)
+	cp, cpCloser, err := plugintest.Loopback(prov)
 	if err != nil {
 		t.Fatal(err)
 	}

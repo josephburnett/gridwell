@@ -14,11 +14,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
@@ -52,7 +52,7 @@ func gitlabNode(t *testing.T, gl *fakeGitLab) *rpc.Client {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := compose.PluginInProcess(gitlabplugin.New(gl, gitlabplugin.Options{}))
+	cp, cpCloser, err := plugintest.Loopback(gitlabplugin.New(gl, gitlabplugin.Options{}))
 	if err != nil {
 		t.Fatal(err)
 	}

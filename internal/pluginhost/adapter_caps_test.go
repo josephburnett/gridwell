@@ -8,11 +8,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
 // capsPlugin declares every capability the plugin.v1 handshake has.
@@ -36,7 +36,7 @@ func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := compose.PluginInProcess(capsPlugin{})
+	cp, cpCloser, err := plugintest.Loopback(capsPlugin{})
 	if err != nil {
 		t.Fatal(err)
 	}

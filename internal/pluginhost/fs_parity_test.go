@@ -13,11 +13,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	"github.com/josephburnett/gridwell/plugins/fs/fssource"
@@ -61,7 +61,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 	// A plain-remove host: nil would mean the production trash, and a test
 	// deletion must never land in the real freedesktop Trash.
 	prov := fsplugin.New(root, osRemoveHost{})
-	cp, cpCloser, err := compose.PluginInProcess(prov)
+	cp, cpCloser, err := plugintest.Loopback(prov)
 	if err != nil {
 		t.Fatal(err)
 	}

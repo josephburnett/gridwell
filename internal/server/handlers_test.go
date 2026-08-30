@@ -9,12 +9,12 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 	procplugin "github.com/josephburnett/gridwell/plugins/proc/plugin"
 )
@@ -46,7 +46,7 @@ func newPluginClient(t *testing.T, kind string, impl pluginv1.PluginServer) name
 		t.Fatalf("%s layout: %v", kind, err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := compose.PluginInProcess(impl)
+	cp, cpCloser, err := plugintest.Loopback(impl)
 	if err != nil {
 		t.Fatalf("%s plugin serve: %v", kind, err)
 	}

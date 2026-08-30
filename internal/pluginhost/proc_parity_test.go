@@ -15,11 +15,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	procplugin "github.com/josephburnett/gridwell/plugins/proc/plugin"
@@ -69,7 +69,7 @@ func pluginProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := compose.PluginInProcess(procplugin.New(procRoot, 100, nopKiller{}))
+	cp, cpCloser, err := plugintest.Loopback(procplugin.New(procRoot, 100, nopKiller{}))
 	if err != nil {
 		t.Fatal(err)
 	}
