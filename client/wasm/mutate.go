@@ -144,7 +144,11 @@ func (a *App) do(w write) error {
 	if r.Refetch {
 		a.refetchGridOnConflict(w.gid, w.label)
 	}
-	if r.Log {
+	// A write with its own words says them; the generic rpc: notice rides
+	// along on a VERDICT (the developer half of "why did that fail") but not
+	// on a transport blip, where "will retry" is the whole story and a
+	// second red line beside it is noise.
+	if r.Log && !(w.source != "" && o == clientsync.OutcomeTransport) {
 		a.surfaceRPCError(w.label, err)
 	}
 	if w.source != "" {
@@ -161,14 +165,17 @@ func (a *App) do(w write) error {
 		}
 		return err
 	}
-	if w.then != nil {
-		w.then()
-	}
+	// The refetch is scheduled BEFORE `then`, the order the plain tile
+	// dispatcher always used: a success hook that relocates a pane wants the
+	// catch-up fetch already in flight.
 	if w.refetchOnOK {
 		a.fetchGrid(w.gid)
 		if w.alsoGID != "" && w.alsoGID != w.gid {
 			a.fetchGrid(w.alsoGID)
 		}
+	}
+	if w.then != nil {
+		w.then()
 	}
 	return nil
 }
