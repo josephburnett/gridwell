@@ -22,8 +22,7 @@ const repoModule = "github.com/josephburnett/gridwell"
 // modules maps each in-repo module, by path suffix with "" for the root, to
 // the other in-repo modules its non-test packages may import. Tests are exempt
 // by construction: `go list .Imports` excludes test files, and a seam test
-// deliberately crosses. The mobile leaf may import anything, because
-// enumeration is the leaf-binary privilege.
+// deliberately crosses.
 var modules = map[string][]string{
 	// The api imports nothing of ours: it is the contract.
 	"api": {},
@@ -41,8 +40,6 @@ var modules = map[string][]string{
 	"": {"api", "internal/doctype"},
 	// The stock host: server and api. No plugins; it spawns binaries.
 	"apps/gridwell": {"", "api", "internal/doctype"},
-	// A leaf binary: enumeration is legal here.
-	"mobile": {"*"},
 }
 
 // moduleOf resolves an import path to its in-repo module by longest
@@ -89,9 +86,6 @@ func repoRoot(t *testing.T) string {
 func TestArrows(t *testing.T) {
 	root := repoRoot(t)
 	for mod, allowed := range modules {
-		if len(allowed) == 1 && allowed[0] == "*" {
-			continue // a leaf binary: anything goes
-		}
 		allowedSet := map[string]bool{mod: true}
 		for _, a := range allowed {
 			allowedSet[a] = true

@@ -29,10 +29,10 @@ func TestDerive(t *testing.T) {
 	if c := Derive(NoBridge(), true); c.LiveShell || c.Shells {
 		t.Errorf("browser host on a shells-disabled node: nothing, got %+v", c)
 	}
-	// The mobile shape: a bridge that declares live url views only. It says
-	// nothing about shells — the host has no shell half to implement.
-	mobile := Bridge{Present: true, LiveURL: true}
-	if c := Derive(mobile, false); !c.LiveURL || !c.LiveShell || !c.Shells {
+	// A bridge that declares live url views only. It says nothing about
+	// shells — the host has no shell half to implement.
+	urlOnly := Bridge{Present: true, LiveURL: true}
+	if c := Derive(urlOnly, false); !c.LiveURL || !c.LiveShell || !c.Shells {
 		t.Errorf("url-only bridge: shells still ride the web door, got %+v", c)
 	}
 }

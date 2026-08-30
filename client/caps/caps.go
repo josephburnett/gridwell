@@ -38,9 +38,10 @@ type Caps struct {
 
 // Bridge is what the native host declares it can do: the window.gridwell
 // object's own caps field, read once at boot. Exposing the bridge does not
-// imply every native feature — a mobile shell can place live url views
-// without carrying the whole desktop's machinery. Shells are not on this
-// list; the PTY rides the web door, so no host implements anything for it.
+// imply every native feature — a host declares each half it implements, so a
+// future one can place live url views without carrying the whole desktop's
+// machinery. Shells are not on this list; the PTY rides the web door, so no
+// host implements anything for it.
 type Bridge struct {
 	// Present: window.gridwell exists at all (false = plain browser).
 	Present bool

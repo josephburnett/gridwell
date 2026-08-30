@@ -22,8 +22,8 @@ const PAGE =
     (async () => {
       try {
         if (!window.gridwell) { console.log('BRIDGE_RESULT ' + JSON.stringify({err:'no window.gridwell'})); return; }
-        // The caps declaration is a three-way string contract (preload /
-        // wasm bridgeCaps / the mobile shell): the KEY must exist as a
+        // The caps declaration is a string contract between the preload and
+        // the wasm's bridgeCaps: the KEY must exist as a
         // boolean, or the wasm silently degrades — a misspelled caps object
         // falls into the legacy full-feature imputation, claiming a native
         // url-view half a host may not implement.

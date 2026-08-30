@@ -8,7 +8,6 @@ use (
 	./api
 	./apps/gridwell
 	./internal/doctype
-	./mobile
 	./plugins/fs
 	./plugins/gitlab
 	./plugins/proc

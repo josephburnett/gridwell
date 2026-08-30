@@ -2,9 +2,7 @@ package boundary
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -112,51 +110,5 @@ func TestGoCacheKeyCoversEveryModule(t *testing.T) {
 		if !matches(filepath.ToSlash(sum)) {
 			t.Errorf("check.yml cache-dependency-path %v does not cover %s — its dependency changes never invalidate CI's Go cache (use **/go.sum)", patterns, sum)
 		}
-	}
-}
-
-// TestIOSCanaryPathsCoverTheBind pins that mobile-ios.yml's `paths:` filter
-// names every top-level directory the mobile bind compiles. A directory
-// missing from the trigger lets a break there ship without the only gate that
-// compiles for iOS ever running.
-func TestIOSCanaryPathsCoverTheBind(t *testing.T) {
-	root := repoRoot(t)
-	paths := yamlBlockList(t, filepath.Join(root, ".github", "workflows", "mobile-ios.yml"), "", "paths")
-	covered := map[string]bool{}
-	for _, p := range paths {
-		covered[strings.TrimSuffix(p, "/**")] = true
-	}
-	cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", "./...")
-	cmd.Dir = filepath.Join(root, "mobile")
-	cmd.Env = append(os.Environ(), "GOWORK=off")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list in mobile: %v\n%s", err, out)
-	}
-	need := map[string]bool{}
-	for _, imp := range strings.Fields(string(out)) {
-		if !strings.HasPrefix(imp, repoModule) {
-			continue
-		}
-		rest := strings.TrimPrefix(strings.TrimPrefix(imp, repoModule), "/")
-		top := rest
-		if i := strings.Index(rest, "/"); i >= 0 {
-			top = rest[:i]
-		}
-		need[top] = true
-	}
-	var missing []string
-	for top := range need {
-		if !covered[top] {
-			missing = append(missing, top+"/**")
-		}
-	}
-	sort.Strings(missing)
-	if len(missing) > 0 {
-		t.Errorf("mobile-ios.yml paths %v omit dirs the mobile bind compiles: %v", paths, missing)
-	}
-	// go.mod at the root governs the internal/ packages the bind links.
-	if !covered["go.mod"] {
-		t.Errorf("mobile-ios.yml paths %v omit go.mod", paths)
 	}
 }

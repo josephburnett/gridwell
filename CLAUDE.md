@@ -88,8 +88,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   socket. Both node-side doors are codecs over the one router.
 - Plugins are the third-party door. The host never imports a plugin
   implementation and never switches on a plugin kind; every plugin behavior
-  rides a wire declaration. Only a leaf binary may enumerate what it ships.
-  `test/boundary` enforces it.
+  rides a wire declaration. `test/boundary` enforces it.
 - A plugin serves keys and content; the node owns ids and layout. A
   connection is config: an immutable name, a label, how to dial. Retiring a
   name is forever. Secrets stay host-local file paths.
@@ -114,8 +113,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   outside; entering a url reopens it, entering a shell reconnects. One
   owner decides (`shellconn.DecideAutoLive`).
 - Shells ride the web door: a WebSocket at `/shell`, same cookie, same
-  origin. Every host with the web client has shells. The only thing that
-  turns shells off is the node (`disable_shells`; a phone cannot host tmux).
+  origin. Every host with the web client has shells — a phone reaches them
+  through the browser, like everything else. The only thing that turns
+  shells off is the node (`disable_shells`).
 - Session-ephemeral: the pane tree, the selection, the level stack, and the
   outer frames' viewports. The durable home for a layout is the pane tile.
 - Cross-plugin: left-drag links, right-drag clones. There is no move.

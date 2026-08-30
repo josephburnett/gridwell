@@ -101,7 +101,7 @@ proto-check:
 # shared nested modules, and each plugin, which is its own module. check
 # builds and tests each one standalone (GOWORK=off) so no module can
 # quietly lean on the workspace.
-MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell mobile
+MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell
 
 # check depends on wasm: web/embed.go EMBEDS the built gridwell.wasm, so
 # a fresh checkout (CI) cannot even `go build ./...` before one exists.

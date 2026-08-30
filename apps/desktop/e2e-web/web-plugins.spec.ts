@@ -6,13 +6,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 // Every shipped plugin kind, crawled through the browser client: proc, a live
-// process tree, and gitlab, todos against a fake GitLab API. This is what makes
-// the bundled-plugin composition mean what it says. The composition-parity gate
-// runs the same suite against `gridwell`, where each plugin is a spawned
-// gridwell-plugin-<kind> subprocess, and against the mobile bind, where every
-// plugin runs in-process through the compose door. Seeding only fs would leave
-// proc and gitlab uncrossed in both. test/boundary pins that every bundled
-// plugin kind is seeded by some web spec.
+// process tree, and gitlab, todos against a fake GitLab API. Each runs as a
+// spawned gridwell-plugin-<kind> subprocess, which is the one way a plugin
+// loads; seeding only fs would leave proc and gitlab uncrossed.
 
 // A todo the fake serves. The JSON shape is the wire form of
 // plugins/gitlab/todos.Todo, from GET /api/v4/todos: one pending review request.

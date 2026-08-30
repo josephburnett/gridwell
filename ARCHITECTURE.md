@@ -292,7 +292,6 @@ pane is inside" and do not spread the word.
 plugins/*          → api                      (nothing else of ours)
 internal, server   → api
 apps/gridwell      → server, api              (no plugin modules)
-apps/mobile        → server, api, chosen plugins   (a leaf may enumerate)
 api                → nothing of ours
 ```
 

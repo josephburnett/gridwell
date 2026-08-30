@@ -1,7 +1,6 @@
 # The per-commit gate: `make check` — fmt, proto drift, every module
-# standalone, the boundary lint, wasm, TS — plus the mobile Android
-# cross-compile canary. The iOS canary needs a macOS runner; see
-# mobile-ios.yml. Broken code must not be mergeable, let alone releasable.
+# standalone, the boundary lint, wasm, TS. Broken code must not be
+# mergeable, let alone releasable.
 name: check
 on:
   push:
@@ -36,5 +35,3 @@ jobs:
         run: cd apps/desktop && npm ci
       - name: make check
         run: make check
-      - name: mobile android canary
-        run: cd mobile && GOWORK=off GOOS=android GOARCH=arm64 go build ./...
