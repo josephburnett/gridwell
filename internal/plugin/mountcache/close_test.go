@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -52,7 +53,12 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(nil) })
+	// Restore a REAL writer, never nil: the standard logger is process-wide,
+	// and another test's prefetch goroutine can still be walking when this
+	// cleanup runs. log.Printf into a nil writer panics and takes the whole
+	// package's test binary with it (a flake that only shows under the
+	// parallel `go test ./...`).
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
 	if _, err := cc.Subscribe(context.Background(), &pb.SubscribeRequest{}); err != nil {
 		t.Fatal(err)

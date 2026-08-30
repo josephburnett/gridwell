@@ -253,8 +253,8 @@ func (s *Store) PluginUUID(ctx context.Context) (string, error) {
 }
 
 // RootFraming returns home's root framing — the same fact, in the same
-// three columns, that a plugin context's root keeps: home's root grid row
-// at ns = ''. ok=false means never visited.
+// three columns, that a plugin context's root keeps, on home's root grid
+// row (the empty namespace). ok=false means never visited.
 func (s *Store) RootFraming(ctx context.Context) (f rpc.Framing, ok bool, err error) {
 	rootID, err := rootGridID(ctx, s.db)
 	if err != nil {
