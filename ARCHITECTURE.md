@@ -20,7 +20,7 @@ lists where that still needs doing.
 ┌──────────────────────────────────────────────────────────────────────┐
 │ Electron main process        apps/desktop/src/main/                  │
 │   native WebContentsViews positioned over a wasm canvas              │
-│   (live URL pages) + the shell PTY relay. Invisible to `make check`. │
+│   (live URL pages) — nothing else. Invisible to `make check`.        │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  IPC  (window.gridwell bridge, CSS-px bounds both ways)
 ┌───────────────▼──────────────────────────────────────────────────────┐
@@ -83,7 +83,7 @@ The surface, one method per concept:
 | Content bytes | `ReadContent` / `WriteContent` — the ONE way content moves. Versioned; a write commits at close (a broken stream leaves the old value intact); a read on a leaf link resolves to the target at the serving node |
 | Web content | `ServeContent` — the RPC carrier behind the HTTP `/content/<token>/<tile-id>/<subpath>` door: a plugin serves ANY content as web content (an image, a whole HTML page with relative subresources). GET-only; routes/link-resolves/federates exactly like `ReadContent`. The door stamps `CSP: sandbox allow-scripts` (opaque origin — no cookies, no RPC reach) and gates by the content token (its own password derivation, handed out on the authenticated `Handshake`). `Tile.serves_page` (wire-only, plugin-derived) tells the client to present the descent with url-tile semantics at the derived address |
 | Mutations | `CreateTile` (metadata only — a body follows as a WriteContent), `SetTile` (framing/preview + rename + content_zoom, one op per call), `PlaceTile` (the one placement writeback), `CloneTile`, `DeleteTile` |
-| Live bytes | `OpenShell` (a PTY both ways — deliberately the one live wire), `ShellSessionAlive` |
+| Live bytes | `OpenShell` (a PTY both ways — deliberately the one live wire; the browser reaches it through the `/shell` WebSocket door, `client/shellwire`), `ShellSessionAlive` |
 | Events | `Subscribe` |
 
 No request carries a descent path — the server derives location facts from
@@ -320,11 +320,12 @@ persistence is the session's system of record (a documented charter-§7
 exception, like processes and files). Teardown captures a final frame for
 the freeze but never depends on the capture succeeding.
 
-**Shell transport.** `shellstreams.ts` dials the sidecar's federation
-socket (the banner's `federation=` path, `unix:`) and
-relays gRPC `OpenShell` per pane over IPC (replace-on-open, at-most-once
-exit, no-op after close — unit-tested against a fake dialer). Browsers get
-frozen shell previews, caps-gated like live url tiles.
+**No shell transport.** There was one — main dialed the federation socket
+and relayed gRPC `OpenShell` per pane over IPC — and it is gone
+(2026-08-29). PTY bytes ride a WebSocket on the WEB door
+(`internal/server/shell_door.go`, `client/shellwire`), like every other
+primitive, so the desktop is no longer the only host with shells and this
+process carries nothing shell-shaped at all.
 
 ---
 
@@ -342,6 +343,7 @@ same truth twice. The templates:
 | `client/menu` | "is the menu open, on which pane" | one state machine | every gesture path (was 14 scattered writes) |
 | `cache` content entries + `text_flush.go` | "the bytes, their version, and whether they're edited" | one entry per tile id | every save path |
 | `shellconn.DecideAutoLive` | "does this descent go live" | one decision | every descent/restore path |
+| `client/shellwire` | the shell door's address + frames | one grammar | the server door and the wasm client |
 | `local.OpenVerified` | the plugin's identity | verify+open+inject fused | every identity read |
 
 Each makes a bug class unrepresentable. That is the goal of every change:

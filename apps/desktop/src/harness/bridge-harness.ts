@@ -23,12 +23,12 @@ const PAGE =
       try {
         if (!window.gridwell) { console.log('BRIDGE_RESULT ' + JSON.stringify({err:'no window.gridwell'})); return; }
         // The caps declaration is a three-way string contract (preload /
-        // wasm bridgeCaps / the mobile shell): the KEYS must exist as
-        // booleans, or the wasm silently degrades — and a misspelled caps
-        // object falls into the legacy full-feature imputation, claiming
-        // live shells a host may not implement.
+        // wasm bridgeCaps / the mobile shell): the KEY must exist as a
+        // boolean, or the wasm silently degrades — a misspelled caps object
+        // falls into the legacy full-feature imputation, claiming a native
+        // url-view half a host may not implement.
         const caps = window.gridwell.caps;
-        if (!caps || typeof caps.liveUrl !== 'boolean' || typeof caps.liveShell !== 'boolean') {
+        if (!caps || typeof caps.liveUrl !== 'boolean') {
           console.log('BRIDGE_RESULT ' + JSON.stringify({ err: 'caps contract broken: ' + JSON.stringify(caps) }));
           return;
         }

@@ -2,9 +2,9 @@
 // served by a Connect-RPC handler at /gridwell.v1.Gridwell/<Method>
 // (binary-proto and JSON-over-proto codecs both supported); the static
 // web/ directory is served at /. Live URL tiles are hosted natively by the
-// Electron shell (WebContentsView), and shell PTY bytes ride the Electron
-// main process's gRPC OpenShell stream against the node export — the
-// browser-facing surface is pure Connect.
+// Electron shell (WebContentsView); shell PTY bytes ride a WebSocket on
+// this same gated door (shell_door.go, 2026-08-29), so every host that
+// runs the client has shells.
 //
 // Single-tenant, two doors (2026-08-26): WebHandler is the browser surface,
 // ALWAYS gated behind the password (the minted <home>/web-password file;
@@ -112,7 +112,7 @@ func (s *Server) routeClient(uuid string) (pb.GridwellClient, bool) {
 // connection, owned by the transport, whose local id keeps the
 // connection segment ("<conn>/…" — the transport peels it); anything
 // else is a plugin by uuid. The Connect handler, the export's streams,
-// the content door and the shell relay all resolve through here.
+// the content door and the shell door all resolve through here.
 func (s *Server) resolve(id string) (client pb.GridwellClient, local, uuid string, transit, ok bool) {
 	uuid, local, split := rpc.SplitID(id)
 	if !split {

@@ -1,34 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dialAddr, parseServingLine, windowOrigin, makeLineSplitter } from './lines';
+import { parseServingLine, windowOrigin, makeLineSplitter } from './lines';
 
 test('parseServingLine extracts the bound address from the serve banner', () => {
   assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1 federation=/tmp/gw home/federation.sock)'), {
     host: '127.0.0.1',
     port: 8099,
-    federation: '/tmp/gw home/federation.sock',
   });
   // A Tailscale bind from server.yaml.
   assert.deepEqual(parseServingLine('gridwell: serving on 100.64.0.7:8080 (static=./web plugins=2 federation=/tmp/gw home/federation.sock)'), {
     host: '100.64.0.7',
     port: 8080,
-    federation: '/tmp/gw home/federation.sock',
   });
   // Go announces a wildcard bind as the dual-stack listener address.
   assert.deepEqual(parseServingLine('gridwell: serving on [::]:8080 (static= plugins=1 federation=/tmp/gw home/federation.sock)'), {
     host: '::',
     port: 8080,
-    federation: '/tmp/gw home/federation.sock',
   });
   assert.deepEqual(parseServingLine('gridwell: serving on 0.0.0.0:8080 (static= plugins=1 federation=/tmp/gw home/federation.sock)'), {
     host: '0.0.0.0',
     port: 8080,
-    federation: '/tmp/gw home/federation.sock',
   });
   assert.deepEqual(parseServingLine('gridwell: serving on [::1]:9000 (static= plugins=1 federation=/tmp/gw home/federation.sock)'), {
     host: '::1',
     port: 9000,
-    federation: '/tmp/gw home/federation.sock',
   });
 });
 
@@ -36,12 +31,12 @@ test('parseServingLine extracts the auth token when a password is configured', (
   const token = 'a'.repeat(64);
   assert.deepEqual(
     parseServingLine(`gridwell: serving on 100.64.0.7:8080 (static=./web plugins=2 auth=${token} federation=/tmp/gw home/federation.sock)`),
-    { host: '100.64.0.7', port: 8080, federation: '/tmp/gw home/federation.sock', auth: token },
+    { host: '100.64.0.7', port: 8080, auth: token },
   );
   // A non-token-shaped auth= is ignored rather than trusted.
   assert.deepEqual(
     parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1 auth=nope federation=/tmp/gw home/federation.sock)'),
-    { host: '127.0.0.1', port: 8099, federation: '/tmp/gw home/federation.sock' },
+    { host: '127.0.0.1', port: 8099 },
   );
 });
 
@@ -52,20 +47,12 @@ test('parseServingLine marks the "already serving" reprint external', () => {
   const token = 'd'.repeat(64);
   assert.deepEqual(
     parseServingLine(`gridwell: already serving on 127.0.0.1:10010 (static=embedded plugins=2 auth=${token} federation=/tmp/gw home/federation.sock)`),
-    { host: '127.0.0.1', port: 10010, federation: '/tmp/gw home/federation.sock', auth: token, external: true },
+    { host: '127.0.0.1', port: 10010, auth: token, external: true },
   );
   assert.deepEqual(
     parseServingLine('gridwell: already serving on [::]:8080 (static=embedded plugins=1 federation=/tmp/gw home/federation.sock)'),
-    { host: '::', port: 8080, federation: '/tmp/gw home/federation.sock', external: true },
+    { host: '::', port: 8080, external: true },
   );
-});
-
-test('dialAddr is the federation socket from the banner, whatever the web host', () => {
-  // The node export is a unix socket (2026-08-26): the shell relay dials
-  // it in grpc-js's unix: form, never the web address — a Tailscale-bound
-  // window still reaches its shells locally.
-  assert.equal(dialAddr({ host: '0.0.0.0', port: 8080, federation: '/h/.gridwell/federation.sock' }), 'unix:/h/.gridwell/federation.sock');
-  assert.equal(dialAddr({ host: '100.64.0.7', port: 8080, federation: '/tmp/gw home/federation.sock' }), 'unix:/tmp/gw home/federation.sock');
 });
 
 test('parseServingLine rejects every other line', () => {
@@ -76,22 +63,26 @@ test('parseServingLine rejects every other line', () => {
   // A banner-shaped line with a garbage address must not resolve boot.
   assert.equal(parseServingLine('gridwell: serving on nonsense (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
   assert.equal(parseServingLine('gridwell: serving on 127.0.0.1:notaport (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
-  // No federation= is not a serve banner: the shell relay would have
-  // nothing to dial (an older binary's banner shape).
-  assert.equal(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1)'), null);
+  // A banner with NO federation= still resolves boot: the desktop app has
+  // no business with the node door since the PTY moved onto the web door
+  // (2026-08-29), and a node may serve no federation socket at all.
+  assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1)'), {
+    host: '127.0.0.1',
+    port: 8099,
+  });
 });
 
 test('windowOrigin maps wildcard hosts to loopback and keeps concrete hosts', () => {
   // Wildcards are reachable locally as loopback.
-  assert.equal(windowOrigin({ host: '0.0.0.0', port: 8080, federation: '/tmp/gw home/federation.sock' }), 'http://127.0.0.1:8080');
-  assert.equal(windowOrigin({ host: '::', port: 8080, federation: '/tmp/gw home/federation.sock' }), 'http://127.0.0.1:8080');
-  assert.equal(windowOrigin({ host: '', port: 8080, federation: '/tmp/gw home/federation.sock' }), 'http://127.0.0.1:8080');
+  assert.equal(windowOrigin({ host: '0.0.0.0', port: 8080 }), 'http://127.0.0.1:8080');
+  assert.equal(windowOrigin({ host: '::', port: 8080 }), 'http://127.0.0.1:8080');
+  assert.equal(windowOrigin({ host: '', port: 8080 }), 'http://127.0.0.1:8080');
   // A concrete host (e.g. a Tailscale IP) is kept, so the window and a phone
   // share one origin.
-  assert.equal(windowOrigin({ host: '100.64.0.7', port: 8080, federation: '/tmp/gw home/federation.sock' }), 'http://100.64.0.7:8080');
-  assert.equal(windowOrigin({ host: '127.0.0.1', port: 41000, federation: '/tmp/gw home/federation.sock' }), 'http://127.0.0.1:41000');
+  assert.equal(windowOrigin({ host: '100.64.0.7', port: 8080 }), 'http://100.64.0.7:8080');
+  assert.equal(windowOrigin({ host: '127.0.0.1', port: 41000 }), 'http://127.0.0.1:41000');
   // IPv6 hosts get re-bracketed for the URL.
-  assert.equal(windowOrigin({ host: '::1', port: 9000, federation: '/tmp/gw home/federation.sock' }), 'http://[::1]:9000');
+  assert.equal(windowOrigin({ host: '::1', port: 9000 }), 'http://[::1]:9000');
 });
 
 test('makeLineSplitter emits complete lines and buffers partials', () => {

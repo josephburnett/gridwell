@@ -5,16 +5,12 @@
 // ServingAddr is the address announced by the serve banner. host is the raw
 // WEB listener host: it may be a wildcard ("0.0.0.0", "::", or "") — Go
 // announces a wildcard bind as its dual-stack listener address "[::]:<port>".
-// federation is the node door's unix socket path — the gRPC export the
-// shell relay dials; since 2026-08-26 it is a 0600 socket, never a TCP
-// address, and it is the banner's LAST field (a path may contain spaces).
 // auth, when present, is the web-UI auth token (server.AuthToken — the value
 // of the gridwell_auth cookie): the server prints it (the door always has a
 // password, so this window can authenticate without prompting.
 interface ServingAddr {
   host: string;
   port: number;
-  federation: string;
   auth?: string;
   // external: the banner came from the "gridwell: already serving on ..."
   // reprint — a server SOMEONE ELSE started holds this home's serve lock
@@ -27,10 +23,11 @@ interface ServingAddr {
 // for any other line. This is the boot contract with `gridwell serve`
 // (internal/cli/serve.go servingBanner): the server prints
 //   "gridwell: serving on <host>:<port> (static=... plugins=N auth=<hex> federation=<socket path>)"
-// with the listener's ACTUAL bound address, only once both doors are up. A
-// banner without federation= is not a serve banner: the shell relay would
-// have nothing to dial, so it is null rather than a half-parsed address.
-// The server — not this spawner — owns the "where am I listening" fact,
+// with the listener's ACTUAL bound address, only once both doors are up.
+// federation= is NOT read here: the desktop app has no business with the
+// node door since the PTY moved onto the web door (2026-08-29), and
+// requiring it would refuse to boot against a node that serves no
+// federation socket at all. The server — not this spawner — owns the "where am I listening" fact,
 // because server.yaml `web.bind` may override the sidecar's --bind-default
 // (one stable origin shared with a phone over e.g. Tailscale).
 // "already serving on" is the same banner re-emitted by a serve (or
@@ -47,10 +44,8 @@ export function parseServingLine(line: string): ServingAddr | null {
   if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
   let host = addr.slice(0, i);
   if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1); // net.JoinHostPort IPv6 form
-  const federation = /\bfederation=(.+)\)$/.exec(line)?.[1];
-  if (!federation) return null;
   const auth = /\bauth=([0-9a-f]{64})\b/.exec(line)?.[1];
-  const out: ServingAddr = { host, port, federation };
+  const out: ServingAddr = { host, port };
   if (auth) out.auth = auth;
   if (external) out.external = true;
   return out;
@@ -62,13 +57,6 @@ export function parseServingLine(line: string): ServingAddr | null {
 // a phone browser share one origin.
 export function windowOrigin(a: ServingAddr): string {
   return `http://${reachableHost(a)}:${a.port}`;
-}
-
-// dialAddr is the gRPC node-export target for the shell transport: the
-// federation socket the banner announced, in grpc-js's unix: form —
-// whatever the web door is bound to.
-export function dialAddr(a: ServingAddr): string {
-  return `unix:${a.federation}`;
 }
 
 function reachableHost(a: ServingAddr): string {

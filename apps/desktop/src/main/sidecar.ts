@@ -2,17 +2,13 @@ import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import { freePort } from './freeport';
 import { sidecarBinary, staticDir } from './paths';
-import { dialAddr, makeLineSplitter, parseServingLine, windowOrigin } from './lines';
+import { makeLineSplitter, parseServingLine, windowOrigin } from './lines';
 
 export interface Sidecar {
   // The window origin, read back from the serve banner — loopback by
   // default, but server.yaml `web.bind` may pin another address (e.g. a
   // Tailscale IP shared with a phone browser).
   origin: string;
-  // dialAddr is the gRPC node-export target: the federation socket from
-  // the banner (unix:<path>) — a 0600 socket since 2026-08-26, so a window
-  // on a Tailscale origin still dials its shells locally.
-  dialAddr: string;
   // The web-UI auth token from the banner (the door is always gated; the
   // password is the minted web-password file — lines.ts owns the contract).
   // index.ts pre-sets it as the auth cookie so this window never prompts —
@@ -132,7 +128,6 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
         clearTimeout(timer);
         resolve({
           origin: windowOrigin(served),
-          dialAddr: dialAddr(served),
           auth: served.auth,
           external: !!served.external,
           child,

@@ -41,8 +41,7 @@ import (
 func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
 
 // FederationHandler is the NODE door: the Gridwell service over raw
-// gRPC, what a remote mounter's ssh tunnel and the desktop's shell relay
-// dial. Ungated by design and served ONLY on the 0600 unix socket
+// gRPC, what a remote mounter's ssh tunnel dials. Ungated by design and served ONLY on the 0600 unix socket
 // node.listenFederation opens (config.FederationSocket; there is no
 // address form) — ssh is the authenticated transport between nodes. Serve
 // it with NodeProtocols: gRPC over a cleartext tunnel needs HTTP/2
