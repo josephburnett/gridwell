@@ -872,12 +872,13 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.cctx.Call("rect", x, y, w, h)
 		a.cctx.Call("clip")
 
-		// Child grid lines inside the well, aligned so child cell (0, 0)
-		// lands at the well's center offset by the well's view region. This
-		// is exactly where the just-after-descent child viewport would put
-		// it, so the lines glide continuously across the path swap.
-		viewCenterX := n.ViewCx
-		viewCenterY := n.ViewCy
+		// Child grid lines inside the well, aligned so the child point the
+		// well's framing centers on lands at the well's center. This is
+		// exactly where the just-after-descent child viewport would put it,
+		// so the lines glide continuously across the path swap — including
+		// for a never-visited well, whose framing EffectiveCenter resolves
+		// to its footprint's own center (the same value Descent uses).
+		viewCenterX, viewCenterY := zoomtrans.EffectiveCenter(wellOf(n))
 		wellCenterX := x + w/2
 		wellCenterY := y + h/2
 		originX := wellCenterX - viewCenterX*previewCell

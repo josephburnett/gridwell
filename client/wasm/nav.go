@@ -98,10 +98,7 @@ func (a *App) descendGrid(p *pane.Pane, well *rpc.Tile) {
 		Path: slices.Clone(p.Path()),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 	}
-	w := zoomtrans.Well{
-		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewCx: well.ViewCx, ViewCy: well.ViewCy, ViewZoom: well.ViewZoom,
-	}
+	w := wellOf(well)
 	next := pane.Frame{Door: well.ID}
 	mid, swap, final := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
 	if isLinkTile(well) {
@@ -368,10 +365,7 @@ func (a *App) ascendOnce(p *pane.Pane, animate bool) bool {
 	// segment, so they begin and end at the same moment regardless of which
 	// has more "distance".
 	from := zoomtrans.Endpoints{Path: slices.Clone(p.Path()), Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
-	w := zoomtrans.Well{
-		ID: doorTile.ID, X: doorTile.X, Y: doorTile.Y, W: doorTile.W, H: doorTile.H,
-		ViewCx: doorTile.ViewCx, ViewCy: doorTile.ViewCy, ViewZoom: doorTile.ViewZoom,
-	}
+	w := wellOf(doorTile)
 	// The switch state is the doorway's own footprint at overtake — the
 	// inverse of the descent's approach, and the same for a well and for a
 	// namespace crossing (the child grid's coordinates mean nothing out

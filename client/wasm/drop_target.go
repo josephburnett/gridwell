@@ -121,15 +121,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
 		dragdrop.PromoteToWell(rpc.IsWellKind(n.Kind), n.ChildGridID, n.ID, excludeTileID) {
-		// Well preview math. Effective ratio resolves the unvisited
-		// fallback in one place so the child cell size is computed
-		// the same way here as in the renderer.
-		ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
-		cp := dragdrop.ChildPreviewFor(ps, struct {
-			X, Y, W, H     int64
-			ViewCx, ViewCy float64
-		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: n.ViewCx, ViewCy: n.ViewCy},
-			ratio)
+		cp := wellPreviewFor(ps, n)
 		return &dropTarget{
 			pane:     p,
 			gridID:   n.ChildGridID,
@@ -222,14 +214,7 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, s
 	if !ok {
 		return nil
 	}
-	ps := paneToDragdrop(p, r)
-	ratio := zoomtrans.EffectiveViewZoom(well.ViewZoom, zoomtrans.DefaultWellViewZoom)
-	cp := dragdrop.ChildPreviewFor(ps, struct {
-		X, Y, W, H     int64
-		ViewCx, ViewCy float64
-	}{X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewCx: well.ViewCx, ViewCy: well.ViewCy},
-		ratio)
+	cp := wellPreviewFor(paneToDragdrop(p, r), well)
 	// Which child cell does the cursor sit in? FloorCellAt floors toward
 	// -inf (math.Floor), the correct hit-test answer in a well's negative
 	// quadrant — int64() truncates toward zero and would mis-target there.
@@ -240,4 +225,28 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, s
 		}
 	}
 	return nil
+}
+
+// wellPreviewFor is the ONE way a well's stored framing becomes a child
+// preview transform: BOTH halves of the framing resolved through
+// zoomtrans' unvisited sentinel — the ratio (EffectiveViewZoom) and the
+// center (EffectiveCenter) — so the drop target, the pull-out-of-well hit
+// test and the renderer place a never-visited well's preview at the same
+// pixels instead of each remembering the fallback for itself.
+func wellPreviewFor(ps dragdrop.Pane, n *rpc.Tile) dragdrop.ChildPreview {
+	cx, cy := zoomtrans.EffectiveCenter(wellOf(n))
+	return dragdrop.ChildPreviewFor(ps, struct {
+		X, Y, W, H     int64
+		ViewCx, ViewCy float64
+	}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: cx, ViewCy: cy},
+		zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom))
+}
+
+// wellOf reads a tile row as the doorway zoomtrans reasons about: its
+// footprint in the parent grid plus the framing it was left at.
+func wellOf(n *rpc.Tile) zoomtrans.Well {
+	return zoomtrans.Well{
+		ID: n.ID, X: n.X, Y: n.Y, W: n.W, H: n.H,
+		ViewCx: n.ViewCx, ViewCy: n.ViewCy, ViewZoom: n.ViewZoom,
+	}
 }

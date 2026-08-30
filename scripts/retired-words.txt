@@ -9,3 +9,12 @@ provider docs/v2-design\.md|docs/content-presentation\.md|.*[Ll]ink [Pp]rovider|
 providers docs/v2-design\.md|docs/content-presentation\.md
 # "loadout" — the compiled-in plugin set of a leaf binary; retired 2026-08-29 with gridwell-all (docs/one-node.md names it as history).
 loadout docs/one-node\.md|docs/plugin\.md
+# "viewX"/"viewY" — a doorway's integer window ORIGIN, spelled ViewX/ViewY
+# on the wire and viewX/viewY in proto-JSON; retired 2026-08-29 by schema
+# v11, which keeps the framing as a float CENTER (viewCx/viewCy). Nothing
+# on the wire answers to the old name any more, so a stale read is silently
+# undefined — which is how three e2e assertions went on comparing zeros.
+# The SQL column view_x is a different word and stays legal: the migration
+# shim must still spell it.
+viewX
+viewY

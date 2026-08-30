@@ -628,3 +628,49 @@ func TestStoredViewMatchesDescentFinal(t *testing.T) {
 		}
 	}
 }
+
+// A never-visited doorway frames the MIDDLE of its child's origin cell,
+// not the corner. Regression: schema v11 replaced the integer window
+// ORIGIN with a float center, and every read site had derived the center
+// as origin + footprint/2 — so a row nobody had visited (origin 0) read
+// as footprint/2. Reading ViewCx/ViewCy raw dropped that half-footprint
+// and slid every unvisited grid up-left: the fs projection's root landed
+// with cell (0,0)'s CORNER at the pane center, half a screen-cell off, and
+// e2e's cellCenter refused the cells that fell out of the pane.
+func TestNeverVisitedFramingCentersTheFootprint(t *testing.T) {
+	// Footprint 3x2, nothing stored (ViewZoom 0 = never visited).
+	w := Well{ID: "1", X: 4, Y: 2, W: 3, H: 2}
+	if cx, cy := EffectiveCenter(w); !near(cx, 1.5) || !near(cy, 1) {
+		t.Errorf("EffectiveCenter = (%v, %v), want (1.5, 1)", cx, cy)
+	}
+	cx, cy, _ := StoredView(w, standardPaneW, standardPaneH, cellPx)
+	if !near(cx, 1.5) || !near(cy, 1) {
+		t.Errorf("StoredView center = (%v, %v), want (1.5, 1)", cx, cy)
+	}
+	_, swap, final := Descent(Endpoints{Zoom: 1}, w, standardPaneW, standardPaneH, cellPx)
+	if !near(swap.Cx, 1.5) || !near(swap.Cy, 1) {
+		t.Errorf("Descent swap center = (%v, %v), want (1.5, 1)", swap.Cx, swap.Cy)
+	}
+	if !near(final.Cx, 1.5) || !near(final.Cy, 1) {
+		t.Errorf("Descent final center = (%v, %v), want (1.5, 1)", final.Cx, final.Cy)
+	}
+	mid, _ := Ascent(Endpoints{Path: []string{"1"}, Zoom: 100}, w, nil,
+		standardPaneW, standardPaneH, cellPx)
+	if !near(mid.Cx, 1.5) || !near(mid.Cy, 1) {
+		t.Errorf("Ascent mid center = (%v, %v), want (1.5, 1)", mid.Cx, mid.Cy)
+	}
+
+	// The plugin/connection root case: a 1x1 synthetic doorway
+	// (rpc.PluginWellTile) frames the middle of child cell (0,0).
+	if cx, cy := EffectiveCenter(Well{W: 1, H: 1}); !near(cx, 0.5) || !near(cy, 0.5) {
+		t.Errorf("root doorway center = (%v, %v), want (0.5, 0.5)", cx, cy)
+	}
+
+	// A VISITED doorway keeps exactly what it stored — including a center
+	// of literally (0,0), which the sentinel must not mistake for unvisited
+	// (the guiding rule: a framing the user set never moves).
+	v := Well{W: 3, H: 2, ViewZoom: 0.4}
+	if cx, cy := EffectiveCenter(v); cx != 0 || cy != 0 {
+		t.Errorf("visited center = (%v, %v), want (0, 0)", cx, cy)
+	}
+}
