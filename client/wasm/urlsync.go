@@ -394,7 +394,7 @@ func (a *App) encodeFocusedPaneURL() pane.URLState {
 // textarea as (column, row), 0-indexed. Returns (0, 0) if the
 // textarea isn't visible.
 func (a *App) textareaCursorRowCol() (int, int) {
-	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
+	if !a.hasTextarea() {
 		return 0, 0
 	}
 	val := a.textTextarea.Get("value").String()
@@ -612,7 +612,7 @@ func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
 // applies it to the textarea via setSelectionRange. No-op if the
 // textarea isn't ready.
 func (a *App) placeCursorAt(col, row int) {
-	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
+	if !a.hasTextarea() {
 		return
 	}
 	val := a.textTextarea.Get("value").String()

@@ -99,12 +99,20 @@ func pointInFileInner(r pane.Rect, sx, sy float64) bool {
 	return panebox.PointInInner(r, textSideInset, sx, sy)
 }
 
+// hasTextarea reports whether the singleton text-overlay element exists yet.
+// Every path that reads or writes it asks first: it is created lazily by
+// ensureFileTextarea, and a draw, a URL read, or a mode toggle can arrive
+// before that.
+func (a *App) hasTextarea() bool {
+	return !a.textTextarea.IsUndefined() && !a.textTextarea.IsNull()
+}
+
 // ensureFileTextarea creates (once) the shared <textarea> overlay used
 // for markdown text-mode editing. It lives in document.body and is
 // positioned absolutely over the focused pane on demand. The element is
 // hidden by default and only shown via refreshFileOverlay.
 func (a *App) ensureFileTextarea() {
-	if !a.textTextarea.IsUndefined() && !a.textTextarea.IsNull() {
+	if a.hasTextarea() {
 		return
 	}
 	ta := a.doc.Call("createElement", "textarea")
@@ -528,7 +536,7 @@ func (a *App) focusCanvas() {
 // edits. It does not refocus, mutate the value, or toggle visibility.
 func (a *App) syncTextOverlayPosition() {
 	a.refreshFileToggle()
-	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
+	if !a.hasTextarea() {
 		return
 	}
 	display := a.textTextarea.Get("style").Get("display").String()
@@ -593,7 +601,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 		p.TextMode = rpc.TextModeText
 		// Reset textarea contents next time refreshFileOverlay is called
 		// so it picks up the freshest cached blob.
-		if !a.textTextarea.IsUndefined() && !a.textTextarea.IsNull() {
+		if a.hasTextarea() {
 			a.textTextarea.Set("value", "")
 			a.textareaReady = false // cleared; refreshFileOverlay re-seeds it
 		}
