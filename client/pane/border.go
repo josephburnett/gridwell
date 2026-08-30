@@ -47,8 +47,8 @@ type BorderInput struct {
 	// TileKnown is true when the descended tile's row is in the
 	// client's cache (so TileKind is meaningful).
 	TileKnown bool
-	// TileKind is the rpc.Kind string: "text", "url", "well",
-	// "file-well". Only consulted when TileKnown is true.
+	// TileKind is the rpc.Kind string ("text", "url", "well", "shell",
+	// "pane"). Only consulted when TileKnown is true.
 	TileKind string
 	// Focused is true when this pane is the keyboard-focused pane in
 	// the split tree.

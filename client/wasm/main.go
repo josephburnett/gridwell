@@ -348,15 +348,6 @@ type App struct {
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
 
-	// What the shared modal-form container left behind. It held the
-	// instance picker, then the entry-params form; the picker retired
-	// 2026-08-23 and the parameterized flow with it, so nothing writes
-	// these now — the busy check (url_stream_client.go) still reads
-	// modalOpen. The URL-entry modal above owns its own DOM.
-	modalCard  js.Value
-	modalOpen  bool
-	modalFuncs []js.Func
-
 	// lastTextareaTileID tracks which text-tile id the singleton
 	// textarea is currently bound to (i.e., whose blob it holds in its
 	// value). "" means "bound to nothing" (textarea is hidden or never

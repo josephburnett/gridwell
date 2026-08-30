@@ -1227,7 +1227,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// kind+source_key as the outside signal. No parent grid is in play here
 	// (the ghost is flying over the canvas).
 	outside := tileOutside(n, false)
-	// A dragged link (file-well / process-well / file) shows dashed too, so
+	// A dragged link shows dashed too, so
 	// you can see what you're carrying — and a drop that will CREATE a link
 	// (the cross-namespace left-drag) previews dashed for the same reason:
 	// dashed always means "this is/becomes a reference".

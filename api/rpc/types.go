@@ -13,10 +13,11 @@ import (
 
 // Tile kinds. A tile is exactly one of these.
 //
-// The "interior" kinds — well, text, url — live inside Gridwell. file-well,
-// process-well, and shell are "exit" kinds: their contents reflect state
-// owned by the host (the filesystem, the process table, a bash session),
-// not by Gridwell. The color grammar (red outline) follows.
+// The "interior" kinds — well, text, url, pane — live inside Gridwell. A
+// shell is an "exit" kind: its contents reflect state owned by the host (a
+// bash session), not by Gridwell; a plugin's wells (a directory, a
+// process) are ordinary wells whose grid a plugin projects. The color
+// grammar (red outline) follows.
 const (
 	KindWell  = "well"
 	KindText  = "text"

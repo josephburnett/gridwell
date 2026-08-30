@@ -135,7 +135,7 @@ func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
 
 // drawProcessGlyph paints a small process-tree icon centered in (x, y,
 // w, h): a parent node and two child nodes connected by lines. Used for
-// the process-well palette tile.
+// the proc plugin's palette tile.
 func drawProcessGlyph(c js.Value, x, y, w, h float64, color string) {
 	beginGlyph(c, w, h, color)
 	cx, cy, half := glyphBox(x, y, w, h)

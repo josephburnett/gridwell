@@ -245,7 +245,7 @@ func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *rpc.Tile 
 
 // armTileGesture installs the right state for a right-button-down on
 // a tile. The model is the same for every tile kind (well, text, URL,
-// file-well):
+// shell, pane):
 //   - Center 1/3 × 1/3: rightDragTileCenter — drag-past-threshold
 //     clones the tile (via the standard a.dragging machinery, armed
 //     in parallel); bare release does nothing.
