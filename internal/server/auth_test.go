@@ -197,14 +197,16 @@ func TestAuthLoginPageDirect(t *testing.T) {
 	}
 }
 
-// The token login: a GET on the login path carrying the
-// banner's token sets the cookie and lands home — how a native shell
-// that owns a webview's cookie jar (mobile) authenticates without a
-// prompt; a wrong token is the login page, 401, no cookie.
+// The token login: a GET on the login path carrying the banner's token sets
+// the cookie and lands home, so a browser reaches a node whose password was
+// never typed into it; a wrong token is the login page, 401, no cookie.
 func TestTokenLogin(t *testing.T) {
 	hs, _ := newAuthTestServer(t, "hunter2")
 	client := noRedirect(hs)
-	res, _ := get(t, client, TokenLoginURL(hs.URL, "hunter2"), "")
+	tokenURL := func(password string) string {
+		return hs.URL + authLoginPath + "?token=" + AuthToken(password)
+	}
+	res, _ := get(t, client, tokenURL("hunter2"), "")
 	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/" {
 		t.Fatalf("token login = %d %q, want 303 to /", res.StatusCode, res.Header.Get("Location"))
 	}
@@ -217,7 +219,7 @@ func TestTokenLogin(t *testing.T) {
 	if cookie != AuthToken("hunter2") {
 		t.Fatalf("cookie = %q", cookie)
 	}
-	res, body := get(t, client, TokenLoginURL(hs.URL, "wrong"), "")
+	res, body := get(t, client, tokenURL("wrong"), "")
 	if res.StatusCode != http.StatusUnauthorized || len(res.Cookies()) != 0 || !strings.Contains(body, "wrong password") {
 		t.Fatalf("wrong token = %d cookies=%d", res.StatusCode, len(res.Cookies()))
 	}

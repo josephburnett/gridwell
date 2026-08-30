@@ -108,10 +108,10 @@ func setAuthCookie(w http.ResponseWriter, token string) {
 // handleLogin serves the login page on GET and checks a submitted password on
 // POST. The submitted password is compared by token, so the compare is
 // constant-time over fixed-length digests. A GET carrying ?token=<token> is
-// the token login: a shell that owns a webview's cookie jar but cannot set a
-// cookie from outside it, such as the mobile bind, loads this URL once and
-// lands home authenticated. The token is the banner's, at the same trust level
-// as the <home>/web-password file the password is read from.
+// the token login: opening /auth/login?token=<banner token> sets the cookie
+// and lands home without a prompt, which is how a browser reaches a node
+// whose password it was never typed. The token is the banner's, at the same
+// trust level as the <home>/web-password file the password is read from.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, token string) {
 	switch r.Method {
 	case http.MethodPost:
@@ -174,11 +174,4 @@ func writeLoginPage(w http.ResponseWriter, status int, wrong bool) {
   <input type="password" name="password" placeholder="password" autofocus autocomplete="current-password">
   <button type="submit">enter</button>
 </form>`))
-}
-
-// TokenLoginURL is the token-login address for origin, handleLogin's GET
-// ?token= arm: what a native shell loads first to authenticate its webview. It
-// is the one place the URL is built.
-func TokenLoginURL(origin, password string) string {
-	return origin + authLoginPath + "?token=" + AuthToken(password)
 }

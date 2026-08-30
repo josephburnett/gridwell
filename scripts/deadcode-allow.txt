@@ -2,12 +2,6 @@
 # line, each with a reason. Keep this list SHORT — an entry here is a claim
 # that the symbol is part of a shipped surface the deadcode roots can't see.
 
-# The mobile bind's login door: mobile.Start (a gomobile LIBRARY leaf —
-# no main for the deadcode roots to walk) returns TokenLoginURL so the
-# phone's webview authenticates against the always-gated web door
-# (2026-08-26). The server half (handleLogin's ?token= arm) is live.
-internal/server/auth.go TokenLoginURL
-
 # Methods a LIBRARY calls through its own interface — the method pass
 # sees only this repo's call sites. hashicorp/go-plugin dispenses through
 # GRPCPlugin.{GRPCServer,GRPCClient}; goldmark installs a renderer through
