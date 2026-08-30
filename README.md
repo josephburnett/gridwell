@@ -138,9 +138,11 @@ still federates: a mounted machine's photos view fine from here. Served
 pages run sandboxed (an opaque origin — no cookies, no reach into your
 Gridwell), and the door is gated by a token derived from your password.
 
-One gRPC service (`api/gridwell/v1/data.proto`) is the whole interface —
-client to server, server to plugin, node to node. And the storage format is
-frozen and additive-only: the data is meant to outlast the application.
+One service (`api/gridwell/v1/data.proto`) is the whole interface — client
+to server, server to namespace, node to node. It travels as a wire only
+where something has to cross: to your browser, out to a plugin's own
+process, and over the socket another machine dials. And the storage format
+is frozen and additive-only: the data is meant to outlast the application.
 
 ## Running it
 
