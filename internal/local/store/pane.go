@@ -55,7 +55,7 @@ func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64,
 }
 
 // SetPaneLayout writes a pane tile's layout blob. Framing-class: the whole
-// layout is arrangement of references to other content — the SetWellView of
+// layout is arrangement of references to other content — the SetFraming of
 // workspaces — so it goes through emitTileChanged and NEVER bumps version
 // (owner decision 2026-07-08: no layout history; edit in place). Version is
 // still claimed for the in-place-edit check like every tile write, and

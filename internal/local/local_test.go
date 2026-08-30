@@ -333,7 +333,7 @@ func TestSetTile_WellFramingNoVersionBump(t *testing.T) {
 	set, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
 		TileId:  well.Tile.Id,
 		Version: well.Tile.Version,
-		Tile:    &gridwellv1.Tile{Kind: "well", ViewX: 5, ViewY: 6, ViewZoom: 2},
+		Tile:    &gridwellv1.Tile{Kind: "well", ViewCx: 5, ViewCy: 6, ViewZoom: 2},
 	})
 	if err != nil {
 		t.Fatalf("SetTile(well framing): %v", err)
@@ -341,7 +341,7 @@ func TestSetTile_WellFramingNoVersionBump(t *testing.T) {
 	if set.Tile.Version != well.Tile.Version {
 		t.Errorf("framing bumped version: %d → %d, want unchanged", well.Tile.Version, set.Tile.Version)
 	}
-	if set.Tile.ViewX != 5 || set.Tile.ViewY != 6 || set.Tile.ViewZoom != 2 {
+	if set.Tile.ViewCx != 5 || set.Tile.ViewCy != 6 || set.Tile.ViewZoom != 2 {
 		t.Errorf("framing not persisted: %+v", set.Tile)
 	}
 }

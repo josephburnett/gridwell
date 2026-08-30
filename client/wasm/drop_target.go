@@ -126,8 +126,9 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 		// the same way here as in the renderer.
 		ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
 		cp := dragdrop.ChildPreviewFor(ps, struct {
-			X, Y, W, H, ViewX, ViewY int64
-		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
+			X, Y, W, H     int64
+			ViewCx, ViewCy float64
+		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: n.ViewCx, ViewCy: n.ViewCy},
 			ratio)
 		return &dropTarget{
 			pane:     p,
@@ -224,9 +225,10 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, s
 	ps := paneToDragdrop(p, r)
 	ratio := zoomtrans.EffectiveViewZoom(well.ViewZoom, zoomtrans.DefaultWellViewZoom)
 	cp := dragdrop.ChildPreviewFor(ps, struct {
-		X, Y, W, H, ViewX, ViewY int64
+		X, Y, W, H     int64
+		ViewCx, ViewCy float64
 	}{X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY},
+		ViewCx: well.ViewCx, ViewCy: well.ViewCy},
 		ratio)
 	// Which child cell does the cursor sit in? FloorCellAt floors toward
 	// -inf (math.Floor), the correct hit-test answer in a well's negative

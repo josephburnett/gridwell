@@ -41,8 +41,9 @@ func TestChildPreviewRoundTrip(t *testing.T) {
 		Cx: 0, Cy: 0, Zoom: 1.0, CellPx: 64,
 	}
 	well := struct {
-		X, Y, W, H, ViewX, ViewY int64
-	}{X: -1, Y: 2, W: 3, H: 4, ViewX: 10, ViewY: -5}
+		X, Y, W, H     int64
+		ViewCx, ViewCy float64
+	}{X: -1, Y: 2, W: 3, H: 4, ViewCx: 11.5, ViewCy: -3}
 	// previewRatio = 1/8: legacy PreviewFactor fallback for an
 	// unvisited well. previewCell = 64 × 1/8 = 8 px per child cell.
 	cp := ChildPreviewFor(parent, well, 1.0/8.0)
@@ -69,8 +70,9 @@ func TestChildPreviewCenterAlignsWithViewCenter(t *testing.T) {
 		Cx: 0, Cy: 0, Zoom: 2.0, CellPx: 64,
 	}
 	well := struct {
-		X, Y, W, H, ViewX, ViewY int64
-	}{X: 0, Y: 0, W: 4, H: 4, ViewX: 0, ViewY: 0}
+		X, Y, W, H     int64
+		ViewCx, ViewCy float64
+	}{X: 0, Y: 0, W: 4, H: 4, ViewCx: 2, ViewCy: 2}
 	cp := ChildPreviewFor(parent, well, 1.0/8.0)
 	parentCell := parent.CellPx * parent.Zoom
 	wellCenterX, wellCenterY := parent.CellToScreen(2, 2) // center of 4×4 well at (0,0)

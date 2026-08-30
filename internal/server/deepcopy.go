@@ -61,7 +61,7 @@ func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient
 	// the current row — return THAT, not the pre-framing create response.
 	framed, err := dst.SetTile(ctx, &pb.SetTileRequest{
 		TileId: created.GetTile().GetId(), Version: created.GetTile().GetVersion(),
-		Tile: &pb.Tile{Kind: "well", ViewX: srcLocalTile.ViewX, ViewY: srcLocalTile.ViewY, ViewZoom: srcLocalTile.ViewZoom},
+		Tile: &pb.Tile{Kind: "well", ViewCx: srcLocalTile.ViewCx, ViewCy: srcLocalTile.ViewCy, ViewZoom: srcLocalTile.ViewZoom},
 	})
 	if err != nil {
 		return created, fmt.Errorf("well framing: %w", err)
@@ -93,7 +93,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 			GridId: dstGrid,
 			Tile: &pb.Tile{Kind: "well", X: t.X, Y: t.Y, W: t.W, H: t.H,
 				AltText: t.AltText, ChildGridId: q.ChildGridId,
-				ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom},
+				ViewCx: t.ViewCx, ViewCy: t.ViewCy, ViewZoom: t.ViewZoom},
 		})
 		return err
 	case q.Kind == "well":
@@ -115,7 +115,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 				GridId: dstGrid,
 				Tile: &pb.Tile{Kind: "well", X: t.X, Y: t.Y, W: t.W, H: t.H,
 					AltText: t.AltText, ChildGridId: q.ChildGridId,
-					ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom},
+					ViewCx: t.ViewCx, ViewCy: t.ViewCy, ViewZoom: t.ViewZoom},
 			})
 			return lerr
 		}

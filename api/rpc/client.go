@@ -185,7 +185,7 @@ func (c *Client) CreateLeafLink(ctx context.Context, req *CreateLeafLinkRequest)
 }
 
 // Set* are typed sugar over the single SetTile RPC.
-func (c *Client) SetWellView(ctx context.Context, req *SetWellViewRequest) (*Tile, error) {
+func (c *Client) SetWellView(ctx context.Context, req *SetFramingRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetWellViewToProto(req))))
 }
 func (c *Client) SetTextView(ctx context.Context, req *SetTextViewRequest) (*Tile, error) {
@@ -200,14 +200,14 @@ func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Til
 
 // SetRootView persists the plugin root-grid framing. The server routes on
 // root_grid_id; framing only — never bumps a content version.
-func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error {
+func (c *Client) SetRootView(ctx context.Context, req *SetFramingRequest) error {
 	_, err := c.cl.SetRootView(ctx, connect.NewRequest(SetRootViewToProto(req)))
 	return err
 }
 
 // SetRootViewToProto is the one wire conversion for the root-view write —
 // shared by the ordinary call above and its unload beacon form.
-func SetRootViewToProto(req *SetRootViewRequest) *pb.SetRootViewRequest {
+func SetRootViewToProto(req *SetFramingRequest) *pb.SetRootViewRequest {
 	return &pb.SetRootViewRequest{
 		RootGridId: req.RootGridID,
 		Cx:         req.Cx,

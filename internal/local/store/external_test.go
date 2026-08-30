@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // The externals' memory engine (external.go), ported from the retired
@@ -208,7 +210,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	if dir.ChildGridID == 0 {
 		t.Fatal("well minted no child grid")
 	}
-	if err := d.SetWellView(dir.ID, 3, -1, 1.5); err != nil {
+	if err := d.SetFraming(dir.ID, 0, rpc.Framing{Cx: 3, Cy: -1, Zoom: 1.5}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.SetTextView(f.ID, 0, 120, 400, 300, "rendered"); err != nil {
@@ -220,7 +222,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	listing[1].Label = "f renamed"
 	tiles, _ = d.Merge(gid, listing, true)
 	dir2, f2 := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
-	if dir2.ViewX != 3 || dir2.ViewY != -1 || dir2.ViewZoom != 1.5 {
+	if dir2.ViewCx != 3 || dir2.ViewCy != -1 || dir2.ViewZoom != 1.5 {
 		t.Fatalf("well framing lost: %+v", dir2)
 	}
 	if f2.TextY != 120 || f2.TextW != 400 || f2.TextMode != "rendered" || f2.ContentZoom != 1.25 || f2.Label != "f renamed" {
@@ -247,17 +249,17 @@ func TestExtRetireIsTheDeleteGesture(t *testing.T) {
 	}
 }
 
-func TestExtRootViewAndListings(t *testing.T) {
+func TestExtRootFramingAndListings(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.ContextID("root")
-	if _, _, _, ok, err := d.RootView(gid); err != nil || ok {
+	if _, ok, err := d.RootFraming(gid); err != nil || ok {
 		t.Fatalf("fresh context claims a root view: ok=%v err=%v", ok, err)
 	}
-	if err := d.SetRootView(gid, 1.5, -2.25, 0.8); err != nil {
+	if err := d.SetFraming(0, gid, rpc.Framing{Cx: 1.5, Cy: -2.25, Zoom: 0.8}); err != nil {
 		t.Fatal(err)
 	}
-	if cx, cy, zoom, ok, err := d.RootView(gid); err != nil || !ok || cx != 1.5 || cy != -2.25 || zoom != 0.8 {
-		t.Fatalf("root view round trip: %v %v %v ok=%v err=%v", cx, cy, zoom, ok, err)
+	if f, ok, err := d.RootFraming(gid); err != nil || !ok || f.Cx != 1.5 || f.Cy != -2.25 || f.Zoom != 0.8 {
+		t.Fatalf("root framing round trip: %+v ok=%v err=%v", f, ok, err)
 	}
 	if _, _, ok, err := d.CachedListing(gid); err != nil || ok {
 		t.Fatalf("fresh listing: ok=%v err=%v", ok, err)

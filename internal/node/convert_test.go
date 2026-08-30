@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
@@ -60,7 +61,7 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 	}
 	root, _ := st.RootGridID(ctx)
 	// Old plugin ids: grid 1 (root), grid 2 (a dir), tiles 1..3.
-	exit, err := st.CreateExitWell(ctx, root, 0, 0, 1, 1, pid+"/2", "docs", 0, 0, 0)
+	exit, err := st.CreateExitWell(ctx, root, 0, 0, 1, 1, pid+"/2", "docs", rpc.Framing{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +157,11 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cx, cy, zoom, ok, _ := p.RootView(rootGID); !ok || cx != 2.5 || cy != -1 || zoom != 0.75 {
-		t.Fatalf("root view lost: %v %v %v ok=%v", cx, cy, zoom, ok)
+	// The old file stored a root as the ORIGIN of the 1×1 synthetic
+	// doorway (2.5, -1); the center the client showed — and the one the
+	// v11 shape keeps — is + 0.5.
+	if f, ok, _ := p.RootFraming(rootGID); !ok || f.Cx != 3 || f.Cy != -0.5 || f.Zoom != 0.75 {
+		t.Fatalf("root framing lost: %+v ok=%v", f, ok)
 	}
 	tiles, err := p.Merge(rootGID, []store.Entry{{Key: "docs", Kind: "well", Label: "docs", ChildContext: "root/docs"}, {Key: "notes.md", Kind: "text", Label: "notes.md"}}, true)
 	if err != nil {
@@ -176,7 +180,9 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		}
 	}
 	docsGID, _ := p.ContextID("root/docs")
-	if docs.X != 4 || docs.W != 2 || docs.ViewX != 7 || docs.ViewZoom != 1.5 || docs.ChildGridID != docsGID {
+	// view_x 7 on a 2×2 footprint is the center 8 — the same arithmetic
+	// the v11 migration applies to a home file.
+	if docs.X != 4 || docs.W != 2 || docs.ViewCx != 8 || docs.ViewCy != 9 || docs.ViewZoom != 1.5 || docs.ChildGridID != docsGID {
 		t.Fatalf("well framing/child lost: %+v (child %d)", docs, docsGID)
 	}
 	if notes.TextY != 120 || notes.TextMode != "rendered" || notes.ContentZoom != 1.25 {

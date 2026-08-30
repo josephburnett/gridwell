@@ -292,3 +292,130 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 		t.Errorf("adopted well after reopen = %+v, want a named well with a child grid", reopened)
 	}
 }
+
+// TestMigrateV11OverAGenuineV10File covers what the per-migration fixture
+// cannot reach: the framing CONVERSION itself. A chain-built v10 file
+// already carries view_cx/view_cy (the v5 rebuild materializes the
+// CURRENT tiles shape — the convergence contract), so there is no
+// view_x/view_y in it to convert. A file written by a v10 BINARY has the
+// integer window ORIGIN, and every well in it must come out of v11
+// showing EXACTLY the framing it showed before: the center the client
+// derived to display it, origin + footprint/2.
+func TestMigrateV11OverAGenuineV10File(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "genuinev10.db")
+	db, root := buildDBAtV1(t, path)
+	applyMigrationsUpTo(t, db, 10)
+
+	// Put the v10 tiles shape back: the integer origin pair, in place of
+	// the float center pair a converged file already has.
+	for _, ddl := range []string{
+		`ALTER TABLE tiles DROP COLUMN view_cx`,
+		`ALTER TABLE tiles DROP COLUMN view_cy`,
+		`ALTER TABLE tiles ADD COLUMN view_x INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE tiles ADD COLUMN view_y INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := db.ExecContext(ctx, ddl); err != nil {
+			t.Fatalf("restore the v10 shape (%s): %v", ddl, err)
+		}
+	}
+	res, err := db.ExecContext(ctx, `INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := mustID(t, res)
+	// An even footprint (the center lands on a whole cell) and an odd one
+	// (the center is a HALF cell — the value the integer column could not
+	// hold, and the reason ViewOriginFromCenter had to exist).
+	for _, w := range []struct {
+		alt    string
+		w, h   int64
+		vx, vy int64
+		zoom   float64
+		wantX  float64
+		wantY  float64
+	}{
+		{"v10 even well", 2, 4, 7, -3, 0.375, 8, -1},
+		{"v10 odd well", 1, 1, 4, 4, 0.125, 4.5, 4.5},
+	} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO tiles
+			(grid_id, kind, x, y, w, h, view_x, view_y, view_zoom, child_grid_id, alt_text, created_at, updated_at)
+			VALUES (`+root+`, 'well', 0, 0, ?, ?, ?, ?, ?, ?, ?, 100, 100)`,
+			w.w, w.h, w.vx, w.vy, w.zoom, child, w.alt); err != nil {
+			t.Fatalf("plant %s: %v", w.alt, err)
+		}
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE system SET value = '12' WHERE key = 'root_view_cx'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE system SET value = '0.5' WHERE key = 'root_zoom'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := storeOver(db).migrateUp(ctx, migrations, 11); err != nil {
+		t.Fatalf("migrate a genuine v10 file to v11: %v", err)
+	}
+
+	for _, want := range []struct {
+		alt    string
+		cx, cy float64
+		zoom   float64
+	}{
+		{"v10 even well", 8, -1, 0.375},
+		{"v10 odd well", 4.5, 4.5, 0.125},
+	} {
+		var cx, cy, zoom float64
+		if err := db.QueryRowContext(ctx,
+			`SELECT view_cx, view_cy, view_zoom FROM tiles WHERE alt_text = ?`, want.alt).
+			Scan(&cx, &cy, &zoom); err != nil {
+			t.Fatalf("read %s after v11: %v", want.alt, err)
+		}
+		if cx != want.cx || cy != want.cy || zoom != want.zoom {
+			t.Errorf("%s framing = (%v, %v, %v), want the center it displayed at (%v, %v, %v)",
+				want.alt, cx, cy, zoom, want.cx, want.cy, want.zoom)
+		}
+	}
+	for _, col := range []string{"view_x", "view_y"} {
+		if _, ok := tableColumnsFP(t, db, "tiles")[col]; ok {
+			t.Errorf("tiles.%s survived v11 on a genuine v10 file", col)
+		}
+	}
+	// Home's root came across too, converted the same way.
+	var cx, zoom float64
+	if err := db.QueryRowContext(ctx,
+		`SELECT root_cx, root_zoom FROM grids WHERE id = `+root+` AND ns = ''`).Scan(&cx, &zoom); err != nil {
+		t.Fatalf("read home root framing: %v", err)
+	}
+	if cx != 12.5 || zoom != 0.5 {
+		t.Errorf("home root framing = (%v, zoom %v), want (12.5, 0.5)", cx, zoom)
+	}
+
+	// And the file OPENS through the production door and reads the wells
+	// back at their preserved framing — the storage promise itself.
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("a genuine v10 file must open after v11: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	g, err := s.GetGrid(ctx, root)
+	if err != nil {
+		t.Fatalf("read the root grid after reopen: %v", err)
+	}
+	found := 0
+	for _, tile := range g.Tiles {
+		if tile.AltText == "v10 odd well" {
+			found++
+			if tile.ViewCx != 4.5 || tile.ViewCy != 4.5 {
+				t.Errorf("odd well after reopen = (%v, %v), want (4.5, 4.5)", tile.ViewCx, tile.ViewCy)
+			}
+		}
+	}
+	if found != 1 {
+		t.Errorf("the odd well is not in the reopened grid (%d matches)", found)
+	}
+}

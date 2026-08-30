@@ -103,8 +103,8 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 			return nil, err
 		}
 		resp.RootGridId = strconv.FormatInt(gid, 10)
-		if cx, cy, zoom, ok, err := a.mem.RootView(gid); err == nil && ok {
-			resp.RootViewCx, resp.RootViewCy, resp.RootViewZoom = cx, cy, zoom
+		if f, ok, err := a.mem.RootFraming(gid); err == nil && ok {
+			resp.RootViewCx, resp.RootViewCy, resp.RootViewZoom = f.Cx, f.Cy, f.Zoom
 		}
 	}
 	return resp, nil
@@ -224,8 +224,8 @@ func buildTiles(gridID string, tiles []store.ExtTile, entries []*pluginv1.Entry)
 			Y:           t.Y,
 			W:           t.W,
 			H:           t.H,
-			ViewX:       t.ViewX,
-			ViewY:       t.ViewY,
+			ViewCx:      t.ViewCx,
+			ViewCy:      t.ViewCy,
 			ViewZoom:    t.ViewZoom,
 			TextX:       t.TextX,
 			TextY:       t.TextY,
@@ -544,7 +544,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 		t := req.GetTile()
 		switch t.GetKind() {
 		case "well":
-			if err := a.mem.SetWellView(id, t.GetViewX(), t.GetViewY(), t.GetViewZoom()); err != nil {
+			if err := a.mem.SetFraming(id, 0, rpc.Framing{Cx: t.GetViewCx(), Cy: t.GetViewCy(), Zoom: t.GetViewZoom()}); err != nil {
 				return nil, err
 			}
 		case "text":
@@ -558,13 +558,14 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	return a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: req.TileId})
 }
 
-// SetRootView persists a context's viewport (framing-class).
+// SetRootView persists a context's ROOT framing — the same fact, in the
+// same shape, that a doorway tile's framing is (framing-class).
 func (a *Adapter) SetRootView(_ context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
 	gid, err := strconv.ParseInt(req.RootGridId, 10, 64)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid root_grid_id %q", req.RootGridId)
 	}
-	if err := a.mem.SetRootView(gid, req.Cx, req.Cy, req.Zoom); err != nil {
+	if err := a.mem.SetFraming(0, gid, rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}); err != nil {
 		return nil, err
 	}
 	return &gridwellv1.SetRootViewResponse{}, nil

@@ -456,8 +456,8 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		// within-plugin clone of an exit well does. This is also the mount
 		// gesture's path (right-drag a node-grid plugin tile).
 		create.Tile.ChildGridId = st.ChildGridId
-		create.Tile.ViewX = st.ViewX
-		create.Tile.ViewY = st.ViewY
+		create.Tile.ViewCx = st.ViewCx
+		create.Tile.ViewCy = st.ViewCy
 		create.Tile.ViewZoom = st.ViewZoom
 	case st.Kind == "well":
 		// A SOLID well's cross-plugin CLONE is the deep copy (issue #200,
@@ -496,8 +496,8 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 				// is already the qualified target, so this is exactly the
 				// exit well a left-drag would have made, framing included.
 				create.Tile.ChildGridId = st.ChildGridId
-				create.Tile.ViewX = st.ViewX
-				create.Tile.ViewY = st.ViewY
+				create.Tile.ViewCx = st.ViewCx
+				create.Tile.ViewCy = st.ViewCy
 				create.Tile.ViewZoom = st.ViewZoom
 				break
 			}

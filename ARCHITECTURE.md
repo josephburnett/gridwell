@@ -92,8 +92,14 @@ session is host-local and live tiles browse from the host's own network.
 
 Three fields encode the product rules directly:
 
-- `Tile.view_x / view_y / view_zoom` — at once the preview frame, the
+- `Tile.view_cx / view_cy / view_zoom` — at once the preview frame, the
   descent target, and the ascent return value. One value, three readings.
+  ONE shape everywhere (schema v11): a float CENTER in the child grid's
+  coordinates plus a pane-size-independent zoom (the intrinsic ratio
+  live/overtake). A grid with no doorway keeps the same three numbers on
+  its own row (`grids.root_cx / root_cy / root_zoom`, home's at `ns = ''`),
+  and one store writer (`Store.SetFraming`) writes both. Zoom 0 is the one
+  "never visited" convention.
 - `Tile.reference` (bool, server-derived, never stored) — the one
   authoritative "this tile is a link" signal. Render draws the dashed
   border from it, delete and clone key on it, descent portals through it.

@@ -125,7 +125,7 @@ func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "ResizeTile", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventSetWellViewEmitsTileChanged(t *testing.T) {
+func TestEventSetFramingEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -137,28 +137,32 @@ func TestEventSetWellViewEmitsTileChanged(t *testing.T) {
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+	if _, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: w.ID, Version: w.Version,
-		ViewX: 5, ViewY: 7, ViewZoom: 1.0,
+		Framing: rpc.Framing{Cx: 5, Cy: 7, Zoom: 1.0},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "SetWellView", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
+	assertCounts(t, "SetFraming(tile)", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventSetRootViewEmitsGridChanged(t *testing.T) {
+func TestEventSetRootFramingEmitsGridChanged(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if err := s.SetRootView(ctx, &rpc.SetRootViewRequest{
-		Cx: 1, Cy: 2, Zoom: 0.5,
+	root, err := s.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
+		RootGridID: root, Framing: rpc.Framing{Cx: 1, Cy: 2, Zoom: 0.5},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "SetRootView", got, map[rpc.EventKind]int{rpc.EventGridChanged: 1})
+	assertCounts(t, "SetFraming(root)", got, map[rpc.EventKind]int{rpc.EventGridChanged: 1})
 }
 
 func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {

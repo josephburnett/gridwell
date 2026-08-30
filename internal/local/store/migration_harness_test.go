@@ -237,11 +237,15 @@ func buildDBAtV1(t *testing.T, path string) (*sql.DB, string) {
 		t.Fatalf("seed v1 root grid: %v", err)
 	}
 	rootRow := mustID(t, res)
+	// The root framing keys a v1 binary wrote. They are string literals
+	// because the constants are gone: schema v11 moved home's root
+	// framing onto its grid row and retired the keys. A genuine old file
+	// still has them, so the chain must still be fed them.
 	for _, kv := range [][2]string{
 		{systemKeyRootGridID, strconv.FormatInt(rootRow, 10)},
-		{systemKeyRootViewCx, "0"},
-		{systemKeyRootViewCy, "0"},
-		{systemKeyRootZoom, "0"},
+		{"root_view_cx", "0"},
+		{"root_view_cy", "0"},
+		{"root_zoom", "0"},
 	} {
 		if _, err := db.ExecContext(ctx,
 			`INSERT INTO system (key, value) VALUES (?, ?)`, kv[0], kv[1]); err != nil {
@@ -874,6 +878,124 @@ func init() {
 			}
 			if nLive != 1 {
 				t.Error("idx_tiles_live_key did not survive the v10 rebuild")
+			}
+		},
+	})
+}
+
+// v11: ONE framing shape. A chain-built v10 file already carries the
+// v11 tiles columns (the v5 rebuild materializes the CURRENT template),
+// so what this fixture can reach is the other three halves of the step:
+// a doorway's framing survives the rebuild untouched, a plugin context's
+// root converts from origin to center, and home's root moves out of the
+// system KV table onto its root GRID row. The view_x → view_cx
+// conversion itself needs a GENUINE v10 file —
+// TestMigrateV11OverAGenuineV10File.
+func init() {
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 11,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
+			if err != nil {
+				t.Fatalf("seed child grid: %v", err)
+			}
+			child := mustID(t, res)
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, view_cx, view_cy, view_zoom,
+				child_grid_id, alt_text, created_at, updated_at)
+				VALUES (`+rootID+`, 'well', 80, 8, 2, 2, 4.25, -6.5, 0.375, ?, 'v10 framed well', 100, 100)`, child); err != nil {
+				t.Fatalf("seed framed well: %v", err)
+			}
+			// A plugin context's root, stored the old way: the ORIGIN of
+			// the 1×1 synthetic doorway the client framed it through.
+			if _, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key, root_cx, root_cy, root_zoom)
+				VALUES (100, 100, 'p1', 'root', 3, -2, 0.5)`); err != nil {
+				t.Fatalf("seed plugin context root: %v", err)
+			}
+			// Home's root framing, in the KV table v11 retires.
+			for _, kv := range [][2]string{{"root_view_cx", "10"}, {"root_view_cy", "-4"}, {"root_zoom", "0.25"}} {
+				if _, err := db.Exec(`INSERT INTO system (key, value) VALUES (?, ?)
+					ON CONFLICT(key) DO UPDATE SET value = excluded.value`, kv[0], kv[1]); err != nil {
+					t.Fatalf("seed home root framing key %s: %v", kv[0], err)
+				}
+			}
+			// A tile deleted before the rebuild: its id must stay dead.
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'shell', 82, 8, 1, 1, 'v10 doomed', 100, 100)`); err != nil {
+				t.Fatalf("seed doomed tile: %v", err)
+			}
+			if _, err := db.Exec(`DELETE FROM tiles WHERE alt_text = 'v10 doomed'`); err != nil {
+				t.Fatalf("delete doomed tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			// The retired pair is gone; the surviving doorway kept its
+			// framing to the bit.
+			for _, col := range []string{"view_x", "view_y"} {
+				if _, ok := tableColumnsFP(t, db, "tiles")[col]; ok {
+					t.Errorf("tiles.%s survived v11", col)
+				}
+			}
+			var cx, cy, zoom float64
+			if err := db.QueryRow(`SELECT view_cx, view_cy, view_zoom FROM tiles WHERE alt_text = 'v10 framed well'`).
+				Scan(&cx, &cy, &zoom); err != nil {
+				t.Fatalf("read the framed well: %v", err)
+			}
+			if cx != 4.25 || cy != -6.5 || zoom != 0.375 {
+				t.Errorf("doorway framing changed across the rebuild: (%v, %v, %v)", cx, cy, zoom)
+			}
+			// The plugin context's root converted origin → center.
+			if err := db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE ns = 'p1' AND context_key = 'root'`).
+				Scan(&cx, &cy, &zoom); err != nil {
+				t.Fatalf("read the plugin context root: %v", err)
+			}
+			if cx != 3.5 || cy != -1.5 || zoom != 0.5 {
+				t.Errorf("plugin root framing = (%v, %v, %v), want the center (3.5, -1.5, 0.5)", cx, cy, zoom)
+			}
+			// Home's root moved onto its grid row, converted the same way,
+			// and the KV rows are gone.
+			var rootID int64
+			if err := db.QueryRow(`SELECT value FROM system WHERE key = 'root_grid_id'`).Scan(&rootID); err != nil {
+				t.Fatalf("read root grid id: %v", err)
+			}
+			if err := db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE id = ? AND ns = ''`, rootID).
+				Scan(&cx, &cy, &zoom); err != nil {
+				t.Fatalf("read home root framing: %v", err)
+			}
+			if cx != 10.5 || cy != -3.5 || zoom != 0.25 {
+				t.Errorf("home root framing = (%v, %v, %v), want the center (10.5, -3.5, 0.25)", cx, cy, zoom)
+			}
+			var nKeys int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM system
+				WHERE key IN ('root_view_cx', 'root_view_cy', 'root_zoom')`).Scan(&nKeys); err != nil {
+				t.Fatalf("count retired keys: %v", err)
+			}
+			if nKeys != 0 {
+				t.Errorf("%d retired root-framing key(s) survived v11", nKeys)
+			}
+			// The id-reuse trap across the v11 rebuild.
+			res, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				SELECT id, 'shell', 84, 8, 1, 1, 'v11 post', 100, 100 FROM grids WHERE ns = '' ORDER BY id LIMIT 1`)
+			if err != nil {
+				t.Fatalf("insert after rebuild: %v", err)
+			}
+			newID := mustID(t, res)
+			var maxOld int64
+			if err := db.QueryRow(`SELECT MAX(id) FROM tiles WHERE alt_text != 'v11 post'`).Scan(&maxOld); err != nil {
+				t.Fatalf("read max surviving id: %v", err)
+			}
+			if newID <= maxOld+1 {
+				t.Errorf("id REUSED after the v11 rebuild: new id %d, deleted id was %d", newID, maxOld+1)
+			}
+			// v9's live-key index came back after DROP TABLE tiles.
+			var nLive int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master
+				WHERE type = 'index' AND name = 'idx_tiles_live_key'`).Scan(&nLive); err != nil {
+				t.Fatalf("look for idx_tiles_live_key: %v", err)
+			}
+			if nLive != 1 {
+				t.Error("idx_tiles_live_key did not survive the v11 rebuild")
 			}
 		},
 	})

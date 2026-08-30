@@ -163,9 +163,9 @@ func TestPluginWellTile(t *testing.T) {
 	}
 	// The plugin's persisted root view rides as the tile's framing (the node
 	// grid's mapping), so a + menu descent lands at the left-off view.
-	if got.ViewX != 3 || got.ViewY != -2 || got.ViewZoom != 0.5 {
+	if got.ViewCx != 3 || got.ViewCy != -2 || got.ViewZoom != 0.5 {
 		t.Errorf("PluginWellTile framing = (%d,%d,%v), want the plugin root view (3,-2,0.5)",
-			got.ViewX, got.ViewY, got.ViewZoom)
+			got.ViewCx, got.ViewCy, got.ViewZoom)
 	}
 }
 

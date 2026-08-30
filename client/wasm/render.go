@@ -875,8 +875,8 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		// lands at the well's center offset by the well's view region. This
 		// is exactly where the just-after-descent child viewport would put
 		// it, so the lines glide continuously across the path swap.
-		viewCenterX := float64(n.ViewX) + float64(n.W)/2
-		viewCenterY := float64(n.ViewY) + float64(n.H)/2
+		viewCenterX := n.ViewCx
+		viewCenterY := n.ViewCy
 		wellCenterX := x + w/2
 		wellCenterY := y + h/2
 		originX := wellCenterX - viewCenterX*previewCell

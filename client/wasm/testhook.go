@@ -443,9 +443,9 @@ func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
 
 // tileSig flattens one tile row's render-relevant fields.
 func tileSig(t *rpc.Tile) string {
-	return fmt.Sprintf("v%d k%s @%d,%d %dx%d view%d,%d,%g text%d,%d,%d,%d,%s blob%d prev%d url%q alt%q ref%v",
+	return fmt.Sprintf("v%d k%s @%d,%d %dx%d view%g,%g,%g text%d,%d,%d,%d,%s blob%d prev%d url%q alt%q ref%v",
 		t.Version, t.Kind, t.X, t.Y, t.W, t.H,
-		t.ViewX, t.ViewY, t.ViewZoom,
+		t.ViewCx, t.ViewCy, t.ViewZoom,
 		t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode,
 		t.BlobID, t.PreviewBlobID, t.URLString, t.AltText, t.Reference)
 }

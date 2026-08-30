@@ -99,7 +99,7 @@ func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) 
 // failure instead of a silently incomplete copy.
 var tileCopyColumns = []string{
 	"version", "grid_id", "kind", "x", "y", "w", "h",
-	"view_x", "view_y", "view_zoom", "child_grid_id",
+	"view_cx", "view_cy", "view_zoom", "child_grid_id",
 	"text_x", "text_y", "text_w", "text_h", "text_mode", "blob_id",
 	"url_string", "preview_blob_id", "alt_text", "alt_user",
 	"content_zoom", "url_history", "link_target_id", "url_frozen",
@@ -178,7 +178,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		`INSERT INTO tiles (`+strings.Join(tileCopyColumns, ", ")+`)
 		VALUES (`+placeholders(len(tileCopyColumns))+`)`,
 		n.Version, gridID, n.Kind, x, y, n.W, n.H,
-		n.ViewX, n.ViewY, n.ViewZoom, child,
+		n.ViewCx, n.ViewCy, n.ViewZoom, child,
 		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
 		urlStr, previewBlob, n.AltText, altUser,
 		n.ContentZoom, urlHist, linkTarget, boolToInt(n.URLFrozen),

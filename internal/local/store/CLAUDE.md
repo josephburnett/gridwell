@@ -39,7 +39,14 @@ user-visible meaning carries no such fact, so it may be **retired**:
   plugin wells are the worked example: each is given a fresh empty child
   grid so the user's tile stays where they put it.
 - The decision is **recorded in the migration's chain-entry comment**, naming
-  what died and when its last reader went. v10 is the first one.
+  what died and when its last reader went. v10 is the first one; v11 is the
+  second (`tiles.view_x/view_y`, the integer window ORIGIN, replaced by the
+  float `view_cx/view_cy` center it was only ever read to compute).
+- A retiring column whose MEANING lives on is **converted, not dropped**:
+  the rebuild's copy list names the DESTINATION columns and `rebuildSelect`
+  supplies the expression that reads them out of the old shape
+  (`view_x + w/2`). The conversion therefore happens exactly once, whichever
+  rebuild step an old file passes through first.
 - A wire field removed alongside a column gets `reserved <n>` in the proto —
   numbers are never reused. (`TestProtoMatchesDDL` pairs columns with proto
   fields, so a column and its field must retire in the SAME change.)
@@ -122,6 +129,14 @@ result. Reach for a rebuild only when a CHECK must change or storage retires.
 columns, so a fixture must find its rows again by a column that survives the
 whole chain — `alt_text` today. (`object_id` was the handle until v10 retired
 it.)
+
+**A fixture cannot see a retired column.** Every rebuild materializes the
+CURRENT shape, so a CHAIN-built file at version N-1 already has version N's
+columns and none of the ones N drops — a per-migration fixture can never
+plant a row in the old shape. The genuine-old-file tests
+(`TestMigrateV10OverAGenuineV9File`, `TestMigrateV11OverAGenuineV10File`)
+put the retired shape back by hand and run the step over it. A drop or a
+conversion needs one of those, not just a fixture.
 
 **Open's order.** `Open` runs the migration chain BEFORE `bootstrapRoot`:
 bootstrap is a write through the CURRENT column set, and an old file does not

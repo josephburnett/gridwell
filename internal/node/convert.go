@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
@@ -129,7 +130,11 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 	m := &idMap{grids: map[int64]int64{}, tiles: map[int64]int64{}}
 	n := st.Namespace(ns)
 
-	// Contexts → grids (context_key), root views along.
+	// Contexts → grids (context_key), root framing along. A pre-one-node
+	// plugin stored a root as the ORIGIN of the 1×1 synthetic doorway the
+	// client framed it through, and the client read it back as
+	// origin + 1/2 — so the center this store keeps (schema v11) is
+	// + 0.5, the picture the user actually had.
 	type ctxRow struct {
 		id              int64
 		key             string
@@ -156,7 +161,9 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 		}
 		m.grids[c.id] = gid
 		if c.rzoom.Valid {
-			if err := n.SetRootView(gid, c.rcx.Float64, c.rcy.Float64, c.rzoom.Float64); err != nil {
+			if err := n.SetFraming(0, gid, rpc.Framing{
+				Cx: c.rcx.Float64 + 0.5, Cy: c.rcy.Float64 + 0.5, Zoom: c.rzoom.Float64,
+			}); err != nil {
 				return nil, err
 			}
 		}
@@ -261,8 +268,13 @@ func importMemory(ctx context.Context, st *store.Store, ns, path string) (*idMap
 		if kind == "url" && url == "" {
 			kind = "text"
 		}
+		// The old layout row's view_x/view_y was a window ORIGIN; the
+		// center this store keeps is origin + footprint/2 — the same
+		// arithmetic schema v11's migration applies to a home file.
 		newID, err := st.InsertExternalRow(ctx, ns, gid, t.key, kind, label, child, url, t.tomb != 0,
-			[4]int64{t.x, t.y, t.w, t.h}, [2]int64{t.vx, t.vy}, t.vz, [4]int64{t.tx, t.ty, t.tw, t.th}, t.mode, t.cz)
+			[4]int64{t.x, t.y, t.w, t.h},
+			rpc.Framing{Cx: float64(t.vx) + float64(t.w)/2, Cy: float64(t.vy) + float64(t.h)/2, Zoom: t.vz},
+			[4]int64{t.tx, t.ty, t.tw, t.th}, t.mode, t.cz)
 		if err != nil {
 			return nil, fmt.Errorf("tile %d (%s): %w", t.id, t.key, err)
 		}

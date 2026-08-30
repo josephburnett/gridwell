@@ -235,7 +235,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (grid_id, kind, x, y, w, h,
-			view_x, view_y, view_zoom, child_grid_id, alt_text,
+			view_cx, view_cy, view_zoom, child_grid_id, alt_text,
 			created_at, updated_at)
 		VALUES (?, 'well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?)`,
 		trashID, x, y, child, month, now, now); err != nil {

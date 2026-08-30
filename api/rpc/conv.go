@@ -64,8 +64,8 @@ func TileToProto(t *Tile) *pb.Tile {
 		Y:                t.Y,
 		W:                t.W,
 		H:                t.H,
-		ViewX:            t.ViewX,
-		ViewY:            t.ViewY,
+		ViewCx:           t.ViewCx,
+		ViewCy:           t.ViewCy,
 		ViewZoom:         t.ViewZoom,
 		ChildGridId:      t.ChildGridID,
 		TextX:            t.TextX,
@@ -102,8 +102,8 @@ func TileFromProto(t *pb.Tile) *Tile {
 		Y:                t.Y,
 		W:                t.W,
 		H:                t.H,
-		ViewX:            t.ViewX,
-		ViewY:            t.ViewY,
+		ViewCx:           t.ViewCx,
+		ViewCy:           t.ViewCy,
 		ViewZoom:         t.ViewZoom,
 		ChildGridID:      t.ChildGridId,
 		TextX:            t.TextX,
@@ -206,7 +206,7 @@ func EventFromProto(e *pb.Event) Event {
 func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindWell, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, AltText: r.Label,
-			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
+			ViewCx: r.Cx, ViewCy: r.Cy, ViewZoom: r.Zoom}}
 }
 
 func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {
@@ -239,9 +239,9 @@ func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
 // SetTile converters. The wire has a single SetTile dispatched on the target
 // tile's Kind; these helpers map each kind's framing/preview writeback onto it.
 
-func SetWellViewToProto(r *SetWellViewRequest) *pb.SetTileRequest {
+func SetWellViewToProto(r *SetFramingRequest) *pb.SetTileRequest {
 	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
-		Tile: &pb.Tile{Kind: KindWell, ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
+		Tile: &pb.Tile{Kind: KindWell, ViewCx: r.Cx, ViewCy: r.Cy, ViewZoom: r.Zoom}}
 }
 func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTileRequest {
 	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,

@@ -312,21 +312,19 @@ func (x *MenuEntry) GetGridId() string {
 // subset of the optional fields is meaningful; the DDL CHECK constraint
 // enforces it.
 type Tile struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	GridId  string                 `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	Kind    string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
-	X       int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
-	Y       int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
-	W       int64                  `protobuf:"varint,8,opt,name=w,proto3" json:"w,omitempty"`
-	H       int64                  `protobuf:"varint,9,opt,name=h,proto3" json:"h,omitempty"`
-	// well-only: the child grid's framing — at once the preview frame,
-	// the descent target, and the ascent return value.
-	ViewX       int64   `protobuf:"varint,10,opt,name=view_x,json=viewX,proto3" json:"view_x,omitempty"`
-	ViewY       int64   `protobuf:"varint,11,opt,name=view_y,json=viewY,proto3" json:"view_y,omitempty"`
-	ViewZoom    float64 `protobuf:"fixed64,12,opt,name=view_zoom,json=viewZoom,proto3" json:"view_zoom,omitempty"`
-	ChildGridId string  `protobuf:"bytes,13,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version     int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	GridId      string                 `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	Kind        string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
+	X           int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
+	Y           int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
+	W           int64                  `protobuf:"varint,8,opt,name=w,proto3" json:"w,omitempty"`
+	H           int64                  `protobuf:"varint,9,opt,name=h,proto3" json:"h,omitempty"`
+	ViewZoom    float64                `protobuf:"fixed64,12,opt,name=view_zoom,json=viewZoom,proto3" json:"view_zoom,omitempty"`
+	ViewCx      float64                `protobuf:"fixed64,36,opt,name=view_cx,json=viewCx,proto3" json:"view_cx,omitempty"`
+	ViewCy      float64                `protobuf:"fixed64,37,opt,name=view_cy,json=viewCy,proto3" json:"view_cy,omitempty"`
+	ChildGridId string                 `protobuf:"bytes,13,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
 	// text-only: text_x/text_y is the scroll offset; text_w/text_h is the
 	// window size; all four are doc-space px. text_mode is "rendered" or
 	// "text". blob_id points at the markdown source in the blobs table.
@@ -496,23 +494,23 @@ func (x *Tile) GetH() int64 {
 	return 0
 }
 
-func (x *Tile) GetViewX() int64 {
-	if x != nil {
-		return x.ViewX
-	}
-	return 0
-}
-
-func (x *Tile) GetViewY() int64 {
-	if x != nil {
-		return x.ViewY
-	}
-	return 0
-}
-
 func (x *Tile) GetViewZoom() float64 {
 	if x != nil {
 		return x.ViewZoom
+	}
+	return 0
+}
+
+func (x *Tile) GetViewCx() float64 {
+	if x != nil {
+		return x.ViewCx
+	}
+	return 0
+}
+
+func (x *Tile) GetViewCy() float64 {
+	if x != nil {
+		return x.ViewCy
 	}
 	return 0
 }
@@ -2634,7 +2632,7 @@ func (x *CloneTileRequest) GetY() int64 {
 // version semantics (face #3 of the primary rule — framing is not a content
 // edit):
 //
-//	well  → view_x/view_y/view_zoom              (framing; never bumps version)
+//	well  → view_cx/view_cy/view_zoom            (framing; never bumps version)
 //	text  → text_x/text_y/text_w/text_h/text_mode (framing; never bumps version)
 //	url   → url_string, alt_text (page title), preview jpeg  (content; bumps)
 //	shell → preview jpeg                          (content; bumps version)
@@ -2846,8 +2844,9 @@ func (*DeleteTileResponse) Descriptor() ([]byte, []int) {
 // fact that SetTile writes for a well tile, but for the plugin root which
 // has no tile row). root_grid_id routes the call to the owning plugin;
 // cx/cy are the viewport center in world cell coords; zoom is the live zoom.
-// Framing only — never bumps a content version. localdb stores to the
-// frozen system KV table (root_view_*); fs/proc are no-ops.
+// Framing only — never bumps a content version. The home node stores it
+// on the root GRID row (root_cx/cy/zoom, schema v11), the same three
+// columns every root uses; a plugin with no memory of roots is a no-op.
 type SetRootViewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RootGridId    string                 `protobuf:"bytes,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified "<plugin-uuid>/<id>", used for routing
@@ -3334,7 +3333,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
 	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x14\n" +
 	"\x05color\x18\x04 \x01(\tR\x05color\x12\x17\n" +
-	"\agrid_id\x18\a \x01(\tR\x06gridIdJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xa4\x06\n" +
+	"\agrid_id\x18\a \x01(\tR\x06gridIdJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xb4\x06\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -3343,11 +3342,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x01x\x18\x06 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\a \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\b \x01(\x03R\x01w\x12\f\n" +
-	"\x01h\x18\t \x01(\x03R\x01h\x12\x15\n" +
-	"\x06view_x\x18\n" +
-	" \x01(\x03R\x05viewX\x12\x15\n" +
-	"\x06view_y\x18\v \x01(\x03R\x05viewY\x12\x1b\n" +
-	"\tview_zoom\x18\f \x01(\x01R\bviewZoom\x12\"\n" +
+	"\x01h\x18\t \x01(\x03R\x01h\x12\x1b\n" +
+	"\tview_zoom\x18\f \x01(\x01R\bviewZoom\x12\x17\n" +
+	"\aview_cx\x18$ \x01(\x01R\x06viewCx\x12\x17\n" +
+	"\aview_cy\x18% \x01(\x01R\x06viewCy\x12\"\n" +
 	"\rchild_grid_id\x18\r \x01(\tR\vchildGridId\x12\x15\n" +
 	"\x06text_x\x18\x0e \x01(\x03R\x05textX\x12\x15\n" +
 	"\x06text_y\x18\x0f \x01(\x03R\x05textY\x12\x15\n" +
@@ -3369,7 +3367,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
-	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\x02\x10\x03J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
+	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\x02\x10\x03J\x04\b\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
 	"\vInfoRequest\"\xd5\x03\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +

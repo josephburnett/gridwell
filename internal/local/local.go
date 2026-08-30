@@ -114,9 +114,10 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	// Root viewport: seed the client's enterPlugin framing so re-entry
-	// restores the left-off view.  Zero on a fresh DB (never visited).
-	cx, cy, zoom, err := p.st.RootView(ctx)
+	// Root framing: seed the client's enterPlugin framing so re-entry
+	// restores the left-off view. Never visited on a fresh DB (zero zoom),
+	// which the client reads as "use the calibrated default".
+	view, _, err := p.st.RootFraming(ctx)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
@@ -140,20 +141,24 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		// kind string): localdb emits change events and accepts creates.
 		Watch:        true,
 		Writable:     true,
-		RootViewCx:   cx,
-		RootViewCy:   cy,
-		RootViewZoom: zoom,
+		RootViewCx:   view.Cx,
+		RootViewCy:   view.Cy,
+		RootViewZoom: view.Zoom,
 	}, nil
 }
 
-// SetRootView persists the plugin root-grid framing. Framing only — never
-// bumps a content version; mirrors SetTile for a well but for the plugin root
-// which has no tile row. Routed by the server via root_grid_id.
+// SetRootView persists the home root-grid framing. Framing only — never
+// bumps a content version; the SAME store writer a well's framing goes
+// through (Store.SetFraming), aimed at the root GRID row instead of a
+// doorway tile. Routed by the server via root_grid_id.
 func (p *Plugin) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
-	if err := p.st.SetRootView(ctx, &rpc.SetRootViewRequest{
-		Cx:   req.Cx,
-		Cy:   req.Cy,
-		Zoom: req.Zoom,
+	root, err := p.st.RootGridID(ctx)
+	if err != nil {
+		return nil, errToStatus(err)
+	}
+	if _, err := p.st.SetFraming(ctx, &rpc.SetFramingRequest{
+		RootGridID: root,
+		Framing:    rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom},
 	}); err != nil {
 		return nil, errToStatus(err)
 	}
@@ -307,7 +312,8 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// user-given grid name (the + palette's name field); empty = unnamed.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
-				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom))
+				t.ChildGridId, t.AltText,
+				rpc.Framing{Cx: t.ViewCx, Cy: t.ViewCy, Zoom: t.ViewZoom}))
 		}
 		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
 	case rpc.KindText:
@@ -396,7 +402,8 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	}
 	switch t.Kind {
 	case rpc.KindWell:
-		return tileResp(p.st.SetWellView(ctx, &rpc.SetWellViewRequest{TileID: req.TileId, Version: req.Version, ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}))
+		return tileResp(p.st.SetFraming(ctx, &rpc.SetFramingRequest{TileID: req.TileId, Version: req.Version,
+			Framing: rpc.Framing{Cx: t.ViewCx, Cy: t.ViewCy, Zoom: t.ViewZoom}}))
 	case rpc.KindText:
 		return tileResp(p.st.SetTextView(ctx, &rpc.SetTextViewRequest{TileID: req.TileId, Version: req.Version, TextX: t.TextX, TextY: t.TextY, TextW: t.TextW, TextH: t.TextH, TextMode: t.TextMode}))
 	case rpc.KindShell:

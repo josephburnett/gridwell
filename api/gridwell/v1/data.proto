@@ -109,10 +109,19 @@ message Tile {
   int64 h = 9;
 
   // well-only: the child grid's framing — at once the preview frame,
-  // the descent target, and the ascent return value.
-  int64 view_x = 10;
-  int64 view_y = 11;
+  // the descent target, and the ascent return value. ONE shape (schema
+  // v11, docs/simplify-plan.md S4): a float CENTER in the child grid's
+  // coordinates (view_cx/view_cy) plus the pane-size-independent
+  // intrinsic zoom (live / overtake) — the same three numbers a ROOT
+  // grid keeps on its own row. view_zoom == 0 means never visited.
+  //
+  // 10, 11 were view_x/view_y, an integer window ORIGIN; the center the
+  // client derived from it (origin + footprint/2) is stored directly now
+  // and the migration converted every row.
+  reserved 10, 11;
   double view_zoom = 12;
+  double view_cx = 36;
+  double view_cy = 37;
   string child_grid_id = 13;
 
   // text-only: text_x/text_y is the scroll offset; text_w/text_h is the
@@ -617,7 +626,7 @@ message CloneTileRequest {
 // tile.kind to the one operation that kind supports, and that mapping fixes the
 // version semantics (face #3 of the primary rule — framing is not a content
 // edit):
-//   well  → view_x/view_y/view_zoom              (framing; never bumps version)
+//   well  → view_cx/view_cy/view_zoom            (framing; never bumps version)
 //   text  → text_x/text_y/text_w/text_h/text_mode (framing; never bumps version)
 //   url   → url_string, alt_text (page title), preview jpeg  (content; bumps)
 //   shell → preview jpeg                          (content; bumps version)
@@ -673,8 +682,9 @@ message DeleteTileResponse {}
 // fact that SetTile writes for a well tile, but for the plugin root which
 // has no tile row). root_grid_id routes the call to the owning plugin;
 // cx/cy are the viewport center in world cell coords; zoom is the live zoom.
-// Framing only — never bumps a content version. localdb stores to the
-// frozen system KV table (root_view_*); fs/proc are no-ops.
+// Framing only — never bumps a content version. The home node stores it
+// on the root GRID row (root_cx/cy/zoom, schema v11), the same three
+// columns every root uses; a plugin with no memory of roots is a no-op.
 message SetRootViewRequest {
   string root_grid_id = 1;  // qualified "<plugin-uuid>/<id>", used for routing
   double cx           = 2;

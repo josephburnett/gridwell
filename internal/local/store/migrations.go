@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/josephburnett/gridwell/internal/dbformat"
 )
@@ -29,7 +31,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 10
+const schemaVersion = 11
 
 // migration is one step that brings a DB from version to-1 up to version
 // to. Additive (a column with a default, a table, an index) is the
@@ -112,6 +114,25 @@ var migrations = []migration{
 	// DROP COLUMN (no CHECK involved). Both preserve every row and the
 	// AUTOINCREMENT seeds.
 	{to: 10, run: migrateV10},
+	// v11 (2026-08-29, docs/simplify-plan.md S4): ONE framing shape.
+	// "How this grid looked when I left it through this doorway" was
+	// stored three ways — a well's integer window ORIGIN
+	// (tiles.view_x/view_y) plus an intrinsic ratio, home's root as a
+	// float center in the `system` KV table (root_view_cx/cy/root_zoom),
+	// and a plugin context's root as a float center on its grid row. Now
+	// it is one: a float CENTER plus that same intrinsic zoom, on the
+	// DOORWAY tile (tiles.view_cx/view_cy/view_zoom) or, for a root with
+	// no doorway, on the GRID row (grids.root_cx/cy/zoom) — home's
+	// included, at ns = ''.
+	//
+	// Nothing user-visible changes: every stored origin becomes the
+	// center the client already derived from it to display the grid
+	// (origin + footprint/2; the root's synthetic doorway is 1×1, so
+	// + 0.5). view_x/view_y RETIRE — after this step nothing reads them
+	// for any meaning, since the center they fed is now stored directly.
+	// Shape: tiles is a REBUILD (a column pair retires and the values
+	// convert); grids and system are in-place updates.
+	{to: 11, run: migrateV11},
 }
 
 // tilesRebuildColumns is the explicit column list a rebuild copies — every
@@ -123,11 +144,16 @@ var migrations = []migration{
 //
 // object_id is NOT here: it was retired at v10, and a rebuild always
 // materializes the CURRENT tilesTableDDL, so a v4 file replaying v5 lands
-// on the v10 shape and simply does not carry the column forward. That is
+// on the v11 shape and simply does not carry the column forward. That is
 // the convergence contract working as designed — the fresh and migrated
 // routes must end at the same schema.
+//
+// view_cx/view_cy are the v11 framing columns, named here as DESTINATION
+// columns: rebuildSelect reads them from a pre-v11 source as
+// view_x + w/2 and view_y + h/2, so an old file replaying ANY rebuild
+// converts its framing exactly once and keeps the picture it had.
 const tilesRebuildColumns = `id, version, grid_id, kind, x, y, w, h,
-	view_x, view_y, view_zoom, child_grid_id,
+	view_cx, view_cy, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
 	url_string, preview_blob_id, alt_text, alt_user, content_zoom, url_history,
 	created_at, updated_at`
@@ -179,8 +205,12 @@ func rebuildTilesForConfigurePlugin(ctx context.Context, tx *sql.Tx) error {
 // (embeds, deep links, and client caches are keyed by id and would resolve to
 // the wrong tile). The fixture in migration_harness_test.go pins this trap.
 func rebuildTiles(ctx context.Context, tx *sql.Tx, columns string) error {
+	src, err := rebuildSelect(ctx, tx, columns)
+	if err != nil {
+		return err
+	}
 	var seq sql.NullInt64
-	err := tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT seq FROM sqlite_sequence WHERE name = 'tiles'`).Scan(&seq)
 	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("read tiles sequence: %w", err)
@@ -188,7 +218,7 @@ func rebuildTiles(ctx context.Context, tx *sql.Tx, columns string) error {
 	for _, ddl := range []string{
 		tilesTableDDL("tiles_new"),
 		`INSERT INTO tiles_new (` + columns + `)
-			SELECT ` + columns + ` FROM tiles`,
+			SELECT ` + src + ` FROM tiles`,
 		`DROP TABLE tiles`,
 		`ALTER TABLE tiles_new RENAME TO tiles`,
 	} {
@@ -214,6 +244,101 @@ func rebuildTiles(ctx context.Context, tx *sql.Tx, columns string) error {
 			seq.Int64, seq.Int64); err != nil {
 			return fmt.Errorf("restore tiles sequence: %w", err)
 		}
+	}
+	return nil
+}
+
+// rebuildSelect maps a rebuild's DESTINATION column list onto the SELECT
+// expressions that read those columns out of the table as it stands now.
+// Every column reads as itself but one pair: on a PRE-v11 source the
+// framing is an integer window ORIGIN (view_x/view_y), and the center the
+// v11 shape stores is reconstructed with the same arithmetic the client
+// always used to display it — origin + footprint/2. So a well shows
+// exactly the framing it showed before, whichever rebuild step an old
+// file happens to convert through.
+func rebuildSelect(ctx context.Context, tx *sql.Tx, columns string) (string, error) {
+	has, err := hasColumn(ctx, tx, "tiles", "view_cx")
+	if err != nil || has {
+		return columns, err
+	}
+	return strings.Replace(columns, "view_cx, view_cy",
+		"view_x + w / 2.0, view_y + h / 2.0", 1), nil
+}
+
+// migrateV11 folds the three framing representations into one (see the
+// chain entry). Order matters:
+//
+//  1. A plugin context's root (grids.root_cx/cy, ns != ”) was written as
+//     the ORIGIN of a 1×1 synthetic doorway and read back as origin + 1/2,
+//     so it converts by + 0.5. This runs FIRST, while home's root row is
+//     still empty — otherwise step 2's already-converted value would be
+//     shifted a second time.
+//  2. Home's root moves out of the `system` KV table onto its root GRID
+//     row (ns = ”), converted the same way; the three keys are deleted.
+//     A never-visited home (zoom 0, the bootstrap seed) copies nothing —
+//     it stays "never visited" in the one convention the new shape has.
+//  3. tiles rebuilds, converting view_x/view_y into view_cx/view_cy
+//     (rebuildSelect) and dropping the retired pair.
+func migrateV11(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE grids SET root_cx = root_cx + 0.5, root_cy = root_cy + 0.5
+		 WHERE ns != '' AND root_zoom IS NOT NULL`); err != nil {
+		return fmt.Errorf("convert context root framing: %w", err)
+	}
+	if err := moveHomeRootFraming(ctx, tx); err != nil {
+		return err
+	}
+	if err := rebuildTiles(ctx, tx, tilesRebuildColumnsV10); err != nil {
+		return err
+	}
+	// DROP TABLE tiles took idx_tiles_live_key with it (see rebuildTiles).
+	_, err := tx.ExecContext(ctx, externalsIndexDDL)
+	return err
+}
+
+// moveHomeRootFraming copies home's root viewport from the frozen system
+// KV table onto its root grid row and deletes the keys. The stored cx/cy
+// were the ORIGIN of the 1×1 synthetic doorway the client framed a root
+// through, so they convert by + 0.5 — the same center the client showed.
+// A missing or zero zoom means never visited: nothing to carry.
+func moveHomeRootFraming(ctx context.Context, tx *sql.Tx) error {
+	read := func(key string) (float64, error) {
+		var v sql.NullFloat64
+		err := tx.QueryRowContext(ctx, `SELECT CAST(value AS REAL) FROM system WHERE key = ?`, key).Scan(&v)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return v.Float64, err
+	}
+	zoom, err := read("root_zoom")
+	if err != nil {
+		return fmt.Errorf("read home root zoom: %w", err)
+	}
+	if zoom > 0 {
+		cx, err := read("root_view_cx")
+		if err != nil {
+			return fmt.Errorf("read home root cx: %w", err)
+		}
+		cy, err := read("root_view_cy")
+		if err != nil {
+			return fmt.Errorf("read home root cy: %w", err)
+		}
+		var rootID sql.NullString
+		if err := tx.QueryRowContext(ctx,
+			`SELECT value FROM system WHERE key = ?`, systemKeyRootGridID).Scan(&rootID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("read home root grid id: %w", err)
+		}
+		if rootID.Valid {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND ns = ''`,
+				cx+0.5, cy+0.5, zoom, rootID.String); err != nil {
+				return fmt.Errorf("write home root framing: %w", err)
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM system WHERE key IN ('root_view_cx', 'root_view_cy', 'root_zoom')`); err != nil {
+		return fmt.Errorf("retire the home root framing keys: %w", err)
 	}
 	return nil
 }
@@ -319,7 +444,7 @@ func migrateV10(ctx context.Context, tx *sql.Tx) error {
 	// created by externalsIndexDDL (v9), not tilesIndexDDL, so the shared
 	// rebuild cannot know about it. Recreate it here; both statements are
 	// IF NOT EXISTS, so the grids half is a no-op. (Any FUTURE rebuild
-	// after v9 must do the same — see rebuildTiles.)
+	// after v9 must do the same — migrateV11 does.)
 	_, err = tx.ExecContext(ctx, externalsIndexDDL)
 	return err
 }

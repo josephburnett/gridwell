@@ -189,7 +189,7 @@ func mountByClone(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, 
 	tile, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
 		GridID: destGrid, X: x, Y: y, W: 1, H: 1,
 		ChildGridID: row.RootGridID, Label: row.Label,
-		ViewX: int64(row.RootViewCx), ViewY: int64(row.RootViewCy), ViewZoom: row.RootViewZoom,
+		Framing: rpc.Framing{Cx: row.RootViewCx, Cy: row.RootViewCy, Zoom: row.RootViewZoom},
 	})
 	if err != nil {
 		t.Fatalf("mount %s by link: %v", pluginUUID, err)
@@ -225,7 +225,7 @@ func TestMenuAndMountLabelAgree(t *testing.T) {
 	_ = ctx
 }
 
-func TestResizeAndSetWellViewRPCs(t *testing.T) {
+func TestResizeAndSetFramingRPCs(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx := context.Background()
 
@@ -243,13 +243,13 @@ func TestResizeAndSetWellViewRPCs(t *testing.T) {
 	}
 	v = tile.Version
 
-	tile, err = cl.SetWellView(ctx, &rpc.SetWellViewRequest{
-		TileID: id, Version: v, ViewX: 7, ViewY: 8, ViewZoom: 1.5,
+	tile, err = cl.SetWellView(ctx, &rpc.SetFramingRequest{
+		TileID: id, Version: v, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 1.5},
 	})
 	if err != nil {
 		t.Fatalf("set well view: %v", err)
 	}
-	if tile.ViewX != 7 || tile.ViewY != 8 || tile.ViewZoom != 1.5 {
+	if tile.ViewCx != 7 || tile.ViewCy != 8 || tile.ViewZoom != 1.5 {
 		t.Errorf("after set well view: %+v", tile)
 	}
 }

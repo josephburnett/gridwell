@@ -303,7 +303,7 @@ func TestResizeVersionConflict(t *testing.T) {
 	}
 }
 
-func TestSetWellView(t *testing.T) {
+func TestSetFraming(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -313,14 +313,14 @@ func TestSetWellView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+	got, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: w.ID, Version: w.Version,
-		ViewX: 5, ViewY: 7, ViewZoom: 1.5,
+		Framing: rpc.Framing{Cx: 5.25, Cy: 7.5, Zoom: 1.5},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ViewX != 5 || got.ViewY != 7 || got.ViewZoom != 1.5 {
+	if got.ViewCx != 5.25 || got.ViewCy != 7.5 || got.ViewZoom != 1.5 {
 		t.Errorf("view %+v", got)
 	}
 	// Framing is not a content edit — the version must NOT move.
@@ -354,9 +354,9 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 		t.Fatalf("clone starts at version %d, want %d", clone.Version, w.Version)
 	}
 	// Frame only the clone.
-	framed, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+	framed, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
 		TileID: clone.ID, Version: clone.Version,
-		ViewX: 3, ViewY: 4, ViewZoom: 2.0,
+		Framing: rpc.Framing{Cx: 3, Cy: 4, Zoom: 2.0},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -373,7 +373,7 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 	if orig.Version != w.Version {
 		t.Errorf("original drifted: version=%d, want %d", orig.Version, w.Version)
 	}
-	if orig.ViewX == framed.ViewX && orig.ViewY == framed.ViewY {
+	if orig.ViewCx == framed.ViewCx && orig.ViewCy == framed.ViewCy {
 		t.Error("framing did not diverge between clones")
 	}
 }
@@ -422,7 +422,7 @@ func TestSetTextViewPersistsWindowAndMode(t *testing.T) {
 	}
 }
 
-func TestSetWellViewRejectsNonWell(t *testing.T) {
+func TestSetFramingRejectsNonWell(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -433,8 +433,8 @@ func TestSetWellViewRejectsNonWell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.SetWellView(ctx, &rpc.SetWellViewRequest{
-		TileID: f.ID, Version: f.Version, ViewX: 1, ViewY: 1, ViewZoom: 1,
+	_, err = s.SetFraming(ctx, &rpc.SetFramingRequest{
+		TileID: f.ID, Version: f.Version, Framing: rpc.Framing{Cx: 1, Cy: 1, Zoom: 1},
 	})
 	if !errors.Is(err, ErrNotWellTile) {
 		t.Errorf("got %v, want ErrNotWellTile", err)

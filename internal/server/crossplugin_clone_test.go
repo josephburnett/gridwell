@@ -89,9 +89,9 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	// The source well has a framing the user set — the preview the link
 	// gesture carries along. Descending the link must land exactly where
 	// descending the source would.
-	framed, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
+	framed, err := cl.SetWellView(ctx, &rpc.SetFramingRequest{
 		TileID: well.ID, Version: well.Version,
-		ViewX: 7, ViewY: -2, ViewZoom: 1.75,
+		Framing: rpc.Framing{Cx: 7, Cy: -2, Zoom: 1.75},
 	})
 	if err != nil {
 		t.Fatalf("SetWellView: %v", err)
@@ -104,14 +104,14 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	link, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
 		GridID: rootB, X: 3, Y: 3, W: well.W, H: well.H,
 		ChildGridID: well.ChildGridID, Label: framed.AltText,
-		ViewX: framed.ViewX, ViewY: framed.ViewY, ViewZoom: framed.ViewZoom,
+		Framing: rpc.Framing{Cx: framed.ViewCx, Cy: framed.ViewCy, Zoom: framed.ViewZoom},
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin link (CreateWell): %v", err)
 	}
-	if link.ViewX != 7 || link.ViewY != -2 || link.ViewZoom != 1.75 {
+	if link.ViewCx != 7 || link.ViewCy != -2 || link.ViewZoom != 1.75 {
 		t.Errorf("link framing = (%v, %v, %v), want the source's (7, -2, 1.75) — a link must not reset the viewport",
-			link.ViewX, link.ViewY, link.ViewZoom)
+			link.ViewCx, link.ViewCy, link.ViewZoom)
 	}
 	if u, _, _ := rpc.SplitID(link.ID); u != uuidB {
 		t.Errorf("link lives in %q, want destination plugin %q", u, uuidB)
@@ -189,8 +189,8 @@ func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Framing on the well (preview = descent = ascent).
-	framed, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
-		TileID: well.ID, Version: well.Version, ViewX: 7, ViewY: 8, ViewZoom: 2.5,
+	framed, err := cl.SetWellView(ctx, &rpc.SetFramingRequest{
+		TileID: well.ID, Version: well.Version, Framing: rpc.Framing{Cx: 7, Cy: 8, Zoom: 2.5},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +205,7 @@ func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
 	if got := uuidOfTest(copyTop.ID); got != uuidB {
 		t.Fatalf("copy landed in %s, want plugin B (%s)", got, uuidB)
 	}
-	if copyTop.ViewX != 7 || copyTop.ViewY != 8 || copyTop.ViewZoom != 2.5 {
+	if copyTop.ViewCx != 7 || copyTop.ViewCy != 8 || copyTop.ViewZoom != 2.5 {
 		t.Errorf("framing lost: %+v", copyTop)
 	}
 	if copyTop.Reference {

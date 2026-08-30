@@ -46,7 +46,7 @@ func beacon(procedure string, m proto.Message) (path string, body []byte) {
 }
 
 // SetWellViewBeacon is the beacon form of Client.SetWellView.
-func SetWellViewBeacon(req *SetWellViewRequest) (path string, body []byte) {
+func SetWellViewBeacon(req *SetFramingRequest) (path string, body []byte) {
 	return beacon(gridwellv1connect.GridwellSetTileProcedure, SetWellViewToProto(req))
 }
 
@@ -56,7 +56,7 @@ func SetTextViewBeacon(req *SetTextViewRequest) (path string, body []byte) {
 }
 
 // SetRootViewBeacon is the beacon form of Client.SetRootView.
-func SetRootViewBeacon(req *SetRootViewRequest) (path string, body []byte) {
+func SetRootViewBeacon(req *SetFramingRequest) (path string, body []byte) {
 	return beacon(gridwellv1connect.GridwellSetRootViewProcedure, SetRootViewToProto(req))
 }
 

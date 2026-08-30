@@ -397,7 +397,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	for i := 0; i < 50 && !primed; i++ {
 		if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: well.GetTile().GetId(),
 			Version: well.GetTile().GetVersion(),
-			Tile:    &pb.Tile{Kind: "well", ViewX: 1, ViewY: 1, ViewZoom: 2}}); err != nil {
+			Tile:    &pb.Tile{Kind: "well", ViewCx: 1, ViewCy: 1, ViewZoom: 2}}); err != nil {
 			t.Fatal(err)
 		}
 		select {
@@ -412,7 +412,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 
 	if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: well.GetTile().GetId(),
 		Version: well.GetTile().GetVersion(),
-		Tile:    &pb.Tile{Kind: "well", ViewX: 9, ViewY: 9, ViewZoom: 3}}); err != nil {
+		Tile:    &pb.Tile{Kind: "well", ViewCx: 9, ViewCy: 9, ViewZoom: 3}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: doomed.GetTile().GetId(),

@@ -275,8 +275,8 @@ func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	framed, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
-		TileID: well.ID, Version: well.Version, ViewX: 5, ViewY: 6, ViewZoom: 1.5,
+	framed, err := cl.SetWellView(ctx, &rpc.SetFramingRequest{
+		TileID: well.ID, Version: well.Version, Framing: rpc.Framing{Cx: 5, Cy: 6, Zoom: 1.5},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -291,7 +291,7 @@ func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
 	if !gotWell.Reference || gotWell.ChildGridID != well.ChildGridID {
 		t.Fatalf("dark well clone should be a link sharing %s: %+v", well.ChildGridID, gotWell)
 	}
-	if gotWell.ViewX != 5 || gotWell.ViewY != 6 || gotWell.ViewZoom != 1.5 {
+	if gotWell.ViewCx != 5 || gotWell.ViewCy != 6 || gotWell.ViewZoom != 1.5 {
 		t.Errorf("degraded well link lost the framing: %+v", gotWell)
 	}
 }

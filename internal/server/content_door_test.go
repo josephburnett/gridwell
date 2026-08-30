@@ -331,8 +331,8 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 		t.Fatalf("fresh root = %+v, want a root grid with zoom 0 (never set)", root)
 	}
 
-	path, body := rpc.SetRootViewBeacon(&rpc.SetRootViewRequest{
-		RootGridID: root.RootGridID, Cx: 3, Cy: 4, Zoom: 0.5,
+	path, body := rpc.SetRootViewBeacon(&rpc.SetFramingRequest{
+		RootGridID: root.RootGridID, Framing: rpc.Framing{Cx: 3, Cy: 4, Zoom: 0.5},
 	})
 	res, err := hs.Client().Post(hs.URL+path, "application/json", bytes.NewReader(body))
 	if err != nil {

@@ -30,7 +30,8 @@ type Endpoints struct {
 
 // Well is the minimal information about a well needed to compute a
 // transition: its row id, its location and size in the parent grid, and
-// its saved internal view offset and intrinsic view ratio.
+// the framing it was left at — a float CENTER in the child grid's
+// coordinates (ViewCx/ViewCy) plus the intrinsic view ratio.
 //
 // ViewZoom is an intrinsic ratio = liveScale / EffectiveOvertake at the
 // moment of the user's last ascent from this well/file. It is
@@ -44,8 +45,8 @@ type Well struct {
 	ID       string
 	X, Y     int64
 	W, H     int64
-	ViewX    int64
-	ViewY    int64
+	ViewCx   float64
+	ViewCy   float64
 	ViewZoom float64
 }
 
@@ -111,11 +112,11 @@ func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax flo
 // framing (issue #210) by one notch, cursor-anchored: the child-grid point
 // under the cursor stays under the cursor, so zooming drifts the view
 // toward the cursor (issue #219 — small navigation by zooming). The center
-// is FLOAT in and out: the caller accumulates it across the wheel burst
-// and quantizes ONCE at flush (ViewOriginFromCenter) — quantizing per
-// notch rounded the sub-cell drift away every time, which is exactly the
-// #219 bug. cx0/cy0 <= 0 sentinel is not used; pass the well's stored
-// center for the first notch. changed=false when the clamp pinned the
+// is FLOAT in, out, and all the way to the store (schema v11), so the
+// sub-cell drift a wheel burst accumulates survives the save; the old
+// integer window ORIGIN rounded it away, which was the #219 bug.
+// cx0/cy0 <= 0 sentinel is not used; pass the well's stored center for
+// the first notch. changed=false when the clamp pinned the
 // ratio or the preview is degenerate; a no-op wheel never mutates.
 func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, cx0, cy0, factorBase, rMin, rMax float64) (cx1, cy1, ratio float64, changed bool) {
 	r0 := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
@@ -250,8 +251,8 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 	swapZoom := LiveFromIntrinsic(ratio, zPTarget)
 	swap = Endpoints{
 		Path: childPath,
-		Cx:   float64(w.ViewX) + float64(w.W)/2,
-		Cy:   float64(w.ViewY) + float64(w.H)/2,
+		Cx:   w.ViewCx,
+		Cy:   w.ViewCy,
 		Zoom: swapZoom,
 	}
 	// Final state: live zoom reconstructed from the *real* overtake (not
@@ -272,8 +273,7 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 // applied on the way OUT, not just the way in).
 func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
-	return float64(w.ViewX) + float64(w.W)/2,
-		float64(w.ViewY) + float64(w.H)/2,
+	return w.ViewCx, w.ViewCy,
 		LiveFromIntrinsic(ratio, OvertakeZoom(w, paneW, paneH, cellPx))
 }
 
@@ -292,8 +292,8 @@ func Ascent(from Endpoints, w Well, parentPath []string, paneW, paneH, cellPx fl
 	midZoom := LiveFromIntrinsic(ratio, zPTarget)
 	mid = Endpoints{
 		Path: from.Path,
-		Cx:   float64(w.ViewX) + float64(w.W)/2,
-		Cy:   float64(w.ViewY) + float64(w.H)/2,
+		Cx:   w.ViewCx,
+		Cy:   w.ViewCy,
 		Zoom: midZoom,
 	}
 	// Make sure the ascent always zooms out from the user's current state.
@@ -333,16 +333,4 @@ func ZoomDist(z1, z2, cellPx, factor float64) float64 {
 		return 0
 	}
 	return math.Abs(math.Log(z2/z1)) * cellPx * factor
-}
-
-// ViewOriginFromCenter quantizes a live pane center back to a stored view
-// window ORIGIN (the tile's view_x/view_y): round the origin, not the center.
-// The descent target is origin + size/2 — a half-cell fraction for odd sizes —
-// so rounding the CENTER first (round(c) - size/2) rounds that .5 away from
-// zero and drifts the stored window one cell per untouched round trip
-// (view 1 → center 1.5 → round 2). Rounding the reconstructed origin makes
-// descend→ascend idempotent by construction: origin → origin + size/2 →
-// round(origin) = origin, for every origin and size.
-func ViewOriginFromCenter(center float64, size int64) int64 {
-	return int64(math.Round(center - float64(size)/2))
 }

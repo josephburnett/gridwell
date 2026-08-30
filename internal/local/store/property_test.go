@@ -212,10 +212,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			n, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+			n, err := s.SetFraming(ctx, &rpc.SetFramingRequest{
 				TileID: pick.id, Version: ver,
-				ViewX: int64(rng.IntN(50)), ViewY: int64(rng.IntN(50)),
-				ViewZoom: 1.0,
+				Framing: rpc.Framing{Cx: rng.Float64() * 50, Cy: rng.Float64() * 50, Zoom: 1.0},
 			})
 			if err != nil && !isBenignPropError(err) {
 				t.Fatalf("iter %d set well view: %v", i, err)

@@ -103,12 +103,14 @@ type ChildPreview struct {
 }
 
 // ChildPreviewFor returns the screen-coord transform for a well's
-// child-grid preview, given the parent pane, the well's footprint &
-// view region, and a resolved child-cell-per-parent-cell ratio (caller
-// computes via zoomtrans.EffectiveViewZoom). previewCell = parentCell ×
-// previewRatio. Pane-size independent.
+// child-grid preview, given the parent pane, the well's footprint and
+// stored framing CENTER (ViewCx/ViewCy, in child-grid cells), and a
+// resolved child-cell-per-parent-cell ratio (caller computes via
+// zoomtrans.EffectiveViewZoom). previewCell = parentCell × previewRatio.
+// Pane-size independent.
 func ChildPreviewFor(parent Pane, well struct {
-	X, Y, W, H, ViewX, ViewY int64
+	X, Y, W, H     int64
+	ViewCx, ViewCy float64
 }, previewRatio float64) ChildPreview {
 	parentCell := parent.CellPx * parent.Zoom
 	previewCell := parentCell * previewRatio
@@ -116,8 +118,8 @@ func ChildPreviewFor(parent Pane, well struct {
 	wellCenterX := wellLeft + float64(well.W)*parentCell/2
 	wellCenterY := wellTop + float64(well.H)*parentCell/2
 	return ChildPreview{
-		OriginX: wellCenterX - (float64(well.ViewX)+float64(well.W)/2)*previewCell,
-		OriginY: wellCenterY - (float64(well.ViewY)+float64(well.H)/2)*previewCell,
+		OriginX: wellCenterX - well.ViewCx*previewCell,
+		OriginY: wellCenterY - well.ViewCy*previewCell,
 		CellPx:  previewCell,
 	}
 }

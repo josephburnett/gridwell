@@ -48,7 +48,7 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 	// well framing: no bump.
 	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}, nil)
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: well.Id, Version: well.Version,
-		Tile: &gridwellv1.Tile{Kind: "well", ViewX: 3, ViewY: 4, ViewZoom: 2}}); err != nil {
+		Tile: &gridwellv1.Tile{Kind: "well", ViewCx: 3, ViewCy: 4, ViewZoom: 2}}); err != nil {
 		t.Fatalf("SetTile well: %v", err)
 	}
 	if v := getTile(t, p, well.Id).Version; v != well.Version {

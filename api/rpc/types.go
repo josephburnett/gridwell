@@ -4,7 +4,10 @@
 // source of truth for the encoding.
 package rpc
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
 
 // Tile kinds. A tile is exactly one of these.
 //
@@ -131,11 +134,11 @@ func PluginWellTile(pl PluginInfo) Tile {
 		// plugin's own root, never this (synthetic) tile's grid. Mark it so it
 		// renders dashed identically to a mounted plugin well.
 		Reference: true,
-		// The plugin's persisted root view IS this tile's framing, so
-		// previewing and descending through the synthetic tile land at the
-		// left-off view.
-		ViewX:    int64(pl.RootViewCx),
-		ViewY:    int64(pl.RootViewCy),
+		// The plugin's persisted root framing IS this tile's framing — one
+		// shape, so it carries across verbatim — and previewing or
+		// descending through the synthetic tile lands at the left-off view.
+		ViewCx:   pl.RootViewCx,
+		ViewCy:   pl.RootViewCy,
 		ViewZoom: pl.RootViewZoom,
 	}
 }
@@ -328,10 +331,13 @@ type Tile struct {
 	Y       int64  `json:"y"`
 	W       int64  `json:"w"`
 	H       int64  `json:"h"`
-	// well-only: ViewX/Y/Zoom is the child grid's framing — the preview
-	// frame, the descent target, and the ascent return value.
-	ViewX       int64   `json:"view_x,omitempty"`
-	ViewY       int64   `json:"view_y,omitempty"`
+	// well-only: ViewCx/Cy/Zoom is the child grid's framing — a float
+	// CENTER in the child grid's coordinates plus the pane-size-independent
+	// intrinsic zoom. One shape: the preview frame, the descent target and
+	// the ascent return value, and the same three numbers a root grid keeps
+	// on its own row. Zoom == 0 means never visited.
+	ViewCx      float64 `json:"view_cx,omitempty"`
+	ViewCy      float64 `json:"view_cy,omitempty"`
 	ViewZoom    float64 `json:"view_zoom,omitempty"`
 	ChildGridID string  `json:"child_grid_id,omitempty"`
 	// text-only: TextX/Y is the scroll offset; TextW/H is the window size;
@@ -480,10 +486,11 @@ type PluginInfo struct {
 	// ScratchGridID is the qualified off-grid grid this plugin holds ephemeral
 	// url tiles in ("descend into a url"); "" if the plugin has none.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`
-	// RootViewCx/Cy/Zoom is the plugin root grid's last-saved viewport from
-	// the Info handshake (center in world cell coords, live zoom). Zero means
-	// "never visited"; the client substitutes the default calibrated zoom.
-	// Filled by localdb from its system KV table; zero for fs/proc.
+	// RootViewCx/Cy/Zoom is the plugin root grid's last-saved framing from
+	// the Info handshake — the same Framing shape a doorway tile carries
+	// (float center, intrinsic zoom). Zero zoom means "never visited"; the
+	// client substitutes the default calibrated zoom. Filled from the root
+	// grid's own row; zero for a plugin that keeps no root framing.
 	RootViewCx   float64 `json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `json:"root_view_zoom,omitempty"`
@@ -508,13 +515,12 @@ type CreateWellRequest struct {
 	// display name for such a well. Empty → an ordinary interior well.
 	ChildGridID string `json:"child_grid_id,omitempty"`
 	Label       string `json:"label,omitempty"`
-	// ViewX/ViewY/ViewZoom seed an exit well's framing at creation (e.g. a
-	// plugin link dropped from the + menu starts at the plugin's persisted
-	// root view, the same framing a node-grid tile shows). Zeros = default
-	// view. Ignored for interior wells, which always start unframed.
-	ViewX    int64   `json:"view_x,omitempty"`
-	ViewY    int64   `json:"view_y,omitempty"`
-	ViewZoom float64 `json:"view_zoom,omitempty"`
+	// Framing seeds an exit well's framing at creation (e.g. a plugin link
+	// dropped from the + menu starts at the plugin's persisted root view,
+	// the same framing a node-grid tile shows). Zero zoom = never visited,
+	// the default view. Ignored for interior wells, which always start
+	// unframed.
+	Framing
 }
 
 // (The unconfigured plugin well is gone — 2026-08-29. The instance
@@ -610,12 +616,44 @@ type PlaceTileRequest struct {
 	H       int64  `json:"h"`
 }
 
-type SetWellViewRequest struct {
-	TileID   string  `json:"tile_id"`
-	Version  int64   `json:"version"`
-	ViewX    int64   `json:"view_x"`
-	ViewY    int64   `json:"view_y"`
-	ViewZoom float64 `json:"view_zoom"`
+// Framing is the ONE shape of "how this grid looked when I left it through
+// this doorway": a float CENTER in the grid's own coordinates plus a
+// pane-size-independent zoom — the intrinsic ratio live/overtake, so a
+// window resize never moves a saved view. Zoom == 0 is the one
+// "never visited" convention; Cx/Cy carry no meaning then.
+type Framing struct {
+	Cx   float64 `json:"cx,omitempty"`
+	Cy   float64 `json:"cy,omitempty"`
+	Zoom float64 `json:"zoom,omitempty"`
+}
+
+// framingEpsilon is how close two framings must be to count as the same
+// picture. Below it a write would be noise — float jitter in an animated
+// or re-derived viewport, not a place the user chose. One cell-thousandth
+// is far under a screen pixel at any usable zoom.
+const framingEpsilon = 0.001
+
+// SameAs reports whether f and g describe the same framing, within
+// framingEpsilon. It is the ONE "did the user actually move?" rule — the
+// no-op guard every persister consults, so a quiet settle tick never
+// churns the store.
+func (f Framing) SameAs(g Framing) bool {
+	return math.Abs(f.Cx-g.Cx) < framingEpsilon &&
+		math.Abs(f.Cy-g.Cy) < framingEpsilon &&
+		math.Abs(f.Zoom-g.Zoom) < framingEpsilon
+}
+
+// SetFramingRequest persists a Framing onto the row that owns it. Exactly
+// one target: TileID names the DOORWAY tile a grid was entered through (a
+// well — interior, exit, or link; each doorway keeps its own framing),
+// RootGridID a ROOT grid, which has no doorway. Version is the doorway
+// tile's claim (unused by the root arm). Framing only — never bumps a
+// content version.
+type SetFramingRequest struct {
+	TileID     string `json:"tile_id,omitempty"`
+	RootGridID string `json:"root_grid_id,omitempty"`
+	Version    int64  `json:"version,omitempty"`
+	Framing
 }
 
 type SetTextViewRequest struct {
@@ -647,17 +685,6 @@ type ShellSessionAliveRequest struct {
 // ShellSessionAliveResponse is the answer side of the probe.
 type ShellSessionAliveResponse struct {
 	Alive bool `json:"alive"`
-}
-
-// SetRootViewRequest persists the plugin root-grid framing. RootGridID
-// (a qualified "<plugin-uuid>/<id>") routes the call on the wire; the store
-// uses only Cx/Cy/Zoom (the qualified prefix has been stripped by the time the
-// store sees it). Framing only — never bumps a content version.
-type SetRootViewRequest struct {
-	RootGridID string  `json:"root_grid_id,omitempty"` // wire routing; stripped at store
-	Cx         float64 `json:"cx"`
-	Cy         float64 `json:"cy"`
-	Zoom       float64 `json:"zoom"`
 }
 
 // SetURLStateRequest freezes a live URL tile (preview JPEG + address +

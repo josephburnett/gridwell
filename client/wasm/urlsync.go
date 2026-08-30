@@ -15,7 +15,6 @@ import (
 	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/urlwalk"
-	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 // urlUpdateDebounceMs is how long we wait after the last state change
@@ -25,7 +24,7 @@ import (
 const urlUpdateDebounceMs = 150
 
 // framingSaveDebounceMs is the delay before persisting settled grid framing
-// (a well's view_*, a plugin's root view) back to the server. Longer than
+// (a doorway's framing, a root grid's framing) back to the server. Longer than
 // the URL debounce so a continuous pan/zoom doesn't spam the server with
 // intermediate values — only the resting state matters.
 const framingSaveDebounceMs = 600
@@ -90,11 +89,9 @@ func (a *App) flushWellWheelSaves() {
 			}
 		}
 		tileID := id
-		req := &rpc.SetWellViewRequest{
+		req := &rpc.SetFramingRequest{
 			TileID: tileID, Version: version,
-			ViewX:    zoomtrans.ViewOriginFromCenter(st.cx, st.w),
-			ViewY:    zoomtrans.ViewOriginFromCenter(st.cy, st.h),
-			ViewZoom: st.ratio,
+			Framing: rpc.Framing{Cx: st.cx, Cy: st.cy, Zoom: st.ratio},
 		}
 		if a.unloading && a.sendBeaconJSON(rpc.SetWellViewBeacon(req)) {
 			continue

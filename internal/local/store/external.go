@@ -20,6 +20,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // Namespace is one external's view of the store.
@@ -62,8 +64,8 @@ type ExtTile struct {
 	Kind        string
 	Label       string
 	X, Y, W, H  int64
-	ViewX       int64
-	ViewY       int64
+	ViewCx      float64
+	ViewCy      float64
 	ViewZoom    float64
 	TextX       int64
 	TextY       int64
@@ -266,7 +268,7 @@ func (n *Namespace) Merge(gridID int64, entries []Entry, authoritative bool) ([]
 
 // tiles lists the live rows of a grid, by id.
 func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
-	rows, err := n.s.db.Query(`SELECT id, key, kind, alt_text, x, y, w, h, view_x, view_y, view_zoom,
+	rows, err := n.s.db.Query(`SELECT id, key, kind, alt_text, x, y, w, h, view_cx, view_cy, view_zoom,
 		text_x, text_y, text_w, text_h, COALESCE(text_mode, ''), content_zoom, COALESCE(child_grid_id, 0)
 		FROM tiles WHERE ns = ? AND grid_id = ? AND tombstoned = 0 ORDER BY id`, n.ns, gridID)
 	if err != nil {
@@ -277,7 +279,7 @@ func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
 	for rows.Next() {
 		var t ExtTile
 		if err := rows.Scan(&t.ID, &t.Key, &t.Kind, &t.Label, &t.X, &t.Y, &t.W, &t.H,
-			&t.ViewX, &t.ViewY, &t.ViewZoom,
+			&t.ViewCx, &t.ViewCy, &t.ViewZoom,
 			&t.TextX, &t.TextY, &t.TextW, &t.TextH, &t.TextMode, &t.ContentZoom, &t.ChildGridID); err != nil {
 			return nil, err
 		}
@@ -310,10 +312,18 @@ func (n *Namespace) Place(tileID, x, y, w, h int64) error {
 	return n.exec(`x = ?, y = ?, w = ?, h = ?`, tileID, x, y, w, h)
 }
 
-// SetWellView persists a well's preview framing — the descent target and
-// ascent return value.
-func (n *Namespace) SetWellView(tileID, vx, vy int64, vz float64) error {
-	return n.exec(`view_x = ?, view_y = ?, view_zoom = ?`, tileID, vx, vy, vz)
+// SetFraming persists framing into this namespace's memory — the ONE
+// writer of the one shape (framing.go), tile or root. Exactly one of
+// tileID and rootGridID is non-zero.
+func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) error {
+	k, err := updateFraming(context.Background(), n.s.db, n.ns, tileID, rootGridID, f, n.s.now().UnixNano())
+	if err != nil {
+		return err
+	}
+	if k == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetTextView persists a text tile's framed window.
@@ -335,34 +345,23 @@ func (n *Namespace) Retire(tileID int64) error {
 	return n.exec(`tombstoned = 1`, tileID)
 }
 
-// RootView reads a context's persisted root viewport; ok=false = never set.
-func (n *Namespace) RootView(gridID int64) (cx, cy, zoom float64, ok bool, err error) {
+// RootFraming reads a ROOT grid's framing — the row that owns it when
+// there is no doorway tile. ok=false = never visited (no row value, or a
+// zero zoom: the one convention framing.go documents).
+func (n *Namespace) RootFraming(gridID int64) (f rpc.Framing, ok bool, err error) {
 	var ncx, ncy, nzoom sql.NullFloat64
 	err = n.s.db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).
 		Scan(&ncx, &ncy, &nzoom)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, 0, false, ErrNotFound
+		return rpc.Framing{}, false, ErrNotFound
 	}
 	if err != nil {
-		return 0, 0, 0, false, err
+		return rpc.Framing{}, false, err
 	}
-	if !nzoom.Valid {
-		return 0, 0, 0, false, nil
+	if !nzoom.Valid || nzoom.Float64 <= 0 {
+		return rpc.Framing{}, false, nil
 	}
-	return ncx.Float64, ncy.Float64, nzoom.Float64, true, nil
-}
-
-// SetRootView persists a context's root viewport. Framing-class.
-func (n *Namespace) SetRootView(gridID int64, cx, cy, zoom float64) error {
-	res, err := n.s.db.Exec(`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND ns = ?`,
-		cx, cy, zoom, gridID, n.ns)
-	if err != nil {
-		return err
-	}
-	if k, _ := res.RowsAffected(); k == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return rpc.Framing{Cx: ncx.Float64, Cy: ncy.Float64, Zoom: nzoom.Float64}, true, nil
 }
 
 // CacheListing remembers a context's last good listing — an opaque blob
@@ -432,7 +431,7 @@ func occupyRect(occupied map[[2]int64]bool, x, y, w, h int64) {
 // external row with its full remembered state, minted fresh. Tombstoned
 // rows are inserted tombstoned — a retired key stays retired.
 func (s *Store) InsertExternalRow(ctx context.Context, ns string, gridID int64, key, kind, label string, childGridID int64, url string, tombstoned bool,
-	place [4]int64, view [2]int64, viewZoom float64, text [4]int64, textMode string, contentZoom float64) (int64, error) {
+	place [4]int64, view rpc.Framing, text [4]int64, textMode string, contentZoom float64) (int64, error) {
 	now := s.now().UnixNano()
 	var child, u, mode any
 	if childGridID != 0 {
@@ -449,11 +448,11 @@ func (s *Store) InsertExternalRow(ctx context.Context, ns string, gridID int64, 
 		tomb = 1
 	}
 	res, err := s.db.ExecContext(ctx, `INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
-		view_x, view_y, view_zoom, child_grid_id, text_x, text_y, text_w, text_h, text_mode, content_zoom,
+		view_cx, view_cy, view_zoom, child_grid_id, text_x, text_y, text_w, text_h, text_mode, content_zoom,
 		url_string, alt_text, created_at, updated_at, ns, key, tombstoned)
 		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		gridID, kind, place[0], place[1], place[2], place[3],
-		view[0], view[1], viewZoom, child, text[0], text[1], text[2], text[3], mode, contentZoom,
+		view.Cx, view.Cy, view.Zoom, child, text[0], text[1], text[2], text[3], mode, contentZoom,
 		u, label, now, now, ns, key, tomb)
 	if err != nil {
 		return 0, err

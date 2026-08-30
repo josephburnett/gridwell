@@ -215,8 +215,8 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2.SetWellView(ctx, &rpc.SetWellViewRequest{
-		TileID: sub.ID, Version: sub.Version, ViewX: 2, ViewY: -1, ViewZoom: 1.4,
+	if _, err := v2.SetWellView(ctx, &rpc.SetFramingRequest{
+		TileID: sub.ID, Version: sub.Version, Framing: rpc.Framing{Cx: 2, Cy: -1, Zoom: 1.4},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 	if got.ID != notes.ID || got.X != 6 || got.Y != 2 || got.W != 2 || got.H != 1 {
 		t.Fatalf("placement did not persist: %+v", got)
 	}
-	if sub2.ViewX != 2 || sub2.ViewY != -1 || sub2.ViewZoom != 1.4 {
+	if sub2.ViewCx != 2 || sub2.ViewCy != -1 || sub2.ViewZoom != 1.4 {
 		t.Fatalf("framing did not persist: %+v", sub2)
 	}
 	if late.X >= 6 && late.X < 8 && late.Y == 2 {

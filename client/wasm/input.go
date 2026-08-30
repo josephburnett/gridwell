@@ -239,7 +239,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// per frame — not the grid the pane shows. Pure math in
 		// zoomtrans.WellWheelView (the same cursor-anchored kernel as the
 		// pane zoom, in preview space); the cache is patched per notch and
-		// the settle persister posts one SetWellView per tile at flush.
+		// the settle persister posts one framing write per tile at flush.
 		ps := paneToDragdrop(p, r)
 		x0, y0 := ps.CellToScreen(float64(hoverWell.X), float64(hoverWell.Y))
 		x1, _ := ps.CellToScreen(float64(hoverWell.X)+1, float64(hoverWell.Y))
@@ -248,13 +248,12 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		hpx := float64(hoverWell.H) * parentCell
 		zw := zoomtrans.Well{
 			X: hoverWell.X, Y: hoverWell.Y, W: hoverWell.W, H: hoverWell.H,
-			ViewX: hoverWell.ViewX, ViewY: hoverWell.ViewY, ViewZoom: hoverWell.ViewZoom,
+			ViewCx: hoverWell.ViewCx, ViewCy: hoverWell.ViewCy, ViewZoom: hoverWell.ViewZoom,
 		}
 		// The float center accumulates across the burst (issue #219): first
-		// notch seeds from the stored origin; later notches feed the drift
+		// notch seeds from the stored center; later notches feed the drift
 		// back in, so cursor-anchored zoom actually travels.
-		cx0 := float64(hoverWell.ViewX) + float64(hoverWell.W)/2
-		cy0 := float64(hoverWell.ViewY) + float64(hoverWell.H)/2
+		cx0, cy0 := hoverWell.ViewCx, hoverWell.ViewCy
 		if st, ok := a.wellWheelPending[hoverWell.ID]; ok {
 			cx0, cy0 = st.cx, st.cy
 		}
@@ -264,8 +263,8 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 			return nil
 		}
 		updated := *hoverWell
-		updated.ViewX = zoomtrans.ViewOriginFromCenter(cx1, hoverWell.W)
-		updated.ViewY = zoomtrans.ViewOriginFromCenter(cy1, hoverWell.H)
+		updated.ViewCx = cx1
+		updated.ViewCy = cy1
 		updated.ViewZoom = ratio
 		a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
 		a.wellWheelPending[hoverWell.ID] = wellWheelDrift{
@@ -432,8 +431,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		if child := a.childTileAtScreen(p, r, n, sx, sy); child != nil {
 			ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
 			cp := dragdrop.ChildPreviewFor(ps, struct {
-				X, Y, W, H, ViewX, ViewY int64
-			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
+				X, Y, W, H     int64
+				ViewCx, ViewCy float64
+			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: n.ViewCx, ViewCy: n.ViewCy},
 				ratio)
 			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
@@ -835,7 +835,7 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 		req := &rpc.CreateWellRequest{
 			GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
 			ChildGridID: src.ChildGridID, Label: src.AltText,
-			ViewX: src.ViewX, ViewY: src.ViewY, ViewZoom: src.ViewZoom,
+			Framing: rpc.Framing{Cx: src.ViewCx, Cy: src.ViewCy, Zoom: src.ViewZoom},
 		}
 		a.postTileMutate("CreateWell", dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
 			return a.cl.CreateWell(ctx, req)
@@ -1135,13 +1135,13 @@ func (a *App) persistPluginRootView(p *pane.Pane) {
 	if !ok {
 		return
 	}
-	a.persistRootViewCore(p, pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom,
-		func(vx, vy int64, zoom float64) {
+	a.persistRootViewCore(p, rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom},
+		func(f rpc.Framing) {
 			for i := range a.plugins {
 				if a.plugins[i].UUID == pl.UUID {
-					a.plugins[i].RootViewCx = float64(vx)
-					a.plugins[i].RootViewCy = float64(vy)
-					a.plugins[i].RootViewZoom = zoom
+					a.plugins[i].RootViewCx = f.Cx
+					a.plugins[i].RootViewCy = f.Cy
+					a.plugins[i].RootViewZoom = f.Zoom
 				}
 			}
 		})
@@ -1152,23 +1152,15 @@ func (a *App) persistPluginRootView(p *pane.Pane) {
 // synthetic-well intrinsic math, the no-op guard against the caller's
 // cached copy, the local reconcile (commit), and the SetRootView post —
 // beacon during unload, ordinary void persist otherwise.
-func (a *App) persistRootViewCore(p *pane.Pane, curCx, curCy, curZoom float64, commit func(vx, vy int64, zoom float64)) {
-	newViewX := zoomtrans.ViewOriginFromCenter(p.Cx, 1)
-	newViewY := zoomtrans.ViewOriginFromCenter(p.Cy, 1)
+func (a *App) persistRootViewCore(p *pane.Pane, cur rpc.Framing, commit func(rpc.Framing)) {
 	r := paneRectFor(a, p)
 	overtake := zoomtrans.OvertakeZoom(zoomtrans.Well{W: 1, H: 1}, r.W, r.H, cellPx)
-	newViewZoom := zoomtrans.IntrinsicFromLive(p.Zoom, overtake)
-	if newViewX == int64(curCx) && newViewY == int64(curCy) &&
-		math.Abs(newViewZoom-curZoom) < 0.001 {
+	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy, Zoom: zoomtrans.IntrinsicFromLive(p.Zoom, overtake)}
+	if cur.SameAs(next) {
 		return
 	}
-	commit(newViewX, newViewY, newViewZoom)
-	req := &rpc.SetRootViewRequest{
-		RootGridID: p.Anchor,
-		Cx:         float64(newViewX),
-		Cy:         float64(newViewY),
-		Zoom:       newViewZoom,
-	}
+	commit(next)
+	req := &rpc.SetFramingRequest{RootGridID: p.Anchor, Framing: next}
 	if a.unloading && a.sendBeaconJSON(rpc.SetRootViewBeacon(req)) {
 		return
 	}
@@ -1216,7 +1208,7 @@ func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, well *rpc.Tile) {
 	r := paneRectFor(a, p)
 	w := zoomtrans.Well{
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
+		ViewCx: well.ViewCx, ViewCy: well.ViewCy, ViewZoom: well.ViewZoom,
 	}
 
 	from := zoomtrans.Endpoints{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
@@ -1325,7 +1317,7 @@ func (a *App) startAscent(p *pane.Pane) {
 	}
 	w := zoomtrans.Well{
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
+		ViewCx: well.ViewCx, ViewCy: well.ViewCy, ViewZoom: well.ViewZoom,
 	}
 	mid, switchTo := zoomtrans.Ascent(from, w, parentPath, r.W, r.H, cellPx)
 
@@ -1400,7 +1392,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 			return 0, 0, 0, false
 		}
 		w := zoomtrans.Well{W: 1, H: 1,
-			ViewX: int64(vcx), ViewY: int64(vcy), ViewZoom: vzoom}
+			ViewCx: vcx, ViewCy: vcy, ViewZoom: vzoom}
 		cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
 		return cx, cy, zoom, true
 	}
@@ -1413,7 +1405,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 		return 0, 0, 0, false
 	}
 	w := zoomtrans.Well{X: t.X, Y: t.Y, W: t.W, H: t.H,
-		ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}
+		ViewCx: t.ViewCx, ViewCy: t.ViewCy, ViewZoom: t.ViewZoom}
 	cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
 	return cx, cy, zoom, true
 }
@@ -1482,7 +1474,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 	}
 	w := zoomtrans.Well{
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
+		ViewCx: well.ViewCx, ViewCy: well.ViewCy, ViewZoom: well.ViewZoom,
 	}
 	if isLinkTile(well) {
 		// A LINK crosses into another id space (a plugin tile on the node
@@ -1933,7 +1925,7 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 	a.persistWellView(p, well, p.Anchor, parentPath)
 }
 
-// persistWellView updates `well`'s ViewX/ViewY/ViewZoom so its parent-grid
+// persistWellView updates `well`'s framing (view center + intrinsic zoom) so its parent-grid
 // preview reflects the user's last position and zoom in the child grid.
 // Fired by every ascent flush and by the settle persister
 // (flushFramingSave). ViewZoom is stored as the intrinsic ratio
@@ -1948,23 +1940,17 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 // stored view (rounded to int cells), so quiet calls don't churn
 // the DB.
 func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string, parentPath []string) {
-	// Quantize the ORIGIN, not the center: descend targets origin + size/2,
-	// and rounding that half-cell center drifted the stored window one cell
-	// per untouched round trip (zoomtrans.ViewOriginFromCenter has the
-	// arithmetic and its idempotence property test).
-	newViewX := zoomtrans.ViewOriginFromCenter(p.Cx, well.W)
-	newViewY := zoomtrans.ViewOriginFromCenter(p.Cy, well.H)
 	r := paneRectFor(a, p)
 	zw := zoomtrans.Well{X: well.X, Y: well.Y, W: well.W, H: well.H}
 	overtake := zoomtrans.OvertakeZoom(zw, r.W, r.H, cellPx)
-	newViewZoom := zoomtrans.IntrinsicFromLive(p.Zoom, overtake)
-	if newViewX == well.ViewX && newViewY == well.ViewY &&
-		math.Abs(newViewZoom-well.ViewZoom) < 0.001 {
+	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy, Zoom: zoomtrans.IntrinsicFromLive(p.Zoom, overtake)}
+	cur := rpc.Framing{Cx: well.ViewCx, Cy: well.ViewCy, Zoom: well.ViewZoom}
+	if cur.SameAs(next) {
 		return
 	}
-	well.ViewX = newViewX
-	well.ViewY = newViewY
-	well.ViewZoom = newViewZoom
+	well.ViewCx = next.Cx
+	well.ViewCy = next.Cy
+	well.ViewZoom = next.Zoom
 
 	// Update local cache so the parent preview renders the new view
 	// before the SSE event from the server arrives.
@@ -1979,10 +1965,7 @@ func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string,
 	// optimistic reaction (roll back the patch above on remaining failure).
 	// During beforeunload the write rides a beacon instead (unload.go).
 	tileID := well.ID
-	req := &rpc.SetWellViewRequest{
-		TileID: tileID, Version: well.Version,
-		ViewX: newViewX, ViewY: newViewY, ViewZoom: newViewZoom,
-	}
+	req := &rpc.SetFramingRequest{TileID: tileID, Version: well.Version, Framing: next}
 	if a.unloading && a.sendBeaconJSON(rpc.SetWellViewBeacon(req)) {
 		return
 	}
@@ -2265,9 +2248,7 @@ func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		ChildGridID: pl.RootGridID,
 		Label:       pl.Label,
-		ViewX:       int64(pl.RootViewCx),
-		ViewY:       int64(pl.RootViewCy),
-		ViewZoom:    pl.RootViewZoom,
+		Framing:     rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom},
 	}
 	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateWell(ctx, req)

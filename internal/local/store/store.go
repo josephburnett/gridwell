@@ -56,9 +56,6 @@ type Store struct {
 
 const (
 	systemKeyRootGridID    = "root_grid_id"
-	systemKeyRootViewCx    = "root_view_cx"
-	systemKeyRootViewCy    = "root_view_cy"
-	systemKeyRootZoom      = "root_zoom"
 	systemKeyPluginUUID    = "plugin_uuid"
 	systemKeyScratchGridID = "scratch_grid_id"
 )
@@ -120,8 +117,11 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
-// bootstrapRoot inserts the initial root grid if none exists and seeds the
-// root viewport keys. Idempotent.
+// bootstrapRoot inserts the initial root grid if none exists. Idempotent.
+// The root's framing is NOT seeded here: it lives on the grid row itself
+// (root_cx/cy/zoom, schema v11) and a NULL zoom already means "never
+// visited" — the client substitutes the calibrated default until the user
+// positions the view.
 func (s *Store) bootstrapRoot(ctx context.Context) error {
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyRootGridID).Scan(&v)
@@ -145,13 +145,6 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 		}
 		seeds := []struct{ k, v string }{
 			{systemKeyRootGridID, strconv.FormatInt(id, 10)},
-			{systemKeyRootViewCx, "0"},
-			{systemKeyRootViewCy, "0"},
-			// zoom=0 signals "never visited": the client substitutes the default
-			// calibrated zoom (DefaultWellViewZoom) on enterPlugin, preserving the
-			// legacy overview entry for fresh plugins. A non-zero value means the
-			// user explicitly positioned the view (written by SetRootView on ascent).
-			{systemKeyRootZoom, "0"},
 			{systemKeyPluginUUID, s.newID()},
 		}
 		for _, kv := range seeds {
@@ -259,55 +252,75 @@ func (s *Store) PluginUUID(ctx context.Context) (string, error) {
 	return v, err
 }
 
-// RootView returns the persisted root viewport: center (cx, cy) and zoom.
-func (s *Store) RootView(ctx context.Context) (cx, cy, zoom float64, err error) {
-	cx, err = readFloatKey(ctx, s.db, systemKeyRootViewCx)
+// RootFraming returns home's root framing — the same fact, in the same
+// three columns, that a plugin context's root keeps: home's root grid row
+// at ns = ”. ok=false means never visited.
+func (s *Store) RootFraming(ctx context.Context) (f rpc.Framing, ok bool, err error) {
+	rootID, err := rootGridID(ctx, s.db)
 	if err != nil {
-		return 0, 0, 0, err
+		return rpc.Framing{}, false, err
 	}
-	cy, err = readFloatKey(ctx, s.db, systemKeyRootViewCy)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	zoom, err = readFloatKey(ctx, s.db, systemKeyRootZoom)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	return cx, cy, zoom, nil
+	return s.Namespace("").RootFraming(rootID)
 }
 
-// SetRootView writes the root framing to the system KV table and emits a
-// GridChanged for the current root grid.
-func (s *Store) SetRootView(ctx context.Context, req *rpc.SetRootViewRequest) error {
-	var rootID int64
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		rootID, err = rootGridID(ctx, tx)
+// SetFraming is the ONE framing writer: "how this grid looked when I left
+// it through this doorway" — a float center in the grid's own coordinates
+// plus the pane-size-independent zoom — onto the row that owns it. Exactly
+// one target: req.TileID names a DOORWAY tile (a well, interior or exit,
+// or a well link — the framing is per-doorway, so a link keeps its own),
+// req.RootGridID a ROOT grid, which has no doorway to carry it.
+//
+// Framing is not a content edit: it does NOT bump the tile version. It is
+// an in-place write to the owning row (copy-on-clone means clones are
+// already independent, so there is nothing to fork) — the framing stays
+// exactly as you left it.
+func (s *Store) SetFraming(ctx context.Context, req *rpc.SetFramingRequest) (*rpc.Tile, error) {
+	if req.RootGridID != "" {
+		return nil, s.setRootFraming(ctx, req)
+	}
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}
-		writes := []struct {
-			k string
-			v string
-		}{
-			{systemKeyRootViewCx, strconv.FormatFloat(req.Cx, 'f', -1, 64)},
-			{systemKeyRootViewCy, strconv.FormatFloat(req.Cy, 'f', -1, 64)},
-			{systemKeyRootZoom, strconv.FormatFloat(req.Zoom, 'f', -1, 64)},
+		if !isWellKind(n.Kind) {
+			return ErrNotWellTile
 		}
-		for _, w := range writes {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO system (key, value) VALUES (?, ?)
-				 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-				w.k, w.v); err != nil {
-				return err
-			}
+		if _, err := updateFraming(ctx, tx, "", tileID, 0, req.Framing, s.now().Unix()); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
+// setRootFraming is SetFraming's root arm: the write lands on the grid row
+// and announces itself as a grid change (a root has no tile to change).
+func (s *Store) setRootFraming(ctx context.Context, req *rpc.SetFramingRequest) error {
+	gridID, err := parseID(req.RootGridID)
+	if err != nil {
+		return fmt.Errorf("%w: invalid root_grid_id", ErrInvalidArgument)
+	}
+	err = s.withTx(ctx, func(tx *sql.Tx) error {
+		n, err := updateFraming(ctx, tx, "", 0, gridID, req.Framing, s.now().Unix())
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	s.publish(rpc.Event{Kind: rpc.EventGridChanged, GridChanged: &rpc.GridChanged{GridID: strconv.FormatInt(rootID, 10)}})
+	s.publish(rpc.Event{Kind: rpc.EventGridChanged, GridChanged: &rpc.GridChanged{GridID: req.RootGridID}})
 	return nil
 }
 
@@ -318,15 +331,6 @@ func rootGridID(ctx context.Context, q gridReader) (int64, error) {
 		return 0, err
 	}
 	return strconv.ParseInt(v, 10, 64)
-}
-
-func readFloatKey(ctx context.Context, q gridReader, key string) (float64, error) {
-	var v string
-	err := q.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, key).Scan(&v)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseFloat(v, 64)
 }
 
 // Close releases the underlying database handle.

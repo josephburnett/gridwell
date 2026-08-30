@@ -9,8 +9,8 @@ import (
 // client calls send — same converters, same procedures — so the unload
 // flush and the settle flush can never write different shapes.
 func TestBeaconBodies(t *testing.T) {
-	path, body := SetWellViewBeacon(&SetWellViewRequest{
-		TileID: "u1/5", Version: 3, ViewX: 1, ViewY: 2, ViewZoom: 0.5,
+	path, body := SetWellViewBeacon(&SetFramingRequest{
+		TileID: "u1/5", Version: 3, Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.5},
 	})
 	if path != "/gridwell.v1.Gridwell/SetTile" {
 		t.Errorf("well-view path = %q", path)
@@ -23,7 +23,7 @@ func TestBeaconBodies(t *testing.T) {
 		t.Errorf("body = %s", body)
 	}
 
-	path, body = SetRootViewBeacon(&SetRootViewRequest{RootGridID: "u1/1", Cx: 1, Cy: 2, Zoom: 0.3})
+	path, body = SetRootViewBeacon(&SetFramingRequest{RootGridID: "u1/1", Framing: Framing{Cx: 1, Cy: 2, Zoom: 0.3}})
 	if path != "/gridwell.v1.Gridwell/SetRootView" {
 		t.Errorf("root-view path = %q", path)
 	}

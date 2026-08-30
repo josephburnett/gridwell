@@ -136,7 +136,7 @@ func (s *Store) createTile(
 
 // CreateWell creates a new well at (x,y) with footprint (w,h) inside
 // req.GridID. The child grid is created empty with no framing on the
-// well (view_x/y/zoom all zero). Label, when set, is stored as the well's
+// well (view_cx/cy/zoom all zero — never visited). Label, when set, is stored as the well's
 // alt_text — the user-given name of the grid (the + palette's name field).
 // Wells have no content to derive an alt from, so this is alt's only writer.
 func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rpc.Tile, error) {
@@ -154,7 +154,7 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 			}
 			res, err = tx.ExecContext(ctx, `
 				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					view_x, view_y, view_zoom, child_grid_id, alt_text,
+					view_cx, view_cy, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
 				VALUES (?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
 				gridID, req.X, req.Y, req.W, req.H, childGridID, req.Label, now, now)
@@ -171,10 +171,11 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 // owned by the destination plugin and named by a qualified "<uuid>/<id>"
 // string. Deleting the well removes only the reference, never the backing
 // directory or process (that is a separate gesture on a tile *inside* the
-// grid). viewX/viewY/viewZoom carry the source's framing when the exit well
-// is a cross-plugin CLONE of a framed well — the link must preview and
-// descend to exactly where the source did; zeros are the default view.
-func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, viewX, viewY int64, viewZoom float64) (*rpc.Tile, error) {
+// grid). view carries the source's framing when the exit well is a
+// cross-plugin CLONE of a framed well — the link must preview and descend
+// to exactly where the source did; a zero zoom is "never visited", the
+// default view.
+func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.Framing) (*rpc.Tile, error) {
 	if childGridID == "" {
 		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
 	}
@@ -182,10 +183,10 @@ func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h in
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					view_x, view_y, view_zoom, child_grid_id, alt_text,
+					view_cx, view_cy, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
 				VALUES (?, 'well', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				gid, x, y, w, h, viewX, viewY, viewZoom, childGridID, alt, now, now)
+				gid, x, y, w, h, view.Cx, view.Cy, view.Zoom, childGridID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert exit well: %w", err)
 			}
@@ -330,39 +331,8 @@ func (s *Store) CreateScratchShell(ctx context.Context) (*rpc.Tile, error) {
 	return out, err
 }
 
-// SetWellView updates a well tile's framing (view_x/view_y/view_zoom).
-//
-// Framing is not a content edit: re-framing does NOT bump the tile version.
-// It's an in-place write to this tile's row (copy-on-clone means clones are
-// already independent, so there is nothing to fork) — the framing stays
-// exactly as you left it.
-func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*rpc.Tile, error) {
-	tileID, err := parseID(req.TileID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *rpc.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
-		if err != nil {
-			return err
-		}
-		if !isWellKind(n.Kind) {
-			return ErrNotWellTile
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
-			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
-		return err
-	})
-	return out, err
-}
-
 // SetTextView updates a text tile's framed-document window and rendered/text
-// mode. Like SetWellView this is framing, not content: an in-place write that
+// mode. Like SetFraming this is framing, not content: an in-place write that
 // does NOT bump the tile version.
 func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)

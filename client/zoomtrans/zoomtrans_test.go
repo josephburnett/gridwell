@@ -42,7 +42,7 @@ func TestOvertakeZoomGuards(t *testing.T) {
 
 func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 	from := Endpoints{Path: nil, Cx: 0, Cy: 0, Zoom: 1.0}
-	w := Well{ID: "7", X: 5, Y: 3, W: 1, H: 1, ViewX: 0, ViewY: 0}
+	w := Well{ID: "7", X: 5, Y: 3, W: 1, H: 1, ViewCx: 0.5, ViewCy: 0.5}
 	mid, swap, final := Descent(from, w, standardPaneW, standardPaneH, cellPx)
 
 	// Mid centers on well center; zoom is the overtake zoom (30 for the
@@ -114,7 +114,7 @@ func TestDescentDoesNotShareSlice(t *testing.T) {
 func TestAscentNeverZoomsIn(t *testing.T) {
 	// Caller is already at a tiny zoom; ascent must not zoom in.
 	from := Endpoints{Path: []string{"42"}, Zoom: 0.5}
-	w := Well{ID: "42", W: 1, H: 1, ViewX: 1, ViewY: 1}
+	w := Well{ID: "42", W: 1, H: 1, ViewCx: 1.5, ViewCy: 1.5}
 	mid, _ := Ascent(from, w, nil, standardPaneW, standardPaneH, cellPx)
 	if mid.Zoom > from.Zoom {
 		t.Errorf("mid.Zoom = %v, want <= %v", mid.Zoom, from.Zoom)
@@ -126,7 +126,7 @@ func TestAscentSwitchContinuity(t *testing.T) {
 	// cellPx * to.Zoom / PreviewFactor. Equal => to.Zoom = mid.Zoom *
 	// PreviewFactor.
 	from := Endpoints{Path: []string{"42"}, Zoom: 5.0}
-	w := Well{ID: "42", X: 1, Y: 2, W: 2, H: 1, ViewX: 0, ViewY: 0}
+	w := Well{ID: "42", X: 1, Y: 2, W: 2, H: 1, ViewCx: 1, ViewCy: 0.5}
 	mid, to := Ascent(from, w, nil, standardPaneW, standardPaneH, cellPx)
 	if !near(to.Zoom, mid.Zoom*PreviewFactor) {
 		t.Errorf("to.Zoom = %v, mid.Zoom*PreviewFactor = %v", to.Zoom, mid.Zoom*PreviewFactor)
@@ -517,35 +517,46 @@ func TestWheelZoom(t *testing.T) {
 	}
 }
 
-// TestViewOriginFromCenterRoundTrip: the descend→ascend quantization is
-// idempotent — reconstructing the origin from the center it produces returns
-// the same origin, for every origin and tile size. The old round(center)-w/2
-// drifted +1 per round trip for odd sizes (the .5 fraction rounds away from
-// zero); caught by preview-stability.spec.ts the day it could be observed.
-func TestViewOriginFromCenterRoundTrip(t *testing.T) {
-	for _, origin := range []int64{-3, -1, 0, 1, 2, 7, 100} {
-		for _, size := range []int64{1, 2, 3, 5} {
-			center := float64(origin) + float64(size)/2
-			if got := ViewOriginFromCenter(center, size); got != origin {
-				t.Errorf("origin %d size %d: center %v → %d, want the same origin", origin, size, center, got)
-			}
+// TestFramingRoundTripIsByteIdentical: leaving a grid and coming back
+// must store EXACTLY what was stored before — the guiding rule applied to
+// framing. A descent reads the stored framing (StoredView), the user
+// touches nothing, and the ascent recomputes what to store from the live
+// viewport; the two must agree bit for bit, at ANY center, including the
+// sub-cell ones the retired integer window ORIGIN could not hold at all
+// (it quantized 5.37 to 5 and drifted a whole cell per odd-sized round
+// trip — the reason ViewOriginFromCenter existed).
+func TestFramingRoundTripIsByteIdentical(t *testing.T) {
+	const paneW, paneH, cell = 1280, 800, 64
+	for _, w := range []Well{
+		{X: 2, Y: 3, W: 2, H: 2, ViewCx: 5.37, ViewCy: -7.125, ViewZoom: 0.4},
+		{X: 0, Y: 0, W: 1, H: 1, ViewCx: 0.5, ViewCy: 0.5, ViewZoom: 1.0 / PreviewFactor},
+		{X: 9, Y: 9, W: 3, H: 5, ViewCx: -0.0001, ViewCy: 1e6 + 0.5, ViewZoom: 0.9},
+	} {
+		// Descend: this is the live viewport the pane lands on.
+		cx, cy, live := StoredView(w, paneW, paneH, cell)
+		// Ascend without touching anything: the persister converts the
+		// live zoom back to the stored intrinsic ratio and keeps the
+		// center as-is.
+		gotZoom := IntrinsicFromLive(live, OvertakeZoom(w, paneW, paneH, cell))
+		if cx != w.ViewCx || cy != w.ViewCy {
+			t.Errorf("round trip moved the center: %+v → (%v, %v)", w, cx, cy)
 		}
-	}
-	// A genuine reframe still quantizes to the nearest window.
-	if got := ViewOriginFromCenter(4.9, 1); got != 4 {
-		t.Errorf("center 4.9 size 1 → %d, want 4", got)
-	}
-	if got := ViewOriginFromCenter(-2.7, 2); got != -4 {
-		t.Errorf("center -2.7 size 2 → %d, want -4", got)
+		// The zoom goes through one multiply and one divide, so it can
+		// come back a single ulp off (0.9 → 0.8999999999999999). That is
+		// far inside the persister's no-op guard (rpc.Framing.SameAs,
+		// 1e-3), so an untouched round trip still writes NOTHING — the
+		// stored bytes are the ones the user left.
+		if math.Abs(gotZoom-w.ViewZoom) > 1e-12 {
+			t.Errorf("round trip changed the zoom: %v → %v", w.ViewZoom, gotZoom)
+		}
 	}
 }
 
 // WellWheelView (issue #210): the hover-wheel zoom on a well's preview.
 func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
-	w := Well{X: 0, Y: 0, W: 2, H: 2, ViewX: 4, ViewY: 6, ViewZoom: 0.25}
+	w := Well{X: 0, Y: 0, W: 2, H: 2, ViewCx: 5, ViewCy: 7, ViewZoom: 0.25}
 	const parentCell = 64.0
-	cx0 := float64(w.ViewX) + float64(w.W)/2
-	cy0 := float64(w.ViewY) + float64(w.H)/2
+	cx0, cy0 := w.ViewCx, w.ViewCy
 
 	// Cursor at the well CENTER: zoom in; the view center must not move
 	// (the anchor is the point under the cursor).
@@ -603,7 +614,7 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 // later" land differently than "descend now".
 func TestStoredViewMatchesDescentFinal(t *testing.T) {
 	wells := []Well{
-		{X: 2, Y: 3, W: 2, H: 2, ViewX: 5, ViewY: 7, ViewZoom: 0.4},
+		{X: 2, Y: 3, W: 2, H: 2, ViewCx: 6, ViewCy: 8, ViewZoom: 0.4},
 		{X: 0, Y: 0, W: 1, H: 1},                // unvisited: default ratio
 		{X: 1, Y: 1, W: 3, H: 1, ViewZoom: 1.0}, // max ratio
 	}

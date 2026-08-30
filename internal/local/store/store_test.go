@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -101,23 +100,30 @@ func TestBootstrapRoot(t *testing.T) {
 	}
 }
 
-// TestRootViewRoundTrip writes a root framing via SetRootView and reads
-// the same values back through RootView (which in turn exercises
-// readFloatKey on each of cx / cy / zoom).
-func TestRootViewRoundTrip(t *testing.T) {
+// TestRootFramingRoundTrip writes home's root framing through the ONE
+// writer (SetFraming aimed at the root GRID row — schema v11 put it in
+// the same three columns every other root uses) and reads it back
+// EXACTLY: a float column keeps the float, so nothing rounds on the way
+// through the store.
+func TestRootFramingRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	want := &rpc.SetRootViewRequest{Cx: 3.5, Cy: -7.25, Zoom: 1.5}
-	if err := s.SetRootView(ctx, want); err != nil {
+	if _, ok, err := s.RootFraming(ctx); err != nil || ok {
+		t.Fatalf("a fresh home claims a root framing: ok=%v err=%v", ok, err)
+	}
+	root, err := s.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := rpc.Framing{Cx: 3.5, Cy: -7.25, Zoom: 1.5}
+	if _, err := s.SetFraming(ctx, &rpc.SetFramingRequest{RootGridID: root, Framing: want}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	cx, cy, zoom, err := s.RootView(ctx)
-	if err != nil {
-		t.Fatalf("get: %v", err)
+	got, ok, err := s.RootFraming(ctx)
+	if err != nil || !ok {
+		t.Fatalf("get: ok=%v err=%v", ok, err)
 	}
-	const eps = 1e-9
-	if math.Abs(cx-want.Cx) > eps || math.Abs(cy-want.Cy) > eps || math.Abs(zoom-want.Zoom) > eps {
-		t.Errorf("RootView = (%v, %v, %v), want (%v, %v, %v)",
-			cx, cy, zoom, want.Cx, want.Cy, want.Zoom)
+	if got != want {
+		t.Errorf("RootFraming = %+v, want %+v", got, want)
 	}
 }

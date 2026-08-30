@@ -24,8 +24,10 @@ package store
 //     split-pane layout (client/pane LayoutV1). Added at schema v5 via the
 //     first CHECK-rebuild migration.
 //
-// Well rows carry one view rectangle (view_x, view_y, view_zoom) that is
-// at once the preview frame, the descent target, and the ascent return.
+// Well rows carry one framing (view_cx, view_cy, view_zoom) — a float
+// center in the child grid's coordinates plus a pane-size-independent
+// zoom — that is at once the preview frame, the descent target, and the
+// ascent return.
 // Text rows carry a doc-space window (text_x, text_y, text_w, text_h)
 // plus a rendered/text mode plus blob_id (the markdown source). URL rows
 // carry a URL string and preview_blob_id (the last-frozen JPEG captured
@@ -50,7 +52,9 @@ CREATE TABLE IF NOT EXISTS system (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- Keys: root_grid_id, root_view_cx, root_view_cy, root_zoom.
+-- Keys: root_grid_id. (root_view_cx/root_view_cy/root_zoom retired at
+-- schema v11: home's root framing lives on its root GRID row, ns = '',
+-- in the same three columns every other root uses.)
 `
 
 // (The `session` table is gone — 2026-08-29, schema v10. It held one
@@ -90,9 +94,11 @@ CREATE TABLE IF NOT EXISTS grids (
     -- ns names the grid's owner: '' = home; a plugin id = that plugin's
     -- memory (docs/one-node.md §2.6 — one table for every namespace).
     -- context_key is the plugin's stable key for the context this grid
-    -- projects ('' for home grids). root_cx/cy/zoom: a plugin context's
-    -- persisted root viewport (NULL = never set; home keeps its own in
-    -- the system table). Added post-v1 (schema v9, additive).
+    -- projects ('' for home grids). root_cx/cy/zoom: the framing of a
+    -- ROOT grid — one with no doorway tile to carry it — in exactly the
+    -- shape a doorway's view_cx/cy/zoom uses. NULL or zero zoom = never
+    -- visited. Home's root is this row with ns = '' (schema v11); a
+    -- plugin context's is its own. Added post-v1 (schema v9, additive).
     ns          TEXT NOT NULL DEFAULT '',
     context_key TEXT NOT NULL DEFAULT '',
     root_cx     REAL,
@@ -142,10 +148,15 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     y             INTEGER NOT NULL,
     w             INTEGER NOT NULL DEFAULT 1 CHECK (w > 0),
     h             INTEGER NOT NULL DEFAULT 1 CHECK (h > 0),
-    -- well: the rectangle in child-grid coordinates that the preview shows
-    -- and descent restores.
-    view_x        INTEGER NOT NULL DEFAULT 0,
-    view_y        INTEGER NOT NULL DEFAULT 0,
+    -- well: the framing this doorway was left at — a float CENTER in the
+    -- child grid's coordinates plus the pane-size-independent intrinsic
+    -- zoom (live / overtake). One shape, shared with a root grid's
+    -- root_cx/cy/zoom. view_zoom = 0 is the one "never visited"
+    -- convention: cx/cy carry no meaning then and the reader falls back
+    -- to the preview calibration. (view_x/view_y — an integer window
+    -- ORIGIN — retired at v11, docs/simplify-plan.md S4.)
+    view_cx       REAL NOT NULL DEFAULT 0,
+    view_cy       REAL NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 0,
     -- No FK on child_grid_id: an exit well's child grid lives in another
     -- plugin (a qualified "<uuid>/<id>" reference), so the link is a soft

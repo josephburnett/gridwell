@@ -16,7 +16,7 @@ func fullTile() *Tile {
 		GridID:  "grid-4",
 		Kind:    KindURL,
 		X:       5, Y: 6, W: 7, H: 8,
-		ViewX: 9, ViewY: 10, ViewZoom: 11,
+		ViewCx: 9, ViewCy: 10, ViewZoom: 11,
 		ChildGridID: "child-12",
 		TextX:       13, TextY: 14, TextW: 15, TextH: 16,
 		TextMode:         "rendered",
@@ -142,13 +142,13 @@ func TestMutationRequestRoundTrips(t *testing.T) {
 // the right place (the one spot per primitive where this mapping lives).
 func TestCreateConvertersSelectKindAndFields(t *testing.T) {
 	well := CreateWellToProto(&CreateWellRequest{GridID: "g", X: 1, Y: 2, W: 3, H: 4, ChildGridID: "cg", Label: "home",
-		ViewX: 7, ViewY: 8, ViewZoom: 0.5})
+		Framing: Framing{Cx: 7, Cy: 8, Zoom: 0.5}})
 	if well.Tile.Kind != KindWell || well.Tile.ChildGridId != "cg" || well.Tile.AltText != "home" || well.GridId != "g" {
 		t.Errorf("CreateWell mapping wrong: %+v", well.Tile)
 	}
 	// The framing seed rides the create so an exit well (a plugin link dropped
 	// from the + menu) starts at the target's persisted root view.
-	if well.Tile.ViewX != 7 || well.Tile.ViewY != 8 || well.Tile.ViewZoom != 0.5 {
+	if well.Tile.ViewCx != 7 || well.Tile.ViewCy != 8 || well.Tile.ViewZoom != 0.5 {
 		t.Errorf("CreateWell dropped the view framing seed: %+v", well.Tile)
 	}
 	text := CreateTextToProto(&CreateTextRequest{GridID: "g", W: 2, H: 2})
@@ -169,8 +169,8 @@ func TestCreateConvertersSelectKindAndFields(t *testing.T) {
 // preview fields under the right Kind, and route the JPEG preview via the
 // Preview field (not the tile body). This is the framing-vs-content boundary.
 func TestSetConvertersAreFramingByKind(t *testing.T) {
-	well := SetWellViewToProto(&SetWellViewRequest{TileID: "t", Version: 1, ViewX: 4, ViewY: 5, ViewZoom: 6})
-	if well.Tile.Kind != KindWell || well.Tile.ViewX != 4 || well.Tile.ViewZoom != 6 {
+	well := SetWellViewToProto(&SetFramingRequest{TileID: "t", Version: 1, Framing: Framing{Cx: 4, Cy: 5, Zoom: 6}})
+	if well.Tile.Kind != KindWell || well.Tile.ViewCx != 4 || well.Tile.ViewZoom != 6 {
 		t.Errorf("SetWellView mapping wrong: %+v", well.Tile)
 	}
 	txt := SetTextViewToProto(&SetTextViewRequest{TileID: "t", TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: "rendered"})

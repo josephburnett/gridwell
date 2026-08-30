@@ -31,8 +31,11 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// own GetGrid responses; the local store never persists them.
 			// writable is stamped by the serving node from the owning
 			// plugin's Info — wire-only, per-grid capability, never persisted.
-			// ns/context_key/root_* are the externals' memory (schema v9,
-			// docs/one-node.md §2.6) — never on the wire.
+			// ns/context_key are the externals' memory (schema v9,
+			// docs/one-node.md §2.6) — never on the wire. root_cx/cy/zoom
+			// is a ROOT grid's framing (schema v11, home's included at
+			// ns = ''): it reaches the client through the Info handshake's
+			// root_view_* fields, never as a Grid field.
 			storageOnly: []string{"created_at", "updated_at", "ns", "context_key", "root_cx", "root_cy", "root_zoom"},
 			// menu_entries is stamped by the serving node from the owning
 			// plugin's Info (#258) — wire-only, like writable.
