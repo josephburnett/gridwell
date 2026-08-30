@@ -152,9 +152,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		// once dropped.
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", x, y, w, h)
-		setTileDash(a.cctx)
-		strokeTileBorder(a.cctx, x, y, w, h, colorFocusBorder, tileBorderPx)
-		clearTileDash(a.cctx)
+		strokeTileFrame(a.cctx, x, y, w, h, colorFocusBorder, true /* dashed */, false /* selected */)
 		a.drawPluginGlyph(item.plugin.Glyph, x, y, w, h)
 		a.drawTileBannerLabel(&n, x, y, w, h, false)
 		// Broken and rootless plugins get the same health tint their link

@@ -198,6 +198,24 @@ func drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
 	c.Set("lineWidth", 1.0)
 }
 
+// strokeTileFrame paints the coda every full-size tile renderer ends with:
+// the kind-colored inset border, dashed when the tile is a link, then the
+// gold selection ring outside it. One order for all of them — the frame over
+// the tile's content, the dash cleared before the selection ring so the gold
+// stays solid — so no renderer can drift into a different one.
+func strokeTileFrame(c js.Value, x, y, w, h float64, color string, dashed, selected bool) {
+	if dashed {
+		setTileDash(c)
+	}
+	strokeTileBorder(c, x, y, w, h, color, tileBorderPx)
+	if dashed {
+		clearTileDash(c)
+	}
+	if selected {
+		drawSelectedTileOutline(c, x, y, w, h)
+	}
+}
+
 // drawTraceOutline paints the fading yellow ascent-trace ring just outside
 // the tile (same geometry as the selection outline, thicker and alpha-faded).
 func drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
@@ -893,16 +911,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// Outline: every well is blue, and a cross-plugin well differs by the
 	// dashed border, not the hue. Dashed always means a link (isLinkTile), a
 	// reference you can unlink.
-	if dashed {
-		setTileDash(a.cctx)
-	}
-	strokeTileBorder(a.cctx, x, y, w, h, colorFocusBorder, tileBorderPx)
-	if dashed {
-		clearTileDash(a.cctx)
-	}
-	if selected {
-		drawSelectedTileOutline(a.cctx, x, y, w, h)
-	}
+	strokeTileFrame(a.cctx, x, y, w, h, colorFocusBorder, dashed, selected)
 	// Banner: "files" or "processes" for root exit wells, the basename for
 	// sub-wells. A plain well (KindWell) gets no banner; tileBannerLabel
 	// returns "" for it.

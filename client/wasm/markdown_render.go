@@ -137,16 +137,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outsid
 	if outside && !markdown.Renderable(n.AltText) {
 		outlineColor = colorMuted
 	}
-	if dashed {
-		setTileDash(a.cctx)
-	}
-	strokeTileBorder(a.cctx, x, y, w, h, outlineColor, tileBorderPx)
-	if dashed {
-		clearTileDash(a.cctx)
-	}
-	if selected {
-		drawSelectedTileOutline(a.cctx, x, y, w, h)
-	}
+	strokeTileFrame(a.cctx, x, y, w, h, outlineColor, dashed, selected)
 }
 
 // markdownStyle holds the raw-text painter's font, spacing, and color

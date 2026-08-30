@@ -115,16 +115,7 @@ func (a *App) drawPageTile(n *rpc.Tile, x, y, w, h float64, selected, outside, d
 		if outside {
 			line = colorMarkdownLineFaded
 		}
-		if dashed {
-			setTileDash(a.cctx)
-		}
-		strokeTileBorder(a.cctx, x, y, w, h, line, tileBorderPx)
-		if dashed {
-			clearTileDash(a.cctx)
-		}
-		if selected {
-			drawSelectedTileOutline(a.cctx, x, y, w, h)
-		}
+		strokeTileFrame(a.cctx, x, y, w, h, line, dashed, selected)
 	})
 }
 
@@ -191,16 +182,7 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bo
 			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 		}
 
-		if dashed {
-			setTileDash(a.cctx)
-		}
-		strokeTileBorder(a.cctx, x, y, w, h, colorShellBorder, tileBorderPx)
-		if dashed {
-			clearTileDash(a.cctx)
-		}
-		if selected {
-			drawSelectedTileOutline(a.cctx, x, y, w, h)
-		}
+		strokeTileFrame(a.cctx, x, y, w, h, colorShellBorder, dashed, selected)
 	})
 }
 
@@ -227,16 +209,7 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool
 			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 		}
 
-		if dashed {
-			setTileDash(a.cctx)
-		}
-		strokeTileBorder(a.cctx, x, y, w, h, colorURLLine, tileBorderPx)
-		if dashed {
-			clearTileDash(a.cctx)
-		}
-		if selected {
-			drawSelectedTileOutline(a.cctx, x, y, w, h)
-		}
+		strokeTileFrame(a.cctx, x, y, w, h, colorURLLine, dashed, selected)
 	})
 }
 

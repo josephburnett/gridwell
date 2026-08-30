@@ -104,16 +104,7 @@ func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, out
 		})
 	}
 
-	if dashed {
-		setTileDash(c)
-	}
-	strokeTileBorder(c, x, y, w, h, colorPaneTileBorder, tileBorderPx)
-	if dashed {
-		clearTileDash(c)
-	}
-	if selected {
-		drawSelectedTileOutline(c, x, y, w, h)
-	}
+	strokeTileFrame(c, x, y, w, h, colorPaneTileBorder, dashed, selected)
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
