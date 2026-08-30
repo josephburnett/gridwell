@@ -483,11 +483,8 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 	if len(red) == 0 {
 		return
 	}
-	a.cctx.Set("strokeStyle", colorCloseWarn)
-	a.cctx.Set("lineWidth", paneBorderPx)
-	half := paneBorderPx / 2
 	for _, rr := range pane.SegmentRects(root, rootRect, lr.targetSplit, red) {
-		a.cctx.Call("strokeRect", rr.X+half, rr.Y+half, rr.W-paneBorderPx, rr.H-paneBorderPx)
+		strokeTileBorder(a.cctx, rr.X, rr.Y, rr.W, rr.H, colorCloseWarn, paneBorderPx)
 	}
 	a.cctx.Set("lineWidth", 1.0)
 }

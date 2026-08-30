@@ -162,9 +162,9 @@ func withClip(c js.Value, x, y, w, h float64, paint func()) {
 
 // strokeTileBorder draws a borderPx-thick outline at `color` that sits
 // entirely inside (x, y, w, h). Canvas centers the stroke on the path,
-// so the rect is inset by half the line width on every side. Most
-// callers pass the tileBorderPx constant; drawChildPreview scales the
-// border down so it stays proportionate to the cell at a distance.
+// so the rect is inset by half the line width on every side. Tiles pass
+// tileBorderPx and panes paneBorderPx; drawChildPreview scales the border
+// down so it stays proportionate to the cell at a distance.
 func strokeTileBorder(c js.Value, x, y, w, h float64, color string, borderPx float64) {
 	c.Set("strokeStyle", color)
 	c.Set("lineWidth", borderPx)
@@ -663,10 +663,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	focused := p.ID == a.tree.Focus
 	urlLive := a.urlViewFor(p.ID) != nil
 	border := a.paneBorderColorFor(p, g, gridOK, focused, urlLive)
-	a.cctx.Set("strokeStyle", border)
-	a.cctx.Set("lineWidth", paneBorderPx)
-	half := paneBorderPx / 2
-	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
+	strokeTileBorder(a.cctx, r.X, r.Y, r.W, r.H, border, paneBorderPx)
 
 	// The per-mode circle button — URL back and refresh, shell refresh, the
 	// + menu — lives in the bottom bar's right-end slot, drawn by
@@ -1164,38 +1161,31 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		setTileDash(c)
 		defer clearTileDash(c)
 	}
+	// The kind picks a body color and an outline color; the drawing is the
+	// same box for all of them. An unknown kind keeps the locked grey body
+	// and gets no outline — the one arm with no line color.
+	fill, line := colorLocked, ""
 	switch n.Kind {
 	case rpc.KindWell:
-		c.Set("fillStyle", colorBg)
-		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorFocusBorder, borderPx)
+		fill, line = colorBg, colorFocusBorder
 	case rpc.KindURL:
-		c.Set("fillStyle", colorURLFill)
-		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorURLLine, borderPx)
+		fill, line = colorURLFill, colorURLLine
 	case rpc.KindShell:
-		c.Set("fillStyle", colorShellFill)
-		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorShellBorder, borderPx)
+		fill, line = colorShellFill, colorShellBorder
 	case rpc.KindText:
-		fill := colorMarkdownFill
-		line := colorMarkdownLine
+		fill, line = colorMarkdownFill, colorMarkdownLine
 		if outside {
-			fill = colorPluginFill
-			line = colorPluginBorder
+			fill, line = colorPluginFill, colorPluginBorder
 		}
-		c.Set("fillStyle", fill)
-		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	case rpc.KindPane:
 		// The flat face a pane tile shows one level down inside another
 		// preview — one level deep, flat beyond — and in the drag ghost.
-		c.Set("fillStyle", colorPaneTileFill)
-		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorPaneTileBorder, borderPx)
-	default:
-		c.Set("fillStyle", colorLocked)
-		c.Call("fillRect", x, y, w, h)
+		fill, line = colorPaneTileFill, colorPaneTileBorder
+	}
+	c.Set("fillStyle", fill)
+	c.Call("fillRect", x, y, w, h)
+	if line != "" {
+		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	}
 	if selected {
 		drawSelectedTileOutline(c, x, y, w, h)
