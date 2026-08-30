@@ -137,7 +137,9 @@ PW_FLAGS ?=
 
 # check-electron runs the live-tile harnesses under a virtual display. Needed
 # only for phases that touch the URL/shell live path (and the final pass), since
-# they exercise the real Electron WebContentsView / PTY bridge. Requires xvfb +
+# they exercise the real Electron WebContentsView. (There is no PTY bridge any
+# more: shells ride a WebSocket on the web door, so check-web owns that path.)
+# Requires xvfb +
 # a prior `make vendor` for node_modules. (The npm scripts wrap xvfb-run
 # themselves — do not wrap them again.)
 check-electron: node-modules
@@ -145,7 +147,8 @@ check-electron: node-modules
 
 # check-e2e drives the REAL Electron app end to end: Playwright launches the same
 # `electron .` as `make launch` (which spawns the Go sidecar), points it at a
-# fresh throwaway home (seeded via `gridwell init`), and drives the wasm canvas with synthetic mouse input —
+# fresh throwaway home (a directory serve mints its config into), and drives
+# the wasm canvas with synthetic mouse input —
 # asserting outcomes against the live server over Connect-RPC. This is the only
 # test that exercises the full renderer→wasm→RPC→server→SQLite composition (e.g.
 # drag-create in a descended grid). Heavier than `make check` (it builds the
@@ -166,7 +169,7 @@ check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web -- $(PW_FLAGS)
 
 # check-federation is the SPAWN GATE (issue #58): the real binaries —
-# gridwell init/serve and the go-plugin subprocesses —
+# gridwell serve and the go-plugin subprocesses —
 # through a real ssh tunnel, one write/read crossing every hop. The in-process
 # seam tests cannot see go-plugin spawn: the pluginmeta sqlite-driver bug kept
 # every test green while every production spawn failed. Guarded by the
