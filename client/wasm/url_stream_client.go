@@ -4,9 +4,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"slices"
-	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -54,10 +52,7 @@ type urlView struct {
 }
 
 // urlLog writes a tagged debug message to the browser console.
-func urlLog(format string, args ...any) {
-	msg := "[urlview] " + fmt.Sprintf(format, args...)
-	js.Global().Get("console").Call("log", msg)
-}
+var urlLog = taggedLog("[urlview]")
 
 // contentViewBounds maps a pane's screen rect to the content-box rectangle a
 // hosted webview should occupy: the pane minus its border band and the bar

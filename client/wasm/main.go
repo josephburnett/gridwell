@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"syscall/js"
 	"time"
@@ -969,6 +970,16 @@ func (a *App) fetchTileByID(tileID string) {
 // reported by the browser. Used for animation timing.
 func nowMs() float64 {
 	return js.Global().Get("Date").Call("now").Float()
+}
+
+// taggedLog returns a console logger that prefixes every message with tag.
+// The live-surface clients trace through it; the prefixes ("[urlview]",
+// "[shellstream]") are what a log reader — and the e2e suite — greps for, so
+// they are part of the output, not decoration.
+func taggedLog(tag string) func(format string, args ...any) {
+	return func(format string, args ...any) {
+		js.Global().Get("console").Call("log", tag+" "+fmt.Sprintf(format, args...))
+	}
 }
 
 // scheduleFrame ensures a draw happens on the next animation frame. While

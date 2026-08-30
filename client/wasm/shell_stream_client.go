@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"syscall/js"
 
@@ -65,10 +64,7 @@ type shellStreamConn struct {
 }
 
 // shellLog writes a tagged debug message to the browser console.
-func shellLog(format string, args ...any) {
-	msg := "[shellstream] " + fmt.Sprintf(format, args...)
-	js.Global().Get("console").Call("log", msg)
-}
+var shellLog = taggedLog("[shellstream]")
 
 // isShellDescent reports whether pane p is currently descended into a
 // shell tile. The input layer uses this to switch from Gridwell-native
