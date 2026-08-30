@@ -102,7 +102,7 @@ type ChildPreview struct {
 
 // ChildPreviewFor returns the screen-coord transform for a well's
 // child-grid preview, given the parent pane, the well's footprint and
-// stored framing CENTER (ViewCx/ViewCy, in child-grid cells), and a
+// stored framing center (ViewCx/ViewCy, in child-grid cells), and a
 // resolved child-cell-per-parent-cell ratio (caller computes via
 // zoomtrans.EffectiveViewZoom). previewCell = parentCell × previewRatio.
 // Pane-size independent.
@@ -390,7 +390,7 @@ func DecideDrop(in DropInput) DropAction {
 }
 
 // GhostPlan is how the in-flight drag ghost should render for a drop
-// verdict — the VISUAL consequence of DecideDrop. DecideDrop decides the
+// verdict — the visual consequence of DecideDrop. DecideDrop decides the
 // action; this decides what the user sees while hovering. Extracted so the
 // verdict→styling mapping is table-tested too, not just the verdict.
 type GhostPlan struct {

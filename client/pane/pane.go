@@ -287,7 +287,7 @@ func anyLeafID(n TreeNode) string {
 // idA == idB is a no-op (returns nil). Either id missing returns an
 // error and leaves the tree unchanged.
 //
-// Focus is NOT moved by Swap; the caller decides where focus goes
+// Focus is not moved by Swap; the caller decides where focus goes
 // after the swap based on the input gesture (e.g., release pane).
 func (t *Tree) Swap(idA, idB string) error {
 	if idA == idB {

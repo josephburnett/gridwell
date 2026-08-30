@@ -488,7 +488,7 @@ func TestGhostPlanForDrop(t *testing.T) {
 		{"clone snaps to target cell", DropClone, false, true,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
 		// The teaching signal: a cross-namespace left-drag previews as a
-		// LINK (chain badge) — never as a bare move, or the source's
+		// link (chain badge) — never as a bare move, or the source's
 		// survival after the drop would read as a surprise duplicate.
 		{"link snaps to target cell with the chain badge", DropLink, false, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},

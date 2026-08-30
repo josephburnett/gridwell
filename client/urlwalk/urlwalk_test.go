@@ -122,7 +122,7 @@ func TestWalkRootFetchFails(t *testing.T) {
 }
 
 func TestWalkWrongGridIDNotFollowed(t *testing.T) {
-	// id "10" exists in grid "1" but NOT in grid "2"; descending into a child
+	// id "10" exists in grid "1" but not in grid "2"; descending into a child
 	// grid must resolve subsequent ids against the child (grid "2"), not
 	// re-find "10" in the parent. Here grid "2" lacks "10", so it's skipped.
 	w := world{

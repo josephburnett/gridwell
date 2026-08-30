@@ -46,10 +46,11 @@ func paneHeights(root TreeNode, container Rect) map[string]float64 {
 func near(a, b float64) bool { return math.Abs(a-b) < 0.01 }
 
 func TestResizeThroughCascades(t *testing.T) {
-	// 300px tall, three 100px panes. Drag the outer divider (top/middle
-	// boundary, at y=100) down to y=250: top grows to 250; the remaining 50px
-	// must be MIDDLE at its 32px min and bottom keeping the rest (18px would
-	// breach bottom's min, so the clamp stops earlier — at 300-32-32=236).
+	// 300px tall, three 100px panes. Drag the outer divider, the top-middle
+	// boundary at y=100, down to y=250: the top grows to 250, and the
+	// remaining 50px is the middle at its 32px min with the bottom keeping
+	// the rest. 18px would breach the bottom's min, so the clamp stops
+	// earlier, at 300-32-32=236.
 	c := Rect{X: 0, Y: 0, W: 100, H: 300}
 	outer, _ := stack3()
 	ResizeThrough(TreeNode{Split: outer}, c, outer, 250, 32)
@@ -300,7 +301,7 @@ func TestPlanCrushPreCrushedNeighbor(t *testing.T) {
 	}
 }
 
-// SegmentRects tracks the LIVE crush — the red overlay strokes where the
+// SegmentRects tracks the live crush: the red overlay strokes where the
 // segment is now, not where it was at arm.
 func TestSegmentRectsLive(t *testing.T) {
 	outer, inner := stack3()

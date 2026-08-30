@@ -30,7 +30,7 @@ type Endpoints struct {
 
 // Well is the minimal information about a well needed to compute a
 // transition: its row id, its location and size in the parent grid, and
-// the framing it was left at — a float CENTER in the child grid's
+// the framing it was left at — a float center in the child grid's
 // coordinates (ViewCx/ViewCy) plus the intrinsic view ratio.
 //
 // ViewZoom is an intrinsic ratio = liveScale / EffectiveOvertake at the

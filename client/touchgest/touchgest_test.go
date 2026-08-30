@@ -39,7 +39,7 @@ func TestDragBeyondSlopIsLeftDrag(t *testing.T) {
 	if as := m.Move([]Point{pt(102, 101)}, 20); len(as) != 0 {
 		t.Fatalf("within-slop move emitted %+v", as)
 	}
-	// Crossing slop: the press becomes a left drag anchored at the ORIGIN so
+	// Crossing slop: the press becomes a left drag anchored at the origin so
 	// the downstream gesture engine sees the same press point a mouse would.
 	as := m.Move([]Point{pt(100+SlopPx+2, 100)}, 40)
 	wantActions(t, as,
@@ -56,7 +56,7 @@ func TestLongPressIsRightButton(t *testing.T) {
 	m := New()
 	m.Start([]Point{pt(200, 200)}, 1000)
 	// A stale timer from an earlier gesture (fired before HoldMs elapsed
-	// for THIS press) must not classify.
+	// for this press) must not classify.
 	if as := m.Timer(1000 + HoldMs - 50); len(as) != 0 {
 		t.Fatalf("early timer emitted %+v", as)
 	}
@@ -233,7 +233,7 @@ func TestOneFingerRemainingAfterTwoIsDeadUntilAllLift(t *testing.T) {
 	m.Start([]Point{pt(100, 100)}, 0)
 	m.Start([]Point{pt(100, 100), pt(200, 100)}, 10)
 	m.Move([]Point{pt(80, 100), pt(220, 100)}, 30) // pinch
-	// One finger lifts; the survivor must NOT start panning.
+	// One finger lifts; the survivor must not start panning.
 	if as := m.End([]Point{pt(80, 100)}, 50); len(as) != 0 {
 		t.Fatalf("first lift emitted %+v", as)
 	}

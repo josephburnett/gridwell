@@ -575,7 +575,7 @@ func pluginStatusName(pl rpc.PluginInfo) string {
 
 // thPalette returns the creation palette for the focused pane: whether it is
 // open, the + button center, and one entry per swatch with its screen rect and
-// identity. The rects are the SAME ones paletteTileIndexAt hit-tests, so a click
+// identity. The rects are the same ones paletteTileIndexAt hit-tests, so a click
 // at an entry's center lands on that swatch.
 func (a *App) thPalette(js.Value, []js.Value) any {
 	p, _, ok := a.focusedPaneRect()

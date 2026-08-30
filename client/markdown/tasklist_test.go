@@ -151,7 +151,7 @@ func TestToggleTaskRenderParity(t *testing.T) {
 }
 
 // TestRenderHTMLCheckboxesInteractive pins that the rendered view's
-// checkboxes are NOT disabled (a disabled input swallows clicks — it could
+// checkboxes are not disabled (a disabled input swallows clicks — it could
 // never be a control), that checked state survives sanitization, and that
 // the sanitizer still strips active content around them.
 func TestRenderHTMLCheckboxesInteractive(t *testing.T) {

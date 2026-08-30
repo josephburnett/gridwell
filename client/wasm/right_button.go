@@ -148,7 +148,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 }
 
 // onForwardedRightDown begins a right-button pane gesture at canvas
-// coordinates (sx, sy) that originated over a LIVE URL view. The native
+// coordinates (sx, sy) that originated over a live URL view. The native
 // WebContentsView swallows the renderer's own mouse events, so its injected
 // preload forwards the right-button press here (via main) — mirroring how the
 // shell's in-renderer xterm overlay forwards its right button. We run the same
@@ -174,7 +174,7 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 }
 
 // onForwardedMiddleDown ascends the pane at canvas coordinates (sx, sy) when a
-// middle-button press originated over a LIVE URL view. Like the right button,
+// middle-button press originated over a live URL view. Like the right button,
 // the native WebContentsView swallows the renderer's own middle clicks, so its
 // preload forwards the press here (via main). Middle-click is the universal
 // ascend gesture; this is its live-URL path, mirroring onForwardedRightDown.
@@ -190,7 +190,7 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 	a.ascendPane(p)
 }
 
-// onForwardedLeftDown handles a left-button press that originated over a LIVE
+// onForwardedLeftDown handles a left-button press that originated over a live
 // URL view. The native WebContentsView swallows the canvas's own mousedown, so
 // the view's preload forwards the press here (via main) in canvas coords —
 // without preventing the default, so in-page interaction, selection, and link

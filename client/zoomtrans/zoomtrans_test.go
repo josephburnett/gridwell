@@ -549,7 +549,7 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 	const parentCell = 64.0
 	cx0, cy0 := w.ViewCx, w.ViewCy
 
-	// Cursor at the well CENTER: zoom in; the view center must not move
+	// Cursor at the well center: zoom in; the view center must not move
 	// (the anchor is the point under the cursor).
 	cx1, cy1, r1, changed := WellWheelView(-120, w, parentCell, 0, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
 	if !changed || r1 <= 0.25 {
@@ -620,14 +620,11 @@ func TestStoredViewMatchesDescentFinal(t *testing.T) {
 	}
 }
 
-// A never-visited doorway frames the MIDDLE of its child's origin cell,
-// not the corner. Regression: schema v11 replaced the integer window
-// ORIGIN with a float center, and every read site had derived the center
-// as origin + footprint/2 — so a row nobody had visited (origin 0) read
-// as footprint/2. Reading ViewCx/ViewCy raw dropped that half-footprint
-// and slid every unvisited grid up-left: the fs projection's root landed
-// with cell (0,0)'s CORNER at the pane center, half a screen-cell off, and
-// e2e's cellCenter refused the cells that fell out of the pane.
+// A never-visited doorway frames the middle of its child's origin cell, not
+// the corner. Reading ViewCx and ViewCy raw would drop that half-footprint
+// and slide every unvisited grid up and left: cell (0,0)'s corner would land
+// at the pane center, half a screen-cell off, and cells would fall out of the
+// pane.
 func TestNeverVisitedFramingCentersTheFootprint(t *testing.T) {
 	// Footprint 3x2, nothing stored (ViewZoom 0 = never visited).
 	w := Well{ID: "1", X: 4, Y: 2, W: 3, H: 2}

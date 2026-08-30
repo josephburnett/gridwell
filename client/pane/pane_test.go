@@ -106,10 +106,10 @@ func TestCloneCarriesTextFields(t *testing.T) {
 	}
 }
 
-// TestPortalRoundTrip: crossing into another namespace pushes a frame;
+// TestPortalRoundTrip: crossing into another namespace pushes a frame, and
 // ascending pops it back, restoring the exact level — grid, path, viewport,
-// content descent and the + menu. STACK semantics: ascend returns where you
-// were, and there is only ONE stack to return through.
+// content descent, and the + menu. Ascending returns where you were, through
+// the one stack.
 func TestPortalRoundTrip(t *testing.T) {
 	p := &Pane{ID: "p1", Stack: StackAt("db-uuid/1", []string{"3", "4"}, "9")}
 	p.Cx, p.Cy, p.Zoom = 5, 6, 1.5

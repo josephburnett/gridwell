@@ -165,7 +165,7 @@ func (m *Machine) Move(pts []Point, t float64) []Action {
 		if dist(m.origin, pts[0]) <= SlopPx {
 			return nil
 		}
-		// Crossed slop before the hold: a left drag, pressed at the ORIGIN so
+		// Crossed slop before the hold: a left drag, pressed at the origin so
 		// the gesture engine sees the same press point a mouse would.
 		m.st = dragLeft
 		return []Action{
@@ -277,7 +277,7 @@ func (m *Machine) End(remaining []Point, t float64) []Action {
 // Timer is called when a long-press timer armed at a touchstart fires. The
 // shell arms one blindly per press and never cancels; the machine ignores
 // stale or irrelevant firings (wrong state, or a timer from an earlier press
-// that hasn't been held for HoldMs of THIS press).
+// that hasn't been held for HoldMs of this press).
 func (m *Machine) Timer(t float64) []Action {
 	if m.st != pending1 || t-m.t0 < HoldMs {
 		return nil

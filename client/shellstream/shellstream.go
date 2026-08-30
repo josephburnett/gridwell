@@ -39,7 +39,7 @@ type Handle interface {
 // affordance.
 type Dialer func(tileID string, cols, rows int, onData func(data []byte), onEnd func(message string, sessionGone bool)) Handle
 
-// Exit is an UNEXPECTED end reported to the caller: the pane whose terminal
+// Exit is an unexpected end reported to the caller: the pane whose terminal
 // died, why, and whether the session is gone for good.
 type Exit struct {
 	PaneID      string

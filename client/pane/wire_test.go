@@ -44,9 +44,9 @@ func nodesEqual(a, b TreeNode) bool {
 }
 
 // TestLayoutGoldenV1 pins the v1 wire format: these exact bytes were written
-// by the first shipping version of the codec and MUST decode identically
-// forever (the tablesV1 philosophy). If this test breaks, the change is
-// rewriting history in every user's pane tiles — do not "fix" the fixture.
+// by the first shipping version of the codec and decode identically forever.
+// If this test breaks, the change is rewriting history in every user's pane
+// tiles — do not "fix" the fixture.
 func TestLayoutGoldenV1(t *testing.T) {
 	golden := `{"v":1,"root":{"split":{"dir":"v","ratio":0.25,` +
 		`"a":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7","aaaa/9"],"cx":3.5,"cy":-2,"zoom":1.5}},` +

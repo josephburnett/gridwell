@@ -216,7 +216,8 @@ func TestDecodeBadFloatIgnored(t *testing.T) {
 }
 
 // `c` present without `r` is not enough for cursor mode, and because the
-// c-branch is taken, x/y/z are NOT read either. Lock this exact shape.
+// c-branch is taken, x, y, and z are not read either. Lock this exact
+// shape.
 func TestDecodeCursorRequiresBothCAndR(t *testing.T) {
 	s, err := DecodeURL("/9?c=5&x=12")
 	if err != nil {
@@ -241,9 +242,9 @@ func TestDecodeBadCursorIgnored(t *testing.T) {
 	}
 }
 
-// URLStateOf is the ONE encode half: the pane's frame stack projected into
-// the URL DTO. A grid place carries its viewport; a content place carries
-// the tile id and, in raw-text mode, the cursor.
+// URLStateOf is the one encode half: the pane's frame stack projected into
+// the URL DTO. A grid place carries its viewport; a content place carries the
+// tile id and, in raw-text mode, the cursor.
 func TestURLStateOfGridPlace(t *testing.T) {
 	p := &Pane{ID: "p1", Stack: StackAt("u1/1", []string{"3", "4", "5"}, "")}
 	p.Cx, p.Cy, p.Zoom = 12.5, -3, 1.5

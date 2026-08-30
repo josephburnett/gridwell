@@ -710,7 +710,7 @@ func main() {
 		return nil
 	}))
 
-	// Mobile browsers resize the VISUAL viewport (on-screen keyboard,
+	// Mobile browsers resize the visual viewport (on-screen keyboard,
 	// collapsing URL bar) without firing a layout resize, leaving the canvas
 	// and the text-overlay geometry stale — the textarea can end up under
 	// the keyboard. Re-run the same resize path on visualViewport changes;

@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// The framing writeback has ONE question: which row owns the framing of the
-// place this pane is at? The frame stack answers it — the doorway you came
-// in by, or the grid itself when you came in by nothing.
+// The framing writeback has one question: which row owns the framing of the
+// place this pane is at? The frame stack answers it — the doorway you came in
+// by, or the grid itself when you came in by nothing.
 func TestFramingTargetPicksTheDoorway(t *testing.T) {
 	// A root grid: no doorway, the grid row owns it.
 	s := NewStack("home/1")

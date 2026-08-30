@@ -127,7 +127,7 @@ func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
 
 // probeShellSessionAlive fires ShellSessionAlive RPC for tileID, caches the
 // result, and triggers a redraw on completion. then, if non-nil, receives
-// the verdict (it is NOT called on probe failure — no verdict, no action).
+// the verdict (it is not called on probe failure — no verdict, no action).
 // Idempotent: short-circuits if a probe is already in flight (a coalesced
 // caller's continuation is dropped; the auto-live path re-decides from the
 // cache on the next descent, and the refresh button remains the retry).
@@ -192,7 +192,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		a.reportErr(caps.ShellNotice())
 		return
 	}
-	// Resolve a shell LINK to its target: the PTY session, the alive cache,
+	// Resolve a shell link to its target: the PTY session, the alive cache,
 	// and the freeze writeback all key by the id that owns the session.
 	tileID = a.contentKey(tileID)
 	// Idempotent: this pane is already attached to this session, a
@@ -552,7 +552,7 @@ func (a *App) onShellData(paneID string, data []byte) {
 	conn.term.Call("write", u8)
 }
 
-// onShellExit handles an UNEXPECTED stream end (the registry suppresses the
+// onShellExit handles an unexpected stream end (the registry suppresses the
 // report for a local close — this side already tore down). sessionGone is the
 // server's definitive "this tmux session no longer exists": flip the cache
 // so the refresh affordance hides. Any other end carries no liveness
