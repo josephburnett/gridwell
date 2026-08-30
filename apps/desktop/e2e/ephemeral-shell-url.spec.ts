@@ -1,16 +1,15 @@
 import { test, expect } from './fixtures';
 
-// Issue #207: a url activated in a live shell behaves exactly like a link a
-// live url view pops (issue #111): the pane SPLITS and the url opens as an
-// ephemeral visit (off-grid, in the scratch grid) in the lower half — the
-// shell stays live and visible above, and ascending the lower pane deletes
-// the visit (issue #85). The old behavior descended IN PLACE, stacking the
-// shell on the session-only ascent stash — which any place-restore dropped
-// (the issue #208 double-ascend).
+// A url activated in a live shell behaves like a link a live url view pops: the
+// pane splits and the url opens as an ephemeral visit, off-grid in the scratch
+// grid, in the lower half. The shell stays live and visible above, and
+// ascending the lower pane deletes the visit. Descending in place instead would
+// stack the shell on the session-only ascent stash, which any place-restore
+// drops.
 //
-// The terminal-cell link click itself can't be hit-tested from the canvas, so
-// the e2e fires the exact callback xterm's link provider runs (shellVisitURL);
-// url detection is unit-tested separately (urlnorm.FindURLs).
+// The terminal-cell link click cannot be hit-tested from the canvas, so the e2e
+// fires the callback xterm's link provider runs (shellVisitURL). Url detection
+// is unit-tested separately in urlnorm.FindURLs.
 test('clicking a url in a shell opens an ephemeral visit in a split below (#207)', async ({
   window,
   gw,
@@ -24,23 +23,22 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
   await gw.enterPlugin('home');
   const home = await gw.focused();
 
-  // Drop a shell at an on-screen cell and descend into it (CreateShell
-  // auto-descends + spawns the PTY). The create→descend is async, so poll until
-  // the descent lands.
+  // Drop a shell at an on-screen cell and descend into it, which spawns the PTY.
+  // The create and descent are async, so poll until the descent lands.
   const shellCx = Math.round(home.cx);
   const shellCy = Math.round(home.cy);
   await gw.openPalette();
   await gw.dragCreate('shell', shellCx, shellCy);
-  await gw.descendCell(shellCx, shellCy); // a drop lands bare (#241); the descent creates the session
+  await gw.descendCell(shellCx, shellCy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPane = await gw.focused();
   const shellFocus = shellPane.textFocus;
   const homeWithShell = tileCount(await gw.getGrid(home.gridID)); // shell is a real placed tile
   const panesBefore = (await gw.panes()).length;
 
-  // Activate a url in the shell → a new pane splits off BELOW and opens the
-  // ephemeral visit; the shell pane is untouched. Visit the local sidecar
-  // origin so the view loads instantly (no network) and tears down cleanly.
+  // Activate a url in the shell: a new pane splits off below and opens the
+  // ephemeral visit, leaving the shell pane untouched. It visits the local
+  // sidecar origin, so the view loads with no network and tears down cleanly.
   const visitURL = `${gw.origin}/?visited=shx`;
   await gw.shellVisitURL(visitURL);
   await expect.poll(async () => (await gw.panes()).length, { timeout: 15_000 }).toBe(
@@ -52,13 +50,13 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
   expect(lower.textFocus, 'the lower pane descended into a tile').toBeTruthy();
   expect(lower.textFocus, 'the lower pane shows the visit, not the shell').not.toBe(shellFocus);
 
-  // The SHELL pane never left its shell — no stacked descent, nothing for a
-  // place-restore to lose (issue #208).
+  // The shell pane never left its shell: no stacked descent, and nothing for a
+  // place-restore to lose.
   const upper = (await gw.panes()).find((p) => p.id === shellPane.id)!;
   expect(upper.textFocus, 'the shell pane is still descended in the shell').toBe(shellFocus);
 
-  // The url landed in the off-grid scratch grid; the home grid still has only
-  // the shell tile (the visit placed nothing on it).
+  // The url landed in the off-grid scratch grid, and the home grid still has
+  // only the shell tile: the visit placed nothing on it.
   await expect
     .poll(async () => {
       const sc = await gw.getGrid(scratchGridID);
@@ -71,9 +69,9 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
     homeWithShell,
   );
 
-  // Ascending the lower pane deletes its ephemeral visit. Wait out the
-  // descent transition, then RETRYABLE middle-click at the lower pane's
-  // center (a click mid-animation is deliberately swallowed).
+  // Ascending the lower pane deletes its ephemeral visit. Wait out the descent
+  // transition, then retry a middle-click at the lower pane's center, because a
+  // click mid-animation is deliberately swallowed.
   await gw.waitIdle();
   const m = window.mouse;
   await expect
@@ -100,10 +98,9 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
     }, { timeout: 10_000 })
     .toBe(0);
 
-  // Leave clean: focus the shell pane (click its overlay), ascend out of the
-  // shell (bar crumb click), then
-  // delete the shell tile so its tmux session is killed and teardown doesn't
-  // hang on a live PTY.
+  // Leave clean: focus the shell pane by clicking its overlay, ascend out of the
+  // shell with a bar crumb click, then delete the shell tile so its tmux session
+  // is killed and teardown does not hang on a live PTY.
   const up = (await gw.panes()).find((p) => p.id === shellPane.id)!;
   await window.mouse.click(up.x + up.w / 2, up.y + up.h / 2);
   await expect.poll(async () => (await gw.focused()).id).toBe(shellPane.id);
