@@ -29,11 +29,12 @@ const (
 )
 
 // installCanvasInput attaches the mouse listeners: presses and the wheel on
-// the canvas (a gesture can only START there), move/release at the window so
-// an in-flight gesture survives whatever the pointer crosses. Gridwell
-// navigation is strictly mouse-only: every gesture (move, descend,
-// ascend, resize, clone, delete) is reachable via left/right click,
-// drag, and the scroll wheel — there are no navigation keybindings.
+// the canvas, where a gesture can only start, and move and release at the
+// window, so an in-flight gesture survives whatever the pointer crosses.
+// Gridwell navigation is mouse-only: every gesture — move, descend, ascend,
+// resize, clone, delete — is reachable through the left, right, and middle
+// buttons, a drag, and the scroll wheel. There are no navigation
+// keybindings.
 //
 // Keyboard events are only used in one place: when the focused pane is
 // descended into a URL tile, every key (including browser-chrome
@@ -46,18 +47,17 @@ const (
 func (a *App) installCanvasInput() {
 	a.canvas.Call("addEventListener", "wheel", js.FuncOf(a.onWheel))
 	a.canvas.Call("addEventListener", "mousedown", js.FuncOf(a.onMouseDown))
-	// move/up listen at the WINDOW, capture phase — never on the canvas. A
-	// gesture armed by a canvas mousedown must keep tracking no matter what
-	// the pointer crosses: a text descent floats a DOM overlay (textarea /
-	// rendered view) above the canvas, so a fast divider drag whose next
-	// mousemove jumped into that rect hit-targeted the overlay and a
-	// canvas-scoped listener heard neither the move nor the release — the
-	// drag wedged, and it stayed armed after the button was let go (the
-	// "can't drag a text pane border fast" bug). Capture also beats any
-	// stopPropagation an overlay library (xterm) might do. When no gesture
-	// is in flight, events that didn't target the canvas are ignored, so
-	// overlay-local behavior (typing, selection, terminal input) is
-	// exactly as before.
+	// move and up listen at the window, in the capture phase, never on the
+	// canvas. A gesture armed by a canvas mousedown keeps tracking whatever
+	// the pointer crosses: a text descent floats a DOM overlay — the
+	// textarea or the rendered view — above the canvas, so a fast divider
+	// drag whose next mousemove jumps into that rect hit-targets the
+	// overlay, and a canvas-scoped listener would hear neither the move nor
+	// the release, wedging the drag and leaving it armed after the button
+	// came up. Capture also beats any stopPropagation an overlay library
+	// such as xterm might do. When no gesture is in flight, events that did
+	// not target the canvas are ignored, so overlay-local behavior — typing,
+	// selection, terminal input — is untouched.
 	captureOpts := js.ValueOf(map[string]any{"capture": true})
 	a.win.Call("addEventListener", "mousemove", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if !a.gestureInFlight() && !args[0].Get("target").Equal(a.canvas) {
@@ -93,8 +93,8 @@ func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
 	}
-	// Ctrl/Cmd +/-/0 zooms a descended tile's CONTENT (issue #82) — checked
-	// first so Electron's built-in page zoom never double-fires.
+	// Ctrl/Cmd +/-/0 zooms a descended tile's content, checked first so
+	// Electron's built-in page zoom never double-fires.
 	a.handleContentZoomKey(args[0])
 	return nil
 }
@@ -120,8 +120,9 @@ func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 }
 
 // cellAtScreen returns the integer cell that contains screen point (sx, sy)
-// inside the given pane. Uses floor (which cell is the cursor *in?*), not
-// round — round-half made clicks in the lower-right half of a tile miss.
+// inside the given pane. It floors — which cell is the cursor in — rather
+// than rounding, since round-half makes clicks in the lower-right half of a
+// tile miss.
 func cellAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) (int64, int64) {
 	return paneToDragdrop(p, r).CellAt(sx, sy)
 }
@@ -147,18 +148,18 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 // calls menu.TransferFocus (which closes the menu when it was on the old pane),
 // refreshes the file overlay, and draws. Returns true when focus changed.
 //
-// This is the SINGLE focus-transfer owner — call it from every press path:
-// canvas onMouseDown, onForwardedRightDown, onForwardedLeftDown. Calling it
-// is always safe even when focus has not moved (no-op on same pane).
+// This is the single focus-transfer owner; every press path calls it: canvas
+// onMouseDown, onForwardedRightDown, onForwardedLeftDown. Calling it is
+// always safe, and a no-op on the same pane.
 func (a *App) focusToPane(p *pane.Pane) bool {
 	prev := a.tree.Focus
 	_ = a.tree.SetFocus(p.ID)
 	if !a.menu.TransferFocus(prev, a.tree.Focus) {
 		return false
 	}
-	// Focus moved → file-mode chrome must follow. The textarea overlay only
-	// ever lives over the focused pane, so without this call a click on a
-	// sibling pane in text mode leaves the textarea stranded.
+	// Focus moved, so the text-mode chrome follows. The textarea overlay
+	// only ever lives over the focused pane, so without this call a click on
+	// a sibling pane in text mode leaves the textarea stranded.
 	a.refreshFileOverlay()
 	a.draw()
 	return true
@@ -172,10 +173,9 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	// Wheel over a pane's BAR band zooms that pane as if the cursor were
-	// at the pane's center (issue #220; every pane wears a band since
-	// #267): the escape hatch for a grid tiled wall-to-wall with wells,
-	// where every content position claims the well-zoom (#210) and no
+	// A wheel over a pane's bar band zooms that pane as if the cursor were
+	// at the pane's center: the escape hatch for a grid tiled wall to wall
+	// with wells, where every content position claims the well zoom and no
 	// empty spot remains.
 	if bx, top, bw, barOK := a.bottomBarRectFor(p); barOK &&
 		sy >= top && sy < top+wsbar.RowH && sx >= bx && sx < bx+bw {
@@ -218,9 +218,9 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")
 		return nil
 	case gesture.WheelScrollDoc:
-		// Text file: fixed scale, no zoom — the wheel scrolls the rendered
-		// window vertically. (Text mode: the textarea scrolls itself and the
-		// event never reaches the canvas.)
+		// A text tile has a fixed scale and no zoom, so the wheel scrolls
+		// the rendered window vertically. In text mode the textarea scrolls
+		// itself and the event never reaches the canvas.
 		p.TextScrollY += dy
 		if p.TextScrollY < 0 {
 			p.TextScrollY = 0
@@ -231,12 +231,12 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	case gesture.WheelIgnore:
 		return nil
 	case gesture.WheelZoomWell:
-		// Issue #210: the wheel zooms the grid IN the hovered well — its
-		// stored view_* preview framing, the one owner the renderer reads
-		// per frame — not the grid the pane shows. Pure math in
-		// zoomtrans.WellWheelView (the same cursor-anchored kernel as the
-		// pane zoom, in preview space); the cache is patched per notch and
-		// the settle persister posts one framing write per tile at flush.
+		// The wheel zooms the grid inside the hovered well — its stored
+		// preview framing, the one fact the renderer reads per frame — not
+		// the grid the pane shows. The math is zoomtrans.WellWheelView, the
+		// same cursor-anchored kernel as the pane zoom, in preview space.
+		// The cache is patched per notch, and the settle persister posts one
+		// framing write per tile at flush.
 		ps := paneToDragdrop(p, r)
 		x0, y0 := ps.CellToScreen(float64(hoverWell.X), float64(hoverWell.Y))
 		x1, _ := ps.CellToScreen(float64(hoverWell.X)+1, float64(hoverWell.Y))
@@ -244,12 +244,12 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		wpx := float64(hoverWell.W) * parentCell
 		hpx := float64(hoverWell.H) * parentCell
 		zw := wellOf(hoverWell)
-		// The float center accumulates across the burst (issue #219): first
-		// notch seeds from the framing the well is SHOWING (a never-visited
-		// one shows its footprint's center, not the corner — the same
-		// EffectiveCenter the preview under the cursor was drawn with);
-		// later notches feed the drift back in, so cursor-anchored zoom
-		// actually travels.
+		// The float center accumulates across the burst: the first notch
+		// seeds from the framing the well is showing — a never-visited one
+		// shows its footprint's center, not the corner, the same
+		// EffectiveCenter the preview under the cursor was drawn with — and
+		// later notches feed the drift back in, so a cursor-anchored zoom
+		// travels.
 		cx0, cy0 := zoomtrans.EffectiveCenter(zw)
 		if st, ok := a.wellWheelPending[hoverWell.ID]; ok {
 			cx0, cy0 = st.cx, st.cy
@@ -277,8 +277,8 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 }
 
 // wheelZoomPaneAt zooms pane p anchored at screen point (sx, sy): the world
-// point under the anchor stays under it after the zoom — like every map
-// app. The bar-band wheel (issue #220) calls this with the pane's center.
+// point under the anchor stays under it after the zoom, map-style. The
+// bar-band wheel calls this with the pane's center.
 func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
 	ps := paneToDragdrop(p, r)
 	cellX, cellY := ps.ScreenToCell(sx, sy)
@@ -304,20 +304,19 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		}
 		return nil
 	}
-	// The bottom bar: the focused pane's bottom band (#220). LEFT-click a
-	// workspace crumb LEAVES it (and everything deeper) — the one gesture
-	// that crosses the workspace boundary; RIGHT-click renames. Chain-crumb
-	// left-clicks ascend (#222).
+	// The bottom bar. A left-click on a pane-tile crumb goes there, closing
+	// everything deeper — the one gesture that crosses the level boundary —
+	// and a right-click renames. A left-click on a chain crumb ascends.
 	if a.bottomBarClick(sx, sy, args[0].Get("button").Int()) {
 		args[0].Call("preventDefault")
 		return nil
 	}
-	// A left-click inside the open palette belongs to the palette — routed
-	// BEFORE pane resolution, because the popover (anchored to the bar slot,
-	// issue #214) floats over whatever pane happens to be under it, and
-	// resolving that pane first would transfer focus and close (SyncFocus)
-	// the very menu being used. Landing on a swatch starts a template drag;
-	// missing one swallows the click so the popover stays open.
+	// A left-click inside the open palette belongs to the palette, routed
+	// before pane resolution: the popover is anchored to the bar slot and
+	// floats over whatever pane happens to be under it, so resolving that
+	// pane first would transfer focus and close the very menu being used.
+	// Landing on a swatch starts a template drag; missing one swallows the
+	// click so the popover stays open.
 	if a.menu.IsOpen() && args[0].Get("button").Int() == 0 {
 		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
 			mr := paneRectFor(a, mp)
@@ -333,9 +332,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	// focusToPane transfers focus, closes the menu on the de-focused pane (via
-	// menu.TransferFocus), refreshes the file overlay, and draws — all in one
-	// call so no path can forget SyncFocus.
+	// focusToPane transfers focus, closes the menu on the de-focused pane
+	// through menu.TransferFocus, refreshes the text overlay, and draws — all
+	// in one call, so no path can forget SyncFocus.
 	prevFocus := a.tree.Focus
 	a.focusToPane(p)
 	button := args[0].Get("button").Int()
@@ -345,9 +344,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 	if button == 1 {
-		// Middle (third) button ascends the pane under the cursor — the
-		// in-pane shortcut for the bar's crumb-click ascent (#222).
-		// preventDefault suppresses the browser's middle-click autoscroll.
+		// The middle button ascends the pane under the cursor: the in-pane
+		// shortcut for the bar's crumb-click ascent. preventDefault
+		// suppresses the browser's middle-click autoscroll.
 		args[0].Call("preventDefault")
 		a.menu.Close()
 		a.ascendPane(p)
@@ -360,32 +359,31 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// (A left-click inside the open palette was already claimed before pane
 	// resolution — see the top of this handler.)
 
-	// Left-drag on a pane boundary resizes the divider — same divider math
-	// as the right-button resize, but it never closes a pane (clamped to a
-	// recoverable minimum). Checked first so a grab near the edge wins over
-	// content interactions. No divider on that side → falls through.
-	// preventDefault, like the right-button path: the unprevented default
-	// action (native selection/drag) engages past the OS drag threshold on
-	// a FAST drag and steals the pointer from the canvas mid-resize
-	// (issue #168; invisible to synthetic CDP input, so the e2e pins the
-	// prevented flag rather than the steal itself).
+	// A left-drag on a pane boundary resizes the divider. It is checked
+	// first, so a grab near the edge wins over content interactions, and
+	// falls through when there is no divider on that side. preventDefault,
+	// as on the right-button path: the unprevented default action — native
+	// selection or drag — engages past the OS drag threshold on a fast drag
+	// and steals the pointer from the canvas mid-resize. That steal is
+	// invisible to synthetic input, so the e2e pins the prevented flag
+	// instead.
 	if a.armLeftResize(p, r, sx, sy) {
 		args[0].Call("preventDefault")
 		return nil
 	}
 
-	// Content descent (text/url/shell): every interactive surface is a DOM
-	// overlay or native view that owns its own clicks (textarea, rendered
-	// div, xterm, WebContentsView), and the bar slot owns the buttons
-	// (issue #214). A canvas left-click reaching here is pane chrome or
-	// margin — ascent lives on the middle button and the bar crumbs — so
+	// In a content descent — text, url, shell — every interactive surface is
+	// a DOM overlay or a native view that owns its own clicks (the textarea,
+	// the rendered div, xterm, the WebContentsView), and the bar slot owns
+	// the buttons. A canvas left-click reaching here is pane chrome or
+	// margin, and ascent lives on the middle button and the bar crumbs, so
 	// it is swallowed whole.
 	if p.ContentID() != "" {
 		return nil
 	}
 
-	// The + button lives in the bar slot now (issue #214); barSlotClick
-	// toggles the menu before a click ever reaches a pane.
+	// The + button lives in the bar slot; barSlotClick toggles the menu
+	// before a click ever reaches a pane.
 	// Mousedown inside the palette: starting a template drag if it
 	// landed on a tile, or swallowing the click (keeps the popover
 	// open) if it landed in the gutter. Click outside the popover
@@ -542,13 +540,13 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 					targetCellSize:    size,
 				}
 				if d.tileID != "" {
-					// Hide by ROW id — a clone is a different row that
+					// Hide by row id: a clone is a different row that
 					// looks the same, so a by-lineage hide would make
 					// every clone vanish whenever its sibling is
-					// picked up. (dragdrop.HiddenMatch + its test
-					// cover the predicate.) Lives on the ghost: the
-					// hide must outlive the drag (snap-back) and die
-					// with the ghost.
+					// picked up (dragdrop.HiddenMatch and its test
+					// cover the predicate). It lives on the ghost,
+					// because the hide outlives the drag through the
+					// snap-back and dies with the ghost.
 					a.ghost.hiddenTileID = d.tileID
 					a.ghost.hiddenPaneID = d.originPaneID
 				}
@@ -558,9 +556,9 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		}
 	}
 	if d.tileID == "" && !d.isTemplate {
-		// Pan the source pane's parent-grid view smoothly. (A pan drag
-		// only arms in grid mode — a content descent swallows the
-		// mousedown — so there is no text-scroll arm here.)
+		// Pan the source pane's parent-grid view smoothly. A pan drag only
+		// arms in grid mode, since a content descent swallows the mousedown,
+		// so there is no text-scroll arm here.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
 			cellSize := cellPx * focused.Zoom
@@ -568,9 +566,9 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			focused.Cy -= (sy - d.curScreenY) / cellSize
 		}
 	} else if a.ghost != nil {
-		// Update the ghost from the SAME dragdrop.DecideDrop verdict the
-		// left-drag commit (onMouseUp) uses, so a previewed action can never
-		// differ from the committed one. clone=false → the move flavor.
+		// Update the ghost from the same dragdrop.DecideDrop verdict the
+		// left-drag commit (onMouseUp) uses, so a previewed action cannot
+		// differ from the committed one. clone=false is the move flavor.
 		a.previewDrop(d, sx, sy, false)
 	}
 	d.curScreenX = sx
@@ -586,9 +584,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishRightDrag(sx, sy)
 		return nil
 	}
-	// Left-button release ends an in-flight pane-boundary resize: the ratio
-	// was applied live during the move; the release decides collapse
-	// (issue #203 — crush past the wall and let go to close the side).
+	// A left-button release ends an in-flight pane-boundary resize: the
+	// ratio was applied live during the move, and the release decides the
+	// collapse — crush past the wall and let go to close that side.
 	if a.leftResize != nil && args[0].Get("button").Int() == 0 {
 		a.finishLeftResize()
 		return nil
@@ -622,12 +620,12 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	a.canvas.Get("style").Set("cursor", "")
 	sx, sy = mouseXY(args[0], a.canvas)
 
-	// A plugin swatch clicked without dragging (no movement past the
-	// threshold) enters that plugin: the + menu "click to descend" gesture.
-	// A drag instead drops an exit-well link (commitTemplateDrop). The
-	// descent is the SAME one a node-grid link tile takes — one verb, one
-	// pushed frame — through a synthetic link tile placed at the pane's view
-	// centre, so ascent lands back exactly here.
+	// A plugin swatch clicked without dragging past the threshold enters
+	// that plugin: the + menu's click-to-descend gesture. A drag instead
+	// drops an exit-well link (commitTemplateDrop). The descent is the same
+	// one a link tile takes — one verb, one pushed frame — through a
+	// synthetic link tile placed at the pane's view center, so ascent lands
+	// back exactly here.
 	if d.isTemplate && d.item.isPlugin && !d.started {
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
 			well := paletteItemGhostNode(d.item)
@@ -637,17 +635,18 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// A url swatch clicked without dragging (no movement past the threshold) is
-	// an EPHEMERAL visit: open the url modal and, on submit, descend into a live
-	// url tile created in the off-grid scratch grid — visit a page without
-	// placing a tile. A drag instead places a real url tile (commitTemplateDrop).
+	// A url swatch clicked without dragging past the threshold is an
+	// ephemeral visit: open the url modal and, on submit, descend into a
+	// live url tile created in the off-grid scratch grid — a page visited
+	// without placing a tile. A drag instead places a real url tile
+	// (commitTemplateDrop).
 	if d.isTemplate && d.item.promotePane != "" && !d.started {
 		return nil // a click on the current crumb: this is where you are
 	}
 	if d.isTemplate && d.item.primitive == tplURL && !d.started {
-		// An ephemeral visit IS a live view — on a host without one (plain
-		// browser) the modal would only produce a blank frozen tile, so say
-		// why up front instead. Drag-create still places a real url tile.
+		// An ephemeral visit is a live view. On a host without one, a plain
+		// browser, the modal would only produce a blank frozen tile, so say
+		// why up front. Drag-create still places a real url tile.
 		if !a.caps.LiveURL {
 			a.menu.Close()
 			a.reportErr(caps.GoLiveNotice())
@@ -666,10 +665,11 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// A shell swatch clicked without dragging is an EPHEMERAL shell: created
-	// in the off-grid scratch grid, descended into, PTY spawned. Ascent
-	// DELETES it — tile row and tmux session with all its processes (gray
-	// border says so). A drag instead places a real, persistent shell tile.
+	// A shell swatch clicked without dragging is an ephemeral shell: created
+	// in the off-grid scratch grid, descended into, with the PTY spawned.
+	// Ascent deletes it — the tile row and the tmux session with all its
+	// processes, which the gray border warns about. A drag instead places a
+	// real, persistent shell tile.
 	if d.isTemplate && d.item.primitive == tplShell && !d.started {
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
 			a.menu.Close()
@@ -678,11 +678,11 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// Snapshot every world-read the drop decision needs, ONCE, using the
-	// local d (a.dragging is already nil above). DecideDrop then picks the
-	// action and the switch executes side effects. onMouseMove builds the
-	// same DropInput for the ghost preview, so preview and commit cannot
-	// diverge — that divergence was the trashcan-delete regression.
+	// Snapshot every world-read the drop decision needs, once, using the
+	// local d, since a.dragging is already nil above. DecideDrop then picks
+	// the action and the switch executes the side effects. onMouseMove
+	// builds the same DropInput for the ghost preview, so preview and commit
+	// cannot diverge.
 	in := dragdrop.DropInput{
 		Started:       d.started,
 		OriginFocused: d.originFocused,
@@ -751,25 +751,24 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 
 	case dragdrop.DropDelete:
-		// Dropping the dragged tile on its source pane's corner button
-		// (shown as a trashcan during a drag) deletes it — "drag it back to
-		// the menu it came from". Resolved against the source pane's button,
-		// not the grid under the cursor, so it works wherever that button sits.
+		// Dropping the dragged tile on the bar slot's trashcan deletes it.
+		// It resolves against that button, not the grid under the cursor, so
+		// it works wherever the cursor happens to be.
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
 		return nil
 
 	case dragdrop.DropRejected:
-		// Read-only doc, no target, forbidden cross-grid move, same cell, or
-		// occupied — snap back without a doomed round-trip to the server.
+		// No target, a forbidden cross-grid move, the same cell, or an
+		// occupied one: snap back without a doomed round trip.
 		a.cancelDragSnapBack(d)
 		return nil
 
 	case dragdrop.DropLink:
-		// Cross-namespace left-drag: the destination gains a LINK and the
-		// source stays put — there is no cross-plugin move (owner decision
-		// 2026-07-19). The ghost previewed this with the dashed chain badge.
+		// A cross-namespace left-drag: the destination gains a link and the
+		// source stays put, because there is no cross-plugin move. The ghost
+		// previewed this with the dashed chain badge.
 		if a.ghost != nil {
 			// The source was hidden for a would-be move; it stays — unhide it
 			// now so the world reads "source intact + link appearing".
@@ -788,13 +787,13 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 
-	// Same-namespace left-drag is a move; clone is handled by the right-drag
-	// path (commitRightClone in right_button.go) and never reaches here.
-	// PlaceTile is the one placement writeback: id + the full (grid, x, y, w,
-	// h) fact — no descent paths (2026-07-26 redesign; the
-	// well-into-own-subtree refusal is the server's own ancestor walk now)
-	// and no version claim (docs/simplify-plan.md S5: placement is layout,
-	// last-writer-wins; the overlap check is what protects the grid).
+	// A same-namespace left-drag is a move; a clone goes through the
+	// right-drag path (commitRightClone in right_button.go) and never
+	// reaches here. PlaceTile is the one placement writeback: an id plus the
+	// full (grid, x, y, w, h) fact, with no descent path — the
+	// well-into-own-subtree refusal is the server's own ancestor walk — and
+	// no version claim, since placement is layout and last-writer-wins, with
+	// the overlap check protecting the grid.
 	req := &rpc.PlaceTileRequest{
 		TileID: d.tileID,
 		GridID: dstGridID,
@@ -804,7 +803,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		H:      d.snapshotTile.H,
 	}
 	// A drag carries no parked value: the ghost is presentation, and snapping
-	// it back to its origin IS the honest reconcile the user can see.
+	// it back to its origin is the honest reconcile the user can see.
 	a.post(write{
 		label: "PlaceTile", gid: srcGridID, alsoGID: dstGridID, refetchOnOK: true,
 		call: func(ctx context.Context) error {
@@ -817,13 +816,12 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	return nil
 }
 
-// commitLinkDrop creates the LINK a cross-namespace left-drag drops: an exit
-// well for a dragged well (same qualified child grid, framing, and label —
-// identical to what a + menu plugin-swatch drop or a node-grid mount
-// produces), a leaf link for text/url/shell/pane (link_target_id names the
-// dragged tile — or, when the dragged tile is itself a leaf link, its
-// TARGET, so links never chain through middleman tiles). The source tile
-// is not touched.
+// commitLinkDrop creates the link a cross-namespace left-drag drops: an exit
+// well for a dragged well, with the same qualified child grid, framing, and
+// label a + menu plugin-swatch drop produces, or a leaf link for a text, url,
+// shell, or pane tile, whose link_target_id names the dragged tile — or, when
+// the dragged tile is itself a leaf link, its target, so links never chain
+// through middleman tiles. The source tile is not touched.
 func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	src := d.snapshotTile
 	dstGridID := t.gridID
@@ -851,13 +849,13 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	}, nil)
 }
 
-// occupiedForDrop reports whether the dropped FOOTPRINT (x, y, w, h) in
+// occupiedForDrop reports whether the dropped footprint (x, y, w, h) in
 // gridID overlaps any cached tile other than excludeID. A move passes the
-// dragged tile's own id — mirroring the server's PlaceTile self-exclusion,
-// so the preflight can never reject a placement the server would accept
-// (#231: a large tile dragged a short distance crosses its own old
-// footprint, which is not a collision). A clone passes "" — the source
-// tile is a real neighbor there.
+// dragged tile's own id, mirroring the server's PlaceTile self-exclusion, so
+// the preflight cannot reject a placement the server would accept: a large
+// tile dragged a short distance crosses its own old footprint, which is not a
+// collision. A clone passes "", because the source tile is a real neighbor
+// there.
 func (a *App) occupiedForDrop(gridID string, x, y, w, h int64, excludeID string) bool {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
@@ -876,9 +874,9 @@ func (a *App) occupiedForDrop(gridID string, x, y, w, h int64, excludeID string)
 
 // startSnap animates the active ghost from its current position to (toX, toY)
 // over the given duration. Replaces any prior animation.
-// landGhost is the one drop landing: the ghost now belongs to paneID
-// (drawn at that pane's cell size when cellSize > 0) and snaps to the
-// screen cell (toX, toY). Four drop commits once repeated these lines.
+// landGhost is the one drop landing: the ghost belongs to paneID, drawn at
+// that pane's cell size when cellSize > 0, and snaps to the screen cell
+// (toX, toY).
 func (a *App) landGhost(paneID string, cellSize, toX, toY float64) {
 	if a.ghost != nil {
 		a.ghost.paneID = paneID
@@ -957,15 +955,14 @@ func (a *App) tileDragInFlight() bool {
 }
 
 // overDeleteButton reports whether (sx, sy) is over the delete target for the
-// in-flight drag d: the bar slot's trashcan (issue #214 — one global
-// target, no longer the origin pane's corner).
+// in-flight drag d: the bar slot's trashcan, one global target.
 //
-// It takes the drag EXPLICITLY rather than reading a.dragging, because the
-// commit path clears a.dragging before deciding what the drop means
-// (onMouseUp / commitTileCenter both do `d := a.dragging; a.dragging = nil`).
-// Reading the field here returned false at release — the tile fell through to a
-// normal move and was placed under the trashcan instead of deleted — even
-// though the live-drag preview looked correct.
+// It takes the drag explicitly rather than reading a.dragging, because the
+// commit path clears a.dragging before deciding what the drop means: both
+// onMouseUp and commitTileCenter do `d := a.dragging; a.dragging = nil`.
+// Reading the field here would return false at release, and the tile would
+// fall through to a normal move and be placed under the trashcan, even though
+// the live-drag preview looked correct.
 func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 	if d == nil || !d.started || d.tileID == "" {
 		return false
@@ -973,10 +970,10 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 	return a.pointInPlus(sx, sy)
 }
 
-// attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)
-// inside pane p to the right navigation gesture. Left-click only ever
-// descends now; ascent is the middle button or a right-click on the bar
-// slot (see ascendPane).
+// attemptDescentOrAscent routes a bare left-click, with no drag, at (sx, sy)
+// inside pane p to the right navigation gesture. A left-click only ever
+// descends; ascent is the middle button or the bar's crumb click (see
+// ascendPane).
 //
 //   - On a well: descend into the well.
 //   - On a markdown file: descend into the file.
@@ -996,9 +993,9 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 	if hit == nil {
 		return false
 	}
-	// An address-less url tile (dropped bare — issue #209): the first
-	// descent is where the address gets asked for. A url LINK resolves its
-	// address through the target and never prompts.
+	// An address-less url tile, dropped bare: the first descent is where the
+	// address is asked for. A url link resolves its address through the
+	// target and never prompts.
 	if hit.Kind == rpc.KindURL && hit.URLString == "" && hit.LinkTargetID == "" {
 		a.openConfigureURL(p, hit)
 		return true
@@ -1007,18 +1004,17 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 		!rpc.IsWorkspaceKind(hit.Kind) {
 		return false
 	}
-	// ONE descent: which kind of frame it pushes is the TILE's declaration
+	// One descent: which kind of frame it pushes is the tile's declaration
 	// (nav.go), not this call site's.
 	a.descend(p, hit, nil)
 	return true
 }
 
-// totalTransitionMs is the total wall-clock duration of a descent or
-// ascent transition. The same value is used for both so the UX is
-// symmetric in feel. A var (not const) solely for the e2e-only
-// setTransitionMs testhook, which stretches it so a spec can inject an
-// SSE event DURING a transition deterministically (I11); production has
-// no writer.
+// totalTransitionMs is the total wall-clock duration of a descent or ascent
+// transition. The same value serves both, so the two feel symmetric. It is a
+// var, not a const, solely for the e2e-only setTransitionMs testhook, which
+// stretches it so a spec can inject an event during a transition
+// deterministically; production has no writer.
 var totalTransitionMs = 350.0
 
 // zoomDistFactor scales log-zoom distance to a "perceived px" unit so we
@@ -1029,10 +1025,9 @@ var totalTransitionMs = 350.0
 // action" and the pan is "the setup".
 const zoomDistFactor = 4.0
 
-// Descents through a link tile (a namespace crossing) live in descend
-// (nav.go): a mounted well and a cross-plugin clone descend through the
-// SAME path a normal well does, with a frame pushed so ascent returns
-// exactly here.
+// Descents through a link tile — a namespace crossing — live in descend
+// (nav.go): a mounted well and a cross-plugin clone take the same path a
+// plain well does, with a frame pushed so ascent returns exactly here.
 
 // descentTextMode applies textedit.DescentMode (the one owner) to a
 // cached tile row at descent; cursorURL is the restore path's extra
@@ -1044,23 +1039,22 @@ func (a *App) descentTextMode(file *rpc.Tile, cursorURL bool) string {
 	})
 }
 
-// persistedGridView resolves the framing the grid at (anchor, path) was
-// LEFT at, from the row that owns it: the containing well's view_* for a
-// nested grid, the plugin's persisted root view for a root. The restore
-// for every ascent with no session state (a reload mid-descent) and the
-// boot viewport — before this, those paths landed on 0,0,zoom-1, a
-// framing the user never set (the guiding rule, violated on the way
-// out). ok=false when nothing is persisted or the owning row isn't
-// cached; callers keep their legacy fallback then.
+// persistedGridView resolves the framing the grid at (anchor, path) was left
+// at, from the row that owns it: the containing well's framing for a nested
+// grid, the plugin's persisted root view for a root. It is the restore for
+// every ascent with no session state, such as a reload mid-descent, and the
+// boot viewport; landing on 0,0 and zoom 1 instead would be a framing the
+// user never set. ok=false when nothing is persisted or the owning row is not
+// cached, and callers keep their own fallback then.
 func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx, cy, zoom float64, ok bool) {
 	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		return 0, 0, 0, false
 	}
 	if len(path) == 0 {
-		// A root grid: the read side of persistFraming's root arm — the
-		// same 1×1 synthetic doorway, inverted; a root's framing rides
-		// its PluginInfo.
+		// A root grid: the read side of persistFraming's root arm, the same
+		// 1×1 synthetic doorway inverted. A root's framing rides its
+		// PluginInfo.
 		var vcx, vcy, vzoom float64
 		if pl, found := a.pluginByRoot(anchor); found {
 			vcx, vcy, vzoom = pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom
@@ -1086,11 +1080,12 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 	return cx, cy, zoom, true
 }
 
-// autoLiveOnRestore is autoLiveOnDescent for the RESTORE paths — reload
-// (applyURLState), workspace install, an ascent landing back on a content
-// frame that was stacked under a deeper visit (landOnFrame). The tile row is not necessarily cached at
-// restore time, so it is fetched first; the pane is re-resolved when the
-// read lands (the user may have moved on — never override where they went).
+// autoLiveOnRestore is autoLiveOnDescent for the restore paths: a reload
+// (applyURLState), a pane-tile install, or an ascent landing back on a
+// content frame stacked under a deeper visit (landOnFrame). The tile row is
+// not necessarily cached at restore time, so it is fetched first, and the
+// pane is re-resolved when the read lands, since the user may have moved on
+// and where they went is never overridden.
 func (a *App) autoLiveOnRestore(paneID, tileID string) {
 	go func() {
 		tile, err := a.cl.GetTile(context.Background(), tileID)
@@ -1105,25 +1100,24 @@ func (a *App) autoLiveOnRestore(paneID, tileID string) {
 }
 
 // healStalePanePath re-derives a restored pane's path when its stored
-// (anchor, path) no longer leads to the descended tile's grid (issue
-// #234): the tile moved — its id is immutable, its path is not. A scoped
-// `id:` Search (the one find verb, issue #244) answers with the CURRENT
-// containing-well chain; the pane re-anchors at the owning root with the
-// fresh path, so the descent binds and the crumbs show a true path from
-// root. The workspace persister derives the corrected layout from the
-// live tree on its next tick, so the heal persists with no dedicated
-// writer. Runs on the restore goroutine (a blocking read is fine there);
-// an unsearchable tile (a plugin without Search) leaves today's
-// frozen-preview state.
+// (anchor, path) no longer leads to the descended tile's grid: the tile moved,
+// since its id is immutable but its path is not. A scoped `id:` Search, the
+// one find verb, answers with the current containing-well chain; the pane
+// re-anchors at the owning root with the fresh path, so the descent binds and
+// the crumbs show a true path from the root. The layout persister derives the
+// corrected layout from the live tree on its next tick, so the heal persists
+// with no dedicated writer. It runs on the restore goroutine, where a
+// blocking read is fine; an unsearchable tile, from a plugin without Search,
+// stays on its frozen preview.
 func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	fp := a.tree.FindPane(paneID)
 	if !pane.StillDescended(fp, tile.ID) {
 		return
 	}
 	if a.isEphemeralTile(fp, tile) {
-		// An EPHEMERAL descent is deliberately focused OFF the pane's grid
-		// (the scratch tile rides above whatever place the pane frames):
-		// the path is not stale, the tile is elsewhere BY DESIGN — healing
+		// An ephemeral descent is deliberately focused off the pane's grid:
+		// the scratch tile rides above whatever place the pane frames. The
+		// path is not stale — the tile is elsewhere by design — and healing
 		// would re-anchor the pane into the scratch grid.
 		return
 	}
@@ -1158,20 +1152,21 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 }
 
 // autoLiveOnDescent applies the shellconn.DecideAutoLive verdict for the
-// just-descended tile: open the url view, attach/create the shell PTY, probe
-// an unknown shell session first, or stay frozen (text, browser hosts, dead
-// sessions). The one auto-live owner — the refresh affordances remain as the
-// RETRY for the cases this stays frozen on. tile is the descent-time row,
-// passed by value: an ephemeral (scratch) tile is in no cached grid.
+// just-descended tile: open the url view, attach or create the shell PTY,
+// probe an unknown shell session first, or stay frozen — text, browser hosts,
+// dead sessions. It is the one auto-live owner, and the refresh affordances
+// are the retry for the cases it stays frozen on. tile is the descent-time
+// row, passed by value, because an ephemeral scratch tile is in no cached
+// grid.
 func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 	tileID := tile.ID
 	fp := a.tree.FindPane(paneID)
 	if !pane.StillDescended(fp, tileID) {
 		return
 	}
-	// The shell facts key by the CONTENT id (a link attaches its target's
-	// session) — the same reads shellRefreshButtonVisible does, so the two
-	// decisions can never disagree about a dead session.
+	// The shell facts key by the content id, so a link attaches its target's
+	// session: the same reads shellRefreshButtonVisible does, so the two
+	// decisions cannot disagree about a dead session.
 	cid := tile.ContentID()
 	alive, known := a.shellAlive[cid]
 	verdict := shellconn.DecideAutoLive(
@@ -1185,8 +1180,9 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 		a.openShellStream(fp, tileID)
 	case shellconn.AutoLiveProbeShell:
 		a.probeShellSessionAlive(cid, func(nowAlive bool) {
-			// Re-check the pane is still in THIS descent when the verdict
-			// lands — the probe is async and the user may have moved on.
+			// Re-check that the pane is still in this descent when the
+			// verdict lands: the probe is async and the user may have moved
+			// on.
 			if p := a.tree.FindPane(paneID); nowAlive && p != nil && p.ContentID() == tileID {
 				a.openShellStream(p, tileID)
 			}
@@ -1199,12 +1195,11 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 // failure reacts via clientsync (transport parks in the outbox, a verdict
 // refetches and surfaces) like every other mutation.
 func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
-	// SetTextView (and the framed-window cache patch) are text-tile
-	// concerns — URL and shell tiles don't carry text_x/text_y/text_w
-	// /text_h, and the server's SetTextView rejects non-text kinds with
-	// InvalidArgument. Routing them through would surface as a 400 the
-	// user has to read. A serves_page descent is web content — no text
-	// framing either.
+	// SetTextView, and the framed-window cache patch, are text-tile
+	// concerns: url and shell tiles carry no text framing, and the server's
+	// SetTextView rejects non-text kinds with InvalidArgument, which would
+	// surface as an error the user has to read. A serves_page descent is web
+	// content and carries no text framing either.
 	if file.Kind != rpc.KindText || file.ServesPage {
 		return
 	}
@@ -1213,20 +1208,19 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
 
-	// Content: read the tile's OWN content-store entry, and only when it
-	// carries an unsaved edit. Never the DOM. The old code read the singleton
-	// textarea here and attributed it to whatever tile THIS pane pointed at —
-	// which is how a bulk flush (pane collapse, workspace boundary) over a
-	// pane the singleton wasn't bound to saved one document's bytes as
-	// another's content (the 2026-07-18 cross-tile stomp). It also posted
-	// unconditionally, so a merely-opened tile rewrote its blob and bumped
-	// its version on every visit; dirty-gating makes a pure read write-free
-	// (the guiding rule: reading never mutates).
-	// Read-only host tiles have no write-back at all: no content (the body
-	// is reconciler output) and no framing store either — the fs plugin's
-	// SetTile refuses text framing, so posting SetTextView from here only
-	// manufactured an error strip (#236). The mode/scroll stay session
-	// facts for them.
+	// Content: read the tile's own cache entry, and only when it carries an
+	// unsaved edit. Never the DOM. Reading the singleton textarea here would
+	// attribute its bytes to whatever tile this pane points at, so a bulk
+	// flush — a pane collapse, a level boundary — over a pane the singleton
+	// was not bound to would save one document's bytes as another's content.
+	// Posting unconditionally would also make a merely-opened tile rewrite
+	// its blob and bump its version on every visit; dirty-gating keeps a
+	// pure read write-free.
+	// Read-only host tiles have no write-back at all: no content, since the
+	// body is derived, and no framing store either — the fs plugin's SetTile
+	// refuses text framing, so posting SetTextView from here would only
+	// manufacture an error strip. Their mode and scroll stay session
+	// facts.
 	if a.tileReadOnly(&file) {
 		return
 	}
@@ -1251,9 +1245,9 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
 
 	mode := p.TextMode
-	// Through the per-tile save queue (issue #140): a debounced keystroke
-	// save may still be in flight, and this flush claims a version too — the
-	// queue serializes them and the version is read at send time.
+	// Through the per-tile save queue: a debounced keystroke save may still
+	// be in flight, and this flush claims a version too, so the queue
+	// serializes them and the version is read at send time.
 	a.textSaves.Enqueue(file.ID, func() {
 		curVersion := file.Version
 		if g, ok := a.c.Grid(gid); ok {
@@ -1261,17 +1255,17 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 				curVersion = f.Version
 			}
 		}
-		// Update content first if the user was editing. The CONTENT write
-		// claims the save basis — the version of the bytes the entry derives
-		// from — never the row version read above: a foreign writer's event
-		// advances the row without this client seeing the new bytes, and
-		// claiming it would save the stale entry right over the foreign edit
-		// (the remote-stomp bug). A stale basis conflicts at the server and
-		// reconciles visibly instead.
+		// Update the content first if the user was editing. The content
+		// write claims the save basis — the version of the bytes the entry
+		// derives from — never the row version read above: a foreign
+		// writer's event advances the row without this client seeing the new
+		// bytes, and claiming it would save the stale entry right over the
+		// foreign edit. A stale basis conflicts at the server and reconciles
+		// visibly instead.
 		if hasBuf {
-			// The write addresses the CONTENT owner (a link doc saves under
-			// its target's id — flushTileContent's discipline); the row
-			// version is a valid fallback only when this row IS the owner.
+			// The write addresses the content owner, so a link's doc saves
+			// under its target's id, as flushTileContent does. The row
+			// version is a valid fallback only when this row is the owner.
 			cid := file.ContentID()
 			saveVersion := curVersion
 			if file.ID != cid {
@@ -1285,15 +1279,15 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 				return
 			}
 			if file.ID == cid {
-				// The SetTextView below claims THIS row's version; only
-				// advance it when the content write bumped this same row
-				// (a link's target version is a different row's fact).
+				// The SetTextView below claims this row's version, so only
+				// advance it when the content write bumped this same row: a
+				// link's target version is a different row's fact.
 				curVersion = tile.Version
 			}
 		}
-		// Persist the framed window + mode so re-descent and the preview
-		// honor "however you left it" across reloads — only when something
-		// changed (textedit.FramingChanged, the one rule): a pure
+		// Persist the framed window and mode so re-descent and the preview
+		// show it however the user left it across reloads, and only when
+		// something changed (textedit.FramingChanged, the one rule): a pure
 		// descend-and-ascent must not write.
 		next := textedit.Framing{X: scrollX, Y: scrollY, W: viewW, H: viewH, Mode: mode}
 		if !textedit.FramingChanged(textedit.FramingOf(file), next) {
@@ -1339,8 +1333,8 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 		originFocused: true, // the palette only opens on the focused pane
 		isTemplate:    true,
 		item:          item,
-		// The menu belongs to the pane's NODE (remote-menu): the drop
-		// rules compare this against the destination's node.
+		// The menu belongs to the pane's node: the drop rules compare this
+		// against the destination's node.
 		menuNS:        a.paneNodeNS(p),
 		startScreenX:  sx,
 		startScreenY:  sy,
@@ -1406,11 +1400,11 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// A plugin item drops into the destination grid (drag-a-plugin-onto-a-
-	// grid): an exit-well LINK to its root grid — a connection row drops
-	// the same way, its chained root already qualified (v2 #269; links
-	// are the standing cross-boundary vocabulary, 2026-07-19). Only
-	// writable grids accept it; anything else snaps back.
+	// A plugin item dropped into the destination grid becomes an exit-well
+	// link to its root grid. A connection row drops the same way, its
+	// chained root already qualified; links are the cross-boundary
+	// vocabulary. Only writable grids accept it, and anything else snaps
+	// back.
 	if d.item.isPlugin {
 		droppable := pluginhealth.Classify(d.item.plugin) == pluginhealth.Enterable
 		if !droppable || !a.gridWritable(a.gridIDForPane(destPane)) {
@@ -1424,11 +1418,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// A primitive belongs to the node whose menu offered it (remote-menu,
-	// 2026-08-16): the swatch was gated by THAT node's grids and policy,
-	// and creating "a remote node's text tile" inside a local grid is a
-	// category error. Same-node drops only; a cross-node drop refuses
-	// VISIBLY (charter §6) and snaps back.
+	// A primitive belongs to the node whose menu offered it: the swatch was
+	// gated by that node's grids and policy, and creating a remote node's
+	// text tile inside a local grid is a category error. Same-node drops
+	// only; a cross-node drop refuses visibly and snaps back.
 	if a.paneNodeNS(destPane) != d.menuNS {
 		a.reportErr(errsurface.Info, "menu",
 			"this menu belongs to another node — drop into a grid on that node, or open the menu here")
@@ -1436,10 +1429,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// EVERY template commits immediately with the snap-and-create gesture
-	// (issue #209: drop first — the drop never prompts; whatever a kind
-	// needs to be useful is asked for on the first DESCENT, so create is
-	// one experience everywhere: drop, descend, fill in).
+	// Every template commits immediately with the snap-and-create gesture.
+	// The drop never prompts: whatever a kind needs to be useful is asked
+	// for on the first descent, so create is one experience everywhere —
+	// drop, descend, fill in.
 	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
 	a.landGhost(destPane.ID, 0, targetX, targetY)
 
@@ -1463,10 +1456,9 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 }
 
 // createPluginLinkAtCell fires CreateWell with the plugin's qualified root
-// grid as the child — an exit-well LINK, the same tile a cross-plugin clone
-// of the plugin's node-grid tile creates (the Mount RPC is gone; CreateTile
-// is the one create). The link's framing seeds from the plugin's persisted
-// root view so its preview shows what descent will show.
+// grid as the child: an exit-well link, through CreateTile, the one create.
+// The link's framing seeds from the plugin's persisted root view, so its
+// preview shows what descent will show.
 func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	req := &rpc.CreateWellRequest{
@@ -1480,9 +1472,9 @@ func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 	}, nil)
 }
 
-// createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
-// Wells are created UNNAMED (naming happens from inside, via the name
-// bubble — issue #118).
+// createWellAtCell fires CreateWell at the given cell. The footprint is 1×1
+// and the well is created unnamed; naming happens from inside, through the
+// bar title.
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	req := &rpc.CreateWellRequest{
@@ -1506,9 +1498,9 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	}, nil)
 }
 
-// createURLAtCell fires CreateURL at the given cell — ADDRESS-LESS (issue
-// #209: drop first). The tile lands inert; the first descent prompts for
-// the address (openConfigureURL) and writes it as the tile's content.
+// createURLAtCell fires CreateURL at the given cell, address-less: the tile
+// lands inert, and the first descent prompts for the address
+// (openConfigureURL) and writes it as the tile's content.
 func (a *App) createURLAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	req := &rpc.CreateURLRequest{
@@ -1520,27 +1512,27 @@ func (a *App) createURLAtCell(p *pane.Pane, cellX, cellY int64) {
 }
 
 // openConfigureURL prompts for a bare url tile's address on its first
-// descent (issue #209: drop first, prompt on descent), reusing the url
-// modal with its visited-url suggestions. Submit writes the address as
-// the tile's content (the store's url arm: versioned, validated, bumps) and
-// then descends, so the fill-in flows straight into the page. EVERY descent
-// goes live (issue #202), so no special go-live handling.
+// descent, reusing the url modal with its visited-url suggestions. Submitting
+// writes the address as the tile's content — the store's url arm: versioned,
+// validated, bumping — and then descends, so the fill-in flows straight into
+// the page. Every descent goes live, so there is no special go-live
+// handling.
 func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 	gid := a.gridIDForPane(p)
 	paneID, id := p.ID, t.ID
-	// The address IS content, so this write claims a version like every
-	// content write (docs/simplify-plan.md S5) — the row as the descent saw
-	// it, which is exactly the value the user is filling in.
+	// The address is content, so this write claims a version like every
+	// content write: the row as the descent saw it, which is exactly the
+	// value the user is filling in.
 	version := t.Version
 	candidates := a.urlSuggestCandidates(uuidOf(gid))
 	a.openURLModal(candidates, func(url string) {
 		go func() {
 			// Through the plain dispatcher, not postWriteContent: the typed
-			// url has no cache entry backing it (the modal is the only
-			// holder), so the content path's "the dirty entry is the record"
-			// rule can't cover it — the dispatcher parks the closure itself
-			// on a transport failure (audit #10, 2026-08-14) and the address
-			// lands on the retry kick; only the descend is skipped.
+			// url has no cache entry backing it, since the modal is the only
+			// holder, so the content path's "the dirty entry is the record"
+			// rule cannot cover it. The dispatcher parks the closure itself
+			// on a transport failure and the address lands on the retry
+			// kick; only the descent is skipped.
 			var tile rpc.Tile
 			err := a.do(write{
 				label: "ConfigureURL", gid: gid, id: id,
@@ -1574,14 +1566,14 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 // has none (fs/proc don't support ephemeral visits).
 func (a *App) scratchGridForPane(p *pane.Pane) string {
 	gid := a.gridIDForPane(p)
-	// The fact rides ON the grid (Grid.ScratchGridID, stamped by the serving
-	// node and chained through mounts) — a local plugin-list lookup cannot
+	// The fact rides on the grid (Grid.ScratchGridID, stamped by the serving
+	// node and chained through mounts): a local plugin-list lookup cannot
 	// answer for a remote plugin behind a transit mount.
 	if g, ok := a.c.Grid(gid); ok && g.Meta.ScratchGridID != "" {
 		return g.Meta.ScratchGridID
 	}
-	// Fallback for an uncached grid: the local plugin list (local plugins
-	// only — first segment).
+	// Fallback for an uncached grid: the local plugin list, matching on the
+	// first segment, so local plugins only.
 	want := uuidOf(gid)
 	for _, pl := range a.plugins {
 		if pl.UUID == want {
@@ -1617,39 +1609,37 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 	})
 }
 
-// isEphemeralTile reports whether t is an ephemeral (scratch-grid) tile of
-// the plugin pane p sits in. The one client-side derivation of "ephemeral":
-// the tile's grid IS the plugin's scratch grid — both facts are server-owned
-// (Grid.ScratchGridID rides on the grid, chained through mounts), so no new
-// wire field is needed. Ephemeral tiles are deleted on ascent; the descended
-// pane border goes gray to say so (issue #85).
+// isEphemeralTile reports whether t is an ephemeral (scratch-grid) tile of the
+// plugin pane p sits in. It is the one client-side derivation of "ephemeral":
+// the tile's grid is the plugin's scratch grid. Both facts are server-owned —
+// Grid.ScratchGridID rides on the grid, chained through mounts — so no new
+// wire field is needed. Ephemeral tiles are deleted on ascent, and the
+// descended pane border goes gray to say so.
 func (a *App) isEphemeralTile(p *pane.Pane, t *rpc.Tile) bool {
 	s := a.scratchGridForPane(p)
 	return s != "" && t.GridID == s
 }
 
-// leavingEphemeral is THE decision that a pane leaving tile t deletes it:
-// the tile is ephemeral AND no other pane still shows it (pane.OtherPaneShows
-// — a split clones the visit; issue #111). Every ascent-shaped path (the
-// animated ascent, the instant pop, promotion onto a grid) asks here, so no
+// leavingEphemeral is the decision that a pane leaving tile t deletes it: the
+// tile is ephemeral and no other pane still shows it (pane.OtherPaneShows,
+// since a split clones the visit). Every ascent-shaped path — the animated
+// ascent, the instant pop, promotion onto a grid — asks here, so no
 // path can forget the guard.
 func (a *App) leavingEphemeral(p *pane.Pane, t *rpc.Tile) bool {
 	return a.isEphemeralTile(p, t) && !a.tree.OtherPaneShows(p.ID, t.ID)
 }
 
 // deleteEphemeralTile removes an ascended-from ephemeral tile — gray means
-// gone: the row is deleted, and for a shell the plugin kills its tmux session
-// (all processes) as part of the delete. A failure surfaces on the strip
-// (charter §6); otherwise the tile would silently leak in the scratch grid
+// gone. The row is deleted, and for a shell the plugin kills its tmux
+// session, and all its processes, as part of the delete. A failure surfaces
+// on the strip; otherwise the tile would silently leak in the scratch grid
 // until the startup sweep.
 func (a *App) deleteEphemeralTile(tileID string) {
 	go func() {
-		// No claim: a delete is the USER's explicit action, and the stream
+		// No claim: a delete is the user's explicit action, and the stream
 		// close that precedes it triggers the plugin's detach-time title
-		// capture — which used to bump the row and refuse this delete,
-		// forcing a one-shot re-claim here. Captures no longer bump and a
-		// delete no longer claims (docs/simplify-plan.md S5), so the whole
-		// race is gone rather than absorbed.
+		// capture. Captures do not bump the row and a delete carries no
+		// claim, so the two cannot race.
 		err := a.cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
 			TileID: tileID,
 		})
@@ -1661,11 +1651,10 @@ func (a *App) deleteEphemeralTile(tileID string) {
 }
 
 // visitEphemeralShell creates an ephemeral shell tile in the current plugin's
-// scratch grid and descends into it, spawning the PTY — "open a shell" from
-// the menu's shell swatch (clicked, not dragged). The shell twin of
-// visitEphemeralURL, with the opposite exit contract: ascent DELETES the tile
-// and its tmux session (issue #85) — gray border warns not to leave
-// persistent work there.
+// scratch grid and descends into it, spawning the PTY: "open a shell" from
+// the menu's shell swatch, clicked rather than dragged. The shell twin of
+// visitEphemeralURL, with the opposite exit contract — ascent deletes the
+// tile and its tmux session, which the gray border warns about.
 func (a *App) visitEphemeralShell(p *pane.Pane) {
 	scratch := a.scratchGridForPane(p)
 	if scratch == "" {
@@ -1682,28 +1671,26 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 	})
 }
 
-// openLinkBelow handles a link opened OUT of a live tile — a new-window
-// intent from a live url view (target=_blank, window.open, ctrl/cmd-click —
-// issue #111) and a url activated in a live shell (issue #207): split the
-// pane horizontally and open the url as an EPHEMERAL visit in the new lower
-// half. The link renders next to the page/terminal it came from, on the
-// same plugin session, and dies on ascent like every ephemeral visit (#85).
-// If the split fails (degenerate pane) the visit opens in place instead —
-// the link must never be silently dropped.
+// openLinkBelow handles a link opened out of a live tile: a new-window intent
+// from a live url view (target=_blank, window.open, ctrl or cmd-click) and a
+// url activated in a live shell. It splits the pane horizontally and opens the
+// url as an ephemeral visit in the new lower half, so the link renders next to
+// the page or terminal it came from, on the same session, and dies on ascent
+// like every ephemeral visit. If the split fails, on a degenerate pane, the
+// visit opens in place instead: the link is never silently dropped.
 func (a *App) openLinkBelow(paneID, url string) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
 		return
 	}
-	// SplitOnSideAt splits the FOCUSED pane; the link's pane may not be it
-	// (a background page can window.open). Focus it first — that is also
-	// where the user's attention is about to go.
+	// SplitOnSideAt splits the focused pane, and the link's pane may not be
+	// it, since a background page can call window.open. Focus it first,
+	// which is also where the user's attention is about to go.
 	a.focusToPane(p)
-	// The universal pane minimum applies to programmatic splits too (issue
-	// #167): a pane too short for two minimum panes opens the visit in
-	// place instead of birthing a sub-minimum pane (SplitOnSideAt itself
-	// only clamps the ratio — its doc makes sub-min rejection the caller's
-	// job).
+	// The universal pane minimum applies to programmatic splits too: a pane
+	// too short for two minimum panes opens the visit in place instead of
+	// birthing a sub-minimum pane. SplitOnSideAt only clamps the ratio;
+	// rejecting a sub-minimum split is the caller's job.
 	if !pane.CanSplit(pane.SideBottom, paneRectFor(a, p)) {
 		a.visitEphemeralURL(p, url)
 		return
@@ -1713,11 +1700,11 @@ func (a *App) openLinkBelow(paneID, url string) {
 		a.visitEphemeralURL(p, url)
 		return
 	}
-	// The clone inherits the source's content frame, which a
-	// live view can't duplicate — same rule as commitSplit: ascend the file
-	// level so the visit descends from the containing grid. (The ephemeral
-	// delete-on-ascent is guarded by leavingEphemeral, so this ascent
-	// never deletes the tile the SOURCE pane still shows.)
+	// The clone inherits the source's content frame, which a live view
+	// cannot duplicate — the same rule as commitSplit — so ascend the
+	// content level and let the visit descend from the containing grid. The
+	// ephemeral delete-on-ascent is guarded by leavingEphemeral, so this
+	// ascent never deletes the tile the source pane still shows.
 	if newP.ContentID() != "" {
 		a.ascend(newP, 1, true)
 	}
@@ -1726,34 +1713,30 @@ func (a *App) openLinkBelow(paneID, url string) {
 	a.visitEphemeralURL(newP, url)
 }
 
-// shellURLActivate handles a click on an http(s) url in a live shell (the xterm
-// link provider's activate): open it below, exactly like a link a live url
-// view pops (issue #207 — one behavior for links out of live tiles; the old
-// in-place descent stashed the shell on a session-only side stack, which any
-// place-restore dropped — the issue #208 double-ascend; since S8 a stacked
-// visit is just another frame). A no-op if the
-// shell is no longer the pane's active descent.
+// shellURLActivate handles a click on an http(s) url in a live shell, the
+// xterm link provider's activate: open it below, exactly like a link a live
+// url view pops, so links out of live tiles have one behavior. A stacked
+// visit is just another frame on the pane's place. A no-op if the shell is no
+// longer the pane's active descent.
 func (a *App) shellURLActivate(paneID, url string) {
 	if p := a.tree.FindPane(paneID); p != nil && p.ContentID() != "" {
 		a.openLinkBelow(paneID, url)
 	}
 }
 
-// createShellAtCell fires CreateShell at the given cell, then
-// auto-descends and auto-spawns the PTY — the user dropped a shell
-// to use a shell, not to look at a placeholder. The first refresh
-// creates the tile's gridwell-private tmux session; subsequent
-// ascent / re-descent shows the frozen JPEG and refresh reattaches
-// to the same tmux session (state preserved).
+// createShellAtCell fires CreateShell at the given cell. The first descent
+// creates the tile's private tmux session; a later ascent shows the frozen
+// JPEG, and re-descending reattaches to the same session with its state
+// preserved.
 func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	req := &rpc.CreateShellRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
-	// The drop just lands the tile — no auto-descend, like every other
-	// primitive since #209 (issue #241; the descend-on-create here was a
-	// leftover of the pre-#209 url flow). The FIRST descent creates the
-	// session: DecideAutoLive's fresh-shell arm (no preview blob).
+	// The drop just lands the tile, with no auto-descent, like every other
+	// primitive. The first descent creates the session, through
+	// DecideAutoLive's fresh-shell arm, which fires when there is no preview
+	// blob.
 	a.postTileMutate("CreateShell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateShell(ctx, req)
 	}, nil)
@@ -1771,8 +1754,8 @@ func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {
 
 // promoteEphemeralURL turns the ephemeral url visit shown in pane
 // originPaneID into a persistent url tile at (cellX, cellY) of destPane's
-// grid — the bar crumb dragged onto a grid (2026-08-27). The tile is
-// created with the visit's CURRENT address (the page may have navigated);
+// grid: the bar crumb dragged onto a grid. The tile is created with the
+// visit's current address, since the page may have navigated, and
 // finishPromote then moves the visit onto it.
 func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cellX, cellY int64) {
 	op := a.tree.FindPane(originPaneID)
@@ -1800,11 +1783,10 @@ func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cell
 
 // finishPromote moves the live visit from the ephemeral row onto the
 // persistent tile just created: the view's final frame, title, and trail
-// freeze onto the NEW tile (never the row about to die); the ephemeral
-// row is deleted (gray means gone) unless a split sibling still shows
-// it; the pane relocates to the new tile's
-// grid (pane.RelocateTo — the nav chain and the next ascent read the new
-// place, its ascent viewport being the destination pane's); and the page
+// freeze onto the new tile, never the row about to die; the ephemeral row is
+// deleted, unless a split sibling still shows it; the pane relocates to the
+// new tile's grid (pane.RelocateTo, so the nav chain and the next ascent read
+// the new place, with the destination pane's ascent viewport); and the page
 // goes live again on the new tile.
 func (a *App) finishPromote(originPaneID, destPaneID, oldID string, created rpc.Tile) {
 	op := a.tree.FindPane(originPaneID)
@@ -1813,16 +1795,15 @@ func (a *App) finishPromote(originPaneID, destPaneID, oldID string, created rpc.
 		return // moved on mid-flight: the tile stays where it was dropped
 	}
 	a.closeURLStreamTo(op.ID, &freezeTarget{tileID: created.ID, gridID: created.GridID}, true)
-	// The row dies only if no sibling pane still shows the visit (a split
-	// clone keeps it, and deletes it on ITS ascent) — the same guard every
+	// The row dies only if no sibling pane still shows the visit; a split
+	// clone keeps it and deletes it on its own ascent. The same guard every
 	// ascent applies, through the same door.
 	if old := a.cachedTileByID(oldID); old != nil && a.leavingEphemeral(op, old) {
 		a.deleteEphemeralTile(oldID)
 	}
 	// The pane follows its content: RelocateTo replaces the visit's frame
-	// with one on the destination's stack, so the next ascent lands where
-	// the tile now lives (one owner — there is no separate saved viewport
-	// to keep in step).
+	// with one on the destination's stack, so the next ascent lands where the
+	// tile now lives. There is no separate saved viewport to keep in step.
 	op.RelocateTo(dp, created.ID)
 	a.placeURLView(op.ID, created)
 	a.refreshFileOverlay()
