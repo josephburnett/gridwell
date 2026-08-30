@@ -8,9 +8,11 @@
 // federation socket. Everything else inside the node is a Go value
 // (internal/namespace).
 //
-// This file is the go-plugin handshake both sides share; plugin.go is
-// the host-side spawn; guest.Serve (api/guest) is the binary's
-// main.
+// This file is the go-plugin handshake both sides share, and plugin.go is
+// the host-side spawn. That is all of the door this repository owns: the
+// guest-side helper a plugin binary's main() calls lives in the plugins
+// repository, github.com/josephburnett/gridwell-plugins/guest, and so does
+// every plugin.
 package compose
 
 import (

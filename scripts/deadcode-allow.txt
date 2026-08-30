@@ -9,8 +9,3 @@
 api/compose/plugin.go pluginGRPCPlugin.GRPCServer
 api/compose/plugin.go pluginGRPCPlugin.GRPCClient
 client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
-
-# The fs plugin's dark-source seam: internal/pluginhost's parity test
-# injects a failing ReadDir (EACCES cannot be staged without root). A
-# cross-package test hook, so export_test.go cannot carry it.
-plugins/fs/plugin/plugin.go Plugin.SetReadDir

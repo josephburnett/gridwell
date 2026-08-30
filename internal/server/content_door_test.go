@@ -21,7 +21,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
 // The /content/ door crosses every seam at once: HTTP URL grammar → token
@@ -91,7 +90,7 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 		t.Fatal(err)
 	}
 
-	fsClient := newPluginClient(t, "fs", fsplugin.New(dir, nil))
+	fsClient := newPluginClient(t, "fs", map[string]string{"root": dir})
 
 	reg := plugin.NewRegistry()
 	reg.Register("uf1", "fs", fsClient, nil)
@@ -192,7 +191,7 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "cat.png"), img, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	fsClient := newPluginClient(t, "fs", fsplugin.New(dir, nil))
+	fsClient := newPluginClient(t, "fs", map[string]string{"root": dir})
 
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -251,7 +250,7 @@ func TestContentDoorThroughAConnection(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "remote.png"), img, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	farNode := newPluginClient(t, "fs", fsplugin.New(dir, nil))
+	farNode := newPluginClient(t, "fs", map[string]string{"root": dir})
 
 	sqlDB, err := sql.Open("sqlite", t.TempDir()+"/conns.db")
 	if err != nil {

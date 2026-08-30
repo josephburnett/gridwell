@@ -9,7 +9,6 @@ package plugin_test
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,27 +17,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// buildPluginBinary compiles a shipped plugin binary into a temp file. A build
-// failure fails the test and never skips: a skip would leave the subprocess
-// transport unexercised while the suite stayed green.
-func buildPluginBinary(t *testing.T, kind string) string {
-	t.Helper()
-	out := filepath.Join(t.TempDir(), "gridwell-plugin-"+kind)
-	cmd := exec.Command("go", "build", "-o", out,
-		"github.com/josephburnett/gridwell/plugins/"+kind+"/cmd/gridwell-plugin-"+kind)
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build plugin %s: %v\n%s", kind, err, b)
-	}
-	return out
-}
-
 func TestSubprocessPlugin_FS(t *testing.T) {
-	if testing.Short() {
-		t.Skip("builds a plugin binary; skipped under -short")
-	}
-	bin := buildPluginBinary(t, "fs")
+	bin := plugintest.Binary(t, "fs")
 
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "hello.md"), []byte("# hi"), 0o644); err != nil {
@@ -119,10 +102,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 // tests this replaces staged the refusal through the deleted in-process
 // factory door, so neither ever spawned anything.
 func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
-	if testing.Short() {
-		t.Skip("builds a plugin binary; skipped under -short")
-	}
-	bin := buildPluginBinary(t, "proc")
+	bin := plugintest.Binary(t, "proc")
 
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {

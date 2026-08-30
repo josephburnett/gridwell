@@ -8,22 +8,16 @@ go 1.26.5
 require (
 	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/internal/doctype v0.0.0-00010101000000-000000000000
-	github.com/josephburnett/gridwell/plugins/fs v0.0.0-00010101000000-000000000000
-	github.com/josephburnett/gridwell/plugins/proc v0.0.0-00010101000000-000000000000
 )
 
 replace (
 	github.com/josephburnett/gridwell/api => ./api
 	github.com/josephburnett/gridwell/internal/doctype => ./internal/doctype
-	github.com/josephburnett/gridwell/plugins/fs => ./plugins/fs
-	github.com/josephburnett/gridwell/plugins/gitlab => ./plugins/gitlab
-	github.com/josephburnett/gridwell/plugins/proc => ./plugins/proc
 )
 
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/creack/pty v1.1.24
-	github.com/josephburnett/gridwell/plugins/gitlab v0.0.0-00010101000000-000000000000
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/niklasfasching/go-org v1.9.1
 	github.com/yuin/goldmark v1.8.5

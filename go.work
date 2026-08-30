@@ -1,6 +1,8 @@
 // Development workspace (docs/plugin.md): stitches the in-repo modules so
 // cross-module edits build immediately. CI also builds every module ALONE
-// (GOWORK=off) — the workspace is convenience, never the contract.
+// (GOWORK=off) — the workspace is convenience, never the contract. The
+// plugins are not here: they live in github.com/josephburnett/gridwell-plugins
+// and reach this repo only through the api module and the spawned binary.
 go 1.26.5
 
 use (
@@ -8,9 +10,6 @@ use (
 	./api
 	./apps/gridwell
 	./internal/doctype
-	./plugins/fs
-	./plugins/gitlab
-	./plugins/proc
 	./test/boundary
 	./test/federation
 )

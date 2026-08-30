@@ -8,24 +8,26 @@ placement and framing, and serves the full Gridwell surface on your behalf.
 The host never knows your name; every behavior rides a declaration on the
 wire.
 
-The in-repo plugins (`plugins/{fs,proc,gitlab}`) use the same door: each is
-its own Go module importing only the api. `gitlab` is the worked example.
-`fs` is the fullest surface.
+The shipped plugins live in their own repository,
+`github.com/josephburnett/gridwell-plugins` (`fs`, `proc`, `gitlab`), and use
+the same door as anyone else's: each is its own Go module importing only the
+api. `gitlab` is the worked example. `fs` is the fullest surface.
 
 ## The contract
 
 - **Module**: depend on `github.com/josephburnett/gridwell/api` only. Its
-  packages: `gen/plugin/v1` (implement `PluginServer`), `guest` (your main:
-  `guest.Serve`, `guest.Config`), `compose` (how a node loads you), `gwerr`
-  (the error vocabulary). Not Go? The service is plain gRPC behind
-  hashicorp go-plugin's handshake.
+  packages: `gen/plugin/v1` (implement `PluginServer`), `compose` (the
+  handshake, and how a node loads you), `gwerr` (the error vocabulary). The
+  guest-side helper for your main is a second small module in the plugins
+  repository, `github.com/josephburnett/gridwell-plugins/guest`. Not Go? The
+  service is plain gRPC behind hashicorp go-plugin's handshake.
 - **Binary**: `gridwell-plugin-<kind>` beside the `gridwell` binary, on
   `GRIDWELL_PLUGIN_DIR`, on PATH, or named by `binary:` in `server.yaml`.
   Register with a `plugins:` entry (`kind`, optional `label`, your `config`
   keys). The first serve mints the entry's id.
-- **Main**: `guest.Serve(yourImpl)`. Config arrives as a JSON map in
-  `GRIDWELL_PLUGIN_CONFIG` (`guest.Config()`): your keys plus `uuid` and
-  `kind`.
+- **Main**: `guest.Main(YourFromConfig)`, or `guest.Serve(yourImpl)`. Config
+  arrives as a JSON map in `GRIDWELL_PLUGIN_CONFIG` (`guest.Config()`): your
+  keys plus `uuid` and `kind`.
 - **Keys are forever**: a key names the same thing for the life of the
   plugin. Changing your key scheme orphans every stored reference.
 - **Unimplemented is fine**: a minimal plugin is `Info` + `List` +
@@ -55,8 +57,9 @@ sandboxed by the node.
 
 ## Gates
 
-`test/boundary` fails the build if a host or client package imports a plugin
-implementation, or the api gains a dependency outside its budget. `make
-check` builds every module standalone and spawns the real fs plugin through
-the production loader. `make check-federation` spawns the real binaries
-through a real ssh tunnel.
+`test/boundary` fails the build if any gridwell package — test files included
+— imports a plugin implementation or names the plugins repository in a go.mod,
+or if the api gains a dependency outside its budget. `make check` builds every
+module standalone and spawns the real fs, proc and gitlab binaries through the
+production loader. `make check-federation` spawns the real binaries through a
+real ssh tunnel.

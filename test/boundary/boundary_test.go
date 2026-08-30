@@ -28,13 +28,10 @@ var modules = map[string][]string{
 	"api": {},
 	// doctype: neutral text-document semantics, self-contained.
 	"internal/doctype": {},
-	// A plugin may import the api and the shared neutral packages, never the
-	// host and never another plugin.
-	"plugins/fs":   {"api", "internal/doctype"},
-	"plugins/proc": {"api"},
-	// gitlab: the api plus goldmark. A plugin's own dependency graph is the
-	// door's point, and the host never sees it.
-	"plugins/gitlab": {"api"},
+	// The plugins are not here at all: they are their own repository, whose
+	// modules depend on the api and never on this one. TestNoPluginImplementation
+	// below is what keeps it that way.
+	//
 	// The root module is the server library and its embedded client: the api
 	// and the neutral packages, never a plugin implementation.
 	"": {"api", "internal/doctype"},

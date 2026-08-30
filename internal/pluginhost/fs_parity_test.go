@@ -1,9 +1,14 @@
 package pluginhost_test
 
-// The fs stack — the fs plugin, the adapter, and the store — through a full
-// server: placement and framing persist, sweeps remove only the dead, the
-// node's own rows answer when the source goes dark, and a retired id never
-// returns.
+// The fs stack — the REAL gridwell-plugin-fs binary, the adapter, and the
+// store — through a full server: placement and framing persist, sweeps remove
+// only the dead, the node's own rows answer when the source goes dark, and a
+// retired id never returns.
+//
+// The plugin is spawned, never linked: it is another repository's module now,
+// and the subprocess is the only door it has. So the source goes dark the way
+// a real one does — an unreadable directory — instead of through an injected
+// reader.
 
 import (
 	"context"
@@ -20,8 +25,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
-	"github.com/josephburnett/gridwell/plugins/fs/fssource"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
 const fsUUID = "fsuuidx"
@@ -44,35 +47,42 @@ func seedTree(t *testing.T) string {
 	return root
 }
 
-func pluginNode(t *testing.T, root string) (*rpc.Client, *fsplugin.Plugin) {
+func pluginNode(t *testing.T, root string) *rpc.Client {
 	t.Helper()
 	return pluginNodeAt(t, root, filepath.Join(t.TempDir(), "mem.db"))
 }
 
 // pluginNodeAt builds the stack over an existing store path: how the
-// conversion parity test serves a converted file.
-func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Plugin) {
+// conversion parity test serves a converted file. The plugin is the shipped
+// binary, configured with root exactly as a server.yaml plugins: entry would.
+func pluginNodeAt(t *testing.T, root, memPath string) *rpc.Client {
 	t.Helper()
 	memStore, err := store.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	// A plain-remove host: nil would mean the production trash, and a test
-	// deletion must never land in the real freedesktop Trash.
-	prov := fsplugin.New(root, osRemoveHost{})
-	cp, cpCloser, err := plugintest.Loopback(prov)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cpCloser)
-	adapter := pluginhost.New(cp, memStore.Namespace("p1"))
-	client := adapter
+	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
+	client := pluginhost.New(cp, memStore.Namespace("p1"))
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
 	srv := servertest.New(t, reg, server.Config{})
 	hs := servertest.Serve(t, srv)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), prov
+	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+}
+
+// darken makes root unreadable for the rest of the test — EACCES on every
+// directory read, an unmounted share or a chmodded tree — and hands back the
+// undo. The mode is restored at the end regardless, or the temp dir could not
+// be cleaned up.
+func darken(t *testing.T, root string) (lighten func()) {
+	t.Helper()
+	if err := os.Chmod(root, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	restore := func() { _ = os.Chmod(root, 0o755) }
+	t.Cleanup(restore)
+	return restore
 }
 
 func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
@@ -80,7 +90,7 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	// an empty non-authoritative listing, so the durable rows still read,
 	// stamped stale and retiring nothing.
 	root := seedTree(t)
-	v2, prov := pluginNode(t, root)
+	v2 := pluginNode(t, root)
 	ctx := context.Background()
 	pl, err := v2.Handshake(ctx)
 	if err != nil {
@@ -96,9 +106,7 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	}
 	// The source goes dark — EACCES, an unmounted share — so every read fails
 	// transiently.
-	prov.SetReadDir(func(string) ([]fssource.Entry, error) {
-		return nil, os.ErrPermission
-	})
+	lighten := darken(t, root)
 	after, err := v2.GetGrid(ctx, rootGrid)
 	if err != nil {
 		t.Fatalf("dark source surfaced as an error instead of the remembered answer: %v", err)
@@ -115,7 +123,7 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 		}
 	}
 	// The source returns; the stale stamp clears.
-	prov.SetReadDir(nil)
+	lighten()
 	healed, err := v2.GetGrid(ctx, rootGrid)
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +139,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	// delete is a no-op, and a recreated file is a new thing with a fresh
 	// id.
 	root := seedTree(t)
-	v2, _ := pluginNode(t, root)
+	v2 := pluginNode(t, root)
 	ctx := context.Background()
 	pl, err := v2.Handshake(ctx)
 	if err != nil {
@@ -181,7 +189,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 // the placed tile ("things stay as you left them").
 func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 	root := seedTree(t)
-	v2, _ := pluginNode(t, root)
+	v2 := pluginNode(t, root)
 	ctx := context.Background()
 	pl, err := v2.Handshake(ctx)
 	if err != nil {
@@ -236,7 +244,7 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 // on the next read; every surviving tile keeps its id and placement.
 func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 	root := seedTree(t)
-	v2, _ := pluginNode(t, root)
+	v2 := pluginNode(t, root)
 	ctx := context.Background()
 	pl, err := v2.Handshake(ctx)
 	if err != nil {
@@ -274,9 +282,3 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 		}
 	}
 }
-
-// osRemoveHost unlinks outright — the test stand-in for the trash.
-type osRemoveHost struct{}
-
-func (osRemoveHost) Remove(p string) error    { return os.Remove(p) }
-func (osRemoveHost) RemoveAll(p string) error { return os.RemoveAll(p) }

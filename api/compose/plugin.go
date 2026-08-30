@@ -18,7 +18,7 @@ import (
 )
 
 // ConfigEnvVar is the environment variable the host uses to hand a
-// plugin its config map (JSON) at spawn — guest.Config reads it.
+// plugin its config map (JSON) at spawn — the guest helper decodes it.
 const ConfigEnvVar = "GRIDWELL_PLUGIN_CONFIG"
 
 // HostPIDEnvVar carries the spawning host's pid to the guest, which
@@ -55,8 +55,8 @@ func PluginMap(impl pluginv1.PluginServer) map[string]plugin.Plugin {
 }
 
 // LoadPlugin spawns a plugin binary and hands back the connected
-// client: the config map rides the spawn environment (guest.Config), the
-// host pid rides with it for the guest's host-death watchdog.
+// client: the config map rides the spawn environment, the host pid rides
+// with it for the guest's host-death watchdog.
 func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient, func(), error) {
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:   "plugin-host",
