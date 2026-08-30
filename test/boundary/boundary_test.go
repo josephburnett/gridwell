@@ -128,7 +128,7 @@ func TestArrows(t *testing.T) {
 			if name == "" {
 				name = "(root)"
 			}
-			t.Errorf("module %s crosses a forbidden arrow (docs/plugin.md):\n  %s",
+			t.Errorf("module %s crosses a forbidden arrow:\n  %s",
 				name, strings.Join(bad, "\n  "))
 		}
 	}
@@ -167,7 +167,7 @@ func TestAPIDependencyBudget(t *testing.T) {
 		}
 		dep := strings.Fields(l)[0]
 		if !allowed[dep] {
-			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (docs/plugin.md — every plugin inherits this graph)", dep)
+			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (every plugin inherits this graph)", dep)
 		}
 	}
 }

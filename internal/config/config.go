@@ -190,7 +190,7 @@ func DefaultPath() (string, error) {
 // retiredKeys names the keys of retired file shapes so a stale file fails
 // with the fix, not a decoder message.
 var retiredKeys = map[string]string{
-	"node_id":  "is `id` (the node IS its home; docs/one-node.md)",
+	"node_id":  "is `id` (the node is its home)",
 	"bind":     "is `web: {bind: …}`",
 	"password": "is the web-password file beside this config (delete it to rotate)",
 	"provider": "is gone (the old `provider: true` flag) — every entry is a content plugin",
@@ -235,7 +235,7 @@ func Parse(data []byte) (*ServerConfig, error) {
 		}
 		switch cfg.Plugins[i].Kind {
 		case "home", "remote", "local", "localdb", "ssh":
-			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin — delete the entry (the node's id is `id:`, its connections are `connections:`; docs/one-node.md)", i, cfg.Plugins[i].Kind)
+			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin — delete the entry (the node's id is `id:`, its connections are `connections:`)", i, cfg.Plugins[i].Kind)
 		}
 	}
 	if err := expandPaths(&cfg); err != nil {

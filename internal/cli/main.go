@@ -57,6 +57,6 @@ Usage:
                                               of every live url tile); the app
                                               must not be running
 
-server.yaml names the node's id, its connections and its content plugins
-(docs/one-node.md); every DB path is derived from an id, never configured.`)
+server.yaml names the node's id, its connections and its content plugins;
+every DB path is derived from an id, never configured.`)
 }
