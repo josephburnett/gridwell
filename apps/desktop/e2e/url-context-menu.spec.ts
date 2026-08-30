@@ -1,21 +1,21 @@
 import { test, expect } from './fixtures';
 
-// Real-stack regression tests for right-click context menus on live URL tiles.
+// Right-click context menus on live url tiles, on the real stack.
 //
-// The canvas-only harness can't reach a WebContentsView (it's a separate
-// webContents off the main page), so the tests run in the MAIN process via
-// electronApp.evaluate: they place a real live view through the registry that
+// A WebContentsView is a separate webContents off the main page, so the
+// canvas-only harness cannot reach it and these tests run in the main process
+// through electronApp.evaluate: they place a real live view through the registry
 // index.ts exposes under GRIDWELL_E2E, send genuine mouse events into that
 // view's webContents, intercept Menu.popup, and assert the menu items.
 
 
 test('right-clicking a link in a live url view offers Copy Link Address', async ({ electronApp, window }) => {
-  // `window` ensures the app finished booting (so the registry is exposed).
+  // `window` ensures the app finished booting, so the registry is exposed.
   await window.title();
 
-  // The link's path slug doubles as a unique, URL-safe locator: it survives
-  // encodeURIComponent verbatim, so we can find this exact view's webContents
-  // by matching getURL().includes(marker).
+  // The link's path slug doubles as a unique, url-safe locator: it survives
+  // encodeURIComponent verbatim, so this exact view's webContents is found by
+  // matching getURL().includes(marker).
   const marker = 'gwe2ectxtarget';
   const linkURL = `https://example.com/${marker}?q=1`;
   // A full-bleed anchor so a click anywhere in the view lands on the link.
@@ -30,13 +30,13 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
       const reg = (globalThis as { __gwRegistry?: any }).__gwRegistry;
       if (!reg) throw new Error('registry not exposed (GRIDWELL_E2E not set?)');
 
-      // Place a REAL live URL view (preload + context-menu handler wired by the
-      // production code), at a fixed on-screen rect, with no plugin (shared
-      // partition, no session hydrate / network).
+      // Place a real live url view, with the preload and context-menu handler
+      // wired by the production code, at a fixed on-screen rect on the shared
+      // partition.
       await reg.place('e2e-ctx', 1, args.dataURL, { x: 0, y: 0, width: 800, height: 600 });
 
-      // place() returns once loadURL is kicked off; the view's getURL() is
-      // empty until the load commits, so poll until our slug appears.
+      // place() returns once loadURL is kicked off, and the view's getURL() is
+      // empty until the load commits, so poll until the slug appears.
       let wc: any = null;
       const findDeadline = Date.now() + 8000;
       while (!wc && Date.now() < findDeadline) {
@@ -48,7 +48,7 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
         await new Promise<void>((res) => wc.once('did-stop-loading', () => res()));
       }
 
-      // Intercept the menu instead of popping a native (blocking) menu.
+      // Intercept the menu instead of popping a native, blocking one.
       const origPopup = Menu.prototype.popup;
       let captured: any = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,9 +58,10 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
       };
 
       try {
-        // A genuine right press+release: through the real preload (a plain
-        // click is NOT a drag, so it is not suppressed) → Chromium emits
-        // `context-menu` with the link's href → our handler builds + pops it.
+        // A genuine right press and release. It goes through the real preload,
+        // which does not suppress it because a plain click is not a drag, so
+        // Chromium emits `context-menu` with the link's href and the handler
+        // builds and pops the menu.
         wc.focus();
         wc.sendInputEvent({ type: 'mouseDown', x: 100, y: 100, button: 'right', clickCount: 1 } as any);
         wc.sendInputEvent({ type: 'mouseUp', x: 100, y: 100, button: 'right', clickCount: 1 } as any);
@@ -75,7 +76,7 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
           .map((i: any) => i.label)
           .filter((l: string) => l);
 
-        // Exercise the actual copy action and read it back off the clipboard.
+        // Exercise the real copy action and read it back off the clipboard.
         clipboard.writeText('');
         const copyItem = captured.items.find((i: any) => i.label === 'Copy Link Address');
         if (copyItem && typeof copyItem.click === 'function') copyItem.click();
@@ -94,17 +95,15 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
   expect(result.clipboard, 'Copy Link Address must copy the link href').toBe(linkURL);
 });
 
-// Regression guard for mechanism B of issue #33: a jittery right-click that
-// moves a few pixels (exceeding the 4 px distance threshold) but is released
-// quickly must still produce the context menu. Before the fix, 5 px of movement
-// — however fast — would arm the pane-gesture path and suppress contextmenu.
-// After the fix the classification requires BOTH distance AND a hold of at least
-// RIGHT_DRAG_TIME_MS (200 ms); a rapid press+mousemove+release has near-zero
-// duration so it still reaches the context-menu handler.
+// A jittery right-click that moves a few pixels, past the 4px distance
+// threshold, but is released quickly must still produce the context menu.
+// Distance alone would arm the pane-gesture path and suppress contextmenu, so
+// the classification requires both distance and a hold of at least
+// RIGHT_DRAG_TIME_MS, 200ms. A rapid press, move, and release has near-zero
+// duration and still reaches the context-menu handler.
 //
-// Why was this not caught? The original url-context-menu.spec.ts sends a
-// zero-movement right-click (mouseDown + mouseUp at the same coords, no
-// mouseMove) — the 4 px suppression path was never exercised by any test.
+// The test above sends a zero-movement right-click, so it never exercises the
+// suppression path at all; this one does.
 test('a jittery right-click (5px movement, fast release) still produces the context menu', async ({
   electronApp,
   window,
@@ -146,13 +145,13 @@ test('a jittery right-click (5px movement, fast release) still produces the cont
 
       try {
         wc.focus();
-        // Right-click WITH 5 px of jitter: exceeds the 4 px distance threshold
-        // but the button is released immediately (events fired in rapid succession
-        // → duration well under 200 ms). Before the fix this would arm the pane
-        // gesture and suppress contextmenu. After the fix the time gate blocks
-        // the drag classification so the menu fires normally.
+        // A right-click with 5px of jitter: past the 4px distance threshold, but
+        // the button is released immediately, with the events fired in rapid
+        // succession so the duration is well under 200ms. The time gate blocks
+        // the drag classification and the menu fires normally.
         wc.sendInputEvent({ type: 'mouseDown', x: 100, y: 100, button: 'right', clickCount: 1 } as any);
-        // Move 5 px — past the 4 px threshold but fast (same JS task, ~0 ms delta).
+        // Move 5px: past the 4px threshold, but in the same JS task, so the
+        // elapsed time is near zero.
         wc.sendInputEvent({ type: 'mouseMove', x: 105, y: 100, buttons: 2 } as any);
         wc.sendInputEvent({ type: 'mouseUp', x: 105, y: 100, button: 'right', clickCount: 1 } as any);
 

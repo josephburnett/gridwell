@@ -1,15 +1,15 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The bar circle's right-click pops the live url view's context menu
-// (Freeze Page included). Motivation: a page can hijack contextmenu inside
-// the view and make the in-page menu unreachable — but the circle sits in
-// the bar band, carved out of the view's bounds (panebox.BarInset), so a
-// right-click there reaches the canvas no matter what the page does. This
-// spec crosses the whole seam: canvas right-click → bottomBarClick slot
-// arm → bridgeShowMenu IPC → registry.showMenu → the same
-// urlContextMenuTemplate the in-page path uses — then fires the real
-// Freeze Page item and asserts the freeze lands on the tile.
+// The bar circle's right-click pops the live url view's context menu, Freeze
+// Page included. A page can hijack contextmenu inside the view and make the
+// in-page menu unreachable, but the circle sits in the bar band, carved out of
+// the view's bounds by panebox.BarInset, so a right-click there reaches the
+// canvas whatever the page does. This spec crosses the whole seam: canvas
+// right-click, the bottomBarClick slot arm, the bridgeShowMenu IPC,
+// registry.showMenu, and the same urlContextMenuTemplate the in-page path uses.
+// It then fires the real Freeze Page item and asserts the freeze lands on the
+// tile.
 
 test('right-clicking the bar circle over a live url pops the context menu; Freeze Page freezes', async ({
   electronApp,
@@ -22,7 +22,7 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
   const cy = Math.round(f.cy);
   const grid = f.gridID;
 
-  // A live url descent (the #209 create-then-prompt flow).
+  // A live url descent: create, then prompt on the first descent.
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
@@ -35,8 +35,8 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
     );
   await expect.poll(live, { timeout: 15_000 }).toBe(true);
 
-  // Intercept Menu.popup in main (a native popup would block under xvfb);
-  // the captured menu is stashed for the poll below.
+  // Intercept Menu.popup in main, since a native popup would block under xvfb.
+  // The captured menu is stashed for the poll below.
   await electronApp.evaluate(({ Menu }) => {
     const g = globalThis as any;
     g.__gwCircleOrigPopup = Menu.prototype.popup;
@@ -48,8 +48,8 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
   });
 
   try {
-    // Right-click the circle slot: the bar band's rightmost SlotW, same
-    // point the reconnect-button click in url-freeze-intent.spec.ts uses.
+    // Right-click the circle slot, the bar band's rightmost SlotW: the same
+    // point url-freeze-intent.spec.ts clicks for the reconnect button.
     const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
     await window.mouse.click(bar.left + bar.width - 24, bar.top + bar.height / 2, {
       button: 'right',
@@ -70,8 +70,8 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
     );
     expect(labels, 'the circle menu carries the navigation block').toContain('Reload');
 
-    // Fire the real Freeze Page item: the live view tears down and the
-    // standing frozen intent persists on the tile (issue #237 wiring).
+    // Fire the real Freeze Page item: the live view tears down and the standing
+    // frozen intent persists on the tile.
     await electronApp.evaluate(() => {
       const m = (globalThis as any).__gwCircleMenu;
       const item = m.items.find((i: any) => i.label === 'Freeze Page');

@@ -1,12 +1,11 @@
 import { test, expect } from './fixtures';
 
-// Issue #172: a live url view whose page refreshes itself must NEVER grab OS
-// keyboard focus from the pane the user is typing in. Chromium implicitly
-// focuses a WebContentsView's new document widget on a page-initiated
-// navigation (verified empirically: before the guard, one location.reload()
-// flipped the view to focused and it stayed there); Gridwell itself never
-// calls focus() on a view. The guard: a navigation that lands focus on an
-// UNFOCUSED pane's view hands focus straight back to the root webContents.
+// A live url view whose page refreshes itself must never take OS keyboard focus
+// from the pane the user is typing in. Chromium focuses a WebContentsView's new
+// document widget on a page-initiated navigation, and one location.reload() is
+// enough to flip the view to focused and keep it there; Gridwell never calls
+// focus() on a view itself. The guard: a navigation that lands focus on an
+// unfocused pane's view hands focus straight back to the root webContents.
 
 test('a self-reloading url view never keeps stolen focus', async ({
   electronApp,
@@ -28,9 +27,9 @@ test('a self-reloading url view never keeps stolen focus', async ({
     })
     .toBeGreaterThan(wcBefore);
 
-  // Move wasm focus off the url pane: split (the clone ascends the file
-  // level — live views can't duplicate), then CLICK the grid pane so it is
-  // unambiguously the focused pane — "the user is typing somewhere else".
+  // Move pane focus off the url pane: split, where the clone ascends the file
+  // level because live views cannot duplicate, then click the grid pane so it is
+  // unambiguously focused, standing in for the user typing somewhere else.
   await gw.splitFocusedPaneVertical();
   await gw.waitIdle();
   const other = (await gw.panes()).find((p) => p.textFocus === '')!;
@@ -47,9 +46,9 @@ test('a self-reloading url view never keeps stolen focus', async ({
       return view?.isFocused() ?? null;
     });
 
-  // The page refreshes itself repeatedly; after every reload the view must
-  // NOT hold OS keyboard focus (before the guard it flipped to true on the
-  // first reload and stayed).
+  // The page refreshes itself repeatedly, and after every reload the view must
+  // not hold OS keyboard focus. Unguarded it flips to focused on the first
+  // reload and stays there.
   for (let i = 0; i < 3; i++) {
     await electronApp.evaluate(({ webContents }) => {
       const view = webContents

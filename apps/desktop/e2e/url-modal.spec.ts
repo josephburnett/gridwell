@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures';
 
-// Issues #131/#132: the url modal is DOM, so a live WebContentsView would
-// paint OVER it — the views must park while it is open (and return after),
-// and the card keeps a FIXED width so suggestion matches can't make it jump.
+// The url modal is DOM, so a live WebContentsView would paint over it: the views
+// must park while it is open and return after. The card keeps a fixed width, so
+// suggestion matches cannot make it jump.
 
 test('live views park under the url modal and return on close', async ({
   electronApp,
@@ -29,7 +29,7 @@ test('live views park under the url modal and return on close', async ({
   const viewBounds = () =>
     electronApp.evaluate(({ webContents, BaseWindow }) => {
       const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('m=1'));
-      if (!wc) return { x: -55555, y: 0 }; // wc GONE marker
+      if (!wc) return { x: -55555, y: 0 }; // marker: the webContents is gone
 
       const win = BaseWindow.getAllWindows()[0];
       const v = (win.contentView.children as unknown as { webContents?: { id: number }; getBounds(): { x: number; y: number } }[]).find(
@@ -37,13 +37,13 @@ test('live views park under the url modal and return on close', async ({
       );
       return v ? v.getBounds() : { x: -77777, y: 0 }; // child gone marker
     });
-  // The webContents count increments before the view's URL commits — poll
-  // until the finder resolves it on screen.
+  // The webContents count increments before the view's url commits, so poll until
+  // the finder resolves it on screen.
   await expect
     .poll(async () => (await viewBounds())!.x, { timeout: 10_000 })
     .toBeGreaterThan(-1000);
 
-  // Split, focus the other pane, open the modal there: the live view PARKS.
+  // Split, focus the other pane, open the modal there: the live view parks.
   await gw.splitFocusedPaneVertical();
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
@@ -51,7 +51,7 @@ test('live views park under the url modal and return on close', async ({
     .poll(async () => (await viewBounds())!.x, { timeout: 5_000 })
     .toBeLessThan(-1000); // parkedBounds coordinates
 
-  // The card width is FIXED regardless of what's typed (issue #132).
+  // The card width is fixed regardless of what is typed.
   const cardW = () =>
     window.evaluate(() => document.querySelector('.gw-modal .card')!.getBoundingClientRect().width);
   const w0 = await cardW();
