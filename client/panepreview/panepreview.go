@@ -1,7 +1,7 @@
 // Package panepreview computes the geometry of a pane tile's live
-// mini-render: the stored workspace layout drawn small inside the tile's
-// rect. Pure Go (no js), so the preview↔descent continuity — the pane-tile
-// generalization of "preview = descent target" — is provable headlessly.
+// mini-render: the stored pane layout drawn small inside the tile's rect.
+// Pure Go, so the preview↔descent continuity — the pane-tile face of
+// "preview = descent target" — is provable headlessly.
 //
 // The preview is the live workspace scaled uniformly by Scale(): pane.Layout
 // is affine in its root rect, so each leaf's preview rect is exactly its

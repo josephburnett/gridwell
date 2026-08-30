@@ -4,13 +4,13 @@
 // bridge) and a plain browser (an iPhone pointed at the Go server's origin).
 // The capability difference between them is derived exactly once at boot and
 // read everywhere; no other code asks "is there a bridge" to make a feature
-// decision. Since 2026-08-29 that difference is ONE thing — native live URL
-// views; shells ride the web door on every host.
+// decision. That difference is one thing: native live URL views. Shells ride
+// the web door on every host.
 //
 // Mirrors client/pluginhealth: a pure classification plus the ready-made
 // errsurface report for the gesture that hits the missing capability, so a
-// tap on an unavailable affordance explains itself instead of dying silently
-// (charter §6).
+// tap on an unavailable affordance explains itself instead of dying
+// silently.
 package caps
 
 import "github.com/josephburnett/gridwell/client/errsurface"
@@ -22,12 +22,12 @@ type Caps struct {
 	// Electron shell can host one (a WebContentsView over the canvas); a
 	// plain browser shows the frozen preview instead.
 	LiveURL bool
-	// LiveShell: a shell tile can attach its live PTY. TRUE wherever this
-	// client runs (owner decision 2026-08-29, reversing 2026-07-26): the
-	// PTY rides a WebSocket on the web door — the page's own origin, the
-	// page's own cookie — so a browser attaches exactly as the desktop
-	// does. The only thing that turns it off is the NODE refusing shells
-	// (server.yaml disable_shells), which is not a host capability at all.
+	// LiveShell: a shell tile can attach its live PTY. True wherever this
+	// client runs: the PTY rides a WebSocket on the web door — the page's
+	// own origin, the page's own cookie — so a browser attaches exactly as
+	// the desktop does. The only thing that turns it off is the node
+	// refusing shells (server.yaml disable_shells), which is not a host
+	// capability at all.
 	LiveShell bool
 	// Shells: shell tiles exist on this node at all. False when the server
 	// declares shells_disabled (server.yaml disable_shells): the + palette
@@ -36,12 +36,11 @@ type Caps struct {
 	Shells bool
 }
 
-// Bridge is what the native host DECLARES it can do (2026-08-13): the
-// window.gridwell object's own caps field, read once at boot. A host that
-// exposes the bridge no longer implies every native feature — a mobile
-// shell can place live url views without carrying the whole desktop's
-// machinery. Shells are NOT on this list: since 2026-08-29 the PTY rides
-// the web door, so no host has to implement anything for it.
+// Bridge is what the native host declares it can do: the window.gridwell
+// object's own caps field, read once at boot. Exposing the bridge does not
+// imply every native feature — a mobile shell can place live url views
+// without carrying the whole desktop's machinery. Shells are not on this
+// list; the PTY rides the web door, so no host implements anything for it.
 type Bridge struct {
 	// Present: window.gridwell exists at all (false = plain browser).
 	Present bool
@@ -51,8 +50,7 @@ type Bridge struct {
 }
 
 // LegacyBridge is the declaration imputed to a bridge without a caps
-// field: the full Electron feature set, which is the only host that shape
-// ever shipped in.
+// field: the full Electron feature set.
 func LegacyBridge() Bridge {
 	return Bridge{Present: true, LiveURL: true}
 }
@@ -74,21 +72,19 @@ func Derive(bridge Bridge, shellsDisabled bool) Caps {
 }
 
 // GoLiveNotice returns the errsurface report for a gesture that asked a URL
-// tile to go live when LiveURL is false — the ephemeral-visit gesture,
-// which can only end frozen. (The bar slot no longer posts this: on a
-// browser host it opens the address in a new tab instead — 2026-08-09.)
-// Info severity: a missing capability is an expected property of this
-// host, not a failure. The stable source coalesces repeated taps into one
-// row.
+// tile to go live when LiveURL is false — the ephemeral-visit gesture, which
+// can only end frozen. Info severity: a missing capability is an expected
+// property of this host, not a failure. The stable source coalesces repeated
+// taps into one row.
 func GoLiveNotice() (sev errsurface.Severity, source, message string) {
 	return errsurface.Info, "livecap", "live web views need the desktop app — showing the frozen preview"
 }
 
 // ShellNotice returns the errsurface report for a gesture that asked a shell
-// tile to attach when LiveShell is false — which now means one thing only:
-// the NODE refuses shells (server.yaml disable_shells). Same shape and
-// severity rationale as GoLiveNotice; same stable source, so mixed taps
-// still coalesce into one capability row.
+// tile to attach when LiveShell is false, which means one thing: the node
+// refuses shells (server.yaml disable_shells). Same shape and severity
+// rationale as GoLiveNotice; same stable source, so mixed taps coalesce into
+// one capability row.
 func ShellNotice() (sev errsurface.Severity, source, message string) {
 	return errsurface.Info, "livecap", "this node has shells turned off — showing the frozen preview"
 }

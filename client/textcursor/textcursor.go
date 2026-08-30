@@ -1,9 +1,8 @@
 // Package textcursor converts between a character offset into a text
 // buffer and a (row, col) coordinate, and back. It is the pure core of
-// the file-textarea cursor math used by URL save/restore — extracted so
-// the off-by-one / EOF / empty-line / CRLF hazards get real test
-// coverage (the wasm callers in client/wasm are build-tag-excluded from
-// `go test`).
+// the textarea cursor math used by URL save/restore — extracted so the
+// off-by-one, EOF, empty-line, and CRLF hazards get real test coverage; the
+// wasm callers are build-tag-excluded from `go test`.
 //
 // Coordinates are 0-indexed. A '\n' ends a line; '\r' is an ordinary
 // character (CRLF therefore leaves the '\r' as the last column of the

@@ -1,12 +1,6 @@
-// Package gridpath holds the pure navigation decision over a pane's
-// descent path: resolving a path to its leaf grid. It was inline in
-// build-tagged wasm (never run by `go test`) though it decides where you
-// land — a stale-prefix slip sends you to the wrong grid.
-//
-// The ascent classifier that used to live here (AscentWalk /
-// ClassifyAscent) is gone with S8: an ascent pops exactly ONE frame, and
-// that frame REMEMBERS the doorway it came in by, so there is no leaf-ward
-// re-walk to classify.
+// Package gridpath resolves a pane's descent path to its leaf grid. The
+// decision lives here, not in the wasm shim, so it is unit-tested: a
+// stale-prefix slip sends you to the wrong grid.
 package gridpath
 
 // ResolveLeafGrid walks a descent path from rootGridID, following each well

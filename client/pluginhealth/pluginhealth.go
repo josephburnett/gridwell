@@ -1,12 +1,9 @@
 // Package pluginhealth decides how a launcher tile should draw and behave for
 // a given rpc.PluginInfo: enterable, broken (Info failed/timed out), or
-// rootless (Info succeeded but declared no root grid). Both non-enterable
-// cases used to present identically — a normal-looking tile whose click
-// silently did nothing (input.go's enterPlugin bailed at RootGridID == "").
-// This package is the one place that decision is made, so client/wasm's
-// launcher rendering and click handling can both be thin reads of it
-// (charter §5: decision logic in a js-free package, unit-tested; the wasm
-// file contributes only pixels and event plumbing).
+// rootless (Info succeeded but declared no root grid). It is the one place
+// that decision is made, so client/wasm's launcher rendering and click
+// handling are both thin reads of it; the wasm file contributes only pixels
+// and event plumbing.
 package pluginhealth
 
 import (
@@ -25,17 +22,13 @@ const (
 	Broken
 	// Rootless: Info succeeded, but the plugin has no root grid configured
 	// (e.g. an fs plugin with no config.root). Healthy, just nothing to
-	// enter. (The Parameterized status — an instance grid instead of a
-	// root, #251 — retired 2026-08-23 with the instance picker: a
-	// parameterized plugin's instances present as rows of their own, and
-	// its bare row, listed only when its instance grid is unreadable,
-	// reads Rootless.)
+	// enter.
 	Rootless
 )
 
 // Classify decides pl's status from the facts the server's Info handshake
 // produces: whether it failed (InfoError != "") and whether it declared a
-// root (RootGridID != ""). InfoError is the ONLY signal that distinguishes
+// root (RootGridID != ""). InfoError is the only signal that distinguishes
 // Broken from the healthy rootless state — both otherwise leave
 // RootGridID == "".
 func Classify(pl rpc.PluginInfo) Status {
@@ -54,9 +47,9 @@ func Classify(pl rpc.PluginInfo) Status {
 // human-readable message. ok is false for Enterable (the caller descends)
 // — that click reports nothing.
 //
-// The source key is "launcher:<uuid>" — the UUID, not the label: two
+// The source key is "launcher:<uuid>" — the uuid, not the label: two
 // connections can share a label, and a shared source key would make one
-// row's notice silently replace another's (found 2026-08-23).
+// row's notice silently replace another's.
 // The source namespace is "launcher:", not "plugin:" — "plugin:<uuid>" is the
 // sticky ongoing-condition namespace (errsurface.Sticky) used by health
 // events, whereas a click notice is a one-shot answer to a gesture and should
@@ -69,13 +62,11 @@ func ClickNotice(pl rpc.PluginInfo) (sev errsurface.Severity, source, message st
 	case Broken:
 		return errsurface.Error, "launcher:" + pl.UUID, pl.Label + ": " + pl.InfoError, true
 	case Rootless:
-		// A CONNECTION row (v2 #269) declares itself with
+		// A connection row declares itself with
 		// rpc.PluginKindConnection — the row's own fact, minted by
 		// rpc.ConnectionRow. Rootless there means the remote hasn't
-		// answered yet: a waiting state, not a config gap. (This used to
-		// sniff a "/" in the uuid, which is the host reading an id's
-		// SHAPE instead of a declaration — and it misread any connection
-		// whose uuid carried no segment.)
+		// answered yet: a waiting state, not a config gap. Read the
+		// declaration, never the shape of the uuid.
 		if pl.Kind == rpc.PluginKindConnection {
 			return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " — the remote hasn't answered yet; it will open once the connection comes up", true
 		}

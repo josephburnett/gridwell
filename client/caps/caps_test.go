@@ -20,19 +20,17 @@ func TestDerive(t *testing.T) {
 	if c := Derive(LegacyBridge(), true); c.Shells || c.LiveShell {
 		t.Errorf("shells_disabled must kill both Shells and LiveShell, got %+v", c)
 	}
-	// The whole point of the 2026-08-29 transport move: a plain browser
-	// (a phone pointed at the node) attaches a live PTY exactly like the
-	// desktop, because the PTY rides the web door. Only the NODE can say
-	// no.
+	// A plain browser (a phone pointed at the node) attaches a live PTY
+	// exactly like the desktop, because the PTY rides the web door. Only
+	// the node can say no.
 	if c := Derive(NoBridge(), false); !c.LiveShell || !c.Shells {
 		t.Errorf("browser host: shells are live there too, got %+v", c)
 	}
 	if c := Derive(NoBridge(), true); c.LiveShell || c.Shells {
 		t.Errorf("browser host on a shells-disabled node: nothing, got %+v", c)
 	}
-	// The mobile shape (2026-08-13): a bridge that declares live url views
-	// only. It says nothing about shells any more — the host has no shell
-	// half to implement.
+	// The mobile shape: a bridge that declares live url views only. It says
+	// nothing about shells — the host has no shell half to implement.
 	mobile := Bridge{Present: true, LiveURL: true}
 	if c := Derive(mobile, false); !c.LiveURL || !c.LiveShell || !c.Shells {
 		t.Errorf("url-only bridge: shells still ride the web door, got %+v", c)
