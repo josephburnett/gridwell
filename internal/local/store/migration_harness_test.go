@@ -999,6 +999,72 @@ func init() {
 			}
 		},
 	})
+
+	// v12: the `listings` table retires (the owner decision in
+	// migrations.go). It stood alone — no CHECK, no AUTOINCREMENT seed,
+	// nothing referencing it — so the step is a plain DROP and the two
+	// record tables must come through completely untouched. The seed
+	// plants a listing row on a real plugin context plus the durable row
+	// beside it; the verify proves the table is gone AND that the row the
+	// user can actually see (its id, its placement, its label, its
+	// tombstone) survived, because THAT is the memory a dark source now
+	// reads from.
+	//
+	// This fixture IS the genuine-old-file test the drop rule asks for
+	// (internal/local/store/CLAUDE.md). The usual problem — a chain-built
+	// file at N-1 already has the current shape, so it cannot hold what N
+	// drops — does not apply to a table created by a MIGRATION LITERAL:
+	// v9 spells `listings` itself, so a chain-built v11 file really has
+	// it, and the seed below really plants the retired shape.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 12,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key) VALUES (100, 100, 'p9', 'root')`)
+			if err != nil {
+				t.Fatalf("seed plugin context: %v", err)
+			}
+			ctxGrid := mustID(t, res)
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
+				VALUES (?, 'text', 12, 34, 2, 3, 'v11 remembered', 100, 100, 'p9', 'notes.md')`, ctxGrid); err != nil {
+				t.Fatalf("seed external row: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key, tombstoned)
+				VALUES (?, 'text', 13, 34, 1, 1, 'v11 gone', 100, 100, 'p9', 'gone.md', 1)`, ctxGrid); err != nil {
+				t.Fatalf("seed retired row: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO listings (grid_id, entries, authoritative) VALUES (?, X'0a04', 1)`, ctxGrid); err != nil {
+				t.Fatalf("seed listing blob: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var n int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'listings'`).Scan(&n); err != nil {
+				t.Fatalf("look for the listings table: %v", err)
+			}
+			if n != 0 {
+				t.Error("the listings table survived v12")
+			}
+			// The node's own memory of what it minted is untouched: the
+			// dark-source answer comes from here now.
+			var x, y, w, h, tomb int64
+			var label string
+			if err := db.QueryRow(`SELECT x, y, w, h, alt_text, tombstoned FROM tiles WHERE ns = 'p9' AND key = 'notes.md'`).
+				Scan(&x, &y, &w, &h, &label, &tomb); err != nil {
+				t.Fatalf("read the external row: %v", err)
+			}
+			if x != 12 || y != 34 || w != 2 || h != 3 || label != "v11 remembered" || tomb != 0 {
+				t.Errorf("the external row changed across v12: %d,%d %dx%d %q tomb=%d", x, y, w, h, label, tomb)
+			}
+			if err := db.QueryRow(`SELECT tombstoned FROM tiles WHERE ns = 'p9' AND key = 'gone.md'`).Scan(&tomb); err != nil {
+				t.Fatalf("read the retired row: %v", err)
+			}
+			if tomb != 1 {
+				t.Error("a retired key came back live across v12")
+			}
+		},
+	})
 }
 
 // objectIDColumn names the retired provenance column. Spelled once so the

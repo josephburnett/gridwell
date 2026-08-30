@@ -105,14 +105,6 @@ CREATE TABLE IF NOT EXISTS grids (
     root_cy     REAL,
     root_zoom   REAL
 );
--- listings: a plugin context's last good listing (an opaque blob the
--- adapter serializes) — the offline answer (v2 tenet 6). Schema v9.
-CREATE TABLE IF NOT EXISTS listings (
-    grid_id       INTEGER PRIMARY KEY REFERENCES grids(id),
-    entries       BLOB NOT NULL,
-    authoritative INTEGER NOT NULL DEFAULT 0
-);
-
 CREATE TABLE IF NOT EXISTS blobs (
     -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
     -- cache key, so a recycled blob id could serve stale image bytes.

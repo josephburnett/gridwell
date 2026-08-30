@@ -31,7 +31,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 11
+const schemaVersion = 12
 
 // migration is one step that brings a DB from version to-1 up to version
 // to. Additive (a column with a default, a table, an index) is the
@@ -133,6 +133,38 @@ var migrations = []migration{
 	// Shape: tiles is a REBUILD (a column pair retires and the values
 	// convert); grids and system are in-place updates.
 	{to: 11, run: migrateV11},
+	// v12 (2026-08-29, docs/simplify-plan.md S7): DEAD STORAGE RETIRED —
+	// the `listings` table. It held one blob per plugin context: the last
+	// ListResponse the plugin gave, so a dark source could be served the
+	// remembered listing. It was a CACHE under the frozen-schema promise
+	// ("durable in practice, disposable in principle" — the review's
+	// finding 7), and it was the node's SECOND engine for "what did the
+	// source last say" (finding 6).
+	//
+	// Its last reader went in the commit before this one. A dark source
+	// now costs nothing that lives here: the adapter merges an empty
+	// non-authoritative listing and the DURABLE rows answer — the ids the
+	// node minted, the placement the user made, the labels, the child
+	// grids. What the SOURCE said (a listing, a body, a preview) is cache
+	// and lives in cache.db, one engine for plugins and connections alike
+	// (internal/sourcecache).
+	//
+	// Nothing user-visible is lost, which is why this is a plain DROP and
+	// not a conversion: every fact a listing row carried that the user
+	// can see was already a durable row beside it, and the rest re-warms
+	// on the next successful List. The table stands alone (no CHECK, no
+	// AUTOINCREMENT seed, nothing references it), so `tiles` and `grids`
+	// are not touched and no sequence is disturbed.
+	{to: 12, run: migrateV12},
+}
+
+// migrateV12 drops the retired `listings` table (chain entry above).
+// IfExists because a file may arrive without it: v9's literal CREATE ran
+// only on files that passed through v9, and a fresh Open has never
+// materialized it since this step landed.
+func migrateV12(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS listings`)
+	return err
 }
 
 // tilesRebuildColumns is the explicit column list a rebuild copies — every
@@ -377,10 +409,14 @@ func migrateV9(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	// The listings table is CREATE IF NOT EXISTS in tablesDDL (it appears
-	// at Open); the two partial indexes name the columns just added, so
-	// they ride here (and in Open's post-migration step for a fresh
-	// file, which never runs the chain — externalsIndexDDL, one text).
+	// The listings table was CREATE IF NOT EXISTS in tablesDDL when v9
+	// landed; it is spelled here too because this step must produce v9's
+	// shape whatever a later template says — and v12 retires it, so the
+	// chain now creates it and drops it again (the two routes still
+	// converge, TestSchemaEquivalence). The two partial indexes name the
+	// columns just added, so they ride here (and in Open's
+	// post-migration step for a fresh file, which never runs the chain —
+	// externalsIndexDDL, one text).
 	if _, err := tx.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS listings (
     grid_id       INTEGER PRIMARY KEY REFERENCES grids(id),
