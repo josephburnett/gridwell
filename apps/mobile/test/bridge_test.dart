@@ -112,7 +112,7 @@ void main() {
 
   group('gridwellUserScript', () {
     test('declares the mobile capability set: liveUrl only', () {
-      expect(gridwellUserScript, contains('caps: { liveUrl: true, liveShell: false }'));
+      expect(gridwellUserScript, contains('caps: { liveUrl: true }'));
     });
 
     test('defines EVERY onX registrar the wasm installs at boot', () {
@@ -120,7 +120,7 @@ void main() {
       // of these unconditionally; a missing one is a boot TypeError.
       for (final name in [
         'onFrame', 'onNav', 'onRightForward', 'onMiddleForward', 'onLeftForward',
-        'onOpenBelow', 'onFreezeURL', 'onZoomKey', 'onError', 'onShellData', 'onShellExit',
+        'onOpenBelow', 'onFreezeURL', 'onZoomKey', 'onError',
       ]) {
         expect(gridwellUserScript, contains('$name:'), reason: '$name registrar missing');
       }
@@ -129,7 +129,7 @@ void main() {
     test('defines every call method the wasm may invoke', () {
       for (final name in [
         'placeWebview', 'setBounds', 'setHidden', 'setZoom', 'goBack', 'showMenu',
-        'removeWebview', 'shellOpen', 'shellWrite', 'shellResize', 'shellClose',
+        'removeWebview',
       ]) {
         expect(gridwellUserScript, contains('$name:'), reason: '$name method missing');
       }

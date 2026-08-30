@@ -3,7 +3,8 @@
 // client a plain browser gets — and this shell adds what a browser can't:
 // native webviews floated over the pane content boxes for LIVE url tiles,
 // driven through the same window.gridwell bridge contract Electron
-// implements (declared caps: liveUrl only; shells stay frozen).
+// implements (declared caps: liveUrl only — shells need no host half
+// since 2026-08-29; the PTY rides the web door).
 //
 // The PHONE IS A NODE (offline-plan phase 2): boot first asks the
 // embedded Go node (lib/node.dart → mobile/mobile.go via the platform

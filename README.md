@@ -174,9 +174,12 @@ plugins:                   # content plugins ONLY
     config: { root: /home/joe }
 ```
 
-Give the web door a reachable address, then run `gridwell serve`. In a browser, live url tiles stay frozen.
-Everything else — grids, text, wells, live shells, navigation — works,
-touch included.
+Give the web door a reachable address, then run `gridwell serve`. In a
+browser, live url tiles stay frozen (an embedded Chromium view needs the
+desktop app). Everything else — grids, text, wells, live shells,
+navigation — works, touch included: a shell attaches its PTY over a
+WebSocket on the same password-gated door, so a phone gets a real
+terminal.
 
 The browser UI always requires a password. It is not in the yaml: serve
 mints a random one into `~/.gridwell/web-password` (0600) and prints it
@@ -197,9 +200,9 @@ shell creation and every PTY attach — whichever plugin, local or mounted,
 would serve it. Existing shell tiles keep their frozen previews (placement
 is sacred); they just can never attach a terminal here.
 
-Note: the password gates the web door. The gRPC node export (federation,
-the desktop's shell transport) is unauthenticated and therefore **only
-exists as a unix socket**, mode 0600 — the kernel admits your uid and
+Note: the password gates the web door — everything a browser reaches,
+live shells included. The gRPC node export (federation) is
+unauthenticated and therefore **only exists as a unix socket**, mode 0600 — the kernel admits your uid and
 nobody else; there is no TCP form, so no config can expose it. ssh is
 the one authenticated transport between nodes. Bind the web door to
 loopback or a VPN-only address (Tailscale is the intended transport),

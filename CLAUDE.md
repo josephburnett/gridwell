@@ -71,7 +71,7 @@ stop creating new copies.
    The wasm shim (~13.6k LOC) has zero unit tests and `make check` executes
    none of it. Do not add untested orchestration there: extract the
    decision into a js-free `client/*` package (as `pane`, `gesture`,
-   `zoomtrans`, `wsbar` are) and unit-test it. Same rule for
+   `zoomtrans`, `wsbar`, `shellstream` are) and unit-test it. Same rule for
    `apps/desktop/src/main` — pure-function modules with unit tests
    (`viewutil.ts`, `contextmenu.ts`) and/or e2e coverage. `webviews.ts` is
    the documented bug source and has no direct test; anything you touch
@@ -114,6 +114,20 @@ Re-litigating them silently is how churn happens.
   like from outside; DESCENDING is the engagement gesture — a url reopens,
   a shell reconnects. One owner decides (`shellconn.DecideAutoLive`); call
   sites never hand-roll go-live.
+- **Shells ride the web door (2026-08-29; REVERSES 2026-07-26 "PTY bytes
+  ride the Electron main process's gRPC OpenShell stream").** PTY bytes
+  cross a WebSocket at `/shell` on the browser door — the page's own
+  origin, behind the SAME auth cookie as every other request, same-origin
+  checked, routed through the one shell route the node export uses. The
+  grammar has one owner both ends read (`client/shellwire`); the
+  lifecycle is a js-free package (`client/shellstream`). Therefore
+  `caps.LiveShell` is `!shellsDisabled` — a browser and a phone attach a
+  real terminal exactly as the desktop does, and the ONLY thing that
+  turns shells off is the node saying so (`disable_shells`). The Electron
+  shell stack is deleted; no host implements a shell half. What a phone
+  running its OWN node cannot do is HOST a shell (no tmux on iOS —
+  `mobile.Start` sets `disable_shells`); reaching one on another node is
+  unaffected.
 - **Session-ephemeral by decision (#13).** The window-root pane tree, the
   selection, and the workspace stack live only in the session. The durable
   home for a layout is the **pane tile** (a workspace as a thing).
@@ -217,9 +231,9 @@ or the bar.
 | Gate | Sees | Run it when |
 |---|---|---|
 | `make check` | pure Go + TS logic; *compiles* wasm but executes none of it | every commit, always |
-| `make check-electron` | the real `WebContentsView` / PTY bridge under xvfb | the live URL/shell path, the bridge, `webviews.ts`, shell IPC |
+| `make check-electron` | the real `WebContentsView` bridge under xvfb | the live URL path, the bridge, `webviews.ts`, the preload contract |
 | `make check-e2e` | the full app (Electron + Go sidecar) as a black box | any `apps/desktop` change, the native layer, any cross-seam behavior; pre-merge |
-| `make check-web` | the browser-mode client (no Electron): caps gating, touch | `client/caps`, `client/touchgest`, the serve/boot path |
+| `make check-web` | the browser-mode client (no Electron): caps gating, touch, the live shell | `client/caps`, `client/touchgest`, the shell transport (`client/shellwire`/`shellstream`/`shellws`, `internal/server/shell_door.go`), the serve/boot path |
 | `make check-federation` | the real binaries through a real ssh tunnel | plugin spawn, `sshdial`, the node export, id routing |
 
 If a change lives in or affects the native layer, `make check` passing

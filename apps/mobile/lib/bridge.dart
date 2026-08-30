@@ -6,9 +6,10 @@
 // `flutter test` with no platform channel (the charter §5 rule: extract
 // the logic from the untestable shell).
 //
-// Capability declaration: liveUrl only. The shell PTY relay is not
-// implemented here, and the wasm client's caps.Derive reads this
-// declaration, so shell tiles stay frozen exactly like a plain browser.
+// Capability declaration: liveUrl only — and since 2026-08-29 that is the
+// whole list. Shells no longer ride a host bridge at all: the PTY is a
+// WebSocket on the web door, which the host webview speaks like any other
+// same-origin request, so a phone gets live shells for free.
 
 /// Bounds of a live view in CSS px of the host page (identical to logical
 /// px here: the host webview is full-screen at 1:1 viewport scale — the
@@ -121,8 +122,8 @@ class BridgeState {
         await host.goBack(paneId);
         return null;
       default:
-        // setZoom, showMenu, shell* — declared-away or desktop-only;
-        // reaching here is legal and inert.
+        // setZoom, showMenu — declared-away or desktop-only; reaching
+        // here is legal and inert.
         return null;
     }
   }
@@ -151,7 +152,7 @@ const String gridwellUserScript = '''
   };
   window.gridwell = {
     version: 1,
-    caps: { liveUrl: true, liveShell: false },
+    caps: { liveUrl: true },
     placeWebview: function (a) { call('placeWebview', a); },
     setBounds: function (a) { call('setBounds', a); },
     setHidden: function (a) { call('setHidden', a); },
@@ -159,10 +160,6 @@ const String gridwellUserScript = '''
     goBack: function (a) { call('goBack', a); },
     showMenu: function (a) { call('showMenu', a); },
     removeWebview: function (a) { return call('removeWebview', a); },
-    shellOpen: function (a) { return Promise.resolve(); },
-    shellWrite: function (a) {},
-    shellResize: function (a) {},
-    shellClose: function (a) {},
     onFrame: registrar('onFrame'),
     onNav: registrar('onNav'),
     onRightForward: registrar('onRightForward'),
@@ -171,9 +168,7 @@ const String gridwellUserScript = '''
     onOpenBelow: registrar('onOpenBelow'),
     onFreezeURL: registrar('onFreezeURL'),
     onZoomKey: registrar('onZoomKey'),
-    onError: registrar('onError'),
-    onShellData: registrar('onShellData'),
-    onShellExit: registrar('onShellExit')
+    onError: registrar('onError')
   };
 })();
 ''';

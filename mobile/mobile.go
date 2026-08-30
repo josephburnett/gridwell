@@ -13,8 +13,12 @@
 //     Same wire contract, same id discipline, no process boundary —
 //     promoted from the loader's test-only path to the supported mobile
 //     mode. Desktop keeps subprocesses.
-//   - Shells are OFF (no PTY, no tmux); the local plugin runs with no
-//     shell manager and the server refuses shell tiles node-wide.
+//   - Shells are OFF (no PTY, no tmux — iOS has neither); the local plugin
+//     runs with no shell manager and the server refuses shell tiles
+//     node-wide. This is about what the phone can HOST, not what its
+//     client can reach: the web client attaches a PTY over the web door
+//     like any other host (2026-08-29), so a phone pointed at a desktop
+//     node has real shells.
 //   - No password (loopback inside an app sandbox; the webview is the
 //     only client) and no serve lock (the OS gives each app one process).
 //   - First run mints the node's id through the SAME door serve uses
