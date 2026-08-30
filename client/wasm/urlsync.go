@@ -338,8 +338,8 @@ func (a *App) withE2EParam(raw string) string {
 // restoreFromHistory applies a browser back/forward (popstate): a
 // reload-equivalent restore of the focused pane at the URL the browser
 // navigated to. Runs on its own goroutine (fetches block). The session
-// scaffolding that a reload would lose — portal frames, the ascent stack,
-// live streams, selection — resets here too, deliberately: back is
+// scaffolding that a reload would lose — the pane's outer frames, live
+// streams, selection — resets here too, deliberately: back is
 // navigation to a PLACE, and the place's truth (content, framing) is all
 // server-owned by now (#190), so what's dropped is only transient workspace
 // scaffolding, never data.

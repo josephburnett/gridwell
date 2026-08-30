@@ -1092,8 +1092,8 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 }
 
 // autoLiveOnRestore is autoLiveOnDescent for the RESTORE paths — reload
-// (applyURLState), workspace install, an ascent landing back on a stashed
-// descent (restoreStashedDescent). The tile row is not necessarily cached at
+// (applyURLState), workspace install, an ascent landing back on a content
+// frame that was stacked under a deeper visit (landOnFrame). The tile row is not necessarily cached at
 // restore time, so it is fetched first; the pane is re-resolved when the
 // read lands (the user may have moved on — never override where they went).
 func (a *App) autoLiveOnRestore(paneID, tileID string) {
@@ -1718,7 +1718,7 @@ func (a *App) openLinkBelow(paneID, url string) {
 		a.visitEphemeralURL(p, url)
 		return
 	}
-	// The clone inherits the source's content descent (TextFocus), which a
+	// The clone inherits the source's content frame, which a
 	// live view can't duplicate — same rule as commitSplit: ascend the file
 	// level so the visit descends from the containing grid. (The ephemeral
 	// delete-on-ascent is guarded by leavingEphemeral, so this ascent
@@ -1734,8 +1734,9 @@ func (a *App) openLinkBelow(paneID, url string) {
 // shellURLActivate handles a click on an http(s) url in a live shell (the xterm
 // link provider's activate): open it below, exactly like a link a live url
 // view pops (issue #207 — one behavior for links out of live tiles; the old
-// in-place descent stacked the shell on the session-only ascent stash, which
-// any place-restore dropped — the issue #208 double-ascend). A no-op if the
+// in-place descent stashed the shell on a session-only side stack, which any
+// place-restore dropped — the issue #208 double-ascend; since S8 a stacked
+// visit is just another frame). A no-op if the
 // shell is no longer the pane's active descent.
 func (a *App) shellURLActivate(paneID, url string) {
 	if p := a.tree.FindPane(paneID); p != nil && p.ContentID() != "" {

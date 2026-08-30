@@ -29,8 +29,9 @@ export interface PaneInfo {
   cx: number;
   cy: number;
   zoom: number;
-  // Depth of the portal Up stack / the saved-ascent stack — the wasm hook
-  // emits both and specs assert on them.
+  // How many doorways deep the pane's place stack is (0 = at its root
+  // grid). ONE number since S8: there is one stack, so a leaked frame has
+  // nowhere to hide.
   placeDepth: number;
   // The ids of the tiles this pane renders (its cache contents). A tile present
   // on the server (the getGrid oracle) but missing here is the "disappeared" bug.

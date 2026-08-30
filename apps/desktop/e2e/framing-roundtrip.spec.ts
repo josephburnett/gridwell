@@ -238,7 +238,7 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
   expect(Math.abs(back.cy - left.cy), 'boot restored the persisted center y').toBeLessThan(0.51);
 });
 
-// Ascending after a RELOAD (empty session ascent stack) must land on the
+// Ascending after a RELOAD (restored frames carry no viewport) must land on the
 // parent's persisted framing — what a fresh descent into it would show —
 // not an arbitrary zoom-1 origin (2026-08-13).
 test('a post-reload ascent restores the parent framing it was left at', async ({ gw, window }) => {

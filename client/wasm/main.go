@@ -104,8 +104,8 @@ type App struct {
 
 	// Plus-button (+) creation-menu state. menu is the single owner: open/closed,
 	// which pane, hovered item. Never assign menu fields directly — go through
-	// its methods (see client/menu). Persistence across a portal descent rides in
-	// the place stack's own Frame.MenuOpen.
+	// its methods (see client/menu). Persistence across a descent rides on the
+	// place frame you left — Frame.MenuOpen.
 	menu menu.State
 
 	// errs is the single owner of user-visible failure notices (charter §6).
@@ -272,7 +272,7 @@ type App struct {
 
 	// textTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
-	// when pane.TextFocus != 0 and pane.TextMode == "text", and hidden
+	// when the pane's place is a content frame in TextMode "text", and hidden
 	// otherwise. We hold it as a single shared element to avoid creating
 	// fresh DOM nodes on every descent.
 	textTextarea js.Value
@@ -535,10 +535,10 @@ type paneTransition struct {
 	segments       []transSegment
 	currentSegment int
 	segmentStartMs float64
-	// onComplete, if set, runs after the last segment lands. Used by text
-	// tile descent to install pane.TextFocus only once the visual transition
-	// has reached the tile's footprint at OvertakeZoom (so the toggle
-	// button appearing doesn't pop into view mid-animation).
+	// onComplete, if set, runs after the last segment lands. Used by a
+	// content descent to push its frame only once the visual transition has
+	// reached the tile's footprint at OvertakeZoom (so the toggle button
+	// appearing doesn't pop into view mid-animation).
 	onComplete func()
 	// traceTileID, when set (ascents only), arms the ephemeral "you just came
 	// from HERE" highlight on that tile once the transition lands — a fading

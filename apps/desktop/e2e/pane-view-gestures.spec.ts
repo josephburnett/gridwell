@@ -195,34 +195,34 @@ test('clicking an unfocused pane focuses without descending; the second click de
   expect(aNow.textFocus, 'second click descended').not.toBe('');
 });
 
-// Ascent-history hygiene (issue #26): the two stacks have DISJOINT owners —
-// pane.Up frames own portal crossings, the session stack owns in-namespace
-// well descents. A balanced excursion of BOTH kinds must return both depths
-// to zero: a portal descent that also pushed the session stack would leak an
-// orphan there, which a boot-descended pane could later mis-consume as a
-// well-ascent viewport. The portal here is a + menu descent into a SECOND
-// plugin (boot already sits inside the first, frameless).
+// Ascent-history hygiene (issue #26): a balanced excursion — a namespace
+// crossing AND a well descent — must return the pane's place to depth zero.
+// This used to need TWO assertions because there were two stacks with
+// disjoint owners, and a descent that pushed the wrong one leaked an orphan
+// a later ascent could mis-consume as a viewport. Since S8 there is one
+// stack, so one number answers it. The crossing here is a + menu descent
+// into a SECOND plugin (boot already sits inside the first, at depth 0).
 test.describe('stack hygiene', () => {
   test.use({ extraNodes: ['second'] });
 
-  test('portal and well round trips leave both ascent stacks empty', async ({ gw }) => {
+  test('a namespace crossing and a well round trip leave the place stack empty', async ({ gw }) => {
     const home = (await gw.focused()).anchor;
-    await gw.enterPlugin('second'); // + menu portal descent (frame pushed)
+    await gw.enterPlugin('second'); // + menu crossing (one frame pushed)
     const f = await gw.focused();
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy) - 1;
     await gw.openPalette();
     await gw.dragCreate('well', cx, cy);
 
-    await gw.descendCell(cx, cy); // well descent (session stack pushed)
+    await gw.descendCell(cx, cy); // well descent (a second frame)
     let cur = (await gw.panes()).find((p) => p.id === f.id)!;
     expect(cur.placeDepth, 'two doorways deep: a well, then the plugin link').toBe(2);
 
     // Pane-center clicks: the ascend is position-independent, and a
     // computed cell center can be OFF-PANE at the child grid's high zoom
     // (the silent no-op behind this spec's long flake history, #195).
-    await gw.middleClickPane(); // well ascent
-    await gw.middleClickPane(); // portal ascent back home
+    await gw.middleClickPane(); // pop the well frame
+    await gw.middleClickPane(); // pop the crossing, back home
 
     cur = (await gw.panes()).find((p) => p.id === f.id)!;
     expect(cur.anchor, 'back home (the boot anchor)').toBe(home);

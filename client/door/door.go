@@ -1,7 +1,7 @@
-// Package door answers ONE question the bar keeps asking about a portal
-// level: what did the pane descend THROUGH? A portal descent records only
-// where it came from (pane.Frame), so the current level's identity — its
-// title, its rename target, its crumb glyph — must be DERIVED, and before
+// Package door answers ONE question the bar keeps asking about a namespace
+// level: what did the pane descend THROUGH? A place frame records the
+// doorway's id, so the level's identity — its title, its rename target, its
+// crumb glyph — must be DERIVED from the row, and before
 // this package each consumer derived it differently (the plugin's config
 // label, a grid-shape glyph guess), which is how a connection named "rtb"
 // presented as "connections" and the trash crumb as a generic grid. One

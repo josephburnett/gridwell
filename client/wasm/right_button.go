@@ -761,8 +761,8 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	}
 	// A new pane is a clone of the source — deliberately: "split" means
 	// "another view of where I am" (issue #27), so a grid view clones
-	// verbatim (same anchor, path, framing). The ONE exception is a content
-	// descent (TextFocus): a live URL/shell view cannot be duplicated (one
+	// verbatim (the same place stack). The ONE exception is a content
+	// frame: a live URL/shell view cannot be duplicated (one
 	// native view / PTY attachment per tile+pane), so the new pane ascends
 	// just the file level and shows the grid containing the tile.
 	if np != nil && np.ContentID() != "" {

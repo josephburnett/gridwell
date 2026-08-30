@@ -342,8 +342,8 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 }
 
 // bootWorkspace restores the innermost workspace from a reload (?w=). The
-// outer tree is nil by design — nesting membership is session-only, like
-// portal Up frames. Defaults (never-arranged / unreadable blob) open on the
+// outer tree is nil by design — nesting membership is session-only, like the
+// outer frames of a pane's place (#13). Defaults (never-arranged / unreadable blob) open on the
 // pane tile's containing grid, centered on the tile.
 func (a *App) bootWorkspace(tileID string) {
 	tile, err := a.cl.GetTile(context.Background(), tileID)
@@ -418,7 +418,7 @@ func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 // FINAL landing animates the reverse of the descent — the pane tile's face
 // shrinking back to the origin pane's viewport. A frame with no outer tree
 // (boot restore) falls back to a fresh pane at the pane tile's containing
-// grid — the same graceful degradation a portal ascent has after reload.
+// grid — the same graceful degradation an ascent has after a reload.
 func (a *App) ascendLevels(count int) {
 	if count <= 0 {
 		return
@@ -528,7 +528,7 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 // callback, where a blocking network call would wedge the wasm scheduler —
 // so the pane lands at home for a frame and re-anchors when the tile
 // arrives; an unreachable tile just leaves it at home (best-effort, same as
-// a portal ascent after reload).
+// an ascent after a reload).
 func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 	t := pane.NewTree()
 	p := t.FocusedPane()
