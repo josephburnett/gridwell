@@ -55,6 +55,37 @@ func previewBlobKey(n *rpc.Tile) int64 {
 	return 0
 }
 
+// drawPreviewFace paints a content tile's frozen face into (x, y, w, h): the
+// kind's fill, then the cached preview image letterboxed whole into the rect.
+// blobID is the tile's preview key — previewBlobKey for anything with a
+// server-side generation counter, the raw PreviewBlobID for a shell. fallback
+// runs instead when nothing is cached: it kicks the fetch and paints whatever
+// stands in meanwhile. One owner of "cached preview or stand-in", so no tile
+// kind can drift into its own answer.
+func (a *App) drawPreviewFace(n *rpc.Tile, x, y, w, h float64, fill string, blobID int64, fallback func()) {
+	a.cctx.Set("fillStyle", fill)
+	a.cctx.Call("fillRect", x, y, w, h)
+	if cached, ok := a.urlPreview.Get(n.ContentID(), blobID); ok {
+		if img, ok := previewImage(cached); ok {
+			drawImageContain(a.cctx, img, x, y, w, h)
+		}
+		return
+	}
+	fallback()
+}
+
+// drawPreviewPlaceholder paints the muted monospace name a grid tile shows
+// while its preview image is still loading, or when the plugin serves none.
+// Nothing on a tile too small to read a label.
+func (a *App) drawPreviewPlaceholder(label string, x, y, w, h float64) {
+	if w <= 20 || h <= 20 {
+		return
+	}
+	a.cctx.Set("fillStyle", colorMuted)
+	a.cctx.Set("font", "12px monospace")
+	a.cctx.Call("fillText", label, x+8, y+18, w-16)
+}
+
 // drawURLTileInPane renders a URL tile that is the pane's current place: the
 // user descended into it. The pane's inner rect (x, y, w, h) gets the cached
 // preview image letterboxed to fit. While a live view is attached, mirror
@@ -67,14 +98,7 @@ func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 	// tracked by syncURLViews, not from this draw path.
 
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", colorFileInnerBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-
-		if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
-			if img, ok := previewImage(cached); ok {
-				drawImageContain(a.cctx, img, x, y, w, h)
-			}
-		} else {
+		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, previewBlobKey(n), func() {
 			a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
 			label := n.URLString
 			if label == "" {
@@ -83,7 +107,7 @@ func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 			a.cctx.Set("fillStyle", colorMuted)
 			a.cctx.Set("font", "16px monospace")
 			a.cctx.Call("fillText", label, x+16, y+32, w-32)
-		}
+		})
 	})
 }
 
@@ -95,21 +119,10 @@ func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 // thumbnail loads, or when the plugin serves none.
 func (a *App) drawPageTile(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", colorFileInnerBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-
-		if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
-			if img, ok := previewImage(cached); ok {
-				drawImageContain(a.cctx, img, x, y, w, h)
-			}
-		} else {
-			if w > 20 && h > 20 {
-				a.cctx.Set("fillStyle", colorMuted)
-				a.cctx.Set("font", "12px monospace")
-				a.cctx.Call("fillText", n.AltText, x+8, y+18, w-16)
-			}
+		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, previewBlobKey(n), func() {
+			a.drawPreviewPlaceholder(n.AltText, x, y, w, h)
 			a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
-		}
+		})
 
 		line := colorMarkdownLine
 		if outside {
@@ -166,21 +179,16 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 // shell tiles can share a single decode pool.
 func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", colorShellFill)
-		a.cctx.Call("fillRect", x, y, w, h)
-
-		if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
-			if img, ok := previewImage(cached); ok {
-				drawImageContain(a.cctx, img, x, y, w, h)
+		a.drawPreviewFace(n, x, y, w, h, colorShellFill, n.PreviewBlobID, func() {
+			if n.PreviewBlobID != 0 {
+				a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
+			} else if w > 20 && h > 20 {
+				// No preview yet, because a palette drop never refreshed:
+				// paint the shell glyph so the swatch reads as a shell rather
+				// than a blank box.
+				drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 			}
-		} else if n.PreviewBlobID != 0 {
-			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
-		} else if w > 20 && h > 20 {
-			// No preview yet, because a palette drop never refreshed: paint
-			// the shell glyph so the swatch reads as a shell rather than a
-			// blank box.
-			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
-		}
+		})
 
 		strokeTileFrame(a.cctx, x, y, w, h, colorShellBorder, dashed, selected)
 	})
@@ -193,21 +201,10 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bo
 //  3. the tile outline + selection highlight
 func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", colorFileInnerBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-
-		if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
-			if img, ok := previewImage(cached); ok {
-				drawImageContain(a.cctx, img, x, y, w, h)
-			}
-		} else {
-			if w > 20 && h > 20 {
-				a.cctx.Set("fillStyle", colorMuted)
-				a.cctx.Set("font", "12px monospace")
-				a.cctx.Call("fillText", n.URLString, x+8, y+18, w-16)
-			}
+		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, n.PreviewBlobID, func() {
+			a.drawPreviewPlaceholder(n.URLString, x, y, w, h)
 			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
-		}
+		})
 
 		strokeTileFrame(a.cctx, x, y, w, h, colorURLLine, dashed, selected)
 	})
