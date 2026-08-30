@@ -147,13 +147,19 @@ func writeShellExit(conn *websocket.Conn, message string, sessionGone bool) {
 // pumpShell ferries one attachment both ways until either side ends, and
 // reports the END VERDICT: the message to show the user (empty for a clean
 // end) and whether the PTY session is GONE for good.
+//
+// It deliberately does NOT cancel ctx on the way out. The verdict still has
+// to reach the client as an exit frame, and a coder/websocket read whose
+// context is cancelled tears the connection down where it stands — the
+// client would see a bare EOF instead of the verdict, and "the session is
+// gone" would arrive as "something broke". The caller cancels once the
+// frame is on the wire.
 func pumpShell(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, up pb.Gridwell_OpenShellClient) (message string, sessionGone bool) {
 	go shellReadLoop(ctx, cancel, conn, up)
 	for {
 		resp, err := up.Recv()
 		if err != nil {
 			_ = up.CloseSend()
-			cancel()
 			return shellEndVerdict(err)
 		}
 		if len(resp.Data) == 0 {
@@ -164,7 +170,6 @@ func pumpShell(ctx context.Context, cancel context.CancelFunc, conn *websocket.C
 		wcancel()
 		if werr != nil {
 			_ = up.CloseSend()
-			cancel()
 			// The viewer's socket broke; nothing to tell it.
 			return "", false
 		}
