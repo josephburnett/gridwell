@@ -405,8 +405,8 @@ func (a *App) drawSwapPreview(rd *rightDragState) {
 	a.cctx.Set("lineWidth", 1.0)
 	angle := math.Atan2(y2-y1, x2-x1)
 	const arrowLen = 12.0
-	drawArrowHead(a, x1, y1, angle+math.Pi, arrowLen)
-	drawArrowHead(a, x2, y2, angle, arrowLen)
+	drawTriangle(a.cctx, x1, y1, angle+math.Pi, arrowLen)
+	drawTriangle(a.cctx, x2, y2, angle, arrowLen)
 }
 
 // drawSwapGlyph paints a compact double-headed horizontal arrow ⇄
@@ -431,23 +431,6 @@ func drawSwapGlyph(c js.Value, cx, cy, size float64, color string) {
 	c.Call("lineTo", cx-size/2+size*0.25, yBot+size*0.2)
 	c.Call("stroke")
 	c.Set("lineWidth", 1.0)
-}
-
-// drawArrowHead paints a small filled triangle at (cx, cy) pointing
-// in the direction `angle` (radians). Used by the swap preview.
-func drawArrowHead(a *App, cx, cy, angle, size float64) {
-	tipX := cx + math.Cos(angle)*size
-	tipY := cy + math.Sin(angle)*size
-	leftX := cx + math.Cos(angle+2.5)*size
-	leftY := cy + math.Sin(angle+2.5)*size
-	rightX := cx + math.Cos(angle-2.5)*size
-	rightY := cy + math.Sin(angle-2.5)*size
-	a.cctx.Call("beginPath")
-	a.cctx.Call("moveTo", tipX, tipY)
-	a.cctx.Call("lineTo", leftX, leftY)
-	a.cctx.Call("lineTo", rightX, rightY)
-	a.cctx.Call("closePath")
-	a.cctx.Call("fill")
 }
 
 // drawLeftResizePreview paints the left resize affordance; the left drag owns

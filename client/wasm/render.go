@@ -1371,14 +1371,15 @@ func (a *App) drawEdgeIndicators(nodes map[string]rpc.Tile, ps dragdrop.Pane, r 
 		my := cy + tMax*dy
 		// Triangle pointing away from center.
 		ang := math.Atan2(dy, dx)
-		a.drawTriangle(mx, my, ang, 6)
+		drawTriangle(a.cctx, mx, my, ang, 6)
 	}
 }
 
 // drawTriangle paints a small filled triangle centered at (cx, cy) pointing
 // in the direction of `angle` (radians). `size` is the half-length from
-// center to tip.
-func (a *App) drawTriangle(cx, cy, angle, size float64) {
+// center to tip. Every arrowhead in the renderer is this one drawing: the
+// off-screen edge indicators and the swap preview's two heads.
+func drawTriangle(c js.Value, cx, cy, angle, size float64) {
 	// Three points: tip, then two base points behind the center perpendicular
 	// to the angle.
 	tipX := cx + math.Cos(angle)*size
@@ -1387,12 +1388,12 @@ func (a *App) drawTriangle(cx, cy, angle, size float64) {
 	leftY := cy + math.Sin(angle+2.5)*size
 	rightX := cx + math.Cos(angle-2.5)*size
 	rightY := cy + math.Sin(angle-2.5)*size
-	a.cctx.Call("beginPath")
-	a.cctx.Call("moveTo", tipX, tipY)
-	a.cctx.Call("lineTo", leftX, leftY)
-	a.cctx.Call("lineTo", rightX, rightY)
-	a.cctx.Call("closePath")
-	a.cctx.Call("fill")
+	c.Call("beginPath")
+	c.Call("moveTo", tipX, tipY)
+	c.Call("lineTo", leftX, leftY)
+	c.Call("lineTo", rightX, rightY)
+	c.Call("closePath")
+	c.Call("fill")
 }
 
 // drawGridNotice paints a centered, muted status line in a pane whose grid
