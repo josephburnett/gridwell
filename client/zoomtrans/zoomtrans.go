@@ -39,8 +39,10 @@ type Endpoints struct {
 // directly as the per-parentCell child-cell-size multiplier, and the
 // descent formula reconstructs the user's live zoom for the current
 // pane size as ViewZoom × EffectiveOvertake_now. Zero means "never
-// visited"; in that case the descent and preview fall back to the
-// PreviewFactor calibration.
+// visited" — the one sentinel for the whole framing: the descent and
+// preview then fall back to the PreviewFactor calibration
+// (EffectiveViewZoom) and to the footprint's own center
+// (EffectiveCenter), never to the raw zeros in ViewCx/ViewCy.
 type Well struct {
 	ID       string
 	X, Y     int64
@@ -76,6 +78,27 @@ func EffectiveViewZoom(stored, fallback float64) float64 {
 		return stored
 	}
 	return fallback
+}
+
+// EffectiveCenter returns the child-grid point a doorway's framing centers
+// on: the stored center, or — for a never-visited doorway — the center of
+// the doorway's own footprint. It is EffectiveViewZoom's other half, and it
+// reads the SAME sentinel (a row nobody has left a view on has ViewZoom 0),
+// so "unvisited" stays one fact with one owner.
+//
+// The default is not arbitrary. Before schema v11 the framing was an
+// integer window ORIGIN and every read site derived origin + footprint/2,
+// so an unvisited row's zero origin READ as the footprint center: a plugin
+// root's 1×1 synthetic doorway framed (0.5, 0.5) — the middle of child cell
+// (0,0) — not (0, 0), which is its top-left CORNER. v11 stores the center
+// itself, so that default has to be supplied here or every never-visited
+// grid (preview, descent, ascent, hover-wheel) slides half a footprint
+// up-left from where it has always sat.
+func EffectiveCenter(w Well) (cx, cy float64) {
+	if w.ViewZoom > 0 {
+		return w.ViewCx, w.ViewCy
+	}
+	return float64(w.W) / 2, float64(w.H) / 2
 }
 
 // WheelZoom computes the new viewport zoom and center for a wheel zoom
@@ -249,10 +272,11 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 	// across the path swap, in both cases.
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	swapZoom := LiveFromIntrinsic(ratio, zPTarget)
+	swapCx, swapCy := EffectiveCenter(w)
 	swap = Endpoints{
 		Path: childPath,
-		Cx:   w.ViewCx,
-		Cy:   w.ViewCy,
+		Cx:   swapCx,
+		Cy:   swapCy,
 		Zoom: swapZoom,
 	}
 	// Final state: live zoom reconstructed from the *real* overtake (not
@@ -273,8 +297,8 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 // applied on the way OUT, not just the way in).
 func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
-	return w.ViewCx, w.ViewCy,
-		LiveFromIntrinsic(ratio, OvertakeZoom(w, paneW, paneH, cellPx))
+	cx, cy = EffectiveCenter(w)
+	return cx, cy, LiveFromIntrinsic(ratio, OvertakeZoom(w, paneW, paneH, cellPx))
 }
 
 // Ascent computes the transition endpoints for ascending from the child
@@ -290,10 +314,11 @@ func Ascent(from Endpoints, w Well, parentPath []string, paneW, paneH, cellPx fl
 	// Descent). Same default substitution as Descent for unvisited.
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	midZoom := LiveFromIntrinsic(ratio, zPTarget)
+	midCx, midCy := EffectiveCenter(w)
 	mid = Endpoints{
 		Path: from.Path,
-		Cx:   w.ViewCx,
-		Cy:   w.ViewCy,
+		Cx:   midCx,
+		Cy:   midCy,
 		Zoom: midZoom,
 	}
 	// Make sure the ascent always zooms out from the user's current state.

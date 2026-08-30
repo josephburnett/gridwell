@@ -243,14 +243,14 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		parentCell := x1 - x0
 		wpx := float64(hoverWell.W) * parentCell
 		hpx := float64(hoverWell.H) * parentCell
-		zw := zoomtrans.Well{
-			X: hoverWell.X, Y: hoverWell.Y, W: hoverWell.W, H: hoverWell.H,
-			ViewCx: hoverWell.ViewCx, ViewCy: hoverWell.ViewCy, ViewZoom: hoverWell.ViewZoom,
-		}
+		zw := wellOf(hoverWell)
 		// The float center accumulates across the burst (issue #219): first
-		// notch seeds from the stored center; later notches feed the drift
-		// back in, so cursor-anchored zoom actually travels.
-		cx0, cy0 := hoverWell.ViewCx, hoverWell.ViewCy
+		// notch seeds from the framing the well is SHOWING (a never-visited
+		// one shows its footprint's center, not the corner — the same
+		// EffectiveCenter the preview under the cursor was drawn with);
+		// later notches feed the drift back in, so cursor-anchored zoom
+		// actually travels.
+		cx0, cy0 := zoomtrans.EffectiveCenter(zw)
 		if st, ok := a.wellWheelPending[hoverWell.ID]; ok {
 			cx0, cy0 = st.cx, st.cy
 		}
@@ -426,12 +426,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// child preview tile sits at the cursor, treat *that* as the
 		// drag source instead of the well.
 		if child := a.childTileAtScreen(p, r, n, sx, sy); child != nil {
-			ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
-			cp := dragdrop.ChildPreviewFor(ps, struct {
-				X, Y, W, H     int64
-				ViewCx, ViewCy float64
-			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: n.ViewCx, ViewCy: n.ViewCy},
-				ratio)
+			cp := wellPreviewFor(ps, n)
 			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
 			a.dragging.tileID = child.ID
@@ -1085,8 +1080,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 	if !found {
 		return 0, 0, 0, false
 	}
-	w := zoomtrans.Well{X: t.X, Y: t.Y, W: t.W, H: t.H,
-		ViewCx: t.ViewCx, ViewCy: t.ViewCy, ViewZoom: t.ViewZoom}
+	w := wellOf(&t)
 	cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
 	return cx, cy, zoom, true
 }
