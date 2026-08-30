@@ -27,6 +27,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"strconv"
 )
@@ -196,9 +197,10 @@ func (s *Server) routes() {
 	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(s))
 	s.mux.Handle(path, handler)
 
-	// (The shell PTY WebSocket bridge is gone — 2026-07-26: PTY bytes ride
-	// the Electron main process's gRPC OpenShell stream against the node
-	// export; browsers show frozen shell previews, caps-gated.)
+	// The /shell door: one live PTY per WebSocket, on the SAME gated mux as
+	// every other page request (shell_door.go). Owner decision 2026-08-29:
+	// shells ride the web door, so every host that runs the client has them.
+	s.mux.Handle(shellwire.Path, s.shellDoor())
 
 	// (The /session/ door is gone — 2026-07-26: the Chromium session is
 	// host-local; nothing hydrates or dehydrates a plugin session blob.)

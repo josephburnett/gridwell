@@ -25,8 +25,12 @@ import (
 	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/shellstream"
+	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/shellsvc"
+	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/remote"
@@ -38,10 +42,16 @@ import (
 const localNodeID = "lnode1"
 
 type transportHarness struct {
-	localCl  *rpc.Client               // the local node's front door
-	remoteCl *rpc.Client               // the remote node's own front door
-	tClient  gridwellv1.GridwellClient // the transport, in process
-	rootBare string                    // the remote home's bare root grid id
+	localCl   *rpc.Client               // the local node's front door
+	remoteCl  *rpc.Client               // the remote node's own front door
+	tClient   gridwellv1.GridwellClient // the transport, in process
+	rootBare  string                    // the remote home's bare root grid id
+	localURL  string                    // the local node's web door origin
+	localHTTP *httptest.Server          // …and the server behind it
+	// remoteShell is the REMOTE home's PTY backend — the fake echoing
+	// streamer, so a shell attach through the chain can be asserted
+	// without a tmux anywhere.
+	remoteShell *shellsvctest.FakeStreamer
 
 	mu      sync.Mutex
 	dialErr error
@@ -55,12 +65,14 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	t.Helper()
 	ctx := context.Background()
 
+	h := &transportHarness{dialErr: dialErr, remoteShell: shellsvctest.New()}
+
 	remoteStore, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = remoteStore.Close() })
-	remoteClient, remoteCloser, err := compose.ServeInProcess(local.New(remoteStore, nil))
+	remoteClient, remoteCloser, err := compose.ServeInProcess(local.New(remoteStore, shellsvc.NewManager(h.remoteShell)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +95,6 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	t.Cleanup(func() { _ = grpcConn.Close() })
 	remoteExport := gridwellv1.NewGridwellClient(grpcConn)
 
-	h := &transportHarness{dialErr: dialErr}
 	sqlDB, err := sql.Open("sqlite", t.TempDir()+"/remote.db")
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +149,8 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	localSrv := servertest.New(t, localReg, server.Config{ID: localNodeID})
 	localHTTP := servertest.Serve(t, localSrv)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
+	h.localHTTP = localHTTP
+	h.localURL = localHTTP.URL
 	remoteWeb := servertest.Serve(t, remoteSrv)
 	h.remoteCl = rpc.NewClient(remoteWeb.Client(), remoteWeb.URL, connect.WithProtoJSON())
 	h.rootBare, err = remoteStore.RootGridID(ctx)
@@ -294,5 +307,56 @@ func TestDialFailureRidesTheRow(t *testing.T) {
 	}
 	if _, err := h.localCl.GetGrid(ctx, localNodeID+"/dead/x/1"); err == nil {
 		t.Fatal("a read through a dead connection must fail, not answer empty")
+	}
+}
+
+// A shell on a MOUNTED remote attaches through the /shell door: the web
+// door's WebSocket → this node's shell route → the transport → the remote
+// node's export → the remote home's PTY. The transport is just another
+// namespace to the door — which is the whole point of the id chain — but
+// the Electron relay it replaced dialed the FEDERATION socket instead, so
+// nothing pinned that the browser door forwards a PTY. This does.
+func TestShellDoorThroughAConnection(t *testing.T) {
+	ctx := context.Background()
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Label: "Geneva", Addr: "/far/federation.sock"}}, nil)
+
+	lp, err := h.localCl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteRoot := lp.Connections[0].RootGridID
+
+	// The shell tile lives on the REMOTE, created through the chain.
+	tile, err := h.localCl.CreateShell(ctx, &rpc.CreateShellRequest{GridID: remoteRoot, X: 0, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatalf("CreateShell through the connection: %v", err)
+	}
+	if !strings.HasPrefix(tile.ID, localNodeID+"/geneva/") {
+		t.Fatalf("tile id %q is not a chain through the connection", tile.ID)
+	}
+
+	out := make(chan []byte, 8)
+	exits := make(chan shellstream.Exit, 4)
+	reg := shellstream.New(
+		shellws.Dialer(shellws.Options{Origin: h.localURL, HTTPClient: h.localHTTP.Client()}),
+		func(_ string, b []byte) { out <- append([]byte(nil), b...) },
+		func(e shellstream.Exit) { exits <- e },
+	)
+	reg.Open("pane-1", tile.ID, 90, 30)
+	t.Cleanup(func() { reg.Close("pane-1") })
+
+	reg.Write("pane-1", []byte("across the wire"))
+	select {
+	case got := <-out:
+		if string(got) != "across the wire" {
+			t.Fatalf("round trip = %q", got)
+		}
+	case e := <-exits:
+		t.Fatalf("the attach ended instead of echoing: %+v", e)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no PTY output from the mounted remote within 5s")
+	}
+	if h.remoteShell.SessionCount() != 1 {
+		t.Errorf("remote PTY sessions = %d, want 1", h.remoteShell.SessionCount())
 	}
 }

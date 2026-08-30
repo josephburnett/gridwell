@@ -25,6 +25,8 @@ import (
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/pending"
 	"github.com/josephburnett/gridwell/client/preview"
+	"github.com/josephburnett/gridwell/client/shellstream"
+	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
 	"github.com/josephburnett/gridwell/client/url"
@@ -250,6 +252,12 @@ type App struct {
 	// and hides the button until the result lands.
 	shellAlive        map[string]bool
 	shellAliveProbing map[string][]func(alive bool)
+
+	// shells is the per-pane registry of live PTY attachments
+	// (client/shellstream over client/shellws — the /shell WebSocket on
+	// this page's own origin). It owns the lifecycle rules; this file only
+	// hands it a dialer and the two callbacks.
+	shells *shellstream.Registry
 
 	// wellWheelPending holds well tiles whose preview framing the hover
 	// wheel changed (issue #210) but hasn't persisted yet: tile id → the
@@ -777,6 +785,17 @@ func main() {
 		go app.restoreFromHistory(raw)
 		return nil
 	}))
+
+	// The shell transport: PTY bytes ride the /shell WebSocket on this
+	// page's own origin, authenticated by the very cookie that served the
+	// page (owner decision 2026-08-29). The registry owns replace-on-open,
+	// exactly-once exit and no-op-after-close; the terminal glue below only
+	// reads and writes bytes.
+	app.shells = shellstream.New(
+		shellws.Dialer(shellws.Options{Origin: origin}),
+		func(paneID string, data []byte) { app.onShellData(paneID, data) },
+		func(e shellstream.Exit) { app.onShellExit(e.PaneID, e.Message, e.SessionGone) },
+	)
 
 	app.installCanvasInput()
 	app.installWebviewListeners()

@@ -31,8 +31,9 @@ func bridge() js.Value {
 // bridgeCaps reads the host's OWN capability declaration
 // (window.gridwell.caps — 2026-08-13): which bridge halves it implements.
 // A bridge without the field is the legacy Electron preload, the only
-// shape that ever shipped without one — it has both halves. caps.Derive
-// is the one reader.
+// shape that ever shipped without one. caps.Derive is the one reader.
+// Shells are not on this list since 2026-08-29 — the PTY rides the web
+// door, so no host implements anything for it.
 func bridgeCaps() caps.Bridge {
 	g := bridge()
 	if !g.Truthy() {
@@ -43,9 +44,8 @@ func bridgeCaps() caps.Bridge {
 		return caps.LegacyBridge()
 	}
 	return caps.Bridge{
-		Present:   true,
-		LiveURL:   c.Get("liveUrl").Truthy(),
-		LiveShell: c.Get("liveShell").Truthy(),
+		Present: true,
+		LiveURL: c.Get("liveUrl").Truthy(),
 	}
 }
 
@@ -171,80 +171,6 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 		return nil
 	})
 	promise.Call("then", then, catch)
-}
-
-// ── shell transport (2026-07-26: PTY bytes ride main's gRPC OpenShell
-// stream over IPC; the WS bridge is gone) ───────────────────────────────────
-
-// bridgeShellOpen asks main to open the OpenShell stream for a pane.
-// tileID is the qualified id of the tile that OWNS the PTY session (links
-// resolved by the caller). onOpen runs when main has accepted the open —
-// writes invoked after this call are ordered behind it by the IPC pipe, so
-// no client-side queue is needed.
-func bridgeShellOpen(paneID, tileID string, cols, rows int, onOpen func()) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	o := js.Global().Get("Object").New()
-	o.Set("paneId", paneID)
-	o.Set("tileId", tileID)
-	o.Set("cols", cols)
-	o.Set("rows", rows)
-	promiseThen(g.Call("shellOpen", o), onOpen)
-}
-
-// bridgeShellWrite forwards keystroke bytes (a Uint8Array) to the pane's PTY.
-func bridgeShellWrite(paneID string, u8 js.Value) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	o := js.Global().Get("Object").New()
-	o.Set("paneId", paneID)
-	o.Set("data", u8)
-	g.Call("shellWrite", o)
-}
-
-// bridgeShellResize forwards a winsize change to the pane's PTY.
-func bridgeShellResize(paneID string, cols, rows int) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	o := js.Global().Get("Object").New()
-	o.Set("paneId", paneID)
-	o.Set("cols", cols)
-	o.Set("rows", rows)
-	g.Call("shellResize", o)
-}
-
-// bridgeShellClose ends the pane's stream from this side. Main suppresses
-// the exit event for a local close (this side asked; the caller does its own
-// teardown), so no shellExit follows.
-func bridgeShellClose(paneID string) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	o := js.Global().Get("Object").New()
-	o.Set("paneId", paneID)
-	g.Call("shellClose", o)
-}
-
-// promiseThen runs fn when a JS promise resolves (rejections are surfaced by
-// the invoke pipeline as EV.error; nothing to do here).
-func promiseThen(p js.Value, fn func()) {
-	if fn == nil || !p.Truthy() {
-		return
-	}
-	var cb js.Func
-	cb = js.FuncOf(func(js.Value, []js.Value) any {
-		fn()
-		cb.Release()
-		return nil
-	})
-	p.Call("then", cb)
 }
 
 // bridgeGoBack navigates the view for paneID back in its history — the bar
@@ -375,20 +301,6 @@ func (a *App) installWebviewListeners() {
 		a.reportErr(errsurface.Error, source, message)
 		return nil
 	})
-	// Shell transport pushes (2026-07-26): PTY output and unexpected stream
-	// ends, routed to the pane's terminal by id.
-	onShellData := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.onShellData(jsString(ev.Get("paneId")), ev.Get("data"))
-		return nil
-	})
-	onShellExit := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.onShellExit(jsString(ev.Get("paneId")), jsString(ev.Get("message")), ev.Get("sessionGone").Bool())
-		return nil
-	})
-	g.Call("onShellData", onShellData)
-	g.Call("onShellExit", onShellExit)
 	g.Call("onFrame", onFrame)
 	g.Call("onNav", onNav)
 	g.Call("onRightForward", onRightForward)
