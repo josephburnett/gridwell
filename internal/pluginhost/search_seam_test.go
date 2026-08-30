@@ -2,15 +2,17 @@ package pluginhost_test
 
 // A plugin's Search is only worth anything if the node can reach it and turn
 // its answers into places: tiles with the ids the store minted, on a path of
-// well tiles. This crosses the whole seam, from a fake GitLab through the
-// gitlab plugin, the adapter, and the server to the rpc client.
+// well tiles. This crosses the whole seam, from a fake GitLab through the REAL
+// gridwell-plugin-gitlab binary, the adapter, and the server to the rpc
+// client. The plugin is spawned and configured — url and token_file — exactly
+// as a server.yaml plugins: entry configures it; nothing here links a plugin
+// implementation, because nothing in this repository may.
 
 import (
 	"context"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 
@@ -19,44 +21,31 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
+	"github.com/josephburnett/gridwell/internal/plugintest/gitlabfake"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
-	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
-	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
 
 const gitlabUUID = "gluuidx"
 
-type fakeGitLab struct{ pending []todos.Todo }
-
-func (f *fakeGitLab) Page(_ context.Context, state string, page int) ([]todos.Todo, bool, error) {
-	if page > 1 || state == todos.StateDone {
-		return nil, false, nil
-	}
-	return f.pending, false, nil
-}
-
-func gitlabTodo(id int64, created, title, body string) todos.Todo {
-	var t todos.Todo
-	t.ID, t.State = id, todos.StatePending
-	t.CreatedAt, _ = time.Parse(time.RFC3339, created)
-	t.TargetType, t.Target.IID, t.Target.Title, t.Body = "MergeRequest", id, title, body
+// gitlabTodo is one pending merge-request todo as GitLab serves it.
+func gitlabTodo(id int64, created, title, body string) gitlabfake.Todo {
+	var t gitlabfake.Todo
+	t.ID, t.State, t.CreatedAt = id, "pending", created
+	t.TargetType, t.Body = "MergeRequest", body
+	t.Target.IID, t.Target.Title = id, title
 	t.TargetURL = "https://gitlab.example/g/p/-/merge_requests/1"
 	return t
 }
 
-func gitlabNode(t *testing.T, gl *fakeGitLab) *rpc.Client {
+func gitlabNode(t *testing.T, gl *gitlabfake.Server) *rpc.Client {
 	t.Helper()
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := plugintest.Loopback(gitlabplugin.New(gl, gitlabplugin.Options{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cpCloser)
+	cp := plugintest.Spawn(t, "gitlab", gl.Config(t, nil))
 	client := pluginhost.New(cp, memStore.Namespace("p1"))
 	reg := plugin.NewRegistry()
 	reg.Register(gitlabUUID, "gitlab", client, nil)
@@ -73,10 +62,10 @@ func gitlabNode(t *testing.T, gl *fakeGitLab) *rpc.Client {
 // go. An adapter that does not forward Search answers Unimplemented, and the
 // server's fan-out then skips the plugin entirely.
 func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
-	gl := &fakeGitLab{pending: []todos.Todo{
+	gl := gitlabfake.New(t,
 		gitlabTodo(1, "2026-08-18T10:00:00Z", "fix the widget", "please review the widget"),
 		gitlabTodo(2, "2026-08-25T10:00:00Z", "add a gadget", "no rush"),
-	}}
+	)
 	cl := gitlabNode(t, gl)
 	ctx := context.Background()
 

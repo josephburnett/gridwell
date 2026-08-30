@@ -86,9 +86,17 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Inside the node a namespace is a Go value (`internal/namespace`). gRPC
   survives at two hops only: the plugin subprocess and the federation
   socket. Both node-side doors are codecs over the one router.
-- Plugins are the third-party door. The host never imports a plugin
-  implementation and never switches on a plugin kind; every plugin behavior
-  rides a wire declaration. `test/boundary` enforces it.
+- Plugins are the third-party door, and they live in their own repository,
+  `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc and
+  gitlab on the same footing as anyone else's. This repo owns the door: the
+  proto, `api/gen/plugin/v1`, and the go-plugin handshake (`api/compose`).
+  No gridwell package, TEST FILES INCLUDED, imports a plugin implementation
+  or names that repository in a go.mod, and nothing switches on a plugin
+  kind; every plugin behavior rides a wire declaration. `test/boundary`
+  enforces it. A test that needs a real plugin spawns the shipped binary
+  (`internal/plugintest`). `make build` compiles those binaries out of
+  `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into the repo root, so
+  clone the plugins repo beside this one.
 - A plugin serves keys and content; the node owns ids and layout. A
   connection is config: an immutable name, a label, how to dial. Retiring a
   name is forever. Secrets stay host-local file paths.
@@ -160,7 +168,8 @@ before you blame a change.
 - [ ] No error is swallowed. Unacknowledged writes park in `client/outbox`
       and nothing user-made is dropped without a server verdict.
 - [ ] Nothing the user can change lives only on the client.
-- [ ] No host or client import of a plugin, no switch on a plugin kind.
+- [ ] No import of a plugin implementation anywhere, tests included, and no
+      switch on a plugin kind.
 - [ ] This is one logical change, and the comments in the files I touched
       are true.
 - [ ] Things stay as the user left them.

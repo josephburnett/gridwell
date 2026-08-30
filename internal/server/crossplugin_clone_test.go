@@ -13,7 +13,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
 // Cross-plugin gesture semantics: LEFT-drag
@@ -470,7 +469,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	fsClient := newPluginClient(t, "fs", fsplugin.New(dir, nil))
+	fsClient := newPluginClient(t, "fs", map[string]string{"root": dir})
 	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("fs info: %v", err)

@@ -4,6 +4,12 @@ BIN := ./gridwell
 # Built plugin binaries — the plugins target below and clean
 # must agree; this is the one list.
 ALL_PLUGIN_BIN := ./gridwell-plugin-fs ./gridwell-plugin-proc ./gridwell-plugin-gitlab
+
+# The plugins live in their own repository — gridwell owns the door, the
+# plugins repo owns the plugins. PLUGINS_DIR is the one place that says where
+# that checkout is: beside this one by default, overridable from the
+# environment (PLUGINS_DIR=/path/to/gridwell-plugins make build).
+PLUGINS_DIR ?= ../gridwell-plugins
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -37,10 +43,18 @@ bin: wasm
 
 # Phony so a source change always rebuilds (Go's build cache keeps it fast);
 # file-target rules would skip the build whenever the binary already existed.
+# The sources are in $(PLUGINS_DIR); the binaries land here, beside $(BIN),
+# which is where the loader and every Go test look for them.
 plugins:
-	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-plugin-fs ./cmd/gridwell-plugin-fs
-	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-plugin-proc ./cmd/gridwell-plugin-proc
-	cd plugins/gitlab && CGO_ENABLED=0 go build -o ../../gridwell-plugin-gitlab ./cmd/gridwell-plugin-gitlab
+	@test -d $(PLUGINS_DIR) || { \
+		echo "$(PLUGINS_DIR) missing — the plugins live in their own repository:"; \
+		echo "  git clone git@github.com:josephburnett/gridwell-plugins.git $(PLUGINS_DIR)"; \
+		echo "(or point PLUGINS_DIR at an existing checkout)"; \
+		exit 1; \
+	}
+	cd $(PLUGINS_DIR)/fs && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-fs ./cmd/gridwell-plugin-fs
+	cd $(PLUGINS_DIR)/proc && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-proc ./cmd/gridwell-plugin-proc
+	cd $(PLUGINS_DIR)/gitlab && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-gitlab ./cmd/gridwell-plugin-gitlab
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's
@@ -97,15 +111,18 @@ proto-check:
 # that never reaches the heavier display-bound gates); check-docpaths fails
 # when a doc or workflow names a repo path that no longer exists. No display
 # or network needed.
-# MODULES lists every in-repo Go module beyond the root: the api, the
-# shared nested modules, and each plugin, which is its own module. check
-# builds and tests each one standalone (GOWORK=off) so no module can
-# quietly lean on the workspace.
-MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell
+# MODULES lists every in-repo Go module beyond the root: the api and the
+# shared nested modules. check builds and tests each one standalone
+# (GOWORK=off) so no module can quietly lean on the workspace. The plugins
+# are not here: they are another repository's modules, gated by its own
+# `make check`.
+MODULES := api internal/doctype apps/gridwell
 
 # check depends on wasm: web/embed.go EMBEDS the built gridwell.wasm, so
-# a fresh checkout (CI) cannot even `go build ./...` before one exists.
-check: fmt-check proto-check wasm
+# a fresh checkout (CI) cannot even `go build ./...` before one exists. It
+# depends on plugins because the seam tests spawn the real binaries: the only
+# door a plugin has into this repo.
+check: fmt-check proto-check wasm plugins
 	go build ./...
 	go vet ./...
 	go test ./...

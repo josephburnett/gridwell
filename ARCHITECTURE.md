@@ -104,8 +104,9 @@ that is the only config write. The node builds its own home and transport.
 tiles, shells, and the event stream. Shells are tmux sessions on a private
 socket, so they survive restarts.
 
-**Plugins** (`plugins/{fs,proc,gitlab}` and anyone else's) speak `plugin.v1`.
-A plugin is stateless. It answers in its own stable string keys and never
+**Plugins** speak `plugin.v1`. They live in their own repository,
+`github.com/josephburnett/gridwell-plugins` — the shipped fs, proc and gitlab
+plugins and anyone else's alike, on the same footing. A plugin is stateless. It answers in its own stable string keys and never
 sees ids, layout, or a database. The node mints ids against those keys and
 keeps the arrangement as a namespace of its own store
 (`internal/pluginhost/adapter.go`). The host never imports a plugin and never
@@ -289,14 +290,21 @@ pane is inside" and do not spread the word.
 ## Module boundaries
 
 ```
-plugins/*          → api                      (nothing else of ours)
 internal, server   → api
 apps/gridwell      → server, api              (no plugin modules)
 api                → nothing of ours
 ```
 
-`test/boundary` enforces the arrows with `go list -deps`, pins the api
-module's dependency budget, and `make check` builds every module standalone
-without go.work. A plugin loads exactly one way — `compose.LoadPlugin` spawns
-its binary — which `internal/plugin`'s subprocess tests and
-`make check-federation` exercise for real.
+There is no arrow to a plugin, in either direction: plugins are a separate
+repository whose modules depend on `api` and never on this one, and no
+package here — test files included — may import one or name that repository
+in a go.mod. `test/boundary` enforces both, along with the api module's
+dependency budget, and `make check` builds every module standalone without
+go.work.
+
+A plugin loads exactly one way — `compose.LoadPlugin` spawns its binary —
+which `internal/plugin`'s subprocess tests, the seam tests that spawn through
+`internal/plugintest`, and `make check-federation` exercise for real. The
+binaries themselves come from the sibling checkout: `make build` compiles them
+out of `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into this repo root,
+where the loader looks.

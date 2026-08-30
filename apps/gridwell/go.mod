@@ -10,8 +10,6 @@ replace (
 	github.com/josephburnett/gridwell => ../..
 	github.com/josephburnett/gridwell/api => ../../api
 	github.com/josephburnett/gridwell/internal/doctype => ../../internal/doctype
-	github.com/josephburnett/gridwell/plugins/fs => ../../plugins/fs
-	github.com/josephburnett/gridwell/plugins/proc => ../../plugins/proc
 )
 
 require github.com/josephburnett/gridwell v0.0.0-00010101000000-000000000000

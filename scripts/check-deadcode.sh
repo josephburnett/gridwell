@@ -7,13 +7,16 @@
 #
 # Two worlds, one verdict: a symbol is dead when the native world cannot
 # reach it AND either its package is not part of the wasm build or the wasm
-# world cannot reach it either. Packages named *test (shellsvctest) exist
-# for tests and are exempt. Deliberate exceptions go in
+# world cannot reach it either. Packages named *test (shellsvctest,
+# plugintest) exist for tests and are exempt, as is anything nested under
+# one (plugintest/gitlabfake). Deliberate exceptions go in
 # scripts/deadcode-allow.txt as "<file> <func>" lines with a comment.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-NATIVE_ROOTS=(./apps/gridwell ./plugins/fs/cmd/... ./plugins/proc/cmd/... ./plugins/gitlab/cmd/...)
+# The plugin binaries are another repository's roots; this gate sees only
+# what this repo ships.
+NATIVE_ROOTS=(./apps/gridwell)
 PKGS=(./internal/... ./api/... ./client/...)
 
 # "path/file.go:12:6: unreachable func: Name" -> "path/file.go Name"
@@ -32,7 +35,7 @@ while IFS= read -r line; do
 	[ -z "$line" ] && continue
 	file=${line%% *}
 	dir=$(dirname "$file")
-	case "$dir" in */*test) continue ;; esac
+	case "$dir" in */*test|*/*test/*) continue ;; esac
 	if grep -qxF "$dir" <<<"$wasmdirs"; then
 		grep -qxF "$line" <<<"$wasm" || continue
 	fi
@@ -81,7 +84,7 @@ while IFS=: read -r file _ decl; do
 	[ "$flagged" = 0 ] && echo "exported methods with no caller outside tests:" >&2
 	echo "  $entry" >&2
 	flagged=1
-done < <(git ls-files -z -- 'internal/*.go' 'api/*.go' 'client/*.go' 'plugins/*.go' | xargs -0 grep -nE '^func \([^)]*\) [A-Z][A-Za-z0-9_]*\(' 2>/dev/null)
+done < <(git ls-files -z -- 'internal/*.go' 'api/*.go' 'client/*.go' | xargs -0 grep -nE '^func \([^)]*\) [A-Z][A-Za-z0-9_]*\(' 2>/dev/null)
 if [ "$flagged" != 0 ]; then
 	echo "delete it, or allowlist it in $allow as \"<file> <Type>.<Method>\" with a reason." >&2
 	exit 1

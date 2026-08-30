@@ -2,21 +2,20 @@ package server
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
-	procplugin "github.com/josephburnett/gridwell/plugins/proc/plugin"
 )
 
 // fsPluginUUID / procPluginUUID are the registry keys used by the
@@ -26,7 +25,7 @@ const (
 	procPluginUUID = "proc-test-uuid"
 )
 
-// newTestServerWithPlugins builds a server wired to in-process fs and proc
+// newTestServerWithPlugins builds a server wired to the spawned fs and proc
 // plugins (with the home namespace's uuid set), so file/process-well creation routes
 // through the plugins exactly as in production. Returns the client and the
 // bare local root grid id.
@@ -34,30 +33,26 @@ const (
 // a home namespace plus built-in fs and proc plugins. The fs plugin is rooted at a
 // fresh temp dir (returned as fsRoot) so a Mount of fsPluginUUID — which
 // attaches with the plugin's default config — lands there.
-// newPluginClient stands up the plugin stack the way the loader does in
-// production — the plugin served in-process, fronted by the node-side
-// pluginhost adapter over a fresh store — and returns the adapter's client. It
-// is the shipped fs and proc stack, which server tests must exercise rather
-// than a stand-in.
-func newPluginClient(t *testing.T, kind string, impl pluginv1.PluginServer) namespace.Namespace {
+// newPluginClient stands up the plugin stack exactly the way the loader does
+// in production — the shipped gridwell-plugin-<kind> binary spawned with cfg,
+// fronted by the node-side pluginhost adapter over a fresh store — and returns
+// the adapter's client. Server tests must exercise the shipped stack rather
+// than a stand-in, and since a plugin lives in its own repository the
+// subprocess is the only way to reach one.
+func newPluginClient(t *testing.T, kind string, cfg map[string]string) namespace.Namespace {
 	t.Helper()
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatalf("%s layout: %v", kind, err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := plugintest.Loopback(impl)
-	if err != nil {
-		t.Fatalf("%s plugin serve: %v", kind, err)
-	}
-	t.Cleanup(cpCloser)
-	client := pluginhost.New(cp, memStore.Namespace("p1"))
-	return client
+	cp := plugintest.Spawn(t, kind, cfg)
+	return pluginhost.New(cp, memStore.Namespace("p1"))
 }
 
-func registerPluginPlugin(t *testing.T, reg *plugin.Registry, uuid, kind string, impl pluginv1.PluginServer) {
+func registerPluginPlugin(t *testing.T, reg *plugin.Registry, uuid, kind string, cfg map[string]string) {
 	t.Helper()
-	reg.Register(uuid, kind, newPluginClient(t, kind, impl), nil)
+	reg.Register(uuid, kind, newPluginClient(t, kind, cfg), nil)
 }
 
 func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string) {
@@ -72,10 +67,12 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	_, root = registerPrimaryLocaldb(t, reg, st)
 
 	fsRoot = t.TempDir()
-	registerPluginPlugin(t, reg, fsPluginUUID, "fs", fsplugin.New(fsRoot, nil))
+	registerPluginPlugin(t, reg, fsPluginUUID, "fs", map[string]string{"root": fsRoot})
 	reg.SetLabel(fsPluginUUID, "files")
 
-	registerPluginPlugin(t, reg, procPluginUUID, "proc", procplugin.New(t.TempDir(), 1, nil))
+	// Rooted at this test process, so the projected tree is this test's own
+	// couple of children rather than the whole machine's process table.
+	registerPluginPlugin(t, reg, procPluginUUID, "proc", map[string]string{"pid": strconv.Itoa(os.Getpid())})
 	reg.SetLabel(procPluginUUID, "processes")
 
 	srv := mustNew(t, reg, Config{})

@@ -12,12 +12,13 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/api/compose"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
 // The host-death seam: a SIGKILLed host must not orphan its plugin
 // subprocesses. go-plugin gives the guest no host-death detection in our
 // configuration — the guest inherits the host's stdin and a dead host is just a
-// disconnected gRPC client — so guest.Serve runs its own watchdog on the pid
+// disconnected gRPC client — so the guest helper runs its own watchdog on the pid
 // the host hands over at spawn. This test fails without the watchdog: the
 // plugin survives its host indefinitely.
 //
@@ -55,13 +56,10 @@ func TestHelperPluginHost(t *testing.T) {
 }
 
 func TestPluginExitsWhenHostDiesHard(t *testing.T) {
-	if testing.Short() {
-		t.Skip("builds a plugin binary; skipped under -short")
-	}
 	host := exec.Command(os.Args[0], "-test.run", "TestHelperPluginHost")
 	host.Env = append(os.Environ(),
 		"GRIDWELL_TEST_HOST=1",
-		"GRIDWELL_TEST_PLUGIN_BIN="+buildPluginBinary(t, "fs"),
+		"GRIDWELL_TEST_PLUGIN_BIN="+plugintest.Binary(t, "fs"),
 		"GRIDWELL_TEST_PLUGIN_ROOT="+t.TempDir(),
 	)
 	stdout, err := host.StdoutPipe()

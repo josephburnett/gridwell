@@ -2,70 +2,62 @@ package server
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/internal/namespace"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
-	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
-	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
+	"github.com/josephburnett/gridwell/internal/plugintest/gitlabfake"
 )
 
 // The gitlab todos plugin through the WHOLE shipped stack — fake
-// GitLab → plugin → adapter → server → ReadContent — pinning
-// the three promises the design makes at the seam where they are kept:
-// the plugin's hints become the first arrangement and the user's
-// moves win from then on; a todo that leaves GitLab flips to done
+// GitLab → the spawned gridwell-plugin-gitlab binary → adapter → server →
+// ReadContent — pinning the three promises the design makes at the seam where
+// they are kept: the plugin's hints become the first arrangement and the
+// user's moves win from then on; a todo that leaves GitLab flips to done
 // without moving or changing identity; and a plugin RESTART (empty
 // memory) does not lose the tile — the node remembers it.
+//
+// The plugin is a subprocess, which is the only door it has: it lives in
+// another repository. So nothing here is injected. The clock is not either:
+// a short refresh: in the config is what makes the second walk happen, and
+// weeks derive from each todo's created_at, never from now.
 
-type fakeGitLab struct {
-	pending, done []todos.Todo
-}
+// todoTileW mirrors the plugin's hinted todo width — two cells, so the label
+// reads. It is the plugin's own arrangement fact, read back off the wire
+// here rather than shared: the two repositories share the contract, not a
+// package.
+const todoTileW = 2
 
-func (f *fakeGitLab) Page(_ context.Context, state string, page int) ([]todos.Todo, bool, error) {
-	if page > 1 {
-		return nil, false, nil
-	}
-	if state == todos.StateDone {
-		return f.done, false, nil
-	}
-	return f.pending, false, nil
-}
-
-func gitlabTodo(id int64, created string) todos.Todo {
-	var t todos.Todo
-	t.ID, t.State = id, todos.StatePending
-	t.CreatedAt, _ = time.Parse(time.RFC3339, created)
-	t.TargetType, t.Target.IID, t.Target.Title, t.Body = "MergeRequest", id, "change "+strings.Repeat("x", int(id)), "please **review**"
-	t.ActionName, t.Author.Name = "review_requested", "Ada"
+// gitlabTodo is one merge-request todo as GitLab serves it, from Ada.
+func gitlabTodo(id int64, created string) gitlabfake.Todo {
+	var t gitlabfake.Todo
+	t.ID, t.State, t.CreatedAt = id, "pending", created
+	t.TargetType, t.Body, t.ActionName = "MergeRequest", "please **review**", "review_requested"
+	t.Target.IID, t.Target.Title = id, "change "+strings.Repeat("x", int(id))
+	t.Author.Name = "Ada"
 	t.TargetURL = "https://gitlab.example/g/p/-/merge_requests/" + strconv.FormatInt(id, 10)
 	return t
 }
 
-// gitlabStackAt stands the plugin up over an EXISTING memory DB path
-// (a restart reuses it) and returns the adapter client plus a closer.
-func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (namespace.Namespace, func()) {
+// gitlabStackAt spawns the plugin over an EXISTING memory DB path (a restart
+// reuses it) and returns the adapter client plus a closer that stops both.
+func gitlabStackAt(t *testing.T, memPath string, cfg map[string]string) (namespace.Namespace, func()) {
 	t.Helper()
 	memStore, err := store.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp, cpCloser, err := plugintest.Loopback(impl)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cp, kill := plugintest.SpawnCloser(t, "gitlab", cfg)
 	client := pluginhost.New(cp, memStore.Namespace("p1"))
-	return client, func() { cpCloser(); _ = memStore.Close() }
+	return client, func() { kill(); _ = memStore.Close() }
 }
 
 func tileByLabelPrefix(tiles []*gridwellv1.Tile, prefix string) *gridwellv1.Tile {
@@ -78,15 +70,19 @@ func tileByLabelPrefix(tiles []*gridwellv1.Tile, prefix string) *gridwellv1.Tile
 }
 
 func TestGitLabTodosThroughTheStack(t *testing.T) {
-	gl := &fakeGitLab{
-		pending: []todos.Todo{gitlabTodo(1, "2026-08-18T10:00:00Z"), gitlabTodo(2, "2026-08-25T10:00:00Z")},
-		done:    []todos.Todo{gitlabTodo(3, "2026-08-19T10:00:00Z")},
-	}
-	gl.done[0].State = todos.StateDone
-	clock := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
-	now := func() time.Time { return clock }
+	done := gitlabTodo(3, "2026-08-19T10:00:00Z")
+	done.State = "done"
+	gl := gitlabfake.New(t,
+		gitlabTodo(1, "2026-08-18T10:00:00Z"),
+		gitlabTodo(2, "2026-08-25T10:00:00Z"),
+		done,
+	)
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	client, closeStack := gitlabStackAt(t, memPath, gitlabplugin.New(gl, gitlabplugin.Options{Now: now}))
+	// A refresh window of one nanosecond: every read walks GitLab again, so a
+	// todo that leaves shows up on the very next read instead of after the
+	// default window. Anything longer is a race against the test's own speed.
+	cfg := gl.Config(t, map[string]string{"refresh": "1ns"})
+	client, closeStack := gitlabStackAt(t, memPath, cfg)
 
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
@@ -108,8 +104,9 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatalf("root = %+v %v", root.Grid, root.Tiles)
 	}
 	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
-	wantX, wantY := todos.WeekCell(time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC))
-	if week == nil || week.Kind != "well" || week.ChildGridId == "" || week.X != wantX || week.Y != wantY {
+	// The epoch is the month of 2026-08-24, so August is row 0 and the week
+	// of Monday the 17th is that month's third Monday: column 2.
+	if week == nil || week.Kind != "well" || week.ChildGridId == "" || week.X != 2 || week.Y != 0 {
 		t.Fatalf("week well = %+v", week)
 	}
 
@@ -123,7 +120,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if len(wk.Tiles) != 2 || one == nil || three == nil {
 		t.Fatalf("week grid = %v", wk.Tiles)
 	}
-	if one.ServesPage || one.Kind != "text" || one.X != 1*todos.TodoTileW || one.Y != 0 || one.W != todos.TodoTileW || three.X != 2*todos.TodoTileW {
+	if one.ServesPage || one.Kind != "text" || one.X != 1*todoTileW || one.Y != 0 || one.W != todoTileW || three.X != 2*todoTileW {
 		t.Errorf("hints not honored: one=%+v three=%+v", one, three)
 	}
 
@@ -138,10 +135,9 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Todo 1 leaves GitLab entirely (target deleted): after the refresh
-	// window it reads as done — same id, where the user left it.
-	gl.pending = gl.pending[1:]
-	clock = clock.Add(gitlabplugin.DefaultRefresh + time.Second)
+	// Todo 1 leaves GitLab entirely (target deleted): the next walk finds it
+	// in neither state, so it reads as done — same id, where the user left it.
+	gl.Set(gitlabTodo(2, "2026-08-25T10:00:00Z"), done)
 	wk, err = client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +151,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	// not list it. The node remembers — same tile, same id, same placement,
 	// last-seen label — and its content says it is not in memory.
 	closeStack()
-	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabplugin.New(gl, gitlabplugin.Options{Now: now}))
+	client2, closeStack2 := gitlabStackAt(t, memPath, cfg)
 	t.Cleanup(closeStack2)
 	reg2 := plugin.NewRegistry()
 	reg2.Register("ug1", "gitlab", client2, nil)
@@ -175,7 +171,6 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if body := readContent(t, client2, three.Id); !strings.Contains(body, "[Open !3 in GitLab](") {
 		t.Errorf("live content after restart = %q", body)
 	}
-
 }
 
 // readContent drains a tile's ReadContent stream through the adapter client.

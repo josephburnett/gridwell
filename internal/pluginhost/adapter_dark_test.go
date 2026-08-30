@@ -2,7 +2,6 @@ package pluginhost_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -21,8 +20,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
-	"github.com/josephburnett/gridwell/plugins/fs/fssource"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
 // darkableCP forwards to a live plugin until dark is set, after which every
@@ -70,11 +67,7 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := plugintest.Loopback(fsplugin.New(root, osRemoveHost{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cpCloser)
+	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	dc := &darkableCP{PluginClient: cp}
 	cache, err := sourcecache.Open(filepath.Join(t.TempDir(), "cache.db"))
 	if err != nil {
@@ -155,12 +148,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	prov := fsplugin.New(root, osRemoveHost{})
-	cp, cpCloser, err := plugintest.Loopback(prov)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cpCloser)
+	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	cache, err := sourcecache.Open(filepath.Join(t.TempDir(), "cache.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +182,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	}
 
 	// The source goes dark: the process answers, the directory does not.
-	prov.SetReadDir(func(string) ([]fssource.Entry, error) { return nil, os.ErrPermission })
+	lighten := darken(t, root)
 
 	// The user drags the tile somewhere free. The write is the node's own
 	// half, so it must land and report landing.
@@ -230,7 +218,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 
 	// The source returns: the same tile, the same id, still where the user put
 	// it while nobody could see the source.
-	prov.SetReadDir(nil)
+	lighten()
 	healed, err := cl.GetGrid(ctx, rootGrid)
 	if err != nil {
 		t.Fatal(err)
