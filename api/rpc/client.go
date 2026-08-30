@@ -149,18 +149,6 @@ func tileResp(r *connect.Response[pb.TileResponse], err error) (*Tile, error) {
 // Create* are typed sugar over the single CreateTile RPC: each builds the
 // kind-tagged CreateTileRequest (see conv.go) and sends it. The wire has one
 // create; these keep call sites readable.
-// CreateEntryTile mints a plugin menu-entry tile (#258): the entry's
-// underlying kind carrying MenuEntry, so the owning plugin recognizes
-// its tool (fs's search). Params follow as a WriteContent on first
-// descent — creation stays metadata-only, like every create.
-func (c *Client) CreateEntryTile(ctx context.Context, req *CreateEntryTileRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(&pb.CreateTileRequest{
-		GridId: req.GridID,
-		Tile: &pb.Tile{Kind: req.Kind, X: req.X, Y: req.Y, W: req.W, H: req.H,
-			AltText: req.Label, MenuEntry: req.MenuEntry},
-	})))
-}
-
 func (c *Client) CreateWell(ctx context.Context, req *CreateWellRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateWellToProto(req))))
 }

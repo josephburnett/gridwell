@@ -25,20 +25,6 @@ import (
 	"github.com/josephburnett/gridwell/plugins/fs/trash"
 )
 
-// MenuEntrySearch is the (+) menu entry id fs declares (#258); the
-// search well itself waits on the userdocs store (#271).
-const MenuEntrySearch = "search"
-
-// SearchParamSchema is the form the client prompts with on first
-// descent into a search well.
-const SearchParamSchema = `{
-  "type": "object",
-  "properties": {
-    "query": {"type": "string", "title": "name contains"}
-  },
-  "required": ["query"]
-}`
-
 // Host is the destructive side-effect surface, injected so tests never
 // touch real files (the legacy plugin's discipline).
 type Host interface {
@@ -115,15 +101,6 @@ func (p *Plugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRes
 		Kind:        "fs",
 		DisplayName: "files",
 		Glyph:       "folder",
-		// The (+) tool fs declares (#258). The adapter strips creation
-		// entries until the userdocs store exists (#271), so this is a
-		// forward declaration of the search well.
-		MenuEntries: []*pluginv1.MenuEntry{{
-			Id:          MenuEntrySearch,
-			Label:       "search",
-			Kind:        "well",
-			ParamSchema: SearchParamSchema,
-		}},
 	}
 	// No configured root → ROOTLESS (the legacy rule): the plugin is
 	// listed but not enterable; no context exists to descend into.

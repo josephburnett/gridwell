@@ -69,30 +69,25 @@ message Grid {
   repeated MenuEntry menu_entries = 11;
 }
 
-// MenuEntry is one plugin-declared (+) menu entry (issue #258) — the
-// generic mechanism behind plugin-specific creation tools (fs "search")
-// and extra plugin roots (local's trashcan, #262). Declared in Info,
-// stamped per grid by the serving node exactly like create_schemas, and
-// passed VERBATIM through transit hops (grid_id gains the hop prefix
-// like every id). Two shapes, by which field is set:
+// MenuEntry is one plugin-declared (+) menu entry (issue #258): an extra
+// plugin ROOT (local's trashcan, #262). Declared in Info, stamped per
+// grid by the serving node exactly like writable, and passed VERBATIM
+// through transit hops (grid_id gains the hop prefix like every id). The
+// swatch behaves exactly like a plugin swatch over grid_id: click
+// descends, drag drops an exit-well link.
 //
-//   - grid_id set: a ROOT entry — the swatch behaves exactly like a
-//     plugin swatch over that grid (click descends, drag drops an
-//     exit-well link). kind/param_schema are ignored.
-//   - kind set: a CREATION entry — dropping it creates a tile of that
-//     kind carrying menu_entry = id (the plugin recognizes its own
-//     entries); param_schema, when non-empty, is the #198-subset JSON
-//     Schema the client prompts with ON FIRST DESCENT (#209's
-//     drop-first rule) and commits as the tile's CONTENT through
-//     WriteContent — the plugin validates authoritatively.
+// 5/6 (kind, param_schema) were the CREATION-entry half — dropping an
+// entry to mint a tool tile, with a #198 parameter form on first
+// descent. Removed 2026-08-29: the node never carried it (the pluginhost
+// adapter stripped every creation entry before the wire), so no client
+// could ever receive one.
 message MenuEntry {
-  string id           = 1; // entry identity within the plugin; rides created tiles as Tile.menu_entry
+  string id           = 1; // entry identity within the plugin
   string label        = 2; // swatch label, verbatim
   string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default face)
   string color        = 4; // optional CSS accent for the swatch border/glyph ("" = default)
-  string kind         = 5; // creation entries: text | url | shell | well | pane
-  string param_schema = 6; // creation entries: the parameter form ("" = no params)
-  string grid_id      = 7; // root entries: the target grid, qualified per hop
+  reserved 5, 6;
+  string grid_id      = 7; // the target grid, qualified per hop
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -209,13 +204,11 @@ message Tile {
   // (fs: the filename/sniff) — wire-only, never a stored column.
   string text_presentation = 33;
 
-  // menu_entry names the plugin MenuEntry a creation-entry drop minted
-  // this tile from (issue #258) — how a plugin recognizes its own tools
-  // (fs's "search" well vs a plain well). Set at CreateTile; plugins
-  // that declare entries persist it; others may ignore it. The client
-  // prompts for the entry's params on first descent when the tile has
-  // no content yet.
-  string menu_entry = 34;
+  // 34 (menu_entry): removed 2026-08-29 with the creation-entry half of
+  // MenuEntry — nothing ever minted an entry tile (the pluginhost
+  // adapter stripped creation entries before the wire) and no plugin
+  // ever persisted the field.
+  reserved 34;
 
   // status_detail is the owning plugin's CURRENT TROUBLE with this tile,
   // for the client to display verbatim — e.g. an ssh connection well whose

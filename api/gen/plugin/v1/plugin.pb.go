@@ -226,16 +226,18 @@ func (x *InfoResponse) GetMenuEntries() []*MenuEntry {
 	return nil
 }
 
-// MenuEntry mirrors the gridwell.v1 shape with contexts for targets.
+// MenuEntry mirrors the gridwell.v1 shape with contexts for targets: an
+// extra plugin ROOT the node stamps onto every grid it serves for this
+// plugin. 5/6 (kind, param_schema) were the creation-entry half, removed
+// 2026-08-29 — the adapter stripped every creation entry, so the node
+// never saw one.
 type MenuEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	Glyph         string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`
-	Kind          string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`                                  // creation entries: the created entry's kind
-	ParamSchema   string                 `protobuf:"bytes,6,opt,name=param_schema,json=paramSchema,proto3" json:"param_schema,omitempty"` // creation entries: the #198-subset form
-	Context       string                 `protobuf:"bytes,7,opt,name=context,proto3" json:"context,omitempty"`                            // root entries: the target context key
+	Context       string                 `protobuf:"bytes,7,opt,name=context,proto3" json:"context,omitempty"` // the target context key
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -294,20 +296,6 @@ func (x *MenuEntry) GetGlyph() string {
 func (x *MenuEntry) GetColor() string {
 	if x != nil {
 		return x.Color
-	}
-	return ""
-}
-
-func (x *MenuEntry) GetKind() string {
-	if x != nil {
-		return x.Kind
-	}
-	return ""
-}
-
-func (x *MenuEntry) GetParamSchema() string {
-	if x != nil {
-		return x.ParamSchema
 	}
 	return ""
 }
@@ -1586,15 +1574,13 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\froot_context\x18\x04 \x01(\tR\vrootContext\x12\x14\n" +
 	"\x05watch\x18\x05 \x01(\bR\x05watch\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x127\n" +
-	"\fmenu_entries\x18\a \x03(\v2\x14.plugin.v1.MenuEntryR\vmenuEntries\"\xae\x01\n" +
+	"\fmenu_entries\x18\a \x03(\v2\x14.plugin.v1.MenuEntryR\vmenuEntries\"\x83\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
 	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x14\n" +
-	"\x05color\x18\x04 \x01(\tR\x05color\x12\x12\n" +
-	"\x04kind\x18\x05 \x01(\tR\x04kind\x12!\n" +
-	"\fparam_schema\x18\x06 \x01(\tR\vparamSchema\x12\x18\n" +
-	"\acontext\x18\a \x01(\tR\acontext\"'\n" +
+	"\x05color\x18\x04 \x01(\tR\x05color\x12\x18\n" +
+	"\acontext\x18\a \x01(\tR\acontextJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"'\n" +
 	"\vListRequest\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\"\x83\x01\n" +
 	"\fListResponse\x12*\n" +

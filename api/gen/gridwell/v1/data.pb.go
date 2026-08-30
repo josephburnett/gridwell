@@ -228,31 +228,25 @@ func (x *Grid) GetMenuEntries() []*MenuEntry {
 	return nil
 }
 
-// MenuEntry is one plugin-declared (+) menu entry (issue #258) — the
-// generic mechanism behind plugin-specific creation tools (fs "search")
-// and extra plugin roots (local's trashcan, #262). Declared in Info,
-// stamped per grid by the serving node exactly like create_schemas, and
-// passed VERBATIM through transit hops (grid_id gains the hop prefix
-// like every id). Two shapes, by which field is set:
+// MenuEntry is one plugin-declared (+) menu entry (issue #258): an extra
+// plugin ROOT (local's trashcan, #262). Declared in Info, stamped per
+// grid by the serving node exactly like writable, and passed VERBATIM
+// through transit hops (grid_id gains the hop prefix like every id). The
+// swatch behaves exactly like a plugin swatch over grid_id: click
+// descends, drag drops an exit-well link.
 //
-//   - grid_id set: a ROOT entry — the swatch behaves exactly like a
-//     plugin swatch over that grid (click descends, drag drops an
-//     exit-well link). kind/param_schema are ignored.
-//   - kind set: a CREATION entry — dropping it creates a tile of that
-//     kind carrying menu_entry = id (the plugin recognizes its own
-//     entries); param_schema, when non-empty, is the #198-subset JSON
-//     Schema the client prompts with ON FIRST DESCENT (#209's
-//     drop-first rule) and commits as the tile's CONTENT through
-//     WriteContent — the plugin validates authoritatively.
+// 5/6 (kind, param_schema) were the CREATION-entry half — dropping an
+// entry to mint a tool tile, with a #198 parameter form on first
+// descent. Removed 2026-08-29: the node never carried it (the pluginhost
+// adapter stripped every creation entry before the wire), so no client
+// could ever receive one.
 type MenuEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                      // entry identity within the plugin; rides created tiles as Tile.menu_entry
-	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                                // swatch label, verbatim
-	Glyph         string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                                // the declared glyph vocabulary ("" = the kind's default face)
-	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`                                // optional CSS accent for the swatch border/glyph ("" = default)
-	Kind          string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`                                  // creation entries: text | url | shell | well | pane
-	ParamSchema   string                 `protobuf:"bytes,6,opt,name=param_schema,json=paramSchema,proto3" json:"param_schema,omitempty"` // creation entries: the parameter form ("" = no params)
-	GridId        string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`                // root entries: the target grid, qualified per hop
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // entry identity within the plugin
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                 // swatch label, verbatim
+	Glyph         string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default face)
+	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`                 // optional CSS accent for the swatch border/glyph ("" = default)
+	GridId        string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -311,20 +305,6 @@ func (x *MenuEntry) GetGlyph() string {
 func (x *MenuEntry) GetColor() string {
 	if x != nil {
 		return x.Color
-	}
-	return ""
-}
-
-func (x *MenuEntry) GetKind() string {
-	if x != nil {
-		return x.Kind
-	}
-	return ""
-}
-
-func (x *MenuEntry) GetParamSchema() string {
-	if x != nil {
-		return x.ParamSchema
 	}
 	return ""
 }
@@ -434,13 +414,6 @@ type Tile struct {
 	// always has for localdb docs. Plugin-derived from the content itself
 	// (fs: the filename/sniff) — wire-only, never a stored column.
 	TextPresentation string `protobuf:"bytes,33,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
-	// menu_entry names the plugin MenuEntry a creation-entry drop minted
-	// this tile from (issue #258) — how a plugin recognizes its own tools
-	// (fs's "search" well vs a plain well). Set at CreateTile; plugins
-	// that declare entries persist it; others may ignore it. The client
-	// prompts for the entry's params on first descent when the tile has
-	// no content yet.
-	MenuEntry string `protobuf:"bytes,34,opt,name=menu_entry,json=menuEntry,proto3" json:"menu_entry,omitempty"`
 	// status_detail is the owning plugin's CURRENT TROUBLE with this tile,
 	// for the client to display verbatim — e.g. an ssh connection well whose
 	// last dial failed carries that error until the connection comes up
@@ -688,13 +661,6 @@ func (x *Tile) GetServesPage() bool {
 func (x *Tile) GetTextPresentation() string {
 	if x != nil {
 		return x.TextPresentation
-	}
-	return ""
-}
-
-func (x *Tile) GetMenuEntry() string {
-	if x != nil {
-		return x.MenuEntry
 	}
 	return ""
 }
@@ -3392,15 +3358,13 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x129\n" +
 	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"\"\xad\x01\n" +
+	"\"\x82\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
 	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x14\n" +
-	"\x05color\x18\x04 \x01(\tR\x05color\x12\x12\n" +
-	"\x04kind\x18\x05 \x01(\tR\x04kind\x12!\n" +
-	"\fparam_schema\x18\x06 \x01(\tR\vparamSchema\x12\x17\n" +
-	"\agrid_id\x18\a \x01(\tR\x06gridId\"\xfe\x06\n" +
+	"\x05color\x18\x04 \x01(\tR\x05color\x12\x17\n" +
+	"\agrid_id\x18\a \x01(\tR\x06gridIdJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xe5\x06\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3436,10 +3400,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x13configure_plugin_id\x18\x1f \x01(\tR\x11configurePluginId\x12\x1f\n" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
-	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12\x1d\n" +
-	"\n" +
-	"menu_entry\x18\" \x01(\tR\tmenuEntry\x12#\n" +
-	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\"\r\n" +
+	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
+	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\"\x10#\"\r\n" +
 	"\vInfoRequest\"\xd5\x03\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +

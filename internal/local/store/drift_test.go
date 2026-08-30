@@ -50,12 +50,9 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// DDL column by design. serves_page is likewise derived, by the
 			// owning plugin from its own content (fs: the filename's media
 			// type) — wire-only; localdb tiles never declare it.
-			// menu_entry marks a plugin-minted tool tile (#258); the OWNING
-			// plugin persists it in its own DB (fs does) — the local store
-			// mints no entry tiles today, so for it the field is wire-only.
 			// status_detail is the owning plugin's transient trouble (the
 			// ssh plugin's last dial error) — wire-only, never a column.
-			protoOnly: []string{"reference", "serves_page", "text_presentation", "menu_entry", "status_detail"},
+			protoOnly: []string{"reference", "serves_page", "text_presentation", "status_detail"},
 		},
 	}
 	for _, c := range cases {

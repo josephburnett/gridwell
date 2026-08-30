@@ -223,29 +223,15 @@ const (
 	GridSourceProc = "proc"
 )
 
-// CreateEntryTileRequest mints a tile from a plugin MenuEntry (#258).
-type CreateEntryTileRequest struct {
-	GridID     string
-	Kind       string
-	MenuEntry  string
-	Label      string
-	X, Y, W, H int64
-}
-
 // MenuEntry is one plugin-declared (+) menu entry (issue #258) — see
-// the proto's MenuEntry for the full contract. GridID set = a ROOT
-// entry (plugin-swatch semantics over that grid); Kind set = a CREATION
-// entry (drop mints a tile carrying Tile.MenuEntry = ID; ParamSchema,
-// when non-empty, is prompted on first descent and committed as
-// content).
+// the proto's MenuEntry for the full contract. It names an extra plugin
+// ROOT: a swatch with plugin-swatch semantics over GridID.
 type MenuEntry struct {
-	ID          string `json:"id"`
-	Label       string `json:"label,omitempty"`
-	Glyph       string `json:"glyph,omitempty"`
-	Color       string `json:"color,omitempty"`
-	Kind        string `json:"kind,omitempty"`
-	ParamSchema string `json:"param_schema,omitempty"`
-	GridID      string `json:"grid_id,omitempty"`
+	ID     string `json:"id"`
+	Label  string `json:"label,omitempty"`
+	Glyph  string `json:"glyph,omitempty"`
+	Color  string `json:"color,omitempty"`
+	GridID string `json:"grid_id,omitempty"`
 }
 
 // EntryPlugin shapes a plugin ROOT MenuEntry as a PSEUDO-PLUGIN (#258):
@@ -410,11 +396,6 @@ type Tile struct {
 	// stored user text_mode rules (localdb docs). Wire-only,
 	// plugin-derived.
 	TextPresentation string `json:"text_presentation,omitempty"`
-	// MenuEntry names the plugin MenuEntry this tile was minted from
-	// (issue #258; "" for ordinary tiles). The plugin recognizes its own
-	// tools by it; the client prompts for the entry's params on first
-	// descent while the tile has no content.
-	MenuEntry string `json:"menu_entry,omitempty"`
 	// StatusDetail is the owning plugin's current trouble with this tile,
 	// displayed verbatim (e.g. an ssh connection well's last dial error
 	// while it has no child yet). Wire-only, plugin-derived — never a

@@ -608,9 +608,8 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		} else {
 			e["kind"] = templateKindName(item.primitive)
 		}
-		// A plugin-declared menu entry (#258) reports its identity so a
-		// test can target it: a CREATION entry (!isPlugin) or a ROOT entry
-		// riding a plugin-shaped row.
+		// A plugin-declared ROOT entry (#258) reports its identity so a
+		// test can tell it from the declaring plugin's own row.
 		if item.entry != nil {
 			e["entry"] = item.entry.ID
 			e["label"] = item.entry.Label

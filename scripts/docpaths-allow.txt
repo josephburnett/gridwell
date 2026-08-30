@@ -31,3 +31,6 @@ docs/one-node.md internal/parity
 # The 2026-08-22 inventory names the retired layout engine (folded into the store 2026-08-29):
 docs/content-presentation.md internal/layout
 docs/one-node.md internal/layout
+# The 2026-08-29 architecture review names the dead machinery S1 removed:
+docs/architecture-review.md client/schemaform
+docs/architecture-review.md client/wasm/entry_params.go

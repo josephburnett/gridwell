@@ -44,15 +44,18 @@ message InfoResponse {
   repeated MenuEntry menu_entries = 7;
 }
 
-// MenuEntry mirrors the gridwell.v1 shape with contexts for targets.
+// MenuEntry mirrors the gridwell.v1 shape with contexts for targets: an
+// extra plugin ROOT the node stamps onto every grid it serves for this
+// plugin. 5/6 (kind, param_schema) were the creation-entry half, removed
+// 2026-08-29 — the adapter stripped every creation entry, so the node
+// never saw one.
 message MenuEntry {
   string id           = 1;
   string label        = 2;
   string glyph        = 3;
   string color        = 4;
-  string kind         = 5; // creation entries: the created entry's kind
-  string param_schema = 6; // creation entries: the #198-subset form
-  string context      = 7; // root entries: the target context key
+  reserved 5, 6;
+  string context      = 7; // the target context key
 }
 
 // ─── Listing ───────────────────────────────────────────────────────────────

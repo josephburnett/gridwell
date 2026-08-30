@@ -233,11 +233,11 @@ var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell, tplP
 type paletteItem struct {
 	isPlugin  bool
 	plugin    rpc.PluginInfo // when isPlugin (also set for a root ENTRY's owner)
-	primitive templateKind   // when !isPlugin && entry == nil
-	// entry is a plugin-declared menu entry (#258): with GridID set it is
-	// a ROOT entry riding the plugin row (plugin-swatch semantics over
-	// that grid); with Kind set it is a CREATION entry riding after the
-	// primitives (drop mints a tile carrying MenuEntry = entry.ID).
+	primitive templateKind   // when !isPlugin
+	// entry is the plugin-declared ROOT menu entry (#258) this
+	// pseudo-plugin swatch came from — local's trashcan, a plugin's
+	// second surface. Set only alongside isPlugin; it names the entry so
+	// a test can tell a declared root from the plugin's own row.
 	entry *rpc.MenuEntry
 	// promotePane, when set, marks a PROMOTE drag (2026-08-27): the item is
 	// the ephemeral url visit shown in that pane, dragged off the bar's
@@ -295,19 +295,6 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 				continue
 			}
 			items = append(items, paletteItem{primitive: k})
-		}
-	}
-	// The grid's CREATION entries follow the primitives (#258): the
-	// owning plugin's declared tools, stamped per grid like writable —
-	// dropping one mints a tile the plugin recognizes by MenuEntry. Deliberately OUTSIDE the writable gate: writable is
-	// the "+ palette primitives" capability, and a read-only projection
-	// (fs) declaring a tool is precisely how tools exist there — the
-	// declaration IS the permission.
-	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		for i := range g.Meta.MenuEntries {
-			if g.Meta.MenuEntries[i].Kind != "" && g.Meta.MenuEntries[i].GridID == "" {
-				items = append(items, paletteItem{entry: &g.Meta.MenuEntries[i]})
-			}
 		}
 	}
 	return items

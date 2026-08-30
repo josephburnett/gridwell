@@ -87,7 +87,6 @@ func TileToProto(t *Tile) *pb.Tile {
 		UrlFrozen:        t.URLFrozen,
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
-		MenuEntry:        t.MenuEntry,
 		StatusDetail:     t.StatusDetail,
 
 		ConfigurePluginId: t.ConfigurePluginID,
@@ -129,7 +128,6 @@ func TileFromProto(t *pb.Tile) *Tile {
 		URLFrozen:        t.UrlFrozen,
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
-		MenuEntry:        t.MenuEntry,
 		StatusDetail:     t.StatusDetail,
 
 		ConfigurePluginID: t.ConfigurePluginId,
@@ -306,7 +304,7 @@ func MenuEntriesToProto(in []MenuEntry) []*pb.MenuEntry {
 	out := make([]*pb.MenuEntry, len(in))
 	for i, e := range in {
 		out[i] = &pb.MenuEntry{Id: e.ID, Label: e.Label, Glyph: e.Glyph,
-			Color: e.Color, Kind: e.Kind, ParamSchema: e.ParamSchema, GridId: e.GridID}
+			Color: e.Color, GridId: e.GridID}
 	}
 	return out
 }
@@ -318,7 +316,7 @@ func MenuEntriesFromProto(in []*pb.MenuEntry) []MenuEntry {
 	out := make([]MenuEntry, len(in))
 	for i, e := range in {
 		out[i] = MenuEntry{ID: e.Id, Label: e.Label, Glyph: e.Glyph,
-			Color: e.Color, Kind: e.Kind, ParamSchema: e.ParamSchema, GridID: e.GridId}
+			Color: e.Color, GridID: e.GridId}
 	}
 	return out
 }
