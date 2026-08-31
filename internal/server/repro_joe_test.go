@@ -135,3 +135,57 @@ func TestReproJoePaneContent(t *testing.T) {
 		fmt.Printf("REPRO pane %s ReadContent OK %d bytes mt=%q ver=%d\n", id, len(data), mt, ver)
 	}
 }
+func TestReproKeyFormTileReads(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "gridwell.db")
+	cp(t, joeSrcMain, dbPath)
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	gl := gitlabfake.New(t,
+		gitlabfake.Todo{ID: 900001, State: "pending", CreatedAt: "2026-08-25T10:00:00Z",
+			TargetType: "MergeRequest", Body: "fresh", ActionName: "review_requested"},
+	)
+	cpClient := plugintest.Spawn(t, "gitlab", gl.Config(t, map[string]string{"refresh": "1ns"}))
+	reg := plugin.NewRegistry()
+	reg.Register(joeNodeID, "home", local.New(st, nil), nil)
+	reg.Register(joeGitlab, "gitlab", pluginhost.New(cpClient, st.Namespace(joeGitlab)), nil)
+	srv := mustNew(t, reg, Config{ID: joeNodeID})
+	hs := serveWeb(t, srv)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	ctx := context.Background()
+
+	// The week of 2026-08-24 holds the NEW todo (id 900001, no minted row):
+	// its tile in the listing is key-form. Find it and read it back by id.
+	root, err := cl.GetGrid(ctx, joeGitlab+"/75")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var weekGrid string
+	for _, tl := range root.Tiles {
+		if tl.AltText != "" && tl.ChildGridID != "" && tl.Kind == "well" {
+			g, gerr := cl.GetGrid(ctx, tl.ChildGridID)
+			if gerr != nil {
+				continue
+			}
+			for _, wt := range g.Tiles {
+				if wt.Kind == "text" && rpc.ShapeOf(rpc.LocalOf(wt.ID)) == rpc.ShapeKey {
+					weekGrid = tl.ChildGridID
+					fmt.Printf("REPRO key-form tile %s label=%q\n", wt.ID, wt.AltText)
+					_, terr := cl.GetTile(ctx, wt.ID)
+					fmt.Printf("REPRO GetTile(key-form) err=%v\n", terr)
+					_, _, _, rerr := cl.ReadContent(ctx, wt.ID)
+					fmt.Printf("REPRO ReadContent(key-form) err=%v\n", rerr)
+				}
+			}
+			if weekGrid != "" {
+				break
+			}
+		}
+	}
+	if weekGrid == "" {
+		t.Fatal("no key-form tile found in any week grid")
+	}
+}
