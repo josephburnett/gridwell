@@ -85,10 +85,12 @@ func darken(t *testing.T, root string) (lighten func()) {
 	return restore
 }
 
-func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
-	// A source that stops answering costs the user nothing: the adapter merges
-	// an empty non-authoritative listing, so the durable rows still read,
-	// stamped stale and retiring nothing.
+func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
+	// A source that stops answering costs the user what they ARRANGED and
+	// nothing more: the adapter joins an empty non-authoritative listing, so
+	// the rows the user touched still read, stamped stale and retiring
+	// nothing, while an entry nobody ever touched has no row to read from and
+	// is simply absent until the source speaks again.
 	root := seedTree(t)
 	v2 := pluginNode(t, root)
 	ctx := context.Background()
@@ -104,6 +106,21 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	if len(before.Tiles) == 0 || before.Grid.Stale {
 		t.Fatalf("bad first read: %+v", before.Grid)
 	}
+	// One durable touch: the user drags notes.md somewhere. That is what
+	// mints a row, and the row is what survives the dark.
+	var notes rpc.Tile
+	for _, tile := range before.Tiles {
+		if tile.AltText == "notes.md" {
+			notes = tile
+		}
+	}
+	if notes.ID == "" {
+		t.Fatal("no notes.md tile")
+	}
+	placed, err := v2.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: notes.ID, GridID: rootGrid, X: 7, Y: 3, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
 	// The source goes dark — EACCES, an unmounted share — so every read fails
 	// transiently.
 	lighten := darken(t, root)
@@ -114,15 +131,13 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	if !after.Grid.Stale {
 		t.Fatal("remembered answer not stamped stale")
 	}
-	if len(after.Tiles) != len(before.Tiles) {
-		t.Fatalf("dark source changed the tile set: %d != %d", len(after.Tiles), len(before.Tiles))
+	if len(after.Tiles) != 1 {
+		t.Fatalf("dark source answered %d tiles, want only the touched one: %+v", len(after.Tiles), after.Tiles)
 	}
-	for i := range before.Tiles {
-		if after.Tiles[i].ID != before.Tiles[i].ID || after.Tiles[i].X != before.Tiles[i].X {
-			t.Fatalf("remembered tile drifted: %+v != %+v", after.Tiles[i], before.Tiles[i])
-		}
+	if got := after.Tiles[0]; got.ID != placed.ID || got.X != 7 || got.Y != 3 || got.AltText != "notes.md" {
+		t.Fatalf("the touched row drifted in the dark: %+v", got)
 	}
-	// The source returns; the stale stamp clears.
+	// The source returns; the stale stamp clears and every entry is back.
 	lighten()
 	healed, err := v2.GetGrid(ctx, rootGrid)
 	if err != nil {
@@ -130,6 +145,9 @@ func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	}
 	if healed.Grid.Stale {
 		t.Fatal("healed source still stamped stale")
+	}
+	if len(healed.Tiles) != len(before.Tiles) {
+		t.Fatalf("healed listing = %d tiles, want the original %d", len(healed.Tiles), len(before.Tiles))
 	}
 }
 
@@ -156,6 +174,15 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 			bin = tile
 		}
 	}
+	// Arrange it first: identity is a property of a ROW, so the "recreation
+	// mints fresh" half of the contract needs one. An entry nobody ever
+	// touched has no id to burn — deleting it is the plugin's verdict and
+	// nothing else, which the last stanza pins.
+	minted, err := v2.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: bin.ID, GridID: rootGrid, X: 4, Y: 4, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin = *minted
 	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: bin.ID}); err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +206,29 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	for _, tile := range g.Tiles {
 		if tile.AltText == "data.bin" && tile.ID == bin.ID {
 			t.Fatal("a recreated file reused the retired id")
+		}
+	}
+	// Deleting an UNTOUCHED entry involves no row at all: the plugin trashes
+	// the file and the next listing simply does not name it.
+	var doc rpc.Tile
+	for _, tile := range g.Tiles {
+		if tile.AltText == "notes.md" {
+			doc = tile
+		}
+	}
+	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: doc.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "notes.md")); !os.IsNotExist(err) {
+		t.Fatalf("untouched entry not deleted at the source: %v", err)
+	}
+	g, err = v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tile := range g.Tiles {
+		if tile.AltText == "notes.md" {
+			t.Fatal("a deleted untouched entry is still listed")
 		}
 	}
 }
@@ -229,8 +279,15 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, sub2, late := find("notes.md"), find("sub"), find("later.md")
-	if got.ID != notes.ID || got.X != 6 || got.Y != 2 || got.W != 2 || got.H != 1 {
+	if got.X != 6 || got.Y != 2 || got.W != 2 || got.H != 1 {
 		t.Fatalf("placement did not persist: %+v", got)
+	}
+	// The drag minted a row, so the tile is named by it from here on. The
+	// address the client was already holding still resolves to the same tile:
+	// an id in a bookmark or a link does not go stale because the thing it
+	// names finally earned a row.
+	if held, err := v2.GetTile(ctx, notes.ID); err != nil || held.ID != got.ID {
+		t.Fatalf("the pre-mint address stopped resolving: %+v (%v), want %s", held, err, got.ID)
 	}
 	if sub2.ViewCx != 2 || sub2.ViewCy != -1 || sub2.ViewZoom != 1.4 {
 		t.Fatalf("framing did not persist: %+v", sub2)
@@ -241,7 +298,10 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 }
 
 // TestFSPluginSweepRemovesOnlyTheDead: a file deleted on disk is swept
-// on the next read; every surviving tile keeps its id and placement.
+// on the next read; every surviving tile keeps its id, and one the user
+// ARRANGED keeps its placement. An untouched entry's placement is derived,
+// so it may reflow when the directory's contents change — that is the whole
+// difference between a derived answer and a row.
 func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 	root := seedTree(t)
 	v2 := pluginNode(t, root)
@@ -252,6 +312,16 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 	}
 	rootGrid := pl.Plugins[0].RootGridID
 	before, err := v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var arranged rpc.Tile
+	for _, tile := range before.Tiles {
+		if tile.AltText == "notes.md" {
+			arranged = tile
+		}
+	}
+	placed, err := v2.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: arranged.ID, GridID: rootGrid, X: 6, Y: 6, W: 1, H: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,12 +343,15 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 		survivors[tile.AltText] = tile
 	}
 	for _, tile := range before.Tiles {
-		if tile.AltText == "data.bin" {
+		if tile.AltText == "data.bin" || tile.AltText == "notes.md" {
 			continue
 		}
 		s, ok := survivors[tile.AltText]
-		if !ok || s.ID != tile.ID || s.X != tile.X || s.Y != tile.Y {
-			t.Fatalf("survivor %s drifted: %+v != %+v", tile.AltText, s, tile)
+		if !ok || s.ID != tile.ID {
+			t.Fatalf("survivor %s lost its identity: %+v != %+v", tile.AltText, s, tile)
 		}
+	}
+	if s := survivors["notes.md"]; s.ID != placed.ID || s.X != 6 || s.Y != 6 {
+		t.Fatalf("the arranged survivor drifted: %+v", s)
 	}
 }

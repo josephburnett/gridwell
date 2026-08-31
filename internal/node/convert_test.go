@@ -190,10 +190,10 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 	// The retired key stayed retired across the conversion: a
 	// non-authoritative listing that says nothing, which is the shape a dark
 	// source takes, answers the two live rows only.
-	if live, lerr := p.Merge(rootGID, nil, false); lerr != nil || len(live) != 2 {
+	if live, lerr := p.Overlay(rootGID, nil); lerr != nil || len(live) != 2 {
 		t.Fatalf("retired key came back live: %+v err=%v", live, lerr)
 	}
-	tiles, err := p.Merge(rootGID, []store.Entry{{Key: "docs", Kind: "well", Label: "docs", ChildContext: "root/docs"}, {Key: "notes.md", Kind: "text", Label: "notes.md"}}, true)
+	tiles, err := p.Overlay(rootGID, []store.Entry{{Key: "docs", Kind: "well", Label: "docs", ChildContext: "root/docs"}, {Key: "notes.md", Kind: "text", Label: "notes.md"}})
 	if err != nil {
 		t.Fatal(err)
 	}

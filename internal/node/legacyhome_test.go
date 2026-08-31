@@ -210,10 +210,10 @@ retired_names:
 	if err != nil || e.ChildGridID != legacyFSID+"/"+strconv.FormatInt(docsGID, 10) {
 		t.Fatalf("exit well child = %+v (%v), want the re-minted docs grid %d", e, err, docsGID)
 	}
-	tiles, err := p.Merge(rootGID, []store.Entry{
+	tiles, err := p.Overlay(rootGID, []store.Entry{
 		{Key: "docs", Kind: "well", Label: "docs", ChildContext: "root/docs"},
 		{Key: "notes.md", Kind: "text", Label: "notes.md"},
-	}, true)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

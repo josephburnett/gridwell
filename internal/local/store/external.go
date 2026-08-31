@@ -257,6 +257,47 @@ func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h in
 	return res.LastInsertId()
 }
 
+// Refresh updates the CONTENT SNAPSHOT a row keeps — the kind, the label, the
+// address — to what the listing just said. The snapshot is not what a listed
+// entry reads by (Overlay takes those facts from the entry itself); it is only
+// what the row answers with when the source cannot be reached, so this keeps
+// the outage answer current with the last thing the source actually said.
+//
+// It writes only where a value genuinely differs, so a steady listing writes
+// nothing at all and a renamed file costs exactly one UPDATE. child_grid_id is
+// deliberately not refreshed: it is a stored REFERENCE, and re-pointing one
+// because a listing came back differently is how a link starts naming
+// something the user never linked.
+func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
+	if gridID == 0 || len(entries) == 0 {
+		return nil
+	}
+	stored, err := n.tiles(gridID)
+	if err != nil {
+		return err
+	}
+	byKey := map[string]ExtTile{}
+	for _, r := range stored {
+		byKey[r.Key] = r
+	}
+	now := n.s.now().UnixNano()
+	for _, e := range entries {
+		r, ok := byKey[e.Key]
+		if !ok {
+			continue
+		}
+		kind := entryKind(e)
+		if r.Kind == kind && r.Label == e.Label {
+			continue
+		}
+		if _, err := n.s.db.Exec(`UPDATE tiles SET kind = ?, alt_text = ?, updated_at = ?
+			WHERE id = ? AND ns = ? AND tombstoned = 0`, kind, e.Label, now, r.ID, n.ns); err != nil {
+			return fmt.Errorf("store: refresh %q: %w", e.Key, err)
+		}
+	}
+	return nil
+}
+
 // Sweep retires the rows of a grid whose keys an AUTHORITATIVE listing did not
 // mention: the source says they are gone, so the ids they minted retire and
 // never come back. Only rows are swept — an untouched entry has nothing to

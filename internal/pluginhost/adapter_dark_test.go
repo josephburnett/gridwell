@@ -141,6 +141,11 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 // facts and the node's, and replaying it would replay the old placement over
 // the new one, so the move would appear to fail and then reappear when the
 // source came back.
+//
+// The arrangement is what a ROW holds, so the test arranges the tile before
+// the dark: an entry nobody has touched has no row, is not shown while the
+// source is dark, and cannot be moved there — the node would be minting a
+// thing it cannot describe. That refusal is the last stanza.
 func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	root := seedTree(t)
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
@@ -180,6 +185,13 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	if moved.ID == "" {
 		t.Fatal("no notes.md tile to move")
 	}
+	// The arrangement the dark must not cost: one move while the source is
+	// still readable, which is what mints the row.
+	first, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: moved.ID, X: 8, Y: 8, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved = *first
 
 	// The source goes dark: the process answers, the directory does not.
 	lighten := darken(t, root)
@@ -200,8 +212,8 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	if !g.Grid.Stale {
 		t.Fatal("a dark source must stamp the grid stale")
 	}
-	if len(g.Tiles) != len(before.Tiles) {
-		t.Fatalf("dark source changed the tile set: %d != %d", len(g.Tiles), len(before.Tiles))
+	if len(g.Tiles) != 1 {
+		t.Fatalf("dark source answered %d tiles, want only the arranged one: %+v", len(g.Tiles), g.Tiles)
 	}
 	var back rpc.Tile
 	for _, tile := range g.Tiles {
@@ -230,5 +242,25 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 		if tile.ID == moved.ID && (tile.X != 9 || tile.Y != 9) {
 			t.Fatalf("the healed listing overwrote the user's placement: %+v", tile)
 		}
+	}
+	if len(healed.Tiles) != len(before.Tiles) {
+		t.Fatalf("healed listing = %d tiles, want the original %d", len(healed.Tiles), len(before.Tiles))
+	}
+
+	// An entry with no row cannot be arranged while its source is dark: there
+	// is nothing to derive a tile from, so the refusal is a plain NotFound
+	// the client surfaces, never a silent no-op.
+	var untouched rpc.Tile
+	for _, tile := range healed.Tiles {
+		if tile.AltText == "data.bin" {
+			untouched = tile
+		}
+	}
+	if untouched.ID == "" {
+		t.Fatal("no untouched tile to try")
+	}
+	darken(t, root)
+	if _, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: untouched.ID, X: 1, Y: 1, W: 1, H: 1}); err == nil {
+		t.Fatal("placing an untouched entry while its source is dark must refuse, not invent a row")
 	}
 }

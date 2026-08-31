@@ -130,8 +130,13 @@ func TestProcPluginSweepAndPlacement(t *testing.T) {
 	if back.ID == "" {
 		t.Fatal("living child swept")
 	}
-	if back.ID != child.ID || back.X != 5 || back.Y != 5 {
+	if back.X != 5 || back.Y != 5 {
 		t.Fatalf("survivor drifted: %+v", back)
+	}
+	// The placement minted the row, so the tile is named by it now; the
+	// address the client held before still resolves to the same tile.
+	if held, err := v2.GetTile(ctx, child.ID); err != nil || held.ID != back.ID {
+		t.Fatalf("the pre-mint address stopped resolving: %+v (%v), want %s", held, err, back.ID)
 	}
 }
 
