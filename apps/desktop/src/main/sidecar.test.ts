@@ -22,10 +22,10 @@ class FakeChild extends EventEmitter {
   }
 }
 
-function boot(child: FakeChild, timeoutMs = 200) {
+function boot(child: FakeChild, silenceMs = 200) {
   return startSidecar({
     port: 4242,
-    timeoutMs,
+    silenceMs,
     onLog: () => {},
     spawnFn: () => child as unknown as ChildProcess,
     binaryPath: '/fake/gridwell',
@@ -71,15 +71,47 @@ test('rejects immediately on a spawn error (not the generic timeout)', async () 
   await assert.rejects(p, /ENOEXEC/);
 });
 
-test('times out and kills the child when nothing is announced', async () => {
+test('gives up on SILENCE and kills the child when nothing is announced', async () => {
   const child = new FakeChild();
-  await assert.rejects(boot(child, 50), /did not report ready within 50ms/);
+  await assert.rejects(boot(child, 50), /went silent for 50ms/);
   assert.ok(child.killed, 'the hung child is terminated, not leaked');
+});
+
+test('a slow but TALKING boot is never killed: every line re-arms the window', async () => {
+  // The upgrade path: a one-database conversion announces each step it
+  // finishes and takes longer than the whole window between them. A fixed
+  // deadline SIGTERMed exactly this, tearing a conversion of real data in
+  // half; only silence may end a boot.
+  const child = new FakeChild();
+  const p = boot(child, 40);
+  for (const line of [
+    'gridwell: converting ~/.gridwell to the one-database layout',
+    'gridwell: convert: plugin fs: 812 grids, 40311 tiles',
+    'gridwell: converted; the old files are in ~/.gridwell/db.pre-one-node',
+  ]) {
+    await new Promise((r) => setTimeout(r, 30)); // under the window, every time
+    child.stdout.write(`${line}\n`);
+  }
+  await new Promise((r) => setTimeout(r, 30));
+  child.stdout.write('gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1)\n');
+  const sc = await p; // well past 40ms, and alive throughout
+  assert.equal(sc.origin, 'http://127.0.0.1:9999');
+  assert.equal(child.killed, false, 'a talking process must never be killed for being slow');
+  sc.stop();
+});
+
+test('silence AFTER progress still ends the boot: the window re-arms, it does not vanish', async () => {
+  const child = new FakeChild();
+  const p = boot(child, 40);
+  await new Promise((r) => setTimeout(r, 20));
+  child.stdout.write('gridwell: converting ~/.gridwell to the one-database layout\n');
+  await assert.rejects(p, /went silent for 40ms/);
+  assert.ok(child.killed, 'a hung process is still terminated, however far it got');
 });
 
 test('a late banner after settle does not double-resolve or unkill', async () => {
   const child = new FakeChild();
-  await assert.rejects(boot(child, 50), /did not report ready/);
+  await assert.rejects(boot(child, 50), /went silent/);
   child.stderr.write('gridwell: serving on 127.0.0.1:9999\n'); // ignored: settled
   assert.ok(child.killed);
 });
@@ -111,7 +143,7 @@ test('--no-server runs `status` and rejects clearly when nothing is running', as
   const argvs: string[][] = [];
   const child = new FakeChild();
   const p = startSidecar({
-    timeoutMs: 200,
+    silenceMs: 200,
     onLog: () => {},
     noServer: true,
     spawnFn: (_bin, args) => {
@@ -129,7 +161,7 @@ test('--no-server runs `status` and rejects clearly when nothing is running', as
 test('--no-server connects to a running server via the status banner', async () => {
   const child = new FakeChild();
   const p = startSidecar({
-    timeoutMs: 200,
+    silenceMs: 200,
     onLog: () => {},
     noServer: true,
     spawnFn: () => child as unknown as ChildProcess,

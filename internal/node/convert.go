@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -85,6 +86,9 @@ func convert(home string, cfg *config.ServerConfig, afterStep func(step string) 
 	target := config.DBFile(home)
 	tmp := target + ".converting"
 	log.Printf("gridwell: converting %s to the one-database layout (%s)", home, target)
+	defer heartbeat(2*time.Second, func(d time.Duration) {
+		log.Printf("gridwell: convert: still working (%s elapsed)", d.Round(time.Second))
+	})()
 
 	// A temp left by an interrupted attempt is scrap: the old layout it was
 	// built from is still there, untouched, so the only safe thing to do with
@@ -183,6 +187,35 @@ func convert(home string, cfg *config.ServerConfig, afterStep func(step string) 
 	}
 	log.Printf("gridwell: converted; the old files are in %s (delete when satisfied)", filepath.Join(home, "db.pre-one-node"))
 	return nil
+}
+
+// heartbeat keeps a long step audible, and returns the stop. The desktop
+// wrapper judges a booting sidecar by whether it is still talking
+// (apps/desktop/src/main/sidecar.ts): silence is what ends a boot, and a
+// conversion of a real home can spend minutes inside one VACUUM or one
+// migration chain with nothing to report. A tick says the process is alive
+// without claiming to know how far along it is — a claim this cannot honestly
+// make, since neither SQLite step reports progress.
+func heartbeat(every time.Duration, say func(elapsed time.Duration)) func() {
+	done, stopped := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(stopped)
+		t := time.NewTicker(every)
+		defer t.Stop()
+		start := time.Now()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				say(time.Since(start))
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-stopped
+	}
 }
 
 // setAsideOldLayout retires the per-namespace layout once gridwell.db is the

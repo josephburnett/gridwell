@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/josephburnett/gridwell/internal/config"
@@ -262,4 +263,42 @@ func diff(want, got string) string {
 		}
 	}
 	return "(identical)"
+}
+
+// TestHeartbeatKeepsALongStepAudible is the other half of the kill: the
+// wrapper spares a sidecar that is still talking, so a conversion that spends
+// minutes inside one VACUUM or one migration chain must say so. Nothing in the
+// conversion itself reports progress, and the tick is what stands in for it.
+func TestHeartbeatKeepsALongStepAudible(t *testing.T) {
+	beats := make(chan time.Duration, 8)
+	stop := heartbeat(2*time.Millisecond, func(d time.Duration) { beats <- d })
+	for i := 0; i < 3; i++ {
+		select {
+		case d := <-beats:
+			if d <= 0 {
+				t.Fatalf("beat %d reported %v elapsed", i, d)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("silence: beat %d never came", i)
+		}
+	}
+	stop()
+	// stop waits for the ticker to quit, so nothing is left beating behind a
+	// finished conversion.
+	drain(beats)
+	select {
+	case d := <-beats:
+		t.Fatalf("a beat after stop: %v", d)
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
+func drain(c chan time.Duration) {
+	for {
+		select {
+		case <-c:
+		default:
+			return
+		}
+	}
 }

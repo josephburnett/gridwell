@@ -28,8 +28,12 @@ interface StartOptions {
   // Passed as --bind-default, so an explicit `web.bind` in server.yaml still
   // wins: the server owns the listen-address decision.
   port?: number;
-  // Milliseconds to wait for the ready line before giving up.
-  timeoutMs?: number;
+  // Milliseconds of SILENCE to tolerate before giving up. It is not a
+  // deadline on boot: every line the sidecar prints resets it, so a slow but
+  // talking process — a one-database conversion, a migration chain over real
+  // data — is never killed for taking its time. Only a process that has gone
+  // quiet is.
+  silenceMs?: number;
   // Sink for sidecar stdout/stderr lines (defaults to console).
   onLog?: (line: string) => void;
   // noServer: never start a server. Runs `gridwell status` instead of
@@ -48,8 +52,14 @@ interface StartOptions {
 
 // startSidecar spawns the Go backend (Connect-RPC plus static files) and
 // resolves once it announces its actual bound address ("gridwell: serving on
-// ..."). It rejects if the process exits first or the timeout elapses. The
-// returned stop() terminates the child.
+// ..."). It rejects if the process exits first or goes silent. The returned
+// stop() terminates the child.
+//
+// Silent, not slow: the wait is a silence window reset by every line the
+// sidecar prints, never a deadline on boot. A fixed deadline SIGTERMed a
+// live, working server — an upgrade converting a real home announces each
+// step it finishes and then takes minutes over the next one — and killing a
+// mid-conversion process is how an upgrade path gets torn in half.
 export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   const bin = opts.binaryPath ?? sidecarBinary();
   if (!opts.spawnFn && !fs.existsSync(bin)) {
@@ -95,17 +105,24 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
 
   return await new Promise<Sidecar>((resolve, reject) => {
     let settled = false;
-    const timeoutMs = opts.timeoutMs ?? 10_000;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      stop();
-      reject(new Error(`sidecar did not report ready within ${timeoutMs}ms`));
-    }, timeoutMs);
+    const silenceMs = opts.silenceMs ?? 10_000;
+    // One timer, re-armed on every line: the deadline is always "silenceMs
+    // from the last thing it said", so progress buys time and only a hang
+    // runs it out.
+    const arm = () =>
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        stop();
+        reject(new Error(`sidecar went silent for ${silenceMs}ms without reporting ready`));
+      }, silenceMs);
+    let timer = arm();
 
     const handleLine = (line: string) => {
       onLog(line);
       if (settled) return;
+      clearTimeout(timer);
+      timer = arm();
       lastLines.push(line);
       if (lastLines.length > 8) lastLines.shift();
       if (opts.noServer && /^gridwell: not serving\b/.test(line)) {
