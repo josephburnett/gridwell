@@ -42,27 +42,81 @@ type idMap struct {
 // Convert builds <home>/gridwell.db from the per-namespace layout. It is
 // idempotent in effect: a home with no db/ dir is not converted, and a
 // finished conversion leaves db.pre-one-node behind.
+//
+// It is crash-safe. Everything is built into <home>/gridwell.db.converting;
+// the real file appears only when the whole conversion has succeeded, through
+// one rename of a checkpointed, closed, fsynced file. A kill anywhere before
+// that rename leaves only the temp, which the next attempt removes and
+// rebuilds from the untouched db/ — never a half-converted store the next
+// boot would silently open. A kill in the one remaining window, between that
+// rename and setting db/ aside, leaves a COMPLETE store beside the old
+// layout; ensureStore finishes the set-aside rather than converting again.
 func Convert(home string, cfg *config.ServerConfig) error {
+	return convert(home, cfg, nil)
+}
+
+// The steps a conversion passes through, in order. They are the points a
+// SIGTERM can land on, so they are also what the crash tests abort after.
+const (
+	stepSnapshot    = "snapshot"    // the home store copied into the temp
+	stepIdentity    = "identity"    // the temp stamped as this node's home
+	stepPlugin      = "plugin:"     // + the plugin id, once per imported memory
+	stepReferences  = "references"  // home references rewritten through the maps
+	stepConnections = "connections" // the transport's rows carried over
+	stepCommitted   = "committed"   // the temp renamed onto gridwell.db
+)
+
+// convert is Convert with a test hook. afterStep runs after each named step
+// above and its error aborts the conversion right there, which is how
+// convert_crash_test.go stands in for a kill at that point. Production passes
+// nil.
+func convert(home string, cfg *config.ServerConfig, afterStep func(step string) error) error {
 	ctx := context.Background()
+	step := func(name string) error {
+		if afterStep == nil {
+			return nil
+		}
+		return afterStep(name)
+	}
 	oldHome := filepath.Join(config.LegacyDBDir(home, cfg.ID), "store.db")
 	if _, err := os.Stat(oldHome); err != nil {
 		return fmt.Errorf("convert: %s has a db/ directory but no home store at %s — is `id` the home's id?", home, oldHome)
 	}
 	target := config.DBFile(home)
+	tmp := target + ".converting"
 	log.Printf("gridwell: converting %s to the one-database layout (%s)", home, target)
+
+	// A temp left by an interrupted attempt is scrap: the old layout it was
+	// built from is still there, untouched, so the only safe thing to do with
+	// a partial file is throw it away and start over. VACUUM INTO refuses an
+	// existing destination anyway.
+	if err := removeSQLiteFile(tmp); err != nil {
+		return fmt.Errorf("convert: clear a previous attempt at %s: %w", tmp, err)
+	}
 
 	// 1. The home store, verbatim: a consistent snapshot into the new file
 	// through VACUUM INTO, which is safe against WAL, then the current
 	// schema migrates it in place on Open.
-	if err := snapshot(oldHome, target); err != nil {
+	if err := snapshot(oldHome, tmp); err != nil {
 		return fmt.Errorf("convert: home store: %w", err)
 	}
-	st, err := store.Open(target)
-	if err != nil {
-		return fmt.Errorf("convert: open %s: %w", target, err)
+	if err := step(stepSnapshot); err != nil {
+		return err
 	}
-	defer st.Close()
-	if err := pluginmeta.Create(target, cfg.ID, "home"); err != nil {
+	st, err := store.Open(tmp)
+	if err != nil {
+		return fmt.Errorf("convert: open %s: %w", tmp, err)
+	}
+	open := true
+	defer func() {
+		if open {
+			st.Close()
+		}
+	}()
+	if err := pluginmeta.Create(tmp, cfg.ID, "home"); err != nil {
+		return err
+	}
+	if err := step(stepIdentity); err != nil {
 		return err
 	}
 
@@ -82,11 +136,17 @@ func Convert(home string, cfg *config.ServerConfig) error {
 		}
 		maps[pc.ID] = m
 		log.Printf("gridwell: convert: plugin %s: %d grids, %d tiles", pc.ID, len(m.grids), len(m.tiles))
+		if err := step(stepPlugin + pc.ID); err != nil {
+			return err
+		}
 	}
 
 	// 3. References into plugins, rewritten.
 	if err := rewriteReferences(ctx, st, maps); err != nil {
 		return fmt.Errorf("convert: references: %w", err)
+	}
+	if err := step(stepReferences); err != nil {
+		return err
 	}
 
 	// 4. The connections.
@@ -96,14 +156,112 @@ func Convert(home string, cfg *config.ServerConfig) error {
 			return fmt.Errorf("convert: connections: %w", err)
 		}
 	}
+	if err := step(stepConnections); err != nil {
+		return err
+	}
 
-	// 5. The old layout aside; the cache gone.
-	if err := os.Rename(filepath.Join(home, "db"), filepath.Join(home, "db.pre-one-node")); err != nil {
+	// 5. Everything succeeded: fold the WAL back into the file, close it, get
+	// the bytes on the platter, and publish it with one rename. This is the
+	// instant the conversion becomes real.
+	if err := checkpointAndClose(st, tmp); err != nil {
+		return fmt.Errorf("convert: finish %s: %w", tmp, err)
+	}
+	open = false
+	if err := os.Rename(tmp, target); err != nil {
+		return fmt.Errorf("convert: publish %s: %w", target, err)
+	}
+	if err := syncDir(home); err != nil {
+		return fmt.Errorf("convert: sync %s: %w", home, err)
+	}
+	if err := step(stepCommitted); err != nil {
+		return err
+	}
+
+	// 6. The old layout aside; the cache gone.
+	if err := setAsideOldLayout(home); err != nil {
+		return err
+	}
+	log.Printf("gridwell: converted; the old files are in %s (delete when satisfied)", filepath.Join(home, "db.pre-one-node"))
+	return nil
+}
+
+// setAsideOldLayout retires the per-namespace layout once gridwell.db is the
+// real file, and drops the disposable source cache. It is the second half of
+// the commit, and ensureStore calls it too: a kill between the two renames
+// leaves a complete store beside a db/ that still needs retiring, and
+// finishing that is the only correct response — never a second conversion
+// over live data. The old files are renamed, never deleted, so a name already
+// taken by an earlier fold is stepped past rather than overwritten.
+func setAsideOldLayout(home string) error {
+	old := filepath.Join(home, "db")
+	aside := filepath.Join(home, "db.pre-one-node")
+	for i := 2; ; i++ {
+		if _, err := os.Stat(aside); errors.Is(err, fs.ErrNotExist) {
+			break
+		}
+		aside = filepath.Join(home, "db.pre-one-node."+strconv.Itoa(i))
+	}
+	if err := os.Rename(old, aside); err != nil {
 		return fmt.Errorf("convert: set the old db/ aside: %w", err)
 	}
 	_ = os.RemoveAll(filepath.Join(home, "cache"))
-	log.Printf("gridwell: converted; the old files are in %s (delete when satisfied)", filepath.Join(home, "db.pre-one-node"))
 	return nil
+}
+
+// checkpointAndClose folds the WAL back into the main file and closes the
+// store, so the single file about to be renamed carries every write. A -wal
+// or -shm sidecar does not survive the rename with its database, and a
+// checkpointed one has nothing left to say.
+func checkpointAndClose(st *store.Store, path string) error {
+	if _, err := st.SQL().Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		st.Close()
+		return err
+	}
+	if err := st.Close(); err != nil {
+		return err
+	}
+	if err := syncFile(path); err != nil {
+		return err
+	}
+	// A clean close of the last connection removes them; anything left is
+	// empty after the TRUNCATE checkpoint above, and must not travel.
+	for _, side := range []string{path + "-wal", path + "-shm"} {
+		if err := os.Remove(side); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+// removeSQLiteFile removes a database and its WAL sidecars.
+func removeSQLiteFile(path string) error {
+	for _, p := range []string{path, path + "-wal", path + "-shm"} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+// syncFile / syncDir put bytes and directory entries on the platter, so the
+// rename that publishes the conversion cannot be reordered ahead of the
+// contents it publishes.
+func syncFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 // snapshot copies a SQLite file consistently (VACUUM INTO).

@@ -32,15 +32,24 @@ CREATE TABLE layout (tile_id INTEGER PRIMARY KEY, x INTEGER NOT NULL DEFAULT 0, 
   text_x INTEGER NOT NULL DEFAULT 0, text_y INTEGER NOT NULL DEFAULT 0, text_w INTEGER NOT NULL DEFAULT 0, text_h INTEGER NOT NULL DEFAULT 0,
   text_mode TEXT NOT NULL DEFAULT '', content_zoom REAL NOT NULL DEFAULT 0);`
 
-// TestConvertFoldsALegacyHome builds a home in the per-namespace layout — a
-// home store with an exit well into a plugin grid, a leaf link into a plugin
-// tile, and a pane layout anchored in the plugin; the plugin's memory DB with
-// two contexts, three keys, one of them retired, and a cached listing; and a
-// transport store with one learned root — converts it, and checks that home
-// keeps its ids, the plugin's rows are re-minted under their namespace with
-// their facts and framing, every reference into the plugin is rewritten, the
-// connections are remembered, and the old files are set aside.
-func TestConvertFoldsALegacyHome(t *testing.T) {
+// legacyHome is the fixture every conversion test starts from: a home in the
+// per-namespace layout — a home store with an exit well into a plugin grid, a
+// leaf link into a plugin tile, and a pane layout anchored in the plugin; the
+// plugin's memory DB with two contexts, three keys, one of them retired, and
+// a cached listing; a transport store with one learned root; and the
+// disposable cache dir — plus the handles a test needs to check what came
+// across. Nothing is converted: when, and how far, is the caller's to decide,
+// which is what lets convert_crash_test.go stop partway.
+type legacyHome struct {
+	home                   string
+	cfg                    *config.ServerConfig
+	nodeID, pid            string
+	root                   string
+	exitID, linkID, paneID string
+}
+
+func buildLegacyHome(t *testing.T) legacyHome {
+	t.Helper()
 	ctx := context.Background()
 	home := t.TempDir()
 	const nodeID, pid = "n0de1", "plug1"
@@ -122,6 +131,21 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	return legacyHome{
+		home: home, cfg: cfg, nodeID: nodeID, pid: pid, root: root,
+		exitID: exit.ID, linkID: link.ID, paneID: paneTile.ID,
+	}
+}
+
+// TestConvertFoldsALegacyHome converts the fixture home above and checks that
+// home keeps its ids, the plugin's rows are re-minted under their namespace
+// with their facts and framing, every reference into the plugin is rewritten,
+// the connections are remembered, and the old files are set aside.
+func TestConvertFoldsALegacyHome(t *testing.T) {
+	ctx := context.Background()
+	f := buildLegacyHome(t)
+	home, cfg, nodeID, pid, root := f.home, f.cfg, f.nodeID, f.pid, f.root
+
 	if err := Convert(home, cfg); err != nil {
 		t.Fatalf("Convert: %v", err)
 	}
@@ -146,7 +170,7 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 	defer ns.Close()
 
 	// Home kept its ids and content.
-	if _, err := ns.GetTile(ctx, exit.ID); err != nil {
+	if _, err := ns.GetTile(ctx, f.exitID); err != nil {
 		t.Fatalf("home exit well lost: %v", err)
 	}
 	// The plugin's rows, re-minted under its namespace: the root context
@@ -195,15 +219,15 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		t.Fatalf("text window lost: %+v", notes)
 	}
 	// Every reference into the plugin points at the re-minted rows.
-	e, _ := ns.GetTile(ctx, exit.ID)
+	e, _ := ns.GetTile(ctx, f.exitID)
 	if e.ChildGridID != pid+"/"+strconv.FormatInt(docsGID, 10) {
 		t.Fatalf("exit well child = %q, want the re-minted docs grid %d", e.ChildGridID, docsGID)
 	}
-	l, _ := ns.GetTile(ctx, link.ID)
+	l, _ := ns.GetTile(ctx, f.linkID)
 	if l.LinkTargetID != pid+"/"+strconv.FormatInt(notes.ID, 10) {
 		t.Fatalf("leaf link target = %q, want the re-minted notes tile %d", l.LinkTargetID, notes.ID)
 	}
-	blob, _, _, err := ns.ReadContent(ctx, paneTile.ID)
+	blob, _, _, err := ns.ReadContent(ctx, f.paneID)
 	if err != nil {
 		t.Fatal(err)
 	}

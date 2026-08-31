@@ -78,6 +78,13 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 // ensureStore makes <home>/gridwell.db exist. A fresh home gets one, with its
 // identity stamped through pluginmeta; a home laid out as db/<id>/… is
 // converted into one by Convert; an existing home is left alone.
+//
+// gridwell.db existing beside a db/ directory is the one window a conversion
+// can be killed in and leave work behind: Convert publishes the finished
+// store with a rename and retires db/ with a second one. The store is
+// complete — Convert builds into a temp and renames only on success — so the
+// answer is to finish the set-aside, never to convert a second time over the
+// data the first one already folded.
 func ensureStore(home string, cfg *config.ServerConfig) error {
 	path := config.DBFile(home)
 	if _, err := os.Stat(path); err == nil {
@@ -85,6 +92,13 @@ func ensureStore(home string, cfg *config.ServerConfig) error {
 		// silently open, or shadow, another identity's data.
 		if _, err := pluginmeta.Verify(path, cfg.ID, "home"); err != nil {
 			return fmt.Errorf("%s is not the store of id %q — did `id` change? (an id is immutable; restore the old one): %w", path, cfg.ID, err)
+		}
+		if _, err := os.Stat(filepath.Join(home, "db")); err == nil {
+			log.Printf("gridwell: %s is converted but the old db/ was never set aside — finishing an interrupted conversion", path)
+			if err := setAsideOldLayout(home); err != nil {
+				return err
+			}
+			log.Printf("gridwell: converted; the old files are in %s (delete when satisfied)", filepath.Join(home, "db.pre-one-node"))
 		}
 		return nil
 	} else if !errors.Is(err, fs.ErrNotExist) {

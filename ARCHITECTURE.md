@@ -109,6 +109,14 @@ beside it folds into `gridwell.db` (`internal/config/legacy.go` then
 guessing refuses and leaves the file as it was. Serve mints what is absent.
 Those are the only two config writes.
 
+The fold is crash-safe, because it runs once, on real data, under a kill it
+does not control (the desktop wrapper SIGTERMs a sidecar that has not
+announced itself). It is built into `gridwell.db.converting` and published
+with one rename, so a kill leaves either the untouched `db/` to retry from or
+a complete `gridwell.db`; the single window in between — a finished store
+beside a `db/` not yet set aside — is finished by `ensureStore`, never
+converted a second time.
+
 **Home** (`internal/local`) owns the user's content: text, urls, wells, pane
 tiles, shells, and the event stream. Shells are tmux sessions on a private
 socket, so they survive restarts.
