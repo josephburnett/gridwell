@@ -9,9 +9,3 @@
 api/compose/plugin.go pluginGRPCPlugin.GRPCServer
 api/compose/plugin.go pluginGRPCPlugin.GRPCClient
 client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
-
-# The key-form encoder half. TileKey and ShapeOf are reachable (the URL
-# grammar and the router's peel classify with them); KeyTileID has no
-# producer yet, because nothing mints a key-form id until lazy minting
-# lands. REMOVE THIS ENTRY when the plugin host emits key-form tile ids.
-api/rpc/segment.go KeyTileID
