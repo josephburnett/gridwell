@@ -150,6 +150,20 @@ func (s *Server) clientForID(id string) (ns namespace.Namespace, local string, o
 	return c, local, found
 }
 
+// homeUUID is the uuid of the node's home namespace: the configured node id,
+// or, when a test wires a registry without one, the first registered entry —
+// home is registered first, the same fact Handshake's ordering leans on. ""
+// only for a registry with no entries at all.
+func (s *Server) homeUUID() string {
+	if s.cfg.ID != "" {
+		return s.cfg.ID
+	}
+	if o := s.pluginReg.Ordered(); len(o) > 0 {
+		return o[0].UUID
+	}
+	return ""
+}
+
 // pluginInfo returns uuid's Info handshake, serving repeat calls from the
 // per-uuid cache. The live call is bounded by pluginInfoTimeout so a hung
 // plugin degrades to an error rather than a stall, and only a successful

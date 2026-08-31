@@ -478,6 +478,45 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	}
 }
 
+// TestPluginGridCarriesHomeScratch: a grid served by a plugin that declares
+// no scratch grid of its own — fs, proc, gitlab — carries the node's home
+// scratch grid instead. The grid is the carrier because it chains through
+// mounts; the stamp is where the client learns that a link clicked in a
+// rendered document inside a plugin grid has somewhere to land as an
+// ephemeral visit. Without it the visit could not open.
+func TestPluginGridCarriesHomeScratch(t *testing.T) {
+	cl, _, _ := newTestServerWithPlugins(t)
+	ctx := context.Background()
+	hs, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatalf("Handshake: %v", err)
+	}
+	homeScratch := hs.Plugins[0].ScratchGridID
+	if homeScratch == "" {
+		t.Fatal("home advertised no scratch grid")
+	}
+	fsRoot := hs.Plugins[1].RootGridID
+	g, err := cl.GetGrid(ctx, fsRoot)
+	if err != nil {
+		t.Fatalf("GetGrid fs root: %v", err)
+	}
+	if g.Grid.ScratchGridID != homeScratch {
+		t.Fatalf("fs grid scratch_grid_id = %q, want home's %q", g.Grid.ScratchGridID, homeScratch)
+	}
+	// The stamp must not be a dangling pointer: a visit created against it
+	// routes into home, exactly what a link click does.
+	tile, err := cl.CreateURL(ctx, &rpc.CreateURLRequest{
+		GridID: g.Grid.ScratchGridID, X: 0, Y: 0, W: 1, H: 1,
+		URL: "https://gitlab.example/g/p/-/merge_requests/1",
+	})
+	if err != nil {
+		t.Fatalf("create ephemeral url into stamped scratch: %v", err)
+	}
+	if tile.Kind != rpc.KindURL {
+		t.Errorf("kind = %q, want url", tile.Kind)
+	}
+}
+
 // TestMountByClone: mounting a plugin (cloning its node-grid tile) drops an
 // exit well in the destination grid whose child is the plugin's root.
 func TestMountByClone(t *testing.T) {

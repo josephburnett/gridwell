@@ -95,9 +95,11 @@ type Grid struct {
 	// from the owning plugin's Info at a leaf, passed through verbatim in
 	// transit. Wire-only, never persisted.
 	Writable bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
-	// scratch_grid_id is the owning plugin's ephemeral-url scratch grid,
-	// qualified from the receiver's perspective and chained through mounts,
-	// by the same stamping rule as writable. "" when the plugin has none.
+	// scratch_grid_id is the grid where ephemeral visits opened from this grid
+	// land: the owning plugin's own scratch grid, or the serving node's home
+	// scratch grid when the plugin declares none. Qualified from the receiver's
+	// perspective and chained through mounts, by the same stamping rule as
+	// writable. "" only when the owning plugin's Info was unreachable.
 	// Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// stale marks a grid the source could not answer for: this is the

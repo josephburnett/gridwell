@@ -117,6 +117,16 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 				g.Writable = info.Writable
 				if info.ScratchGridId != "" {
 					g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
+				} else if hu := rt.srv.homeUUID(); hu != "" && hu != uuid {
+					// A plugin that declares no scratch grid — fs, proc,
+					// gitlab — still serves grids whose links open as
+					// ephemeral visits, and those land in the node's home
+					// scratch grid. Stamped here because the grid is the
+					// carrier that chains through mounts: a client behind a
+					// transit hop has no other way to learn it.
+					if hinfo, herr := rt.srv.pluginInfo(ctx, hu); herr == nil && hinfo.ScratchGridId != "" {
+						g.ScratchGridId = rpc.QualifyID(hu, hinfo.ScratchGridId)
+					}
 				}
 				// The plugin's declared (+) menu additions.
 				g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
