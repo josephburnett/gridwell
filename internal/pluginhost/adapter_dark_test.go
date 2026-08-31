@@ -95,6 +95,15 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 	if len(before.Tiles) == 0 {
 		t.Fatal("empty first read")
 	}
+	// Nothing here has been touched, so every tile in that answer is
+	// SYNTHESIZED — named by its key, backed by no row. Those are exactly the
+	// tiles the cache has to be able to replay, and the ones a store-only
+	// memory could not have produced.
+	for _, tile := range before.Tiles {
+		if rpc.ShapeOf(rpc.LocalOf(tile.ID)) != rpc.ShapeKey {
+			t.Fatalf("browsing minted a row for %q (%s)", tile.AltText, tile.ID)
+		}
+	}
 
 	dc.dark.Store(true)
 	// Even the handshake is answered from the cache: Info is the plugin's own

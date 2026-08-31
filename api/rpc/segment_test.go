@@ -187,3 +187,21 @@ func TestTransitQualifyKeyForm(t *testing.T) {
 		t.Fatalf("LocalOf(%q) = %q, want %q", out[0].Id, LocalOf(out[0].Id), key)
 	}
 }
+
+// idshape.ValidateSegment and ShapeOf must agree on what a namespace segment
+// is: idshape cannot import this package (its tests import idshape), so the
+// two spellings are pinned here instead of shared. A shape that ShapeOf calls
+// a tile must be refused as a namespace, or an id would be ambiguous in a URL
+// path with no way to tell which reading was meant.
+func TestValidateSegmentRefusesEveryTileShape(t *testing.T) {
+	for _, seg := range []string{"14", "0", KeyTileID("/home/joe"), KeyTileID(""), "~"} {
+		if IsTileSegment(seg) == (idshape.ValidateSegment("id", seg) == nil) {
+			t.Errorf("%q: IsTileSegment=%v but ValidateSegment=%v — the two classifiers disagree",
+				seg, IsTileSegment(seg), idshape.ValidateSegment("id", seg))
+		}
+	}
+	// A namespace segment stays legal.
+	if err := idshape.ValidateSegment("id", "ngkwanw"); err != nil {
+		t.Errorf("a plain namespace segment was refused: %v", err)
+	}
+}

@@ -41,6 +41,11 @@ func TestParseContentPath(t *testing.T) {
 		{"/content/tok/uf1/5/", "tok", "uf1/5", "", false, true},
 		{"/content/tok/uf1/5", "tok", "uf1/5", "", true, true},
 		{"/content/tok/uf1/5/img/cat.png", "tok", "uf1/5", "img/cat.png", false, true},
+		// A tile the plugin has never minted a row for is named by its key,
+		// and the door reads that shape as the end of the id exactly as it
+		// reads digits — otherwise an untouched page would 404.
+		{"/content/tok/uf1/~L2hvbWU/", "tok", "uf1/~L2hvbWU", "", false, true},
+		{"/content/tok/uf1/~L2hvbWU/a.css", "tok", "uf1/~L2hvbWU", "a.css", false, true},
 		{"/content/tok/ssh1/conn/uf1/5/a.css", "tok", "ssh1/conn/uf1/5", "a.css", false, true},
 		{"/content/tok/uf1/5/../secret", "", "", "", false, false},
 		{"/content/tok/uf1/", "", "", "", false, false},     // no numeric local id
