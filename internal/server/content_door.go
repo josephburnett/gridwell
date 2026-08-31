@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 const contentPathPrefix = "/content/"
@@ -54,12 +55,14 @@ func ContentToken(password string) string {
 
 // parseContentPath splits a /content/ URL path into its parts. The grammar
 // leans on the id shape: a namespace segment — a plugin uuid, a node id, a
-// connection name — is never purely numeric, and a local tile id always is, so
-// the first all-digits segment terminates the qualified id and everything
-// after it is the page-relative subpath. needSlash reports a root-page request
-// missing its trailing slash, which the caller redirects: relative URLs inside
-// the page resolve against the directory, so the root page must live at
-// ".../<id>/".
+// connection name — is never a tile segment, so the first TILE segment
+// terminates the qualified id and everything after it is the page-relative
+// subpath. Which segments are tiles is rpc.IsTileSegment's decision, shared
+// with the router's peel and the address bar, so a tile a plugin has never
+// minted a row for — named by its key, "~…" — serves its page through the same
+// door as one that has. needSlash reports a root-page request missing its
+// trailing slash, which the caller redirects: relative URLs inside the page
+// resolve against the directory, so the root page must live at ".../<id>/".
 func parseContentPath(path string) (token, tileID, subpath string, needSlash, ok bool) {
 	rest, found := strings.CutPrefix(path, contentPathPrefix)
 	if !found {
@@ -72,7 +75,7 @@ func parseContentPath(path string) (token, tileID, subpath string, needSlash, ok
 	token = segs[0]
 	idEnd := 0
 	for i := 1; i < len(segs); i++ {
-		if isAllDigits(segs[i]) {
+		if rpc.IsTileSegment(segs[i]) {
 			idEnd = i
 			break
 		}
@@ -94,18 +97,6 @@ func parseContentPath(path string) (token, tileID, subpath string, needSlash, ok
 		}
 	}
 	return token, tileID, subpath, false, true
-}
-
-func isAllDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 // contentDoor is the HTTP handler mounted at /content/, exempt from the cookie

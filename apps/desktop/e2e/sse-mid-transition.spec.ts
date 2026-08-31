@@ -73,7 +73,7 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
 
   // Data: the injected tile fanned out and is visible in the descended pane.
   expect(landed.tileIds, 'the injected tile reached the animating pane').toContainEqual(
-    expect.stringMatching(/\/\d+$/),
+    expect.stringMatching(/\/(\d+|~[A-Za-z0-9_-]+)$/),
   );
   const inChild = await gw.getGrid(child);
   expect((inChild.tiles ?? []).length, 'the injected tile exists in the child grid').toBe(1);

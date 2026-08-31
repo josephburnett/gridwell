@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -233,6 +232,10 @@ func (s *Server) Rows(ctx context.Context) []Row {
 
 // ── routing ──────────────────────────────────────────────────────────────────
 
+// routePlaceholder stands in for the local half of an id when only the
+// connection matters.
+const routePlaceholder = "0"
+
 // forward is a resolved hop: the connection's client plus its name for
 // prepending response ids.
 type forward struct {
@@ -241,15 +244,18 @@ type forward struct {
 }
 
 // route resolves the connection an id chains through: the first segment is the
-// connection name, and the rest is the remote's own id. A numeric first
-// segment is malformed, because the transport owns no tiles.
+// connection name, and the rest is the remote's own id, forwarded verbatim
+// whatever shape its segments take. A TILE segment in first position — a row
+// id, or a key form naming an entry on the far node — is malformed, because
+// the transport owns no tiles of its own; rpc.IsTileSegment is the same
+// classifier the router's peel and the URL grammar ask.
 func (s *Server) route(ctx context.Context, id string) (*forward, string, error) {
 	first, rest, ok := rpc.SplitID(id)
 	if !ok {
 		return nil, "", status.Errorf(codes.InvalidArgument, "remote: id %q names no connection", id)
 	}
-	if _, err := strconv.ParseInt(first, 10, 64); err == nil {
-		return nil, "", status.Errorf(codes.InvalidArgument, "remote: id %q chains through a numeric segment", id)
+	if rpc.IsTileSegment(first) {
+		return nil, "", status.Errorf(codes.InvalidArgument, "remote: id %q chains through a tile segment", id)
 	}
 	c, ok := s.conns[first]
 	if !ok {
@@ -517,7 +523,10 @@ func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest
 	if !ok {
 		first, rest = ns, ""
 	}
-	fw, _, err := s.route(ctx, first+"/0")
+	// A handshake names a connection, not a tile, so route gets the
+	// connection segment plus a row-shaped placeholder: route only needs to
+	// see a well-formed chain, and "0" is the cheapest tile segment there is.
+	fw, _, err := s.route(ctx, first+"/"+routePlaceholder)
 	if err != nil {
 		return nil, err
 	}

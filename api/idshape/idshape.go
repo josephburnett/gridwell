@@ -54,11 +54,14 @@ func NewShortID() string {
 	return string(b)
 }
 
-// ValidateSegment enforces the two load-bearing properties on an id used
-// as a namespace segment (a plugin id, a node id, a connection namespace):
-// no '/', the qualified-id delimiter, and never purely numeric, which
-// would be indistinguishable from a tile id in a URL path. what names the
-// id in the error.
+// ValidateSegment enforces the load-bearing properties on an id used as a
+// namespace segment (a plugin id, a node id, a connection namespace): no '/',
+// the qualified-id delimiter, and neither of the two TILE shapes, which would
+// be indistinguishable from a tile in a URL path — purely numeric (a row) or
+// leading with '~' (a plugin key). The shapes are decided in api/rpc
+// (ShapeOf); this package cannot import it, because rpc's own tests import
+// this one, so the two spellings are pinned to each other by a test there.
+// what names the id in the error.
 func ValidateSegment(what, id string) error {
 	if id == "" {
 		return nil
@@ -68,6 +71,9 @@ func ValidateSegment(what, id string) error {
 	}
 	if _, err := strconv.ParseInt(id, 10, 64); err == nil {
 		return fmt.Errorf("%s %q must not be purely numeric (indistinguishable from a tile id)", what, id)
+	}
+	if strings.HasPrefix(id, "~") {
+		return fmt.Errorf("%s %q must not begin with '~' (indistinguishable from a key-form tile id)", what, id)
 	}
 	return nil
 }
