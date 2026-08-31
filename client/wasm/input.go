@@ -680,9 +680,14 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			a.reportErr(caps.GoLiveNotice())
 			return nil
 		}
-		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
+		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
 			paneID := fp.ID
 			a.menu.Close()
+			// Check before the modal opens: typing a url into a visit that
+			// cannot land would fail only on submit.
+			if a.scratchOrReport(fp) == "" {
+				return nil
+			}
 			a.openURLModal(a.urlSuggestCandidates(uuidOf(a.gridIDForPane(fp))),
 				func(url string) {
 					if vp := a.tree.FindPane(paneID); vp != nil {
@@ -699,9 +704,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// processes, which the gray border warns about. A drag instead places a
 	// real, persistent shell tile.
 	if d.isTemplate && d.item.primitive == tplShell && !d.started {
-		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
+		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
 			a.menu.Close()
-			a.visitEphemeralShell(fp)
+			a.visitEphemeralShell(fp) // reports if there is nowhere to open
 		}
 		return nil
 	}
@@ -1562,9 +1567,11 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 	})
 }
 
-// scratchGridForPane returns the qualified scratch grid id of the plugin the
-// pane is currently in — where ephemeral url visits land — or "" if that plugin
-// has none (fs/proc don't support ephemeral visits).
+// scratchGridForPane returns the qualified scratch grid id where ephemeral
+// visits from the pane's grid land. Every grid a node serves carries one —
+// the owning plugin's own, or the serving node's home scratch grid when the
+// plugin declares none — so "" means only an uncached grid whose plugin is
+// not local.
 func (a *App) scratchGridForPane(p *pane.Pane) string {
 	gid := a.gridIDForPane(p)
 	// The fact rides on the grid (Grid.ScratchGridID, stamped by the serving
@@ -1584,6 +1591,19 @@ func (a *App) scratchGridForPane(p *pane.Pane) string {
 	return ""
 }
 
+// scratchOrReport is scratchGridForPane with the failure surfaced: a visit
+// with nowhere to land must say so, or the click looks like it just did
+// nothing. Every ephemeral-visit entry point asks here, so no path can fail
+// silently.
+func (a *App) scratchOrReport(p *pane.Pane) string {
+	s := a.scratchGridForPane(p)
+	if s == "" {
+		a.reportErr(errsurface.Error, "ephemeral",
+			"nowhere to open an ephemeral visit: this grid carries no scratch grid")
+	}
+	return s
+}
+
 // visitEphemeralURL creates an ephemeral url tile in the current plugin's
 // scratch grid (off any visible grid) and descends into it, going live —
 // "descend into a url" from the menu's url swatch (clicked, not dragged). The
@@ -1593,9 +1613,9 @@ func (a *App) scratchGridForPane(p *pane.Pane) string {
 // descends WITHOUT re-anchoring — the pane keeps its grid and just focuses the
 // off-grid tile, which render / url stream / ascent resolve by id (descendedTile).
 func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
-	scratch := a.scratchGridForPane(p)
+	scratch := a.scratchOrReport(p)
 	if scratch == "" {
-		return // plugin has no scratch grid — nothing to visit into
+		return
 	}
 	paneID := p.ID
 	req := &rpc.CreateURLRequest{
@@ -1657,9 +1677,9 @@ func (a *App) deleteEphemeralTile(tileID string) {
 // visitEphemeralURL, with the opposite exit contract — ascent deletes the
 // tile and its tmux session, which the gray border warns about.
 func (a *App) visitEphemeralShell(p *pane.Pane) {
-	scratch := a.scratchGridForPane(p)
+	scratch := a.scratchOrReport(p)
 	if scratch == "" {
-		return // plugin has no scratch grid — nothing to open into
+		return
 	}
 	paneID := p.ID
 	req := &rpc.CreateShellRequest{GridID: scratch, X: 0, Y: 0, W: 1, H: 1}
@@ -1682,6 +1702,11 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 func (a *App) openLinkBelow(paneID, url string) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
+		return
+	}
+	// The visit needs somewhere to land before anything splits: without a
+	// scratch grid the split would only birth a pane with nothing to show.
+	if a.scratchOrReport(p) == "" {
 		return
 	}
 	// SplitOnSideAt splits the focused pane, and the link's pane may not be
