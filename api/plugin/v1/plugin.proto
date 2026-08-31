@@ -42,6 +42,16 @@ message InfoResponse {
   // node onto every grid it serves for this plugin. Keyed by context
   // instead of grid id.
   repeated MenuEntry menu_entries = 7;
+  // host_content: this plugin's contexts PROJECT host state — a directory
+  // tree, the process table — rather than holding content of their own.
+  // Their rows are summaries the node cannot re-arrange across contexts, and
+  // the client renders them with the host treatment: the outside tint on
+  // every tile, the exit border family on a descent. It is a DECLARATION,
+  // never inferred from kind: the node has no list of which kinds are
+  // host-backed, so a third-party plugin gets the same treatment by saying
+  // so. It becomes Grid.host_content on every grid the node serves for this
+  // plugin.
+  bool host_content = 8;
 }
 
 // MenuEntry mirrors the gridwell.v1 shape with contexts for targets: an
@@ -74,8 +84,10 @@ message ListResponse {
   // answers GONE. It is the one sweep fact only the plugin knows.
   bool authoritative = 2;
   // source_label is the human name of the backing source, such as the
-  // directory path or the pid. It becomes Grid.source_id on the node
-  // surface.
+  // directory path or the pid. The node surface has no field for it since
+  // Grid.source_id was retired, so nothing reads it today; it is kept
+  // because plugins already declare it and a name for the source is the
+  // obvious thing for a future bar to show.
   string source_label = 3;
 }
 

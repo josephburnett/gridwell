@@ -124,7 +124,23 @@ type Grid struct {
 	// menu_entries is the owning plugin's declared (+) menu additions for
 	// this grid. Stamped from Info by the serving node, and verbatim through
 	// transit with grid_id prefixed per hop. Wire-only.
-	MenuEntries   []*MenuEntry `protobuf:"bytes,11,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
+	MenuEntries []*MenuEntry `protobuf:"bytes,11,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
+	// host_content says this grid PROJECTS host state — a directory, the
+	// process table — instead of holding content of its own: read-only rows
+	// the client renders with the host treatment (the outside tint, the exit
+	// border family). Declared by the owning plugin (plugin.v1
+	// InfoResponse.host_content), stamped onto the grid by the adapter that
+	// serves it, and carried verbatim through transit like writable. It is
+	// what a reader consults instead of learning a kind's name.
+	// Wire-only, never persisted.
+	HostContent bool `protobuf:"varint,13,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
+	// glyph is the owning plugin's declared identity glyph for this grid, from
+	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
+	// client falls back to the well face or the mount door's glyph). It
+	// travels on the GRID because a plugin-list lookup cannot answer for a
+	// grid reached through a mount. Stamped by the adapter, verbatim in
+	// transit. Wire-only, never persisted.
+	Glyph         string `protobuf:"bytes,14,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -220,6 +236,20 @@ func (x *Grid) GetMenuEntries() []*MenuEntry {
 		return x.MenuEntries
 	}
 	return nil
+}
+
+func (x *Grid) GetHostContent() bool {
+	if x != nil {
+		return x.HostContent
+	}
+	return false
+}
+
+func (x *Grid) GetGlyph() string {
+	if x != nil {
+		return x.Glyph
+	}
+	return ""
 }
 
 // MenuEntry is one plugin-declared (+) menu entry: an extra plugin root,
@@ -3313,7 +3343,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xae\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xe7\x02\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1f\n" +
@@ -3325,7 +3355,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05stale\x18\f \x01(\bR\x05stale\x12\x17\n" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x129\n" +
-	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x12!\n" +
+	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
+	"\x05glyph\x18\x0e \x01(\tR\x05glyphJ\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"\"\x82\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +

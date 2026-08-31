@@ -153,6 +153,22 @@ type Grid struct {
 	// this grid. Stamped from Info by the serving node, and verbatim through
 	// transit with grid_id prefixed per hop. Wire-only.
 	MenuEntries []MenuEntry `json:"menu_entries,omitempty"`
+	// host_content says this grid PROJECTS host state — a directory, the
+	// process table — instead of holding content of its own: read-only rows
+	// the client renders with the host treatment (the outside tint, the exit
+	// border family). Declared by the owning plugin (plugin.v1
+	// InfoResponse.host_content), stamped onto the grid by the adapter that
+	// serves it, and carried verbatim through transit like writable. It is
+	// what a reader consults instead of learning a kind's name.
+	// Wire-only, never persisted.
+	HostContent bool `json:"host_content,omitempty"`
+	// glyph is the owning plugin's declared identity glyph for this grid, from
+	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
+	// client falls back to the well face or the mount door's glyph). It
+	// travels on the GRID because a plugin-list lookup cannot answer for a
+	// grid reached through a mount. Stamped by the adapter, verbatim in
+	// transit. Wire-only, never persisted.
+	Glyph string `json:"glyph,omitempty"`
 }
 
 // MenuEntry is one plugin-declared (+) menu entry: an extra plugin root,
@@ -426,6 +442,8 @@ func GridToProto(v *Grid) *pb.Grid {
 		Stale:         v.Stale,
 		NodeNs:        v.NodeNS,
 		MenuEntries:   MenuEntriesToProto(v.MenuEntries),
+		HostContent:   v.HostContent,
+		Glyph:         v.Glyph,
 	}
 }
 
@@ -444,6 +462,8 @@ func GridFromProto(p *pb.Grid) *Grid {
 		Stale:         p.Stale,
 		NodeNS:        p.NodeNs,
 		MenuEntries:   MenuEntriesFromProto(p.MenuEntries),
+		HostContent:   p.HostContent,
+		Glyph:         p.Glyph,
 	}
 	return out
 }

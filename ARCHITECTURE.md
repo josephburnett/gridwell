@@ -82,7 +82,11 @@ Wire-only fields are derived in exactly one place each. `Tile.reference`
 `text_presentation`, and `status_detail` come from the plugin's `Entry`
 through `pluginhost/adapter.go`. `Grid.writable`, `scratch_grid_id`, and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
-transit). `Grid.node_ns` comes from `TransitQualifyGrid` alone. `Grid.stale`
+transit). `Grid.host_content` (these rows project host state) and
+`Grid.glyph` (the grid's identity face) come from the owning plugin's
+`Info` through `pluginhost/adapter.go`, so a cached answer keeps them when
+the plugin goes dark; they are what the client reads instead of knowing a
+plugin's kind. `Grid.node_ns` comes from `TransitQualifyGrid` alone. `Grid.stale`
 is raised by whoever serves a remembered answer.
 
 ## The router

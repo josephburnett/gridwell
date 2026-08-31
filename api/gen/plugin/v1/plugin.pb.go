@@ -142,7 +142,17 @@ type InfoResponse struct {
 	// menu_entries: the plugin's declared (+) menu additions, stamped by the
 	// node onto every grid it serves for this plugin. Keyed by context
 	// instead of grid id.
-	MenuEntries   []*MenuEntry `protobuf:"bytes,7,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
+	MenuEntries []*MenuEntry `protobuf:"bytes,7,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
+	// host_content: this plugin's contexts PROJECT host state — a directory
+	// tree, the process table — rather than holding content of their own.
+	// Their rows are summaries the node cannot re-arrange across contexts, and
+	// the client renders them with the host treatment: the outside tint on
+	// every tile, the exit border family on a descent. It is a DECLARATION,
+	// never inferred from kind: the node has no list of which kinds are
+	// host-backed, so a third-party plugin gets the same treatment by saying
+	// so. It becomes Grid.host_content on every grid the node serves for this
+	// plugin.
+	HostContent   bool `protobuf:"varint,8,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -224,6 +234,13 @@ func (x *InfoResponse) GetMenuEntries() []*MenuEntry {
 		return x.MenuEntries
 	}
 	return nil
+}
+
+func (x *InfoResponse) GetHostContent() bool {
+	if x != nil {
+		return x.HostContent
+	}
+	return false
 }
 
 // MenuEntry mirrors the gridwell.v1 shape with contexts for targets: an
@@ -363,8 +380,10 @@ type ListResponse struct {
 	// answers GONE. It is the one sweep fact only the plugin knows.
 	Authoritative bool `protobuf:"varint,2,opt,name=authoritative,proto3" json:"authoritative,omitempty"`
 	// source_label is the human name of the backing source, such as the
-	// directory path or the pid. It becomes Grid.source_id on the node
-	// surface.
+	// directory path or the pid. The node surface has no field for it since
+	// Grid.source_id was retired, so nothing reads it today; it is kept
+	// because plugins already declare it and a name for the source is the
+	// obvious thing for a future bar to show.
 	SourceLabel   string `protobuf:"bytes,3,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1566,7 +1585,7 @@ var File_plugin_v1_plugin_proto protoreflect.FileDescriptor
 const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"\x16plugin/v1/plugin.proto\x12\tplugin.v1\"\r\n" +
-	"\vInfoRequest\"\xe9\x01\n" +
+	"\vInfoRequest\"\x8c\x02\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x14\n" +
@@ -1574,7 +1593,8 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\froot_context\x18\x04 \x01(\tR\vrootContext\x12\x14\n" +
 	"\x05watch\x18\x05 \x01(\bR\x05watch\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x127\n" +
-	"\fmenu_entries\x18\a \x03(\v2\x14.plugin.v1.MenuEntryR\vmenuEntries\"\x83\x01\n" +
+	"\fmenu_entries\x18\a \x03(\v2\x14.plugin.v1.MenuEntryR\vmenuEntries\x12!\n" +
+	"\fhost_content\x18\b \x01(\bR\vhostContent\"\x83\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +

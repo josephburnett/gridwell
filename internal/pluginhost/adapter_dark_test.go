@@ -55,7 +55,7 @@ func (d *darkableCP) Probe(ctx context.Context, req *pluginv1.ProbeRequest, opts
 // A dark plugin, whose subprocess is gone, is answered by the node's one
 // source cache, one layer up. The adapter itself keeps no memory: when the
 // process stops answering, nothing about the node's half can be derived, not
-// even the grid's source kind, so the read fails and the cache serves what
+// even the grid's declared face, so the read fails and the cache serves what
 // this namespace last said. This crosses the whole seam the production wiring
 // crosses — sourcecache.Store.Front over the adapter, through the registry,
 // the server, and the wire client — because a unit test on either side alone
@@ -129,6 +129,18 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 	}
 	if after.Grid.SourceKind != before.Grid.SourceKind {
 		t.Fatalf("source kind drifted dark: %q != %q", after.Grid.SourceKind, before.Grid.SourceKind)
+	}
+	// The plugin's DECLARATIONS are what the client renders the grid with, so
+	// a dark plugin whose face changed would repaint the room: the host tint
+	// would drop off every tile and the folder would turn into a well. They
+	// come back from the cache with everything else. fs is the real spawned
+	// binary here, so this also pins its declaration reaching the wire.
+	if !before.Grid.HostContent {
+		t.Fatal("the fs plugin no longer declares host_content: the host treatment is what this pins across dark")
+	}
+	if after.Grid.HostContent != before.Grid.HostContent || after.Grid.Glyph != before.Grid.Glyph {
+		t.Fatalf("declared face drifted dark: host_content %v != %v, glyph %q != %q",
+			after.Grid.HostContent, before.Grid.HostContent, after.Grid.Glyph, before.Grid.Glyph)
 	}
 
 	dc.dark.Store(false)

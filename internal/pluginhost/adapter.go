@@ -330,9 +330,13 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 		tiles = kept
 	}
-	// The plugin's declared kind stamps the grid. A dark plugin fails here,
-	// and the source cache one layer up answers the whole read from what this
-	// namespace last said.
+	// The plugin's DECLARATIONS stamp the grid: host_content (these rows
+	// project host state, so they wear the host treatment) and glyph (the
+	// grid's identity face). Both ride the grid rather than a plugin-list
+	// lookup, because a grid reached through a mount has no local row to look
+	// up. A dark plugin fails here, and the source cache one layer up answers
+	// the whole read — declarations included — from what this namespace last
+	// said.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, err
@@ -341,7 +345,14 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	if err != nil {
 		return nil, err
 	}
-	g := &gridwellv1.Grid{Id: canonical, SourceKind: ci.Kind, SourceId: resp.SourceLabel, Stale: stale}
+	g := &gridwellv1.Grid{
+		Id:          canonical,
+		SourceKind:  ci.Kind,
+		SourceId:    resp.SourceLabel,
+		HostContent: ci.HostContent,
+		Glyph:       ci.Glyph,
+		Stale:       stale,
+	}
 	wire, err := buildTiles(canonical, ckey, tiles, resp.Entries, a.canonicalGridID)
 	if err != nil {
 		return nil, err
