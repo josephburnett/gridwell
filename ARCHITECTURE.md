@@ -306,7 +306,7 @@ pane is inside" and do not spread the word.
 | Focus steal is impossible | the registry's focus guard; `control-focus.spec.ts` |
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
-| User state survives an unreachable source | the durable rows answer; fs/proc sweep rules |
+| User state survives an unreachable source | the rows the user TOUCHED answer (an untouched entry has no row and is absent until the source speaks); fs/proc sweep rules |
 | A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
 
 ## Module boundaries

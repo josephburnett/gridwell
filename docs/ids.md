@@ -7,14 +7,14 @@ peels one segment; the segment's shape says what it is:
 |---|---|---|
 | letter-leading | `ngkwanw`, `fa21d5d1…` | a namespace: node, plugin, or connection (7-char base36 or legacy 32-hex) |
 | digits | `14` | a minted row (tile or grid) in the owner's store — permanent, never reused |
-| `~` + base64url(key) | `~L2hvbWUvam9l` | a plugin entry named by its own key — no row; mints to digits on first durable touch |
+| `~` + base64url(address) | `~L2hvbWUvam9l` | a plugin thing named by its own address — no row; mints to digits on first durable touch |
 
 ## Examples
 
 ```
 52f8374f…/14                    home tile 14 (node id = home's id)
 ngkwanw/7                       minted tile 7 in gitlab's namespace
-fa21d5d1…/~L2hvbWUvam9l         untouched fs entry /home/joe
+fa21d5d1…/~L2hvbWUvam9l         the untouched fs grid of /home/joe
 8aed…/eoifgyl/rp1nodeX/3        via connection eoifgyl → remote node → its tile 3
 ```
 
@@ -34,8 +34,29 @@ letter segment → that connection; any other letter segment → that plugin.
 - `Reference` (dashed = link) is derived from a chain crossing
   namespaces — never stored.
 
+## What is inside a `~`
+
+The payload is the owning namespace's own address for the thing, and no one
+else opens it: to the URL grammar, the router, the /content/ door and the
+client, a `~` segment is one opaque tile segment. `internal/pluginhost` is the
+only reader, and it writes two forms (`address.go`):
+
+| Position | Payload | Example |
+|---|---|---|
+| grid | the plugin's context key | `~` + b64(`/home/joe`) |
+| tile | the context key, NUL, the entry key | `~` + b64(`/home` NUL `/home/joe`) |
+
+A tile carries its context because a tile must be answerable on its own: the
+node keeps no key→context index — that index is the row we are not minting —
+and `plugin.v1` has no verb that describes one entry, so `GetTile` on an
+untouched entry is one `List` of the context that names it.
+
 ## Stability
 
 Digits are never reused. A `~` id is as stable as the plugin's key (keys
-are forever, per the plugin contract). Retired connection names never
+are forever, per the plugin contract), and a reference at REST is never one:
+the router mints (`namespace.Minter`) before a link, a mount, or a clone
+stores a target, so `child_grid_id` and `link_target_id` always hold digits.
+A `~` id already in a client's hands keeps resolving after the mint — the
+answer just comes back named by the row. Retired connection names never
 return. Home is only ever letter + digits — it is not a plugin.
