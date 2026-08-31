@@ -347,8 +347,6 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	}
 	g := &gridwellv1.Grid{
 		Id:          canonical,
-		SourceKind:  ci.Kind,
-		SourceId:    resp.SourceLabel,
 		HostContent: ci.HostContent,
 		Glyph:       ci.Glyph,
 		Stale:       stale,

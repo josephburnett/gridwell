@@ -127,9 +127,6 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 			t.Fatalf("remembered tile drifted: %+v != %+v", after.Tiles[i], before.Tiles[i])
 		}
 	}
-	if after.Grid.SourceKind != before.Grid.SourceKind {
-		t.Fatalf("source kind drifted dark: %q != %q", after.Grid.SourceKind, before.Grid.SourceKind)
-	}
 	// The plugin's DECLARATIONS are what the client renders the grid with, so
 	// a dark plugin whose face changed would repaint the room: the host tint
 	// would drop off every tile and the folder would turn into a well. They

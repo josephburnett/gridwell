@@ -178,7 +178,7 @@ func (p *pageFake) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGri
 		return nil, status.Error(codes.Unavailable, "tunnel down")
 	}
 	return &pb.GetGridResponse{
-		Grid:  &pb.Grid{Id: in.GetGridId(), SourceKind: "fs"},
+		Grid:  &pb.Grid{Id: in.GetGridId(), HostContent: true},
 		Tiles: []*pb.Tile{{Id: "7", GridId: in.GetGridId(), Kind: "url", ServesPage: true}},
 	}, nil
 }

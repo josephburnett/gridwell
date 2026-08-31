@@ -4,8 +4,8 @@
 // TestDescriptorMatchesProto pins the two together in both directions.
 //
 // Conventions:
-//   - kind, source_kind, and text_mode are string fields, not enums. The
-//     DDL CHECK constraints already pin the closed sets; strings keep the
+//   - kind and text_mode are string fields, not enums. The DDL CHECK
+//     constraints already pin the closed sets; strings keep the
 //     proto-to-column mapping mechanical and let named constants live
 //     alongside the generated types.
 //   - created_at and updated_at exist in the DDL but are not on the wire.

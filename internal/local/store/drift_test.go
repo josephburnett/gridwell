@@ -34,8 +34,6 @@ func TestDescriptorMatchesProto(t *testing.T) {
 			message: (&pb.Grid{}).ProtoReflect().Descriptor(),
 			onWire:  wireNames(gridsColumns),
 			wireOnly: map[string]string{
-				"source_kind":     "set by the fs/proc plugins on their own GetGrid responses; the local store never persists it",
-				"source_id":       "likewise — the path or PID behind a host-backed grid",
 				"writable":        "stamped by the serving node from the owning plugin's Info — a per-grid capability, never persisted",
 				"scratch_grid_id": "stamped by the serving node, qualified per hop",
 				"node_ns":         "the namespace chain of the node serving the grid, from the receiver's perspective",

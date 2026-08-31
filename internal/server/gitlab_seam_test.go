@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -49,7 +50,7 @@ func gitlabTodo(id int64, created string) gitlabfake.Todo {
 
 // gitlabStackAt spawns the plugin over an EXISTING memory DB path (a restart
 // reuses it) and returns the adapter client plus a closer that stops both.
-func gitlabStackAt(t *testing.T, memPath string, cfg map[string]string) (namespace.Namespace, func()) {
+func gitlabStackAt(t *testing.T, memPath string, cfg map[string]string) (namespace.Namespace, pluginv1.PluginClient, func()) {
 	t.Helper()
 	memStore, err := store.Open(memPath)
 	if err != nil {
@@ -57,7 +58,7 @@ func gitlabStackAt(t *testing.T, memPath string, cfg map[string]string) (namespa
 	}
 	cp, kill := plugintest.SpawnCloser(t, "gitlab", cfg)
 	client := pluginhost.New(cp, memStore.Namespace("p1"))
-	return client, func() { kill(); _ = memStore.Close() }
+	return client, cp, func() { kill(); _ = memStore.Close() }
 }
 
 func tileByLabelPrefix(tiles []*gridwellv1.Tile, prefix string) *gridwellv1.Tile {
@@ -82,7 +83,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	// todo that leaves shows up on the very next read instead of after the
 	// default window. Anything longer is a race against the test's own speed.
 	cfg := gl.Config(t, map[string]string{"refresh": "1ns"})
-	client, closeStack := gitlabStackAt(t, memPath, cfg)
+	client, _, closeStack := gitlabStackAt(t, memPath, cfg)
 
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
@@ -100,7 +101,10 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(root.Tiles) != 2 || root.Grid.SourceKind != "gitlab" {
+	// A plugin that holds its own content declares no host_content, so its
+	// grids render as owned content — the gitlab face is the well, exactly
+	// as it was when the client had no declaration for the kind "gitlab".
+	if len(root.Tiles) != 2 || root.Grid.HostContent || root.Grid.Glyph != "" {
 		t.Fatalf("root = %+v %v", root.Grid, root.Tiles)
 	}
 	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
@@ -154,7 +158,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	// not list it. The node remembers — same tile, same id, same placement,
 	// last-seen label — and its content says it is not in memory.
 	closeStack()
-	client2, closeStack2 := gitlabStackAt(t, memPath, cfg)
+	client2, _, closeStack2 := gitlabStackAt(t, memPath, cfg)
 	t.Cleanup(closeStack2)
 	reg2 := plugin.NewRegistry()
 	reg2.Register("ug1", "gitlab", client2, nil)

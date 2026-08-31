@@ -213,14 +213,6 @@ func IsWorkspaceKind(kind string) bool {
 	return kind == KindPane
 }
 
-// Grid source kinds. NULL ("") means a regular Gridwell-owned grid. fs
-// means the grid's tile list is reconciled against a host directory; proc
-// means against the host process table. SourceID carries the path or PID.
-const (
-	GridSourceFS   = "fs"
-	GridSourceProc = "proc"
-)
-
 // EntryPlugin shapes a plugin's root MenuEntry as a pseudo-plugin: the
 // entry's grid as the root and its label and glyph as the face, so every
 // downstream flow (swatch, ghost, click-descend, drag-link, the bar's door

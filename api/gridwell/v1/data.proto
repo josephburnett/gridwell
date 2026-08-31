@@ -4,8 +4,8 @@
 // TestDescriptorMatchesProto pins the two together in both directions.
 //
 // Conventions:
-//   - kind, source_kind, and text_mode are string fields, not enums. The
-//     DDL CHECK constraints already pin the closed sets; strings keep the
+//   - kind and text_mode are string fields, not enums. The DDL CHECK
+//     constraints already pin the closed sets; strings keep the
 //     proto-to-column mapping mechanical and let named constants live
 //     alongside the generated types.
 //   - created_at and updated_at exist in the DDL but are not on the wire.
@@ -21,18 +21,17 @@ option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridw
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells
 // point at child grids. The root grid has no parent.
-//
-// source_kind is empty for a regular Gridwell-owned grid, "fs" for a
-// grid whose tile list is reconciled against a host directory, "proc"
-// for the process table. source_id carries the path or PID.
 message Grid {
   string id = 1;
   // 2 was object_id, a provenance mint no reader consulted. Identity is
   // the id.
   reserved 2;
   int64 version = 3;
-  string source_kind = 4;
-  string source_id = 5;
+  // 4 and 5 were source_kind and source_id: an fs/proc-shaped enum every
+  // reader switched on to pick a treatment, which is the plugin's kind
+  // leaking into the host and the client. host_content and glyph below are
+  // the declarations that replaced it; source_id had no reader at all.
+  reserved 4, 5;
   // writable reports whether the grid's owning plugin accepts mutations.
   // It is per grid, not per namespace, because one connection fronts many
   // remote plugins with differing capabilities. Stamped by the serving node
@@ -75,7 +74,8 @@ message Grid {
   // border family). Declared by the owning plugin (plugin.v1
   // InfoResponse.host_content), stamped onto the grid by the adapter that
   // serves it, and carried verbatim through transit like writable. It is
-  // what a reader consults instead of learning a kind's name.
+  // what a reader consults instead of learning a kind's name; it replaced
+  // source_kind.
   // Wire-only, never persisted.
   bool host_content = 13;
   // glyph is the owning plugin's declared identity glyph for this grid, from

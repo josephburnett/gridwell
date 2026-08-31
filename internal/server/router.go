@@ -510,15 +510,17 @@ func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest
 			return nil, err
 		}
 		srcLocalTile := resp.GetTile()
-		// A source-backed subtree — an fs directory, the proc table — is
-		// refused before anything is created: its content is host metadata
-		// stubs, so the copy would be a forest of summaries rather than the
-		// files, and a gesture that returns something other than what it
-		// names diverges silently. Copying host files is its own feature.
-		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetSourceKind() != "" {
-			return nil, status.Errorf(gcodes.Unimplemented,
-				"deep copy of a %s-backed well is not implemented (the copy would be metadata stubs, not the %s content); left-drag creates a link",
-				sg.GetGrid().GetSourceKind(), sg.GetGrid().GetSourceKind())
+		// A subtree the owning plugin declares as HOST CONTENT — an fs
+		// directory, the proc table — is refused before anything is created:
+		// its rows are host metadata stubs, so the copy would be a forest of
+		// summaries rather than the files, and a gesture that returns
+		// something other than what it names diverges silently. Copying host
+		// files is its own feature. The declaration is read off the grid, so
+		// this rule never learns a plugin's kind; a plugin whose rows carry
+		// their own content copies like any other.
+		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetHostContent() {
+			return nil, status.Error(gcodes.Unimplemented,
+				"deep copy of a host-content well is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
 		}
 		out, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID,
 			srcLocalTile, dst, dstLocal, m.X, m.Y)

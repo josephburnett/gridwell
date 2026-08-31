@@ -114,15 +114,9 @@ type Tile struct {
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells
 // point at child grids. The root grid has no parent.
-//
-// source_kind is empty for a regular Gridwell-owned grid, "fs" for a
-// grid whose tile list is reconciled against a host directory, "proc"
-// for the process table. source_id carries the path or PID.
 type Grid struct {
-	ID         string `json:"id,omitempty"`
-	Version    int64  `json:"version,omitempty"`
-	SourceKind string `json:"source_kind,omitempty"`
-	SourceID   string `json:"source_id,omitempty"`
+	ID      string `json:"id,omitempty"`
+	Version int64  `json:"version,omitempty"`
 	// writable reports whether the grid's owning plugin accepts mutations.
 	// It is per grid, not per namespace, because one connection fronts many
 	// remote plugins with differing capabilities. Stamped by the serving node
@@ -159,7 +153,8 @@ type Grid struct {
 	// border family). Declared by the owning plugin (plugin.v1
 	// InfoResponse.host_content), stamped onto the grid by the adapter that
 	// serves it, and carried verbatim through transit like writable. It is
-	// what a reader consults instead of learning a kind's name.
+	// what a reader consults instead of learning a kind's name; it replaced
+	// source_kind.
 	// Wire-only, never persisted.
 	HostContent bool `json:"host_content,omitempty"`
 	// glyph is the owning plugin's declared identity glyph for this grid, from
@@ -435,8 +430,6 @@ func GridToProto(v *Grid) *pb.Grid {
 	return &pb.Grid{
 		Id:            v.ID,
 		Version:       v.Version,
-		SourceKind:    v.SourceKind,
-		SourceId:      v.SourceID,
 		Writable:      v.Writable,
 		ScratchGridId: v.ScratchGridID,
 		Stale:         v.Stale,
@@ -455,8 +448,6 @@ func GridFromProto(p *pb.Grid) *Grid {
 	out := &Grid{
 		ID:            p.Id,
 		Version:       p.Version,
-		SourceKind:    p.SourceKind,
-		SourceID:      p.SourceId,
 		Writable:      p.Writable,
 		ScratchGridID: p.ScratchGridId,
 		Stale:         p.Stale,

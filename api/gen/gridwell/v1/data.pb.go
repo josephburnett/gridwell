@@ -4,8 +4,8 @@
 // TestDescriptorMatchesProto pins the two together in both directions.
 //
 // Conventions:
-//   - kind, source_kind, and text_mode are string fields, not enums. The
-//     DDL CHECK constraints already pin the closed sets; strings keep the
+//   - kind and text_mode are string fields, not enums. The DDL CHECK
+//     constraints already pin the closed sets; strings keep the
 //     proto-to-column mapping mechanical and let named constants live
 //     alongside the generated types.
 //   - created_at and updated_at exist in the DDL but are not on the wire.
@@ -85,16 +85,10 @@ func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells
 // point at child grids. The root grid has no parent.
-//
-// source_kind is empty for a regular Gridwell-owned grid, "fs" for a
-// grid whose tile list is reconciled against a host directory, "proc"
-// for the process table. source_id carries the path or PID.
 type Grid struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Version    int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	SourceKind string                 `protobuf:"bytes,4,opt,name=source_kind,json=sourceKind,proto3" json:"source_kind,omitempty"`
-	SourceId   string                 `protobuf:"bytes,5,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	// writable reports whether the grid's owning plugin accepts mutations.
 	// It is per grid, not per namespace, because one connection fronts many
 	// remote plugins with differing capabilities. Stamped by the serving node
@@ -131,7 +125,8 @@ type Grid struct {
 	// border family). Declared by the owning plugin (plugin.v1
 	// InfoResponse.host_content), stamped onto the grid by the adapter that
 	// serves it, and carried verbatim through transit like writable. It is
-	// what a reader consults instead of learning a kind's name.
+	// what a reader consults instead of learning a kind's name; it replaced
+	// source_kind.
 	// Wire-only, never persisted.
 	HostContent bool `protobuf:"varint,13,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
 	// glyph is the owning plugin's declared identity glyph for this grid, from
@@ -187,20 +182,6 @@ func (x *Grid) GetVersion() int64 {
 		return x.Version
 	}
 	return 0
-}
-
-func (x *Grid) GetSourceKind() string {
-	if x != nil {
-		return x.SourceKind
-	}
-	return ""
-}
-
-func (x *Grid) GetSourceId() string {
-	if x != nil {
-		return x.SourceId
-	}
-	return ""
 }
 
 func (x *Grid) GetWritable() bool {
@@ -3343,13 +3324,10 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xe7\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xb5\x02\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1f\n" +
-	"\vsource_kind\x18\x04 \x01(\tR\n" +
-	"sourceKind\x12\x1b\n" +
-	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
+	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12\x14\n" +
 	"\x05stale\x18\f \x01(\bR\x05stale\x12\x17\n" +
@@ -3357,7 +3335,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	" \x01(\tR\x06nodeNs\x129\n" +
 	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x12!\n" +
 	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
-	"\x05glyph\x18\x0e \x01(\tR\x05glyphJ\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\x05glyph\x18\x0e \x01(\tR\x05glyphJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"\"\x82\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
