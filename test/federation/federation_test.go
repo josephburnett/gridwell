@@ -577,3 +577,80 @@ func awaitConnRoot(t *testing.T, origin, name string) string {
 		}
 	}
 }
+
+// A key-form id — a tile on a remote node's plugin that nobody has touched —
+// must survive both directions of the chain: the remote derives it, the
+// transport passes it through without deciding it is a namespace hop or a
+// malformed row, and a read routed back on it lands on the same entry. Only
+// the real tunnel can catch that: the transport's peel is the one place a
+// segment shape is classified on the way out, and a unit test on either node
+// alone never sees the wire.
+func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
+	root := repoRoot(t)
+	bin := filepath.Join(root, "gridwell")
+	if _, err := os.Stat(bin); err != nil {
+		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
+	}
+	// The remote serves a directory through the fs plugin. Nothing there is
+	// ever touched, so every tile it answers is named by its key.
+	files := t.TempDir()
+	if err := os.WriteFile(filepath.Join(files, "far.txt"), []byte("hello from the far side"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	remoteHome := t.TempDir()
+	freshHome(t, remoteHome)
+	appendConnectionsYAML(t, remoteHome, fmt.Sprintf(`plugins:
+    - kind: fs
+      label: files
+      binary: %s
+      config:
+        root: %s
+`, filepath.Join(root, "gridwell-plugin-fs"), files))
+	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
+
+	creds := dialtest.Server(t, t.TempDir())
+	localHome := t.TempDir()
+	freshHome(t, localHome)
+	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedkey1", creds, remoteAddr))
+	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+
+	sshRoot := awaitConnRoot(t, localOrigin, "fedkey1")
+	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
+	nodeNS, _ := ng["grid"].(map[string]any)["nodeNs"].(string)
+	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
+	var fsRoot string
+	for _, p := range menu["plugins"].([]any) {
+		pm := p.(map[string]any)
+		if pm["label"] == "files" {
+			fsRoot, _ = pm["rootGridId"].(string)
+		}
+	}
+	if fsRoot == "" {
+		t.Fatalf("the remote's fs plugin is not on the routed menu: %v", menu["plugins"])
+	}
+
+	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": fsRoot})
+	var farID string
+	for _, ti := range g["tiles"].([]any) {
+		tm := ti.(map[string]any)
+		if tm["altText"] == "far.txt" {
+			farID, _ = tm["id"].(string)
+		}
+	}
+	if farID == "" {
+		t.Fatalf("far.txt not listed through the tunnel: %v", g["tiles"])
+	}
+	if !strings.Contains(farID, "/~") {
+		t.Fatalf("far.txt came back as %q, want an untouched entry's key form", farID)
+	}
+	// The id routes back: the same tile, and its bytes.
+	back := rpc(t, localOrigin, "GetTile", map[string]any{"tileId": farID})["tile"].(map[string]any)
+	if back["altText"] != "far.txt" {
+		t.Fatalf("GetTile on a key-form id through the chain = %v", back)
+	}
+	body, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), farID)
+	if err != nil || string(body) != "hello from the far side" {
+		t.Fatalf("ReadContent on a key-form id through the chain = %q (%v)", body, err)
+	}
+	fmt.Println("federation spawn gate: key-form ids cross the tunnel and route back OK")
+}
