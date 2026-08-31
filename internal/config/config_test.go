@@ -110,11 +110,11 @@ func TestLoad_empty_and_defaults(t *testing.T) {
 // The retired shapes fail loudly with the fix, never load silently: the flat
 // bind, a password in the file, a plugin row with no kind, an unknown key.
 //
-// The PRE-ONE-NODE vocabulary — node_id, a plugin row's name, provider, a
-// `kind: home` or `kind: remote` row — is deliberately absent: those files
-// CONVERT now (legacy.go, TestLoadConvertsAPreOneNodeConfig), which is what
-// "a pre-one-node home converts itself at first serve" promised. Refusing
-// them was the bug.
+// The PRE-ONE-NODE vocabulary — node_id, a plugin row's name, the retired
+// per-row flag, a `kind: home` or `kind: remote` row — is deliberately
+// absent: those files CONVERT now (legacy.go,
+// TestLoadConvertsAPreOneNodeConfig), which is what "a pre-one-node home
+// converts itself at first serve" promised. Refusing them was the bug.
 func TestLoad_refusesRetiredKeys(t *testing.T) {
 	cases := map[string]string{
 		"bind: 127.0.0.1:1\n":    "web",

@@ -2,9 +2,10 @@
 # A hit is "path:line:text"; the regex must match it from the start.
 #
 # "provider" — one word: plugin. Allowed: xterm's own "link provider" API,
-# and the retired `provider: true` yaml key, which the config must still
-# recognize to print its deprecation.
-provider .*[Ll]ink [Pp]rovider|.*registerLinkProvider|.*provider: true|.*yaml:"provider
+# the retired `provider: true` yaml key, and the legacy-config converter,
+# which must still spell the retired key to drop it from a pre-one-node
+# server.yaml.
+provider .*[Ll]ink [Pp]rovider|.*registerLinkProvider|.*provider: true|.*yaml:"provider|internal/config/legacy(_test)?\.go:
 providers
 # "loadout" — the compiled-in plugin set of a leaf binary.
 loadout

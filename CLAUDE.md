@@ -61,7 +61,10 @@ These were decided deliberately. Do not reverse one without a new decision.
 
 - The node is its home. One id, one `server.yaml` (`id`, `web`,
   `federation`, `connections`, `plugins`), one `gridwell.db`. `cache.db` is
-  disposable. Serve mints what is absent; that is the only config write.
+  disposable. Serve mints what is absent, and a pre-one-node home converts
+  itself at the first load — the config shape and the `db/<id>/` layout
+  both, originals set aside, never deleted. Those are the only config
+  writes.
 - The forever file holds node facts only: minted ids, layout, framing, the
   user's bytes, connections, tombstones. What a source last said is cache.
 - The storage format is additive by default. Dead storage — no released

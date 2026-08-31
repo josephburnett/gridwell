@@ -51,7 +51,7 @@ func TestAPreOneNodeHomeConvertsAndBoots(t *testing.T) {
 	}
 
 	// 1. The old config, exactly as the fold left it on a real machine:
-	// node_id, every namespace under plugins:, name:, provider:.
+	// node_id, every namespace under plugins:, name:, the retired flag.
 	cfgPath := filepath.Join(home, "server.yaml")
 	legacyYAML := "node_id: " + legacyNodeID + `
 plugins:

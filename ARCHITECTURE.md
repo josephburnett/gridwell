@@ -96,9 +96,18 @@ between nodes.
 ## The node
 
 `server.yaml` names the node: `id`, `web`, `federation`, `connections`,
-`plugins`. A missing file is a fresh home; serve mints what is absent, and
-that is the only config write. The node builds its own home and transport.
-`plugins:` lists content plugins only.
+`plugins`. A missing file is a fresh home. The node builds its own home and
+transport. `plugins:` lists content plugins only.
+
+A pre-one-node home converts itself at the first load, both halves: the old
+config shape — `node_id:`, every namespace under `plugins:`, `name:`, the
+retired per-row flag — becomes the one-node shape, and the `db/<id>/` layout
+beside it folds into `gridwell.db` (`internal/config/legacy.go` then
+`node.Convert`). The node's id is the old `kind: home` row's, never
+`node_id`; the originals are set aside as `server.yaml.pre-one-node` and
+`db.pre-one-node`, never deleted; a conversion that cannot be made without
+guessing refuses and leaves the file as it was. Serve mints what is absent.
+Those are the only two config writes.
 
 **Home** (`internal/local`) owns the user's content: text, urls, wells, pane
 tiles, shells, and the event stream. Shells are tmux sessions on a private
