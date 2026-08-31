@@ -571,3 +571,11 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		c.deleteTile(ctx, p.TileRemoved.GetTileId())
 	}
 }
+
+// MintRef passes the mint through to the source. It is a write, not a read,
+// so there is nothing to cache and nothing to serve when the source is dark:
+// a reference that cannot be minted must not be stored. A source that does
+// not derive ids answers itself, through namespace.MintRef.
+func (l *Layer) MintRef(ctx context.Context, localID string) (string, error) {
+	return namespace.MintRef(ctx, l.Namespace, localID)
+}

@@ -130,10 +130,13 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatalf("content = %q", body)
 	}
 
-	// The user moves todo 1.
-	if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: one.Id, X: 5, Y: 5, W: 3, H: 2}); err != nil {
+	// The user moves todo 1. That is the durable touch: the entry earns a row
+	// and is named by it from here on.
+	movedOne, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: one.Id, X: 5, Y: 5, W: 3, H: 2})
+	if err != nil {
 		t.Fatal(err)
 	}
+	one = movedOne.GetTile()
 
 	// Todo 1 leaves GitLab entirely (target deleted): the next walk finds it
 	// in neither state, so it reads as done — same id, where the user left it.

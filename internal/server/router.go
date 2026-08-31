@@ -391,9 +391,54 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 	if err != nil {
 		return nil, err
 	}
+	if err := rt.mintReferences(ctx, m.Tile); err != nil {
+		return nil, err
+	}
 	m.GridId = local
 	resp, err := c.CreateTile(ctx, m)
 	return rt.tileResp(uuid, transit, resp, err)
+}
+
+// mintReferences canonicalizes the ids a tile is about to STORE — an exit
+// well's child grid, a leaf link's target — before the create that stores
+// them. A namespace may answer an untouched thing by what it is rather than
+// by a row (pluginhost's derived addresses); a reference at rest must name a
+// row, so this is where a link or a mount pays for the row its target has
+// been getting for free. It is the one call, made by every create that can
+// carry a reference: the client's link drop and the cross-plugin clone.
+func (rt *router) mintReferences(ctx context.Context, t *pb.Tile) error {
+	if t == nil {
+		return nil
+	}
+	child, err := rt.mintRef(ctx, t.ChildGridId)
+	if err != nil {
+		return err
+	}
+	target, err := rt.mintRef(ctx, t.LinkTargetId)
+	if err != nil {
+		return err
+	}
+	t.ChildGridId, t.LinkTargetId = child, target
+	return nil
+}
+
+// mintRef canonicalizes one qualified reference through its owning namespace.
+// An id that names nothing here, or a namespace that does not derive ids —
+// home, a mount of another node, which mints its own rows and has no wire verb
+// to be asked — answers itself.
+func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
+	if id == "" {
+		return "", nil
+	}
+	c, local, uuid, _, ok := rt.srv.resolve(id)
+	if !ok {
+		return id, nil
+	}
+	minted, err := namespace.MintRef(ctx, c, local)
+	if err != nil {
+		return "", err
+	}
+	return rpc.QualifyID(uuid, minted), nil
 }
 
 // ── mutations ──────────────────────────────────────────────────────────────────
@@ -548,6 +593,9 @@ func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest
 		return nil, err
 	}
 	create.GridId = dstLocal
+	if err := rt.mintReferences(ctx, create.Tile); err != nil {
+		return nil, err
+	}
 	out, err := dst.CreateTile(ctx, create)
 	if err != nil {
 		return rt.tileResp(dstUUID, dstTransit, out, err)

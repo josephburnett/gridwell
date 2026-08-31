@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -506,9 +507,23 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cross-plugin link from fs: %v", err)
 	}
-	if link.ChildGridID != sub.ChildGridID {
-		t.Errorf("link child = %q, want the fs dir's grid %q (shared, not copied)",
-			link.ChildGridID, sub.ChildGridID)
+	// A reference at rest names a ROW, so storing this link is what mints the
+	// fs dir's grid: the stored child is not the derived address the client
+	// dragged, and it must open exactly the same grid — shared, not copied.
+	if link.ChildGridID == "" || !strings.HasPrefix(link.ChildGridID, fsUUID+"/") {
+		t.Fatalf("link child = %q, want a grid in %q", link.ChildGridID, fsUUID)
+	}
+	viaLink, err := cl.GetGrid(ctx, link.ChildGridID)
+	if err != nil {
+		t.Fatalf("GetGrid through the link: %v", err)
+	}
+	viaSource, err := cl.GetGrid(ctx, sub.ChildGridID)
+	if err != nil {
+		t.Fatalf("GetGrid through the dragged address: %v", err)
+	}
+	if viaLink.Grid.ID != viaSource.Grid.ID {
+		t.Errorf("the link opens %q, the dragged tile opens %q: not the same grid",
+			viaLink.Grid.ID, viaSource.Grid.ID)
 	}
 	if !link.Reference {
 		t.Error("cross-plugin link must be marked Reference (dashed border)")

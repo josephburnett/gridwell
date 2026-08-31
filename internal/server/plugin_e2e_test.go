@@ -86,9 +86,21 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	if moved.X != 5 || moved.Y != 6 {
 		t.Errorf("moved tile at (%d,%d), want (5,6)", moved.X, moved.Y)
 	}
-	if moved.ID != alpha.ID {
-		t.Errorf("move changed id %s→%s (must never re-row)", alpha.ID, moved.ID)
+	// The move is the durable touch that mints the row, so the tile is named
+	// by its row id from here on. The address the client was holding still
+	// resolves to the same tile — nothing the user has is invalidated — and
+	// from here the id never changes again.
+	if held, err := cl.GetTile(ctx, alpha.ID); err != nil || held.ID != moved.ID {
+		t.Errorf("the pre-mint address stopped resolving: %+v (%v), want %s", held, err, moved.ID)
 	}
+	again, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: moved.ID, GridID: child, X: 5, Y: 6, W: alpha.W, H: alpha.H})
+	if err != nil {
+		t.Fatalf("second move: %v", err)
+	}
+	if again.ID != moved.ID {
+		t.Errorf("move changed id %s→%s (must never re-row)", moved.ID, again.ID)
+	}
+	alpha.ID = moved.ID
 	g2, err := cl.GetGrid(ctx, child)
 	if err != nil {
 		t.Fatalf("GetGrid after move: %v", err)
