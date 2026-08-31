@@ -89,7 +89,7 @@ func TestSubscribeKicksPrefetch(t *testing.T) {
 	// The kick is async; poll the cache for the never-opened grid.
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		if _, ok := cc.loadGrid(ctx, nested); ok {
+		if _, _, ok := cc.loadGrid(ctx, nested); ok {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -128,7 +128,7 @@ func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 	// Give a walk every chance to happen before declaring it did not: the
 	// positive twin above finds the grid well inside this window.
 	time.Sleep(500 * time.Millisecond)
-	if _, ok := cc.loadGrid(ctx, nested); ok {
+	if _, _, ok := cc.loadGrid(ctx, nested); ok {
 		t.Fatal("a namespace without the prefetch policy crawled itself anyway")
 	}
 	// The layer still caches what is actually read: the engine is the same,
@@ -136,12 +136,12 @@ func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: nested}); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := cc.loadGrid(ctx, nested); !ok {
+	if _, _, ok := cc.loadGrid(ctx, nested); !ok {
 		t.Fatal("a read-through answer was not remembered")
 	}
 }
 
-func TestStaleBitMarksCacheServedGrids(t *testing.T) {
+func TestStaleBitMarksAnswersPastTheirWindow(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
 	live, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
@@ -151,16 +151,34 @@ func TestStaleBitMarksCacheServedGrids(t *testing.T) {
 	if live.GetGrid().GetStale() {
 		t.Error("a live answer must never wear the stale bit")
 	}
+	// Within the window a remembered answer serves as good as live — even
+	// dark, since nothing consults the source.
 	upstream.dark = true
+	fresh, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.GetGrid().GetStale() {
+		t.Error("a within-window answer must not wear the stale bit")
+	}
+	// Past the window it says so on the wire (#256, serve-first edition) —
+	// and stays said while the source is dark, since the revalidation the
+	// read kicks fails transport-shaped and changes nothing.
+	ageGrid(t, cc, root)
 	stale, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !stale.GetGrid().GetStale() {
-		t.Error("a cache-served grid must say so on the wire (#256)")
+		t.Error("a remembered answer past its window must say so on the wire (#256)")
 	}
-	// Back alive: the bit clears, since it is never stored.
+	// Back alive: the next read still serves the remembered answer, and the
+	// revalidation it kicks lands and clears the bit, which is never stored.
 	upstream.dark = false
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	awaitFresh(t, cc, root)
 	again, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -213,10 +231,16 @@ func TestAStaleAnswerIsNeverRemembered(t *testing.T) {
 	}
 
 	up.degraded = true
+	// Age the row so the read revalidates against the degraded upstream; the
+	// revalidation must not store the degraded answer. There is no landing to
+	// await — a stale answer changes nothing — so give it every chance the
+	// no-prefetch test above gives a walk, then look.
+	ageGrid(t, cc, root)
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
-	cached, ok := cc.loadGrid(ctx, root)
+	time.Sleep(500 * time.Millisecond)
+	cached, _, ok := cc.loadGrid(ctx, root)
 	if !ok {
 		t.Fatal("the good answer was dropped")
 	}

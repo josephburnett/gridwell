@@ -152,7 +152,8 @@ func (a *App) drawBottomBarFor(p *pane.Pane) {
 // wire-level stale bit: a small amber chip at the bar's right, beside the
 // slot. Bar chrome only — staleness never moves or restyles tiles. The room
 // renders exactly as remembered, and this is the one quiet sign that it is a
-// remembering.
+// remembering — a source gone dark, or a serve-first answer whose refresh is
+// still in flight, which clears the chip through the GridChanged it emits.
 func (a *App) drawStaleChipFor(p *pane.Pane, bx, top, bw float64) {
 	if p == nil {
 		return
@@ -171,7 +172,7 @@ func (a *App) drawStaleChipFor(p *pane.Pane, bx, top, bw float64) {
 	c.Set("font", "10px system-ui, sans-serif")
 	c.Set("textAlign", "center")
 	c.Set("textBaseline", "middle")
-	c.Call("fillText", "offline", x+chipW/2, y+chipH/2)
+	c.Call("fillText", "cached", x+chipW/2, y+chipH/2)
 	c.Set("textAlign", "start")
 }
 

@@ -431,9 +431,9 @@ func TestPersistsAcrossRestart(t *testing.T) {
 }
 
 // TestRefreshReconcilesWhatChangedWhileBlind: mutations the cache never
-// saw (no subscription running) reconcile on the next successful GetGrid —
-// the response IS the complete tile set, so a delete-while-blind vanishes
-// from the cache too.
+// saw (no subscription running) reconcile on the revalidation an
+// out-of-window read kicks — the response IS the complete tile set, so a
+// delete-while-blind vanishes from the cache too.
 func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
@@ -446,15 +446,20 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
-	// Deleted UPSTREAM directly — the cache never sees an event.
+	// Deleted UPSTREAM directly — the cache never sees an event, and the
+	// write never passes through this layer.
 	if _, err := upstream.Namespace.DeleteTile(ctx, &pb.DeleteTileRequest{
 		TileId: doomed.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
-	// The refresh read replaces the grid's whole tile set.
+	// An out-of-window read serves the remembered answer — doomed included:
+	// that is the remembering — and kicks the revalidation that replaces the
+	// grid's whole tile set.
+	ageGrid(t, cc, root)
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
+	awaitFresh(t, cc, root)
 	upstream.dark = true
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
@@ -462,7 +467,322 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 	}
 	for _, tl := range g.GetTiles() {
 		if tl.GetId() == doomed.GetTile().GetId() {
-			t.Fatal("a delete-while-blind must reconcile out on the next successful GetGrid")
+			t.Fatal("a delete-while-blind must reconcile out on the revalidation")
 		}
+	}
+}
+
+// ── serve-first ─────────────────────────────────────────────────────────
+
+// ageGrid pushes a remembered grid past the freshness window, the test's
+// stand-in for waiting the window out: the next read serves it stamped stale
+// and kicks a revalidation.
+func ageGrid(t *testing.T, cc *Layer, gridID string) {
+	t.Helper()
+	if _, err := cc.db.Exec(`UPDATE grids SET fetched_at = fetched_at - ? WHERE id = ?`,
+		int64(freshWindow/time.Second)+1, gridID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// awaitFresh polls until a revalidation has re-stored the grid — its
+// fetched_at is back inside the window — and returns the remembered answer.
+func awaitFresh(t *testing.T, cc *Layer, gridID string) *pb.GetGridResponse {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		resp, fetchedAt, ok := cc.loadGrid(context.Background(), gridID)
+		if ok && time.Since(time.Unix(fetchedAt, 0)) < freshWindow {
+			return resp
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("revalidation never landed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// midwalk blocks GetGrid until released — a source mid-walk. Calls before the
+// gate closes pass through.
+type midwalk struct {
+	namespace.Namespace
+	gate chan struct{} // nil: pass through; non-nil: block until closed
+}
+
+func (g *midwalk) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	if g.gate != nil {
+		select {
+		case <-g.gate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return g.Namespace.GetGrid(ctx, in)
+}
+
+// TestServeFirstNeverWaitsOnTheSource is the feature: a remembered grid
+// answers immediately while the source is mid-walk, stamped stale past its
+// window, and the walk lands behind as the revalidation.
+func TestServeFirstNeverWaitsOnTheSource(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	root, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := &midwalk{Namespace: local.New(st, nil)}
+	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
+
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err) // warm while the gate is open
+	}
+	// The source changes, then goes into a slow walk.
+	txt, err := up.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := make(chan struct{})
+	up.gate = gate
+	ageGrid(t, cc, root)
+
+	done := make(chan *pb.GetGridResponse, 1)
+	go func() {
+		g, gerr := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+		if gerr != nil {
+			t.Error(gerr)
+			done <- nil
+			return
+		}
+		done <- g
+	}()
+	select {
+	case g := <-done:
+		if g == nil {
+			t.FailNow()
+		}
+		if !g.GetGrid().GetStale() {
+			t.Error("the served remembering must wear the stale bit")
+		}
+		if len(g.GetTiles()) != 0 {
+			t.Errorf("served %d tiles, want the remembered 0 (the walk has not landed)", len(g.GetTiles()))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read waited on the source: serve-first must answer from the remembering")
+	}
+
+	close(gate) // the walk lands
+	fresh := awaitFresh(t, cc, root)
+	if len(fresh.GetTiles()) != 1 || fresh.GetTiles()[0].GetId() != txt.GetTile().GetId() {
+		t.Fatalf("revalidation remembered %v, want the new tile", fresh.GetTiles())
+	}
+}
+
+// unwatched is the adapter's shape: a namespace with no event stream of its
+// own. The layer must provide one — its Info says watch, and its Subscribe
+// serves the GridChanged its revalidations emit.
+type unwatched struct {
+	namespace.Namespace
+}
+
+func (unwatched) Subscribe(context.Context, *pb.SubscribeRequest, func(*pb.Event) error) error {
+	return status.Error(codes.Unimplemented, "no event stream")
+}
+
+func (unwatched) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+	return &pb.InfoResponse{Kind: "test", Watch: false}, nil
+}
+
+// TestRevalidationEmitsGridChanged closes the serve-first loop for a
+// namespace the node never watched: stale served, refresh lands a different
+// answer, GridChanged fires on the layer's own stream, and the next read
+// serves the correction. Info declares the door.
+func TestRevalidationEmitsGridChanged(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	root, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := &unwatched{Namespace: local.New(st, nil)}
+	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
+
+	info, err := cc.Info(ctx, &pb.InfoRequest{})
+	if err != nil || !info.GetWatch() {
+		t.Fatalf("layer Info = (%+v, %v), want watch: the layer has a stream to offer", info, err)
+	}
+
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
+	evs := make(chan *pb.Event, 16)
+	go func() {
+		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(ev *pb.Event) error {
+			evs <- ev
+			return nil
+		})
+	}()
+	// The subscriber registers asynchronously; wait for it, or the emit
+	// races past an empty subscriber set.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		cc.subsMu.Lock()
+		n := len(cc.subs)
+		cc.subsMu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the synthetic subscription never registered")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// The source changes while nobody is looking; an out-of-window read
+	// serves the remembering and kicks the refresh that finds the change.
+	txt, err := up.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ageGrid(t, cc, root)
+	stale, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stale.GetTiles()) != 0 {
+		t.Fatalf("the stale answer already has %d tiles; it must be the remembering", len(stale.GetTiles()))
+	}
+	select {
+	case ev := <-evs:
+		gc := ev.GetGridChanged()
+		if gc.GetGridId() != root {
+			t.Fatalf("GridChanged names %q, want %q", gc.GetGridId(), root)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the revalidation's GridChanged never arrived")
+	}
+	again, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.GetGrid().GetStale() || len(again.GetTiles()) != 1 || again.GetTiles()[0].GetId() != txt.GetTile().GetId() {
+		t.Fatalf("post-event read = stale:%v tiles:%v, want the fresh correction", again.GetGrid().GetStale(), again.GetTiles())
+	}
+}
+
+// verdicted answers one grid with NotFound once armed — the source's word
+// that the grid is gone.
+type verdicted struct {
+	namespace.Namespace
+	gone bool
+}
+
+func (v *verdicted) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	if v.gone {
+		return nil, status.Error(codes.NotFound, "grid gone")
+	}
+	return v.Namespace.GetGrid(ctx, in)
+}
+
+// TestRevalidationVerdictEvicts: an answered error is an answer. The one read
+// that catches the transition still serves the remembering, but the
+// revalidation evicts it, and from then on the verdict surfaces instead of a
+// ghost.
+func TestRevalidationVerdictEvicts(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	root, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := &verdicted{Namespace: local.New(st, nil)}
+	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
+
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	up.gone = true
+	ageGrid(t, cc, root)
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err) // the catching read still serves the remembering
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, _, ok := cc.loadGrid(ctx, root); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the verdict never evicted the remembered grid")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); status.Code(err) != codes.NotFound {
+		t.Fatalf("post-eviction read = %v, want the NotFound verdict passed through", err)
+	}
+}
+
+// TestWriteResponsesUpdateTheRememberedRows: under serve-first "the next read
+// refreshes" no longer holds, so a write's response must fold into the
+// remembered rows — a moved tile reads back where the user put it, and a
+// deleted one is gone, straight from the remembering.
+func TestWriteResponsesUpdateTheRememberedRows(t *testing.T) {
+	cc, upstream, root, _ := fixture(t)
+	ctx := context.Background()
+
+	moved, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doomed, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 2, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.PlaceTile(ctx, &pb.PlaceTileRequest{GridId: root,
+		TileId: moved.GetTile().GetId(), X: 5, Y: 6, W: 2, H: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: doomed.GetTile().GetId()}); err != nil {
+		t.Fatal(err)
+	}
+	// Dark, within the window: the remembering is all there is, and it must
+	// already say what the user did.
+	upstream.dark = true
+	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotMoved *pb.Tile
+	for _, tl := range g.GetTiles() {
+		if tl.GetId() == doomed.GetTile().GetId() {
+			t.Fatal("the deleted tile must be gone from the remembering")
+		}
+		if tl.GetId() == moved.GetTile().GetId() {
+			gotMoved = tl
+		}
+	}
+	if gotMoved.GetX() != 5 || gotMoved.GetY() != 6 || gotMoved.GetW() != 2 {
+		t.Fatalf("moved tile remembered at (%d,%d,%d), want (5,6,2)",
+			gotMoved.GetX(), gotMoved.GetY(), gotMoved.GetW())
 	}
 }

@@ -130,12 +130,14 @@ type Grid struct {
 	// writable. "" only when the owning plugin's Info was unreachable.
 	// Wire-only.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`
-	// stale marks a grid the source could not answer for: this is the
-	// remembered answer, not the live one. Two node-side stampers share the
-	// one meaning — internal/sourcecache on its serve-stale path, and a
-	// plugin adapter answering a dark source from the rows it minted.
-	// Wire-only, never persisted. The cache also obeys it: an answer already
-	// stamped stale is never remembered.
+	// stale marks a remembered answer, not a live one: the source could not
+	// answer, or has not confirmed this answer within the cache's freshness
+	// window — a refresh is in flight and a GridChanged follows if it finds
+	// drift. Two node-side stampers share the one meaning —
+	// internal/sourcecache on its serve-first and dark paths, and a plugin
+	// adapter answering a dark source from the rows it minted. Wire-only,
+	// never persisted. The cache also obeys it: an answer already stamped
+	// stale is never remembered.
 	Stale bool `json:"stale,omitempty"`
 	// node_ns is the namespace chain of the node serving this grid, from the
 	// receiver's perspective: "" for a grid served by the node you are

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
@@ -74,8 +75,13 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cache.Close() })
-	// The production policy for a content plugin: the engine, no crawl.
-	cached := cache.Front(pluginhost.New(dc, memStore.Namespace("p1")), sourcecache.Options{})
+	// The content-plugin policy — the engine, no crawl — with the serve-first
+	// window shrunk to a second (fetched_at is second-granular), so a short
+	// sleep puts the dark read past it and it wears the signal this test
+	// pins: within the window a remembered answer serves unstamped,
+	// indistinguishable from live on purpose.
+	cached := cache.Front(pluginhost.New(dc, memStore.Namespace("p1")),
+		sourcecache.Options{FreshWindow: time.Second})
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", cached, nil)
 	srv := servertest.New(t, reg, server.Config{})
@@ -111,6 +117,7 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 	if _, err := cl.Handshake(ctx); err != nil {
 		t.Fatalf("dark plugin lost the handshake: %v", err)
 	}
+	time.Sleep(1200 * time.Millisecond) // past the window: the read must say remembered
 	after, err := cl.GetGrid(ctx, rootGrid)
 	if err != nil {
 		t.Fatalf("dark plugin surfaced as an error instead of the remembered answer: %v", err)
@@ -141,12 +148,24 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 	}
 
 	dc.dark.Store(false)
-	healed, err := cl.GetGrid(ctx, rootGrid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if healed.Grid.Stale {
-		t.Fatal("healed plugin still stamped stale")
+	// The healed read still serves the remembering — every read here is past
+	// the shrunk window — but it kicks a live revalidation, and once one
+	// lands the stamp clears. Poll: the window is a nanosecond, so only a
+	// read that races in right behind a landed revalidation sees it fresh,
+	// and the eventual unstamped answer is the healing this pins.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		healed, err := cl.GetGrid(ctx, rootGrid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !healed.Grid.Stale {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("healed plugin still stamped stale")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -154,16 +173,18 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 // while dark is a fact of the node's own, so it stands and reads back
 // immediately.
 //
-// That is why the adapter answers a dark source from its rows instead of
-// failing into the cache: the cache's grid response is a join of the source's
-// facts and the node's, and replaying it would replay the old placement over
-// the new one, so the move would appear to fail and then reappear when the
-// source came back.
+// Under serve-first the read after the move is answered by the cache's
+// remembered listing, so the promise rests on two things: a write's response
+// folds into the remembered rows, which is what keeps the move from being
+// replayed over by the old placement; and the adapter's dark-source answer —
+// its rows only, stamped stale — is what the revalidation sees and refuses
+// to store, so the remembered listing (untouched entries included) survives
+// the outage instead of being overwritten by the degraded one.
 //
 // The arrangement is what a ROW holds, so the test arranges the tile before
-// the dark: an entry nobody has touched has no row, is not shown while the
-// source is dark, and cannot be moved there — the node would be minting a
-// thing it cannot describe. That refusal is the last stanza.
+// the dark: an entry nobody has touched has no row and cannot be moved while
+// the source is dark — the node would be minting a thing it cannot describe.
+// That refusal is the last stanza.
 func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	root := seedTree(t)
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
@@ -227,11 +248,14 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dark source surfaced as an error: %v", err)
 	}
-	if !g.Grid.Stale {
-		t.Fatal("a dark source must stamp the grid stale")
+	// Within the serve-first window the remembered listing answers unstamped
+	// — nothing vanishes just because the directory blinked — and the move
+	// already reads back from it, folded in by the write's response.
+	if g.Grid.Stale {
+		t.Fatal("a within-window remembering must serve unstamped")
 	}
-	if len(g.Tiles) != 1 {
-		t.Fatalf("dark source answered %d tiles, want only the arranged one: %+v", len(g.Tiles), g.Tiles)
+	if len(g.Tiles) != len(before.Tiles) {
+		t.Fatalf("dark source answered %d tiles, want the remembered %d: %+v", len(g.Tiles), len(before.Tiles), g.Tiles)
 	}
 	var back rpc.Tile
 	for _, tile := range g.Tiles {

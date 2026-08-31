@@ -85,7 +85,10 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		// carries them — Subscribe over cp.Watch, mapping ContextChanged to
 		// GridChanged by context id and EntryRemoved to TileRemoved by the id
 		// map, and WriteContent forwarding by key — at which point they
-		// follow ci again.
+		// follow ci again. The cache layer that fronts every adapter
+		// re-declares watch over its own stream (sourcecache.Layer.Subscribe,
+		// the revalidation's GridChanged), so the fan-in still reaches a
+		// plugin namespace; false here stays the adapter's own truth.
 		Watch:    false,
 		Writable: false,
 	}

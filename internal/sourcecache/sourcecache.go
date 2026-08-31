@@ -1,12 +1,27 @@
 // Package sourcecache is the node's one memory of what a source last said. It
 // sits in front of every non-home namespace — every content plugin's adapter
 // and the transport's connections — as a read-through layer over one
-// disposable file. Online it passes through and remembers every successful
-// read; when the source is unreachable, on a transport-class failure only,
-// since an answered "gone" is never masked, it serves the remembered answer
-// stamped stale. Writes always pass through: the cache is never a write
-// buffer, the source stays the one owner of its truth, and this layer owns
-// only the remembered answer.
+// disposable file.
+//
+// A grid read serves first and refreshes behind. A remembered grid answers
+// immediately: unstamped within freshWindow of the answer it remembers,
+// stamped stale beyond it, with one background revalidation kicked per grid.
+// A revalidation that lands a different answer replaces the rows and emits a
+// GridChanged through the layer's own event stream (Subscribe below), so the
+// client refetches and the correction reaches the screen without the source's
+// latency — a gitlab walk, a remote round trip — ever sitting on the read
+// path. A verdict from the revalidation — NotFound, PermissionDenied — evicts
+// the remembered grid and emits the same event, so the next read passes
+// through and the verdict surfaces rather than a ghost answering forever.
+// Only a grid the cache has never seen still waits on the source.
+//
+// Every other read passes through and remembers; when the source is
+// unreachable, on a transport-class failure only, since an answered "gone" is
+// never masked, it serves the remembered answer. Writes always pass through —
+// the cache is never a write buffer, the source stays the one owner of its
+// truth — and a write's successful response updates the remembered rows,
+// because under serve-first "the next read refreshes" no longer holds and a
+// moved tile must not snap back to its remembered place.
 //
 // It is a cache, not memory. The node's own facts about a plugin's entries —
 // the ids it minted, where the user put them, how they are framed — are
@@ -33,26 +48,27 @@
 // tile set, so that read-through refresh is the resync by construction rather
 // than by a sweep.
 //
-// Deliberately not cached: write responses, since the next read refreshes,
-// and any answer already stamped stale, since remembering a degraded answer
-// would overwrite the good one it degraded from. ServeContent bodies are
-// cached under their own bounds (servecontent.go); the whole-source prefetch
-// walk is a per-namespace policy, off by default and opted into by the
-// transport alone (prefetch.go).
+// Deliberately not cached: any answer already stamped stale, since
+// remembering a degraded answer would overwrite the good one it degraded
+// from. ServeContent bodies are cached under their own bounds
+// (servecontent.go); the whole-source prefetch walk is a per-namespace
+// policy, off by default and opted into by the transport alone (prefetch.go).
 package sourcecache
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/josephburnett/gridwell/api/gwerr"
 	"log"
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	_ "modernc.org/sqlite"
@@ -125,6 +141,15 @@ const contentChunkBytes = 256 * 1024
 // still passes through live, just uncached.
 const maxCachedContentBytes = 16 * 1024 * 1024
 
+// freshWindow is how long a remembered grid answers without a revalidation:
+// within it a hit serves unstamped and touches nothing, beyond it the hit
+// serves stamped stale and kicks one background refresh. The window is also
+// what keeps refresh from feeding on itself — a GridChanged makes the client
+// refetch, and the refetch lands inside the window of the revalidation that
+// caused it, so a source whose listing drifts on every walk settles into at
+// most one refresh per window instead of a loop.
+const freshWindow = 30 * time.Second
+
 // Options is the per-namespace policy over the one engine. The engine is the
 // same for a local plugin and a remote connection; what differs is how eagerly
 // it warms.
@@ -137,16 +162,41 @@ type Options struct {
 	// own disk on every reconnect would buy nothing and cost a full
 	// traversal.
 	Prefetch bool
+	// FreshWindow overrides freshWindow, the serve-first horizon. Zero takes
+	// the default; tests shrink it so an aged answer is one they just stored.
+	FreshWindow time.Duration
+}
+
+// window is this layer's serve-first horizon.
+func (c *Layer) window() time.Duration {
+	if c.opts.FreshWindow > 0 {
+		return c.opts.FreshWindow
+	}
+	return freshWindow
 }
 
 // Layer is the cache in front of one namespace. Every method not overridden
-// here passes through the embedded Namespace untouched: writes, shells, Probe,
-// SetFraming.
+// here passes through the embedded Namespace untouched: shells, Probe, and
+// Search.
 type Layer struct {
 	namespace.Namespace
 	db   *sql.DB
 	opts Options
 	pf   prefetcher
+
+	// revalidations in flight, one per grid id, on pf.ctx so Close cancels
+	// them; revalWG lets Close wait so a landing walk never writes into a
+	// closed DB.
+	revalMu       sync.Mutex
+	revalInflight map[string]bool
+	revalWG       sync.WaitGroup
+
+	// subs are this layer's own event subscribers — the synthetic stream
+	// Subscribe serves when the upstream has none — fed by revalidations
+	// that changed or evicted a grid.
+	subsMu sync.Mutex
+	subs   map[int]chan *pb.Event
+	subSeq int
 }
 
 // The cache is a namespace in front of a namespace, nothing more.
@@ -189,7 +239,8 @@ func Open(dbPath string) (*Store, error) {
 // The returned layer is owned by the store: Close shuts every layer down
 // before the file goes away.
 func (s *Store) Front(upstream namespace.Namespace, opts Options) *Layer {
-	c := &Layer{Namespace: upstream, db: s.db, opts: opts}
+	c := &Layer{Namespace: upstream, db: s.db, opts: opts,
+		revalInflight: map[string]bool{}, subs: map[int]chan *pb.Event{}}
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -214,7 +265,8 @@ func (s *Store) Close() error {
 	s.mu.Unlock()
 	for _, c := range layers {
 		c.pf.cancel()
-		c.pf.wg.Wait() // the walk is out before its DB goes away
+		c.pf.wg.Wait()   // the walk is out before its DB goes away
+		c.revalWG.Wait() // and so is every in-flight revalidation
 	}
 	return s.db.Close()
 }
@@ -240,6 +292,12 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 				ON CONFLICT(k) DO UPDATE SET proto=excluded.proto`, b)
 			logErr("store info", werr)
 		}
+		// The layer always has an event stream to offer — the upstream's, or
+		// its own synthetic GridChanged (see Subscribe) — so the door it
+		// declares is its own, the same rule the adapter applies to its
+		// plugin. Flipped after the store: what the source said is what is
+		// remembered.
+		resp.Watch = true
 		return resp, nil
 	}
 	if !gwerr.IsTransport(err) {
@@ -253,6 +311,7 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 	if uerr := proto.Unmarshal(b, cached); uerr != nil {
 		return nil, err
 	}
+	cached.Watch = true // the layer's door, same as the live path
 	return cached, nil
 }
 
@@ -286,35 +345,118 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 
 // ── GetGrid ─────────────────────────────────────────────────────────────
 
+// GetGrid serves first and refreshes behind. A remembered grid answers
+// immediately — the whole point: the source's latency, a gitlab walk or a
+// remote round trip, never sits on the read path. Within freshWindow the
+// answer serves as-is; beyond it, it serves stamped stale and one background
+// revalidation is kicked, whose landing emits a GridChanged so the client
+// refetches. Only a miss waits on the source.
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
-	resp, err := c.Namespace.GetGrid(ctx, in)
-	if err == nil {
-		// A stale answer is never remembered. The layer below degrades too —
-		// a plugin adapter whose source went dark answers from the rows it
-		// minted and stamps the grid — and storing that would permanently
-		// overwrite the good answer it degraded from with a poorer one,
-		// because the degraded read succeeds and nothing would correct it but
-		// a live read that may never come. The stale bit is the one place
-		// that fact is known, and this is the one place it is obeyed.
-		if !resp.GetGrid().GetStale() {
-			c.storeGrid(ctx, in.GridId, resp)
+	if cached, fetchedAt, hit := c.loadGrid(ctx, in.GridId); hit {
+		if time.Since(time.Unix(fetchedAt, 0)) < c.window() {
+			return cached, nil
 		}
-		return resp, nil
+		// The stale bit: this is a remembered answer past its window and the
+		// wire says so. Wire-only, never stored, so the revalidation
+		// re-stores the grid without it.
+		if cached.GetGrid() != nil {
+			cached.Grid.Stale = true
+		}
+		c.revalidateGrid(in.GridId)
+		return cached, nil
 	}
-	if !gwerr.IsTransport(err) {
+	// A miss has nothing better than the source's word.
+	return c.getGridLive(ctx, in.GridId)
+}
+
+// getGridLive reads one grid from the source and remembers the answer: the
+// miss path, the revalidation's read, and the prefetch walk, which exists to
+// warm from the source and must never be answered by the rows it is warming.
+//
+// A stale answer is never remembered. The layer below degrades too — a
+// plugin adapter whose source went dark answers from the rows it minted and
+// stamps the grid — and storing that would permanently overwrite the good
+// answer it degraded from with a poorer one, because the degraded read
+// succeeds and nothing would correct it but a live read that may never come.
+// The stale bit is the one place that fact is known, and this is the one
+// place it is obeyed.
+func (c *Layer) getGridLive(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {
+	resp, err := c.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: gridID})
+	if err != nil {
 		return nil, err
 	}
-	cached, hit := c.loadGrid(ctx, in.GridId)
-	if !hit {
-		return nil, err
+	if !resp.GetGrid().GetStale() {
+		c.storeGrid(ctx, gridID, resp)
 	}
-	// The stale bit: this is the remembered answer and the wire says so. The
-	// one place the fact is known is the one place it is stamped. Wire-only,
-	// never stored, so a later live read re-stores the grid without it.
-	if cached.GetGrid() != nil {
-		cached.Grid.Stale = true
+	return resp, nil
+}
+
+// revalidateGrid refreshes one remembered grid in the background, single-
+// flight per grid id, on the layer's own context so a canceled click never
+// kills a refresh other readers are counting on. A changed answer is stored
+// and announced; a transport failure or a degraded (stale-stamped) answer
+// changes nothing, the remembered rows stand; a verdict evicts, so the next
+// read passes through and the verdict surfaces instead of a remembered ghost.
+func (c *Layer) revalidateGrid(gridID string) {
+	c.revalMu.Lock()
+	if c.revalInflight[gridID] {
+		c.revalMu.Unlock()
+		return
 	}
-	return cached, nil
+	c.revalInflight[gridID] = true
+	c.revalMu.Unlock()
+	c.revalWG.Add(1)
+	go func() {
+		defer func() {
+			c.revalMu.Lock()
+			delete(c.revalInflight, gridID)
+			c.revalMu.Unlock()
+			c.revalWG.Done()
+		}()
+		ctx := c.pf.ctx
+		old, _, hit := c.loadGrid(ctx, gridID)
+		resp, err := c.getGridLive(ctx, gridID)
+		switch {
+		case err == nil && !resp.GetGrid().GetStale():
+			if !hit || !gridRespEqual(old, resp) {
+				c.emitGridChanged(gridID)
+			}
+		case err != nil && !gwerr.IsTransport(err):
+			// An answered error is an answer: the remembered grid must not
+			// outlive the source's verdict. (A canceled ctx — the store
+			// closing — reads as transport and evicts nothing.)
+			c.evictGrid(ctx, gridID)
+			c.emitGridChanged(gridID)
+		}
+	}()
+}
+
+// gridRespEqual reports whether two grid answers say the same thing, tiles
+// compared by id so row order never fakes a change.
+func gridRespEqual(a, b *pb.GetGridResponse) bool {
+	if !proto.Equal(a.GetGrid(), b.GetGrid()) || len(a.GetTiles()) != len(b.GetTiles()) {
+		return false
+	}
+	byID := make(map[string]*pb.Tile, len(a.GetTiles()))
+	for _, t := range a.GetTiles() {
+		byID[t.GetId()] = t
+	}
+	for _, t := range b.GetTiles() {
+		if !proto.Equal(byID[t.GetId()], t) {
+			return false
+		}
+	}
+	return true
+}
+
+// evictGrid forgets a grid and its tile rows. Content and preview rows keyed
+// by the tiles linger unreachable and refresh on their next live read: the
+// file is disposable, and reaping them here would buy nothing.
+func (c *Layer) evictGrid(ctx context.Context, gridID string) {
+	_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE grid_id = ?`, gridID)
+	logErr("evict tiles", err)
+	_, err = c.db.ExecContext(ctx, `DELETE FROM grids WHERE id = ?`, gridID)
+	logErr("evict grid", err)
 }
 
 // storeGrid replaces the grid row and its whole tile set in one transaction. A
@@ -360,33 +502,33 @@ func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridRe
 	logErr("store grid", tx.Commit())
 }
 
-func (c *Layer) loadGrid(ctx context.Context, gridID string) (*pb.GetGridResponse, bool) {
+func (c *Layer) loadGrid(ctx context.Context, gridID string) (resp *pb.GetGridResponse, fetchedAt int64, ok bool) {
 	var gb []byte
-	if err := c.db.QueryRowContext(ctx, `SELECT proto FROM grids WHERE id = ?`, gridID).Scan(&gb); err != nil {
-		return nil, false
+	if err := c.db.QueryRowContext(ctx, `SELECT proto, fetched_at FROM grids WHERE id = ?`, gridID).Scan(&gb, &fetchedAt); err != nil {
+		return nil, 0, false
 	}
 	g := &pb.Grid{}
 	if err := proto.Unmarshal(gb, g); err != nil {
-		return nil, false
+		return nil, 0, false
 	}
 	rows, err := c.db.QueryContext(ctx, `SELECT proto FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
-		return nil, false
+		return nil, 0, false
 	}
 	defer rows.Close()
-	resp := &pb.GetGridResponse{Grid: g}
+	resp = &pb.GetGridResponse{Grid: g}
 	for rows.Next() {
 		var tb []byte
 		if err := rows.Scan(&tb); err != nil {
-			return nil, false
+			return nil, 0, false
 		}
 		t := &pb.Tile{}
 		if err := proto.Unmarshal(tb, t); err != nil {
-			return nil, false
+			return nil, 0, false
 		}
 		resp.Tiles = append(resp.Tiles, t)
 	}
-	return resp, rows.Err() == nil
+	return resp, fetchedAt, rows.Err() == nil
 }
 
 // ── GetTile ─────────────────────────────────────────────────────────────
@@ -549,16 +691,72 @@ func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, vers
 // live session's mutations as the server relays them. With nothing subscribed,
 // reads still refresh on their own; the tee is an accelerator, not the
 // correctness path.
+//
+// An upstream with no event stream — a plugin adapter — gets the layer's own:
+// the GridChanged a background revalidation emits when it lands a different
+// answer. That stream is what closes the serve-first loop for a namespace the
+// node never watched before: stale served, refresh lands, event fires, the
+// client refetches the corrected grid. Info declares watch accordingly.
 func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	// Every subscription and resubscription is a moment to warm the whole
 	// source: the initial connect and each health-up reconnect land here, so
 	// the walk doubles as the resync for grids nobody re-opened while the
 	// source was dark.
 	c.kickPrefetch()
-	return c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
+	err := c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
 		c.applyEvent(ctx, ev)
 		return send(ev)
 	})
+	if status.Code(err) != codes.Unimplemented {
+		return err
+	}
+	id, ch := c.addSub()
+	defer c.removeSub(id)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev := <-ch:
+			if serr := send(ev); serr != nil {
+				return serr
+			}
+		}
+	}
+}
+
+// addSub registers one synthetic-stream subscriber.
+func (c *Layer) addSub() (int, chan *pb.Event) {
+	ch := make(chan *pb.Event, 64)
+	c.subsMu.Lock()
+	defer c.subsMu.Unlock()
+	c.subSeq++
+	c.subs[c.subSeq] = ch
+	return c.subSeq, ch
+}
+
+func (c *Layer) removeSub(id int) {
+	c.subsMu.Lock()
+	defer c.subsMu.Unlock()
+	delete(c.subs, id)
+}
+
+// emitGridChanged announces one changed (or evicted) grid to the synthetic
+// stream's subscribers. The id is this layer's local one; the server's fan-in
+// qualifies it like any plugin event. A subscriber too far behind to take the
+// event loses it — a missed refresh, not a missed fact, since the rows are
+// already stored and the next read serves them — but never blocks a
+// revalidation.
+func (c *Layer) emitGridChanged(gridID string) {
+	ev := &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: gridID}}}
+	c.subsMu.Lock()
+	defer c.subsMu.Unlock()
+	for _, ch := range c.subs {
+		select {
+		case ch <- ev:
+		default:
+			log.Printf("gridwell: sourcecache: a subscriber missed GridChanged %s (buffer full)", gridID)
+		}
+	}
 }
 
 // applyEvent folds one event into the cache. GridChanged carries only an id,
@@ -578,4 +776,98 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 // not derive ids answers itself, through namespace.MintRef.
 func (l *Layer) MintRef(ctx context.Context, localID string) (string, error) {
 	return namespace.MintRef(ctx, l.Namespace, localID)
+}
+
+// ── writes ──────────────────────────────────────────────────────────────
+
+// Writes pass through untouched — the source stays the one owner of its
+// truth — and a successful response updates the remembered rows, the same
+// fold the event tee applies. Under serve-first this is what keeps a moved
+// tile from snapping back to its remembered place on the next read and only
+// correcting when the revalidation lands.
+
+// foldWrite folds one in-place write's answer into the remembered rows. A
+// write against a derived (key-form) tile mints its row, and the answer
+// renames it: the remembered row under the requested id must go, or the
+// remembered listing reads a ghost twin of the tile beside its minted self.
+// Only for verbs that mutate the tile they name — a clone's request names
+// the source, which stays.
+func (c *Layer) foldWrite(ctx context.Context, reqTileID string, t *pb.Tile) {
+	if t.GetId() != "" && reqTileID != "" && reqTileID != t.GetId() {
+		c.deleteTile(ctx, reqTileID)
+	}
+	c.upsertTile(ctx, t)
+}
+
+func (c *Layer) CreateTile(ctx context.Context, in *pb.CreateTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.CreateTile(ctx, in)
+	if err == nil {
+		c.upsertTile(ctx, resp.GetTile())
+	}
+	return resp, err
+}
+
+func (c *Layer) SetTile(ctx context.Context, in *pb.SetTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.SetTile(ctx, in)
+	if err == nil {
+		c.foldWrite(ctx, in.TileId, resp.GetTile())
+	}
+	return resp, err
+}
+
+func (c *Layer) PlaceTile(ctx context.Context, in *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.PlaceTile(ctx, in)
+	if err == nil {
+		c.foldWrite(ctx, in.TileId, resp.GetTile())
+	}
+	return resp, err
+}
+
+func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.CloneTile(ctx, in)
+	if err == nil {
+		c.upsertTile(ctx, resp.GetTile()) // the request names the source, which stays
+	}
+	return resp, err
+}
+
+func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
+	resp, err := c.Namespace.SetFraming(ctx, in)
+	if err == nil && resp.GetTile() != nil { // nil for a root-grid framing
+		c.foldWrite(ctx, in.TileId, resp.GetTile())
+	}
+	return resp, err
+}
+
+func (c *Layer) DeleteTile(ctx context.Context, in *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
+	resp, err := c.Namespace.DeleteTile(ctx, in)
+	if err == nil {
+		c.deleteTile(ctx, in.TileId)
+	}
+	return resp, err
+}
+
+// WriteContent forwards the stream and, on the commit, drops the remembered
+// body rather than guessing at it: the bytes went by as caller frames, not a
+// committed value, and a remembered body must be one the source vouched for
+// whole. The tile row is updated (the version moved), and the next live read
+// re-remembers the body — offline serves nothing rather than a body whose
+// version lies.
+func (c *Layer) WriteContent(ctx context.Context, recv func() (*pb.WriteContentRequest, error)) (*pb.TileResponse, error) {
+	var tileID string
+	resp, err := c.Namespace.WriteContent(ctx, func() (*pb.WriteContentRequest, error) {
+		req, rerr := recv()
+		if rerr == nil && tileID == "" {
+			tileID = req.GetTileId()
+		}
+		return req, rerr
+	})
+	if err == nil {
+		if tileID != "" {
+			_, derr := c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
+			logErr("drop written content", derr)
+		}
+		c.foldWrite(ctx, tileID, resp.GetTile())
+	}
+	return resp, err
 }
