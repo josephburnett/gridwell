@@ -894,7 +894,17 @@ func (a *App) resize() {
 func (a *App) loadGrid(id string) error {
 	resp, err := a.cl.GetGrid(context.Background(), id)
 	if err != nil {
-		a.gridLoadFailed[id] = true
+		// A verdict latches: the server answered, and the same ask gets the
+		// same answer until something changes, so fetchGrid stops asking
+		// until a path that justifies a retry clears the latch — GridChanged
+		// for this grid, a reconnect resync, a navigation. Without the latch
+		// a dangling doorway (a link into an unconfigured plugin) is
+		// refetched and re-reported every frame the well is on screen. A
+		// transport failure latches nothing — the server never spoke and the
+		// next caller retries — the same rule fetchTileByID applies.
+		if clientsync.Of(err) != clientsync.OutcomeTransport {
+			a.gridLoadFailed[id] = true
+		}
 		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
 		return err
 	}
@@ -909,18 +919,15 @@ func (a *App) loadGrid(id string) error {
 // cache miss every frame, so without the guard a single descent into a
 // parent of many wells would dogpile the server.
 func (a *App) fetchGrid(id string) {
-	if id == "" {
-		return
-	}
-	if a.gridInflight[id] {
+	// A latched grid is not re-asked: the paths that justify a retry — the
+	// GridChanged handler, retryKick's resync, completeTransition — clear
+	// the latch first. fetchGrid clearing it itself defeated the latch for
+	// the per-frame draw path and turned one honest verdict into an
+	// every-frame refetch-and-report loop.
+	if id == "" || a.gridInflight[id] || a.gridLoadFailed[id] {
 		return
 	}
 	a.gridInflight[id] = true
-	// Clear any stale failure flag before attempting — a new fetch either
-	// succeeds (populates the cache) or fails (re-sets the flag). This
-	// prevents a previously-failed grid from staying locked out when a
-	// GridChanged event fires and triggers a retry.
-	delete(a.gridLoadFailed, id)
 	go func() {
 		defer delete(a.gridInflight, id)
 		if a.loadGrid(id) != nil {
@@ -1185,8 +1192,11 @@ func (a *App) startSSE() {
 				a.urlPreview.Drop(ev.TileRemoved.TileID)
 				a.dropRenderedPreview(ev.TileRemoved.TileID)
 			}
-			// GridChanged: refetch the affected grid if any pane is looking at it.
+			// GridChanged: refetch the affected grid if any pane is looking at
+			// it. The event is the one per-grid signal that something changed,
+			// so it is also what clears a verdict latch for that grid.
 			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
+				delete(a.gridLoadFailed, ev.GridChanged.GridID)
 				a.fetchGrid(ev.GridChanged.GridID)
 			}
 			// PluginHealth: a plugin's own event stream, not this client's
@@ -1222,6 +1232,7 @@ func (a *App) retryKick(resync bool) {
 		// was down deserves a fresh attempt, and a tile id latched by a
 		// verdict re-verifies once per reconnect, at one GetTile.
 		clear(a.tileLoadFailed)
+		clear(a.gridLoadFailed)
 		for _, gid := range a.c.KnownGridIDs() {
 			a.fetchGrid(gid)
 		}
