@@ -129,22 +129,17 @@ func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string,
 }
 
 // localIsHome reports whether a local id under the node's own segment names
-// the home store, whose first segment is numeric — a grid or tile id — rather
-// than a connection, whose name leads with a letter.
+// the home store — its first segment is a TILE segment, a grid or tile id —
+// rather than a connection, whose name is a namespace segment. The shape
+// question is rpc.IsTileSegment's, the same classifier the URL grammar asks,
+// so the router and the address bar can never disagree about which segments
+// are a namespace chain.
 func localIsHome(local string) bool {
 	first := local
 	if i := strings.IndexByte(local, '/'); i >= 0 {
 		first = local[:i]
 	}
-	if first == "" {
-		return true
-	}
-	for i := 0; i < len(first); i++ {
-		if first[i] < '0' || first[i] > '9' {
-			return false
-		}
-	}
-	return true
+	return first == "" || rpc.IsTileSegment(first)
 }
 
 // clientForID resolves the namespace that owns a qualified id, returning it
