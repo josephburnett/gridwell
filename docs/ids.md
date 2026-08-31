@@ -43,7 +43,7 @@ only reader, and it writes two forms (`address.go`):
 
 | Position | Payload | Example |
 |---|---|---|
-| grid | the plugin's context key | `~` + b64(`/home/joe`) |
+| grid | the plugin's context key (its name for good) | `~` + b64(`/home/joe`) |
 | tile | the context key, NUL, the entry key | `~` + b64(`/home` NUL `/home/joe`) |
 
 A tile carries its context because a tile must be answerable on its own: the
@@ -54,9 +54,17 @@ untouched entry is one `List` of the context that names it.
 ## Stability
 
 Digits are never reused. A `~` id is as stable as the plugin's key (keys
-are forever, per the plugin contract), and a reference at REST is never one:
-the router mints (`namespace.Minter`) before a link, a mount, or a clone
-stores a target, so `child_grid_id` and `link_target_id` always hold digits.
-A `~` id already in a client's hands keeps resolving after the mint — the
-answer just comes back named by the row. Retired connection names never
+are forever, per the plugin contract).
+
+A TILE reference at rest is never one: the router mints
+(`namespace.Minter`) before a link or a clone stores a target, so
+`link_target_id` holds digits. A `~` id already in a client's hands keeps
+resolving after that mint — the answer just comes back named by the row.
+
+A GRID keeps its `~` name for good, minted row or not, and a
+`child_grid_id` into a plugin holds it verbatim. A grid is the one thing a
+client is STANDING IN: a pane holds its anchor grid id, and renaming a grid
+under a pane — which minting would do the moment the first tile in it was
+dragged — would leave the pane naming a grid nothing answers to. Both forms
+still resolve on the way in, so an older stored row id keeps working. Retired connection names never
 return. Home is only ever letter + digits — it is not a plugin.

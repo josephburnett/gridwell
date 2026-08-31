@@ -280,15 +280,18 @@ func TestALinkOntoAnUntouchedEntryMintsItAsARow(t *testing.T) {
 		t.Fatalf("exit well onto an untouched directory: %v", err)
 	}
 
-	// What is at rest: digits, both of them.
-	for what, ref := range map[string]string{"link_target_id": link.LinkTargetID, "child_grid_id": mount.ChildGridID} {
-		ns, local, ok := rpc.SplitID(ref)
-		if !ok || ns != fsPluginUUID {
-			t.Fatalf("%s = %q, want an id in the fs plugin", what, ref)
-		}
-		if rpc.ShapeOf(local) != rpc.ShapeRow {
-			t.Fatalf("%s = %q: a reference at rest must name a row, not a derived address", what, ref)
-		}
+	// What is at rest. A TILE reference names a row: the entry earned one when
+	// the link was stored, because a derived placement can reflow and a link
+	// must keep naming the same thing. A GRID reference keeps the address: a
+	// grid answers to its address for good (the pane the user is standing in
+	// holds that name), and the context key is as permanent as the plugin's
+	// keys, so there is nothing a row would make safer.
+	ns, local, ok := rpc.SplitID(link.LinkTargetID)
+	if !ok || ns != fsPluginUUID || rpc.ShapeOf(local) != rpc.ShapeRow {
+		t.Fatalf("link_target_id = %q: a leaf link at rest must name a row in the fs plugin", link.LinkTargetID)
+	}
+	if mount.ChildGridID != well.ChildGridID {
+		t.Fatalf("child_grid_id = %q, want the grid the user dragged, %q", mount.ChildGridID, well.ChildGridID)
 	}
 	stored := storedReference(t, st, link.ID)
 	if stored != link.LinkTargetID {

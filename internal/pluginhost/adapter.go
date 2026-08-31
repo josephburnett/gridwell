@@ -229,18 +229,19 @@ func (a *Adapter) resolveGrid(gridID string) (gid int64, context string, err err
 	}
 }
 
-// canonicalGridID is the one name a context answers to: its row id once it has
-// one, its derived address until then. Everything that emits a grid id — Info,
-// a well's child, the grid itself — goes through here, so a context is never
-// answered by two names in one breath.
+// canonicalGridID is the one name a context answers to, and it is the derived
+// address FOR GOOD — a grid keeps its name even after the store mints a row
+// for it.
+//
+// A tile can be renamed by its mint because a grid answer replaces the whole
+// tile set at once; a GRID cannot, because the client is standing in it. A
+// pane holds its anchor grid id, and the moment the first tile in that grid is
+// dragged — which is what mints the grid's row — a numeric answer would make
+// the pane's anchor name a grid nothing answers to, and the room would go
+// blank under the user's hand. The row is storage; the address is the name.
+// Both still resolve on the way in (resolveGrid), so a reference stored before
+// this rule keeps working.
 func (a *Adapter) canonicalGridID(context string) (string, error) {
-	gid, ok, err := a.mem.LookupContext(context)
-	if err != nil {
-		return "", err
-	}
-	if ok {
-		return strconv.FormatInt(gid, 10), nil
-	}
 	return gridAddr(context), nil
 }
 
@@ -481,13 +482,13 @@ func (a *Adapter) MintRef(ctx context.Context, localID string) (string, error) {
 	case rpc.ShapeRow:
 		return localID, nil
 	case rpc.ShapeKey:
-		context, _, isTile, _ := splitAddr(localID)
+		_, _, isTile, _ := splitAddr(localID)
 		if !isTile {
-			gid, err := a.mem.ContextID(context)
-			if err != nil {
-				return "", err
-			}
-			return strconv.FormatInt(gid, 10), nil
+			// A grid keeps its address as its name (canonicalGridID), so a
+			// reference to one is already canonical and durable: the context
+			// key is as permanent as the plugin's keys, and a row would only
+			// give it a second name the client could not follow.
+			return localID, nil
 		}
 		id, err := a.mint(ctx, localID)
 		if err != nil {
