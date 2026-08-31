@@ -42,9 +42,14 @@ prefixes and derives `Tile.reference`; transit prepends one segment and
 trusts the wire bits (`rpc.TransitQualifyTiles`). Qualification clones —
 that clone is the whole protection for messages shared by pointer.
 
-Plugin and node ids are 7-char lowercase base36 with a leading letter
-(`idshape.NewShortID`). The leading letter is what tells a namespace segment
-from a tile id in a URL. Ids are never reassigned.
+A segment has one of three shapes, and `rpc.ShapeOf` is the one classifier
+every reader shares. Plugin and node ids are 7-char lowercase base36 with a
+leading letter (`idshape.NewShortID`); a tile is a store row id in decimal
+digits, or a KEY FORM — `~` followed by the plugin key's unpadded base64url
+(`rpc.KeyTileID`), which names a tile by what it is rather than by a row.
+The leading byte separates all three, so a URL path and the router's peel
+both tell a namespace segment from a tile id without asking anyone. Ids are
+never reassigned.
 
 ## The contract
 

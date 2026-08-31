@@ -264,3 +264,27 @@ func TestAsConnectError(t *testing.T) {
 		}
 	}
 }
+
+// The router's namespace/tile split is rpc.IsTileSegment's, the same rule the
+// URL grammar reads a path with — one classifier, so an address that the bar
+// says is a home tile can never route to the transport instead. Under the
+// node's own segment: a tile shape (row id or key form) is the home store, a
+// namespace shape is a connection.
+func TestLocalIsHomeFollowsTheSegmentClassifier(t *testing.T) {
+	home := []string{"", "1", "7/3", "42", rpc.KeyTileID("/home/joe/x"),
+		rpc.KeyTileID("/home/joe") + "/3"}
+	conn := []string{"laptop", "laptop/1", "ssh4321/remote9/1", "k3x9m2q",
+		// A '~' segment that is not a well-formed key form is a namespace
+		// segment, here as everywhere.
+		"~AC", "~AC/1"}
+	for _, local := range home {
+		if !localIsHome(local) {
+			t.Errorf("localIsHome(%q) = false, want true", local)
+		}
+	}
+	for _, local := range conn {
+		if localIsHome(local) {
+			t.Errorf("localIsHome(%q) = true, want false", local)
+		}
+	}
+}

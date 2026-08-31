@@ -8,21 +8,25 @@
 //
 //	/                                home, default viewport
 //	/3/4/5                           descended through tiles 3, 4, 5 (home)
+//	/k3x9m2q/1/~L2hvbWUvam9l         plugin k3x9m2q, grid 1, key-form tile
 //	/k3x9m2q/1/3/4                   plugin k3x9m2q, grid 1, tiles 3, 4
 //	/ssh4321/remote9/1/4/7           chained remote anchor, then tiles
 //	/3/4/5?x=12.5&y=-3&z=1.5         grid leaf, viewport center + zoom
 //	/3/4/5/9                         file leaf (rendered mode)
 //	/3/4/5/9?c=24&r=10               file leaf in text mode, cursor
 //
-// The grammar has one rule: leading non-numeric segments are the anchor's
-// namespace chain (plugin and node ids, guaranteed non-numeric by
-// idshape.NewShortID), the first numeric segment is the anchor grid id, and
-// every following segment is a tile row id in descent order. No leading
-// non-numeric segment means the home anchor: "/" is the node's home grid, the
-// one the handshake names. The trailing tile id may be a well tile or a
-// content tile; the caller resolves which by walking the ids against the
-// cache after a successful DecodeURL. The `?a=<anchor>` query form is still
-// decoded, for old bookmarks, but never emitted.
+// The grammar has one rule: leading NAMESPACE segments are the anchor's
+// chain (plugin and node ids, letter-leading by idshape.NewShortID), the
+// first TILE segment is the anchor grid id, and every following segment is a
+// tile id in descent order. Which is which is rpc.IsTileSegment's decision,
+// shared with the router so the two can never disagree: a tile segment is a
+// row id ("14") or a key form ("~L2hvbWUvam9lL3g", a plugin key), and
+// anything else is a namespace hop. No leading namespace segment means the
+// home anchor: "/" is the node's home grid, the one the handshake names. The
+// trailing tile id may be a well tile or a content tile; the caller resolves
+// which by walking the ids against the cache after a successful DecodeURL.
+// The `?a=<anchor>` query form is still decoded, for old bookmarks, but
+// never emitted.
 //
 // Presence of `c`/`r` (column and row, 0-indexed) means the content tile is
 // in text mode with the cursor at that position. Absence means rendered mode.
@@ -51,8 +55,9 @@ type URLState struct {
 
 	// TileIDs is the descent path of tile row ids. Empty means the anchor
 	// grid, or with no anchor, the start screen. The trailing id may be a
-	// content tile, resolved after DecodeURL. Ids are bare decimal strings
-	// ("42"); the client qualifies them with the anchor's namespace.
+	// content tile, resolved after DecodeURL. Ids are bare tile segments —
+	// a row id ("42") or a key form ("~L2hvbWUvam9l"); the client qualifies
+	// them with the anchor's namespace.
 	TileIDs []string
 
 	// Viewport, set when the leaf is a grid. The encoder emits these only
@@ -193,11 +198,11 @@ func EncodeURL(s URLState) string {
 	return path.String() + "?" + encoded
 }
 
-// DecodeURL parses a path+query string back into a URLState. The grammar (see the
-// package comment): leading non-numeric segments are the anchor's namespace
-// chain, the first numeric segment is the anchor grid id, the rest are tile
-// ids; no non-numeric prefix means the home anchor. `/` (or empty) decodes to
-// a root state. Anything else is rejected.
+// DecodeURL parses a path+query string back into a URLState. The grammar (see
+// the package comment): leading namespace segments are the anchor's chain,
+// the first tile segment is the anchor grid id, the rest are tile ids; no
+// namespace prefix means the home anchor. `/` (or empty) decodes to a root
+// state. Anything else is rejected.
 //
 // The leaf type (well or content tile) is not resolved here; that requires
 // walking the cache. The CursorMode flag and the `c`/`r` values are set when
@@ -226,13 +231,12 @@ func DecodeURL(raw string) (URLState, error) {
 				segs = append(segs, seg)
 			}
 		}
-		// The anchor/path boundary: skip the leading non-numeric namespace
-		// segments; the first numeric segment is the anchor grid id.
+		// The anchor/path boundary: skip the leading namespace segments;
+		// the first tile segment is the anchor grid id. One classifier
+		// (rpc.IsTileSegment) decides, so a key-form id is a tile here and
+		// everywhere else too.
 		first := 0
-		for first < len(segs) {
-			if _, err := strconv.ParseInt(segs[first], 10, 64); err == nil {
-				break
-			}
+		for first < len(segs) && !rpc.IsTileSegment(segs[first]) {
 			first++
 		}
 		var tileSegs []string
@@ -250,11 +254,12 @@ func DecodeURL(raw string) (URLState, error) {
 		}
 		ids := make([]string, 0, len(tileSegs))
 		for _, seg := range tileSegs {
-			// Every descent segment must be an integer (Gridwell URL
-			// detection); returned as strings — the client qualifies them
-			// with the anchor's namespace after decoding.
-			if _, err := strconv.ParseInt(seg, 10, 64); err != nil {
-				return URLState{}, err
+			// Every descent segment must be a tile id — a row id or a key
+			// form (Gridwell URL detection); returned as strings, and the
+			// client qualifies them with the anchor's namespace after
+			// decoding.
+			if !rpc.IsTileSegment(seg) {
+				return URLState{}, errors.New("descent segment " + strconv.Quote(seg) + " is not a tile id")
 			}
 			ids = append(ids, seg)
 		}

@@ -3,6 +3,8 @@ package pane
 import (
 	"reflect"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func TestEncodeRoot(t *testing.T) {
@@ -489,5 +491,83 @@ func TestWorkspaceURLRoundTrip(t *testing.T) {
 	s2, err := DecodeURL(EncodeURL(URLState{Workspace: "ssh-uuid/plugin-uuid/9"}))
 	if err != nil || s2.Workspace != "ssh-uuid/plugin-uuid/9" {
 		t.Fatalf("chained workspace: %+v err=%v", s2, err)
+	}
+}
+
+// The key-form tile segment rides the URL like a row id: a leaf content
+// descent, a well mid-path, and a slashy key alike. The grammar is pinned to
+// itself — whatever EncodeURL writes, DecodeURL reads back — because the two
+// halves are the only place the shape is spelled, and a URL that decodes to a
+// different place than it encoded silently relocates the user on reload.
+func TestKeyFormURLRoundTrip(t *testing.T) {
+	deep := rpc.KeyTileID("/home/joe/notes/a b.md")
+	for _, st := range []URLState{
+		// A key-form content leaf under a plugin anchor.
+		{Anchor: "k3x9m2q/1", TileIDs: []string{"3", rpc.KeyTileID("/home/joe/x")}},
+		// A key-form WELL mid-path, descending on into a row id.
+		{Anchor: "k3x9m2q/1", TileIDs: []string{rpc.KeyTileID("/home/joe"), "4"}},
+		// A key whose bytes are full of slashes stays exactly one segment.
+		{Anchor: "ssh4321/remote9/1", TileIDs: []string{deep}},
+		// Under the home anchor, with no namespace prefix at all.
+		{TileIDs: []string{rpc.KeyTileID("/etc")}},
+		// A text-mode content leaf, cursor and all.
+		{Anchor: "k3x9m2q/1", TileIDs: []string{deep}, CursorMode: true, Col: 24, Row: 10},
+		// A grid leaf with a viewport, reached through a key-form well.
+		{Anchor: "k3x9m2q/1", TileIDs: []string{deep, "7"}, X: 5.5, Y: -2, Zoom: 1.5},
+	} {
+		raw := EncodeURL(st)
+		got, err := DecodeURL(raw)
+		if err != nil {
+			t.Fatalf("DecodeURL(%q) from %+v: %v", raw, st, err)
+		}
+		if !reflect.DeepEqual(got, st) {
+			t.Fatalf("round trip through %q: got %+v, want %+v", raw, got, st)
+		}
+	}
+}
+
+// A key form is a TILE segment, never a namespace hop: the anchor boundary
+// stops at it. "/~<key>" is a tile in the home grid, and "/k3x9m2q/~<key>"
+// names the plugin's key-form grid, not a two-hop namespace chain.
+func TestKeyFormIsNeverANamespaceSegment(t *testing.T) {
+	key := rpc.KeyTileID("/home/joe/x")
+	got, err := DecodeURL("/" + key)
+	if err != nil {
+		t.Fatalf("DecodeURL(/%s): %v", key, err)
+	}
+	if got.Anchor != "" || !reflect.DeepEqual(got.TileIDs, []string{key}) {
+		t.Fatalf("leading key form read as a namespace: %+v", got)
+	}
+	got, err = DecodeURL("/k3x9m2q/" + key + "/4")
+	if err != nil {
+		t.Fatalf("DecodeURL: %v", err)
+	}
+	if got.Anchor != "k3x9m2q/"+key || !reflect.DeepEqual(got.TileIDs, []string{"4"}) {
+		t.Fatalf("key-form anchor grid misread: %+v", got)
+	}
+}
+
+// A '~' segment that is not canonical base64url is not a key form, so it is
+// rejected mid-descent exactly as any other non-tile segment is. The URL
+// grammar inherits that from rpc.ShapeOf rather than deciding it again.
+func TestDecodeRejectsMalformedKeyForm(t *testing.T) {
+	for _, raw := range []string{
+		"/k3x9m2q/1/~AC",         // non-canonical trailing bits
+		"/k3x9m2q/1/~AB==",       // padded
+		"/k3x9m2q/1/~not base64", // not the alphabet
+	} {
+		if _, err := DecodeURL(raw); err == nil {
+			t.Errorf("DecodeURL(%q) accepted; want error", raw)
+		}
+	}
+}
+
+// EncodeURL writes a tile id's LAST segment, whatever its shape: a qualified
+// key-form id strips to the key form, never to a fragment of it.
+func TestEncodeStripsNamespaceFromKeyForm(t *testing.T) {
+	key := rpc.KeyTileID("/home/joe/x")
+	got := EncodeURL(URLState{Anchor: "k3x9m2q/1", TileIDs: []string{rpc.QualifyID("k3x9m2q", key)}})
+	if want := "/k3x9m2q/1/" + key; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
