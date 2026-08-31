@@ -382,3 +382,43 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 		t.Fatalf("second mint = %d (%v), want the first row %d", again, err, id)
 	}
 }
+
+// Dragging one tile must not rearrange the room. A minted entry keeps its slot
+// in the derived flow and simply overrides it, so its neighbours' derived
+// cells are the same before and after — the hole it leaves behind is what a
+// tile dragged out of a row leaves behind.
+func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.ContextID("root")
+	entries := textEntries("a", "b", "c", "d", "e")
+	before, err := d.Overlay(gid, entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The user drags "b" well clear of the flow.
+	b := extByKey(t, before, "b")
+	if _, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := d.LiveTileID(gid, "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Place(id, 3, 4, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	after, err := d.Overlay(gid, entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"a", "c", "d", "e"} {
+		was, now := extByKey(t, before, key), extByKey(t, after, key)
+		if was.X != now.X || was.Y != now.Y {
+			t.Fatalf("%q moved because a neighbour was dragged: (%d,%d) → (%d,%d)",
+				key, was.X, was.Y, now.X, now.Y)
+		}
+	}
+	if got := extByKey(t, after, "b"); got.X != 3 || got.Y != 4 {
+		t.Fatalf("the dragged tile is at (%d,%d), want (3,4)", got.X, got.Y)
+	}
+}

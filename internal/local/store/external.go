@@ -178,6 +178,14 @@ func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 	matched := map[string]bool{}
 	out := make([]ExtTile, 0, len(entries)+len(stored))
 	for _, e := range entries {
+		// EVERY entry takes a slot in the flow, minted or not, and a minted
+		// row then overrides its own slot. That is what keeps a neighbour
+		// still: if a minted entry gave up its slot, every entry after it in
+		// the listing would shift by a cell the moment the user dragged it,
+		// and dragging one tile would rearrange the room. It leaves a hole
+		// where the tile used to be, which is exactly what dragging a tile
+		// out of a row of tiles does.
+		x, y, w, h := derivePlacement(occupied, &cur, e.Hint)
 		if r, ok := rows[e.Key]; ok {
 			matched[e.Key] = true
 			// The row owns identity, placement and framing; the listing owns
@@ -186,7 +194,6 @@ func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 			out = append(out, r)
 			continue
 		}
-		x, y, w, h := derivePlacement(occupied, &cur, e.Hint)
 		out = append(out, ExtTile{Key: e.Key, Kind: entryKind(e), Label: e.Label,
 			X: x, Y: y, W: w, H: h})
 	}
