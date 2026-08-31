@@ -77,42 +77,15 @@ func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
 }
 
 // pluginGlyph returns the identity glyph for the plugin owning the given
-// qualified grid id, from declarations only. A root MenuEntry naming the grid
-// wins: the trash grid is an ordinary local grid, so only its entry knows its
-// face. Then the cached grid's own source_kind, a wire enum riding on the
-// grid, which answers for remote grids a local plugin-list lookup cannot.
-// Then, for content served by another node (node_ns set), the mount door's
-// declared glyph — the same face the tile you descended through wore. Else
-// the plugin's declared glyph from the handshake, else "" (the globe). A
-// cached local grid with no source_kind is owned content: the well glyph. No
-// kind strings anywhere.
+// qualified grid id. The rule is door.GlyphFor's, js-free and unit-tested;
+// this is the impure half, resolving the cached grid and the declaration
+// list the rule reads. No kind strings anywhere.
 func (a *App) pluginGlyph(gridID string) string {
-	if g := door.EntryGlyph(gridID, a.allPlugins()); g != "" {
-		return g
-	}
+	plugins := a.allPlugins()
 	if g, ok := a.c.Grid(gridID); ok {
-		switch g.Meta.SourceKind {
-		case rpc.GridSourceFS:
-			return rpc.GlyphFolder
-		case rpc.GridSourceProc:
-			return rpc.GlyphProcess
-		default:
-			if g.Meta.NodeNS != "" {
-				// The mount door is the connection row, uuid
-				// "<id>/<conn>". The node's own id prefixes it, so a
-				// prefix lookup would answer for home, not the door.
-				if pl, ok := a.pluginByUUID(g.Meta.NodeNS); ok {
-					return pl.Glyph
-				}
-				return "" // an unknown mount: the globe, like its swatch
-			}
-			return rpc.GlyphWell
-		}
+		return door.GlyphFor(gridID, &g.Meta, plugins)
 	}
-	if pl, ok := a.pluginByUUID(uuidOf(gridID)); ok {
-		return pl.Glyph
-	}
-	return ""
+	return door.GlyphFor(gridID, nil, plugins)
 }
 
 // allPlugins is every PluginInfo the client knows — the boot handshake's list

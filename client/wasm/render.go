@@ -677,7 +677,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 				}
 			} else {
-				inSource := g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc)
+				inHost := g != nil && g.Meta.HostContent
 				for _, n := range g.Tiles {
 					if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.ID) {
 						continue
@@ -689,8 +689,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						continue
 					}
 					nn := n
-					outside := tileOutside(&nn, inSource)
-					dashed := !inSource && isLinkTile(&nn)
+					outside := tileOutside(&nn, inHost)
+					dashed := !inHost && isLinkTile(&nn)
 					a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected, outside, dashed, p.ID)
 					a.drawPluginHealthTint(&nn, left, top, w, h)
 				}
@@ -995,13 +995,15 @@ func (a *App) tileReadOnly(n *rpc.Tile) bool {
 
 // tileOutside reports whether a tile should be rendered with the "outside
 // Gridwell" treatment (red outline / banner). True when:
-//   - the tile's parent grid is a source-backed grid (fs/proc), so every
-//     row in it represents host state, not Gridwell-owned data
+//   - the tile's parent grid DECLARES host_content, so every row in it
+//     represents host state, not Gridwell-owned data. The declaration is
+//     the plugin's (plugin.v1 Info), carried on the grid: the client never
+//     learns which kinds are host-backed
 //   - the tile is itself an exit well (its child grid lives in another
 //     plugin) anywhere — outside regardless of where the well sits
 //   - the tile is a shell tile (bash runs outside Gridwell's data world)
-func tileOutside(n *rpc.Tile, parentInSource bool) bool {
-	if parentInSource {
+func tileOutside(n *rpc.Tile, parentHostContent bool) bool {
+	if parentHostContent {
 		return true
 	}
 	if isExitWell(n) {
@@ -1208,7 +1210,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 	hiddenTileID string,
 ) {
 	c := a.cctx
-	childInSource := child != nil && (child.Meta.SourceKind == rpc.GridSourceFS || child.Meta.SourceKind == rpc.GridSourceProc)
+	childInHost := child != nil && child.Meta.HostContent
 	// Scale the inner-tile border so a child grid viewed from a distance
 	// keeps its borders proportionate to the cells. Full-size live tiles
 	// use 2px; previews glide down with the cell scale.
@@ -1231,7 +1233,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		// do not overlay their frozen JPEGs here, so a well's interior
 		// reads uniformly — one visual grammar for looking one level
 		// down.
-		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource), borderPx, false)
+		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInHost), borderPx, false)
 	}
 }
 
@@ -1358,8 +1360,8 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 			in.Ephemeral = a.isEphemeralTile(p, &tile)
 		}
 	}
-	if gridOK && g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc) {
-		in.InSourceGrid = true
+	if gridOK && g != nil && g.Meta.HostContent {
+		in.InHostGrid = true
 	}
 	return in
 }

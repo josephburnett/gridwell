@@ -71,3 +71,41 @@ func TestEntryGlyph(t *testing.T) {
 		t.Errorf("EntryGlyph(plain root) = %q, want empty", g)
 	}
 }
+
+// The grid's face comes from what its plugin DECLARED, never from a kind the
+// client recognizes. fs and proc get the folder and the process faces because
+// they declare them; a plugin that declares nothing — the gitlab shape — is
+// owned content and takes the well, exactly as it did when the client
+// switched on a source kind it had no declaration for. Without this the
+// glyph arm is free to grow a kind switch back, which is the leak the
+// declared facts replaced.
+func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
+	plugins := []rpc.PluginInfo{
+		{UUID: "ufs", Glyph: rpc.GlyphFolder, RootGridID: "ufs/1"},
+		{UUID: "ugl", RootGridID: "ugl/1"},
+		{UUID: "n1/conn", Glyph: rpc.GlyphFolder, MenuEntries: []rpc.MenuEntry{
+			{GridID: "ufs/9", Glyph: rpc.GlyphTrash},
+		}},
+	}
+	for _, tc := range []struct {
+		name   string
+		gridID string
+		grid   *rpc.Grid
+		want   string
+	}{
+		{"declared folder", "ufs/1", &rpc.Grid{ID: "ufs/1", Glyph: rpc.GlyphFolder, HostContent: true}, rpc.GlyphFolder},
+		{"declared process", "up/1", &rpc.Grid{ID: "up/1", Glyph: rpc.GlyphProcess, HostContent: true}, rpc.GlyphProcess},
+		{"declares nothing is owned content", "ugl/1", &rpc.Grid{ID: "ugl/1"}, rpc.GlyphWell},
+		{"a root entry outranks the grid", "ufs/9", &rpc.Grid{ID: "ufs/9", Glyph: rpc.GlyphFolder}, rpc.GlyphTrash},
+		{"mounted content wears the door", "n1/conn/x/1", &rpc.Grid{ID: "n1/conn/x/1", NodeNS: "n1/conn"}, rpc.GlyphFolder},
+		{"unknown mount takes the globe", "n1/gone/x/1", &rpc.Grid{ID: "n1/gone/x/1", NodeNS: "n1/gone"}, ""},
+		{"uncached falls back to the plugin row", "ufs/4", nil, rpc.GlyphFolder},
+		{"uncached unknown namespace", "zzz/4", nil, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := GlyphFor(tc.gridID, tc.grid, plugins); got != tc.want {
+				t.Errorf("GlyphFor(%q) = %q, want %q", tc.gridID, got, tc.want)
+			}
+		})
+	}
+}

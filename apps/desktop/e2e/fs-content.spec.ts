@@ -18,6 +18,24 @@ test('the plugin fs declares no tool it cannot honor (#271)', async ({ gw, windo
   expect(labels, 'no dead-end search entry on plugin fs').not.toContain('search');
 });
 
+test('an fs grid wears the glyph its plugin declared, not a kind the client knows', async ({ gw }) => {
+  // The whole declaration flow in one assertion: the fs plugin declares
+  // glyph "folder" and host_content in its plugin.v1 handshake, the adapter
+  // stamps both onto every grid it serves, and the client's crumb renders the
+  // declared face. Nothing between them knows the word "fs" any more — before
+  // the declared facts this crumb came from a Grid.source_kind enum the client
+  // switched on, so a plugin that was not fs or proc could never wear a face.
+  await gw.enterPlugin('code');
+  const bar = await gw.bar();
+  const chain = bar.segments.filter((s) => s.kind === 'chain');
+  const here = chain[chain.length - 1];
+  expect(here, 'the fs level has a crumb').toBeTruthy();
+  expect(here.glyph, 'the crumb wears the declared folder face').toBe('folder');
+  // The level the descent came from is the node's own room: no declaration,
+  // so the well face. The two arms of the same rule, one gesture apart.
+  expect(chain[0].glyph, 'home is owned content').toBe('well');
+});
+
 test('a source file shows as plain text and refreshes each open', async ({ gw, window }) => {
   // Reset the fixture: the freshness half of this test mutates the file, and the
   // module-scoped dir persists across runs.

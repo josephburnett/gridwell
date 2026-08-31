@@ -118,16 +118,16 @@ func TestBorderColorUnknownKindFallback(t *testing.T) {
 	}
 }
 
-func TestBorderColorSourceGridIsBlue(t *testing.T) {
-	// Viewing an fs / proc grid (not into a content tile) is still viewing a
-	// grid — blue like every other grid. (The read-only host *content* tiles
-	// inside it are brown; see TestBorderColorTextInSourceGridIsExit.)
+func TestBorderColorHostGridIsBlue(t *testing.T) {
+	// Viewing a host-content grid (not into a content tile) is still viewing
+	// a grid — blue like every other grid. (The read-only host *content* tiles
+	// inside it are brown; see TestBorderColorTextInHostGridIsExit.)
 	in := BorderInput{
 		DescentDepth: 1,
-		InSourceGrid: true,
+		InHostGrid:   true,
 	}
 	if got := BorderColor(in, testColors()); got != "FOCUS_FADED" {
-		t.Errorf("source grid + not focused: got %q, want FOCUS_FADED", got)
+		t.Errorf("host grid + not focused: got %q, want FOCUS_FADED", got)
 	}
 	in.Focused = true
 	if got := BorderColor(in, testColors()); got != "FOCUS" {
@@ -152,23 +152,23 @@ func TestBorderColorShellTile(t *testing.T) {
 	}
 }
 
-func TestBorderColorTextInSourceGridIsExit(t *testing.T) {
-	// Descending into a text tile inside a source-backed grid (e.g. the
+func TestBorderColorTextInHostGridIsExit(t *testing.T) {
+	// Descending into a text tile inside a host-content grid (e.g. the
 	// @info tile in a proc-well, or a file-metadata tile in an fs-well)
 	// keeps the red Exit color — the tile is a read-only window onto
 	// host state, not an editor, so green ("I can type here") would lie
 	// to the user. URL tiles still get the URL color because a URL
-	// inside a source grid is still a URL.
+	// inside a host grid is still a URL.
 	in := BorderInput{
 		HasTextFocus: true,
 		DescentDepth: 1,
 		TileKnown:    true,
 		TileKind:     "text",
-		InSourceGrid: true,
+		InHostGrid:   true,
 		Focused:      true,
 	}
 	if got := BorderColor(in, testColors()); got != "EXIT" {
-		t.Errorf("text-in-source-grid + focused: got %q, want EXIT", got)
+		t.Errorf("text-in-host-grid + focused: got %q, want EXIT", got)
 	}
 	in.Focused = false
 	if got := BorderColor(in, testColors()); got != "EXIT_FADED" {
@@ -225,7 +225,7 @@ func TestFamilyOf(t *testing.T) {
 	}{
 		{"grid", BorderInput{}, FamilyGrid},
 		{"text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text"}, FamilyText},
-		{"source text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InSourceGrid: true}, FamilyExit},
+		{"host text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InHostGrid: true}, FamilyExit},
 		{"url frozen", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url"}, FamilyURL},
 		{"url live", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", URLLive: true}, FamilyURLLive},
 		{"shell", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "shell"}, FamilyShell},

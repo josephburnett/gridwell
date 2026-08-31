@@ -56,11 +56,12 @@ type BorderInput struct {
 	// a Chromium tab into this pane. Only meaningful for a descent into
 	// a URL tile.
 	URLLive bool
-	// InSourceGrid is true when the pane's currently-viewed grid is
-	// source-backed (fs or proc). It drives the brown Exit border for a
-	// read-only host text tile, echoing the plugin well that led here. The
-	// grid view itself is still blue: every grid is a grid.
-	InSourceGrid bool
+	// InHostGrid is true when the pane's currently-viewed grid DECLARES
+	// host_content — its rows project host state (a directory, the process
+	// table). It drives the brown Exit border for a read-only host text
+	// tile, echoing the plugin well that led here. The grid view itself is
+	// still blue: every grid is a grid.
+	InHostGrid bool
 	// Ephemeral is true when the descended tile lives in the plugin's
 	// scratch grid, so it is deleted on ascent. It overrides the kind color
 	// with gray, and is only meaningful when HasTextFocus and TileKnown.
@@ -86,7 +87,7 @@ const (
 	// FamilyShell is a descent into a shell tile.
 	FamilyShell
 	// FamilyExit is a read-only host content descent (a text tile inside a
-	// source grid): brown, echoing the plugin well that led here.
+	// host-content grid): brown, echoing the plugin well that led here.
 	FamilyExit
 	// FamilyEphemeral is a descent into an ephemeral (scratch-grid) tile:
 	// gray beats the kind color, because ascending deletes it.
@@ -110,7 +111,7 @@ func FamilyOf(s BorderInput) Family {
 			case "shell":
 				return FamilyShell
 			case "text":
-				if s.InSourceGrid {
+				if s.InHostGrid {
 					return FamilyExit
 				}
 				return FamilyText

@@ -232,27 +232,27 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 	return moving, pin - moving
 }
 
-// MoveForbidden reports whether a left-drag from a tile in a grid whose
-// source kind is srcKind to a destination grid whose source kind is dstKind
-// would be rejected by the server. "" is a regular Gridwell grid; a non-empty
-// kind (fs / proc) is source-backed.
+// MoveForbidden reports whether a left-drag from a tile in a grid that
+// declares host_content (srcHost) to a destination grid that declares it
+// (dstHost) would be rejected by the server. The fact is the owning plugin's
+// DECLARATION, carried on the grid — no kind names here.
 //
 // Crossing an id namespace is not a forbidden move; it is not a move at all.
 // A cross-plugin left-drag creates a link (DropLink): identity never
 // migrates, the content stays where its id lives, and the destination gains a
-// reference. That is why crossPlugin exempts the source-kind arms here —
-// linking a host file or directory into a Gridwell grid is the mount
-// philosophy, and a read-only destination is rejected by the separate
-// TargetReadOnly gate. What remains forbidden is the same-namespace
-// cross-grid move with a source-backed endpoint: a host file cannot migrate
-// into Gridwell, regular tiles cannot move into a host directory, and
-// host-side mv between two source dirs is not implemented. A same-grid move
-// crosses no boundary and is always allowed.
-func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
+// reference. That is why crossPlugin exempts the host arms here — linking a
+// host file or directory into a Gridwell grid is the mount philosophy, and a
+// read-only destination is rejected by the separate TargetReadOnly gate. What
+// remains forbidden is the same-namespace cross-grid move with a
+// host-content endpoint: a host file cannot migrate into Gridwell, regular
+// tiles cannot move into a host directory, and host-side mv between two
+// source dirs is not implemented. A same-grid move crosses no boundary and is
+// always allowed.
+func MoveForbidden(sameGrid, crossPlugin, srcHost, dstHost bool) bool {
 	if sameGrid || crossPlugin {
 		return false
 	}
-	return srcKind != "" || dstKind != ""
+	return srcHost || dstHost
 }
 
 // DropAction is the single verdict for a drag release and the matching

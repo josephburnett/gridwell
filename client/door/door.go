@@ -85,3 +85,55 @@ func EntryGlyph(gridID string, plugins []rpc.PluginInfo) string {
 	}
 	return ""
 }
+
+// GlyphFor is the identity glyph for the plugin owning gridID, from
+// DECLARATIONS only — no reader here knows a plugin's kind. Most specific
+// first:
+//
+//  1. a root MenuEntry naming the grid: the trash grid is an ordinary local
+//     grid, so only its entry knows its face;
+//  2. the cached grid's own declared glyph (Grid.glyph, stamped by the
+//     serving node from the owning plugin's Info), which answers for remote
+//     grids a local plugin-list lookup cannot;
+//  3. for content served by another node (node_ns set), the mount door's
+//     declared glyph — the same face the tile you descended through wore.
+//     The mount door is the connection row, uuid "<id>/<conn>"; the node's
+//     own id prefixes it, so a prefix lookup would answer for home, not the
+//     door. An unknown mount takes the globe, like its swatch;
+//  4. the plugin's declared glyph from the handshake, looked up by the
+//     grid's namespace, for a grid not cached yet.
+//
+// A cached grid that declares no glyph and came from this node is owned
+// content: the well glyph. grid is nil when the client has not cached it.
+func GlyphFor(gridID string, grid *rpc.Grid, plugins []rpc.PluginInfo) string {
+	if g := EntryGlyph(gridID, plugins); g != "" {
+		return g
+	}
+	if grid != nil {
+		if grid.Glyph != "" {
+			return grid.Glyph
+		}
+		if grid.NodeNS != "" {
+			if pl, ok := byUUID(grid.NodeNS, plugins); ok {
+				return pl.Glyph
+			}
+			return ""
+		}
+		return rpc.GlyphWell
+	}
+	if pl, ok := byUUID(rpc.UUIDOf(gridID), plugins); ok {
+		return pl.Glyph
+	}
+	return ""
+}
+
+// byUUID finds the plugin row with the given, possibly chain-qualified,
+// namespace.
+func byUUID(u string, plugins []rpc.PluginInfo) (rpc.PluginInfo, bool) {
+	for i := range plugins {
+		if plugins[i].UUID == u {
+			return plugins[i], true
+		}
+	}
+	return rpc.PluginInfo{}, false
+}

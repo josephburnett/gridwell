@@ -181,15 +181,15 @@ func tileCopy(n *rpc.Tile) *rpc.Tile {
 	return &c
 }
 
-// gridSourceKind returns the grid's source kind (fs or proc), or "" for a
-// Gridwell-owned grid or an unknown grid id. It wraps the cache lookup so
-// callers compare SourceKind directly.
-func (a *App) gridSourceKind(gridID string) string {
+// gridHostContent reports the grid's declared host_content — its rows
+// project host state — and false for a Gridwell-owned grid or an unknown
+// grid id. It wraps the cache lookup so callers read the declaration.
+func (a *App) gridHostContent(gridID string) bool {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
-		return ""
+		return false
 	}
-	return g.Meta.SourceKind
+	return g.Meta.HostContent
 }
 
 // dropCrossNamespace reports whether the drag's source grid and t's
@@ -207,7 +207,7 @@ func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 
 // dropForbiddenForMove reports whether a left-drag from the dragState's
 // source grid to t's destination grid is rejected up front: a same-namespace
-// cross-grid move with a source-backed endpoint, since host mv is
+// cross-grid move with a host-content endpoint, since host mv is
 // unimplemented and host directories are not a placement medium. A
 // cross-namespace left-drag is never a move — it verdicts DropLink — so it is
 // exempt here, and the read-only destination case is the separate
@@ -220,8 +220,8 @@ func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	return dragdrop.MoveForbidden(
 		d.srcGridID == t.gridID,
 		dropCrossNamespace(d, t),
-		a.gridSourceKind(d.srcGridID),
-		a.gridSourceKind(t.gridID),
+		a.gridHostContent(d.srcGridID),
+		a.gridHostContent(t.gridID),
 	)
 }
 

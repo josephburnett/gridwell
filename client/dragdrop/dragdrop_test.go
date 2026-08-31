@@ -290,11 +290,6 @@ func TestPaneCellAt(t *testing.T) {
 	}
 }
 
-// TestMoveForbidden pins the move-drop policy to the server's MoveTile rule.
-// The case to watch is source to source across grids (dragging a file from
-// one host directory's grid into another's): the server rejects any
-// cross-grid move touching a source-backed grid, and an XOR check here would
-// report it allowed, inviting a drop that then fails.
 // TestDecideDropFocusOnly: a bare click on a pane that was not focused at
 // press time is focus-only — no navigation, no selection — whatever sits
 // under the cursor. A bare click on an already-focused pane navigates. The +
@@ -354,33 +349,37 @@ func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	}
 }
 
+// TestMoveForbidden pins the move-drop policy to the server's placement rule.
+// The case to watch is host to host across grids (dragging a file from one
+// host directory's grid into another's): the server rejects any cross-grid
+// placement, and an XOR check here would report it allowed, inviting a drop
+// that then fails.
 func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
 		name             string
 		sameGrid         bool
 		crossPlugin      bool
-		srcKind, dstKind string
+		srcHost, dstHost bool
 		want             bool
 	}{
-		{"same grid, both source", true, false, "fs", "fs", false},
-		{"same grid, regular", true, false, "", "", false},
-		{"cross regular->regular", false, false, "", "", false},
-		{"cross source->regular", false, false, "fs", "", true},
-		{"cross regular->source", false, false, "", "proc", true},
-		{"cross source->source (regression)", false, false, "fs", "proc", true},
-		{"cross same-kind source->source", false, false, "fs", "fs", true},
+		{"same grid, both host", true, false, true, true, false},
+		{"same grid, regular", true, false, false, false, false},
+		{"cross regular->regular", false, false, false, false, false},
+		{"cross host->regular", false, false, true, false, true},
+		{"cross regular->host", false, false, false, true, true},
+		{"cross host->host (regression)", false, false, true, true, true},
 		// Crossing an id namespace is not a forbidden move — it is not a
 		// move at all: the left-drag becomes a link (DropLink), so nothing
-		// is forbidden here. The source-kind arms are exempted too: linking
-		// host content into a grid is the mount philosophy, and a read-only
+		// is forbidden here. The host arms are exempted too: linking host
+		// content into a grid is the mount philosophy, and a read-only
 		// destination is rejected by the TargetReadOnly gate, not this one.
-		{"cross-plugin left-drag is a link, not forbidden", false, true, "", "", false},
-		{"cross-plugin from a source grid links too", false, true, "fs", "", false},
+		{"cross-plugin left-drag is a link, not forbidden", false, true, false, false, false},
+		{"cross-plugin from a host grid links too", false, true, true, false, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind); got != c.want {
-				t.Errorf("MoveForbidden(%v, %v, %q, %q) = %v, want %v", c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind, got, c.want)
+			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcHost, c.dstHost); got != c.want {
+				t.Errorf("MoveForbidden(%v, %v, %v, %v) = %v, want %v", c.sameGrid, c.crossPlugin, c.srcHost, c.dstHost, got, c.want)
 			}
 		})
 	}
