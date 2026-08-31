@@ -7,6 +7,13 @@ ids (`ns`, `key` → id), layout, framing, the user's bytes, connections,
 tombstones. What a source last said is cache and lives in `cache.db`
 (`internal/sourcecache`), never here.
 
+A plugin row is minted LAZILY: listing a source writes nothing (`Overlay` is
+a read-only join, `Mint` the one INSERT), so a row exists only for an entry
+the user has touched — moved, resized, framed, or pointed a reference at.
+The consequence for an outage: the rows the user touched answer an
+unreachable source, unchanged and stamped stale; an untouched entry has no
+row and is simply absent until the source speaks again.
+
 ## The promise
 
 Data written by any released binary stays readable forever. A newer binary

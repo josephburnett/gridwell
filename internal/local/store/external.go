@@ -18,9 +18,17 @@ package store
 // durable file keeps about a plugin's entries: the id it minted for a key,
 // where the user put it, how it is framed, and the tombstone of a key that
 // went away. What the source last said — listings, bodies, previews — is cache
-// and lives in cache.db, in internal/sourcecache. That is why a dark source
-// costs nothing here: the adapter merges an empty non-authoritative listing
-// and these rows answer, unchanged.
+// and lives in cache.db, in internal/sourcecache.
+//
+// A row exists only once the user has made a durable fact about an entry —
+// moved it, resized it, framed it, or pointed a reference at it. Listing
+// writes nothing: Overlay is a read-only JOIN of the plugin's entries with
+// whatever rows exist, and an entry with no row is answered at a DERIVED
+// placement, by the same algorithm Mint stores. So a dark source costs only
+// the rows' worth: the adapter overlays an empty non-authoritative listing
+// and the TOUCHED rows answer, unchanged, stamped stale — an untouched entry
+// has no row and is simply absent until the source speaks again. What the
+// source last said in full is the cache's job, one layer up.
 
 import (
 	"context"
@@ -63,8 +71,10 @@ type Entry struct {
 // Hint is a plugin's suggested first placement.
 type Hint struct{ X, Y, W, H int64 }
 
-// ExtTile is one merged row: the plugin's content facts joined with the
-// user's stored arrangement.
+// ExtTile is one joined entry: the plugin's content facts over the user's
+// stored arrangement. ID is the minted row id, or 0 when the entry has no
+// row yet and X/Y/W/H are therefore DERIVED — the caller names such a tile by
+// its key rather than by a row id.
 type ExtTile struct {
 	ID          int64
 	Key         string
@@ -132,125 +142,172 @@ func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned 
 	return gridID, key, tomb != 0, err
 }
 
-// Merge joins one plugin listing with the stored arrangement,
-// transactionally: known live keys keep their rows (content facts —
-// label, url, child — refresh); new keys mint ids and take their first
-// placement (hint, else first free cell); and when the listing is
-// authoritative, live keys absent from it retire. The returned tiles are
-// ordered by id (stable output).
-func (n *Namespace) Merge(gridID int64, entries []Entry, authoritative bool) ([]ExtTile, error) {
-	// Child contexts mint OUTSIDE the transaction (the store runs one
-	// connection; a nested Exec would self-deadlock) and before the rows
-	// that reference them — a well row needs its child grid to exist.
-	child := map[string]int64{}
-	for _, e := range entries {
-		if e.Kind == "well" && e.ChildContext != "" {
-			cgid, err := n.ContextID(e.ChildContext)
-			if err != nil {
-				return nil, err
-			}
-			child[e.Key] = cgid
-		}
-	}
-	tx, err := n.s.db.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	type live struct {
-		id         int64
-		x, y, w, h int64
-	}
-	rows, err := tx.Query(`SELECT id, key, x, y, w, h FROM tiles
-		WHERE ns = ? AND grid_id = ? AND tombstoned = 0`, n.ns, gridID)
-	if err != nil {
-		return nil, err
-	}
-	liveByKey := map[string]live{}
-	for rows.Next() {
-		var l live
-		var key string
-		if err := rows.Scan(&l.id, &key, &l.x, &l.y, &l.w, &l.h); err != nil {
-			rows.Close()
+// Overlay joins one plugin listing with the stored arrangement and WRITES
+// NOTHING. It is the one join: minted rows contribute their id, placement and
+// framing; the listing contributes every content fact (label, kind, url,
+// serves-page), so a renamed file needs no writeback; and an entry with no row
+// is answered at a placement derived here, by the same algorithm Mint stores
+// when the entry is first touched. Rows the listing does not mention — a dark
+// source, or a non-authoritative pass — follow at the end, answering from
+// their stored snapshot, which is what makes a touched tile survive an outage.
+//
+// gridID may be 0: a context nobody has touched has no grid row, so there is
+// nothing to overlay and every entry is derived. The order is the listing's,
+// then the unmatched rows by id.
+func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
+	rows := map[string]ExtTile{}
+	var stored []ExtTile
+	if gridID != 0 {
+		var err error
+		stored, err = n.tiles(gridID)
+		if err != nil {
 			return nil, err
 		}
-		liveByKey[key] = l
+		for _, r := range stored {
+			rows[r.Key] = r
+		}
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Occupancy: the full footprints of every live row.
+	// Occupancy: the full footprints of every minted row. A derived
+	// placement flows around what the user has arranged; a row never moves
+	// because its neighbours changed.
 	occupied := map[[2]int64]bool{}
-	for _, l := range liveByKey {
-		occupyRect(occupied, l.x, l.y, l.w, l.h)
+	for _, r := range stored {
+		occupyRect(occupied, r.X, r.Y, r.W, r.H)
 	}
 	var cur cursor
-	now := n.s.now().UnixNano()
-
-	present := map[string]bool{}
+	matched := map[string]bool{}
+	out := make([]ExtTile, 0, len(entries)+len(stored))
 	for _, e := range entries {
-		present[e.Key] = true
-		kind := e.Kind
-		if kind == "" {
-			kind = "text"
-		}
-		var childID, url any
-		if kind == "well" {
-			cg, ok := child[e.Key]
-			if !ok {
-				return nil, fmt.Errorf("store: well entry %q declares no child context", e.Key)
-			}
-			childID = cg
-		}
-		if kind == "url" {
-			url = e.URL
-		}
-		if l, ok := liveByKey[e.Key]; ok {
-			// Arranged already; the user's placement stands. The
-			// plugin's facts refresh (a renamed file, a moved link).
-			if _, err := tx.Exec(`UPDATE tiles SET kind = ?, alt_text = ?, child_grid_id = ?, url_string = ?, updated_at = ?
-				WHERE id = ?`, kind, e.Label, childID, url, now, l.id); err != nil {
-				return nil, fmt.Errorf("store: refresh %q: %w", e.Key, err)
-			}
+		if r, ok := rows[e.Key]; ok {
+			matched[e.Key] = true
+			// The row owns identity, placement and framing; the listing owns
+			// the content facts, read fresh every time.
+			r.Kind, r.Label = entryKind(e), e.Label
+			out = append(out, r)
 			continue
 		}
-		x, y, w, h := int64(0), int64(0), int64(1), int64(1)
-		if e.Hint != nil {
-			x, y, w, h = e.Hint.X, e.Hint.Y, e.Hint.W, e.Hint.H
-			if w < 1 {
-				w = 1
-			}
-			if h < 1 {
-				h = 1
-			}
-			occupyRect(occupied, x, y, w, h)
-		} else {
-			x, y = nextEmptyCell(occupied, DefaultGridWidth, &cur)
-		}
-		if _, err := tx.Exec(`INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
-			child_grid_id, url_string, alt_text, created_at, updated_at, ns, key)
-			VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			gridID, kind, x, y, w, h, childID, url, e.Label, now, now, n.ns, e.Key); err != nil {
-			return nil, fmt.Errorf("store: mint %q: %w", e.Key, err)
+		x, y, w, h := derivePlacement(occupied, &cur, e.Hint)
+		out = append(out, ExtTile{Key: e.Key, Kind: entryKind(e), Label: e.Label,
+			X: x, Y: y, W: w, H: h})
+	}
+	for _, r := range stored {
+		if !matched[r.Key] {
+			out = append(out, r)
 		}
 	}
+	return out, nil
+}
 
-	if authoritative {
-		for key, l := range liveByKey {
-			if !present[key] {
-				if _, err := tx.Exec(`UPDATE tiles SET tombstoned = 1, updated_at = ? WHERE id = ?`, now, l.id); err != nil {
-					return nil, err
-				}
-			}
+// entryKind is the kind an entry answers with; "" reads as text, the one
+// default, applied where the join and the mint both see it.
+func entryKind(e Entry) string {
+	if e.Kind == "" {
+		return "text"
+	}
+	return e.Kind
+}
+
+// derivePlacement is the auto-place rule, and the ONLY one: a hint seeds a
+// first placement, otherwise the entry takes the next free cell in reading
+// order. Overlay derives with it and Mint stores exactly what Overlay derived,
+// so touching a tile never moves it.
+func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y, w, h int64) {
+	w, h = 1, 1
+	if hint != nil {
+		x, y, w, h = hint.X, hint.Y, hint.W, hint.H
+		if w < 1 {
+			w = 1
+		}
+		if h < 1 {
+			h = 1
+		}
+		occupyRect(occupied, x, y, w, h)
+		return x, y, w, h
+	}
+	x, y = nextEmptyCell(occupied, DefaultGridWidth, cur)
+	return x, y, 1, 1
+}
+
+// Mint writes the row an entry has earned: the id, the placement it was
+// already being answered at, and a snapshot of the content facts for the
+// outage case. It is the one INSERT, called once per entry, by the one caller
+// that decides a durable fact has been made (pluginhost.Adapter.mint). An
+// entry that already has a live row returns that row's id and writes nothing,
+// so minting is idempotent.
+func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h int64) (int64, error) {
+	if id, ok, err := n.LiveTileID(gridID, e.Key); err != nil || ok {
+		return id, err
+	}
+	kind := entryKind(e)
+	var child, url any
+	if childGridID != 0 {
+		child = childGridID
+	}
+	if kind == "url" {
+		url = e.URL
+	}
+	now := n.s.now().UnixNano()
+	res, err := n.s.db.Exec(`INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
+		child_grid_id, url_string, alt_text, created_at, updated_at, ns, key)
+		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		gridID, kind, x, y, w, h, child, url, e.Label, now, now, n.ns, e.Key)
+	if err != nil {
+		return 0, fmt.Errorf("store: mint %q: %w", e.Key, err)
+	}
+	return res.LastInsertId()
+}
+
+// Sweep retires the rows of a grid whose keys an AUTHORITATIVE listing did not
+// mention: the source says they are gone, so the ids they minted retire and
+// never come back. Only rows are swept — an untouched entry has nothing to
+// sweep, it simply stops appearing. Nothing is written when nothing vanished.
+func (n *Namespace) Sweep(gridID int64, present map[string]bool) error {
+	rows, err := n.tiles(gridID)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		if present[r.Key] {
+			continue
+		}
+		if err := n.Retire(r.ID); err != nil && !errors.Is(err, ErrNotFound) {
+			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	return nil
+}
+
+// LookupContext resolves a context key to its grid row id WITHOUT minting one:
+// the read half of ContextID, for the join, which must not write.
+func (n *Namespace) LookupContext(key string) (int64, bool, error) {
+	var id int64
+	err := n.s.db.QueryRow(`SELECT id FROM grids WHERE ns = ? AND context_key = ?`, n.ns, key).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
 	}
-	return n.tiles(gridID)
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
+// LiveTileID resolves (grid, plugin key) to the live row minted for it, if
+// there is one. It is TileKey's inverse and the join's canonicalization: an
+// entry with a row is named by that row's id, never by its key.
+func (n *Namespace) LiveTileID(gridID int64, key string) (int64, bool, error) {
+	if gridID == 0 {
+		return 0, false, nil
+	}
+	var id int64
+	err := n.s.db.QueryRow(`SELECT id FROM tiles WHERE ns = ? AND grid_id = ? AND key = ? AND tombstoned = 0`,
+		n.ns, gridID, key).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
 }
 
 // tiles lists the live rows of a grid, by id.
