@@ -786,3 +786,31 @@ func TestWriteResponsesUpdateTheRememberedRows(t *testing.T) {
 			gotMoved.GetX(), gotMoved.GetY(), gotMoved.GetW())
 	}
 }
+
+// TestStoreGridSurvivesAGridKeyRename: after an id migration the same grid
+// can be asked for under two keys — the old minted id and the new derived
+// address — and its tiles keep their ids. Storing the answer under the new
+// key must move the tiles, not collide with their rows under the old key:
+// the plain INSERT rolled back on tiles.id UNIQUE, the store never
+// succeeded, and every refresh retried and logged forever (seen live after
+// the lazy-ids upgrade).
+func TestStoreGridSurvivesAGridKeyRename(t *testing.T) {
+	cc, upstream, root, _ := fixture(t)
+	ctx := context.Background()
+
+	if _, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	live, err := upstream.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The same answer remembered under two keys, the migration shape.
+	cc.storeGrid(ctx, "old-key", live)
+	cc.storeGrid(ctx, "new-key", live)
+	got, _, ok := cc.loadGrid(ctx, "new-key")
+	if !ok || len(got.GetTiles()) != len(live.GetTiles()) {
+		t.Fatalf("new-key remembered %v (ok=%v), want the full tile set: the rename must upsert, not collide", got.GetTiles(), ok)
+	}
+}

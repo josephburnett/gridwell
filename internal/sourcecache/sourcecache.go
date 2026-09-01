@@ -492,7 +492,14 @@ func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridRe
 			_ = tx.Rollback()
 			return
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO tiles (id, grid_id, proto, fetched_at) VALUES (?, ?, ?, ?)`,
+		// Upsert, never a plain insert: after an id migration the same grid
+		// answers under two keys — the old minted id and the new derived
+		// address — and its tiles keep their ids, so a row may already exist
+		// under the old grid key. The upsert moves it here; the remembered
+		// answer under the old key decays as its tiles migrate, which is
+		// right, since nothing asks for the old key again.
+		if _, err := tx.ExecContext(ctx, `INSERT INTO tiles (id, grid_id, proto, fetched_at) VALUES (?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET grid_id=excluded.grid_id, proto=excluded.proto, fetched_at=excluded.fetched_at`,
 			t.GetId(), gridID, tb, ts); err != nil {
 			logErr("store tile", err)
 			_ = tx.Rollback()
