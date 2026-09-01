@@ -356,20 +356,20 @@ func (a *App) thIdle(js.Value, []js.Value) any {
 	return a.transition == nil &&
 		a.wsPending == nil &&
 		a.dragging == nil &&
-		len(a.gridInflight) == 0 &&
-		len(a.tileInflight) == 0
+		a.gridFetch.Len() == 0 &&
+		a.tileFetch.Len() == 0
 }
 
 // thIdleDetail names each idle() component so a stalled waitIdle in a spec
 // reports WHICH state is stuck (a hung fetch reads very differently from a
 // stuck transition) instead of a bare timeout.
 func (a *App) thIdleDetail(js.Value, []js.Value) any {
-	grids := make([]any, 0, len(a.gridInflight))
-	for id := range a.gridInflight {
+	grids := make([]any, 0, a.gridFetch.Len())
+	for _, id := range a.gridFetch.Keys() {
 		grids = append(grids, id)
 	}
-	tiles := make([]any, 0, len(a.tileInflight))
-	for id := range a.tileInflight {
+	tiles := make([]any, 0, a.tileFetch.Len())
+	for _, id := range a.tileFetch.Keys() {
 		tiles = append(tiles, id)
 	}
 	return map[string]any{

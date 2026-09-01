@@ -21,6 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
+	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -173,25 +174,27 @@ type App struct {
 	// not retry in a tight loop.
 	gridLoadFailed map[string]bool
 
-	// gridInflight tracks grid ids with a pending GetGrid request so
-	// repeated draws (which call fetchGrid on every cache miss) don't
-	// dogpile the server. Cleared in the fetch goroutine after the
-	// response lands.
-	gridInflight map[string]bool
+	// gridFetch holds the grid ids with a pending GetGrid so repeated draws
+	// (which call fetchGrid on every cache miss) don't dogpile the server.
+	// client/inflight owns the claim's whole life: bounded, cancellable, and
+	// released by the fetch that made it — a request lost with the link used
+	// to hold its id forever, which is "loading …" with no error and no
+	// retry.
+	gridFetch *inflight.Set
 
-	// contentInflight tracks tile ids with a pending ReadContent request,
-	// deduped like gridInflight: tileBody fires fetchTileContent on every
-	// cache miss every frame, so without the guard one absent body spawns a
-	// fetch per frame, and any reply older than one that already landed
-	// would repaint stale bytes into the overlay. The cache's
-	// PutFetchedContent version guard is the backstop.
-	contentInflight map[string]bool
+	// contentFetch holds the tile ids with a pending ReadContent, deduped
+	// like gridFetch: tileBody fires fetchTileContent on every cache miss
+	// every frame, so without the claim one absent body spawns a fetch per
+	// frame, and any reply older than one that already landed would repaint
+	// stale bytes into the overlay. The cache's PutFetchedContent version
+	// guard is the backstop.
+	contentFetch *inflight.Set
 
-	// tileInflight tracks qualified tile ids with a pending GetTile request
+	// tileFetch holds the qualified tile ids with a pending GetTile
 	// (findTileByID misses). A globally-routable id may name a tile whose
 	// grid was never visited (so it isn't cached); resolving it locates the
-	// tile's grid and fetches it. Deduped like gridInflight.
-	tileInflight map[string]bool
+	// tile's grid and fetches it. Deduped like gridFetch.
+	tileFetch *inflight.Set
 	// tileLoadFailed records tile ids whose GetTile failed (the tile was
 	// deleted, or its plugin isn't mounted). Without it a missing id
 	// re-fires GetTile every frame forever — the same dogpile
@@ -705,9 +708,9 @@ func main() {
 		errs:               errsurface.New(),
 		caps:               caps.Derive(bridgeCaps(), false),
 		gridLoadFailed:     map[string]bool{},
-		gridInflight:       map[string]bool{},
-		contentInflight:    map[string]bool{},
-		tileInflight:       map[string]bool{},
+		gridFetch:          inflight.New(inflight.Deadline),
+		contentFetch:       inflight.New(inflight.Deadline),
+		tileFetch:          inflight.New(inflight.Deadline),
 		tileLoadFailed:     map[string]bool{},
 		urlPreview:         preview.NewCache(preview.NewJSDecoder()),
 		wrapCache:          map[string][]string{},
@@ -891,8 +894,8 @@ func (a *App) resize() {
 // error key ("grid:<id>") surfaced and resolved through the strip. The async
 // renderer path (fetchGrid) and the synchronous URL walk (fetchGridSync) both
 // come here, so gridLoadFailed has one writer.
-func (a *App) loadGrid(id string) error {
-	resp, err := a.cl.GetGrid(context.Background(), id)
+func (a *App) loadGrid(ctx context.Context, id string) error {
+	resp, err := a.cl.GetGrid(ctx, id)
 	if err != nil {
 		// A verdict latches: the server answered, and the same ask gets the
 		// same answer until something changes, so fetchGrid stops asking
@@ -924,13 +927,16 @@ func (a *App) fetchGrid(id string) {
 	// the latch first. fetchGrid clearing it itself defeated the latch for
 	// the per-frame draw path and turned one honest verdict into an
 	// every-frame refetch-and-report loop.
-	if id == "" || a.gridInflight[id] || a.gridLoadFailed[id] {
+	if id == "" || a.gridLoadFailed[id] {
 		return
 	}
-	a.gridInflight[id] = true
+	ctx, done, ok := a.gridFetch.Begin(id)
+	if !ok {
+		return
+	}
 	go func() {
-		defer delete(a.gridInflight, id)
-		if a.loadGrid(id) != nil {
+		defer done()
+		if a.loadGrid(ctx, id) != nil {
 			a.draw()
 			return
 		}
@@ -947,13 +953,16 @@ func (a *App) fetchGrid(id string) {
 // findTileByID then hits. Deduped per tile id; a no-op once the tile's grid
 // is cached. Background, like fetchGrid.
 func (a *App) fetchTileByID(tileID string) {
-	if tileID == "" || a.tileInflight[tileID] || a.tileLoadFailed[tileID] {
+	if tileID == "" || a.tileLoadFailed[tileID] {
 		return
 	}
-	a.tileInflight[tileID] = true
+	ctx, done, ok := a.tileFetch.Begin(tileID)
+	if !ok {
+		return
+	}
 	go func() {
-		defer delete(a.tileInflight, tileID)
-		tile, err := a.cl.GetTile(context.Background(), tileID)
+		defer done()
+		tile, err := a.cl.GetTile(ctx, tileID)
 		if err != nil || tile == nil {
 			// Latch only on a server verdict: a broken reference — a
 			// deleted tile, an unmounted plugin — answers the same way
@@ -1233,7 +1242,18 @@ func (a *App) retryKick(resync bool) {
 		// verdict re-verifies once per reconnect, at one GetTile.
 		clear(a.tileLoadFailed)
 		clear(a.gridLoadFailed)
-		for _, gid := range a.c.KnownGridIDs() {
+		// So is a fetch still in flight. The link it rode is gone, and a
+		// request that dies with a link need never return: nothing answers
+		// it, nothing fails it, and its dedupe claim would keep every retry
+		// away forever. Cancel them all, and re-ask for the grids by name —
+		// a pane waiting on a grid it never received is not in the cache, so
+		// the known-grid sweep below cannot speak for it. The cancelled tile
+		// and content reads are re-asked by the draw the refetches schedule,
+		// off the same cache misses that asked the first time.
+		stuck := a.gridFetch.CancelAll()
+		a.tileFetch.CancelAll()
+		a.contentFetch.CancelAll()
+		for _, gid := range append(stuck, a.c.KnownGridIDs()...) {
 			a.fetchGrid(gid)
 		}
 	}

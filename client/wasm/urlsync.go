@@ -588,7 +588,13 @@ func (a *App) fetchGridSync(id string) bool {
 	if _, ok := a.c.Grid(id); ok {
 		return true
 	}
-	return a.loadGrid(id) == nil
+	// Claim-free (the walk blocks on its own answer, and a background fetch
+	// for the same grid must not turn the walk into a no-op) but bounded
+	// like every other fetch: a boot that waits forever on a dead socket is
+	// a blank screen with no explanation.
+	ctx, cancel := a.gridFetch.Context()
+	defer cancel()
+	return a.loadGrid(ctx, id) == nil
 }
 
 // fetchBlobAndSetCursor pulls the file's bytes and, once they're in
@@ -604,10 +610,13 @@ func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
 		return
 	}
 	go func() {
+		// Claim-free, like the walk above, and bounded the same way.
+		ctx, cancel := a.contentFetch.Context()
+		defer cancel()
 		// loadTileContent stores the bytes and refreshes the overlay (in
 		// text mode that seeds the textarea from the body); the cursor is
 		// what this path adds, and it goes after the seeding.
-		a.loadTileContent(textTileID, func() {
+		a.loadTileContent(ctx, textTileID, func() {
 			if state.CursorMode {
 				a.placeCursorAt(state.Col, state.Row)
 			}

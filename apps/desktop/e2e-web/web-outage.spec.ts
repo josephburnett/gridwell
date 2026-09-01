@@ -6,13 +6,15 @@ import { Served, spawnServe, freePort, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
-// The mid-session outage seam: the only gate that kills the server under a live
-// client. Without it, a network blip during autosave can destroy the only copy
-// of unsaved text and a reconnect can render stale state silently. This spec is
-// the end-to-end oracle for that class: type into a doc, kill the server
+// The mid-session outage seam: the only gate that takes the link away under a
+// live client. Without it, a network blip during autosave can destroy the only
+// copy of unsaved text, a reconnect can render stale state silently, and a
+// request the network swallows can leave a pane loading forever. These specs
+// are the end-to-end oracle for that class: type into a doc, kill the server
 // mid-session, keep the typing on screen, restart the server on the same port,
 // and prove the retry kick lands the save on the reborn server with no user
-// action.
+// action — and, without killing anything, swallow one grid read and prove the
+// pane comes back on its own.
 //
 // The stock `serve` fixture cannot revive its process, so this spec owns a
 // restartable server: the same seedHome, binary, and flags, plus kill() and
@@ -143,6 +145,105 @@ test('typing survives a server outage and saves itself after the restart', async
   });
   expect(value).toContain('saved before the outage.');
   expect(value).toContain('typed while the server was dead.');
+});
+
+test('a grid fetch the network swallows does not latch "loading" forever', async ({
+  gw,
+  window,
+  outage,
+}) => {
+  // The zombie fetch, and the pane that waits on it forever. The client dedupes
+  // GetGrid per grid id, so the per-frame draw cannot dogpile the server, and
+  // the claim is released when the request returns. A killed server answers
+  // with a reset and the request does return; the shape that hurts is the
+  // black hole — a laptop asleep, a route that went away — where the request
+  // neither answers nor fails. The claim was then never released: no refetch
+  // ever fired, no error was ever reported, and the pane said "loading …" for
+  // the life of the page. That is what the gitlab well did on 2026-08-31,
+  // while the plugin was answering fine.
+  //
+  // Nothing here restarts the server, because nothing needs to: the fix is that
+  // a fetch is bounded, so the pane comes back on its own, off its own clock,
+  // with the link in exactly the state that broke it. (The event stream's
+  // reconnect resync also cancels in-flight fetches, which is faster when the
+  // stream does come back — client/inflight's unit tests own that half.)
+  test.setTimeout(150_000);
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
+  const child = well.childGridId as string;
+
+  // A tile inside the well: an empty child grid signs the same as an uncached
+  // one, so without it "the grid came back" is unobservable.
+  await gw.descendCell(cx, cy);
+  const inner = await gw.focused();
+  const icx = Math.round(inner.cx);
+  const icy = Math.round(inner.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', icx, icy);
+  const note = tileAt(await gw.getGrid(child), 'text', icx, icy)!;
+  expect(note, 'the well holds a tile to come back to').toBeTruthy();
+
+  // The black hole: the next GetGrid for this one grid is swallowed — never
+  // fulfilled, never aborted. Every other request keeps working, the way a dead
+  // socket leaves a fresh one fine, and so does the retry, so the only thing
+  // between the pane and its grid is the client's own claim on that id.
+  let blackhole = true;
+  await window.route('**/gridwell.v1.Gridwell/GetGrid', async (route) => {
+    if (blackhole && (route.request().postData() ?? '').includes(child)) {
+      blackhole = false; // one request into the hole; the retry gets a live link
+      return;
+    }
+    await route.continue();
+  });
+
+  // Back to a fresh boot at home, so the child grid is out of the cache and the
+  // well's preview asks for it again — into the hole.
+  await window.goto(outage.origin + '/?e2e=1');
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  const home = await gw.focused();
+  const c = await gw.cellCenter(home.id, cx, cy);
+  await window.mouse.click(c.x, c.y); // descend; no waitIdle, the fetch is hung by design
+
+  await expect
+    .poll(async () => (await gw.focused()).gridID, { timeout: 15_000 })
+    .toBe(child);
+  await expect
+    .poll(
+      async () =>
+        (await window.evaluate(() => (window as any).__gridwellTest.idleDetail())).gridInflight,
+      { message: 'the grid fetch is in flight and stuck there', timeout: 15_000 },
+    )
+    .toContain(child);
+  const stuck = await window.evaluate(
+    (gid: string) => Object.keys((window as any).__gridwellTest.gridSigs(gid)).length,
+    child,
+  );
+  expect(stuck, 'the pane is showing a grid it does not have').toBe(0);
+
+  // No user action, no restart, no reconnect: only time. The bounded fetch
+  // gives up, says so, and the next draw asks again over a link that works.
+  await expect
+    .poll(
+      async () =>
+        Object.keys(
+          await window.evaluate(
+            (gid: string) => (window as any).__gridwellTest.gridSigs(gid),
+            child,
+          ),
+        ),
+      { message: 'the grid the pane is showing loads itself again', timeout: 45_000 },
+    )
+    .toContain(note.id);
+  expect(
+    await window.evaluate(() => (window as any).__gridwellTest.idleDetail()),
+    'the claim the zombie held is gone with it',
+  ).toMatchObject({ gridInflight: [] });
 });
 
 test('framing settled during an outage lands after the restart', async ({ gw, outage }) => {

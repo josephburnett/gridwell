@@ -1136,7 +1136,7 @@ func bannerTextColor(n *rpc.Tile, outside bool) string {
 
 // fetchTileContent issues ReadContent for a plugin tile (file / proc @info)
 // and caches the body by tile id. Idempotent: a successful previous fetch
-// short-circuits, and an in-flight one is never doubled (contentInflight):
+// short-circuits, and an in-flight one is never doubled (contentFetch):
 // concurrent fetches for one tile are how a stale reply lands after a fresher
 // one and repaints old bytes into the overlay.
 func (a *App) fetchTileContent(tileID string) {
@@ -1146,14 +1146,14 @@ func (a *App) fetchTileContent(tileID string) {
 	if _, ok := a.c.TileContent(tileID); ok {
 		return
 	}
-	if a.contentInflight[tileID] {
+	ctx, done, ok := a.contentFetch.Begin(tileID)
+	if !ok {
 		return
 	}
-	a.contentInflight[tileID] = true
 	go func() {
-		defer delete(a.contentInflight, tileID)
+		defer done()
 		// Coalesced repaint: body fetches land in bursts (#265).
-		a.loadTileContent(tileID, a.scheduleFrame)
+		a.loadTileContent(ctx, tileID, a.scheduleFrame)
 	}()
 }
 
@@ -1167,8 +1167,8 @@ func (a *App) fetchTileContent(tileID string) {
 // Content is routable by tile id (ReadContent); blob ids carry no plugin
 // namespace and are not routable on their own. The cache is the one text-body
 // store every overlay reads from.
-func (a *App) loadTileContent(tileID string, then func()) {
-	data, _, version, err := a.cl.ReadContent(context.Background(), tileID)
+func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) {
+	data, _, version, err := a.cl.ReadContent(ctx, tileID)
 	if err != nil {
 		// The tile body would otherwise never appear: say why.
 		a.surfaceRPCError("ReadContent", err)
