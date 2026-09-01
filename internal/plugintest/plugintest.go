@@ -109,7 +109,8 @@ func Binary(t *testing.T, kind string) string {
 //
 // The guest inherits this process's environment, so the test's own home is
 // redirected first: an fs plugin trashes a deleted file into
-// $XDG_DATA_HOME/Trash, and a test must never write into the developer's.
+// $XDG_DATA_HOME/Trash, and a test must never write into the developer's. Its
+// state_dir is redirected for the same reason — see withStateDir.
 func Spawn(t *testing.T, kind string, cfg map[string]string) pluginv1.PluginClient {
 	t.Helper()
 	cp, _ := SpawnCloser(t, kind, cfg)
@@ -122,10 +123,27 @@ func Spawn(t *testing.T, kind string, cfg map[string]string) pluginv1.PluginClie
 func SpawnCloser(t *testing.T, kind string, cfg map[string]string) (pluginv1.PluginClient, func()) {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	cp, kill, err := compose.LoadPlugin(Binary(t, kind), cfg)
+	cp, kill, err := compose.LoadPlugin(Binary(t, kind), withStateDir(t, cfg))
 	if err != nil {
 		t.Fatalf("spawn gridwell-plugin-%s: %v", kind, err)
 	}
 	t.Cleanup(kill)
 	return cp, kill
+}
+
+// withStateDir copies cfg with a state_dir, the private directory the loader
+// hands a plugin in production (<home>/plugins/<id>): a per-test temp
+// directory, so no test writes into a real home. A test that keeps a plugin's
+// memory across a restart passes its own directory and this leaves it alone.
+// The copy keeps the caller's map its own.
+func withStateDir(t *testing.T, cfg map[string]string) map[string]string {
+	t.Helper()
+	out := make(map[string]string, len(cfg)+1)
+	for k, v := range cfg {
+		out[k] = v
+	}
+	if out["state_dir"] == "" {
+		out["state_dir"] = t.TempDir()
+	}
+	return out
 }
