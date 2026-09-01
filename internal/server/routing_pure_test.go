@@ -192,6 +192,17 @@ func TestQualifyEvent(t *testing.T) {
 	if health.GetPluginHealth().Healthy || health.GetPluginHealth().Detail != "stream ended" {
 		t.Errorf("PluginHealth payload mutated beyond the uuid: %+v", health.GetPluginHealth())
 	}
+	// An EMPTY uuid names the namespace the event rode in from: the cache
+	// layer reports its own store health without knowing its registry uuid,
+	// and the fan-in's prefix is exactly that uuid. A bare prepend would
+	// mint "u/" — a name that resolves to nothing.
+	own := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+		Healthy: false, Detail: "cache cannot remember",
+	}}})
+	if got := own.GetPluginHealth().GetPluginUuid(); got != "u" {
+		t.Errorf("self PluginHealth uuid = %q, want the fan-in's own %q", got, "u")
+	}
+
 	// Leaf plugins don't emit PluginHealth today, but the chain rule is
 	// uniform: every id in a response gets this hop prepended.
 	leafHealth := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{

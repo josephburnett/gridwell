@@ -101,8 +101,15 @@ func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb
 			TileId: QualifyID(prefix, p.TileRemoved.TileId),
 		}}}
 	case *pb.Event_PluginHealth:
+		// An empty uuid means "the namespace this event rode in from": the
+		// cache layer reports its own store health without knowing the uuid
+		// the registry gave it, and the fan-in's prefix is exactly that uuid.
+		uuid := prefix
+		if p.PluginHealth.PluginUuid != "" {
+			uuid = QualifyID(prefix, p.PluginHealth.PluginUuid)
+		}
 		return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-			PluginUuid: QualifyID(prefix, p.PluginHealth.PluginUuid),
+			PluginUuid: uuid,
 			Healthy:    p.PluginHealth.Healthy,
 			Detail:     p.PluginHealth.Detail,
 		}}}

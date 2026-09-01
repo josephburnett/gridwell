@@ -77,7 +77,7 @@ func (c *Layer) storeServeContent(ctx context.Context, tileID, subpath string, s
 		ON CONFLICT(tile_id, subpath) DO UPDATE SET status=excluded.status,
 			media_type=excluded.media_type, data=excluded.data, fetched_at=excluded.fetched_at`,
 		tileID, subpath, status, mediaType, data, now())
-	logErr("store servecontent", err)
+	c.noteCache("store servecontent", err)
 	c.evictServeContent(ctx)
 }
 
@@ -88,7 +88,7 @@ func (c *Layer) evictServeContent(ctx context.Context) {
 		var total int64
 		if err := c.db.QueryRowContext(ctx,
 			`SELECT COALESCE(SUM(LENGTH(data)),0) FROM servecontent`).Scan(&total); err != nil {
-			logErr("evict servecontent", err)
+			c.noteCache("evict servecontent", err)
 			return
 		}
 		if total <= serveContentMountCap {
@@ -96,7 +96,7 @@ func (c *Layer) evictServeContent(ctx context.Context) {
 		}
 		if _, err := c.db.ExecContext(ctx, `DELETE FROM servecontent WHERE rowid =
 			(SELECT rowid FROM servecontent ORDER BY fetched_at ASC, rowid ASC LIMIT 1)`); err != nil {
-			logErr("evict servecontent", err)
+			c.noteCache("evict servecontent", err)
 			return
 		}
 	}

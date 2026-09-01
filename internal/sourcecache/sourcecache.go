@@ -193,10 +193,15 @@ type Layer struct {
 
 	// subs are this layer's own event subscribers — the synthetic stream
 	// Subscribe serves when the upstream has none — fed by revalidations
-	// that changed or evicted a grid.
+	// that changed or evicted a grid, and by cache-store health transitions.
 	subsMu sync.Mutex
 	subs   map[int]chan *pb.Event
 	subSeq int
+
+	// cacheDown remembers that stores are failing, so the transition — not
+	// every failure — surfaces as this namespace's health.
+	healthMu  sync.Mutex
+	cacheDown bool
 }
 
 // The cache is a namespace in front of a namespace, nothing more.
@@ -272,11 +277,51 @@ func (s *Store) Close() error {
 }
 
 // logErr surfaces a cache-side failure to the server log. A broken cache must
-// never fail a live request, but it must not be silent either, or the offline
-// promise degrades invisibly until the day it is needed.
+// never fail a live request, but under serve-first the cache IS the read
+// path, so a cache that cannot remember is user-visible degradation: every
+// read of an unremembered grid pays the source's full latency. The layer's
+// noteCache is the surfacing half; this is only the log line.
 func logErr(op string, err error) {
 	if err != nil {
-		log.Printf("gridwell: sourcecache %s: %v (cache degraded; the live path is unaffected)", op, err)
+		log.Printf("gridwell: sourcecache %s: %v (answers are not being remembered)", op, err)
+	}
+}
+
+// noteCache records one cache-write outcome and surfaces the transitions on
+// the layer's own event stream as this namespace's health: down on the first
+// failure, up on the first success after, never once per failure. "Degraded,
+// I'm sure it will be okay" in a server log is how a broken cache runs
+// unnoticed for hours — the strip is where the user actually looks.
+func (c *Layer) noteCache(op string, err error) {
+	logErr(op, err)
+	c.healthMu.Lock()
+	transition := (err != nil) != c.cacheDown
+	c.cacheDown = err != nil
+	c.healthMu.Unlock()
+	if !transition {
+		return
+	}
+	if err != nil {
+		c.emitHealth(false, "the cache cannot remember answers ("+op+": "+err.Error()+"); every read now pays the source's full latency")
+		return
+	}
+	c.emitHealth(true, "")
+}
+
+// emitHealth announces a health transition to the synthetic stream's
+// subscribers. The uuid rides empty: the fan-in fills in the namespace the
+// event came from (rpc.QualifyEventIDs).
+func (c *Layer) emitHealth(healthy bool, detail string) {
+	ev := &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+		Healthy: healthy, Detail: detail,
+	}}}
+	c.subsMu.Lock()
+	defer c.subsMu.Unlock()
+	for _, ch := range c.subs {
+		select {
+		case ch <- ev:
+		default:
+		}
 	}
 }
 
@@ -290,7 +335,7 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO info (k, proto) VALUES ('info', ?)
 				ON CONFLICT(k) DO UPDATE SET proto=excluded.proto`, b)
-			logErr("store info", werr)
+			c.noteCache("store info", werr)
 		}
 		// The layer always has an event stream to offer — the upstream's, or
 		// its own synthetic GridChanged (see Subscribe) — so the door it
@@ -325,7 +370,7 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
 				ON CONFLICT(ns) DO UPDATE SET proto=excluded.proto`, in.GetNamespace(), b)
-			logErr("store pluginlist", werr)
+			c.noteCache("store pluginlist", werr)
 		}
 		return resp, nil
 	}
@@ -454,9 +499,9 @@ func gridRespEqual(a, b *pb.GetGridResponse) bool {
 // file is disposable, and reaping them here would buy nothing.
 func (c *Layer) evictGrid(ctx context.Context, gridID string) {
 	_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE grid_id = ?`, gridID)
-	logErr("evict tiles", err)
+	c.noteCache("evict tiles", err)
 	_, err = c.db.ExecContext(ctx, `DELETE FROM grids WHERE id = ?`, gridID)
-	logErr("evict grid", err)
+	c.noteCache("evict grid", err)
 }
 
 // storeGrid replaces the grid row and its whole tile set in one transaction. A
@@ -465,30 +510,30 @@ func (c *Layer) evictGrid(ctx context.Context, gridID string) {
 func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridResponse) {
 	gb, err := proto.Marshal(resp.GetGrid())
 	if err != nil {
-		logErr("marshal grid", err)
+		c.noteCache("marshal grid", err)
 		return
 	}
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
-		logErr("store grid", err)
+		c.noteCache("store grid", err)
 		return
 	}
 	ts := now()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO grids (id, proto, fetched_at) VALUES (?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET proto=excluded.proto, fetched_at=excluded.fetched_at`, gridID, gb, ts); err != nil {
-		logErr("store grid", err)
+		c.noteCache("store grid", err)
 		_ = tx.Rollback()
 		return
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE grid_id = ?`, gridID); err != nil {
-		logErr("store grid", err)
+		c.noteCache("store grid", err)
 		_ = tx.Rollback()
 		return
 	}
 	for _, t := range resp.GetTiles() {
 		tb, merr := proto.Marshal(t)
 		if merr != nil {
-			logErr("marshal tile", merr)
+			c.noteCache("marshal tile", merr)
 			_ = tx.Rollback()
 			return
 		}
@@ -501,12 +546,12 @@ func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridRe
 		if _, err := tx.ExecContext(ctx, `INSERT INTO tiles (id, grid_id, proto, fetched_at) VALUES (?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET grid_id=excluded.grid_id, proto=excluded.proto, fetched_at=excluded.fetched_at`,
 			t.GetId(), gridID, tb, ts); err != nil {
-			logErr("store tile", err)
+			c.noteCache("store tile", err)
 			_ = tx.Rollback()
 			return
 		}
 	}
-	logErr("store grid", tx.Commit())
+	c.noteCache("store grid", tx.Commit())
 }
 
 func (c *Layer) loadGrid(ctx context.Context, gridID string) (resp *pb.GetGridResponse, fetchedAt int64, ok bool) {
@@ -566,22 +611,22 @@ func (c *Layer) upsertTile(ctx context.Context, t *pb.Tile) {
 	}
 	tb, err := proto.Marshal(t)
 	if err != nil {
-		logErr("marshal tile", err)
+		c.noteCache("marshal tile", err)
 		return
 	}
 	_, werr := c.db.ExecContext(ctx, `INSERT INTO tiles (id, grid_id, proto, fetched_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET grid_id=excluded.grid_id, proto=excluded.proto, fetched_at=excluded.fetched_at`,
 		t.GetId(), t.GetGridId(), tb, now())
-	logErr("upsert tile", werr)
+	c.noteCache("upsert tile", werr)
 }
 
 func (c *Layer) deleteTile(ctx context.Context, tileID string) {
 	_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID)
-	logErr("delete tile", err)
+	c.noteCache("delete tile", err)
 	_, err = c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
-	logErr("delete content", err)
+	c.noteCache("delete content", err)
 	_, err = c.db.ExecContext(ctx, `DELETE FROM previews WHERE tile_id = ?`, tileID)
-	logErr("delete preview", err)
+	c.noteCache("delete preview", err)
 }
 
 // ── GetTilePreview ──────────────────────────────────────────────────────
@@ -593,7 +638,7 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO previews (tile_id, jpeg, fetched_at) VALUES (?, ?, ?)
 				ON CONFLICT(tile_id) DO UPDATE SET jpeg=excluded.jpeg, fetched_at=excluded.fetched_at`,
 				in.TileId, jpeg, now())
-			logErr("store preview", werr)
+			c.noteCache("store preview", werr)
 		}
 		return resp, nil
 	}
@@ -689,7 +734,7 @@ func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, vers
 	_, err := c.db.ExecContext(ctx, `INSERT INTO content (tile_id, media_type, version, data, fetched_at) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(tile_id) DO UPDATE SET media_type=excluded.media_type, version=excluded.version, data=excluded.data, fetched_at=excluded.fetched_at`,
 		tileID, mediaType, version, data, now())
-	logErr("store content", err)
+	c.noteCache("store content", err)
 }
 
 // ── Subscribe ───────────────────────────────────────────────────────────
@@ -872,7 +917,7 @@ func (c *Layer) WriteContent(ctx context.Context, recv func() (*pb.WriteContentR
 	if err == nil {
 		if tileID != "" {
 			_, derr := c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
-			logErr("drop written content", derr)
+			c.noteCache("drop written content", derr)
 		}
 		c.foldWrite(ctx, tileID, resp.GetTile())
 	}

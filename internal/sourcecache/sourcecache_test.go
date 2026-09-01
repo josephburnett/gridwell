@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -813,4 +814,86 @@ func TestStoreGridSurvivesAGridKeyRename(t *testing.T) {
 	if !ok || len(got.GetTiles()) != len(live.GetTiles()) {
 		t.Fatalf("new-key remembered %v (ok=%v), want the full tile set: the rename must upsert, not collide", got.GetTiles(), ok)
 	}
+}
+
+// TestCacheStoreFailureSurfacesAsHealth: a cache that cannot remember is not
+// a shrug in a server log — under serve-first it means every read pays the
+// source's full latency, and the user deserves the error. The transition
+// rides the layer's own event stream as this namespace's health: down on the
+// first failing store, up on the first success after. (The tiles.id UNIQUE
+// rollback ran for hours as a log-only "degraded" before this.)
+func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	root, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := &unwatched{Namespace: local.New(st, nil)}
+	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
+
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
+	evs := make(chan *pb.Event, 64)
+	go func() {
+		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(ev *pb.Event) error {
+			evs <- ev
+			return nil
+		})
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		cc.subsMu.Lock()
+		n := len(cc.subs)
+		cc.subsMu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the synthetic subscription never registered")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// The cache breaks: the next live read's store fails and the health goes
+	// down, with the failure in the detail.
+	if _, err := cc.db.Exec(`DROP TABLE tiles`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatalf("a broken cache must never fail the live read: %v", err)
+	}
+	waitHealth := func(wantHealthy bool, what string) *pb.EventPluginHealth {
+		for {
+			select {
+			case ev := <-evs:
+				if h := ev.GetPluginHealth(); h != nil && h.GetHealthy() == wantHealthy {
+					return h
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal(what)
+			}
+		}
+	}
+	down := waitHealth(false, "the failing store never surfaced as health")
+	if down.GetPluginUuid() != "" {
+		t.Errorf("uuid = %q, want empty (the fan-in fills the namespace)", down.GetPluginUuid())
+	}
+	if !strings.Contains(down.GetDetail(), "cannot remember") {
+		t.Errorf("detail = %q, want the cache failure named", down.GetDetail())
+	}
+
+	// The cache heals: the next successful store clears it.
+	if _, err := cc.db.Exec(`CREATE TABLE tiles (id TEXT PRIMARY KEY, grid_id TEXT NOT NULL, proto BLOB NOT NULL, fetched_at INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	ageGrid(t, cc, root) // past the window: the next read revalidates and stores
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	waitHealth(true, "the healed store never cleared the health")
 }
