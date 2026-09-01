@@ -132,8 +132,12 @@ socket, so they survive restarts.
 
 **Plugins** speak `plugin.v1`. They live in their own repository,
 `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc and gitlab
-plugins and anyone else's alike, on the same footing. A plugin is stateless. It answers in its own stable string keys and never
-sees ids, layout, or a database. The node mints ids against those keys and
+plugins and anyone else's alike, on the same footing. A plugin holds no node
+fact. It answers in its own stable string keys and never sees ids, layout, or
+a database. It does get a private directory, `<home>/plugins/<id>`, named to
+it as `state_dir` at spawn: its own memory of its source, under cache.db's
+contract — disposable, safe to delete, rewarmed by use, and never deleted by
+the node. The node mints ids against those keys and
 keeps the arrangement as a namespace of its own store
 (`internal/pluginhost/adapter.go`). The host never imports a plugin and never
 switches on its kind; every plugin behavior rides a wire declaration.

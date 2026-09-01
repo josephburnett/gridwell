@@ -100,9 +100,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`internal/plugintest`). `make build` compiles those binaries out of
   `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into the repo root, so
   clone the plugins repo beside this one.
-- A plugin serves keys and content; the node owns ids and layout. A
-  connection is config: an immutable name, a label, how to dial. Retiring a
-  name is forever. Secrets stay host-local file paths.
+- A plugin serves keys and content; the node owns ids and layout. A plugin
+  holds no node fact, and keeps its own memory of its source in the private
+  directory the node hands it at spawn (`<home>/plugins/<id>`, as
+  `state_dir`), under `cache.db`'s contract: disposable, safe to delete,
+  rewarmed by use. Nothing deletes one automatically. A connection is
+  config: an immutable name, a label, how to dial. Retiring a name is
+  forever. Secrets stay host-local file paths.
 - A node has no grid of its own. A mount lands on the remote's home.
   Plugins and connections live on the + menu's top row.
 - The web door always has a password (the minted 0600 `web-password` file;

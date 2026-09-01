@@ -3,7 +3,8 @@
 A plugin is a separate program (or a compiled-in factory) that serves the
 `plugin.v1` gRPC service (`api/plugin/v1/plugin.proto`). It answers in its
 own stable string keys — a path, a message id, a todo id — and never sees
-ids, layout, or a database. The node mints ids against your keys, stores
+ids, layout, or a database. It keeps no node fact; what it may keep is its own
+memory of its source, in the directory the node hands it (`state_dir`). The node mints ids against your keys, stores
 placement and framing, and serves the full Gridwell surface on your behalf.
 The host never knows your name; every behavior rides a declaration on the
 wire.
@@ -27,7 +28,13 @@ api. `gitlab` is the worked example. `fs` is the fullest surface.
   keys). The first serve mints the entry's id.
 - **Main**: `guest.Main(YourFromConfig)`, or `guest.Serve(yourImpl)`. Config
   arrives as a JSON map in `GRIDWELL_PLUGIN_CONFIG` (`guest.Config()`): your
-  keys plus `uuid` and `kind`.
+  keys plus `uuid`, `kind` and `state_dir`.
+- **State**: `state_dir` is a directory of your own, `<home>/plugins/<id>`,
+  minted 0700 before you start. Hold no node facts — no ids, no layout, no
+  database. Your own memory of your source is welcome there, under `cache.db`'s
+  contract: disposable, safe for the user to delete, rewarmed by use. Nothing
+  deletes it for you, not even removing your entry from `server.yaml`. Write
+  atomically (temp file, rename), and come up correctly when it is empty.
 - **Keys are forever**: a key names the same thing for the life of the
   plugin. Changing your key scheme orphans every stored reference.
 - **Unimplemented is fine**: a minimal plugin is `Info` + `List` +
