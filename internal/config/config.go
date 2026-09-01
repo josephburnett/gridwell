@@ -171,6 +171,15 @@ func CacheFile(home string) string {
 	return filepath.Join(home, "cache.db")
 }
 
+// PluginStateDir is one plugin's private directory, <home>/plugins/<id>. The
+// node mints it at load and hands the path to the plugin as `state_dir`. What
+// a plugin keeps there is its own memory of its source, never a node fact,
+// under cache.db's contract: disposable, safe to delete by hand, rewarmed by
+// use. Nothing deletes one automatically.
+func PluginStateDir(home, id string) string {
+	return filepath.Join(home, "plugins", id)
+}
+
 // LegacyDBDir is the older per-namespace layout the converter reads:
 // <home>/db/<id>/. See node.Convert.
 func LegacyDBDir(home, id string) string {

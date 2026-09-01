@@ -11,6 +11,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/josephburnett/gridwell/api/compose"
@@ -28,11 +29,11 @@ import (
 // cache under this plugin's policy, and it is the node, not this loader, that
 // decides who is cached. nil means uncached, which is the shape tests use. The
 // node registers its own home and transport around this call.
-func LoadInto(reg *Registry, cfg *config.ServerConfig, st *store.Store,
+func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.Store,
 	front func(namespace.Namespace) namespace.Namespace) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
-		ns, closer, err := loadPlugin(pc, st)
+		ns, closer, err := loadPlugin(pc, home, st)
 		if err == nil && front != nil {
 			ns = front(ns)
 		}
@@ -61,16 +62,14 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, st *store.Store,
 
 // loadPlugin materializes one plugin entry: the subprocess binary, and the
 // adapter joining it with the plugin's namespace of the node's store, as an
-// ordinary namespace.Namespace the router calls in-process.
-func loadPlugin(pc *config.PluginConfig, st *store.Store) (namespace.Namespace, func(), error) {
-	// The plugin's config: its own keys plus identity. A plugin is
-	// stateless by contract; the node's store is never the guest's.
-	cfg := make(map[string]string, len(pc.Config)+2)
-	for k, v := range pc.Config {
-		cfg[k] = v
+// ordinary namespace.Namespace the router calls in-process. home is the
+// Gridwell home config.Home() derived, threaded from the node; the plugin's
+// state directory hangs off it.
+func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespace.Namespace, func(), error) {
+	cfg, err := spawnConfig(pc, home)
+	if err != nil {
+		return nil, nil, err
 	}
-	cfg["uuid"] = pc.ID
-	cfg["kind"] = pc.Kind
 
 	if pc.Binary == "" {
 		return nil, nil, fmt.Errorf("kind %q: no binary path", pc.Kind)
@@ -81,4 +80,32 @@ func loadPlugin(pc *config.PluginConfig, st *store.Store) (namespace.Namespace, 
 	}
 
 	return pluginhost.New(cp, st.Namespace(pc.ID)), cpClose, nil
+}
+
+// spawnConfig is the config map one plugin is spawned with: its own keys, its
+// identity, and state_dir — the private directory the node mints for it at
+// <home>/plugins/<id>, 0700. A plugin holds no node facts; the node's store is
+// never the guest's. What it may keep in that directory is its own memory of
+// its source, under cache.db's contract: disposable, safe to delete, rewarmed
+// by use. Nothing here or anywhere else deletes one — a plugin dropped from
+// server.yaml may come back, and things stay as the user left them.
+//
+// An empty home is an error, not a relative path: a plugin must never write
+// into whatever directory the node happened to start in.
+func spawnConfig(pc *config.PluginConfig, home string) (map[string]string, error) {
+	if home == "" {
+		return nil, fmt.Errorf("no home directory for the plugin's state_dir")
+	}
+	dir := config.PluginStateDir(home, pc.ID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("state dir %s: %w", dir, err)
+	}
+	cfg := make(map[string]string, len(pc.Config)+3)
+	for k, v := range pc.Config {
+		cfg[k] = v
+	}
+	cfg["uuid"] = pc.ID
+	cfg["kind"] = pc.Kind
+	cfg["state_dir"] = dir
+	return cfg, nil
 }

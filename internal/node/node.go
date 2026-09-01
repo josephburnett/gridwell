@@ -115,6 +115,8 @@ func ensureStore(home string, cfg *config.ServerConfig) error {
 
 // Options configures Start.
 type Options struct {
+	// Home is the Gridwell home, from the one config.Home() derivation: the
+	// store, the cache, and every plugin's state directory hang off it.
 	Home string
 	// Cfg is the prepared config: BuildConfig plus any caller adjustments,
 	// such as the bind, a static override, or a forced DisableShells.
@@ -183,7 +185,7 @@ func Start(opts Options) (*Node, error) {
 	// A content plugin gets the engine with no prefetch: its source is
 	// local to this machine, so a crawl on every reconnect would warm
 	// what is already at hand.
-	if err := plugin.LoadInto(reg, cfg, st, func(ns namespace.Namespace) namespace.Namespace {
+	if err := plugin.LoadInto(reg, cfg, opts.Home, st, func(ns namespace.Namespace) namespace.Namespace {
 		return front(ns, sourcecache.Options{})
 	}); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))

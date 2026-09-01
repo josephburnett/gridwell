@@ -4,7 +4,8 @@ package plugin_test
 // gridwell-plugin-fs binary spawned through go-plugin, serving plugin.v1. The
 // loader opens the node-owned store, wraps the adapter, and the registry
 // client sees an ordinary Gridwell namespace. Placement persists in the node's
-// file and the plugin process holds no state at all.
+// file; the plugin holds no node fact, only the private directory the loader
+// mints for it.
 
 import (
 	"context"
@@ -30,7 +31,8 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "docs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dbPath := filepath.Join(t.TempDir(), "gridwell.db")
+	home := t.TempDir()
+	dbPath := config.DBFile(home)
 	st, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +44,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 		Config: map[string]string{"root": root},
 	}}}
 	reg := plugin.NewRegistry()
-	if err := plugin.LoadInto(reg, cfg, st, nil); err != nil {
+	if err := plugin.LoadInto(reg, cfg, home, st, nil); err != nil {
 		t.Fatalf("LoadInto: %v", err)
 	}
 	defer reg.Close()
@@ -87,10 +89,17 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if got.Tile.X != 4 || got.Tile.W != 2 {
 		t.Fatalf("placement not persisted through the subprocess seam: %+v", got.Tile)
 	}
-	// The plugin's memory is the node's one database, and the plugin process
-	// wrote nothing anywhere: its config carries no db path at all.
+	// The arrangement is the node's one database, and the plugin process never
+	// touches it: its config carries no db path at all.
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Fatalf("node database missing: %v", err)
+	}
+	// What the plugin does get is its own directory, minted by the loader
+	// under the home it was threaded, for its own memory of its source.
+	if fi, err := os.Stat(config.PluginStateDir(home, "pfsuuid")); err != nil {
+		t.Fatalf("state dir not minted through the loader: %v", err)
+	} else if perm := fi.Mode().Perm(); perm != 0o700 {
+		t.Errorf("state dir mode = %04o, want 0700", perm)
 	}
 }
 
@@ -114,7 +123,7 @@ func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
 		ID: "pr1234a", Label: "procs", Kind: "proc", Binary: bin,
 		Config: map[string]string{"pid": "abc"},
 	}}}
-	err = plugin.LoadInto(plugin.NewRegistry(), cfg, st, nil)
+	err = plugin.LoadInto(plugin.NewRegistry(), cfg, t.TempDir(), st, nil)
 	if err == nil || !strings.Contains(err.Error(), `pid "abc"`) || !strings.Contains(err.Error(), "pr1234a") {
 		t.Fatalf("LoadInto = %v, want the plugin's own reason, naming it", err)
 	}
