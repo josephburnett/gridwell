@@ -514,10 +514,28 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 // Handshake forwards a namespaced request through the named connection: peel
 // the connection segment, forward the rest to its node export, and re-qualify
 // the answer with the segment.
+//
+// With no namespace it answers for the transport itself, which is what the
+// handshake means everywhere: "tell me about the namespace I am talking to."
+// The transport owns no tiles, so what it has to declare is its connections —
+// each with the landing it has learned, in the transport's own frame
+// ("<conn>/<remote id>"). Rows is the one owner of that fact; the node's own
+// handshake row-builds from the same call, one qualifying hop up. It is the
+// door anything fronting this namespace asks, the source cache's whole-source
+// walk included: a namespace that owns no grids still knows where its content
+// begins.
 func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
 	ns := req.GetNamespace()
 	if ns == "" {
-		return nil, status.Error(codes.InvalidArgument, "remote: Handshake needs a connection namespace")
+		resp := &gridwellv1.HandshakeResponse{}
+		for _, r := range s.Rows(ctx) {
+			resp.Connections = append(resp.Connections, &gridwellv1.ConnectionInfo{
+				Uuid: r.Name, Label: r.Label, RootGridId: r.RootGridID,
+				RootViewCx: r.ViewCx, RootViewCy: r.ViewCy, RootViewZoom: r.ViewZoom,
+				StatusDetail: r.StatusDetail,
+			})
+		}
+		return resp, nil
 	}
 	first, rest, ok := rpc.SplitID(ns)
 	if !ok {

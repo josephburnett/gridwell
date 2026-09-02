@@ -900,3 +900,114 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 	}
 	waitHealth(true, "the healed store never cleared the health")
 }
+
+func TestStaleBitMarksAnswersPastTheirWindow(t *testing.T) {
+	cc, upstream, root, _ := fixture(t)
+	ctx := context.Background()
+	live, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live.GetGrid().GetStale() {
+		t.Error("a live answer must never wear the stale bit")
+	}
+	// Within the window a remembered answer serves as good as live — even
+	// dark, since nothing consults the source.
+	upstream.dark = true
+	fresh, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.GetGrid().GetStale() {
+		t.Error("a within-window answer must not wear the stale bit")
+	}
+	// Past the window it says so on the wire (#256, serve-first edition) —
+	// and stays said while the source is dark, since the revalidation the
+	// read kicks fails transport-shaped and changes nothing.
+	ageGrid(t, cc, root)
+	stale, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stale.GetGrid().GetStale() {
+		t.Error("a remembered answer past its window must say so on the wire (#256)")
+	}
+	// Back alive: the next read still serves the remembered answer, and the
+	// revalidation it kicks lands and clears the bit, which is never stored.
+	upstream.dark = false
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	awaitFresh(t, cc, root)
+	again, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.GetGrid().GetStale() {
+		t.Error("the stale bit leaked into the stored row")
+	}
+}
+
+// degrading is an upstream that answers, but with a degraded grid: the shape a
+// plugin adapter takes when its source goes dark, holding the rows it minted,
+// no source facts, stamped stale. The cache must not remember it, because the
+// degraded answer succeeds and nothing else would ever put the good one
+// back.
+type degrading struct {
+	namespace.Namespace
+	degraded bool
+}
+
+func (d *degrading) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	resp, err := d.Namespace.GetGrid(ctx, in)
+	if err != nil || !d.degraded {
+		return resp, err
+	}
+	resp.Grid.Stale = true
+	resp.Tiles = nil // whatever the source said is missing
+	return resp, nil
+}
+
+func TestAStaleAnswerIsNeverRemembered(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	root, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := local.New(st, nil)
+	if _, err := raw.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	up := &degrading{Namespace: raw}
+	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	up.degraded = true
+	// Age the row so the read revalidates against the degraded upstream; the
+	// revalidation must not store the degraded answer. There is no landing to
+	// await — a stale answer changes nothing — so give it every chance the
+	// no-prefetch test above gives a walk, then look.
+	ageGrid(t, cc, root)
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	cached, _, ok := cc.loadGrid(ctx, root)
+	if !ok {
+		t.Fatal("the good answer was dropped")
+	}
+	if len(cached.GetTiles()) != 1 {
+		t.Fatalf("a stale answer overwrote the good one: %d tiles remembered, want 1", len(cached.GetTiles()))
+	}
+	if cached.GetGrid().GetStale() {
+		t.Fatal("the stale bit was stored")
+	}
+}

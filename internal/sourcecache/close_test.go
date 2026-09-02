@@ -22,9 +22,16 @@ import (
 // network read does.
 type gated struct {
 	namespace.Namespace
+	root    string
 	once    sync.Once
 	entered chan struct{}
 	release chan struct{}
+}
+
+// Handshake is the walk's doorstep: what a namespace answers for itself is
+// where its content begins, and the walk starts at the root declared here.
+func (g *gated) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: "u1", RootGridId: g.root}}}, nil
 }
 
 func (g *gated) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
@@ -43,7 +50,11 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	g := &gated{Namespace: local.New(st, nil), entered: make(chan struct{}), release: make(chan struct{})}
+	root, err := st.RootGridID(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := &gated{Namespace: local.New(st, nil), root: root, entered: make(chan struct{}), release: make(chan struct{})}
 	cache, err := Open(filepath.Join(t.TempDir(), "cache.db"))
 	if err != nil {
 		t.Fatal(err)

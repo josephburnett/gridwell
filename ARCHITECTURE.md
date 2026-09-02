@@ -166,7 +166,8 @@ refetch serves the correction; a verdict evicts the remembered grid so it
 surfaces on the next read. Other reads pass through and remember, and on a
 transport-class failure serve the remembered answer stamped `stale`. Writes
 always pass through, and their responses fold into the remembered rows.
-Prefetch is a per-seam option only the transport takes. A dark node is
+Prefetch is a per-seam option only the transport takes, rooted at the
+connections the fronted namespace's own handshake declares. A dark node is
 answered by the cache. A dark *source* (the plugin answers, its directory
 or API does not) is answered by the durable rows, so a move made during the
 outage still lands; a dark *plugin* has nothing to answer from and fails

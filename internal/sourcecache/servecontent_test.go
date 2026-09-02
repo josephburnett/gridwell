@@ -161,17 +161,13 @@ type pageFake struct {
 	doorFake
 }
 
-func (p *pageFake) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	if p.dark {
-		return nil, status.Error(codes.Unavailable, "tunnel down")
-	}
-	return &pb.InfoResponse{Kind: "fs", RootGridId: "1"}, nil
-}
+// Handshake is the walk's doorstep: the connection it declares is where the
+// walk begins.
 func (p *pageFake) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	if p.dark {
 		return nil, status.Error(codes.Unavailable, "tunnel down")
 	}
-	return &pb.HandshakeResponse{}, nil
+	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: "u1", RootGridId: "1"}}}, nil
 }
 func (p *pageFake) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if p.dark {

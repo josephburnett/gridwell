@@ -101,18 +101,27 @@ func (c *Layer) kickPrefetch() {
 // trigger runs it in the background.
 func (c *Layer) Prefetch(ctx context.Context) {
 	w := &walker{c: c, ctx: ctx, seenGrids: map[string]bool{}, seenTiles: map[string]bool{}, seenNs: map[string]bool{}}
-	info, err := c.Info(ctx, &pb.InfoRequest{})
+	// The roots are what the fronted namespace declares about itself, through
+	// the door every namespace answers on: the handshake with no namespace.
+	// The transport's answer is its connections, each with the landing it
+	// learned; a node-shaped one names its plugins' roots. Info was the old
+	// door and the transport implements none, so the walk returned at its
+	// first line and the whole-source warm silently did nothing.
+	hs, err := c.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		return // dark, or refused, at the doorstep: nothing to walk
 	}
 	roots := []string{}
-	if info.GetRootGridId() != "" {
-		roots = append(roots, info.GetRootGridId())
-	}
-	for _, e := range info.GetMenuEntries() {
-		if e.GetGridId() != "" {
-			roots = append(roots, e.GetGridId())
+	add := func(id string) {
+		if id != "" {
+			roots = append(roots, id)
 		}
+	}
+	for _, conn := range hs.GetConnections() {
+		add(conn.GetRootGridId())
+	}
+	for _, p := range hs.GetPlugins() {
+		add(p.GetRootGridId())
 	}
 	for _, g := range roots {
 		if !w.walkGrid(g) {

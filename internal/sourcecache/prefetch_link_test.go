@@ -13,10 +13,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// linkUpstream is a fake remote node, with qualified ids, the shape a
-// connection really serves: a root grid holding one leaf link whose target
-// lives in a grid no well references. The link arm is the target's only warm
-// path, which is the case the walker promises to cover.
+// linkUpstream is a fake transport, with qualified ids, the shape a
+// connection really serves: one connection whose landing is a root grid
+// holding one leaf link whose target lives in a grid no well references. The
+// link arm is the target's only warm path, which is the case the walker
+// promises to cover. The walker's mechanics are what this pins, so the
+// upstream is a stub; the walk against the real transport is the seam test.
 type linkUpstream struct {
 	namespace.Namespace
 	dark bool
@@ -24,18 +26,13 @@ type linkUpstream struct {
 
 func (u *linkUpstream) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
 
-func (u *linkUpstream) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	if u.dark {
-		return nil, u.offline()
-	}
-	return &pb.InfoResponse{Kind: "remote", RootGridId: "u1/g1"}, nil
-}
-
+// Handshake is where the walk's roots come from: what this namespace answers
+// for itself is its connection and the landing it learned.
 func (u *linkUpstream) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
-	return &pb.HandshakeResponse{}, nil
+	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: "u1", RootGridId: "u1/g1"}}}, nil
 }
 
 func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
