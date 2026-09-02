@@ -1,9 +1,13 @@
-// plugin.proto is the plugin interface. A plugin is stateless: it answers
-// from its source — a directory tree, the process table, a mail account —
-// in its own stable string keys, and never sees ids, layout, or a database.
-// The node owns all of those. It mints ids against keys, keeps the
+// plugin.proto is the plugin interface. A plugin holds no node fact: it
+// answers from its source — a directory tree, the process table, a mail
+// account — in its own stable string keys, and never sees ids, layout, or a
+// database. The node owns all of those. It mints ids against keys, keeps the
 // arrangement as a namespace of its own store, and serves the full Gridwell
 // surface to clients, so a plugin is invisible on the federation wire.
+//
+// What a plugin MAY keep is its own memory of its source, in the private
+// directory the node hands it at spawn (`state_dir`), under cache.db's
+// contract: disposable, safe to delete, rewarmed by use.
 //
 // Key stability is the plugin's one hard contract: a key names the same
 // logical thing forever — a path relative to the configured root, a
