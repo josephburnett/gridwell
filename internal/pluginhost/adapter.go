@@ -37,6 +37,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"sync"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,6 +50,19 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
+// Supervisor is whoever owns the plugin's subprocess, as the adapter sees it:
+// a source of health to announce on this namespace's event stream. The
+// adapter never decides liveness itself and keeps no state about it — it asks
+// the owner (internal/plugin.Supervisor). nil is an unsupervised adapter,
+// which still has a stream, just no health on it.
+type Supervisor interface {
+	// Health is the current state: up, or down with the reason.
+	Health() (healthy bool, detail string)
+	// OnHealth registers a listener for every transition until cancel runs.
+	// The listener must not block.
+	OnHealth(func(healthy bool, detail string)) (cancel func())
+}
+
 // Adapter implements namespace.Namespace over one plugin and its namespace of
 // the node's store. The router calls it as a Go value, and the one gRPC hop
 // underneath is the plugin.v1 subprocess, the third-party door.
@@ -56,14 +70,23 @@ type Adapter struct {
 	namespace.Unimplemented
 	cp  pluginv1.PluginClient
 	mem *store.Namespace
+	sup Supervisor
+
+	// subs are this namespace's event subscribers. The stream is the
+	// adapter's own: the supervisor's health, and the grids the adapter's own
+	// writes changed. Nothing else can see either.
+	subsMu sync.Mutex
+	subs   map[int]chan *gridwellv1.Event
+	subSeq int
 }
 
 // A plugin reaches the router as a Go value; the compiler is what says so.
 var _ namespace.Namespace = (*Adapter)(nil)
 
-// New builds the adapter. The caller owns both halves' lifecycles.
-func New(cp pluginv1.PluginClient, mem *store.Namespace) *Adapter {
-	return &Adapter{cp: cp, mem: mem}
+// New builds the adapter. The caller owns both halves' lifecycles. sup may be
+// nil for an adapter whose plugin nobody supervises.
+func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapter {
+	return &Adapter{cp: cp, mem: mem, sup: sup, subs: map[int]chan *gridwellv1.Event{}}
 }
 
 // Info translates the plugin handshake, minting the root context's grid id
@@ -78,19 +101,21 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		DisplayName: ci.DisplayName,
 		Glyph:       ci.Glyph,
 		// Watch and Writable are the adapter's declarations, not the
-		// plugin's: the node-facing Info describes the doors this adapter
-		// opens. It has no Subscribe, so a passed-through watch:true would
-		// send the server's watchPlugin into Unimplemented retries forever,
-		// and no WriteContent, so a passed-through writable:true would offer
-		// editing that is then refused. Both stay false until the adapter
-		// carries them — Subscribe over cp.Watch, mapping ContextChanged to
-		// GridChanged by context id and EntryRemoved to TileRemoved by the id
-		// map, and WriteContent forwarding by key — at which point they
-		// follow ci again. The cache layer that fronts every adapter
-		// re-declares watch over its own stream (sourcecache.Layer.Subscribe,
-		// the revalidation's GridChanged), so the fan-in still reaches a
-		// plugin namespace; false here stays the adapter's own truth.
-		Watch:    false,
+		// plugin's: the node-facing Info describes the doors THIS ADAPTER
+		// opens, and the plugin's own answer says nothing about them.
+		//
+		// Watch is true because the adapter has a stream of its own
+		// (Subscribe below): the supervisor's health, and the grids its own
+		// writes changed. It does not yet relay the plugin's cp.Watch —
+		// mapping ContextChanged to GridChanged by context id and
+		// EntryRemoved to TileRemoved by the id map — so a plugin that
+		// watches its source is still polled by the client; the door the node
+		// sees is open either way.
+		//
+		// Writable is false because there is no WriteContent here: a
+		// passed-through writable:true would offer editing that is then
+		// refused. It follows ci again when the adapter carries the verb.
+		Watch:    true,
 		Writable: false,
 	}
 	for _, m := range ci.MenuEntries {
@@ -121,6 +146,95 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		}
 	}
 	return resp, nil
+}
+
+// Subscribe serves this namespace's event stream. It carries what the adapter
+// itself can see and nothing else: the supervisor's health — the subprocess
+// died, the subprocess came back — and a GridChanged for a grid one of the
+// adapter's own writes changed, so a second pane standing in that grid
+// repaints instead of holding a placement the user has since moved.
+//
+// A subscriber that arrives while the plugin is DOWN is told so at once —
+// nothing else would tell it until the recovery, and a client that has been
+// staring at failed reads deserves the reason. A healthy plugin announces
+// nothing on connect: healthy is what a client already assumes, and the event
+// costs it a full resync (client/wasm reportPluginHealth), so saying it would
+// make every reconnect re-fetch every plugin for no news.
+func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	id, ch := a.addSub()
+	defer a.removeSub(id)
+	if a.sup != nil {
+		cancel := a.sup.OnHealth(func(healthy bool, detail string) { a.emitHealth(healthy, detail) })
+		defer cancel()
+		if healthy, detail := a.sup.Health(); !healthy {
+			if err := send(healthEvent(healthy, detail)); err != nil {
+				return err
+			}
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev := <-ch:
+			if err := send(ev); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (a *Adapter) addSub() (int, chan *gridwellv1.Event) {
+	ch := make(chan *gridwellv1.Event, 64)
+	a.subsMu.Lock()
+	defer a.subsMu.Unlock()
+	a.subSeq++
+	a.subs[a.subSeq] = ch
+	return a.subSeq, ch
+}
+
+func (a *Adapter) removeSub(id int) {
+	a.subsMu.Lock()
+	defer a.subsMu.Unlock()
+	delete(a.subs, id)
+}
+
+// emit hands one event to every subscriber. A subscriber too far behind to
+// take it loses it rather than blocking the writer: every event on this stream
+// is a cue to look again, never a fact only it carries.
+func (a *Adapter) emit(ev *gridwellv1.Event) {
+	a.subsMu.Lock()
+	defer a.subsMu.Unlock()
+	for _, ch := range a.subs {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+}
+
+// healthEvent is one health state as this namespace announces it. The uuid
+// rides empty: the server's fan-in fills in the namespace the event came from
+// (rpc.QualifyEventIDs).
+func healthEvent(healthy bool, detail string) *gridwellv1.Event {
+	return &gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{
+		PluginHealth: &gridwellv1.EventPluginHealth{Healthy: healthy, Detail: detail},
+	}}
+}
+
+func (a *Adapter) emitHealth(healthy bool, detail string) { a.emit(healthEvent(healthy, detail)) }
+
+// emitGridChanged announces that a grid this adapter serves has changed. The
+// id is the grid's canonical address — the one every client holds, since a
+// grid keeps its address as its name (canonicalGridID) — so a listener does
+// not have to know whether the write minted anything.
+func (a *Adapter) emitGridChanged(gridID string) {
+	if gridID == "" {
+		return
+	}
+	a.emit(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{
+		GridChanged: &gridwellv1.GridChanged{GridId: gridID},
+	}})
 }
 
 // engineEntries converts listing entries for the store's merge.
@@ -652,7 +766,7 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err := a.mem.Place(id, req.X, req.Y, req.W, req.H); err != nil {
 		return nil, err
 	}
-	return a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
+	return a.changed(a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)}))
 }
 
 // resolveGridContext is resolveGrid's context half, for the callers that only
@@ -689,7 +803,17 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())
 		}
 	}
-	return a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
+	return a.changed(a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)}))
+}
+
+// changed announces the grid a write landed in, on the way back out with the
+// write's own answer: the answer names the grid, so no caller has to resolve
+// it a second time and no write can forget to say what it moved.
+func (a *Adapter) changed(resp *gridwellv1.TileResponse, err error) (*gridwellv1.TileResponse, error) {
+	if err == nil {
+		a.emitGridChanged(resp.GetTile().GetGridId())
+	}
+	return resp, err
 }
 
 // SetFraming persists framing into this plugin's namespace of the store: the
@@ -712,6 +836,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 		if err := a.mem.SetFraming(0, gid, f); err != nil {
 			return nil, err
 		}
+		a.emitGridChanged(gridAddr(ckey))
 		return &gridwellv1.SetFramingResponse{}, nil
 	}
 	id, err := a.mint(ctx, req.TileId)
@@ -721,7 +846,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	if err := a.mem.SetFraming(id, 0, f); err != nil {
 		return nil, err
 	}
-	t, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
+	t, err := a.changed(a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)}))
 	if err != nil {
 		return nil, err
 	}
@@ -832,5 +957,6 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 			return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)
 		}
 	}
+	a.emitGridChanged(gridAddr(ref.context))
 	return &gridwellv1.DeleteTileResponse{}, nil
 }

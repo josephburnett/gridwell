@@ -123,12 +123,12 @@ func Spawn(t *testing.T, kind string, cfg map[string]string) pluginv1.PluginClie
 func SpawnCloser(t *testing.T, kind string, cfg map[string]string) (pluginv1.PluginClient, func()) {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	cp, kill, err := compose.LoadPlugin(Binary(t, kind), withStateDir(t, cfg))
+	proc, err := compose.LoadPlugin(Binary(t, kind), withStateDir(t, cfg))
 	if err != nil {
 		t.Fatalf("spawn gridwell-plugin-%s: %v", kind, err)
 	}
-	t.Cleanup(kill)
-	return cp, kill
+	t.Cleanup(proc.Kill)
+	return pluginv1.NewPluginClient(proc.Conn), proc.Kill
 }
 
 // withStateDir copies cfg with a state_dir, the private directory the loader

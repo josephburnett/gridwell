@@ -63,7 +63,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) *rpc.Client {
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
-	client := pluginhost.New(cp, memStore.Namespace("p1"))
+	client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
 	srv := servertest.New(t, reg, server.Config{})

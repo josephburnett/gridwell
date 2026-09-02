@@ -57,7 +57,7 @@ func gitlabStackAt(t *testing.T, memPath string, cfg map[string]string) (namespa
 		t.Fatal(err)
 	}
 	cp, kill := plugintest.SpawnCloser(t, "gitlab", cfg)
-	client := pluginhost.New(cp, memStore.Namespace("p1"))
+	client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
 	return client, cp, func() { kill(); _ = memStore.Close() }
 }
 

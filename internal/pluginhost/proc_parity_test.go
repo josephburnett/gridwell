@@ -71,7 +71,7 @@ func pluginProcNodeAt(t *testing.T, memPath string) *rpc.Client {
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
 	cp := plugintest.Spawn(t, "proc", map[string]string{"pid": strconv.Itoa(os.Getpid())})
-	client := pluginhost.New(cp, memStore.Namespace("p1"))
+	client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
 	reg := plugin.NewRegistry()
 	reg.Register(procUUID, "proc", client, nil)
 	srv := servertest.New(t, reg, server.Config{})

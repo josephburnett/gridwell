@@ -24,12 +24,13 @@ func (capsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRe
 	return &pluginv1.InfoResponse{Kind: "caps", DisplayName: "caps", RootContext: "r", Watch: true, Writable: true}, nil
 }
 
-// The adapter must never declare a door it cannot open. It has no Subscribe,
-// so a declared watch:true would send the server's watchPlugin into
-// Unimplemented retries forever, and no WriteContent, so a declared
-// writable:true would offer editing the adapter refuses. Until it implements
-// them, the node-facing Info answers both false whatever the plugin
-// declares.
+// The adapter declares the doors IT opens, never the plugin's. It has a
+// Subscribe of its own — the supervisor's health and the grids its writes
+// changed — so watch is true whatever the plugin says; it has no WriteContent,
+// so a declared writable:true would offer editing the adapter refuses, and
+// writable stays false whatever the plugin says. Each declaration is checked
+// against the verb behind it, because a door that is declared and not there
+// sends the server's watchPlugin into Unimplemented retries forever.
 func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
@@ -41,20 +42,22 @@ func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(cpCloser)
-	client := pluginhost.New(cp, memStore.Namespace("p1"))
+	client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
 	ctx := context.Background()
 
 	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Watch || info.Writable {
-		t.Errorf("Info = watch %v writable %v; the adapter opens neither door", info.Watch, info.Writable)
+	if !info.Watch || info.Writable {
+		t.Errorf("Info = watch %v writable %v; the adapter opens the first door and not the second", info.Watch, info.Writable)
 	}
-	// The declarations must agree with the verbs.
-	serr := client.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(*gridwellv1.Event) error { return nil })
-	if status.Code(serr) != codes.Unimplemented {
-		t.Errorf("Subscribe answered %v; a false watch declaration must mean no stream", serr)
+	// The declarations must agree with the verbs. The stream lives as long as
+	// its context, so the context ending is how it ends — never Unimplemented.
+	subCtx, subCancel := context.WithCancel(ctx)
+	subCancel()
+	if serr := client.Subscribe(subCtx, &gridwellv1.SubscribeRequest{}, func(*gridwellv1.Event) error { return nil }); serr != nil {
+		t.Errorf("Subscribe answered %v; a true watch declaration must mean a stream", serr)
 	}
 	_, werr := client.WriteContent(ctx, func() (*gridwellv1.WriteContentRequest, error) {
 		return &gridwellv1.WriteContentRequest{TileId: "1"}, nil
@@ -113,7 +116,7 @@ func TestGridWearsThePluginsDeclarations(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(cpCloser)
-			client := pluginhost.New(cp, memStore.Namespace("p1"))
+			client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
 			ctx := context.Background()
 
 			info, err := client.Info(ctx, &gridwellv1.InfoRequest{})

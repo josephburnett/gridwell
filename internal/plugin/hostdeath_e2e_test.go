@@ -34,7 +34,7 @@ func TestHelperPluginHost(t *testing.T) {
 	if os.Getenv("GRIDWELL_TEST_HOST") != "1" {
 		t.Skip("helper process body; run only via re-exec")
 	}
-	_, closer, err := compose.LoadPlugin(os.Getenv("GRIDWELL_TEST_PLUGIN_BIN"), map[string]string{
+	proc, err := compose.LoadPlugin(os.Getenv("GRIDWELL_TEST_PLUGIN_BIN"), map[string]string{
 		"root": os.Getenv("GRIDWELL_TEST_PLUGIN_ROOT"),
 		"uuid": "hostdeath",
 		"kind": "fs",
@@ -43,7 +43,7 @@ func TestHelperPluginHost(t *testing.T) {
 		fmt.Printf("HELPER-ERR %v\n", err)
 		os.Exit(1)
 	}
-	defer closer()
+	defer proc.Kill()
 	// Report the plugin child pid: the only child of this process.
 	out, err := exec.Command("pgrep", "-P", strconv.Itoa(os.Getpid())).Output()
 	if err != nil {

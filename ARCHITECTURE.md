@@ -132,8 +132,11 @@ socket, so they survive restarts.
 
 **Plugins** speak `plugin.v1`. They live in their own repository,
 `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc and gitlab
-plugins and anyone else's alike, on the same footing. A plugin holds no node
-fact. It answers in its own stable string keys and never sees ids, layout, or
+plugins and anyone else's alike, on the same footing. Each runs as a
+supervised subprocess (`internal/plugin`, the one owner of whether a plugin
+is alive): one that dies is respawned with a backoff, the down and up reach
+the strip as that namespace's health event, and while it is down its calls
+fail honestly — nothing answers for it. A plugin holds no node fact. It answers in its own stable string keys and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to
 it as `state_dir` at spawn: its own memory of its source, under cache.db's
 contract — disposable, safe to delete, rewarmed by use, and never deleted by

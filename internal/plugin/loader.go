@@ -5,7 +5,9 @@
 //
 // A loaded plugin reaches the registry as a namespace.Namespace, a Go value
 // the router calls directly. The plugin.v1 subprocess underneath is one of
-// the node's only two gRPC hops.
+// the node's only two gRPC hops, and it is SUPERVISED (supervisor.go): this
+// package is the one owner of whether a plugin is alive, respawns the ones
+// that die, and is where the health the strip shows comes from.
 package plugin
 
 import (
@@ -14,8 +16,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -55,11 +57,16 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.St
 	return nil
 }
 
-// loadPlugin materializes one plugin entry: the subprocess binary, and the
+// loadPlugin materializes one plugin entry: the supervised subprocess, and the
 // adapter joining it with the plugin's namespace of the node's store, as an
 // ordinary namespace.Namespace the router calls in-process. home is the
 // Gridwell home config.Home() derived, threaded from the node; the plugin's
 // state directory hangs off it.
+//
+// The client is built over the SUPERVISOR, not over one process: a respawn
+// swaps the process underneath it, so nothing here ever holds a handle to a
+// dead one. The supervisor is also the adapter's source of health, which is
+// what the namespace's event stream announces.
 func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespace.Namespace, func(), error) {
 	cfg, err := spawnConfig(pc, home)
 	if err != nil {
@@ -69,12 +76,12 @@ func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespac
 	if pc.Binary == "" {
 		return nil, nil, fmt.Errorf("kind %q: no binary path", pc.Kind)
 	}
-	cp, cpClose, err := compose.LoadPlugin(pc.Binary, cfg)
+	sup, err := Supervise(pc.ID, pc.Kind, pc.Binary, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return pluginhost.New(cp, st.Namespace(pc.ID)), cpClose, nil
+	return pluginhost.New(pluginv1.NewPluginClient(sup), st.Namespace(pc.ID), sup), sup.Close, nil
 }
 
 // spawnConfig is the config map one plugin is spawned with: its own keys, its

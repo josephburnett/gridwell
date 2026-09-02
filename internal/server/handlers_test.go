@@ -47,7 +47,7 @@ func newPluginClient(t *testing.T, kind string, cfg map[string]string) namespace
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
 	cp := plugintest.Spawn(t, kind, cfg)
-	return pluginhost.New(cp, memStore.Namespace("p1"))
+	return pluginhost.New(cp, memStore.Namespace("p1"), nil)
 }
 
 func registerPluginPlugin(t *testing.T, reg *plugin.Registry, uuid, kind string, cfg map[string]string) {

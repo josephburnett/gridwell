@@ -44,7 +44,7 @@ func lazyStack(t *testing.T) (cl *rpc.Client, st *store.Store, hs httpServer, fs
 	// The plugin's namespace is a namespace of THIS store, not a store of its
 	// own: the whole question is what lands in the node's one file.
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": fsRoot})
-	reg.Register(fsPluginUUID, "fs", pluginhost.New(cp, s.Namespace(fsPluginUUID)), nil)
+	reg.Register(fsPluginUUID, "fs", pluginhost.New(cp, s.Namespace(fsPluginUUID), nil), nil)
 	reg.SetLabel(fsPluginUUID, "files")
 	srv := mustNew(t, reg, Config{})
 	h := serveWeb(t, srv)

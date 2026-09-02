@@ -46,7 +46,7 @@ func gitlabNode(t *testing.T, gl *gitlabfake.Server) *rpc.Client {
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
 	cp := plugintest.Spawn(t, "gitlab", gl.Config(t, nil))
-	client := pluginhost.New(cp, memStore.Namespace("p1"))
+	client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
 	reg := plugin.NewRegistry()
 	reg.Register(gitlabUUID, "gitlab", client, nil)
 	srv, err := server.New(reg, server.Config{Password: "test-password"})

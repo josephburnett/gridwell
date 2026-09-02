@@ -42,8 +42,12 @@ func (p *pluginGRPCPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) erro
 	return nil
 }
 
+// GRPCClient hands the host the CONNECTION, not a typed client. A supervisor
+// keeps one plugin.v1 client for the life of the plugin and swaps the process
+// underneath it (internal/plugin), which it can only do if it owns the
+// connection the client is built over.
 func (p *pluginGRPCPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return pluginv1.NewPluginClient(c), nil
+	return c, nil
 }
 
 // PluginMap is the plugin map for plugin binaries — impl set on
@@ -54,10 +58,31 @@ func PluginMap(impl pluginv1.PluginServer) map[string]plugin.Plugin {
 	}
 }
 
-// LoadPlugin spawns a plugin binary and hands back the connected
-// client: the config map rides the spawn environment, the host pid rides
-// with it for the guest's host-death watchdog.
-func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient, func(), error) {
+// Process is one running plugin subprocess: the connection every plugin.v1
+// call rides, the id of the process behind it, whether it is still there, and
+// the kill. A supervisor holds one and replaces it when the process goes away.
+type Process struct {
+	// Conn is the plugin.v1 connection. Build a client over it with
+	// pluginv1.NewPluginClient.
+	Conn   grpc.ClientConnInterface
+	client *plugin.Client
+}
+
+// ID names the running process — its pid — so a log line can say which one
+// died.
+func (p *Process) ID() string { return p.client.ID() }
+
+// Exited reports whether the subprocess is gone. It is the whole exit signal
+// go-plugin offers: there is no channel to select on, so a supervisor looks.
+func (p *Process) Exited() bool { return p.client.Exited() }
+
+// Kill terminates the subprocess and waits for it. Safe to call twice.
+func (p *Process) Kill() { p.client.Kill() }
+
+// LoadPlugin spawns a plugin binary and hands back the running process: the
+// config map rides the spawn environment, the host pid rides with it for the
+// guest's host-death watchdog.
+func LoadPlugin(binaryPath string, cfg map[string]string) (*Process, error) {
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:   "plugin-host",
 		Output: hclog.DefaultOutput,
@@ -69,7 +94,7 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient
 	if len(cfg) > 0 {
 		blob, err := json.Marshal(cfg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("plugin %q: marshal config: %w", binaryPath, err)
+			return nil, fmt.Errorf("plugin %q: marshal config: %w", binaryPath, err)
 		}
 		cmd.Env = append(cmd.Env, ConfigEnvVar+"="+string(blob))
 	}
@@ -87,17 +112,17 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient
 	rpcClient, err := client.Client()
 	if err != nil {
 		client.Kill()
-		return nil, nil, fmt.Errorf("plugin dial %q: %w", binaryPath, err)
+		return nil, fmt.Errorf("plugin dial %q: %w", binaryPath, err)
 	}
 	raw, err := rpcClient.Dispense(PluginName)
 	if err != nil {
 		client.Kill()
-		return nil, nil, fmt.Errorf("plugin dispense %q: %w", binaryPath, err)
+		return nil, fmt.Errorf("plugin dispense %q: %w", binaryPath, err)
 	}
-	cp, ok := raw.(pluginv1.PluginClient)
+	conn, ok := raw.(grpc.ClientConnInterface)
 	if !ok {
 		client.Kill()
-		return nil, nil, fmt.Errorf("plugin %q: unexpected type %T", binaryPath, raw)
+		return nil, fmt.Errorf("plugin %q: unexpected type %T", binaryPath, raw)
 	}
-	return cp, client.Kill, nil
+	return &Process{Conn: conn, client: client}, nil
 }

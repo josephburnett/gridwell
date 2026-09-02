@@ -71,7 +71,7 @@ func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	dc := &darkableCP{PluginClient: cp}
 	reg := plugin.NewRegistry()
-	reg.Register(fsUUID, "fs", pluginhost.New(dc, memStore.Namespace("p1")), nil)
+	reg.Register(fsUUID, "fs", pluginhost.New(dc, memStore.Namespace("p1"), nil), nil)
 	srv := servertest.New(t, reg, server.Config{})
 	hs := servertest.Serve(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -151,7 +151,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	t.Cleanup(func() { _ = memStore.Close() })
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	reg := plugin.NewRegistry()
-	reg.Register(fsUUID, "fs", pluginhost.New(cp, memStore.Namespace("p1")), nil)
+	reg.Register(fsUUID, "fs", pluginhost.New(cp, memStore.Namespace("p1"), nil), nil)
 	srv := servertest.New(t, reg, server.Config{})
 	hs := servertest.Serve(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

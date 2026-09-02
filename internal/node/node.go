@@ -179,8 +179,9 @@ func Start(opts Options) (*Node, error) {
 	}
 	// A content plugin is registered bare. Its source is a subprocess on this
 	// machine, so a call to it is a function call; remembering the answers
-	// bought no network round trip and papered over the supervision a
-	// subprocess actually needs.
+	// bought no network round trip. What a subprocess needs instead is
+	// supervision, and internal/plugin gives it one: a plugin that dies is
+	// respawned, and the outage reaches the strip as that namespace's health.
 	if err := plugin.LoadInto(reg, cfg, opts.Home, st); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))
 	}

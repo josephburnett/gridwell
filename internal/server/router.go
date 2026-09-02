@@ -842,8 +842,10 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 // client's stream, re-qualifying each event's ids with the emitting
 // namespace's uuid. A namespace declares that it emits events through
 // Info.watch, a capability from the handshake and never the kind string, so a
-// remote node's events flow exactly like a local plugin's. fs and proc report
-// watch=false and are polled through GetGrid. With no single root, a client
+// remote node's events flow exactly like a local plugin's. A plugin namespace
+// declares watch for the adapter's own stream — its supervisor's health, and
+// the grids its writes changed — not for the plugin's view of its source,
+// which the client still polls through GetGrid. With no single root, a client
 // subscribes to the whole federation at once.
 //
 // Failures surface and heal rather than silently ending a namespace's events
