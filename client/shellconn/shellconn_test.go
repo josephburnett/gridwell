@@ -85,3 +85,29 @@ func TestDecideAutoLive(t *testing.T) {
 		})
 	}
 }
+
+// A click on a url in a live shell belongs to Gridwell alone whenever the
+// application would otherwise be told about it too.
+func TestDecideLinkPress(t *testing.T) {
+	for _, c := range []struct {
+		name        string
+		hoveredURL  string
+		tracking    string
+		modifier    bool
+		wantSwallow bool
+	}{
+		{"link, tracking application", "https://x/", "vt200", false, true},
+		{"link, x10 tracking", "https://x/", "x10", false, true},
+		{"link, any tracking", "https://x/", "any", false, true},
+		{"link, no tracking: xterm's own selection start", "https://x/", "none", false, false},
+		{"link, terminal did not answer", "https://x/", "", false, false},
+		{"link, modifier: the escape hatch stays", "https://x/", "any", true, false},
+		{"no link, tracking application", "", "any", false, false},
+		{"no link, no tracking", "", "none", false, false},
+	} {
+		if got := DecideLinkPress(c.hoveredURL, c.tracking, c.modifier); got != c.wantSwallow {
+			t.Errorf("%s: DecideLinkPress(%q, %q, %v) = %v, want %v",
+				c.name, c.hoveredURL, c.tracking, c.modifier, got, c.wantSwallow)
+		}
+	}
+}

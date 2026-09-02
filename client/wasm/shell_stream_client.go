@@ -42,11 +42,23 @@ type shellStreamConn struct {
 
 	onData         js.Func   // term.onData(bytes string) callback
 	onResize       js.Func   // term.onResize({cols, rows})
-	onMouse        js.Func   // container right-button → canvas gesture pipeline
+	onMouse        js.Func   // container mouse events: right-button gesture, focus, link press
 	onLinkProvide  js.Func   // xterm link provider: scans lines for http(s) urls
 	onLinkActivate js.Func   // shared link click handler → ephemeral url descent
+	onLinkHover    js.Func   // shared link hover → hoveredURL
+	onLinkLeave    js.Func   // shared link leave → hoveredURL cleared
 	onOSCURL       js.Func   // OSC 5522 from the gridwell-open shim → ephemeral url descent
 	touchFns       []js.Func // the container's overlay-touch handlers (installOverlayTouch)
+
+	// hoveredURL is the link the pointer is on, or "" for none. The fact is
+	// xterm's linkifier's — it owns the hit test — published here by the
+	// hover and leave callbacks the link provider hands it, which is also
+	// exactly when a click would activate that link.
+	hoveredURL string
+	// pendingLink is the url of a press this overlay took from xterm
+	// (shellconn.DecideLinkPress), held until the click that completes it
+	// opens it. "" when the last press was the terminal's.
+	pendingLink string
 
 	closed bool
 
@@ -223,28 +235,64 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	style.Set("height", "200px")
 	doc.Get("body").Call("appendChild", container)
 
+	// conn is assigned below, once the terminal exists; the handlers
+	// installed here read it when an event arrives, never before.
+	var conn *shellStreamConn
+
 	// The overlay paints above the canvas and would otherwise swallow the
 	// right-button mousedown that starts a pane gesture, leaving split,
 	// clone, and resize reachable only from the thin border ring. Forward
 	// the right button into the same canvas gesture pipeline every other
 	// tile uses; the left button stays with xterm — typing, caret,
 	// selection — except for its pane-focus side effect, handled inline
-	// below. Once onMouseDown sets a right gesture, draw() parks this
-	// overlay (liveOverlaysHidden), so the rest of the drag lands on the
-	// canvas.
+	// below, and a press on a link, which is Gridwell's alone. Once
+	// onMouseDown sets a right gesture, draw() parks this overlay
+	// (liveOverlaysHidden), so the rest of the drag lands on the canvas.
 	onMouse := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
-		if ev.Get("type").String() == "contextmenu" {
+		switch ev.Get("type").String() {
+		case "contextmenu":
 			ev.Call("preventDefault")
+			return nil
+		case "mouseup", "click":
+			// The tail of a press this overlay took from xterm. Swallow it
+			// too — xterm must neither report the release to the
+			// application nor activate the link itself — and open the url
+			// on the click that completes the press.
+			if conn == nil || conn.pendingLink == "" {
+				return nil
+			}
+			ev.Call("preventDefault")
+			ev.Call("stopPropagation")
+			if ev.Get("type").String() == "click" {
+				url := conn.pendingLink
+				conn.pendingLink = ""
+				a.shellURLActivate(p.ID, url)
+			}
 			return nil
 		}
 		if ev.Get("button").Int() != 2 {
-			// Left and middle stay with xterm — typing, caret, selection —
-			// but pane focus still follows the click: the overlay swallows
-			// the mousedown, so the canvas path that normally transfers
-			// focus never runs. Without this, clicking into a terminal from
-			// another pane leaves Gridwell focus behind. The same contract
-			// as the URL view's forwarded left-down.
+			// A press on a link, while the application is tracking the
+			// mouse, is Gridwell's and only Gridwell's: xterm would both
+			// activate the link and report the press, and an application
+			// with clickable links opens the same url again through its own
+			// opener, which is how it reaches the host browser.
+			if conn != nil {
+				conn.pendingLink = ""
+				if ev.Get("button").Int() == 0 && shellconn.DecideLinkPress(
+					conn.hoveredURL, mouseTrackingMode(conn.term), modifierHeld(ev)) {
+					conn.pendingLink = conn.hoveredURL
+					ev.Call("preventDefault")
+					ev.Call("stopPropagation")
+				}
+			}
+			// Left and middle otherwise stay with xterm — typing, caret,
+			// selection — but pane focus still follows the click, link press
+			// included: the overlay swallows the mousedown, so the canvas
+			// path that normally transfers focus never runs. Without this,
+			// clicking into a terminal from another pane leaves Gridwell
+			// focus behind. The same contract as the URL view's forwarded
+			// left-down.
 			if cur := a.tree.FindPane(p.ID); cur != nil {
 				a.focusToPane(cur)
 			}
@@ -263,6 +311,8 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	})
 	// Capture phase so we win over xterm's own inner listeners.
 	container.Call("addEventListener", "mousedown", onMouse, true)
+	container.Call("addEventListener", "mouseup", onMouse, true)
+	container.Call("addEventListener", "click", onMouse, true)
 	container.Call("addEventListener", "contextmenu", onMouse, true)
 
 	// xterm.Terminal({...}). Options are tuned to match Gridwell's
@@ -333,7 +383,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	rows := term.Get("rows").Int()
 	shellLog("open pane=%s tile=%s cols=%d rows=%d", p.ID, tileID, cols, rows)
 
-	conn := &shellStreamConn{
+	conn = &shellStreamConn{
 		term:         term,
 		fitAddon:     fitAddon,
 		renderAddon:  renderAddon,
@@ -358,6 +408,20 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		if len(args) >= 2 && args[1].Type() == js.TypeString {
 			a.shellURLActivate(p.ID, args[1].String())
 		}
+		return nil
+	})
+	// hover and leave are xterm's linkifier telling us which link the pointer
+	// is on — the same state that decides what a click activates. The
+	// overlay's mouse handler reads it to know whose press this is; nothing
+	// else derives it, so there is no second hit test to disagree.
+	conn.onLinkHover = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) >= 2 && args[1].Type() == js.TypeString {
+			conn.hoveredURL = args[1].String()
+		}
+		return nil
+	})
+	conn.onLinkLeave = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		conn.hoveredURL = ""
 		return nil
 	})
 	conn.onLinkProvide = js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -392,6 +456,8 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 			link.Set("range", rng)
 			link.Set("text", s.URL)
 			link.Set("activate", conn.onLinkActivate)
+			link.Set("hover", conn.onLinkHover)
+			link.Set("leave", conn.onLinkLeave)
 			links.Call("push", link)
 		}
 		cb.Invoke(links)
@@ -659,6 +725,33 @@ func (a *App) closeAllShellStreams() {
 	}
 }
 
+// mouseTrackingMode reads xterm's modes.mouseTrackingMode: "none" when no
+// application is tracking the mouse, else the protocol it turned on. ""
+// when the terminal cannot answer, which shellconn.DecideLinkPress reads as
+// not tracking.
+func mouseTrackingMode(term js.Value) string {
+	if !term.Truthy() {
+		return ""
+	}
+	modes := term.Get("modes")
+	if !modes.Truthy() {
+		return ""
+	}
+	m := modes.Get("mouseTrackingMode")
+	if m.Type() != js.TypeString {
+		return ""
+	}
+	return m.String()
+}
+
+// modifierHeld reports whether a mouse event carries any modifier. A held
+// modifier is the terminal's standing escape hatch from a mouse-tracking
+// application, so the overlay leaves those presses alone.
+func modifierHeld(ev js.Value) bool {
+	return ev.Get("altKey").Truthy() || ev.Get("shiftKey").Truthy() ||
+		ev.Get("ctrlKey").Truthy() || ev.Get("metaKey").Truthy()
+}
+
 // releaseShellStream tears down the DOM + js.Func handlers. Called from
 // closeShellStream (local close) and onShellExit (unexpected end).
 func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
@@ -678,6 +771,12 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	}
 	if conn.onLinkActivate.Truthy() {
 		conn.onLinkActivate.Release()
+	}
+	if conn.onLinkHover.Truthy() {
+		conn.onLinkHover.Release()
+	}
+	if conn.onLinkLeave.Truthy() {
+		conn.onLinkLeave.Release()
 	}
 	if conn.onOSCURL.Truthy() {
 		conn.onOSCURL.Release()

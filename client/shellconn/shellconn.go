@@ -119,3 +119,37 @@ func DecideShellRefreshVisible(isShell, hasPreview, aliveKnown, alive bool) Refr
 	}
 	return RefreshVisibility{Probe: true}
 }
+
+// MouseTrackingNone is xterm's modes.mouseTrackingMode value for "the
+// application under the terminal is not tracking the mouse". Any other value
+// ("x10", "vt200", "drag", "any") means every press and release is reported
+// to it. An empty string is a terminal that did not answer, read as not
+// tracking: the swallow below is only ever for the case that is known.
+const MouseTrackingNone = "none"
+
+// DecideLinkPress decides who owns a left-button press in a live shell: the
+// terminal (false), or Gridwell alone (true).
+//
+// It is Gridwell's when the press is over a hovered link while the
+// application is tracking the mouse, because xterm then does both — it
+// activates the hovered link and reports the same press to the application.
+// An application with clickable links opens that url through its own opener
+// on the report, so one click opens the url twice, and the second one leaves
+// for the host browser. A link opens inside Gridwell and nowhere else, so
+// the press is swallowed and Gridwell opens the url itself.
+//
+// Two presses stay the terminal's. With no application tracking the mouse
+// nothing is reported and the press is xterm's own selection start, which
+// must keep working over a url. And a modifier held is the terminal's
+// standing escape hatch from a mouse-tracking application (alt-drag to
+// select), which a swallow would take away.
+//
+// hoveredURL is the link xterm says the pointer is on, "" for none;
+// mouseTracking is xterm's modes.mouseTrackingMode; modifier is whether any
+// of alt, shift, control or meta is held.
+func DecideLinkPress(hoveredURL, mouseTracking string, modifier bool) bool {
+	if hoveredURL == "" || modifier {
+		return false
+	}
+	return mouseTracking != "" && mouseTracking != MouseTrackingNone
+}
