@@ -13,7 +13,7 @@ import (
 // SearchHopTimeout bounds one hop's answer during a search fan-out, so a
 // hung hop — a dead ssh tunnel, say — cannot stall the whole search. It is
 // the one owner for both fan-outs: the server's per-plugin loop and the
-// remote transport's per-connection loop.
+// connection transport's per-connection loop.
 const SearchHopTimeout = 3 * time.Second
 
 // SearchQuery is the parsed form of a Search query: the one grammar every

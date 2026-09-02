@@ -109,7 +109,7 @@ func FederationSocket(home string) string {
 // ("<id>/<name>/…", of idshape.ValidateSegment shape). Renaming it dangles
 // those references. Change Label instead, and retire the old name into
 // retired_names if the connection itself dies. Host set means the ssh
-// bridge; Host empty means a direct dial of Addr. Addr is the remote's
+// bridge; Host empty means a direct dial of Addr. Addr is the far node's
 // connection-door socket path and is required either way.
 type ConnectionConfig struct {
 	Name       string `yaml:"name"`

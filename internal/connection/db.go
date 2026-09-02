@@ -1,7 +1,7 @@
 package connection
 
 // The transport's store: what the node remembers about its connections beyond
-// what server.yaml declares. That is the learned landing, the remote's home
+// what server.yaml declares. That is the learned landing, the far node's home
 // grid id, so a dark remote still has a room to show through the source cache;
 // and the graveyard, since a retired name never returns and its namespace
 // stays reserved forever, so stored references through it stay dangling rather
@@ -18,7 +18,7 @@ import (
 )
 
 // ErrNotFound is the missing-row verdict.
-var ErrNotFound = errors.New("remote: not found")
+var ErrNotFound = errors.New("connection: not found")
 
 // DB is the connection store.
 type DB struct {
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS connections (
 // Close is a no-op; the store owns the handle.
 func NewDB(db *sql.DB) (*DB, error) {
 	if _, err := db.Exec(connSchema); err != nil {
-		return nil, fmt.Errorf("remote: init schema: %w", err)
+		return nil, fmt.Errorf("connection: init schema: %w", err)
 	}
 	return &DB{db: db}, nil
 }

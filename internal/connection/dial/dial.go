@@ -1,6 +1,6 @@
 // Package dial is the transport's dialer: it opens an ssh tunnel to a remote
 // host and dials that node's connection door through it with raw gRPC, over
-// direct-streamlocal. The far end is the remote's node export, the full
+// direct-streamlocal. The far end is the far node's own export, the full
 // Gridwell service routed by the qualified ids each request carries, so a
 // mount is the whole node: the descent lands on its home and every remote
 // plugin is reachable through it. There is no selector and no name
@@ -164,7 +164,7 @@ func (r *redialer) close() {
 // at construction, where they are a misconfiguration to surface. The ssh
 // session itself is established lazily on first use and re-established after
 // any death; see redialer. A connection whose remote is down at construction,
-// or whose tunnel dies later, heals by itself the moment the remote is
+// or whose tunnel dies later, heals by itself the moment the far node is
 // reachable again, and until then every RPC fails loudly and the fan-in health
 // machinery tells the user.
 func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {

@@ -53,7 +53,7 @@ func TestCloneExitWellSharesReferenceNoNewGrid(t *testing.T) {
 		t.Errorf("clone child = %q, want the shared reference %q", clone.ChildGridID, remoteChild)
 	}
 	if after := gridRowCount(t, s); after != before {
-		t.Errorf("clone of an exit well created %d local grid(s); the remote is shared, not copied", after-before)
+		t.Errorf("clone of an exit well created %d local grid(s); the far grid is shared, not copied", after-before)
 	}
 	verifyRefcounts(t, s)
 }

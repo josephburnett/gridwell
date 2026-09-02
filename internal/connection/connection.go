@@ -1,7 +1,7 @@
 // Package connection is the node's transport: its connections to other nodes. A
 // connection is config — a server.yaml `connections:` row naming it, labelling
 // it, and saying how to dial. The transport dials each one, learns where it
-// lands, which is the remote's home, and routes every id shaped
+// lands, which is the far node's home, and routes every id shaped
 // "<conn>/<remote-id…>" to that connection's client, prepending the segment on
 // the way back through rpc.TransitQualifyTiles: the one transit rule, the same
 // one the node applies a level up under its own id.
@@ -40,7 +40,7 @@ import (
 // Dialer builds a namespace over a remote node's export from a resolved
 // config. Production is dial.Dial, whose ssh session is lazy and self-healing,
 // and which reads the far node's gridwell.v1 through the one client codec,
-// namespace.FromClient. Tests inject in-process remotes.
+// namespace.FromClient. Tests inject in-process nodes.
 type Dialer func(cfg dial.Config) (namespace.Namespace, func(), error)
 
 // bootDialWait bounds how long ConnectAll waits for each connection at boot
@@ -74,7 +74,7 @@ type Server struct {
 // Conn is one declared connection with what the store remembers about it.
 type Conn struct {
 	Cfg        config.ConnectionConfig
-	RemoteRoot string // the learned landing (the remote's home grid, in ITS frame); "" until learned
+	RemoteRoot string // the learned landing (the far node's home grid, in ITS frame); "" until learned
 }
 
 // liveConn is one connection's constructed transport. Constructing is cheap
@@ -244,7 +244,7 @@ type forward struct {
 }
 
 // route resolves the connection an id chains through: the first segment is the
-// connection name, and the rest is the remote's own id, forwarded verbatim
+// connection name, and the rest is the far node's own id, forwarded verbatim
 // whatever shape its segments take. A TILE segment in first position — a row
 // id, or a key form naming an entry on the far node — is malformed, because
 // the transport owns no tiles of its own; rpc.IsTileSegment is the same
@@ -252,17 +252,17 @@ type forward struct {
 func (s *Server) route(ctx context.Context, id string) (*forward, string, error) {
 	first, rest, ok := rpc.SplitID(id)
 	if !ok {
-		return nil, "", status.Errorf(codes.InvalidArgument, "remote: id %q names no connection", id)
+		return nil, "", status.Errorf(codes.InvalidArgument, "connection: id %q names no connection", id)
 	}
 	if rpc.IsTileSegment(first) {
-		return nil, "", status.Errorf(codes.InvalidArgument, "remote: id %q chains through a tile segment", id)
+		return nil, "", status.Errorf(codes.InvalidArgument, "connection: id %q chains through a tile segment", id)
 	}
 	c, ok := s.conns[first]
 	if !ok {
 		if row, err := s.db.Get(ctx, first); err == nil && row.Deleted {
-			return nil, "", status.Errorf(codes.NotFound, "remote: connection %q was retired", first)
+			return nil, "", status.Errorf(codes.NotFound, "connection: connection %q was retired", first)
 		}
-		return nil, "", status.Errorf(codes.NotFound, "remote: no connection %q", first)
+		return nil, "", status.Errorf(codes.NotFound, "connection: no connection %q", first)
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
@@ -274,8 +274,8 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 // dialConfig resolves a declared connection to a dial.Config, applying the
 // host-side defaults: port 22; the key is the first of ~/.ssh/id_ed25519 and
 // ~/.ssh/id_rsa that exists; known_hosts is ~/.ssh/known_hosts. addr, the
-// remote's connection-door socket path, is required either way, because that socket
-// lives under the remote's home, which only the operator knows.
+// far node's connection-door socket path, is required either way, because that
+// socket lives under the far node's home, which only the operator knows.
 func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 	cfg := dial.Config{
 		User:       c.User,
@@ -352,18 +352,18 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	cfg, err := s.dialConfig(c.Cfg)
 	if err != nil {
 		s.rootErr[name] = err.Error()
-		return nil, status.Errorf(codes.FailedPrecondition, "remote: connection %q: %v", name, err)
+		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: %v", name, err)
 	}
 	if s.dial == nil {
 		s.rootErr[name] = "no dialer"
-		return nil, status.Errorf(codes.FailedPrecondition, "remote: connection %q: no dialer", name)
+		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: no dialer", name)
 	}
 	client, closer, err := s.dial(cfg)
 	if err != nil {
 		// Record the bare dial error: the wrapper is routing noise to
 		// whoever reads the row status.
 		s.rootErr[name] = err.Error()
-		return nil, status.Errorf(codes.Unavailable, "remote: connection %q: %v", name, err)
+		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: %v", name, err)
 	}
 	delete(s.rootErr, name) // transport constructed; the learn may still fail
 	ctx, cancel := context.WithCancel(context.Background())
@@ -412,7 +412,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 		return "", err
 	}
 	if info.RootGridId == "" {
-		err := errors.New("the remote declared no home")
+		err := errors.New("the connected node declared no home")
 		s.setRootErr(name, err.Error())
 		return "", err
 	}
@@ -492,11 +492,11 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 		if ctx.Err() != nil {
 			return
 		}
-		detail := "the remote's event stream ended"
+		detail := "the connection's event stream ended"
 		if err != nil {
 			detail = err.Error()
 		}
-		log.Printf("gridwell: remote %s: event stream ended: %v (retrying in 5s)", ns, detail)
+		log.Printf("gridwell: connection %s: event stream ended: %v (retrying in 5s)", ns, detail)
 		if healthy {
 			healthy = false
 			report(false, detail)
@@ -729,10 +729,10 @@ func (s *Server) ServeContent(ctx context.Context, req *gridwellv1.ServeContentR
 func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
 	first, err := recv()
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "remote: write: empty stream")
+		return nil, status.Error(codes.InvalidArgument, "connection: write: empty stream")
 	}
 	if first.TileId == "" {
-		return nil, status.Error(codes.InvalidArgument, "remote: write: first message must bind tile_id")
+		return nil, status.Error(codes.InvalidArgument, "connection: write: first message must bind tile_id")
 	}
 	fw, local, err := s.route(ctx, first.TileId)
 	if err != nil {

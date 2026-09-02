@@ -10,7 +10,7 @@ import (
 func OpenDB(path string) (*DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		return nil, fmt.Errorf("remote: open %q: %w", path, err)
+		return nil, fmt.Errorf("connection: open %q: %w", path, err)
 	}
 	db.SetMaxOpenConns(1)
 	d, err := NewDB(db)

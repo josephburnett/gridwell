@@ -306,7 +306,7 @@ func TestNodeExportContentStreams(t *testing.T) {
 
 // TestNodeExportSearches pins that Search crosses the node export. Why this
 // existed as a gap: the export delegates every unary verb by hand, Search was
-// simply never added, and BOTH downstream layers (the remote transport and
+// simply never added, and BOTH downstream layers (the connection transport and
 // the connect handler's fan-out) treat any per-hop error — Unimplemented
 // included — as "that hop contributes nothing", so a federated search
 // silently answered empty instead of failing loudly anywhere.

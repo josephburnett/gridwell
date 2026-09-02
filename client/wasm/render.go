@@ -1473,7 +1473,7 @@ func drawTriangle(c js.Value, cx, cy, angle, size float64) {
 // drawGridNotice paints a centered, muted status line in a pane whose grid
 // is not in the cache: pane.GridNotice words it (loading vs. unavailable);
 // the plugin's label names the grid when its owner is in the launcher list
-// (a mounted remote's grid falls back to the id — the label is a wire fact
+// (a mounted node's grid falls back to the id — the label is a wire fact
 // this lookup cannot see; see scratchGridForPane).
 func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if r.W < 80 || r.H < 40 {

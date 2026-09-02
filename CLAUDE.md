@@ -107,7 +107,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   rewarmed by use. Nothing deletes one automatically. A connection is
   config: an immutable name, a label, how to dial. Retiring a name is
   forever. Secrets stay host-local file paths.
-- A node has no grid of its own. A mount lands on the remote's home.
+- A node has no grid of its own. A mount lands on the far node's home.
   Plugins and connections live on the + menu's top row.
 - The web door always has a password (the minted 0600 `web-password` file;
   delete it to rotate). The connection door is a 0600 unix socket, never

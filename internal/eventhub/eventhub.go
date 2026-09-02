@@ -1,6 +1,6 @@
 // Package eventhub is the one event fan-out: a publisher never blocks on a
 // slow subscriber and no distinct change is ever dropped. The home store
-// and the remote transport both use it.
+// and the connection transport both use it.
 //
 // Each subscriber owns a coalescing queue drained by a pump goroutine:
 //

@@ -148,7 +148,7 @@ switches on its kind; every plugin behavior rides a wire declaration.
 `docs/plugin-authoring.md` is the contract from the plugin's side.
 
 **Connections** (`internal/connection`) are config rows: an immutable name, a
-label, how to dial. The transport dials each at boot, lands on the remote's
+label, how to dial. The transport dials each at boot, lands on the far node's
 home, and remembers nothing else but retired names (a name never returns).
 A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection

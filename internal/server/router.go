@@ -346,7 +346,7 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		}
 		out.Results = append(out.Results, qualifySearch(false, p.UUID, resp).Results...)
 	}
-	// The connections: the transport fans out to every remote, answering in
+	// The connections: the transport fans out to every connection, answering in
 	// chains this node re-qualifies under its own id.
 	if t, ok := rt.srv.pluginReg.Transport(); ok && rt.srv.cfg.ID != "" {
 		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)

@@ -64,11 +64,11 @@ func ClickNotice(pl rpc.PluginInfo) (sev errsurface.Severity, source, message st
 	case Rootless:
 		// A connection row declares itself with
 		// rpc.PluginKindConnection — the row's own fact, minted by
-		// rpc.ConnectionRow. Rootless there means the remote hasn't
+		// rpc.ConnectionRow. Rootless there means the far node has not
 		// answered yet: a waiting state, not a config gap. Read the
 		// declaration, never the shape of the uuid.
 		if pl.Kind == rpc.PluginKindConnection {
-			return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " — the remote hasn't answered yet; it will open once the connection comes up", true
+			return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " — the connected node hasn't answered yet; it will open once the connection comes up", true
 		}
 		return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " has no root configured — set config.root in server.yaml", true
 	default:

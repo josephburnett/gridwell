@@ -9,7 +9,7 @@ import (
 // The transit qualification rule: how a hop that fronts a whole namespace
 // prepends one segment to ids that are already qualified from the far
 // side's perspective. It lives here, next to the id codec, because two
-// layers apply it — the server's transit stamp and the remote transport,
+// layers apply it — the server's transit stamp and the connection transport,
 // which peels a connection segment exactly as a node peels a plugin
 // segment. One implementation, so the two hops can never disagree about
 // what a chain looks like.
@@ -46,7 +46,7 @@ func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 // further away), and the menu entries' root targets. Everything else rides
 // verbatim, because the far node already stamped its owning plugin's facts.
 // It is the one grid rule for both hops, the server's transit stamp and the
-// remote transport.
+// connection transport.
 func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	if g == nil {
 		return nil
