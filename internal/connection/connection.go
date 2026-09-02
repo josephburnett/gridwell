@@ -109,6 +109,11 @@ var _ namespace.Namespace = (*Server)(nil)
 // config does not declare is tombstoned; and every retired name is reserved in
 // the store forever. home is the host's home directory, and "" means no ~
 // defaults, so keys must be explicit paths.
+//
+// It is also the boot gate on the connections' host-local config: every
+// declared row must resolve to a dial plan whose files are there. A row that
+// cannot is an error, so `serve` refuses to start rather than coming up with
+// a connection that could never have dialed.
 func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
 	s := &Server{db: db, dial: dialer, home: home, conns: map[string]*Conn{},
@@ -126,6 +131,16 @@ func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, re
 		}
 		if retiredSet[c.Name] {
 			return nil, fmt.Errorf("connection %q: this name is RETIRED — a retired name never returns; mint a new one", c.Name)
+		}
+		// The host-local half of the row, checked before the node serves:
+		// a missing addr, a key or known_hosts path that is not there or
+		// not readable. Those are facts this machine can settle, and a
+		// connection that can never dial is a misconfiguration to fail on,
+		// not a row that comes up quietly dark. Whether the far node
+		// answers is deliberately NOT asked here — a laptop on a plane
+		// still serves its home and its cache; see ConnectAll.
+		if _, err := s.dialConfig(c); err != nil {
+			return nil, fmt.Errorf("connection %q: %w", c.Name, err)
 		}
 		row, err := db.Get(ctx, c.Name)
 		if err != nil && !errors.Is(err, ErrNotFound) {
@@ -276,6 +291,12 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 // ~/.ssh/id_rsa that exists; known_hosts is ~/.ssh/known_hosts. addr, the
 // far node's connection-door socket path, is required either way, because that
 // socket lives under the far node's home, which only the operator knows.
+//
+// It is the one owner of what a connection's fields mean, so it is also the
+// one gate on them: the plan it returns is checked, dial.Config.Check, and
+// every host-local file it names is there and readable. New calls it for
+// every declared connection at boot, which is how a bad path fails `serve`
+// instead of leaving the connection dark.
 func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 	cfg := dial.Config{
 		User:       c.User,
@@ -287,7 +308,7 @@ func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 		return dial.Config{}, fmt.Errorf("addr required — the remote node's connection-door socket path (its <home>/federation.sock)")
 	}
 	if c.Host == "" {
-		return cfg, nil // a direct dial of the socket
+		return cfg, nil // a direct dial of the socket: nothing host-local to check
 	}
 	if strings.TrimSpace(c.User) == "" {
 		return dial.Config{}, fmt.Errorf("user is required for an ssh connection")
@@ -311,6 +332,9 @@ func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 			return dial.Config{}, fmt.Errorf("known_hosts path required (no home directory to default from)")
 		}
 		cfg.KnownHosts = filepath.Join(s.home, ".ssh", "known_hosts")
+	}
+	if err := cfg.Check(); err != nil {
+		return dial.Config{}, err
 	}
 	return cfg, nil
 }
@@ -340,8 +364,9 @@ func firstExisting(paths ...string) string {
 }
 
 // ensureLive returns the connection's transport, constructing it on first
-// use. A config-shaped problem (bad key path) surfaces here, loudly, on
-// every attempt.
+// use. New already refused a config-shaped problem at boot, so the same
+// check here catches only what changed underneath a running node — a key
+// file deleted or chmod'ed away — and it surfaces loudly, on every attempt.
 func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	name := c.Cfg.Name
 	s.mu.Lock()

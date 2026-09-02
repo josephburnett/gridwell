@@ -47,6 +47,47 @@ type Config struct {
 	Addr string
 }
 
+// LocalFile is one host-local file a dial plan will open: the server.yaml
+// key that names it and the resolved path.
+type LocalFile struct {
+	Field string // the `connections:` key: "key", "known_hosts"
+	Path  string
+}
+
+// LocalFiles lists the host-local files Dial opens, in the order it opens
+// them. It lives beside the fields it enumerates, so it is the one list: a
+// new path field on Config joins it here, where the field is declared, and
+// Check — and through Check, the boot gate — picks it up with no second
+// copy of what a connection's paths are.
+//
+// A direct dial opens nothing local. Addr is the far node's socket, and
+// whether that socket answers is a network fact, not a config one.
+func (c Config) LocalFiles() []LocalFile {
+	if c.Host == "" {
+		return nil
+	}
+	return []LocalFile{{Field: "key", Path: c.KeyPath}, {Field: "known_hosts", Path: c.KnownHosts}}
+}
+
+// Check reports whether every host-local file this plan needs is there and
+// readable. It is the startup gate: a `key:` with a typo in it is a
+// misconfiguration the operator must see at `serve`, not a connection that
+// comes up quietly dark. It opens each file — existence and permission both,
+// since an unreadable key dials no better than an absent one — and reads
+// nothing further: what the bytes mean is Dial's business, and whether the
+// far node answers is the network's.
+func (c Config) Check() error {
+	for _, f := range c.LocalFiles() {
+		fh, err := os.Open(f.Path)
+		if err != nil {
+			// os.Open's error already carries the exact path.
+			return fmt.Errorf("%s: %w", f.Field, err)
+		}
+		_ = fh.Close()
+	}
+	return nil
+}
+
 // redialer is the one owner of "is the ssh session up". Capturing a single
 // *ssh.Client in the gRPC dialer closure would leave every reconnect attempt
 // tunneling through the same dead session after a laptop sleep, a network
@@ -161,7 +202,8 @@ func (r *redialer) close() {
 // back, so chains compose one segment per hop.
 //
 // Config-shaped failures — an unreadable key, a bad known_hosts — fail here,
-// at construction, where they are a misconfiguration to surface. The ssh
+// at construction, where they are a misconfiguration to surface; Check has
+// already refused the absent ones a boot earlier. The ssh
 // session itself is established lazily on first use and re-established after
 // any death; see redialer. A connection whose remote is down at construction,
 // or whose tunnel dies later, heals by itself the moment the far node is

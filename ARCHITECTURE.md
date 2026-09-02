@@ -154,6 +154,15 @@ A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection
 name, and the same transit rule applies at both hops.
 
+The host-local half of a row is checked before the node serves: a missing
+`addr`, a `key` or `known_hosts` path that is not there or not readable fails
+`serve`, naming the connection and the exact path. Those are facts this
+machine can settle, and a connection that could never dial is a
+misconfiguration, not a row that comes up dark. Whether the far node answers
+is not asked — offline boot is decided behavior, so an unreachable remote
+stays a runtime state, with its reason on its menu row and the cache
+answering for it.
+
 **Cache** (`internal/sourcecache`) is the one read-through cache, in front
 of the one seam that crosses a network — the transport — in one disposable
 file (`cache.db`). A cache earns its keep across a network and nowhere

@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -68,6 +69,8 @@ func TestReconcileDeclaredRetiredAndDropped(t *testing.T) {
 // needs user, defaults port 22 and the ~/.ssh files.
 func TestDialConfigDefaults(t *testing.T) {
 	home := t.TempDir()
+	touch(t, filepath.Join(home, "k"))
+	touch(t, filepath.Join(home, ".ssh", "known_hosts"))
 	s := &Server{home: home}
 	if _, err := s.dialConfig(config.ConnectionConfig{Name: "a", Host: "h", User: "u"}); err == nil || !strings.Contains(err.Error(), "addr required") {
 		t.Fatalf("addr is required: %v", err)
@@ -85,5 +88,62 @@ func TestDialConfigDefaults(t *testing.T) {
 	}
 	if _, err := s.dialConfig(config.ConnectionConfig{Name: "a", Host: "h", User: "u", Addr: "/sock", Port: 70000}); err == nil {
 		t.Fatal("port range")
+	}
+}
+
+// The dial plan is checked, not merely resolved: every host-local file it
+// names must be there. A typo in key: or known_hosts: is a fact this machine
+// can settle, and it is settled here, at the one place config becomes a dial
+// plan, so the boot fails instead of the connection going quietly dark. The
+// error names the field and the exact path.
+func TestDialConfigRefusesAPathThatIsNotThere(t *testing.T) {
+	home := t.TempDir()
+	key := filepath.Join(home, "k")
+	kh := filepath.Join(home, "kh")
+	s := &Server{home: home}
+	ssh := config.ConnectionConfig{Name: "a", Host: "h", User: "u", Addr: "/sock", Key: key, KnownHosts: kh}
+
+	_, err := s.dialConfig(ssh)
+	if err == nil || !strings.Contains(err.Error(), "key") || !strings.Contains(err.Error(), key) {
+		t.Fatalf("a key that is not there must be refused by path: %v", err)
+	}
+	touch(t, key)
+	_, err = s.dialConfig(ssh)
+	if err == nil || !strings.Contains(err.Error(), "known_hosts") || !strings.Contains(err.Error(), kh) {
+		t.Fatalf("a known_hosts that is not there must be refused by path: %v", err)
+	}
+	touch(t, kh)
+	if _, err := s.dialConfig(ssh); err != nil {
+		t.Fatalf("both files present: %v", err)
+	}
+
+	// A direct dial opens no host-local file. Whether the far socket is
+	// there is a network fact, not a config one, so it is not checked.
+	if _, err := s.dialConfig(config.ConnectionConfig{Name: "a", Addr: filepath.Join(home, "no-such.sock")}); err != nil {
+		t.Fatalf("a direct dial of an absent socket is a dark remote, not a misconfiguration: %v", err)
+	}
+}
+
+// New is the boot gate: a declared connection whose host-local config cannot
+// resolve fails transport construction, which is what fails node.Start and so
+// `serve`. The error names the connection.
+func TestNewRefusesAMisconfiguredConnection(t *testing.T) {
+	home := t.TempDir()
+	key := filepath.Join(home, "nope", "id_ed25519")
+	_, err := New(openConnDB(t), nil, home, []config.ConnectionConfig{
+		{Name: "geneva", Host: "h", User: "u", Addr: "/sock", Key: key, KnownHosts: key},
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "geneva") || !strings.Contains(err.Error(), key) {
+		t.Fatalf("the transport must refuse to build, naming the connection and the path: %v", err)
+	}
+}
+
+func touch(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
