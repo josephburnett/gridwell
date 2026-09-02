@@ -1,5 +1,5 @@
 // Package sourcecache is the node's one memory of what a connection last
-// said. It sits in front of the transport — the one seam whose answers cross
+// answered. It sits in front of the transport — the one seam whose answers cross
 // a network — as a read-through layer over one disposable file. Home is the
 // durable store and a plugin is a subprocess a call away; neither is fronted,
 // because a cache earns its keep across a network and nowhere else.

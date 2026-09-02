@@ -66,7 +66,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   both, originals set aside, never deleted. Those are the only config
   writes.
 - The forever file holds node facts only: minted ids, layout, framing, the
-  user's bytes, connections, tombstones. What a source last said is cache.
+  user's bytes, connections, tombstones. What a connection last answered is
+  cache.
 - The storage format is additive by default. Dead storage — no released
   binary reads it for a user-visible meaning, shown by grep — may be
   retired by a rebuild migration that preserves every surviving row. A row

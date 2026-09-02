@@ -183,8 +183,8 @@ honestly.
 
 One database, `gridwell.db`. It holds node facts only: the ids the node
 minted (`ns`, `key` → id), layout, framing, the user's bytes, connections,
-tombstones. What a source last said lives in `cache.db`. The format contract
-is `internal/local/store/CLAUDE.md`.
+tombstones. What a connection last answered lives in `cache.db`. The
+format contract is `internal/local/store/CLAUDE.md`.
 
 **Framing** is one shape: a float center in the grid's own coordinates plus
 a pane-size-independent zoom (the intrinsic ratio, live/overtake). It lives

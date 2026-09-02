@@ -17,8 +17,9 @@ package store
 // These rows are the node's own facts, and they are the whole of what the
 // durable file keeps about a plugin's entries: the id it minted for a key,
 // where the user put it, how it is framed, and the tombstone of a key that
-// went away. What the source last said — listings, bodies, previews — is cache
-// and lives in cache.db, in internal/sourcecache.
+// went away. What a source last answered — listings, bodies, previews — is
+// cache: a connection's answers live in cache.db, in internal/sourcecache, and
+// a plugin's own memory of its source lives in its state_dir. Neither is here.
 //
 // A row exists only once the user has made a durable fact about an entry —
 // moved it, resized it, framed it, or pointed a reference at it. Listing
@@ -27,8 +28,9 @@ package store
 // placement, by the same algorithm Mint stores. So a dark source costs only
 // the rows' worth: the adapter overlays an empty non-authoritative listing
 // and the TOUCHED rows answer, unchanged, stamped stale — an untouched entry
-// has no row and is simply absent until the source speaks again. What the
-// source last said in full is the cache's job, one layer up.
+// has no row and is simply absent until the source speaks again. Remembering
+// what a source last answered in full is the cache's job, one layer up, and it
+// takes that job for a connection only.
 
 import (
 	"context"

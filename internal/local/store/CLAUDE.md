@@ -4,7 +4,7 @@ This package is the node's one database, `<home>/gridwell.db`: home's
 content (`ns = ''`), every plugin's memory as namespaced rows of the same
 tables, and the transport's connections. It holds node facts only: minted
 ids (`ns`, `key` → id), layout, framing, the user's bytes, connections,
-tombstones. What a source last said is cache and lives in `cache.db`
+tombstones. What a connection last answered is cache and lives in `cache.db`
 (`internal/sourcecache`), never here.
 
 A plugin row is minted LAZILY: listing a source writes nothing (`Overlay` is
