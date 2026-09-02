@@ -583,19 +583,22 @@ func TestServeFirstNeverWaitsOnTheSource(t *testing.T) {
 	}
 }
 
-// unwatched is the adapter's shape: a namespace with no event stream of its
-// own. The layer must provide one — its Info says watch, and its Subscribe
-// serves the GridChanged its revalidations emit.
-type unwatched struct {
+// streaming is the transport's shape: a namespace that HAS an event stream of
+// its own, which every connection does. The layer's own stream must reach the
+// subscriber ALONGSIDE it — a revalidation's GridChanged and the cache's
+// health are facts only the layer knows, and an upstream with a stream must
+// not bury them.
+type streaming struct {
 	namespace.Namespace
 }
 
-func (unwatched) Subscribe(context.Context, *pb.SubscribeRequest, func(*pb.Event) error) error {
-	return status.Error(codes.Unimplemented, "no event stream")
+func (streaming) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
+	<-ctx.Done()
+	return nil
 }
 
-func (unwatched) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "test", Watch: false}, nil
+func (streaming) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+	return &pb.InfoResponse{Kind: "test", Watch: true}, nil
 }
 
 // TestRevalidationEmitsGridChanged closes the serve-first loop for a
@@ -613,7 +616,7 @@ func TestRevalidationEmitsGridChanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	up := &unwatched{Namespace: local.New(st, nil)}
+	up := &streaming{Namespace: local.New(st, nil)}
 	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
 
 	info, err := cc.Info(ctx, &pb.InfoRequest{})
@@ -833,7 +836,7 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	up := &unwatched{Namespace: local.New(st, nil)}
+	up := &streaming{Namespace: local.New(st, nil)}
 	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
 
 	subCtx, subCancel := context.WithCancel(ctx)

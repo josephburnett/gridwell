@@ -191,9 +191,9 @@ type Layer struct {
 	revalInflight map[string]bool
 	revalWG       sync.WaitGroup
 
-	// subs are this layer's own event subscribers — the synthetic stream
-	// Subscribe serves when the upstream has none — fed by revalidations
-	// that changed or evicted a grid, and by cache-store health transitions.
+	// subs are this layer's own event subscribers — the stream Subscribe
+	// serves alongside the upstream's — fed by revalidations that changed or
+	// evicted a grid, and by cache-store health transitions.
 	subsMu sync.Mutex
 	subs   map[int]chan *pb.Event
 	subSeq int
@@ -337,11 +337,10 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 				ON CONFLICT(k) DO UPDATE SET proto=excluded.proto`, b)
 			c.noteCache("store info", werr)
 		}
-		// The layer always has an event stream to offer — the upstream's, or
-		// its own synthetic GridChanged (see Subscribe) — so the door it
-		// declares is its own, the same rule the adapter applies to its
-		// plugin. Flipped after the store: what the source said is what is
-		// remembered.
+		// The layer always has an event stream to offer — its own synthetic
+		// GridChanged and cache health, merged with the upstream's (see
+		// Subscribe) — so the door it declares is its own. Flipped after the
+		// store: what the source said is what is remembered.
 		resp.Watch = true
 		return resp, nil
 	}
@@ -739,41 +738,72 @@ func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, vers
 
 // ── Subscribe ───────────────────────────────────────────────────────────
 
-// Subscribe passes the event stream through with a tee: the cache tracks the
-// live session's mutations as the server relays them. With nothing subscribed,
-// reads still refresh on their own; the tee is an accelerator, not the
-// correctness path.
+// Subscribe serves TWO streams as one: the upstream's, teed so the cache
+// tracks the live session's mutations as the server relays them, and the
+// layer's own — the GridChanged a background revalidation emits when it lands
+// a different answer, and the health of the cache itself.
 //
-// An upstream with no event stream — a plugin adapter — gets the layer's own:
-// the GridChanged a background revalidation emits when it lands a different
-// answer. That stream is what closes the serve-first loop for a namespace the
-// node never watched before: stale served, refresh lands, event fires, the
-// client refetches the corrected grid. Info declares watch accordingly.
+// Both, always, because they carry different facts and each is the only source
+// of its own. The layer's stream is what closes the serve-first loop: stale
+// served, refresh lands, event fires, the client refetches the corrected grid.
+// Nothing upstream can know that happened. Serving ours only as a FALLBACK,
+// when the upstream had none, silently dropped both facts for every namespace
+// that does have a stream — which, now that the cache fronts connections
+// alone, is every namespace it fronts. The tee, by contrast, is an
+// accelerator: with nothing subscribed, reads still refresh on their own.
+//
+// Info declares watch on that basis: the layer always has a stream to offer.
 func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	// Every subscription and resubscription is a moment to warm the whole
 	// source: the initial connect and each health-up reconnect land here, so
 	// the walk doubles as the resync for grids nobody re-opened while the
 	// source was dark.
 	c.kickPrefetch()
-	err := c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
-		c.applyEvent(ctx, ev)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// One send at a time: the two streams are relayed by two goroutines and
+	// the caller's send is not concurrent.
+	var sendMu sync.Mutex
+	emit := func(ev *pb.Event) error {
+		sendMu.Lock()
+		defer sendMu.Unlock()
 		return send(ev)
-	})
-	if status.Code(err) != codes.Unimplemented {
-		return err
 	}
 	id, ch := c.addSub()
 	defer c.removeSub(id)
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case ev := <-ch:
-			if serr := send(ev); serr != nil {
-				return serr
+	var ownErr error
+	own := make(chan struct{})
+	go func() {
+		defer close(own)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev := <-ch:
+				if err := emit(ev); err != nil {
+					ownErr = err
+					cancel()
+					return
+				}
 			}
 		}
+	}()
+	err := c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
+		c.applyEvent(ctx, ev)
+		return emit(ev)
+	})
+	if status.Code(err) == codes.Unimplemented {
+		// An upstream with no stream of its own: ours stands alone until the
+		// subscriber goes away.
+		<-ctx.Done()
+		err = nil
 	}
+	cancel()
+	<-own
+	if err != nil {
+		return err
+	}
+	return ownErr
 }
 
 // addSub registers one synthetic-stream subscriber.
