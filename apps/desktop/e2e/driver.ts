@@ -135,10 +135,11 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.palette());
   }
 
-  // bar returns the raw bar hook: the one band's geometry plus every segment's
-  // rect and identity. Chain crumbs carry anchor and tileID, and a root crumb
-  // also carries the glyph it renders. There is one bar, across the bottom of
-  // the window, and it wears whichever pane has focus.
+  // bar returns the raw bar hook: the one bar's drawn rectangle plus every
+  // segment's rect and identity. Chain crumbs carry anchor and tileID, and a
+  // root crumb also carries the glyph it renders. There is one bar, at the
+  // bottom of the window, riding whichever pane has focus: left and width are
+  // that pane's span, top the reserved full-width row it sits in.
   async bar(): Promise<{
     top: number;
     left: number;

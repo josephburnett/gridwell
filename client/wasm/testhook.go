@@ -666,12 +666,13 @@ func stringsToAny(ss []string) []any {
 	return out
 }
 
-// thBar exposes the one bottom bar: the band's top edge and every segment's
-// rect and identity — level crumbs by level, chain crumbs by index with the
-// tile or anchor they stand for. It wears the focused pane, so there is
-// nothing to address it by. Read-only over the exact layout drawBottomBar
-// renders and bottomBarClick hit-tests, so a spec's click at a segment center
-// is the click the user would make.
+// thBar exposes the one bottom bar: its drawn rectangle — top, left and width,
+// the last two being the focused pane's span, since the bar rides it — and
+// every segment's rect and identity: level crumbs by level, chain crumbs by
+// index with the tile or anchor they stand for. It always shows the focused
+// pane, so there is nothing to address it by. Read-only over the exact layout
+// drawBottomBar renders and bottomBarClick hit-tests, so a spec's click at a
+// segment center is the click the user would make.
 func (a *App) thBar(js.Value, []js.Value) any {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok {

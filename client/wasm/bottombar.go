@@ -11,29 +11,34 @@ import (
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
-// The bottom bar: one band across the bottom of the window, always there,
-// wearing the focused pane. It carries the one nav chain — the complete path
-// from the root: outer chains, pane-tile boundary crumbs, and the focused
-// pane's own chain, as square previews truncated from the left on overflow —
-// plus the centered title and the circle slot. Geometry comes from wsbar, so
-// the click hit-test reads the identical layout and render and input cannot
-// disagree; the band is reserved layout (wsbar.Band, through rootLayoutRect),
+// The bottom bar: one bar at the bottom of the window, always there, riding
+// the focused pane. It carries the one nav chain — the complete path from the
+// root: outer chains, pane-tile boundary crumbs, and the focused pane's own
+// chain, as square previews truncated from the left on overflow — plus the
+// centered title and the circle slot. Geometry comes from wsbar, so the click
+// hit-test reads the identical layout and render and input cannot disagree;
+// the band it sits in is reserved layout (wsbar.Band, through rootLayoutRect),
 // so no pane and no surface sized from a pane can paint over it. What the bar
 // shows is the focused pane's state, derived per frame from the level stack
 // and the tree's own facts (pane.Levels.NavChain); nothing here stores a
 // second copy of where anything is. When focus moves the bar switches to that
-// pane; a click in an unfocused pane moves focus and nothing else.
+// pane and slides under it; a click in an unfocused pane moves focus and
+// nothing else.
 
-// bottomBarRect returns the band: a full-width RowH strip across the bottom of
-// the window, above the reserved notice strip. ok=false when the window is too
-// short to hold it. The pane tree ends at its top edge, which is the same
-// number wsbar.Band hands rootLayoutRect.
+// bottomBarRect returns the bar's drawn rectangle: the RowH row at the band's
+// top edge, spanning the focused pane. wsbar.Rect owns that geometry — the
+// band's height is the same whatever has focus, so panes never resize, while
+// the chrome rides the pane you are working in — and this only resolves the
+// impure facts it needs: the window, the notice strip, and the focused pane's
+// span. ok=false when there is no pane to sit under or no room for the band;
+// then the row is plain background and nothing is drawn.
 func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
-	top, ok = wsbar.Band(a.height, errsurface.StripHeight(a.errs.Len()))
-	if !ok || a.width <= 0 {
+	p := a.tree.FocusedPane()
+	if p == nil {
 		return 0, 0, 0, false
 	}
-	return 0, top, a.width, true
+	r := a.paneRectByID(p.ID)
+	return wsbar.Rect(a.width, a.height, errsurface.StripHeight(a.errs.Len()), r.X, r.W)
 }
 
 // barTheme returns the band and button shades for the focused pane: a subtle
@@ -405,8 +410,8 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 	return &t
 }
 
-// bottomBarClick consumes a click in the bar band, always acting on the
-// focused pane — the pane the band is wearing. Every crumb of the one nav
+// bottomBarClick consumes a click in the bar's band, always acting on the
+// focused pane — the pane the bar is riding. Every crumb of the one nav
 // chain answers a left-click by going there: a pane-tile crumb lands you
 // inside that level, closing the deeper ones, and the current boundary is
 // where you already are, so it is a no-op; a chain crumb pops to its tree and
@@ -415,15 +420,19 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 // crumb's level, and on the circle slot of a live url descent it pops the
 // view's context menu (Freeze Page): a page can hijack contextmenu inside the
 // view, but the circle sits on the canvas, so this door always opens. The band
-// is below every pane, so a click here is never meant for one: it is consumed
-// either way and never falls through.
+// is below every pane, so a click anywhere in its row is never meant for one:
+// the quiet background either side of the bar swallows the click too, and
+// nothing falls through.
 func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	bx, top, bw, ok := a.bottomBarRect()
-	if !ok || sy < top || sy >= top+wsbar.RowH || sx < bx || sx >= bx+bw {
+	if !ok {
 		return false
 	}
-	if a.tree.FocusedPane() == nil {
-		return true
+	switch wsbar.Where(sx, sy, bx, top, bw) {
+	case wsbar.ZoneOutside:
+		return false
+	case wsbar.ZoneBand:
+		return true // beside the bar: plain background, no pane under it
 	}
 	chain := a.navChain()
 	if button == 2 {

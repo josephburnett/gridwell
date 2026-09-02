@@ -1,10 +1,11 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The bottom bar is always-reserved layout — one band across the window's
-// bottom, wearing the focused pane — carrying the one nav chain: the complete
-// path from the root, as an outer chain, the pane-tile boundary crumb, and the
-// inner chain. The band never overlays pane content. Every crumb click
+// The bottom bar sits in always-reserved layout — a full-width band across the
+// window's bottom — and rides the focused pane inside it, carrying the one nav
+// chain: the complete path from the root, as an outer chain, the pane-tile
+// boundary crumb, and the inner chain. The band never overlays pane content,
+// and inside a pane tile the bar rides the inset pane. Every crumb click
 // goes to that crumb, so the current boundary is a no-op and leaving is clicking
 // any crumb before it. The workspace boundary belongs to the bar alone:
 //   - the in-pane ascent gesture, a middle click, on a fully-ascended pane does
@@ -63,6 +64,10 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   const inside0 = await bar(window);
   expect(winH - (wp.y + wp.h), 'the gutter, then the band').toBe(wp.x + inside0.height);
   expect(inside0.top - (wp.y + wp.h), 'the outline stays off the band').toBe(wp.x);
+  // The bar rides the pane, so the outline's gutter narrows it too: the band
+  // stays full width, the chrome sits under the inset pane.
+  expect(inside0.left, 'the bar rides the inset pane').toBe(wp.x);
+  expect(inside0.width).toBe(wp.w);
 
   // Inside, one nav chain: the outer chain, then the pane tile's boundary crumb,
   // then the inner chain. The complete path from the root.

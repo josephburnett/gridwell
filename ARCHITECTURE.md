@@ -263,13 +263,18 @@ other view paints soft-wrapped source on canvas at the same columns as the
 textarea, so nothing reflows on focus. Previews render at constant scale from
 the tile's own facts alone.
 
-**The bar.** One band across the bottom of the window (`client/wsbar`,
-`bottombar.go`), always there, wearing the focused pane: one crumb per frame,
-the title, and the circle slot (+ menu / back / refresh). It is reserved
-layout — the pane tree ends at its top edge (`wsbar.Band`) — so no pane, and
-no surface sized from a pane, can occlude it. Clicks act in the focused pane;
-a click in an unfocused pane moves focus, nothing else. A crumb click is the
-ascent gesture; middle-click is the in-pane shortcut.
+**The bar.** One bar at the bottom of the window (`client/wsbar`,
+`bottombar.go`), always there, riding the focused pane: one crumb per frame,
+the title, and the circle slot (+ menu / back / refresh). `wsbar.Rect` owns
+where it is — the chrome spans the focused pane and slides under it as focus
+moves, so the slot is never a wide screen away from the pane you are working
+in, inside the full-width row `wsbar.Band` reserves once, whatever has focus.
+That row is reserved layout — the pane tree ends at its top edge — so no pane,
+and no surface sized from a pane, can occlude the bar; the plain background
+either side of the bar covers no pane, and a click there does nothing. Clicks
+act in the focused pane; a click in an unfocused pane moves focus, nothing
+else. A crumb click is the ascent gesture; middle-click is the in-pane
+shortcut.
 
 **Shells** attach over a WebSocket at `/shell` on the page's own origin
 (`client/shellwire` writes the address and frames; `client/shellstream` owns

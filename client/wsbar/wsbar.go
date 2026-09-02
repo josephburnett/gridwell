@@ -1,13 +1,16 @@
-// Package wsbar owns the bottom bar's geometry: the one band across the
-// bottom of the window, carrying the nav chain — the complete path from the
-// root as square tile previews, pane-tile boundaries included — and the
-// circle slot. Pure Go: render and input read the same segment rects, so the
-// crumb you see is exactly the crumb you hit.
+// Package wsbar owns the bottom bar's geometry: the one bar at the bottom of
+// the window, carrying the nav chain — the complete path from the root as
+// square tile previews, pane-tile boundaries included — and the circle slot.
+// Pure Go: render and input read the same segment rects, so the crumb you see
+// is exactly the crumb you hit.
 //
-// The band is always present: the bar is the one home for "where am I", so it
-// never comes and goes. It is reserved layout — the pane tree ends at its top
-// edge (Band) — so no pane, and no native surface sized from a pane, can
-// paint over it.
+// The bar is always present: it is the one home for "where am I", so it never
+// comes and goes. Its band — the full-width RowH row at the bottom — is
+// reserved layout, and the pane tree ends at that row's top edge (Band), so no
+// pane, and no native surface sized from a pane, can paint over it. The band's
+// height never depends on which pane has focus; only the bar's own chrome
+// moves, riding the focused pane's span (Rect), so the + menu stays beside the
+// pane you are working in on a wide screen.
 package wsbar
 
 // Band divides the window's vertical space: the pane tree gets everything
@@ -26,6 +29,66 @@ func Band(winH, stripH float64) (paneH float64, ok bool) {
 		return avail, false
 	}
 	return avail - RowH, true
+}
+
+// Rect is the one answer to "where is the bar": render, hit-test and the
+// rename inputs all read it, so the chrome you see is exactly the chrome you
+// hit.
+//
+// Vertically it is the RowH row at the band's top edge (Band) — the same
+// reservation whichever pane has focus, so panes never resize as focus moves.
+// Horizontally it is only the focused pane's span (paneX, paneW), centered
+// under that pane: the bar reads as a tab under the pane you are working in,
+// and the circle slot is never a wide screen away from it. A span wider than
+// the window, or one hanging off an edge, is clamped whole into the window
+// rather than drawn half outside it.
+//
+// ok=false when the window cannot hold the band, or when there is no pane for
+// the bar to sit under; then no chrome is drawn and the band's row is plain
+// background all the way across.
+func Rect(winW, winH, stripH, paneX, paneW float64) (x, top, w float64, ok bool) {
+	top, ok = Band(winH, stripH)
+	if !ok || winW <= 0 || paneW <= 0 {
+		return 0, 0, 0, false
+	}
+	w = paneW
+	if w > winW {
+		w = winW
+	}
+	x = paneX + (paneW-w)/2 // centered under the pane when the window clips it
+	if x+w > winW {
+		x = winW - w
+	}
+	if x < 0 {
+		x = 0
+	}
+	return x, top, w, true
+}
+
+// Zone says where a point falls with respect to the bar.
+type Zone int
+
+const (
+	// ZoneOutside: not in the band's row at all — the point belongs to a
+	// pane, or to the notice strip below.
+	ZoneOutside Zone = iota
+	// ZoneBand: in the band's row but off the bar — the plain background
+	// left or right of it. Nothing is under the band, so a point here is
+	// nobody's: it is swallowed, never passed on to a pane.
+	ZoneBand
+	// ZoneBar: on the bar's own chrome, where every bar gesture lives.
+	ZoneBar
+)
+
+// Where classifies a point against the rect Rect returned.
+func Where(px, py, x, top, w float64) Zone {
+	if py < top || py >= top+RowH {
+		return ZoneOutside
+	}
+	if px < x || px >= x+w {
+		return ZoneBand
+	}
+	return ZoneBar
 }
 
 // RowH is the bar's height in CSS px. 32 keeps the band thin while a
