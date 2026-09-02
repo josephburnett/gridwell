@@ -11,9 +11,9 @@ package server
 // is against the current password's token, changing the password invalidates
 // every outstanding cookie with no revocation state at all.
 //
-// Deliberately not gated: the gRPC node export, FederationHandler, which a
+// Deliberately not gated: the gRPC node export, ConnectionHandler, which a
 // mounter's ssh tunnel dials. Its gate is the kernel — it is served only on
-// the 0600 unix socket node.listenFederation opens. Everything on the browser
+// the 0600 unix socket node.listenConnectionDoor opens. Everything on the browser
 // door is gated here, the /shell WebSocket included; a PTY is not an
 // exception. The desktop app's own window authenticates without prompting: the
 // serve banner carries the token and the sidecar pre-sets the cookie.

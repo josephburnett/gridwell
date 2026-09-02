@@ -2,7 +2,7 @@
 // auth against exactly one authorized key, host-key verification material, and
 // direct-streamlocal channel forwarding — everything the dial path needs and
 // nothing else. Shared by the sshdial seam test, in-process, and the
-// federation spawn gate (production binaries), so there is one implementation
+// connections spawn gate (production binaries), so there is one implementation
 // of "a throwaway sshd" instead of a hand-rolled copy per smoke.
 package dialtest
 
@@ -23,7 +23,7 @@ import (
 
 // directStreamLocal is the direct-streamlocal@openssh.com channel-open
 // payload, what x/crypto/ssh's Client.Dial("unix", path) sends. It is the only
-// forwarding the federation dial uses, because the node door is a unix
+// forwarding the connection dial uses, because the connection door is a unix
 // socket.
 type directStreamLocal struct {
 	SocketPath string

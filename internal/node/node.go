@@ -128,16 +128,16 @@ type Options struct {
 // Node is a running (or listen-ready) Gridwell node.
 type Node struct {
 	Reg *plugin.Registry
-	// Ln is the web door's listener, bound where web.bind says. FedLn is the
-	// federation door's unix socket, and is nil when the door is closed.
-	Ln    net.Listener
-	FedLn net.Listener
+	// Ln is the web door's listener, bound where web.bind says. ConnLn is the
+	// connection door's unix socket, and is nil when the door is closed.
+	Ln     net.Listener
+	ConnLn net.Listener
 
 	st            *store.Store
 	cache         *sourcecache.Store
 	srv           *server.Server
 	webSrv        *http.Server
-	fedSrv        *http.Server
+	connSrv       *http.Server
 	cancelRequest context.CancelFunc
 	closeOnce     sync.Once
 	closeErr      error
@@ -207,7 +207,7 @@ func Start(opts Options) (*Node, error) {
 	}
 	requestCtx, cancel := context.WithCancel(context.Background())
 	// Two doors, two listeners. The web door binds where config says; a
-	// tailnet address is fine, because it is password-gated. The federation
+	// tailnet address is fine, because it is password-gated. The connection
 	// door is a 0600 unix socket, or closed, and never TCP, so no config can
 	// expose the ungated gRPC export to another uid, let alone a network. ssh
 	// tunnels terminate on it.
@@ -216,8 +216,8 @@ func Start(opts Options) (*Node, error) {
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
 	}
-	fedSrv := &http.Server{
-		Handler:           srv.FederationHandler(),
+	connSrv := &http.Server{
+		Handler:           srv.ConnectionHandler(),
 		Protocols:         server.NodeProtocols(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
@@ -227,16 +227,16 @@ func Start(opts Options) (*Node, error) {
 		cancel()
 		return fail(err)
 	}
-	var fedLn net.Listener
+	var connLn net.Listener
 	if sock := cfg.Federation.Socket; sock != "" {
-		fedLn, err = listenFederation(sock)
+		connLn, err = listenConnectionDoor(sock)
 		if err != nil {
 			ln.Close()
 			cancel()
 			return fail(err)
 		}
 	}
-	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, st: st, cache: cache, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
+	return &Node{Reg: reg, Ln: ln, ConnLn: connLn, st: st, cache: cache, srv: srv, webSrv: webSrv, connSrv: connSrv, cancelRequest: cancel}, nil
 }
 
 // startHome registers the home over the store: a Go value the router calls
@@ -309,25 +309,25 @@ func closeImpl(impl any) {
 	}
 }
 
-// listenFederation opens the federation socket: a stale file from a
+// listenConnectionDoor opens the connection door's socket: a stale file from a
 // crashed serve is unlinked first (the serve lock guarantees no live
 // holder), and the socket is 0600 — the kernel is the gate.
-func listenFederation(path string) (net.Listener, error) {
+func listenConnectionDoor(path string) (net.Listener, error) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("federation socket: %w", err)
+		return nil, fmt.Errorf("connection door: %w", err)
 	}
 	ln, err := net.Listen("unix", path)
 	if err != nil {
-		return nil, fmt.Errorf("federation socket: %w", err)
+		return nil, fmt.Errorf("connection door: %w", err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		ln.Close()
-		return nil, fmt.Errorf("federation socket: %w", err)
+		return nil, fmt.Errorf("connection door: %w", err)
 	}
 	return ln, nil
 }
 
-// ServeBackground starts serving on the listeners (the federation door
+// ServeBackground starts serving on the listeners (the connection door
 // only when open); the returned channel carries the first serve error
 // (never http.ErrServerClosed).
 func (n *Node) ServeBackground() <-chan error {
@@ -338,8 +338,8 @@ func (n *Node) ServeBackground() <-chan error {
 		}
 	}
 	go serve(n.webSrv, n.Ln)
-	if n.FedLn != nil {
-		go serve(n.fedSrv, n.FedLn)
+	if n.ConnLn != nil {
+		go serve(n.connSrv, n.ConnLn)
 	}
 	return errCh
 }
@@ -355,8 +355,8 @@ func (n *Node) Close() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err := n.webSrv.Shutdown(ctx)
-		if n.FedLn != nil {
-			err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
+		if n.ConnLn != nil {
+			err = errors.Join(err, n.connSrv.Shutdown(ctx)) // Close unlinks the socket
 		}
 		// The cache closes BEFORE the transport it fronts: its prefetch
 		// walk reads through it and writes into the file, and a walk

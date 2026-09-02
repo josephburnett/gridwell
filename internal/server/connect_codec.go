@@ -2,12 +2,12 @@ package server
 
 // The browser codec: gridwellv1connect.GridwellHandler over the one
 // in-process router. It routes nothing and decides nothing — it unwraps a
-// connect.Request, calls the router, and wraps the answer. The federation
+// connect.Request, calls the router, and wraps the answer. The connection
 // door's codec is namespace.Server over the same router value, so the two
 // surfaces cannot drift: there is no second implementation to drift from.
 //
 // The codec is deliberately not total. Info, Probe, and OpenShell are
-// federation verbs: the browser learns the node's identity from Handshake on
+// connection-door verbs: the browser learns the node's identity from Handshake on
 // its own door, and its shell bytes ride the /shell WebSocket. Unimplemented
 // here means "not a browser verb", not "missing".
 

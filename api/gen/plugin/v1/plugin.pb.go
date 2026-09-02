@@ -3,7 +3,7 @@
 // account — in its own stable string keys, and never sees ids, layout, or a
 // database. The node owns all of those. It mints ids against keys, keeps the
 // arrangement as a namespace of its own store, and serves the full Gridwell
-// surface to clients, so a plugin is invisible on the federation wire.
+// surface to clients, so a plugin is invisible to a connection.
 //
 // What a plugin MAY keep is its own memory of its source, in the private
 // directory the node hands it at spawn (`state_dir`), under cache.db's

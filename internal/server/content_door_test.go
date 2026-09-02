@@ -241,7 +241,8 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 
 // TestContentDoorThroughAConnection: the id "<node>/<conn>/<tile>"
 // forwards through the node's TRANSPORT — the only transit namespace there
-// is — and streams back, so federation for pages is the
+// is — and streams back, so a connection carries pages as it does
+// everything else: the
 // same one-hop-per-segment composition as every content read. The dialer
 // lands the connection on an in-process namespace; there is no proxy stand-in
 // any more, because the transport itself is a Go value now.

@@ -82,7 +82,7 @@ func homeRoot(t *testing.T, c namespace.Namespace) string {
 }
 
 // nodeServer stands up a full Server (one in-process store
-// registered as uuid "ur1", label "personal") behind its FederationHandler on a real
+// registered as uuid "ur1", label "personal") behind its ConnectionHandler on a real
 // TCP listener, and returns a raw gRPC client dialed at it — the exact wire a
 // remote ssh-plugin sees after its tunnel. Every request routes by the
 // QUALIFIED ids it carries; there is no scoping header and no name-based
@@ -113,7 +113,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := &http.Server{Handler: srv.FederationHandler(), Protocols: server.NodeProtocols()}
+	httpSrv := &http.Server{Handler: srv.ConnectionHandler(), Protocols: server.NodeProtocols()}
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 

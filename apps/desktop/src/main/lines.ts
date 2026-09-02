@@ -25,7 +25,7 @@ interface ServingAddr {
 //   "gridwell: serving on <host>:<port> (static=... plugins=N auth=<hex> federation=<socket path>)"
 // with the listener's actual bound address, once both doors are up.
 // federation= is not read here. The desktop app reaches everything it needs
-// over the web door, and requiring the federation socket would refuse to boot
+// over the web door, and requiring the connection door would refuse to boot
 // against a node that serves none. The server, not this spawner, owns where
 // it is listening: server.yaml `web.bind` may override the sidecar's
 // --bind-default so a phone and this window share one origin.

@@ -37,7 +37,7 @@ type ServerConfig struct {
 	// Web is the browser door: the address browsers and the desktop window
 	// load from. Its password is not a yaml fact; see WebPassword.
 	Web WebConfig `yaml:"web,omitempty"`
-	// Federation is the node door: the unix socket other nodes mount this
+	// Federation is the connection door: the unix socket other nodes mount this
 	// one through. ssh tunnels terminate there.
 	Federation FederationConfig `yaml:"federation,omitempty"`
 	// StaticDir is "" for the embedded web client, or a path to serve the
@@ -87,7 +87,7 @@ type WebConfig struct {
 	BindSet bool `yaml:"-"`
 }
 
-// FederationConfig is the node door's configuration: a unix socket path,
+// FederationConfig is the connection door's configuration: a unix socket path,
 // never a TCP address. The kernel enforces who may connect — the socket is
 // created 0600, so only the owning uid reaches the ungated gRPC export, and
 // other users and sandboxed apps on the machine cannot, which loopback TCP
@@ -99,7 +99,7 @@ type FederationConfig struct {
 	Socket string `yaml:"socket,omitempty"`
 }
 
-// FederationSocket is the default federation socket path for a home.
+// FederationSocket is the default connection-door socket path for a home.
 func FederationSocket(home string) string {
 	return filepath.Join(home, "federation.sock")
 }
@@ -110,7 +110,7 @@ func FederationSocket(home string) string {
 // those references. Change Label instead, and retire the old name into
 // retired_names if the connection itself dies. Host set means the ssh
 // bridge; Host empty means a direct dial of Addr. Addr is the remote's
-// federation socket path and is required either way.
+// connection-door socket path and is required either way.
 type ConnectionConfig struct {
 	Name       string `yaml:"name"`
 	Label      string `yaml:"label,omitempty"`
@@ -394,7 +394,7 @@ func expandPaths(cfg *ServerConfig) error {
 }
 
 // PasswordFile is where a home's web password lives: beside server.yaml and
-// the federation socket, 0600.
+// the connection door's socket, 0600.
 func PasswordFile(home string) string { return filepath.Join(home, "web-password") }
 
 // DurableFiles are the loose files a home is made of besides its

@@ -2,8 +2,8 @@
 // the node-side half of the split. The adapter joins the plugin's content
 // answers — keys, kinds, labels, bytes — with the plugin's namespace of the
 // node's store, which holds the ids, the placement, and the framing, and
-// registers in the plugin registry, so the router, the client, and federation
-// never know the difference.
+// registers in the plugin registry, so the router, the client, and every
+// connection never know the difference.
 //
 // This is the seam where two owners' facts meet, which is why it stays thin:
 // every merge decision lives in the store (store.Namespace, unit-tested),

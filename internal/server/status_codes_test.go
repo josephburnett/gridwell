@@ -17,7 +17,7 @@ import (
 // asserting that the code the owning namespace answered with is the code the
 // client classifies on. A code that collapses to Internal turns a transport
 // failure two hops away into a verdict, and clientsync then drops a parked
-// write. The federation codec's half of this is
+// write. The connection door's half of this is
 // namespace.TestStatusCodesSurviveBothCodecs.
 func TestStatusCodesSurviveTheConnectCodec(t *testing.T) {
 	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {

@@ -24,7 +24,7 @@ store               internal/local/store      gridwell.db
 
 Inside the node a namespace is a Go interface (`internal/namespace`). There
 are exactly two gRPC hops, both across a real process boundary: the plugin
-subprocess (`plugin.v1`) and the federation socket (`gridwell.v1`). Connect
+subprocess (`plugin.v1`) and the connection door (`gridwell.v1`). Connect
 over HTTP is the third codec, and it crosses to the browser.
 
 ## Ids
@@ -98,9 +98,10 @@ for other nodes. They cannot drift because they are the same value.
 
 Two listeners. The web door (`web.bind`) serves Connect, the content door,
 and the shell door behind a password cookie; serve mints the 0600
-`web-password` file and prints it, delete it to rotate. The federation door
-is a 0600 unix socket (`federation.socket`), never TCP; ssh forwards it
-between nodes.
+`web-password` file and prints it, delete it to rotate. The connection door
+is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
+`server.yaml` key is `federation:` and its file is `federation.sock` — the
+word's two survivors, kept because a home already has them written down.
 
 ## The node
 

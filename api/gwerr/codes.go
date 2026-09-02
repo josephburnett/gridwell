@@ -7,8 +7,8 @@ import (
 
 // codePairs is the one gRPC↔Connect status-code table. Gridwell answers in
 // gRPC status codes everywhere — every namespace, the router, the
-// federation export — and exactly one hop translates: the Connect codec on
-// the way to a browser (server.asConnectError). The federation export
+// node export — and exactly one hop translates: the Connect codec on
+// the way to a browser (server.asConnectError). The node export
 // hands a mounter the router's status error unchanged. The table is total
 // and injective over the gRPC enum (TestCodeTableIsTotal), so a code
 // missing here fails the contract's test rather than a user's write.

@@ -8,7 +8,7 @@
 //
 //   - the plugin.v1 subprocess (api/compose.LoadPlugin): the third-party
 //     door, with process isolation and a separate dependency graph;
-//   - the federation socket (internal/server/nodeexport.go serving
+//   - the connection door (internal/server/nodeexport.go serving
 //     gridwell.v1, internal/connection/dial consuming it): another node.
 //
 // The web door stays Connect over HTTP, because it crosses to the browser.
@@ -33,7 +33,7 @@
 // Errors are gRPC status errors (google.golang.org/grpc/status), always.
 // The client classifies by code (client/clientsync), so the code is part
 // of the contract: it must read the same whether the answer came from a
-// Go call, the Connect codec, or two federation hops away. Both codecs in
+// Go call, the Connect codec, or two connection hops away. Both codecs in
 // this package preserve codes; the Connect handler maps them through
 // gwerr's one table (server.asConnectError).
 //

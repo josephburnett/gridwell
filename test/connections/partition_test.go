@@ -35,7 +35,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// the SAME addr the connection dials.
 	remoteHome := t.TempDir()
 	freshHome(t, remoteHome)
-	// The federation socket lives under the home, so a revival on the same
+	// The connection door's socket lives under the home, so a revival on the same
 	// home lands on the SAME path the connection dials.
 	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())

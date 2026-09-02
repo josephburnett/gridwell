@@ -1,7 +1,7 @@
 package server
 
 // The node export: the same router the browser talks to, re-served over raw
-// gRPC on the node's federation socket, which is the surface a remote
+// gRPC on the node's connection door, which is the surface a remote
 // mounter's ssh tunnel dials. It is a codec, not a second router:
 // namespace.Server writes the one in-process router onto gridwell.v1, exactly
 // as the Connect handler writes it onto Connect. Nothing here routes.
@@ -29,24 +29,24 @@ import (
 // address exposes exactly the gated surface and nothing else.
 func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
 
-// FederationHandler is the node door: the Gridwell service over raw gRPC,
-// what a remote mounter's ssh tunnel dials. It is ungated by design and served
-// only on the 0600 unix socket node.listenFederation opens; there is no
+// ConnectionHandler is the connection door: the Gridwell service over raw
+// gRPC, what a remote mounter's ssh tunnel dials. It is ungated by design and
+// served only on the 0600 unix socket node.listenConnectionDoor opens; there is no
 // address form, and ssh is the authenticated transport between nodes. Serve it
 // with NodeProtocols, because gRPC over a cleartext tunnel needs HTTP/2
 // without TLS, which plain net/http refuses by default.
 //
-// This and internal/connection/dial are the federation hop's two ends, and the two
+// This and internal/connection/dial are the connection hop's two ends, and the two
 // ends of the only gRPC in the node besides the plugin subprocess: one writes
 // the router onto the wire (namespace.Server), the other reads it back off
 // (namespace.FromClient).
-func (s *Server) FederationHandler() http.Handler {
+func (s *Server) ConnectionHandler() http.Handler {
 	g := grpc.NewServer()
 	pb.RegisterGridwellServer(g, namespace.Server(newRouter(s)))
 	return g
 }
 
-// NodeProtocols is the protocol set for any http.Server serving the federation
+// NodeProtocols is the protocol set for any http.Server serving the connection
 // door: HTTP/1.1 plus unencrypted HTTP/2 for raw gRPC through an ssh tunnel,
 // where the connection is already private and TLS-only h2 would refuse the
 // mounter. One owner here, so the production server and every test harness

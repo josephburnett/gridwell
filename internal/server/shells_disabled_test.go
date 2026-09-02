@@ -1,7 +1,7 @@
 package server_test
 
 // The disable_shells contract (server.yaml), pinned over the REAL wire —
-// the gRPC node export behind FederationHandler, what a remote mounter
+// the gRPC node export behind ConnectionHandler, what a remote mounter
 // speaks. (The BROWSER door's half — the /shell WebSocket — is pinned by
 // shell_door_seam_test.go; both enter through the one shell route, so the
 // refusal cannot hold on one door and not the other.) The refusal lives at

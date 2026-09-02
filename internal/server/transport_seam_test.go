@@ -78,7 +78,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	remoteReg.SetLabel("rnode1", "home")
 	remoteSrv := servertest.New(t, remoteReg, server.Config{ID: "rnode1"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
-	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
+	remoteHTTP.Config.Handler = remoteSrv.ConnectionHandler()
 	remoteHTTP.Config.Protocols = server.NodeProtocols()
 	remoteHTTP.EnableHTTP2 = true
 	remoteHTTP.Start()
@@ -309,7 +309,7 @@ func TestDialFailureRidesTheRow(t *testing.T) {
 // door's WebSocket → this node's shell route → the transport → the remote
 // node's export → the remote home's PTY. The transport is just another
 // namespace to the door — which is the whole point of the id chain — but
-// the Electron relay it replaced dialed the FEDERATION socket instead, so
+// the Electron relay it replaced dialed the CONNECTION DOOR instead, so
 // nothing pinned that the browser door forwards a PTY. This does.
 func TestShellDoorThroughAConnection(t *testing.T) {
 	ctx := context.Background()

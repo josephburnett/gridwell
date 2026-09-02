@@ -8,7 +8,7 @@
 // green.
 //
 // It requires the binaries already built at the repo root, which the make
-// target depends on, and is guarded by the `federation` build tag so plain
+// target depends on, and is guarded by the `connections` build tag so plain
 // `go test ./...` stays fast.
 package connections_test
 
@@ -57,7 +57,7 @@ func repoRoot(t *testing.T) string {
 }
 
 // startServe launches the real `gridwell serve` for a home and returns its
-// origin and the federation door's socket path once the banner announces them.
+// origin and the connection door's socket path once the banner announces them.
 // The socket lives under the home, so two nodes on one box never collide.
 func startServe(t *testing.T, bin, home, bind string) (origin, fedSocket string) {
 	origin, fedSocket, _ = startServeProc(t, bin, home, bind)
@@ -205,7 +205,7 @@ func freshHome(t *testing.T, home string) {
 	}
 }
 
-func TestFederationSpawn(t *testing.T) {
+func TestConnectionSpawn(t *testing.T) {
 	root := repoRoot(t)
 	bin := filepath.Join(root, "gridwell")
 	if _, err := os.Stat(bin); err != nil {
@@ -421,7 +421,7 @@ func TestFederationSpawn(t *testing.T) {
 		break
 	}
 
-	fmt.Println("federation spawn gate: production binaries, real tunnel, chained write/read + session + live events OK")
+	fmt.Println("connections spawn gate: production binaries, real tunnel, chained write/read + session + live events OK")
 }
 
 // Connections are server.yaml config, here through real binaries: declared
@@ -519,7 +519,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatalf("the remote must be untouched by retirement: %q (%v)", rbody, err)
 	}
 
-	fmt.Println("federation spawn gate: connections mode — yaml-declared, real tunnel, chained bytes, config-refused edits, clean retirement OK")
+	fmt.Println("connections spawn gate: connections mode — yaml-declared, real tunnel, chained bytes, config-refused edits, clean retirement OK")
 }
 
 // appendConnectionsYAML writes the connections section into a home's
@@ -652,5 +652,5 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	if err != nil || string(body) != "hello from the far side" {
 		t.Fatalf("ReadContent on a key-form id through the chain = %q (%v)", body, err)
 	}
-	fmt.Println("federation spawn gate: key-form ids cross the tunnel and route back OK")
+	fmt.Println("connections spawn gate: key-form ids cross the tunnel and route back OK")
 }

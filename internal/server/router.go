@@ -25,7 +25,7 @@ import (
 // out.
 //
 // Two codecs stand over this one router and neither routes anything of its
-// own: the browser's Connect door (connect_codec.go) and the federation
+// own: the browser's Connect door (connect_codec.go) and the connection
 // socket's gRPC export (namespace.Server, nodeexport.go). They cannot drift,
 // because they are the same value.
 //
@@ -846,7 +846,7 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 // declares watch for the adapter's own stream — its supervisor's health, and
 // the grids its writes changed — not for the plugin's view of its source,
 // which the client still polls through GetGrid. With no single root, a client
-// subscribes to the whole federation at once.
+// subscribes to every connected node at once.
 //
 // Failures surface and heal rather than silently ending a namespace's events
 // for the life of the client stream: an Info or Subscribe failure is logged
@@ -1026,7 +1026,7 @@ func isUnimplemented(err error) bool {
 
 // Info describes this node to a mounter: its identity, where a descent lands,
 // and its capabilities. Watch is true because Subscribe fans in every
-// namespace's events. It is served on the federation codec only; the browser
+// namespace's events. It is served on the connection door only; the browser
 // learns all of this from Handshake, on its own door.
 func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, error) {
 	// A mount lands where a direct client lands: home, the first configured

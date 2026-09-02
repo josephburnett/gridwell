@@ -1752,7 +1752,7 @@ func (x *GetTileRequest) GetTileId() string {
 // plugin that owns that qualified id answers; an empty scope fans out to
 // every configured plugin in config order. A transit hop forwards the query
 // to the remote node, which fans out again, so an unscoped search recurses
-// through the whole federation and results come back qualified like every
+// through every connected node and results come back qualified like every
 // other id.
 type SearchRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2255,8 +2255,8 @@ type HandshakeResponse struct {
 	// double as the auth cookie, handed out only on this authenticated
 	// handshake, and checked against the current password like the cookie is.
 	// It is a node-level fact of the local origin: content URLs are always
-	// built against the serving node, and federation happens behind the door,
-	// over the RPC.
+	// built against the serving node, and a connection is followed behind the
+	// door, over the RPC.
 	ContentToken  string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

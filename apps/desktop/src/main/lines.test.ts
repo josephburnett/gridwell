@@ -64,7 +64,7 @@ test('parseServingLine rejects every other line', () => {
   assert.equal(parseServingLine('gridwell: serving on nonsense (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
   assert.equal(parseServingLine('gridwell: serving on 127.0.0.1:notaport (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
   // A banner with no federation= still resolves boot: the desktop app reaches
-  // everything it needs over the web door, and a node may serve no federation
+  // everything it needs over the web door, and a node may serve no connection
   // socket at all.
   assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1)'), {
     host: '127.0.0.1',

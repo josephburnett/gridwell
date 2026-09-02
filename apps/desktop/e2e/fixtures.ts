@@ -56,7 +56,7 @@ export interface FarNode {
 }
 
 // spawnFarNode boots a fresh node (empty server.yaml; its first serve mints
-// its id) on a loopback port and waits for its banner. The federation
+// its id) on a loopback port and waits for its banner. The connection
 // socket lives under its home, which is what the local node's connection
 // dials.
 async function spawnFarNode(label: string): Promise<FarNode> {

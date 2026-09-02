@@ -33,7 +33,7 @@ import (
 // network itself.
 
 // remoteNode stands up the "remote gridwell serve": node id "rnode" with two
-// namespaces ("personal", "work") behind FederationHandler on a real listener.
+// namespaces ("personal", "work") behind ConnectionHandler on a real listener.
 // Returns its address and a direct client to the first plugin for
 // ground-truth assertions.
 func remoteNode(t *testing.T) (string, namespace.Namespace) {
@@ -52,14 +52,14 @@ func remoteNode(t *testing.T) (string, namespace.Namespace) {
 	}
 	direct, _ := reg.Get("ur1")
 	srv := servertest.New(t, reg, server.Config{})
-	// The federation door is a unix socket; the test sshd
+	// The connection door is a unix socket; the test sshd
 	// forwards direct-streamlocal to it, exactly like a real sshd.
 	sock := filepath.Join(t.TempDir(), "federation.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := &http.Server{Handler: srv.FederationHandler(), Protocols: server.NodeProtocols()}
+	httpSrv := &http.Server{Handler: srv.ConnectionHandler(), Protocols: server.NodeProtocols()}
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 	return sock, direct

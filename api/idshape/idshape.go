@@ -27,7 +27,7 @@ func NewUUID() string {
 // shortIDLen is the length of a plugin/node id minted by NewShortID. Seven
 // characters of lowercase base36 with a leading letter is ~35.7 bits —
 // birthday collision odds reach 50% around 300k ids, far beyond a personal
-// federation — while staying readable in a URL path.
+// node — while staying readable in a URL path.
 const shortIDLen = 7
 
 // NewShortID returns a fresh plugin/node/namespace identity: shortIDLen

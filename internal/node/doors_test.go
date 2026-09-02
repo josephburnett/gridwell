@@ -14,18 +14,18 @@ import (
 )
 
 // The listener seam of the two doors: Start binds the web door where config
-// says and the federation door as a 0600 unix socket at federation.socket,
+// says and the connection door as a 0600 unix socket at `federation:`,
 // never TCP, so the ungated gRPC export is reachable by the owning uid only
 // while the web door keeps its Connect API. A fresh home's first BuildConfig
 // mints the password, so the web door is gated from the first serve.
-func TestStartBindsFederationOnASocketOnly(t *testing.T) {
+func TestStartBindsTheConnectionDoorOnASocketOnly(t *testing.T) {
 	home := t.TempDir()
 	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.WebPassword == "" || cfg.Federation.Socket != filepath.Join(home, "federation.sock") {
-		t.Fatalf("built config: web %+v federation %+v", cfg.Web, cfg.Federation)
+		t.Fatalf("built config: web %+v connection door %+v", cfg.Web, cfg.Federation)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
 	n, err := Start(Options{Home: home, Cfg: cfg})
@@ -34,8 +34,8 @@ func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 	}
 	n.ServeBackground()
 
-	if n.FedLn.Addr().Network() != "unix" || n.FedLn.Addr().String() != cfg.Federation.Socket {
-		t.Fatalf("federation door = %s %s, want the unix socket %s", n.FedLn.Addr().Network(), n.FedLn.Addr(), cfg.Federation.Socket)
+	if n.ConnLn.Addr().Network() != "unix" || n.ConnLn.Addr().String() != cfg.Federation.Socket {
+		t.Fatalf("connection door = %s %s, want the unix socket %s", n.ConnLn.Addr().Network(), n.ConnLn.Addr(), cfg.Federation.Socket)
 	}
 	st, err := os.Stat(cfg.Federation.Socket)
 	if err != nil || st.Mode().Perm() != 0o600 {
@@ -51,7 +51,7 @@ func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 		return err
 	}
 	if err := info("unix:" + cfg.Federation.Socket); err != nil {
-		t.Fatalf("federation door: %v", err)
+		t.Fatalf("connection door: %v", err)
 	}
 	if err := info(n.Ln.Addr().String()); err == nil {
 		t.Fatal("the web door answered raw gRPC")

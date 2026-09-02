@@ -219,7 +219,7 @@ func RunServe(args []string) int {
 
 	// The node core, internal/node: plugin loading, identity, the server
 	// assembly, and the two listeners — the web door where config says, and
-	// the federation door's unix socket. The CLI's own concerns wrap it: the
+	// the connection door's unix socket. The CLI's own concerns wrap it: the
 	// lock above, the banner below, signals.
 	n, err := node.Start(node.Options{
 		Home: home,

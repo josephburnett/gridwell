@@ -17,7 +17,7 @@ import (
 // longer demuxes raw gRPC to the node export, so a listener bound to a
 // network address serves exactly the gated surface. Pinned at the
 // handler seam: a gRPC client against WebHandler gets no Gridwell
-// service, while the same call against FederationHandler answers.
+// service, while the same call against ConnectionHandler answers.
 func TestWebDoorServesNoGRPC(t *testing.T) {
 	srv := mustNew(t, plugin.NewRegistry(), Config{})
 	serve := func(h http.Handler) string {
@@ -42,7 +42,7 @@ func TestWebDoorServesNoGRPC(t *testing.T) {
 	if err := info(serve(srv.WebHandler())); err == nil {
 		t.Fatal("the web door answered a raw gRPC Info: the node export leaked onto the browser listener")
 	}
-	if err := info(serve(srv.FederationHandler())); err != nil {
-		t.Fatalf("the federation door refused Info: %v", err)
+	if err := info(serve(srv.ConnectionHandler())); err != nil {
+		t.Fatalf("the connection door refused Info: %v", err)
 	}
 }

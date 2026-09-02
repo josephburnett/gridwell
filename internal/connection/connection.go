@@ -49,7 +49,7 @@ var bootDialWait = 5 * time.Second
 
 // Server is the transport: a namespace.Namespace whose ids are chains
 // through its connections — each connection itself a Namespace, read off
-// the far node's federation socket by namespace.FromClient.
+// the far node's connection door by namespace.FromClient.
 type Server struct {
 	namespace.Unimplemented
 
@@ -274,7 +274,7 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 // dialConfig resolves a declared connection to a dial.Config, applying the
 // host-side defaults: port 22; the key is the first of ~/.ssh/id_ed25519 and
 // ~/.ssh/id_rsa that exists; known_hosts is ~/.ssh/known_hosts. addr, the
-// remote's federation socket path, is required either way, because that socket
+// remote's connection-door socket path, is required either way, because that socket
 // lives under the remote's home, which only the operator knows.
 func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 	cfg := dial.Config{
@@ -284,7 +284,7 @@ func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 		Addr:       c.Addr,
 	}
 	if cfg.Addr == "" {
-		return dial.Config{}, fmt.Errorf("addr required — the remote node's federation socket path (its <home>/federation.sock)")
+		return dial.Config{}, fmt.Errorf("addr required — the remote node's connection-door socket path (its <home>/federation.sock)")
 	}
 	if c.Host == "" {
 		return cfg, nil // a direct dial of the socket
@@ -806,7 +806,7 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 // to the connection owning the id; free text fans out to live connections
 // only, because a search answers with what is reachable and never dials the
 // world. Each remote answer comes from a node, which fans out to its own
-// namespaces, so the federation recursion falls out of the chain shape. A
+// namespaces, so the recursion through connections falls out of the chain shape. A
 // connection that errors or times out contributes nothing, loudly.
 func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {

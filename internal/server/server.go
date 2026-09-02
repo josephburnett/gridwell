@@ -7,9 +7,9 @@
 //
 // Two doors. WebHandler is the browser surface, always gated behind the
 // password — the minted <home>/web-password file, and one cookie derived from
-// it in auth.go — and bindable to a network. FederationHandler is the
+// it in auth.go — and bindable to a network. ConnectionHandler is the
 // raw-gRPC node export, ungated and served only on the 0600 unix socket
-// node.listenFederation opens.
+// node.listenConnectionDoor opens.
 package server
 
 import (
@@ -60,8 +60,8 @@ type Config struct {
 // Server is the wired-up HTTP server: a router. Every operation is routed
 // through the registry by the first segment of its qualified id, and home,
 // the first configured entry with a root, is where a client lands. Construct
-// it with New and mount WebHandler, the browser door, and FederationHandler,
-// the node door, on their own listeners; see node.Start.
+// it with New and mount WebHandler, the browser door, and ConnectionHandler,
+// the connection door, on their own listeners; see node.Start.
 type Server struct {
 	cfg       Config
 	pluginReg *plugin.Registry
@@ -109,7 +109,7 @@ func (s *Server) routeClient(uuid string) (namespace.Namespace, bool) {
 // node and the transit qualification rule applies. "<id>/<digits>" is the home
 // store; "<id>/<letters>/…" is a connection, owned by the transport, whose
 // local id keeps the connection segment for the transport to peel; anything
-// else is a plugin by uuid. The Connect codec, the federation codec, the
+// else is a plugin by uuid. The Connect codec, the connection door, the
 // content door, and the shell door all resolve through here.
 //
 // The transport is the only transit namespace, and that is structural rather
@@ -205,7 +205,7 @@ func (s *Server) invalidateInfoCache(uuid string) {
 
 func (s *Server) routes() {
 	// The Connect-RPC handler covers the browser's data plane: a thin codec
-	// over the one in-process router, the same router the federation door
+	// over the one in-process router, the same router the connection door
 	// serves through the other codec.
 	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(newRouter(s)))
 	s.mux.Handle(path, handler)

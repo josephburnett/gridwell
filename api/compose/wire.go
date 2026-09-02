@@ -5,7 +5,7 @@
 // router as an ordinary in-process namespace.
 //
 // The subprocess is one of the node's two gRPC hops; the other is the
-// federation socket. Everything else inside the node is a Go value
+// connection door. Everything else inside the node is a Go value
 // (internal/namespace).
 //
 // This file is the go-plugin handshake both sides share, and plugin.go is

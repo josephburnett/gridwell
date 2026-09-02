@@ -87,8 +87,8 @@ These were decided deliberately. Do not reverse one without a new decision.
 **Node**
 
 - Inside the node a namespace is a Go value (`internal/namespace`). gRPC
-  survives at two hops only: the plugin subprocess and the federation
-  socket. Both node-side doors are codecs over the one router.
+  survives at two hops only: the plugin subprocess and the connection
+  door. Both node-side doors are codecs over the one router.
 - Plugins are the third-party door, and they live in their own repository,
   `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc and
   gitlab on the same footing as anyone else's. This repo owns the door: the
@@ -110,8 +110,9 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A node has no grid of its own. A mount lands on the remote's home.
   Plugins and connections live on the + menu's top row.
 - The web door always has a password (the minted 0600 `web-password` file;
-  delete it to rotate). The federation door is a 0600 unix socket, never
-  TCP.
+  delete it to rotate). The connection door is a 0600 unix socket, never
+  TCP. Its `server.yaml` key stays `federation:` and its file stays
+  `federation.sock`: an existing home already has them written down.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never
   interchangeable with the cookie.

@@ -2,8 +2,8 @@ package namespace
 
 // Server is one of the two codecs; the other is FromClient. It writes a
 // Namespace onto the gridwell.v1 gRPC service. Exactly one place needs it,
-// internal/server's FederationHandler, which serves the node's router to a
-// remote mounter over the federation socket, so the export is a codec and
+// internal/server's ConnectionHandler, which serves the node's router to a
+// remote mounter over the connection door, so the export is a codec and
 // never a second router.
 
 import (

@@ -70,7 +70,7 @@ func (s *Server) openShellBound(ctx context.Context, ns namespace.Namespace, loc
 }
 
 // openShellRoute is the shell route, whole: refusal, resolution, bind. Both
-// doors — this browser WebSocket and the federation codec's bidirectional gRPC
+// doors — this browser WebSocket and the connection door's bidirectional gRPC
 // — enter through these functions, so a shell on a mounted remote behaves
 // identically whichever door asked and neither door can grow its own
 // routing.

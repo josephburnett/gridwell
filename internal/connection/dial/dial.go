@@ -1,5 +1,5 @@
 // Package dial is the transport's dialer: it opens an ssh tunnel to a remote
-// host and dials that node's federation socket through it with raw gRPC, over
+// host and dials that node's connection door through it with raw gRPC, over
 // direct-streamlocal. The far end is the remote's node export, the full
 // Gridwell service routed by the qualified ids each request carries, so a
 // mount is the whole node: the descent lands on its home and every remote
@@ -39,8 +39,8 @@ type Config struct {
 	User       string // ssh user (ssh only)
 	KeyPath    string // private key file (ssh only)
 	KnownHosts string // known_hosts file (ssh only; mandatory, no blind trust)
-	// Addr is the remote node's federation door: its unix socket path, on
-	// the remote host for an ssh bridge — its federation.socket,
+	// Addr is the remote node's connection door: its unix socket path, on
+	// the remote host for an ssh bridge — its `federation:` socket,
 	// <home>/federation.sock by default — or on this host for a direct
 	// connection. Never a TCP address; the door does not exist in that
 	// form.
@@ -85,7 +85,7 @@ func (r *redialer) dial(_ string, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	// direct-streamlocal@openssh.com: the remote's federation door is a unix
+	// direct-streamlocal@openssh.com: the remote node's connection door is a unix
 	// socket, never a port.
 	conn, err := c.Dial("unix", addr)
 	if err != nil {
@@ -194,7 +194,7 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 	// path, since they would strip its leading slash, and the dialer never
 	// needs it — it opens cfg.Addr on the remote host through the
 	// self-healing ssh session, whatever gRPC hands it.
-	conn, err := grpc.NewClient("passthrough:///federation",
+	conn, err := grpc.NewClient("passthrough:///connection",
 		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
 			return rd.dial("unix", cfg.Addr)
 		}),
@@ -233,7 +233,7 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 }
 
 // dialDirect is the direct transport: a plain gRPC connection to another
-// node's federation socket on this machine, with the same keepalive and
+// node's connection door on this machine, with the same keepalive and
 // healing posture as the tunnel, so a dead peer surfaces as Unavailable rather
 // than a silent stale stream and a revived one heals in seconds. There is no
 // auth on this path: the socket's 0600 mode is the gate, admitting the same
