@@ -913,6 +913,18 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 	}
 	a.resolveErr("grid:" + id)
 	delete(a.gridLoadFailed, id)
+	if resp.Grid.ID != id {
+		// The cache keys by the answered name and every frame resolves by the
+		// asked one, so a server that answers under a different id strands the
+		// pane on "loading" with nothing but 200s on the wire — for days, once.
+		// Say so instead, and latch: re-asking gets the same unusable answer,
+		// which is what a verdict is. The answer still lands under its own
+		// name; this report is the difference between a visible contract break
+		// and silence.
+		a.gridLoadFailed[id] = true
+		a.reportErr(errsurface.Error, "grid:"+id,
+			"asked for grid "+id+", was answered "+resp.Grid.ID+" — the view of "+id+" cannot load")
+	}
 	a.c.PutGrid(resp.Grid, resp.Tiles)
 	return nil
 }
