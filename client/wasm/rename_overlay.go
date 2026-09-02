@@ -14,9 +14,9 @@ import (
 
 // Naming: name the room you are in. The focused pane's name renders as the
 // bottom bar's centered title (bottombar.go), not in a pill floating over
-// pane content. The band is carved out of every native surface's rect
-// (panebox.BarInset), so the label and the inline rename input work
-// identically over canvas, shells, and live url panes, with no native twin.
+// pane content. The band is reserved layout below every pane, so the label
+// and the inline rename input work identically over canvas, shells, and live
+// url panes, with no native twin.
 //
 // A right-click on the title opens the rename input when the name is
 // user-editable: Enter or blur commits the versioned SetTile rename, a

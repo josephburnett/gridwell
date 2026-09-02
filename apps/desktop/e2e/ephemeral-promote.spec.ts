@@ -35,7 +35,7 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
   expect(ephemeralID, 'the visit is a descent').not.toBe('');
 
   // The current crumb (last chain segment) is the drag handle.
-  const bar = await gw.bar(visiting.id);
+  const bar = await gw.bar();
   const crumb = bar.segments[bar.segments.length - 1];
   const from = { x: crumb.x + crumb.w / 2, y: bar.top + bar.height / 2 }; // segment x is absolute
   const to = await gw.cellCenter(dest.id, Math.round(dest.cx), Math.round(dest.cy));

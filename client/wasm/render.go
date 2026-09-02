@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
@@ -495,8 +496,8 @@ func (a *App) draw() {
 	// content box and park off-screen during canvas-overlay gestures.
 	a.syncURLViews()
 	// The reserved bottom bands, drawn last so nothing paints over them:
-	// every pane's bottom bar, then the notice strip.
-	a.drawBottomBars()
+	// the one bottom bar, then the notice strip.
+	a.drawBottomBar()
 	a.drawErrStrip()
 	// Inside a pane tile, a teal line wraps the whole window: a second hint
 	// that you are inside one, alongside the named crumb in the bar. It owns
@@ -505,8 +506,8 @@ func (a *App) draw() {
 	// nothing covers it.
 	if a.ws.Depth() > 0 {
 		// The same height the layout used: the outline wraps the pane area
-		// and stays off the notice strip below it.
-		h := a.height - errsurface.StripHeight(a.errs.Len())
+		// and stays off the bar band and notice strip below it.
+		h := a.paneAreaH()
 		a.cctx.Set("strokeStyle", colorPaneTileBorder)
 		a.cctx.Set("lineWidth", wsOutlinePx)
 		a.cctx.Call("strokeRect", wsOutlinePx/2, wsOutlinePx/2,
@@ -524,7 +525,7 @@ func (a *App) draw() {
 		}
 		k := anim.EaseOutCubic(t)
 		lerp := func(from, to float64) float64 { return from + (to-from)*k }
-		h := a.height - errsurface.StripHeight(a.errs.Len())
+		h := a.paneAreaH()
 		a.cctx.Set("strokeStyle", colorPaneTileBorder)
 		a.cctx.Set("lineWidth", lerp(tileBorderPx, wsOutlinePx))
 		a.cctx.Call("strokeRect",
@@ -558,15 +559,22 @@ func (a *App) layoutPanes() map[string]pane.Rect {
 // never overlap.
 const wsOutlinePx = 3.0
 
+// paneAreaH is the height the pane tree occupies: the window minus the
+// reserved notice strip minus the one bottom bar's band (wsbar.Band). It is
+// also the band's top edge. rootLayoutRect, the pane-tile outline, and the
+// descent animation all read this one number, so the panes, the outline, and
+// the bar can never disagree about where they meet.
+func (a *App) paneAreaH() float64 {
+	h, _ := wsbar.Band(a.height, errsurface.StripHeight(a.errs.Len()))
+	return h
+}
+
 // rootLayoutRect is the rectangle the pane tree lays out into: the canvas
-// minus the reserved notice strip, and, inside a pane tile, minus the outline
-// gutter on all four sides. One owner, because the cascading divider resize
-// (pane.ResizeThrough) must see the exact rect the layout uses.
+// minus the reserved notice strip and bar band, and, inside a pane tile, minus
+// the outline gutter on all four sides. One owner, because the cascading
+// divider resize (pane.ResizeThrough) must see the exact rect the layout uses.
 func (a *App) rootLayoutRect() pane.Rect {
-	// The bottom bar lives inside each pane (bottomBarRect), so panes fill
-	// everything above the strip.
-	r := pane.Rect{X: 0, Y: 0, W: a.width,
-		H: a.height - errsurface.StripHeight(a.errs.Len())}
+	r := pane.Rect{X: 0, Y: 0, W: a.width, H: a.paneAreaH()}
 	if a.ws.Depth() > 0 {
 		r.X += wsOutlinePx
 		r.Y += wsOutlinePx
@@ -665,10 +673,10 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					case file.WebContent():
 						// url tiles and serves_page tiles take the same web-content
 						// descent: a preview when frozen, a native view when live.
-						ix, iy, iw, ih := liveContentBox(r)
+						ix, iy, iw, ih := paneContentBox(r)
 						a.drawURLTileInPane(&file, ix, iy, iw, ih)
 					case file.Kind == rpc.KindShell:
-						ix, iy, iw, ih := liveContentBox(r)
+						ix, iy, iw, ih := paneContentBox(r)
 						a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
 					default:
 						ix, iy, iw, ih := textInnerBox(r)
@@ -761,12 +769,12 @@ func (a *App) drawCircleButtonChrome(cx, cy float64) {
 // drawURLBackButton paints the bar-slot button on a URL-tile descent.
 // Click → history.back() on the descended Chromium tab. Same circular
 // chrome as the + button so the position is muscle-memory-compatible.
-func (a *App) drawURLBackButton(p *pane.Pane) {
-	cx, cy := a.plusButtonCenterFor(p)
+func (a *App) drawURLBackButton() {
+	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
-	band, _ := a.barThemeFor(p)
+	band, _ := a.barTheme()
 	beginSlotGlyph(a.cctx, band)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("moveTo", cx+6, cy)
@@ -782,12 +790,12 @@ func (a *App) drawURLBackButton(p *pane.Pane) {
 // descent. Click → open URL stream (same action as the right-drag-down
 // refresh gesture). Same circular chrome as drawURLBackButton so the
 // position is muscle-memory-compatible.
-func (a *App) drawURLRefreshButton(p *pane.Pane) {
-	cx, cy := a.plusButtonCenterFor(p)
+func (a *App) drawURLRefreshButton() {
+	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
-	band, _ := a.barThemeFor(p)
+	band, _ := a.barTheme()
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
 }
 
@@ -797,12 +805,12 @@ func (a *App) drawURLRefreshButton(p *pane.Pane) {
 // arrow out its corner, and a click opens the tile's address in a new browser
 // tab — the browser host's next-best descent. The tile itself stays frozen
 // and untouched.
-func (a *App) drawURLOpenTabButton(p *pane.Pane) {
-	cx, cy := a.plusButtonCenterFor(p)
+func (a *App) drawURLOpenTabButton() {
+	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
 	c := a.cctx
-	band, _ := a.barThemeFor(p)
+	band, _ := a.barTheme()
 	c.Set("strokeStyle", band)
 	c.Set("lineWidth", 2.0)
 	c.Set("lineCap", "round")

@@ -1,13 +1,32 @@
-// Package wsbar owns the bottom bar's geometry: the band at the bottom of
-// every pane, carrying the one nav chain — the complete path from the root as
-// square tile previews, pane-tile boundaries included — and the circle slot.
-// Pure Go: render and input read the same segment rects, so the crumb you see
-// is exactly the crumb you hit.
+// Package wsbar owns the bottom bar's geometry: the one band across the
+// bottom of the window, carrying the nav chain — the complete path from the
+// root as square tile previews, pane-tile boundaries included — and the
+// circle slot. Pure Go: render and input read the same segment rects, so the
+// crumb you see is exactly the crumb you hit.
 //
 // The band is always present: the bar is the one home for "where am I", so it
-// never comes and goes. Native surfaces carve the band out of their rects
-// (panebox.BarInset), so they can never paint over it.
+// never comes and goes. It is reserved layout — the pane tree ends at its top
+// edge (Band) — so no pane, and no native surface sized from a pane, can
+// paint over it.
 package wsbar
+
+// Band divides the window's vertical space: the pane tree gets everything
+// above the band, the band is the RowH strip below it, and the caller's
+// notice strip (stripH) keeps the bottom. paneH is the pane tree's height,
+// which is also the band's top edge, since panes start at y=0 — one number,
+// so the layout and the bar can never disagree about where they meet.
+// ok=false when what is left cannot hold the band; then the panes take it
+// all and no band is drawn.
+func Band(winH, stripH float64) (paneH float64, ok bool) {
+	avail := winH - stripH
+	if avail < 0 {
+		avail = 0
+	}
+	if avail < RowH {
+		return avail, false
+	}
+	return avail - RowH, true
+}
 
 // RowH is the bar's height in CSS px. 32 keeps the band thin while a
 // square chain crumb (side RowH) stays legible as a preview.

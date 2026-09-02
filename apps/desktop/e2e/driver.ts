@@ -135,11 +135,11 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.palette());
   }
 
-  // bar returns the raw bar hook: the band geometry plus every segment's rect
-  // and identity. Chain crumbs carry anchor and tileID, and a root crumb also
-  // carries the glyph it renders. Every pane wears a band, so pass a paneID to
-  // read an unfocused pane's bar; with no argument it reads the focused pane's.
-  async bar(paneID?: string): Promise<{
+  // bar returns the raw bar hook: the one band's geometry plus every segment's
+  // rect and identity. Chain crumbs carry anchor and tileID, and a root crumb
+  // also carries the glyph it renders. There is one bar, across the bottom of
+  // the window, and it wears whichever pane has focus.
+  async bar(): Promise<{
     top: number;
     left: number;
     width: number;
@@ -155,7 +155,7 @@ export class GridwellDriver {
       glyph?: string;
     }>;
   }> {
-    return this.win.evaluate((id) => (window as any).__gridwellTest.bar(id), paneID ?? '');
+    return this.win.evaluate(() => (window as any).__gridwellTest.bar());
   }
 
   async barName(): Promise<{
@@ -467,9 +467,9 @@ export class GridwellDriver {
   // bottom edge band, splitting it into two stacked panes.
   async splitFocusedPaneHorizontal(): Promise<void> {
     const p = await this.focused();
-    // 30% across: the bottom edge band sits under the bar, where a right-down
-    // falls through to the split gesture everywhere except the centered title,
-    // which opens rename. So grab between the crumbs and the title.
+    // 30% across: the whole bottom edge is the pane's own border band now
+    // that the one bar lives below every pane, so a right-down anywhere along
+    // it arms the split.
     const x = p.x + p.w * 0.3;
     await this.rightDragScreen(x, p.y + p.h - 5, x, p.y + p.h * 0.45);
   }
@@ -491,9 +491,8 @@ export class GridwellDriver {
     dy: number,
   ): Promise<{ before: number; after: number }> {
     const g = await this.hDividerGeom();
-    // Grab from below the boundary, in the lower pane's top band: the upper side
-    // can be the focused pane's bar band, which owns left-clicks. The two sides
-    // of a border are otherwise equivalent.
+    // Grab from below the boundary, in the lower pane's top band. The two
+    // sides of a border are equivalent.
     if (button === 'right') {
       await this.rightDragScreen(g.x, g.y + 2, g.x, g.y + dy);
     } else {

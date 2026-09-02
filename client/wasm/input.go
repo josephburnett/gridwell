@@ -169,19 +169,21 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
 	sx, sy := mouseXY(args[0], a.canvas)
-	p, r, ok := a.paneAtScreen(sx, sy)
-	if !ok {
+	// A wheel over the bar band zooms the pane the band is wearing — the
+	// focused one — as if the cursor were at that pane's center: the escape
+	// hatch for a grid tiled wall to wall with wells, where every content
+	// position claims the well zoom and no empty spot remains. The band is
+	// below every pane, so this is resolved before the pane hit-test.
+	if bx, top, bw, barOK := a.bottomBarRect(); barOK &&
+		sy >= top && sy < top+wsbar.RowH && sx >= bx && sx < bx+bw {
+		if fp := a.tree.FocusedPane(); fp != nil && fp.ContentID() == "" {
+			fr := a.paneRectByID(fp.ID)
+			a.wheelZoomPaneAt(fp, fr, dy, fr.X+fr.W/2, fr.Y+fr.H/2)
+		}
 		return nil
 	}
-	// A wheel over a pane's bar band zooms that pane as if the cursor were
-	// at the pane's center: the escape hatch for a grid tiled wall to wall
-	// with wells, where every content position claims the well zoom and no
-	// empty spot remains.
-	if bx, top, bw, barOK := a.bottomBarRectFor(p); barOK &&
-		sy >= top && sy < top+wsbar.RowH && sx >= bx && sx < bx+bw {
-		if p.ContentID() == "" {
-			a.wheelZoomPaneAt(p, r, dy, r.X+r.W/2, r.Y+r.H/2)
-		}
+	p, r, ok := a.paneAtScreen(sx, sy)
+	if !ok {
 		return nil
 	}
 	// Routing is the pure gesture.ClassifyWheel: this handler only resolves
@@ -206,7 +208,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		TextFocused:       p.ContentID() != "",
 		URLDescent:        a.isURLDescent(p),
 		LiveURLView:       a.urlViewFor(p.ID) != nil,
-		InContentBox:      pointInLiveContent(r, sx, sy),
+		InContentBox:      pointInPaneContent(r, sx, sy),
 		TextModeRendered:  p.TextMode == rpc.TextModeRendered,
 		OverEnterableWell: hoverWell != nil,
 		ZoomOut:           dy > 0,
@@ -624,7 +626,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// gridwell gesture.
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-		if a.urlViewFor(p.ID) != nil && pointInLiveContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
+		if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
 	}

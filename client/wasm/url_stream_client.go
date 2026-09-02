@@ -56,11 +56,11 @@ type urlView struct {
 var urlLog = taggedLog("[urlview]")
 
 // contentViewBounds maps a pane's screen rect to the content-box rectangle a
-// hosted webview should occupy: the pane minus its border band and the bar
-// band, in CSS px (liveContentBox). The view fills that box; the pane carries
-// no corner control, because the bar's crumb is the ascent.
+// hosted webview should occupy: the pane minus its border band, in CSS px
+// (paneContentBox). The view fills that box; the pane carries no corner
+// control, because the bar's crumb is the ascent.
 func contentViewBounds(r pane.Rect) viewBounds {
-	x, y, w, h := liveContentBox(r)
+	x, y, w, h := paneContentBox(r)
 	return viewBounds{X: x, Y: y, W: w, H: h}
 }
 
@@ -176,7 +176,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	for _, otherID := range pane.TakeOver(a.urlSurfaces(), paneID, t.ID) {
 		a.closeURLStream(otherID, true)
 	}
-	r := a.barAwarePaneRect(p)
+	r := paneRectFor(a, p)
 	b := contentViewBounds(r)
 	page := t.Kind != rpc.KindURL && t.ServesPage
 	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
@@ -349,9 +349,9 @@ func (a *App) syncURLViews() {
 			bridgeSetHidden(paneID, true, false)
 			continue
 		}
-		// The band is bar territory: liveContentBox carves it out so the
-		// view cannot occlude the bar, and the canvas draws the parked
-		// frame into the very same box.
+		// The view fills the pane's content box, and the canvas draws the
+		// parked frame into the very same box. The one bar is below every
+		// pane, so no view can occlude it.
 		b := contentViewBounds(r)
 		v.bounds = b
 		bridgeSetBounds(paneID, b)

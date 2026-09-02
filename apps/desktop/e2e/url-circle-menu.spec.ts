@@ -3,9 +3,9 @@ import { tileAt } from './oracle';
 
 // The bar circle's right-click pops the live url view's context menu, Freeze
 // Page included. A page can hijack contextmenu inside the view and make the
-// in-page menu unreachable, but the circle sits in the bar band, carved out of
-// the view's bounds by panebox.BarInset, so a right-click there reaches the
-// canvas whatever the page does. This spec crosses the whole seam: canvas
+// in-page menu unreachable, but the circle sits in the one bar's band, below
+// every pane and so outside every view's bounds, so a right-click there
+// reaches the canvas whatever the page does. This spec crosses the whole seam: canvas
 // right-click, the bottomBarClick slot arm, the bridgeShowMenu IPC,
 // registry.showMenu, and the same urlContextMenuTemplate the in-page path uses.
 // It then fires the real Freeze Page item and asserts the freeze lands on the

@@ -135,9 +135,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   outer frames' viewports. The durable home for a layout is the pane tile.
 - Cross-plugin: left-drag links, right-drag clones. There is no move.
   Dashed means link; deleting a link unlinks.
-- Every pane wears the bar. Clicks act in the focused pane; a click in an
-  unfocused pane moves focus, nothing else. A crumb click ascends;
-  middle-click is the in-pane shortcut.
+- One bar, across the bottom of the window, always visible, wearing the
+  focused pane; the panes end at its top edge. Clicks act in the focused
+  pane; a click in an unfocused pane moves focus, nothing else. A crumb
+  click ascends; middle-click is the in-pane shortcut.
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.

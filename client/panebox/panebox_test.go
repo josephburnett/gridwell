@@ -46,9 +46,9 @@ func TestPointInContent(t *testing.T) {
 		{200, 50, false},
 	}
 	for _, c := range cases {
-		got := PointInLiveContent(r, 0, 10, c.sx, c.sy)
+		got := PointInContent(r, 10, c.sx, c.sy)
 		if got != c.want {
-			t.Errorf("PointInLiveContent(%v, %v) = %v, want %v", c.sx, c.sy, got, c.want)
+			t.Errorf("PointInContent(%v, %v) = %v, want %v", c.sx, c.sy, got, c.want)
 		}
 	}
 }
@@ -158,20 +158,6 @@ func TestLiveViewContentBoxDegeneratePane(t *testing.T) {
 	}
 }
 
-func TestBarInset(t *testing.T) {
-	// Every pane wears the bar, so the inset is unconditional: content does
-	// not resize when focus moves.
-	r := pane.Rect{X: 10, Y: 20, W: 300, H: 200}
-	got := BarInset(r, 32)
-	if got.H != 168 || got.X != 10 || got.Y != 20 || got.W != 300 {
-		t.Fatalf("inset = %+v, want H=168 only", got)
-	}
-	tiny := pane.Rect{H: 20}
-	if BarInset(tiny, 32) != tiny {
-		t.Fatal("degenerate rect must not go negative")
-	}
-}
-
 // Pane-centered modals: the dialog appears where you acted.
 func TestModalCardPos_CentersOnThePane(t *testing.T) {
 	// Right half of a 1000×800 window; a 400×200 card.
@@ -198,26 +184,24 @@ func TestModalCardPos_ClampsToTheWindow(t *testing.T) {
 	}
 }
 
-// The parked frame and the live view share one box: a capture taken at the
-// live bounds, contain-fit into the fallback box, lands pixel-for-pixel where
-// the view was — no letterbox, no shift. Drawn into the un-inset content box
-// the same frame would sit half a bar lower behind black bands.
-func TestLiveContentBoxIsTheFallbackBox(t *testing.T) {
+// The parked frame and the live view share one box — the pane's content box,
+// with nothing carved out of it, since the one bar lives below every pane
+// rather than inside one. A capture taken at the live bounds, contain-fit
+// into the fallback box, lands pixel-for-pixel where the view was: no
+// letterbox, no shift.
+func TestContentBoxIsTheFallbackBox(t *testing.T) {
 	r := pane.Rect{X: 100, Y: 40, W: 600, H: 400}
-	live := LiveContentBox(r, 28, 2)
-	if live != ContentBox(BarInset(r, 28), 2) {
-		t.Fatalf("LiveContentBox = %+v", live)
-	}
+	live := ContentBox(r, 2)
 	dx, dy, dw, dh, ok := preview.ContainDstRect(live.W, live.H, live.X, live.Y, live.W, live.H)
 	if !ok || dx != live.X || dy != live.Y || dw != live.W || dh != live.H {
 		t.Fatalf("frame drawn into its own box moved: (%v,%v,%v,%v)", dx, dy, dw, dh)
 	}
-	raw := ContentBox(r, 2)
-	_, dy, _, _, _ = preview.ContainDstRect(live.W, live.H, raw.X, raw.Y, raw.W, raw.H)
-	if dy == live.Y {
-		t.Fatal("the un-inset box would not have shifted the frame — the regression this pins is gone from the fixture")
+	// The box runs to the pane's bottom border: a live view fills the pane,
+	// and no band is reserved out of it.
+	if !PointInContent(r, 2, 300, 300) || !PointInContent(r, 2, 300, 437) {
+		t.Error("hit-test: the content box reaches the pane's bottom border")
 	}
-	if !PointInLiveContent(r, 28, 2, 300, 300) || PointInLiveContent(r, 28, 2, 300, 430) {
-		t.Error("hit-test: inside the live box yes, in the bar band no")
+	if PointInContent(r, 2, 300, 441) {
+		t.Error("hit-test: past the pane's bottom edge is outside")
 	}
 }

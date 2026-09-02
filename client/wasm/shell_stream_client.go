@@ -735,10 +735,10 @@ func (a *App) syncShellOverlayPosition() {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}
-		// The one live content box (liveContentBox): the same rect the URL
+		// The one live content box (paneContentBox): the same rect the URL
 		// view and the canvas fallback use, so every live-tile kind sits
-		// flush inside the chrome and above the bar.
-		cx, cy, cw, ch := liveContentBox(r)
+		// flush inside the chrome.
+		cx, cy, cw, ch := paneContentBox(r)
 		cb := pane.Rect{X: cx, Y: cy, W: cw, H: ch}
 		if cb.W < 1 || cb.H < 1 {
 			conn.container.Get("style").Set("display", "none")

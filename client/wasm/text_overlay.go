@@ -12,7 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
-	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
 // textSaveDebounceMs is the delay between the first keystroke since
@@ -72,27 +71,21 @@ func textInnerBox(r pane.Rect) (x, y, w, h float64) {
 	return b.X, b.Y, b.W, b.H
 }
 
-// barAwarePaneRect is pane p's rect with the bar band carved out: the rect
-// every overlay and native surface sizes from, so none can occlude the band.
-func (a *App) barAwarePaneRect(p *pane.Pane) pane.Rect {
-	return panebox.BarInset(paneRectFor(a, p), wsbar.RowH)
-}
-
-// liveContentBox returns the rectangle a live surface (url/page view,
-// shell overlay) occupies in pane rect r, and the rectangle its parked
-// fallback frame is drawn into: the pane minus the bar band minus the
-// outline — panebox.LiveContentBox with this renderer's constants. Web
-// content fills it edge-to-edge (pages have their own layout); ascent
-// is via the Escape key. There is deliberately no un-inset variant.
-func liveContentBox(r pane.Rect) (x, y, w, h float64) {
-	b := panebox.LiveContentBox(r, wsbar.RowH, paneBorderPx)
+// paneContentBox returns the rectangle a live surface (url/page view, shell
+// overlay) occupies in pane rect r, and the rectangle its parked fallback
+// frame is drawn into: the pane minus the outline — panebox.ContentBox with
+// this renderer's border constant. The one bar sits below every pane, so
+// nothing is carved out of it. Web content fills it edge-to-edge (pages have
+// their own layout); ascent is via the Escape key.
+func paneContentBox(r pane.Rect) (x, y, w, h float64) {
+	b := panebox.ContentBox(r, paneBorderPx)
 	return b.X, b.Y, b.W, b.H
 }
 
-// pointInLiveContent / pointInFileInner are thin adapters over the
+// pointInPaneContent / pointInFileInner are thin adapters over the
 // panebox hit-tests, supplying the wasm renderer's constants.
-func pointInLiveContent(r pane.Rect, sx, sy float64) bool {
-	return panebox.PointInLiveContent(r, wsbar.RowH, paneBorderPx, sx, sy)
+func pointInPaneContent(r pane.Rect, sx, sy float64) bool {
+	return panebox.PointInContent(r, paneBorderPx, sx, sy)
 }
 
 func pointInFileInner(r pane.Rect, sx, sy float64) bool {
@@ -459,7 +452,7 @@ func (a *App) refreshFileOverlay() {
 			return
 		}
 	}
-	r := a.barAwarePaneRect(p)
+	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		ta.Get("style").Set("display", "none")
 		return
@@ -548,7 +541,7 @@ func (a *App) syncTextOverlayPosition() {
 		a.textTextarea.Get("style").Set("display", "none")
 		return
 	}
-	r := a.barAwarePaneRect(p)
+	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}

@@ -1,9 +1,10 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The bottom bar is always-reserved layout carrying the one nav chain: the
-// complete path from the root, as an outer chain, the pane-tile boundary crumb,
-// and the inner chain. The band never overlays pane content. Every crumb click
+// The bottom bar is always-reserved layout — one band across the window's
+// bottom, wearing the focused pane — carrying the one nav chain: the complete
+// path from the root, as an outer chain, the pane-tile boundary crumb, and the
+// inner chain. The band never overlays pane content. Every crumb click
 // goes to that crumb, so the current boundary is a no-op and leaving is clicking
 // any crumb before it. The workspace boundary belongs to the bar alone:
 //   - the in-pane ascent gesture, a middle click, on a fully-ascended pane does
@@ -25,16 +26,14 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  // The band lives inside the pane's border: its top edge is one row plus the
-  // border above the pane's bottom, so the border wraps all the way around.
-  // Outside a workspace there is no workspace crumb and no anchor block; the
-  // chain starts the band. On a grid the theme is the blue grid family.
+  // The band is reserved layout below every pane: the pane's bottom edge is
+  // exactly the band's top, so the two can never overlap. Outside a workspace
+  // there is no workspace crumb and no anchor block; the chain starts the
+  // band. On a grid the theme is the blue grid family.
   const outside = await bar(window);
   expect((await workspaceState(window)).depth).toBe(0);
   const fp0 = await gw.focused();
-  const borderPx = fp0.y + fp0.h - outside.height - outside.top;
-  expect(borderPx, 'the band sits inside the pane border').toBeGreaterThan(0);
-  expect(borderPx, 'by exactly the border width').toBeLessThan(8);
+  expect(fp0.y + fp0.h, 'the pane ends where the band begins').toBe(outside.top);
   expect(outside.segments.some((s: any) => s.kind === 'pane'), 'no boundary crumb outside').toBe(false);
   expect(outside.segments[0].kind, 'the chain starts the band').toBe('chain');
   expect(outside.band, 'grid-family band shade').toBe('#151b2e');
@@ -59,7 +58,11 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect(wp.x, 'the gutter is thin').toBeLessThan(8);
   expect(wp.y, 'top gutter matches').toBe(wp.x);
   expect(winW - (wp.x + wp.w), 'right gutter matches').toBe(wp.x);
-  expect(winH - (wp.y + wp.h), 'bottom gutter matches').toBe(wp.x);
+  // Below the panes the window carries the gutter and then the bar's band, so
+  // the bottom margin is the gutter plus one row.
+  const inside0 = await bar(window);
+  expect(winH - (wp.y + wp.h), 'the gutter, then the band').toBe(wp.x + inside0.height);
+  expect(inside0.top - (wp.y + wp.h), 'the outline stays off the band').toBe(wp.x);
 
   // Inside, one nav chain: the outer chain, then the pane tile's boundary crumb,
   // then the inner chain. The complete path from the root.

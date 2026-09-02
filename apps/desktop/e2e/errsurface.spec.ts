@@ -91,13 +91,11 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
   const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
   const winH = await window.evaluate(() => globalThis.innerHeight);
   const bottom = Math.max(...panes.map((p: any) => p.y + p.h));
-  // Panes reclaim the full window height: no strip, and no reserved bar band
-  // either, since the bar rides inside the pane, a border's width above its
+  // Panes reclaim the strip's height and nothing more: the one bar's band
+  // stays reserved below them, and with no strip left it runs to the window's
   // bottom edge.
-  expect(bottom, 'panes reclaim the reserved strip height').toBe(winH);
-  const gap = bottom - (bar.top + bar.height);
-  expect(gap, 'the band sits inside the pane border').toBeGreaterThan(0);
-  expect(gap, 'by exactly the border width').toBeLessThan(8);
+  expect(bottom, 'panes reclaim the reserved strip height').toBe(bar.top);
+  expect(bar.top + bar.height, 'the band now reaches the window bottom').toBe(winH);
 });
 
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {

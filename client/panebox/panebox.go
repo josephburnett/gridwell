@@ -42,19 +42,13 @@ func ContentBox(r pane.Rect, borderPx float64) pane.Rect {
 	return pane.Rect{X: x, Y: y, W: w, H: h}
 }
 
-// PointInContent reports whether (sx, sy) lies inside ContentBox(r, borderPx).
-// LiveContentBox is the content box of a live surface — a url or page view, a
-// shell overlay — and of the canvas frame drawn in its place while it is
-// parked: the pane minus the bar band minus the border. One derivation for
-// the native bounds and the fallback draw, so a parked frame lands exactly
+// PointInContent is the hit-test twin of ContentBox: it reports whether
+// (sx, sy) lies inside ContentBox(r, borderPx). A live surface — a url or
+// page view, a shell overlay — fills the same box, as does the canvas frame
+// drawn in its place while it is parked, so a parked frame lands exactly
 // where the live view was instead of jumping.
-func LiveContentBox(r pane.Rect, barH, borderPx float64) pane.Rect {
-	return ContentBox(BarInset(r, barH), borderPx)
-}
-
-// PointInLiveContent is the hit-test twin of LiveContentBox.
-func PointInLiveContent(r pane.Rect, barH, borderPx, sx, sy float64) bool {
-	return LiveContentBox(r, barH, borderPx).Contains(sx, sy)
+func PointInContent(r pane.Rect, borderPx, sx, sy float64) bool {
+	return ContentBox(r, borderPx).Contains(sx, sy)
 }
 
 // TextareaBox returns the text-overlay textarea rectangle and its
@@ -97,19 +91,6 @@ func FitZoom(r pane.Rect, fileW, fileH int64, sideInset, cellPx float64) float64
 		return 1
 	}
 	return zoomtrans.Fit(fileW, fileH, inner.W, inner.H, cellPx)
-}
-
-// BarInset carves the bottom-bar band out of a pane rect before content boxes
-// are computed from it, so no native surface (live view, shell overlay,
-// textarea, rendered div) can occlude the band. Every pane wears its bar, so
-// the inset is unconditional and content does not resize when focus moves;
-// focus shows only in the border color. A no-op for degenerate rects.
-func BarInset(r pane.Rect, barH float64) pane.Rect {
-	if r.H <= barH {
-		return r
-	}
-	r.H -= barH
-	return r
 }
 
 // ModalCardPos places a modal card centered on the active pane rather than

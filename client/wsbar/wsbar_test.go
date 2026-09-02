@@ -99,3 +99,29 @@ func TestLayoutMixedWidths(t *testing.T) {
 		t.Fatalf("tight layout = %+v, want the tail starting at the boundary", segs)
 	}
 }
+
+// The band is reserved layout: panes end exactly where it starts, whether or
+// not a notice strip is up, and the two numbers come from one computation.
+func TestBandReservesTheStripBelowThePanes(t *testing.T) {
+	paneH, ok := Band(800, 0)
+	if !ok || paneH != 800-RowH {
+		t.Fatalf("Band(800, 0) = %v, %v; want %v, true", paneH, ok, 800-RowH)
+	}
+	// A notice strip takes its rows from below the band.
+	paneH, ok = Band(800, 24)
+	if !ok || paneH != 800-24-RowH {
+		t.Fatalf("Band(800, 24) = %v, %v; want %v, true", paneH, ok, 800-24-RowH)
+	}
+}
+
+func TestBandRefusesAWindowTooShortToHoldIt(t *testing.T) {
+	// Not even one row left: no band, and the panes get what remains.
+	paneH, ok := Band(RowH-1, 0)
+	if ok || paneH != RowH-1 {
+		t.Fatalf("Band(%v, 0) = %v, %v; want %v, false", RowH-1, paneH, ok, RowH-1)
+	}
+	// A strip taller than the window never yields a negative pane height.
+	if paneH, ok := Band(10, 40); ok || paneH != 0 {
+		t.Fatalf("Band(10, 40) = %v, %v; want 0, false", paneH, ok)
+	}
+}

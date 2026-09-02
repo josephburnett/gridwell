@@ -241,11 +241,13 @@ other view paints soft-wrapped source on canvas at the same columns as the
 textarea, so nothing reflows on focus. Previews render at constant scale from
 the tile's own facts alone.
 
-**The bar.** Every pane wears it (`client/wsbar`, `bottombar.go`): one crumb
-per frame, the title, and the circle slot (+ menu / back / refresh). Native
-surfaces carve the band out unconditionally (`panebox.BarInset`). Clicks act
-in the focused pane; a click in an unfocused pane moves focus, nothing else.
-A crumb click is the ascent gesture; middle-click is the in-pane shortcut.
+**The bar.** One band across the bottom of the window (`client/wsbar`,
+`bottombar.go`), always there, wearing the focused pane: one crumb per frame,
+the title, and the circle slot (+ menu / back / refresh). It is reserved
+layout — the pane tree ends at its top edge (`wsbar.Band`) — so no pane, and
+no surface sized from a pane, can occlude it. Clicks act in the focused pane;
+a click in an unfocused pane moves focus, nothing else. A crumb click is the
+ascent gesture; middle-click is the in-pane shortcut.
 
 **Shells** attach over a WebSocket at `/shell` on the page's own origin
 (`client/shellwire` writes the address and frames; `client/shellstream` owns
