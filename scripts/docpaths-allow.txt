@@ -2,3 +2,6 @@
 # although it does not exist in the tree. Every line says why.
 # A gitignored runtime cache dir that `make vendor` creates:
 apps/desktop/README.md apps/desktop/.cache
+# The name internal/remote will take under the plan's vocabulary section,
+# named there as the destination of a rename that has not happened yet:
+docs/one-cache.md internal/connection
