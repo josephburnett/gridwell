@@ -424,6 +424,18 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		conn.hoveredURL = ""
 		return nil
 	})
+	// A program's own OSC 8 hyperlink is xterm's own link — the link provider
+	// never scanned it out of a line — and xterm opens it itself: a confirm(),
+	// then window.open — a tab in the host browser on a browser host, and a
+	// denied popup that opens nothing on the desktop. The linkHandler option
+	// hands those links to the same owner as every other one, hover and leave
+	// included, so a press on one is Gridwell's too. xterm keeps its own
+	// http(s) filter on these, so no other protocol reaches here.
+	linkHandler := js.Global().Get("Object").New()
+	linkHandler.Set("activate", conn.onLinkActivate)
+	linkHandler.Set("hover", conn.onLinkHover)
+	linkHandler.Set("leave", conn.onLinkLeave)
+	term.Get("options").Set("linkHandler", linkHandler)
 	conn.onLinkProvide = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		// (bufferLineNumber 1-based, callback). Resolve the line text, find any
 		// urls, and hand xterm a link (1-based inclusive cell range) per url.

@@ -5,8 +5,8 @@ import { tileAt } from './oracle';
 
 // Clicking a url rendered in a live shell opens the ephemeral visit below and
 // nothing else. Every exit is instrumented: renderer window.open and confirm,
-// which is xterm's OSC-8 default path, main-process shell.openExternal, and the
-// BrowserWindow count. The app-wide seals keep it that way even on paths this
+// main-process shell.openExternal, and the BrowserWindow count. The
+// app-wide seals keep it that way even on paths this
 // spec's plain click cannot reach: openExternal is denied on every session, and
 // window.open is denied on every webContents without the live-view handler.
 
@@ -231,6 +231,102 @@ test('a shell url click is not also delivered to the terminal application', asyn
   // And the application heard nothing: no press, no release, no bytes at all.
   await window.waitForTimeout(1000);
   expect(sunk()).toBe(beforeLink);
+
+  // Teardown: ascend the visit, ascend the shell, delete the tile so tmux dies.
+  const panes = (await gw.panes()).slice().sort((a: any, b: any) => a.y - b.y);
+  const lower = panes[panes.length - 1];
+  await window.mouse.move(lower.x + lower.w / 2, lower.y + lower.h / 2);
+  await window.mouse.down({ button: 'middle' });
+  await window.mouse.up({ button: 'middle' });
+  await gw.waitIdle();
+  await gw.ascendViaCrumb();
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 10_000 }).toBe('');
+  const shell = tileAt(await gw.getGrid(grid), 'shell', cx, cy);
+  if (shell) await gw.deleteTileCell(cx, cy);
+});
+
+// A program's own OSC 8 hyperlink is a link like any other, and opens where
+// every link opens: the visit below. xterm ships a default handler for these —
+// a confirm() and then window.open — which is a tab in the host browser on a
+// browser host, and a denied popup that opens nothing on the desktop. Neither
+// is Gridwell's answer, so the terminal is handed the one owner instead. The
+// sequence is fed straight into the terminal (shellFeed): a hyperlink is a
+// terminal-level contract, and tmux strips it unless the outer terminal
+// declares the capability.
+test('an OSC 8 hyperlink in a shell opens the visit below, not a browser', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const grid = f.gridID;
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('shell', cx, cy);
+  await gw.descendCell(cx, cy);
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellRenderer()), {
+      timeout: 15_000,
+    })
+    .toBe('webgl');
+
+  await window.evaluate(() => {
+    (window as any).__wopens = [];
+    (window as any).open = (u: any) => {
+      (window as any).__wopens.push(String(u));
+      return null;
+    };
+    (window as any).__confirms = [];
+    (window as any).confirm = (m: any) => {
+      (window as any).__confirms.push(String(m));
+      return true;
+    };
+  });
+
+  // The url rides the sequence and the cells say only OSC8CLICKME, so the url
+  // scanner cannot see this link: the linkifier's own hyperlink is the only
+  // one here.
+  const url = `${gw.origin}/wasm_exec.js?osc8=1`;
+  await window.evaluate(
+    (u: string) =>
+      (window as any).__gridwellTest.shellFeed(
+        `\r\n\u001b]8;;${u}\u001b\\OSC8CLICKME\u001b]8;;\u001b\\\r\n`,
+      ),
+    url,
+  );
+  const markerRow = (t: string) => t.split('\n').findIndex((l) => l.includes('OSC8CLICKME'));
+  await expect
+    .poll(
+      async () => markerRow(await window.evaluate(() => (window as any).__gridwellTest.shellText())),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThanOrEqual(0);
+  const text: string = await window.evaluate(() => (window as any).__gridwellTest.shellText());
+  const row = markerRow(text);
+  const pt = await window.evaluate(
+    ([c, r]: number[]) => (window as any).__gridwellTest.shellCellPx(c, r),
+    [text.split('\n')[row].indexOf('OSC8CLICKME') + 5, row],
+  );
+  await window.mouse.move(pt.x, pt.y - 40);
+  await window.mouse.move(pt.x, pt.y);
+  await expect
+    .poll(
+      () =>
+        window.evaluate(
+          () =>
+            document.querySelector('.xterm-screen')?.classList.contains('xterm-cursor-pointer') ??
+            false,
+        ),
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+  await window.mouse.click(pt.x, pt.y);
+
+  // The visit below, and no browser: no confirm, no window.open.
+  await expect.poll(async () => (await gw.panes()).length, { timeout: 15_000 }).toBe(2);
+  expect(await window.evaluate(() => (window as any).__confirms)).toEqual([]);
+  expect(await window.evaluate(() => (window as any).__wopens)).toEqual([]);
 
   // Teardown: ascend the visit, ascend the shell, delete the tile so tmux dies.
   const panes = (await gw.panes()).slice().sort((a: any, b: any) => a.y - b.y);
