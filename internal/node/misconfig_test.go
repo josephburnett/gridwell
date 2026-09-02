@@ -117,6 +117,25 @@ func TestStartRefusesAConnectionWithNoAddr(t *testing.T) {
 	}
 }
 
+// The other half of the class, pinned: a plugin whose binary: path is not
+// there fails the boot too, naming the path. `serve` resolves an unpinned
+// binary before it starts the node, and a pinned one that is not there fails
+// the spawn, which stops LoadInto — a plugin without the binary or the config
+// it needs must never come up as an empty grid.
+func TestStartRefusesAPluginBinaryThatIsNotThere(t *testing.T) {
+	home, cfg := startCfg(t)
+	bin := filepath.Join(home, "nowhere", "gridwell-plugin-fs")
+	cfg.Plugins = []config.PluginConfig{{ID: "aaaaaaa", Kind: "fs", Binary: bin}}
+	n, err := Start(Options{Home: home, Cfg: cfg})
+	if err == nil {
+		n.Close()
+		t.Fatal("serve started with a plugin binary that is not there")
+	}
+	if !strings.Contains(err.Error(), bin) {
+		t.Fatalf("the error must name the exact path, got: %v", err)
+	}
+}
+
 // The boundary, from the other side: a remote that does not answer is a
 // NETWORK fact, and offline boot is decided behavior — a laptop on a plane
 // serves its home and its cache. The connection stays dark at runtime, with
