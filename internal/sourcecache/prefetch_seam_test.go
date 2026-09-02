@@ -10,11 +10,11 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/remote"
-	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
 
 // The prefetch seam: the cache in front of the REAL transport, not a stand-in
@@ -22,7 +22,7 @@ import (
 // every prefetch test used to ask that of a home store behind a proxy — a
 // namespace that answers Info, which no transport does. So the walk returned
 // at its first line against the one seam it exists for, and every test stayed
-// green. These run the production shape: sourcecache → remote.Server →
+// green. These run the production shape: sourcecache → connection.Server →
 // a connection.
 
 // connFixture wires one connection, dialed in-process to a far node's store,
@@ -47,12 +47,12 @@ func connFixture(t *testing.T, opts Options) (cc *Layer, far *darkable, farRoot,
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	db, err := remote.NewDB(sqlDB)
+	db, err := connection.NewDB(sqlDB)
 	if err != nil {
 		t.Fatal(err)
 	}
 	conn = "farconn"
-	transport, err := remote.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
 		return far, func() {}, nil
 	}, "", []config.ConnectionConfig{{Name: conn, Addr: "/far/federation.sock"}}, nil)
 	if err != nil {

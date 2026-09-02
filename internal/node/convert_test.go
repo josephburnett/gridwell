@@ -15,9 +15,9 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
-	"github.com/josephburnett/gridwell/internal/remote"
 )
 
 // legacyMemoryDDL is the retired per-plugin memory-DB schema, as the
@@ -119,7 +119,7 @@ func buildLegacyHome(t *testing.T) legacyHome {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rdb, err := remote.NewDB(rsql)
+	rdb, err := connection.NewDB(rsql)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestConvertFoldsALegacyHome(t *testing.T) {
 		t.Fatalf("a home anchor must stay as it was: %s", blob)
 	}
 	// The connections came along.
-	cdb, err := remote.NewDB(ns.SQL())
+	cdb, err := connection.NewDB(ns.SQL())
 	if err != nil {
 		t.Fatal(err)
 	}

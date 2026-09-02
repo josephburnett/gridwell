@@ -29,9 +29,9 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
-	"github.com/josephburnett/gridwell/internal/remote"
 )
 
 // idMap remaps one plugin's old grid and tile ids to the new ones.
@@ -605,7 +605,7 @@ func importConnections(ctx context.Context, st *store.Store, path string) error 
 		return err
 	}
 	defer old.Close()
-	db, err := remote.NewDB(st.SQL())
+	db, err := connection.NewDB(st.SQL())
 	if err != nil {
 		return err
 	}

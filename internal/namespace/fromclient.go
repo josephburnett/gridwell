@@ -2,9 +2,9 @@ package namespace
 
 // FromClient is one of the two codecs; the other is Server. It reads a
 // gridwell.v1 gRPC client as a Namespace. Exactly one place needs it,
-// internal/remote/dial, which dials another node's federation socket, so the
+// internal/connection/dial, which dials another node's federation socket, so the
 // transport's connections are Namespace values like everything else and
-// internal/remote never touches a gRPC stream type.
+// internal/connection never touches a gRPC stream type.
 
 import (
 	"context"

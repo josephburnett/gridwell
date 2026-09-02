@@ -9,7 +9,7 @@
 //   - the plugin.v1 subprocess (api/compose.LoadPlugin): the third-party
 //     door, with process isolation and a separate dependency graph;
 //   - the federation socket (internal/server/nodeexport.go serving
-//     gridwell.v1, internal/remote/dial consuming it): another node.
+//     gridwell.v1, internal/connection/dial consuming it): another node.
 //
 // The web door stays Connect over HTTP, because it crosses to the browser.
 //
@@ -43,7 +43,7 @@
 // messages they pass. The contract, so no copy layer is needed:
 //
 //   - a Namespace must not retain or mutate a request after it returns;
-//     one that rewrites ids clones first, as internal/remote does;
+//     one that rewrites ids clones first, as internal/connection does;
 //   - a Namespace must not mutate a response after returning it;
 //   - a caller must not mutate a response in place: the qualification
 //     layer clones (api/rpc.TransitQualifyTiles, server.qualifyTiles), so

@@ -16,11 +16,11 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/remote"
-	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
 
 // The /content/ door crosses every seam at once: HTTP URL grammar → token
@@ -262,11 +262,11 @@ func TestContentDoorThroughAConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	db, err := remote.NewDB(sqlDB)
+	db, err := connection.NewDB(sqlDB)
 	if err != nil {
 		t.Fatal(err)
 	}
-	transport, err := remote.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
 		return farNode, func() {}, nil
 	}, "", []config.ConnectionConfig{{Name: "far", Addr: "/tmp/far.sock"}}, nil)
 	if err != nil {

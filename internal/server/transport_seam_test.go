@@ -28,13 +28,13 @@ import (
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/remote"
-	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
@@ -96,11 +96,11 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	db, err := remote.NewDB(sqlDB)
+	db, err := connection.NewDB(sqlDB)
 	if err != nil {
 		t.Fatal(err)
 	}
-	transport, err := remote.New(db, func(cfg dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(db, func(cfg dial.Config) (namespace.Namespace, func(), error) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.dialed = append(h.dialed, cfg)

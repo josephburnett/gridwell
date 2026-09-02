@@ -36,7 +36,7 @@ type Registry struct {
 }
 
 // ConnectionRow is one connection as the transport lists it for the
-// handshake. It mirrors internal/remote.Row's shape, and lives here so the
+// handshake. It mirrors internal/connection.Row's shape, and lives here so the
 // registry needs no transport import.
 type ConnectionRow struct {
 	Name, Label, RootGridID, StatusDetail string

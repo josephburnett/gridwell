@@ -1,4 +1,4 @@
-package remote
+package connection
 
 // The transport's store: what the node remembers about its connections beyond
 // what server.yaml declares. That is the learned landing, the remote's home

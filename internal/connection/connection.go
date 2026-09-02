@@ -1,4 +1,4 @@
-// Package remote is the node's transport: its connections to other nodes. A
+// Package connection is the node's transport: its connections to other nodes. A
 // connection is config — a server.yaml `connections:` row naming it, labelling
 // it, and saying how to dial. The transport dials each one, learns where it
 // lands, which is the remote's home, and routes every id shaped
@@ -10,7 +10,7 @@
 // the + menu and, when the user drags it, an ordinary link tile in their own
 // grid. What it remembers, in db.go, is the learned landing and the graveyard
 // of retired names.
-package remote
+package connection
 
 import (
 	"context"
@@ -32,9 +32,9 @@ import (
 	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
 
 // Dialer builds a namespace over a remote node's export from a resolved

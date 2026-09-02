@@ -25,13 +25,13 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
-	"github.com/josephburnett/gridwell/internal/remote"
-	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
@@ -274,12 +274,12 @@ func openCache(cfg *config.ServerConfig) *sourcecache.Store {
 // namespace ("<id>/<conn>/…"), fronted by the source cache so a dark
 // remote degrades to stale-but-readable instead of blank.
 func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig, front func(namespace.Namespace) namespace.Namespace) error {
-	db, err := remote.NewDB(st.SQL())
+	db, err := connection.NewDB(st.SQL())
 	if err != nil {
 		return err
 	}
 	userHome, _ := os.UserHomeDir()
-	impl, err := remote.New(db, dial.Dial, userHome, cfg.Connections, cfg.RetiredNames)
+	impl, err := connection.New(db, dial.Dial, userHome, cfg.Connections, cfg.RetiredNames)
 	if err != nil {
 		return err
 	}

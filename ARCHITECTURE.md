@@ -146,7 +146,7 @@ keeps the arrangement as a namespace of its own store
 switches on its kind; every plugin behavior rides a wire declaration.
 `docs/plugin-authoring.md` is the contract from the plugin's side.
 
-**Connections** (`internal/remote`) are config rows: an immutable name, a
+**Connections** (`internal/connection`) are config rows: an immutable name, a
 label, how to dial. The transport dials each at boot, lands on the remote's
 home, and remembers nothing else but retired names (a name never returns).
 A connection is a row in the + menu and, when dragged, an ordinary link

@@ -36,7 +36,7 @@ func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
 // with NodeProtocols, because gRPC over a cleartext tunnel needs HTTP/2
 // without TLS, which plain net/http refuses by default.
 //
-// This and internal/remote/dial are the federation hop's two ends, and the two
+// This and internal/connection/dial are the federation hop's two ends, and the two
 // ends of the only gRPC in the node besides the plugin subprocess: one writes
 // the router onto the wire (namespace.Server), the other reads it back off
 // (namespace.FromClient).

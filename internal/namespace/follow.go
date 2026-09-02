@@ -5,7 +5,7 @@ package namespace
 // In process there is no stream open to observe: Subscribe is one call that
 // runs for the stream's whole life. Follow supplies the missing moment,
 // once, so the node's fan-in (internal/server) and the transport's
-// (internal/remote) agree on what established means instead of each
+// (internal/connection) agree on what established means instead of each
 // inventing a rule.
 
 import (

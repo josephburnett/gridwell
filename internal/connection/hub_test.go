@@ -1,4 +1,4 @@
-package remote
+package connection
 
 import (
 	"path/filepath"

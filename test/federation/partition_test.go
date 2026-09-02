@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
+	"github.com/josephburnett/gridwell/internal/connection/dial/dialtest"
 )
 
 func TestMountPartitionServesCache(t *testing.T) {
