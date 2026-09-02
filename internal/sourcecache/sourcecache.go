@@ -1,7 +1,8 @@
-// Package sourcecache is the node's one memory of what a source last said. It
-// sits in front of every non-home namespace — every content plugin's adapter
-// and the transport's connections — as a read-through layer over one
-// disposable file.
+// Package sourcecache is the node's one memory of what a connection last
+// said. It sits in front of the transport — the one seam whose answers cross
+// a network — as a read-through layer over one disposable file. Home is the
+// durable store and a plugin is a subprocess a call away; neither is fronted,
+// because a cache earns its keep across a network and nowhere else.
 //
 // A grid read serves first and refreshes behind. A remembered grid answers
 // immediately: unstamped within freshWindow of the answer it remembers,
@@ -23,12 +24,10 @@
 // because under serve-first "the next read refreshes" no longer holds and a
 // moved tile must not snap back to its remembered place.
 //
-// It is a cache, not memory. The node's own facts about a plugin's entries —
-// the ids it minted, where the user put them, how they are framed — are
-// durable rows in gridwell.db, and an adapter answers a dark source from
-// those rows, not from here. What lives here is only what the source itself
-// said: the handshake, the tile facts of a remote grid, bodies, previews,
-// page bytes.
+// It is a cache, not memory. The node's own facts — the ids it minted, where
+// the user put them, how they are framed — are durable rows in gridwell.db.
+// What lives here is only what a connection itself said: the handshake, the
+// tile facts of a remote grid, bodies, previews, page bytes.
 //
 // Storage is one SQLite DB for the whole node, <home>/cache.db, and it is
 // explicitly disposable: deleting it is always safe, since it re-warms from
@@ -51,8 +50,8 @@
 // Deliberately not cached: any answer already stamped stale, since
 // remembering a degraded answer would overwrite the good one it degraded
 // from. ServeContent bodies are cached under their own bounds
-// (servecontent.go); the whole-source prefetch walk is a per-namespace
-// policy, off by default and opted into by the transport alone (prefetch.go).
+// (servecontent.go); the whole-source prefetch walk is a per-seam policy, off
+// by default and opted into by the transport alone (prefetch.go).
 package sourcecache
 
 import (
@@ -150,17 +149,16 @@ const maxCachedContentBytes = 16 * 1024 * 1024
 // most one refresh per window instead of a loop.
 const freshWindow = 30 * time.Second
 
-// Options is the per-namespace policy over the one engine. The engine is the
-// same for a local plugin and a remote connection; what differs is how eagerly
-// it warms.
+// Options is the per-seam policy over the one engine: what differs between two
+// fronted namespaces is how eagerly the engine warms.
 type Options struct {
 	// Prefetch walks the whole namespace on every successful Subscribe,
 	// warming grids, tiles, previews, and bodies nobody has opened yet; see
 	// prefetch.go. It is the offline policy, and belongs to a namespace whose
 	// answers cross a network and whose absence is a machine going dark: the
-	// transport. A local plugin's source is right here, so making it crawl its
-	// own disk on every reconnect would buy nothing and cost a full
-	// traversal.
+	// transport, which is the one namespace fronted today. The default is off,
+	// so a seam fronted without asking for a crawl reads through and remembers,
+	// nothing more.
 	Prefetch bool
 	// FreshWindow overrides freshWindow, the serve-first horizon. Zero takes
 	// the default; tests shrink it so an aged answer is one they just stored.

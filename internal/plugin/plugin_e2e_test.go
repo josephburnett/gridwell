@@ -44,7 +44,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 		Config: map[string]string{"root": root},
 	}}}
 	reg := plugin.NewRegistry()
-	if err := plugin.LoadInto(reg, cfg, home, st, nil); err != nil {
+	if err := plugin.LoadInto(reg, cfg, home, st); err != nil {
 		t.Fatalf("LoadInto: %v", err)
 	}
 	defer reg.Close()
@@ -123,7 +123,7 @@ func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
 		ID: "pr1234a", Label: "procs", Kind: "proc", Binary: bin,
 		Config: map[string]string{"pid": "abc"},
 	}}}
-	err = plugin.LoadInto(plugin.NewRegistry(), cfg, t.TempDir(), st, nil)
+	err = plugin.LoadInto(plugin.NewRegistry(), cfg, t.TempDir(), st)
 	if err == nil || !strings.Contains(err.Error(), `pid "abc"`) || !strings.Contains(err.Error(), "pr1234a") {
 		t.Fatalf("LoadInto = %v, want the plugin's own reason, naming it", err)
 	}

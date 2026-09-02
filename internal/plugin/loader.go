@@ -24,19 +24,14 @@ import (
 
 // LoadInto registers every content plugin of the server config in reg, keyed
 // by its ID: a plugin.v1 subprocess, from a binary, fronted by the pluginhost
-// adapter over the node-owned store.
-// front, when non-nil, wraps each loaded namespace; the node passes the source
-// cache under this plugin's policy, and it is the node, not this loader, that
-// decides who is cached. nil means uncached, which is the shape tests use. The
-// node registers its own home and transport around this call.
-func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.Store,
-	front func(namespace.Namespace) namespace.Namespace) error {
+// adapter over the node-owned store. Nothing is cached in front of it — a
+// subprocess on this machine is a call away, and the node's memory of what it
+// minted is the durable store. The node registers its own home and transport
+// around this call.
+func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.Store) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		ns, closer, err := loadPlugin(pc, home, st)
-		if err == nil && front != nil {
-			ns = front(ns)
-		}
 		if err != nil {
 			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, err)
 		}

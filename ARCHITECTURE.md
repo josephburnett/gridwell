@@ -151,20 +151,23 @@ tile. `Server.resolve` peels the node id, the transport peels the connection
 name, and the same transit rule applies at both hops.
 
 **Cache** (`internal/sourcecache`) is the one read-through cache, in front
-of every non-home namespace, in one disposable file (`cache.db`). A
-remembered grid serves first — unstamped inside the freshness window,
-stamped `stale` past it with one background revalidation kicked — so a slow
-source (a gitlab walk, a remote round trip) never sits on the read path. A
+of the one seam that crosses a network — the transport — in one disposable
+file (`cache.db`). A cache earns its keep across a network and nowhere
+else: home is the durable store, and a plugin is a subprocess on this
+machine, so both are read live. A remembered grid serves first — unstamped
+inside the freshness window, stamped `stale` past it with one background
+revalidation kicked — so a remote round trip never sits on the read path. A
 revalidation that finds drift emits a `GridChanged` on the layer's own
-event stream (its Info declares `watch` for namespaces with none), and the
-client's refetch serves the correction; a verdict evicts the remembered
-grid so it surfaces on the next read. Other reads pass through and
-remember, and on a transport-class failure serve the remembered answer
-stamped `stale`. Writes always pass through, and their responses fold into
-the remembered rows. Prefetch is a per-namespace option only the transport
-takes. A dark *source* (the plugin answers, its directory or API does not)
-is answered by the durable rows, so a move made during the outage still
-lands. A dark *plugin* or node is answered by the cache.
+event stream, served alongside the connection's own, and the client's
+refetch serves the correction; a verdict evicts the remembered grid so it
+surfaces on the next read. Other reads pass through and remember, and on a
+transport-class failure serve the remembered answer stamped `stale`. Writes
+always pass through, and their responses fold into the remembered rows.
+Prefetch is a per-seam option only the transport takes. A dark node is
+answered by the cache. A dark *source* (the plugin answers, its directory
+or API does not) is answered by the durable rows, so a move made during the
+outage still lands; a dark *plugin* has nothing to answer from and fails
+honestly.
 
 ### The store
 

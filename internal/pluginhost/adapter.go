@@ -24,10 +24,11 @@
 // every row it minted still reads, with the same ids, placement, and labels,
 // stamped stale and retiring nothing. An entry with no row has nothing to
 // answer from and is simply absent until the source speaks again. A dark
-// plugin, whose subprocess is gone, costs the node-side answer too, and that
-// is what internal/sourcecache remembers one layer up. The adapter keeps no
-// memory of its own: the durable rows are the node's memory of what it
-// minted, and the cache is the memory of what the source said.
+// plugin, whose subprocess is gone, costs the node-side answer too, and it
+// fails honestly: nothing fronts a plugin, because a subprocess on this
+// machine is a call away, so there are no remembered answers to serve. The
+// durable rows are the node's memory of what it minted; what the source said
+// is the source's to say again.
 package pluginhost
 
 import (
@@ -337,9 +338,8 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	// project host state, so they wear the host treatment) and glyph (the
 	// grid's identity face). Both ride the grid rather than a plugin-list
 	// lookup, because a grid reached through a mount has no local row to look
-	// up. A dark plugin fails here, and the source cache one layer up answers
-	// the whole read — declarations included — from what this namespace last
-	// said.
+	// up. A dark plugin fails here, and the whole read fails with it: the
+	// declared face is the plugin's own fact and nothing else can supply it.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, err

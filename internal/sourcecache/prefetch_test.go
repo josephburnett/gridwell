@@ -99,12 +99,12 @@ func TestSubscribeKicksPrefetch(t *testing.T) {
 	}
 }
 
-// TestSubscribeDoesNotCrawlWithoutThePolicy: the walk is a per-namespace
-// policy over the one engine, not part of the engine. A local plugin's layer
-// is opened without it and must never traverse. The seam is the Subscribe
-// trigger, so this drives the same door the transport does and asserts nothing
-// was warmed. Without the policy gate, every plugin would crawl its own disk
-// on every reconnect.
+// TestSubscribeDoesNotCrawlWithoutThePolicy: the walk is a per-seam policy
+// over the one engine, not part of the engine, and the default is off. The
+// seam is the Subscribe trigger, so this drives the same door the transport
+// does and asserts nothing was warmed. A whole-source crawl is what
+// unreachability costs a NETWORK seam; a layer fronted without asking for one
+// must read through and remember, nothing more.
 func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {

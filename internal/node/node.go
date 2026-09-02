@@ -156,18 +156,13 @@ func Start(opts Options) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The source cache: one disposable file remembering what every non-home
-	// source last said. It is opened here, once, and put in front of each
-	// namespace below, which is the one place the node decides who is cached
-	// and under what policy. Home is never cached: its answers are the
-	// durable file.
+	// The source cache: one disposable file remembering what a connection last
+	// said. It is opened here, once, and put in front of the transport below,
+	// which is the one place the node decides who is cached. A cache earns its
+	// keep across a network and nowhere else: home's answers are the durable
+	// file, and a plugin is a subprocess on this machine, so both are read
+	// live.
 	cache := openCache(cfg)
-	front := func(ns namespace.Namespace, o sourcecache.Options) namespace.Namespace {
-		if cache == nil {
-			return ns
-		}
-		return cache.Front(ns, o)
-	}
 	reg := plugin.NewRegistry()
 	fail := func(err error) (*Node, error) {
 		reg.Close()
@@ -182,19 +177,21 @@ func Start(opts Options) (*Node, error) {
 	if err := startHome(reg, st, cfg); err != nil {
 		return fail(fmt.Errorf("home: %w", err))
 	}
-	// A content plugin gets the engine with no prefetch: its source is
-	// local to this machine, so a crawl on every reconnect would warm
-	// what is already at hand.
-	if err := plugin.LoadInto(reg, cfg, opts.Home, st, func(ns namespace.Namespace) namespace.Namespace {
-		return front(ns, sourcecache.Options{})
-	}); err != nil {
+	// A content plugin is registered bare. Its source is a subprocess on this
+	// machine, so a call to it is a function call; remembering the answers
+	// bought no network round trip and papered over the supervision a
+	// subprocess actually needs.
+	if err := plugin.LoadInto(reg, cfg, opts.Home, st); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))
 	}
 	// The transport gets the engine with prefetch: a connection's answers
 	// cross a network, and offline readability means everything on the far
 	// machine, not only what was visited.
 	if err := startTransport(reg, st, cfg, func(ns namespace.Namespace) namespace.Namespace {
-		return front(ns, sourcecache.Options{Prefetch: true})
+		if cache == nil {
+			return ns
+		}
+		return cache.Front(ns, sourcecache.Options{Prefetch: true})
 	}); err != nil {
 		return fail(fmt.Errorf("transport: %w", err))
 	}
@@ -259,12 +256,12 @@ func openCache(cfg *config.ServerConfig) *sourcecache.Store {
 		return nil
 	}
 	if err := os.MkdirAll(cfg.CacheDir, 0o700); err != nil {
-		log.Printf("gridwell: source cache dir %s: %v (plugins and connections run uncached)", cfg.CacheDir, err)
+		log.Printf("gridwell: source cache dir %s: %v (connections run uncached)", cfg.CacheDir, err)
 		return nil
 	}
 	cache, err := sourcecache.Open(config.CacheFile(cfg.CacheDir))
 	if err != nil {
-		log.Printf("gridwell: source cache: %v (plugins and connections run uncached)", err)
+		log.Printf("gridwell: source cache: %v (connections run uncached)", err)
 		return nil
 	}
 	return cache
@@ -360,8 +357,8 @@ func (n *Node) Close() error {
 		if n.FedLn != nil {
 			err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
 		}
-		// The cache closes BEFORE the sources it fronts: its prefetch
-		// walk reads through them and writes into the file, and a walk
+		// The cache closes BEFORE the transport it fronts: its prefetch
+		// walk reads through it and writes into the file, and a walk
 		// must be out before either goes away.
 		if n.cache != nil {
 			err = errors.Join(err, n.cache.Close())

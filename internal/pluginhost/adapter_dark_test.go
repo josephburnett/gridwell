@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
@@ -20,7 +19,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
-	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
 
 // darkableCP forwards to a live plugin until dark is set, after which every
@@ -53,15 +51,17 @@ func (d *darkableCP) Probe(ctx context.Context, req *pluginv1.ProbeRequest, opts
 	return d.PluginClient.Probe(ctx, req, opts...)
 }
 
-// A dark plugin, whose subprocess is gone, is answered by the node's one
-// source cache, one layer up. The adapter itself keeps no memory: when the
-// process stops answering, nothing about the node's half can be derived, not
-// even the grid's declared face, so the read fails and the cache serves what
-// this namespace last said. This crosses the whole seam the production wiring
-// crosses — sourcecache.Store.Front over the adapter, through the registry,
-// the server, and the wire client — because a unit test on either side alone
-// would not catch the two disagreeing.
-func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
+// A dark plugin — the subprocess is gone — fails honestly. Nothing between the
+// router and the plugin remembers what it said: a plugin is a subprocess on
+// this machine, and pretending it answered would hand the user a room that no
+// longer exists. What the node itself minted is durable, so the arrangement
+// comes back untouched the moment the process does.
+//
+// This crosses the whole seam the production wiring crosses — the adapter,
+// through the registry, the server, and the wire client — because a unit test
+// on either side alone would not catch the two disagreeing about what an
+// unreachable plugin looks like.
+func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 	root := seedTree(t)
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
@@ -70,20 +70,8 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 	t.Cleanup(func() { _ = memStore.Close() })
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	dc := &darkableCP{PluginClient: cp}
-	cache, err := sourcecache.Open(filepath.Join(t.TempDir(), "cache.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cache.Close() })
-	// The content-plugin policy — the engine, no crawl — with the serve-first
-	// window shrunk to a second (fetched_at is second-granular), so a short
-	// sleep puts the dark read past it and it wears the signal this test
-	// pins: within the window a remembered answer serves unstamped,
-	// indistinguishable from live on purpose.
-	cached := cache.Front(pluginhost.New(dc, memStore.Namespace("p1")),
-		sourcecache.Options{FreshWindow: time.Second})
 	reg := plugin.NewRegistry()
-	reg.Register(fsUUID, "fs", cached, nil)
+	reg.Register(fsUUID, "fs", pluginhost.New(dc, memStore.Namespace("p1")), nil)
 	srv := servertest.New(t, reg, server.Config{})
 	hs := servertest.Serve(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -101,85 +89,54 @@ func TestDarkPluginServesItsLastGridThroughTheCache(t *testing.T) {
 	if len(before.Tiles) == 0 {
 		t.Fatal("empty first read")
 	}
-	// Nothing here has been touched, so every tile in that answer is
-	// SYNTHESIZED — named by its key, backed by no row. Those are exactly the
-	// tiles the cache has to be able to replay, and the ones a store-only
-	// memory could not have produced.
+	// One durable touch: the arrangement is what a ROW holds, and the row is
+	// the node's own fact, so it is what must survive the outage.
+	var notes rpc.Tile
 	for _, tile := range before.Tiles {
-		if rpc.ShapeOf(rpc.LocalOf(tile.ID)) != rpc.ShapeKey {
-			t.Fatalf("browsing minted a row for %q (%s)", tile.AltText, tile.ID)
+		if tile.AltText == "notes.md" {
+			notes = tile
 		}
+	}
+	if notes.ID == "" {
+		t.Fatal("no notes.md tile to move")
+	}
+	placed, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: notes.ID, X: 7, Y: 3, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	dc.dark.Store(true)
-	// Even the handshake is answered from the cache: Info is the plugin's own
-	// fact, and without it the client would not know where to land.
-	if _, err := cl.Handshake(ctx); err != nil {
-		t.Fatalf("dark plugin lost the handshake: %v", err)
-	}
-	time.Sleep(1200 * time.Millisecond) // past the window: the read must say remembered
-	after, err := cl.GetGrid(ctx, rootGrid)
-	if err != nil {
-		t.Fatalf("dark plugin surfaced as an error instead of the remembered answer: %v", err)
-	}
-	if !after.Grid.Stale {
-		t.Fatal("remembered answer not stamped stale")
-	}
-	if len(after.Tiles) != len(before.Tiles) {
-		t.Fatalf("dark plugin changed the tile set: %d != %d", len(after.Tiles), len(before.Tiles))
-	}
-	for i := range before.Tiles {
-		if after.Tiles[i].ID != before.Tiles[i].ID || after.Tiles[i].X != before.Tiles[i].X ||
-			after.Tiles[i].AltText != before.Tiles[i].AltText {
-			t.Fatalf("remembered tile drifted: %+v != %+v", after.Tiles[i], before.Tiles[i])
-		}
-	}
-	// The plugin's DECLARATIONS are what the client renders the grid with, so
-	// a dark plugin whose face changed would repaint the room: the host tint
-	// would drop off every tile and the folder would turn into a well. They
-	// come back from the cache with everything else. fs is the real spawned
-	// binary here, so this also pins its declaration reaching the wire.
-	if !before.Grid.HostContent {
-		t.Fatal("the fs plugin no longer declares host_content: the host treatment is what this pins across dark")
-	}
-	if after.Grid.HostContent != before.Grid.HostContent || after.Grid.Glyph != before.Grid.Glyph {
-		t.Fatalf("declared face drifted dark: host_content %v != %v, glyph %q != %q",
-			after.Grid.HostContent, before.Grid.HostContent, after.Grid.Glyph, before.Grid.Glyph)
+	if g, err := cl.GetGrid(ctx, rootGrid); err == nil {
+		t.Fatalf("a dark plugin answered %+v; with no memory of the source there is nothing to serve", g.Grid)
 	}
 
 	dc.dark.Store(false)
-	// The healed read still serves the remembering — every read here is past
-	// the shrunk window — but it kicks a live revalidation, and once one
-	// lands the stamp clears. Poll: the window is a nanosecond, so only a
-	// read that races in right behind a landed revalidation sees it fresh,
-	// and the eventual unstamped answer is the healing this pins.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		healed, err := cl.GetGrid(ctx, rootGrid)
-		if err != nil {
-			t.Fatal(err)
+	healed, err := cl.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatalf("the plugin is back and the read still failed: %v", err)
+	}
+	if healed.Grid.Stale {
+		t.Fatal("a live read must never wear the stale bit")
+	}
+	if len(healed.Tiles) != len(before.Tiles) {
+		t.Fatalf("healed listing = %d tiles, want the original %d", len(healed.Tiles), len(before.Tiles))
+	}
+	var back rpc.Tile
+	for _, tile := range healed.Tiles {
+		if tile.ID == placed.ID {
+			back = tile
 		}
-		if !healed.Grid.Stale {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("healed plugin still stamped stale")
-		}
-		time.Sleep(10 * time.Millisecond)
+	}
+	if back.X != 7 || back.Y != 3 || back.AltText != "notes.md" {
+		t.Fatalf("the arrangement did not survive the outage: %+v", back)
 	}
 }
 
-// A dark source must not cost the user their arrangement, and a move made
-// while dark is a fact of the node's own, so it stands and reads back
-// immediately.
-//
-// Under serve-first the read after the move is answered by the cache's
-// remembered listing, so the promise rests on two things: a write's response
-// folds into the remembered rows, which is what keeps the move from being
-// replayed over by the old placement; and the adapter's dark-source answer —
-// its rows only, stamped stale — is what the revalidation sees and refuses
-// to store, so the remembered listing (untouched entries included) survives
-// the outage instead of being overwritten by the degraded one.
+// A dark SOURCE — the plugin answers, its directory does not — is a different
+// outage from a dark plugin, and it must not cost the user their arrangement.
+// A move made while dark is a fact of the node's own, so it lands and reads
+// back immediately, out of the rows the adapter overlays on an empty
+// non-authoritative listing.
 //
 // The arrangement is what a ROW holds, so the test arranges the tile before
 // the dark: an entry nobody has touched has no row and cannot be moved while
@@ -193,14 +150,8 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
-	cache, err := sourcecache.Open(filepath.Join(t.TempDir(), "cache.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cache.Close() })
-	cached := cache.Front(pluginhost.New(cp, memStore.Namespace("p1")), sourcecache.Options{})
 	reg := plugin.NewRegistry()
-	reg.Register(fsUUID, "fs", cached, nil)
+	reg.Register(fsUUID, "fs", pluginhost.New(cp, memStore.Namespace("p1")), nil)
 	srv := servertest.New(t, reg, server.Config{})
 	hs := servertest.Serve(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -248,22 +199,17 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dark source surfaced as an error: %v", err)
 	}
-	// Within the serve-first window the remembered listing answers unstamped
-	// — nothing vanishes just because the directory blinked — and the move
-	// already reads back from it, folded in by the write's response.
-	if g.Grid.Stale {
-		t.Fatal("a within-window remembering must serve unstamped")
+	// The rows answer, stamped stale and retiring nothing. An entry nobody
+	// touched has no row to read from and is simply absent until the source
+	// speaks again.
+	if !g.Grid.Stale {
+		t.Fatal("a rows-only answer must say so on the wire")
 	}
-	if len(g.Tiles) != len(before.Tiles) {
-		t.Fatalf("dark source answered %d tiles, want the remembered %d: %+v", len(g.Tiles), len(before.Tiles), g.Tiles)
+	if len(g.Tiles) != 1 {
+		t.Fatalf("dark source answered %d tiles, want only the touched one: %+v", len(g.Tiles), g.Tiles)
 	}
-	var back rpc.Tile
-	for _, tile := range g.Tiles {
-		if tile.ID == moved.ID {
-			back = tile
-		}
-	}
-	if back.X != 9 || back.Y != 9 {
+	back := g.Tiles[0]
+	if back.ID != moved.ID || back.X != 9 || back.Y != 9 {
 		t.Fatalf("the move made while dark was lost: %+v", back)
 	}
 	if back.AltText != "notes.md" {
