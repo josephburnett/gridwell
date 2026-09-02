@@ -251,11 +251,12 @@ func engineEntries(entries []*pluginv1.Entry) []store.Entry {
 }
 
 // buildTiles joins the overlay's rows with the listing's content facts and
-// names each one: a minted row by its row id, an untouched entry by its
-// derived address. Both id positions — the tile's own and a well's child grid
-// — canonicalize the same way, so a tile that has a row is never named by its
-// key and a tile that has none is never named by a row that does not exist.
-func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*pluginv1.Entry, childGrid func(string) (string, error)) ([]*gridwellv1.Tile, error) {
+// names each one: a minted TILE by its row id, an untouched one by its derived
+// address. A well's CHILD GRID is always named by the address, row or no row —
+// a grid keeps its name (see canonicalGridID), so the id a well hands the
+// client must be the id GetGrid answers under, and the row the mint stored
+// stays what it is: storage, resolved on the way in, never a name handed out.
+func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*pluginv1.Entry, childGrid func(string) (string, error), rowContext func(int64) (string, error)) ([]*gridwellv1.Tile, error) {
 	byKey := map[string]*pluginv1.Entry{}
 	for _, e := range entries {
 		byKey[e.Key] = e
@@ -287,12 +288,21 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 		}
 		e, listed := byKey[t.Key]
 		switch {
-		case t.ChildGridID != 0:
-			// A minted well's child grid has a row: references at rest are
-			// row ids, so this is the one the store already wrote.
-			pt.ChildGridId = strconv.FormatInt(t.ChildGridID, 10)
 		case listed && e.ChildContext != "":
 			cg, err := childGrid(e.ChildContext)
+			if err != nil {
+				return nil, err
+			}
+			pt.ChildGridId = cg
+		case t.ChildGridID != 0:
+			// A minted well the listing does not carry — a dark or stale
+			// source. The row remembers WHICH child grid; its context is read
+			// back so the name handed out is still the address.
+			ck, err := rowContext(t.ChildGridID)
+			if err != nil {
+				return nil, err
+			}
+			cg, err := childGrid(ck)
 			if err != nil {
 				return nil, err
 			}
@@ -468,7 +478,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		Glyph:       ci.Glyph,
 		Stale:       stale,
 	}
-	wire, err := buildTiles(canonical, ckey, tiles, resp.Entries, a.canonicalGridID)
+	wire, err := buildTiles(canonical, ckey, tiles, resp.Entries, a.canonicalGridID, a.mem.ContextKey)
 	if err != nil {
 		return nil, err
 	}
