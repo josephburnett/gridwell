@@ -52,6 +52,7 @@ func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, se
 		}
 		return send(ch)
 	})
+	c.noteReachTile(ctx, err, in.GetTileId())
 	if err == nil {
 		if !oversized && status == 200 {
 			c.storeServeContent(ctx, in.GetTileId(), in.GetSubpath(), status, mediaType, data)

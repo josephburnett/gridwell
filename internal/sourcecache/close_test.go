@@ -59,7 +59,7 @@ func TestCloseWaitsForTheWalk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cc := cache.Front(&darkable{Namespace: g}, Options{Prefetch: true})
+	cc := cache.Front(newDarkable(g), Options{Prefetch: true})
 	closer := func() { _ = cache.Close() }
 
 	var logs bytes.Buffer

@@ -1392,4 +1392,11 @@ func (a *App) reportPluginHealth(h rpc.PluginHealth) {
 		label = pl.Label
 	}
 	a.reportErr(errsurface.Error, source, label+": live updates stopped — "+h.Detail)
+	// A source going down changes what its grids ARE: a connection's rooms
+	// stop being live answers and become the node's memory of them, stamped
+	// stale and worn as the bar's cached chip. Nothing on screen says so until
+	// the client re-reads, so the down transition resyncs exactly as the up
+	// one does — the same blunt cure for the same reason, since which grids
+	// belong to which source is routing state the client does not keep.
+	a.retryKick(true)
 }

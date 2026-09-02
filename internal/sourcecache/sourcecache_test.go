@@ -5,6 +5,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,51 +42,111 @@ func writeOne(t *testing.T, c namespace.Namespace, tileID string, version int64,
 // home store behind a switchable dark proxy, the shape of a connection whose
 // tunnel dropped.
 
-// darkable wraps the upstream client; dark=true fails every read the way a
-// dead tunnel does. Writes are not intercepted: write behavior under darkness
-// is the pass-through error path, not cache behavior.
+// darkable wraps the upstream client: a machine that can go away. Dark, every
+// read fails the way a dead tunnel does AND the event stream it was serving
+// ends, which is both halves of a machine going away and the second is how a
+// connection's own supervisor learns of the first. Writes are not
+// intercepted: write behavior under darkness is the pass-through error path,
+// not cache behavior.
 type darkable struct {
 	namespace.Namespace
-	dark bool
+	mu   sync.Mutex
+	down bool
+	// fell is closed when the machine goes away, dropping the parked event
+	// stream; goLive replaces it, since a machine can come back.
+	fell chan struct{}
+}
+
+func newDarkable(ns namespace.Namespace) *darkable {
+	return &darkable{Namespace: ns, fell: make(chan struct{})}
+}
+
+// goDark and goLive are the machine leaving and returning.
+func (d *darkable) goDark() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.down {
+		return
+	}
+	d.down = true
+	close(d.fell)
+}
+
+func (d *darkable) goLive() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.down {
+		return
+	}
+	d.down = false
+	d.fell = make(chan struct{})
+}
+
+func (d *darkable) dark() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.down
+}
+
+func (d *darkable) fallen() <-chan struct{} {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.fell
 }
 
 func (d *darkable) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
 
 func (d *darkable) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
-	if d.dark {
+	if d.dark() {
 		return nil, d.offline()
 	}
 	return d.Namespace.Info(ctx, in)
 }
 func (d *darkable) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
-	if d.dark {
+	if d.dark() {
 		return nil, d.offline()
 	}
 	return d.Namespace.GetGrid(ctx, in)
 }
 func (d *darkable) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileResponse, error) {
-	if d.dark {
+	if d.dark() {
 		return nil, d.offline()
 	}
 	return d.Namespace.GetTile(ctx, in)
 }
 func (d *darkable) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
-	if d.dark {
+	if d.dark() {
 		return nil, d.offline()
 	}
 	return d.Namespace.GetTilePreview(ctx, in)
 }
 func (d *darkable) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
-	if d.dark {
+	if d.dark() {
 		return d.offline()
 	}
 	return d.Namespace.ReadContent(ctx, in, send)
 }
+
+// Subscribe parks like a live stream and ends when the machine goes away: an
+// event stream that ended is what the connection's fan-in reads as darkness.
 func (d *darkable) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
-	if d.dark {
+	if d.dark() {
 		return d.offline()
 	}
-	return d.Namespace.Subscribe(ctx, in, send)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-d.fallen():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	err := d.Namespace.Subscribe(ctx, in, send)
+	if d.dark() {
+		return d.offline()
+	}
+	return err
 }
 
 // openLayer is the production wiring in one line: one cache file, one
@@ -113,7 +174,7 @@ func fixture(t *testing.T) (cc *Layer, upstream *darkable, root string, dbPath s
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream = &darkable{Namespace: local.New(st, nil)}
+	upstream = newDarkable(local.New(st, nil))
 	dbPath = filepath.Join(t.TempDir(), "cache.db")
 	return openLayer(t, upstream, dbPath, Options{Prefetch: true}), upstream, root, dbPath
 }
@@ -176,7 +237,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	}
 
 	// THE TUNNEL DROPS.
-	upstream.dark = true
+	upstream.goDark()
 
 	if _, err := cc.Info(ctx, &pb.InfoRequest{}); err != nil {
 		t.Fatalf("dark Info should serve the remembered handshake: %v", err)
@@ -394,7 +455,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 		}
 	}
 
-	upstream.dark = true
+	upstream.goDark()
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -425,7 +486,7 @@ func TestPersistsAcrossRestart(t *testing.T) {
 	}
 
 	reopened := openLayer(t, upstream, dbPath, Options{Prefetch: true})
-	upstream.dark = true
+	upstream.goDark()
 	if _, err := reopened.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatalf("reopened cache should serve the remembered grid: %v", err)
 	}
@@ -461,7 +522,7 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitFresh(t, cc, root)
-	upstream.dark = true
+	upstream.goDark()
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -771,7 +832,7 @@ func TestWriteResponsesUpdateTheRememberedRows(t *testing.T) {
 	}
 	// Dark, within the window: the remembering is all there is, and it must
 	// already say what the user did.
-	upstream.dark = true
+	upstream.goDark()
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -911,9 +972,10 @@ func TestStaleBitMarksAnswersPastTheirWindow(t *testing.T) {
 	if live.GetGrid().GetStale() {
 		t.Error("a live answer must never wear the stale bit")
 	}
-	// Within the window a remembered answer serves as good as live — even
-	// dark, since nothing consults the source.
-	upstream.dark = true
+	// Within the window a remembered answer serves as good as live: the
+	// machine is gone, but nothing has learned that yet, and an unlearned
+	// absence must not stamp fresh answers (dark_test.go owns the learning).
+	upstream.goDark()
 	fresh, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -934,7 +996,7 @@ func TestStaleBitMarksAnswersPastTheirWindow(t *testing.T) {
 	}
 	// Back alive: the next read still serves the remembered answer, and the
 	// revalidation it kicks lands and clears the bit, which is never stored.
-	upstream.dark = false
+	upstream.goLive()
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}

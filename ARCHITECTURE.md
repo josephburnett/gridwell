@@ -158,8 +158,13 @@ of the one seam that crosses a network — the transport — in one disposable
 file (`cache.db`). A cache earns its keep across a network and nowhere
 else: home is the durable store, and a plugin is a subprocess on this
 machine, so both are read live. A remembered grid serves first — unstamped
-inside the freshness window, stamped `stale` past it with one background
-revalidation kicked — so a remote round trip never sits on the read path. A
+inside the freshness window, stamped `stale` past it, and stamped inside it
+too once the connection is known dark, with one background revalidation
+kicked — so a remote round trip never sits on the read path. Darkness is
+learned from any pass-through call that fails transport-shaped and from the
+connection's own health on the stream the layer relays, cleared by the next
+answer; the discovery announces the grid at hand, and the client re-reads
+what it is showing when a source's health changes either way. A
 revalidation that finds drift emits a `GridChanged` on the layer's own
 event stream, served alongside the connection's own, and the client's
 refetch serves the correction; a verdict evicts the remembered grid so it

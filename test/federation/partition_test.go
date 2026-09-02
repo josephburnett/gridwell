@@ -111,15 +111,27 @@ func TestMountPartitionServesCache(t *testing.T) {
 	if err != nil || string(staleBody) != "warmed words" {
 		t.Fatalf("dark warmed read = %q (%v), want the cached bytes", staleBody, err)
 	}
-	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": wellChild})
-	if len(g["tiles"].([]any)) != 2 {
-		t.Fatalf("dark grid read has %d tiles, want the cached 2", len(g["tiles"].([]any)))
-	}
 	// The memory says so on the wire (#256): the cache-served grid wears
 	// the stale bit through the whole real chain — sourcecache → server →
-	// Connect JSON — which is what the client's offline chip reads.
-	if gm, ok := g["grid"].(map[string]any); !ok || gm["stale"] != true {
-		t.Fatalf("dark grid read grid=%v, want stale=true on the wire", g["grid"])
+	// Connect JSON — which is what the client's offline chip reads. Polled,
+	// because "this serve is a memory" waits on the node LEARNING that the
+	// connection is dark: a call of its own failing transport-shaped, or the
+	// connection's health saying so on the event stream. The grid was read
+	// seconds ago, so its own age says nothing yet.
+	deadline = time.Now().Add(60 * time.Second)
+	var g map[string]any
+	for {
+		g = rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": wellChild})
+		if gm, ok := g["grid"].(map[string]any); ok && gm["stale"] == true {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("dark grid read grid=%v, want stale=true on the wire", g["grid"])
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if len(g["tiles"].([]any)) != 2 {
+		t.Fatalf("dark grid read has %d tiles, want the cached 2", len(g["tiles"].([]any)))
 	}
 	// A never-read body fails HONESTLY — served-wrong would be worse than
 	// unavailable.

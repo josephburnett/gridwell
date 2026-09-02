@@ -243,7 +243,11 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   expect(liveTiles.length).toBeGreaterThan(0);
 
   // The machine goes dark. Leave and re-enter: the room re-reads through the
-  // source cache and arrives as a marked memory, tiles intact.
+  // source cache and arrives as a marked memory, tiles intact. The room is
+  // young enough to be inside the cache's freshness window, so what makes it
+  // a memory is the node learning the connection is dark — its health, or a
+  // call of the node's own failing — and the client re-reading after that.
+  // Hence the poll: the stamp lands a beat after the machine does.
   await world.killFar();
   await gw.ascendViaCrumb();
   await gw.descendCell(cx, cy);

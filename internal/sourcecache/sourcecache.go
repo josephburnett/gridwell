@@ -5,8 +5,11 @@
 // because a cache earns its keep across a network and nowhere else.
 //
 // A grid read serves first and refreshes behind. A remembered grid answers
-// immediately: unstamped within freshWindow of the answer it remembers,
-// stamped stale beyond it, with one background revalidation kicked per grid.
+// immediately, and the stale bit says whether that answer is a memory:
+// unstamped within freshWindow of the answer it remembers, stamped beyond it,
+// and stamped inside it too once the connection it came from is known dark,
+// because then a memory is all it can be. A stamped read kicks one background
+// revalidation per grid.
 // A revalidation that lands a different answer replaces the rows and emits a
 // GridChanged through the layer's own event stream (Subscribe below), so the
 // client refetches and the correction reaches the screen without the source's
@@ -18,11 +21,17 @@
 //
 // Every other read passes through and remembers; when the source is
 // unreachable, on a transport-class failure only, since an answered "gone" is
-// never masked, it serves the remembered answer. Writes always pass through —
-// the cache is never a write buffer, the source stays the one owner of its
-// truth — and a write's successful response updates the remembered rows,
-// because under serve-first "the next read refreshes" no longer holds and a
-// moved tile must not snap back to its remembered place.
+// never masked, it serves the remembered answer. Every pass-through call is
+// also how the layer learns whether a connection can be reached at all, and
+// the connection's own health, riding the stream this layer relays, says the
+// same thing from the other side; either way the discovery announces the grid
+// at hand, so a client holding it re-reads and sees the stamp.
+//
+// Writes always pass through — the cache is never a write buffer, the source
+// stays the one owner of its truth — and a write's successful response
+// updates the remembered rows, because under serve-first "the next read
+// refreshes" no longer holds and a moved tile must not snap back to its
+// remembered place.
 //
 // It is a cache, not memory. The node's own facts — the ids it minted, where
 // the user put them, how they are framed — are durable rows in gridwell.db.
@@ -68,6 +77,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	_ "modernc.org/sqlite"
@@ -200,6 +210,86 @@ type Layer struct {
 	// every failure — surfaces as this namespace's health.
 	healthMu  sync.Mutex
 	cacheDown bool
+
+	// dark is what this layer knows about reaching each source behind it, by
+	// connection segment ("" for an upstream whose ids are unchained). It is
+	// the second half of "this serve is a memory": a remembered grid is
+	// stamped past its window because nothing has confirmed it, and stamped
+	// inside its window when the connection it came from is known dark. Two
+	// things write it, and they are the same fact from two directions — a
+	// pass-through call that failed transport-shaped, and the connection's
+	// own health on the stream this layer already relays.
+	darkMu sync.Mutex
+	dark   map[string]bool
+}
+
+// sourceOf names the source an id belongs to: the connection segment of a
+// chained id. An unchained id — an upstream that is not the transport —
+// belongs to the one unnamed source, which is the whole layer.
+func sourceOf(id string) string {
+	if first, _, ok := rpc.SplitID(id); ok {
+		return first
+	}
+	return ""
+}
+
+// sourceOfNS names the source a namespace chain belongs to. A namespace IS
+// the chain, so a single segment names the connection rather than nothing.
+func sourceOfNS(ns string) string {
+	if first, _, ok := rpc.SplitID(ns); ok {
+		return first
+	}
+	return ns
+}
+
+// setDark records one source's reachability and reports whether that changed
+// it. Idempotent: only the transition is news.
+func (c *Layer) setDark(source string, dark bool) bool {
+	c.darkMu.Lock()
+	defer c.darkMu.Unlock()
+	if c.dark[source] == dark {
+		return false
+	}
+	c.dark[source] = dark
+	return true
+}
+
+func (c *Layer) isDark(source string) bool {
+	c.darkMu.Lock()
+	defer c.darkMu.Unlock()
+	return c.dark[source]
+}
+
+// noteReach records one pass-through outcome as this layer's reachability of
+// the source the call named, and, when that changes, announces the grid at
+// hand so a client already holding it re-reads: dark, it wants the stamp and
+// the cached chip; light again, it wants the live answer back. A coded
+// refusal is an answer, so the source is reachable — only a transport-shaped
+// failure is darkness. grid is consulted on the transition alone.
+func (c *Layer) noteReach(err error, source string, grid func() string) {
+	if !c.setDark(source, err != nil && gwerr.IsTransport(err)) || grid == nil {
+		return
+	}
+	if id := grid(); id != "" {
+		c.emitGridChanged(id)
+	}
+}
+
+// noteReachGrid and noteReachTile are noteReach for the two shapes of call:
+// one names a grid, the other a tile whose grid the cache can look up (only
+// on the transition, which is why it is a closure).
+func (c *Layer) noteReachGrid(err error, gridID string) {
+	c.noteReach(err, sourceOf(gridID), func() string { return gridID })
+}
+
+func (c *Layer) noteReachTile(ctx context.Context, err error, tileID string) {
+	c.noteReach(err, sourceOf(tileID), func() string {
+		var gridID string
+		if qerr := c.db.QueryRowContext(ctx, `SELECT grid_id FROM tiles WHERE id = ?`, tileID).Scan(&gridID); qerr != nil {
+			return "" // nothing remembered names this tile: no grid to re-read
+		}
+		return gridID
+	})
 }
 
 // The cache is a namespace in front of a namespace, nothing more.
@@ -243,7 +333,7 @@ func Open(dbPath string) (*Store, error) {
 // before the file goes away.
 func (s *Store) Front(upstream namespace.Namespace, opts Options) *Layer {
 	c := &Layer{Namespace: upstream, db: s.db, opts: opts,
-		revalInflight: map[string]bool{}, subs: map[int]chan *pb.Event{}}
+		revalInflight: map[string]bool{}, subs: map[int]chan *pb.Event{}, dark: map[string]bool{}}
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -329,6 +419,7 @@ func now() int64 { return time.Now().Unix() }
 
 func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
 	resp, err := c.Namespace.Info(ctx, in)
+	c.noteReach(err, "", nil) // an unnamed call: reachability, no grid to re-read
 	if err == nil {
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO info (k, proto) VALUES ('info', ?)
@@ -363,6 +454,7 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 // and verdicts pass through.
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	resp, err := c.Namespace.Handshake(ctx, in)
+	c.noteReach(err, sourceOfNS(in.GetNamespace()), nil)
 	if err == nil {
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
@@ -389,17 +481,20 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 
 // GetGrid serves first and refreshes behind. A remembered grid answers
 // immediately — the whole point: the source's latency, a gitlab walk or a
-// remote round trip, never sits on the read path. Within freshWindow the
-// answer serves as-is; beyond it, it serves stamped stale and one background
+// remote round trip, never sits on the read path. Within freshWindow, and
+// with the connection not known dark, the answer serves as-is; otherwise it
+// serves stamped stale — this serve is a memory — and one background
 // revalidation is kicked, whose landing emits a GridChanged so the client
 // refetches. Only a miss waits on the source.
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if cached, fetchedAt, hit := c.loadGrid(ctx, in.GridId); hit {
-		if time.Since(time.Unix(fetchedAt, 0)) < c.window() {
+		if time.Since(time.Unix(fetchedAt, 0)) < c.window() && !c.isDark(sourceOf(in.GridId)) {
 			return cached, nil
 		}
-		// The stale bit: this is a remembered answer past its window and the
-		// wire says so. Wire-only, never stored, so the revalidation
+		// The stale bit: this serve is a memory, and the wire says so. Past
+		// the window because nothing has confirmed it since; inside the
+		// window when the connection is known dark, because then a memory is
+		// all it can be. Wire-only, never stored, so the revalidation
 		// re-stores the grid without it.
 		if cached.GetGrid() != nil {
 			cached.Grid.Stale = true
@@ -424,6 +519,7 @@ func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 // place it is obeyed.
 func (c *Layer) getGridLive(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {
 	resp, err := c.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: gridID})
+	c.noteReachGrid(err, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -584,6 +680,7 @@ func (c *Layer) loadGrid(ctx context.Context, gridID string) (resp *pb.GetGridRe
 
 func (c *Layer) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.GetTile(ctx, in)
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.upsertTile(ctx, resp.GetTile())
 		return resp, nil
@@ -630,6 +727,7 @@ func (c *Layer) deleteTile(ctx context.Context, tileID string) {
 
 func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	resp, err := c.Namespace.GetTilePreview(ctx, in)
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		if jpeg := resp.GetJpeg(); len(jpeg) > 0 {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO previews (tile_id, jpeg, fetched_at) VALUES (?, ?, ?)
@@ -681,6 +779,7 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 		}
 		return send(ch)
 	})
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		if !oversized {
 			c.storeContent(ctx, in.TileId, mediaType, version, data)
@@ -847,6 +946,18 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		c.upsertTile(ctx, p.TileChanged.GetTile())
 	case *pb.Event_TileRemoved:
 		c.deleteTile(ctx, p.TileRemoved.GetTileId())
+	case *pb.Event_PluginHealth:
+		// The source's own supervisor already knows whether it can be
+		// reached, and says so on the stream this layer relays. Reading it
+		// here is why a room re-entered after a machine died says it is a
+		// memory without waiting for a call of this layer's own to fail. The
+		// uuid is the source key as it arrives here — one segment for a
+		// connection, deeper for something inside one, which is its own key
+		// and never the connection's, since a far plugin being down does not
+		// make the machine unreachable.
+		// The client is receiving this same event, so nothing is emitted:
+		// what it does with it is the client's half.
+		c.setDark(p.PluginHealth.GetPluginUuid(), !p.PluginHealth.GetHealthy())
 	}
 }
 
@@ -881,6 +992,7 @@ func (c *Layer) foldWrite(ctx context.Context, reqTileID string, t *pb.Tile) {
 
 func (c *Layer) CreateTile(ctx context.Context, in *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.CreateTile(ctx, in)
+	c.noteReachGrid(err, in.GridId)
 	if err == nil {
 		c.upsertTile(ctx, resp.GetTile())
 	}
@@ -889,6 +1001,7 @@ func (c *Layer) CreateTile(ctx context.Context, in *pb.CreateTileRequest) (*pb.T
 
 func (c *Layer) SetTile(ctx context.Context, in *pb.SetTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.SetTile(ctx, in)
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
 	}
@@ -897,6 +1010,7 @@ func (c *Layer) SetTile(ctx context.Context, in *pb.SetTileRequest) (*pb.TileRes
 
 func (c *Layer) PlaceTile(ctx context.Context, in *pb.PlaceTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.PlaceTile(ctx, in)
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
 	}
@@ -905,6 +1019,7 @@ func (c *Layer) PlaceTile(ctx context.Context, in *pb.PlaceTileRequest) (*pb.Til
 
 func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.CloneTile(ctx, in)
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.upsertTile(ctx, resp.GetTile()) // the request names the source, which stays
 	}
@@ -913,6 +1028,7 @@ func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.Til
 
 func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	resp, err := c.Namespace.SetFraming(ctx, in)
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil && resp.GetTile() != nil { // nil for a root-grid framing
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
 	}
@@ -921,6 +1037,7 @@ func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.S
 
 func (c *Layer) DeleteTile(ctx context.Context, in *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
 	resp, err := c.Namespace.DeleteTile(ctx, in)
+	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.deleteTile(ctx, in.TileId)
 	}
@@ -942,6 +1059,7 @@ func (c *Layer) WriteContent(ctx context.Context, recv func() (*pb.WriteContentR
 		}
 		return req, rerr
 	})
+	c.noteReachTile(ctx, err, tileID)
 	if err == nil {
 		if tileID != "" {
 			_, derr := c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)

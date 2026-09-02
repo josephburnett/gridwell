@@ -41,7 +41,7 @@ func connFixture(t *testing.T, opts Options) (cc *Layer, far *darkable, farRoot,
 	if err != nil {
 		t.Fatal(err)
 	}
-	far = &darkable{Namespace: local.New(st, nil)}
+	far = newDarkable(local.New(st, nil))
 	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "remote.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestPrefetchWarmsAWholeConnection(t *testing.T) {
 	nested, inner, textID := seedNested(t, far.Namespace, farRoot)
 
 	cc.Prefetch(ctx)
-	far.dark = true
+	far.goDark()
 
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: qualify(conn, nested)})
 	if err != nil {
@@ -155,7 +155,7 @@ func TestSubscribeKicksPrefetch(t *testing.T) {
 // read through the dead tunnel ends the walk.
 func TestPrefetchAbortsQuietlyWhenDark(t *testing.T) {
 	cc, far, _, _ := connFixture(t, Options{Prefetch: true})
-	far.dark = true
+	far.goDark()
 	cc.Prefetch(context.Background()) // must simply return, not wedge or panic
 }
 
