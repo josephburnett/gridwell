@@ -11,5 +11,5 @@ use (
 	./apps/gridwell
 	./internal/doctype
 	./test/boundary
-	./test/federation
+	./test/connections
 )

@@ -355,7 +355,7 @@ go.work.
 
 A plugin loads exactly one way — `compose.LoadPlugin` spawns its binary —
 which `internal/plugin`'s subprocess tests, the seam tests that spawn through
-`internal/plugintest`, and `make check-federation` exercise for real. The
+`internal/plugintest`, and `make check-connections` exercise for real. The
 binaries themselves come from the sibling checkout: `make build` compiles them
 out of `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into this repo root,
 where the loader looks.

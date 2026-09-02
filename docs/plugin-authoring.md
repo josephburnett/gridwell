@@ -68,5 +68,5 @@ sandboxed by the node.
 — imports a plugin implementation or names the plugins repository in a go.mod,
 or if the api gains a dependency outside its budget. `make check` builds every
 module standalone and spawns the real fs, proc and gitlab binaries through the
-production loader. `make check-federation` spawns the real binaries through a
+production loader. `make check-connections` spawns the real binaries through a
 real ssh tunnel.

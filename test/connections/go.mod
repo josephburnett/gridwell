@@ -1,4 +1,4 @@
-module github.com/josephburnett/gridwell/test/federation
+module github.com/josephburnett/gridwell/test/connections
 
 go 1.26.5
 

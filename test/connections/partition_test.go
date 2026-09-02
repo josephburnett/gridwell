@@ -1,4 +1,4 @@
-//go:build federation
+//go:build connections
 
 // The mid-session partition gate: a mount that dies under a live session. It
 // runs the production binaries through a real ssh tunnel, reads through the
@@ -8,7 +8,7 @@
 // as decided — cached copies, uncached links — and a revived remote answers
 // live again, so the cache never masks a healed mount.
 
-package federation_test
+package connections_test
 
 import (
 	"context"

@@ -55,7 +55,7 @@ this there is only one node-side cache — and its contract line becomes
   revalidation, cleared on the next success, and its discovery emits on
   the layer's stream so a client already holding the grid refetches.
   The two red gates assert the old synchronous meaning and are updated
-  to poll past discovery: `test/federation/partition_test.go` and
+  to poll past discovery: `test/connections/partition_test.go` and
   `apps/desktop/e2e-web/web-remote-menu.spec.ts` (#256, broken by
   9ad34354).
 

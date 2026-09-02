@@ -1,4 +1,4 @@
-# The heavy gates, on PRs and main: the browser suite, the federation spawn,
+# The heavy gates, on PRs and main: the browser suite, the connection spawn,
 # direct, and partition gates, whose sshd is self-contained through dialtest,
 # and the full Electron e2e under xvfb. One retry per suite
 # (PW_FLAGS=--retries=1) is the CI face of the repo's flake discipline. Every
@@ -10,7 +10,7 @@ on:
     branches: [main]
   pull_request:
 jobs:
-  web-and-federation:
+  web-and-connections:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +34,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: build
         run: make build
-      - name: federation gate
-        run: make check-federation
+      - name: connections gate
+        run: make check-connections
       # The web config drives a chromium by explicit path (the repo's
       # offline-buildable posture); on the runner, hand it playwright's.
       - name: resolve chromium path

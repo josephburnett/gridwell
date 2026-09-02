@@ -1,6 +1,6 @@
-//go:build federation
+//go:build connections
 
-// Package federation_test is the spawn gate, run by `make check-federation`:
+// Package connections_test is the spawn gate, run by `make check-connections`:
 // it runs the real, separately-compiled binaries — `gridwell serve` and the
 // go-plugin subprocesses — through a real ssh tunnel and asserts one write and
 // read crossing every hop. The in-process seam tests cannot see go-plugin
@@ -10,7 +10,7 @@
 // It requires the binaries already built at the repo root, which the make
 // target depends on, and is guarded by the `federation` build tag so plain
 // `go test ./...` stays fast.
-package federation_test
+package connections_test
 
 import (
 	"bufio"

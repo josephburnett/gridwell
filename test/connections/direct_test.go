@@ -1,4 +1,4 @@
-//go:build federation
+//go:build connections
 
 // The direct-connect gate: the transport reaches another node's export with
 // no ssh anywhere, which is the two-nodes-on-one-machine case. The connection
@@ -6,7 +6,7 @@
 // the socket's mode; the ssh bridge remains the authenticated transport across
 // machines.
 
-package federation_test
+package connections_test
 
 import (
 	"context"

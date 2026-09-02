@@ -1,4 +1,4 @@
-.PHONY: build bin plugins wasm fmt-check proto-check check check-electron check-e2e check-web check-federation serve clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm fmt-check proto-check check check-electron check-e2e check-web check-connections serve clean launch vendor dist node-modules
 
 BIN := ./gridwell
 # Built plugin binaries — the plugins target below and clean
@@ -179,15 +179,15 @@ check-e2e: build node-modules
 check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web -- $(PW_FLAGS)
 
-# check-federation is the spawn gate: the real binaries — gridwell serve and
+# check-connections is the spawn gate: the real binaries — gridwell serve and
 # the go-plugin subprocesses — through a real ssh tunnel, with one write and
 # read crossing every hop. The in-process seam tests cannot see go-plugin
 # spawn, so a failure that only happens in a spawned process leaves them green.
-# Guarded by the `federation` build tag so make check stays fast. Headless.
+# Guarded by the `connections` build tag so make check stays fast. Headless.
 # Run it for any change to plugin spawn, the dialer, the node export, or
 # routing.
-check-federation: build
-	cd test/federation && go test -tags federation -count=1 .
+check-connections: build
+	cd test/connections && go test -tags connections -count=1 .
 
 # serve runs the backend on its own. The desktop app spawns it as a sidecar;
 # this target is for poking at the RPC surface or loading the wasm client in a
