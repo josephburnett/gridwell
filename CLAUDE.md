@@ -135,8 +135,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   shells off is the node (`disable_shells`).
 - Session-ephemeral: the pane tree, the selection, the level stack, and the
   outer frames' viewports. The durable home for a layout is the pane tile.
-- Cross-plugin: left-drag links, right-drag clones. There is no move.
-  Dashed means link; deleting a link unlinks.
+- Left-drag moves, right-drag clones, ctrl + right-drag links — the
+  modifier flips the right button from copy to link, in the namespace the
+  drop lands in or across one. Cross-plugin a left-drag links too, because
+  there is no cross-plugin move. Dashed means link; deleting a link
+  unlinks.
 - A link into a namespace the node does not declare is DEAD: greyed, inert,
   still labelled, still deletable. It is a state, not an error — nothing is
   asked for it and nothing is said about it. Dead is not dark: a declared

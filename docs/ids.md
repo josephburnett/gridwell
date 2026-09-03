@@ -31,8 +31,10 @@ letter segment → that connection; any other letter segment → that plugin.
 - `child_grid_id` (a well or link's target grid) and `link_target_id` (a
   leaf link's target): full chains. A key names the entry; whether it
   stands for the entry's tile or its grid is positional, same as digits.
-- `Reference` (dashed = link) is derived from a chain crossing
-  namespaces — never stored.
+- `Reference` (dashed = link) is derived from the target arriving already
+  qualified — never stored. A link inside one namespace is still a
+  reference: a ctrl + right-drag makes one, and so does a same-namespace
+  mount. A uuid comparison would miss both.
 
 ## What is inside a `~`
 
