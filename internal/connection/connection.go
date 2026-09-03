@@ -67,6 +67,13 @@ type Server struct {
 	// one fact behind a pending row's status. Written by ensureLive and the
 	// root learn, cleared on success, never persisted.
 	rootErr map[string]string
+	// dark is what the fan-in knows about reaching each connection: the
+	// detail of its last down transition, by name, absent while its event
+	// stream is up. Reachability is a state, not a moment, so it is recorded
+	// and not only announced — a subscriber that attaches after the machine
+	// died is told from here, and the fan-in reads it to decide whether an
+	// outage is a transition worth publishing. One writer, noteHealth.
+	dark map[string]string
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 }
@@ -117,7 +124,8 @@ var _ namespace.Namespace = (*Server)(nil)
 func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
 	s := &Server{db: db, dial: dialer, home: home, conns: map[string]*Conn{},
-		live: map[string]*liveConn{}, rootErr: map[string]string{}, hub: eventhub.New(eventKey)}
+		live: map[string]*liveConn{}, rootErr: map[string]string{}, dark: map[string]string{},
+		hub: eventhub.New(eventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
 		retiredSet[r] = true
@@ -486,6 +494,51 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}()
 }
 
+// healthEvent is one connection's reachability on the wire.
+func healthEvent(ns string, up bool, detail string) *gridwellv1.Event {
+	return &gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
+		PluginUuid: ns, Healthy: up, Detail: detail,
+	}}}
+}
+
+// noteHealth records one connection's reachability and publishes the
+// transition. The record is the fact — what a subscriber arriving later is
+// told, in Subscribe — and it is also what decides a transition, so a
+// connection retrying every five seconds publishes once, not once per try.
+func (s *Server) noteHealth(ns string, up bool, detail string) {
+	s.mu.Lock()
+	if _, wasDark := s.dark[ns]; wasDark == !up {
+		s.mu.Unlock()
+		return
+	}
+	if up {
+		delete(s.dark, ns)
+	} else {
+		s.dark[ns] = detail
+	}
+	s.mu.Unlock()
+	s.hub.Publish(healthEvent(ns, up, detail))
+}
+
+// darkNow is every connection the fan-in currently cannot reach, as the
+// health events that say so, in name order. Only the dark ones: healthy is
+// what a subscriber assumes of a connection it has heard nothing about, and
+// an up event means "resync" to what is listening.
+func (s *Server) darkNow() []*gridwellv1.Event {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	names := make([]string, 0, len(s.dark))
+	for name := range s.dark {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]*gridwellv1.Event, 0, len(names))
+	for _, name := range names {
+		out = append(out, healthEvent(name, false, s.dark[name]))
+	}
+	return out
+}
+
 // fanInRemote forwards a connection's remote change events, each id prefixed
 // with the connection segment. It is a plain retry loop: the transport
 // underneath self-heals through the redialer, so a dropped stream re-subscribes
@@ -493,12 +546,6 @@ func (s *Server) kickRootFetch(c *Conn) {
 // EventPluginHealth, the same contract the node's fanInEvents keeps per
 // namespace.
 func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Namespace) {
-	healthy := true
-	report := func(up bool, detail string) {
-		s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
-			PluginUuid: ns, Healthy: up, Detail: detail,
-		}}})
-	}
 	for {
 		// Established, not opened: a callback stream has no open to report,
 		// so namespace.Follow decides the moment, and the node's own fan-in
@@ -508,12 +555,7 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 				s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
 				return nil
 			},
-			func() {
-				if !healthy {
-					healthy = true
-					report(true, "")
-				}
-			})
+			func() { s.noteHealth(ns, true, "") })
 		if ctx.Err() != nil {
 			return
 		}
@@ -522,10 +564,7 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 			detail = err.Error()
 		}
 		log.Printf("gridwell: connection %s: event stream ended: %v (retrying in 5s)", ns, detail)
-		if healthy {
-			healthy = false
-			report(false, detail)
-		}
+		s.noteHealth(ns, false, detail)
 		select {
 		case <-ctx.Done():
 			return
@@ -805,10 +844,23 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 }
 
 // Subscribe streams every connection's remote events (prefixed) and the
-// connections' own health transitions.
+// connections' own health, which opens with what is dark right now.
+//
+// A down transition fires once. A subscriber that attaches after it — a client
+// opening while the machine is already gone, which is the ordinary case, since
+// the fan-in outlives every client stream — would otherwise never hear of the
+// outage: the source cache in front of this would serve a remembered grid as
+// if it were live, and the client's tint would say the connection is fine.
+// Attach first, then read the record, so a transition racing this arrives on
+// the stream rather than falling in the gap between the two.
 func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := s.hub.Subscribe()
 	defer cancel()
+	for _, ev := range s.darkNow() {
+		if err := send(ev); err != nil {
+			return err
+		}
+	}
 	for {
 		select {
 		case ev, ok := <-ch:

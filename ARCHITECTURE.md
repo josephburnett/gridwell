@@ -152,7 +152,11 @@ label, how to dial. The transport dials each at boot, lands on the far node's
 home, and remembers nothing else but retired names (a name never returns).
 A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection
-name, and the same transit rule applies at both hops.
+name, and the same transit rule applies at both hops. The fan-in holds each
+connection's reachability as a state, not a moment: the transport's event
+stream opens with every connection that is dark right now, so a client that
+subscribes after the machine died is told, and the cache in front of it
+stamps what it remembers.
 
 The host-local half of a row is checked before the node serves: a missing
 `addr`, a `key` or `known_hosts` path that is not there or not readable fails
