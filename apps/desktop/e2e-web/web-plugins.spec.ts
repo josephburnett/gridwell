@@ -126,5 +126,5 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   const doneTile = after.find((t) => t.id === todo!.id);
   expect(doneTile, 'the todo is still listed after the gesture').toBeTruthy();
   expect(doneTile!.statusDetail).toBe('done');
-  expect(String(doneTile!.altText)).toContain('✓');
+  expect(String(doneTile!.altText)).toContain('✅');
 });
