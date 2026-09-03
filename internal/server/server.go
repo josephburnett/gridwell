@@ -120,26 +120,16 @@ func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string,
 	if !split {
 		return nil, "", "", false, false
 	}
-	if s.cfg.ID != "" && uuid == s.cfg.ID && !localIsHome(local) {
+	// Two segments of namespace under the node's own id means a connection,
+	// which the transport owns; one means the home store. rpc.OwnerNamespaceOf is
+	// the peel, shared with every other reader of an id, so the router and
+	// the address bar cannot disagree about which segments are a namespace.
+	if s.cfg.ID != "" && rpc.OwnerNamespaceOf(id, s.cfg.ID) != uuid {
 		t, has := s.pluginReg.Transport()
 		return t, local, uuid, true, has
 	}
 	c, found := s.pluginReg.Get(uuid)
 	return c, local, uuid, false, found
-}
-
-// localIsHome reports whether a local id under the node's own segment names
-// the home store — its first segment is a TILE segment, a grid or tile id —
-// rather than a connection, whose name is a namespace segment. The shape
-// question is rpc.IsTileSegment's, the same classifier the URL grammar asks,
-// so the router and the address bar can never disagree about which segments
-// are a namespace chain.
-func localIsHome(local string) bool {
-	first := local
-	if i := strings.IndexByte(local, '/'); i >= 0 {
-		first = local[:i]
-	}
-	return first == "" || rpc.IsTileSegment(first)
 }
 
 // clientForID resolves the namespace that owns a qualified id, returning it

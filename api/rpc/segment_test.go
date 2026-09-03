@@ -205,3 +205,43 @@ func TestValidateSegmentRefusesEveryTileShape(t *testing.T) {
 		t.Errorf("a plain namespace segment was refused: %v", err)
 	}
 }
+
+// OwnerNamespaceOf is the router's peel as a value: the namespace this node
+// hands the id to, which is not NamespaceOf (everything before the LAST
+// segment) on any chain longer than one hop. The cases are the routing table
+// itself — a plugin id, the home store under the node's own id, a connection
+// under it, and a transit chain through that connection, whose deeper hops
+// belong to the far node's frame and are never this node's to name.
+func TestOwnerNamespaceOfIsTheRoutersPeel(t *testing.T) {
+	const node = "n1abcde"
+	cases := []struct {
+		id, want string
+	}{
+		// A plugin: one segment, whatever its local id's shape.
+		{"p9xyzab/1", "p9xyzab"},
+		{"p9xyzab/" + KeyTileID("/home/joe"), "p9xyzab"},
+		// The node's own store: a tile segment under the node is home.
+		{node + "/1", node},
+		{node + "/7/3", node},
+		{node + "/" + KeyTileID("/home/joe"), node},
+		// A connection: a namespace segment under the node.
+		{node + "/laptop", node + "/laptop"},
+		{node + "/laptop/1", node + "/laptop"},
+		// Transit: the far node's own namespaces stay in its frame.
+		{node + "/laptop/far9xyz/1", node + "/laptop"},
+		{node + "/laptop/far9xyz/deeper/1", node + "/laptop"},
+		// A bare id names no namespace.
+		{"1", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := OwnerNamespaceOf(c.id, node); got != c.want {
+			t.Errorf("OwnerNamespaceOf(%q, %q) = %q, want %q", c.id, node, got, c.want)
+		}
+	}
+	// A reader that does not know the node's own id can only say the first
+	// segment; it must never invent a two-segment chain.
+	if got := OwnerNamespaceOf(node+"/laptop/1", ""); got != node {
+		t.Errorf("OwnerNamespaceOf with no node id = %q, want the first segment %q", got, node)
+	}
+}

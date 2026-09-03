@@ -82,3 +82,43 @@ func IsTileSegment(seg string) bool {
 	s := ShapeOf(seg)
 	return s == ShapeRow || s == ShapeKey
 }
+
+// OwnerNamespaceOf returns the namespace the node whose id is nodeID hands a
+// qualified id to: the segments its router peels before anything else sees
+// them. It is Server.resolve's peel as a value, so a node and a client ask
+// the same question of the same id and cannot answer differently — which is
+// how a client can tell that a reference names a namespace this node does not
+// declare.
+//
+// The answer is the first segment, except under the node's own id, where a
+// second NAMESPACE segment is a connection name and belongs to it
+// ("<node>/<conn>"); a tile segment there is the home store, whose namespace
+// is the node itself. Deeper segments are the far node's frame and are never
+// this node's to name. "" for a bare, unqualified id, which names no
+// namespace at all.
+//
+// Not NamespaceOf, which is everything before an id's LAST segment — the
+// store-identity question ("do these two ids live in the same store"). The
+// two differ on every chain longer than one hop, and only this one answers
+// "which of my namespaces owns this".
+//
+// nodeID may be "" for a reader that does not know the node's own id; the
+// answer is then always the first segment, which is what a receiver with no
+// home of its own can say.
+func OwnerNamespaceOf(id, nodeID string) string {
+	first, rest, ok := SplitID(id)
+	if !ok {
+		return ""
+	}
+	if first != nodeID || nodeID == "" {
+		return first
+	}
+	second := rest
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		second = rest[:i]
+	}
+	if second == "" || IsTileSegment(second) {
+		return first
+	}
+	return first + "/" + second
+}

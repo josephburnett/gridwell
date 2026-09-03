@@ -276,12 +276,14 @@ func TestAsConnectError(t *testing.T) {
 	}
 }
 
-// The router's namespace/tile split is rpc.IsTileSegment's, the same rule the
+// The router's namespace/tile split is rpc.OwnerNamespaceOf's, the same rule the
 // URL grammar reads a path with — one classifier, so an address that the bar
 // says is a home tile can never route to the transport instead. Under the
 // node's own segment: a tile shape (row id or key form) is the home store, a
-// namespace shape is a connection.
-func TestLocalIsHomeFollowsTheSegmentClassifier(t *testing.T) {
+// namespace shape is a connection. The peel itself is pinned in
+// api/rpc/segment_test.go; this pins that resolve routes by it.
+func TestResolveRoutesByTheNamespacePeel(t *testing.T) {
+	const node = "n1abcde"
 	home := []string{"", "1", "7/3", "42", rpc.KeyTileID("/home/joe/x"),
 		rpc.KeyTileID("/home/joe") + "/3"}
 	conn := []string{"laptop", "laptop/1", "ssh4321/remote9/1", "k3x9m2q",
@@ -289,13 +291,13 @@ func TestLocalIsHomeFollowsTheSegmentClassifier(t *testing.T) {
 		// segment, here as everywhere.
 		"~AC", "~AC/1"}
 	for _, local := range home {
-		if !localIsHome(local) {
-			t.Errorf("localIsHome(%q) = false, want true", local)
+		if got := rpc.OwnerNamespaceOf(rpc.QualifyID(node, local), node); got != node {
+			t.Errorf("OwnerNamespaceOf(%q) = %q, want the node itself (the home store)", local, got)
 		}
 	}
 	for _, local := range conn {
-		if localIsHome(local) {
-			t.Errorf("localIsHome(%q) = true, want false", local)
+		if got := rpc.OwnerNamespaceOf(rpc.QualifyID(node, local), node); got == node {
+			t.Errorf("OwnerNamespaceOf(%q) = %q, want a connection chain", local, got)
 		}
 	}
 }
