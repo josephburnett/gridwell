@@ -1,6 +1,6 @@
 module github.com/josephburnett/gridwell/test/connections
 
-go 1.26.5
+go 1.26.6
 
 // A LEAF COMPOSER (docs/plugin.md): replaces every in-repo sibling —
 // replace directives only apply in the main module, so each leaf

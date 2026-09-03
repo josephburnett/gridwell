@@ -3,7 +3,7 @@
 // (GOWORK=off) — the workspace is convenience, never the contract. The
 // plugins are not here: they live in github.com/josephburnett/gridwell-plugins
 // and reach this repo only through the api module and the spawned binary.
-go 1.26.5
+go 1.26.6
 
 use (
 	.
