@@ -10,12 +10,30 @@ import (
 )
 
 // treesEqual compares two trees on everything the layout persists: structure,
-// split dir/ratio, leaf places and text state, Focus, Zoomed. The outer
-// frames' viewports and nextID are deliberately excluded — those viewports
-// are session-only by design (wire.go), and nextID is covered by the
+// split dir/ratio, every leaf's whole place and text state, Focus, Zoomed. The
+// outer frames' viewports and nextID are deliberately excluded — those
+// viewports are session-only by design (wire.go), and nextID is covered by the
 // mint-no-collision assertion instead.
 func treesEqual(a, b *Tree) bool {
 	return a.Focus == b.Focus && a.Zoomed == b.Zoomed && nodesEqual(a.Root, b.Root)
+}
+
+// placesEqual compares two panes' frame stacks level by level on the identity
+// the blob carries: which grid a frame opens, which doorway it came through,
+// and whether the door is the place. Outer viewports are excluded — see
+// treesEqual.
+func placesEqual(a, b *Pane) bool {
+	fa, fb := a.Frames(), b.Frames()
+	if len(fa) != len(fb) {
+		return false
+	}
+	for i := range fa {
+		if fa[i].GridID != fb[i].GridID || fa[i].Door != fb[i].Door ||
+			fa[i].Content != fb[i].Content {
+			return false
+		}
+	}
+	return true
 }
 
 func nodesEqual(a, b TreeNode) bool {
@@ -24,18 +42,12 @@ func nodesEqual(a, b TreeNode) bool {
 	}
 	if a.IsLeaf() {
 		pa, pb := a.Pane, b.Pane
-		ja, jb := pa.Path(), pb.Path()
-		if len(ja) != len(jb) {
+		if !placesEqual(pa, pb) {
 			return false
 		}
-		for i := range ja {
-			if ja[i] != jb[i] {
-				return false
-			}
-		}
-		return pa.ID == pb.ID && pa.Anchor() == pb.Anchor() &&
+		return pa.ID == pb.ID &&
 			pa.Cx == pb.Cx && pa.Cy == pb.Cy && pa.Zoom == pb.Zoom &&
-			pa.ContentID() == pb.ContentID() && pa.TextMode == pb.TextMode &&
+			pa.TextMode == pb.TextMode &&
 			pa.TextScrollX == pb.TextScrollX && pa.TextScrollY == pb.TextScrollY &&
 			pa.TextZoom == pb.TextZoom
 	}
@@ -110,6 +122,25 @@ func randomTree(r *rand.Rand) *Tree {
 			content = fmt.Sprintf("uuid-%d/%d", i%3, r.Intn(90)+2)
 		}
 		p.Stack = StackAt(fmt.Sprintf("uuid-%d/1", i%3), path, content)
+		// Some panes cross into another namespace on the way down — the shape
+		// whose outer levels the anchor/path projection cannot hold. The
+		// crossing goes under any content descent, which stays the top frame.
+		if r.Intn(3) == 0 {
+			var leaf Frame
+			hadContent := p.Content
+			if hadContent {
+				leaf = p.Frame
+				p.Pop()
+			}
+			p.Push(Frame{GridID: fmt.Sprintf("uuid-%d/1", (i+1)%3),
+				Door: fmt.Sprintf("uuid-%d/%d", i%3, r.Intn(90)+2)})
+			for range r.Intn(2) {
+				p.Push(Frame{Door: fmt.Sprintf("uuid-%d/%d", (i+1)%3, r.Intn(90)+2)})
+			}
+			if hadContent {
+				p.Push(leaf)
+			}
+		}
 		p.Cx, p.Cy = float64(r.Intn(41)-20), float64(r.Intn(41)-20)
 		p.Zoom = 0.25 * float64(r.Intn(8)+1)
 		if text {
@@ -313,10 +344,12 @@ func TestLayoutLooseViewState(t *testing.T) {
 	}
 }
 
-// TestLayoutDropsOuterFrames: the frames a pane would ascend through are
-// session-only by design. Only the place it is at reaches the blob, and a
-// restored pane starts at depth 1 plus its own path.
-func TestLayoutDropsOuterFrames(t *testing.T) {
+// TestLayoutKeepsEveryLevelFromTheRoot: a restored place carries every level
+// down from the root, namespace crossings included. A crossing frame owns its
+// target grid id, so the blob must carry it: without it the restored stack
+// begins at the crossing, and the bar's chain has no root crumb and no way
+// back out of the plugin.
+func TestLayoutKeepsEveryLevelFromTheRoot(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
 	p.Stack = StackAt("plugin/1", []string{"plugin/4"}, "")
@@ -326,15 +359,104 @@ func TestLayoutDropsOuterFrames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(data, []byte(`"up"`)) || bytes.Contains(data, []byte("plugin/1")) {
-		t.Fatalf("outer frames leaked into the blob: %s", data)
+	got, err := DecodeLayout(data, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gp := got.FocusedPane()
+	if gp.Depth() != 3 {
+		t.Fatalf("restored depth = %d, want 3: %+v", gp.Depth(), gp.Crumbs())
+	}
+	// The leaf still names its own namespace directly: the crossing frame kept
+	// its grid id, so nothing has to walk the parent grid to find it.
+	if gp.Anchor() != "other/1" || len(gp.Path()) != 0 {
+		t.Fatalf("restored leaf place = %q %v, want other/1 []", gp.Anchor(), gp.Path())
+	}
+	crumbs := gp.Crumbs()
+	if len(crumbs) != 3 || crumbs[0].Anchor != "plugin/1" ||
+		crumbs[1].TileID != "plugin/4" || crumbs[2].Anchor != "other/1" {
+		t.Fatalf("restored chain = %+v", crumbs)
+	}
+}
+
+// TestLayoutRestoresTheWholePlace: the crumb chain of a mixed deep place —
+// wells, two crossings, a content descent below the top — survives the blob
+// unchanged. The chain is the projection users navigate by, so it is what the
+// round trip is measured on.
+func TestLayoutRestoresTheWholePlace(t *testing.T) {
+	tr := NewTree()
+	src := chainPane()
+	tr.FocusedPane().Stack = src.Stack.Clone()
+
+	data, _, err := EncodeLayout(tr, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 	got, err := DecodeLayout(data, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gp := got.FocusedPane(); gp.Depth() != 1 || gp.Anchor() != "other/1" {
-		t.Fatalf("decoded pane place = %+v (depth %d)", gp.Crumbs(), gp.Depth())
+	want, gotCrumbs := src.Crumbs(), got.FocusedPane().Crumbs()
+	if len(want) != len(gotCrumbs) {
+		t.Fatalf("chain length = %d, want %d: %+v", len(gotCrumbs), len(want), gotCrumbs)
+	}
+	for i := range want {
+		g, w := gotCrumbs[i], want[i]
+		if g.Level != w.Level || g.Anchor != w.Anchor || g.TileID != w.TileID ||
+			g.Text != w.Text || g.ParentAnchor != w.ParentAnchor ||
+			!samePath(g.ParentPath, w.ParentPath) {
+			t.Errorf("crumb %d = %+v, want %+v", i, g, w)
+		}
+	}
+}
+
+// TestLayoutOuterViewportsStaySessionOnly: the frames a pane would ascend
+// through keep their identity in the blob, never their viewports — those are
+// session-only, and a restored ascent falls back to each grid's persisted
+// framing (Frame.HasView).
+func TestLayoutOuterViewportsStaySessionOnly(t *testing.T) {
+	tr := NewTree()
+	p := tr.FocusedPane()
+	p.Stack = NewStack("plugin/1")
+	p.Cx, p.Cy, p.Zoom = 11, 22, 3
+	p.Push(Frame{GridID: "other/1", Door: "plugin/9", Zoom: 1})
+
+	data, _, err := EncodeLayout(tr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte("11")) || bytes.Contains(data, []byte("22")) {
+		t.Fatalf("an outer viewport leaked into the blob: %s", data)
+	}
+	got, err := DecodeLayout(data, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gp := got.FocusedPane()
+	if !gp.Pop() {
+		t.Fatal("restored pane cannot ascend")
+	}
+	if gp.HasView() {
+		t.Fatalf("restored outer frame carries a viewport: %+v", gp.Frame)
+	}
+}
+
+// TestLayoutOmitsPlaceWhenTheProjectionHoldsIt: a place with no crossing
+// below its top level encodes exactly as it always did, so visiting an
+// existing workspace re-encodes byte-identically and the persister's diff
+// stays quiet. Reading never mutates.
+func TestLayoutOmitsPlaceWhenTheProjectionHoldsIt(t *testing.T) {
+	tr := NewTree()
+	p := tr.FocusedPane()
+	p.Stack = StackAt("plugin/1", []string{"plugin/4", "plugin/7"}, "plugin/12")
+	p.Zoom = 1
+
+	data, _, err := EncodeLayout(tr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(`"place"`)) {
+		t.Fatalf("place written for a single-namespace stack: %s", data)
 	}
 }
 

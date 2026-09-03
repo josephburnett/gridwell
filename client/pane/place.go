@@ -72,8 +72,11 @@ func NewStack(gridID string) Stack {
 
 // StackAt builds the stack a restored place names: a root grid, a descent
 // path of doorway tile ids, and (when non-empty) a content descent on top.
-// The outer frames carry no viewport — see Frame.HasView. The one decoder
-// for the URL and the layout blob alike.
+// The outer frames carry no viewport — see Frame.HasView. This is the URL's
+// decoder, and the layout blob's for a place its projection holds in full.
+//
+// It can only say one namespace level: a path is doorway ids below one
+// anchor, so a stack whose crossings matter is decoded by StackOf instead.
 func StackAt(gridID string, path []string, contentID string) Stack {
 	s := Stack{Frame: Frame{GridID: gridID}}
 	for _, id := range path {
@@ -83,6 +86,43 @@ func StackAt(gridID string, path []string, contentID string) Stack {
 		s.Push(Frame{Door: contentID, Content: true})
 	}
 	return s
+}
+
+// StackOf builds the stack from its frames, bottom first — the inverse of
+// Frames, and the decoder for a place recorded level by level (wire.go's
+// Place). Empty frames yield the boot-blank stack.
+func StackOf(frames []Frame) Stack {
+	if len(frames) == 0 {
+		return Stack{}
+	}
+	s := Stack{Frame: frames[0]}
+	for _, f := range frames[1:] {
+		s.Push(f)
+	}
+	return s
+}
+
+// ProjectionHolds reports whether Anchor/Path/ContentID name this whole
+// stack: true when decoding that projection through StackAt rebuilds every
+// frame's identity. It is false exactly where the projection loses a level —
+// a namespace crossing below the top level, or a content frame below the top
+// — and it decides by rebuilding and comparing rather than by a rule about
+// which shapes lose, so no encoder can quietly drop a level it did not think
+// of.
+func (s *Stack) ProjectionHolds() bool {
+	anchor, path := s.AnchorPathAt(len(s.below))
+	rebuilt := StackAt(anchor, path, s.ContentID())
+	have, want := s.Frames(), rebuilt.Frames()
+	if len(have) != len(want) {
+		return false
+	}
+	for i := range have {
+		if have[i].GridID != want[i].GridID || have[i].Door != want[i].Door ||
+			have[i].Content != want[i].Content {
+			return false
+		}
+	}
+	return true
 }
 
 // Depth is the number of frames (1 = the pane sits at its root grid).

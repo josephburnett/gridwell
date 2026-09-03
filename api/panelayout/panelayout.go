@@ -48,21 +48,43 @@ type LayoutSplit struct {
 	B     LayoutNode `json:"b"`
 }
 
-// LayoutPane is a leaf's persisted place: anchor, path, and viewport, plus
-// the content-descent state. All ids are in the owning node's namespace
-// frame.
+// LayoutFrame is one level of a leaf's place: the doorway it came through
+// and, where the frame owns it, the grid that doorway opened. A crossing into
+// another namespace — a link tile, a mount, a plugin swatch — is the frame
+// that carries GridID; an ordinary well frame carries only Door and its grid
+// is derived from the row. Content marks a frame whose place is the door tile
+// itself. No viewport: the viewports a pane would ascend onto are
+// session-only, and only the leaf's current one is persisted (Cx/Cy/Zoom).
+type LayoutFrame struct {
+	Door    string `json:"d,omitempty"`
+	GridID  string `json:"g,omitempty"`
+	Content bool   `json:"c,omitempty"`
+}
+
+// LayoutPane is a leaf's persisted place: the whole frame stack in Place,
+// root first, plus the leaf's viewport and content-descent state. All ids are
+// in the owning node's namespace frame.
+//
+// Anchor, Path and TextFocus are the same place projected onto its innermost
+// namespace level — the only shape a Gridwell older than Place can read, and
+// the shape the store's reap scans for referenced text tiles. Place wins
+// wherever it is present, and it is written only where the projection would
+// lose a level (a crossing below the top, a content frame below the top), so
+// a place the projection holds in full encodes byte-identically to what
+// earlier versions wrote and re-visiting a workspace still writes nothing.
 type LayoutPane struct {
-	ID          string   `json:"id"`
-	Anchor      string   `json:"anchor,omitempty"`
-	Path        []string `json:"path,omitempty"`
-	Cx          float64  `json:"cx,omitempty"`
-	Cy          float64  `json:"cy,omitempty"`
-	Zoom        float64  `json:"zoom,omitempty"`
-	TextFocus   string   `json:"text_focus,omitempty"`
-	TextMode    string   `json:"text_mode,omitempty"`
-	TextScrollX float64  `json:"text_scroll_x,omitempty"`
-	TextScrollY float64  `json:"text_scroll_y,omitempty"`
-	TextZoom    float64  `json:"text_zoom,omitempty"`
+	ID          string        `json:"id"`
+	Anchor      string        `json:"anchor,omitempty"`
+	Path        []string      `json:"path,omitempty"`
+	Cx          float64       `json:"cx,omitempty"`
+	Cy          float64       `json:"cy,omitempty"`
+	Zoom        float64       `json:"zoom,omitempty"`
+	TextFocus   string        `json:"text_focus,omitempty"`
+	TextMode    string        `json:"text_mode,omitempty"`
+	TextScrollX float64       `json:"text_scroll_x,omitempty"`
+	TextScrollY float64       `json:"text_scroll_y,omitempty"`
+	TextZoom    float64       `json:"text_zoom,omitempty"`
+	Place       []LayoutFrame `json:"place,omitempty"`
 }
 
 // Parse unmarshals and version-checks a layout blob.

@@ -7,18 +7,22 @@
 // LayoutV1's bytes are forever — decoding a v1 blob must work in every future
 // version of Gridwell, and the golden fixture in wire_test.go pins it.
 //
+// A leaf persists its whole place: every frame it descended through, root
+// first, namespace crossings included, plus the viewport at the one it is on.
+// The bar's chain is that stack projected, so a restored workspace can always
+// be walked back out to its root.
+//
 // What is not in the layout, by design: the outer frames' viewports, the
-// selection, and the native handles. A leaf persists the place it is at — the
-// grid it sits in, the doorways it came through, and the viewport there —
-// exactly the URL vocabulary. The viewports it would ascend onto stay
-// session-scoped, so a restored pane falls back to each grid's persisted
+// selection, and the native handles. The viewports a pane would ascend onto
+// stay session-scoped, so a restored pane falls back to each grid's persisted
 // framing on the way out.
 //
-// Id relativity: every id in the layout (anchor, path segments, TextFocus) is
-// stored in the owning node's namespace frame. The encoder strips the pane
-// tile's own transit-chain prefix via rel; the decoder prepends it via abs.
-// URL path segments follow the same rule, so a pane tile mounted over ssh
-// restores against the chain the reader used to reach it.
+// Id relativity: every id in the layout (anchor, path segments, TextFocus,
+// and each Place frame's door and grid) is stored in the owning node's
+// namespace frame. The encoder strips the pane tile's own transit-chain
+// prefix via rel; the decoder prepends it via abs. URL path segments follow
+// the same rule, so a pane tile mounted over ssh restores against the chain
+// the reader used to reach it.
 package pane
 
 import (
@@ -47,6 +51,7 @@ type (
 	LayoutNode  = panelayout.LayoutNode
 	LayoutSplit = panelayout.LayoutSplit
 	LayoutPane  = panelayout.LayoutPane
+	LayoutFrame = panelayout.LayoutFrame
 )
 
 // EncodeLayout serializes the tree as a LayoutV1 blob.
@@ -109,9 +114,39 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 
 // encodeLeaf maps one pane's place into the owning node's frame. ok=false
 // means some id was outside the frame and the leaf was serialized as home.
+//
+// The place is written twice by design: Place is the whole frame stack, and
+// Anchor/Path/TextFocus are its projection onto the innermost namespace
+// level, which is all a Gridwell older than Place can read and all the
+// store's reap scans. Place is omitted wherever the projection already holds
+// the whole place (Stack.ProjectionHolds), so the common blob is byte-identical
+// to what earlier versions wrote and a pure visit still never writes.
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)
 	home := &LayoutPane{ID: bareID, Zoom: 1}
+	var place []LayoutFrame
+	if !p.ProjectionHolds() {
+		frames := p.Frames()
+		place = make([]LayoutFrame, len(frames))
+		for i, f := range frames {
+			lf := LayoutFrame{Content: f.Content}
+			if f.GridID != "" {
+				g, ok := rel(f.GridID)
+				if !ok {
+					return home, false
+				}
+				lf.GridID = g
+			}
+			if f.Door != "" {
+				d, ok := rel(f.Door)
+				if !ok {
+					return home, false
+				}
+				lf.Door = d
+			}
+			place[i] = lf
+		}
+	}
 	panchor, ppath := p.AnchorPathAt(p.Depth() - 1)
 	anchor := ""
 	if panchor != "" {
@@ -145,6 +180,7 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 		TextFocus: textFocus, TextMode: p.TextMode,
 		TextScrollX: p.TextScrollX, TextScrollY: p.TextScrollY, TextZoom: p.TextZoom,
+		Place: place,
 	}, true
 }
 
@@ -246,6 +282,35 @@ func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNod
 }
 
 func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane {
+	p := &Pane{ID: idPrefix + lp.ID, Stack: decodePlace(lp, abs)}
+	p.Cx, p.Cy, p.Zoom = lp.Cx, lp.Cy, lp.Zoom
+	p.TextMode = lp.TextMode
+	p.TextScrollX, p.TextScrollY, p.TextZoom = lp.TextScrollX, lp.TextScrollY, lp.TextZoom
+	if p.Zoom == 0 {
+		p.Zoom = 1
+	}
+	return p
+}
+
+// decodePlace rebuilds a leaf's frame stack: Place when the blob recorded it
+// level by level, and otherwise its Anchor/Path/TextFocus projection — the
+// only shape blobs written before Place carry, and the shape written whenever
+// it holds the whole place.
+func decodePlace(lp *LayoutPane, abs func(string) string) Stack {
+	if len(lp.Place) > 0 {
+		frames := make([]Frame, len(lp.Place))
+		for i, lf := range lp.Place {
+			f := Frame{Content: lf.Content}
+			if lf.GridID != "" {
+				f.GridID = abs(lf.GridID)
+			}
+			if lf.Door != "" {
+				f.Door = abs(lf.Door)
+			}
+			frames[i] = f
+		}
+		return StackOf(frames)
+	}
 	anchor := ""
 	if lp.Anchor != "" {
 		anchor = abs(lp.Anchor)
@@ -258,14 +323,7 @@ func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane 
 	if lp.TextFocus != "" {
 		textFocus = abs(lp.TextFocus)
 	}
-	p := &Pane{ID: idPrefix + lp.ID, Stack: StackAt(anchor, path, textFocus)}
-	p.Cx, p.Cy, p.Zoom = lp.Cx, lp.Cy, lp.Zoom
-	p.TextMode = lp.TextMode
-	p.TextScrollX, p.TextScrollY, p.TextZoom = lp.TextScrollX, lp.TextScrollY, lp.TextZoom
-	if p.Zoom == 0 {
-		p.Zoom = 1
-	}
-	return p
+	return StackAt(anchor, path, textFocus)
 }
 
 // paneIDNum parses the N out of a "p<N>" pane id.
