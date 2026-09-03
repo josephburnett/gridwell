@@ -94,13 +94,15 @@ func (a *App) bottomBarSegments(chain []navCrumb) []wsbar.Segment {
 }
 
 // drawBottomBar paints the one band: the focused pane's nav chain, then its
-// title and slot.
+// title and slot. The band's top edge carries no rule or accent: the bar meets
+// the pane area above it directly, so the pane's own border is the only line
+// there and the bar reads as the pane's own footer rather than a second frame.
 func (a *App) drawBottomBar() {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok {
 		return
 	}
-	band, button := a.barTheme()
+	band, _ := a.barTheme()
 	c := a.cctx
 	c.Set("fillStyle", band)
 	c.Call("fillRect", bx, top, bw, wsbar.RowH)
@@ -118,8 +120,6 @@ func (a *App) drawBottomBar() {
 			a.drawChainCrumb(nc.Crumb, shifted, top)
 		}
 	}
-	c.Set("fillStyle", button)
-	c.Call("fillRect", bx, top, bw, 1) // hairline above the band, kind-hued
 	a.drawBarTitle(top)
 	a.drawStaleChip(bx, top, bw)
 	a.drawBarSlot()
