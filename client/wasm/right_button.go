@@ -359,8 +359,8 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 	}
 	if a.ghost != nil {
 		// Same DecideDrop verdict the right-drag commit (commitRightClone)
-		// uses — clone=true flavor. Preview and commit can't diverge.
-		a.previewDrop(d, sx, sy, true)
+		// uses, off the same d.intent. Preview and commit can't diverge.
+		a.previewDrop(d, sx, sy)
 	}
 	d.curScreenX = sx
 	d.curScreenY = sy
@@ -380,7 +380,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 	a.dragging = &dragState{
 		originPaneID:  p.ID,
 		originFocused: true, // right-down focused the pane before arming
-		clone:         true,
+		intent:        dragdrop.IntentCopy,
 		startScreenX:  sx,
 		startScreenY:  sy,
 		curScreenX:    sx,
@@ -417,10 +417,10 @@ func (a *App) commitTileCenter(sx, sy float64) {
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// The same snapshot-then-DecideDrop discipline as the left-drag commit
 	// (onMouseUp), through the one gatherer (dropInputAt), so the preview
-	// (advanceCloneDrag) and the commit share one decision. A right-drag
-	// clones everywhere — a copy of the dragged tile, and a link tile copies
-	// as another link.
-	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* clone */, true /* placement */)
+	// (advanceCloneDrag) and the commit share one decision off d.intent. A
+	// right-drag clones everywhere — a copy of the dragged tile, and a link
+	// tile copies as another link.
+	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
 	switch dragdrop.DecideDrop(in) {
 	case dragdrop.DropDelete:

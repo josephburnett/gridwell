@@ -541,8 +541,8 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	} else if a.ghost != nil {
 		// Update the ghost from the same dragdrop.DecideDrop verdict the
 		// left-drag commit (onMouseUp) uses, so a previewed action cannot
-		// differ from the committed one. clone=false is the move flavor.
-		a.previewDrop(d, sx, sy, false)
+		// differ from the committed one. The flavor rides d.intent.
+		a.previewDrop(d, sx, sy)
 	}
 	d.curScreenX = sx
 	d.curScreenY = sy
@@ -560,12 +560,13 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 //
 // The two flavors differ in exactly two places, both kept explicit:
 //   - the hide. A move hides the original at its stored position so we don't
-//     see two copies of the same stone; a clone (d.clone) shows both, since
-//     the copy is a new stone. Hiding is by row id: a clone is a different
-//     row that looks the same, so a by-lineage hide would make every clone
-//     vanish whenever its sibling is picked up (dragdrop.HiddenMatch and its
-//     test cover the predicate). It lives on the ghost, because the hide
-//     outlives the drag through the snap-back and dies with the ghost.
+//     see two copies of the same stone; a creating drag (d.intent.Creates —
+//     a right-drag copy or link) shows both, since what lands is a new stone.
+//     Hiding is by row id: a clone is a different row that looks the same, so
+//     a by-lineage hide would make every clone vanish whenever its sibling is
+//     picked up (dragdrop.HiddenMatch and its test cover the predicate). It
+//     lives on the ghost, because the hide outlives the drag through the
+//     snap-back and dies with the ghost.
 //   - the missing-cell-size fallback (below).
 //
 // A pan drag — no tile and no template — materializes no ghost; a right-drag
@@ -591,7 +592,7 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 		// A right-drag clone is armed from a real tile with a real cell size
 		// and keeps the bare cellPx fallback it has always had.
 		size = cellPx
-		if src := a.tree.FindPane(d.originPaneID); src != nil && !d.clone {
+		if src := a.tree.FindPane(d.originPaneID); src != nil && !d.intent.Creates() {
 			size = cellPx * src.Zoom
 		}
 	}
@@ -603,7 +604,7 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 		displayedCellSize: size,
 		targetCellSize:    size,
 	}
-	if d.tileID != "" && !d.clone {
+	if d.tileID != "" && !d.intent.Creates() {
 		a.ghost.hiddenTileID = d.tileID
 		a.ghost.hiddenPaneID = d.originPaneID
 	}
@@ -636,14 +637,14 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	if a.dragging == nil {
 		return nil
 	}
-	// A right-button clone drag commits only through the right-button
-	// release path (finishRightDrag → commitRightClone), which clears
-	// a.dragging before reaching here. Reaching the move-commit with a clone
-	// still armed means a non-right button came up mid-drag (e.g. the user
-	// pressed and released the left button while right-dragging). Ignore it
-	// so the clone is never silently committed as a move — the gesture stays
-	// armed and the eventual right-button release still clones.
-	if a.dragging.clone {
+	// A right-button drag — a copy or a link — commits only through the
+	// right-button release path (finishRightDrag → commitRightClone), which
+	// clears a.dragging before reaching here. Reaching the move-commit with
+	// one still armed means a non-right button came up mid-drag (e.g. the
+	// user pressed and released the left button while right-dragging).
+	// Ignore it so the gesture is never silently committed as a move — it
+	// stays armed and the eventual right-button release still creates.
+	if a.dragging.intent.Creates() {
 		return nil
 	}
 	d := a.dragging
@@ -720,8 +721,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// local d, since a.dragging is already nil above. DecideDrop then picks
 	// the action and the switch executes the side effects. onMouseMove
 	// gathers the same DropInput for the ghost preview, so preview and commit
-	// cannot diverge. clone=false: a clone commits via the right path above.
-	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, false /* clone */, true /* placement */)
+	// cannot diverge. The flavor is d.intent, which is IntentMove here: a
+	// right-button drag commits via the right path above.
+	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
 	verdict := dragdrop.DecideDrop(in)
 	switch verdict {

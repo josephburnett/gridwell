@@ -255,6 +255,30 @@ func MoveForbidden(sameGrid, crossPlugin, srcHost, dstHost bool) bool {
 	return srcHost || dstHost
 }
 
+// Intent is what the armed gesture means to leave at the destination, fixed
+// by the press that arms the drag and never re-derived afterwards. It is the
+// one owner of that fact: the drag state carries it, and the preview and the
+// commit both read it from there, so no call site can decide on a flavor that
+// disagrees with the gesture the user actually started.
+type Intent int
+
+const (
+	// IntentMove is a left-drag: the tile itself travels. Across an id
+	// namespace there is no move, so it verdicts a link instead. It is the
+	// zero value, which a palette template drag also leaves unset.
+	IntentMove Intent = iota
+	// IntentCopy is a right-drag: an independent copy at the destination, in
+	// the same namespace or across one.
+	IntentCopy
+)
+
+// Creates reports whether the intent puts a NEW tile at the destination
+// rather than relocating the dragged one. A copy is creation: the source
+// stays put, so it is a real neighbor the drop must not land on, a read-only
+// destination refuses the arrival, and a move-only rule like MoveForbidden
+// does not apply.
+func (i Intent) Creates() bool { return i != IntentMove }
+
 // DropAction is the single verdict for a drag release and the matching
 // in-flight preview. Both the commit handlers and the ghost-preview handlers
 // in the wasm client route through DecideDrop, so they cannot disagree: a
@@ -306,13 +330,13 @@ const (
 //   - OverDelete:  a.overDeleteButton(d, sx, sy)
 //   - HasTarget:   a.dropTargetAt(sx, sy, tileID) resolved
 //   - Forbidden:   move only — a.dropForbiddenForMove(d, t) (MoveForbidden).
-//     No clone is forbidden (a solid well deep-copies, a link copies as a
-//     link), so a clone leaves it false
+//     No creation is forbidden (a solid well deep-copies, a link copies as a
+//     link), so a copy or a link leaves it false
 //   - CrossPlugin: dropCrossNamespace(d, t) — NamespaceOf(src) != NamespaceOf(dst)
 //   - SameCell:    target grid == source grid && drop cell == source cell
 //   - Occupied:    a.occupiedForDrop(t.gridID, dropX, dropY, w, h, exclude)
 //     — the dragged footprint against the cached tiles, excluding the
-//     moving tile itself on a move (never on a clone), mirroring the
+//     moving tile itself on a move (never on a creation), mirroring the
 //     server's PlaceTile self-exclusion
 type DropInput struct {
 	Started bool
@@ -329,7 +353,9 @@ type DropInput struct {
 	// never sets it.
 	SplitNav   bool
 	IsTemplate bool
-	Clone      bool   // right-drag armed
+	// Intent is the armed gesture's meaning — move, copy, or link — read
+	// from the drag state, never re-derived per call site.
+	Intent     Intent
 	TileID     string // "" = pan / empty-space drag
 	OverDelete bool
 	HasTarget  bool
@@ -367,7 +393,9 @@ type DropInput struct {
 //  6. Forbidden     → Rejected      (cross-grid move; move-only input)
 //  7. SameCell      → Rejected
 //  8. Occupied      → Rejected
-//  9. else          → Clone ? DropClone : DropMove
+//  9. else          → the Intent: copy → DropClone, move → DropMove, and a
+//     move across an id namespace → DropLink, since there is no
+//     cross-plugin move
 func DecideDrop(in DropInput) DropAction {
 	switch {
 	case !in.Started && !in.OriginFocused:
@@ -386,16 +414,16 @@ func DecideDrop(in DropInput) DropAction {
 		return DropRejected
 	case in.Forbidden:
 		return DropRejected
-	case in.TargetReadOnly && !(in.SameGrid && !in.Clone):
+	case in.TargetReadOnly && !(in.SameGrid && !in.Intent.Creates()):
 		// Read-only gates arrivals, which are creation-class. A same-grid
 		// left-drag is placement, which read-only projections accept and
-		// persist. Clones stay creation.
+		// persist. Copies and links stay creation.
 		return DropRejected
 	case in.SameCell:
 		return DropRejected
 	case in.Occupied:
 		return DropRejected
-	case in.Clone:
+	case in.Intent == IntentCopy:
 		return DropClone
 	case in.CrossPlugin:
 		return DropLink
@@ -422,11 +450,12 @@ type GhostPlan struct {
 	Cursor string // CSS cursor: "" or "not-allowed"
 }
 
-// GhostPlanForDrop maps a DecideDrop verdict (plus the reject cause and
-// the clone flavor) to the ghost styling. The pane ids and cell sizes are
-// passed in because the ghost rests in a different pane per verdict: the
-// origin pane for a delete or an off-canvas reject, the drop target for a
-// placement or a forbidden cross-grid move.
+// GhostPlanForDrop maps a DecideDrop verdict (plus the reject cause) to the
+// ghost styling. The verdict already carries the intent — DropClone, DropMove
+// and DropLink are three of its values — so the intent is not passed again.
+// The pane ids and cell sizes are passed in because the ghost rests in a
+// different pane per verdict: the origin pane for a delete or an off-canvas
+// reject, the drop target for a placement or a forbidden cross-grid move.
 //
 //   - Delete  → shrink to 1/5 and fully fragment, in the origin pane.
 //   - Rejected, forbidden → source size in the target pane, no-entry badge.
@@ -439,7 +468,7 @@ type GhostPlan struct {
 // SameCell and Occupied never reach here as a distinct style: the preview is
 // optimistic about placement and shows the snap-to-cell, while the commit
 // does the authoritative overlap check.
-func GhostPlanForDrop(action DropAction, forbidden, clone bool,
+func GhostPlanForDrop(action DropAction, forbidden bool,
 	originPaneID, targetPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
 	switch action {
 	case DropDelete:

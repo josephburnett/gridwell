@@ -19,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/clientsync"
+	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/inflight"
@@ -662,11 +663,15 @@ type dragState struct {
 	curScreenX   float64
 	curScreenY   float64
 	started      bool
-	// clone marks a right-button clone drag, armed by armRightClone. Such a
-	// drag commits only through the right-button release path; the
-	// left-button move-commit refuses it, so a stray non-right release
-	// cannot silently turn the clone into a move.
-	clone         bool
+	// intent is what this drag means to leave at the destination, fixed by
+	// the press that armed it: move for a left-drag, copy for a right-drag,
+	// link for ctrl + right-drag (armRightClone). It is the ONE owner of that
+	// fact — the ghost preview and the commit both read it from here, so
+	// neither can decide on a flavor the other did not. A creating drag
+	// (dragdrop.Intent.Creates) commits only through the right-button release
+	// path; the left-button move-commit refuses it, so a stray non-right
+	// release cannot silently turn a copy or a link into a move.
+	intent        dragdrop.Intent
 	snapshotTile  rpc.Tile
 	originScreenX float64
 	originScreenY float64

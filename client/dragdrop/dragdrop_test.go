@@ -312,7 +312,7 @@ func TestDecideDropFocusOnly(t *testing.T) {
 	}
 }
 
-// TestDecideDropTargetReadOnly: a drop (move OR clone) onto a read-only grid
+// TestDecideDropTargetReadOnly: a drop (any intent) onto a read-only grid
 // (fs/proc) is rejected up front — no doomed RPC, no
 // misleading "changed elsewhere" reconcile notice.
 func TestDecideDropTargetReadOnly(t *testing.T) {
@@ -321,7 +321,7 @@ func TestDecideDropTargetReadOnly(t *testing.T) {
 		t.Errorf("move onto read-only grid = %v, want DropRejected", got)
 	}
 	clone := base
-	clone.Clone = true
+	clone.Intent = IntentCopy
 	if got := DecideDrop(clone); got != DropRejected {
 		t.Errorf("clone onto read-only grid = %v, want DropRejected", got)
 	}
@@ -335,7 +335,7 @@ func TestDecideDropTargetReadOnly(t *testing.T) {
 // TestDecideDropReadOnlyPlacement: read-only gates arrivals, not placement. A
 // same-grid left-drag on any read-only grid — fs, proc, the launcher — is a
 // rearrangement the node persists, so things stay as the user left them on
-// every grid. Clones stay creation-class.
+// every grid. Copies and links stay creation-class.
 func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	rearrange := DropInput{Started: true, TileID: "u/1", HasTarget: true,
 		TargetReadOnly: true, SameGrid: true}
@@ -343,7 +343,7 @@ func TestDecideDropReadOnlyPlacement(t *testing.T) {
 		t.Errorf("same-grid move on read-only grid = %v, want DropMove", got)
 	}
 	clone := rearrange
-	clone.Clone = true
+	clone.Intent = IntentCopy
 	if got := DecideDrop(clone); got != DropRejected {
 		t.Errorf("same-grid clone on read-only grid = %v, want DropRejected (creation)", got)
 	}
@@ -385,6 +385,31 @@ func TestMoveForbidden(t *testing.T) {
 	}
 }
 
+// TestIntentCreates pins which intents put a NEW tile at the destination.
+// Three call sites branch on it — the occupancy self-exclusion, the
+// move-only Forbidden input, and the read-only placement exemption — so a
+// wrong answer here silently lets a copy land on its own source, or gates a
+// rearrangement that read-only grids are supposed to accept. The zero value
+// must stay IntentMove: a palette template drag and a plain left-drag both
+// leave the field unset.
+func TestIntentCreates(t *testing.T) {
+	var zero Intent
+	if zero != IntentMove {
+		t.Errorf("zero Intent = %v, want IntentMove", zero)
+	}
+	for _, c := range []struct {
+		in   Intent
+		want bool
+	}{
+		{IntentMove, false},
+		{IntentCopy, true},
+	} {
+		if got := c.in.Creates(); got != c.want {
+			t.Errorf("Intent(%d).Creates() = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
 func TestDecideDrop(t *testing.T) {
 	// base is a clean, started, left-drag of a real tile over a valid
 	// empty target cell — i.e. the DropMove case. Each row flips just the
@@ -399,7 +424,7 @@ func TestDecideDrop(t *testing.T) {
 		// --- the happy paths ---
 		{"clean left drag -> move", base, DropMove},
 		{"clean right drag -> clone",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true}, DropClone},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy}, DropClone},
 
 		// --- early branches beat everything ---
 		{"bare click on focused pane -> navigate (beats all)",
@@ -435,24 +460,24 @@ func TestDecideDrop(t *testing.T) {
 		{"occupied -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Occupied: true}, DropRejected},
 
-		// --- clone flavor ---
+		// --- the copy intent ---
 		{"clone with a clean target -> clone",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true}, DropClone},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy}, DropClone},
 		// SameCell/Occupied still reject a clone (both commit paths check them).
 		{"clone onto occupied -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, Occupied: true}, DropRejected},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, Occupied: true}, DropRejected},
 		{"clone onto same cell -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, SameCell: true}, DropRejected},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, SameCell: true}, DropRejected},
 		// Forbidden is a per-gesture input; the verdict treats a forbidden
 		// clone like a forbidden move (no gesture sets it for clones today).
 		{"forbidden clone -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, Forbidden: true}, DropRejected},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, Forbidden: true}, DropRejected},
 
 		// --- a cross-namespace left-drag is a link ---
 		{"cross-plugin left drag -> link",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true}, DropLink},
 		{"cross-plugin right drag -> clone (copy, not link)",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Clone: true}, DropClone},
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Intent: IntentCopy}, DropClone},
 		{"cross-plugin link onto occupied -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Occupied: true}, DropRejected},
 		{"cross-plugin link onto read-only target -> rejected",
@@ -479,27 +504,26 @@ func TestGhostPlanForDrop(t *testing.T) {
 		name      string
 		action    DropAction
 		forbidden bool
-		clone     bool
 		want      GhostPlan
 	}{
-		{"delete shrinks+fragments in origin", DropDelete, false, false,
+		{"delete shrinks+fragments in origin", DropDelete, false,
 			GhostPlan{PaneID: origin, TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},
-		{"rejected forbidden cross-grid: no-entry in target", DropRejected, true, false,
+		{"rejected forbidden cross-grid: no-entry in target", DropRejected, true,
 			GhostPlan{PaneID: target, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
-		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false, false,
+		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false,
 			GhostPlan{PaneID: origin, TargetCellSize: srcSz}},
-		{"move snaps to target cell", DropMove, false, false,
+		{"move snaps to target cell", DropMove, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
-		{"clone snaps to target cell", DropClone, false, true,
+		{"clone snaps to target cell", DropClone, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
 		// The teaching signal: a cross-namespace left-drag previews as a
 		// link (chain badge) — never as a bare move, or the source's
 		// survival after the drop would read as a surprise duplicate.
-		{"link snaps to target cell with the chain badge", DropLink, false, false,
+		{"link snaps to target cell with the chain badge", DropLink, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},
 	}
 	for _, c := range cases {
-		got := GhostPlanForDrop(c.action, c.forbidden, c.clone,
+		got := GhostPlanForDrop(c.action, c.forbidden,
 			origin, target, srcSz, tgtSz)
 		if got != c.want {
 			t.Errorf("%s: GhostPlanForDrop = %+v, want %+v", c.name, got, c.want)
