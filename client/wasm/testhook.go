@@ -728,10 +728,13 @@ func (a *App) thBar(js.Value, []js.Value) any {
 			e["anchor"] = nc.Crumb.Anchor
 			e["tileID"] = nc.Crumb.TileID
 			e["text"] = nc.Crumb.Text
+			// The leading close-all crumb is not one of the focused pane's
+			// own: it stands for the levels, and its click closes them.
+			e["closeOnly"] = nc.CloseOnly
 			if nc.Crumb.Anchor != "" {
-				// The root crumb's face: the exact selector drawChainCrumb
-				// renders, with "" meaning the globe, so a spec can pin
-				// crumb identity without reading pixels.
+				// A root crumb's face: the exact selector drawChainCrumb
+				// renders, so a spec can pin crumb identity without reading
+				// pixels.
 				e["glyph"] = a.pluginGlyph(nc.Crumb.Anchor)
 			}
 		}

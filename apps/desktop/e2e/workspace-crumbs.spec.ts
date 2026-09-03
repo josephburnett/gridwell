@@ -88,3 +88,41 @@ test('a workspace re-entered inside a plugin keeps every crumb down from its roo
   const depth = await window.evaluate(() => (window as any).__gridwellTest.workspace().depth);
   expect(depth, 'still inside the workspace').toBe(1);
 });
+
+test('a workspace restored by ?w= still shows a face on its close-all crumb', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const rootGrid = f.gridID;
+  const wx = Math.round(f.cx);
+  const wy = Math.round(f.cy);
+
+  await gw.openPalette();
+  await gw.dragCreate('pane', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
+  expect(pt).toBeTruthy();
+  await gw.descendCell(wx, wy);
+
+  // A fresh boot straight into the workspace: nothing parked an outer tree,
+  // and the close-all crumb used to have nothing to draw.
+  await window.evaluate(
+    ([tileId]) => {
+      location.href = `${location.origin}/?w=${encodeURIComponent(tileId)}&e2e=1`;
+    },
+    [pt!.id],
+  );
+  await window.waitForFunction(() => (window as any).__gridwellTest !== undefined);
+  await expect
+    .poll(async () => window.evaluate(() => (window as any).__gridwellTest.workspace().depth), {
+      message: 'boot must restore the workspace from ?w=',
+      timeout: 15_000,
+    })
+    .toBe(1);
+
+  const root = (await gw.bar()).segments[0];
+  expect(root.closeOnly, 'the leading crumb closes the levels').toBe(true);
+  expect(root.anchor, 'and names the grid the pane tile sits in').toBe(rootGrid);
+  expect(root.glyph, 'so it draws a face, not a blank square').not.toBe('');
+});

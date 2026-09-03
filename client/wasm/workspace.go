@@ -162,6 +162,10 @@ func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string,
 		OuterTree:  outer,
 		OriginPane: originPane,
 		TileID:     pt.ID,
+		// Where the pane tile sits, off the row this descent already read: the
+		// close-all landing when no tree was parked, and so the face the bar's
+		// root crumb wears there instead of an anonymous square.
+		GridID: pt.GridID,
 		// Raw alt text: the bar substitutes the generic label at draw time,
 		// so the crumb rename can round-trip an empty name honestly.
 		Name:     pt.AltText,
@@ -434,7 +438,7 @@ func (a *App) ascendLevels(count int) {
 				a.animateWorkspaceReturn(f)
 			}
 		} else {
-			a.tree = a.fallbackTreeFor(f.TileID)
+			a.tree = a.fallbackTreeFor(f)
 		}
 	}
 	// Same rebind as installWorkspace: the restored outer tree's focused pane
@@ -516,26 +520,33 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 }
 
 // fallbackTreeFor builds the post-reload ascent landing: a fresh single pane
-// that re-anchors to the pane tile's containing grid, its viewport centered
-// on the tile. The GetTile rides a goroutine, because this runs inside a
-// click callback where a blocking network call would wedge the wasm
-// scheduler, so the pane lands at home for a frame and re-anchors when the
-// tile arrives. An unreachable tile leaves it at home.
-func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
+// at the pane tile's containing grid, its viewport centered on the tile. The
+// grid is the level's own fact — the row the descent read (Level.GridID), the
+// same one the bar's root crumb wears — so the landing is right on the first
+// frame; only the centering needs the row, and that GetTile rides a goroutine
+// because this runs inside a click callback where a blocking network call
+// would wedge the wasm scheduler. A level with no recorded grid, or an
+// unreachable tile, leaves the pane at home.
+func (a *App) fallbackTreeFor(f pane.Level) *pane.Tree {
 	t := pane.NewTree()
 	p := t.FocusedPane()
-	p.Reset(pane.Frame{GridID: a.home, Zoom: 1})
-	paneID := p.ID
+	landing := f.GridID
+	if landing == "" {
+		landing = a.home
+	}
+	p.Reset(pane.Frame{GridID: landing, Zoom: 1})
+	a.fetchGrid(landing)
+	paneID, tileID := p.ID, f.TileID
 	go func() {
 		tile, err := a.cl.GetTile(context.Background(), tileID)
 		if err != nil {
 			a.surfaceRPCError("GetTile", err)
 			return
 		}
-		// Re-anchor only if the pane is still sitting untouched at home —
-		// a user who already navigated wins over the late fetch.
+		// Re-center only if the pane is still sitting untouched where it
+		// landed — a user who already navigated wins over the late fetch.
 		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.Anchor() != a.home || len(fp.Path()) > 0 || fp.ContentID() != "" {
+		if fp == nil || fp.Anchor() != landing || len(fp.Path()) > 0 || fp.ContentID() != "" {
 			return
 		}
 		fp.Reset(pane.Frame{GridID: tile.GridID,

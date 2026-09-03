@@ -44,10 +44,37 @@ func TestNavChainInsideViews(t *testing.T) {
 			t.Errorf("crumb %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
-	// A boot-restored innermost frame: the root crumb has no face.
+}
+
+// TestNavChainRootCrumbAlwaysHasAFace: the close-all root crumb wears the face
+// of wherever its click lands, however the level was entered. A descent parked
+// a tree, so it takes that tree's origin pane's root; a boot restore parked
+// none, so it takes the grid the level's pane tile sits in — exactly where the
+// close-all ascent re-anchors. A faceless crumb is a blank square in the bar
+// with nothing to say what it is.
+func TestNavChainRootCrumbAlwaysHasAFace(t *testing.T) {
 	var boot Levels
-	boot.Push(Level{TileID: "pt"})
-	if r := boot.NavChain(nil)[0]; !r.CloseOnly || !reflect.DeepEqual(r.Crumb, Crumb{}) {
-		t.Fatalf("boot root crumb = %+v", r)
+	boot.Push(Level{TileID: "pt", GridID: "u1/0"})
+	r := boot.NavChain(nil)[0]
+	if !r.CloseOnly || r.Crumb.Anchor != "u1/0" {
+		t.Fatalf("boot-restored root crumb = %+v, want the pane tile's grid face", r)
+	}
+
+	// A descent's parked tree wins: that is the place the click restores.
+	outer := NewTree()
+	op := outer.FocusedPane()
+	op.Stack = StackAt("u2/0", nil, "")
+	var down Levels
+	down.Push(Level{OuterTree: outer, OriginPane: op.ID, TileID: "pt", GridID: "u1/0"})
+	if got := down.NavChain(nil)[0].Crumb; !reflect.DeepEqual(got, op.Crumbs()[0]) {
+		t.Fatalf("descended root crumb = %+v, want the origin's root", got)
+	}
+
+	// Neither: nothing is known, and the crumb says so rather than claiming a
+	// place it cannot name.
+	var bare Levels
+	bare.Push(Level{TileID: "pt"})
+	if got := bare.NavChain(nil)[0].Crumb; !reflect.DeepEqual(got, Crumb{}) {
+		t.Fatalf("faceless root crumb = %+v, want the empty crumb", got)
 	}
 }

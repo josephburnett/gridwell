@@ -31,6 +31,10 @@ type Level struct {
 	// TileID is the pane tile's qualified id — the owner of the layout blob
 	// and the routing handle for the layout WriteContent.
 	TileID string
+	// GridID is the grid the pane tile sits in, from the row the descent
+	// already read. It is where a close-all ascent re-anchors when this level
+	// parked no tree, and so the face the bar's root crumb wears there.
+	GridID string
 	// Name is the tile's display label at descent time (the bar's crumb).
 	Name string
 	// ReadOnly latches when the layout blob could not be decoded (corrupt,
@@ -158,16 +162,22 @@ func (s *Levels) NavChain(p *Pane) []NavCrumb {
 	var out []NavCrumb
 	depth := s.Depth()
 	if depth > 0 {
-		// The root crumb wears the session origin's root face (the
-		// namespace glyph) when it is known; a boot-restored level has none
-		// and the crumb draws as the muted placeholder. Either way the click
-		// only closes levels.
+		// The root crumb wears the face of wherever its click lands: the
+		// session origin's root when this level parked a tree, and otherwise
+		// — a boot restore, which parked none — the grid the level's pane tile
+		// sits in, which is where the close-all ascent re-anchors. Either way
+		// the click only closes levels.
 		root := NavCrumb{CloseOnly: true}
-		if f := s.At(1); f != nil && f.OuterTree != nil && f.OriginPane != "" {
-			if op := f.OuterTree.FindPane(f.OriginPane); op != nil {
-				if chain := op.Crumbs(); len(chain) > 0 {
-					root.Crumb = chain[0]
+		if f := s.At(1); f != nil {
+			if f.OuterTree != nil && f.OriginPane != "" {
+				if op := f.OuterTree.FindPane(f.OriginPane); op != nil {
+					if chain := op.Crumbs(); len(chain) > 0 {
+						root.Crumb = chain[0]
+					}
 				}
+			}
+			if root.Crumb.Anchor == "" && root.Crumb.TileID == "" && f.GridID != "" {
+				root.Crumb = Crumb{Anchor: f.GridID, ParentAnchor: f.GridID}
 			}
 		}
 		out = append(out, root)

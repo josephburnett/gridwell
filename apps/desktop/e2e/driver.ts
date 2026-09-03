@@ -154,6 +154,7 @@ export class GridwellDriver {
       anchor?: string;
       tileID?: string;
       glyph?: string;
+      closeOnly?: boolean;
     }>;
   }> {
     return this.win.evaluate(() => (window as any).__gridwellTest.bar());
