@@ -139,7 +139,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   modifier flips the right button from copy to link, in the namespace the
   drop lands in or across one. Cross-plugin a left-drag links too, because
   there is no cross-plugin move. Dashed means link; deleting a link
-  unlinks.
+  unlinks. Ctrl + left-click descends in a new pane split below — the
+  same split a link out of a live tile opens; in an unfocused pane it
+  still only moves focus.
 - A link into a namespace the node does not declare is DEAD: greyed, inert,
   still labelled, still deletable. It is a state, not an error — nothing is
   asked for it and nothing is said about it. Dead is not dark: a declared

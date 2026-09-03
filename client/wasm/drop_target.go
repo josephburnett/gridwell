@@ -60,6 +60,7 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, clone, placement bool) (
 	in = dragdrop.DropInput{
 		Started:       d.started,
 		OriginFocused: d.originFocused,
+		SplitNav:      d.splitNav,
 		IsTemplate:    d.isTemplate,
 		Clone:         clone,
 		TileID:        d.tileID,

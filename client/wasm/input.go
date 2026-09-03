@@ -429,6 +429,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	a.dragging = &dragState{
 		originPaneID:  p.ID,
 		originFocused: prevFocus == p.ID,
+		splitNav:      args[0].Get("ctrlKey").Truthy(),
 		tileID:        "",
 		startScreenX:  sx,
 		startScreenY:  sy,
@@ -722,14 +723,17 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// cannot diverge. clone=false: a clone commits via the right path above.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, false /* clone */, true /* placement */)
 
-	switch dragdrop.DecideDrop(in) {
+	verdict := dragdrop.DecideDrop(in)
+	switch verdict {
 	case dragdrop.DropFocusOnly:
 		// The click's only job was moving focus (done at mousedown).
 		a.draw()
 		return nil
 
-	case dragdrop.DropNavigate:
+	case dragdrop.DropNavigate, dragdrop.DropNavigateSplit:
 		// Bare click (no movement) on an already-focused pane: navigation.
+		// The split flavor is the same click with ctrl held at press: the
+		// descent lands in a new pane below; everything else is identical.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused == nil {
 			a.draw()
@@ -740,7 +744,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		// tile, or in the edge band kicks off navigation. Selection
 		// only applies to other cases (e.g., clicking a tile to
 		// outline it without descending).
-		if a.attemptDescentOrAscent(focused, r, sx, sy) {
+		if a.attemptDescentOrAscent(focused, r, sx, sy,
+			verdict == dragdrop.DropNavigateSplit) {
 			a.scheduleURLUpdate()
 			return nil
 		}
@@ -1006,9 +1011,14 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 //   - Otherwise: no-op (selection is handled by the bare-click path
 //     in onMouseUp before this is invoked).
 //
+// inNewPane is the ctrl-click ask (DropNavigateSplit): the descent lands in
+// a new pane split below, leaving this pane where it is. Only a descent
+// splits — the url-configure prompt stays in place, and a click that would
+// do nothing still does nothing.
+//
 // Returns true if a navigation gesture was performed (caller should skip
 // further interpretation of the click).
-func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
+func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, inNewPane bool) bool {
 	if p.ContentID() != "" {
 		// Inside a text/url/shell descent, a bare click isn't navigation:
 		// ascent lives on the middle button and the bar's crumb click.
@@ -1032,7 +1042,13 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 	}
 	// One descent: which kind of frame it pushes is the tile's declaration
 	// (nav.go), not this call site's.
-	a.descend(p, hit, nil)
+	target := p
+	if inNewPane && !a.deadLink(hit) {
+		// Ctrl asked for the descent in a new pane. A dead link descends
+		// nowhere (descend's own guard), so it births no pane either.
+		target = a.splitBelowForOpen(p)
+	}
+	a.descend(target, hit, nil)
 	return true
 }
 
@@ -1717,30 +1733,41 @@ func (a *App) openLinkBelow(paneID, url string) {
 	// it, since a background page can call window.open. Focus it first,
 	// which is also where the user's attention is about to go.
 	a.focusToPane(p)
-	// The universal pane minimum applies to programmatic splits too: a pane
-	// too short for two minimum panes opens the visit in place instead of
-	// birthing a sub-minimum pane. SplitOnSideAt only clamps the ratio;
-	// rejecting a sub-minimum split is the caller's job.
-	if !pane.CanSplit(pane.SideBottom, paneRectFor(a, p)) {
+	newP := a.splitBelowForOpen(p)
+	if newP == p {
 		a.visitEphemeralURL(p, url)
 		return
-	}
-	newP, err := a.tree.SplitOnSideAt(pane.SideBottom, 0.5)
-	if err != nil {
-		a.visitEphemeralURL(p, url)
-		return
-	}
-	// The clone inherits the source's content frame, which a live view
-	// cannot duplicate — the same rule as commitSplit — so ascend the
-	// content level and let the visit descend from the containing grid. The
-	// ephemeral delete-on-ascent is guarded by leavingEphemeral, so this
-	// ascent never deletes the tile the source pane still shows.
-	if newP.ContentID() != "" {
-		a.ascend(newP, 1, true)
 	}
 	a.draw()
 	a.scheduleURLUpdate()
 	a.visitEphemeralURL(newP, url)
+}
+
+// splitBelowForOpen splits the focused pane p into a new lower half and
+// returns the new pane, focused, ready to receive a descent or a visit. It
+// is the one programmatic split: a link opened out of a live tile and a
+// ctrl-click descent land in the same place. The universal pane minimum
+// applies to programmatic splits too — a pane too short for two minimum
+// panes returns p itself, so the caller's action lands in place instead of
+// being silently dropped (SplitOnSideAt only clamps the ratio; rejecting a
+// sub-minimum split is this caller's job). The clone inherits the source's
+// content frame, which a live view cannot duplicate — the same rule as
+// commitSplit — so the new pane ascends just the content level and shows
+// the grid containing the tile. The ephemeral delete-on-ascent is guarded
+// by leavingEphemeral, so that ascent never deletes the tile the source
+// pane still shows.
+func (a *App) splitBelowForOpen(p *pane.Pane) *pane.Pane {
+	if !pane.CanSplit(pane.SideBottom, paneRectFor(a, p)) {
+		return p
+	}
+	newP, err := a.tree.SplitOnSideAt(pane.SideBottom, 0.5)
+	if err != nil {
+		return p
+	}
+	if newP.ContentID() != "" {
+		a.ascend(newP, 1, true)
+	}
+	return newP
 }
 
 // shellURLActivate handles a click on an http(s) url in a live shell, the

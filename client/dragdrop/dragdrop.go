@@ -266,6 +266,12 @@ const (
 	// DropNavigate: a bare click (no drag started) on an already-focused
 	// pane — the wasm side runs descent/ascent/selection. Not a placement.
 	DropNavigate DropAction = iota
+	// DropNavigateSplit: the same bare click with ctrl held at press time —
+	// a descent lands in a new split pane instead of this one; every other
+	// outcome of the click (selection, the url-configure prompt) is
+	// unchanged. Ctrl is the split ask only on an already-focused pane: on
+	// an unfocused one the click is still focus-only.
+	DropNavigateSplit
 	// DropFocusOnly: a bare click whose only job was moving focus to the
 	// pane (it was unfocused at press time); no navigation, no selection.
 	DropFocusOnly
@@ -316,12 +322,18 @@ type DropInput struct {
 	// select, whatever tile sits under the cursor. The + button and the
 	// corner circle follow the same rule: act only when already focused.
 	OriginFocused bool
-	IsTemplate    bool
-	Clone         bool   // right-drag armed
-	TileID        string // "" = pan / empty-space drag
-	OverDelete    bool
-	HasTarget     bool
-	Forbidden     bool
+	// SplitNav: ctrl was held at left-press time — fixed at press like
+	// every drag fact, so releasing ctrl mid-click cannot change the
+	// verdict. Read only by the bare-click arm: a started drag with ctrl
+	// held is still a plain move. Touch synthesizes no ctrlKey, so touch
+	// never sets it.
+	SplitNav   bool
+	IsTemplate bool
+	Clone      bool   // right-drag armed
+	TileID     string // "" = pan / empty-space drag
+	OverDelete bool
+	HasTarget  bool
+	Forbidden  bool
 	// TargetReadOnly: the destination grid refuses creation (Grid.writable
 	// false — an fs or proc grid), so an arrival there (a cross-grid drop, a
 	// clone) is rejected up front instead of firing an RPC the server must
@@ -346,7 +358,8 @@ type DropInput struct {
 // commit (onMouseUp) and reconciles the right-drag commit
 // (commitRightClone). Earlier branches strictly win:
 //
-//  1. !Started      → Navigate     (bare click beats everything)
+//  1. !Started      → Navigate     (bare click beats everything;
+//     ctrl held at press → NavigateSplit)
 //  2. IsTemplate    → CreateTemplate
 //  3. TileID == ""  → PanEnd
 //  4. OverDelete    → Delete
@@ -359,6 +372,8 @@ func DecideDrop(in DropInput) DropAction {
 	switch {
 	case !in.Started && !in.OriginFocused:
 		return DropFocusOnly
+	case !in.Started && in.SplitNav:
+		return DropNavigateSplit
 	case !in.Started:
 		return DropNavigate
 	case in.IsTemplate:

@@ -346,6 +346,17 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
+  // ctrlDescendCell is descendCell with Control held: the descent lands in a
+  // new pane split below, which takes focus; the clicked pane stays put.
+  async ctrlDescendCell(cx: number, cy: number): Promise<void> {
+    const f = await this.focused();
+    const c = await this.cellCenter(f.id, cx, cy);
+    await this.win.keyboard.down('Control');
+    await this.win.mouse.click(c.x, c.y);
+    await this.win.keyboard.up('Control');
+    await this.waitIdle();
+  }
+
   // ── Tile gestures (left/right button drags over the canvas) ───────────────
 
   // NUDGE is the first move of every synthetic drag: comfortably past the 4px

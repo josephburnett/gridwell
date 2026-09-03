@@ -650,14 +650,18 @@ type dragState struct {
 	// Without it, a click meant to focus a pane descends whenever it happens
 	// to hit a tile.
 	originFocused bool
-	tileID        string
-	cellOffsetX   float64
-	cellOffsetY   float64
-	startScreenX  float64
-	startScreenY  float64
-	curScreenX    float64
-	curScreenY    float64
-	started       bool
+	// splitNav records ctrl held at left-press time: a bare click then asks
+	// for its descent in a new split pane (dragdrop.DropNavigateSplit).
+	// Fixed at press like every drag fact; a started drag ignores it.
+	splitNav     bool
+	tileID       string
+	cellOffsetX  float64
+	cellOffsetY  float64
+	startScreenX float64
+	startScreenY float64
+	curScreenX   float64
+	curScreenY   float64
+	started      bool
 	// clone marks a right-button clone drag, armed by armRightClone. Such a
 	// drag commits only through the right-button release path; the
 	// left-button move-commit refuses it, so a stray non-right release
