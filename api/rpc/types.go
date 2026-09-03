@@ -318,10 +318,12 @@ type CreateWellRequest struct {
 	Y      int64  `json:"y"`
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
-	// ChildGridID, when set, makes this an exit well pointing at an existing
-	// grid in another plugin: a mounted node, an fs or proc grid. Label is
-	// the display name for such a well. Empty means an ordinary interior
-	// well.
+	// ChildGridID, when set, makes this an exit well: a doorway onto an
+	// existing grid named by its qualified id — a mounted node, an fs or
+	// proc grid, or, when ctrl + right-drag links a well, another doorway
+	// onto a grid in the same namespace. Label is the display name for such
+	// a well. Empty means an ordinary interior well, which allocates its own
+	// child grid.
 	ChildGridID string `json:"child_grid_id,omitempty"`
 	Label       string `json:"label,omitempty"`
 	// Framing seeds an exit well's framing at creation: a plugin link
@@ -332,9 +334,11 @@ type CreateWellRequest struct {
 }
 
 // CreateLeafLinkRequest creates a leaf link: a text, url, shell, or pane tile
-// whose content lives in another plugin's tile, which is what a cross-plugin
-// left-drag makes. Kind is the target's kind, LinkTargetID is the qualified
-// "<uuid>/<tile-id>" reference, and Label is the link's local alt_text.
+// whose content lives in another tile — what a ctrl + right-drag makes
+// anywhere, and what a cross-plugin left-drag makes at a namespace boundary.
+// Kind is the target's kind, LinkTargetID is the qualified "<uuid>/<tile-id>"
+// reference — qualified in every namespace, so the target may be a neighbor
+// in the same one — and Label is the link's local alt_text.
 type CreateLeafLinkRequest struct {
 	GridID       string `json:"grid_id"`
 	X            int64  `json:"x"`

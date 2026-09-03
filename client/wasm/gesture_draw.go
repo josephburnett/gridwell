@@ -176,8 +176,10 @@ func drawRefreshIcon(c js.Value, cx, cy, radius float64, color string) {
 //     is a single resize zone — grab anywhere out here, drag any
 //     direction. Eight outward arrows (4 cardinal + 4 diagonal) make
 //     "you can pull in any direction" explicit.
-//   - Inner 1/3 × 1/3 square is the clone zone — marked with the
-//     two-rectangles "clone" glyph.
+//   - Inner 1/3 × 1/3 square is the copy/link zone — marked with the
+//     two-rectangles "copy" glyph. The glyph does not change with the ctrl
+//     modifier: the overlay describes where the zones are, and the drag
+//     ghost — solid or dashed — is what says which mode is armed.
 //
 // Strictly grey: informational, not interactive.
 func (a *App) drawTileHotspotOverlay(rd *rightDragState) {
@@ -200,7 +202,7 @@ func (a *App) drawTileHotspotOverlay(rd *rightDragState) {
 	a.cctx.Call("strokeRect", left+0.5, top+0.5, w-1, h-1)
 	a.cctx.Call("strokeRect", innerL+0.5, innerT+0.5, tw-1, th-1)
 
-	// Clone glyph: two overlapping rectangles inside the inner zone.
+	// Copy glyph: two overlapping rectangles inside the inner zone.
 	ccx := left + w/2
 	ccy := top + h/2
 	gs := math.Min(tw, th) * 0.35

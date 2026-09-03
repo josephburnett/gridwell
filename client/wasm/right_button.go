@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"math"
+	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
@@ -40,9 +41,10 @@ const (
 	rightDragSwap
 	rightDragSplit
 	// rightDragTileCenter is armed when right-down lands in the inner
-	// 1/3 × 1/3 of a tile (cell coords). It's the clone grab handle:
-	// dragging past the threshold materializes a clone ghost via the
-	// standard a.dragging machinery; bare release is a no-op.
+	// 1/3 × 1/3 of a tile (cell coords). It's the copy/link grab handle:
+	// dragging past the threshold materializes a ghost via the standard
+	// a.dragging machinery — a solid copy, or a dashed link when ctrl was
+	// held at the press; bare release is a no-op.
 	rightDragTileCenter
 	// rightDragTileResize is armed when right-down lands on a tile
 	// outside its center. The pin is the corner of the original tile
@@ -94,15 +96,34 @@ type rightDragState struct {
 	tileNewW, tileNewH       int64
 }
 
+// rightDragIntent reads the right-button press's modifier and returns what a
+// drag off it means: ctrl flips the right button from copy to link. It is the
+// one place that reading lives, so the canvas, the text overlay, and the
+// shell overlay cannot disagree about which modifier means link — and the
+// intent is fixed HERE, at the press, like every other gesture fact
+// (gesture.Kind), so the ghost previews the same outcome the release commits
+// even if the key is let go mid-drag.
+func rightDragIntent(ev js.Value) dragdrop.Intent {
+	if ev.Truthy() && ev.Get("ctrlKey").Truthy() {
+		return dragdrop.IntentLink
+	}
+	return dragdrop.IntentCopy
+}
+
 // onRightDown classifies the right-down and arms the matching gesture
 // state. Tile gestures (cap/redig/fill on bare release; resize on
 // drag) take priority when the cursor is over a tile in a grid view.
 // No tree or store edits happen here — those wait for release (or the
 // next move tick, for pane resize).
 //
+// intent is what a drag off this press will leave at the destination
+// (rightDragIntent): copy, or link when ctrl was held. It reaches only the
+// tile-center arm; the pane gestures — swap, split, tile resize — have no
+// destination and ignore it.
+//
 // Caller has already verified there's no animation in flight and
 // (sx, sy) is over pane p with screen rect r.
-func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
+func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent dragdrop.Intent) {
 	// Resolve the facts gesture.Classify orders, holding onto the lookups
 	// (tile, divider, region) so the arming switch reuses them instead of
 	// recomputing. Every lookup here is a pure read; the state edits happen
@@ -124,8 +145,9 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	switch gesture.Classify(in) {
 	case gesture.TileCenter, gesture.TileResize:
 		// armTileGesture re-derives center-vs-resize via dragdrop and arms
-		// the matching state (and primes the clone ghost for the center).
-		a.armTileGesture(p, r, tile, sx, sy)
+		// the matching state (and primes the copy-or-link ghost for the
+		// center).
+		a.armTileGesture(p, r, tile, sx, sy, intent)
 	case gesture.Swap:
 		a.rightDrag = &rightDragState{
 			kind:         rightDragSwap,
@@ -177,7 +199,11 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 	// semantics as the canvas path. Omitting it here would strand the menu
 	// on the old pane after a right-drag over a live URL view moved focus.
 	a.focusToPane(p)
-	a.onRightDown(p, r, sx, sy)
+	// IntentCopy, not a forwarded modifier: this press came from a live URL
+	// view, so the pane is in a content descent and gesture.Classify can only
+	// reach the pane gestures, which ignore the intent. There is no tile
+	// under a live view to copy or link.
+	a.onRightDown(p, r, sx, sy, dragdrop.IntentCopy)
 	a.draw()
 }
 
@@ -248,14 +274,17 @@ func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *rpc.Tile 
 // a tile. The model is the same for every tile kind (well, text, URL,
 // shell, pane):
 //   - Center 1/3 × 1/3: rightDragTileCenter — drag-past-threshold
-//     clones the tile (via the standard a.dragging machinery, armed
-//     in parallel); bare release does nothing.
+//     clones the tile, or links it when intent is IntentLink (via the
+//     standard a.dragging machinery, armed in parallel); bare release
+//     does nothing.
 //   - Outside center: rightDragTileResize — rubber-band the footprint.
+//     A resize has no destination, so it ignores the intent: ctrl on the
+//     resize ring changes nothing.
 //
 // In both cases drawRightDragPreview paints the 5-zone hotspot
 // overlay so the user can see all the affordances on the tile at a
 // glance.
-func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float64) {
+func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float64, intent dragdrop.Intent) {
 	common := rightDragState{
 		startX:     sx,
 		startY:     sy,
@@ -270,7 +299,7 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy floa
 		common.kind = rightDragTileCenter
 		common.cursorInCenter = true
 		a.rightDrag = &common
-		a.armRightClone(p, r, n, sx, sy)
+		a.armRightClone(p, r, n, sx, sy, intent)
 	} else {
 		common.kind = rightDragTileResize
 		common.pinX, common.pinY,
@@ -366,21 +395,23 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 	d.curScreenY = sy
 }
 
-// armRightClone primes the a.dragging state so a drag from the center
-// zone of tile n will clone it. The ghost itself is materialized only
-// once the cursor moves past dragThreshold — same convention as
-// left-click drags — so a bare right-click leaves the world unchanged.
+// armRightClone primes the a.dragging state so a drag from the center zone of
+// tile n will clone it, or link it when ctrl was held at the press
+// (IntentLink). The ghost itself is materialized only once the cursor moves
+// past dragThreshold — same convention as left-click drags — so a bare
+// right-click leaves the world unchanged.
 //
-// We don't hide the original tile (clone=true), and the cursor offset
-// inside the tile is preserved so the grab point tracks the cursor.
-func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float64) {
+// We don't hide the original tile — both intents create, and the source stays
+// — and the cursor offset inside the tile is preserved so the grab point
+// tracks the cursor.
+func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float64, intent dragdrop.Intent) {
 	ps := paneToDragdrop(p, r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
 	a.dragging = &dragState{
 		originPaneID:  p.ID,
 		originFocused: true, // right-down focused the pane before arming
-		intent:        dragdrop.IntentCopy,
+		intent:        intent,
 		startScreenX:  sx,
 		startScreenY:  sy,
 		curScreenX:    sx,
@@ -393,10 +424,11 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 
 // commitTileCenter handles release of a center-zone gesture. With the
 // unified mouse-only model the bare-release semantics are: no-op. The
-// center is "the clone grab handle" — clone happens by dragging past
-// the threshold. If a.dragging was promoted to "started" by motion,
-// commit it as a CloneTile drop; otherwise just clear the priming
-// state so subsequent clicks aren't affected.
+// center is "the copy/link grab handle" — the drop happens by dragging
+// past the threshold. If a.dragging was promoted to "started" by motion,
+// commit it through commitRightClone, which reads the armed intent;
+// otherwise just clear the priming state so subsequent clicks aren't
+// affected.
 func (a *App) commitTileCenter(sx, sy float64) {
 	d := a.dragging
 	a.dragging = nil
@@ -409,17 +441,17 @@ func (a *App) commitTileCenter(sx, sy float64) {
 }
 
 // commitRightClone resolves the drop target at (sx, sy) and either deletes —
-// a drop on the source pane's + button, shown as a trashcan — fires
-// CloneTile, or snaps the ghost back on a rejected drop. The async RPC fires
-// in a goroutine and the local cache is patched by the event when it lands.
-// Dropping on the trashcan deletes whichever button armed the drag;
-// otherwise a right-drag clones or links.
+// a drop on the source pane's + button, shown as a trashcan — fires CloneTile
+// or the link create, or snaps the ghost back on a rejected drop. The async
+// RPC fires in a goroutine and the local cache is patched by the event when it
+// lands. Dropping on the trashcan deletes whichever button armed the drag;
+// otherwise a right-drag copies, and a ctrl + right-drag links.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// The same snapshot-then-DecideDrop discipline as the left-drag commit
 	// (onMouseUp), through the one gatherer (dropInputAt), so the preview
 	// (advanceCloneDrag) and the commit share one decision off d.intent. A
-	// right-drag clones everywhere — a copy of the dragged tile, and a link
-	// tile copies as another link.
+	// plain right-drag clones everywhere — a copy of the dragged tile, and a
+	// link tile copies as another link.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
 	switch dragdrop.DecideDrop(in) {
@@ -435,6 +467,16 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	case dragdrop.DropRejected:
 		// No target, the same cell, or an occupied one: snap back.
 		a.cancelDragSnapBack(d)
+		return
+	case dragdrop.DropLink:
+		// Ctrl was held at the press: the destination gains a reference and
+		// the source stays put, whatever namespace the drop landed in. It is
+		// the one link commit the cross-namespace left-drag uses, so the two
+		// gestures cannot make two different kinds of link. Nothing to
+		// unhide: a creating drag never hid the source.
+		a.landGhostAtCell(t, dropX, dropY)
+		a.commitLinkDrop(d, t, dropX, dropY)
+		a.draw()
 		return
 	}
 

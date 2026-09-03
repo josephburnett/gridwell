@@ -360,7 +360,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	button := args[0].Get("button").Int()
 	if button == 2 {
 		args[0].Call("preventDefault")
-		a.onRightDown(p, r, sx, sy)
+		// The modifier is read here, at the press, and never again: ctrl
+		// flips a right-drag from copy to link (rightDragIntent).
+		a.onRightDown(p, r, sx, sy, rightDragIntent(args[0]))
 		return nil
 	}
 	if button == 1 {
@@ -840,12 +842,16 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	return nil
 }
 
-// commitLinkDrop creates the link a cross-namespace left-drag drops: an exit
-// well for a dragged well, with the same qualified child grid, framing, and
-// label a + menu plugin-swatch drop produces, or a leaf link for a text, url,
-// shell, or pane tile, whose link_target_id names the dragged tile — or, when
-// the dragged tile is itself a leaf link, its target, so links never chain
-// through middleman tiles. The source tile is not touched.
+// commitLinkDrop creates the link a DropLink verdict asks for — a ctrl +
+// right-drag anywhere, or a cross-namespace left-drag, which have no reason
+// to make two different kinds of reference: an exit well for a dragged well,
+// with the same qualified child grid, framing, and label a + menu
+// plugin-swatch drop produces, or a leaf link for a text, url, shell, or pane
+// tile, whose link_target_id names the dragged tile — or, when the dragged
+// tile is itself a leaf link, its target, so links never chain through
+// middleman tiles. The ids the client already holds are qualified in every
+// namespace, home included, so the same request shape links inside one
+// namespace and across one. The source tile is not touched.
 func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	src := d.snapshotTile
 	dstGridID := t.gridID

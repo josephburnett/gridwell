@@ -403,6 +403,7 @@ func TestIntentCreates(t *testing.T) {
 	}{
 		{IntentMove, false},
 		{IntentCopy, true},
+		{IntentLink, true},
 	} {
 		if got := c.in.Creates(); got != c.want {
 			t.Errorf("Intent(%d).Creates() = %v, want %v", c.in, got, c.want)
@@ -472,6 +473,29 @@ func TestDecideDrop(t *testing.T) {
 		// clone like a forbidden move (no gesture sets it for clones today).
 		{"forbidden clone -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, Forbidden: true}, DropRejected},
+
+		// --- the link intent: ctrl + right-drag ---
+		// The gesture asks for a link, so it links inside one namespace too —
+		// that is the whole point of the modifier. Without this arm the
+		// verdict falls through to DropMove and the drop relocates the tile.
+		{"ctrl right drag in one namespace -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink}, DropLink},
+		// A link is a link: crossing a namespace with the modifier held is
+		// the same verdict a plain left-drag reaches there, not a refusal.
+		{"ctrl right drag across a namespace -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, CrossPlugin: true}, DropLink},
+		// A link is creation-class, like a clone: it lands a new row, so the
+		// source cell is a real neighbor and a read-only grid refuses it.
+		{"ctrl right drag onto occupied -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, Occupied: true}, DropRejected},
+		{"ctrl right drag onto same cell -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, SameCell: true}, DropRejected},
+		{"ctrl right drag onto a read-only grid -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, TargetReadOnly: true}, DropRejected},
+		{"ctrl right drag in the tile's own read-only grid -> rejected (creation)",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, TargetReadOnly: true, SameGrid: true}, DropRejected},
+		{"ctrl right drag over delete still deletes",
+			DropInput{Started: true, TileID: "7", OverDelete: true, Intent: IntentLink}, DropDelete},
 
 		// --- a cross-namespace left-drag is a link ---
 		{"cross-plugin left drag -> link",

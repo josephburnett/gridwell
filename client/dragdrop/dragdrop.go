@@ -153,8 +153,8 @@ func RectsOverlap(ax, ay, aw, ah, bx, by, bw, bh int64) bool {
 // InTileCenter reports whether the cell-space point (cellX, cellY) lies
 // inside the inner 1/3 × 1/3 of the tile at (x, y, w, h). The center
 // region scales with the tile so it's always 1/9 of the footprint, even
-// on 1×1 tiles, and the right-button "clone grab handle" feels the same
-// at every zoom.
+// on 1×1 tiles, and the right-button "copy/link grab handle" feels the
+// same at every zoom.
 func InTileCenter(x, y, w, h int64, cellX, cellY float64) bool {
 	xf, yf := float64(x), float64(y)
 	wf, hf := float64(w), float64(h)
@@ -270,13 +270,19 @@ const (
 	// IntentCopy is a right-drag: an independent copy at the destination, in
 	// the same namespace or across one.
 	IntentCopy
+	// IntentLink is ctrl + right-drag: ctrl flips the right button's meaning
+	// from copy to link, so the destination gains a reference and the source
+	// is untouched. It links in whatever namespace the drop lands in — the
+	// same namespace or across one — because a link is a link; the
+	// cross-namespace case is exactly what a plain left-drag already makes.
+	IntentLink
 )
 
 // Creates reports whether the intent puts a NEW tile at the destination
-// rather than relocating the dragged one. A copy is creation: the source
-// stays put, so it is a real neighbor the drop must not land on, a read-only
-// destination refuses the arrival, and a move-only rule like MoveForbidden
-// does not apply.
+// rather than relocating the dragged one. Copy and link are both creation:
+// the source stays put, so it is a real neighbor the drop must not land on,
+// a read-only destination refuses the arrival, and a move-only rule like
+// MoveForbidden does not apply.
 func (i Intent) Creates() bool { return i != IntentMove }
 
 // DropAction is the single verdict for a drag release and the matching
@@ -313,11 +319,13 @@ const (
 	DropMove
 	// DropClone: a clean right-drag — CloneTile.
 	DropClone
-	// DropLink: a clean left-drag whose endpoints are in different id
-	// namespaces — create a link at the destination (an exit well for a
-	// grid, a leaf link for text/url/shell/pane). There is no cross-plugin
-	// move: identity never migrates, the content stays where its id lives,
-	// and the source tile is untouched.
+	// DropLink: create a link at the destination (an exit well for a grid, a
+	// leaf link for text/url/shell/pane). Two gestures verdict it: a ctrl +
+	// right-drag, which asks for a link anywhere, and a clean left-drag whose
+	// endpoints are in different id namespaces, where there is no other
+	// answer — there is no cross-plugin move. Either way identity never
+	// migrates, the content stays where its id lives, and the source tile is
+	// untouched.
 	DropLink
 )
 
@@ -393,9 +401,9 @@ type DropInput struct {
 //  6. Forbidden     → Rejected      (cross-grid move; move-only input)
 //  7. SameCell      → Rejected
 //  8. Occupied      → Rejected
-//  9. else          → the Intent: copy → DropClone, move → DropMove, and a
-//     move across an id namespace → DropLink, since there is no
-//     cross-plugin move
+//  9. else          → the Intent: copy → DropClone, link → DropLink, move →
+//     DropMove, and a move across an id namespace → DropLink too, since
+//     there is no cross-plugin move
 func DecideDrop(in DropInput) DropAction {
 	switch {
 	case !in.Started && !in.OriginFocused:
@@ -425,7 +433,11 @@ func DecideDrop(in DropInput) DropAction {
 		return DropRejected
 	case in.Intent == IntentCopy:
 		return DropClone
-	case in.CrossPlugin:
+	case in.Intent == IntentLink || in.CrossPlugin:
+		// Ctrl asked for a link; a move across an id namespace has no other
+		// answer. Both land on the one link commit, so the gesture that says
+		// "link" and the boundary that forces one cannot produce two
+		// different kinds of reference.
 		return DropLink
 	default:
 		return DropMove

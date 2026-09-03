@@ -9,8 +9,8 @@
 // priority ordering between those facts — the piece worth testing in
 // isolation. On release, the gestures whose outcome is pure geometry (Split,
 // Resize, URLRefresh, Ascend) resolve here; the gestures whose outcome is a
-// drop resolution (TileCenter clone, drop-on-+-button delete) stay in the
-// App.
+// drop resolution (a TileCenter copy or link, drop-on-+-button delete) stay
+// in the App.
 package gesture
 
 import "github.com/josephburnett/gridwell/client/pane"
@@ -26,8 +26,9 @@ const (
 	// has somewhere to ascend to. Release inside the circle ascends;
 	// dragging out cancels.
 	Ascend
-	// TileCenter is the clone grab handle: armed in a tile's inner third.
-	// Drag past the threshold clones; bare release is a no-op.
+	// TileCenter is the copy/link grab handle: armed in a tile's inner
+	// third. Drag past the threshold clones the tile, or links it when ctrl
+	// was held at the press; bare release is a no-op.
 	TileCenter
 	// TileResize is armed on a tile outside its center: rubber-band the
 	// footprint from the diagonally-opposite pinned corner.
@@ -50,7 +51,7 @@ type Input struct {
 	// InGridView is true when the pane shows a grid (p.TextFocus == 0) —
 	// tile gestures are only valid there. OverTile is true when the cursor
 	// is over a tile; InTileCenter is true when it's in that tile's inner
-	// third (the clone handle) rather than the resize ring.
+	// third (the copy/link handle) rather than the resize ring.
 	InGridView   bool
 	OverTile     bool
 	InTileCenter bool

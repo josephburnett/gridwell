@@ -162,10 +162,11 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 		})
 }
 
-// CreateExitWell creates a well tile whose child grid lives in a different
-// plugin, such as a file well or a process well. Unlike CreateWell it
-// allocates no interior child grid and holds no refcount on the child: the
-// child grid is owned by the destination plugin and named by a qualified
+// CreateExitWell creates a well tile that is a doorway onto an existing grid
+// rather than the owner of one — a file well, a process well, a mount, or a
+// ctrl + right-drag link onto a grid in this same namespace. Unlike CreateWell
+// it allocates no interior child grid and holds no refcount on the child: the
+// child grid is owned by whoever created it and named by a qualified
 // "<uuid>/<id>" string. Deleting the well removes only the reference, never
 // the backing directory or process, which is a separate gesture on a tile
 // inside the grid. view carries the source's framing when the exit well is a

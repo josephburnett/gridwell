@@ -376,17 +376,33 @@ export class GridwellDriver {
     await this.dragCell(fromCx, fromCy, toCx, toCy, 'right');
   }
 
+  // linkTileCell ctrl+right-drags from the center of the tile at (fromCx,fromCy)
+  // to (toCx,toCy): the link gesture. Ctrl flips the right button's meaning from
+  // copy to link, so a reference lands at the destination and the source is
+  // untouched. Ctrl is held across the PRESS, which is where the gesture
+  // classifies; releasing it mid-drag changes nothing.
+  async linkTileCell(fromCx: number, fromCy: number, toCx: number, toCy: number): Promise<void> {
+    await this.dragCell(fromCx, fromCy, toCx, toCy, 'right', true);
+  }
+
   // dragCell is the shared press, nudge, drag, release over two cell centers.
-  private async dragCell(fromCx: number, fromCy: number, toCx: number, toCy: number, button: 'left' | 'right'): Promise<void> {
+  // ctrl, when set, is held down across the press and released after the drop —
+  // the modifier the canvas reads off the mousedown event.
+  private async dragCell(fromCx: number, fromCy: number, toCx: number, toCy: number, button: 'left' | 'right', ctrl = false): Promise<void> {
     const f = await this.focused();
     const from = await this.cellCenter(f.id, fromCx, fromCy);
     const to = await this.cellCenter(f.id, toCx, toCy);
     const m = this.win.mouse;
     await m.move(from.x, from.y);
-    await m.down({ button });
-    await m.move(from.x + GridwellDriver.NUDGE, from.y + GridwellDriver.NUDGE);
-    await m.move(to.x, to.y, { steps: 8 });
-    await m.up({ button });
+    if (ctrl) await this.win.keyboard.down('Control');
+    try {
+      await m.down({ button });
+      await m.move(from.x + GridwellDriver.NUDGE, from.y + GridwellDriver.NUDGE);
+      await m.move(to.x, to.y, { steps: 8 });
+      await m.up({ button });
+    } finally {
+      if (ctrl) await this.win.keyboard.up('Control');
+    }
     await this.waitIdle();
   }
 

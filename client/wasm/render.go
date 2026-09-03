@@ -1344,9 +1344,10 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// (the ghost is flying over the canvas).
 	outside := tileOutside(n, false)
 	// A dragged link shows dashed too, so you can see what you are carrying,
-	// and a drop that will create a link — the cross-namespace left-drag —
-	// previews dashed for the same reason: dashed always means this is, or
-	// becomes, a reference.
+	// and a drop that will create a link — a ctrl + right-drag, or a
+	// cross-namespace left-drag — previews dashed for the same reason:
+	// dashed always means this is, or becomes, a reference. It is how the
+	// user learns mid-drag which of the two right-button modes is armed.
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
 	if frag < 0.02 {
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")

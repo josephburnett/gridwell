@@ -224,7 +224,7 @@ func (a *App) ensureFileTextarea() {
 			if !ok {
 				return nil
 			}
-			a.onRightDown(p, r, sx, sy)
+			a.onRightDown(p, r, sx, sy, rightDragIntent(ev))
 			return nil
 		}
 		if button == 1 {

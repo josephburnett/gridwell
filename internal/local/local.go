@@ -295,19 +295,20 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		return nil, status.Error(codes.InvalidArgument, "create: nil tile")
 	}
 	if t.LinkTargetId != "" {
-		// A leaf link: any leaf kind whose content lives in another plugin's
-		// tile, which is what a cross-plugin left-drag makes. One create for
-		// all four kinds; the store validates the kind set and the
-		// qualified-target shape.
+		// A leaf link: any leaf kind whose content lives in another tile —
+		// what a ctrl + right-drag makes anywhere, and what a cross-plugin
+		// left-drag makes at a namespace boundary. One create for all four
+		// kinds; the store validates the kind set and the qualified-target
+		// shape.
 		return tileResp(p.st.CreateLeafLink(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 			t.Kind, t.LinkTargetId, t.AltText))
 	}
 	switch t.Kind {
 	case rpc.KindWell:
-		// child_grid_id set makes an exit well pointing at a grid owned by
-		// another plugin. No interior child grid is allocated; the
-		// cross-plugin reference is stored verbatim, and alt_text is the exit
-		// well's label. On an interior well, alt_text is the user-given grid
+		// child_grid_id set makes an exit well: a doorway onto an existing
+		// grid, in another namespace or this one. No interior child grid is
+		// allocated; the qualified reference is stored verbatim, and alt_text
+		// is the exit well's label. On an interior well, alt_text is the user-given grid
 		// name from the + palette; empty means unnamed.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,

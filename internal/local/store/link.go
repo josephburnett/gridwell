@@ -21,9 +21,11 @@ var leafLinkKinds = map[string]bool{
 }
 
 // CreateLeafLink creates a leaf tile — text, url, shell, or pane — that is a
-// link to a tile owned by another plugin. link_target_id holds the qualified
-// "<uuid>/<tile-id>" reference, stored verbatim, on the same contract as an
-// exit well's qualified child_grid_id. The row carries no content of its own,
+// link to another tile, in this namespace or another one. link_target_id
+// holds the qualified "<uuid>/<tile-id>" reference, stored verbatim, on the
+// same contract as an exit well's qualified child_grid_id: the qualification
+// is what makes the reference unambiguous, not the crossing, so a target in
+// this same namespace is an ordinary link. The row carries no content of its own,
 // since readers resolve bytes, preview, and session through the target id, so
 // deleting it only unlinks: tileRefs says a link owns nothing. alt is the
 // link's local label.
@@ -34,7 +36,9 @@ func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h in
 	if !strings.Contains(linkTargetID, "/") {
 		// The target must be a qualified tile id: a bare integer would be
 		// ambiguous the moment this row is read by a client that does not know
-		// which plugin allocated it. Same rule as an exit well's child.
+		// which namespace allocated it. Same rule as an exit well's child, and
+		// the reason a same-namespace link needs no special case — every id a
+		// client holds is already qualified, home's included.
 		return nil, fmt.Errorf("%w: link_target_id %q is not a qualified <uuid>/<tile-id> reference", ErrInvalidArgument, linkTargetID)
 	}
 	return s.createTile(ctx, gridID, x, y, w, h,
