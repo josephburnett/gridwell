@@ -240,6 +240,12 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	if a.urlPreview.KnownEmpty(tileID, blobID) {
 		return // the server already answered "no preview" for this blob
 	}
+	// tileID is the content id: a leaf link's TARGET, which may live in a
+	// namespace this node no longer declares. Never ask one — the answer is
+	// known, and asking would put its verdict on the error strip.
+	if a.deadNamespace(tileID) {
+		return
+	}
 	if !a.urlPreview.MarkFetching(tileID) {
 		return
 	}

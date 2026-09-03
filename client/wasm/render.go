@@ -128,6 +128,14 @@ const (
 	// plugin glyph / preview underneath still reads.
 	colorLauncherBrokenTint   = "rgba(180, 40, 40, 0.38)"
 	colorLauncherRootlessTint = "rgba(40, 40, 46, 0.55)"
+	// A dead link (client/deadref): a link into a namespace this node no
+	// longer declares. It is a state, not a failure, so it gets no alarm
+	// color — the veil fades the tile most of the way back to the
+	// background, and the outline and label are redrawn in the muted grey,
+	// keeping the dash that says "link" and the label that says which one.
+	// Grey and legible is the whole point: what you can throw away.
+	colorDeadLinkVeil = "rgba(12, 13, 17, 0.72)"
+	colorDeadLink     = "#5c5f68"
 )
 
 const (
@@ -215,6 +223,26 @@ func strokeTileFrame(c js.Value, x, y, w, h float64, color string, dashed, selec
 	if selected {
 		drawSelectedTileOutline(c, x, y, w, h)
 	}
+}
+
+// drawDeadLinkFace paints a dead link over the tile already drawn: a veil
+// that fades it back toward the pane background, then the dashed outline and
+// the banner label redrawn in the muted grey. It is an overlay for the same
+// reason drawPluginHealthTint is — every kind draws itself first and this
+// says one thing about the result — and it is the whole visible half of the
+// state. Nothing is asked for a dead link and nothing is said about it, so
+// the tile has to carry the news on its own.
+//
+// The selection ring sits outside the footprint and survives the veil: a
+// dead link is still a tile you can select and delete, which is the point.
+func (a *App) drawDeadLinkFace(n *rpc.Tile, x, y, w, h float64) {
+	if !a.deadLink(n) {
+		return
+	}
+	a.cctx.Set("fillStyle", colorDeadLinkVeil)
+	a.cctx.Call("fillRect", x, y, w, h)
+	strokeTileFrame(a.cctx, x, y, w, h, colorDeadLink, true, false)
+	a.drawTileBannerLabelIn(n, x, y, w, h, colorDeadLink)
 }
 
 // drawTraceOutline paints the fading yellow ascent-trace ring just outside
@@ -701,6 +729,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					dashed := !inHost && isLinkTile(&nn)
 					a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected, outside, dashed, p.ID)
 					a.drawPluginHealthTint(&nn, left, top, w, h)
+					a.drawDeadLinkFace(&nn, left, top, w, h)
 				}
 				// Ascent trace: the fading "you just came from here" outline on
 				// the tile this pane most recently ascended out of. Drawn after
@@ -1085,6 +1114,13 @@ func bannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
 // the red exit color; otherwise the tile-kind color (green for text, blue
 // for wells) so the banner echoes the tile's own color grammar.
 func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool) {
+	a.drawTileBannerLabelIn(n, x, y, w, h, bannerTextColor(n, outside))
+}
+
+// drawTileBannerLabelIn is drawTileBannerLabel with the text color named
+// rather than derived: one banner geometry, so a tile drawn in another state
+// — a dead link's grey — cannot end up with the label somewhere else.
+func (a *App) drawTileBannerLabelIn(n *rpc.Tile, x, y, w, h float64, textColor string) {
 	label := tileBannerLabel(n)
 	if label == "" {
 		return
@@ -1108,7 +1144,7 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 		a.cctx.Set("fillStyle", colorSourceLabelBg)
 		a.cctx.Call("fillRect", ix, iy, iw, bannerH)
 		setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true)
-		a.cctx.Set("fillStyle", bannerTextColor(n, outside))
+		a.cctx.Set("fillStyle", textColor)
 		a.cctx.Set("textBaseline", "middle")
 		a.cctx.Set("textAlign", "start")
 		a.cctx.Call("fillText", label, ix+4, iy+bannerH/2)
@@ -1152,6 +1188,12 @@ func (a *App) fetchTileContent(tileID string) {
 		return
 	}
 	if _, ok := a.c.TileContent(tileID); ok {
+		return
+	}
+	// A leaf link resolves its bytes through its target id, so a target in a
+	// namespace this node does not declare is not asked for. Same rule as
+	// fetchGrid: no round trip, no verdict, no notice.
+	if a.deadNamespace(tileID) {
 		return
 	}
 	ctx, done, ok := a.contentFetch.Begin(tileID)

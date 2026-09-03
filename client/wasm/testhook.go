@@ -45,6 +45,7 @@ func (a *App) installTestHook() {
 		"panes":         js.FuncOf(a.thPanes),
 		"previewSigs":   js.FuncOf(a.thPreviewSigs),
 		"gridSigs":      js.FuncOf(a.thGridSigs),
+		"deadLinks":     js.FuncOf(a.thDeadLinks),
 		"transitioning": js.FuncOf(a.thTransitioning),
 		"setTransitionMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// An e2e-only action, like shellVisitURL: stretch the transition
@@ -433,6 +434,34 @@ func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
 	out := map[string]any{}
 	for id, t := range g.Tiles {
 		out[id] = tileSig(&t) + a.childSig(t.ChildGridID)
+	}
+	return out
+}
+
+// thDeadLinks reports which tiles of a grid the client draws dead: links
+// into a namespace this node does not declare (client/deadref). It is the
+// one observable of the state — the face is canvas pixels and the absence of
+// an RPC is an absence — so a spec can pin that the verdict crossed the seam
+// from server.yaml to the tile.
+func (a *App) thDeadLinks(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return []any{}
+	}
+	g, ok := a.c.Grid(args[0].String())
+	if !ok {
+		return []any{}
+	}
+	ids := []string{}
+	for id, t := range g.Tiles {
+		tile := t
+		if a.deadLink(&tile) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	out := make([]any, len(ids))
+	for i, id := range ids {
+		out[i] = id
 	}
 	return out
 }

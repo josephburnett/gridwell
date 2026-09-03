@@ -218,7 +218,7 @@ own `media_type`.
 
 `client/*` packages are pure Go with unit tests: `pane`, `cache`, `outbox`,
 `zoomtrans`, `gesture`, `wsbar`, `markdown`, `menu`, `shellstream`,
-`shellwire`, `clientsync`, `errsurface`. `client/wasm` is the shim: canvas,
+`shellwire`, `clientsync`, `errsurface`, `deadref`. `client/wasm` is the shim: canvas,
 DOM, and the RPC calls. `make check` compiles the shim but executes none of
 it; only the e2e gates see it. A decision that lives only in the shim is a
 defect — extract it.
@@ -251,6 +251,18 @@ the retry kick on reconnect and the unload flush by `sendBeacon`. It holds
 order and retry, never a copy of a value. `client/wasm/mutate.go` has two
 paths: `postWriteContent` (the one write that claims a version) and
 `write`/`do` (everything else).
+
+**Dead links.** A link stores a qualified id into another namespace. When the
+node stops declaring that namespace — a plugin dropped from `server.yaml`, a
+connection name retired, which is forever — the link is dead: `client/deadref`
+reads the handshake roster the + menu is built from, asks the router's own peel
+(`rpc.OwnerNamespaceOf`) which namespace the id names, and answers from the
+node's declaration rather than from a failed fetch. A dead link is drawn grey
+and inert, is never fetched for, raises no notice, and does not descend; it can
+still be selected, read, and deleted. Dead is not dark: a declared plugin that
+is down and a declared connection that will not answer are health and
+staleness, and a chain through a declared connection is the far node's to
+judge, so it is never judged here.
 
 **Events** flow only into the cache. Framing writes live only in gesture and
 transition code. An event landing mid-animation updates data and redraws;
@@ -316,7 +328,9 @@ copy:
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
 | the shell door's address and frames | `client/shellwire` |
 | what error is this | `gwerr.ClassifyError` |
+| which namespace an id names | `rpc.OwnerNamespaceOf` |
 | who owns this qualified id | `Server.resolve` + `server.router` |
+| is this link dead | `deadref.DeadTile` over the handshake roster |
 | this event stream is established | `namespace.Follow` |
 
 Remaining seams with more than one writer, ranked by risk:

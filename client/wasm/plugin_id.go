@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/deadref"
 	"github.com/josephburnett/gridwell/client/door"
 )
 
@@ -13,6 +14,30 @@ import (
 // renderer reads them at many call sites.
 func uuidOf(id string) string     { return rpc.UUIDOf(id) }
 func isExitWell(n *rpc.Tile) bool { return rpc.IsExitWell(n) }
+
+// nodeID is this node's own id: the segment its home grid and every one of
+// its connections hang under. The handshake's home grid is the one place it
+// is written down, so it is read from there rather than kept a second time.
+func (a *App) nodeID() string { return rpc.UUIDOf(a.home) }
+
+// deadNamespace reports that a qualified id names a namespace this node does
+// not declare — a plugin dropped from server.yaml, a connection name retired.
+// The rule and the boundary against a merely dark namespace are deadref's;
+// this is the impure half, handing it the handshake roster and the node id.
+//
+// Nothing asks a dead namespace for anything: every fetch door consults this
+// first, so a dead link costs no RPC, raises no verdict, and surfaces no
+// error. It just sits there, greyed, until the user throws it away.
+func (a *App) deadNamespace(id string) bool {
+	return deadref.Dead(id, a.plugins, a.nodeID())
+}
+
+// deadLink reports that a tile is a link into a namespace this node does not
+// declare: the greyed, inert face, and the one thing the renderer, the
+// descent guard, and the fetch doors all read.
+func (a *App) deadLink(n *rpc.Tile) bool {
+	return deadref.DeadTile(n, a.plugins, a.nodeID())
+}
 
 // gridWritable reports whether the grid accepts new or edited tiles. The fact
 // is per grid and travels on the grid (Grid.Writable, stamped by the serving

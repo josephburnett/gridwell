@@ -137,6 +137,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   outer frames' viewports. The durable home for a layout is the pane tile.
 - Cross-plugin: left-drag links, right-drag clones. There is no move.
   Dashed means link; deleting a link unlinks.
+- A link into a namespace the node does not declare is DEAD: greyed, inert,
+  still labelled, still deletable. It is a state, not an error — nothing is
+  asked for it and nothing is said about it. Dead is not dark: a declared
+  plugin that is down and a declared connection that will not answer are
+  health and staleness, and they come back. `client/deadref`.
 - One bar, at the bottom of the window, always visible, riding the focused
   pane: it spans that pane and slides under it as focus moves, inside a
   full-width row reserved once, so no pane ever resizes. Panes end at that

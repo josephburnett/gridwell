@@ -942,6 +942,16 @@ func (a *App) fetchGrid(id string) {
 	if id == "" || a.gridLoadFailed[id] {
 		return
 	}
+	// A grid in a namespace this node does not declare is never asked for.
+	// The answer is already known — no plugin by that id, no connection by
+	// that name — so asking would spend a round trip to be told so and put
+	// a verdict on the error strip for a link the user can see is dead. The
+	// latch stands in for the answer we did not need: the in-pane wording
+	// reads "unavailable" rather than a "loading…" that never ends.
+	if a.deadNamespace(id) {
+		a.gridLoadFailed[id] = true
+		return
+	}
 	ctx, done, ok := a.gridFetch.Begin(id)
 	if !ok {
 		return
@@ -966,6 +976,13 @@ func (a *App) fetchGrid(id string) {
 // is cached. Background, like fetchGrid.
 func (a *App) fetchTileByID(tileID string) {
 	if tileID == "" || a.tileLoadFailed[tileID] {
+		return
+	}
+	// Same rule as fetchGrid: a namespace this node does not declare is not
+	// asked. A leaf link into a removed plugin resolves nowhere and stays
+	// its own dead face.
+	if a.deadNamespace(tileID) {
+		a.tileLoadFailed[tileID] = true
 		return
 	}
 	ctx, done, ok := a.tileFetch.Begin(tileID)

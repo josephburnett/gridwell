@@ -36,6 +36,15 @@ import (
 // after, when non-nil, runs once the pane is fully descended (the URL-tile
 // creation path chains on it).
 func (a *App) descend(p *pane.Pane, tile *rpc.Tile, after func()) {
+	// A dead link is not a doorway: it points into a namespace this node
+	// does not declare, so there is nothing on the other side to descend
+	// into. It does nothing, quietly — the tile is already drawn dead, and
+	// that is the answer. A notice here would be the error this state
+	// replaced, repeated on every click. It stops in front of
+	// flushFramingSave because nothing about the pane's place changes.
+	if a.deadLink(tile) {
+		return
+	}
 	// The pane is about to change place: flush framing still inside the
 	// settle window, while the viewport still belongs to the place it
 	// describes. One place asks, so no door can forget.

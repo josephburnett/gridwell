@@ -163,6 +163,30 @@ export async function placeTile(
   }
 }
 
+// createExitWell creates a link well directly through the server: a well whose
+// child grid is a qualified id in another namespace. The node stores the
+// reference verbatim and never checks that the namespace exists — it cannot,
+// since the namespace may be a remote's — so this is also how a spec seeds a
+// DANGLING link, one into a namespace this node does not declare.
+export async function createExitWell(
+  origin: string,
+  gridId: string,
+  childGridId: string,
+  altText: string,
+  x: number,
+  y: number,
+): Promise<Tile> {
+  const res = await fetch(`${origin}/${SERVICE}/CreateTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ gridId, tile: { kind: 'well', x, y, w: 1, h: 1, childGridId, altText } }),
+  });
+  if (!res.ok) {
+    throw new Error(`CreateTile(well -> ${childGridId}) failed: ${res.status} ${await res.text()}`);
+  }
+  return ((await res.json()) as { tile: Tile }).tile;
+}
+
 // updateText is writeContent for a text body, the foreign-writer specs' shape.
 export async function updateText(
   origin: string,
