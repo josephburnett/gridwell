@@ -27,22 +27,35 @@ const TODO = {
 };
 const TOKEN = 'glpat-e2e-fake';
 
-// fakeGitLab answers the one endpoint the plugin pages, and refuses a wrong
-// token with a 401 the way GitLab does, so a seeded token_file that did not
-// reach the plugin is a visible failure rather than an empty grid.
+// fakeGitLab answers the two endpoints the plugin speaks — the todos pager and
+// mark_as_done — and refuses a wrong token with a 401 the way GitLab does, so
+// a seeded token_file that did not reach the plugin is a visible failure
+// rather than an empty grid. Marking done flips the one todo's state, the way
+// the real API does, so a later walk agrees with the write.
 function fakeGitLab(): Promise<http.Server> {
+  TODO.state = 'pending'; // each server starts undone, whatever an earlier test wrote
   const srv = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
-    if (url.pathname !== '/api/v4/todos') {
-      res.writeHead(404).end();
-      return;
-    }
     if (req.headers['private-token'] !== TOKEN) {
       res.writeHead(401, { 'content-type': 'application/json' }).end('{"message":"401 Unauthorized"}');
       return;
     }
+    const done = /^\/api\/v4\/todos\/(\d+)\/mark_as_done$/.exec(url.pathname);
+    if (req.method === 'POST' && done) {
+      if (Number(done[1]) !== TODO.id) {
+        res.writeHead(404).end();
+        return;
+      }
+      TODO.state = 'done';
+      res.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify(TODO));
+      return;
+    }
+    if (url.pathname !== '/api/v4/todos') {
+      res.writeHead(404).end();
+      return;
+    }
     const page = Number(url.searchParams.get('page') ?? '1');
-    const body = url.searchParams.get('state') === 'pending' && page === 1 ? [TODO] : [];
+    const body = url.searchParams.get('state') === TODO.state && page === 1 ? [TODO] : [];
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
   });
   return new Promise((resolve) => srv.listen(0, '127.0.0.1', () => resolve(srv)));
@@ -103,4 +116,15 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   // ReadContent is the todo's markdown, served through the node exactly like any
   // text tile: the oracle is the RPC, not the plugin.
   expect(await gw.getTileContent(todo!.id)).toContain('please **review**');
+
+  // The trash gesture on a todo means mark-as-done: the tile does not vanish,
+  // it re-lists resolved — GitLab took the write (the fake flips its state),
+  // the label wears the ✓ and the week's counts move. The whole journey rides
+  // the one delete path: drag → DeleteTile → plugin Delete → mark_as_done.
+  await gw.deleteTileCell(Number(todo!.x ?? 0), Number(todo!.y ?? 0));
+  const after = (await gw.getGrid(inner.gridID)).tiles ?? [];
+  const doneTile = after.find((t) => t.id === todo!.id);
+  expect(doneTile, 'the todo is still listed after the gesture').toBeTruthy();
+  expect(doneTile!.statusDetail).toBe('done');
+  expect(String(doneTile!.altText)).toContain('✓');
 });
