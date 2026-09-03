@@ -50,6 +50,9 @@ export interface PaletteItem {
   uuid?: string;
   rootGridID?: string;
   status?: string;
+  // The swatch's declared face — the same selector the bar's crumb for this
+  // row's root grid wears, so a spec can pin that the two agree.
+  glyph?: string;
   // A plugin-declared menu entry's id, such as fs "search". Creation entries
   // are !isPlugin rows after the primitives; root entries ride a plugin-shaped
   // row.

@@ -61,6 +61,48 @@ func TestFindMissesCleanly(t *testing.T) {
 	}
 }
 
+// A + menu row wears one face, in the menu and in the bar alike: the swatch
+// and the crumb of the grid that row roots read the same owner, so an
+// undeclared glyph cannot mean one thing at one call site and another at the
+// next. A row that declares a glyph keeps it; a row that declares none takes
+// the grid face, because a plugin serves grids. A connection takes the globe
+// — declared where connection rows are minted (rpc.ConnectionRow), so nothing
+// here switches on a kind — and it takes it even over what the far node's own
+// grid declares, because that grid is the connection as far as this node is
+// concerned.
+func TestRowFaceIsTheSameInTheMenuAndInTheBar(t *testing.T) {
+	conn := rpc.ConnectionRow(rpc.ConnectionInfo{UUID: "n2/rtb", RootGridID: "n2/rtb/rp/1"})
+	rows := []rpc.PluginInfo{
+		{UUID: "ufs", Glyph: rpc.GlyphFolder, RootGridID: "ufs/1"},
+		{UUID: "ugl", RootGridID: "ugl/1"}, // the gitlab shape: declares nothing
+		conn,
+	}
+	for _, tc := range []struct {
+		name string
+		row  rpc.PluginInfo
+		grid *rpc.Grid
+		want string
+	}{
+		{"declared keeps its glyph", rows[0],
+			&rpc.Grid{ID: "ufs/1", Glyph: rpc.GlyphFolder, HostContent: true}, rpc.GlyphFolder},
+		{"undeclared plugin takes the grid face", rows[1],
+			&rpc.Grid{ID: "ugl/1"}, rpc.GlyphWell},
+		// The far node's home grid declares its own local well; the row is a
+		// connection, and the connection's face wins on its own root.
+		{"a connection takes the globe", conn,
+			&rpc.Grid{ID: "n2/rtb/rp/1", Glyph: rpc.GlyphWell, NodeNS: "n2/rtb"}, rpc.GlyphGlobe},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RowGlyph(tc.row); got != tc.want {
+				t.Errorf("RowGlyph (the + menu swatch) = %q, want %q", got, tc.want)
+			}
+			if got := GlyphFor(tc.row.RootGridID, tc.grid, rows); got != tc.want {
+				t.Errorf("GlyphFor (the bar crumb) = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // The trash grid is an ordinary local grid — only the entry declaration
 // knows its face. Anything undeclared answers "".
 func TestEntryGlyph(t *testing.T) {
@@ -98,9 +140,9 @@ func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
 		{"declares nothing is owned content", "ugl/1", &rpc.Grid{ID: "ugl/1"}, rpc.GlyphWell},
 		{"a root entry outranks the grid", "ufs/9", &rpc.Grid{ID: "ufs/9", Glyph: rpc.GlyphFolder}, rpc.GlyphTrash},
 		{"mounted content wears the door", "n1/conn/x/1", &rpc.Grid{ID: "n1/conn/x/1", NodeNS: "n1/conn"}, rpc.GlyphFolder},
-		{"unknown mount takes the globe", "n1/gone/x/1", &rpc.Grid{ID: "n1/gone/x/1", NodeNS: "n1/gone"}, ""},
+		{"unknown mount takes the globe", "n1/gone/x/1", &rpc.Grid{ID: "n1/gone/x/1", NodeNS: "n1/gone"}, rpc.GlyphGlobe},
 		{"uncached falls back to the plugin row", "ufs/4", nil, rpc.GlyphFolder},
-		{"uncached unknown namespace", "zzz/4", nil, ""},
+		{"uncached unknown namespace", "zzz/4", nil, rpc.GlyphWell},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := GlyphFor(tc.gridID, tc.grid, plugins); got != tc.want {

@@ -66,19 +66,11 @@ func (a *App) gridKnownReadOnly(gridID string) bool {
 }
 
 // pluginByRoot returns the menu row rooted at gridID — the row whose root
-// view a root-grid reframe persists to and restores from. It is looked up by
-// root, not by namespace: a connection row's uuid ("<id>/<conn>") is not a
-// prefix of its root ("<id>/<conn>/<remote-home>/<n>").
+// view a root-grid reframe persists to and restores from, and whose face that
+// grid wears. The rule is door.ByRoot's, js-free and unit-tested; this is the
+// impure half, resolving the declaration list it reads.
 func (a *App) pluginByRoot(gridID string) (rpc.PluginInfo, bool) {
-	if gridID == "" {
-		return rpc.PluginInfo{}, false
-	}
-	for _, pl := range a.allPlugins() {
-		if pl.RootGridID == gridID {
-			return pl, true
-		}
-	}
-	return rpc.PluginInfo{}, false
+	return door.ByRoot(gridID, a.allPlugins())
 }
 
 // pluginByUUID returns the plugin with the given, possibly chain-qualified,

@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
+	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -630,6 +631,10 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 			e["uuid"] = item.plugin.UUID
 			e["rootGridID"] = item.plugin.RootGridID
 			e["status"] = pluginStatusName(item.plugin)
+			// The swatch's face, the exact selector drawPaletteItem renders,
+			// so a spec can pin it against the crumb of the grid this row
+			// roots without reading pixels.
+			e["glyph"] = door.RowGlyph(item.plugin)
 		} else {
 			e["kind"] = templateKindName(item.primitive)
 		}

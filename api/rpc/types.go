@@ -157,9 +157,14 @@ const PluginKindConnection = "connection"
 // already handles. Its Kind is PluginKindConnection. A pending connection is
 // rootless with its failure carried as StatusDetail, then InfoError, so
 // health reads the declared kind as waiting rather than broken.
+//
+// The globe is declared here, the one place connection rows are minted, so
+// every face a connection wears — its swatch, its drag ghost, its crumb —
+// reads it as a declaration like any plugin's, and no renderer needs to know
+// what kind of row it has.
 func ConnectionRow(c ConnectionInfo) PluginInfo {
 	return PluginInfo{
-		UUID: c.UUID, Kind: PluginKindConnection, Label: c.Label,
+		UUID: c.UUID, Kind: PluginKindConnection, Label: c.Label, Glyph: GlyphGlobe,
 		RootGridID: c.RootGridID, InfoError: c.StatusDetail,
 		RootViewCx: c.RootViewCx, RootViewCy: c.RootViewCy, RootViewZoom: c.RootViewZoom,
 	}
@@ -233,14 +238,18 @@ func EntryPlugin(pl PluginInfo, e MenuEntry) PluginInfo {
 }
 
 // The plugin glyph vocabulary (InfoResponse.glyph, PluginInfo.Glyph):
-// declared by the plugin, rendered by the client, with anything unknown
-// falling back to the generic globe, so a third-party plugin degrades
-// politely without either side learning names.
+// declared by the plugin, rendered by the client, with a name the client does
+// not know falling back to the generic globe, so a third-party plugin
+// degrades politely without either side learning names. A row that declares
+// NOTHING is a different case: it takes the grid face, since a plugin serves
+// grids (client/door.RowGlyph owns that default). GlyphGlobe is the far side:
+// a connection declares it, in ConnectionRow.
 const (
 	GlyphFolder  = "folder"
 	GlyphProcess = "process"
 	GlyphWell    = "well"
 	GlyphTrash   = "trash"
+	GlyphGlobe   = "globe"
 )
 
 // Text-tile display modes.

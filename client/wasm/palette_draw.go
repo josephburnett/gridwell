@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
@@ -148,7 +149,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", x, y, w, h)
 		strokeTileFrame(a.cctx, x, y, w, h, colorFocusBorder, true /* dashed */, false /* selected */)
-		a.drawPluginGlyph(item.plugin.Glyph, x, y, w, h)
+		a.drawPluginGlyph(door.RowGlyph(item.plugin), x, y, w, h)
 		a.drawTileBannerLabel(&n, x, y, w, h, false)
 		// Broken and rootless plugins get the same health tint their link
 		// tiles do; the click guard explains on click.
@@ -165,13 +166,13 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 	}
 }
 
-// drawPluginGlyph overlays a plugin's identity glyph, all in the grid blue,
-// chosen by the plugin's own declaration (InfoResponse.glyph: "folder",
-// "process", "well"; anything else, a third-party plugin's unknown value
-// included, falls back to the generic globe). Never a kind switch: the client
-// must not know its plugins. Full size (glyphBox). One drawing shared by the
-// menu swatch, the drag ghost, and a cross-plugin well with no preview yet,
-// so all three read identically.
+// drawPluginGlyph overlays a declared identity glyph, all in the grid blue.
+// This is the name-to-pixels half only: which name a row or a grid wears is
+// door.RowGlyph and door.GlyphFor, so the menu swatch and the bar crumb
+// cannot default differently. Never a kind switch: the client must not know
+// its plugins. Full size (glyphBox). One drawing shared by the menu swatch,
+// the drag ghost, and a cross-plugin well with no preview yet, so all three
+// read identically.
 func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 	switch glyph {
 	case rpc.GlyphFolder:
@@ -183,6 +184,8 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 	case rpc.GlyphTrash:
 		drawTrashGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	default:
+		// rpc.GlyphGlobe — declared by every connection — and equally any
+		// name this client does not know.
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	}
 }
