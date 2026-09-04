@@ -141,3 +141,52 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
   expect(after.viewCx, 'center stable').toEqual(settled.viewCx);
   expect(after.viewCy, 'center stable').toEqual(settled.viewCy);
 });
+
+// A viewport in mid-flight is presentation, never the user's framing. The
+// settle persister fires on its own 600ms clock, so a stretched transition
+// puts a debounce tick squarely inside the animation: the pane's centre and
+// zoom are then racing toward the doorway's overtake, values the user never
+// chose. Whichever writer asks, the answer is the same, because only
+// persistFraming decides.
+test('a mid-flight viewport never becomes the framing that persists', async ({ gw, window }) => {
+  await gw.enterPlugin('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+
+  // Settle a root framing the user chose, so there is something to keep.
+  await gw.wheelAtFocusedCenter(-240);
+  const uuid = (await gw.plugins()).find((p) => p.kind === 'home')!.uuid;
+  const rootView = async () => {
+    const pl = (await gw.plugins()).find((p) => p.uuid === uuid)!;
+    return { cx: pl.rootViewCx, cy: pl.rootViewCy, zoom: pl.rootViewZoom };
+  };
+  await expect.poll(async () => (await rootView()).zoom, { timeout: 10_000 }).toBeGreaterThan(0);
+  const settled = await rootView();
+
+  // Stretch the clock and descend without waiting: for the next few seconds
+  // the pane's zoom climbs toward the well's overtake while the settle
+  // persister keeps firing.
+  await window.evaluate(`(window).__gridwellTest.setTransitionMs(4000)`);
+  const c = await gw.cellCenter(home.id, cx, cy);
+  await window.mouse.click(c.x, c.y);
+  await expect
+    .poll(() => window.evaluate(`(window).__gridwellTest.transitioning()`), { timeout: 10_000 })
+    .toBe(true);
+  await window.waitForTimeout(1500); // two debounce windows
+
+  expect(
+    await window.evaluate(`(window).__gridwellTest.transitioning()`),
+    'the descent is still animating, so the read below is genuinely mid-flight',
+  ).toBe(true);
+  expect(
+    await rootView(),
+    'a frame of the descent animation became the durable root framing',
+  ).toEqual(settled);
+
+  await window.evaluate(`(window).__gridwellTest.setTransitionMs(350)`);
+  await gw.waitIdle(30_000);
+  expect(await rootView(), 'the landing moved it too').toEqual(settled);
+});

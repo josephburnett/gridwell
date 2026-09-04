@@ -37,15 +37,12 @@ func (a *App) scheduleFramingSave() {
 }
 
 // flushFramingSave persists every pane's settled grid framing now. The
-// writers it dispatches to no-op when nothing moved, so quiet calls are free.
-// It is skipped entirely while a transition animates: animated viewport
-// values are presentation, not user state, and persisting one would store
-// framing the user never set. draw() re-arms the debounce on the next frame,
-// so the flush lands after the animation.
+// writers it dispatches to no-op when nothing moved, so quiet calls are free,
+// and persistFraming refuses for any pane that is mid-transition — that
+// decision has one owner and this is not it. draw() re-arms the debounce on
+// the next frame, so an animating pane's flush lands after its animation
+// while its quiet siblings persist on time.
 func (a *App) flushFramingSave() {
-	if a.trans.Any() {
-		return
-	}
 	a.framingFlushes++
 	// One active surface per grid: among panes showing the same grid, only
 	// the focused one writes its framing. pane.FramingWriters is the rule.
@@ -150,6 +147,17 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 // arrives. During beforeunload the write rides a beacon instead
 // (unload.go).
 func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, doorPath []string) {
+	// Never a mid-animation viewport. While this pane animates, its centre and
+	// zoom are the transition's scratch values inside whatever place the
+	// current segment installed — presentation, not something the user set —
+	// and storing one would make a frame of an animation the framing they come
+	// back to. Every writer asks here, so none can forget: the settle
+	// persister, an ascent's leaveFrame, and a pane about to be dropped. A
+	// cancelled transition retires before its landing runs, so a write made
+	// from a landing is the destination, not scratch.
+	if a.trans.Active(p.ID) {
+		return
+	}
 	var (
 		req    rpc.SetFramingRequest
 		foot   = zoomtrans.Well{W: 1, H: 1}
