@@ -43,7 +43,7 @@ func (a *App) scheduleFramingSave() {
 // framing the user never set. draw() re-arms the debounce on the next frame,
 // so the flush lands after the animation.
 func (a *App) flushFramingSave() {
-	if a.transition != nil {
+	if a.trans.Any() {
 		return
 	}
 	a.framingFlushes++
@@ -360,7 +360,9 @@ func (a *App) restoreFromHistory(raw string) {
 	// place over it, so a deeper frame left standing here would survive a
 	// restore to a shallower place.
 	a.menu.Close()
-	a.transition = nil
+	// Land whatever is animating before the reset: a restore replaces the
+	// place, and a transition dropped here would leave its descent half done.
+	a.trans.CancelAll()
 	a.forgetPane(p.ID)
 	p.Reset(pane.Frame{GridID: a.home, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 	a.refreshFileOverlay()

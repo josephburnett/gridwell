@@ -25,6 +25,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/transition"
 )
 
 // wsSaveDebounceMs is the persister's coalescing window: every
@@ -141,7 +142,10 @@ func workspaceTreeFromPlace(idPrefix, anchor string, path []string, cx, cy, zoom
 // grid. baseline is the decoded blob bytes, nil for a never-arranged tile,
 // seeding the persister's diff so a pure visit never writes.
 func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string, readOnly bool, baseline []byte, keepOuter bool) {
-	a.transition = nil
+	// The outer tree is about to stop being drawn: land every animation it
+	// still has, so no pane is parked on an animation's scratch place for as
+	// long as this level lasts.
+	a.trans.CancelAll()
 	// The capture animation's expanding rect lands exactly where the level
 	// outline draws; dropping it here is the seamless handoff.
 	a.wsExpand = nil
@@ -227,15 +231,15 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 		x0, y0 := dd.CellToScreen(float64(pt.X), float64(pt.Y))
 		x1, y1 := dd.CellToScreen(float64(pt.X+pt.W), float64(pt.Y+pt.H))
 		a.wsExpand = &wsExpandState{x: x0, y: y0, w: x1 - x0, h: y1 - y0, startMs: nowMs()}
-		a.startTransition(&paneTransition{
-			paneID: p.ID,
-			segments: []transSegment{{
-				place:  &here,
-				fromCx: p.Cx, fromCy: p.Cy, fromZoom: p.Zoom,
-				toCx: p.Cx, toCy: p.Cy, toZoom: p.Zoom,
-				durationMs: totalTransitionMs,
+		a.startTransition(&transition.Transition{
+			PaneID: p.ID,
+			Segments: []transition.Segment{{
+				Place:  &here,
+				FromCx: p.Cx, FromCy: p.Cy, FromZoom: p.Zoom,
+				ToCx: p.Cx, ToCy: p.Cy, ToZoom: p.Zoom,
+				DurationMs: totalTransitionMs,
 			}},
-			onComplete: func() {
+			OnComplete: func() {
 				pd.animDone = true
 				a.maybeInstallWorkspace(pd)
 			},
@@ -251,15 +255,15 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 		if target < p.Zoom {
 			target = p.Zoom
 		}
-		a.startTransition(&paneTransition{
-			paneID: p.ID,
-			segments: []transSegment{{
-				place:  &here,
-				fromCx: p.Cx, fromCy: p.Cy, fromZoom: p.Zoom,
-				toCx: tcx, toCy: tcy, toZoom: target,
-				durationMs: totalTransitionMs,
+		a.startTransition(&transition.Transition{
+			PaneID: p.ID,
+			Segments: []transition.Segment{{
+				Place:  &here,
+				FromCx: p.Cx, FromCy: p.Cy, FromZoom: p.Zoom,
+				ToCx: tcx, ToCy: tcy, ToZoom: target,
+				DurationMs: totalTransitionMs,
 			}},
-			onComplete: func() {
+			OnComplete: func() {
 				pd.animDone = true
 				a.maybeInstallWorkspace(pd)
 			},
@@ -425,7 +429,10 @@ func (a *App) ascendLevels(count int) {
 			return
 		}
 		a.flushWorkspaceSave()
-		a.transition = nil
+		// The inner tree is about to be dropped: land its animations before
+		// flushDroppedSubtree reads each leaf's viewport, or a scratch
+		// viewport becomes the pane's durable framing.
+		a.trans.CancelAll()
 		a.menu.Close()
 		a.flushDroppedSubtree(a.tree.Root)
 		f, _ := a.ws.Pop()
@@ -484,13 +491,13 @@ func (a *App) animateWorkspaceReturn(f pane.Level) {
 	if overtake < savedZoom {
 		overtake = savedZoom
 	}
-	a.startTransition(&paneTransition{
-		paneID: p.ID,
-		segments: []transSegment{{
-			place:  &here,
-			fromCx: tcx, fromCy: tcy, fromZoom: overtake,
-			toCx: savedCx, toCy: savedCy, toZoom: savedZoom,
-			durationMs: totalTransitionMs,
+	a.startTransition(&transition.Transition{
+		PaneID: p.ID,
+		Segments: []transition.Segment{{
+			Place:  &here,
+			FromCx: tcx, FromCy: tcy, FromZoom: overtake,
+			ToCx: savedCx, ToCy: savedCy, ToZoom: savedZoom,
+			DurationMs: totalTransitionMs,
 		}},
 	})
 }

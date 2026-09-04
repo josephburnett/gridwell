@@ -356,7 +356,7 @@ func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 // resolved. Tests poll this instead of sleeping, so they never race the ~350ms
 // zoom animation or the async create→fetchGrid refresh.
 func (a *App) thIdle(js.Value, []js.Value) any {
-	return a.transition == nil &&
+	return !a.trans.Any() &&
 		a.wsPending == nil &&
 		a.dragging == nil &&
 		a.gridFetch.Len() == 0 &&
@@ -376,7 +376,7 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 		tiles = append(tiles, id)
 	}
 	return map[string]any{
-		"transition":   a.transition != nil,
+		"transition":   a.trans.Any(),
 		"wsPending":    a.wsPending != nil,
 		"dragging":     a.dragging != nil,
 		"gridInflight": grids,
@@ -395,7 +395,7 @@ func (a *App) thOrigin(js.Value, []js.Value) any {
 // thTransitioning reports whether a pane transition (descent/ascent
 // animation) is in flight — the window I11's injection spec aims for.
 func (a *App) thTransitioning(js.Value, []js.Value) any {
-	return a.transition != nil
+	return a.trans.Any()
 }
 
 // thPreviewSigs returns, for the focused pane's leaf grid, a per-tile

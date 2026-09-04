@@ -48,23 +48,14 @@ func (a *App) sendBeacon(path string, body []byte, contentType string) bool {
 	return nav.Call("sendBeacon", a.origin+path, blob).Bool()
 }
 
-// flushOnUnload is the beforeunload durable-state path: land the in-flight
+// flushOnUnload is the beforeunload durable-state path: land every in-flight
 // transition on its destination, switch the beacon transport in
 // (a.unloading), run the settle-persister flush for framing the user just
 // changed, drain the outbox so everything already owed leaves too, and
 // finally beacon the one thing neither covers — a live page's navigation
 // state, which lives in the bridge, not in any ledger.
 func (a *App) flushOnUnload() {
-	if tr := a.transition; tr != nil && len(tr.segments) > 0 {
-		if p := a.tree.FindPane(tr.paneID); p != nil {
-			seg := tr.segments[len(tr.segments)-1]
-			if seg.place != nil {
-				p.Stack = seg.place.Clone()
-			}
-			p.Cx, p.Cy, p.Zoom = seg.toCx, seg.toCy, seg.toZoom
-		}
-		a.completeTransition()
-	}
+	a.trans.CancelAll()
 	a.unloading = true
 	a.flushFramingSave()
 	a.syncContentOutbox()

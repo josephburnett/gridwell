@@ -229,7 +229,7 @@ func (a *App) ensureFileTextarea() {
 		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
 		if button == 2 {
 			ev.Call("preventDefault")
-			if a.transition != nil {
+			if a.trans.Any() {
 				return nil
 			}
 			p, r, ok := a.paneAtScreen(sx, sy)
@@ -244,7 +244,7 @@ func (a *App) ensureFileTextarea() {
 			// covers the whole pane in text mode, so the canvas listener
 			// never sees this press — forward it here.
 			ev.Call("preventDefault")
-			if a.transition != nil {
+			if a.trans.Any() {
 				return nil
 			}
 			if p := a.tree.FocusedPane(); p != nil {

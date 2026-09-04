@@ -174,7 +174,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent drag
 // same two guards the canvas's own onMouseDown opens with, shared by the
 // three forwarded handlers so none of them can forget the transition gate.
 func (a *App) forwardedPaneAt(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
-	if a.transition != nil {
+	if a.trans.Any() {
 		return nil, pane.Rect{}, false
 	}
 	return a.paneAtScreen(sx, sy)

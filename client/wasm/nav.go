@@ -24,6 +24,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/transition"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
@@ -45,6 +46,12 @@ func (a *App) descend(p *pane.Pane, tile *rpc.Tile, after func()) {
 	if a.deadLink(tile) {
 		return
 	}
+	// A descent that arrives while this pane is still animating a previous
+	// one lands that one first: its frame push happened, and the segments
+	// below are computed from the place it left, not from the outgoing
+	// animation's scratch viewport. Stacking a visit over a live descent is
+	// exactly this case.
+	a.trans.Cancel(p.ID)
 	// The pane is about to change place: flush framing still inside the
 	// settle window, while the viewport still belongs to the place it
 	// describes. One place asks, so no door can forget.
@@ -139,23 +146,23 @@ func (a *App) descendGrid(p *pane.Pane, well *rpc.Tile) {
 		durations = []float64{totalTransitionMs, 0}
 	}
 
-	a.startTransition(&paneTransition{
-		paneID: p.ID,
-		segments: []transSegment{
+	a.startTransition(&transition.Transition{
+		PaneID: p.ID,
+		Segments: []transition.Segment{
 			// A: parent pan+zoom toward the well/footprint center at Overtake.
 			{
-				place:  &base,
-				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: durations[0],
+				Place:  &base,
+				FromCx: from.Cx, FromCy: from.Cy, FromZoom: from.Zoom,
+				ToCx: mid.Cx, ToCy: mid.Cy, ToZoom: mid.Zoom,
+				DurationMs: durations[0],
 			},
 			// C: after the frame push, ease the child zoom out to the stored
 			// ratio (zero-length when swap == final).
 			{
-				place:  &child,
-				fromCx: swap.Cx, fromCy: swap.Cy, fromZoom: swap.Zoom,
-				toCx: final.Cx, toCy: final.Cy, toZoom: final.Zoom,
-				durationMs: durations[1],
+				Place:  &child,
+				FromCx: swap.Cx, FromCy: swap.Cy, FromZoom: swap.Zoom,
+				ToCx: final.Cx, ToCy: final.Cy, ToZoom: final.Zoom,
+				DurationMs: durations[1],
 			},
 		},
 	})
@@ -221,19 +228,19 @@ func (a *App) descendContent(p *pane.Pane, file *rpc.Tile, after func()) {
 		a.descentTextMode(file, false),
 		float64(file.TextX), float64(file.TextY)))
 	wasContent := base.Content
-	a.startTransition(&paneTransition{
-		paneID: p.ID,
-		segments: []transSegment{
+	a.startTransition(&transition.Transition{
+		PaneID: p.ID,
+		Segments: []transition.Segment{
 			// Single combined pan+zoom segment: pan to the file center
 			// while simultaneously zooming to the overtake target.
 			{
-				place:  &animBase,
-				fromCx: fromCx, fromCy: fromCy, fromZoom: fromZoom,
-				toCx: wellCx, toCy: wellCy, toZoom: target,
-				durationMs: totalTransitionMs,
+				Place:  &animBase,
+				FromCx: fromCx, FromCy: fromCy, FromZoom: fromZoom,
+				ToCx: wellCx, ToCy: wellCy, ToZoom: target,
+				DurationMs: totalTransitionMs,
 			},
 		},
-		onComplete: func() {
+		OnComplete: func() {
 			fp := a.tree.FindPane(p.ID)
 			if fp == nil {
 				return
@@ -280,6 +287,10 @@ func (a *App) ascend(p *pane.Pane, n int, animate bool) {
 	if n <= 0 {
 		return
 	}
+	// Land anything this pane is still animating before reading its place:
+	// leaveFrame's writebacks and the landing viewport are computed from where
+	// the pane actually is, which mid-animation is scratch.
+	a.trans.Cancel(p.ID)
 	for i := 0; i < n; i++ {
 		if p.Depth() == 1 {
 			break
@@ -343,16 +354,16 @@ func (a *App) ascendOnce(p *pane.Pane, animate bool) bool {
 		if !haveSaved {
 			saved = pane.Frame{Cx: cx, Cy: cy, Zoom: 1.0}
 		}
-		a.startTransition(&paneTransition{
-			paneID:      p.ID,
-			traceTileID: door,
-			segments: []transSegment{{
-				place:  &landing,
-				fromCx: cx, fromCy: cy, fromZoom: overtake,
-				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: totalTransitionMs,
+		a.startTransition(&transition.Transition{
+			PaneID:      p.ID,
+			TraceTileID: door,
+			Segments: []transition.Segment{{
+				Place:  &landing,
+				FromCx: cx, FromCy: cy, FromZoom: overtake,
+				ToCx: saved.Cx, ToCy: saved.Cy, ToZoom: saved.Zoom,
+				DurationMs: totalTransitionMs,
 			}},
-			onComplete: onLanded,
+			OnComplete: onLanded,
 		})
 		return true
 	}
@@ -378,27 +389,27 @@ func (a *App) ascendOnce(p *pane.Pane, animate bool) bool {
 	parentDist := panDist(saved.Cx-switchTo.Cx, saved.Cy-switchTo.Cy, saved.Zoom) +
 		zoomDist(switchTo.Zoom, saved.Zoom)
 	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
-	a.startTransition(&paneTransition{
-		paneID:      p.ID,
-		traceTileID: door,
-		segments: []transSegment{
+	a.startTransition(&transition.Transition{
+		PaneID:      p.ID,
+		TraceTileID: door,
+		Segments: []transition.Segment{
 			// Child grid: combined pan+zoom to land on the calibrated state.
 			{
-				place:  &cur,
-				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: durations[0],
+				Place:  &cur,
+				FromCx: from.Cx, FromCy: from.Cy, FromZoom: from.Zoom,
+				ToCx: mid.Cx, ToCy: mid.Cy, ToZoom: mid.Zoom,
+				DurationMs: durations[0],
 			},
 			// Parent grid: combined pan+zoom from the doorway back to the
 			// viewport the landing frame was left at.
 			{
-				place:  &landing,
-				fromCx: switchTo.Cx, fromCy: switchTo.Cy, fromZoom: switchTo.Zoom,
-				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: durations[1],
+				Place:  &landing,
+				FromCx: switchTo.Cx, FromCy: switchTo.Cy, FromZoom: switchTo.Zoom,
+				ToCx: saved.Cx, ToCy: saved.Cy, ToZoom: saved.Zoom,
+				DurationMs: durations[1],
 			},
 		},
-		onComplete: onLanded,
+		OnComplete: onLanded,
 	})
 	return true
 }

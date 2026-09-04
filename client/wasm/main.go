@@ -32,6 +32,7 @@ import (
 	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
+	"github.com/josephburnett/gridwell/client/transition"
 )
 
 const (
@@ -217,8 +218,11 @@ type App struct {
 	// leaks handles. See scheduler below.
 	sched scheduler
 
-	// transition is the active descent/ascent zoom animation, if any.
-	transition *paneTransition
+	// trans holds every pane's descent/ascent zoom animation, at most one per
+	// pane (client/transition). Two panes animate independently, and a
+	// transition that is displaced or cleared lands on its destination rather
+	// than vanishing, so a descent is never voided after visibly animating.
+	trans *transition.Set
 
 	// rightDrag is the in-flight right-button gesture, if any. Right
 	// button is dedicated to pane management — split, resize, close,
@@ -511,6 +515,10 @@ func (a *App) forgetPane(paneID string) {
 	// again on the next one — so every pane-keyed map clears here, or a
 	// stale entry would greet the next level's pane of the same id.
 	delete(a.traces, paneID)
+	// A pane that is going away is the one case a transition is dropped
+	// rather than landed: there is no pane left to install a place on or to
+	// re-engage. Every other clearing goes through Cancel, which lands.
+	a.trans.Drop(paneID)
 }
 
 // selectedFor returns the selected tile id in paneID, or "" if nothing is
@@ -530,33 +538,13 @@ func (a *App) clearSelected(paneID string) {
 	}
 }
 
-// paneTransition is the active per-pane zoom animation. It is a series of
-// segments; each segment carries the path that should be installed when it
-// starts and animates the viewport from `from*` toward `to*` over
-// `durationMs`. Path-switch points (descent / ascent) are segment
-// boundaries; the visual continuity at those boundaries is achieved by
-// setting up calibrated start/end states in zoomtrans.
-//
-// Descent uses two segments: one for the parent zoom-in, then a
-// zero-duration "install" segment that lands on the calibrated child state.
-// Ascent uses two segments: a child zoom-out to the calibrated state, then
-// a parent zoom-out from "well overtakes" back to the saved state.
-type paneTransition struct {
-	paneID         string
-	segments       []transSegment
-	currentSegment int
-	segmentStartMs float64
-	// onComplete, if set, runs after the last segment lands. Used by a
-	// content descent to push its frame only once the visual transition has
-	// reached the tile's footprint at OvertakeZoom (so the toggle button
-	// appearing doesn't pop into view mid-animation).
-	onComplete func()
-	// traceTileID, set on ascents only, arms the ephemeral "you just came
-	// from here" highlight on that tile once the transition lands: a fading
-	// outline so the user can tell which tile they just left. Pure view
-	// state; nothing persists.
-	traceTileID string
-}
+// The transition itself — its shape, its per-pane bookkeeping, and what
+// displacing one means — lives in client/transition. Descent uses two
+// segments: one for the parent zoom-in, then a zero-duration "install"
+// segment that lands on the calibrated child state. Ascent uses two: a child
+// zoom-out to the calibrated state, then a parent zoom-out from "well
+// overtakes" back to the saved state. The visual continuity at each boundary
+// comes from the calibrated start/end states zoomtrans hands back.
 
 // traceState is one armed ascent-trace highlight: the tile to outline in the
 // pane's grid view and the fade clock's start. Held per pane in App.traces.
@@ -567,20 +555,6 @@ type traceState struct {
 
 // traceDurMs is how long the ascent-trace outline takes to fade out.
 const traceDurMs = 2000.0
-
-type transSegment struct {
-	// place is the pane's place for this segment: a snapshot installed at
-	// the segment's start. A descent's last segment carries the stack with
-	// the new frame pushed, an ascent's carries it popped, and a same-place
-	// segment carries the stack unchanged. Because each segment installs a
-	// snapshot, the viewport the animation writes into the live top frame is
-	// scratch, and the frame the pane will ascend onto keeps the viewport it
-	// was actually left at.
-	place                    *pane.Stack
-	fromCx, fromCy, fromZoom float64
-	toCx, toCy, toZoom       float64
-	durationMs               float64
-}
 
 // ghost is a transient floating render of a tile, positioned in screen
 // coordinates within a specific pane. screenX/Y is the top-left corner of
@@ -734,6 +708,7 @@ func main() {
 		menuCtxs:           map[string]*menuContext{},
 		renderedPanePaints: map[string]int{},
 	}
+	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
 	app.tree = pane.NewTree()
@@ -1062,18 +1037,21 @@ func (a *App) frame() {
 			a.scheduleFrame()
 		}
 	}
-	if a.transition != nil {
-		seg := a.transition.segments[a.transition.currentSegment]
-		t := anim.Progress(now, a.transition.segmentStartMs, seg.durationMs)
+	// Every animating pane advances on the same tick; they are independent,
+	// so one landing never touches another's motion.
+	for _, tr := range a.trans.List() {
+		seg := tr.Segment()
+		t := anim.Progress(now, tr.StartMs(), seg.DurationMs)
 		eased := anim.EaseOutCubic(t)
-		if p := a.tree.FindPane(a.transition.paneID); p != nil {
-			p.Cx = anim.Lerp(seg.fromCx, seg.toCx, eased)
-			p.Cy = anim.Lerp(seg.fromCy, seg.toCy, eased)
-			p.Zoom = anim.LerpExp(seg.fromZoom, seg.toZoom, eased)
+		if p := a.tree.FindPane(tr.PaneID); p != nil {
+			p.Cx = anim.Lerp(seg.FromCx, seg.ToCx, eased)
+			p.Cy = anim.Lerp(seg.FromCy, seg.ToCy, eased)
+			p.Zoom = anim.LerpExp(seg.FromZoom, seg.ToZoom, eased)
 		}
 		if t >= 1 {
-			a.advanceTransition(now)
-		} else {
+			a.trans.Advance(tr.PaneID, now)
+		}
+		if a.trans.Active(tr.PaneID) {
 			a.scheduleFrame()
 		}
 	}
@@ -1098,69 +1076,53 @@ func (a *App) pruneTraces(now float64) bool {
 	return alive
 }
 
-// startTransition installs the given transition and primes the first
-// segment: the pane's place and viewport are set to the segment's start
-// state and the per-frame loop is woken up.
-func (a *App) startTransition(t *paneTransition) {
-	a.transition = t
-	a.applySegmentStart(t.segments[0])
-	t.segmentStartMs = nowMs()
+// startTransition hands the transition to the per-pane set, which primes its
+// first segment and displaces — landing, never voiding — anything that pane
+// was already animating, and wakes the frame loop.
+func (a *App) startTransition(t *transition.Transition) {
+	a.trans.Start(t, nowMs())
 	a.scheduleFrame()
 }
 
-// applySegmentStart installs the segment's place and viewport on the pane.
-// Called when a segment begins (including the very first).
-func (a *App) applySegmentStart(seg transSegment) {
-	p := a.tree.FindPane(a.transition.paneID)
+// enterSegment installs a segment's place and viewport on its pane: the one
+// writer of the scratch viewport an animation drives. Called by
+// client/transition when a segment begins, and once more with the final
+// segment's end state when a transition is cut short.
+func (a *App) enterSegment(paneID string, seg transition.Segment) {
+	p := a.tree.FindPane(paneID)
 	if p == nil {
 		return
 	}
-	if seg.place != nil {
-		p.Stack = seg.place.Clone()
+	if seg.Place != nil {
+		p.Stack = seg.Place.Clone()
 	}
-	p.Cx = seg.fromCx
-	p.Cy = seg.fromCy
-	p.Zoom = seg.fromZoom
+	p.Cx = seg.FromCx
+	p.Cy = seg.FromCy
+	p.Zoom = seg.FromZoom
 }
 
-// advanceTransition is called when the current segment finishes. If more
-// segments remain, install the next one's start state and continue;
-// otherwise the transition is complete.
-func (a *App) advanceTransition(now float64) {
-	a.transition.currentSegment++
-	if a.transition.currentSegment >= len(a.transition.segments) {
-		a.completeTransition()
-		return
-	}
-	a.applySegmentStart(a.transition.segments[a.transition.currentSegment])
-	a.transition.segmentStartMs = now
-	a.scheduleFrame()
-}
-
-// completeTransition tears down the active transition once the last
-// segment has finished. Pane state has already been set by the segment
-// machinery; here we just refresh ancillary state and persist.
-func (a *App) completeTransition() {
-	tr := a.transition
-	a.transition = nil
-	if tr == nil {
-		return
-	}
-	p := a.tree.FindPane(tr.paneID)
+// landTransition is what arriving means, whether the pane animated the whole
+// way there or was cut short: the selection clears, latched grid verdicts get
+// their retry, the grid is fetched, an ascent's trace arms, and the
+// transition's own landing runs — a content descent pushes its frame there,
+// so this is not optional. The pane's place and viewport are already the
+// destination's; this is everything else.
+func (a *App) landTransition(tr *transition.Transition) {
+	p := a.tree.FindPane(tr.PaneID)
 	if p == nil {
 		return
 	}
 	a.clearSelected(p.ID)
 	a.gridLoadFailed = map[string]bool{}
 	a.fetchGrid(a.gridIDForPane(p))
-	if tr.traceTileID != "" {
+	if tr.TraceTileID != "" {
 		// The ascent landed: light the trace on the tile the pane came out
 		// of and keep the frame loop alive for the fade.
-		a.traces[p.ID] = traceState{tileID: tr.traceTileID, startMs: nowMs()}
+		a.traces[p.ID] = traceState{tileID: tr.TraceTileID, startMs: nowMs()}
 		a.scheduleFrame()
 	}
-	if tr.onComplete != nil {
-		tr.onComplete()
+	if tr.OnComplete != nil {
+		tr.OnComplete()
 	}
 	a.scheduleURLUpdate()
 	a.draw()
@@ -1239,9 +1201,11 @@ func (a *App) startSSE() {
 				a.urlPreview.Drop(ev.TileRemoved.TileID)
 				a.dropRenderedPreview(ev.TileRemoved.TileID)
 			}
-			// GridChanged: refetch the affected grid if any pane is looking at
-			// it. The event is the one per-grid signal that something changed,
-			// so it is also what clears a verdict latch for that grid.
+			// GridChanged: refetch the affected grid. The event is the one
+			// per-grid signal that something changed, so it is also what
+			// clears a verdict latch for that grid. It is unconditional: a
+			// grid nothing is looking at now is one the next descent, preview,
+			// or crumb would otherwise read stale from the cache.
 			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
 				delete(a.gridLoadFailed, ev.GridChanged.GridID)
 				a.fetchGrid(ev.GridChanged.GridID)

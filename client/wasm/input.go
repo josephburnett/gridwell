@@ -374,7 +374,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	// Block all input gestures while a viewport transition is animating
 	// — keeps the tree and viewport state atomic across the zoom.
-	if a.transition != nil {
+	if a.trans.Any() {
 		return nil
 	}
 	// Notice strip: it occupies the band layoutPanes reserved below every

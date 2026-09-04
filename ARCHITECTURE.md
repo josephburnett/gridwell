@@ -222,7 +222,8 @@ own `media_type`.
 
 `client/*` packages are pure Go with unit tests: `pane`, `cache`, `outbox`,
 `zoomtrans`, `gesture`, `wsbar`, `markdown`, `menu`, `shellstream`,
-`shellwire`, `clientsync`, `errsurface`, `deadref`. `client/wasm` is the shim: canvas,
+`shellwire`, `clientsync`, `errsurface`, `deadref`, `transition`.
+`client/wasm` is the shim: canvas,
 DOM, and the RPC calls. `make check` compiles the shim but executes none of
 it; only the e2e gates see it. A decision that lives only in the shim is a
 defect — extract it.
@@ -271,6 +272,13 @@ judge, so it is never judged here.
 **Events** flow only into the cache. Framing writes live only in gesture and
 transition code. An event landing mid-animation updates data and redraws;
 it cannot move the viewport.
+
+**Transitions** are per pane (`client/transition`): at most one animation per
+pane, and two panes animate without either voiding the other. A transition
+that is displaced or cleared LANDS — its destination place is installed and
+its landing runs — so the frame push a descent animates towards is never
+conditional on the animation finishing. `Set.Cancel` is that one door; the
+only drop without a landing is a pane that is closing.
 
 **Rendered text** is a sanitized HTML overlay (`markdown.RenderHTML`:
 goldmark, go-org, bluemonday). Task-list checkboxes are the one interactive
@@ -330,6 +338,7 @@ copy:
 | does this descent go live | `shellconn.DecideAutoLive` |
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
+| is this pane animating, and where a displaced one lands | `transition.Set` |
 | the shell door's address and frames | `client/shellwire` |
 | what error is this | `gwerr.ClassifyError` |
 | which namespace an id names | `rpc.OwnerNamespaceOf` |
