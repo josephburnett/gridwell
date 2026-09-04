@@ -477,19 +477,20 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		a.onLeftResizeMove(sx, sy)
 		return nil
 	}
-	// URL-stream forwarding: if the cursor is over a pane that's
-	// descended into a live URL tile, the move belongs to the page.
-	// Any in-flight drag (left or right button) keeps gridwell in
-	// charge of the move so the user can drag clones / resize past a
-	// URL pane without the page seeing it.
+	// URL-stream forwarding: if the cursor is over a live URL view's own
+	// content box, the move belongs to the page. Any in-flight drag (left or
+	// right button) keeps gridwell in charge of the move so the user can drag
+	// clones / resize past a URL pane without the page seeing it — which is
+	// already true here, since a drag parks every live view and
+	// liveViewOwnsPoint asks about the park.
 	if a.rightDrag == nil && a.dragging == nil {
-		if p, _, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-			// A live pane's native view owns its own cursor (the canvas
-			// won't get moves over it anyway); a frozen pane's letterboxed
-			// preview has no pan gesture. Default cursor either way.
+		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.liveViewOwnsPoint(p, r, sx, sy) {
+			// The live view owns its own cursor (the canvas won't get moves
+			// over it anyway). Default cursor.
 			a.canvas.Get("style").Set("cursor", "")
 		} else {
-			// Not hovering a URL descent pane: show a resize cursor when
+			// The canvas owns this point — no live view, or one that is
+			// parked, or the pane's border band: show a resize cursor when
 			// over a grabbable split divider (the grab band is far wider
 			// than the 1px line), otherwise clear.
 			a.canvas.Get("style").Set("cursor", a.dividerResizeCursor(sx, sy))
@@ -627,14 +628,16 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishLeftResize()
 		return nil
 	}
-	// URL descent: the live content box is handled by the native view;
-	// swallow the matching mouseup over it so it doesn't leak into a
-	// gridwell gesture.
+	// URL descent: a live view's content box is handled by the native view,
+	// so swallow the matching mouseup over it rather than leaking it into a
+	// gridwell gesture. Whether the view owns that point is
+	// panebox.LiveViewOwnsPoint's decision, not this handler's: an armed
+	// gesture parks every live view, so a release that ends one is never
+	// swallowed here and always reaches the commit below.
 	sx, sy := mouseXY(args[0], a.canvas)
-	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-		if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
-			return nil
-		}
+	if p, r, ok := a.paneAtScreen(sx, sy); ok && args[0].Get("button").Int() == 0 &&
+		a.liveViewOwnsPoint(p, r, sx, sy) {
+		return nil
 	}
 	if a.dragging == nil {
 		return nil

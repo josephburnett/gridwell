@@ -92,6 +92,18 @@ func pointInFileInner(r pane.Rect, sx, sy float64) bool {
 	return panebox.PointInInner(r, textSideInset, sx, sy)
 }
 
+// liveViewOwnsPoint is the wasm adapter for panebox.LiveViewOwnsPoint: the one
+// decision behind "hand this pointer event to the native view instead of
+// acting on it". It supplies the two facts the shim owns — whether live
+// overlays are parked this frame (liveOverlaysHidden) and whether this pane
+// has a live view at all (urlViewFor) — so no handler re-derives either.
+func (a *App) liveViewOwnsPoint(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
+	if p == nil {
+		return false
+	}
+	return panebox.LiveViewOwnsPoint(a.liveOverlaysHidden(), a.urlViewFor(p.ID) != nil, r, paneBorderPx, sx, sy)
+}
+
 // hasTextarea reports whether the singleton text-overlay element exists yet.
 // Every path that reads or writes it asks first: it is created lazily by
 // ensureFileTextarea, and a draw, a URL read, or a mode toggle can arrive

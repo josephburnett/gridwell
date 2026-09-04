@@ -205,3 +205,50 @@ func TestContentBoxIsTheFallbackBox(t *testing.T) {
 		t.Error("hit-test: past the pane's bottom edge is outside")
 	}
 }
+
+// A live view owns the pixels of its own content box — but only while it is
+// actually painting there. The two unmakers are the whole point of the
+// function: a parked view (any armed gesture, the open + menu, the url modal)
+// owns nothing, and a frozen pane has no view to own anything.
+//
+// The armed-gesture row is the regression: the release that ends a drag lands
+// wherever the pointer happens to be, often over a live url pane, and a
+// handler that swallowed it there left the drag armed forever — an immortal
+// ghost, and every live view parked for good, since the park is keyed off the
+// same armed drag.
+func TestLiveViewOwnsPoint(t *testing.T) {
+	r := pane.Rect{X: 100, Y: 40, W: 600, H: 400}
+	const border = 2
+	// Inside the content box, and outside the pane entirely.
+	inX, inY := 400.0, 240.0
+	outX, outY := 50.0, 240.0
+
+	cases := []struct {
+		name           string
+		overlaysHidden bool
+		hasLiveView    bool
+		x, y           float64
+		want           bool
+	}{
+		{"live view, point inside its content box", false, true, inX, inY, true},
+		{"live view, point outside the pane", false, true, outX, outY, false},
+		{"parked view (gesture armed / menu open / modal up)", true, true, inX, inY, false},
+		{"frozen pane: no live view owns nothing", false, false, inX, inY, false},
+		{"parked and frozen", true, false, inX, inY, false},
+	}
+	for _, c := range cases {
+		got := LiveViewOwnsPoint(c.overlaysHidden, c.hasLiveView, r, border, c.x, c.y)
+		if got != c.want {
+			t.Errorf("%s: LiveViewOwnsPoint = %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	// The owned region is exactly PointInContent's: one box, one hit-test, so
+	// the parked frame the canvas draws and the live view it replaces can
+	// never disagree about which points are theirs.
+	for _, p := range [][2]float64{{inX, inY}, {outX, outY}, {100, 40}, {700, 440}, {702, 240}} {
+		if got, want := LiveViewOwnsPoint(false, true, r, border, p[0], p[1]), PointInContent(r, border, p[0], p[1]); got != want {
+			t.Errorf("at (%v,%v): owns=%v but PointInContent=%v", p[0], p[1], got, want)
+		}
+	}
+}

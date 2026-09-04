@@ -51,6 +51,31 @@ func PointInContent(r pane.Rect, borderPx, sx, sy float64) bool {
 	return ContentBox(r, borderPx).Contains(sx, sy)
 }
 
+// LiveViewOwnsPoint is the one owner of "does this pane's live view own this
+// screen point" — the question every canvas pointer handler must ask before it
+// hands an event to the native surface instead of acting on it itself.
+//
+// A live view (a url tile's WebContentsView) paints over the pane's content
+// box and swallows the mouse there, so a point inside that box belongs to the
+// page and not to the canvas. Two facts unmake that, and both are inputs here
+// rather than assumptions at the call site:
+//
+//   - overlaysHidden — the client parks every live view while a gesture is
+//     armed, the + menu is open, or the url modal is up (the shim's
+//     liveOverlaysHidden, the one owner of that state). A parked view paints
+//     nothing and owns nothing, so the canvas keeps every event over it,
+//     including the release that ends the very gesture that parked it. A
+//     handler that swallows without asking discards that release and leaves
+//     the gesture armed forever.
+//   - hasLiveView — a frozen preview is a canvas drawing. Only a live view
+//     owns pixels.
+func LiveViewOwnsPoint(overlaysHidden, hasLiveView bool, r pane.Rect, borderPx, x, y float64) bool {
+	if overlaysHidden || !hasLiveView {
+		return false
+	}
+	return PointInContent(r, borderPx, x, y)
+}
+
 // TextareaBox returns the text-overlay textarea rectangle and its
 // rendered font size, both at the application's fixed text scale.
 // `sideInset` is the gap between the pane edge and the text content;
