@@ -64,6 +64,10 @@ type write struct {
 	call func(ctx context.Context) error
 	// then runs after a successful call, before the refetch is scheduled.
 	then func()
+	// done, when set, runs once this write has finished — landed, failed, or
+	// parked. It is the release half of an in-flight count, so no path out of
+	// the dispatcher can leave a write counted as still going.
+	done func()
 	// undo runs after a failure: the visible reconcile for a write that
 	// showed the user something optimistic with no cache patch behind it,
 	// such as the drag ghost snapping back to its origin. It is the
@@ -120,6 +124,9 @@ func rpcErrText(err error) string {
 // on transport again re-parks itself and the outbox converges rather than
 // losing the value.
 func (a *App) do(w write) error {
+	if w.done != nil {
+		defer w.done()
+	}
 	if a.unloading {
 		return a.doOnUnload(w)
 	}
@@ -217,8 +224,16 @@ func (a *App) doOnUnload(w write) error {
 // may be nil, fires with the response tile.
 func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess func(rpc.Tile)) {
 	var tile *rpc.Tile
+	// The gesture is not over while the row is still being made: the descent,
+	// the visit, or the placement it leads to happens in onSuccess. Counting
+	// it in flight is what lets a caller — the e2e's idle signal — tell "the
+	// gesture finished" from "the gesture is still waiting on the server".
+	// The release is the dispatcher's own, on every path out, and these
+	// writes never park, so no retry can double-count one.
+	a.tileMutates++
 	a.post(write{
 		label: label, gid: gid, refetchOnOK: true,
+		done: func() { a.tileMutates-- },
 		call: func(ctx context.Context) error {
 			var err error
 			tile, err = call(ctx)

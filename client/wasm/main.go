@@ -316,6 +316,13 @@ type App struct {
 	// wasm zoom owner is attributable instead of a silent no-op.
 	zoomKeyRelays int
 
+	// tileMutates counts the tile mutations in flight — a Create* or a resize
+	// whose row does not exist yet, so the descent, visit, or placement that
+	// follows it has not happened. postTileMutate owns it; the e2e idle
+	// signal reads it, so a spec can tell "the gesture finished" from "the
+	// gesture is still waiting on the server".
+	tileMutates int
+
 	// persistPosts counts optimistic-persist dispatches by label
 	// ("SetFraming" and the rest) and framingFlushes counts settle-persister
 	// flush passes. e2e-only introspection (the persistPosts testhook): the

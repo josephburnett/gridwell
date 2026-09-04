@@ -351,12 +351,15 @@ func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 	return nil
 }
 
-// thIdle reports true when no transition, drag, or fetch is in flight — i.e. the
-// descent/ascent animation has finished AND every pending GetGrid/GetTile has
-// resolved. Tests poll this instead of sleeping, so they never race the ~350ms
-// zoom animation or the async create→fetchGrid refresh.
+// thIdle reports true when no transition, drag, fetch, or tile mutation is in
+// flight — i.e. the descent/ascent animation has finished, every pending
+// GetGrid/GetTile has resolved, AND no Create* is still out. Tests poll this
+// instead of sleeping, so they never race the ~350ms zoom animation, the async
+// create→fetchGrid refresh, or a gesture whose descent waits on a row the
+// server has not made yet.
 func (a *App) thIdle(js.Value, []js.Value) any {
 	return !a.trans.Any() &&
+		a.tileMutates == 0 &&
 		a.wsPending == nil &&
 		a.dragging == nil &&
 		a.gridFetch.Len() == 0 &&
@@ -377,6 +380,7 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 	}
 	return map[string]any{
 		"transition":   a.trans.Any(),
+		"tileMutates":  a.tileMutates,
 		"wsPending":    a.wsPending != nil,
 		"dragging":     a.dragging != nil,
 		"gridInflight": grids,
