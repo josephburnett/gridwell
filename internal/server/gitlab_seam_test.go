@@ -120,7 +120,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatal(err)
 	}
 	one := tileByLabelPrefix(wk.Tiles, "Ada: !1 ")
-	three := tileByLabelPrefix(wk.Tiles, "✓ Ada: !3 ")
+	three := tileByLabelPrefix(wk.Tiles, "✅ Ada: !3 ")
 	if len(wk.Tiles) != 2 || one == nil || three == nil {
 		t.Fatalf("week grid = %v", wk.Tiles)
 	}
@@ -149,7 +149,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	flipped := tileByLabelPrefix(wk.Tiles, "✓ Ada: !1 ")
+	flipped := tileByLabelPrefix(wk.Tiles, "✅ Ada: !1 ")
 	if len(wk.Tiles) != 2 || flipped == nil || flipped.Id != one.Id || flipped.X != 5 || flipped.Y != 5 || flipped.W != 3 {
 		t.Fatalf("after deletion in GitLab: %v", wk.Tiles)
 	}
@@ -166,7 +166,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept := tileByLabelPrefix(wk.Tiles, "✓ Ada: !1 ")
+	kept := tileByLabelPrefix(wk.Tiles, "✅ Ada: !1 ")
 	if len(wk.Tiles) != 2 || kept == nil || kept.Id != one.Id || kept.X != 5 || kept.Y != 5 {
 		t.Fatalf("restart lost the todo: %v", wk.Tiles)
 	}
@@ -174,7 +174,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Errorf("gone content = %q", body)
 	}
 	// And a live todo still reads after the restart.
-	three = tileByLabelPrefix(wk.Tiles, "✓ Ada: !3 ")
+	three = tileByLabelPrefix(wk.Tiles, "✅ Ada: !3 ")
 	if body := readContent(t, client2, three.Id); !strings.Contains(body, "[Open !3 in GitLab](") {
 		t.Errorf("live content after restart = %q", body)
 	}

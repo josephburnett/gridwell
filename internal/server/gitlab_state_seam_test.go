@@ -88,7 +88,7 @@ func TestGitLabPluginServesFromItsStateDirAfterARestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	one := tileByLabelPrefix(wk2.Tiles, "Ada: !1 ")
-	three := tileByLabelPrefix(wk2.Tiles, "✓ Ada: !3 ")
+	three := tileByLabelPrefix(wk2.Tiles, "✅ Ada: !3 ")
 	if len(wk2.Tiles) != 2 || one == nil || three == nil {
 		t.Fatalf("week after the restart = %v", wk2.Tiles)
 	}
