@@ -119,3 +119,65 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
     }, { timeout: 10_000 })
     .toBe(0);
 });
+
+// The programmatic split is not an ascent. splitBelowForOpen clones the source
+// pane, so the clone inherits a content frame it must shed before the visit
+// lands — but there is no footprint to zoom out of and the user made no ascent
+// gesture, so animating it is a second transition for one gesture, and it
+// lands wearing the "you just came from here" trace of a departure that never
+// happened. The clone sheds its frame synchronously instead.
+test('a link-open split lands without animating an ascent nobody made', async ({ gw, window }) => {
+  await gw.enterPlugin('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  await gw.descendCell(cx, cy);
+  await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
+  const source = await gw.focused();
+
+  // The same door a url clicked in a live shell goes through.
+  await window.evaluate(
+    (u: string) => (window as any).__gridwellTest.shellVisitURL(u),
+    `${gw.origin}/wasm_exec.js?split-open=1`,
+  );
+  await expect.poll(async () => (await gw.panes()).length, { timeout: 15_000 }).toBe(2);
+  await gw.waitIdle();
+
+  const lower = (await gw.panes()).slice().sort((a, b) => a.y - b.y)[1];
+  expect(lower.id, 'the new pane is not the source pane').not.toBe(source.id);
+  expect(lower.textFocus, 'the new pane landed on the visit').not.toBe('');
+
+  const traces = await window.evaluate(() => (window as any).__gridwellTest.traces());
+  expect(
+    traces.filter((t: { paneId: string }) => t.paneId === lower.id),
+    'the split pane wears an ascent trace for a departure the user never made',
+  ).toEqual([]);
+
+  // The control: a real ascent in this same pane does arm one, so the empty
+  // read above is "not armed", not "the observable is dead".
+  await gw.waitIdle();
+  await expect
+    .poll(
+      async () => {
+        const lp = (await gw.panes()).find((p) => p.id === lower.id);
+        if (!lp) return -1;
+        if (lp.textFocus !== '') {
+          await window.mouse.move(lp.x + lp.w / 2, lp.y + lp.h / 2);
+          await window.mouse.down({ button: 'middle' });
+          await window.mouse.up({ button: 'middle' });
+        }
+        const armed = await window.evaluate(
+          (id: string) =>
+            (window as any).__gridwellTest
+              .traces()
+              .filter((t: { paneId: string }) => t.paneId === id).length,
+          lower.id,
+        );
+        return armed;
+      },
+      { timeout: 15_000, intervals: [700, 700, 1000, 1500] },
+    )
+    .toBeGreaterThan(0);
+});

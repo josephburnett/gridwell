@@ -1819,7 +1819,12 @@ func (a *App) openLinkBelow(paneID, url string) {
 // commitSplit — so the new pane ascends just the content level and shows
 // the grid containing the tile. The ephemeral delete-on-ascent is guarded
 // by leavingEphemeral, so that ascent never deletes the tile the source
-// pane still shows.
+// pane still shows. That shedding is instant: the clone is born in the same
+// place as the source with nothing on screen to zoom out of, and the user made
+// no ascent gesture, so animating it would be a second transition for one
+// gesture — and one that lands wearing the trace of a departure that never
+// happened. commitSplit's animated ascent is the other case: there the user
+// asked, and the footprint is real.
 func (a *App) splitBelowForOpen(p *pane.Pane) *pane.Pane {
 	if !pane.CanSplit(pane.SideBottom, paneRectFor(a, p)) {
 		return p
@@ -1834,7 +1839,7 @@ func (a *App) splitBelowForOpen(p *pane.Pane) *pane.Pane {
 	// would stay open on a pane that no longer has focus.
 	a.menu.TransferFocus(prev, a.tree.Focus)
 	if newP.ContentID() != "" {
-		a.ascend(newP, 1, true)
+		a.ascend(newP, 1, false)
 	}
 	return newP
 }
