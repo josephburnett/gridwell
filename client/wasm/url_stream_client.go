@@ -18,7 +18,13 @@ import (
 type urlView struct {
 	tileID string
 	paneID string
-	bounds viewBounds
+	// descentID is the pane frame this view was opened for — the row the pane
+	// is descended into, which for a url link is the link row and not tileID,
+	// the content owner the view actually shows. The per-frame sweep compares
+	// it against the pane's current descent (pane.SurfaceOf) to tell a view
+	// that still belongs on screen from one whose pane has moved on.
+	descentID string
+	bounds    viewBounds
 	// anchor and path are the plugin-root grid id and the descent path to
 	// the grid that holds this URL tile, captured when the view went live.
 	// The freeze (SetURLState) needs them to resolve this tile's leaf grid.
@@ -179,7 +185,11 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	r := paneRectFor(a, p)
 	b := contentViewBounds(r)
 	page := t.Kind != rpc.KindURL && t.ServesPage
-	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
+	// Every caller places into the descent the pane is already in — the
+	// descent's auto-live, the reconnect click, the promote's relocation —
+	// so the pane's own frame is the descent this view belongs to. For a
+	// link that frame is the link row, while t is its target.
+	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, descentID: p.ContentID(), bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
 	// durable means the descended row survives ascent: false for an
 	// ephemeral visit, which gets no Freeze Page in the context menu. A page
 	// view is not durable in this sense either — it carries no standing
@@ -345,8 +355,25 @@ func (a *App) syncURLViews() {
 			continue
 		}
 		r, ok := rects[paneID]
-		if !ok {
+		p := a.tree.FindPane(paneID)
+		var contentID string
+		if p != nil {
+			contentID = p.ContentID()
+		}
+		switch pane.SurfaceOf(ok, contentID, v.descentID) {
+		case pane.SurfacePark:
+			// Not laid out this frame: a stacked level parked behind a pane
+			// tile. The level stays alive, so the view keeps running.
 			bridgeSetHidden(paneID, true, false)
+			continue
+		case pane.SurfaceOrphan:
+			// The pane moved on without this view's teardown. Merely hiding
+			// it, as the shell twin does, would keep a Chromium page and its
+			// session alive for a descent that has ended; the url side's
+			// re-entry is a fresh place, so the view goes, through the one
+			// path that persists its freeze. Modifies pl in place — no map
+			// key changes — so the range stays valid.
+			a.closeURLStream(paneID, true)
 			continue
 		}
 		// The view fills the pane's content box, and the canvas draws the

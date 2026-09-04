@@ -31,6 +31,12 @@ type shellStreamConn struct {
 
 	tileID string
 	paneID string
+	// descentID is the pane frame this stream was opened for — the row the
+	// pane is descended into, which for a shell link is the link row and not
+	// tileID, the session owner the overlay shows. The per-frame sweep
+	// compares it against the pane's current descent (pane.SurfaceOf); the
+	// content id it used to compare parks a live link's overlay forever.
+	descentID string
 	// anchor and path are the plugin-root grid id and the descent path to
 	// the grid that holds this shell tile, captured when the stream opened.
 	// The freeze (SetShellPreview) needs them to resolve this tile's leaf
@@ -391,6 +397,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		container:    container,
 		tileID:       tileID,
 		paneID:       p.ID,
+		descentID:    p.ContentID(),
 		anchor:       p.Anchor(),
 		path:         slices.Clone(p.Path()),
 		onMouse:      onMouse,
@@ -834,15 +841,18 @@ func (a *App) syncShellOverlayPosition() {
 			continue
 		}
 		r, ok := rects[paneID]
-		if !ok {
-			conn.container.Get("style").Set("display", "none")
-			continue
+		p := a.tree.FindPane(paneID)
+		var contentID string
+		if p != nil {
+			contentID = p.ContentID()
 		}
-		// Hide the shell overlay when the pane is not currently descended
-		// in this shell — it descended further into an ephemeral url from a
-		// shell link, say. The stream stays alive and the session persists;
-		// only the overlay parks, reappearing when the pane returns.
-		if p := a.tree.FindPane(paneID); p == nil || p.ContentID() != conn.tileID {
+		// Park the overlay when the pane is not laid out this frame, and when
+		// it is on screen but no longer in the descent this stream was opened
+		// for — it descended further into an ephemeral url from a shell link,
+		// say. Unlike the url side, the stream stays alive and the session
+		// persists; only the overlay parks, reappearing when the pane returns.
+		// pane.SurfaceOf owns both verdicts, for both surface kinds.
+		if pane.SurfaceOf(ok, contentID, conn.descentID) != pane.SurfaceShow {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}
