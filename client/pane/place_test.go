@@ -152,3 +152,19 @@ func TestFramesAndCloneDoNotAlias(t *testing.T) {
 		t.Fatal("Clone aliased the live stack")
 	}
 }
+
+func TestContentFrameCarriesTheTilesOwnViewport(t *testing.T) {
+	f := ContentFrame("u1/9", Footprint{X: 3, Y: 4, W: 2, H: 4}, 2.5, "rendered", 7, 11)
+	if f.Door != "u1/9" || !f.Content {
+		t.Fatalf("not a content frame: %+v", f)
+	}
+	if f.Cx != 4 || f.Cy != 6 {
+		t.Fatalf("not centred on the footprint: %+v", f)
+	}
+	if !f.HasView() || f.Zoom != 2.5 {
+		t.Fatalf("no viewport: %+v", f)
+	}
+	if f.TextMode != "rendered" || f.TextScrollX != 7 || f.TextScrollY != 11 {
+		t.Fatalf("text state not carried: %+v", f)
+	}
+}

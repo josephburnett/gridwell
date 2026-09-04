@@ -340,11 +340,15 @@ func StillDescended(p *Pane, tileID string) bool {
 }
 
 // RelocateTo moves pane p to where dest stands — anchor, path, viewport — and
-// descends it into tileID. This is the promote gesture: an ephemeral url
-// visit is dragged from the bar onto another pane's grid and becomes a
-// persistent tile there, and the visiting pane follows its content, so the
-// nav chain and the next ascent both read the new place.
-func (p *Pane) RelocateTo(dest *Pane, tileID string) {
+// descends it into tileID, whose footprint is foot and which is shown at
+// zoom. This is the promote gesture: an ephemeral url visit is dragged from
+// the bar onto another pane's grid and becomes a persistent tile there, and
+// the visiting pane follows its content, so the nav chain and the next ascent
+// both read the new place.
+//
+// The frame comes from ContentFrame, the same constructor a descent uses, so
+// a promoted pane is in every way a descended pane.
+func (p *Pane) RelocateTo(dest *Pane, tileID string, foot Footprint, zoom float64) {
 	p.Stack = dest.Stack.Clone()
 	if p.Content {
 		// The destination is itself in a content descent: the promoted tile
@@ -352,7 +356,7 @@ func (p *Pane) RelocateTo(dest *Pane, tileID string) {
 		// content to where the tile now lives, one level deep).
 		p.Pop()
 	}
-	p.Push(Frame{Door: tileID, Content: true})
+	p.Push(ContentFrame(tileID, foot, zoom, "", 0, 0))
 }
 
 // OtherPaneShows reports whether any leaf other than paneID is descended into

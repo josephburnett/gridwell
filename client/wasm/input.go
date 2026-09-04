@@ -1930,7 +1930,16 @@ func (a *App) finishPromote(originPaneID, destPaneID, oldID string, created rpc.
 	// The pane follows its content: RelocateTo replaces the visit's frame
 	// with one on the destination's stack, so the next ascent lands where the
 	// tile now lives. There is no separate saved viewport to keep in step.
-	op.RelocateTo(dp, created.ID)
+	// The frame is minted by pane.ContentFrame — the constructor descendContent
+	// uses — at the zoom a descent into this tile would have landed on, so the
+	// promoted pane is a descended pane and its ascent has a real overtake to
+	// zoom out from. There is no zoom floor here: a promote has no prior grid
+	// zoom in this pane to refuse to zoom out past.
+	foot := pane.Footprint{X: created.X, Y: created.Y, W: created.W, H: created.H}
+	op.RelocateTo(dp, created.ID, foot, textFitZoom(paneRectFor(a, op), created.W, created.H))
+	// The content scale follows the frame, as it does at the end of every
+	// descent and every ascent landing (issue #82).
+	op.TextZoom = a.textScaleFor(op)
 	a.placeURLView(op.ID, created)
 	a.refreshFileOverlay()
 	a.scheduleURLUpdate()

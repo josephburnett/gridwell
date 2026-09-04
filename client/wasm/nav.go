@@ -177,8 +177,8 @@ func (a *App) descendGrid(p *pane.Pane, well *rpc.Tile) {
 func (a *App) descendContent(p *pane.Pane, file *rpc.Tile, after func()) {
 	r := paneRectFor(a, p)
 	fromCx, fromCy, fromZoom := p.Cx, p.Cy, p.Zoom
-	wellCx := float64(file.X) + float64(file.W)/2
-	wellCy := float64(file.Y) + float64(file.H)/2
+	foot := pane.Footprint{X: file.X, Y: file.Y, W: file.W, H: file.H}
+	wellCx, wellCy := foot.Center()
 	target := textFitZoom(r, file.W, file.H)
 	if target < fromZoom {
 		target = fromZoom
@@ -217,12 +217,9 @@ func (a *App) descendContent(p *pane.Pane, file *rpc.Tile, after func()) {
 		animBase.Pop()
 	}
 	landing := base.Clone()
-	landing.Push(pane.Frame{
-		Door: file.ID, Content: true,
-		Cx: wellCx, Cy: wellCy, Zoom: target,
-		TextMode:    a.descentTextMode(file, false),
-		TextScrollX: float64(file.TextX), TextScrollY: float64(file.TextY),
-	})
+	landing.Push(pane.ContentFrame(file.ID, foot, target,
+		a.descentTextMode(file, false),
+		float64(file.TextX), float64(file.TextY)))
 	wasContent := base.Content
 	a.startTransition(&paneTransition{
 		paneID: p.ID,

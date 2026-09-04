@@ -411,12 +411,18 @@ func TestRelocateToFollowsTheDestination(t *testing.T) {
 	p.TextMode, p.TextScrollY = "text", 40
 	dest := &Pane{ID: "b", Stack: StackAt("u2/0", []string{"u2/7", "u2/8"}, "")}
 	dest.Cx, dest.Cy, dest.Zoom = 10, 20, 2
-	p.RelocateTo(dest, "u2/44")
+	p.RelocateTo(dest, "u2/44", Footprint{X: 4, Y: 6, W: 2, H: 2}, 3)
 	if p.Anchor() != "u2/0" || len(p.Path()) != 2 || p.Path()[1] != "u2/8" {
 		t.Fatalf("location not taken: %+v", p.Crumbs())
 	}
 	if p.ContentID() != "u2/44" || p.TextMode != "" || p.TextScrollY != 0 {
 		t.Fatalf("descent not reset onto the new tile: %+v", p.Frame)
+	}
+	// A promoted pane is a descended pane: the frame carries the viewport the
+	// descent path would have given it, so the next ascent has an overtake to
+	// compute from instead of zoom 0.
+	if !p.HasView() || p.Cx != 5 || p.Cy != 7 || p.Zoom != 3 {
+		t.Fatalf("promoted frame carries no viewport: %+v", p.Frame)
 	}
 	// The pane ascends into the destination's viewport, not the origin's.
 	if !p.Pop() || p.Cx != 10 || p.Cy != 20 || p.Zoom != 2 {

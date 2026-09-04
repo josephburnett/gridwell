@@ -47,6 +47,36 @@ type Frame struct {
 	MenuOpen bool
 }
 
+// Footprint is a tile's cell rectangle in the grid it sits in — the only
+// thing a content frame needs from the tile row.
+type Footprint struct{ X, Y, W, H int64 }
+
+// Center is the footprint's centre in the grid's own coordinates.
+func (f Footprint) Center() (cx, cy float64) {
+	return float64(f.X) + float64(f.W)/2, float64(f.Y) + float64(f.H)/2
+}
+
+// ContentFrame builds the frame a pane pushes when it lands inside a content
+// tile: the tile is the place, so the viewport is the tile's own footprint
+// centre at the zoom it is shown at, carrying the text mode and scroll it was
+// left at.
+//
+// It is the one constructor, because every path that puts a pane inside a
+// content tile must mint the same frame shape. A frame with no zoom reads as
+// "never visited" (HasView), and the ascent out of it computes its overtake
+// from nothing — so a path that minted a bare frame would leave a pane the
+// descent path could never produce.
+func ContentFrame(tileID string, foot Footprint, zoom float64, textMode string, scrollX, scrollY float64) Frame {
+	cx, cy := foot.Center()
+	return Frame{
+		Door: tileID, Content: true,
+		Cx: cx, Cy: cy, Zoom: zoom,
+		TextMode:    textMode,
+		TextScrollX: scrollX,
+		TextScrollY: scrollY,
+	}
+}
+
 // HasView reports whether the frame carries a viewport the pane was actually
 // left at. A frame restored from a URL or a layout blob has none — those
 // encode the descent path, not the outer viewports, which are
