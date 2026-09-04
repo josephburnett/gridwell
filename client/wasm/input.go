@@ -160,6 +160,27 @@ func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 	return nil, pane.Rect{}, false
 }
 
+// menuPaneForPointer resolves the pane an open palette's pointer events belong
+// to. That is the menu's OWN pane, never the pane under the cursor: the
+// popover is anchored to the bar slot at the bottom of the window and floats
+// over whatever pane happens to sit there, and every swatch rect is laid out
+// for the menu's pane. Routing by the pane at the pointer highlights nothing
+// on a stacked layout, and at the press it would move focus out of the very
+// menu being used.
+//
+// It is the one owner of that routing, shared by the press (onMouseDown) and
+// the hover (onMouseMove); the release needs none, because an armed template
+// drag owns its own release and carries its origin pane. Reports false when
+// the menu is closed or its pane is gone — the nil pane paneAtScreen can hand
+// back has no way in here.
+func (a *App) menuPaneForPointer() (*pane.Pane, pane.Rect, bool) {
+	mp := a.tree.FindPane(a.menu.PaneID()) // PaneID is "" while closed
+	if mp == nil {
+		return nil, pane.Rect{}, false
+	}
+	return mp, paneRectFor(a, mp), true
+}
+
 // cellAtScreen returns the integer cell that contains screen point (sx, sy)
 // inside the given pane. It floors — which cell is the cursor in — rather
 // than rounding, since round-half makes clicks in the lower-right half of a
@@ -378,15 +399,12 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// pane first would transfer focus and close the very menu being used.
 	// Landing on a swatch starts a template drag; missing one swallows the
 	// click so the popover stays open.
-	if a.menu.IsOpen() && args[0].Get("button").Int() == 0 {
-		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
-			mr := paneRectFor(a, mp)
-			if a.pointInPalette(mp, sx, sy) {
-				if idx := a.paletteTileIndexAt(mp, sx, sy); idx >= 0 {
-					a.startPaletteDrag(mp, mr, idx, sx, sy)
-				}
-				return nil
+	if mp, mr, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 0 {
+		if a.pointInPalette(mp, sx, sy) {
+			if idx := a.paletteTileIndexAt(mp, sx, sy); idx >= 0 {
+				a.startPaletteDrag(mp, mr, idx, sx, sy)
 			}
+			return nil
 		}
 	}
 	p, r, ok := a.paneAtScreen(sx, sy)
@@ -446,20 +464,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 
 	// The + button lives in the bar slot; barSlotClick toggles the menu
-	// before a click ever reaches a pane.
-	// Mousedown inside the palette: starting a template drag if it
-	// landed on a tile, or swallowing the click (keeps the popover
-	// open) if it landed in the gutter. Click outside the popover
-	// dismisses it and falls through to normal interaction.
+	// before a click ever reaches a pane. A click inside the popover was
+	// claimed by menuPaneForPointer at the top of this handler, whichever pane
+	// the popover floats over, so what is left here is a click outside it:
+	// dismiss the menu and fall through to normal interaction.
 	if a.menu.OpenOn(p.ID) {
-		if a.pointInPalette(p, sx, sy) {
-			idx := a.paletteTileIndexAt(p, sx, sy)
-			if idx >= 0 {
-				a.startPaletteDrag(p, r, idx, sx, sy)
-				return nil
-			}
-			return nil
-		}
 		a.menu.Close()
 		a.draw()
 		// fall through so the click also pans / selects
@@ -542,12 +551,14 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		a.onRightMove(sx, sy)
 		return nil
 	}
-	// Track palette hover regardless of drag state.
+	// Track palette hover regardless of drag state, through the same router
+	// the press uses: the popover's swatches are laid out for the menu's OWN
+	// pane, so hit-testing them against the pane under the cursor highlights
+	// nothing whenever the popover floats over a different pane.
 	if a.menu.IsOpen() {
-		p, _, ok := a.paneAtScreen(sx, sy)
 		hover := -1
-		if ok && a.menu.OpenOn(p.ID) {
-			hover = a.paletteTileIndexAt(p, sx, sy)
+		if mp, _, ok := a.menuPaneForPointer(); ok {
+			hover = a.paletteTileIndexAt(mp, sx, sy)
 		}
 		if a.menu.SetHover(hover) {
 			a.draw()
@@ -1813,10 +1824,15 @@ func (a *App) splitBelowForOpen(p *pane.Pane) *pane.Pane {
 	if !pane.CanSplit(pane.SideBottom, paneRectFor(a, p)) {
 		return p
 	}
+	prev := a.tree.Focus
 	newP, err := a.tree.SplitOnSideAt(pane.SideBottom, 0.5)
 	if err != nil {
 		return p
 	}
+	// SplitOnSideAt moves focus to the new pane itself, so the menu has to be
+	// told, like every other path that moves focus. Without this the + menu
+	// would stay open on a pane that no longer has focus.
+	a.menu.TransferFocus(prev, a.tree.Focus)
 	if newP.ContentID() != "" {
 		a.ascend(newP, 1, true)
 	}

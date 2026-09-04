@@ -652,6 +652,10 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		"plusX": px,
 		"plusY": py,
 		"items": entries,
+		// The hovered swatch index, -1 for none: what the palette highlights,
+		// straight off client/menu, the one owner. A spec asserts the hover
+		// routed to the menu's pane without reading pixels.
+		"hover": a.menu.Hover(),
 	}
 }
 

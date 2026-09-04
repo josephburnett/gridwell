@@ -87,6 +87,9 @@ export interface PaletteInfo {
   plusX: number;
   plusY: number;
   items: PaletteItem[];
+  // The hovered swatch index, -1 for none: what the palette highlights, read
+  // off client/menu, the one owner of the menu's live state.
+  hover: number;
 }
 
 export class GridwellDriver {
