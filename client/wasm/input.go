@@ -107,6 +107,47 @@ func (a *App) gestureInFlight() bool {
 	return a.leftResize != nil || a.rightDrag != nil || a.dragging != nil
 }
 
+// Bit masks for MouseEvent.buttons: which buttons are held right now, as
+// opposed to MouseEvent.button, which names the one that changed.
+const (
+	buttonsLeft  = 1
+	buttonsRight = 2
+)
+
+// recoverLostRelease resolves an armed gesture whose release we never saw: the
+// button came up outside the window, or over a surface that swallowed the
+// event. A move that reports the gesture's own button already up IS that
+// release, arriving late, so each state finishes through its own commit path —
+// never by being cleared, which would drop what the user did.
+//
+// It is the one owner of that recovery for all three armed states. Written per
+// state, the left drag was simply forgotten: a lost release left a.dragging
+// armed forever, and with it an immortal ghost, a source tile hidden under it,
+// and every live view parked, since liveOverlaysHidden reads the same field.
+//
+// The order matches onMouseUp's. A right-drag from a tile's center arms
+// a.dragging alongside a.rightDrag, and finishRightDrag is what commits that
+// pair, so the right case must be tried before the plain-drag one.
+//
+// Reports whether it resolved something, in which case the move is spent.
+func (a *App) recoverLostRelease(buttons int, sx, sy float64) bool {
+	switch {
+	case a.leftResize != nil && buttons&buttonsLeft == 0:
+		// The same collapse decision an on-canvas release makes, from the last
+		// applied cursor, never this stray re-entry point.
+		a.finishLeftResize()
+		return true
+	case a.rightDrag != nil && buttons&buttonsRight == 0:
+		a.finishRightDrag(sx, sy)
+		return true
+	case a.dragging != nil && buttons&buttonsLeft == 0:
+		// finishLeftDrag refuses a creating drag (a right-button copy or link
+		// armed in parallel), which stays armed for its own button's release.
+		return a.finishLeftDrag(sx, sy)
+	}
+	return false
+}
+
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
 // or (nil, pane.Rect{}, false) if no pane covers the point.
 func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
@@ -465,15 +506,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
+	// A gesture whose release we never saw ends here, before anything else
+	// reads it. One owner for all three armed states.
+	if a.recoverLostRelease(args[0].Get("buttons").Int(), sx, sy) {
+		return nil
+	}
 	// Left-button pane resize takes precedence over everything else.
 	if a.leftResize != nil {
-		if args[0].Get("buttons").Int()&1 == 0 {
-			// Left button released somewhere we didn't see — finish, with
-			// the same collapse decision an on-canvas release makes (from
-			// the last applied cursor, never this stray re-entry point).
-			a.finishLeftResize()
-			return nil
-		}
 		a.onLeftResizeMove(sx, sy)
 		return nil
 	}
@@ -500,13 +539,6 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	// the right button doesn't accidentally invoke left-button code
 	// paths (e.g., menu hover) below.
 	if a.rightDrag != nil {
-		// If the right button has been released somewhere we didn't
-		// see (e.g., outside the canvas), commit the gesture as if
-		// mouseup had fired.
-		if buttons := args[0].Get("buttons").Int(); buttons&2 == 0 {
-			a.finishRightDrag(sx, sy)
-			return nil
-		}
 		a.onRightMove(sx, sy)
 		return nil
 	}
@@ -639,8 +671,19 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.liveViewOwnsPoint(p, r, sx, sy) {
 		return nil
 	}
+	a.finishLeftDrag(sx, sy)
+	return nil
+}
+
+// finishLeftDrag commits the armed left-button drag at the release point: the
+// move, the pan, the palette template, or the bar's promote drag. It is the
+// left drag's own commit path, the twin of finishRightDrag and
+// finishLeftResize, so both ways a left drag can end — the mouseup we saw, and
+// the one recoverLostRelease infers from a button that is already up — resolve
+// through exactly the same code. It reports whether it consumed the drag.
+func (a *App) finishLeftDrag(sx, sy float64) bool {
 	if a.dragging == nil {
-		return nil
+		return false
 	}
 	// A right-button drag — a copy or a link — commits only through the
 	// right-button release path (finishRightDrag → commitRightClone), which
@@ -650,14 +693,13 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// Ignore it so the gesture is never silently committed as a move — it
 	// stays armed and the eventual right-button release still creates.
 	if a.dragging.intent.Creates() {
-		return nil
+		return false
 	}
 	d := a.dragging
 	a.dragging = nil
 	// Reset any drag-time cursor change (e.g. "not-allowed" from
 	// hovering a doc with the left button).
 	a.canvas.Get("style").Set("cursor", "")
-	sx, sy = mouseXY(args[0], a.canvas)
 
 	// A plugin swatch clicked without dragging past the threshold enters
 	// that plugin: the + menu's click-to-descend gesture. A drag instead
@@ -671,7 +713,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
 			a.descend(fp, &well, nil)
 		}
-		return nil
+		return true
 	}
 
 	// A url swatch clicked without dragging past the threshold is an
@@ -680,7 +722,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// without placing a tile. A drag instead places a real url tile
 	// (commitTemplateDrop).
 	if d.isTemplate && d.item.promotePane != "" && !d.started {
-		return nil // a click on the current crumb: this is where you are
+		return true // a click on the current crumb: this is where you are
 	}
 	if d.isTemplate && d.item.primitive == tplURL && !d.started {
 		// An ephemeral visit is a live view. On a host without one, a plain
@@ -689,7 +731,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		if !a.caps.LiveURL {
 			a.menu.Close()
 			a.reportErr(caps.GoLiveNotice())
-			return nil
+			return true
 		}
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
 			paneID := fp.ID
@@ -697,7 +739,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			// Check before the modal opens: typing a url into a visit that
 			// cannot land would fail only on submit.
 			if a.scratchOrReport(fp) == "" {
-				return nil
+				return true
 			}
 			a.openURLModal(a.urlSuggestCandidates(uuidOf(a.gridIDForPane(fp))),
 				func(url string) {
@@ -706,7 +748,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 					}
 				}, nil)
 		}
-		return nil
+		return true
 	}
 
 	// A shell swatch clicked without dragging is an ephemeral shell: created
@@ -719,7 +761,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			a.menu.Close()
 			a.visitEphemeralShell(fp) // reports if there is nowhere to open
 		}
-		return nil
+		return true
 	}
 
 	// Snapshot every world-read the drop decision needs, once, using the
@@ -735,7 +777,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	case dragdrop.DropFocusOnly:
 		// The click's only job was moving focus (done at mousedown).
 		a.draw()
-		return nil
+		return true
 
 	case dragdrop.DropNavigate, dragdrop.DropNavigateSplit:
 		// Bare click (no movement) on an already-focused pane: navigation.
@@ -744,7 +786,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused == nil {
 			a.draw()
-			return nil
+			return true
 		}
 		r := paneRectFor(a, focused)
 		// Try descent/ascent first — a click on a well, a content
@@ -754,7 +796,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		if a.attemptDescentOrAscent(focused, r, sx, sy,
 			verdict == dragdrop.DropNavigateSplit) {
 			a.scheduleURLUpdate()
-			return nil
+			return true
 		}
 		cellX, cellY := cellAtScreen(focused, r, sx, sy)
 		if n := a.tileAtCell(focused, cellX, cellY); n != nil {
@@ -764,20 +806,20 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		}
 		a.draw()
 		a.scheduleURLUpdate()
-		return nil
+		return true
 
 	case dragdrop.DropCreateTemplate:
 		// Template-drag drop: turn the synthetic ghost into a real node by
 		// asking the server to create it at the snapped cell.
 		a.commitTemplateDrop(d, sx, sy)
-		return nil
+		return true
 
 	case dragdrop.DropPanEnd:
 		// Pan drag end: just persist viewport state (the URL now; the grid
 		// framing via the draw()-armed settle persister).
 		a.scheduleURLUpdate()
 		a.draw()
-		return nil
+		return true
 
 	case dragdrop.DropDelete:
 		// Dropping the dragged tile on the bar slot's trashcan deletes it.
@@ -786,13 +828,13 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
-		return nil
+		return true
 
 	case dragdrop.DropRejected:
 		// No target, a forbidden cross-grid move, the same cell, or an
 		// occupied one: snap back without a doomed round trip.
 		a.cancelDragSnapBack(d)
-		return nil
+		return true
 
 	case dragdrop.DropLink:
 		// A cross-namespace left-drag: the destination gains a link and the
@@ -807,7 +849,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.landGhostAtCell(t, dropX, dropY)
 		a.commitLinkDrop(d, t, dropX, dropY)
 		a.draw()
-		return nil
+		return true
 	}
 
 	// DropMove: animate ghost to the snapped cell in the target grid's coords.
@@ -842,7 +884,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		undo: func() { a.snapBackToOrigin(d) },
 	})
 	a.draw()
-	return nil
+	return true
 }
 
 // commitLinkDrop creates the link a DropLink verdict asks for — a ctrl +

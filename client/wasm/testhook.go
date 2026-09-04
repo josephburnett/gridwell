@@ -61,6 +61,7 @@ func (a *App) installTestHook() {
 		"bar":           js.FuncOf(a.thBar),
 		"plugins":       js.FuncOf(a.thPlugins),
 		"palette":       js.FuncOf(a.thPalette),
+		"ghost":         js.FuncOf(a.thGhost),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
@@ -651,6 +652,19 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		"plusX": px,
 		"plusY": py,
 		"items": entries,
+	}
+}
+
+// thGhost reports the drag ghost the renderer would paint this frame and the
+// source tile it hides while it stands in for it — the same two facts the tile
+// loop reads at its hide check, so "the source tile draws again" is assertable
+// without reading pixels. A hidden tile with no way to un-hide it is what a
+// lost release used to leave behind.
+func (a *App) thGhost(js.Value, []js.Value) any {
+	return map[string]any{
+		"active":       a.ghost != nil,
+		"hiddenTileID": a.ghostHiddenTile(),
+		"hiddenPaneID": a.ghostHiddenPane(),
 	}
 }
 
