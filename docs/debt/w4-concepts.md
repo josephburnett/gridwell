@@ -234,9 +234,12 @@ store keys delete and clone on that difference.
 
 ## Half B — the predicate sweep
 
-Mechanical and behavior-preserving. 20 sites across 11 files. Three new
-`rpc.Tile` methods, two new `cache.Grid` methods, one new `pluginhealth`
-helper.
+**Done (2026-09-05).** Mechanical and behavior-preserving. 19 of the 20
+sites re-routed; the twentieth (`content_zoom.go`) is a question, below.
+Three new `rpc.Tile` methods, two new `cache.Grid` methods, one new
+`pluginhealth` helper, each with a unit test in a package `make check`
+executes. The greps are now a gate: `scripts/check-exception-owners.sh`,
+on `make check`.
 
 ### New owners
 
@@ -262,13 +265,14 @@ helper.
 | `client/wasm/urlsync.go:237` | `if !ok || !file.TextDocument() || …` |
 | `client/wasm/url_stream_client.go:97` | `if t.PageContent() {` — the `KindURL` arm returned already, so this is identity |
 | `client/wasm/url_stream_client.go:187` | `page := t.PageContent()` |
-| `client/wasm/content_zoom.go:121` | `if t.PageContent() {` — **see the behavior note below** |
-| `client/wasm/input.go:1096` | narrow `textedit.ModeInput` to take `*rpc.Tile` + `ReadOnly`, so `DescentMode` reads `in.Tile.TextDocument()` and the shim stops forwarding raw fields |
+| `client/wasm/content_zoom.go:121` | **not swept** — it would change behavior; see the question below |
+| `client/wasm/input.go:1096` | `textedit.ModeInput` takes the answer, not the fields: its `Kind` and `ServesPage` became one `TextDocument bool`, filled by `file.TextDocument()`. A whole `rpc.Tile` was the design's first shape; the bool is smaller and, unlike the row, carries no second copy of `TextMode`, which the struct already holds as `Stored`. |
 
 Already owners, no change: `api/rpc/types.go:267` (`WebContent`),
 `client/wasm/url_preview.go:52` (`previewBlobKey` — it keys on `ServesPage`
-alone deliberately, since a preview key is wanted for any page-serving row),
-`client/textedit/unload.go:80` (`DescentMode`).
+alone deliberately, since a preview key is wanted for any page-serving row).
+`DescentMode` was one too, and stopped reading the field at all: it now
+takes `TextDocument` as an input.
 
 **`.LinkTargetID` — 6 bare sites**
 
@@ -316,8 +320,8 @@ field read here would add a name and own nothing.
 
 Both reads are inside owners: `text_overlay.go:630` (`textToggleVisible`)
 and `rendered_overlay.go:222` (`presentationHTML`). Both owners live in
-`client/wasm`, so `make check` executes neither, and the lint flags
-`text_overlay.go:630` until Q3's move to `client/textedit`.
+`client/wasm`, so `make check` executes neither; the gate allow-lists both
+files, with the reason, until Q3's move to `client/textedit`.
 
 **`tileReadOnly` — no bare reads**
 
@@ -333,16 +337,26 @@ Both are inside `a.gridWritable` / `a.gridKnownReadOnly`
 (`plugin_id.go:56,65`). Q7 proposes folding them into one tri-state after
 the sweep.
 
-### The one site where consolidation would change behavior
+### The one site left as a question
 
-`client/wasm/content_zoom.go:121` reads bare `t.ServesPage`; the proposed
-owner `PageContent()` also requires `Kind != KindURL`. A url tile with
+`client/wasm/content_zoom.go:121` reads bare `t.ServesPage`; the owner
+`PageContent()` also requires `Kind != KindURL`. A url tile with
 `serves_page` set — which nothing mints today, but the wire permits, since
 both fields come from a plugin `Entry` — would keep its content zoom under
-the new predicate and lose it under the old check. The sweep should take
-`PageContent()` here **and** say so in the commit message, because it makes
-the two "is this a page" readers agree; but it is not silent, so it is
-listed here rather than buried in the diff.
+the predicate and lose it under the bare read. That is a behavior
+difference, not a rename, so the sweep left the line alone and the gate
+allow-lists it with the reason.
+
+**The question for the owner:** should a url row that also declares
+`serves_page` keep its content zoom (take `PageContent()` here, and the two
+"is this a page" readers agree), or is the row itself the thing to refuse —
+the node rejecting a `serves_page` url entry at the plugin door, so the
+shape never reaches a client? The second closes the class; the first closes
+this line. Either way the allow-list entry comes out.
+
+Not to be confused with Q4's separate gap in the same function: the
+`possiblyEphemeral` guard `applyContentZoom` was missing has since landed,
+and the sweep did not disturb it.
 
 `client/wasm/input.go:1052` is the second one to read twice: `LeafLink()` is
 exactly `LinkTargetID != ""` there, so it is identity — but note that
@@ -350,55 +364,40 @@ exactly `LinkTargetID != ""` there, so it is identity — but note that
 `Reference` is also true for a well with a qualified child grid. Use
 `LeafLink()`, not `isLinkTile`.
 
-### The verifying greps
+### The gate
 
-Zero hits outside the owner file for each. Suitable for a `make check` lint
-or a `test/boundary`-style test.
+The verifying greps are `scripts/check-exception-owners.sh`, on `make
+check` beside `check-vocabulary` and `check-docpaths`. Each of the seven
+fields may be read only in the paths `scripts/exception-owners.txt` lists,
+which carries the reason for every entry. Scope is `client/` and
+`api/rpc/`; `_test.go` and `client/wasm/testhook.go` are exempt by path
+(the testhook reports fields to the e2e harness and decides nothing), and a
+whole-line comment is not a read, so an owner can still name the field in
+prose.
 
-Each field family has an owner allow-list; a hit outside it fails. Run from
-the repo root, `_test.go` and `client/wasm/testhook.go` exempt by path (the
-testhook reports fields to the e2e harness; it decides nothing).
+Two allow-list entries are open questions rather than owners, and say so in
+the file:
 
-```sh
-gw_bare() { # $1 = field pattern, $2.. = owner path prefixes
-  local pat=$1; shift
-  local IFS='|'; local allow="$*"; unset IFS
-  grep -rn "$pat" --include='*.go' client/ api/rpc/ \
-    | grep -v '_test\.go' | grep -v 'client/wasm/testhook\.go' \
-    | grep -v -E "^($allow)"
-}
+- `client/wasm/content_zoom.go` — the behavior question above.
+- `client/wasm/text_overlay.go` — `textToggleVisible` is a real owner, but
+  it sits in `client/wasm`, where `make check` executes nothing. Q3's move
+  to `client/textedit` clears it, along with `rendered_overlay.go`'s
+  `presentationHTML`.
 
-gw_bare '\.ServesPage\b'       api/rpc/ client/textedit/ client/wasm/url_preview.go
-gw_bare '\.TextPresentation\b' api/rpc/ client/textedit/   # excludes rpc.TextPresentation* consts
-gw_bare '\.LinkTargetID\b'     api/rpc/ client/deadref/
-gw_bare '\.Reference\b'        api/rpc/ client/deadref/ client/pluginhealth/ \
-                               client/wasm/render.go
-gw_bare 'Meta\.HostContent\b'  client/cache/
-gw_bare 'Meta\.Stale\b'        client/cache/
-gw_bare 'Meta\.Writable\b'     client/cache/ client/wasm/plugin_id.go
-```
+### What landed
 
-Zero output from all seven is the sweep's completion test. Run against the
-tree today they print exactly the 20 sites listed above, plus
-`text_overlay.go:630`, which Q3's move to `client/textedit` clears. The
-function was run to produce this list, so a future lint is a straight port
-of it.
+1. The six owners, each with a unit test, paired in one commit with the
+   sites that use them — the deadcode gate refuses an owner with no caller,
+   which is the right shape for the history anyway: one commit per field
+   family, each saying why the rewrite is identity.
+2. 19 sites re-routed; `content_zoom.go` left as the question above.
+3. The greps as the gate.
 
-The `TextPresentation` pattern must anchor with `\b` and skip the
-`rpc.TextPresentation*` constant names: those are references to the
-vocabulary, not reads of the field.
+Gates run: `make check` green on each commit, plus a targeted `check-e2e`
+chunk (fs page and content, text edit, tile links, plugin health, dead
+link, workspace rebind and round trip, freeze intent, content zoom,
+ephemeral url, swatch click) — 20 specs, all green, since every changed
+line is in `client/wasm`, which `make check` compiles and never runs.
 
-### Order
-
-1. The six owners, each with a unit test (`api/rpc`, `client/cache`,
-   `client/pluginhealth` all run under `make check`).
-2. The 20 call sites, one commit per field family — five commits, each
-   provably identical except `content_zoom.go:121`, which says so.
-3. The greps as a lint.
-4. Q3's `client/textedit` move and Q7's tri-state, if the owner agrees.
-5. Q4's `applyContentZoom` gap: a failing test first — it is a bug, and it
-   rides its own commit, not the sweep.
-
-`make check` covers all of it except the shim edits themselves; run
-`make check-e2e` once at the end of step 2, since every changed line is in
-`client/wasm`.
+Still open, in order: Q3's `client/textedit` move and Q7's tri-state, if
+the owner agrees, then the `content_zoom.go` question above.

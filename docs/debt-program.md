@@ -129,7 +129,7 @@ predicate (in `api/rpc` on Tile, or a `client/*` package), with the sweep
 verified by grep: no bare `.ServesPage`/`.TextPresentation`/`Meta.HostContent`
 read outside its owner. Design doc: `docs/debt/w4-concepts.md`.
 
-**Status:** [x] design (docs/debt/w4-concepts.md: enumeration + 8 merge questions for the owner) [ ] merge decisions [ ] predicate sweep
+**Status:** [x] design (docs/debt/w4-concepts.md: enumeration + 8 merge questions for the owner) [ ] merge decisions [x] predicate sweep (19 of 20 sites; six new owners; `scripts/check-exception-owners.sh` keeps it swept. One site left as a question — `content_zoom.go`'s serves_page arm, where the owning predicate would change behavior)
 
 ## W6 — The App struct decomposes by owner
 
