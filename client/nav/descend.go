@@ -6,6 +6,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/scratch"
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/transition"
@@ -249,17 +250,86 @@ func descentTextMode(file rpc.Tile, readOnly bool) string {
 }
 
 // reEngage re-applies the auto-live verdict to a pane that is already sitting
-// in a content descent: the restore paths' arm of the one go-live owner. The
-// row was read asynchronously, so the pane may have moved on, and where the
-// user went is never overridden.
+// in a content descent: the restore paths' arm of the one go-live owner. A
+// reload, a pane-tile install, and an ascent landing back onto a content frame
+// stacked under a deeper visit all reach it.
+//
+// The row is read first, and unconditionally — it is not necessarily cached at
+// restore time, and the refetch is what makes a link's target and a tile that
+// moved resolve at all. The answer then runs under the one moved-on rule: the
+// user may have gone elsewhere while the read was in flight, and where they
+// went is never overridden.
 func (m *Machine) reEngage(g Gesture, w World) Plan {
 	var pl planner
-	guard := Guard{Kind: GuardDescendedIn, PaneID: g.PaneID, TileID: g.Door.ID}
-	if !guard.holds(w) {
-		return pl.plan()
-	}
-	m.autoLiveOnDescent(g.PaneID, g.Door, w, &pl)
+	tok := m.mint(cont{
+		Guard:  Guard{Kind: GuardDescendedIn, PaneID: g.PaneID, TileID: g.TileID},
+		Step:   stepReEngage,
+		PaneID: g.PaneID,
+		TileID: g.TileID,
+	})
+	pl.add(Effect{Kind: EffAwait, Token: tok,
+		Request: Request{Kind: RequestGetTile, ID: g.TileID}})
 	return pl.plan()
+}
+
+// healStale re-derives a restored pane's path when its stored (anchor, path)
+// no longer leads to the descended tile's grid: the tile moved, since its id
+// is immutable but its path is not. A scoped `id:` Search, the one find verb,
+// answers with the current containing-well chain.
+//
+// It reports whether the search was started; when it is, the go-live verdict
+// rides the answer instead, so a heal always precedes the re-engagement it
+// changes the place under.
+func (m *Machine) healStale(paneID string, tile rpc.Tile, w World, pl *planner) bool {
+	p, ok := w.Pane(paneID)
+	if !ok {
+		return false
+	}
+	// An ephemeral descent is deliberately focused off the pane's grid: the
+	// scratch tile rides above whatever place the pane frames. The path is not
+	// stale — the tile is elsewhere by design — and healing would re-anchor
+	// the pane into the scratch grid. Not-known-yet counts as ephemeral here,
+	// because the re-anchor is a durable write.
+	if eph, known := scratch.Ephemeral(p.Scratch, tile.GridID); eph || !known {
+		return false
+	}
+	if p.GridID == tile.GridID {
+		return false // the path still resolves: nothing to heal
+	}
+	tok := m.mint(cont{
+		Guard:  Guard{Kind: GuardDescendedIn, PaneID: paneID, TileID: tile.ID},
+		Step:   stepHealed,
+		PaneID: paneID,
+		TileID: tile.ID,
+		Tile:   tile,
+	})
+	pl.add(Effect{Kind: EffAwait, Token: tok,
+		Request: Request{Kind: RequestSearch, Query: "id:" + tile.ID,
+			Scope: tile.ID, Limit: 1}})
+	return true
+}
+
+// landHealed re-anchors the pane at the owning root with the fresh path, so
+// the descent binds and the crumbs show a true path from the root. The layout
+// persister derives the corrected layout from the live tree on its next tick,
+// so the heal persists with no dedicated writer.
+func landHealed(paneID string, tile rpc.Tile, wells []rpc.Tile, pl *planner) {
+	anchor := tile.GridID
+	path := make([]string, 0, len(wells))
+	if len(wells) > 0 {
+		anchor = wells[0].GridID
+		for _, wl := range wells {
+			path = append(path, wl.ID)
+		}
+	}
+	st := pane.StackAt(anchor, path, tile.ID)
+	// Centre the healed viewport on the tile in its new grid, so ascending out
+	// of the descent lands looking at the tile, not a stale offset.
+	st.Cx = float64(tile.X) + float64(tile.W)/2
+	st.Cy = float64(tile.Y) + float64(tile.H)/2
+	pl.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &st})
+	pl.add(Effect{Kind: EffFetchGrid, GridID: tile.GridID})
+	pl.add(Effect{Kind: EffScheduleURLUpdate})
 }
 
 // autoLiveOnDescent applies the shellconn.DecideAutoLive verdict for the

@@ -560,7 +560,7 @@ func (a *App) applyURLState(raw string) {
 		// A reload lands back inside the descent, so re-engage it: the shell
 		// reconnects and the url reopens, through the same one-owner
 		// decision every descent applies.
-		a.autoLiveOnRestore(p.ID, textTileID)
+		a.navReEngage(p.ID, textTileID)
 	} else {
 		p.Cx = state.X
 		p.Cy = state.Y

@@ -8,6 +8,8 @@ package main
 // Nothing here decides anything; client/nav does.
 
 import (
+	"context"
+
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/transition"
@@ -81,7 +83,7 @@ func (a *App) runNavEffect(e nav.Effect) {
 	case nav.EffLeaveLevels:
 		a.ascendLevels(e.Count)
 	case nav.EffReEngage:
-		a.autoLiveOnRestore(e.PaneID, e.TileID)
+		a.navReEngage(e.PaneID, e.TileID)
 	default:
 		// The vocabulary is frozen ahead of the phases that emit the rest of
 		// it. An effect with no executor is a bug in the machine, not a
@@ -212,6 +214,33 @@ func (a *App) navAwait(e nav.Effect) {
 		a.probeShellSessionAlive(e.Request.ID, func(alive bool) {
 			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Alive: alive}, a.navWorldCommon()))
 		})
+	case nav.RequestGetTile:
+		id := e.Request.ID
+		go func() {
+			tile, err := a.cl.GetTile(context.Background(), id)
+			if err != nil {
+				// The continuation retires either way, so a leaf whose
+				// reference no longer resolves leaves nothing owed.
+				a.runNav(a.nav.Resume(tok, nav.Result{}, a.navWorldCommon()))
+				return
+			}
+			// The row lands in the cache before the machine acts on it: the
+			// place it heals to and the row the renderer draws are the same
+			// answer.
+			a.c.UpdateTile(tile.GridID, *tile)
+			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Tile: tile}, a.navWorldCommon()))
+		}()
+	case nav.RequestSearch:
+		req := e.Request
+		go func() {
+			res, err := a.cl.Search(context.Background(), req.Query, req.Scope, int32(req.Limit))
+			if err != nil || len(res) == 0 {
+				a.runNav(a.nav.Resume(tok, nav.Result{}, a.navWorldCommon()))
+				return
+			}
+			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Wells: res[0].Path},
+				a.navWorldCommon()))
+		}()
 	default:
 		a.reportErr(errsurface.Error, "nav", "no executor for this navigation request")
 	}

@@ -27,7 +27,6 @@ const (
 	// GestureLeaveLevels leaves pane-tile levels: Count. (Phase C.)
 	GestureLeaveLevels
 	// GestureReEngage re-engages a restored content frame: PaneID, TileID.
-	// (Phase B.)
 	GestureReEngage
 )
 

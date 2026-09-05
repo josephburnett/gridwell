@@ -86,6 +86,12 @@ const (
 	// stepProbedShell re-decides a shell descent once its liveness probe
 	// answers.
 	stepProbedShell
+	// stepReEngage applies the go-live verdict to a restored content frame
+	// once its row has been read, healing a stale path first.
+	stepReEngage
+	// stepHealed re-anchors a restored pane once the locate answers, and then
+	// engages it.
+	stepHealed
 )
 
 // mint registers c and returns its token.
@@ -149,6 +155,24 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 			pl.add(Effect{Kind: EffOpenStream, PaneID: c.PaneID, TileID: c.TileID,
 				Stream: StreamShell})
 		}
+	case stepReEngage:
+		// A leaf whose reference no longer resolves stays frozen.
+		if !r.OK || r.Tile == nil {
+			break
+		}
+		// A stale path is healed BEFORE the engagement, because the heal moves
+		// the place the surface is opened into.
+		if m.healStale(c.PaneID, *r.Tile, w, &pl) {
+			break
+		}
+		m.autoLiveOnDescent(c.PaneID, *r.Tile, w, &pl)
+	case stepHealed:
+		// An unsearchable tile, from a plugin without Search, keeps the place
+		// it was restored with; the engagement happens either way.
+		if r.OK {
+			landHealed(c.PaneID, c.Tile, r.Wells, &pl)
+		}
+		m.autoLiveOnDescent(c.PaneID, c.Tile, w, &pl)
 	}
 	return pl.plan()
 }

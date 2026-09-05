@@ -406,7 +406,7 @@ func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 		}
 		a.fetchGrid(a.gridIDForPane(p))
 		if p.ContentID() != "" {
-			a.autoLiveOnRestore(p.ID, p.ContentID())
+			a.navReEngage(p.ID, p.ContentID())
 		}
 	})
 }
@@ -458,7 +458,7 @@ func (a *App) ascendLevels(count int) {
 	// same tile: the holder just closed, so the surface is free again and
 	// the pane re-engages, through the one owner of that decision.
 	for _, h := range pane.ContentPanes(a.tree) {
-		a.autoLiveOnRestore(h.PaneID, h.TileID)
+		a.navReEngage(h.PaneID, h.TileID)
 	}
 	a.scheduleURLUpdate()
 	a.draw()

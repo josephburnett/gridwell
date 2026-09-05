@@ -207,13 +207,15 @@ type Effect struct {
 type RequestKind int
 
 const (
-	// RequestGetTile reads one tile row by id: ID. (Phase B.)
+	// RequestGetTile reads one tile row by id: ID. The answer is cached by
+	// the executor before the resume, so the row the machine acts on and the
+	// row the renderer draws are the same one.
 	RequestGetTile RequestKind = iota
 	// RequestGetGrid reads one grid: ID. (Phase B.)
 	RequestGetGrid
 	// RequestReadContent reads a tile's body: ID. (Phase B.)
 	RequestReadContent
-	// RequestSearch locates a tile: Query, Scope, Limit. (Phase B.)
+	// RequestSearch locates a tile: Query, Scope, Limit.
 	RequestSearch
 	// RequestProbeShell asks whether a shell session is still alive: ID is
 	// the content id the shell facts key by.
@@ -232,9 +234,17 @@ type Request struct {
 // Result is one async answer, handed back to Resume with the token that
 // asked for it.
 type Result struct {
-	// OK is false when the read failed; a step that cannot act on a failure
-	// simply plans nothing.
+	// OK is false when the read failed, or answered nothing usable — a
+	// search with no hit is the same "no" as a search that could not run,
+	// and both leave the pane where it is. A step that cannot act on a
+	// failure simply plans nothing.
 	OK bool
 	// Alive answers RequestProbeShell.
 	Alive bool
+	// Tile answers RequestGetTile: the row BY VALUE, because the step acts on
+	// the row that was read rather than on whatever the cache holds later.
+	Tile *rpc.Tile
+	// Wells answers RequestSearch: the hit's containing-well chain from its
+	// plugin root, outermost first. Empty means the tile sits at a root.
+	Wells []rpc.Tile
 }

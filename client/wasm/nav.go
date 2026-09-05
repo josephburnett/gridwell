@@ -67,10 +67,10 @@ func (a *App) ascendPane(p *pane.Pane) {
 
 // navReEngage re-applies the auto-live verdict to a pane that is sitting in a
 // content descent: the restore paths' arm of the one go-live owner. The
-// machine re-checks that the pane is still in this descent, since the row it
-// carries was read asynchronously.
-func (a *App) navReEngage(paneID string, tile *rpc.Tile) {
-	a.runGesture(nav.Gesture{Kind: nav.GestureReEngage, PaneID: paneID, Door: *tile})
+// machine reads the row, heals a stale path, and re-checks that the pane is
+// still in this descent, since the read is asynchronous.
+func (a *App) navReEngage(paneID, tileID string) {
+	a.runGesture(nav.Gesture{Kind: nav.GestureReEngage, PaneID: paneID, TileID: tileID})
 }
 
 // navWorld resolves the snapshot a gesture is planned against: the common
@@ -78,7 +78,7 @@ func (a *App) navReEngage(paneID string, tile *rpc.Tile) {
 func (a *App) navWorld(g nav.Gesture) nav.World {
 	w := a.navWorldCommon()
 	switch g.Kind {
-	case nav.GestureDescend, nav.GestureReEngage:
+	case nav.GestureDescend:
 		w.Door = a.navWorldForDescend(&g.Door)
 	case nav.GestureAscend:
 		w.Leave = a.navWorldForAscend(g.PaneID)
