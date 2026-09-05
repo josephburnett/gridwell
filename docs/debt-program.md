@@ -61,7 +61,7 @@ executors.
    bootWorkspace) and promote.
 Design doc: `docs/debt/w1-nav-orchestration.md`.
 
-**Status:** [x] design [x] phase A [ ] phase B [ ] phase C
+**Status:** [x] design [x] phase A [x] phase B [ ] phase C
 
 ## W2 — The native seam sheds its timing heuristics
 
