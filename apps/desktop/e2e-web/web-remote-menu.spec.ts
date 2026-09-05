@@ -239,8 +239,22 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   let inside = (await gw.panes()).find((p) => p.focused)!;
   expect(inside.gridID).toBe(farHomeGrid);
   expect(inside.stale, 'a live remote room is not stale').toBeFalsy();
-  const liveTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
-  expect(liveTiles.length).toBeGreaterThan(0);
+  // The room arrives, then it is read. The node serves a remembered grid
+  // immediately and revalidates behind it, and the client's own Subscribe
+  // kicked a whole-source prefetch of this connection at boot — before the
+  // far node grew the tile above — so the first answers for this room are a
+  // legitimately empty memory inside its freshness window, corrected when the
+  // revalidation's GridChanged lands. A single read races that correction.
+  let liveTiles: any[] = [];
+  await expect
+    .poll(
+      async () => {
+        liveTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
+        return liveTiles.length;
+      },
+      { message: 'the live room arrives, remembered-empty first or not', timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
 
   // The machine goes dark. Leave and re-enter: the room re-reads through the
   // source cache and arrives as a marked memory, tiles intact. The room is
