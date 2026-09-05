@@ -7,10 +7,29 @@
 //
 // Prints "HARNESS PASS" or "HARNESS FAIL: ..." and exits 0 or 1.
 import { app, BaseWindow, BrowserWindow, WebContentsView } from 'electron';
+import * as fs from 'node:fs';
+import * as http from 'node:http';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
 import { registerWebviewIpc } from '../main/register';
 import type { NavEvent } from '../main/ipc';
-import { PARK_COORD } from '../main/viewutil';
+import { PARK_COORD, SESSION_PARTITION } from '../main/viewutil';
+import { FOCUS_SETTLE_MS } from '../main/focusguard';
+
+// A throwaway Chromium profile per run. The storage-flush scenario asserts what
+// is on disk under SESSION_PARTITION, and a previous run's bytes would answer
+// for this one; a temp profile also keeps the harness out of the developer's
+// own Electron profile. Must be set before app is ready.
+const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-harness-'));
+app.setPath('userData', profileDir);
+process.on('exit', () => {
+  try {
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  } catch {
+    // A leftover temp profile is harmless; the run's verdict is already printed.
+  }
+});
 
 // The touch-scroll scenario synthesizes TouchEvents inside the hosted page.
 // Chromium exposes the Touch and TouchEvent constructors only when touch events
@@ -121,7 +140,10 @@ app.whenReady().then(async () => {
   // webContents is gone, and remove() must still complete and hand back an
   // empty freeze. The wasm side skips the freeze writeback on an all-empty
   // result, so nothing overwrites the good preview.
-  const reg2 = new WebviewRegistry(win, {});
+  // The crash must also be REPORTED: an empty freeze is safe, but the user
+  // still needs to know why the tile fell back to its last good preview.
+  const deadErrs: string[] = [];
+  const reg2 = new WebviewRegistry(win, { onError: (ev) => deadErrs.push(ev.message) });
   await reg2.place('pane2', 'u1/43', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   if ((await waitForNonEmptyCapture(reg2, 'pane2', 6000)).length === 0) {
     fail('dead-view scenario: view produced no frame within 6s');
@@ -131,7 +153,10 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 300));
   const deadFreeze = await reg2.remove('pane2');
   if (deadFreeze.jpegBase64 !== '') fail('dead view yielded a non-empty freeze');
-  console.log('dead-view remove ok: empty freeze, no throw');
+  if (!deadErrs.some((m) => m.includes('view crashed while closing'))) {
+    fail(`a crash during remove was not reported (errors: ${JSON.stringify(deadErrs)})`);
+  }
+  console.log('dead-view remove ok: empty freeze, no throw, the crash reported');
 
   // ── single-finger touch scroll over a live view ─────────────────────────
   // A finger drag over live web content must scroll the page, with the content
@@ -407,6 +432,99 @@ app.whenReady().then(async () => {
   if (regFo.focusedFor('paneFo') !== false) fail('a focus-only setHidden back to unfocused was not recorded');
   await regFo.remove('paneFo');
   console.log('setHidden focus ok: tracked on the entry, the view never moved');
+
+  // ── remove() cannot detach: the blank-overlay report ────────────────────
+  // The failure the file's own comment forbids silently — a live view left
+  // sitting on top of the pane the user just ascended out of. Forced by
+  // destroying the window under the registry, which is what a host-side window
+  // close does: removeChildView then throws, and remove() must still complete
+  // and say why a blank rectangle is covering a pane.
+  const detachErrs: string[] = [];
+  const doomed = new BaseWindow({ width: 300, height: 200, show: false });
+  const regX = new WebviewRegistry(doomed, { onError: (ev) => detachErrs.push(ev.message) });
+  await regX.place('paneX', 'u1/64', DATA_URL, { x: 0, y: 0, width: 300, height: 200 });
+  doomed.destroy();
+  await new Promise((r) => setTimeout(r, 200));
+  await regX.remove('paneX'); // must resolve, never throw
+  if (!detachErrs.some((m) => m.includes('failed to detach live view'))) {
+    fail(`a failed detach was not reported (errors: ${JSON.stringify(detachErrs)})`);
+  }
+  console.log('detach failure ok: remove resolved and the blank overlay was reported');
+
+  // ── remove() commits DOM storage before the renderer dies ───────────────
+  // The largest documented-but-untested claim in webviews.ts: Chromium flushes
+  // localStorage lazily, so an abrupt close can drop a site's unsubmitted
+  // draft. The claim is about bytes on disk, so that is what this reads — the
+  // partition's own leveldb, before and after the remove. A data: url has an
+  // opaque origin and no storage at all, hence the loopback server.
+  const lsServer = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<title>storage</title><body>storage</body>');
+  });
+  await new Promise<void>((r) => lsServer.listen(0, '127.0.0.1', () => r()));
+  const lsPort = (lsServer.address() as { port: number }).port;
+  const MARKER = 'GWFLUSHMARKER12345';
+  const lsDir = path.join(
+    profileDir,
+    'Partitions',
+    SESSION_PARTITION.replace(/^persist:/, ''),
+    'Local Storage',
+    'leveldb',
+  );
+  const markerOnDisk = (): boolean => {
+    try {
+      return fs
+        .readdirSync(lsDir)
+        .some((f) => fs.readFileSync(path.join(lsDir, f)).includes(MARKER));
+    } catch {
+      return false; // no leveldb yet is no marker
+    }
+  };
+  const regS = new WebviewRegistry(win, {});
+  await regS.place('paneS', 'u1/65', `http://127.0.0.1:${lsPort}/`, { x: 0, y: 0, width: 400, height: 300 });
+  const wcS = regS.webContentsFor('paneS')!;
+  if (!(await waitFor(() => wcS.getURL().startsWith('http://127.0.0.1:'), 6000))) fail('storage page never loaded');
+  await wcS.executeJavaScript(`localStorage.setItem('gwdraft', ${JSON.stringify(MARKER)})`);
+  // Chromium batches DOM-storage commits by seconds; nothing between the write
+  // and the remove is slow enough for one, so the write is still in memory.
+  if (markerOnDisk()) fail('precondition broke: Chromium committed the write before remove() flushed');
+  await regS.remove('paneS');
+  if (!markerOnDisk()) fail('remove() did not commit localStorage: the draft died with the view');
+  lsServer.close();
+  console.log('storage flush ok: the write was in memory, remove() put it on disk');
+
+  // ── remove() cancels a pending settle timer ─────────────────────────────
+  // The timer's closure holds the view, and firing after webContents.close()
+  // would throw uncaught in main. The cancel is invisible from outside, so the
+  // scenario watches the timer itself: every FOCUS_SETTLE_MS timeout the
+  // registry arms is recorded, and the one still pending at the remove must be
+  // the one cleared.
+  const armedSettles: unknown[] = [];
+  const clearedSettles: unknown[] = [];
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  (globalThis as { setTimeout: unknown }).setTimeout = (fn: () => void, ms?: number, ...rest: unknown[]) => {
+    const t = (realSetTimeout as (...a: unknown[]) => unknown)(fn, ms, ...rest);
+    if (ms === FOCUS_SETTLE_MS) armedSettles.push(t);
+    return t;
+  };
+  (globalThis as { clearTimeout: unknown }).clearTimeout = (t: unknown) => {
+    if (armedSettles.includes(t)) clearedSettles.push(t);
+    return (realClearTimeout as (...a: unknown[]) => unknown)(t);
+  };
+  const cancelSteals: string[] = [];
+  const { reg: regT, wc: wcT } = await armSteal('paneT', 'u1/66', cancelSteals);
+  wcT.focus(); // a page grab: the guard waits, bounces, then arms its confirmation
+  if (!(await waitFor(() => cancelSteals.length >= 1, 4000))) fail('paneT: the first bounce never fired');
+  if (armedSettles.length === 0) fail('paneT: no settle timer was armed');
+  const pending = armedSettles[armedSettles.length - 1];
+  await regT.remove('paneT');
+  (globalThis as { setTimeout: unknown }).setTimeout = realSetTimeout;
+  (globalThis as { clearTimeout: unknown }).clearTimeout = realClearTimeout;
+  if (!clearedSettles.includes(pending)) fail('remove() left the pending settle timer armed');
+  await new Promise((r) => setTimeout(r, FOCUS_SETTLE_MS * 4));
+  if (cancelSteals.length !== 1) fail(`a removed pane kept bouncing (${cancelSteals.length} steals)`);
+  console.log('settle cancel ok: the pending timer was cleared and never fired again');
 
   console.log('HARNESS PASS');
   app.exit(0);

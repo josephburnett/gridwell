@@ -300,10 +300,10 @@ file; GAP means nothing exercises the path.
 | 7 | `setHidden` park / unpark | `e2e/palette-under-webview.spec.ts`; `e2e/url-modal.spec.ts`; `e2e/workspace-live.spec.ts`; `capture-harness.ts` |
 | 7b | `setHidden` `focused`-only change tracked on the entry | `capture-harness.ts` setHidden focus scenario (recorded on the entry, both directions, and the view never moves) |
 | 8 | `remove` freeze payload (jpeg / url / title / history) | `capture-harness.ts`; `bridge-harness.ts`; `e2e/url-history.spec.ts`; `e2e/auto-live.spec.ts` |
-| 9 | `remove` crash arm | PARTIAL — `capture-harness.ts` dead-view scenario proves the catch is entered and the freeze is empty, but its `onError` text is unasserted (the harness passes `{}` callbacks) |
-| 10 | `remove` detach-failure arm (`failed to detach live view`) | **GAP** |
-| 11 | `remove` `flushStorageData` / localStorage survival | **GAP** — the largest documented-but-untested claim in the file |
-| 12 | `remove` cancelling the pending `focusSettle` | **GAP** |
+| 9 | `remove` crash arm | `capture-harness.ts` dead-view scenario — the catch is entered, the freeze is empty, and the report ("view crashed while closing") is asserted |
+| 10 | `remove` detach-failure arm (`failed to detach live view`) | `capture-harness.ts` detach-failure scenario — the window is destroyed under the registry, so `removeChildView` throws; `remove()` still resolves and reports |
+| 11 | `remove` `flushStorageData` / localStorage survival | `capture-harness.ts` storage-flush scenario — a real origin off a loopback server writes the marker, the partition's leveldb does not hold it, `remove()` puts it there |
+| 12 | `remove` cancelling the pending `focusSettle` | `capture-harness.ts` settle-cancel scenario — every `FOCUS_SETTLE_MS` timeout the registry arms is recorded, and the one pending at the remove must be the one cleared |
 | 13 | `capture` failing streak → `onError` | **GAP** |
 | 14 | `capture` recovered → `onError` | **GAP** |
 | 15 | context menu, in-page right-click door | `e2e/url-context-menu.spec.ts` (both tests) |
@@ -324,8 +324,8 @@ file; GAP means nothing exercises the path.
 | 30 | `applyMinWidthZoom` / `setZoom` composition | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` (three units). The `setZoomFactor` try/catch and the `did-finish-load` re-apply are not separately asserted |
 | 31 | `goBack`, including the no-op at the start of history | `capture-harness.ts`; `contextmenu.test.ts` enablement flags |
 
-**Gap count: 7 GAP rows — 10, 11, 12, 13, 14, 20, 25 — plus 4
-partials: 9, 18, 23, 30.** Rows 6b and 7b are split out of items 6 and 7
+**Gap count: 4 GAP rows — 13, 14, 20, 25 — plus 3
+partials: 18, 23, 30.** Rows 6b and 7b are split out of items 6 and 7
 because each has a covered half and an uncovered half. Rows 27, 28 and 29, the
 focus family, were closed by phase 2; 13 at the time this table was written.
 
