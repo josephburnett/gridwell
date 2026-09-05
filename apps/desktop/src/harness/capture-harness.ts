@@ -6,7 +6,7 @@
 //   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
 //
 // Prints "HARNESS PASS" or "HARNESS FAIL: ..." and exits 0 or 1.
-import { app, BaseWindow, BrowserWindow } from 'electron';
+import { app, BaseWindow, BrowserWindow, WebContentsView } from 'electron';
 import { WebviewRegistry } from '../main/webviews';
 import { registerWebviewIpc } from '../main/register';
 import type { NavEvent } from '../main/ipc';
@@ -231,6 +231,55 @@ app.whenReady().then(async () => {
   await regF.remove('paneU');
   await regG.remove('paneG');
   console.log('place focus ok: unfocused placement bounced, focused placement kept');
+
+  // ── the user's own click into an unfocused live pane is not a steal ──────
+  // The guard's hardest case, and the one it got wrong until W2 measured it
+  // (docs/debt/w2-native-seam.md §5, M1): Chromium focuses the widget in the
+  // browser process WHILE routing the press and forwards the press afterwards,
+  // so at the `focus` event nothing about the click has arrived yet — not the
+  // browser-process input-event, not the preload's IPC. A guard that decides
+  // there reports a steal for the click the user just made.
+  //
+  // The order below is the measured one: focus first, then the press. The
+  // press is a real sendInputEvent, so it raises the same `input-event` on the
+  // same webContents that an OS click does; only the widget-focus half is
+  // stood in for, because sendInputEvent bypasses Chromium's browser-process
+  // focus routing and cannot produce a `focus` event at all.
+  const rootView = new WebContentsView({ webPreferences: { sandbox: false } });
+  win.contentView.addChildView(rootView);
+  rootView.setBounds({ x: 0, y: 0, width: 800, height: 600 });
+  await rootView.webContents.loadURL('data:text/html,' + encodeURIComponent('<title>root</title>root'));
+
+  const clickSteals: string[] = [];
+  // Wired exactly as index.ts wires it: a reported steal hands OS focus back to
+  // the root webContents.
+  const regC = new WebviewRegistry(win, {
+    onFocusStolen: (ev) => {
+      clickSteals.push(ev.paneId);
+      rootView.webContents.focus();
+    },
+  });
+  await regC.place('paneC', 'u1/49', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false);
+  const wcC = regC.webContentsFor('paneC')!;
+  // Let the placement's own grab be bounced and focus land back on the root,
+  // so the click below starts from the real precondition: an unfocused live
+  // pane whose view does not hold OS focus.
+  await new Promise((r) => setTimeout(r, 1000));
+  rootView.webContents.focus();
+  await new Promise((r) => setTimeout(r, 300));
+  if (wcC.isFocused()) fail('setup: the view still held OS focus before the click');
+  clickSteals.length = 0;
+
+  wcC.focus(); // the widget focus Chromium applies while routing the press
+  wcC.sendInputEvent({ type: 'mouseDown', x: 200, y: 150, button: 'left', clickCount: 1 });
+  wcC.sendInputEvent({ type: 'mouseUp', x: 200, y: 150, button: 'left', clickCount: 1 });
+  await new Promise((r) => setTimeout(r, 800));
+  if (clickSteals.length > 0) {
+    fail(`the user's own click into an unfocused live pane was reported as a steal (${clickSteals.length}x)`);
+  }
+  if (!wcC.isFocused()) fail("the user's own click did not leave the view holding OS focus");
+  await regC.remove('paneC');
+  console.log('click-into-unfocused ok: the press explains the focus, no bounce');
 
   console.log('HARNESS PASS');
   app.exit(0);

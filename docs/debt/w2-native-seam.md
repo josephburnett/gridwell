@@ -5,7 +5,7 @@ mechanism in Gridwell that decides by racing a clock. This document says what
 the clock is standing in for, whether an owned fact can take its place, and
 what the extraction and the test-gap closure are either way.
 
-## 1. What the guard does today
+## 1. What the guard did before this workstream
 
 `bounceStolenFocus` in `wireNav`, bound to the view's `webContents` `focus`
 event: return if `e.focused`; return if `Date.now() - e.lastUserClickMs <
@@ -16,8 +16,9 @@ focus, and the stamp is still stale.
 
 `e.focused` is an owned fact: the renderer writes it on `place`
 (`PlaceArgs.focused`) and on every `setHidden` (`syncURLViews`, `paneID ==
-a.tree.Focus`). `e.lastUserClickMs` is the heuristic — a timestamp compared
-against a constant.
+a.tree.Focus`). `e.lastUserClickMs` was the heuristic — a timestamp compared
+against a constant — and §5 measured it wrong on every first click. It is gone;
+§3 and §4 say what replaced it.
 
 ## 2. The race, precisely
 
@@ -145,59 +146,68 @@ the bounce at +121 ms is the only one that ever lands.
 No constant is deleted on faith; each survives only with a measurement on
 record.
 
-## 4. The extraction (independent of §3)
+## 4. The extraction
 
 `apps/desktop/src/main/focusguard.ts`, a js-free-of-Electron pure module in the
-`viewutil.ts` shape: production constants exported from the module so the test
-pins the real values, no Electron imports, one decision function.
+`viewutil.ts` shape: the production constant exported from the module so the
+test pins the real value, no Electron imports, one decision function. This is
+what landed, after §5 replaced the timestamp with the press count:
 
 ```ts
-export const USER_CLICK_FOCUS_GRACE_MS = 1500;
-export const FOCUS_RECHECK_MS = 120;
+export const FOCUS_SETTLE_MS = 120;
 
-export type GuardPhase = 'focus-event' | 'recheck';
+export function isPressInput(type: string): boolean; // mouseDown/touchStart/pointerDown
+
+export type GuardPhase = 'focus-event' | 'settle';
 
 export interface GuardInput {
   phase: GuardPhase;
   paneFocused: boolean;      // Entry.focused — the renderer's owned fact
   viewHoldsOSFocus: boolean; // webContents.isFocused(); true at 'focus-event'
-  lastUserInputMs: number;   // the intent stamp; 0 = never
-  now: number;
-  ackSeen?: boolean;         // renderer confirmed focused=true since the stamp
+  pressesAtFocus: number;    // the view's press count when the grab happened
+  pressesNow: number;        // the count now; a rise is the user's click
+  alreadyBounced: boolean;
 }
 
 export type GuardAction =
   | { kind: 'allow' }
-  | { kind: 'bounce'; scheduleRecheckMs: number | null };
+  | { kind: 'wait'; settleMs: number }
+  | { kind: 'bounce'; settleMs: number | null };
 
 export function decideFocus(i: GuardInput): GuardAction;
 ```
 
-`webviews.ts` keeps only the executor: subscribe to `focus`, read `isFocused()`
-inside the existing try/catch, call `cb.onFocusStolen`, schedule and cancel the
-timer, and the `this.entries.get(paneId) !== e` identity check. No comparison,
-no constant, no branch on time lives there.
+There is no timestamp in the input at all, so the "clock stepped back" case has
+nowhere to arise: a monotonic count answers "did a press land after this
+focus?" exactly, where two timestamps only approximate it.
+
+`webviews.ts` keeps only the executor: count presses from `input-event`,
+subscribe to `focus`, read `isFocused()` inside the try/catch, call
+`cb.onFocusStolen`, schedule and cancel the timer, and the
+`this.entries.get(paneId) !== e` identity check. No comparison, no constant, no
+branch on time lives there.
 
 `focusguard.test.ts`, table-driven under `node --test` like `viewutil.test.ts`:
 
 | # | case | expect |
 |---|---|---|
 | 1 | focus-event, paneFocused | allow |
-| 2 | focus-event, unfocused, `lastUserInputMs === 0` | bounce + recheck |
-| 3 | focus-event, unfocused, input 100 ms ago | allow |
-| 4 | focus-event, unfocused, input 1499 ms ago | allow (boundary) |
-| 5 | focus-event, unfocused, input exactly 1500 ms ago | bounce (boundary; `>=` bounces) |
-| 6 | recheck, pane became focused meanwhile | allow, no second bounce |
-| 7 | recheck, view no longer holds OS focus | allow |
-| 8 | recheck, still unfocused + still holds focus + stale stamp | bounce, `scheduleRecheckMs: null` |
-| 9 | recheck, a click landed between bounce and recheck | allow |
-| 10 | `now < lastUserInputMs` (clock stepped back) | allow, documented |
-| 11 | ackSeen true with a stale stamp | allow (phase 2) |
-| 12 | ackSeen false past the deadline | bounce (phase 2) |
+| 2 | focus-event, unfocused, no press yet | wait `FOCUS_SETTLE_MS` |
+| 3 | settle, unfocused, holds focus, no press | bounce + settle |
+| 4 | settle, `alreadyBounced` | bounce, `settleMs: null` |
+| 5 | settle, pane became focused meanwhile | allow, no second bounce |
+| 6 | settle, view no longer holds OS focus | allow |
+| 7 | settle, a press landed since the grab | allow |
+| 8 | focus-event, a press already counted (press-first host) | allow |
+| 9 | settle, an equal non-zero count (an older, consumed click) | bounce |
+| 10 | settle after a bounce, a press landed meanwhile | allow |
+| — | every case decided twice | identical (no clock) |
 
-Case 9 is the one the current code gets right by accident: the recheck arm
-re-reads `lastUserClickMs`, so a press arriving during the 120 ms suppresses
-the second bounce. A naive extraction drops it silently. It is untested today.
+Case 10 is the one the old code got right by accident: the recheck arm re-read
+`lastUserClickMs`, so a press arriving during the 120 ms suppressed the second
+bounce. A naive extraction would have dropped it silently. Case 9 is the one it
+got wrong: a 1500 ms grace treats any recent click as consent for every focus
+grab that follows it, and a count does not.
 
 ## 5. Measurements
 

@@ -20,6 +20,7 @@ import {
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { captureJpegBase64 } from './capture';
+import { decideFocus, isPressInput, GuardPhase } from './focusguard';
 
 // urlViewPreload is the script injected into every live url view; it forwards
 // a right-button press to main so the renderer can gesture over live content.
@@ -37,35 +38,24 @@ interface Entry {
   // userZoom is the tile's persisted content zoom, composed with the min-width
   // layout zoom in applyMinWidthZoom. 0 means unset, i.e. 1.0.
   userZoom: number;
-  // lastUserClickMs is when the view's preload last forwarded a left press, the
-  // one legitimate way a view acquires OS focus. The focus guard treats a grab
-  // inside this grace window as user intent.
-  lastUserClickMs: number;
+  // presses counts the press-shaped input events Chromium has routed into this
+  // view (focusguard.isPressInput). It is main's own fact, seen in the browser
+  // process before the renderer even receives the press, and the focus guard
+  // reads it to tell the user's click from a page's grab.
+  presses: number;
   // durable is whether the tile behind this view survives ascent. An ephemeral
   // visit is not durable and has nothing to re-descend into, so the context
   // menu offers no Freeze Page there.
   durable: boolean;
-  // focusRecheck is the steal guard's pending settle timer. It is tracked so
+  // focusSettle is the steal guard's pending settle timer. It is tracked so
   // remove() can cancel it: the closure holds the view, and firing after
   // webContents.close() would throw uncaught in main.
-  focusRecheck: ReturnType<typeof setTimeout> | null;
+  focusSettle: ReturnType<typeof setTimeout> | null;
   // captureFailing marks a mirror capture in a failing streak, so entering and
   // leaving failure each log exactly once. A silently frozen mirror otherwise
   // leaves no evidence anywhere.
   captureFailing?: boolean;
 }
-
-// USER_CLICK_FOCUS_GRACE_MS is how long after a forwarded left press a view may
-// legitimately acquire OS focus. Native focus lands immediately on the press,
-// while the wasm marks the pane focused a round trip later, and the stamp
-// bridges that gap. It is long enough for a slow frame and far shorter than any
-// refresh cadence worth stealing for.
-const USER_CLICK_FOCUS_GRACE_MS = 1500;
-
-// FOCUS_RECHECK_MS is the settle delay before the steal guard double-checks:
-// long enough for an in-flight widget-focus commit to land, short enough
-// that leaked keystrokes stay negligible.
-const FOCUS_RECHECK_MS = 120;
 
 interface RegistryCallbacks {
   // onNav fires when a hosted view finishes a navigation, changing url or
@@ -224,6 +214,14 @@ export class WebviewRegistry {
     return this.entries.get(paneId)?.focused;
   }
 
+  // webContentsFor is a test-only accessor returning the webContents behind a
+  // pane, so a harness can drive real Chromium focus and input against it. The
+  // harnesses used to cast through `private entries`, a seam that rots silently
+  // the moment Entry changes shape.
+  webContentsFor(paneId: string): WebContents | undefined {
+    return this.entries.get(paneId)?.view.webContents;
+  }
+
   // viewBoundsFor is a test-only accessor returning the view's physical bounds
   // as Electron last set them, which tells whether the view is parked or at its
   // visible position. The e2e uses it to assert that a bounds change while
@@ -328,7 +326,7 @@ export class WebviewRegistry {
     // page they never clicked on. syncURLViews calls setHidden for this pane on
     // the next draw() and reaffirms both.
     const startHidden = hidden;
-    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, focused, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
+    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null };
     this.entries.set(paneId, e);
     this.win.contentView.addChildView(view);
     view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
@@ -356,18 +354,6 @@ export class WebviewRegistry {
       e.view.setBounds(rounded);
     }
     this.applyMinWidthZoom(e);
-  }
-
-  // noteUserClick stamps the entry whose view the given webContents belongs to:
-  // its preload just forwarded a left press, the one legitimate path to OS
-  // focus for a live view. The focus guard honors the stamp.
-  noteUserClick(sender: WebContents): void {
-    for (const e of this.entries.values()) {
-      if (e.view.webContents === sender) {
-        e.lastUserClickMs = Date.now();
-        return;
-      }
-    }
   }
 
   // touchScroll injects one step of a single-finger drag as a mouseWheel into
@@ -450,9 +436,9 @@ export class WebviewRegistry {
     this.entries.delete(paneId);
     // Cancel the steal guard's settle timer: its closure holds this view, and
     // firing after close() would throw uncaught in main.
-    if (e.focusRecheck) {
-      clearTimeout(e.focusRecheck);
-      e.focusRecheck = null;
+    if (e.focusSettle) {
+      clearTimeout(e.focusSettle);
+      e.focusSettle = null;
     }
 
     // Commit DOM storage to the persistent partition before the renderer is
@@ -563,43 +549,61 @@ export class WebviewRegistry {
     e.view.webContents.on('did-navigate', emit);
     e.view.webContents.on('did-navigate-in-page', emit);
     e.view.webContents.on('page-title-updated', emit);
+    // Every press Chromium routes into this view, counted in the browser
+    // process. This is the guard's intent fact: it arrives before the renderer
+    // has even seen the press, so no page can delay or suppress it, and the
+    // registry's own mouseWheel injection is excluded by isPressInput.
+    e.view.webContents.on('input-event', (_event, input) => {
+      if (isPressInput(input.type)) e.presses++;
+    });
     // A page-initiated navigation (a self-refresh timer, meta-refresh, or JS
     // reload) makes Chromium focus the new document's widget, taking OS
     // keyboard focus from whatever the user was typing in. The grab can land,
     // and re-land, asynchronously after any single navigation event, so the
-    // guard sits on the focus event itself: a view may hold OS focus only when
-    // its pane is the focused pane, or when the user just pressed into it (the
-    // forwarded left-down stamps lastUserClickMs before wasm marks the pane
-    // focused). Anything else is a steal, and focus goes back.
-    const bounceStolenFocus = () => {
-      if (e.focused) return;
-      if (Date.now() - e.lastUserClickMs < USER_CLICK_FOCUS_GRACE_MS) return;
-      this.cb.onFocusStolen?.({ paneId });
-      // The grab can still be in flight when the bounce runs: Chromium's
-      // widget-focus commit then lands after it with no further focus event.
-      // Recheck once things settle and bounce again if the view still holds
-      // focus it should not. The timer is tracked on the entry so remove() can
-      // cancel it, but that only covers a teardown that went through the
-      // registry: a view can also die under it — a render-process crash, a
-      // host-side close — and every read of a destroyed WebContents throws,
-      // uncaught inside a timer, which hangs main behind an error dialog. The
-      // whole recheck therefore runs inside a catch; a view that is gone has no
-      // focus to hand back.
-      if (e.focusRecheck) clearTimeout(e.focusRecheck);
-      e.focusRecheck = setTimeout(() => {
-        e.focusRecheck = null;
-        if (this.entries.get(paneId) !== e) return; // removed meanwhile
+    // guard sits on the focus event itself.
+    //
+    // What it must not do is DECIDE there. Chromium focuses the widget while
+    // routing a press and forwards the press afterwards, so at the focus event
+    // a user's click and a page's grab look identical (measured, 8/8:
+    // docs/debt/w2-native-seam.md §5). The guard therefore snapshots the press
+    // count and asks focusguard, which defers; one settle later the press has
+    // arrived if there was one, and the same pure function decides.
+    //
+    // The timer is tracked on the entry so remove() can cancel it, but that
+    // only covers a teardown that went through the registry: a view can also
+    // die under it — a render-process crash, a host-side close — and every read
+    // of a destroyed WebContents throws, uncaught inside a timer, which hangs
+    // main behind an error dialog. The settle therefore reads isFocused()
+    // inside a catch; a view that is gone has no focus to hand back.
+    const step = (phase: GuardPhase, pressesAtFocus: number, alreadyBounced: boolean): void => {
+      let viewHoldsOSFocus = true; // at 'focus-event' the event is the evidence
+      if (phase === 'settle') {
         try {
-          if (!e.focused && e.view.webContents.isFocused() &&
-              Date.now() - e.lastUserClickMs >= USER_CLICK_FOCUS_GRACE_MS) {
-            this.cb.onFocusStolen?.({ paneId });
-          }
+          viewHoldsOSFocus = e.view.webContents.isFocused();
         } catch {
-          // The view died between the focus event and this settle.
+          return; // the view died between the grab and this settle
         }
-      }, FOCUS_RECHECK_MS);
+      }
+      const act = decideFocus({
+        phase,
+        paneFocused: e.focused,
+        viewHoldsOSFocus,
+        pressesAtFocus,
+        pressesNow: e.presses,
+        alreadyBounced,
+      });
+      if (act.kind === 'allow') return;
+      if (act.kind === 'bounce') this.cb.onFocusStolen?.({ paneId });
+      if (act.settleMs === null) return;
+      if (e.focusSettle) clearTimeout(e.focusSettle);
+      const bounced = act.kind === 'bounce';
+      e.focusSettle = setTimeout(() => {
+        e.focusSettle = null;
+        if (this.entries.get(paneId) !== e) return; // removed meanwhile
+        step('settle', pressesAtFocus, bounced);
+      }, act.settleMs);
     };
-    e.view.webContents.on('focus', bounceStolenFocus);
+    e.view.webContents.on('focus', () => step('focus-event', e.presses, false));
     // zoomFactor resets across cross-origin navigations, so re-apply the
     // min-width zoom once the new document has loaded.
     e.view.webContents.on('did-finish-load', () => this.applyMinWidthZoom(e));

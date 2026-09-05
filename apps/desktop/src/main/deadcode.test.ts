@@ -29,6 +29,12 @@ const ALLOWED: Record<string, string> = {
     'the pure validator behind reviveNavigation; its clamping and rejection cases are unit-tested directly',
   'main/viewutil.ts:classifyRightPress':
     'the reference implementation of the right-press classification the sandboxed preload must inline; unit-tested as the owner',
+  'main/focusguard.ts:FOCUS_SETTLE_MS':
+    'the guard\'s one surviving constant; decideFocus hands it to the executor in its verdict, so only focusguard.test.ts names it, which is the point — the test pins the production value',
+  'main/focusguard.ts:GuardInput':
+    'the decision\'s input shape; the executor builds it inline as an object literal, so only the table test names the type',
+  'main/focusguard.ts:GuardAction':
+    'the decision\'s output shape; the executor switches on act.kind, so only the table test names the type',
 };
 
 function walkTs(dir: string, out: string[] = []): string[] {
