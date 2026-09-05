@@ -21,15 +21,23 @@ import { FOCUS_SETTLE_MS } from '../main/focusguard';
 // is on disk under SESSION_PARTITION, and a previous run's bytes would answer
 // for this one; a temp profile also keeps the harness out of the developer's
 // own Electron profile. Must be set before app is ready.
-const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-harness-'));
-app.setPath('userData', profileDir);
-process.on('exit', () => {
+//
+// The sweep is at the START rather than at exit, and that is not laziness:
+// app.exit() runs no process 'exit' handler, and even a cleanup that does run
+// is followed by Chromium writing a fresh profile skeleton back on its way out.
+// Sweeping first leaves at most one run's profile at rest and cannot leave a
+// stale one for the next run to read.
+const PROFILE_PREFIX = 'gridwell-harness-';
+for (const name of fs.readdirSync(os.tmpdir())) {
+  if (!name.startsWith(PROFILE_PREFIX)) continue;
   try {
-    fs.rmSync(profileDir, { recursive: true, force: true });
+    fs.rmSync(path.join(os.tmpdir(), name), { recursive: true, force: true });
   } catch {
-    // A leftover temp profile is harmless; the run's verdict is already printed.
+    // Another harness may be running; its profile is not ours to reclaim.
   }
-});
+}
+const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), PROFILE_PREFIX));
+app.setPath('userData', profileDir);
 
 // The touch-scroll scenario synthesizes TouchEvents inside the hosted page.
 // Chromium exposes the Touch and TouchEvent constructors only when touch events
