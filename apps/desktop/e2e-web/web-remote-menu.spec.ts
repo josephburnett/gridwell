@@ -126,7 +126,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   expect((await gw.barName()).editable, 'the door is a real row — renamable').toBe(true);
   const bar = await gw.bar();
   const rootCrumb = bar.segments.filter((s) => s.kind === 'chain' && s.anchor).pop();
-  expect(rootCrumb?.glyph, 'the crumb wears the mount door face, not a grid').toBe('');
+  expect(rootCrumb?.glyph, 'the crumb wears the mount door face, not a grid').toBe('globe');
   await gw.clickBarName('right');
   const rin = window.locator('#gw-rename-input');
   await expect(rin).toBeVisible();
