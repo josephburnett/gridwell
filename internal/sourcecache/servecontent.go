@@ -77,7 +77,7 @@ func (c *Layer) storeServeContent(ctx context.Context, tileID, subpath string, s
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(tile_id, subpath) DO UPDATE SET status=excluded.status,
 			media_type=excluded.media_type, data=excluded.data, fetched_at=excluded.fetched_at`,
-		tileID, subpath, status, mediaType, data, now())
+		tileID, subpath, status, mediaType, blob(data), now())
 	c.noteCache("store servecontent", err)
 	c.evictServeContent(ctx)
 }

@@ -829,8 +829,20 @@ func (c *Layer) loadContent(ctx context.Context, tileID string) (mediaType strin
 func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, version int64, data []byte) {
 	_, err := c.db.ExecContext(ctx, `INSERT INTO content (tile_id, media_type, version, data, fetched_at) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(tile_id) DO UPDATE SET media_type=excluded.media_type, version=excluded.version, data=excluded.data, fetched_at=excluded.fetched_at`,
-		tileID, mediaType, version, data, now())
+		tileID, mediaType, version, blob(data), now())
 	c.noteCache("store content", err)
+}
+
+// blob binds a body for one of the NOT NULL blob columns. A nil []byte binds
+// as SQL NULL, and an empty answer — a tile nobody has typed into yet, a 200
+// with no bytes — is an answer like any other: the cache must be able to
+// remember it, and the columns say so with NOT NULL. Both body writers go
+// through here, because the fault is the binding, not the column.
+func blob(b []byte) []byte {
+	if b == nil {
+		return []byte{}
+	}
+	return b
 }
 
 // ── Subscribe ───────────────────────────────────────────────────────────

@@ -1073,3 +1073,41 @@ func TestAStaleAnswerIsNeverRemembered(t *testing.T) {
 		t.Fatal("the stale bit was stored")
 	}
 }
+
+// TestAnEmptyBodyIsRemembered: a tile created and never typed into has an
+// empty body, and remembering one is not a special case — it is the most
+// ordinary read there is, and the cache owes it the same answer while dark.
+// It could not: a nil []byte binds as SQL NULL and `content.data` is NOT NULL,
+// so the store failed, the body was never remembered, and noteCache flipped
+// the WHOLE cache to "cannot remember answers" on the user's strip for a tile
+// that simply had nothing in it yet.
+func TestAnEmptyBodyIsRemembered(t *testing.T) {
+	cc, upstream, root, _ := fixture(t)
+	ctx := context.Background()
+
+	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := txt.GetTile().GetId()
+	if _, _, data := readContent(t, cc, id); len(data) != 0 {
+		t.Fatalf("a new tile read back %q, want an empty body", data)
+	}
+
+	cc.healthMu.Lock()
+	down := cc.cacheDown
+	cc.healthMu.Unlock()
+	if down {
+		t.Fatal("remembering an empty body broke the cache: the strip now says it cannot remember answers")
+	}
+	if _, _, _, ok := cc.loadContent(ctx, id); !ok {
+		t.Fatal("an empty body was not remembered")
+	}
+
+	// And the point of remembering it: dark, it still answers.
+	upstream.goDark()
+	if _, _, data := readContent(t, cc, id); len(data) != 0 {
+		t.Fatalf("the dark read of a remembered empty body = %q, want empty", data)
+	}
+}

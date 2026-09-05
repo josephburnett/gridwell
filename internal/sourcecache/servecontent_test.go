@@ -203,3 +203,31 @@ func TestPrefetchWalksServesPageBodies(t *testing.T) {
 		t.Errorf("warmed page = (%d, %s, %d bytes)", st, mt, len(data))
 	}
 }
+
+// TestServeContentRemembersAnEmptyBody: a 200 with no bytes — an empty file, a
+// 200 with only headers — is an answer like any other. The same nil-binds-as-
+// NULL fault that hit tile content hit the door's cache too: the write failed,
+// nothing was remembered, and the cache announced itself broken.
+func TestServeContentRemembersAnEmptyBody(t *testing.T) {
+	cc, fake := doorFixture(t)
+	fake.bodies["7|empty.txt"] = doorBody{status: 200, mediaType: "text/plain", data: nil}
+
+	if _, _, _, err := serveDoor(cc, "7", "empty.txt"); err != nil {
+		t.Fatal(err)
+	}
+	cc.healthMu.Lock()
+	down := cc.cacheDown
+	cc.healthMu.Unlock()
+	if down {
+		t.Fatal("remembering an empty door body broke the cache: the strip now says it cannot remember answers")
+	}
+
+	fake.dark = true
+	st, mt, data, err := serveDoor(cc, "7", "empty.txt")
+	if err != nil {
+		t.Fatalf("dark serve of a remembered empty body: %v", err)
+	}
+	if st != 200 || mt != "text/plain" || len(data) != 0 {
+		t.Fatalf("dark serve = %d %q %q, want 200 text/plain and no bytes", st, mt, data)
+	}
+}
