@@ -235,7 +235,7 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 func (a *App) persistTextScroll(p *pane.Pane) {
 	file, ok := a.descendedTile(p)
 	if !ok || file.Kind != rpc.KindText || file.ServesPage ||
-		a.tileReadOnly(&file) || a.isEphemeralTile(p, &file) {
+		a.tileReadOnly(&file) || a.possiblyEphemeral(p, &file) {
 		return
 	}
 	scrollX := int64(p.TextScrollX + 0.5)

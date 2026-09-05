@@ -517,6 +517,13 @@ func (a *App) landOnFrame(p *pane.Pane) {
 		p.TextZoom = a.textScaleFor(p) // base × content zoom (issue #82)
 		a.refreshFileOverlay()
 		a.autoLiveOnRestore(p.ID, id)
+		// The pane's own grid, even though nothing draws it from in here: it
+		// carries the scratch-grid stamp, and until it is cached nothing can
+		// say whether this descent is an ephemeral visit — so the border, the
+		// title, and above all the delete on the way back out would all be
+		// deciding without it. A restore straight into a content frame is the
+		// one path that reaches this level without ever having fetched it.
+		a.fetchGrid(a.gridIDForPane(p))
 		return
 	}
 	a.fetchGrid(a.gridIDForPane(p))

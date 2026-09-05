@@ -1420,7 +1420,7 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 		if tile, ok := a.descendedTile(p); ok {
 			in.TileKnown = true
 			in.TileKind = tile.Kind
-			in.Ephemeral = a.isEphemeralTile(p, &tile)
+			in.Ephemeral = a.certainlyEphemeral(p, &tile)
 		}
 	}
 	if gridOK && g != nil && g.Meta.HostContent {
@@ -1528,8 +1528,10 @@ func drawTriangle(c js.Value, cx, cy, angle, size float64) {
 // drawGridNotice paints a centered, muted status line in a pane whose grid
 // is not in the cache: pane.GridNotice words it (loading vs. unavailable);
 // the plugin's label names the grid when its owner is in the launcher list
-// (a mounted node's grid falls back to the id — the label is a wire fact
-// this lookup cannot see; see scratchGridForPane).
+// (a mounted node's grid falls back to the id — the label is a wire fact this
+// lookup cannot see, since a mounted id's first segment is the LOCAL node,
+// which is why no fact about a grid may be derived from one; see
+// client/scratch).
 func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if r.W < 80 || r.H < 40 {
 		return

@@ -43,7 +43,7 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 	}
 	if p.ContentID() != "" {
 		t, ok := a.descendedTile(p)
-		if !ok || t.Kind == rpc.KindText || a.isEphemeralTile(p, &t) {
+		if !ok || t.Kind == rpc.KindText || a.possiblyEphemeral(p, &t) {
 			return rpc.Tile{}, false
 		}
 		return t, true
@@ -93,7 +93,7 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 	}
 	if p.ContentID() != "" {
 		if t, ok := a.descendedTile(p); ok {
-			if a.isEphemeralTile(p, &t) {
+			if a.certainlyEphemeral(p, &t) {
 				return "ephemeral", false, true
 			}
 			if t.AltText != "" {

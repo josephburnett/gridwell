@@ -222,7 +222,7 @@ own `media_type`.
 
 `client/*` packages are pure Go with unit tests: `pane`, `cache`, `outbox`,
 `zoomtrans`, `gesture`, `wsbar`, `markdown`, `menu`, `shellstream`,
-`shellwire`, `clientsync`, `errsurface`, `deadref`, `transition`.
+`shellwire`, `clientsync`, `errsurface`, `deadref`, `transition`, `scratch`.
 `client/wasm` is the shim: canvas,
 DOM, and the RPC calls. `make check` compiles the shim but executes none of
 it; only the e2e gates see it. A decision that lives only in the shim is a
@@ -336,6 +336,7 @@ copy:
 | is this write still owed | `outbox.Record` |
 | the bytes, their version, edited or not | one cache entry per tile id |
 | does this descent go live | `shellconn.DecideAutoLive` |
+| is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |

@@ -197,7 +197,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	// freeze and no history writeback, and its frozen face is the plugin's
 	// own derivation.
 	durable := !page
-	if tile, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &tile) {
+	if tile, ok := a.descendedTile(p); ok && a.possiblyEphemeral(p, &tile) {
 		durable = false
 	}
 	v.durable = durable
@@ -337,7 +337,7 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 		return
 	}
 	tile, ok := a.descendedTile(p)
-	if !ok || tile.Kind != rpc.KindURL || a.isEphemeralTile(p, &tile) {
+	if !ok || tile.Kind != rpc.KindURL || a.possiblyEphemeral(p, &tile) {
 		return
 	}
 	tid := tile.ID

@@ -485,7 +485,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	// which does nothing because this is where you are, and a drop.
 	if seg.Index == len(chain)-1 {
 		if p := a.tree.FocusedPane(); p != nil {
-			if t, ok := a.descendedTile(p); ok && t.Kind == rpc.KindURL && a.isEphemeralTile(p, &t) {
+			if t, ok := a.descendedTile(p); ok && t.Kind == rpc.KindURL && a.certainlyEphemeral(p, &t) {
 				a.startPromoteDrag(p, t, seg, bx, top, sx, sy)
 				return true
 			}

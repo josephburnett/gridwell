@@ -18,6 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/scratch"
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -1171,7 +1172,7 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	if !pane.StillDescended(fp, tile.ID) {
 		return
 	}
-	if a.isEphemeralTile(fp, tile) {
+	if a.possiblyEphemeral(fp, tile) {
 		// An ephemeral descent is deliberately focused off the pane's grid:
 		// the scratch tile rides above whatever place the pane frames. The
 		// path is not stale — the tile is elsewhere by design — and healing
@@ -1675,37 +1676,46 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 	})
 }
 
-// scratchGridForPane returns the qualified scratch grid id where ephemeral
-// visits from the pane's grid land. Every grid a node serves carries one —
-// the owning plugin's own, or the serving node's home scratch grid when the
-// plugin declares none — so "" means only an uncached grid whose plugin is
-// not local.
-func (a *App) scratchGridForPane(p *pane.Pane) string {
-	gid := a.gridIDForPane(p)
-	// The fact rides on the grid (Grid.ScratchGridID, stamped by the serving
-	// node and chained through mounts): a local plugin-list lookup cannot
-	// answer for a remote plugin behind a transit mount.
-	if g, ok := a.c.Grid(gid); ok && g.Meta.ScratchGridID != "" {
-		return g.Meta.ScratchGridID
+// scratchGridOf reads the pane's own grid as the scratch rule sees it. The
+// stamp rides on the grid (Grid.ScratchGridID, written by the serving node
+// and chained through mounts), which is the one owner: nothing here derives
+// it from an id, because a mounted remote grid's first segment is the LOCAL
+// node and any roster keyed on it answers for the wrong machine.
+//
+// A pure read, and deliberately: the border asks per frame, and a read that
+// kicked its own fetch would hammer a grid nobody is drawing — a dead link's
+// namespace above all, which is never to be fetched for. Fetching a pane's
+// grid belongs to the paths that show it; landOnFrame does it for the one
+// place that lands in a content frame without ever having drawn the grid
+// behind it.
+func (a *App) scratchGridOf(p *pane.Pane) scratch.Grid {
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return scratch.Grid{}
 	}
-	// Fallback for an uncached grid: the local plugin list, matching on the
-	// first segment, so local plugins only.
-	want := uuidOf(gid)
-	for _, pl := range a.plugins {
-		if pl.UUID == want {
-			return pl.ScratchGridID
-		}
-	}
-	return ""
+	return scratch.Grid{Cached: true, ScratchGridID: g.Meta.ScratchGridID}
 }
 
-// scratchOrReport is scratchGridForPane with the failure surfaced: a visit
-// with nowhere to land must say so, or the click looks like it just did
-// nothing. Every ephemeral-visit entry point asks here, so no path can fail
-// silently.
+// scratchFor is scratch.For over that read: the scratch grid a visit from
+// this pane lands in, and whether that is known yet.
+func (a *App) scratchFor(p *pane.Pane) (string, bool) {
+	return scratch.For(a.scratchGridOf(p))
+}
+
+// scratchOrReport is scratchFor with the failure surfaced: a visit with
+// nowhere to land, or nowhere known yet, must say so, or the click looks like
+// it just did nothing. Every ephemeral-visit entry point asks here, so no
+// path can fail silently.
 func (a *App) scratchOrReport(p *pane.Pane) string {
-	s := a.scratchGridForPane(p)
-	if s == "" {
+	s, known := a.scratchFor(p)
+	switch {
+	case !known:
+		// The visit is a gesture on a pane that is showing its grid, so this
+		// is the rare mid-load click; the draw that follows fetches, and the
+		// next attempt has an answer.
+		a.reportErr(errsurface.Info, "ephemeral",
+			"this grid is still loading — try the visit again in a moment")
+	case s == "":
 		a.reportErr(errsurface.Error, "ephemeral",
 			"nowhere to open an ephemeral visit: this grid carries no scratch grid")
 	}
@@ -1738,24 +1748,34 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 	})
 }
 
-// isEphemeralTile reports whether t is an ephemeral (scratch-grid) tile of the
-// plugin pane p sits in. It is the one client-side derivation of "ephemeral":
-// the tile's grid is the plugin's scratch grid. Both facts are server-owned —
-// Grid.ScratchGridID rides on the grid, chained through mounts — so no new
-// wire field is needed. Ephemeral tiles are deleted on ascent, and the
-// descended pane border goes gray to say so.
-func (a *App) isEphemeralTile(p *pane.Pane, t *rpc.Tile) bool {
-	s := a.scratchGridForPane(p)
-	return s != "" && t.GridID == s
+// certainlyEphemeral: t is an ephemeral (scratch-grid) tile of the pane's
+// grid, AND that is known. It is what the ACTS read — delete it on ascent,
+// promote it off the crumb, draw the gray dies-on-ascent border — because
+// each of those is irreversible or a promise, and none may be made on a
+// guess. An unloaded grid answers no, and the read kicked the fetch that
+// makes the next answer real.
+func (a *App) certainlyEphemeral(p *pane.Pane, t *rpc.Tile) bool {
+	eph, known := scratch.Ephemeral(a.scratchGridOf(p), t.GridID)
+	return known && eph
+}
+
+// possiblyEphemeral: t is ephemeral, or it is not known yet. It is what the
+// DURABLE WRITES read — persisting a visit's scroll, its url trail, a freeze
+// intent, or re-anchoring its pane onto its own grid — because a write made
+// about a visit that is about to die leaves a mark the user never asked for,
+// while a write skipped costs only that it is made a moment later.
+func (a *App) possiblyEphemeral(p *pane.Pane, t *rpc.Tile) bool {
+	eph, known := scratch.Ephemeral(a.scratchGridOf(p), t.GridID)
+	return eph || !known
 }
 
 // leavingEphemeral is the decision that a pane leaving tile t deletes it: the
-// tile is ephemeral and no other pane still shows it (pane.OtherPaneShows,
-// since a split clones the visit). Every ascent-shaped path — the animated
-// ascent, the instant pop, promotion onto a grid — asks here, so no
-// path can forget the guard.
+// tile is known to be ephemeral and no other pane still shows it
+// (pane.OtherPaneShows, since a split clones the visit). Every ascent-shaped
+// path — the animated ascent, the instant pop, promotion onto a grid — asks
+// here, so no path can forget the guard.
 func (a *App) leavingEphemeral(p *pane.Pane, t *rpc.Tile) bool {
-	return a.isEphemeralTile(p, t) && !a.tree.OtherPaneShows(p.ID, t.ID)
+	return a.certainlyEphemeral(p, t) && !a.tree.OtherPaneShows(p.ID, t.ID)
 }
 
 // deleteEphemeralTile removes an ascended-from ephemeral tile — gray means
@@ -1932,7 +1952,7 @@ func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, c
 		return
 	}
 	t, ok := a.descendedTile(op)
-	if !ok || t.Kind != rpc.KindURL || !a.isEphemeralTile(op, &t) {
+	if !ok || t.Kind != rpc.KindURL || !a.certainlyEphemeral(op, &t) {
 		return
 	}
 	url := t.URLString

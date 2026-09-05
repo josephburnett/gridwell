@@ -103,7 +103,7 @@ func (a *App) captureWorkspaceTree(tileID, idPrefix string, origin pane.Pane) *p
 				if cp.ContentID() == "" {
 					return
 				}
-				if tile := a.findTileByID(cp.ContentID()); tile != nil && a.isEphemeralTile(cp, tile) {
+				if tile := a.findTileByID(cp.ContentID()); tile != nil && a.possiblyEphemeral(cp, tile) {
 					cp.Pop()
 				}
 			})
