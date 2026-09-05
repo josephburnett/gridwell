@@ -190,11 +190,8 @@ func tileCopy(n *rpc.Tile) *rpc.Tile {
 // project host state — and false for a Gridwell-owned grid or an unknown
 // grid id. It wraps the cache lookup so callers read the declaration.
 func (a *App) gridHostContent(gridID string) bool {
-	g, ok := a.c.Grid(gridID)
-	if !ok {
-		return false
-	}
-	return g.Meta.HostContent
+	g, _ := a.c.Grid(gridID)
+	return g.HostContent()
 }
 
 // dropCrossNamespace reports whether the drag's source grid and t's

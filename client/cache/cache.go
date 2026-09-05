@@ -54,6 +54,19 @@ type Grid struct {
 	Tiles map[string]rpc.Tile
 }
 
+// HostContent reports the grid's declared host_content: every row in it
+// projects host state, so it draws in the "outside Gridwell" treatment. The
+// declaration is the plugin's, which is how the client never learns plugin
+// kinds. Nil-safe, because a grid the client has not fetched declares
+// nothing.
+func (g *Grid) HostContent() bool { return g != nil && g.Meta.HostContent }
+
+// Stale reports that this grid is a remembering rather than an answer — a
+// source gone dark, or a serve-first reply whose refresh is still out. It is
+// one bar chip and never moves or restyles a tile. Nil-safe for the same
+// reason as HostContent.
+func (g *Grid) Stale() bool { return g != nil && g.Meta.Stale }
+
 // New returns an empty cache.
 func New() *Cache {
 	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{}}

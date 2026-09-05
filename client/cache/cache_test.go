@@ -636,3 +636,26 @@ func TestDirtyAccessors(t *testing.T) {
 		t.Fatalf("after save DirtyTileIDs = %v, want empty", ids)
 	}
 }
+
+// TestGridDeclarationsAreNilSafe pins the two declaration readers on Grid.
+// The nil receiver is the case the callers need: a renderer holding a grid it
+// has not fetched asks anyway, and "not known" answers no rather than
+// panicking or forcing every call site to spell the nil check.
+func TestGridDeclarationsAreNilSafe(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1", HostContent: true, Stale: true}, nil)
+	c.PutGrid(rpc.Grid{ID: "2"}, nil)
+
+	g, ok := c.Grid("1")
+	if !ok || !g.HostContent() || !g.Stale() {
+		t.Errorf("declared grid: HostContent=%v Stale=%v, want both true", g.HostContent(), g.Stale())
+	}
+	plain, ok := c.Grid("2")
+	if !ok || plain.HostContent() || plain.Stale() {
+		t.Errorf("undeclared grid: HostContent=%v Stale=%v, want both false", plain.HostContent(), plain.Stale())
+	}
+	var missing *Grid
+	if missing.HostContent() || missing.Stale() {
+		t.Error("an unfetched grid declares nothing")
+	}
+}

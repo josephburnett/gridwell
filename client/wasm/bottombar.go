@@ -137,7 +137,7 @@ func (a *App) drawStaleChip(bx, top, bw float64) {
 		return
 	}
 	g, ok := a.c.Grid(a.gridIDForPane(p))
-	if !ok || !g.Meta.Stale {
+	if !ok || !g.Stale() {
 		return
 	}
 	const chipW, chipH = 52.0, 16.0

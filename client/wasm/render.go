@@ -725,7 +725,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 				}
 			} else {
-				inHost := g != nil && g.Meta.HostContent
+				inHost := g.HostContent()
 				for _, n := range g.Tiles {
 					if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.ID) {
 						continue
@@ -1272,7 +1272,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 	hiddenTileID string,
 ) {
 	c := a.cctx
-	childInHost := child != nil && child.Meta.HostContent
+	childInHost := child.HostContent()
 	// Scale the inner-tile border so a child grid viewed from a distance
 	// keeps its borders proportionate to the cells. Full-size live tiles
 	// use 2px; previews glide down with the cell scale.
@@ -1423,7 +1423,7 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 			in.Ephemeral = a.certainlyEphemeral(p, &tile)
 		}
 	}
-	if gridOK && g != nil && g.Meta.HostContent {
+	if gridOK && g.HostContent() {
 		in.InHostGrid = true
 	}
 	return in
