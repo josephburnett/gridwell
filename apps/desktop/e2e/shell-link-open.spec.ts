@@ -295,6 +295,11 @@ test('an OSC 8 hyperlink in a shell opens the visit below, not a browser', async
       ),
     url,
   );
+  // The fed row must RENDER before it can be clicked. A flake, 2026-09-05:
+  // once in a full combined run this poll never saw the marker, while the same
+  // built tree passed it four times in isolation — the sequence was fed and
+  // never reached the buffer. No mechanism yet; docs/flake-ledger.md carries
+  // the evidence.
   const markerRow = (t: string) => t.split('\n').findIndex((l) => l.includes('OSC8CLICKME'));
   await expect
     .poll(
