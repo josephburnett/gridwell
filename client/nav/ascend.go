@@ -181,7 +181,7 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 		// goes away; for a shell the plugin kills its tmux session too. The
 		// answer must be a KNOWN yes, and no other pane may still show it,
 		// since a split clones the visit.
-		eph, known := scratch.Ephemeral(lw.PaneScratch, file.GridID)
+		eph, known := scratch.Ephemeral(p.Scratch, file.GridID)
 		ephemeral := eph && known && !w.otherPaneShows(p.ID, file.ID)
 		if file.WebContent() {
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,

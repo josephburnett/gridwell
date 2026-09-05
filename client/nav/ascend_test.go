@@ -43,6 +43,7 @@ func TestAscendPlans(t *testing.T) {
 		name    string
 		pane    PaneView
 		leave   LeaveWorld
+		scratch scratch.Grid
 		animate bool
 		want    []EffectKind
 	}{{
@@ -97,19 +98,19 @@ func TestAscendPlans(t *testing.T) {
 			EffInstallPlace, EffClearSelection, EffFetchGrid,
 			EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
-		name: "leaving an ephemeral visit deletes it without freezing",
-		pane: contentPane("pane1", "r1"),
-		leave: LeaveWorld{DescendedTile: urlRow,
-			PaneScratch: scratch.Grid{Cached: true, ScratchGridID: "sg"}},
+		name:    "leaving an ephemeral visit deletes it without freezing",
+		pane:    contentPane("pane1", "r1"),
+		leave:   LeaveWorld{DescendedTile: urlRow},
+		scratch: scratch.Grid{Cached: true, ScratchGridID: "sg"},
 		animate: true,
 		want: []EffectKind{EffCancelTransition, EffSaveText, EffCloseStream,
 			EffDeleteEphemeral, EffStartTransition,
 			EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
-		name: "an unloaded grid cannot say ephemeral: freeze, do not delete",
-		pane: contentPane("pane1", "r1"),
-		leave: LeaveWorld{DescendedTile: urlRow,
-			PaneScratch: scratch.Grid{}},
+		name:    "an unloaded grid cannot say ephemeral: freeze, do not delete",
+		pane:    contentPane("pane1", "r1"),
+		leave:   LeaveWorld{DescendedTile: urlRow},
+		scratch: scratch.Grid{},
 		animate: true,
 		want: []EffectKind{EffCancelTransition, EffSaveText, EffCloseStream,
 			EffStartTransition, EffRefreshOverlay, EffScheduleURLUpdate},
@@ -118,6 +119,7 @@ func TestAscendPlans(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			w := baseWorld(c.pane)
+			w.Panes[0].Scratch = c.scratch
 			lw := c.leave
 			w.Leave = &lw
 			plan := New().Do(ascendGesture("pane1", 1, c.animate), w)
@@ -134,8 +136,10 @@ func TestAscendPlans(t *testing.T) {
 func TestAscendEphemeralWithASplitSiblingDoesNotDelete(t *testing.T) {
 	urlRow := &rpc.Tile{ID: "r1", Kind: rpc.KindURL, GridID: "sg", X: 2, Y: 2, W: 3, H: 2}
 	w := baseWorld(contentPane("pane1", "r1"), contentPane("pane2", "r1"))
-	w.Leave = &LeaveWorld{DescendedTile: urlRow,
-		PaneScratch: scratch.Grid{Cached: true, ScratchGridID: "sg"}}
+	w.Leave = &LeaveWorld{DescendedTile: urlRow}
+	for i := range w.Panes {
+		w.Panes[i].Scratch = scratch.Grid{Cached: true, ScratchGridID: "sg"}
+	}
 	plan := New().Do(ascendGesture("pane1", 1, true), w)
 
 	for _, e := range plan.Effects {

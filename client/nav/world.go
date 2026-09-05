@@ -15,7 +15,7 @@ import (
 //
 // Facts the machine PROJECTS rather than receives, because a snapshot field
 // would be a copy: pane.FramingTarget, pane.FramingWriters, scratch.Ephemeral
-// over PaneScratch, pane.StillDescended, pane.ContentPanes, pane.TakeOver,
+// over PaneView.Scratch, pane.StillDescended, pane.ContentPanes, pane.TakeOver,
 // OtherPaneShows, zoomtrans.*, shellconn.DecideAutoLive,
 // textedit.DescentMode, urlwalk.Walk.
 //
@@ -41,6 +41,12 @@ type PaneView struct {
 	// path. Resolved by the gatherer because the walk reads the cache and
 	// kicks its own fetches.
 	GridID string
+	// Scratch is that grid as the scratch rule reads it — the stamp a visit
+	// from this pane lands in, and whether it is known yet. It is a per-pane
+	// fact, so it rides the pane rather than each verb's own half: the
+	// ascent's ephemeral delete and the restore's heal ask the same question
+	// and must not be able to disagree.
+	Scratch scratch.Grid
 }
 
 // Notice is a resolved errsurface report — pluginhealth's wording for a
@@ -68,8 +74,6 @@ type DoorWorld struct {
 	Health *Notice
 	// ReadOnly is tileReadOnly for the door row.
 	ReadOnly bool
-	// PaneScratch is the pane's grid as the scratch rule reads it.
-	PaneScratch scratch.Grid
 }
 
 // LeaveWorld is the ascent's extra half: the frame being left, resolved
@@ -91,8 +95,6 @@ type LeaveWorld struct {
 	// nested grid, the plugin's persisted root view for a root). nil when
 	// nothing is persisted or the owning row is not cached.
 	LandingView *Viewport
-	// PaneScratch is the pane's grid as the scratch rule reads it.
-	PaneScratch scratch.Grid
 }
 
 // World is one navigation snapshot.

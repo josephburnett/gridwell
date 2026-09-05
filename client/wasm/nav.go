@@ -79,7 +79,7 @@ func (a *App) navWorld(g nav.Gesture) nav.World {
 	w := a.navWorldCommon()
 	switch g.Kind {
 	case nav.GestureDescend, nav.GestureReEngage:
-		w.Door = a.navWorldForDescend(g.PaneID, &g.Door)
+		w.Door = a.navWorldForDescend(&g.Door)
 	case nav.GestureAscend:
 		w.Leave = a.navWorldForAscend(g.PaneID)
 	}
@@ -108,6 +108,9 @@ func (a *App) navWorldCommon() nav.World {
 	rects := a.layoutPanes()
 	a.tree.Walk(func(p *pane.Pane) {
 		r, onScreen := rects[p.ID]
+		// One walk of the place per pane: the grid its place names, and that
+		// grid's scratch stamp, are the same read.
+		gid := a.gridIDForPane(p)
 		w.Panes = append(w.Panes, nav.PaneView{
 			ID:          p.ID,
 			Stack:       p.Stack.Clone(),
@@ -119,7 +122,8 @@ func (a *App) navWorldCommon() nav.World {
 			TextMode:    p.TextMode,
 			Rect:        r,
 			OnScreen:    onScreen,
-			GridID:      a.gridIDForPane(p),
+			GridID:      gid,
+			Scratch:     a.scratchGridIn(gid),
 		})
 		w.Animating[p.ID] = a.trans.Active(p.ID)
 	})
@@ -134,14 +138,11 @@ func (a *App) navWorldCommon() nav.World {
 
 // navWorldForDescend resolves the doorway half: the declarations only the
 // shim can read, each through the predicate that owns it.
-func (a *App) navWorldForDescend(paneID string, tile *rpc.Tile) *nav.DoorWorld {
+func (a *App) navWorldForDescend(tile *rpc.Tile) *nav.DoorWorld {
 	d := &nav.DoorWorld{
 		DeadLink: a.deadLink(tile),
 		IsLink:   isLinkTile(tile),
 		ReadOnly: a.tileReadOnly(tile),
-	}
-	if p := a.tree.FindPane(paneID); p != nil {
-		d.PaneScratch = a.scratchGridOf(p)
 	}
 	if tile.ChildGridID != "" {
 		_, d.ChildGridCached = a.c.Grid(tile.ChildGridID)
@@ -177,7 +178,6 @@ func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 	if p == nil {
 		return lw
 	}
-	lw.PaneScratch = a.scratchGridOf(p)
 	own := p.FramingTarget()
 	switch {
 	case own.Content:

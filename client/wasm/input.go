@@ -1650,7 +1650,13 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 // for the one place that lands in a content frame without ever having drawn
 // the grid behind it.
 func (a *App) scratchGridOf(p *pane.Pane) scratch.Grid {
-	g, ok := a.c.Grid(a.gridIDForPane(p))
+	return a.scratchGridIn(a.gridIDForPane(p))
+}
+
+// scratchGridIn is that read against an already-resolved grid id, for the
+// callers that have just walked the place and must not walk it twice.
+func (a *App) scratchGridIn(gridID string) scratch.Grid {
+	g, ok := a.c.Grid(gridID)
 	if !ok {
 		return scratch.Grid{}
 	}
