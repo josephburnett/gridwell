@@ -26,7 +26,7 @@ const (
 	// EffClearSelection drops the pane's selection: PaneID.
 	EffClearSelection
 	// EffRelocatePane moves a pane to where another stands and descends it
-	// into a tile: PaneID, DestPaneID, TileID, Foot, Zoom. (Promote's.)
+	// into a tile: PaneID, DestPaneID, TileID, Foot, Zoom.
 	EffRelocatePane
 	// EffForgetPane drops every session resource keyed to a pane: PaneID.
 	EffForgetPane
@@ -76,7 +76,8 @@ const (
 	// EffOpenStream opens one: PaneID, TileID, Stream.
 	EffOpenStream
 	// EffPlaceURLView re-parents a live url view onto a pane: PaneID,
-	// TileID. (Promote's.)
+	// TileID, Tile (the row by value — a just-created tile is in no cached
+	// grid yet).
 	EffPlaceURLView
 	// EffRefreshOverlay re-syncs the text and rendered overlays. No payload.
 	EffRefreshOverlay

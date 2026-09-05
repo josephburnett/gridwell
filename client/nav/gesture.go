@@ -18,7 +18,7 @@ const (
 	// GestureRestoreFromHistory installs a whole session place: Raw.
 	GestureRestoreFromHistory
 	// GesturePromote turns an ephemeral visit into a persistent tile:
-	// PaneID, DestPaneID, OldID, Created. (Still the shim's.)
+	// PaneID, DestPaneID, OldID, Created.
 	GesturePromote
 	// GestureEnterLevel descends the window into a pane tile: PaneID, Door.
 	GestureEnterLevel

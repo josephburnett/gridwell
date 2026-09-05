@@ -527,7 +527,17 @@ otherwise.
 
 7. **`pane.ContentPanes` is deleted.** The machine projects "which panes are in
    a content descent" over `Stack.ContentID`, per §3's projection list, and the
-   tree-shaped form had no caller left.
+   tree-shaped form had no caller left. `Tree.OtherPaneShows` goes the same way
+   with the promote, and `leavingEphemeral` with it: the delete decision is
+   `scratch.Ephemeral` plus that projection, and it is now spelled once, in the
+   machine, for both the ascent and the promote.
+
+8. **The promote's guard is evaluated at gesture time, not at resume.** The
+   await it continues is a MUTATION — the create — and mutations are the
+   dispatcher's, not the machine's, so `Promote` is a gesture the shim hands
+   over when the row lands rather than a token it resumes. Its precondition is
+   the same `Guard{DescendedIn}` value a continuation would carry, evaluated by
+   the same code: the moved-on rule stays spelled once.
 
 ## Open question for the owner
 

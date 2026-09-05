@@ -105,6 +105,22 @@ type LevelWorld struct {
 	Tile *rpc.Tile
 }
 
+// PromoteWorld is the promote's extra half: the ephemeral row being promoted
+// away from, as the cache last held it (cachedTileByID, which reaches an
+// off-grid scratch tile). nil leaves it undeleted rather than guessing about a
+// row nobody can see.
+type PromoteWorld struct {
+	OldTile *rpc.Tile
+}
+
+// old is the row being promoted away from, "" when there is no promote half.
+func (pw *PromoteWorld) old() *rpc.Tile {
+	if pw == nil {
+		return nil
+	}
+	return pw.OldTile
+}
+
 // RestoreTile is one cached row as the URL restore reads it: what the walk
 // needs to classify it, and what a content leaf's frame is restored from.
 type RestoreTile struct {
@@ -199,11 +215,13 @@ type World struct {
 	ShellAliveKnown map[string]bool
 
 	// Door is set for a descent, Leave for an ascent hop, Restore for a URL
-	// restore and every step of its walk, and Level for a pane-tile landing.
+	// restore and every step of its walk, Level for a pane-tile landing, and
+	// Promote for a promote.
 	Door    *DoorWorld
 	Leave   *LeaveWorld
 	Restore *RestoreWorld
 	Level   *LevelWorld
+	Promote *PromoteWorld
 }
 
 // Pane returns the pane view for id.

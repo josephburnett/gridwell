@@ -433,27 +433,6 @@ func TestRelocateToFollowsTheDestination(t *testing.T) {
 		t.Fatal("place must be a copy, not shared with the destination pane")
 	}
 }
-
-func TestOtherPaneShows(t *testing.T) {
-	tr, a, b := twoPaneTree(t)
-	tr.FindPane(a).Push(Frame{Door: "tile-1", Content: true})
-	if tr.OtherPaneShows(a, "tile-1") {
-		t.Fatal("the pane's own descent is not another pane's")
-	}
-	tr.FindPane(b).Push(Frame{Door: "tile-1", Content: true}) // a split clones the descent
-	if !tr.OtherPaneShows(a, "tile-1") || !tr.OtherPaneShows(b, "tile-1") {
-		t.Fatal("each pane must see the other's clone of the same visit")
-	}
-	tr.FindPane(b).Pop()
-	tr.FindPane(b).Push(Frame{Door: "tile-2", Content: true})
-	if tr.OtherPaneShows(a, "tile-1") {
-		t.Fatal("a sibling on a different tile does not hold tile-1")
-	}
-}
-
-// The pane's grid notice must say "unavailable" once the fetch has failed —
-// two draw sites once disagreed: the centered one said "loading…" forever
-// over a grid the strip had already reported dead.
 func TestGridNotice(t *testing.T) {
 	if got := GridNotice("gitlab", false); got != "loading gitlab…" {
 		t.Errorf("loading = %q", got)

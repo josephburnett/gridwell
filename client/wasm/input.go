@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
@@ -1654,15 +1655,6 @@ func (a *App) possiblyEphemeral(p *pane.Pane, t *rpc.Tile) bool {
 	return eph || !known
 }
 
-// leavingEphemeral is the decision that a pane leaving tile t deletes it: the
-// tile is known to be ephemeral and no other pane still shows it
-// (pane.OtherPaneShows, since a split clones the visit). Every ascent-shaped
-// path — the animated ascent, the instant pop, promotion onto a grid — asks
-// here, so no path can forget the guard.
-func (a *App) leavingEphemeral(p *pane.Pane, t *rpc.Tile) bool {
-	return a.certainlyEphemeral(p, t) && !a.tree.OtherPaneShows(p.ID, t.ID)
-}
-
 // deleteEphemeralTile removes an ascended-from ephemeral tile — gray means
 // gone. The row is deleted, and for a shell the plugin kills its tmux
 // session, and all its processes, as part of the delete.
@@ -1760,9 +1752,9 @@ func (a *App) openLinkBelow(paneID, url string) {
 // sub-minimum split is this caller's job). The clone inherits the source's
 // content frame, which a live view cannot duplicate — the same rule as
 // commitSplit — so the new pane ascends just the content level and shows
-// the grid containing the tile. The ephemeral delete-on-ascent is guarded
-// by leavingEphemeral, so that ascent never deletes the tile the source
-// pane still shows. That shedding is instant: the clone is born in the same
+// the grid containing the tile. The ephemeral delete-on-ascent asks
+// whether another pane still shows the tile, so that ascent never deletes the
+// tile the source pane still shows. That shedding is instant: the clone is born in the same
 // place as the source with nothing on screen to zoom out of, and the user made
 // no ascent gesture, so animating it would be a second transition for one
 // gesture — and one that lands wearing the trace of a departure that never
@@ -1829,8 +1821,10 @@ func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {
 // originPaneID into a persistent url tile at (cellX, cellY) of grid gid — the
 // drop target's grid — with destPaneID the pane the visit relocates into: the
 // bar crumb dragged onto a grid. The tile is created with the visit's current
-// address, since the page may have navigated, and finishPromote then moves
-// the visit onto it.
+// address, since the page may have navigated, and the promote verb then moves
+// the visit onto it: the view's final frame, title and trail freeze onto the
+// new tile, the ephemeral row dies unless a split sibling still shows it, the
+// pane relocates, and the page goes live again on the new tile.
 func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, cellY int64) {
 	op := a.tree.FindPane(originPaneID)
 	if op == nil {
@@ -1850,45 +1844,10 @@ func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, c
 	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateURL(ctx, req)
 	}, func(created rpc.Tile) {
-		a.finishPromote(originPaneID, destID, oldID, created)
+		// The create was the await: what happens now — the freeze onto the new
+		// row, the ephemeral delete, the relocation, going live again — is the
+		// promote verb, planned against the world as it is when the row lands.
+		a.runGesture(nav.Gesture{Kind: nav.GesturePromote, PaneID: originPaneID,
+			DestPaneID: destID, OldID: oldID, Created: created})
 	})
-}
-
-// finishPromote moves the live visit from the ephemeral row onto the
-// persistent tile just created: the view's final frame, title, and trail
-// freeze onto the new tile, never the row about to die; the ephemeral row is
-// deleted, unless a split sibling still shows it; the pane relocates to the
-// new tile's grid (pane.RelocateTo, so the nav chain and the next ascent read
-// the new place, with the destination pane's ascent viewport); and the page
-// goes live again on the new tile.
-func (a *App) finishPromote(originPaneID, destPaneID, oldID string, created rpc.Tile) {
-	op := a.tree.FindPane(originPaneID)
-	dp := a.tree.FindPane(destPaneID)
-	if !pane.StillDescended(op, oldID) || dp == nil {
-		return // moved on mid-flight: the tile stays where it was dropped
-	}
-	a.closeURLStreamTo(op.ID, &freezeTarget{tileID: created.ID, gridID: created.GridID}, true)
-	// The row dies only if no sibling pane still shows the visit; a split
-	// clone keeps it and deletes it on its own ascent. The same guard every
-	// ascent applies, through the same door.
-	if old := a.cachedTileByID(oldID); old != nil && a.leavingEphemeral(op, old) {
-		a.deleteEphemeralTile(old.GridID, oldID)
-	}
-	// The pane follows its content: RelocateTo replaces the visit's frame
-	// with one on the destination's stack, so the next ascent lands where the
-	// tile now lives. There is no separate saved viewport to keep in step.
-	// The frame is minted by pane.ContentFrame — the constructor descendContent
-	// uses — at the zoom a descent into this tile would have landed on, so the
-	// promoted pane is a descended pane and its ascent has a real overtake to
-	// zoom out from. There is no zoom floor here: a promote has no prior grid
-	// zoom in this pane to refuse to zoom out past.
-	foot := pane.Footprint{X: created.X, Y: created.Y, W: created.W, H: created.H}
-	op.RelocateTo(dp, created.ID, foot, textFitZoom(paneRectFor(a, op), created.W, created.H))
-	// The content scale follows the frame, as it does at the end of every
-	// descent and every ascent landing (issue #82).
-	op.TextZoom = a.textScaleFor(op)
-	a.placeURLView(op.ID, created)
-	a.refreshFileOverlay()
-	a.scheduleURLUpdate()
-	a.draw()
 }

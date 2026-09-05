@@ -359,21 +359,6 @@ func (p *Pane) RelocateTo(dest *Pane, tileID string, foot Footprint, zoom float6
 	p.Push(ContentFrame(tileID, foot, zoom, "", 0, 0))
 }
 
-// OtherPaneShows reports whether any leaf other than paneID is descended into
-// tileID. It is the one guard on delete-on-ascent for an ephemeral tile:
-// splitting an ephemeral visit clones the descent, and the clone's ascent, or
-// its promotion onto a grid, must not delete the row the source pane still
-// shows.
-func (t *Tree) OtherPaneShows(paneID, tileID string) bool {
-	found := false
-	t.Walk(func(p *Pane) {
-		if p.ID != paneID && p.ContentID() == tileID {
-			found = true
-		}
-	})
-	return found
-}
-
 // GridNotice is the one wording of a pane whose grid is not in the cache:
 // the wait while a fetch is in flight (a plugin building its first
 // listing can take a while), or the failure once the last fetch failed.

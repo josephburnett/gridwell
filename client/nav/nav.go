@@ -246,8 +246,9 @@ func (m *Machine) Do(g Gesture, w World) Plan {
 		return m.leaveLevels(g, w)
 	case GestureLandLevel:
 		return m.landLevel(g, w)
+	case GesturePromote:
+		return m.promote(g, w)
 	}
-	// Promote is the last shim-side verb; it never reaches here.
 	return Plan{}
 }
 

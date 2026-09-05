@@ -38,6 +38,8 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.clearSelected(e.PaneID)
 	case nav.EffForgetPane:
 		a.forgetPane(e.PaneID)
+	case nav.EffRelocatePane:
+		a.navRelocatePane(e)
 	case nav.EffInstallLevel:
 		a.navInstallLevel(e)
 	case nav.EffPopLevel:
@@ -66,6 +68,8 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.navCloseStream(e)
 	case nav.EffOpenStream:
 		a.navOpenStream(e)
+	case nav.EffPlaceURLView:
+		a.placeURLView(e.PaneID, e.Tile)
 	case nav.EffRefreshOverlay:
 		a.refreshFileOverlay()
 	case nav.EffScaleContent:
@@ -210,6 +214,17 @@ func (a *App) navCloseStream(e nav.Effect) {
 		// socket: closeShellStream handles all three.
 		a.closeShellStream(e.PaneID, e.Freeze)
 	}
+}
+
+// navRelocatePane moves a pane to where another stands and descends it into a
+// tile: the promote gesture's landing. pane.RelocateTo is the one mover.
+func (a *App) navRelocatePane(e nav.Effect) {
+	p := a.tree.FindPane(e.PaneID)
+	dest := a.tree.FindPane(e.DestPaneID)
+	if p == nil || dest == nil {
+		return
+	}
+	p.RelocateTo(dest, e.TileID, e.Foot, e.Zoom)
 }
 
 func (a *App) navOpenStream(e nav.Effect) {
