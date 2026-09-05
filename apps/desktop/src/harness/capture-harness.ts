@@ -77,9 +77,7 @@ app.whenReady().then(async () => {
   const FIRST_URL = 'data:text/html,' + encodeURIComponent('<title>First</title>first');
   const SECOND_URL = 'data:text/html,' + encodeURIComponent('<title>Second</title>second');
   await registry.place('paneb', 'u1/46', FIRST_URL, { x: 0, y: 0, width: 400, height: 300 });
-  const wcb = (
-    registry as unknown as { entries: Map<string, { view: { webContents: Electron.WebContents } }> }
-  ).entries.get('paneb')!.view.webContents;
+  const wcb = registry.webContentsFor('paneb')!;
   const loaded = (url: string) =>
     new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error(`no did-finish-load for ${url.slice(0, 40)}`)), 6000);
@@ -129,9 +127,7 @@ app.whenReady().then(async () => {
     fail('dead-view scenario: view produced no frame within 6s');
   }
   // Destroy the renderer out from under the registry: the crashed-tab shape.
-  (reg2 as unknown as { entries: Map<string, { view: { webContents: { close(): void } } }> })
-    .entries.get('pane2')!
-    .view.webContents.close();
+  reg2.webContentsFor('pane2')!.close();
   await new Promise((r) => setTimeout(r, 300));
   const deadFreeze = await reg2.remove('pane2');
   if (deadFreeze.jpegBase64 !== '') fail('dead view yielded a non-empty freeze');
@@ -155,11 +151,7 @@ app.whenReady().then(async () => {
   if ((await waitForNonEmptyCapture(reg3, 'pane3', 6000)).length === 0) {
     fail('touch scenario: view produced no frame within 6s');
   }
-  const wc3 = (
-    reg3 as unknown as {
-      entries: Map<string, { view: { webContents: Electron.WebContents } }>;
-    }
-  ).entries.get('pane3')!.view.webContents;
+  const wc3 = reg3.webContentsFor('pane3')!;
   await wc3.executeJavaScript('window.scrollTo(0, 1000)');
   // The preload forwards physical screen coords, and the registry converts them
   // back through getContentBounds and the view bounds. The view sits at content
@@ -206,9 +198,7 @@ app.whenReady().then(async () => {
   if (regF.focusedFor('paneU') !== false) {
     fail(`place(focused=false) recorded focused=${String(regF.focusedFor('paneU'))}`);
   }
-  const wcU = (
-    regF as unknown as { entries: Map<string, { view: { webContents: Electron.WebContents } }> }
-  ).entries.get('paneU')!.view.webContents;
+  const wcU = regF.webContentsFor('paneU')!;
   // Force the grab the guard exists for. Chromium emits 'focus' on the
   // webContents, which is where the guard sits.
   wcU.focus();
@@ -222,9 +212,7 @@ app.whenReady().then(async () => {
   const regG = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push('WRONG:' + ev.paneId) });
   await regG.place('paneG', 'u1/48', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, true);
   if (regG.focusedFor('paneG') !== true) fail('place(focused=true) did not record focused');
-  const wcG = (
-    regG as unknown as { entries: Map<string, { view: { webContents: Electron.WebContents } }> }
-  ).entries.get('paneG')!.view.webContents;
+  const wcG = regG.webContentsFor('paneG')!;
   wcG.focus();
   await new Promise((r) => setTimeout(r, 500));
   if (steals.some((s) => s.startsWith('WRONG:'))) fail('a view placed on the FOCUSED pane was bounced');
@@ -280,6 +268,85 @@ app.whenReady().then(async () => {
   if (!wcC.isFocused()) fail("the user's own click did not leave the view holding OS focus");
   await regC.remove('paneC');
   console.log('click-into-unfocused ok: the press explains the focus, no bounce');
+
+  // Park the view of a fresh steal-scenario registry on an unfocused pane with
+  // OS focus sitting on the root, which is the precondition every steal starts
+  // from. The placement's own grab is bounced first, so the recorder starts
+  // empty and only the deliberate grab below counts.
+  const armSteal = async (paneId: string, tileId: string, steals: string[]) => {
+    const reg = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push(ev.paneId) });
+    await reg.place(paneId, tileId, DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false);
+    const wc = reg.webContentsFor(paneId)!;
+    await new Promise((r) => setTimeout(r, 800));
+    rootView.webContents.focus();
+    await new Promise((r) => setTimeout(r, 300));
+    if (wc.isFocused()) fail(`${paneId}: setup left the view holding OS focus`);
+    steals.length = 0;
+    return { reg, wc };
+  };
+  const waitFor = async (ok: () => boolean, timeoutMs: number): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (ok()) return true;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    return ok();
+  };
+
+  // ── a page grab is bounced, then confirmed once, then stops ──────────────
+  // Chromium's widget-focus commit can land after the bounce with no further
+  // focus event, so the guard confirms once at FOCUS_SETTLE_MS. Nothing here
+  // hands focus back, so the view still holds it at the confirmation and the
+  // second bounce fires. It must then stop: a chain would report a steal every
+  // 120 ms forever for a view the app has given up on.
+  const settleSteals: string[] = [];
+  const { reg: regD, wc: wcD } = await armSteal('paneD', 'u1/50', settleSteals);
+  wcD.focus(); // the page-initiated grab: no press behind it
+  if (!(await waitFor(() => settleSteals.length >= 2, 4000))) {
+    fail(`the settle arm did not confirm the bounce (${settleSteals.length} steals)`);
+  }
+  await new Promise((r) => setTimeout(r, 600));
+  if (settleSteals.length !== 2) fail(`the bounce chained past its confirmation (${settleSteals.length} steals)`);
+  await regD.remove('paneD');
+  console.log('settle arm ok: bounce, one confirmation, no chain');
+
+  // ── a press between the bounce and its confirmation stops the second ─────
+  // The user clicks into the pane just after a page grabbed focus. The press is
+  // counted in the browser process, the confirmation sees the count risen, and
+  // the view keeps the focus the click gave it.
+  const raceSteals: string[] = [];
+  const { reg: regE, wc: wcE } = await armSteal('paneE', 'u1/51', raceSteals);
+  wcE.focus();
+  if (!(await waitFor(() => raceSteals.length >= 1, 4000))) fail('paneE: the first bounce never fired');
+  wcE.sendInputEvent({ type: 'mouseDown', x: 200, y: 150, button: 'left', clickCount: 1 });
+  wcE.sendInputEvent({ type: 'mouseUp', x: 200, y: 150, button: 'left', clickCount: 1 });
+  await new Promise((r) => setTimeout(r, 600));
+  if (raceSteals.length !== 1) fail(`a press during the settle did not stop the second bounce (${raceSteals.length} steals)`);
+  await regE.remove('paneE');
+  console.log('press-during-settle ok: the second bounce is suppressed');
+
+  // ── the view dies under the settle timer ────────────────────────────────
+  // remove() cancels the timer, but that only covers a teardown that went
+  // through the registry. A render-process crash or a host-side close leaves
+  // the timer armed over a destroyed WebContents, where every read throws —
+  // uncaught inside a timer, which hangs main behind an error dialog. The
+  // scenario the code's comment warns about, and until now untested. Verified
+  // against the unguarded code: it does not report a phantom steal, it wedges,
+  // and this harness never reaches HARNESS PASS.
+  const deadSteals: string[] = [];
+  const { reg: regH, wc: wcH } = await armSteal('paneH', 'u1/52', deadSteals);
+  const uncaught: string[] = [];
+  const onUncaught = (err: Error) => uncaught.push(String(err));
+  process.on('uncaughtException', onUncaught);
+  wcH.focus();
+  if (!(await waitFor(() => wcH.isFocused(), 3000))) fail('paneH: the grab never landed');
+  wcH.close(); // destroyed behind the registry's back, timer still armed
+  await new Promise((r) => setTimeout(r, 800));
+  process.off('uncaughtException', onUncaught);
+  if (uncaught.length > 0) fail(`the settle timer threw over a destroyed view: ${uncaught[0]}`);
+  if (deadSteals.length > 0) fail(`a destroyed view reported a steal (${deadSteals.length})`);
+  await regH.remove('paneH');
+  console.log('died-under-settle ok: no throw, no phantom steal');
 
   console.log('HARNESS PASS');
   app.exit(0);

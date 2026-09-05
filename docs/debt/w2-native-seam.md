@@ -303,7 +303,7 @@ file; GAP means nothing exercises the path.
 | 9 | `remove` crash arm | PARTIAL — `capture-harness.ts` dead-view scenario proves the catch is entered and the freeze is empty, but its `onError` text is unasserted (the harness passes `{}` callbacks) |
 | 10 | `remove` detach-failure arm (`failed to detach live view`) | **GAP** |
 | 11 | `remove` `flushStorageData` / localStorage survival | **GAP** — the largest documented-but-untested claim in the file |
-| 12 | `remove` cancelling the pending `focusRecheck` | **GAP** |
+| 12 | `remove` cancelling the pending `focusSettle` | **GAP** |
 | 13 | `capture` failing streak → `onError` | **GAP** |
 | 14 | `capture` recovered → `onError` | **GAP** |
 | 15 | context menu, in-page right-click door | `e2e/url-context-menu.spec.ts` (both tests) |
@@ -318,15 +318,16 @@ file; GAP means nothing exercises the path.
 | 24 | `did-fail-load` filter → `onError` | `e2e/errsurface.spec.ts`; `viewutil.test.ts` filter + message |
 | 25 | `render-process-gone` → `onError` | **GAP** at the integration level — only `renderProcessGoneMessage` is unit-tested; the `getURL()` try/catch after a crash is untested |
 | 26 | focus steal: bounce on `focus` when unfocused | `e2e/url-focus-steal.spec.ts`; `capture-harness.ts` place-focus scenario |
-| 27 | focus steal: the click grace suppressing a bounce | **GAP** — the leftdown relay and `noteUserClick` do run in `e2e/live-view-focus.spec.ts`, but nothing asserts the grace suppresses a bounce |
-| 28 | focus steal: the `FOCUS_RECHECK_MS` arm | **GAP** — `url-focus-steal.spec.ts` passes on the first bounce alone |
-| 29 | focus steal: view died under the recheck timer | **GAP** — the exact hang the code's comment warns about |
+| 27 | focus steal: a user press suppressing a bounce | `capture-harness.ts` click-into-unfocused scenario (the grab, then the press, then no steal — the measured order) |
+| 28 | focus steal: the `FOCUS_SETTLE_MS` arm | `capture-harness.ts` settle-arm scenario (bounce, one confirmation, no chain) and press-during-settle scenario |
+| 29 | focus steal: view died under the settle timer | `capture-harness.ts` died-under-settle scenario; verified against the unguarded code, where it wedges |
 | 30 | `applyMinWidthZoom` / `setZoom` composition | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` (three units). The `setZoomFactor` try/catch and the `did-finish-load` re-apply are not separately asserted |
 | 31 | `goBack`, including the no-op at the start of history | `capture-harness.ts`; `contextmenu.test.ts` enablement flags |
 
-**Gap count: 13 GAP rows — 2, 6b, 7b, 10, 11, 12, 13, 14, 20, 25, 27, 28, 29 —
-plus 4 partials: 9, 18, 23, 30.** Rows 6b and 7b are split out of items 6 and 7
-because each has a covered half and an uncovered half.
+**Gap count: 10 GAP rows — 2, 6b, 7b, 10, 11, 12, 13, 14, 20, 25 — plus 4
+partials: 9, 18, 23, 30.** Rows 6b and 7b are split out of items 6 and 7
+because each has a covered half and an uncovered half. Rows 27, 28 and 29, the
+focus family, were closed by phase 2; 13 at the time this table was written.
 
 Every gap except 20 is an error or edge arm — the class this file's own
 comments argue hardest for ("must be loud", "must not fail silently", "hangs
@@ -359,10 +360,12 @@ Run M1–M3 and write the results into §5. Then:
 - Replace the `entries` cast in `capture-harness.ts` with a test-only accessor
   beside `viewBoundsFor` / `focusedFor`. A harness reaching through `private`
   is a seam that can rot silently.
-- If M2 holds, land the `input-event` correlation as its own commit, with the
-  measurement in the commit message and the constant deleted or re-scoped. If
-  M3 holds, land the root-blur replacement likewise. If either fails, write the
-  failure into §5 and leave the constant with the measurement in its comment.
+- M2 and M3 both came back negative as stated, and §5 says why. What they
+  established instead — the press reaches main before the renderer's stamp, and
+  the immediate bounce never takes — landed as the deferred press correlation
+  in the same commit as the extraction, because the extraction of a decision
+  that was measured wrong cannot preserve it. `USER_CLICK_FOCUS_GRACE_MS` is
+  deleted; `FOCUS_SETTLE_MS` carries M3 in its comment.
 
 **Done bar.** Each focus path in §6 has a named covering test. `make
 check-electron` and `make check-e2e` green. Every surviving constant has a
