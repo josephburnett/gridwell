@@ -195,7 +195,7 @@ func (a *App) descendContent(p *pane.Pane, file *rpc.Tile, after func()) {
 	// transition lands. URL tiles don't have a blob; their preview
 	// path goes through urlPreview instead — and so does a serves_page
 	// tile's (its descent is the page, not the document body).
-	if file.Kind == rpc.KindText && !file.ServesPage {
+	if file.TextDocument() {
 		// Source-backed bodies (fs files, the proc @info tile) are host
 		// state, not versioned content: their version is always 0, so a
 		// cache entry from the first open would match forever and the

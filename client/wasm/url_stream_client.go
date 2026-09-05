@@ -94,7 +94,7 @@ func (a *App) webAddress(t *rpc.Tile) string {
 	if t.Kind == rpc.KindURL {
 		return t.URLString
 	}
-	if t.ServesPage {
+	if t.PageContent() {
 		// ContentID is the one client-side link resolution. The door would
 		// re-resolve server-side, but every content op keys by the owner.
 		return rpc.PageURL(a.origin, a.contentToken, t.ContentID())
@@ -184,7 +184,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	}
 	r := paneRectFor(a, p)
 	b := contentViewBounds(r)
-	page := t.Kind != rpc.KindURL && t.ServesPage
+	page := t.PageContent()
 	// Every caller places into the descent the pane is already in — the
 	// descent's auto-live, the reconnect click, the promote's relocation —
 	// so the pane's own frame is the descent this view belongs to. For a

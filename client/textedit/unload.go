@@ -56,9 +56,11 @@ func FramingChanged(cur, next Framing) bool { return cur != next }
 
 // ModeInput is everything the descent-mode decision reads.
 type ModeInput struct {
-	Kind       string
-	ServesPage bool
-	ReadOnly   bool
+	// TextDocument: the row's content is its own document body
+	// (rpc.Tile.TextDocument, the owner). Nothing else has a text mode, so
+	// the kind and the page flag never travel here separately.
+	TextDocument bool
+	ReadOnly     bool
 	// Cached: the tile row is known (an uncached restore has no stored
 	// mode to honor).
 	Cached bool
@@ -68,16 +70,17 @@ type ModeInput struct {
 	Stored    string
 }
 
-// DescentMode is the one owner of which mode a text descent shows. URL and
-// serves_page tiles have no text/rendered mode ("" — the textarea overlay
-// never shows). A read-only text tile always shows rendered: never a caret
+// DescentMode is the one owner of which mode a text descent shows. A row
+// that is not a text document — a url, a shell, a serves_page tile — has no
+// text/rendered mode ("" — the textarea overlay never shows). A read-only
+// text tile always shows rendered: never a caret
 // over content the user can't change, and rendered is the selectable DOM
 // surface. A cursor URL forces text. Otherwise the stored mode, defaulting to
 // raw text for a never-opened or uncached tile. Every path that decides a
 // text mode — descent, session restore — reads this and never re-derives
 // it.
 func DescentMode(in ModeInput) string {
-	if in.Kind != rpc.KindText || in.ServesPage {
+	if !in.TextDocument {
 		return ""
 	}
 	if in.ReadOnly {

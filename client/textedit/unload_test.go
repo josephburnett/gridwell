@@ -53,13 +53,15 @@ func TestDescentModeTable(t *testing.T) {
 		in   ModeInput
 		want string
 	}{
-		{"url tile", ModeInput{Kind: rpc.KindURL, Cached: true, Stored: "text"}, ""},
-		{"page tile", ModeInput{Kind: rpc.KindText, ServesPage: true, Cached: true}, ""},
-		{"read-only is rendered even with a cursor url", ModeInput{Kind: rpc.KindText, ReadOnly: true, Cached: true, CursorURL: true, Stored: "text"}, rpc.TextModeRendered},
-		{"cursor url forces text", ModeInput{Kind: rpc.KindText, Cached: true, CursorURL: true, Stored: rpc.TextModeRendered}, rpc.TextModeText},
-		{"stored mode honored", ModeInput{Kind: rpc.KindText, Cached: true, Stored: rpc.TextModeRendered}, rpc.TextModeRendered},
-		{"never opened defaults to text", ModeInput{Kind: rpc.KindText, Cached: true}, rpc.TextModeText},
-		{"uncached restore defaults to text", ModeInput{Kind: rpc.KindText, Cached: false, Stored: rpc.TextModeRendered}, rpc.TextModeText},
+		// Which rows are documents is rpc.Tile.TextDocument's question
+		// (pinned there); here it is one input, and everything that is not
+		// one has no text mode at all.
+		{"not a document (url, shell, page tile)", ModeInput{Cached: true, Stored: "text"}, ""},
+		{"read-only is rendered even with a cursor url", ModeInput{TextDocument: true, ReadOnly: true, Cached: true, CursorURL: true, Stored: "text"}, rpc.TextModeRendered},
+		{"cursor url forces text", ModeInput{TextDocument: true, Cached: true, CursorURL: true, Stored: rpc.TextModeRendered}, rpc.TextModeText},
+		{"stored mode honored", ModeInput{TextDocument: true, Cached: true, Stored: rpc.TextModeRendered}, rpc.TextModeRendered},
+		{"never opened defaults to text", ModeInput{TextDocument: true, Cached: true}, rpc.TextModeText},
+		{"uncached restore defaults to text", ModeInput{TextDocument: true, Cached: false, Stored: rpc.TextModeRendered}, rpc.TextModeText},
 	}
 	for _, c := range cases {
 		if got := DescentMode(c.in); got != c.want {

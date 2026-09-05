@@ -267,6 +267,26 @@ func (t *Tile) WebContent() bool {
 	return t.Kind == KindURL || t.ServesPage
 }
 
+// TextDocument reports whether this tile's content is its own document body:
+// the tile that fetches a blob, carries text framing, and shows the markdown
+// face. It is the complement of the page arm inside a text kind — a
+// serves_page row is a file whose presentation is a page, so it has no body
+// of its own to descend into. Every "is this the document" question reads
+// this, so the shim never spells the kind-and-not-page pair itself.
+func (t *Tile) TextDocument() bool {
+	return t.Kind == KindText && !t.ServesPage
+}
+
+// PageContent reports whether this tile presents at the /content/ door: the
+// serves_page arm of WebContent, and its complement. A page tile holds no
+// persisted url state, no content zoom, and no freeze intent — those belong
+// to the owning plugin, which holds no node fact — so the address is derived
+// at use time (PageURL). A url tile is never a page tile however its row is
+// flagged: its own address wins.
+func (t *Tile) PageContent() bool {
+	return t.ServesPage && t.Kind != KindURL
+}
+
 // PageURL builds the /content/ door address for a tile: the one place the
 // URL grammar is written on the client side. The server's parseContentPath
 // is its mirror, and a seam test pins that they agree. The trailing slash is

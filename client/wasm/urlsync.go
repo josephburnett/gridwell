@@ -234,7 +234,7 @@ func (a *App) persistFraming(p *pane.Pane, door *rpc.Tile, doorAnchor string, do
 // descents carry no text framing at all.
 func (a *App) persistTextScroll(p *pane.Pane) {
 	file, ok := a.descendedTile(p)
-	if !ok || file.Kind != rpc.KindText || file.ServesPage ||
+	if !ok || !file.TextDocument() ||
 		a.tileReadOnly(&file) || a.possiblyEphemeral(p, &file) {
 		return
 	}
@@ -551,7 +551,7 @@ func (a *App) applyURLState(raw string) {
 			p.TextScrollY = float64(file.TextY)
 		} else {
 			// Uncached: no row to read; the one owner decides the default.
-			p.TextMode = textedit.DescentMode(textedit.ModeInput{Kind: rpc.KindText, CursorURL: state.CursorMode})
+			p.TextMode = textedit.DescentMode(textedit.ModeInput{TextDocument: true, CursorURL: state.CursorMode})
 		}
 		p.TextZoom = a.textScaleFor(p) // base × the tile's content zoom
 		a.fetchBlobAndSetCursor(textTileID, state)

@@ -1093,7 +1093,7 @@ const zoomDistFactor = 4.0
 // input (an address that encodes a text cursor).
 func (a *App) descentTextMode(file *rpc.Tile, cursorURL bool) string {
 	return textedit.DescentMode(textedit.ModeInput{
-		Kind: file.Kind, ServesPage: file.ServesPage, ReadOnly: a.tileReadOnly(file),
+		TextDocument: file.TextDocument(), ReadOnly: a.tileReadOnly(file),
 		Cached: true, CursorURL: cursorURL, Stored: file.TextMode,
 	})
 }
@@ -1259,7 +1259,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// SetTextView rejects non-text kinds with InvalidArgument, which would
 	// surface as an error the user has to read. A serves_page descent is web
 	// content and carries no text framing either.
-	if file.Kind != rpc.KindText || file.ServesPage {
+	if !file.TextDocument() {
 		return
 	}
 	gid := a.gridIDForPane(p)

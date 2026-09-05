@@ -239,3 +239,33 @@ func TestContentID(t *testing.T) {
 		t.Errorf("owned ContentID = %q, want its own id", got)
 	}
 }
+
+// TestTextDocumentAndPageContent pins the two derivations of "is this a
+// page", which were spelled three ways across the shim before they had
+// owners. The last row is the shape only the wire permits: a url row that
+// also carries serves_page. Its own address wins, so it is web content and a
+// url tile, never a page tile and never a document.
+func TestTextDocumentAndPageContent(t *testing.T) {
+	cases := []struct {
+		name                   string
+		tile                   Tile
+		document, page, webCon bool
+	}{
+		{"text document", Tile{Kind: KindText}, true, false, false},
+		{"page tile", Tile{Kind: KindText, ServesPage: true}, false, true, true},
+		{"url tile", Tile{Kind: KindURL}, false, false, true},
+		{"well", Tile{Kind: KindWell}, false, false, false},
+		{"url row flagged serves_page", Tile{Kind: KindURL, ServesPage: true}, false, false, true},
+	}
+	for _, c := range cases {
+		if got := c.tile.TextDocument(); got != c.document {
+			t.Errorf("%s: TextDocument = %v, want %v", c.name, got, c.document)
+		}
+		if got := c.tile.PageContent(); got != c.page {
+			t.Errorf("%s: PageContent = %v, want %v", c.name, got, c.page)
+		}
+		if got := c.tile.WebContent(); got != c.webCon {
+			t.Errorf("%s: WebContent = %v, want %v", c.name, got, c.webCon)
+		}
+	}
+}

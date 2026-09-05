@@ -705,7 +705,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				// focused off the pane's grid, in the scratch grid — renders.
 				if file, ok := a.descendedTile(p); ok {
 					switch {
-					case file.Kind == rpc.KindText && !file.ServesPage:
+					case file.TextDocument():
 						ix, iy, iw, ih := textInnerBox(r)
 						a.cctx.Set("fillStyle", colorFileInnerBg)
 						a.cctx.Call("fillRect", ix, iy, iw, ih)
@@ -940,7 +940,7 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
 	case rpc.KindText:
-		if n.ServesPage {
+		if !n.TextDocument() {
 			// A page tile's grid face is its content's image — an fs
 			// thumbnail of the file — in the text family's border: it is a
 			// file, and only its presentation is web content.
