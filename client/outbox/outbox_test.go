@@ -161,3 +161,89 @@ func TestKeysReportsDrainOrder(t *testing.T) {
 		t.Errorf("Keys mutated the outbox: Len = %d", o.Len())
 	}
 }
+
+// TestRecordContentIsTheDirtinessFork is the content op's whole rule as a
+// table: dirty × parked. It lived in client/wasm, where nothing executes it —
+// make check compiles the wasm shim and runs none of it (CLAUDE.md §5) — so
+// the one decision that says which tiles still owe the server their bytes had
+// no test at all. Absent+clean is the case that matters most: an ack there
+// must not resurrect a key.
+func TestRecordContentIsTheDirtinessFork(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		alreadyParked bool
+		dirty         bool
+		wantParked    bool
+	}{
+		{"a first keystroke parks", false, true, true},
+		{"a later keystroke re-parks", true, true, true},
+		{"a landed save acks", true, false, false},
+		{"a clean tile nobody parked stays absent", false, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := New()
+			if tc.alreadyParked {
+				o.Park(k(OpContent, "t1"), func() {})
+			}
+			var fired int
+			o.RecordContent("t1", tc.dirty, func() { fired++ })
+			if got := o.Len() == 1; got != tc.wantParked {
+				t.Fatalf("parked = %v, want %v (keys %v)", got, tc.wantParked, o.Keys())
+			}
+			if !tc.wantParked {
+				return
+			}
+			if keys := o.Keys(); len(keys) != 1 || keys[0] != k(OpContent, "t1") {
+				t.Fatalf("keys = %v, want one content key for t1", keys)
+			}
+			// The parked thunk is the one just handed over, not a stale
+			// closure over older bytes.
+			for _, fn := range o.Drain() {
+				fn()
+			}
+			if fired != 1 {
+				t.Errorf("the drained thunk fired %d times, want the newest one once", fired)
+			}
+		})
+	}
+}
+
+// TestSyncContentParksTheDirtySetInOrder: the pre-drain sweep re-derives the
+// content entries from the cache's dirty set, in the order it is given, and
+// touches nothing else. It parks what is dirty and judges nothing it cannot
+// see — a parked key for a tile absent from the set keeps its place, because
+// this sweep is belt and braces for a drain, never a garbage collector.
+func TestSyncContentParksTheDirtySetInOrder(t *testing.T) {
+	o := New()
+	o.Park(k("SetFraming", "w1"), func() {})
+	o.Park(k(OpContent, "gone"), func() {})
+
+	var fired []string
+	o.SyncContent([]string{"t1", "t2"}, func(id string) func() {
+		return func() { fired = append(fired, id) }
+	})
+
+	want := []Key{k("SetFraming", "w1"), k(OpContent, "gone"), k(OpContent, "t1"), k(OpContent, "t2")}
+	got := o.Keys()
+	if len(got) != len(want) {
+		t.Fatalf("keys = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("keys = %v, want %v", got, want)
+		}
+	}
+	// A second sweep is idempotent: same keys, same order, one thunk each.
+	o.SyncContent([]string{"t1", "t2"}, func(id string) func() {
+		return func() { fired = append(fired, id) }
+	})
+	if len(o.Keys()) != len(want) {
+		t.Fatalf("a second sweep changed the outbox: %v", o.Keys())
+	}
+	for _, fn := range o.Drain() {
+		fn()
+	}
+	if len(fired) != 2 || fired[0] != "t1" || fired[1] != "t2" {
+		t.Errorf("drained %v, want [t1 t2] in the dirty set's order", fired)
+	}
+}

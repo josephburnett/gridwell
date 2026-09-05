@@ -266,34 +266,26 @@ func (a *App) postFramingPersist(label, gid, id string,
 	a.post(write{label: label, gid: gid, id: id, optimistic: true, call: call, beacon: beacon})
 }
 
-// recordContent syncs the tile's outbox entry to the one owner of its bytes,
-// the cache's content entry: still dirty means the server is still owed this
-// write, clean means it is not. The outbox therefore knows which tiles owe a
-// write and in what order, while the bytes stay where the renderer reads
-// them, with no second copy of the user's words.
-//
-// Every path that can change dirtiness calls this: the keystroke that makes
-// an entry dirty, and each completed save, which leaves it clean, drops it on
-// a verdict, or leaves it dirty on a transport failure. Those three outcomes
-// decide parked or acked without this function knowing which happened.
+// recordContent and syncContentOutbox are the shim halves of the two rules in
+// client/outbox: read the dirtiness from the cache, hand the outbox the retry
+// thunk, and let it decide. Every path that can change dirtiness calls
+// recordContent — the keystroke that makes an entry dirty, and each completed
+// save, which leaves it clean, drops it on a verdict, or leaves it dirty on a
+// transport failure — and none of them has to know which happened.
 func (a *App) recordContent(cid string) {
-	k := outbox.Key{Op: outbox.OpContent, ID: cid}
-	if _, dirty := a.c.DirtyContent(cid); dirty {
-		a.out.Park(k, func() { a.flushTileContent(cid) })
-		return
-	}
-	a.out.Ack(k)
+	_, dirty := a.c.DirtyContent(cid)
+	a.out.RecordContent(cid, dirty, a.flushContent(cid))
 }
 
-// syncContentOutbox re-derives the outbox's content entries from their one
-// owner, the cache. recordContent already runs on every path that changes
-// dirtiness, so this is belt and braces before a drain. It earns its place: a
-// drift between the two would silently cost the words the user typed last, at
-// the one moment — a quit — with no next sweep behind it.
 func (a *App) syncContentOutbox() {
-	for _, cid := range a.c.DirtyTileIDs() {
-		a.recordContent(cid)
-	}
+	a.out.SyncContent(a.c.DirtyTileIDs(), a.flushContent)
+}
+
+// flushContent is one tile's retry thunk: re-read the bytes from the cache and
+// send them. The outbox holds order and retry, never a copy of the user's
+// words.
+func (a *App) flushContent(cid string) func() {
+	return func() { a.flushTileContent(cid) }
 }
 
 // putEditedContent is the one door for an optimistic local edit: store the

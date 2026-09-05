@@ -72,6 +72,37 @@ func (o *Outbox) Record(out clientsync.Outcome, k Key, retry func()) {
 	o.Ack(k)
 }
 
+// RecordContent syncs one tile's content entry to the dirtiness of its bytes,
+// which lives with their one owner (the client cache's content entry): still
+// dirty means the server is still owed this write, clean means it is not. It
+// is Record's fork restated for the one op whose completion is not an RPC
+// outcome but a state — a content save can leave the entry dirty (transport),
+// clean (landed), or gone (a verdict dropped it), and the caller does not have
+// to know which happened to get the outbox right.
+func (o *Outbox) RecordContent(tileID string, dirty bool, retry func()) {
+	k := Key{Op: OpContent, ID: tileID}
+	if dirty {
+		o.Park(k, retry)
+		return
+	}
+	o.Ack(k)
+}
+
+// SyncContent re-derives the content entries from the dirty set — the cache's,
+// which is the one owner of the bytes. RecordContent already runs on every
+// path that changes dirtiness, so this is belt and braces before a drain. It
+// earns its place: a drift between the two would silently cost the words the
+// user typed last, at the one moment — a quit — with no next sweep behind it.
+//
+// It parks what is dirty and nothing else. A parked key whose entry is now
+// clean is NOT acked here: this sees only the dirty ids, and a key it cannot
+// see is a key it must not judge.
+func (o *Outbox) SyncContent(dirty []string, retry func(tileID string) func()) {
+	for _, id := range dirty {
+		o.RecordContent(id, true, retry(id))
+	}
+}
+
 // Park holds retry for k, replacing any earlier thunk for the same key (last
 // writer wins — the newer closure reaches the newer value). A replaced key
 // keeps its original drain position.
