@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +32,15 @@ import (
 // answers Unavailable.
 func connFixture(t *testing.T, opts Options) (cc *Layer, far *darkable, farRoot, conn string) {
 	t.Helper()
+	return connFixtureWith(t, opts, nil)
+}
+
+// connFixtureWith is connFixture with one decorator around the namespace the
+// dialer hands back, so a test can watch what the layer actually asks the far
+// node for. The decorator wraps the darkable, not the store: what it sees is
+// exactly what crossed the connection.
+func connFixtureWith(t *testing.T, opts Options, wrap func(namespace.Namespace) namespace.Namespace) (cc *Layer, far *darkable, farRoot, conn string) {
+	t.Helper()
 	ctx := context.Background()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -52,8 +62,12 @@ func connFixture(t *testing.T, opts Options) (cc *Layer, far *darkable, farRoot,
 		t.Fatal(err)
 	}
 	conn = "farconn"
+	dialed := namespace.Namespace(far)
+	if wrap != nil {
+		dialed = wrap(dialed)
+	}
 	transport, err := connection.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
-		return far, func() {}, nil
+		return dialed, func() {}, nil
 	}, "", []config.ConnectionConfig{{Name: conn, Addr: "/far/federation.sock"}}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -189,5 +203,121 @@ func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 	}
 	if _, _, ok := cc.loadGrid(ctx, qualify(conn, nested)); !ok {
 		t.Fatal("a read-through answer was not remembered")
+	}
+}
+
+// gridReads counts what the layer asked the far node for, by grid id. A grid
+// only the walk ever visits is therefore a walk counter.
+type gridReads struct {
+	namespace.Namespace
+	mu sync.Mutex
+	n  map[string]int
+}
+
+func (g *gridReads) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	g.mu.Lock()
+	g.n[in.GetGridId()]++
+	g.mu.Unlock()
+	return g.Namespace.GetGrid(ctx, in)
+}
+
+func (g *gridReads) count(id string) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.n[id]
+}
+
+// awaitHealth reads relayed events until one connection's health matches want.
+func awaitHealth(t *testing.T, events <-chan *pb.Event, conn string, want bool) {
+	t.Helper()
+	for {
+		select {
+		case ev := <-events:
+			h := ev.GetPluginHealth()
+			if h != nil && h.GetPluginUuid() == conn && h.GetHealthy() == want {
+				return
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatalf("the connection's health never went %v on the relayed stream", want)
+		}
+	}
+}
+
+// TestOneConnectionsRecoveryDoesNotReWalkTheSource pins what trace (b) says
+// does NOT happen. kickPrefetch fires from Layer.Subscribe, and the layer's
+// upstream subscription is the TRANSPORT's hub stream, which is one stream for
+// every connection and survives any one of them dying. So a connection going
+// dark and coming back — the health round trip the layer relays and acts on —
+// re-kicks nothing: the resync after a recovery is the client's blunt refetch
+// of the grids it holds, not a re-walk of the source.
+//
+// This is deliberately a pin of CURRENT behaviour, not an endorsement: whether
+// a health-up should kick the walk (so the deletes-while-away resync covers
+// grids nobody re-opened) is owner-question 5 in docs/freshness.md. It is
+// worth a test either way, because both comments claimed the opposite and no
+// test could tell.
+func TestOneConnectionsRecoveryDoesNotReWalkTheSource(t *testing.T) {
+	var reads *gridReads
+	cc, far, farRoot, conn := connFixtureWith(t, Options{Prefetch: true},
+		func(ns namespace.Namespace) namespace.Namespace {
+			reads = &gridReads{Namespace: ns, n: map[string]int{}}
+			return reads
+		})
+	ctx := context.Background()
+	nested, _, _ := seedNested(t, far.Namespace, farRoot)
+
+	// The one subscription the server's fan-in holds for the life of a
+	// client: the walk's trigger, and the stream the health rides.
+	events := make(chan *pb.Event, 64)
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
+	go func() {
+		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(ev *pb.Event) error {
+			select {
+			case events <- ev:
+			default:
+			}
+			return nil
+		})
+	}()
+	awaitWalkDone(t, cc, ctx, qualify(conn, nested))
+	walked := reads.count(nested)
+	if walked != 1 {
+		t.Fatalf("the first walk read the nested grid %d times, want exactly 1", walked)
+	}
+
+	// The machine leaves and returns, both transitions on the stream the
+	// layer relays and applies. Nothing else calls through the connection.
+	far.goDark()
+	awaitHealth(t, events, conn, false)
+	far.goLive()
+	awaitHealth(t, events, conn, true)
+
+	// Give a re-walk every chance to happen before declaring it did not: the
+	// first walk finished well inside this window.
+	time.Sleep(time.Second)
+	if got := reads.count(nested); got != walked {
+		t.Fatalf("the nested grid was read %d times after a health round trip, want %d — "+
+			"a single connection's recovery re-walked the whole source (owner-question 5)", got, walked)
+	}
+}
+
+// awaitWalkDone waits for the Subscribe-triggered walk to reach the given grid
+// and then finish, so a count taken after it is a whole walk's worth.
+func awaitWalkDone(t *testing.T, cc *Layer, ctx context.Context, gridID string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		_, _, warmed := cc.loadGrid(ctx, gridID)
+		cc.pf.mu.Lock()
+		running := cc.pf.running
+		cc.pf.mu.Unlock()
+		if warmed && !running {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the subscribe walk never settled (warmed=%v running=%v)", warmed, running)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

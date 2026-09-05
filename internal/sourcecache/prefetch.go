@@ -9,12 +9,19 @@ package sourcecache
 // construction — text, previews, metadata — so the walk is a full traversal
 // with caps as emergency valves, not a sampling strategy.
 //
-// The trigger is every successful Subscribe establishment, which is both the
-// initial connect and each health-up reconnect, since the server's fan-in
-// re-subscribes through this wrapper. The walk therefore doubles as the
-// deletes-while-away resync for grids the user never re-opened. It runs
-// through the wrapper's own read methods, so every answer lands in the cache
-// by the one existing write path and there is no second writer.
+// The trigger is every Layer.Subscribe establishment, and nothing else. In
+// front of the transport that stream is the connection hub's, one for every
+// connection, so the trigger means the initial connect and a re-dial of the
+// server's own fan-in — NOT one connection's recovery, which the hub survives
+// without a resubscription here. What resyncs after a recovery is the client's
+// blunt refetch of the grids it holds; a grid the user never re-opened waits
+// for the next establishment, so the walk is the deletes-while-away resync
+// only that far. (Whether a health-up should kick the walk is an open question
+// for the owner in docs/freshness.md;
+// prefetch_seam_test.go:TestOneConnectionsRecoveryDoesNotReWalkTheSource pins
+// what happens today.) The walk runs through the wrapper's own read methods,
+// so every answer lands in the cache by the one existing write path and there
+// is no second writer.
 //
 // A transport failure mid-walk aborts quietly: the source went dark, and the
 // next successful Subscribe walks again. A coded refusal on an individual read

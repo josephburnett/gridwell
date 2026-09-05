@@ -852,9 +852,10 @@ func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, vers
 // Info declares watch on that basis: the layer always has a stream to offer.
 func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	// Every subscription and resubscription is a moment to warm the whole
-	// source: the initial connect and each health-up reconnect land here, so
-	// the walk doubles as the resync for grids nobody re-opened while the
-	// source was dark.
+	// source. In front of the transport that means the initial connect and a
+	// re-dial of the server's own fan-in: one connection going dark and
+	// coming back does not land here, because the stream this relays is the
+	// transport's hub, which survives it. prefetch.go says what that costs.
 	c.kickPrefetch()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
