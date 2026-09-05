@@ -1,5 +1,6 @@
 // Package gitlabfake is a fake GitLab: the paged GET /api/v4/todos the
-// gridwell-plugin-gitlab binary talks to, over httptest.
+// gridwell-plugin-gitlab binary reads and the POST
+// /api/v4/todos/:id/mark_as_done it writes, over httptest.
 //
 // It fakes the SERVICE, never the plugin. A plugin is another repository's
 // module and reaches this one only as a spawned binary, so a seam test that
@@ -15,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -77,10 +79,61 @@ func (s *Server) Calls() int {
 	return s.calls
 }
 
-// serve answers GET /api/v4/todos: the todos in the requested state, paged by
+// serve answers the two calls the plugin makes: the paged listing, and the
+// mark-as-done write.
+func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
+	if id, ok := markDoneID(r); ok {
+		s.markDone(w, id)
+		return
+	}
+	s.list(w, r)
+}
+
+// markDoneID reads POST /api/v4/todos/:id/mark_as_done, the plugin's only
+// write.
+func markDoneID(r *http.Request) (int64, bool) {
+	if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/mark_as_done") {
+		return 0, false
+	}
+	rest := strings.TrimSuffix(r.URL.Path, "/mark_as_done")
+	id, err := strconv.ParseInt(rest[strings.LastIndex(rest, "/")+1:], 10, 64)
+	return id, err == nil
+}
+
+// markDone flips one todo to the done state, which is what GitLab does: the
+// todo does not leave, it changes state, so the next listing finds it under
+// state=done. An id it does not hold is a 404, the same answer the real API
+// gives.
+func (s *Server) markDone(w http.ResponseWriter, id int64) {
+	s.mu.Lock()
+	s.calls++
+	found := false
+	for i := range s.todos {
+		if s.todos[i].ID == id {
+			s.todos[i].State = "done"
+			found = true
+		}
+	}
+	td := append([]Todo(nil), s.todos...)
+	s.mu.Unlock()
+
+	if !found {
+		http.Error(w, "404 Not Found", http.StatusNotFound)
+		return
+	}
+	for _, t := range td {
+		if t.ID == id {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(t)
+			return
+		}
+	}
+}
+
+// list answers GET /api/v4/todos: the todos in the requested state, paged by
 // per_page/page with X-Next-Page while more remain, which is the shape the
 // real API has.
-func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
+func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.calls++
 	state := r.URL.Query().Get("state")

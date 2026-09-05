@@ -62,6 +62,15 @@ answers GONE. A `placement_hint` seeds an entry's first placement only. An
 entry with `serves_page` presents its `ServeContent` HTML on descent,
 sandboxed by the node.
 
+## Deletes
+
+`Delete` is yours to define: remove the thing, or transform it (the gitlab
+plugin marks the todo done and the tile stays). The node does not assume. After
+your `Delete` succeeds it asks `Probe` for the same key and retires the id it
+minted only on a definitive GONE — a minted row retires only when its source
+says the key is gone. So answer `Probe` honestly and the user's placement and
+every link to the tile survive a delete that keeps the thing.
+
 ## Gates
 
 `test/boundary` fails the build if any gridwell package — test files included

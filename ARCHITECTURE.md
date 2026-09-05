@@ -386,6 +386,7 @@ pane is inside" and do not spread the word.
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
 | User state survives an unreachable source | the rows the user TOUCHED answer (an untouched entry has no row and is absent until the source speaks); fs/proc sweep rules |
+| A minted row retires only when its source says the key is gone | an authoritative listing's `Sweep`, or a GONE `Probe` — on the listing path and after a `Delete` alike, so a plugin whose delete transforms rather than removes keeps its placement and its stored references |
 | A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
 
 ## Module boundaries

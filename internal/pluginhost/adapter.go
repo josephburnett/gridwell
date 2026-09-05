@@ -949,8 +949,19 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 	}
 }
 
-// DeleteTile deletes the source thing, which is the plugin's verdict, then
-// retires the row. An already-gone row succeeds: the verb is idempotent.
+// DeleteTile hands the gesture to the plugin, which is the only one that says
+// what deleting its thing means, and then retires the row only if the key went
+// with it. An already-gone row succeeds: the verb is idempotent.
+//
+// Delete is not removal by definition: fs unlinks the file, gitlab marks the
+// todo done and the tile stays and changes state. So the row's fate is settled
+// the way every other absence is — ask the source, by the same arbitration
+// synthesize runs on a non-authoritative listing: only a definitive GONE
+// retires, and a failed or unsure read keeps. The row is where the placement
+// and every stored reference live, so retiring one whose thing is still there
+// would snap the tile back to its hint under a fresh id and kill every link to
+// it. An authoritative listing sweeps the row later if the thing really is
+// gone, so keeping it on doubt costs nothing durable.
 func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
@@ -963,10 +974,16 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	// verdict and nothing else: there is no id to retire, and the next
 	// listing simply does not name it.
 	if ref.id != 0 {
-		if err := a.mem.Retire(ref.id); err != nil && !errors.Is(err, store.ErrNotFound) {
-			return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)
+		pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: ref.key})
+		if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
+			if err := a.mem.Retire(ref.id); err != nil && !errors.Is(err, store.ErrNotFound) {
+				return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)
+			}
 		}
 	}
+	// Either way the source changed, and the client must look again: for a
+	// delete that removes, the tile is gone; for one that transforms, this
+	// refetch is what repaints the new state on the same row.
 	a.emitGridChanged(gridAddr(ref.context))
 	return &gridwellv1.DeleteTileResponse{}, nil
 }

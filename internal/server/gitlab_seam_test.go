@@ -8,8 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -177,6 +180,131 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	three = tileByLabelPrefix(wk.Tiles, "✅ Ada: !3 ")
 	if body := readContent(t, client2, three.Id); !strings.Contains(body, "[Open !3 in GitLab](") {
 		t.Errorf("live content after restart = %q", body)
+	}
+}
+
+// The trash gesture on a todo, through the WHOLE stack the user's hand
+// crosses: the wire client → the router → the adapter → the spawned
+// gridwell-plugin-gitlab binary → fake GitLab, with a home namespace beside
+// the plugin so a link can be dragged from another grid.
+//
+// Delete here means "mark the todo done at GitLab" — the tile stays and
+// changes state — so the node must keep the row it minted. The row is where
+// two durable facts live: the placement the user chose, and the identity every
+// stored reference names (MintRef canonicalizes a link's target to a row id).
+// Retiring it on the plugin's word alone snapped the tile back to its calendar
+// hint under a fresh id and killed every link to it. Nothing but a delete-
+// then-look test on a plugin with keep semantics can see that, which is why
+// this journey moves the tile, links to it, and then trashes it.
+func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
+	gl := gitlabfake.New(t, gitlabTodo(1, "2026-08-18T10:00:00Z"))
+	// A one-nanosecond refresh window: every read walks GitLab again, so the
+	// done state lands on the very next listing.
+	cfg := gl.Config(t, map[string]string{"refresh": "1ns"})
+	client, _, _ := gitlabStackAt(t, filepath.Join(t.TempDir(), "mem.db"), cfg)
+
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	reg := plugin.NewRegistry()
+	_, homeRoot := registerPrimaryLocaldb(t, reg, st)
+	reg.Register("ug1", "gitlab", client, nil)
+	srv := mustNew(t, reg, Config{})
+	hs := serveWeb(t, srv)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	ctx := context.Background()
+
+	pl, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var todosRoot string
+	for _, p := range pl.Plugins {
+		if p.UUID == "ug1" {
+			todosRoot = p.RootGridID
+		}
+	}
+	if todosRoot == "" {
+		t.Fatalf("no gitlab plugin in the handshake: %+v", pl.Plugins)
+	}
+	root, err := cl.GetGrid(ctx, todosRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var week rpc.Tile
+	for _, tl := range root.Tiles {
+		if strings.HasPrefix(tl.AltText, "2026-08-17") {
+			week = tl
+		}
+	}
+	if week.ChildGridID == "" {
+		t.Fatalf("no week well: %+v", root.Tiles)
+	}
+	wk, err := cl.GetGrid(ctx, week.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wk.Tiles) != 1 {
+		t.Fatalf("week grid = %+v, want the one todo", wk.Tiles)
+	}
+	todo := wk.Tiles[0]
+
+	// The user moves the todo somewhere of their own, and drags a link to it
+	// onto the home grid — a weekly plan naming this todo.
+	moved, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{TileID: todo.ID, X: 5, Y: 5, W: 3, H: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	todo = *moved
+	link, err := cl.CreateLeafLink(ctx, &rpc.CreateLeafLinkRequest{
+		GridID: homeRoot, X: 1, Y: 1, W: 1, H: 1,
+		Kind: rpc.KindText, LinkTargetID: todo.ID, Label: todo.AltText,
+	})
+	if err != nil {
+		t.Fatalf("link to a todo: %v", err)
+	}
+	// A reference at rest names a row, so the link's target is the id the
+	// delete is about to decide the fate of.
+	if link.LinkTargetID != todo.ID {
+		t.Fatalf("link target = %q, want the moved todo %q", link.LinkTargetID, todo.ID)
+	}
+
+	// The trash gesture. GitLab accepts the mark-as-done; the todo stays.
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: todo.ID}); err != nil {
+		t.Fatalf("trash a todo: %v", err)
+	}
+
+	after, err := cl.GetGrid(ctx, week.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Tiles) != 1 {
+		t.Fatalf("week grid after the trash = %+v, want the todo still there, done", after.Tiles)
+	}
+	kept := after.Tiles[0]
+	if kept.ID != todo.ID {
+		t.Errorf("the todo came back under a fresh id %q, want %q: every stored reference to it is now dead", kept.ID, todo.ID)
+	}
+	if kept.X != 5 || kept.Y != 5 || kept.W != 3 || kept.H != 2 {
+		t.Errorf("the todo snapped back to its hint: %+v, want the 5,5 3x2 the user left", kept)
+	}
+	// The gesture's whole visible effect: the same tile, repainted done.
+	if !strings.HasPrefix(kept.AltText, "✅ ") {
+		t.Errorf("label after the trash = %q, want the done mark", kept.AltText)
+	}
+
+	// And the link still names something that reads.
+	if _, err := cl.GetTile(ctx, link.LinkTargetID); err != nil {
+		t.Fatalf("the link went dead: GetTile %s: %v", link.LinkTargetID, err)
+	}
+	body, _, _, err := cl.ReadContent(ctx, link.LinkTargetID)
+	if err != nil {
+		t.Fatalf("content through the link target: %v", err)
+	}
+	if !strings.Contains(string(body), "[Open !1 in GitLab](") {
+		t.Errorf("content through the link = %q", body)
 	}
 }
 
