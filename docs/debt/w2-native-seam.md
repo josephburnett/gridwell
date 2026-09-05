@@ -291,14 +291,14 @@ file; GAP means nothing exercises the path.
 | # | path | covered by |
 |---|---|---|
 | 1 | `place` happy path (view, bounds, addChildView) | `capture-harness.ts` scenario 1; `e2e/palette-under-webview.spec.ts`; `e2e/user-agent.spec.ts` |
-| 2 | `place` replace-without-close arm (stale entry → `onError` + `remove`) | **GAP** — nothing places twice into one paneId |
+| 2 | `place` replace-without-close arm (stale entry → `onError` + `remove`) | `capture-harness.ts` place-replace scenario (the report names both tiles; the replacement stands, one entry) |
 | 3 | `place` `startHidden` parked bounds | `e2e/palette-under-webview.spec.ts` "a new view placed with hidden=true starts parked"; `capture-harness.ts` |
 | 4 | `place` `focused` from `PlaceArgs` reaching the entry | `capture-harness.ts` place-focus scenario (both arms); `bridge-harness.ts` across the real IPC seam |
 | 5 | `place` `reviveNavigation` restore vs load | `e2e/url-history.spec.ts` (restore); `viewutil.test.ts` "the edited address beats a stale back-stack" |
 | 6 | `setBounds` — parked view not lifted | `e2e/palette-under-webview.spec.ts` "setBounds() while hidden keeps the view parked" |
-| 6b | `setBounds` — early return on equal bounds | **GAP** — `boundsEqual` is unit-tested; the early return is not |
+| 6b | `setBounds` — early return on equal bounds | `capture-harness.ts` setBounds scenario — the composed zoom is the witness: equal bounds leave it alone, a 1px change recomputes it |
 | 7 | `setHidden` park / unpark | `e2e/palette-under-webview.spec.ts`; `e2e/url-modal.spec.ts`; `e2e/workspace-live.spec.ts`; `capture-harness.ts` |
-| 7b | `setHidden` `focused`-only change tracked on the entry | **GAP** — focus tracking is only covered on the `place` path |
+| 7b | `setHidden` `focused`-only change tracked on the entry | `capture-harness.ts` setHidden focus scenario (recorded on the entry, both directions, and the view never moves) |
 | 8 | `remove` freeze payload (jpeg / url / title / history) | `capture-harness.ts`; `bridge-harness.ts`; `e2e/url-history.spec.ts`; `e2e/auto-live.spec.ts` |
 | 9 | `remove` crash arm | PARTIAL — `capture-harness.ts` dead-view scenario proves the catch is entered and the freeze is empty, but its `onError` text is unasserted (the harness passes `{}` callbacks) |
 | 10 | `remove` detach-failure arm (`failed to detach live view`) | **GAP** |
@@ -324,7 +324,7 @@ file; GAP means nothing exercises the path.
 | 30 | `applyMinWidthZoom` / `setZoom` composition | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` (three units). The `setZoomFactor` try/catch and the `did-finish-load` re-apply are not separately asserted |
 | 31 | `goBack`, including the no-op at the start of history | `capture-harness.ts`; `contextmenu.test.ts` enablement flags |
 
-**Gap count: 10 GAP rows — 2, 6b, 7b, 10, 11, 12, 13, 14, 20, 25 — plus 4
+**Gap count: 7 GAP rows — 10, 11, 12, 13, 14, 20, 25 — plus 4
 partials: 9, 18, 23, 30.** Rows 6b and 7b are split out of items 6 and 7
 because each has a covered half and an uncovered half. Rows 27, 28 and 29, the
 focus family, were closed by phase 2; 13 at the time this table was written.

@@ -348,6 +348,66 @@ app.whenReady().then(async () => {
   await regH.remove('paneH');
   console.log('died-under-settle ok: no throw, no phantom steal');
 
+  // ── a place() into a pane that already holds a view is loud ─────────────
+  // The renderer closes a pane's live view before placing another, and never
+  // re-places the tile already live there, so this branch is a renderer bug.
+  // What it must not be is silent: the replaced view's freeze has no caller to
+  // land in, so its final frame — the tile's preview — is lost, and the only
+  // evidence is this report.
+  const replaceErrs: string[] = [];
+  const regR = new WebviewRegistry(win, { onError: (ev) => replaceErrs.push(ev.message) });
+  await regR.place('paneR', 'u1/60', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await regR.place('paneR', 'u1/61', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  if (replaceErrs.length !== 1) fail(`a replaced live view reported ${replaceErrs.length} errors, want 1`);
+  if (!replaceErrs[0].includes('u1/60 → u1/61')) fail(`the replace report does not name both tiles: ${replaceErrs[0]}`);
+  // The replacement stands and the old view is gone: one entry, the new tile.
+  if (regR.paneIds().length !== 1) fail(`the replace left ${regR.paneIds().length} entries for one pane`);
+  if (regR.tileIdFor('paneR') !== 'u1/61') fail(`the replacement did not take (tile ${regR.tileIdFor('paneR')})`);
+  await regR.remove('paneR');
+  console.log('place replace ok: reported, old view torn down, replacement stands');
+
+  // ── setBounds returns early when nothing moved ──────────────────────────
+  // syncURLViews calls setBounds every frame, so the equal-bounds early return
+  // is the difference between a no-op and re-applying the composed zoom sixty
+  // times a second. Zoom is what makes it observable: the registry only touches
+  // zoomFactor through applyMinWidthZoom, so moving it out from under the
+  // registry and calling setBounds with the same bounds must leave it alone,
+  // while a real bounds change must recompute it.
+  const regB = new WebviewRegistry(win, {});
+  const narrow = { x: 0, y: 0, width: 320, height: 300 };
+  await regB.place('paneB2', 'u1/62', DATA_URL, narrow);
+  const wcB = regB.webContentsFor('paneB2')!;
+  if (!(await waitFor(() => wcB.getZoomFactor() < 1, 6000))) {
+    fail(`the min-width zoom never applied (factor ${wcB.getZoomFactor()})`);
+  }
+  wcB.setZoomFactor(1);
+  regB.setBounds('paneB2', { ...narrow });
+  if (wcB.getZoomFactor() !== 1) fail('setBounds with equal bounds did work: the zoom was re-applied');
+  regB.setBounds('paneB2', { ...narrow, width: narrow.width + 1 });
+  if (wcB.getZoomFactor() >= 1) fail(`a real bounds change did not re-apply the zoom (factor ${wcB.getZoomFactor()})`);
+  await regB.remove('paneB2');
+  console.log('setBounds ok: equal bounds are a no-op, a changed width recomputes the zoom');
+
+  // ── setHidden carries a focus change with no view change ────────────────
+  // Focus and visibility ride the same call because syncURLViews reports both
+  // every frame. A focus-only change must still be recorded — it is the fact
+  // the steal guard reads — and must not move the view: the pane did not
+  // become hidden, so parking it would blank live content on a mere focus move.
+  const regFo = new WebviewRegistry(win, {});
+  const foBounds = { x: 5, y: 6, width: 400, height: 300 };
+  await regFo.place('paneFo', 'u1/63', DATA_URL, foBounds, 0, '', false, false, false);
+  const beforeFo = regFo.viewBoundsFor('paneFo');
+  regFo.setHidden('paneFo', false, true);
+  if (regFo.focusedFor('paneFo') !== true) fail('a focus-only setHidden was not recorded on the entry');
+  const afterFo = regFo.viewBoundsFor('paneFo');
+  if (afterFo?.x !== beforeFo?.x || afterFo?.y !== beforeFo?.y) {
+    fail(`a focus-only setHidden moved the view (${beforeFo?.x},${beforeFo?.y}) → (${afterFo?.x},${afterFo?.y})`);
+  }
+  regFo.setHidden('paneFo', false, false);
+  if (regFo.focusedFor('paneFo') !== false) fail('a focus-only setHidden back to unfocused was not recorded');
+  await regFo.remove('paneFo');
+  console.log('setHidden focus ok: tracked on the entry, the view never moved');
+
   console.log('HARNESS PASS');
   app.exit(0);
 });
