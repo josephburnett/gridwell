@@ -336,7 +336,13 @@ func writeFileAtomic(path string, out []byte) error {
 // paths tell a namespace segment from a tile id. Mint produces conforming
 // ids; this is the one door that catches a hand-edited id before it is
 // stored into references it can never be removed from. An absent id is
-// legal here, because Mint fills it.
+// legal here for the node's own id and a plugin's, because Mint fills those;
+// a connection name and a retired name are never minted, so an absent one is
+// a stanza that names nothing and is refused.
+//
+// retired_names is validated the same way and against the declared names: a
+// name reserved forever has to be spelled right, and a name cannot be alive
+// and retired at once.
 func validateIDs(cfg *ServerConfig) error {
 	check := idshape.ValidateSegment
 	if cfg.ID != "" {
@@ -366,6 +372,14 @@ func validateIDs(cfg *ServerConfig) error {
 			return fmt.Errorf("connection %q is declared twice", c.Name)
 		}
 		names[c.Name] = true
+	}
+	for _, r := range cfg.RetiredNames {
+		if err := check("retired connection name", r); err != nil {
+			return err
+		}
+		if names[r] {
+			return fmt.Errorf("connection %q is declared and also in retired_names — a retired name never returns; mint a new one", r)
+		}
 	}
 	return nil
 }

@@ -55,16 +55,21 @@ func NewShortID() string {
 }
 
 // ValidateSegment enforces the load-bearing properties on an id used as a
-// namespace segment (a plugin id, a node id, a connection namespace): no '/',
-// the qualified-id delimiter, and neither of the two TILE shapes, which would
-// be indistinguishable from a tile in a URL path — purely numeric (a row) or
-// leading with '~' (a plugin key). The shapes are decided in api/rpc
-// (ShapeOf); this package cannot import it, because rpc's own tests import
-// this one, so the two spellings are pinned to each other by a test there.
-// what names the id in the error.
+// namespace segment (a plugin id, a node id, a connection namespace): not
+// empty; no '/', the qualified-id delimiter; and neither of the two TILE
+// shapes, which would be indistinguishable from a tile in a URL path — purely
+// numeric (a row) or leading with '~' (a plugin key). The shapes are decided
+// in api/rpc (ShapeOf); this package cannot import it, because rpc's own tests
+// import this one, so the two spellings are pinned to each other by a test
+// there. what names the id in the error.
+//
+// The empty segment is refused here, at the owner, rather than by each
+// caller: a nameless declaration would occupy it, and "<node>//12" peels to
+// nothing. An id that may legitimately be absent — one Mint fills in — is
+// checked for presence by its caller BEFORE it gets here.
 func ValidateSegment(what, id string) error {
 	if id == "" {
-		return nil
+		return fmt.Errorf("%s is empty — a namespace segment must name something", what)
 	}
 	if strings.Contains(id, "/") {
 		return fmt.Errorf("%s %q must not contain '/'", what, id)

@@ -138,6 +138,18 @@ func TestLoad_rejectsBadIDs(t *testing.T) {
 		"plugins:\n  - id: dup1\n    kind: fs\n  - id: dup1\n    kind: proc\n",
 		"connections:\n  - name: \"9\"\n    addr: /s\n",
 		"connections:\n  - name: c1\n    addr: /s\n  - name: c1\n    addr: /t\n",
+		// A nameless stanza occupies the empty segment: every id through it
+		// would read as the node's own.
+		"connections:\n  - addr: /s\n",
+		"connections:\n  - name: \"\"\n    addr: /s\n",
+		// retired_names is a list of namespace segments, and reserving one
+		// forever is a decision that has to be spelled right.
+		"retired_names: [\"12\"]\n",
+		"retired_names: [\"has/slash\"]\n",
+		"retired_names: [\"\"]\n",
+		// Declared and retired at once: the name is either alive or gone
+		// forever, never both.
+		"connections:\n  - name: rtb\n    addr: /s\nretired_names: [rtb]\n",
 	} {
 		if _, err := Load(write(t, t.TempDir(), yml)); err == nil {
 			t.Errorf("%q must be refused", yml)

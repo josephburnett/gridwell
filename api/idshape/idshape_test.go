@@ -44,3 +44,15 @@ func TestNewUUIDStays128Bit(t *testing.T) {
 		t.Fatalf("NewUUID() = %q (len %d), want 32 hex chars", id, len(id))
 	}
 }
+
+// The empty string is not a namespace segment. It is the one shape that
+// LOOKS harmless and is not: a nameless connection stanza would occupy the
+// empty segment, so "<node>//12" would peel to it and every id through it
+// would read as the node's own. Nothing legitimately validates an id it has
+// not already checked for presence, so the owner refuses it here rather than
+// leaving each caller to remember.
+func TestValidateSegmentRefusesTheEmptySegment(t *testing.T) {
+	if err := ValidateSegment("connection name", ""); err == nil {
+		t.Fatal("an empty segment must be refused")
+	}
+}
