@@ -98,6 +98,15 @@ export interface PlaceArgs {
   // open palette starts parked. The renderer owns this fact; the registry must
   // not infer it from whichever setHidden happened to arrive last.
   hidden?: boolean;
+  // focused is whether the pane being placed on is the focused pane, exactly
+  // as setHidden carries it. The renderer owns the fact: a pane goes live on
+  // paths that have nothing to do with focus — a workspace restore walking
+  // every leaf, an ascent re-engaging every content pane, a promote landing on
+  // another pane's grid — and main cannot tell those from a user's descent.
+  // The registry's focus-steal guard reads it from the first frame, before
+  // addChildView and loadURL hand the new widget OS keyboard focus. Absent
+  // means false: a placement that does not say it is focused is not.
+  focused?: boolean;
   url: string;
   bounds: Bounds;
   // contentZoom is the tile's persisted user content zoom, composed with the

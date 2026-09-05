@@ -66,7 +66,7 @@ func (b viewBounds) toJS() js.Value {
 // bridgePlace asks main to create or attach a WebContentsView for paneID
 // showing url at bounds. Every live view shares the one host-local session:
 // there is no per-plugin partition or session key.
-func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden bool) {
+func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden, focused bool) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -81,6 +81,14 @@ func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom fl
 	// hidden: this frame's gesture-hide verdict. A view placed mid-drag or
 	// under the palette starts parked; the registry never guesses.
 	args.Set("hidden", hidden)
+	// focused: is this pane the focused pane. It rides place for the same
+	// reason it rides setHidden — the renderer owns focus — and it must be
+	// here rather than inferred, because a view goes live on paths that are
+	// not a gesture on the focused pane at all (a workspace restore walking
+	// every leaf, an ascent re-engaging every content pane, a promote landing
+	// on another pane's grid). Chromium focuses the new widget as it attaches,
+	// so a guess of "focused" leaks a frame of keystrokes into it.
+	args.Set("focused", focused)
 	// durable gates the context menu's Freeze Page: an ephemeral visit has
 	// nothing to re-descend into.
 	args.Set("durable", durable)

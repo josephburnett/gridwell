@@ -206,6 +206,13 @@ export class WebviewRegistry {
     return this.entries.get(paneId)?.tileId;
   }
 
+  // focusedFor reports whether the registry believes paneId is the focused
+  // pane — the fact the focus-steal guard reads, owned by the renderer and
+  // carried on both place and setHidden. Undefined if the pane has no entry.
+  focusedFor(paneId: string): boolean | undefined {
+    return this.entries.get(paneId)?.focused;
+  }
+
   // viewBoundsFor is a test-only accessor returning the view's physical bounds
   // as Electron last set them, which tells whether the view is parked or at its
   // visible position. The e2e uses it to assert that a bounds change while
@@ -225,7 +232,7 @@ export class WebviewRegistry {
   // bug and is reported, never absorbed: url_stream_client.go returns early for
   // the tile already live in the pane and closes any other view first, so
   // nothing legitimate reaches that branch.
-  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false): Promise<void> {
+  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false, focused = false): Promise<void> {
     const rounded = roundBounds(bounds);
     // One host-local session: every live url tile, local or through a mount,
     // browses on the shared persistent partition, so a login holds everywhere.
@@ -298,15 +305,19 @@ export class WebviewRegistry {
     // only emits this event. The injected preload suppresses the event for a
     // right-drag, which is a pane gesture, so reaching here means a real click.
     view.webContents.on('context-menu', (_event, params) => this.showContextMenu(paneId, view, params));
-    // focused starts true: a pane only goes live by an action on the focused
-    // pane. syncURLViews corrects it on the next frame if focus has moved.
-    // hidden starts from the renderer's verdict for this frame
-    // (PlaceArgs.hidden), so a view placed while the palette is open or during
-    // a drag gesture starts parked instead of landing on top of the canvas
-    // overlay. syncURLViews calls setHidden for this pane on the next draw()
-    // and reaffirms the state.
+    // hidden and focused both start from the renderer's verdict for this frame
+    // (PlaceArgs), because the renderer owns both facts. hidden parks a view
+    // placed while the palette is open or during a drag gesture instead of
+    // landing it on top of the canvas overlay. focused feeds the steal guard
+    // below from the very first frame: addChildView and loadURL hand the new
+    // widget OS keyboard focus, and a placement on an unfocused pane — a
+    // workspace restore walking every leaf, an ascent re-engaging every
+    // content pane, a promote — must bounce it straight back. Guessing `true`
+    // here made the guard return early and leak the user's keystrokes into a
+    // page they never clicked on. syncURLViews calls setHidden for this pane on
+    // the next draw() and reaffirms both.
     const startHidden = hidden;
-    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
+    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, focused, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
     this.entries.set(paneId, e);
     this.win.contentView.addChildView(view);
     view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
@@ -556,17 +567,24 @@ export class WebviewRegistry {
       // The grab can still be in flight when the bounce runs: Chromium's
       // widget-focus commit then lands after it with no further focus event.
       // Recheck once things settle and bounce again if the view still holds
-      // focus it should not. The timer is tracked on the entry and guarded on
-      // liveness, because a middle-click ascent inside the settle window
-      // destroys the view and isFocused() on a destroyed WebContents throws
-      // uncaught in main.
+      // focus it should not. The timer is tracked on the entry so remove() can
+      // cancel it, but that only covers a teardown that went through the
+      // registry: a view can also die under it — a render-process crash, a
+      // host-side close — and every read of a destroyed WebContents throws,
+      // uncaught inside a timer, which hangs main behind an error dialog. The
+      // whole recheck therefore runs inside a catch; a view that is gone has no
+      // focus to hand back.
       if (e.focusRecheck) clearTimeout(e.focusRecheck);
       e.focusRecheck = setTimeout(() => {
         e.focusRecheck = null;
         if (this.entries.get(paneId) !== e) return; // removed meanwhile
-        if (!e.focused && e.view.webContents.isFocused() &&
-            Date.now() - e.lastUserClickMs >= USER_CLICK_FOCUS_GRACE_MS) {
-          this.cb.onFocusStolen?.({ paneId });
+        try {
+          if (!e.focused && e.view.webContents.isFocused() &&
+              Date.now() - e.lastUserClickMs >= USER_CLICK_FOCUS_GRACE_MS) {
+            this.cb.onFocusStolen?.({ paneId });
+          }
+        } catch {
+          // The view died between the focus event and this settle.
         }
       }, FOCUS_RECHECK_MS);
     };

@@ -32,11 +32,17 @@ const PAGE =
           console.log('BRIDGE_RESULT ' + JSON.stringify({ err: 'caps contract broken: ' + JSON.stringify(caps) }));
           return;
         }
+        // focused:false is the renderer's verdict for a placement on a pane
+        // that is not the focused one — a workspace restore, an ascent
+        // re-engaging every content pane, a promote. It must reach the
+        // registry's entry across the real IPC seam, not be guessed there.
         await window.gridwell.placeWebview({
           paneId: 'p1', tileId: 'u1/7',
           url: 'data:text/html,' + encodeURIComponent('<title>Inner</title><body style="margin:0;background:#2980b9">y</body>'),
           bounds: { x: 0, y: 0, width: 400, height: 300 },
+          focused: false,
         });
+        console.log('BRIDGE_PLACED');
         await new Promise(r => setTimeout(r, 1500));
         const f = await window.gridwell.removeWebview({ paneId: 'p1' });
         console.log('BRIDGE_RESULT ' + JSON.stringify({ hasJpeg: f.jpegBase64.length > 0, title: f.title }));
@@ -63,6 +69,16 @@ app.whenReady().then(() => {
   registerWebviewIpc(registry, root.webContents, win);
 
   root.webContents.on('console-message', (_e, _level, message) => {
+    if (message === 'BRIDGE_PLACED') {
+      // PlaceArgs.focused crossed the seam: the entry must carry the
+      // renderer's verdict, since the focus-steal guard reads it from the
+      // first frame — before the renderer's next setHidden could correct it,
+      // and before addChildView and loadURL hand the widget OS focus.
+      const f = registry.focusedFor('p1');
+      if (f !== false) fail(`PlaceArgs.focused did not reach the registry entry (focusedFor=${String(f)})`);
+      console.log('bridge ok: PlaceArgs.focused=false reached the entry');
+      return;
+    }
     if (!message.startsWith('BRIDGE_RESULT ')) return;
     const payload = JSON.parse(message.slice('BRIDGE_RESULT '.length));
     if (payload.err) fail(`renderer reported error: ${payload.err}`);

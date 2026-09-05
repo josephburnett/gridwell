@@ -191,6 +191,47 @@ app.whenReady().then(async () => {
   await reg3.remove('pane3');
   rootWin.destroy();
 
+  // ── a view placed on an unfocused pane may not keep OS focus ────────────
+  // Focus steal is impossible: only the focused pane's view may hold OS
+  // keyboard focus. A pane goes live on paths that are not a gesture on the
+  // focused pane — a workspace restore walking every leaf, an ascent
+  // re-engaging every content pane, a promote onto another pane's grid — and
+  // attaching a WebContentsView and loading a url hands the new widget focus.
+  // The renderer owns the fact and carries it on PlaceArgs; the registry must
+  // not assume the placement was focused, or the guard returns early and the
+  // user's next keystrokes land in a page they never clicked on.
+  const steals: string[] = [];
+  const regF = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push(ev.paneId) });
+  await regF.place('paneU', 'u1/47', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false);
+  if (regF.focusedFor('paneU') !== false) {
+    fail(`place(focused=false) recorded focused=${String(regF.focusedFor('paneU'))}`);
+  }
+  const wcU = (
+    regF as unknown as { entries: Map<string, { view: { webContents: Electron.WebContents } }> }
+  ).entries.get('paneU')!.view.webContents;
+  // Force the grab the guard exists for. Chromium emits 'focus' on the
+  // webContents, which is where the guard sits.
+  wcU.focus();
+  const stealDeadline = Date.now() + 5000;
+  while (steals.length === 0 && Date.now() < stealDeadline) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  if (steals[0] !== 'paneU') fail('a view placed on an unfocused pane kept OS focus: no steal reported');
+  // And the focused case is not bounced: the pane the user acted on keeps its
+  // view's focus, or every legitimate descent would fight the guard.
+  const regG = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push('WRONG:' + ev.paneId) });
+  await regG.place('paneG', 'u1/48', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, true);
+  if (regG.focusedFor('paneG') !== true) fail('place(focused=true) did not record focused');
+  const wcG = (
+    regG as unknown as { entries: Map<string, { view: { webContents: Electron.WebContents } }> }
+  ).entries.get('paneG')!.view.webContents;
+  wcG.focus();
+  await new Promise((r) => setTimeout(r, 500));
+  if (steals.some((s) => s.startsWith('WRONG:'))) fail('a view placed on the FOCUSED pane was bounced');
+  await regF.remove('paneU');
+  await regG.remove('paneG');
+  console.log('place focus ok: unfocused placement bounced, focused placement kept');
+
   console.log('HARNESS PASS');
   app.exit(0);
 });

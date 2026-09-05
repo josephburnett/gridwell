@@ -77,7 +77,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
-    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.durable ?? false, a.hidden ?? false);
+    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.durable ?? false, a.hidden ?? false, a.focused ?? false);
   });
 
   ipcMain.handle(CH.setZoom, (_e, a: SetZoomArgs): void => {

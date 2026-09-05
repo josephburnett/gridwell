@@ -202,7 +202,11 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	a.local(p.ID).urlView.durable = durable
 	addr := a.webAddress(&t)
 	urlLog("place pane=%s tile=%s url=%s", p.ID, t.ID, addr)
-	bridgePlace(p.ID, t.ID, addr, b, contentZoomOf(&t), t.URLHistory, durable, a.liveOverlaysHidden())
+	// The focus fact goes with the placement, from the same owner
+	// syncURLViews reads it from: going live is not always a gesture on the
+	// focused pane.
+	bridgePlace(p.ID, t.ID, addr, b, contentZoomOf(&t), t.URLHistory, durable,
+		a.liveOverlaysHidden(), p.ID == a.tree.Focus)
 	a.draw()
 }
 
