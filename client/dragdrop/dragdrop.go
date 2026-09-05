@@ -394,16 +394,24 @@ type DropInput struct {
 //
 //  1. !Started      → Navigate     (bare click beats everything;
 //     ctrl held at press → NavigateSplit)
-//  2. IsTemplate    → CreateTemplate
-//  3. TileID == ""  → PanEnd
-//  4. OverDelete    → Delete
-//  5. !HasTarget    → Rejected
+//  2. TileID == "" && !IsTemplate → PanEnd
+//  3. OverDelete    → Delete
+//  4. !HasTarget    → Rejected
+//  5. IsTemplate    → CreateTemplate
 //  6. Forbidden     → Rejected      (cross-grid move; move-only input)
 //  7. SameCell      → Rejected
 //  8. Occupied      → Rejected
 //  9. else          → the Intent: copy → DropClone, link → DropLink, move →
 //     DropMove, and a move across an id namespace → DropLink too, since
 //     there is no cross-plugin move
+//
+// The target check sits above EVERY arm that lands something in a grid,
+// creation included, so no arm can commit against a destination the target
+// resolution refused (a content descent, off-canvas). Only the two arms that
+// land in no grid stand above it: a pan, which ends wherever it ends, and the
+// trashcan, which resolves against the bar's own button rather than the grid
+// under the cursor. A template carries no tile id, so it never reaches the
+// delete arm — OverDelete is false without one.
 func DecideDrop(in DropInput) DropAction {
 	switch {
 	case !in.Started && !in.OriginFocused:
@@ -412,14 +420,14 @@ func DecideDrop(in DropInput) DropAction {
 		return DropNavigateSplit
 	case !in.Started:
 		return DropNavigate
-	case in.IsTemplate:
-		return DropCreateTemplate
-	case in.TileID == "":
+	case in.TileID == "" && !in.IsTemplate:
 		return DropPanEnd
 	case in.OverDelete:
 		return DropDelete
 	case !in.HasTarget:
 		return DropRejected
+	case in.IsTemplate:
+		return DropCreateTemplate
 	case in.Forbidden:
 		return DropRejected
 	case in.TargetReadOnly && !(in.SameGrid && !in.Intent.Creates()):

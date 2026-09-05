@@ -32,7 +32,15 @@ type menuContext struct {
 // primitives are already hidden by the writable gate, and the local list is
 // the least-wrong face.
 func (a *App) paneNodeNS(p *pane.Pane) string {
-	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+	return a.gridNodeNS(a.gridIDForPane(p))
+}
+
+// gridNodeNS is paneNodeNS by grid id: the node serving that grid, read off
+// the grid's own stamp. A drop resolves its destination grid rather than a
+// pane's leaf grid — the two differ when the cursor promoted into an open
+// well — so the same-node gate reads the grid it is actually landing in.
+func (a *App) gridNodeNS(gridID string) string {
+	if g, ok := a.c.Grid(gridID); ok {
 		return g.Meta.NodeNS
 	}
 	return ""

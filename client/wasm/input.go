@@ -821,8 +821,10 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 
 	case dragdrop.DropCreateTemplate:
 		// Template-drag drop: turn the synthetic ghost into a real node by
-		// asking the server to create it at the snapped cell.
-		a.commitTemplateDrop(d, sx, sy)
+		// asking the server to create it at the snapped cell. The target and
+		// the cell are the ones gathered above — the verdict's own — so the
+		// create can never land somewhere the verdict did not allow.
+		a.commitTemplateDrop(d, t, dropX, dropY)
 		return true
 
 	case dragdrop.DropPanEnd:
@@ -1476,23 +1478,30 @@ func paletteItemGhostNode(item paletteItem) rpc.Tile {
 	return rpc.Tile{}
 }
 
-// commitTemplateDrop resolves the template drag at release. Off-pane
-// or overlap → snap-back, palette stays open. Valid drop → for url/
-// upload, prompt first; on confirm, fire the create RPC at the
-// snapped cell. On any successful commit, the palette closes.
-func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
-	destPane, destRect, ok := a.paneAtScreen(sx, sy)
-	if !ok {
+// commitTemplateDrop resolves the template drag at release: the create RPC at
+// the snapped cell, or a snap-back with the palette left open. Overlap snaps
+// back; on any successful commit the palette closes.
+//
+// The destination is not resolved here. It is the (t, dropX, dropY) the one
+// gather (dropInputAt) produced for the verdict that routed this call, so the
+// create lands exactly where DecideDrop said it may. A second hit-test would
+// be a second opinion about a legal destination — and dropTargetAt is the one
+// owner of that: it refuses a content descent and off-canvas, which a bare
+// paneAtScreen does not, so a swatch released over a descended pane used to
+// create a tile in the hidden grid behind it, at a cell computed under that
+// grid's zoom rather than the one on screen.
+func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
+	if t == nil {
 		a.cancelDragSnapBack(d)
 		return
 	}
-	dpscreen := paneToDragdrop(destPane, destRect)
-	dcx, dcy := dpscreen.ScreenToCell(sx, sy)
-	dropX := dragdrop.SnapToCell(dcx - d.cellOffsetX)
-	dropY := dragdrop.SnapToCell(dcy - d.cellOffsetY)
+	destPane := t.pane
 
-	// Bail early if the drop cell would overlap an existing node.
-	if a.tileAtCell(destPane, dropX, dropY) != nil {
+	// Bail early if the drop cell would overlap an existing tile in the
+	// destination grid — the target's grid, which is the open well's child
+	// when the cursor promoted into one, not the pane's own leaf grid.
+	if a.occupiedForDrop(t.gridID, dropX, dropY,
+		max(d.snapshotTile.W, 1), max(d.snapshotTile.H, 1), "") {
 		a.cancelDragSnapBack(d)
 		return
 	}
@@ -1504,13 +1513,12 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	// back.
 	if d.item.isPlugin {
 		droppable := pluginhealth.Classify(d.item.plugin) == pluginhealth.Enterable
-		if !droppable || !a.gridWritable(a.gridIDForPane(destPane)) {
+		if !droppable || !a.gridWritable(t.gridID) {
 			a.cancelDragSnapBack(d)
 			return
 		}
-		targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
-		a.landGhost(destPane.ID, 0, targetX, targetY)
-		a.createPluginLinkAtCell(destPane, d.item.plugin, dropX, dropY)
+		a.landGhostAtCell(t, dropX, dropY)
+		a.createPluginLinkAtCell(t.gridID, d.item.plugin, dropX, dropY)
 		a.menu.Close()
 		return
 	}
@@ -1519,7 +1527,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	// gated by that node's grids and policy, and creating a remote node's
 	// text tile inside a local grid is a category error. Same-node drops
 	// only; a cross-node drop refuses visibly and snaps back.
-	if a.paneNodeNS(destPane) != d.menuNS {
+	if a.gridNodeNS(t.gridID) != d.menuNS {
 		a.reportErr(errsurface.Info, "menu",
 			"this menu belongs to another node — drop into a grid on that node, or open the menu here")
 		a.cancelDragSnapBack(d)
@@ -1530,17 +1538,16 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	// The drop never prompts: whatever a kind needs to be useful is asked
 	// for on the first descent, so create is one experience everywhere —
 	// drop, descend, fill in.
-	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
-	a.landGhost(destPane.ID, 0, targetX, targetY)
+	a.landGhostAtCell(t, dropX, dropY)
 
 	// A promote drag is the one arm that is not a plain create: the ephemeral
 	// url dragged off the bar's crumb becomes a persistent tile carrying its
 	// address, and the pane relocates onto it. Every other drop is the
 	// primitives table's create.
 	if d.item.primitive == tplURL && d.item.promotePane != "" {
-		a.promoteEphemeralURL(d.item.promotePane, destPane, dropX, dropY)
+		a.promoteEphemeralURL(d.item.promotePane, destPane.ID, t.gridID, dropX, dropY)
 	} else if pr, ok := primitiveFor(d.item.primitive); ok {
-		pr.create(a, destPane, dropX, dropY)
+		pr.create(a, t.gridID, dropX, dropY)
 	}
 	a.menu.Close()
 }
@@ -1549,8 +1556,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 // grid as the child: an exit-well link, through CreateTile, the one create.
 // The link's framing seeds from the plugin's persisted root view, so its
 // preview shows what descent will show.
-func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
+func (a *App) createPluginLinkAtCell(gid string, pl rpc.PluginInfo, cellX, cellY int64) {
 	req := &rpc.CreateWellRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		ChildGridID: pl.RootGridID,
@@ -1562,11 +1568,10 @@ func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 	}, nil)
 }
 
-// createWellAtCell fires CreateWell at the given cell. The footprint is 1×1
-// and the well is created unnamed; naming happens from inside, through the
-// bar title.
-func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
+// createWellAtCell fires CreateWell at the given cell of grid gid. The
+// footprint is 1×1 and the well is created unnamed; naming happens from
+// inside, through the bar title.
+func (a *App) createWellAtCell(gid string, cellX, cellY int64) {
 	req := &rpc.CreateWellRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
@@ -1575,10 +1580,9 @@ func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	}, nil)
 }
 
-// createTextAtCell fires CreateText at the given cell with the given
-// initial bytes. Footprint is 1×1.
-func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
+// createTextAtCell fires CreateText at the given cell of grid gid with the
+// given initial bytes. Footprint is 1×1.
+func (a *App) createTextAtCell(gid string, data []byte, cellX, cellY int64) {
 	req := &rpc.CreateTextRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		Data: data,
@@ -1588,11 +1592,10 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	}, nil)
 }
 
-// createURLAtCell fires CreateURL at the given cell, address-less: the tile
-// lands inert, and the first descent prompts for the address
-// (openConfigureURL) and writes it as the tile's content.
-func (a *App) createURLAtCell(p *pane.Pane, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
+// createURLAtCell fires CreateURL at the given cell of grid gid,
+// address-less: the tile lands inert, and the first descent prompts for the
+// address (openConfigureURL) and writes it as the tile's content.
+func (a *App) createURLAtCell(gid string, cellX, cellY int64) {
 	req := &rpc.CreateURLRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
@@ -1859,8 +1862,7 @@ func (a *App) shellURLActivate(paneID, url string) {
 // creates the tile's private tmux session; a later ascent shows the frozen
 // JPEG, and re-descending reattaches to the same session with its state
 // preserved.
-func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
+func (a *App) createShellAtCell(gid string, cellX, cellY int64) {
 	req := &rpc.CreateShellRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
@@ -1884,11 +1886,12 @@ func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {
 // (Right-button gesture handling lives in right_button.go.)
 
 // promoteEphemeralURL turns the ephemeral url visit shown in pane
-// originPaneID into a persistent url tile at (cellX, cellY) of destPane's
-// grid: the bar crumb dragged onto a grid. The tile is created with the
-// visit's current address, since the page may have navigated, and
-// finishPromote then moves the visit onto it.
-func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cellX, cellY int64) {
+// originPaneID into a persistent url tile at (cellX, cellY) of grid gid — the
+// drop target's grid — with destPaneID the pane the visit relocates into: the
+// bar crumb dragged onto a grid. The tile is created with the visit's current
+// address, since the page may have navigated, and finishPromote then moves
+// the visit onto it.
+func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, cellY int64) {
 	op := a.tree.FindPane(originPaneID)
 	if op == nil {
 		return
@@ -1901,8 +1904,7 @@ func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cell
 	if v := a.urlViewFor(op.ID); v != nil && v.lastURL != "" {
 		url = v.lastURL
 	}
-	gid := a.gridIDForPane(destPane)
-	destID := destPane.ID
+	destID := destPaneID
 	oldID := t.ID
 	req := &rpc.CreateURLRequest{GridID: gid, X: cellX, Y: cellY, W: 1, H: 1, URL: url}
 	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*rpc.Tile, error) {

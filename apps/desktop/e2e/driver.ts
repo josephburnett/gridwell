@@ -292,17 +292,32 @@ export class GridwellDriver {
     await this.dragSwatchToCell(item, cx, cy);
   }
 
+  // dragCreateToScreen drags the palette swatch of the given primitive kind to
+  // an arbitrary screen point rather than a cell of the focused pane: the drop
+  // a cell address cannot name, such as a point inside another pane that is
+  // descended into a tile, where there is no grid to take a cell from.
+  async dragCreateToScreen(kind: string, x: number, y: number): Promise<void> {
+    const pal = await this.palette();
+    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
+    if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
+    await this.dragSwatchToScreen(item, x, y);
+  }
+
   private async dragSwatchToCell(item: PaletteItem, cx: number, cy: number): Promise<void> {
-    const sx = item.x + item.w / 2;
-    const sy = item.y + item.h / 2;
     const f = await this.focused();
     const target = await this.cellCenter(f.id, cx, cy);
+    await this.dragSwatchToScreen(item, target.x, target.y);
+  }
+
+  private async dragSwatchToScreen(item: PaletteItem, x: number, y: number): Promise<void> {
+    const sx = item.x + item.w / 2;
+    const sy = item.y + item.h / 2;
 
     const m = this.win.mouse;
     await m.move(sx, sy);
     await m.down();
     await m.move(sx + 10, sy + 10); // past the 4px threshold: the drag arms
-    await m.move(target.x, target.y, { steps: 8 });
+    await m.move(x, y, { steps: 8 });
     await m.up();
     await this.waitIdle();
   }

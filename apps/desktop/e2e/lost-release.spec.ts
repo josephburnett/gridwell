@@ -35,10 +35,23 @@ test('a left drag whose release is never seen still commits and unhides its tile
   const to = await gw.cellCenter(home.id, cx + 1, cy);
 
   // Press and drag past the threshold: the ghost materializes and hides the
-  // source tile it stands in for.
-  await window.mouse.move(from.x, from.y);
-  await window.mouse.down();
-  await window.mouse.move(from.x + 8, from.y + 8);
+  // source tile it stands in for. Both events go in one synchronous turn,
+  // like the recovery move below: Playwright drives a virtual mouse, so the
+  // real cursor stays parked at the screen center, and any layer change
+  // Chromium notices under it arrives as a mousemove with no button held —
+  // which IS a lost release, and would end this drag before it is asserted on.
+  await window.evaluate(
+    ([fx, fy]: number[]) => {
+      const canvas = document.querySelector('canvas')!;
+      const fire = (type: string, x: number, y: number) =>
+        canvas.dispatchEvent(
+          new MouseEvent(type, { clientX: x, clientY: y, buttons: 1, button: 0, bubbles: true }),
+        );
+      fire('mousedown', fx, fy);
+      fire('mousemove', fx + 8, fy + 8);
+    },
+    [from.x, from.y],
+  );
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.ghost().hiddenTileID), {
       message: 'the armed drag hides the source tile',
@@ -82,7 +95,5 @@ test('a left drag whose release is never seen still commits and unhides its tile
     )
     .toBe(tileID);
 
-  // Let the physical button go; by now there is nothing left for it to end.
-  await window.mouse.up();
   await gw.waitIdle();
 });

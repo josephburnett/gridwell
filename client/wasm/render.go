@@ -291,11 +291,14 @@ const (
 // set, so a kind cannot be half-added — a swatch with no glyph, a glyph with
 // no create — and every reader derives from the same order.
 type primitive struct {
-	kind   templateKind
-	name   string
-	ghost  rpc.Tile
-	glyph  func(a *App, x, y, w, h float64)
-	create func(a *App, p *pane.Pane, cellX, cellY int64)
+	kind  templateKind
+	name  string
+	ghost rpc.Tile
+	glyph func(a *App, x, y, w, h float64)
+	// create fires this kind's create RPC into gridID — the drop target's
+	// grid, which is an open well's child grid when the cursor promoted into
+	// one, never re-derived from a pane here.
+	create func(a *App, gridID string, cellX, cellY int64)
 }
 
 // primitives is the palette layout order of the built-in tile primitives,
@@ -317,31 +320,31 @@ func init() {
 			kind: tplWell, name: "well",
 			ghost:  rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1},
 			glyph:  func(a *App, x, y, w, h float64) { drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder) },
-			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createWellAtCell(p, cellX, cellY) },
+			create: func(a *App, gid string, cellX, cellY int64) { a.createWellAtCell(gid, cellX, cellY) },
 		},
 		{
 			kind: tplMarkdown, name: "markdown",
 			ghost:  rpc.Tile{Kind: rpc.KindText, W: 1, H: 1},
 			glyph:  func(a *App, x, y, w, h float64) { drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine) },
-			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createTextAtCell(p, []byte{}, cellX, cellY) },
+			create: func(a *App, gid string, cellX, cellY int64) { a.createTextAtCell(gid, []byte{}, cellX, cellY) },
 		},
 		{
 			kind: tplURL, name: "url",
 			ghost:  rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1},
 			glyph:  func(a *App, x, y, w, h float64) { drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine) },
-			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createURLAtCell(p, cellX, cellY) },
+			create: func(a *App, gid string, cellX, cellY int64) { a.createURLAtCell(gid, cellX, cellY) },
 		},
 		{
 			kind: tplShell, name: "shell",
 			ghost:  rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"},
 			glyph:  func(a *App, x, y, w, h float64) { drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder) },
-			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createShellAtCell(p, cellX, cellY) },
+			create: func(a *App, gid string, cellX, cellY int64) { a.createShellAtCell(gid, cellX, cellY) },
 		},
 		{
 			kind: tplPane, name: "pane",
 			ghost:  rpc.Tile{Kind: rpc.KindPane, W: 1, H: 1, AltText: "workspace"},
 			glyph:  func(a *App, x, y, w, h float64) { drawPaneGlyph(a.cctx, x, y, w, h, colorPaneTileBorder) },
-			create: func(a *App, p *pane.Pane, cellX, cellY int64) { a.createPaneAtCell(p, cellX, cellY) },
+			create: func(a *App, gid string, cellX, cellY int64) { a.createPaneAtCell(gid, cellX, cellY) },
 		},
 	}
 	primitiveKinds = make([]templateKind, len(primitives))

@@ -139,8 +139,7 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 // The tile is created unnamed, like a well — naming happens through the
 // bar-title rename — and with no layout blob, so it is never-arranged and the
 // first descent installs the default single pane.
-func (a *App) createPaneAtCell(p *pane.Pane, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
+func (a *App) createPaneAtCell(gid string, cellX, cellY int64) {
 	req := &rpc.CreatePaneRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}

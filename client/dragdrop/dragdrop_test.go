@@ -438,10 +438,18 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: false, OriginFocused: false, SplitNav: true, TileID: "7"}, DropFocusOnly},
 		{"ctrl held on a started drag -> still a plain move",
 			DropInput{Started: true, SplitNav: true, TileID: "7", HasTarget: true}, DropMove},
-		{"template -> create (beats pan/delete)",
-			DropInput{Started: true, IsTemplate: true, TileID: "", OverDelete: true, HasTarget: true}, DropCreateTemplate},
-		{"pan (tileID \"\") -> panEnd (beats delete)",
+		{"template -> create (beats pan)",
+			DropInput{Started: true, IsTemplate: true, TileID: "", HasTarget: true}, DropCreateTemplate},
+		{"pan (tileID \"\") -> panEnd (beats delete and the target check)",
 			DropInput{Started: true, TileID: "", OverDelete: true, HasTarget: true}, DropPanEnd},
+		{"pan off any pane -> still panEnd",
+			DropInput{Started: true, TileID: "", HasTarget: false}, DropPanEnd},
+		// A creation needs a destination, like every other landing arm. The
+		// swatch released over a content descent, or off the canvas, resolves
+		// no drop target, and a template that skipped this check would be
+		// committed against a second hit-test of its own.
+		{"template with no target -> rejected",
+			DropInput{Started: true, IsTemplate: true, TileID: "", HasTarget: false}, DropRejected},
 
 		// --- delete fires, and outranks the placement arms ---
 		{"over delete button -> delete",

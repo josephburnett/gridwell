@@ -34,17 +34,37 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
   const ephemeralID = visiting.textFocus;
   expect(ephemeralID, 'the visit is a descent').not.toBe('');
 
-  // The current crumb (last chain segment) is the drag handle.
+  // The current crumb (last chain segment) is the drag handle. The drop cell
+  // is off the destination pane's center, so the assertion below pins WHICH
+  // pane the drop resolved in: the visiting pane frames the same home grid, at
+  // its descent's zoom, and a drop resolved there would land on a different
+  // cell.
+  const dropX = Math.round(dest.cx) + 2;
+  const dropY = Math.round(dest.cy) + 1;
   const bar = await gw.bar();
   const crumb = bar.segments[bar.segments.length - 1];
   const from = { x: crumb.x + crumb.w / 2, y: bar.top + bar.height / 2 }; // segment x is absolute
-  const to = await gw.cellCenter(dest.id, Math.round(dest.cx), Math.round(dest.cy));
-  const m = window.mouse;
-  await m.move(from.x, from.y);
-  await m.down();
-  await m.move(from.x + 6, from.y + 6);
-  await m.move(to.x, to.y, { steps: 12 });
-  await m.up();
+  const to = await gw.cellCenter(dest.id, dropX, dropY);
+  // The whole gesture in one synchronous turn. Arming the drag parks every
+  // live view, which changes what sits under the REAL cursor — and Playwright
+  // drives a virtual mouse, so the real one is still parked at the screen
+  // center. Chromium then reports that layer change as a mousemove with no
+  // button held, which is a lost release (recoverLostRelease) and ends the
+  // drag wherever the real cursor happens to be. Dispatching press, move, and
+  // release together leaves no window for it.
+  await window.evaluate(
+    ([fx, fy, tx, ty]: number[]) => {
+      const canvas = document.querySelector('canvas')!;
+      const fire = (type: string, x: number, y: number, buttons: number) =>
+        canvas.dispatchEvent(
+          new MouseEvent(type, { clientX: x, clientY: y, buttons, button: 0, bubbles: true }),
+        );
+      fire('mousedown', fx, fy, 1);
+      fire('mousemove', tx, ty, 1);
+      fire('mouseup', tx, ty, 0);
+    },
+    [from.x, from.y, to.x, to.y],
+  );
   await gw.waitIdle();
 
   // A persistent url tile with the visit's address now lives on the home grid.
@@ -55,6 +75,10 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
     }, { timeout: 15_000 })
     .toBe(1);
   const promoted = (await gw.getGrid(home.gridID)).tiles!.find((t) => String(t.urlString ?? '').includes('promote-me'))!;
+  expect(
+    [Number(promoted.x ?? 0), Number(promoted.y ?? 0)],
+    'the tile landed on the cell of the pane the drop resolved in',
+  ).toEqual([dropX, dropY]);
 
   // The visiting pane followed its content: it is descended into the new tile on
   // the destination's grid, and the ephemeral row is gone.
