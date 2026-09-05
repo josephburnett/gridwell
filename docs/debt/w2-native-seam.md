@@ -396,6 +396,15 @@ reachable from a test with the cost written down. `make check-electron` and
 `make check-e2e` green. `docs/debt-program.md`'s W2 status ticked in the same
 commit as the last phase.
 
+**What landed.** Every remaining row is a `capture-harness.ts` scenario — the
+registry is the thing under test in all of them, and the harness drives it
+directly for a fraction of Playwright's cost. Grouped by mechanism rather than
+one commit per row: the place/setBounds/setHidden half-covered arms, the four
+`remove()` arms, the four `wireNav` event arms, and the capture streak with the
+context menu's `canFreeze`. Two of them were checked against a deliberately
+broken production line first (the storage flush, the settle cancel) to be sure
+the assertion had teeth. Row 14 is the one UNCOVERABLE row, above.
+
 ## 8. Running the gates on this dev box
 
 No document in `docs/` describes this; the only trace is

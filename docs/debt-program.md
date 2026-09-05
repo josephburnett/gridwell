@@ -91,7 +91,13 @@ covered in the bridge harness. Separately: audit every `webviews.ts` path
 against the CLAUDE.md rule ("anything you touch there gets one") and close
 gaps. Design doc: `docs/debt/w2-native-seam.md`.
 
-**Status:** [x] design [x] focusguard extraction + tests [x] harness coverage [ ] webviews path audit (10 GAP rows left in docs/debt/w2-native-seam.md §6; the focus family is closed)
+**Status:** [x] design [x] focusguard extraction + tests [x] harness coverage
+[x] webviews path audit — DONE. Every path in `docs/debt/w2-native-seam.md` §6
+names a covering test. One row, 14 (the recovered-capture report), is marked
+UNCOVERABLE with the reason written down: the arm is unreachable in production,
+not merely untested, because the failing streak is entered only by a
+synchronous throw and a destroyed view never recovers. That is a question for
+the owner, in the doc; no behavior was changed.
 
 ## W3 — The freshness stack gets its one document and its seam tests
 
@@ -113,7 +119,13 @@ cross-layer behavior in those traces not pinned by a seam test gets one
 (most live in `internal/server`'s seam tests and `make check-connections`).
 Simplification candidates noted for owner decision, not silently applied.
 
-**Status:** [x] doc [x] seam-test gap list [ ] gap tests
+**Status:** [x] doc [x] seam-test gap list [x] gap tests — DONE. Both remaining
+rows are pinned by one browser-mode spec, a far node that dies and comes back:
+the client's GridChanged arm and its two health arms, all asserted as an
+absence of gestures. It also found a real bug — an empty body could not be
+remembered at all (a nil `[]byte` binds as NULL against a NOT NULL column), so
+the most ordinary read there is announced "the cache cannot remember answers"
+on the strip.
 
 ## W4 — Concept audit and exception-surface consolidation
 
