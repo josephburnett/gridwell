@@ -17,6 +17,7 @@ package nav
 
 import (
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -148,6 +149,8 @@ const (
 	// stepLevelRecentre centres a post-reload ascent landing on the pane tile
 	// it came out of, once that row has been read.
 	stepLevelRecentre
+	// stepLinkTarget places a live url view on a link's target row.
+	stepLinkTarget
 )
 
 // mint registers c and returns its token.
@@ -248,6 +251,8 @@ func (m *Machine) Do(g Gesture, w World) Plan {
 		return m.landLevel(g, w)
 	case GesturePromote:
 		return m.promote(g, w)
+	case GestureFollowLink:
+		return m.followLink(g, w)
 	}
 	return Plan{}
 }
@@ -317,6 +322,14 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		return m.levelBody(c, r, &pl)
 	case stepLevelRecentre:
 		m.levelRecentre(c, r, w, &pl)
+	case stepLinkTarget:
+		if !r.OK || r.Tile == nil {
+			pl.add(Effect{Kind: EffReport, Severity: errsurface.Error,
+				Source: "rpc:GetTile", Message: "GetTile failed: " + r.Err})
+			break
+		}
+		pl.add(Effect{Kind: EffPlaceURLView, PaneID: c.PaneID,
+			TileID: r.Tile.ID, Tile: *r.Tile})
 	case stepRestoreCursor:
 		// The bytes have landed and seeded the textarea; the cursor the
 		// address encodes goes after the seeding, or it lands in an empty

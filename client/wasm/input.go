@@ -1752,11 +1752,11 @@ func (a *App) openLinkBelow(paneID, url string) {
 // sub-minimum split is this caller's job). The clone inherits the source's
 // content frame, which a live view cannot duplicate — the same rule as
 // commitSplit — so the new pane ascends just the content level and shows
-// the grid containing the tile. The ephemeral delete-on-ascent asks
-// whether another pane still shows the tile, so that ascent never deletes the
-// tile the source pane still shows. That shedding is instant: the clone is born in the same
-// place as the source with nothing on screen to zoom out of, and the user made
-// no ascent gesture, so animating it would be a second transition for one
+// the grid containing the tile. The ephemeral delete-on-ascent asks whether
+// another pane still shows the tile, so that ascent never deletes the tile the
+// source pane still shows. That shedding is instant: the clone is born in the
+// same place as the source with nothing on screen to zoom out of, and the user
+// made no ascent gesture, so animating it would be a second transition for one
 // gesture — and one that lands wearing the trace of a departure that never
 // happened. commitSplit's animated ascent is the other case: there the user
 // asked, and the footprint is real.

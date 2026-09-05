@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -138,25 +139,12 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 		return
 	}
 	// A url link goes live as its target: the url string, the session
-	// partition, the history, and the freeze writeback all belong to the
-	// tile that owns the content. The target row lives in a foreign grid the
-	// client has likely never loaded, so fetch it; the view places when the
-	// row arrives.
-	paneID := p.ID
-	go func() {
-		target, err := a.cl.GetTile(context.Background(), t.ContentID())
-		if err != nil {
-			a.surfaceRPCError("GetTile", err)
-			return
-		}
-		// The pane may have closed, ascended, or descended elsewhere while
-		// the target row was in flight: the moved-on rule every async
-		// descent path applies (pane.StillDescended).
-		if !pane.StillDescended(a.tree.FindPane(paneID), t.ID) {
-			return
-		}
-		a.placeURLView(paneID, *target)
-	}()
+	// partition, the history, and the freeze writeback all belong to the tile
+	// that owns the content. The target row lives in a foreign grid the client
+	// has likely never loaded, so it is read, and the view places when the row
+	// arrives — under the machine's one moved-on rule, since the user may go
+	// elsewhere while it is in flight.
+	a.runGesture(nav.Gesture{Kind: nav.GestureFollowLink, PaneID: p.ID, Door: t})
 }
 
 // placeURLView places the native WebContentsView for pane paneID showing tile
@@ -232,7 +220,7 @@ func (a *App) dropFailedURLView(paneID string, v *urlView) {
 }
 
 // freezeTarget names the row a closing view's freeze is written to when it is
-// not the view's own tile: the promote gesture (finishPromote) captures the
+// not the view's own tile: the promote gesture (client/nav) captures the
 // ephemeral visit's final frame onto the persistent tile that replaces it.
 type freezeTarget struct {
 	tileID string

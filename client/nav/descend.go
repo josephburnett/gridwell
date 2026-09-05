@@ -272,6 +272,26 @@ func (m *Machine) reEngage(g Gesture, w World) Plan {
 	return pl.plan()
 }
 
+// followLink resolves a url link's target row and places the live view on it.
+// The url string, the session partition, the history and the freeze writeback
+// all belong to the tile that OWNS the content, and that row lives in a
+// foreign grid the client has likely never loaded — so it is read, and the
+// view places when the answer lands. The read is asynchronous, so it runs
+// under the one moved-on rule: the pane may have closed, ascended, or
+// descended elsewhere, and a late placement would put a native surface over a
+// pane that no longer shows that tile.
+func (m *Machine) followLink(g Gesture, w World) Plan {
+	var pl planner
+	tok := m.mint(cont{
+		Guard:  Guard{Kind: GuardDescendedIn, PaneID: g.PaneID, TileID: g.Door.ID},
+		Step:   stepLinkTarget,
+		PaneID: g.PaneID,
+	})
+	pl.add(Effect{Kind: EffAwait, Token: tok,
+		Request: Request{Kind: RequestGetTile, ID: g.Door.ContentID()}})
+	return pl.plan()
+}
+
 // healStale re-derives a restored pane's path when its stored (anchor, path)
 // no longer leads to the descended tile's grid: the tile moved, since its id
 // is immutable but its path is not. A scoped `id:` Search, the one find verb,

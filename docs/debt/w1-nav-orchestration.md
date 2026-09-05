@@ -532,7 +532,14 @@ otherwise.
    `scratch.Ephemeral` plus that projection, and it is now spelled once, in the
    machine, for both the ascent and the promote.
 
-8. **The promote's guard is evaluated at gesture time, not at resume.** The
+8. **Phase C also absorbs the go-live link hop.** The done-bar is a grep over
+   the whole shim, and `openURLStream`'s target fetch — a url link goes live as
+   the row that owns the content — was the last hand-written
+   `pane.StillDescended` in `client/wasm`. It is a `FollowLink` gesture now, so
+   both its callers (the descent's auto-live and the reconnect click) get the
+   guard from the one place, rather than one of them keeping a copy.
+
+9. **The promote's guard is evaluated at gesture time, not at resume.** The
    await it continues is a MUTATION — the create — and mutations are the
    dispatcher's, not the machine's, so `Promote` is a gesture the shim hands
    over when the row lands rather than a token it resumes. Its precondition is

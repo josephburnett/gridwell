@@ -435,3 +435,33 @@ func TestLeaveLevels(t *testing.T) {
 		}
 	})
 }
+
+func TestFollowLinkTarget(t *testing.T) {
+	link := rpc.Tile{ID: "r1", Kind: rpc.KindURL, GridID: "g1", LinkTargetID: "u2/r9"}
+	target := rpc.Tile{ID: "u2/r9", Kind: rpc.KindURL, GridID: "u2/1",
+		URLString: "https://example.test/"}
+	descended := baseWorld(contentPane("pane1", "r1"))
+
+	t.Run("the view places on the row that owns the content", func(t *testing.T) {
+		m := New()
+		aw := only(t, m.Do(Gesture{Kind: GestureFollowLink, PaneID: "pane1", Door: link},
+			descended), EffAwait)
+		if aw.Request.ID != "u2/r9" {
+			t.Fatalf("await = %+v, want the link's target", aw.Request)
+		}
+		e := only(t, m.Resume(aw.Token, Result{OK: true, Tile: &target}, descended), EffPlaceURLView)
+		if e.PaneID != "pane1" || e.Tile.URLString != target.URLString {
+			t.Fatalf("placed %+v, want the target row by value", e)
+		}
+	})
+
+	t.Run("a pane that moved on gets no view", func(t *testing.T) {
+		m := New()
+		aw := only(t, m.Do(Gesture{Kind: GestureFollowLink, PaneID: "pane1", Door: link},
+			descended), EffAwait)
+		elsewhere := baseWorld(contentPane("pane1", "other"))
+		if plan := m.Resume(aw.Token, Result{OK: true, Tile: &target}, elsewhere); len(plan.Effects) != 0 {
+			t.Fatalf("placed a view over a pane that moved on: %v", kinds(plan))
+		}
+	})
+}

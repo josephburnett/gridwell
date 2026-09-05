@@ -29,6 +29,9 @@ const (
 	GestureLandLevel
 	// GestureReEngage re-engages a restored content frame: PaneID, TileID.
 	GestureReEngage
+	// GestureFollowLink places a live url view on a link's target: PaneID,
+	// Door (the link row).
+	GestureFollowLink
 )
 
 // Gesture is one navigation verb with its arguments. Like Effect it is a
