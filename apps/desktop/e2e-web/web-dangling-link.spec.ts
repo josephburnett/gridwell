@@ -5,18 +5,29 @@ import * as path from 'node:path';
 import { spawnServe, stopServe, authenticate, freePort } from './fixtures';
 import { seedHome } from '../e2e/fixtures';
 import { GridwellDriver } from '../e2e/driver';
+import { tileAt } from '../e2e/oracle';
 
-// A dangling doorway — a link into a plugin no longer in server.yaml — must
-// surface its verdict once and latch, not refetch and re-report every frame
-// the well is on screen. The shape is a real one: a pre-one-node home whose
-// conversion dropped a plugin leaves exactly these wells behind.
+// A dangling doorway — a link into a plugin no longer in server.yaml — is
+// DEAD: the node does not declare that namespace, so the tile greys, nothing
+// is asked for it, and nothing is said about it (client/deadref). The shape
+// is a real one: a pre-one-node home whose conversion dropped a plugin leaves
+// exactly these wells behind.
+//
+// dead-link.spec pins the state against a reference seeded straight onto the
+// server. This crosses the other half of the seam, in browser mode: a link
+// the user really dropped on a plugin that is really in server.yaml, then the
+// config edit and the reboot that make it dangle. The counts are the point —
+// zero verdicts and zero fetches over three seconds of rendering — because
+// the failure this replaced was one RPC and one error line PER FRAME.
 
-base('a link into an unconfigured plugin reports once, not per frame', async ({ page }) => {
+base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) => {
   const docs = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-docs-'));
   fs.writeFileSync(path.join(docs, 'note.md'), 'hello');
   const home = seedHome([{ kind: 'fs', name: 'files', config: { root: docs } }]);
 
   // Boot 1: with the plugin. Drop a link to it on the home root.
+  let linkID = '';
+  let childGridID = '';
   const served1 = await spawnServe(home, await freePort());
   try {
     await authenticate(page, served1);
@@ -31,6 +42,10 @@ base('a link into an unconfigured plugin reports once, not per frame', async ({ 
     const seeded: any = await gw.getGrid(f.gridID);
     const link = (seeded.tiles ?? []).find((t: any) => t.kind === 'well');
     expect(link, 'boot 1 dropped the plugin link well').toBeTruthy();
+    expect(link.reference, 'and it is a link, not a well of its own').toBe(true);
+    linkID = link.id;
+    childGridID = String(link.childGridId ?? '');
+    expect(childGridID, 'the link names the plugin root it points at').toBeTruthy();
   } finally {
     await stopServe(served1.child);
   }
@@ -43,10 +58,16 @@ base('a link into an unconfigured plugin reports once, not per frame', async ({ 
   expect(idLine, 'boot 1 minted the node id').toBeTruthy();
   fs.writeFileSync(path.join(home, 'server.yaml'), idLine + '\n');
 
-  // Boot 2: the well is a dangling doorway. Its verdict must surface once.
+  // Boot 2: the well is a dangling doorway. Count everything it could say —
+  // the strip's verdict on the console, and every grid the client asks for.
   const unavailable: string[] = [];
   page.on('console', (m) => {
     if (m.text().includes('grid unavailable')) unavailable.push(m.text());
+  });
+  const asked: string[] = [];
+  await page.route('**/gridwell.v1.Gridwell/GetGrid', async (r) => {
+    asked.push(r.request().postData() ?? '');
+    await r.continue();
   });
   const served2 = await spawnServe(home, await freePort());
   try {
@@ -55,14 +76,40 @@ base('a link into an unconfigured plugin reports once, not per frame', async ({ 
     await page.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
     const gw = new GridwellDriver(page, served2.origin);
     await gw.waitIdle();
-    // Let the render loop run with the dangling well on screen: without the
-    // verdict latch this collects a report per frame.
+    const f = await gw.focused();
+
+    // The verdict crossed the seam: server.yaml lost the plugin, so the tile
+    // the roster cannot place reads dead.
+    await expect
+      .poll(
+        async () =>
+          (await page.evaluate(
+            (gid: string) => (window as any).__gridwellTest.deadLinks(gid),
+            f.gridID,
+          )) as string[],
+        { message: 'the dangling doorway reads dead', timeout: 15_000 },
+      )
+      .toEqual([linkID]);
+
+    // Let the render loop run with the dangling well on screen. Nothing is
+    // asked and nothing is said: not once per frame, not once at all.
     await page.waitForTimeout(3_000);
-    expect(unavailable.length, 'the dangling doorway must report').toBeGreaterThan(0);
+    expect(unavailable, 'a dead link raises no verdict').toEqual([]);
     expect(
-      unavailable.length,
-      `one verdict, one report — got ${unavailable.length} (a per-frame refetch loop)`,
-    ).toBeLessThanOrEqual(2);
+      asked.filter((body) => body.includes(childGridID)),
+      'a dead namespace is never asked for',
+    ).toEqual([]);
+
+    // Still a link, still labelled — and still something the user can throw
+    // away, which is the whole point of drawing it rather than hiding it.
+    const row = (await gw.getGrid(f.gridID)).tiles!.find((t: any) => t.id === linkID)!;
+    expect(row.reference, 'still a link: deleting it only unlinks').toBe(true);
+    await page.unroute('**/gridwell.v1.Gridwell/GetGrid');
+    await gw.deleteTileCell(Number(row.x ?? 0), Number(row.y ?? 0));
+    await expect
+      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', Number(row.x ?? 0), Number(row.y ?? 0)))
+      .toBeUndefined();
+    expect(unavailable, 'and the delete is quiet too').toEqual([]);
   } finally {
     await stopServe(served2.child);
     fs.rmSync(home, { recursive: true, force: true });
