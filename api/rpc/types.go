@@ -287,6 +287,15 @@ func (t *Tile) PageContent() bool {
 	return t.ServesPage && t.Kind != KindURL
 }
 
+// LeafLink reports whether this row is a leaf link: one content tile shown in
+// a second place, owning no bytes of its own. ContentID answers "whose
+// content" and is the read-through every content operation takes; this names
+// the question where the answer is not an id — whether to resolve at all,
+// whether to prompt, whether the row is the content's home.
+func (t *Tile) LeafLink() bool {
+	return t.LinkTargetID != ""
+}
+
 // PageURL builds the /content/ door address for a tile: the one place the
 // URL grammar is written on the client side. The server's parseContentPath
 // is its mirror, and a seam test pins that they agree. The trailing slash is

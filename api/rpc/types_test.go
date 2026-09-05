@@ -269,3 +269,21 @@ func TestTextDocumentAndPageContent(t *testing.T) {
 		}
 	}
 }
+
+// TestLeafLink pins that the link question is the target's presence, not the
+// Reference flag: a well with a qualified child grid is a reference too, and
+// it owns its row.
+func TestLeafLink(t *testing.T) {
+	link := Tile{ID: "b/9", Kind: KindText, LinkTargetID: "a/42", Reference: true}
+	if !link.LeafLink() {
+		t.Error("a row with a target is a leaf link")
+	}
+	mount := Tile{ID: "b/1", Kind: KindWell, ChildGridID: "a/7", Reference: true}
+	if mount.LeafLink() {
+		t.Error("an exit well is not a leaf link")
+	}
+	owned := Tile{ID: "a/42", Kind: KindText}
+	if owned.LeafLink() {
+		t.Error("a row that owns its content is not a leaf link")
+	}
+}

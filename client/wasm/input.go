@@ -875,10 +875,9 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 		}, nil)
 		return
 	}
-	target := src.LinkTargetID
-	if target == "" {
-		target = src.ID
-	}
+	// A link to a link points at the content, never at the middle row: the
+	// same read-through every content operation takes.
+	target := src.ContentID()
 	req := &rpc.CreateLeafLinkRequest{
 		GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
 		Kind: src.Kind, LinkTargetID: target, Label: src.AltText,
@@ -1049,7 +1048,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 	// An address-less url tile, dropped bare: the first descent is where the
 	// address is asked for. A url link resolves its address through the
 	// target and never prompts.
-	if hit.Kind == rpc.KindURL && hit.URLString == "" && hit.LinkTargetID == "" {
+	if hit.Kind == rpc.KindURL && hit.URLString == "" && !hit.LeafLink() {
 		a.openConfigureURL(p, hit)
 		return true
 	}

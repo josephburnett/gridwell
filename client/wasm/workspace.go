@@ -284,12 +284,12 @@ func (a *App) descendLevel(p *pane.Pane, pt *rpc.Tile) {
 			a.maybeInstallWorkspace(pd)
 			return
 		}
-		if fresh.LinkTargetID != "" {
+		if fresh.LeafLink() {
 			// A pane link opens the target's arrangement, the one shared
 			// layout, and the persister then writes back through the target
 			// id too. The same read-through rule as every other content
 			// door.
-			tileID = fresh.LinkTargetID
+			tileID = fresh.ContentID()
 			fresh, err = a.cl.GetTile(context.Background(), tileID)
 			if err != nil {
 				a.surfaceRPCError("GetTile", err)
@@ -351,9 +351,9 @@ func (a *App) bootWorkspace(tileID string) {
 		a.surfaceRPCError("GetTile", err)
 		return
 	}
-	if tile.LinkTargetID != "" {
+	if tile.LeafLink() {
 		// A pane link boots the target's arrangement (see openWorkspace).
-		tileID = tile.LinkTargetID
+		tileID = tile.ContentID()
 		tile, err = a.cl.GetTile(context.Background(), tileID)
 		if err != nil {
 			a.surfaceRPCError("GetTile", err)

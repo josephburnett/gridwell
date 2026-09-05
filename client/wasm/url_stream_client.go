@@ -133,7 +133,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 			a.c.UpdateTile(cleared.GridID, *cleared)
 		}()
 	}
-	if t.LinkTargetID == "" {
+	if !t.LeafLink() {
 		a.placeURLView(p.ID, t)
 		return
 	}
@@ -144,7 +144,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	// row arrives.
 	paneID := p.ID
 	go func() {
-		target, err := a.cl.GetTile(context.Background(), t.LinkTargetID)
+		target, err := a.cl.GetTile(context.Background(), t.ContentID())
 		if err != nil {
 			a.surfaceRPCError("GetTile", err)
 			return
