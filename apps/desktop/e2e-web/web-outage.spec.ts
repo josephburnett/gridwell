@@ -287,3 +287,48 @@ test('framing settled during an outage lands after the restart', async ({ gw, ou
     )
     .toBeGreaterThan(0);
 });
+
+// The ephemeral cleanup is the one delete with nothing on screen to reconcile:
+// the row lives in the off-grid scratch grid, and a shell's tmux session with
+// all its processes lives behind it. Ascending is what deletes it, so an
+// outage at exactly that moment used to lose the cleanup outright — the call
+// was a bare goroutine, outside the dispatcher, with no outbox entry, no
+// retry, and, during a quit, no run at all. It has to park like every other
+// unacknowledged write and drain on reconnect.
+test('an ephemeral visit left during an outage parks its delete and drains on reconnect', async ({
+  gw,
+  window,
+  outage,
+}) => {
+  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
+  expect(scratchGridID, 'the home plugin advertises a scratch grid').toBeTruthy();
+
+  await gw.enterPlugin('home');
+
+  // An ephemeral shell: created off-grid in the scratch grid, descended into,
+  // PTY spawned. Shells ride the web door, so this is the browser's own visit.
+  await gw.clickPaletteSwatch('shell');
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  const ephemeralID = (await gw.focused()).textFocus;
+  expect(
+    ((await gw.getGrid(scratchGridID)).tiles ?? []).length,
+    'the scratch row is there to be cleaned up',
+  ).toBe(1);
+
+  // The outage, then the ascent: gray meant gone, and the delete fires into a
+  // dead socket.
+  await outage.kill();
+  await gw.ascendViaCrumb();
+
+  // It parked instead of evaporating.
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.outbox()), { timeout: 15_000 })
+    .toContain('DeleteTile:' + ephemeralID);
+
+  // The reconnect drains it, with no user action: the scratch row is gone, and
+  // the tmux session behind it went with the delete.
+  await outage.start();
+  await expect
+    .poll(async () => ((await gw.getGrid(scratchGridID)).tiles ?? []).length, { timeout: 30_000 })
+    .toBe(0);
+});

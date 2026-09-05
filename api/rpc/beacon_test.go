@@ -35,4 +35,15 @@ func TestBeaconBodies(t *testing.T) {
 	if path, body = SetTextViewBeacon(&SetTextViewRequest{TileID: "u1/9", TextY: 40}); path == "" || body == nil {
 		t.Error("text-view beacon empty")
 	}
+
+	// The ephemeral cleanup parks, so it can be drained at unload: a quit
+	// mid-ascent must still take the scratch row, and a shell's tmux session,
+	// with it.
+	path, body = DeleteTileBeacon(&DeleteTileRequest{TileID: "u1/7"})
+	if path != "/gridwell.v1.Gridwell/DeleteTile" {
+		t.Errorf("delete path = %q", path)
+	}
+	if err := json.Unmarshal(body, &m); err != nil || m["tileId"] != "u1/7" {
+		t.Errorf("delete body = %s err=%v", body, err)
+	}
 }

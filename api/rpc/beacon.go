@@ -68,6 +68,14 @@ func SetURLStateBeacon(req *SetURLStateRequest) (path string, body []byte) {
 	return beacon(gridwellv1connect.GridwellSetTileProcedure, SetURLStateToProto(&r))
 }
 
+// DeleteTileBeacon is the beacon form of Client.DeleteTile. Only one delete
+// parks and therefore reaches the unload drain: the ephemeral visit's
+// cleanup, which is off-grid — nothing on screen says it did not happen, and
+// a shell's tmux session outlives it.
+func DeleteTileBeacon(req *DeleteTileRequest) (path string, body []byte) {
+	return beacon(gridwellv1connect.GridwellDeleteTileProcedure, DeleteTileRequestToProto(req))
+}
+
 // WriteContentBeacon is the beacon form of Client.WriteContent, and the one
 // streaming beacon. The Connect client-streaming request body is a sequence
 // of enveloped messages (1 flags byte, 4-byte big-endian length, payload),

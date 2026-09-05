@@ -449,7 +449,7 @@ func (a *App) leaveFrame(p *pane.Pane) (doorID string, doorTile *rpc.Tile) {
 			a.closeShellStream(p.ID, !ephemeral)
 		}
 		if ephemeral {
-			a.deleteEphemeralTile(file.ID)
+			a.deleteEphemeralTile(file.GridID, file.ID)
 		}
 		return own.TileID, &file
 	}

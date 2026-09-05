@@ -1760,23 +1760,37 @@ func (a *App) leavingEphemeral(p *pane.Pane, t *rpc.Tile) bool {
 
 // deleteEphemeralTile removes an ascended-from ephemeral tile — gray means
 // gone. The row is deleted, and for a shell the plugin kills its tmux
-// session, and all its processes, as part of the delete. A failure surfaces
-// on the strip; otherwise the tile would silently leak in the scratch grid
-// until the startup sweep.
-func (a *App) deleteEphemeralTile(tileID string) {
-	go func() {
-		// No claim: a delete is the user's explicit action, and the stream
-		// close that precedes it triggers the plugin's detach-time title
-		// capture. Captures do not bump the row and a delete carries no
-		// claim, so the two cannot race.
-		err := a.cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
-			TileID: tileID,
-		})
-		if err != nil {
-			a.reportErr(errsurface.Error, "ephemeral",
-				"ephemeral tile cleanup failed: "+rpcErrText(err))
-		}
-	}()
+// session, and all its processes, as part of the delete.
+//
+// It goes through the one dispatcher, like every other mutation, and it PARKS
+// (id set): a transport failure retries it on reconnect and beacons it at
+// unload. The trashcan delete deliberately does not park, because a row that
+// did not die comes back on screen and the user can ask again — but an
+// ephemeral row is off-grid, and its shell's tmux session with it, so a lost
+// cleanup is invisible and leaks until the startup sweep. A bare goroutine
+// had neither: no retry, no beacon, and during beforeunload it was never even
+// scheduled.
+func (a *App) deleteEphemeralTile(gridID, tileID string) {
+	// No claim: a delete is the user's explicit action, and the stream close
+	// that precedes it triggers the plugin's detach-time title capture.
+	// Captures do not bump the row and a delete carries no claim, so the two
+	// cannot race.
+	req := &rpc.DeleteTileRequest{TileID: tileID}
+	// Drop any cached liveness probe: the row is going, and so is the tmux
+	// session behind it.
+	delete(a.shellAlive, tileID)
+	delete(a.shellAliveProbing, tileID)
+	// No refetch: the scratch grid is off any pane, so nothing renders it and
+	// the event stream carries the removal into the cache.
+	a.post(write{
+		label: "DeleteTile", gid: gridID, id: tileID,
+		source: "ephemeral", failText: "ephemeral tile cleanup failed",
+		call: func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
+		beacon: func() (string, []byte, string) {
+			path, body := rpc.DeleteTileBeacon(req)
+			return path, body, rpc.BeaconJSONType
+		},
+	})
 }
 
 // visitEphemeralShell creates an ephemeral shell tile in the current plugin's
@@ -1953,7 +1967,7 @@ func (a *App) finishPromote(originPaneID, destPaneID, oldID string, created rpc.
 	// clone keeps it and deletes it on its own ascent. The same guard every
 	// ascent applies, through the same door.
 	if old := a.cachedTileByID(oldID); old != nil && a.leavingEphemeral(op, old) {
-		a.deleteEphemeralTile(oldID)
+		a.deleteEphemeralTile(old.GridID, oldID)
 	}
 	// The pane follows its content: RelocateTo replaces the visit's frame
 	// with one on the destination's stack, so the next ascent lands where the
