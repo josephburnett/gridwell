@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
+	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
@@ -712,66 +713,14 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// hovering a doc with the left button).
 	a.canvas.Get("style").Set("cursor", "")
 
-	// A plugin swatch clicked without dragging past the threshold enters
-	// that plugin: the + menu's click-to-descend gesture. A drag instead
-	// drops an exit-well link (commitTemplateDrop). The descent is the same
-	// one a link tile takes — one verb, one pushed frame — through a
-	// synthetic link tile placed at the pane's view center, so ascent lands
-	// back exactly here.
-	if d.isTemplate && d.item.isPlugin && !d.started {
-		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
-			well := paletteItemGhostNode(d.item)
-			well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
-			a.descend(fp, &well, nil)
-		}
-		return true
-	}
-
-	// A url swatch clicked without dragging past the threshold is an
-	// ephemeral visit: open the url modal and, on submit, descend into a
-	// live url tile created in the off-grid scratch grid — a page visited
-	// without placing a tile. A drag instead places a real url tile
-	// (commitTemplateDrop).
-	if d.isTemplate && d.item.promotePane != "" && !d.started {
-		return true // a click on the current crumb: this is where you are
-	}
-	if d.isTemplate && d.item.primitive == tplURL && !d.started {
-		// An ephemeral visit is a live view. On a host without one, a plain
-		// browser, the modal would only produce a blank frozen tile, so say
-		// why up front. Drag-create still places a real url tile.
-		if !a.caps.LiveURL {
-			a.menu.Close()
-			a.reportErr(caps.GoLiveNotice())
-			return true
-		}
-		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
-			paneID := fp.ID
-			a.menu.Close()
-			// Check before the modal opens: typing a url into a visit that
-			// cannot land would fail only on submit.
-			if a.scratchOrReport(fp) == "" {
-				return true
-			}
-			a.openURLModal(a.urlSuggestCandidates(uuidOf(a.gridIDForPane(fp))),
-				func(url string) {
-					if vp := a.tree.FindPane(paneID); vp != nil {
-						a.visitEphemeralURL(vp, url)
-					}
-				}, nil)
-		}
-		return true
-	}
-
-	// A shell swatch clicked without dragging is an ephemeral shell: created
-	// in the off-grid scratch grid, descended into, with the PTY spawned.
-	// Ascent deletes it — the tile row and the tmux session with all its
-	// processes, which the gray border warns about. A drag instead places a
-	// real, persistent shell tile.
-	if d.isTemplate && d.item.primitive == tplShell && !d.started {
-		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
-			a.menu.Close()
-			a.visitEphemeralShell(fp) // reports if there is nowhere to open
-		}
+	// A palette swatch released without a drag is the MENU's gesture, and it
+	// is answered here, by the one table, never below. The drop verdict's
+	// bare-click arm is the canvas's gesture, at the canvas's coordinates —
+	// and the popover floats over a live pane, so a swatch click that fell
+	// through to it descended into, or selected, whatever tile happened to sit
+	// behind the swatch.
+	if d.isTemplate && !d.started {
+		a.clickTemplate(d)
 		return true
 	}
 
@@ -1476,6 +1425,78 @@ func paletteItemGhostNode(item paletteItem) rpc.Tile {
 		return pr.ghost
 	}
 	return rpc.Tile{}
+}
+
+// clickTemplate runs the bare-click behavior of the palette item a template
+// drag was armed from. WHICH behavior is palette.ClickOn's decision, over the
+// swatch alone — a click has no destination, so the coordinates play no part —
+// and what a primitive does is its own row's `click`, nil meaning nothing.
+// Every swatch therefore has an answer, including "nothing", and the menu
+// stays open for it.
+func (a *App) clickTemplate(d *dragState) {
+	fp := a.tree.FindPane(d.originPaneID)
+	if fp == nil {
+		return
+	}
+	pr, _ := primitiveFor(d.item.primitive)
+	switch palette.ClickOn(palette.Swatch{
+		IsPlugin: d.item.isPlugin,
+		Promote:  d.item.promotePane != "",
+		Visits:   pr.click != nil,
+	}) {
+	case palette.ClickEnter:
+		// Enter the plugin, connection, or declared root the swatch names.
+		// The descent is the same one a link tile takes — one verb, one
+		// pushed frame — through a synthetic link tile placed at the pane's
+		// view center, so ascent lands back exactly here. A drag instead
+		// drops the exit-well link (commitTemplateDrop).
+		well := paletteItemGhostNode(d.item)
+		well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
+		a.descend(fp, &well, nil)
+	case palette.ClickVisit:
+		pr.click(a, fp)
+	case palette.ClickHere, palette.ClickNothing:
+		// The crumb you are standing on, or a swatch that only creates by
+		// being dragged: nothing happens, and the menu stays open.
+	}
+}
+
+// visitURLFromMenu is the url swatch's click: open the url modal and, on
+// submit, descend into a live url tile created in the off-grid scratch grid —
+// a page visited without placing a tile. A drag instead places a real url
+// tile (the table's create).
+func (a *App) visitURLFromMenu(p *pane.Pane) {
+	// An ephemeral visit is a live view. On a host without one, a plain
+	// browser, the modal would only produce a blank frozen tile, so say why
+	// up front. Drag-create still places a real url tile.
+	if !a.caps.LiveURL {
+		a.menu.Close()
+		a.reportErr(caps.GoLiveNotice())
+		return
+	}
+	paneID := p.ID
+	a.menu.Close()
+	// Check before the modal opens: typing a url into a visit that cannot
+	// land would fail only on submit.
+	if a.scratchOrReport(p) == "" {
+		return
+	}
+	a.openURLModal(a.urlSuggestCandidates(uuidOf(a.gridIDForPane(p))),
+		func(url string) {
+			if vp := a.tree.FindPane(paneID); vp != nil {
+				a.visitEphemeralURL(vp, url)
+			}
+		}, nil)
+}
+
+// visitShellFromMenu is the shell swatch's click: an ephemeral shell created
+// in the off-grid scratch grid, descended into, with the PTY spawned. Ascent
+// deletes it — the tile row and the tmux session with all its processes,
+// which the gray border warns about. A drag instead places a real, persistent
+// shell tile.
+func (a *App) visitShellFromMenu(p *pane.Pane) {
+	a.menu.Close()
+	a.visitEphemeralShell(p) // reports if there is nowhere to open
 }
 
 // commitTemplateDrop resolves the template drag at release: the create RPC at

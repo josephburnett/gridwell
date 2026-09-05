@@ -299,6 +299,13 @@ type primitive struct {
 	// grid, which is an open well's child grid when the cursor promoted into
 	// one, never re-derived from a pane here.
 	create func(a *App, gridID string, cellX, cellY int64)
+	// click is what a bare click on this kind's swatch does, with no drag and
+	// so no destination cell: the ephemeral visit a url or shell opens
+	// without placing a tile. nil is the default and the common case —
+	// nothing happens and the menu stays open. It is a column rather than an
+	// arm per kind because the fall-through was the bug: a swatch with no
+	// hand-written arm let the click reach the canvas behind the popover.
+	click func(a *App, p *pane.Pane)
 }
 
 // primitives is the palette layout order of the built-in tile primitives,
@@ -333,12 +340,14 @@ func init() {
 			ghost:  rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1},
 			glyph:  func(a *App, x, y, w, h float64) { drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine) },
 			create: func(a *App, gid string, cellX, cellY int64) { a.createURLAtCell(gid, cellX, cellY) },
+			click:  func(a *App, p *pane.Pane) { a.visitURLFromMenu(p) },
 		},
 		{
 			kind: tplShell, name: "shell",
 			ghost:  rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"},
 			glyph:  func(a *App, x, y, w, h float64) { drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder) },
 			create: func(a *App, gid string, cellX, cellY int64) { a.createShellAtCell(gid, cellX, cellY) },
+			click:  func(a *App, p *pane.Pane) { a.visitShellFromMenu(p) },
 		},
 		{
 			kind: tplPane, name: "pane",
