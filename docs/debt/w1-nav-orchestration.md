@@ -330,6 +330,15 @@ The remainder — `cl`, `home`, `tree`, `c`, `ws`, `locals`, `menu`, `errs`,
 `trans`, `shells`, `caps`, `plugins`, `traces`, the drag states — stays on
 `App`. Each already has one owning file.
 
+**Landed.** The groups are `fetchState`, `overlayState`, `persistState` and
+`viewCaches` in `client/wasm/main.go`; `App` went from 65 fields to 40. Three
+notes. The overlay group has no constructor: every field is the zero value
+until the file that owns the singleton creates it lazily, exactly as before.
+`shellAlive` and `shellAliveProbing` stayed on `App` — the probe's
+single-flight is neither a fetch claim nor a view cache, and no group named
+it. So did the counters that instrument something other than persistence
+(`zoomKeyRelays`, `tileMutates`, `renderedPanePaints`).
+
 ## 6. What does not move
 
 - `transition.Set` stays in `client/transition`. The machine emits

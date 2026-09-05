@@ -66,8 +66,7 @@ Design doc: `docs/debt/w1-nav-orchestration.md`.
 owns descend, ascend, restore, the pane-tile levels and the promote; the shim
 gathers, executes, and feeds answers back. `grep -rn StillDescended
 client/wasm` is empty: every moved-on check is one Guard, evaluated in one
-place. Open: W6's App-struct grouping, which rode this and is now the only
-piece of W1's end state left.
+place. W6's App-struct grouping, which rode this, has landed too.
 
 ## W2 — The native seam sheds its timing heuristics
 
@@ -152,7 +151,10 @@ so cross-owner mutation is visible at the call site as `a.fetch.…` vs
 `a.overlays.…`. No behavior change; rides W1's phases rather than preceding
 them.
 
-**Status:** [ ] design (folded into w1 doc) [ ] extraction
+**Status:** [x] design (folded into w1 doc, §5) [x] extraction — DONE. `App`
+is 65 fields down to 40: `fetch`, `overlays`, `persist` and `views`, each a
+struct with a doc comment naming what it owns and one constructor. Pure
+regrouping, no behavior change.
 
 ## Order and rules
 
