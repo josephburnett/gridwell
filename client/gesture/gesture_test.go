@@ -140,25 +140,44 @@ func TestSplitSideFromDrag(t *testing.T) {
 }
 
 func TestResizeAffordance(t *testing.T) {
+	// A pane with a divider on every side, so a press anywhere in a band
+	// grabs; the fixture is the geometry, the grab is the decision.
+	pr := pane.Rect{X: 100, Y: 100, W: 200, H: 200}
+	divs := []pane.Divider{
+		{Dir: pane.Vertical, Rect: pane.Rect{X: 99, Y: 0, W: 2, H: 600}},
+		{Dir: pane.Vertical, Rect: pane.Rect{X: 299, Y: 0, W: 2, H: 600}},
+		{Dir: pane.Horizontal, Rect: pane.Rect{X: 0, Y: 99, W: 600, H: 2}},
+		{Dir: pane.Horizontal, Rect: pane.Rect{X: 0, Y: 299, W: 600, H: 2}},
+	}
+	const band = 10.0
 	cases := []struct {
 		name       string
-		region     pane.Region
-		hasDivider bool
+		sx, sy     float64
 		wantArm    bool
 		wantCursor string
 	}{
-		{"left band with divider -> ew", pane.RegionResizeLeft, true, true, "ew-resize"},
-		{"right band with divider -> ew", pane.RegionResizeRight, true, true, "ew-resize"},
-		{"top band with divider -> ns", pane.RegionResizeTop, true, true, "ns-resize"},
-		{"bottom band with divider -> ns", pane.RegionResizeBottom, true, true, "ns-resize"},
-		{"resize band but no divider on that side", pane.RegionResizeTop, false, false, ""},
-		{"not a resize region", pane.RegionNone, true, false, ""},
+		{"left band -> ew", 103, 200, true, "ew-resize"},
+		{"right band -> ew", 297, 200, true, "ew-resize"},
+		{"top band -> ns", 200, 103, true, "ns-resize"},
+		{"bottom band -> ns", 200, 297, true, "ns-resize"},
+		{"top-left corner -> nwse", 103, 103, true, "nwse-resize"},
+		{"bottom-right corner -> nwse", 297, 297, true, "nwse-resize"},
+		{"top-right corner -> nesw", 297, 103, true, "nesw-resize"},
+		{"bottom-left corner -> nesw", 103, 297, true, "nesw-resize"},
+		{"pane interior -> nothing", 200, 200, false, ""},
 	}
 	for _, c := range cases {
-		arm, cursor := ResizeAffordance(c.region, c.hasDivider)
+		g := pane.GrabDividers(divs, pr, band, c.sx, c.sy)
+		arm, cursor := ResizeAffordance(g)
 		if arm != c.wantArm || cursor != c.wantCursor {
-			t.Errorf("%s: ResizeAffordance(%v,%v) = (%v,%q), want (%v,%q)",
-				c.name, c.region, c.hasDivider, arm, cursor, c.wantArm, c.wantCursor)
+			t.Errorf("%s: ResizeAffordance(%+v) = (%v,%q), want (%v,%q)",
+				c.name, g, arm, cursor, c.wantArm, c.wantCursor)
 		}
+	}
+	// A band with no divider on that side does not arm — the veto survives.
+	edge := pane.Rect{X: 0, Y: 0, W: 200, H: 200}
+	g := pane.GrabDividers(nil, edge, band, 3, 3)
+	if arm, cursor := ResizeAffordance(g); arm || cursor != "" {
+		t.Errorf("no divider anywhere must not arm, got (%v,%q)", arm, cursor)
 	}
 }

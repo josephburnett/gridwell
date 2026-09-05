@@ -76,6 +76,16 @@ func (a *App) installTestHook() {
 		// the forwarded press and the canvas half of the drag. Arming is
 		// also what parks the live view.
 		"leftResizeArmed": js.FuncOf(func(js.Value, []js.Value) any { return a.leftResize != nil }),
+		// leftResizeAxes is how many dividers the press grabbed: 1 on a
+		// divider's length, 2 at a corner. A spec that drags a corner needs to
+		// distinguish "grabbed both" from "grabbed one and the other split
+		// happened to move".
+		"leftResizeAxes": js.FuncOf(func(js.Value, []js.Value) any {
+			if a.leftResize == nil {
+				return 0
+			}
+			return len(a.leftResize.axes)
+		}),
 		// rightDragKind names the armed right-button gesture, "" for none:
 		// which gesture a right-down classified into, so a spec can
 		// distinguish "never armed" from "armed but did not commit".

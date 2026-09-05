@@ -133,6 +133,70 @@ func DividerOnSide(divs []Divider, paneRect Rect, side Side) int {
 	return -1
 }
 
+// DividerGrab is the verdict of "which dividers does this press grab" — the
+// one decision behind arming a boundary resize. A press within the grab band
+// of a pane edge grabs the divider on that side; at a T-intersection the press
+// is inside the band of one horizontal-divider edge (top or bottom) AND one
+// vertical-divider edge (left or right), so it grabs both and the drag moves
+// both axes. There is at most one per axis: a pane has one edge per side, and
+// the two dividers meeting at a corner belong to different tree nodes.
+//
+// The zero value grabs nothing; GrabDividers is the only producer.
+type DividerGrab struct {
+	// HasHoriz reports that a horizontal divider — the one along the pane's
+	// top or bottom edge — is grabbed. Horiz indexes into the divs slice the
+	// grab was resolved against, and HorizSide names the edge.
+	HasHoriz  bool
+	Horiz     int
+	HorizSide Side
+	// HasVert / Vert / VertSide are the same for the vertical divider along
+	// the pane's left or right edge.
+	HasVert  bool
+	Vert     int
+	VertSide Side
+}
+
+// Any reports whether the press grabs anything at all.
+func (g DividerGrab) Any() bool { return g.HasHoriz || g.HasVert }
+
+// Both reports a corner grab: one divider per axis, driven by one gesture.
+func (g DividerGrab) Both() bool { return g.HasHoriz && g.HasVert }
+
+// GrabDividers decides which dividers a press at (sx, sy) inside pane rect r
+// grabs, resolved against the tree's dividers. Each axis is decided on its
+// own: the nearer of the pane's two edges on that axis wins (a tie goes to top
+// / left, matching ClassifyRegion's tiebreak), it must lie within bandPx, and a
+// divider must actually be adjacent there. One axis is the ordinary
+// single-divider resize; two is the corner, and the caller arms one resize per
+// axis rather than a gesture of its own.
+func GrabDividers(divs []Divider, r Rect, bandPx, sx, sy float64) DividerGrab {
+	var g DividerGrab
+	if r.W <= 0 || r.H <= 0 {
+		return g
+	}
+	if side, in := nearerSide(sy-r.Y, (r.Y+r.H)-sy, SideTop, SideBottom, bandPx); in {
+		if i := DividerOnSide(divs, r, side); i >= 0 {
+			g.HasHoriz, g.Horiz, g.HorizSide = true, i, side
+		}
+	}
+	if side, in := nearerSide(sx-r.X, (r.X+r.W)-sx, SideLeft, SideRight, bandPx); in {
+		if i := DividerOnSide(divs, r, side); i >= 0 {
+			g.HasVert, g.Vert, g.VertSide = true, i, side
+		}
+	}
+	return g
+}
+
+// nearerSide picks the closer of a pane's two edges along one axis — the near
+// one wins a tie, so the tiebreak is top over bottom and left over right — and
+// reports whether it is inside the grab band.
+func nearerSide(dNear, dFar float64, near, far Side, bandPx float64) (Side, bool) {
+	if dFar < dNear {
+		return far, dFar < bandPx
+	}
+	return near, dNear < bandPx
+}
+
 // nearHalfPx reports whether two pixel coordinates are within half a pixel —
 // the same tolerance dragdrop.NearPx uses, inlined to keep pane dependency-free.
 func nearHalfPx(a, b float64) bool {

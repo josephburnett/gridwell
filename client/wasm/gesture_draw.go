@@ -432,31 +432,39 @@ func drawSwapGlyph(c js.Value, cx, cy, size float64, color string) {
 }
 
 // drawLeftResizePreview paints the left resize affordance; the left drag owns
-// resize and close. Two layers:
+// resize and close. One armed axis is drawn per grabbed divider — a corner
+// grab paints both, so the two boundaries the drag is moving are both visible.
+// Two layers per axis:
 //   - Always: highlight the divider being dragged in grey with an
 //     orthogonal double-headed arrow.
 //   - Every corridor segment the drag has pressed past its bump gets a red
 //     border: a release closes all of them, and backing off un-reds them one
 //     by one.
 func (a *App) drawLeftResizePreview(lr *leftResizeState) {
+	for i := range lr.axes {
+		a.drawResizeAxisPreview(&lr.axes[i])
+	}
+}
+
+func (a *App) drawResizeAxisPreview(ax *leftResizeAxis) {
 	// Live geometry, every frame: the cascade moves ancestor ratios, so the
 	// grabbed split's container and its boundary are wherever the applied
 	// layout says they are. An arm-time copy goes stale mid-drag and closes
 	// panes on a legal mid-corridor release.
 	root := a.tree.Root
 	rootRect := a.rootLayoutRect()
-	r, ok := pane.LocateSplit(root, rootRect, lr.targetSplit)
+	r, ok := pane.LocateSplit(root, rootRect, ax.targetSplit)
 	if !ok {
 		return
 	}
-	aRect, _ := pane.SplitRect(r, lr.splitDir, lr.targetSplit.Ratio)
+	aRect, _ := pane.SplitRect(r, ax.splitDir, ax.targetSplit.Ratio)
 	// Divider hint: a thin grey band along the shared edge between
 	// aRect and bRect, plus a double-headed arrow centered on it.
 	a.cctx.Set("strokeStyle", colorMuted)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("setLineDash", jsArray(4, 4))
 	a.cctx.Call("beginPath")
-	if lr.splitDir == pane.Horizontal {
+	if ax.splitDir == pane.Horizontal {
 		dy := aRect.Y + aRect.H
 		a.cctx.Call("moveTo", r.X, dy)
 		a.cctx.Call("lineTo", r.X+r.W, dy)
@@ -479,13 +487,13 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 
 	// The crush verdict: every corridor segment the drag has pressed past
 	// its live bump reds, and the release reads the identical stored
-	// lr.crush.Red() state, so the red set and the closed set cannot
+	// crush.Red() state, so the red set and the closed set cannot
 	// diverge. Rects are live (SegmentRects), tracking the crush.
-	red := lr.crush.Red()
+	red := ax.crush.Red()
 	if len(red) == 0 {
 		return
 	}
-	for _, rr := range pane.SegmentRects(root, rootRect, lr.targetSplit, red) {
+	for _, rr := range pane.SegmentRects(root, rootRect, ax.targetSplit, red) {
 		strokeTileBorder(a.cctx, rr.X, rr.Y, rr.W, rr.H, colorCloseWarn, paneBorderPx)
 	}
 	a.cctx.Set("lineWidth", 1.0)

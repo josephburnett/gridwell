@@ -239,7 +239,7 @@ func (a *App) onForwardedLeftDown(sx, sy float64) {
 		return
 	}
 	a.focusToPane(p)
-	a.armLeftResize(p, r, sx, sy)
+	a.armLeftResize(r, sx, sy)
 }
 
 // onRightMove updates the cursor position and applies live changes.
@@ -591,19 +591,31 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 	a.forgetPane(p.ID)
 }
 
-// leftResizeState carries the in-flight left-button pane-boundary resize. The
-// left button keeps its own state so the right-button routing, which keys off
-// button 2, stays untouched. It holds the dragged split plus the collapse
-// facts the release decides from: the left drag owns closing too, so crushing
-// a side past the wall and releasing collapses that side.
-type leftResizeState struct {
+// leftResizeAxis is one armed divider inside a left-button resize: the split
+// being dragged plus the collapse facts its release decides from.
+type leftResizeAxis struct {
 	targetSplit *pane.Split
 	splitDir    pane.Direction
 	// crush is the close-threshold plan: the cursor positions past which
 	// each corridor segment outward from the boundary is pressed to close —
 	// the per-segment steps of the corridor wall. The red preview and the
-	// release both read crush.Red(cursor), so there is one verdict.
+	// release both read crush.Red(), so there is one verdict.
 	crush pane.CrushPlan
+}
+
+// leftResizeState carries the in-flight left-button pane-boundary resize. The
+// left button keeps its own state so the right-button routing, which keys off
+// button 2, stays untouched. The left drag owns closing too, so crushing a
+// side past the wall and releasing collapses that side.
+//
+// A press grabs at most one divider per axis (pane.GrabDividers): on a
+// divider's length it grabs one, at a T-intersection it grabs both, and then
+// axes holds two entries that this one gesture drives together. There is no
+// separate corner gesture — a corner is two ordinary resizes sharing a press,
+// so the minimum clamp, the cascade, and the crush verdict are the same code
+// on each axis.
+type leftResizeState struct {
+	axes []leftResizeAxis
 	// curX/curY is the last cursor the move applied. The preview and the
 	// release read the same point, so the red warning cannot mark a
 	// different side than the release collapses. It is initialized to the
@@ -612,38 +624,40 @@ type leftResizeState struct {
 	// deliberately no captured container rect — the cascade moves ancestor
 	// ratios mid-drag, and a stale copy of the split's geometry closes panes
 	// on a legal mid-corridor release. Everything derives live from the tree
-	// (pane.CorridorSpan, pane.LocateSplit).
+	// (pane.CorridorWalls, pane.LocateSplit).
 	curX, curY float64
 }
 
-// armLeftResize starts a left-button boundary resize if (sx, sy) sits in a
-// resize band of pane p that has a divider on that side. Returns true if a
-// resize was armed (caller should stop interpreting the click).
-func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
-	var d *pane.Divider
-	if region.IsResize() {
-		d = a.dividerOnSide(p, region.Side())
-	}
-	// gesture.ResizeAffordance owns the gating, where the band beats a
-	// missing divider, and dividerResizeCursor shares it so the hover cursor
-	// cannot disagree with where a drag arms. When arm is true, d is
-	// non-nil.
-	arm, _ := gesture.ResizeAffordance(region, d != nil)
+// armLeftResize starts a left-button boundary resize if (sx, sy) sits in the
+// grab band of a pane edge that has a divider on it. One armed resize per axis
+// grabbed, so a press at the corner of three panes drives both. Returns true if
+// anything was armed (caller should stop interpreting the click).
+func (a *App) armLeftResize(r pane.Rect, sx, sy float64) bool {
+	grab, divs := a.dividerGrab(r, sx, sy)
+	// gesture.ResizeAffordance owns the gating, and dividerResizeCursor shares
+	// it so the hover cursor cannot disagree with where a drag arms.
+	arm, _ := gesture.ResizeAffordance(grab)
 	if !arm {
 		return false
 	}
-	crush, ok := pane.PlanCrush(a.tree.Root, a.rootLayoutRect(), d.Split, pane.MinPanePx)
-	if !ok {
+	var axes []leftResizeAxis
+	add := func(d pane.Divider) {
+		crush, ok := pane.PlanCrush(a.tree.Root, a.rootLayoutRect(), d.Split, pane.MinPanePx)
+		if !ok {
+			return
+		}
+		axes = append(axes, leftResizeAxis{targetSplit: d.Split, splitDir: d.Dir, crush: crush})
+	}
+	if grab.HasHoriz {
+		add(divs[grab.Horiz])
+	}
+	if grab.HasVert {
+		add(divs[grab.Vert])
+	}
+	if len(axes) == 0 {
 		return false
 	}
-	a.leftResize = &leftResizeState{
-		targetSplit: d.Split,
-		splitDir:    d.Dir,
-		crush:       crush,
-		curX:        sx,
-		curY:        sy,
-	}
+	a.leftResize = &leftResizeState{axes: axes, curX: sx, curY: sy}
 	// Park live overlays now; liveOverlaysHidden consults leftResize. The
 	// grab band straddles the divider, so half of it can sit over a live
 	// WebContentsView that would otherwise eat the next mousemove and kill
@@ -654,66 +668,81 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 
 // dividerResizeCursor returns the CSS cursor to show while hovering a
 // grabbable pane split divider at (sx, sy): "ew-resize" over a vertical
-// divider, "ns-resize" over a horizontal one, or "" when the point isn't
-// over a divider's resize band. It mirrors armLeftResize exactly, so the
-// cursor appears precisely where a left-drag would resize. The grab band is
-// resizeBandPx (10) wide even though the divider line is drawn at 1px — the
+// divider, "ns-resize" over a horizontal one, a diagonal at a corner that
+// grabs both, or "" when the point isn't in any divider's grab band. It
+// mirrors armLeftResize exactly — same pane.GrabDividers verdict through the
+// same gesture.ResizeAffordance — so the cursor appears precisely where a
+// left-drag would resize, and says how many axes it would move. The grab band
+// is resizeBandPx (10) wide even though the divider line is drawn at 1px — the
 // cursor is what makes that otherwise-invisible band discoverable.
 func (a *App) dividerResizeCursor(sx, sy float64) string {
-	p, r, ok := a.paneAtScreen(sx, sy)
+	_, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return ""
 	}
-	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
-	hasDivider := region.IsResize() && a.dividerOnSide(p, region.Side()) != nil
-	// Same gating as armLeftResize, via the shared gesture.ResizeAffordance.
-	_, cursor := gesture.ResizeAffordance(region, hasDivider)
+	grab, _ := a.dividerGrab(r, sx, sy)
+	_, cursor := gesture.ResizeAffordance(grab)
 	return cursor
 }
 
 // onLeftResizeMove applies the live divider move for the in-flight
-// left-button resize. The cascade (pane.ResizeThrough) compresses the pane
-// adjacent to the divider to its minimum first, then the next along the axis,
-// across same-axis splits, walled by the sum of minimums, so the move itself
-// never closes a pane.
+// left-button resize, one armed axis at a time — a corner grab moves both from
+// the one cursor, each reading only its own axis's coordinate. The cascade
+// (pane.ResizeThrough) compresses the pane adjacent to the divider to its
+// minimum first, then the next along the axis, across same-axis splits, walled
+// by the sum of minimums, so the move itself never closes a pane.
 func (a *App) onLeftResizeMove(sx, sy float64) {
 	lr := a.leftResize
 	if lr == nil {
 		return
 	}
 	lr.curX, lr.curY = sx, sy
-	cursor := sx
-	if lr.targetSplit.Dir == pane.Horizontal {
-		cursor = sy
+	// Each axis re-reads the tree, so the second one sees the first one's
+	// ratios: the geometry is live, never a copy taken at arm.
+	for i := range lr.axes {
+		ax := &lr.axes[i]
+		cursor := sx
+		if ax.splitDir == pane.Horizontal {
+			cursor = sy
+		}
+		// Fold the move into the red state before the layout follows the
+		// cursor: the pre-move layout is what tells a deeper press, which
+		// stays red, from a back-off, which clears, while a crushed pane
+		// rides the drag at its minimum.
+		ax.crush.Update(a.tree.Root, a.rootLayoutRect(), ax.targetSplit, pane.MinPanePx, cursor)
+		// Walled at the universal pane minimum: the drag itself never
+		// collapses. The adjacent pane visibly crushes toward the wall,
+		// signaling that a release now closes it; the release decides.
+		pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), ax.targetSplit, cursor, pane.MinPanePx)
 	}
-	// Fold the move into the red state before the layout follows the
-	// cursor: the pre-move layout is what tells a deeper press, which stays
-	// red, from a back-off, which clears, while a crushed pane rides the
-	// drag at its minimum.
-	lr.crush.Update(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, pane.MinPanePx, cursor)
-	// Walled at the universal pane minimum: the drag itself never
-	// collapses. The adjacent pane visibly crushes toward the wall,
-	// signaling that a release now closes it; the release decides.
-	pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, cursor, pane.MinPanePx)
 	a.draw()
 }
 
 // finishLeftResize is the left release. The live layout was already applied
-// during the move, only to the grabbed border, so the release only closes
+// during the move, only to the grabbed borders, so the release only closes
 // what the drag pressed: every corridor segment red in the preview is flushed
-// and removed, adjacent first. The release reads the same stored red state
-// the last move computed and the preview drew, so the verdict is identical to
-// the warning the user saw.
+// and removed, adjacent first, on each armed axis. The release reads the same
+// stored red state the last move computed and the preview drew, so the verdict
+// is identical to the warning the user saw.
+//
+// A corner grab can red a segment on one axis that lies inside a segment the
+// other axis closes, so a segment already gone from the tree is skipped rather
+// than flushed twice.
 func (a *App) finishLeftResize() {
 	lr := a.leftResize
 	a.leftResize = nil
 	if lr == nil {
 		return
 	}
-	for _, seg := range lr.crush.Red() {
-		a.flushDroppedSubtree(seg)
-		if !a.tree.RemoveSegment(seg) {
-			break
+	for i := range lr.axes {
+		for _, seg := range lr.axes[i].crush.Red() {
+			if !pane.HasSegment(a.tree.Root, seg) {
+				continue
+			}
+			a.flushDroppedSubtree(seg)
+			if !a.tree.RemoveSegment(seg) {
+				break
+			}
 		}
 	}
 	a.draw()
@@ -767,23 +796,18 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	}
 }
 
-// dividerOnSide returns the Divider directly adjacent to pane p on
-// the requested side, or nil if pane abuts the screen edge with no
-// sibling on that side.
-func (a *App) dividerOnSide(p *pane.Pane, side pane.Side) *pane.Divider {
-	// One owner for the layout rect: pane rects come from layoutPanes over
-	// rootLayoutRect, so divider geometry uses the same rect. A second copy
-	// here — the full window — would drift by the bar's height and the
-	// adjacency match below would never fire.
-	r := paneRectFor(a, p)
+// dividerGrab asks which dividers a press at (sx, sy) in pane p grabs — one
+// per axis, both at a T-intersection. The decision is pane.GrabDividers; this
+// only supplies the geometry, and returns the divider slice so the caller can
+// resolve the grab's indices.
+// r is the pane's own laid-out rect, as the caller got it from paneAtScreen.
+// One owner for the layout rect: pane rects and divider geometry both come
+// from layoutPanes over rootLayoutRect. A second copy here — the full window —
+// would drift by the bar's height and the adjacency match inside GrabDividers
+// would never fire.
+func (a *App) dividerGrab(r pane.Rect, sx, sy float64) (pane.DividerGrab, []pane.Divider) {
 	divs := pane.Dividers(a.tree, a.rootLayoutRect(), resizeBandPx)
-	// The adjacency match (which divider touches this pane's edge on `side`)
-	// is the pure pane.DividerOnSide; picking the wrong one would resize an
-	// unrelated boundary.
-	if i := pane.DividerOnSide(divs, r, side); i >= 0 {
-		return &divs[i]
-	}
-	return nil
+	return pane.GrabDividers(divs, r, resizeBandPx, sx, sy), divs
 }
 
 // paneToDragdrop builds a dragdrop.Pane (screen rect + viewport) for

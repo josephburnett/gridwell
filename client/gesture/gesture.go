@@ -140,16 +140,24 @@ const SplitArmPx = 8.0
 // both route through this one function instead of each re-deriving the
 // gating.
 //
-// Inputs: the region the cursor classifies into, and whether a grabbable
-// divider exists on that region's side.
-func ResizeAffordance(region pane.Region, hasDivider bool) (arm bool, cursor string) {
-	if !region.IsResize() || !hasDivider {
+// Input: the grab — which dividers the press is close enough to take, at most
+// one per axis (pane.GrabDividers). A grab on both axes is a corner, and the
+// cursor names the diagonal it opens along, so the corner is as discoverable
+// as a single divider.
+func ResizeAffordance(g pane.DividerGrab) (arm bool, cursor string) {
+	if !g.Any() {
 		return false, ""
 	}
-	switch region {
-	case pane.RegionResizeLeft, pane.RegionResizeRight:
+	switch {
+	case g.Both():
+		// Top-left and bottom-right corners run NW–SE; the other two NE–SW.
+		if (g.HorizSide == pane.SideTop) == (g.VertSide == pane.SideLeft) {
+			return true, "nwse-resize"
+		}
+		return true, "nesw-resize"
+	case g.HasVert:
 		return true, "ew-resize"
-	default: // RegionResizeTop, RegionResizeBottom
+	default: // horizontal only
 		return true, "ns-resize"
 	}
 }

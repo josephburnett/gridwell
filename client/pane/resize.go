@@ -232,6 +232,20 @@ func (t *Tree) RemoveSegment(seg TreeNode) bool {
 	return true
 }
 
+// HasSegment reports whether a subtree is still part of the tree. A corner
+// grab arms one resize per axis, and one axis's crush verdict can close a
+// subtree that contains the other's, so the release asks before flushing:
+// a segment already gone must not be flushed or removed a second time.
+func HasSegment(root TreeNode, seg TreeNode) bool {
+	if root == seg {
+		return true
+	}
+	if root.Split == nil {
+		return false
+	}
+	return HasSegment(root.Split.A, seg) || HasSegment(root.Split.B, seg)
+}
+
 // LocateSplit returns target's current laid-out container rect within the
 // tree. It must be the live geometry: a rect captured at arm time goes stale
 // the moment a cascade moves an ancestor ratio.

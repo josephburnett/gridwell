@@ -335,6 +335,7 @@ copy:
 | where is this pane | `pane.Stack` |
 | is this write still owed | `outbox.Record` |
 | the bytes, their version, edited or not | one cache entry per tile id |
+| which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | does this descent go live | `shellconn.DecideAutoLive` |
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |

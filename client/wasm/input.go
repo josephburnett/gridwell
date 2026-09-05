@@ -450,7 +450,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// and steals the pointer from the canvas mid-resize. That steal is
 	// invisible to synthetic input, so the e2e pins the prevented flag
 	// instead.
-	if a.armLeftResize(p, r, sx, sy) {
+	if a.armLeftResize(r, sx, sy) {
 		args[0].Call("preventDefault")
 		return nil
 	}

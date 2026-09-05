@@ -427,6 +427,122 @@ func TestDividerOnSide(t *testing.T) {
 	}
 }
 
+// A T-intersection: pane P is the bottom-right of a 200x200 root, with a
+// vertical divider on its left edge (x=100) and a horizontal one on its top
+// edge (y=100). The two belong to different tree nodes; the grab returns at
+// most one per axis.
+func grabFixture() (Rect, []Divider) {
+	pr := Rect{X: 100, Y: 100, W: 100, H: 100}
+	vLeft := Divider{Dir: Vertical, Rect: Rect{X: 99, Y: 0, W: 2, H: 200}}
+	hTop := Divider{Dir: Horizontal, Rect: Rect{X: 100, Y: 99, W: 100, H: 2}}
+	return pr, []Divider{vLeft, hTop}
+}
+
+func TestGrabDividersCornerGrabsBothAxes(t *testing.T) {
+	pr, divs := grabFixture()
+	const band = 10.0
+	cases := []struct {
+		name                 string
+		sx, sy               float64
+		wantHoriz, wantVert  bool
+		wantHSide, wantVSide Side
+	}{
+		// Inside the band of both edges: the corner.
+		{"dead on the corner", 100, 100, true, true, SideTop, SideLeft},
+		{"inside both bands", 103, 105, true, true, SideTop, SideLeft},
+		// One axis only: on a divider's length, away from the other.
+		{"mid left edge", 103, 150, false, true, SideTop, SideLeft},
+		{"mid top edge", 150, 105, true, false, SideTop, SideLeft},
+		// Neither: pane interior.
+		{"pane middle", 150, 150, false, false, SideTop, SideLeft},
+		// Tolerance edges: strictly inside the band arms, exactly at it does not.
+		{"just inside both", 109.9, 109.9, true, true, SideTop, SideLeft},
+		{"exactly at the band on both", 110, 110, false, false, SideTop, SideLeft},
+		{"at the band vertically, inside horizontally", 109, 110, false, true, SideTop, SideLeft},
+		{"at the band horizontally, inside vertically", 110, 109, true, false, SideTop, SideLeft},
+		// The far edges have no divider: the band is there, the divider is not.
+		{"bottom-right corner has no dividers", 199, 199, false, false, SideTop, SideLeft},
+	}
+	for _, c := range cases {
+		g := GrabDividers(divs, pr, band, c.sx, c.sy)
+		if g.HasHoriz != c.wantHoriz || g.HasVert != c.wantVert {
+			t.Errorf("%s: GrabDividers(%v,%v) horiz=%v vert=%v, want horiz=%v vert=%v",
+				c.name, c.sx, c.sy, g.HasHoriz, g.HasVert, c.wantHoriz, c.wantVert)
+			continue
+		}
+		if g.HasHoriz && (g.HorizSide != c.wantHSide || divs[g.Horiz].Dir != Horizontal) {
+			t.Errorf("%s: horiz side %v idx %d", c.name, g.HorizSide, g.Horiz)
+		}
+		if g.HasVert && (g.VertSide != c.wantVSide || divs[g.Vert].Dir != Vertical) {
+			t.Errorf("%s: vert side %v idx %d", c.name, g.VertSide, g.Vert)
+		}
+		if g.Any() != (c.wantHoriz || c.wantVert) || g.Both() != (c.wantHoriz && c.wantVert) {
+			t.Errorf("%s: Any/Both disagree with the fields", c.name)
+		}
+	}
+}
+
+// The near edge wins a tie, so the tiebreak is top over bottom and left over
+// right — the same order ClassifyRegion uses.
+func TestGrabDividersPicksTheNearerEdgePerAxis(t *testing.T) {
+	// A pane with a divider on every side; a press dead center of a pane
+	// narrower than two bands must still resolve one side per axis.
+	pr := Rect{X: 100, Y: 100, W: 16, H: 16}
+	divs := []Divider{
+		{Dir: Vertical, Rect: Rect{X: 99, Y: 0, W: 2, H: 400}},    // left, x=100
+		{Dir: Vertical, Rect: Rect{X: 115, Y: 0, W: 2, H: 400}},   // right, x=116
+		{Dir: Horizontal, Rect: Rect{X: 0, Y: 99, W: 400, H: 2}},  // top, y=100
+		{Dir: Horizontal, Rect: Rect{X: 0, Y: 115, W: 400, H: 2}}, // bottom, y=116
+	}
+	const band = 10.0
+	// Dead center: both distances are 8 on each axis, so the tie goes near.
+	g := GrabDividers(divs, pr, band, 108, 108)
+	if !g.Both() || g.HorizSide != SideTop || g.VertSide != SideLeft {
+		t.Fatalf("centered tie: got %+v, want top/left", g)
+	}
+	// Nearer the far edges: the far side wins outright.
+	g = GrabDividers(divs, pr, band, 114, 114)
+	if !g.Both() || g.HorizSide != SideBottom || g.VertSide != SideRight {
+		t.Fatalf("near the far edges: got %+v, want bottom/right", g)
+	}
+}
+
+func TestGrabDividersEmptyRectAndNoDividers(t *testing.T) {
+	pr, divs := grabFixture()
+	if g := GrabDividers(divs, Rect{}, 10, 0, 0); g.Any() {
+		t.Errorf("degenerate rect must grab nothing, got %+v", g)
+	}
+	if g := GrabDividers(nil, pr, 10, 100, 100); g.Any() {
+		t.Errorf("no dividers must grab nothing, got %+v", g)
+	}
+	if g := (DividerGrab{}); g.Any() || g.Both() {
+		t.Errorf("the zero value must grab nothing")
+	}
+}
+
+// The corner grab arms one resize per axis, and one axis's crush can close a
+// subtree containing the other's segment. HasSegment is what the release asks
+// before flushing a second time.
+func TestHasSegment(t *testing.T) {
+	tr := NewTree()
+	if _, err := tr.SplitOnSideAt(SideRight, 0.5); err != nil {
+		t.Fatal(err)
+	}
+	left, right := tr.Root.Split.A, tr.Root.Split.B
+	if !HasSegment(tr.Root, left) || !HasSegment(tr.Root, right) {
+		t.Fatalf("both children must be present")
+	}
+	if !tr.RemoveSegment(right) {
+		t.Fatalf("RemoveSegment(right) failed")
+	}
+	if HasSegment(tr.Root, right) {
+		t.Errorf("a removed segment must not report present")
+	}
+	if !HasSegment(tr.Root, left) {
+		t.Errorf("the hoisted survivor must still report present")
+	}
+}
+
 func TestCanSplitAgreesWithTheClamp(t *testing.T) {
 	for _, h := range []float64{2*MinPanePx - 1, 2 * MinPanePx, 2*MinPanePx + 1, 10 * MinPanePx} {
 		r := Rect{W: 10 * MinPanePx, H: h}

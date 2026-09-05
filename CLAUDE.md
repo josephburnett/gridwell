@@ -154,6 +154,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   clicks. Clicks act in the focused pane; a click in an unfocused pane moves
   focus, nothing else. A crumb click ascends; middle-click is the in-pane
   shortcut.
+- A left-drag on a pane boundary resizes it. A press grabs at most one
+  divider per axis, so at the corner of three panes it grabs both and the
+  one drag moves both — two ordinary resizes sharing a gesture, not a
+  gesture of its own. `pane.GrabDividers`.
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.
