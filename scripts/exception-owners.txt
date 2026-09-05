@@ -1,0 +1,31 @@
+# Exception fields and their owners (scripts/check-exception-owners.sh):
+# "<field regex> <allowed path regex>". The field may be read only inside the
+# paths listed; everywhere else the question goes through the owner's
+# predicate. A hit is "path:line:text" and the regex must match it from the
+# start. Comment lines in the scanned files are not hits — naming a field in
+# prose is not reading it.
+#
+# serves_page: rpc.Tile.WebContent / TextDocument / PageContent own the
+# derivation. client/textedit reads the answer, not the field, so it is here
+# only for the wire type it re-exports. url_preview keys a preview blob on
+# serves_page alone on purpose: any page-serving row wants that key, url tile
+# or not. content_zoom is an open question in docs/debt/w4-concepts.md —
+# PageContent would also cover a url row flagged serves_page, which is a
+# behavior change, not a rename.
+\.ServesPage\b api/rpc/|client/textedit/|client/wasm/url_preview\.go|client/wasm/content_zoom\.go
+# text_presentation: the faces a text tile has. textToggleVisible and
+# presentationHTML are its owners; both still sit in client/wasm, where
+# `make check` executes neither, which is Q3's move to client/textedit.
+\.TextPresentation\b api/rpc/|client/textedit/|client/wasm/text_overlay\.go|client/wasm/rendered_overlay\.go
+# link_target_id: rpc.Tile.ContentID resolves it, rpc.Tile.LeafLink asks
+# whether there is one, deadref reads it to name a dead namespace.
+\.LinkTargetID\b api/rpc/|client/deadref/
+# reference: isLinkTile draws it, deadref classifies it, pluginhealth's
+# UnrootedLink is the launcher precondition.
+\.Reference\b api/rpc/|client/deadref/|client/pluginhealth/|client/wasm/render\.go
+# The two grid-wide declarations. cache.Grid owns both, nil-safe.
+Meta\.HostContent\b client/cache/
+Meta\.Stale\b client/cache/
+# writable: a.gridWritable / a.gridKnownReadOnly, the two safe defaults for
+# one uncached grid (Q7 folds them into one tri-state).
+Meta\.Writable\b client/cache/|client/wasm/plugin_id\.go
