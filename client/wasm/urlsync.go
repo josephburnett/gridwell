@@ -33,7 +33,7 @@ const framingSaveDebounceMs = 600
 // at ascent would lose the viewport whenever a grid is left another way:
 // descending deeper, a pane switch, a URL edit, a reload.
 func (a *App) scheduleFramingSave() {
-	a.sched.framingSave.arm(framingSaveDebounceMs)
+	a.persist.sched.framingSave.arm(framingSaveDebounceMs)
 }
 
 // flushFramingSave persists every pane's settled grid framing now. The
@@ -43,7 +43,7 @@ func (a *App) scheduleFramingSave() {
 // the next frame, so an animating pane's flush lands after its animation
 // while its quiet siblings persist on time.
 func (a *App) flushFramingSave() {
-	a.framingFlushes++
+	a.persist.framingFlushes++
 	// One active surface per grid: among panes showing the same grid, only
 	// the focused one writes its framing. pane.FramingWriters is the rule.
 	var pgs []pane.PaneGrid
@@ -68,9 +68,9 @@ func (a *App) flushFramingSave() {
 // fallback, and the framing dispatcher's conflict retry covers both being
 // stale.
 func (a *App) flushWellWheelSaves() {
-	for id, st := range a.wellWheelPending {
+	for id, st := range a.persist.wellWheelPending {
 		gid := st.gridID
-		delete(a.wellWheelPending, id)
+		delete(a.persist.wellWheelPending, id)
 		tileID := id
 		req := &rpc.SetFramingRequest{
 			TileID:  tileID,
@@ -273,7 +273,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 // it to be replaced on the next debounce tick. Cheap to call from any
 // state-mutating code path.
 func (a *App) scheduleURLUpdate() {
-	a.sched.urlUpdate.arm(urlUpdateDebounceMs)
+	a.persist.sched.urlUpdate.arm(urlUpdateDebounceMs)
 }
 
 // writeURLNow encodes the focused pane's state and writes it to the browser

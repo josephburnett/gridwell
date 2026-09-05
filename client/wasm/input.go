@@ -320,7 +320,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// later notches feed the drift back in, so a cursor-anchored zoom
 		// travels.
 		cx0, cy0 := zoomtrans.EffectiveCenter(zw)
-		if st, ok := a.wellWheelPending[hoverWell.ID]; ok {
+		if st, ok := a.persist.wellWheelPending[hoverWell.ID]; ok {
 			cx0, cy0 = st.cx, st.cy
 		}
 		cx1, cy1, ratio, changed := zoomtrans.WellWheelView(dy, zw, parentCell,
@@ -333,7 +333,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		updated.ViewCy = cy1
 		updated.ViewZoom = ratio
 		a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
-		a.wellWheelPending[hoverWell.ID] = wellWheelDrift{
+		a.persist.wellWheelPending[hoverWell.ID] = wellWheelDrift{
 			gridID: a.gridIDForPane(p), cx: cx1, cy: cy1,
 			ratio: ratio, version: hoverWell.Version,
 		}
@@ -1186,7 +1186,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// Through the per-tile save queue: a debounced keystroke save may still
 	// be in flight, and this flush claims a version too, so the queue
 	// serializes them and the version is read at send time.
-	a.textSaves.Enqueue(file.ID, func() {
+	a.persist.textSaves.Enqueue(file.ID, func() {
 		curVersion := file.Version
 		if g, ok := a.c.Grid(gid); ok {
 			if f, ok := g.Tiles[file.ID]; ok {

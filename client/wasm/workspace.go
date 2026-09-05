@@ -193,7 +193,7 @@ func (a *App) scheduleWorkspaceSave() {
 	if a.ws.Depth() == 0 {
 		return
 	}
-	a.sched.wsSave.arm(wsSaveDebounceMs)
+	a.persist.sched.wsSave.arm(wsSaveDebounceMs)
 }
 
 // flushWorkspaceSave persists the current layout immediately if it changed

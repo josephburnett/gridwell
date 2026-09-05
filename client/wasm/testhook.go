@@ -100,8 +100,8 @@ func (a *App) installTestHook() {
 		// can name which stage of gesture, debounce, flush, post went quiet
 		// instead of timing out on the far-end effect.
 		"persistPosts": js.FuncOf(func(js.Value, []js.Value) any {
-			out := map[string]any{"framingFlushes": a.framingFlushes}
-			for label, n := range a.persistPosts {
+			out := map[string]any{"framingFlushes": a.persist.framingFlushes}
+			for label, n := range a.persist.persistPosts {
 				out[label] = n
 			}
 			return out
@@ -111,7 +111,7 @@ func (a *App) installTestHook() {
 		// park my work, and did the reconnect land it?".
 		"outbox": js.FuncOf(func(js.Value, []js.Value) any {
 			out := []any{}
-			for _, k := range a.out.Keys() {
+			for _, k := range a.persist.out.Keys() {
 				out = append(out, k.Op+":"+k.ID)
 			}
 			return out

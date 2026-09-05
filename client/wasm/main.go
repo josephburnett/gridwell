@@ -92,9 +92,11 @@ type App struct {
 	tree *pane.Tree
 	c    *cache.Cache
 
-	// textSaves serializes content writes per tile so pipelined saves chain
-	// versions instead of racing; see enqueueTextSave.
-	textSaves *textedit.SaveQueue
+	// persist is what executes a write on its way out: the debounce
+	// schedulers, the per-tile save queue, the well-wheel settle state, the
+	// outbox, and the two e2e counters that instrument them. See
+	// persistState.
+	persist persistState
 
 	width, height float64
 
@@ -171,12 +173,6 @@ type App struct {
 	// drop or snap-back-to-origin on failure).
 	animation *anim.Animation
 
-	// sched holds the debounce / requestAnimationFrame bookkeeping: each
-	// debounce guards a pending callback so repeated triggers coalesce into
-	// one, and its retained js.Func is allocated once so re-scheduling never
-	// leaks handles. See scheduler below.
-	sched scheduler
-
 	// trans holds every pane's descent/ascent zoom animation, at most one per
 	// pane (client/transition). Two panes animate independently, and a
 	// transition that is displaced or cleared lands on its destination rather
@@ -226,13 +222,6 @@ type App struct {
 	// hands it a dialer and the two callbacks.
 	shells *shellstream.Registry
 
-	// wellWheelPending holds well tiles whose preview framing the hover wheel
-	// changed but has not persisted yet: tile id to the grid the tile sits
-	// in. The cache is patched per notch, since the renderer reads it live,
-	// and the settle persister's flush posts one SetFraming per tile from
-	// the cached row, so a scroll burst is one write.
-	wellWheelPending map[string]wellWheelDrift
-
 	// traces holds the per-pane ascent-trace highlight: the fading "you just
 	// came from here" outline. Armed by completeTransition when the finished
 	// transition was an ascent, and pruned by frame() as each fade runs out.
@@ -262,21 +251,6 @@ type App struct {
 	// signal reads it, so a spec can tell "the gesture finished" from "the
 	// gesture is still waiting on the server".
 	tileMutates int
-
-	// persistPosts counts optimistic-persist dispatches by label
-	// ("SetFraming" and the rest) and framingFlushes counts settle-persister
-	// flush passes. e2e-only introspection (the persistPosts testhook): the
-	// settle chain — gesture, debounce, flush, post — is otherwise silent at
-	// every stage, so a spec waiting on its effect could not say which stage
-	// went quiet.
-	persistPosts   map[string]int
-	framingFlushes int
-
-	// out is the one record of writes the server has not acknowledged —
-	// framing, captures, layout, and the user's unsaved bytes alike — in the
-	// order they were made. retryKick and the unload flush are its two
-	// drains. See client/outbox.
-	out *outbox.Outbox
 
 	// menuCtxs caches each remote node's + menu (menuctx.go), keyed by
 	// the grid-stamped node_ns. "" (the local node) is a.plugins/a.caps.
@@ -439,7 +413,59 @@ func (d *debounce) arm(ms int) {
 	js.Global().Call("setTimeout", d.cb, ms)
 }
 
-// scheduler holds the App's debounce / requestAnimationFrame bookkeeping.
+// persistState is the write-out side of the client: the debounce schedulers
+// that decide when a settled change is posted, the per-tile save queue, the
+// hover-wheel drift waiting on its settle, the outbox of writes the server
+// has not acknowledged, and the two counters that let a spec see which stage
+// of the chain went quiet. The navigation machine emits the Flush* effects;
+// this group is what executes them.
+type persistState struct {
+	// sched holds the debounce / requestAnimationFrame bookkeeping: each
+	// debounce guards a pending callback so repeated triggers coalesce into
+	// one, and its retained js.Func is allocated once so re-scheduling never
+	// leaks handles. See scheduler below.
+	sched scheduler
+
+	// textSaves serializes content writes per tile so pipelined saves chain
+	// versions instead of racing; see enqueueTextSave.
+	textSaves *textedit.SaveQueue
+
+	// wellWheelPending holds well tiles whose preview framing the hover wheel
+	// changed but has not persisted yet: tile id to the grid the tile sits
+	// in. The cache is patched per notch, since the renderer reads it live,
+	// and the settle persister's flush posts one SetFraming per tile from
+	// the cached row, so a scroll burst is one write.
+	wellWheelPending map[string]wellWheelDrift
+
+	// persistPosts counts optimistic-persist dispatches by label
+	// ("SetFraming" and the rest) and framingFlushes counts settle-persister
+	// flush passes. e2e-only introspection (the persistPosts testhook): the
+	// settle chain — gesture, debounce, flush, post — is otherwise silent at
+	// every stage, so a spec waiting on its effect could not say which stage
+	// went quiet.
+	persistPosts   map[string]int
+	framingFlushes int
+
+	// out is the one record of writes the server has not acknowledged —
+	// framing, captures, layout, and the user's unsaved bytes alike — in the
+	// order they were made. retryKick and the unload flush are its two
+	// drains. See client/outbox.
+	out *outbox.Outbox
+}
+
+// newPersistState builds the persist group — the one place it is
+// constructed. The debounces get their bodies at boot (afterBootstrap),
+// since those close over the App.
+func newPersistState() persistState {
+	return persistState{
+		textSaves:        textedit.NewSaveQueue(),
+		wellWheelPending: map[string]wellWheelDrift{},
+		persistPosts:     map[string]int{},
+		out:              outbox.New(),
+	}
+}
+
+// scheduler holds the debounce / requestAnimationFrame bookkeeping.
 type scheduler struct {
 	// rafScheduled tracks a pending requestAnimationFrame so we don't
 	// queue redundant frames.
@@ -723,22 +749,19 @@ func main() {
 		origin:             origin,
 		cl:                 rpc.NewDefaultClient(origin),
 		c:                  cache.New(),
-		textSaves:          textedit.NewSaveQueue(),
 		locals:             map[string]*paneLocal{},
 		menu:               menu.New(),
 		errs:               errsurface.New(),
 		caps:               caps.Derive(bridgeCaps(), false),
 		fetch:              newFetchState(),
+		persist:            newPersistState(),
 		urlPreview:         preview.NewCache(preview.NewJSDecoder()),
 		wrapCache:          map[string][]string{},
 		shellAlive:         map[string]bool{},
 		shellAliveProbing:  map[string][]func(bool){},
-		wellWheelPending:   map[string]wellWheelDrift{},
 		traces:             map[string]traceState{},
 		paneLayouts:        map[string]*paneLayoutEntry{},
 		renderedPrev:       map[string]*renderedPreview{},
-		persistPosts:       map[string]int{},
-		out:                outbox.New(),
 		menuCtxs:           map[string]*menuContext{},
 		renderedPanePaints: map[string]int{},
 	}
@@ -870,10 +893,10 @@ func (a *App) afterBootstrap() {
 		a.fetchGrid(a.home)
 	}
 
-	a.sched.wsSave.set(a.flushWorkspaceSave)
-	a.sched.urlUpdate.set(a.writeURLNow)
-	a.sched.framingSave.set(a.flushFramingSave)
-	a.sched.errExpire.set(func() {
+	a.persist.sched.wsSave.set(a.flushWorkspaceSave)
+	a.persist.sched.urlUpdate.set(a.writeURLNow)
+	a.persist.sched.framingSave.set(a.flushFramingSave)
+	a.persist.sched.errExpire.set(func() {
 		if a.errs.Expire(time.Now()) {
 			a.scheduleFrame() // strip shrank; panes reclaim the height on redraw
 		}
@@ -1044,12 +1067,12 @@ func taggedLog(tag string) func(format string, args ...any) {
 // scheduleFrame ensures a draw happens on the next animation frame. While
 // dragging or animating, the frame loop continues until the state settles.
 func (a *App) scheduleFrame() {
-	if a.sched.rafScheduled {
+	if a.persist.sched.rafScheduled {
 		return
 	}
-	a.sched.rafScheduled = true
+	a.persist.sched.rafScheduled = true
 	js.Global().Call("requestAnimationFrame", js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.rafScheduled = false
+		a.persist.sched.rafScheduled = false
 		a.frame()
 		return nil
 	}))
@@ -1294,7 +1317,7 @@ func (a *App) retryKick(resync bool) {
 		}
 	}
 	a.syncContentOutbox()
-	for _, retry := range a.out.Drain() {
+	for _, retry := range a.persist.out.Drain() {
 		retry()
 	}
 }
@@ -1307,7 +1330,7 @@ func (a *App) retryBackstop() {
 	for {
 		time.Sleep(30 * time.Second)
 		a.syncContentOutbox()
-		if a.out.Len() > 0 {
+		if a.persist.out.Len() > 0 {
 			a.retryKick(false)
 		}
 	}
@@ -1381,7 +1404,7 @@ func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 // A coalesced re-report that pushed a deadline out only makes the pending
 // timer fire early, prune nothing, and reschedule — never miss an expiry.
 func (a *App) scheduleErrExpiry() {
-	if a.sched.errExpire.pending {
+	if a.persist.sched.errExpire.pending {
 		return
 	}
 	d, ok := a.errs.NextDeadline(time.Now())
@@ -1394,7 +1417,7 @@ func (a *App) scheduleErrExpiry() {
 	if ms < 1 {
 		ms = 1
 	}
-	a.sched.errExpire.arm(ms)
+	a.persist.sched.errExpire.arm(ms)
 }
 
 // resolveErr clears a source's notice when its condition heals (e.g. the

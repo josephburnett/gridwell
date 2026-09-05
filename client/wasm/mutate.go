@@ -138,7 +138,7 @@ func (a *App) do(w write) error {
 		// freeze's jpeg, url, title, and trail, a pane arrangement, a typed
 		// name — which is the only copy once the gesture that made it is
 		// over. Abandoning it on a blip loses it.
-		a.out.Record(o, outbox.Key{Op: w.label, ID: w.id}, func() { a.post(w) })
+		a.persist.out.Record(o, outbox.Key{Op: w.label, ID: w.id}, func() { a.post(w) })
 	}
 
 	r := clientsync.React(o)
@@ -262,7 +262,7 @@ func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess 
 // persister passes one except content zoom, which has no *Beacon builder.
 func (a *App) postFramingPersist(label, gid, id string,
 	call func(ctx context.Context) error, beacon func() (string, []byte, string)) {
-	a.persistPosts[label]++
+	a.persist.persistPosts[label]++
 	a.post(write{label: label, gid: gid, id: id, optimistic: true, call: call, beacon: beacon})
 }
 
@@ -274,11 +274,11 @@ func (a *App) postFramingPersist(label, gid, id string,
 // transport failure — and none of them has to know which happened.
 func (a *App) recordContent(cid string) {
 	_, dirty := a.c.DirtyContent(cid)
-	a.out.RecordContent(cid, dirty, a.flushContent(cid))
+	a.persist.out.RecordContent(cid, dirty, a.flushContent(cid))
 }
 
 func (a *App) syncContentOutbox() {
-	a.out.SyncContent(a.c.DirtyTileIDs(), a.flushContent)
+	a.persist.out.SyncContent(a.c.DirtyTileIDs(), a.flushContent)
 }
 
 // flushContent is one tile's retry thunk: re-read the bytes from the cache and
@@ -374,7 +374,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 // content entry is gone, so the server still sees the write and surfaces the
 // real story.
 func (a *App) enqueueTextSave(gid string, tileID string, fallbackVersion int64, data []byte) {
-	a.textSaves.Enqueue(tileID, func() {
+	a.persist.textSaves.Enqueue(tileID, func() {
 		version := fallbackVersion
 		if base, ok := a.c.SaveBasis(tileID); ok {
 			version = base

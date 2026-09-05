@@ -38,7 +38,7 @@ func setBoundsPx(style js.Value, left, top, width, height float64) {
 // textarea contents. Cheap to call from every keystroke — no-op if a
 // save is already pending.
 func (a *App) scheduleFileSave() {
-	a.sched.textSave.arm(textSaveDebounceMs)
+	a.persist.sched.textSave.arm(textSaveDebounceMs)
 }
 
 // textFitZoom returns the parent zoom at which the text tile's footprint
@@ -153,7 +153,7 @@ func (a *App) ensureFileTextarea() {
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
 
-	a.sched.textSave.set(func() {
+	a.persist.sched.textSave.set(func() {
 		// Sweep every dirty content entry, whoever holds focus now.
 		// Fire-time guards on the focused pane, the mode, or the singleton
 		// binding would only be needed by a save that read the DOM and had
