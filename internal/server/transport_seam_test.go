@@ -52,10 +52,39 @@ type transportHarness struct {
 	// streamer, so a shell attach through the chain can be asserted
 	// without a tmux anywhere.
 	remoteShell *shellsvctest.FakeStreamer
+	// cut is closed by cutFarStream: the far machine's event stream ends,
+	// which is how a connection's fan-in learns the machine went away. The
+	// dialed namespace is otherwise untouched, so the reads keep working —
+	// darkness here is exactly a dropped stream, not a dead node.
+	cut chan struct{}
 
 	mu      sync.Mutex
 	dialErr error
 	dialed  []dial.Config
+}
+
+// cutFarStream ends the far node's event stream once. The connection's
+// fanInRemote sees namespace.Follow return and publishes one health event.
+func (h *transportHarness) cutFarStream() { close(h.cut) }
+
+// farLink is the dialed far namespace with a cuttable event stream. Every
+// other verb passes straight through to the real remote export.
+type farLink struct {
+	namespace.Namespace
+	cut <-chan struct{}
+}
+
+func (f *farLink) Subscribe(ctx context.Context, in *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-f.cut:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return f.Namespace.Subscribe(ctx, in, send)
 }
 
 // newTransportHarness builds the two nodes with the given connections
@@ -65,7 +94,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	t.Helper()
 	ctx := context.Background()
 
-	h := &transportHarness{dialErr: dialErr, remoteShell: shellsvctest.New()}
+	h := &transportHarness{dialErr: dialErr, remoteShell: shellsvctest.New(), cut: make(chan struct{})}
 
 	remoteStore, err := store.Open(":memory:")
 	if err != nil {
@@ -107,7 +136,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 		if h.dialErr != nil {
 			return nil, nil, h.dialErr
 		}
-		return namespace.FromClient(remoteExport), func() {}, nil
+		return &farLink{Namespace: namespace.FromClient(remoteExport), cut: h.cut}, func() {}, nil
 	}, "", conns, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -283,6 +312,67 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 			t.Fatalf("hop 2 (the local door): %v", err)
 		case <-ctx.Done():
 			t.Fatal("hop 2 (the local door): no event")
+		}
+	}
+}
+
+// TestConnectionHealthArrivesQualified is the other half of the event seam:
+// TestConnectionEventsArrivePrefixed proves TILE ids gain the node segment,
+// and rpc.QualifyEventIDs' handling of the health uuid is pure-tested
+// (routing_pure_test.go:TestQualifyEvent) — but nothing ran a real
+// connection's darkness through the real router onto a real client stream.
+// The uuid is what the client keys its sticky notice on
+// (App.reportPluginHealth's "plugin:<node>/<conn>"), so a hop that forgot to
+// qualify it would post a notice nothing could ever resolve, and both unit
+// tests would stay green.
+func TestConnectionHealthArrivesQualified(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
+
+	health := make(chan *rpc.PluginHealth, 8)
+	doorErr := make(chan error, 1)
+	go func() {
+		es, err := h.localCl.Subscribe(ctx)
+		if err != nil {
+			doorErr <- err
+			return
+		}
+		defer es.Close()
+		for {
+			ev, ok, err := es.Recv()
+			if err != nil || !ok {
+				doorErr <- err
+				return
+			}
+			if ev.Kind == rpc.EventPluginHealth {
+				health <- ev.PluginHealth
+			}
+		}
+	}()
+	// The stream registers asynchronously, and the down transition is
+	// published once — so be attached before causing it.
+	time.Sleep(500 * time.Millisecond)
+	h.cutFarStream()
+
+	for {
+		select {
+		case ph := <-health:
+			if ph.Healthy {
+				continue // the transport's own fan-in settling, not the outage
+			}
+			if ph.PluginUUID != localNodeID+"/geneva" {
+				t.Fatalf("health uuid = %q, want %s/geneva — the client cannot address a connection it was told about by its bare name",
+					ph.PluginUUID, localNodeID)
+			}
+			if ph.Detail == "" {
+				t.Error("a health-down with no detail tells the user nothing about why")
+			}
+			return
+		case err := <-doorErr:
+			t.Fatalf("the local door's stream: %v", err)
+		case <-ctx.Done():
+			t.Fatal("the connection's darkness never reached the client stream")
 		}
 	}
 }
