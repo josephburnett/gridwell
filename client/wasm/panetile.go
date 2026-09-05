@@ -24,20 +24,6 @@ type paneLayoutEntry struct {
 	tree   *pane.Tree
 }
 
-// paneTileChainPrefix returns the transit-chain prefix through which this
-// tile's owning node is reached — everything before the owning-plugin segment
-// ("" for a local tile, "<ssh>/" for one hop, and so on). The layout blob's
-// ids are stored in the owning node's frame, per the codec's relativity rule,
-// and the reader prepends this prefix to resolve them in its own view. Built
-// from the shared id codec (NamespaceOf), never a local split.
-func paneTileChainPrefix(tileID string) string {
-	ns := rpc.NamespaceOf(rpc.NamespaceOf(tileID))
-	if ns == "" {
-		return ""
-	}
-	return ns + "/"
-}
-
 // paneTileLayout returns the decoded pane tree for a pane tile, memoized by
 // (tile, blob) generation. A blob change — another view's layout write —
 // invalidates through the tile row: cache.Apply drops the stale content
@@ -62,7 +48,7 @@ func (a *App) paneTileLayout(n *rpc.Tile) (*pane.Tree, bool) {
 		}
 		return nil, false
 	}
-	prefix := paneTileChainPrefix(n.ID)
+	prefix := pane.ChainPrefix(n.ID)
 	tree, err := pane.DecodeLayout(body, func(id string) string { return prefix + id }, "")
 	if err != nil {
 		// Once per blob generation: the memo entry below short-circuits the

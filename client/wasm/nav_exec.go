@@ -21,6 +21,12 @@ func (a *App) runNav(plan nav.Plan) {
 	for _, e := range plan.Effects {
 		a.runNavEffect(e)
 	}
+	// The capture animation's rect is drawn for exactly as long as a level
+	// descent is pending: the machine owns that fact, so the install and the
+	// failed descent both end the animation without either remembering to.
+	if !a.nav.LevelPending() {
+		a.wsExpand = nil
+	}
 	a.draw()
 }
 
@@ -33,10 +39,13 @@ func (a *App) runNavEffect(e nav.Effect) {
 	case nav.EffForgetPane:
 		a.forgetPane(e.PaneID)
 	case nav.EffInstallLevel:
-		// A boot restore's level: the tile id is all the machine can say
-		// until phase C owns the resolution. It fetches, so it runs on its
-		// own goroutine, as it did from applyURLState.
-		go a.bootWorkspace(e.TileID)
+		a.navInstallLevel(e)
+	case nav.EffPopLevel:
+		a.navPopLevel(e)
+	case nav.EffFlushLayout:
+		a.flushWorkspaceSave()
+	case nav.EffFlushDroppedSubtree:
+		a.flushDroppedSubtree(a.tree.Root)
 	case nav.EffFlushFraming:
 		a.flushFramingSave()
 	case nav.EffFlushDirtyText:
@@ -89,12 +98,12 @@ func (a *App) runNavEffect(e nav.Effect) {
 	case nav.EffReport:
 		a.reportErr(e.Severity, e.Source, e.Message)
 	case nav.EffEnterLevel:
-		if p := a.tree.FindPane(e.PaneID); p != nil {
-			tile := e.Tile
-			a.descendLevel(p, &tile)
-		}
+		// The level axis re-enters the machine through its own gesture, so it
+		// is planned against a world gathered after the effects above it —
+		// the framing flush among them.
+		a.runGesture(nav.Gesture{Kind: nav.GestureEnterLevel, PaneID: e.PaneID, Door: e.Tile})
 	case nav.EffLeaveLevels:
-		a.ascendLevels(e.Count)
+		a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels, Count: e.Count})
 	case nav.EffReEngage:
 		a.navReEngage(e.PaneID, e.TileID)
 	default:
@@ -165,6 +174,18 @@ func (a *App) navSaveText(e nav.Effect) {
 // continuation is resumed from OnComplete, which runs whether the animation
 // finished or was cut short — a cancelled transition still lands.
 func (a *App) navStartTransition(e nav.Effect) {
+	if e.Expand {
+		// The pane-tile capture animation rides the same clock as the
+		// transition beside it: the tile's screen rect at arm, growing into
+		// the level outline. render.go draws it; the machine's pending level
+		// decides how long.
+		if p := a.tree.FindPane(e.PaneID); p != nil {
+			dd := paneToDragdrop(p, paneRectFor(a, p))
+			x0, y0 := dd.CellToScreen(float64(e.Tile.X), float64(e.Tile.Y))
+			x1, y1 := dd.CellToScreen(float64(e.Tile.X+e.Tile.W), float64(e.Tile.Y+e.Tile.H))
+			a.wsExpand = &wsExpandState{x: x0, y: y0, w: x1 - x0, h: y1 - y0, startMs: nowMs()}
+		}
+	}
 	tr := &transition.Transition{
 		PaneID:      e.PaneID,
 		Segments:    e.Segments,
@@ -233,8 +254,10 @@ func (a *App) navAwait(e nav.Effect) {
 			tile, err := a.cl.GetTile(context.Background(), id)
 			if err != nil {
 				// The continuation retires either way, so a leaf whose
-				// reference no longer resolves leaves nothing owed.
-				a.runNav(a.nav.Resume(tok, nav.Result{}, a.navWorldCommon()))
+				// reference no longer resolves leaves nothing owed. Whether
+				// the failure is worth a notice is the step's call, so the
+				// text rides the answer rather than being surfaced here.
+				a.runNav(a.nav.Resume(tok, nav.Result{Err: rpcErrText(err)}, a.navWorldCommon()))
 				return
 			}
 			// The row lands in the cache before the machine acts on it: the
@@ -266,6 +289,19 @@ func (a *App) navAwait(e nav.Effect) {
 			// path adds is the cursor, and it goes after the seeding.
 			err := a.loadTileContent(ctx, id, func() {})
 			a.runNav(a.nav.Resume(tok, nav.Result{OK: err == nil}, a.navWorldCommon()))
+		}()
+	case nav.RequestReadLayout:
+		id := e.Request.ID
+		go func() {
+			// The bytes go straight back to the machine, which owns the codec
+			// call: a layout is not a document, so it never seeds the text
+			// overlay and is not cached as a body.
+			data, _, _, err := a.cl.ReadContent(context.Background(), id)
+			if err != nil {
+				a.runNav(a.nav.Resume(tok, nav.Result{Err: rpcErrText(err)}, a.navWorldCommon()))
+				return
+			}
+			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Data: data}, a.navWorldCommon()))
 		}()
 	case nav.RequestSearch:
 		req := e.Request

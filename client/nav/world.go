@@ -15,9 +15,10 @@ import (
 //
 // Facts the machine PROJECTS rather than receives, because a snapshot field
 // would be a copy: pane.FramingTarget, pane.FramingWriters, scratch.Ephemeral
-// over PaneView.Scratch, pane.StillDescended, pane.ContentPanes, pane.TakeOver,
-// OtherPaneShows, zoomtrans.*, shellconn.DecideAutoLive,
-// textedit.DescentMode, urlwalk.Walk.
+// over PaneView.Scratch, pane.StillDescended, pane.TakeOver, "which panes are
+// in a content descent" and "does another pane show this tile" over
+// Stack.ContentID, zoomtrans.*, shellconn.DecideAutoLive, textedit.DescentMode,
+// urlwalk.Walk.
 //
 // Three-valued facts stay three-valued. ChildGridCached, DoorGridCached and
 // scratch.Grid.Cached distinguish "no" from "not known yet", exactly as
@@ -95,6 +96,13 @@ type LeaveWorld struct {
 	// nested grid, the plugin's persisted root view for a root). nil when
 	// nothing is persisted or the owning row is not cached.
 	LandingView *Viewport
+}
+
+// LevelWorld is the pane-tile axis's extra half: the row the return animation
+// zooms out onto, from the grid the landing pane sits in. nil Tile means the
+// row is not cached, and the landing is instant.
+type LevelWorld struct {
+	Tile *rpc.Tile
 }
 
 // RestoreTile is one cached row as the URL restore reads it: what the walk
@@ -191,10 +199,11 @@ type World struct {
 	ShellAliveKnown map[string]bool
 
 	// Door is set for a descent, Leave for an ascent hop, Restore for a URL
-	// restore and every step of its walk.
+	// restore and every step of its walk, and Level for a pane-tile landing.
 	Door    *DoorWorld
 	Leave   *LeaveWorld
 	Restore *RestoreWorld
+	Level   *LevelWorld
 }
 
 // Pane returns the pane view for id.
@@ -207,9 +216,11 @@ func (w World) Pane(id string) (PaneView, bool) {
 	return PaneView{}, false
 }
 
-// otherPaneShows is pane.Tree.OtherPaneShows projected over the snapshot:
-// some pane other than paneID is descended into tileID, so leaving does not
-// delete it.
+// otherPaneShows: some pane other than paneID is descended into tileID, so
+// leaving does not delete it. Splitting an ephemeral visit clones the descent,
+// and the clone's ascent — or its promotion onto a grid — must not delete the
+// row the source pane still shows. Stack.ContentID is the one owner of what a
+// pane shows; this is that read over every pane in the snapshot.
 func (w World) otherPaneShows(paneID, tileID string) bool {
 	for _, p := range w.Panes {
 		if p.ID != paneID && p.Stack.ContentID() == tileID {

@@ -26,17 +26,18 @@ const (
 	// EffClearSelection drops the pane's selection: PaneID.
 	EffClearSelection
 	// EffRelocatePane moves a pane to where another stands and descends it
-	// into a tile: PaneID, DestPaneID, TileID, Foot, Zoom. (Phase C.)
+	// into a tile: PaneID, DestPaneID, TileID, Foot, Zoom. (Promote's.)
 	EffRelocatePane
 	// EffForgetPane drops every session resource keyed to a pane: PaneID.
 	EffForgetPane
 	// EffInstallLevel swaps the whole pane tree for a pane-tile level:
-	// Level, Tree, Baseline, KeepOuter — or, from a boot restore, TileID
-	// alone, the level being everything the shim still resolves for itself
-	// until phase C.
+	// Level (everything but the outer tree, which is the live one), Tree
+	// (nil with Capture set: the tree to install is the window layout as it
+	// stands at the swap), Baseline, KeepOuter, IDPrefix.
 	EffInstallLevel
-	// EffPopLevel leaves one pane-tile level: Animate, OriginPane.
-	// (Phase C.)
+	// EffPopLevel leaves one pane-tile level, restoring the tree it parked —
+	// or, when it parked none, a fresh pane at GridID: OriginPane, TileID,
+	// GridID.
 	EffPopLevel
 
 	// EffFlushFraming persists every pane's settled grid framing now. The
@@ -52,10 +53,9 @@ const (
 	// EffFlushDirtyText flushes every unsaved edit now. No payload.
 	EffFlushDirtyText
 	// EffFlushLayout persists the pane-tile layout blob now. No payload.
-	// (Phase C.)
 	EffFlushLayout
 	// EffFlushDroppedSubtree flushes the writebacks a closing subtree owes.
-	// No payload. (Phase C.)
+	// No payload.
 	EffFlushDroppedSubtree
 
 	// EffCancelTransition lands whatever a pane is animating, on its
@@ -64,6 +64,10 @@ const (
 	// EffStartTransition animates a pane: PaneID, Segments, TraceTileID,
 	// Land (the continuation the executor resumes from OnComplete; a
 	// cancelled transition still lands, so the resume happens either way).
+	// Expand, with Tile, asks for the pane-tile capture animation over the
+	// same clock: the tile's face growing into the level outline while the
+	// content underneath never moves, which is what a first descent looks
+	// like instead of a zoom.
 	EffStartTransition
 
 	// EffCloseStream tears a pane's live surfaces down: PaneID, Streams,
@@ -72,7 +76,7 @@ const (
 	// EffOpenStream opens one: PaneID, TileID, Stream.
 	EffOpenStream
 	// EffPlaceURLView re-parents a live url view onto a pane: PaneID,
-	// TileID. (Phase C.)
+	// TileID. (Promote's.)
 	EffPlaceURLView
 	// EffRefreshOverlay re-syncs the text and rendered overlays. No payload.
 	EffRefreshOverlay
@@ -113,9 +117,12 @@ const (
 	EffReport
 	// EffEnterLevel descends the window into a pane tile: PaneID, TileID,
 	// Tile (the descent-time row, by value, for the same reason the Descend
-	// gesture carries one).
+	// gesture carries one). Like EffReEngage it re-enters the machine
+	// through its own gesture, which is planned against a world gathered
+	// after the effects above it.
 	EffEnterLevel
-	// EffLeaveLevels leaves pane-tile levels: Count.
+	// EffLeaveLevels leaves pane-tile levels: Count. It re-enters the machine
+	// the same way.
 	EffLeaveLevels
 	// EffReEngage re-engages a restored content frame: PaneID, TileID. It
 	// re-enters the machine through GestureReEngage, which reads the row and
@@ -170,6 +177,8 @@ type Effect struct {
 	Tree       *pane.Tree
 	Baseline   []byte
 	KeepOuter  bool
+	Capture    bool
+	IDPrefix   string
 	Animate    bool
 	OriginPane string
 	Count      int
@@ -182,6 +191,7 @@ type Effect struct {
 	Segments    []transition.Segment
 	TraceTileID string
 	Land        Token
+	Expand      bool
 
 	// Surface.
 	Streams    StreamKind
@@ -215,6 +225,11 @@ const (
 	RequestGetGrid
 	// RequestReadContent reads a tile's body into the cache: ID.
 	RequestReadContent
+	// RequestReadLayout reads a pane tile's layout blob and hands the BYTES
+	// back (Data): ID. It is separate from RequestReadContent because a
+	// layout is not a document — it never seeds the text overlay, and it is
+	// decoded here rather than cached as a body.
+	RequestReadLayout
 	// RequestSearch locates a tile: Query, Scope, Limit.
 	RequestSearch
 	// RequestProbeShell asks whether a shell session is still alive: ID is
@@ -247,4 +262,12 @@ type Result struct {
 	// Wells answers RequestSearch: the hit's containing-well chain from its
 	// plugin root, outermost first. Empty means the tile sits at a root.
 	Wells []rpc.Tile
+	// Data answers RequestReadLayout: the blob's bytes, which the machine
+	// decodes itself (client/pane owns the codec, and it is pure).
+	Data []byte
+	// Err is a failed read's text, already stripped of the wire prefix. A
+	// step that surfaces its failure — a level descent aborts something the
+	// user is watching — plans the notice with it; one that stays quiet
+	// ignores it.
+	Err string
 }

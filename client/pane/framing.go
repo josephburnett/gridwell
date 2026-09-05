@@ -81,23 +81,6 @@ type Holder struct {
 	TileID string
 }
 
-// ContentPanes lists every pane of t descended into a content tile, in tree
-// order. Liveness follows pane existence: every pane that exists, including
-// one parked in a stacked level, keeps its surface. This is the whole answer
-// to "which frames are parked live" for one tree.
-func ContentPanes(t *Tree) []Holder {
-	var out []Holder
-	if t == nil {
-		return nil
-	}
-	t.Walk(func(p *Pane) {
-		if id := p.ContentID(); id != "" {
-			out = append(out, Holder{PaneID: p.ID, TileID: id})
-		}
-	})
-	return out
-}
-
 // TakeOver applies one live surface per content tile: opening tileID live in
 // openerID freezes every other pane's surface on the same content, at any
 // stack level, and returns those panes. The opener takes over. A pane that

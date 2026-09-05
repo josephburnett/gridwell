@@ -131,11 +131,6 @@ type App struct {
 	// persisted layout is owned by the server blob.
 	ws pane.Levels
 
-	// wsPending coordinates an in-flight pane-tile descent, pairing the
-	// animation with the fetch; nil when none. thIdle reports busy while it
-	// exists.
-	wsPending *wsPending
-
 	// caps is the host capability set (client/caps), derived once at boot
 	// from bridge presence. Feature gates read a.caps; nothing else asks the
 	// bridge to make a behavior decision.

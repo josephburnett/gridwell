@@ -84,8 +84,29 @@ func (a *App) navWorld(g nav.Gesture) nav.World {
 		w.Leave = a.navWorldForAscend(g.PaneID)
 	case nav.GestureRestore:
 		w.Restore = a.navWorldForRestore().Restore
+	case nav.GestureLandLevel:
+		w.Level = a.navWorldForLevel(g.PaneID, g.TileID)
 	}
 	return w
+}
+
+// navWorldForLevel resolves the pane tile's row as the landing pane's grid
+// holds it: what the return animation zooms out of, and nil when the grid was
+// never cached, which is an instant landing.
+func (a *App) navWorldForLevel(paneID, tileID string) *nav.LevelWorld {
+	lw := &nav.LevelWorld{}
+	p := a.tree.FindPane(paneID)
+	if p == nil {
+		return lw
+	}
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return lw
+	}
+	if t, ok := g.Tiles[tileID]; ok {
+		lw.Tile = &t
+	}
+	return lw
 }
 
 // navWorldForRestore is the whole snapshot a restore and every step of its

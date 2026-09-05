@@ -29,10 +29,27 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/josephburnett/gridwell/api/panelayout"
 	"strconv"
 	"strings"
+
+	"github.com/josephburnett/gridwell/api/panelayout"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
+
+// ChainPrefix returns the transit-chain prefix through which a pane tile's
+// owning node is reached — everything before the owning-plugin segment ("" for
+// a local tile, "<ssh>/" for one hop, and so on). The blob's ids are stored in
+// the owning node's frame, per the relativity rule above, and the reader
+// prepends this prefix to resolve them in its own view: it is the `abs` half a
+// DecodeLayout call passes and the `rel` half an EncodeLayout call strips.
+// Built from the shared id codec (rpc.NamespaceOf), never a local split.
+func ChainPrefix(tileID string) string {
+	ns := rpc.NamespaceOf(rpc.NamespaceOf(tileID))
+	if ns == "" {
+		return ""
+	}
+	return ns + "/"
+}
 
 // The persisted format itself — structs, media type, version — is
 // api/panelayout. The store reads the same blobs for its reap's protection

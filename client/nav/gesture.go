@@ -18,13 +18,15 @@ const (
 	// GestureRestoreFromHistory installs a whole session place: Raw.
 	GestureRestoreFromHistory
 	// GesturePromote turns an ephemeral visit into a persistent tile:
-	// PaneID, DestPaneID, OldID, Created. (Phase C.)
+	// PaneID, DestPaneID, OldID, Created. (Still the shim's.)
 	GesturePromote
-	// GestureEnterLevel descends the window into a pane tile: PaneID,
-	// TileID. (Phase C.)
+	// GestureEnterLevel descends the window into a pane tile: PaneID, Door.
 	GestureEnterLevel
-	// GestureLeaveLevels leaves pane-tile levels: Count. (Phase C.)
+	// GestureLeaveLevels leaves pane-tile levels: Count.
 	GestureLeaveLevels
+	// GestureLandLevel finishes one leave hop against the tree the pop
+	// installed: PaneID, TileID, Outer, Animate, Count.
+	GestureLandLevel
 	// GestureReEngage re-engages a restored content frame: PaneID, TileID.
 	GestureReEngage
 )
@@ -55,4 +57,9 @@ type Gesture struct {
 	Created    rpc.Tile
 	TileID     string
 	Count      int
+	// Outer says the level just popped had parked a tree: its landing is the
+	// return animation onto the pane tile, rather than the post-reload
+	// fallback's re-centre. It is read at pop time, since by landing time the
+	// level is gone.
+	Outer bool
 }

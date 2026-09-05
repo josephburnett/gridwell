@@ -90,7 +90,7 @@ func TestRestoreBootPlans(t *testing.T) {
 		name:  "a pane-tile address is the whole place",
 		raw:   "/?w=pt1",
 		grids: homeOnly(),
-		want:  []EffectKind{EffInstallLevel},
+		want:  []EffectKind{EffAwait},
 	}}
 
 	for _, c := range cases {

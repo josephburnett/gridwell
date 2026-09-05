@@ -109,7 +109,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 	// level stack stays empty above it (nesting is session-only), so a bar
 	// ascent falls back to the pane tile's containing grid.
 	if state.Workspace != "" {
-		pl.add(Effect{Kind: EffInstallLevel, TileID: state.Workspace})
+		m.bootLevel(state.Workspace, &pl)
 		return m.endRestore(d, &pl)
 	}
 	p, ok := w.Pane(paneID)

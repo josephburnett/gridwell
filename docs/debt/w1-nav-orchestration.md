@@ -471,6 +471,64 @@ One branch is kept without a test because the walk cannot reach it: a content
 leaf whose row is not cached. The walk only names a leaf it read, so the
 uncached default is the same defensive fallback `applyURLState` carried.
 
+## Deviations found in phase C
+
+The level axis, again with no behavior change except where a line says
+otherwise.
+
+1. **A ninth gesture, `LandLevel`.** A pop swaps the whole pane tree, so what
+   the hop lands on — the return animation onto the pane tile, or the
+   post-reload fallback's re-centre — can only be planned against a world
+   gathered after it. `LeaveLevels` therefore ends at `PopLevel` and hands the
+   landing back through `Plan.Next`, the mechanism deviation A1 established,
+   with the next hop chained after it. It carries `Outer` (did this level park
+   a tree?) because by landing time the level is gone. `PopLevel`'s payload is
+   `OriginPane, TileID, GridID` rather than the sketch's `Animate,
+   OriginPane`: the animation belongs to the landing, and `GridID` is where a
+   level that parked no tree re-anchors.
+
+2. **A sixth request, `ReadLayout`, and `Result` gains `Data` and `Err`.** A
+   layout blob is not a document: `RequestReadContent`'s executor caches a body
+   and seeds the text overlay, which a layout must not do. The bytes come back
+   instead and the machine decodes them itself — `pane.DecodeLayout` is pure,
+   so the read-only-on-failure rule is a machine decision rather than a shim
+   one. `Err` rides the answer because whether a failed read deserves a notice
+   is the step's call: a level descent aborts something the user is watching
+   and says so, while a re-engage's missing row stays quiet. The EFFECT
+   vocabulary is unchanged at 33; phase C is what gives `InstallLevel`,
+   `PopLevel`, `RelocatePane` and `PlaceURLView` their executors.
+
+3. **The capture animation rides `StartTransition{Expand}`.** A first descent
+   into a never-arranged tile animates the tile's face growing into the level
+   outline instead of zooming, over the same clock as the transition beside it,
+   so it is a field on that effect rather than a verb of its own. The rect is
+   drawn for exactly as long as `Machine.LevelPending()` — the barrier — so
+   nothing has to remember to clear it on either the install or the failure,
+   and the e2e idle signal reads that same fact where it read `wsPending`.
+
+4. **The capture itself stays in the executor.** `InstallLevel` with `Tree`
+   nil and `Capture` set means "the tree to install is the window layout as it
+   stands now": encoding it needs the whole live tree, and a snapshot field
+   holding one would be exactly the copy §3 forbids. One consequence is a
+   behavior change, and it is an improvement: the capture now happens after the
+   plan's `CancelAll` rather than before it, so it encodes landed places rather
+   than an animation's scratch viewport — the rule the install already applied
+   one line later.
+
+5. **`pane.ChainPrefix` and `pane.TreeAtPlace` move into `client/pane`.** The
+   machine decodes the blob and builds the fallback tree, so the id-relativity
+   prefix and the single-pane default each needed one owner both sides read.
+   They sit beside the codec and the level stack whose rules they are.
+
+6. **`GuardLevelTopIs` is deleted.** Its two named users — the crumb rename's
+   write acknowledgement and the layout flush — are not navigation
+   continuations and never enter the machine, so the guard had no user, and
+   `make check`'s deadcode rule refuses one.
+
+7. **`pane.ContentPanes` is deleted.** The machine projects "which panes are in
+   a content descent" over `Stack.ContentID`, per §3's projection list, and the
+   tree-shaped form had no caller left.
+
 ## Open question for the owner
 
 `autoLiveOnRestore` fires an unconditional `GetTile` for every restored

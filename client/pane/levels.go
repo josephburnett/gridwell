@@ -46,6 +46,26 @@ type Level struct {
 	savedHash string
 }
 
+// TreeAtPlace builds the single-pane tree a level falls back to: one pane at
+// the given place, under the level's own id prefix. It is the decode-failure
+// default, the boot-restore default, and the capture fallback when the current
+// tree cannot encode — one constructor, so a level that could not read its
+// blob and a level that never had one open the same way.
+func TreeAtPlace(idPrefix, anchor string, path []string, cx, cy, zoom float64) *Tree {
+	t := NewTree()
+	t.IDPrefix = idPrefix
+	p := t.FocusedPane()
+	p.ID = idPrefix + p.ID
+	t.Focus = p.ID
+	p.Stack = StackAt(anchor, path, "")
+	p.Cx, p.Cy = cx, cy
+	if zoom <= 0 {
+		zoom = 1
+	}
+	p.Zoom = zoom
+	return t
+}
+
 // Levels is the window's nesting, bottom (first entered) to top (current).
 type Levels struct {
 	frames []Level

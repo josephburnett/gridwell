@@ -22,12 +22,9 @@ const (
 	// pane.StillDescended. PaneID, TileID.
 	GuardDescendedIn
 	// GuardPaneUntouched: the pane still sits at this anchor with nothing
-	// pushed on it — fallbackTreeFor's re-centre guard. PaneID, Anchor.
-	// (Phase C.)
+	// pushed on it — the post-reload level landing's re-centre guard.
+	// PaneID, Anchor.
 	GuardPaneUntouched
-	// GuardLevelTopIs: this pane tile is still the top level — the rename
-	// and layout-flush guard. TileID. (Phase C.)
-	GuardLevelTopIs
 )
 
 // Guard is one precondition.
@@ -53,8 +50,6 @@ func (g Guard) holds(w World) bool {
 	case GuardPaneUntouched:
 		p, ok := w.Pane(g.PaneID)
 		return ok && p.Stack.Depth() == 1 && p.Stack.Anchor() == g.Anchor
-	case GuardLevelTopIs:
-		return w.LevelTop != nil && w.LevelTop.TileID == g.TileID
 	}
 	return false
 }

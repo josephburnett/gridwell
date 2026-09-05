@@ -370,7 +370,7 @@ func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 func (a *App) thIdle(js.Value, []js.Value) any {
 	return !a.trans.Any() &&
 		a.tileMutates == 0 &&
-		a.wsPending == nil &&
+		!a.nav.LevelPending() &&
 		a.dragging == nil &&
 		a.gridFetch.Len() == 0 &&
 		a.tileFetch.Len() == 0
@@ -389,9 +389,9 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 		tiles = append(tiles, id)
 	}
 	return map[string]any{
-		"transition":  a.trans.Any(),
-		"tileMutates": a.tileMutates,
-		"wsPending":   a.wsPending != nil,
+		"transition":   a.trans.Any(),
+		"tileMutates":  a.tileMutates,
+		"levelPending": a.nav.LevelPending(),
 		// All three armed gesture states, not just the one idle() gates on:
 		// a press that arms the wrong gesture and a press that arms nothing
 		// read identically from "dragging" alone, and a spec that sees no

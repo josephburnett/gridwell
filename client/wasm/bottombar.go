@@ -7,6 +7,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
@@ -476,7 +477,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		// Go there: be inside level wsLevel, or for the root crumb, back in
 		// the session (closeOnly: the levels close, and the session's own
 		// state is never touched from the bar).
-		a.ascendLevels(a.ws.PopCountTo(nc.WsLevel))
+		a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels, Count: a.ws.PopCountTo(nc.WsLevel)})
 		return true
 	}
 	// The current crumb of an ephemeral url visit is a drag handle: dropped
