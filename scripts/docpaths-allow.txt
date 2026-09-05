@@ -4,10 +4,6 @@
 apps/desktop/README.md apps/desktop/.cache
 # The plan names the old package as the source of a rename that has happened:
 docs/one-cache.md internal/remote
-# The debt program (docs/debt-program.md, docs/debt/) plans files that do not
-# exist yet; each entry comes out when its workstream lands the file:
-docs/debt-program.md client/nav
-docs/debt/w1-nav-orchestration.md client/nav
 # A grep exclusion pattern in a verification command, not a path citation
 # (the checker splits `testhook\.go` at the backslash):
 docs/debt/w4-concepts.md client/wasm/testhook
