@@ -63,10 +63,80 @@ func (b viewBounds) toJS() js.Value {
 	return o
 }
 
+// bridgeCall invokes one bridge verb and routes what the promise says. Every
+// verb goes through here, because every one of them can reject: the handlers
+// on the other side are ipcMain.handle, and a throw there — a destroyed
+// window, a view that will not attach — comes back as a rejected promise. A
+// bare g.Call drops it, which is the "logs and returns" failure in its purest
+// form: the wasm goes on believing a pane is live, positioned, parked or
+// zoomed, with nothing on screen and nothing said. onFail runs after the
+// notice, for the caller that must also undo its own optimism.
+//
+// Exactly one of the two arms fires: promise.then(onFulfilled, onRejected),
+// the two-argument form. The chained form .then(a).catch(b) is not exclusive —
+// a throw inside the fulfilled arm rejects the derived promise and runs the
+// catch arm too, releasing twice and running the failure path after a success.
+// Each arm releases both funcs; a per-arm defer would leak the other on every
+// call.
+func (a *App) bridgeCall(g js.Value, method string, args js.Value, onOK func(js.Value), onFail func()) {
+	promise := g.Call(method, args)
+	if promise.Type() != js.TypeObject || promise.Get("then").Type() != js.TypeFunction {
+		// A host whose bridge half returns nothing: there is no verdict to
+		// wait for, so treat the call as delivered.
+		if onOK != nil {
+			onOK(js.Undefined())
+		}
+		return
+	}
+	var then, catch js.Func
+	release := func() { then.Release(); catch.Release() }
+	then = js.FuncOf(func(_ js.Value, p []js.Value) any {
+		defer release()
+		if onOK != nil {
+			res := js.Undefined()
+			if len(p) > 0 {
+				res = p[0]
+			}
+			onOK(res)
+		}
+		return nil
+	})
+	catch = js.FuncOf(func(_ js.Value, p []js.Value) any {
+		defer release()
+		reason := "rejected"
+		if len(p) > 0 {
+			reason = rejectionText(p[0])
+		}
+		// The same source the main process's own failures report under, so a
+		// native failure reads the same whichever side noticed it.
+		a.reportErr(errsurface.Error, "electron:webview", method+" failed: "+reason)
+		if onFail != nil {
+			onFail()
+		}
+		return nil
+	})
+	promise.Call("then", then, catch)
+}
+
+// rejectionText renders a promise rejection reason for the strip: an Error's
+// message, a string as itself, anything else through String().
+func rejectionText(v js.Value) string {
+	if v.Type() == js.TypeObject {
+		if m := v.Get("message"); m.Type() == js.TypeString {
+			return m.String()
+		}
+	}
+	if v.Type() == js.TypeString {
+		return v.String()
+	}
+	return js.Global().Get("String").Invoke(v).String()
+}
+
 // bridgePlace asks main to create or attach a WebContentsView for paneID
 // showing url at bounds. Every live view shares the one host-local session:
-// there is no per-plugin partition or session key.
-func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden, focused bool) {
+// there is no per-plugin partition or session key. onFail runs when main
+// refuses the placement: no view exists, so the caller's live handle must go.
+func (a *App) bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden, focused bool, onFail func()) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -92,11 +162,11 @@ func bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom fl
 	// durable gates the context menu's Freeze Page: an ephemeral visit has
 	// nothing to re-descend into.
 	args.Set("durable", durable)
-	g.Call("placeWebview", args)
+	a.bridgeCall(g, "placeWebview", args, nil, onFail)
 }
 
 // bridgeSetBounds repositions/resizes the view for paneID.
-func bridgeSetBounds(paneID string, b viewBounds) {
+func (a *App) bridgeSetBounds(paneID string, b viewBounds) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -104,13 +174,13 @@ func bridgeSetBounds(paneID string, b viewBounds) {
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
 	args.Set("bounds", b.toJS())
-	g.Call("setBounds", args)
+	a.bridgeCall(g, "setBounds", args, nil, nil)
 }
 
 // bridgeSetHidden parks and unparks the view so canvas overlays (palette,
 // drag ghosts, modals) can paint where the native view would otherwise
 // occlude. focused is bookkeeping for main's focus-steal guard.
-func bridgeSetHidden(paneID string, hidden, focused bool) {
+func (a *App) bridgeSetHidden(paneID string, hidden, focused bool) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -119,13 +189,13 @@ func bridgeSetHidden(paneID string, hidden, focused bool) {
 	args.Set("paneId", paneID)
 	args.Set("hidden", hidden)
 	args.Set("focused", focused)
-	g.Call("setHidden", args)
+	a.bridgeCall(g, "setHidden", args, nil, nil)
 }
 
 // bridgeSetZoom sets the user content zoom for the live view on paneID (the
 // tile's content_zoom). The main process composes it with the min-width
 // layout zoom: the two multiply, and neither overwrites the other.
-func bridgeSetZoom(paneID string, zoom float64) {
+func (a *App) bridgeSetZoom(paneID string, zoom float64) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -133,14 +203,14 @@ func bridgeSetZoom(paneID string, zoom float64) {
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
 	args.Set("zoom", zoom)
-	g.Call("setZoom", args)
+	a.bridgeCall(g, "setZoom", args, nil, nil)
 }
 
 // bridgeRemove tears the view down and invokes onFreeze with the final
 // frame (decoded JPEG bytes), url, and title so the caller can persist the
 // frozen preview. onFreeze runs asynchronously when the JS promise settles;
 // a missing bridge or failed capture yields empty values.
-func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history string)) {
+func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history string)) {
 	g := bridge()
 	if !g.Truthy() {
 		onFreeze(nil, "", "", "")
@@ -148,58 +218,42 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 	}
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
-	promise := g.Call("removeWebview", args)
-
-	// Exactly one of the two arms fires: promise.then(onFulfilled,
-	// onRejected), the two-argument form. The chained form
-	// .then(a).catch(b) is not exclusive — a throw inside the fulfilled arm
-	// rejects the derived promise and runs the catch arm too, releasing
-	// twice and writing a second, empty freeze. Each arm releases both
-	// funcs; a per-arm defer would leak the other on every close.
-	var then, catch js.Func
-	release := func() { then.Release(); catch.Release() }
-	then = js.FuncOf(func(_ js.Value, p []js.Value) any {
-		defer release()
-		res := p[0]
-		jpeg := decodeBase64(res.Get("jpegBase64"))
-		url := jsString(res.Get("url"))
-		title := jsString(res.Get("title"))
-		history := jsString(res.Get("history"))
-		onFreeze(jpeg, url, title, history)
-		return nil
-	})
-	catch = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		defer release()
+	a.bridgeCall(g, "removeWebview", args, func(res js.Value) {
+		onFreeze(decodeBase64(res.Get("jpegBase64")), jsString(res.Get("url")),
+			jsString(res.Get("title")), jsString(res.Get("history")))
+	}, func() {
+		// A refused teardown still has to release the caller's closure, which
+		// holds the only copy of the freeze it was going to write. An empty
+		// freeze is skipped by the writeback guard, so nothing overwrites a
+		// good preview; bridgeCall has already surfaced the refusal.
 		onFreeze(nil, "", "", "")
-		return nil
 	})
-	promise.Call("then", then, catch)
 }
 
 // bridgeGoBack navigates the view for paneID back in its history: the bar
 // slot's back button.
-func bridgeGoBack(paneID string) {
+func (a *App) bridgeGoBack(paneID string) {
 	g := bridge()
 	if !g.Truthy() {
 		return
 	}
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
-	g.Call("goBack", args)
+	a.bridgeCall(g, "goBack", args, nil, nil)
 }
 
 // bridgeShowMenu pops the live view's context menu (Freeze Page included)
 // with no in-page context — the bar circle's right-click. A page that
 // hijacks contextmenu makes the in-page menu unreachable; the circle sits
 // on the canvas outside the view's rect, so this door always opens.
-func bridgeShowMenu(paneID string) {
+func (a *App) bridgeShowMenu(paneID string) {
 	g := bridge()
 	if !g.Truthy() {
 		return
 	}
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
-	g.Call("showMenu", args)
+	a.bridgeCall(g, "showMenu", args, nil, nil)
 }
 
 // installWebviewListeners registers the main→renderer push handlers (frame

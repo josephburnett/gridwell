@@ -189,7 +189,8 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	// descent's auto-live, the reconnect click, the promote's relocation —
 	// so the pane's own frame is the descent this view belongs to. For a
 	// link that frame is the link row, while t is its target.
-	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, descentID: p.ContentID(), bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
+	v := &urlView{tileID: t.ID, paneID: p.ID, descentID: p.ContentID(), bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
+	a.local(p.ID).urlView = v
 	// durable means the descended row survives ascent: false for an
 	// ephemeral visit, which gets no Freeze Page in the context menu. A page
 	// view is not durable in this sense either — it carries no standing
@@ -199,14 +200,34 @@ func (a *App) placeURLView(paneID string, t rpc.Tile) {
 	if tile, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &tile) {
 		durable = false
 	}
-	a.local(p.ID).urlView.durable = durable
+	v.durable = durable
 	addr := a.webAddress(&t)
 	urlLog("place pane=%s tile=%s url=%s", p.ID, t.ID, addr)
 	// The focus fact goes with the placement, from the same owner
 	// syncURLViews reads it from: going live is not always a gesture on the
-	// focused pane.
-	bridgePlace(p.ID, t.ID, addr, b, contentZoomOf(&t), t.URLHistory, durable,
-		a.liveOverlaysHidden(), p.ID == a.tree.Focus)
+	// focused pane. The handle above is optimistic — it is set before main
+	// answers, so the very next frame positions the view — so a refused
+	// placement takes it back down (dropFailedURLView).
+	a.bridgePlace(p.ID, t.ID, addr, b, contentZoomOf(&t), t.URLHistory, durable,
+		a.liveOverlaysHidden(), p.ID == a.tree.Focus,
+		func() { a.dropFailedURLView(p.ID, v) })
+	a.draw()
+}
+
+// dropFailedURLView takes back the optimistic live handle when the place that
+// created it was refused: main never made the view, so nothing is on screen,
+// and a handle left standing would keep the pane looking live — no frozen
+// preview, no re-descent through the auto-live owner, and the next successful
+// place reported by the registry as a view replaced without its close. The
+// teardown is only local: there is nothing native to remove, and no freeze to
+// write, because no frame was ever rendered. bridgeCall has already surfaced
+// the refusal. Identity-checked, since a later place may already own the pane.
+func (a *App) dropFailedURLView(paneID string, v *urlView) {
+	pl, ok := a.localIf(paneID)
+	if !ok || pl.urlView != v {
+		return
+	}
+	pl.urlView = nil
 	a.draw()
 }
 
@@ -251,7 +272,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	anchor := v.anchor
 	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%s", paneID, tileID)
-	bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
+	a.bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
 		// A page view persists nothing on close: the plugin owns the frozen
 		// face, deriving a thumbnail from the file, and its store has no
 		// url state to write. The wildcard put below still shows the final
@@ -368,7 +389,7 @@ func (a *App) syncURLViews() {
 		case pane.SurfacePark:
 			// Not laid out this frame: a stacked level parked behind a pane
 			// tile. The level stays alive, so the view keeps running.
-			bridgeSetHidden(paneID, true, false)
+			a.bridgeSetHidden(paneID, true, false)
 			continue
 		case pane.SurfaceOrphan:
 			// The pane moved on without this view's teardown. Merely hiding
@@ -385,10 +406,10 @@ func (a *App) syncURLViews() {
 		// pane, so no view can occlude it.
 		b := contentViewBounds(r)
 		v.bounds = b
-		bridgeSetBounds(paneID, b)
+		a.bridgeSetBounds(paneID, b)
 		// focused feeds main's focus-steal guard (webviews.ts): only the
 		// focused pane's view may take keyboard focus back after a park.
-		bridgeSetHidden(paneID, hidden, paneID == a.tree.Focus)
+		a.bridgeSetHidden(paneID, hidden, paneID == a.tree.Focus)
 	}
 }
 

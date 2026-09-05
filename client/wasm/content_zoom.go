@@ -135,7 +135,7 @@ func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	case rpc.KindShell:
 		a.applyShellZoom(p.ID, z)
 	case rpc.KindURL:
-		bridgeSetZoom(p.ID, z)
+		a.bridgeSetZoom(p.ID, z)
 	}
 	a.refreshFileOverlay() // textarea font tracks the scale in text mode
 	a.draw()

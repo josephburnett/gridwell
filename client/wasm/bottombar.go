@@ -299,7 +299,7 @@ func (a *App) barSlotClick(button int) {
 		}
 	case a.isURLDescent(p):
 		if a.urlViewFor(p.ID) != nil {
-			bridgeGoBack(p.ID)
+			a.bridgeGoBack(p.ID)
 		} else if !a.caps.LiveURL {
 			// A browser host cannot place a live view, so the next-best
 			// descent is the browser's own: open the address in a new tab.
@@ -438,7 +438,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	if button == 2 {
 		if sx >= bx+bw-wsbar.SlotW {
 			if p := a.tree.FocusedPane(); p != nil && a.isURLDescent(p) && a.urlViewFor(p.ID) != nil {
-				bridgeShowMenu(p.ID)
+				a.bridgeShowMenu(p.ID)
 			}
 			return true
 		}
