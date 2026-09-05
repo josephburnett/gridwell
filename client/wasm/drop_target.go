@@ -276,11 +276,7 @@ func wellPreviewFor(ps dragdrop.Pane, n *rpc.Tile) dragdrop.ChildPreview {
 		zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom))
 }
 
-// wellOf reads a tile row as the doorway zoomtrans reasons about: its
-// footprint in the parent grid plus the framing it was left at.
-func wellOf(n *rpc.Tile) zoomtrans.Well {
-	return zoomtrans.Well{
-		ID: n.ID, X: n.X, Y: n.Y, W: n.W, H: n.H,
-		ViewCx: n.ViewCx, ViewCy: n.ViewCy, ViewZoom: n.ViewZoom,
-	}
-}
+// wellOf forwards to zoomtrans.WellOf, the one derivation of "this row read
+// as a doorway". It keeps a local name because the renderer reads it at many
+// call sites.
+func wellOf(n *rpc.Tile) zoomtrans.Well { return zoomtrans.WellOf(n) }

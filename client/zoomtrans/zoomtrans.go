@@ -17,6 +17,8 @@ package zoomtrans
 import (
 	"math"
 	"slices"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // Endpoints describes one end of a transition: the pane state expressed
@@ -49,6 +51,17 @@ type Well struct {
 	ViewCx   float64
 	ViewCy   float64
 	ViewZoom float64
+}
+
+// WellOf reads a tile row as the doorway this package reasons about: its
+// footprint in the parent grid plus the framing it was left at. One
+// derivation, so the renderer's preview, the descent, and the ascent cannot
+// disagree about what a row says.
+func WellOf(t *rpc.Tile) Well {
+	return Well{
+		ID: t.ID, X: t.X, Y: t.Y, W: t.W, H: t.H,
+		ViewCx: t.ViewCx, ViewCy: t.ViewCy, ViewZoom: t.ViewZoom,
+	}
 }
 
 // PreviewFactor is the scale at which a well shows its child grid.
