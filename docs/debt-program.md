@@ -61,7 +61,7 @@ executors.
    bootWorkspace) and promote.
 Design doc: `docs/debt/w1-nav-orchestration.md`.
 
-**Status:** [ ] design [ ] phase A [ ] phase B [ ] phase C
+**Status:** [x] design [ ] phase A [ ] phase B [ ] phase C
 
 ## W2 — The native seam sheds its timing heuristics
 
@@ -86,7 +86,7 @@ covered in the bridge harness. Separately: audit every `webviews.ts` path
 against the CLAUDE.md rule ("anything you touch there gets one") and close
 gaps. Design doc: `docs/debt/w2-native-seam.md`.
 
-**Status:** [ ] design [ ] focusguard extraction + tests [ ] harness coverage [ ] webviews path audit
+**Status:** [x] design [ ] focusguard extraction + tests [ ] harness coverage [ ] webviews path audit (gap list in docs/debt/w2-native-seam.md)
 
 ## W3 — The freshness stack gets its one document and its seam tests
 
@@ -108,7 +108,7 @@ cross-layer behavior in those traces not pinned by a seam test gets one
 (most live in `internal/server`'s seam tests and `make check-connections`).
 Simplification candidates noted for owner decision, not silently applied.
 
-**Status:** [ ] doc [ ] seam-test gap list [ ] gap tests
+**Status:** [x] doc [x] seam-test gap list [ ] gap tests
 
 ## W4 — Concept audit and exception-surface consolidation
 
@@ -129,7 +129,7 @@ predicate (in `api/rpc` on Tile, or a `client/*` package), with the sweep
 verified by grep: no bare `.ServesPage`/`.TextPresentation`/`Meta.HostContent`
 read outside its owner. Design doc: `docs/debt/w4-concepts.md`.
 
-**Status:** [ ] concept doc + merge questions [ ] predicate sweep
+**Status:** [x] design (docs/debt/w4-concepts.md: enumeration + 8 merge questions for the owner) [ ] merge decisions [ ] predicate sweep
 
 ## W6 — The App struct decomposes by owner
 
