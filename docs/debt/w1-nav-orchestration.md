@@ -349,6 +349,64 @@ The remainder — `cl`, `home`, `tree`, `c`, `ws`, `locals`, `menu`, `errs`,
 - No behavior change in any phase. A change that alters what the user sees is
   a separate commit with its own decision.
 
+## Deviations found in phase A
+
+Implementation found seven places where this design did not match reality.
+Behavior is unchanged in every one; the design is amended here rather than
+diverged from silently.
+
+1. **`Plan` gains `Next *Gesture`.** Two paths must compute from state the
+   effects above them just changed, exactly as the sequential code did: a
+   descent or ascent that first lands a running transition (`trans.Cancel`
+   runs the displaced landing, which moves the pane, before the segments are
+   read), and each hop of a multi-level ascent (each `ascendOnce` reads the
+   place the previous one landed on). Both return a plan that ends there and
+   hands the rest back as a continuation GESTURE; the shim gathers a fresh
+   world and calls `Do` again. The loop is bounded (`navGestureSteps`) and
+   each step consumes something, so it always terminates. The alternative —
+   letting the machine guess the post-cancel place — would have been a second
+   copy of where a pane is.
+
+2. **Thirty-three effects, not thirty-one.** `ScaleContent{PaneID}` is the
+   content render scale (issue #82), re-derived at every landing on a content
+   frame; the animated ascent's landing installs no place, so `InstallPlace`
+   could not carry it. `ReEngage{PaneID, TileID}` is the restore path's
+   go-live arm: phase A must not touch `autoLiveOnRestore`, so the effect runs
+   it unchanged and phase B replaces its body with `Await{GetTile}` under a
+   `DescendedIn` guard.
+
+3. **`Gesture.Descend` has no `After`.** No call site passes one — the
+   URL-tile creation path stopped chaining on it — so the dead parameter went
+   with the absorbed function rather than into the vocabulary.
+
+4. **`ReEngage` is a gesture in phase A.** `autoLiveOnRestore` still fetches
+   and heals on the shim side, but its verdict routes through the machine, or
+   `shellconn.DecideAutoLive` would have had two callers in the client.
+
+5. **The snapshot carries four more resolved facts.** `World` gains
+   `ZoomDistFactor` and `TextSideInset` (the renderer constants the segment
+   math and the content fit zoom read) and `PaneView.GridID` (the grid a
+   pane's place names, which only the cache walk can answer). `LeaveWorld`
+   folds `RootFraming` into `LandingView`, the already-resolved viewport, and
+   adds `DoorGridID`/`DoorGridCached`, because the ascent fetches that grid
+   when it is missing.
+
+6. **The barrier is data only until phase C.** `BarrierID` and the
+   continuation's `Barrier` field exist; the arrival counting lands with its
+   first user, because `make check`'s deadcode gate refuses a function no
+   shipped binary reaches.
+
+7. **The ascent calibrates against the doorway row AFTER its framing write.**
+   `leaveFrame` persists the pane's centre onto the doorway and then reads it
+   back, so the frame swap matches where the user actually is. Both halves
+   of one plan, so the machine projects the same write onto its own copy
+   through `zoomtrans` — which owns the formula and is the only owner either
+   side reads.
+
+`Effect` and `Gesture` are one tagged struct each rather than a type per
+verb, the shape `pane.TreeNode` already uses: a plan is then comparable field
+by field in a table test.
+
 ## Open question for the owner
 
 `autoLiveOnRestore` fires an unconditional `GetTile` for every restored

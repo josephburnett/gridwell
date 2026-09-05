@@ -1,0 +1,156 @@
+package nav
+
+import (
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/caps"
+	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/scratch"
+)
+
+// The world snapshot: gather then execute, the shape dragdrop.DropInput
+// already established. Every impure read is resolved up front, so there is no
+// App field and no js.Value inside this package and a field cleared
+// mid-teardown can never be read late.
+//
+// Facts the machine PROJECTS rather than receives, because a snapshot field
+// would be a copy: pane.FramingTarget, pane.FramingWriters, scratch.Ephemeral
+// over PaneScratch, pane.StillDescended, pane.ContentPanes, pane.TakeOver,
+// OtherPaneShows, zoomtrans.*, shellconn.DecideAutoLive,
+// textedit.DescentMode, urlwalk.Walk.
+//
+// Three-valued facts stay three-valued. ChildGridCached, DoorGridCached and
+// scratch.Grid.Cached distinguish "no" from "not known yet", exactly as
+// client/scratch requires. A snapshot never guesses.
+
+// PaneView is one pane as navigation reads it.
+type PaneView struct {
+	ID string
+	// Stack is a clone of the pane's place: the machine reads it and returns
+	// a new one, and holds no place of its own between calls.
+	Stack pane.Stack
+	// Cx, Cy, Zoom are the pane's live viewport — the top frame's, unrolled,
+	// and mid-animation the transition's scratch values.
+	Cx, Cy, Zoom float64
+	TextScrollX  float64
+	TextScrollY  float64
+	TextMode     string
+	Rect         pane.Rect
+	OnScreen     bool
+	// GridID is the grid the place names: the anchor walked down the doorway
+	// path. Resolved by the gatherer because the walk reads the cache and
+	// kicks its own fetches.
+	GridID string
+}
+
+// Notice is a resolved errsurface report — pluginhealth's wording for a
+// doorway that cannot be entered, carried by value so the machine never asks
+// the health classifier itself.
+type Notice struct {
+	Severity errsurface.Severity
+	Source   string
+	Message  string
+}
+
+// DoorWorld is the descent's extra half: everything about the doorway row
+// that only the shim can resolve.
+type DoorWorld struct {
+	// DeadLink is deadref.DeadTile: the link points into a namespace this
+	// node does not declare.
+	DeadLink bool
+	// IsLink is isLinkTile: the row's reference declaration, read by its one
+	// owner and handed over as an answer.
+	IsLink bool
+	// ChildGridCached is whether the target grid is already in the cache.
+	ChildGridCached bool
+	// Health is pluginhealth.ClickNotice for a link with no child grid, and
+	// nil when there is none — or when the question does not arise.
+	Health *Notice
+	// ReadOnly is tileReadOnly for the door row.
+	ReadOnly bool
+	// PaneScratch is the pane's grid as the scratch rule reads it.
+	PaneScratch scratch.Grid
+}
+
+// LeaveWorld is the ascent's extra half: the frame being left, resolved
+// against the row that owns it.
+type LeaveWorld struct {
+	// DescendedTile is descendedTile(p) for a content place — the cache-wide
+	// walk that finds an off-grid ephemeral visit. nil when the row vanished
+	// or was never cached.
+	DescendedTile *rpc.Tile
+	// DoorGridID is the grid the doorway row lives in, one level out.
+	DoorGridID string
+	// DoorGridCached says whether that grid is in the cache at all.
+	DoorGridCached bool
+	// DoorTile is the doorway row itself, nil when the grid holds none — a
+	// + menu portal, for which the origin grid has no row.
+	DoorTile *rpc.Tile
+	// LandingView is the framing the grid being landed on was left at, from
+	// the row that owns it (persistedGridView: the containing well for a
+	// nested grid, the plugin's persisted root view for a root). nil when
+	// nothing is persisted or the owning row is not cached.
+	LandingView *Viewport
+	// PaneScratch is the pane's grid as the scratch rule reads it.
+	PaneScratch scratch.Grid
+}
+
+// World is one navigation snapshot.
+type World struct {
+	Focus string
+	Panes []PaneView
+	Home  string
+
+	// CellPx is the renderer's base cell size at zoom 1.0; TransitionMs the
+	// total wall-clock length of a descent or ascent; ZoomDistFactor the
+	// log-zoom-to-pixel weighting the duration split uses; TextSideInset the
+	// inner-box inset a content descent calibrates against. The four are the
+	// renderer's constants, bound here rather than duplicated.
+	CellPx         float64
+	TransitionMs   float64
+	ZoomDistFactor float64
+	TextSideInset  float64
+
+	// Animating is trans.Active per pane.
+	Animating map[string]bool
+	// MenuOpenOn is the pane the + menu is open on, "" for none.
+	MenuOpenOn string
+	Caps       caps.Caps
+	// Surfaces is every pane holding a live url or shell surface, keyed by
+	// the content it shows: the input to pane.TakeOver.
+	Surfaces   []pane.Holder
+	LevelDepth int
+	LevelTop   *pane.Level
+
+	// ShellAlive and ShellAliveKnown are the cached liveness probe results,
+	// keyed by content id. Known is separate because "not probed yet" is not
+	// "dead".
+	ShellAlive      map[string]bool
+	ShellAliveKnown map[string]bool
+
+	// Door is set for a descent, Leave for an ascent hop.
+	Door  *DoorWorld
+	Leave *LeaveWorld
+}
+
+// Pane returns the pane view for id.
+func (w World) Pane(id string) (PaneView, bool) {
+	for _, p := range w.Panes {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return PaneView{}, false
+}
+
+// otherPaneShows is pane.Tree.OtherPaneShows projected over the snapshot:
+// some pane other than paneID is descended into tileID, so leaving does not
+// delete it.
+func (w World) otherPaneShows(paneID, tileID string) bool {
+	for _, p := range w.Panes {
+		if p.ID != paneID && p.Stack.ContentID() == tileID {
+			return true
+		}
+	}
+	return false
+}

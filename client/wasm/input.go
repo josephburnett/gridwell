@@ -19,7 +19,6 @@ import (
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/scratch"
-	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -1064,7 +1063,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 		// nowhere (descend's own guard), so it births no pane either.
 		target = a.splitBelowForOpen(p)
 	}
-	a.descend(target, hit, nil)
+	a.descend(target, hit)
 	return true
 }
 
@@ -1138,12 +1137,13 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 	return cx, cy, zoom, true
 }
 
-// autoLiveOnRestore is autoLiveOnDescent for the restore paths: a reload
+// autoLiveOnRestore is the go-live arm of the restore paths: a reload
 // (applyURLState), a pane-tile install, or an ascent landing back on a
-// content frame stacked under a deeper visit (landOnFrame). The tile row is
-// not necessarily cached at restore time, so it is fetched first, and the
-// pane is re-resolved when the read lands, since the user may have moved on
-// and where they went is never overridden.
+// content frame stacked under a deeper visit (client/nav's landOnFrame). The
+// tile row is not necessarily cached at restore time, so it is fetched first,
+// and the verdict then goes through the machine, which re-checks that the
+// pane is still in this descent — the user may have moved on while the read
+// was in flight, and where they went is never overridden.
 func (a *App) autoLiveOnRestore(paneID, tileID string) {
 	go func() {
 		tile, err := a.cl.GetTile(context.Background(), tileID)
@@ -1152,7 +1152,7 @@ func (a *App) autoLiveOnRestore(paneID, tileID string) {
 		}
 		a.c.UpdateTile(tile.GridID, *tile)
 		a.healStalePanePath(paneID, tile)
-		a.autoLiveOnDescent(paneID, tile)
+		a.navReEngage(paneID, tile)
 		a.draw()
 	}()
 }
@@ -1207,45 +1207,6 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	a.fetchGrid(tile.GridID)
 	a.draw()
 	a.scheduleURLUpdate()
-}
-
-// autoLiveOnDescent applies the shellconn.DecideAutoLive verdict for the
-// just-descended tile: open the url view, attach or create the shell PTY,
-// probe an unknown shell session first, or stay frozen — text, browser hosts,
-// dead sessions. It is the one auto-live owner, and the refresh affordances
-// are the retry for the cases it stays frozen on. tile is the descent-time
-// row, passed by value, because an ephemeral scratch tile is in no cached
-// grid.
-func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
-	tileID := tile.ID
-	fp := a.tree.FindPane(paneID)
-	if !pane.StillDescended(fp, tileID) {
-		return
-	}
-	// The shell facts key by the content id, so a link attaches its target's
-	// session: the same reads shellRefreshButtonVisible does, so the two
-	// decisions cannot disagree about a dead session.
-	cid := tile.ContentID()
-	alive, known := a.shellAlive[cid]
-	verdict := shellconn.DecideAutoLive(
-		tile.WebContent(), tile.Kind == rpc.KindShell,
-		a.caps.LiveURL, a.caps.LiveShell,
-		tile.PreviewBlobID != 0, known, alive, tile.URLFrozen)
-	switch verdict {
-	case shellconn.AutoLiveURL:
-		a.openURLStream(fp, tileID)
-	case shellconn.AutoLiveShell:
-		a.openShellStream(fp, tileID)
-	case shellconn.AutoLiveProbeShell:
-		a.probeShellSessionAlive(cid, func(nowAlive bool) {
-			// Re-check that the pane is still in this descent when the
-			// verdict lands: the probe is async and the user may have moved
-			// on.
-			if p := a.tree.FindPane(paneID); nowAlive && p != nil && p.ContentID() == tileID {
-				a.openShellStream(p, tileID)
-			}
-		})
-	}
 }
 
 // saveTextBeforeAscent posts the editor buffer (if text mode is active)
@@ -1453,7 +1414,7 @@ func (a *App) clickTemplate(d *dragState) {
 		// drops the exit-well link (commitTemplateDrop).
 		well := paletteItemGhostNode(d.item)
 		well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
-		a.descend(fp, &well, nil)
+		a.descend(fp, &well)
 	case palette.ClickVisit:
 		pr.click(a, fp)
 	case palette.ClickHere, palette.ClickNothing:
@@ -1668,7 +1629,7 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 			if fp == nil || fp.ContentID() != "" {
 				return
 			}
-			a.descend(fp, &tile, nil)
+			a.descend(fp, &tile)
 			a.draw()
 		}()
 	}, func() {
@@ -1685,9 +1646,9 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 // A pure read, and deliberately: the border asks per frame, and a read that
 // kicked its own fetch would hammer a grid nobody is drawing — a dead link's
 // namespace above all, which is never to be fetched for. Fetching a pane's
-// grid belongs to the paths that show it; landOnFrame does it for the one
-// place that lands in a content frame without ever having drawn the grid
-// behind it.
+// grid belongs to the paths that show it; client/nav's landOnFrame does it
+// for the one place that lands in a content frame without ever having drawn
+// the grid behind it.
 func (a *App) scratchGridOf(p *pane.Pane) scratch.Grid {
 	g, ok := a.c.Grid(a.gridIDForPane(p))
 	if !ok {
@@ -1743,7 +1704,7 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 		return a.cl.CreateURL(ctx, req)
 	}, func(tile rpc.Tile) {
 		if fp := a.tree.FindPane(paneID); fp != nil {
-			a.descend(fp, &tile, nil)
+			a.descend(fp, &tile)
 		}
 	})
 }
@@ -1829,7 +1790,7 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 		return a.cl.CreateShell(ctx, req)
 	}, func(tile rpc.Tile) {
 		if fp := a.tree.FindPane(paneID); fp != nil {
-			a.descend(fp, &tile, nil)
+			a.descend(fp, &tile)
 		}
 	})
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/menu"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
@@ -224,6 +225,12 @@ type App struct {
 	// transition that is displaced or cleared lands on its destination rather
 	// than vanishing, so a descent is never voided after visibly animating.
 	trans *transition.Set
+
+	// nav is the navigation state machine (client/nav): every descent and
+	// ascent decision, as data. This file's half is resolution and execution
+	// only — nav.go gathers the world it plans against and nav_exec.go runs
+	// the effects it returns.
+	nav *nav.Machine
 
 	// rightDrag is the in-flight right-button gesture, if any. Right
 	// button is dedicated to pane management — split, resize, close,
@@ -527,6 +534,9 @@ func (a *App) forgetPane(paneID string) {
 	// rather than landed: there is no pane left to install a place on or to
 	// re-engage. Every other clearing goes through Cancel, which lands.
 	a.trans.Drop(paneID)
+	// And with it every navigation continuation that was waiting on this
+	// pane: the drop means no landing will ever retire them.
+	a.nav.Forget(paneID)
 }
 
 // selectedFor returns the selected tile id in paneID, or "" if nothing is
@@ -717,6 +727,7 @@ func main() {
 		renderedPanePaints: map[string]int{},
 	}
 	app.trans = transition.New(app.enterSegment, app.landTransition)
+	app.nav = nav.New()
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
 	app.tree = pane.NewTree()
