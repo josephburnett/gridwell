@@ -51,10 +51,10 @@ func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 // Listeners are installed fresh on every open and released on close, so
 // repeat opens don't leak js.FuncOf handles.
 func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url string), onCancel func()) {
-	if a.urlModalOpen {
+	if a.overlays.urlModalOpen {
 		return
 	}
-	a.urlModalOpen = true
+	a.overlays.urlModalOpen = true
 	// Park live views now (liveOverlaysHidden) so none paints over the
 	// dialog.
 	a.draw()
@@ -107,7 +107,7 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 	)
 
 	close := func() {
-		a.urlModalOpen = false
+		a.overlays.urlModalOpen = false
 		defer a.draw() // un-park the live views (issue #131)
 		modal.Get("classList").Call("remove", "open")
 		suggestEl.Set("innerHTML", "")

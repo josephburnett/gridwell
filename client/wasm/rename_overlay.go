@@ -181,7 +181,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 	st.Set("outline", "none")
 	st.Set("width", pxf(width))
 	position(st)
-	a.renameEditing = true
+	a.overlays.renameEditing = true
 
 	orig := strings.TrimSpace(value)
 	closed := false
@@ -195,7 +195,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		in.Call("remove")
 		keyCb.Release()
 		blurCb.Release()
-		a.renameEditing = false
+		a.overlays.renameEditing = false
 		if commit && val != orig {
 			onCommit(val)
 		}

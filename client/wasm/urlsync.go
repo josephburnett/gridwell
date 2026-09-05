@@ -346,8 +346,8 @@ func (a *App) textareaCursorRowCol() (int, int) {
 	if !a.hasTextarea() {
 		return 0, 0
 	}
-	val := a.textTextarea.Get("value").String()
-	off := a.textTextarea.Get("selectionStart").Int()
+	val := a.overlays.textTextarea.Get("value").String()
+	off := a.overlays.textTextarea.Get("selectionStart").Int()
 	row, col := textcursor.RowColFromOffset(val, off)
 	return col, row
 }
@@ -381,8 +381,8 @@ func (a *App) placeCursorAt(col, row int) {
 	if !a.hasTextarea() {
 		return
 	}
-	val := a.textTextarea.Get("value").String()
+	val := a.overlays.textTextarea.Get("value").String()
 	off := textcursor.OffsetFromRowCol(val, row, col)
-	a.textTextarea.Call("focus")
-	a.textTextarea.Call("setSelectionRange", off, off)
+	a.overlays.textTextarea.Call("focus")
+	a.overlays.textTextarea.Call("setSelectionRange", off, off)
 }

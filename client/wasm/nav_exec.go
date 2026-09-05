@@ -25,7 +25,7 @@ func (a *App) runNav(plan nav.Plan) {
 	// descent is pending: the machine owns that fact, so the install and the
 	// failed descent both end the animation without either remembering to.
 	if !a.nav.LevelPending() {
-		a.wsExpand = nil
+		a.overlays.wsExpand = nil
 	}
 	a.draw()
 }
@@ -187,7 +187,7 @@ func (a *App) navStartTransition(e nav.Effect) {
 			dd := paneToDragdrop(p, paneRectFor(a, p))
 			x0, y0 := dd.CellToScreen(float64(e.Tile.X), float64(e.Tile.Y))
 			x1, y1 := dd.CellToScreen(float64(e.Tile.X+e.Tile.W), float64(e.Tile.Y+e.Tile.H))
-			a.wsExpand = &wsExpandState{x: x0, y: y0, w: x1 - x0, h: y1 - y0, startMs: nowMs()}
+			a.overlays.wsExpand = &wsExpandState{x: x0, y: y0, w: x1 - x0, h: y1 - y0, startMs: nowMs()}
 		}
 	}
 	tr := &transition.Transition{

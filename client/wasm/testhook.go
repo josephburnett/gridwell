@@ -288,7 +288,7 @@ func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 	return map[string]any{
 		"paneID":     p.ID,
 		"tileID":     p.ContentID(),
-		"hasContent": a.textareaReady,
+		"hasContent": a.overlays.textareaReady,
 		// The focused pane's inner box — lets e2e verify the overlay is over the
 		// right pane's geometry, not a sibling.
 		"x": r.X,
@@ -810,10 +810,10 @@ func (a *App) thBar(js.Value, []js.Value) any {
 // same bytes on both sides.
 func (a *App) thRawRows(js.Value, []js.Value) any {
 	p := a.tree.FocusedPane()
-	if p == nil || p.ContentID() == "" || !a.textTextarea.Truthy() {
+	if p == nil || p.ContentID() == "" || !a.overlays.textTextarea.Truthy() {
 		return -1
 	}
-	src := a.textTextarea.Get("value").String()
+	src := a.overlays.textTextarea.Get("value").String()
 	st := defaultMarkdownStyle()
 	scale := a.textScaleFor(p)
 	setFont(a.cctx, st.codePx*scale, st.monospace, false)

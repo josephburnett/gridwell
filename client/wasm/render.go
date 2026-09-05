@@ -558,7 +558,7 @@ func (a *App) draw() {
 	// the level outline while the content underneath never moves. Its end
 	// rect is the outline above, so the install handoff is seamless. Drawn
 	// last, like the outline it becomes.
-	if e := a.wsExpand; e != nil {
+	if e := a.overlays.wsExpand; e != nil {
 		t := (nowMs() - e.startMs) / totalTransitionMs
 		if t > 1 {
 			t = 1

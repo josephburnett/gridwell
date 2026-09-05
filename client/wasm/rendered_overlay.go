@@ -22,7 +22,7 @@ import (
 // ensureRenderedView creates (once) the overlay div and its scoped
 // stylesheet.
 func (a *App) ensureRenderedView() {
-	if a.renderedView.Truthy() {
+	if a.overlays.renderedView.Truthy() {
 		return
 	}
 	st := a.doc.Call("createElement", "style")
@@ -77,15 +77,15 @@ func (a *App) ensureRenderedView() {
 		if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeRendered {
 			return nil
 		}
-		p.TextScrollY = a.renderedView.Get("scrollTop").Float()
-		p.TextScrollX = a.renderedView.Get("scrollLeft").Float()
+		p.TextScrollY = a.overlays.renderedView.Get("scrollTop").Float()
+		p.TextScrollX = a.overlays.renderedView.Get("scrollLeft").Float()
 		a.scheduleFileSave()
 		return nil
 	})
 	div.Call("addEventListener", "scroll", scrollCb)
 
 	a.doc.Get("body").Call("appendChild", div)
-	a.renderedView = div
+	a.overlays.renderedView = div
 }
 
 // refreshRenderedOverlay shows/positions/fills the rendered view for the
@@ -93,11 +93,11 @@ func (a *App) ensureRenderedView() {
 // (tile id + version + org-ness) changes, so scrolling never re-renders.
 func (a *App) refreshRenderedOverlay() {
 	a.ensureRenderedView()
-	div := a.renderedView
+	div := a.overlays.renderedView
 	hide := func() {
 		div.Get("style").Set("display", "none")
-		a.renderedReady = false
-		a.lastRenderedKey = ""
+		a.overlays.renderedReady = false
+		a.overlays.lastRenderedKey = ""
 	}
 	p := a.tree.FocusedPane()
 	if p == nil || p.ContentID() == "" {
@@ -143,13 +143,13 @@ func (a *App) refreshRenderedOverlay() {
 
 	key := t.ID + "\x00" + strconv.FormatInt(t.Version, 10) + "\x00" +
 		strconv.FormatBool(markdown.IsOrg(t.AltText)) + "\x00" + fmt.Sprint(len(body))
-	if key != a.lastRenderedKey {
+	if key != a.overlays.lastRenderedKey {
 		div.Set("innerHTML", presentationHTML(&t, body))
-		a.lastRenderedKey = key
+		a.overlays.lastRenderedKey = key
 		div.Set("scrollTop", p.TextScrollY)
 		div.Set("scrollLeft", p.TextScrollX)
 	}
-	a.renderedReady = true
+	a.overlays.renderedReady = true
 }
 
 // onRenderedCheckboxClick toggles the task marker behind a clicked checkbox.
@@ -184,7 +184,7 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 		ev.Call("preventDefault")
 		return
 	}
-	inputs := a.renderedView.Call("querySelectorAll", `input[type="checkbox"]`)
+	inputs := a.overlays.renderedView.Call("querySelectorAll", `input[type="checkbox"]`)
 	idx := -1
 	for i := 0; i < inputs.Length(); i++ {
 		if inputs.Index(i).Equal(input) {
@@ -205,7 +205,7 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 	a.scheduleFileSave()
 	// Re-render from the toggled source: the render key won't change (same
 	// tile, same version, same length), so force it.
-	a.lastRenderedKey = ""
+	a.overlays.lastRenderedKey = ""
 	a.refreshRenderedOverlay()
 	a.draw()
 }

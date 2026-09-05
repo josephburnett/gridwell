@@ -52,9 +52,9 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 		if mode == "" {
 			mode = rpc.TextModeRendered
 		}
-		ready := a.textareaReady
+		ready := a.overlays.textareaReady
 		if mode == rpc.TextModeRendered {
-			ready = a.renderedReady
+			ready = a.overlays.renderedReady
 		}
 		// textedit.CanvasHiddenByOverlay is the single owner of "canvas paints
 		// or overlay covers". It is mode-agnostic, since both modes are DOM

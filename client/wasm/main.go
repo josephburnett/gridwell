@@ -239,34 +239,9 @@ type App struct {
 	// Ephemeral view state, like the selection.
 	traces map[string]traceState
 
-	// textTextarea is the lazily-created <textarea> element used for
-	// markdown text-mode editing. It is positioned over the focused pane
-	// when the pane's place is a content frame in TextMode "text", and hidden
-	// otherwise. We hold it as a single shared element to avoid creating
-	// fresh DOM nodes on every descent.
-	textTextarea js.Value
-	// textTextareaInputCb is the input event listener that mirrors the
-	// textarea's value into a per-frame redraw. Held so we can release
-	// it cleanly if the App is torn down (currently never).
-	textTextareaInputCb  js.Func
-	textTextareaScrollCb js.Func
-
-	// renameEditing marks the shared inline rename input as open (the bar's
-	// current crumb hides its name text underneath it — bottombar.go).
-	renameEditing bool
-
-	// renderedView is the singleton read-only rendered-HTML overlay div
-	// (rendered_overlay.go). renderedReady mirrors textareaReady for
-	// rendered mode: the canvas paints raw source until the overlay holds
-	// content. lastRenderedKey caches the render (tile, version, org-ness)
-	// so scrolling never re-renders.
-	renderedView    js.Value
-	renderedReady   bool
-	lastRenderedKey string
-
-	// wsExpand is the in-flight first-descent capture animation
-	// (workspace.go); nil when none.
-	wsExpand *wsExpandState
+	// overlays holds the DOM singletons that sit over the canvas and the
+	// "is this one showing" flags that go with them. See overlayState.
+	overlays overlayState
 
 	// renderedPrev caches rasterized rendered-mode grid previews by tile id
 	// (rendered_preview.go): SVG foreignObject images of
@@ -312,6 +287,44 @@ type App struct {
 	// rendered pane paints the raster, never raw. Exposed by the
 	// renderedPreviews testhook.
 	renderedPanePaints map[string]int
+}
+
+// overlayState holds the DOM singletons layered over the canvas — the text
+// textarea, the rendered-HTML view, the rendered/raw toggle — their retained
+// listeners, and the flags saying which one is showing and what it holds.
+// Each element is created lazily by its own file (text_overlay.go,
+// rendered_overlay.go) and reused for the life of the page, so a descent
+// never allocates fresh DOM. Nothing here is a fact the user can change; it
+// is what the page is currently displaying.
+type overlayState struct {
+	// textTextarea is the lazily-created <textarea> element used for
+	// markdown text-mode editing. It is positioned over the focused pane
+	// when the pane's place is a content frame in TextMode "text", and hidden
+	// otherwise. We hold it as a single shared element to avoid creating
+	// fresh DOM nodes on every descent.
+	textTextarea js.Value
+	// textTextareaInputCb is the input event listener that mirrors the
+	// textarea's value into a per-frame redraw. Held so we can release
+	// it cleanly if the App is torn down (currently never).
+	textTextareaInputCb  js.Func
+	textTextareaScrollCb js.Func
+
+	// renameEditing marks the shared inline rename input as open (the bar's
+	// current crumb hides its name text underneath it — bottombar.go).
+	renameEditing bool
+
+	// renderedView is the singleton read-only rendered-HTML overlay div
+	// (rendered_overlay.go). renderedReady mirrors textareaReady for
+	// rendered mode: the canvas paints raw source until the overlay holds
+	// content. lastRenderedKey caches the render (tile, version, org-ness)
+	// so scrolling never re-renders.
+	renderedView    js.Value
+	renderedReady   bool
+	lastRenderedKey string
+
+	// wsExpand is the in-flight first-descent capture animation
+	// (workspace.go); nil when none.
+	wsExpand *wsExpandState
 
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above

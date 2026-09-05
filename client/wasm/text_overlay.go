@@ -109,7 +109,7 @@ func (a *App) liveViewOwnsPoint(p *pane.Pane, r pane.Rect, sx, sy float64) bool 
 // ensureFileTextarea, and a draw, a URL read, or a mode toggle can arrive
 // before that.
 func (a *App) hasTextarea() bool {
-	return !a.textTextarea.IsUndefined() && !a.textTextarea.IsNull()
+	return !a.overlays.textTextarea.IsUndefined() && !a.overlays.textTextarea.IsNull()
 }
 
 // ensureFileTextarea creates (once) the shared <textarea> overlay used
@@ -161,13 +161,13 @@ func (a *App) ensureFileTextarea() {
 		// tile-keyed entries cannot strand an edit whose pane moved on.
 		a.flushDirtyText()
 	})
-	a.textTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+	a.overlays.textTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the keystroke into the cache under the tile the textarea is
 		// bound to, the one owner of unsaved text. The DOM value is a view;
 		// nothing persists from it directly. Then arm the debounced sweep;
 		// the URL update is debounced separately.
-		a.textareaReady = true
-		if a.lastTextareaTileID == "" {
+		a.overlays.textareaReady = true
+		if a.overlays.lastTextareaTileID == "" {
 			// Typing into an unbound textarea has no tile to belong to. An
 			// unbound textarea is hidden, so this should be unreachable;
 			// surface it rather than let the typing vanish silently.
@@ -177,13 +177,13 @@ func (a *App) ensureFileTextarea() {
 		}
 		// Keyed by contentKey: a leaf link's edits accumulate under its
 		// target's id, the one shared content fact (see text_flush.go).
-		a.putEditedContent(a.contentKey(a.lastTextareaTileID), []byte(a.textTextarea.Get("value").String()))
+		a.putEditedContent(a.contentKey(a.overlays.lastTextareaTileID), []byte(a.overlays.textTextarea.Get("value").String()))
 		a.scheduleFileSave()
 		a.draw()
 		a.scheduleURLUpdate()
 		return nil
 	})
-	ta.Call("addEventListener", "input", a.textTextareaInputCb)
+	ta.Call("addEventListener", "input", a.overlays.textTextareaInputCb)
 
 	// Cursor moves without text changes (arrow keys, click placement,
 	// page navigation) also need to refresh the URL — listen for those
@@ -196,20 +196,20 @@ func (a *App) ensureFileTextarea() {
 	ta.Call("addEventListener", "mouseup", cursorCb)
 	ta.Call("addEventListener", "select", cursorCb)
 
-	a.textTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+	a.overlays.textTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the browser scroll position onto the focused pane so
 		// SetTextView on ascent persists the right value, but only when the
 		// textarea is bound to the focused pane's tile. Without the binding
 		// check, a stale-binding window lands tile A's scroll offset on tile
 		// B's pane and persists it as B's text_y.
 		p := a.tree.FocusedPane()
-		if p == nil || p.ContentID() == "" || p.ContentID() != a.lastTextareaTileID {
+		if p == nil || p.ContentID() == "" || p.ContentID() != a.overlays.lastTextareaTileID {
 			return nil
 		}
-		p.TextScrollY = a.textTextarea.Get("scrollTop").Float()
+		p.TextScrollY = a.overlays.textTextarea.Get("scrollTop").Float()
 		return nil
 	})
-	ta.Call("addEventListener", "scroll", a.textTextareaScrollCb)
+	ta.Call("addEventListener", "scroll", a.overlays.textTextareaScrollCb)
 
 	// No wheel listener: text mode uses the textarea's native scroll.
 	// TextZoom is fixed for the visit, so nothing in here needs the
@@ -316,7 +316,7 @@ func (a *App) ensureFileTextarea() {
 	a.installTextareaTouch(ta)
 
 	a.doc.Get("body").Call("appendChild", ta)
-	a.textTextarea = ta
+	a.overlays.textTextarea = ta
 }
 
 // ensureFileToggle creates, once, the floating rendered/raw toggle button
@@ -324,7 +324,7 @@ func (a *App) ensureFileTextarea() {
 // textarea (zIndex 6 against the textarea's 5) so the text content can fill
 // the pane.
 func (a *App) ensureFileToggle() {
-	if !a.textToggleBtn.IsUndefined() && !a.textToggleBtn.IsNull() {
+	if !a.overlays.textToggleBtn.IsUndefined() && !a.overlays.textToggleBtn.IsNull() {
 		return
 	}
 	btn := a.doc.Call("createElement", "div")
@@ -348,7 +348,7 @@ func (a *App) ensureFileToggle() {
 	style.Set("fontSize", "18px")
 	btn.Set("textContent", "a")
 
-	a.textToggleCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+	a.overlays.textToggleCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) == 0 {
 			return nil
 		}
@@ -367,7 +367,7 @@ func (a *App) ensureFileToggle() {
 		a.onToggleFileMode(p)
 		return nil
 	})
-	btn.Call("addEventListener", "mousedown", a.textToggleCb)
+	btn.Call("addEventListener", "mousedown", a.overlays.textToggleCb)
 	// Suppress the browser context menu so a right-click on the toggle stays
 	// inert instead of popping a menu.
 	btn.Call("addEventListener", "contextmenu", js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -380,7 +380,7 @@ func (a *App) ensureFileToggle() {
 	// which toggles. Without it the button would be mouse-only.
 	a.installOverlayTouch(btn, nil)
 	a.doc.Get("body").Call("appendChild", btn)
-	a.textToggleBtn = btn
+	a.overlays.textToggleBtn = btn
 }
 
 // refreshFileToggle positions and styles the floating toggle for a markdown
@@ -388,7 +388,7 @@ func (a *App) ensureFileToggle() {
 // button instead, so they are excluded.
 func (a *App) refreshFileToggle() {
 	a.ensureFileToggle()
-	style := a.textToggleBtn.Get("style")
+	style := a.overlays.textToggleBtn.Get("style")
 	hide := func() { style.Set("display", "none") }
 
 	p := a.tree.FocusedPane()
@@ -443,7 +443,7 @@ func (a *App) refreshFileOverlay() {
 	a.refreshFileToggle()
 	a.refreshRenderedOverlay()
 	a.ensureFileTextarea()
-	ta := a.textTextarea
+	ta := a.overlays.textTextarea
 
 	p := a.tree.FocusedPane()
 	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
@@ -485,10 +485,10 @@ func (a *App) refreshFileOverlay() {
 	// default content. The blob fetch's onComplete fires refreshFileOverlay
 	// again with the actual content.
 	gid := a.gridIDForPane(p)
-	_, pendingEdit := a.c.DirtyContent(a.contentKey(a.lastTextareaTileID))
+	_, pendingEdit := a.c.DirtyContent(a.contentKey(a.overlays.lastTextareaTileID))
 	in := textedit.TextareaSyncInput{
 		FocusedTileID: p.ContentID(),
-		LastTileID:    a.lastTextareaTileID,
+		LastTileID:    a.overlays.lastTextareaTileID,
 		CurrentValue:  ta.Get("value").String(),
 		PendingEdit:   pendingEdit,
 	}
@@ -511,9 +511,9 @@ func (a *App) refreshFileOverlay() {
 		// pane with actual content and the canvas hides; false means the
 		// textarea was cleared on a tile switch, or the blob has not
 		// arrived, and the canvas keeps painting through the loading race.
-		a.textareaReady = dec.Value != ""
+		a.overlays.textareaReady = dec.Value != ""
 	}
-	a.lastTextareaTileID = dec.NewLastTileID
+	a.overlays.lastTextareaTileID = dec.NewLastTileID
 	// Reflect saved scroll into the textarea; on subsequent calls the
 	// user's own scroll wins.
 	if ta.Get("scrollTop").Float() == 0 && p.TextScrollY > 0 {
@@ -529,7 +529,7 @@ func (a *App) refreshFileOverlay() {
 // land on the canvas, and since blur commits, it would also close the input
 // mid-thought.
 func (a *App) focusCanvas() {
-	if a.renameEditing {
+	if a.overlays.renameEditing {
 		return
 	}
 	a.canvas.Call("focus")
@@ -544,13 +544,13 @@ func (a *App) syncTextOverlayPosition() {
 	if !a.hasTextarea() {
 		return
 	}
-	display := a.textTextarea.Get("style").Get("display").String()
+	display := a.overlays.textTextarea.Get("style").Get("display").String()
 	if display == "none" {
 		return
 	}
 	p := a.tree.FocusedPane()
 	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
-		a.textTextarea.Get("style").Set("display", "none")
+		a.overlays.textTextarea.Get("style").Set("display", "none")
 		return
 	}
 	r := paneRectFor(a, p)
@@ -558,7 +558,7 @@ func (a *App) syncTextOverlayPosition() {
 		return
 	}
 	left, top, width, height, fontPx := a.textTextareaBox(p, r)
-	style := a.textTextarea.Get("style")
+	style := a.overlays.textTextarea.Get("style")
 	setBoundsPx(style, left, top, width, height)
 	style.Set("fontSize", pxf(fontPx))
 	style.Set("clipPath", "none")
@@ -607,8 +607,8 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 		// Reset textarea contents next time refreshFileOverlay is called
 		// so it picks up the freshest cached blob.
 		if a.hasTextarea() {
-			a.textTextarea.Set("value", "")
-			a.textareaReady = false // cleared; refreshFileOverlay re-seeds it
+			a.overlays.textTextarea.Set("value", "")
+			a.overlays.textareaReady = false // cleared; refreshFileOverlay re-seeds it
 		}
 	}
 	// The mode is persisted to the tile on ascent (saveTextBeforeAscent).

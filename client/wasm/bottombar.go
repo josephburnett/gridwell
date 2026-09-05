@@ -216,7 +216,7 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 // drawBarTitle paints the focused pane's name centered in the band. Hidden
 // while the rename input replaces it in place.
 func (a *App) drawBarTitle(top float64) {
-	if a.renameEditing {
+	if a.overlays.renameEditing {
 		return
 	}
 	x, w, label, _, muted, ok := a.barTitleGeom()
