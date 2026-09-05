@@ -213,7 +213,8 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 // refreshes the file overlay, and draws. Returns true when focus changed.
 //
 // This is the single focus-transfer owner; every press path calls it: canvas
-// onMouseDown, onForwardedRightDown, onForwardedLeftDown. Calling it is
+// onMouseDown, onForwardedRightDown, onForwardedLeftDown, and the opening of a
+// live view's native context menu (onForwardedContextMenu). Calling it is
 // always safe, and a no-op on the same pane.
 func (a *App) focusToPane(p *pane.Pane) bool {
 	prev := a.tree.Focus

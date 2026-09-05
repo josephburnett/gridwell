@@ -152,8 +152,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   full-width row reserved once, so no pane ever resizes. Panes end at that
   row's top edge; the background beside the bar is nobody's and swallows
   clicks. Clicks act in the focused pane; a click in an unfocused pane moves
-  focus, nothing else. A crumb click ascends; middle-click is the in-pane
-  shortcut.
+  focus, nothing else. Every button obeys that, the right one included: a
+  live url view's native context menu names the pane it acts in and focus
+  follows before any item can run. A crumb click ascends; middle-click is
+  the in-pane shortcut.
 - A left-drag on a pane boundary resizes it. A press grabs at most one
   divider per axis, so at the corner of three panes it grabs both and the
   one drag moves both — two ordinary resizes sharing a gesture, not a

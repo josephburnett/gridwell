@@ -11,6 +11,7 @@ import {
   SetZoomArgs,
   OpenBelowEvent,
   FreezeURLEvent,
+  ContextMenuEvent,
   ZoomKeyEvent,
   RemoveArgs,
   PaneRef,
@@ -108,6 +109,14 @@ const api = {
     const h = (_e: unknown, ev: FreezeURLEvent) => cb(ev);
     ipcRenderer.on(EV.freezeUrl, h);
     return () => ipcRenderer.removeListener(EV.freezeUrl, h);
+  },
+  // onContextMenu fires just before a live view's context menu opens, naming
+  // the pane it acts in. The wasm moves focus to that pane: right-clicking a
+  // pane is interacting with it, the same rule a left-click obeys.
+  onContextMenu(cb: (ev: ContextMenuEvent) => void): () => void {
+    const h = (_e: unknown, ev: ContextMenuEvent) => cb(ev);
+    ipcRenderer.on(EV.menuPane, h);
+    return () => ipcRenderer.removeListener(EV.menuPane, h);
   },
   // onZoomKey fires when the content-zoom chord was pressed while a live view
   // owned OS keyboard focus. The wasm zoom owner applies and persists it.

@@ -242,6 +242,26 @@ func (a *App) onForwardedLeftDown(sx, sy float64) {
 	a.armLeftResize(r, sx, sy)
 }
 
+// onForwardedContextMenu handles a live URL view's native context menu opening
+// on pane paneID. The view swallows a plain right-press — its preload only
+// forwards one once it has become a drag — so the menu is the whole gesture the
+// renderer ever hears about, and without this a right-click and a Reload acted
+// on a pane that never took focus. Right-clicking a pane is interacting with
+// it, so it moves focus, through the same focusToPane every other press path
+// uses; the rest of the menu stays main's business.
+//
+// Keyed by pane id, not by cursor position: main knows which view was
+// right-clicked, and the bar-circle door has no cursor over the pane at all. A
+// pane that is not in the live tree (a parked level) is not focusable, and is
+// skipped.
+func (a *App) onForwardedContextMenu(paneID string) {
+	p := a.tree.FindPane(paneID)
+	if p == nil {
+		return
+	}
+	a.focusToPane(p)
+}
+
 // onRightMove updates the cursor position and applies live changes.
 // Pane-resize is the only gesture that mutates the tree mid-drag; the
 // rest render previews that commit on release.

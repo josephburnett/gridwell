@@ -316,7 +316,12 @@ one entry per pane. `syncURLViews` runs every frame: the renderer sends CSS-px
 bounds, `roundBounds` snaps to DIP, `boundsEqual` skips churn, and
 `liveOverlaysHidden` parks views off-screen while a drag, resize, or menu
 needs the canvas. The focus guard keeps OS keyboard focus in the focused
-pane's view only. One Chromium partition (`persist:gridwell`) holds every
+pane's view only. A view swallows the renderer's own mouse events, so the
+presses that must move pane focus are relayed back: the preload forwards a
+left press, and `showContextMenu` — the one funnel for both doors into the
+native menu — announces the pane it is opening on. Both land in `focusToPane`,
+so a right-click moves focus like every other press. One Chromium partition
+(`persist:gridwell`) holds every
 live url tile, local or mounted; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
 

@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, FreezeURLEvent, ZoomKeyEvent } from './ipc';
+import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -84,6 +84,12 @@ interface RegistryCallbacks {
   // onFreezeURL fires when the user picks "Freeze Page" in a live view's
   // context menu; the renderer freezes and stores the intent.
   onFreezeURL?: (ev: FreezeURLEvent) => void;
+  // onContextMenu fires just before a live view's context menu opens, naming
+  // the pane it acts in. The renderer moves focus there: a right-click is an
+  // interaction with that pane, and the rule is the same one a left-click
+  // obeys. Announced once here, for both doors into the menu, because this is
+  // the only place that knows a menu is opening at all.
+  onContextMenu?: (ev: ContextMenuEvent) => void;
   // onZoomKey fires when the content-zoom chord (Ctrl/Cmd with +, =, - or 0) is
   // pressed while this view owns OS keyboard focus. The renderer's
   // applyContentZoom, the one owner of the cache and the write, handles it.
@@ -141,6 +147,11 @@ export class WebviewRegistry {
       editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean };
     },
   ): void {
+    // Focus first, then pop: the menu acts in this pane, so this pane is the
+    // focused one by the time any item runs. The renderer's focusToPane is the
+    // one owner; announcing before the pop means even a menu dismissed without
+    // a pick has moved focus, exactly like a bare left-click.
+    this.cb.onContextMenu?.({ paneId });
     const wc = view.webContents;
     const nav = wc.navigationHistory;
     const template = urlContextMenuTemplate(

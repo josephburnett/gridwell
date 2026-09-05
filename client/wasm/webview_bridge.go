@@ -338,6 +338,14 @@ func (a *App) installWebviewListeners() {
 		a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
 		return nil
 	})
+	// A live URL view's native context menu is opening on this pane. The view
+	// swallows a plain right-press, so this is the only signal the renderer
+	// gets: move focus to the pane the menu acts in, before it can act.
+	onContextMenu := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.onForwardedContextMenu(jsString(ev.Get("paneId")))
+		return nil
+	})
 	// The content-zoom chord was pressed while a live URL view owned OS
 	// keyboard focus: the window-level keydown never fires, so main
 	// intercepts the chord in before-input-event and relays it here, keyed by
@@ -368,6 +376,7 @@ func (a *App) installWebviewListeners() {
 	g.Call("onLeftForward", onLeftForward)
 	g.Call("onOpenBelow", onOpenBelow)
 	g.Call("onFreezeURL", onFreezeURL)
+	g.Call("onContextMenu", onContextMenu)
 	g.Call("onZoomKey", onZoomKey)
 	g.Call("onError", onError)
 	// Listeners live for the lifetime of the app; no Release.

@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, session } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
-import { registerWebviewIpc, makeNavForwarder, makeOpenBelowForwarder, makeFreezeURLForwarder, makeZoomKeyForwarder, sendFrame, sendError } from './register';
+import { registerWebviewIpc, makeNavForwarder, makeOpenBelowForwarder, makeFreezeURLForwarder, makeContextMenuForwarder, makeZoomKeyForwarder, sendFrame, sendError } from './register';
 import { MirrorPump } from './capture';
 import { sanitizeUserAgent, allowPermission, SESSION_PARTITION } from './viewutil';
 import { applyUserDataOverride } from './userdata';
@@ -120,6 +120,7 @@ async function boot(): Promise<void> {
     onError: (ev) => sendError(rootWC, ev.source, ev.message),
     onOpenBelow: makeOpenBelowForwarder(rootWC),
     onFreezeURL: makeFreezeURLForwarder(rootWC),
+    onContextMenu: makeContextMenuForwarder(rootWC),
     onZoomKey: makeZoomKeyForwarder(rootWC),
     // A live view took focus through page-initiated navigation: give it back
     // to the root renderer, where the user was typing.

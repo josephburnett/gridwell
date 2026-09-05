@@ -16,6 +16,7 @@ import {
   ErrorEvent,
   OpenBelowEvent,
   FreezeURLEvent,
+  ContextMenuEvent,
   ZoomKeyEvent,
 } from './ipc';
 import { WebviewRegistry } from './webviews';
@@ -125,6 +126,13 @@ export function makeOpenBelowForwarder(rootWC: WebContents): (ev: OpenBelowEvent
 // the standing frozen intent.
 export function makeFreezeURLForwarder(rootWC: WebContents): (ev: FreezeURLEvent) => void {
   return (ev) => safeSend(rootWC, EV.freezeUrl, ev);
+}
+
+// makeContextMenuForwarder relays "a live view's context menu is opening on
+// this pane" to the renderer (EV.menuPane), where focusToPane — the one focus
+// owner — moves focus there before the menu can act.
+export function makeContextMenuForwarder(rootWC: WebContents): (ev: ContextMenuEvent) => void {
+  return (ev) => safeSend(rootWC, EV.menuPane, ev);
 }
 
 // makeZoomKeyForwarder relays the content-zoom chord from a focused live view

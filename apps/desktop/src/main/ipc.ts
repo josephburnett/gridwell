@@ -53,6 +53,7 @@ export const EV = {
                      // the user. There is no second, silent path.
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window or ctrl-click link
   freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture
+  menuPane: 'gw:menu-pane', // ContextMenuEvent — a live view's context menu is opening on this pane
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus
 } as const;
 
@@ -180,6 +181,16 @@ export interface OpenBelowEvent {
 // The renderer tears the view down with the usual freeze writeback and persists
 // the standing frozen intent on the tile.
 export interface FreezeURLEvent {
+  paneId: string;
+}
+
+// ContextMenuEvent: a live url view's context menu is about to open on this
+// pane, from an in-page right-click or from the bar circle. A right-click is an
+// interaction with the pane, so the renderer moves focus there first, exactly
+// as a left-click does (EV.leftForward). The native view swallows the
+// right-press until it becomes a drag, so this is the only way the renderer
+// hears about a plain one.
+export interface ContextMenuEvent {
   paneId: string;
 }
 
