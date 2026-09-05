@@ -92,10 +92,11 @@ test('an unreadable layout opens read-only and is never overwritten', async ({ g
   await writeContent(gw.origin, pt!.id, 0, Buffer.from(futureBlob));
 
   // No echo-wait here, deliberately: the direct write races its own event echo,
-  // and descending inside that window is the trap this pins. descendLevel must
-  // refetch the tile rather than trust the cached row, or a stale BlobID of 0
-  // installs the writable default and the persister overwrites the blob. An
-  // earlier version of this spec found that as a one-run flake.
+  // and descending inside that window is the trap this pins. The level fetch
+  // (client/nav/level.go) must refetch the tile rather than trust the cached
+  // row, or a stale BlobID of 0 installs the writable default and the
+  // persister overwrites the blob. An earlier version of this spec found that
+  // as a one-run flake.
   await gw.descendCell(ax, ay);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
   expect(

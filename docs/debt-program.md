@@ -58,10 +58,16 @@ executors.
 2. Phase B: the restore paths (applyURLState, restoreFromHistory,
    autoLiveOnRestore, healStalePanePath).
 3. Phase C: workspace levels (descendLevel/installWorkspace/ascendLevels/
-   bootWorkspace) and promote.
+   bootWorkspace) and promote — plus the go-live link hop, which held the last
+   hand-written moved-on check.
 Design doc: `docs/debt/w1-nav-orchestration.md`.
 
-**Status:** [x] design [x] phase A [x] phase B [ ] phase C
+**Status:** [x] design [x] phase A [x] phase B [x] phase C — DONE. `client/nav`
+owns descend, ascend, restore, the pane-tile levels and the promote; the shim
+gathers, executes, and feeds answers back. `grep -rn StillDescended
+client/wasm` is empty: every moved-on check is one Guard, evaluated in one
+place. Open: W6's App-struct grouping, which rode this and is now the only
+piece of W1's end state left.
 
 ## W2 — The native seam sheds its timing heuristics
 
