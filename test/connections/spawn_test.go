@@ -427,8 +427,10 @@ func TestConnectionSpawn(t *testing.T) {
 // Connections are server.yaml config, here through real binaries: declared
 // before first serve, presented as a menu row of their own, mutation-refused
 // on the wire, with bytes flowing through the real tunnel, and retired by
-// removing the declaration and restarting — the row disappears, the namespace
-// stops resolving, and the remote is untouched.
+// naming the connection in retired_names and restarting — retirement is
+// explicit, so the declaration going away is not enough — after which the row
+// disappears, the namespace stops resolving forever, and the remote is
+// untouched.
 func TestConnectionsModeSpawn(t *testing.T) {
 	root := repoRoot(t)
 	bin := filepath.Join(root, "gridwell")
@@ -485,9 +487,11 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatalf("ReadContent through the connection chain = %q (%v)", got, err)
 	}
 
-	// 4. Retirement is a config edit plus a restart: the declaration goes, the
-	//    row goes, the namespace stops resolving forever, and the remote keeps
-	//    its tile, verified on its own front door.
+	// 4. Retirement is a config edit plus a restart: the name goes into
+	//    retired_names (the declaration going away alone would only make the
+	//    connection dead until it came back), the row goes, the namespace
+	//    stops resolving forever, and the remote keeps its tile, verified on
+	//    its own front door.
 	stopLocal()
 	// Keep the node's minted id, which the first serve wrote, and replace the
 	// connection list with the retirement.

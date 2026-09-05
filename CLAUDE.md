@@ -107,7 +107,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   `state_dir`), under `cache.db`'s contract: disposable, safe to delete,
   rewarmed by use. Nothing deletes one automatically. A connection is
   config: an immutable name, a label, how to dial. Retiring a name is
-  forever. Secrets stay host-local file paths.
+  forever, and EXPLICIT: `retired_names:` is the one owner, and the stored
+  `deleted` flag is only that list mirrored. Boot never retires a name
+  because the config stopped declaring it — the row and its landing stay,
+  its links go dead by the roster, and the stanza brings them back.
+  Secrets stay host-local file paths.
 - A node has no grid of its own. A mount lands on the far node's home.
   Plugins and connections live on the + menu's top row.
 - The web door always has a password (the minted 0600 `web-password` file;
@@ -146,7 +150,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   still labelled, still deletable. It is a state, not an error — nothing is
   asked for it and nothing is said about it. Dead is not dark: a declared
   plugin that is down and a declared connection that will not answer are
-  health and staleness, and they come back. `client/deadref`.
+  health and staleness, and they come back. Nor is dead always forever: a
+  retired connection name never returns, but a namespace merely undeclared
+  is live again the moment it is declared again. `client/deadref`.
 - One bar, at the bottom of the window, always visible, riding the focused
   pane: it spans that pane and slides under it as focus moves, inside a
   full-width row reserved once, so no pane ever resizes. Panes end at that

@@ -2,11 +2,17 @@ package connection
 
 // The transport's store: what the node remembers about its connections beyond
 // what server.yaml declares. That is the learned landing, the far node's home
-// grid id, so a dark remote still has a room to show through the source cache;
-// and the graveyard, since a retired name never returns and its namespace
+// grid id, so a dark remote still has a room to show through the source cache.
+// Everything else about a connection — where it is, how to reach it, what it
+// is called — is config, read fresh every boot.
+//
+// The `deleted` flag is not a fact of its own: it is the mirror of the
+// config's retired_names, which is the one owner of retirement, reconciled
+// onto these rows at boot (see New) so route and Probe can read "retired" off
+// the row they already hold. A retired name never returns and its namespace
 // stays reserved forever, so stored references through it stay dangling rather
-// than re-routed. Everything else about a connection — where it is, how to
-// reach it, what it is called — is config, read fresh every boot.
+// than re-routed. A name the config merely stopped declaring is NOT retired:
+// its row stays as it was, and its references come back with its stanza.
 
 import (
 	"context"
@@ -114,5 +120,14 @@ func (d *DB) Tombstone(ctx context.Context, name string) error {
 		return err
 	}
 	_, err := d.db.ExecContext(ctx, `UPDATE connections SET deleted = 1 WHERE name = ?`, name)
+	return err
+}
+
+// Revive clears a tombstone the config's retired_names does not hold. It
+// un-retires nothing: retirement lives in retired_names, and this only brings
+// the mirror back in line with it. Everything else on the row — the learned
+// landing above all — is untouched.
+func (d *DB) Revive(ctx context.Context, name string) error {
+	_, err := d.db.ExecContext(ctx, `UPDATE connections SET deleted = 0 WHERE name = ?`, name)
 	return err
 }

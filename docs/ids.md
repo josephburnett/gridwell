@@ -68,5 +68,7 @@ A GRID keeps its `~` name for good, minted row or not, and a
 client is STANDING IN: a pane holds its anchor grid id, and renaming a grid
 under a pane — which minting would do the moment the first tile in it was
 dragged — would leave the pane naming a grid nothing answers to. Both forms
-still resolve on the way in, so an older stored row id keeps working. Retired connection names never
-return. Home is only ever letter + digits — it is not a plugin.
+still resolve on the way in, so an older stored row id keeps working. A
+connection name in `retired_names:` never returns; a name the config merely
+stopped declaring is not retired, and resolves again the moment it is
+declared again. Home is only ever letter + digits — it is not a plugin.

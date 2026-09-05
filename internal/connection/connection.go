@@ -8,8 +8,9 @@
 //
 // The transport is not a plugin and owns no tiles. A connection is a row in
 // the + menu and, when the user drags it, an ordinary link tile in their own
-// grid. What it remembers, in db.go, is the learned landing and the graveyard
-// of retired names.
+// grid. What it remembers, in db.go, is the learned landing, and — mirrored
+// from the config's retired_names, the one owner of retirement — which names
+// are reserved forever.
 package connection
 
 import (
@@ -111,11 +112,24 @@ type Row struct {
 var _ namespace.Namespace = (*Server)(nil)
 
 // New builds the transport and reconciles the store against the declared
-// connections; server.yaml is authoritative. A declared name that is retired,
-// whether in retired or tombstoned in the store, is refused; a stored name the
-// config does not declare is tombstoned; and every retired name is reserved in
-// the store forever. home is the host's home directory, and "" means no ~
-// defaults, so keys must be explicit paths.
+// connections; server.yaml is authoritative about what is DECLARED, and
+// retired_names is the one owner of what is RETIRED.
+//
+// Retirement is explicit. A declared name that retired_names holds is refused,
+// and a retired name is reserved in the store forever. A stored name the
+// config merely does not declare is left exactly as it is — its row, its
+// learned landing, its flag: while the stanza is gone the mounts and links
+// through that name are dead by the boot roster (client/deadref), and putting
+// the stanza back brings them all live again. Boot never retires a name on
+// absence.
+//
+// The `deleted` column is therefore the MIRROR of retired_names and nothing
+// else, reconciled from it here and written nowhere else. A tombstone on a
+// name retired_names does not hold was written by the old boot reconcile,
+// which retired on absence; it is cleared, once, with a line saying so.
+//
+// home is the host's home directory, and "" means no ~ defaults, so keys must
+// be explicit paths.
 //
 // It is also the boot gate on the connections' host-local config: every
 // declared row must resolve to a dial plan whose files are there. A row that
@@ -154,23 +168,24 @@ func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, re
 		if err != nil && !errors.Is(err, ErrNotFound) {
 			return nil, err
 		}
-		if err == nil && row.Deleted {
-			return nil, fmt.Errorf("connection %q: this name is RETIRED in the connection store — a retired name never returns; mint a new one", c.Name)
-		}
 		if err := db.Ensure(ctx, c.Name); err != nil {
 			return nil, err
 		}
 		s.conns[c.Name] = &Conn{Cfg: c, RemoteRoot: row.RemoteRoot}
 		s.order = append(s.order, c.Name)
 	}
+	// Sync the mirror both ways. A tombstone retired_names does not hold is a
+	// leftover from the boot reconcile that retired a name on absence: clear
+	// it, so the mounts through that name come back with its stanza.
 	rows, err := db.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
-		if _, declared := s.conns[r.Name]; !declared && !r.Deleted {
-			if err := db.Tombstone(ctx, r.Name); err != nil {
-				return nil, fmt.Errorf("retire connection %q: %w", r.Name, err)
+		if r.Deleted && !retiredSet[r.Name] {
+			log.Printf("gridwell: connection %q: clearing a tombstone the old boot reconcile wrote; retirement now lives in retired_names", r.Name)
+			if err := db.Revive(ctx, r.Name); err != nil {
+				return nil, fmt.Errorf("connection %q: clear stale tombstone: %w", r.Name, err)
 			}
 		}
 	}
@@ -282,6 +297,10 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	}
 	c, ok := s.conns[first]
 	if !ok {
+		// The row's tombstone mirrors retired_names, so this says RETIRED
+		// for a name the config retired and nothing else: a name merely no
+		// longer declared falls through to plain not-found, and comes back
+		// when its stanza does.
 		if row, err := s.db.Get(ctx, first); err == nil && row.Deleted {
 			return nil, "", status.Errorf(codes.NotFound, "connection: connection %q was retired", first)
 		}
@@ -623,7 +642,10 @@ func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 	fw, local, err := s.route(ctx, req.TileId)
 	if err != nil {
 		// A connection that cannot be resolved is not gone; only a retired
-		// one is. A failed read must never sweep a tile.
+		// one is, and the row's tombstone is the mirror of retired_names, so
+		// a name the config merely stopped declaring answers NOT gone and
+		// its links survive to come back. A failed read must never sweep a
+		// tile.
 		if first, _, ok := rpc.SplitID(req.TileId); ok {
 			if row, derr := s.db.Get(ctx, first); derr == nil && row.Deleted {
 				return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil

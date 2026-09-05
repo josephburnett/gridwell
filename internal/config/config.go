@@ -51,13 +51,16 @@ type ServerConfig struct {
 	// serve it. Existing shell tiles keep their frozen previews and their
 	// placement; they just can never attach a PTY here.
 	DisableShells bool `yaml:"disable_shells,omitempty"`
-	// Connections declares the remote nodes. The list is authoritative: the
-	// transport's connection rows are reconciled against it at every boot,
-	// and a name absent from it and not retired is an error.
+	// Connections declares the remote nodes. The list says what is DECLARED,
+	// not what is retired: a name it stops naming keeps its stored row and
+	// its learned landing, goes dead in the client's roster, and comes back
+	// live when the stanza does. Only RetiredNames retires.
 	Connections []ConnectionConfig `yaml:"connections,omitempty"`
-	// RetiredNames reserves connection names forever: a deleted connection's
-	// name goes here so it can never be reused, and stored references
-	// through its namespace stay dangling rather than being re-routed.
+	// RetiredNames reserves connection names forever, and is the ONE owner of
+	// retirement: a dead connection's name goes here so it can never be
+	// reused, and stored references through its namespace stay dangling
+	// rather than being re-routed. Boot mirrors it onto the connection rows
+	// and never retires a name any other way.
 	RetiredNames []string `yaml:"retired_names,omitempty"`
 	// Plugins are the content plugins: separate binaries speaking plugin.v1.
 	// The node's own store and transport are not listed; they are the

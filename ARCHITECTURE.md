@@ -149,7 +149,12 @@ switches on its kind; every plugin behavior rides a wire declaration.
 
 **Connections** (`internal/connection`) are config rows: an immutable name, a
 label, how to dial. The transport dials each at boot, lands on the far node's
-home, and remembers nothing else but retired names (a name never returns).
+home, and remembers that landing and nothing else. Retirement is EXPLICIT:
+`retired_names:` is its one owner, a retired name never returns, and the
+stored `deleted` flag is only that list mirrored onto the rows. Dropping a
+connection's stanza retires nothing — the row and its landing stay, the
+mounts and links through it go dead in the roster, and putting the stanza
+back brings them all live again.
 A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection
 name, and the same transit rule applies at both hops. The fan-in holds each
@@ -259,7 +264,8 @@ paths: `postWriteContent` (the one write that claims a version) and
 
 **Dead links.** A link stores a qualified id into another namespace. When the
 node stops declaring that namespace — a plugin dropped from `server.yaml`, a
-connection name retired, which is forever — the link is dead: `client/deadref`
+connection stanza removed, a connection name retired — the link is dead:
+`client/deadref`
 reads the handshake roster the + menu is built from, asks the router's own peel
 (`rpc.OwnerNamespaceOf`) which namespace the id names, and answers from the
 node's declaration rather than from a failed fetch. A dead link is drawn grey
@@ -267,7 +273,10 @@ and inert, is never fetched for, raises no notice, and does not descend; it can
 still be selected, read, and deleted. Dead is not dark: a declared plugin that
 is down and a declared connection that will not answer are health and
 staleness, and a chain through a declared connection is the far node's to
-judge, so it is never judged here.
+judge, so it is never judged here. Dead is not always forever, either: a
+retired connection name never returns, but a namespace merely undeclared is
+dead only while it is undeclared — declare it again and every link through it
+is live again, unchanged.
 
 **Events** flow only into the cache. Framing writes live only in gesture and
 transition code. An event landing mid-animation updates data and redraws;

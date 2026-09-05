@@ -30,10 +30,11 @@ func openConnDB(t *testing.T) *DB {
 	return db
 }
 
-// server.yaml is authoritative: a declared name gets a row; a name the
-// config dropped tombstones; a retired name is reserved even on a fresh
-// store; and none of the three ever comes back.
-func TestReconcileDeclaredRetiredAndDropped(t *testing.T) {
+// server.yaml is authoritative about what is DECLARED; retired_names is the
+// one owner of what is RETIRED. A declared name gets a row; a name the config
+// merely drops keeps its row and its learned landing and comes back with the
+// stanza; a retired name is reserved even on a fresh store and never returns.
+func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 	ctx := context.Background()
 	db := openConnDB(t)
 	s, err := New(db, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}, {Name: "rtb", Addr: "/t"}}, []string{"olddead"})
@@ -47,21 +48,87 @@ func TestReconcileDeclaredRetiredAndDropped(t *testing.T) {
 	if r, _ := db.Get(ctx, "olddead"); !r.Deleted {
 		t.Fatal("retired_names must be reserved in the store")
 	}
-	// Drop rtb from the config: it tombstones; re-declaring it is refused.
-	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil); err != nil {
+	// A landing the transport learned, so the surviving row has something to
+	// lose.
+	if err := db.SetRemoteRoot(ctx, "rtb", "rnode1/3"); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := db.Get(ctx, "rtb"); !r.Deleted {
-		t.Fatal("a dropped connection must tombstone")
+	// Drop rtb from the config: the row survives untouched. Boot never
+	// retires on absence.
+	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, []string{"olddead"}); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "rtb", Addr: "/t"}}, nil); err == nil || !strings.Contains(err.Error(), "RETIRED") {
-		t.Fatalf("a tombstoned name must never return, got %v", err)
+	r, err := db.Get(ctx, "rtb")
+	if err != nil {
+		t.Fatalf("an undeclared connection's row must survive: %v", err)
+	}
+	if r.Deleted {
+		t.Fatal("boot must never tombstone on absence — retirement lives in retired_names")
+	}
+	if r.RemoteRoot != "rnode1/3" {
+		t.Fatalf("remote_root = %q, want the learned landing intact", r.RemoteRoot)
+	}
+	// Re-declare it: the connection comes back, landing and all.
+	s2, err := New(db, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}, {Name: "rtb", Addr: "/t"}}, []string{"olddead"})
+	if err != nil {
+		t.Fatalf("a name the config merely dropped must be declarable again: %v", err)
+	}
+	rows = s2.Rows(ctx)
+	if len(rows) != 2 || rows[1].Name != "rtb" || rows[1].RootGridID != "rtb/rnode1/3" {
+		t.Fatalf("rows = %+v, want rtb back on its remembered landing", rows)
 	}
 	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "olddead", Addr: "/t"}}, []string{"olddead"}); err == nil || !strings.Contains(err.Error(), "RETIRED") {
 		t.Fatalf("a retired name must never return, got %v", err)
 	}
 	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "42", Addr: "/t"}}, nil); err == nil {
 		t.Fatal("a numeric name is not a namespace segment")
+	}
+}
+
+// The `deleted` column is the mirror of retired_names and nothing else. A
+// tombstone the OLD boot reconcile wrote — one boot with the stanza absent —
+// is a stale mirror, not a retirement, so the next boot clears it and the
+// mounts through that name come back. No SQL by hand.
+func TestStaleTombstonesHealAndRetiredNamesMirror(t *testing.T) {
+	ctx := context.Background()
+	db := openConnDB(t)
+	if err := db.Tombstone(ctx, "laptop"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetRemoteRoot(ctx, "laptop", "rnode1/3"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "laptop", Addr: "/s"}}, nil); err != nil {
+		t.Fatalf("a declared name the old reconcile tombstoned must heal, not refuse: %v", err)
+	}
+	r, _ := db.Get(ctx, "laptop")
+	if r.Deleted {
+		t.Fatal("the stale tombstone must be cleared")
+	}
+	if r.RemoteRoot != "rnode1/3" {
+		t.Fatalf("remote_root = %q, want the landing kept through the heal", r.RemoteRoot)
+	}
+	// An UNdeclared row heals too: the mirror is retired_names, whether the
+	// name is declared this boot or not.
+	if err := db.Tombstone(ctx, "ghost"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(db, nil, "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := db.Get(ctx, "ghost"); r.Deleted {
+		t.Fatal("only retired_names retires a name")
+	}
+	// And retired_names is mirrored onto the row, declared or not, so route
+	// and Probe can read retirement off it.
+	if _, err := New(db, nil, "", nil, []string{"ghost"}); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := db.Get(ctx, "ghost"); !r.Deleted {
+		t.Fatal("retired_names must be mirrored onto the row")
+	}
+	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "ghost", Addr: "/s"}}, []string{"ghost"}); err == nil || !strings.Contains(err.Error(), "RETIRED") {
+		t.Fatalf("declaring a retired name must be refused loudly, got %v", err)
 	}
 }
 

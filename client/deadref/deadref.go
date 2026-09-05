@@ -3,16 +3,20 @@
 //
 // A link tile stores a qualified id into another namespace — a plugin, a
 // connection, or the node's own home. Remove that plugin from server.yaml,
-// retire that connection name, and the id keeps naming something the node
-// will never route again. The link is DEAD: not late, not unreachable, but
+// remove or retire that connection, and the id keeps naming something the
+// node will not route. The link is DEAD: not late, not unreachable, but
 // addressed to a namespace that is not there.
 //
 // Dead is not dark. A declared plugin whose subprocess is down and a
 // declared connection whose remote will not answer are both still declared;
 // they come back, and their state is the health and stale machinery's
 // (pluginhealth, Grid.Meta.Stale). Only a namespace the node does not
-// declare at all is dead, and a retired connection name is dead forever,
-// because a retired name never returns.
+// declare at all is dead.
+//
+// Dead is not always forever either, and this decides nothing about that: a
+// retired connection name never returns, while a namespace the config merely
+// stopped declaring is dead only while it is undeclared and live again with
+// its declaration. Either way the verdict is the roster's, read fresh.
 //
 // The verdict reads the node's own declaration — the handshake roster the
 // + menu is built from — and never an error. It asks the same peel the
