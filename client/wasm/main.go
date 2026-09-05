@@ -158,37 +158,9 @@ type App struct {
 	touchTimerCb    js.Func
 	touchDownTarget js.Value
 
-	// gridLoadFailed records grids whose last GetGrid failed (loadGrid is
-	// the one writer), so the renderer can say so and the URL walk does
-	// not retry in a tight loop.
-	gridLoadFailed map[string]bool
-
-	// gridFetch holds the grid ids with a pending GetGrid so repeated draws
-	// (which call fetchGrid on every cache miss) don't dogpile the server.
-	// client/inflight owns the claim's whole life: bounded, cancellable, and
-	// released by the fetch that made it — a request lost with the link used
-	// to hold its id forever, which is "loading …" with no error and no
-	// retry.
-	gridFetch *inflight.Set
-
-	// contentFetch holds the tile ids with a pending ReadContent, deduped
-	// like gridFetch: tileBody fires fetchTileContent on every cache miss
-	// every frame, so without the claim one absent body spawns a fetch per
-	// frame, and any reply older than one that already landed would repaint
-	// stale bytes into the overlay. The cache's PutFetchedContent version
-	// guard is the backstop.
-	contentFetch *inflight.Set
-
-	// tileFetch holds the qualified tile ids with a pending GetTile
-	// (findTileByID misses). A globally-routable id may name a tile whose
-	// grid was never visited (so it isn't cached); resolving it locates the
-	// tile's grid and fetches it. Deduped like gridFetch.
-	tileFetch *inflight.Set
-	// tileLoadFailed records tile ids whose GetTile failed (the tile was
-	// deleted, or its plugin isn't mounted). Without it a missing id
-	// re-fires GetTile every frame forever — the same dogpile
-	// gridLoadFailed prevents for grids. Cleared only by a reload.
-	tileLoadFailed map[string]bool
+	// fetch is the one owner of "a read is outstanding or has failed": the
+	// three inflight claim sets and the two verdict latches. See fetchState.
+	fetch fetchState
 
 	// ghost is the in-flight visual representation of a node being dragged
 	// or animated to/from somewhere. The dragged node renders here at
@@ -369,6 +341,56 @@ type App struct {
 	// the canvas keeps painting during the loading race instead of going
 	// blank.
 	textareaReady bool
+}
+
+// fetchState owns whether a read is outstanding or has failed: the three
+// dedupe claim sets and the two failure latches that go with them. Nothing
+// else in the client answers "is this already being fetched?" or "did this
+// last fail?", so a reach from an unrelated file reads as a.fetch.… Every
+// claim's life is client/inflight's; this struct only holds the sets.
+type fetchState struct {
+	// gridLoadFailed records grids whose last GetGrid failed (loadGrid is
+	// the one writer), so the renderer can say so and the URL walk does
+	// not retry in a tight loop.
+	gridLoadFailed map[string]bool
+
+	// gridFetch holds the grid ids with a pending GetGrid so repeated draws
+	// (which call fetchGrid on every cache miss) don't dogpile the server.
+	// client/inflight owns the claim's whole life: bounded, cancellable, and
+	// released by the fetch that made it — a request lost with the link used
+	// to hold its id forever, which is "loading …" with no error and no
+	// retry.
+	gridFetch *inflight.Set
+
+	// contentFetch holds the tile ids with a pending ReadContent, deduped
+	// like gridFetch: tileBody fires fetchTileContent on every cache miss
+	// every frame, so without the claim one absent body spawns a fetch per
+	// frame, and any reply older than one that already landed would repaint
+	// stale bytes into the overlay. The cache's PutFetchedContent version
+	// guard is the backstop.
+	contentFetch *inflight.Set
+
+	// tileFetch holds the qualified tile ids with a pending GetTile
+	// (findTileByID misses). A globally-routable id may name a tile whose
+	// grid was never visited (so it isn't cached); resolving it locates the
+	// tile's grid and fetches it. Deduped like gridFetch.
+	tileFetch *inflight.Set
+	// tileLoadFailed records tile ids whose GetTile failed (the tile was
+	// deleted, or its plugin isn't mounted). Without it a missing id
+	// re-fires GetTile every frame forever — the same dogpile
+	// gridLoadFailed prevents for grids. Cleared only by a reload.
+	tileLoadFailed map[string]bool
+}
+
+// newFetchState builds the fetch group — the one place it is constructed.
+func newFetchState() fetchState {
+	return fetchState{
+		gridLoadFailed: map[string]bool{},
+		gridFetch:      inflight.New(inflight.Deadline),
+		contentFetch:   inflight.New(inflight.Deadline),
+		tileFetch:      inflight.New(inflight.Deadline),
+		tileLoadFailed: map[string]bool{},
+	}
 }
 
 // debounce is one coalescing deferred callback: arm() starts a setTimeout
@@ -693,11 +715,7 @@ func main() {
 		menu:               menu.New(),
 		errs:               errsurface.New(),
 		caps:               caps.Derive(bridgeCaps(), false),
-		gridLoadFailed:     map[string]bool{},
-		gridFetch:          inflight.New(inflight.Deadline),
-		contentFetch:       inflight.New(inflight.Deadline),
-		tileFetch:          inflight.New(inflight.Deadline),
-		tileLoadFailed:     map[string]bool{},
+		fetch:              newFetchState(),
 		urlPreview:         preview.NewCache(preview.NewJSDecoder()),
 		wrapCache:          map[string][]string{},
 		shellAlive:         map[string]bool{},
@@ -893,13 +911,13 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 		// transport failure latches nothing — the server never spoke and the
 		// next caller retries — the same rule fetchTileByID applies.
 		if clientsync.Of(err) != clientsync.OutcomeTransport {
-			a.gridLoadFailed[id] = true
+			a.fetch.gridLoadFailed[id] = true
 		}
 		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
 		return err
 	}
 	a.resolveErr("grid:" + id)
-	delete(a.gridLoadFailed, id)
+	delete(a.fetch.gridLoadFailed, id)
 	if resp.Grid.ID != id {
 		// The cache keys by the answered name and every frame resolves by the
 		// asked one, so a server that answers under a different id strands the
@@ -908,7 +926,7 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 		// which is what a verdict is. The answer still lands under its own
 		// name; this report is the difference between a visible contract break
 		// and silence.
-		a.gridLoadFailed[id] = true
+		a.fetch.gridLoadFailed[id] = true
 		a.reportErr(errsurface.Error, "grid:"+id,
 			"asked for grid "+id+", was answered "+resp.Grid.ID+" — the view of "+id+" cannot load")
 	}
@@ -926,7 +944,7 @@ func (a *App) fetchGrid(id string) {
 	// the latch first. fetchGrid clearing it itself defeated the latch for
 	// the per-frame draw path and turned one honest verdict into an
 	// every-frame refetch-and-report loop.
-	if id == "" || a.gridLoadFailed[id] {
+	if id == "" || a.fetch.gridLoadFailed[id] {
 		return
 	}
 	// A grid in a namespace this node does not declare is never asked for.
@@ -936,10 +954,10 @@ func (a *App) fetchGrid(id string) {
 	// latch stands in for the answer we did not need: the in-pane wording
 	// reads "unavailable" rather than a "loading…" that never ends.
 	if a.deadNamespace(id) {
-		a.gridLoadFailed[id] = true
+		a.fetch.gridLoadFailed[id] = true
 		return
 	}
-	ctx, done, ok := a.gridFetch.Begin(id)
+	ctx, done, ok := a.fetch.gridFetch.Begin(id)
 	if !ok {
 		return
 	}
@@ -962,17 +980,17 @@ func (a *App) fetchGrid(id string) {
 // findTileByID then hits. Deduped per tile id; a no-op once the tile's grid
 // is cached. Background, like fetchGrid.
 func (a *App) fetchTileByID(tileID string) {
-	if tileID == "" || a.tileLoadFailed[tileID] {
+	if tileID == "" || a.fetch.tileLoadFailed[tileID] {
 		return
 	}
 	// Same rule as fetchGrid: a namespace this node does not declare is not
 	// asked. A leaf link into a removed plugin resolves nowhere and stays
 	// its own dead face.
 	if a.deadNamespace(tileID) {
-		a.tileLoadFailed[tileID] = true
+		a.fetch.tileLoadFailed[tileID] = true
 		return
 	}
-	ctx, done, ok := a.tileFetch.Begin(tileID)
+	ctx, done, ok := a.fetch.tileFetch.Begin(tileID)
 	if !ok {
 		return
 	}
@@ -986,7 +1004,7 @@ func (a *App) fetchTileByID(tileID string) {
 			// the server. A transport failure latches nothing, because the
 			// server never spoke, and the next caller retries.
 			if clientsync.Of(err) != clientsync.OutcomeTransport {
-				a.tileLoadFailed[tileID] = true
+				a.fetch.tileLoadFailed[tileID] = true
 			}
 			return
 		}
@@ -1116,7 +1134,7 @@ func (a *App) landTransition(tr *transition.Transition) {
 		return
 	}
 	a.clearSelected(p.ID)
-	a.gridLoadFailed = map[string]bool{}
+	a.fetch.gridLoadFailed = map[string]bool{}
 	a.fetchGrid(a.gridIDForPane(p))
 	if tr.TraceTileID != "" {
 		// The ascent landed: light the trace on the tile the pane came out
@@ -1210,7 +1228,7 @@ func (a *App) startSSE() {
 			// grid nothing is looking at now is one the next descent, preview,
 			// or crumb would otherwise read stale from the cache.
 			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
-				delete(a.gridLoadFailed, ev.GridChanged.GridID)
+				delete(a.fetch.gridLoadFailed, ev.GridChanged.GridID)
 				a.fetchGrid(ev.GridChanged.GridID)
 			}
 			// PluginHealth: a plugin's own event stream, not this client's
@@ -1245,8 +1263,8 @@ func (a *App) retryKick(resync bool) {
 		// Failure latches are gap state: a grid that failed while the link
 		// was down deserves a fresh attempt, and a tile id latched by a
 		// verdict re-verifies once per reconnect, at one GetTile.
-		clear(a.tileLoadFailed)
-		clear(a.gridLoadFailed)
+		clear(a.fetch.tileLoadFailed)
+		clear(a.fetch.gridLoadFailed)
 		// So is a fetch still in flight. The link it rode is gone, and a
 		// request that dies with a link need never return: nothing answers
 		// it, nothing fails it, and its dedupe claim would keep every retry
@@ -1255,9 +1273,9 @@ func (a *App) retryKick(resync bool) {
 		// the known-grid sweep below cannot speak for it. The cancelled tile
 		// and content reads are re-asked by the draw the refetches schedule,
 		// off the same cache misses that asked the first time.
-		stuck := a.gridFetch.CancelAll()
-		a.tileFetch.CancelAll()
-		a.contentFetch.CancelAll()
+		stuck := a.fetch.gridFetch.CancelAll()
+		a.fetch.tileFetch.CancelAll()
+		a.fetch.contentFetch.CancelAll()
 		for _, gid := range append(stuck, a.c.KnownGridIDs()...) {
 			a.fetchGrid(gid)
 		}

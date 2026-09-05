@@ -288,7 +288,7 @@ func (a *App) navAwait(e nav.Effect) {
 			// fetch for the same grid must not turn the walk into a no-op —
 			// but bounded like every other fetch: a boot that waits forever
 			// on a dead socket is a blank screen with no explanation.
-			ctx, cancel := a.gridFetch.Context()
+			ctx, cancel := a.fetch.gridFetch.Context()
 			defer cancel()
 			ok := a.loadGrid(ctx, id) == nil
 			a.runNav(a.nav.Resume(tok, nav.Result{OK: ok}, a.navWorldForRestore()))
@@ -297,7 +297,7 @@ func (a *App) navAwait(e nav.Effect) {
 		id := e.Request.ID
 		go func() {
 			// Claim-free, like the walk above, and bounded the same way.
-			ctx, cancel := a.contentFetch.Context()
+			ctx, cancel := a.fetch.contentFetch.Context()
 			defer cancel()
 			// loadTileContent stores the bytes and refreshes the overlay (in
 			// text mode that seeds the textarea from the body); what this

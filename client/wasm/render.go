@@ -1208,7 +1208,7 @@ func (a *App) fetchTileContent(tileID string) {
 	if a.deadNamespace(tileID) {
 		return
 	}
-	ctx, done, ok := a.contentFetch.Begin(tileID)
+	ctx, done, ok := a.fetch.contentFetch.Begin(tileID)
 	if !ok {
 		return
 	}
@@ -1545,7 +1545,7 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if pl, ok := a.pluginByUUID(uuidOf(gid)); ok && pl.Label != "" {
 		name = pl.Label
 	}
-	label := pane.GridNotice(name, a.gridLoadFailed[gid])
+	label := pane.GridNotice(name, a.fetch.gridLoadFailed[gid])
 	a.cctx.Call("save")
 	a.cctx.Set("fillStyle", colorMuted)
 	a.cctx.Set("font", "13px system-ui, sans-serif")

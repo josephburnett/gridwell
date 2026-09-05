@@ -93,7 +93,7 @@ func (a *App) postTileContent(cid string, t *rpc.Tile, data []byte) {
 		// (GetTile plus its grid) and the next sweep tick flushes through
 		// it. Only a definitive server answer ("no such tile") reports the
 		// orphan; a transport failure retries quietly.
-		if a.tileLoadFailed[cid] {
+		if a.fetch.tileLoadFailed[cid] {
 			a.reportErr(errsurface.Error, "textedit",
 				"unsaved text edit has no destination — its tile is no longer known")
 			return

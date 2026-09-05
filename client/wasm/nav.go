@@ -145,7 +145,7 @@ func (a *App) navWorldForRestore() nav.World {
 		}
 		rw.Grids[gid] = rows
 	}
-	for id := range a.gridLoadFailed {
+	for id := range a.fetch.gridLoadFailed {
 		rw.Failed[id] = true
 	}
 	// The framing each plugin root was left at, from the row that owns it.
