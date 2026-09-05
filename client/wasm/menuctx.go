@@ -54,10 +54,10 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 	if ns == "" {
 		return &menuContext{plugins: a.plugins, shellsDisabled: !a.caps.Shells, fetched: true}
 	}
-	ctx, ok := a.menuCtxs[ns]
+	ctx, ok := a.views.menuCtxs[ns]
 	if !ok {
 		ctx = &menuContext{}
-		a.menuCtxs[ns] = ctx
+		a.views.menuCtxs[ns] = ctx
 	}
 	if !ctx.fetched && !ctx.inflight {
 		ctx.inflight = true
@@ -72,7 +72,7 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 // already the ambient signal.
 func (a *App) fetchMenuCtx(ns string) {
 	lp, err := a.cl.HandshakeNS(context.Background(), ns)
-	ctx := a.menuCtxs[ns]
+	ctx := a.views.menuCtxs[ns]
 	ctx.inflight = false
 	if err != nil {
 		a.surfaceRPCError("Handshake", err)

@@ -303,7 +303,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 			// Reflect the just-frozen frame immediately so the pane, and
 			// any mirror, shows the final state without waiting for the
 			// SetURLState round trip and preview re-fetch.
-			a.urlPreview.PutWildcard(previewKey, jpeg, func() { a.draw() })
+			a.views.urlPreview.PutWildcard(previewKey, jpeg, func() { a.draw() })
 		}
 		a.draw()
 	})

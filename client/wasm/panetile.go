@@ -36,7 +36,7 @@ func (a *App) paneTileLayout(n *rpc.Tile) (*pane.Tree, bool) {
 	if n.BlobID == 0 {
 		return nil, false
 	}
-	e := a.paneLayouts[n.ID]
+	e := a.views.paneLayouts[n.ID]
 	if e != nil && e.blobID == n.BlobID {
 		return e.tree, e.tree != nil
 	}
@@ -54,10 +54,10 @@ func (a *App) paneTileLayout(n *rpc.Tile) (*pane.Tree, bool) {
 		// Once per blob generation: the memo entry below short-circuits the
 		// next frames, so a corrupt layout cannot spam the strip.
 		a.reportErr(errsurface.Error, "layout:"+n.ID, "workspace layout unreadable: "+err.Error())
-		a.paneLayouts[n.ID] = &paneLayoutEntry{blobID: n.BlobID}
+		a.views.paneLayouts[n.ID] = &paneLayoutEntry{blobID: n.BlobID}
 		return nil, false
 	}
-	a.paneLayouts[n.ID] = &paneLayoutEntry{blobID: n.BlobID, tree: tree}
+	a.views.paneLayouts[n.ID] = &paneLayoutEntry{blobID: n.BlobID, tree: tree}
 	return tree, true
 }
 

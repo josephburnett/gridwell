@@ -58,7 +58,7 @@ func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPrevie
 	mapKey := n.ID + "\x00" + strconv.FormatFloat(bucket, 'f', 0, 64)
 	key := n.ID + "\x00" + strconv.FormatInt(n.Version, 10) + "\x00" +
 		strconv.FormatFloat(bucket, 'f', 0, 64) + "\x00" + strconv.FormatBool(isOrg)
-	if e, ok := a.renderedPrev[mapKey]; ok && e.key == key {
+	if e, ok := a.views.renderedPrev[mapKey]; ok && e.key == key {
 		return e, e.ready && !e.failed
 	}
 	body, ok := a.tileBody(n)
@@ -68,21 +68,21 @@ func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPrevie
 	// Replace a stale same-bucket entry, and sweep other buckets of this
 	// tile whose version moved on; they re-rasterize on next use.
 	// dropRenderedPreview is the deletion twin of these revokes.
-	if old, ok := a.renderedPrev[mapKey]; ok && old.url != "" {
+	if old, ok := a.views.renderedPrev[mapKey]; ok && old.url != "" {
 		js.Global().Get("URL").Call("revokeObjectURL", old.url)
 	}
 	stalePrefix := n.ID + "\x00"
-	for mk, old := range a.renderedPrev {
+	for mk, old := range a.views.renderedPrev {
 		if mk != mapKey && strings.HasPrefix(mk, stalePrefix) && old.key != "" &&
 			!strings.HasPrefix(old.key, n.ID+"\x00"+strconv.FormatInt(n.Version, 10)+"\x00") {
 			if old.url != "" {
 				js.Global().Get("URL").Call("revokeObjectURL", old.url)
 			}
-			delete(a.renderedPrev, mk)
+			delete(a.views.renderedPrev, mk)
 		}
 	}
 	e := &renderedPreview{key: key, rasterW: bucket}
-	a.renderedPrev[mapKey] = e
+	a.views.renderedPrev[mapKey] = e
 
 	// Serialize the sanitized render through the DOM so goldmark's HTML5
 	// output (unclosed <br>, <img>) becomes well-formed XML — the SVG
@@ -150,13 +150,13 @@ func (a *App) drawRenderedPreview(n *rpc.Tile, frame markdown.PreviewFrame,
 // resources for the life of the page.
 func (a *App) dropRenderedPreview(tileID string) {
 	prefix := tileID + "\x00"
-	for mk, e := range a.renderedPrev {
+	for mk, e := range a.views.renderedPrev {
 		if !strings.HasPrefix(mk, prefix) {
 			continue
 		}
 		if e.url != "" {
 			js.Global().Get("URL").Call("revokeObjectURL", e.url)
 		}
-		delete(a.renderedPrev, mk)
+		delete(a.views.renderedPrev, mk)
 	}
 }

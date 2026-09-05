@@ -270,7 +270,7 @@ func (a *App) installWebviewListeners() {
 		tileID := jsString(ev.Get("tileId"))
 		jpeg := decodeBase64(ev.Get("jpegBase64"))
 		if len(jpeg) > 0 {
-			a.urlPreview.PutWildcard(tileID, jpeg, func() { a.draw() })
+			a.views.urlPreview.PutWildcard(tileID, jpeg, func() { a.draw() })
 		}
 		return nil
 	})

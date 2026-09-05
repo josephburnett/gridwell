@@ -148,7 +148,7 @@ func (a *App) installTestHook() {
 			// prove a rendered-mode tile's preview switched to the
 			// rasterized path, and that the raster decoded.
 			out := map[string]any{}
-			for mk, e := range a.renderedPrev {
+			for mk, e := range a.views.renderedPrev {
 				// The cache keys per (tile, width bucket); the hook
 				// aggregates per tile: ready when any bucket's raster
 				// decoded.
@@ -241,7 +241,7 @@ func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
 	// The same box the in-pane draw uses (render.go's KindShell arm).
 	r := a.paneRectByID(p.ID)
 	x, y, _, _ := paneContentBox(r)
-	cached, ok := a.urlPreview.Get(file.ContentID(), file.PreviewBlobID)
+	cached, ok := a.views.urlPreview.Get(file.ContentID(), file.PreviewBlobID)
 	if !ok {
 		return nil
 	}

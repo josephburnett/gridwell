@@ -229,14 +229,14 @@ func (a *App) memoWrap(n *rpc.Tile) func(string, int) []string {
 	return func(src string, cols int) []string {
 		key := n.ContentID() + "\x00" + strconv.FormatInt(n.Version, 10) + "\x00" +
 			strconv.Itoa(len(src)) + "\x00" + strconv.Itoa(cols)
-		if lines, ok := a.wrapCache[key]; ok {
+		if lines, ok := a.views.wrapCache[key]; ok {
 			return lines
 		}
 		lines := markdown.WrapRawText(src, cols)
-		if len(a.wrapCache) >= 512 {
-			a.wrapCache = map[string][]string{}
+		if len(a.views.wrapCache) >= 512 {
+			a.views.wrapCache = map[string][]string{}
 		}
-		a.wrapCache[key] = lines
+		a.views.wrapCache[key] = lines
 		return lines
 	}
 }

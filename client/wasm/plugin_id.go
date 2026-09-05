@@ -83,7 +83,7 @@ func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
 			return a.plugins[i], true
 		}
 	}
-	for _, ctx := range a.menuCtxs {
+	for _, ctx := range a.views.menuCtxs {
 		for i := range ctx.plugins {
 			if ctx.plugins[i].UUID == u {
 				return ctx.plugins[i], true
@@ -110,7 +110,7 @@ func (a *App) pluginGlyph(gridID string) string {
 // door.EntryGlyph) that must see remote declarations too.
 func (a *App) allPlugins() []rpc.PluginInfo {
 	out := a.plugins
-	for _, ctx := range a.menuCtxs {
+	for _, ctx := range a.views.menuCtxs {
 		out = append(out[:len(out):len(out)], ctx.plugins...)
 	}
 	return out

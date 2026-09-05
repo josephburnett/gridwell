@@ -65,7 +65,7 @@ func previewBlobKey(n *rpc.Tile) int64 {
 func (a *App) drawPreviewFace(n *rpc.Tile, x, y, w, h float64, fill string, blobID int64, fallback func()) {
 	a.cctx.Set("fillStyle", fill)
 	a.cctx.Call("fillRect", x, y, w, h)
-	if cached, ok := a.urlPreview.Get(n.ContentID(), blobID); ok {
+	if cached, ok := a.views.urlPreview.Get(n.ContentID(), blobID); ok {
 		if img, ok := previewImage(cached); ok {
 			drawImageContain(a.cctx, img, x, y, w, h)
 		}
@@ -147,7 +147,7 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 		a.cctx.Set("fillStyle", colorShellFill)
 		a.cctx.Call("fillRect", x, y, w, h)
 
-		if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
+		if cached, ok := a.views.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
 			if img, ok := previewImage(cached); ok {
 				// Stand-in geometry, not letterbox: the live xterm canvas sits
 				// top-left at integer-cell size, so the snapshot goes back
@@ -234,10 +234,10 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	if blobID == 0 {
 		return
 	}
-	if _, ok := a.urlPreview.Get(tileID, blobID); ok {
+	if _, ok := a.views.urlPreview.Get(tileID, blobID); ok {
 		return
 	}
-	if a.urlPreview.KnownEmpty(tileID, blobID) {
+	if a.views.urlPreview.KnownEmpty(tileID, blobID) {
 		return // the server already answered "no preview" for this blob
 	}
 	// tileID is the content id: a leaf link's TARGET, which may live in a
@@ -246,12 +246,12 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	if a.deadNamespace(tileID) {
 		return
 	}
-	if !a.urlPreview.MarkFetching(tileID) {
+	if !a.views.urlPreview.MarkFetching(tileID) {
 		return
 	}
 	go func() {
 		jpeg, err := a.cl.GetTilePreview(context.Background(), tileID)
-		a.urlPreview.ClearFetching(tileID)
+		a.views.urlPreview.ClearFetching(tileID)
 		if err != nil {
 			// A plugin that serves no previews answers Unimplemented: a
 			// capability property, so the tile shows its label. Anything
@@ -260,17 +260,17 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 				a.surfaceRPCError("GetTilePreview", err)
 				return // transient — the next draw may retry
 			}
-			a.urlPreview.PutEmpty(tileID, blobID)
+			a.views.urlPreview.PutEmpty(tileID, blobID)
 			return
 		}
 		if len(jpeg) == 0 {
 			// A completed answer settles the cache (PutEmpty). Leaving the
 			// miss unrecorded re-fires this fetch on every draw: one RPC
 			// per non-decodable tile per frame, forever.
-			a.urlPreview.PutEmpty(tileID, blobID)
+			a.views.urlPreview.PutEmpty(tileID, blobID)
 			return
 		}
-		a.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame() })
+		a.views.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame() })
 	}()
 }
 

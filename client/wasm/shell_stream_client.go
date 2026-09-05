@@ -696,7 +696,7 @@ func (a *App) mirrorLiveShells() {
 		if jpeg == nil {
 			continue
 		}
-		a.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.draw() })
+		a.views.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.draw() })
 	}
 }
 
@@ -725,7 +725,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 		// returns, so store it as a wildcard: Get satisfies any expected
 		// blob id until a specific Put supersedes it, on the next
 		// GetTilePreview.
-		a.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
+		a.views.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
 		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
 	a.shells.Close(paneID)

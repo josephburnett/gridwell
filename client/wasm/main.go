@@ -121,11 +121,8 @@ type App struct {
 	// nowhere else.
 	errs *errsurface.Surface
 
-	// paneLayouts memoizes each pane tile's decoded tree, keyed by tile id
-	// and invalidated by blob generation (see paneTileLayout). It is a cache
-	// and a view of the server blob, never an authority: the decode is what
-	// is memoized, and the truth is the tile row plus its content bytes.
-	paneLayouts map[string]*paneLayoutEntry
+	// views holds the derived caches and memos — never facts. See viewCaches.
+	views viewCaches
 
 	// ws is the window's level stack: the one owner of which pane tile the
 	// user is inside and what outer tree each descent restores. The rules
@@ -195,16 +192,6 @@ type App struct {
 	// the release decides a crush-through close.
 	leftResize *leftResizeState
 
-	// urlPreview caches decoded HTMLImageElement values for URL and
-	// shell tile previews. Keyed by tile id; auto-invalidates when a
-	// tile's PreviewBlobID changes server-side — see client/preview.
-	urlPreview *preview.Cache
-
-	// wrapCache memoizes raw-text soft-wrap results per (content id,
-	// version, length, columns) — a render cache (memoWrap), reset
-	// wholesale when full, never a fact.
-	wrapCache map[string][]string
-
 	// shellAlive caches the result of the ShellSessionAlive probe per tile
 	// id. The refresh button shows when preview_blob_id is 0, or when
 	// shellAlive[id] is true. shellAliveProbing single-flights the in-flight
@@ -232,12 +219,6 @@ type App struct {
 	// "is this one showing" flags that go with them. See overlayState.
 	overlays overlayState
 
-	// renderedPrev caches rasterized rendered-mode grid previews by tile id
-	// (rendered_preview.go): SVG foreignObject images of
-	// markdown.RenderHTML's output, decoded async and drawn by
-	// drawMarkdownNode when a tile's stored text_mode is "rendered".
-	renderedPrev map[string]*renderedPreview
-
 	// zoomKeyRelays counts zoom chords that arrived over the main-process
 	// relay, from its before-input-event interception. e2e-only
 	// introspection: together with the registry's zoomChordRelays counter it
@@ -251,10 +232,6 @@ type App struct {
 	// signal reads it, so a spec can tell "the gesture finished" from "the
 	// gesture is still waiting on the server".
 	tileMutates int
-
-	// menuCtxs caches each remote node's + menu (menuctx.go), keyed by
-	// the grid-stamped node_ns. "" (the local node) is a.plugins/a.caps.
-	menuCtxs map[string]*menuContext
 
 	// renderedPanePaints counts rendered-raster paints of a descended pane by
 	// tile id (markdown_render.go): e2e attribution that an unfocused
@@ -328,6 +305,50 @@ type overlayState struct {
 	// the canvas keeps painting during the loading race instead of going
 	// blank.
 	textareaReady bool
+}
+
+// viewCaches holds the client's derived views: caches and memos, never
+// facts. Every one of them is recomputable from the cache and the tile rows,
+// so the whole group may be dropped wholesale without losing anything the
+// user made — which is what makes a.views.… safe to reach for from any file,
+// and what tells a reader that nothing here needs persisting.
+type viewCaches struct {
+	// urlPreview caches decoded HTMLImageElement values for URL and
+	// shell tile previews. Keyed by tile id; auto-invalidates when a
+	// tile's PreviewBlobID changes server-side — see client/preview.
+	urlPreview *preview.Cache
+
+	// wrapCache memoizes raw-text soft-wrap results per (content id,
+	// version, length, columns) — a render cache (memoWrap), reset
+	// wholesale when full, never a fact.
+	wrapCache map[string][]string
+
+	// renderedPrev caches rasterized rendered-mode grid previews by tile id
+	// (rendered_preview.go): SVG foreignObject images of
+	// markdown.RenderHTML's output, decoded async and drawn by
+	// drawMarkdownNode when a tile's stored text_mode is "rendered".
+	renderedPrev map[string]*renderedPreview
+
+	// paneLayouts memoizes each pane tile's decoded tree, keyed by tile id
+	// and invalidated by blob generation (see paneTileLayout). It is a cache
+	// and a view of the server blob, never an authority: the decode is what
+	// is memoized, and the truth is the tile row plus its content bytes.
+	paneLayouts map[string]*paneLayoutEntry
+
+	// menuCtxs caches each remote node's + menu (menuctx.go), keyed by
+	// the grid-stamped node_ns. "" (the local node) is a.plugins/a.caps.
+	menuCtxs map[string]*menuContext
+}
+
+// newViewCaches builds the views group — the one place it is constructed.
+func newViewCaches() viewCaches {
+	return viewCaches{
+		urlPreview:   preview.NewCache(preview.NewJSDecoder()),
+		wrapCache:    map[string][]string{},
+		renderedPrev: map[string]*renderedPreview{},
+		paneLayouts:  map[string]*paneLayoutEntry{},
+		menuCtxs:     map[string]*menuContext{},
+	}
 }
 
 // fetchState owns whether a read is outstanding or has failed: the three
@@ -755,14 +776,10 @@ func main() {
 		caps:               caps.Derive(bridgeCaps(), false),
 		fetch:              newFetchState(),
 		persist:            newPersistState(),
-		urlPreview:         preview.NewCache(preview.NewJSDecoder()),
-		wrapCache:          map[string][]string{},
+		views:              newViewCaches(),
 		shellAlive:         map[string]bool{},
 		shellAliveProbing:  map[string][]func(bool){},
 		traces:             map[string]traceState{},
-		paneLayouts:        map[string]*paneLayoutEntry{},
-		renderedPrev:       map[string]*renderedPreview{},
-		menuCtxs:           map[string]*menuContext{},
 		renderedPanePaints: map[string]int{},
 	}
 	app.trans = transition.New(app.enterSegment, app.landTransition)
@@ -1255,7 +1272,7 @@ func (a *App) startSSE() {
 			// rendered-markdown preview holds the same pair — a blob URL
 			// and a decoded raster — and is released beside it.
 			if ev.Kind == rpc.EventTileRemoved && ev.TileRemoved != nil {
-				a.urlPreview.Drop(ev.TileRemoved.TileID)
+				a.views.urlPreview.Drop(ev.TileRemoved.TileID)
 				a.dropRenderedPreview(ev.TileRemoved.TileID)
 			}
 			// GridChanged: refetch the affected grid. The event is the one
