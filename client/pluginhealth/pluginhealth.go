@@ -41,6 +41,17 @@ func Classify(pl rpc.PluginInfo) Status {
 	return Enterable
 }
 
+// UnrootedLink reports whether a tile is a well link with nothing behind it:
+// a launcher row for a plugin or connection that declared no root grid. It is
+// the drawn half of the same "not enterable" the descent guard reports on
+// click, derived from the row alone, so it holds for a remote node's launcher
+// rows too — the local plugin list cannot classify those, and Classify is
+// only consulted when it can. It belongs beside Classify because both answer
+// "is this enterable", from the two kinds of fact that can say no.
+func UnrootedLink(t *rpc.Tile) bool {
+	return t.Reference && rpc.IsWellKind(t.Kind) && t.ChildGridID == ""
+}
+
 // ClickNotice returns the errsurface.Surface.Report arguments for clicking a
 // non-enterable launcher tile: severity, a per-plugin source key (so a second
 // click updates the same notice rather than scrolling the strip), and a

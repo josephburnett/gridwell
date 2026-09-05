@@ -126,3 +126,25 @@ func TestClickNotice_PendingConnection(t *testing.T) {
 		t.Fatalf("dial detail must surface: %q ok=%v", msg, ok)
 	}
 }
+
+// TestUnrootedLink pins the three facts the tint reads together. A well link
+// that resolved a child grid is enterable; a leaf link is not a well, so it
+// is never tinted however it points; and a plain local well is not a
+// reference at all.
+func TestUnrootedLink(t *testing.T) {
+	cases := []struct {
+		name string
+		tile rpc.Tile
+		want bool
+	}{
+		{"launcher with no root", rpc.Tile{Kind: rpc.KindWell, Reference: true}, true},
+		{"launcher with a root", rpc.Tile{Kind: rpc.KindWell, Reference: true, ChildGridID: "fs/1"}, false},
+		{"leaf link", rpc.Tile{Kind: rpc.KindText, Reference: true, LinkTargetID: "fs/2"}, false},
+		{"plain well", rpc.Tile{Kind: rpc.KindWell, ChildGridID: "3"}, false},
+	}
+	for _, c := range cases {
+		if got := UnrootedLink(&c.tile); got != c.want {
+			t.Errorf("%s: UnrootedLink = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

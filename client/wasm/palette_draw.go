@@ -201,7 +201,7 @@ func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
 	// rootless plugin link, one to a remote plugin included, whose health
 	// the local plugin list cannot know. Dim it; the descent guard explains
 	// on click.
-	if n.Reference && rpc.IsWellKind(n.Kind) && n.ChildGridID == "" {
+	if pluginhealth.UnrootedLink(n) {
 		color := colorLauncherRootlessTint
 		// The local plugin list knows more: broken (Info failed) gets the
 		// alarm tint, rootless the softer one.
