@@ -155,6 +155,11 @@ stored `deleted` flag is only that list mirrored onto the rows. Dropping a
 connection's stanza retires nothing — the row and its landing stay, the
 mounts and links through it go dead in the roster, and putting the stanza
 back brings them all live again.
+The landing is checked, not merely learned: every transport asks the far node
+where it lands before it is used, and an answer that differs from the stored
+one refuses the connection — the stored landing is never overwritten, the row
+carries the reason, and every read through the name fails loudly until the
+operator retires the name or restores the target.
 A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection
 name, and the same transit rule applies at both hops. The fan-in holds each

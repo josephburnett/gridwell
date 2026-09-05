@@ -75,6 +75,14 @@ type Server struct {
 	// died is told from here, and the fan-in reads it to decide whether an
 	// outage is a transition worth publishing. One writer, noteHealth.
 	dark map[string]string
+	// mismatch is the landing verdict, by name: set when the far end answers
+	// a home that is not the one this connection's stored references were
+	// written against. It is a refusal, not a failure — the remote is
+	// reachable, it is simply not the node this name means — so it does not
+	// live in rootErr or dark. One writer, learnRoot; route refuses on it and
+	// Rows shows it. Never persisted: the stored landing is the fact, and
+	// this is only what the last answer said about it.
+	mismatch map[string]string
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 }
@@ -94,6 +102,12 @@ type liveConn struct {
 	cancel context.CancelFunc // stops the root-fetch/fan-in goroutines
 	// rootFetching single-flights the remote-root learn.
 	rootFetching bool
+	// verified is "this transport has told us where it lands, and it is where
+	// the store says". It rides the liveConn, not the Conn, so every fresh
+	// transport — a reconnect, the next boot — asks again: a learned landing
+	// taken as settled forever is how a name silently starts serving another
+	// node's tiles.
+	verified bool
 }
 
 // Row is a connection as the handshake lists it (the node qualifies the
@@ -139,7 +153,7 @@ func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, re
 	ctx := context.Background()
 	s := &Server{db: db, dial: dialer, home: home, conns: map[string]*Conn{},
 		live: map[string]*liveConn{}, rootErr: map[string]string{}, dark: map[string]string{},
-		hub: eventhub.New(eventKey)}
+		mismatch: map[string]string{}, hub: eventhub.New(eventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
 		retiredSet[r] = true
@@ -251,7 +265,17 @@ func (s *Server) Rows(ctx context.Context) []Row {
 		root := c.RemoteRoot
 		lc := s.live[name]
 		r.StatusDetail = s.rootErr[name]
+		mismatch := s.mismatch[name]
 		s.mu.Unlock()
+		if mismatch != "" {
+			// The landing verdict outranks the learned root: the row keeps
+			// the landing its references name, and says why nothing through
+			// it will answer.
+			r.RootGridID = rpc.QualifyID(name, root)
+			r.StatusDetail = mismatch
+			out = append(out, r)
+			continue
+		}
 		if root != "" {
 			r.RootGridID = rpc.QualifyID(name, root)
 			r.StatusDetail = ""
@@ -305,6 +329,15 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 			return nil, "", status.Errorf(codes.NotFound, "connection: connection %q was retired", first)
 		}
 		return nil, "", status.Errorf(codes.NotFound, "connection: no connection %q", first)
+	}
+	// A connection whose landing contradicts the stored one serves nothing:
+	// the ids in this request were written against the node that is no longer
+	// there.
+	s.mu.Lock()
+	mismatch := s.mismatch[first]
+	s.mu.Unlock()
+	if mismatch != "" {
+		return nil, "", status.Error(codes.FailedPrecondition, "connection: "+mismatch)
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
@@ -442,8 +475,17 @@ func (s *Server) setRootErr(name, detail string) {
 
 // learnRoot is the connect-and-learn body: the boot path, ConnectAll, calls it
 // synchronously, and the lazy kick, kickRootFetch, calls it in a goroutine. It
-// dials the transport; a learned root is final, and a fresh one persists and
-// publishes a health event so open clients re-list.
+// dials the transport and asks the far node where this connection lands, once
+// per live transport. A first answer is persisted and published as a health
+// event so open clients re-list.
+//
+// Every later answer — the next boot, a reconnect — is CHECKED against the
+// stored landing rather than trusted. A connection name is bound to the node
+// it landed on, because that is what every stored reference through it was
+// written against; if the far end is a different node now, the stored landing
+// is left exactly as it is and the connection is refused until the operator
+// retires the name or restores the target. Overwriting it would silently
+// re-point the user's references at another node's tiles.
 func (s *Server) learnRoot(c *Conn) (string, error) {
 	name := c.Cfg.Name
 	lc, err := s.ensureLive(c)
@@ -451,9 +493,9 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 		return "", err // ensureLive recorded the detail already
 	}
 	s.mu.Lock()
-	root := c.RemoteRoot
+	root, verified := c.RemoteRoot, lc.verified
 	s.mu.Unlock()
-	if root != "" {
+	if verified {
 		return root, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -468,34 +510,58 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 		s.setRootErr(name, err.Error())
 		return "", err
 	}
-	s.setRootErr(name, "")
-	if err := s.db.SetRemoteRoot(ctx, name, info.RootGridId); err != nil {
-		return "", err
+	if root != "" && info.RootGridId != root {
+		return "", s.noteLandingMismatch(name, root, info.RootGridId)
 	}
+	if root == "" {
+		if err := s.db.SetRemoteRoot(ctx, name, info.RootGridId); err != nil {
+			return "", err
+		}
+	}
+	s.setRootErr(name, "")
 	s.mu.Lock()
+	lc.verified = true
+	healed := s.mismatch[name] != ""
+	delete(s.mismatch, name)
 	c.RemoteRoot = info.RootGridId
 	s.mu.Unlock()
-	s.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
-		PluginUuid: name, Healthy: true,
-	}}})
+	// A first landing and a restored one both change what the menu can show,
+	// so both make open clients re-list; a landing that was already known and
+	// still matches has changed nothing and says nothing.
+	if root == "" || healed {
+		s.hub.Publish(healthEvent(name, true, ""))
+	}
 	return info.RootGridId, nil
 }
 
-// kickRootFetch learns a connection's landing in the background,
-// single-flight per connection; a no-op once learned.
-func (s *Server) kickRootFetch(c *Conn) {
+// noteLandingMismatch records the landing verdict and returns the refusal
+// every read through the connection gets. It is deliberately NOT marked
+// verified: the connection keeps asking, so restoring the target brings it
+// back with no restart. The line is logged once per transition, not once per
+// ask.
+func (s *Server) noteLandingMismatch(name, stored, answered string) error {
+	msg := fmt.Sprintf("connection %q now lands on a different node; stored references name the old one — retire the name or restore the target", name)
 	s.mu.Lock()
-	known := c.RemoteRoot != ""
+	first := s.mismatch[name] == ""
+	s.mismatch[name] = msg
 	s.mu.Unlock()
-	if known {
-		return
+	if first {
+		log.Printf("gridwell: %s (stored landing %s, the far node answered %s)", msg, stored, answered)
 	}
+	return status.Error(codes.FailedPrecondition, "connection: "+msg)
+}
+
+// kickRootFetch learns and verifies a connection's landing in the background,
+// single-flight per connection; a no-op once this transport has answered where
+// it lands. A remembered landing is not enough to skip it — a transport that
+// has never been asked is a transport whose landing is unchecked.
+func (s *Server) kickRootFetch(c *Conn) {
 	lc, err := s.ensureLive(c)
 	if err != nil {
 		return // recorded in rootErr; the row says why
 	}
 	s.mu.Lock()
-	if lc.rootFetching {
+	if lc.verified || lc.rootFetching {
 		s.mu.Unlock()
 		return
 	}
