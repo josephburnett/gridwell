@@ -86,7 +86,7 @@ covered in the bridge harness. Separately: audit every `webviews.ts` path
 against the CLAUDE.md rule ("anything you touch there gets one") and close
 gaps. Design doc: `docs/debt/w2-native-seam.md`.
 
-**Status:** [x] design [ ] focusguard extraction + tests [ ] harness coverage [ ] webviews path audit (gap list in docs/debt/w2-native-seam.md)
+**Status:** [x] design [x] focusguard extraction + tests [x] harness coverage [ ] webviews path audit (10 GAP rows left in docs/debt/w2-native-seam.md §6; the focus family is closed)
 
 ## W3 — The freshness stack gets its one document and its seam tests
 

@@ -6,10 +6,8 @@ apps/desktop/README.md apps/desktop/.cache
 docs/one-cache.md internal/remote
 # The debt program (docs/debt-program.md, docs/debt/) plans files that do not
 # exist yet; each entry comes out when its workstream lands the file:
-docs/debt-program.md apps/desktop/src/main/focusguard.ts
 docs/debt-program.md client/nav
 docs/debt/w1-nav-orchestration.md client/nav
-docs/debt/w2-native-seam.md apps/desktop/src/main/focusguard.ts
 # A grep exclusion pattern in a verification command, not a path citation
 # (the checker splits `testhook\.go` at the backslash):
 docs/debt/w4-concepts.md client/wasm/testhook
