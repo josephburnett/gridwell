@@ -97,6 +97,66 @@ type LeaveWorld struct {
 	LandingView *Viewport
 }
 
+// RestoreTile is one cached row as the URL restore reads it: what the walk
+// needs to classify it, and what a content leaf's frame is restored from.
+type RestoreTile struct {
+	ChildGridID string
+	IsWell      bool
+	IsContent   bool
+
+	// The leaf's half: the mode a content descent restores in, and the scroll
+	// it was left at. Only the trailing id can be a content leaf, but which id
+	// that is only the walk knows, so every row carries them.
+	TextDocument bool
+	ReadOnly     bool
+	TextY        int64
+	TextMode     string
+}
+
+// RestoreWorld is the restore's extra half: the cache as the URL walk reads
+// it.
+//
+// The whole cached set is projected, not a chosen subset, because which grids
+// a path reaches is what the walk itself decides — and gather-then-execute
+// admits no callback left open across the seam. Restores are boot and
+// popstate only, so this is resolved a handful of times a session.
+type RestoreWorld struct {
+	// Grids is grid id → its rows.
+	Grids map[string]map[string]RestoreTile
+	// Failed is the grid-load latch: a grid the server already refused is not
+	// asked again, and the walk stops there rather than suspending.
+	Failed map[string]bool
+	// RootViews is the framing each plugin root grid was left at, from the row
+	// that owns it (persistedGridView's root arm), against the focused pane's
+	// rect — the only pane a restore targets. Keyed by root grid id, because
+	// which one the address names is the machine's to decode. A root with
+	// nothing persisted is absent.
+	RootViews map[string]Viewport
+}
+
+// grids answers the walk for one grid, and reports whether the snapshot holds
+// it at all.
+func (rw *RestoreWorld) rows(gridID string) (map[string]RestoreTile, bool) {
+	if rw == nil {
+		return nil, false
+	}
+	g, ok := rw.Grids[gridID]
+	return g, ok
+}
+
+// failed reports the grid-load latch for gridID.
+func (rw *RestoreWorld) failed(gridID string) bool {
+	return rw != nil && rw.Failed[gridID]
+}
+
+// rootView is the persisted framing of a root grid, zero when there is none.
+func (rw *RestoreWorld) rootView(gridID string) Viewport {
+	if rw == nil {
+		return Viewport{}
+	}
+	return rw.RootViews[gridID]
+}
+
 // World is one navigation snapshot.
 type World struct {
 	Focus string
@@ -130,9 +190,11 @@ type World struct {
 	ShellAlive      map[string]bool
 	ShellAliveKnown map[string]bool
 
-	// Door is set for a descent, Leave for an ascent hop.
-	Door  *DoorWorld
-	Leave *LeaveWorld
+	// Door is set for a descent, Leave for an ascent hop, Restore for a URL
+	// restore and every step of its walk.
+	Door    *DoorWorld
+	Leave   *LeaveWorld
+	Restore *RestoreWorld
 }
 
 // Pane returns the pane view for id.

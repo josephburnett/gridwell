@@ -29,10 +29,11 @@ const (
 	// into a tile: PaneID, DestPaneID, TileID, Foot, Zoom. (Phase C.)
 	EffRelocatePane
 	// EffForgetPane drops every session resource keyed to a pane: PaneID.
-	// (Phase C.)
 	EffForgetPane
 	// EffInstallLevel swaps the whole pane tree for a pane-tile level:
-	// Level, Tree, Baseline, KeepOuter. (Phase C.)
+	// Level, Tree, Baseline, KeepOuter — or, from a boot restore, TileID
+	// alone, the level being everything the shim still resolves for itself
+	// until phase C.
 	EffInstallLevel
 	// EffPopLevel leaves one pane-tile level: Animate, OriginPane.
 	// (Phase C.)
@@ -49,7 +50,6 @@ const (
 	// PaneID, TileID.
 	EffSaveText
 	// EffFlushDirtyText flushes every unsaved edit now. No payload.
-	// (Phase C.)
 	EffFlushDirtyText
 	// EffFlushLayout persists the pane-tile layout blob now. No payload.
 	// (Phase C.)
@@ -101,10 +101,9 @@ const (
 	EffCloseMenu
 	// EffScheduleURLUpdate arms the debounced history writer. No payload.
 	EffScheduleURLUpdate
-	// EffWriteURLNow writes the history entry now. No payload. (Phase B.)
+	// EffWriteURLNow writes the history entry now. No payload.
 	EffWriteURLNow
 	// EffPlaceCursor puts the text cursor at a document position: Col, Row.
-	// (Phase B.)
 	EffPlaceCursor
 
 	// EffDeleteEphemeral deletes an ascended-from ephemeral visit: GridID,
@@ -118,9 +117,9 @@ const (
 	EffEnterLevel
 	// EffLeaveLevels leaves pane-tile levels: Count.
 	EffLeaveLevels
-	// EffReEngage re-engages a restored content frame: PaneID, TileID.
-	// Phase A runs the existing restore path unchanged; phase B replaces its
-	// body with Await{GetTile} under a DescendedIn guard.
+	// EffReEngage re-engages a restored content frame: PaneID, TileID. It
+	// re-enters the machine through GestureReEngage, which reads the row and
+	// engages under a DescendedIn guard.
 	EffReEngage
 )
 
@@ -211,9 +210,10 @@ const (
 	// the executor before the resume, so the row the machine acts on and the
 	// row the renderer draws are the same one.
 	RequestGetTile RequestKind = iota
-	// RequestGetGrid reads one grid: ID. (Phase B.)
+	// RequestGetGrid reads one grid: ID. OK reports whether it loaded; the
+	// walk asks for a grid at most once, however it answered.
 	RequestGetGrid
-	// RequestReadContent reads a tile's body: ID. (Phase B.)
+	// RequestReadContent reads a tile's body into the cache: ID.
 	RequestReadContent
 	// RequestSearch locates a tile: Query, Scope, Limit.
 	RequestSearch

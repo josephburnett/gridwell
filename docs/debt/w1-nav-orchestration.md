@@ -275,6 +275,8 @@ for an ephemeral visit; heal skipped when the path already resolves.
 
 Done when: `urlsync.go` holds the DOM half only — `location`, `history`, the
 textarea cursor — and every walk and restore decision is in `client/nav`.
+(Landed. `urlsync.go` keeps the framing persisters, which are writeback, not
+navigation.)
 
 ### Phase C — levels and promote
 
@@ -406,6 +408,68 @@ diverged from silently.
 `Effect` and `Gesture` are one tagged struct each rather than a type per
 verb, the shape `pane.TreeNode` already uses: a plan is then comparable field
 by field in a table test.
+
+## Deviations found in phase B
+
+Six more, again with no behavior change.
+
+1. **`Gesture.Restore` gains `Reset`, and `PaneID` may be empty.** The
+   popstate restore's level exit swaps the whole pane tree, so which pane is
+   focused — and everything the per-pane reset reads off it — can only come
+   from a world gathered after it. `RestoreFromHistory` therefore ends at
+   `LeaveLevels` and hands the rest back as `Restore{Reset: true}` through
+   `Plan.Next`, the mechanism deviation 1 established. `Reset` carries both
+   halves of "this came from the browser": the reload-equivalent teardown at
+   the start, and the URL handed back at the end. An empty `PaneID` means
+   the focused pane, which is the only pane a restore ever targets.
+
+2. **`ReEngage` becomes fetch-first, and stays an effect.** Phase A's
+   `ReEngage` gesture took the row; it now takes a tile id and mints
+   `Await{GetTile}` itself, with the heal's `Await{Search}` between the
+   answer and the go-live verdict. The `EffReEngage` effect stays in the
+   vocabulary and re-enters the machine through that gesture, because
+   `workspace.go` has two call sites of its own (phase C absorbs them) and
+   the alternative was two spellings of the same arm.
+
+3. **A boot pane-tile restore rides `EffInstallLevel` with `TileID` alone.**
+   `?w=` names a level to install, which is that effect's verb; everything
+   else about it — fetching the row, following a pane link, decoding the
+   blob — is still `bootWorkspace`'s until phase C, exactly as `EffEnterLevel`
+   still runs `descendLevel`. No verb was added: the vocabulary stays at 33.
+
+4. **`World.Restore` carries the whole cached grid set.** Which grids a path
+   reaches is what the walk itself decides, so a gatherer that projected a
+   subset would be running the walk. Gather-then-execute admits no callback
+   left open across the seam, so the snapshot holds the cache as
+   `urlwalk.Walk` reads it, plus the grid-load latch and every plugin root's
+   persisted framing. It is resolved for restores only — boot and popstate,
+   a handful of times a session.
+
+5. **The walk re-runs rather than resuming mid-loop.** `urlwalk.Walk` takes a
+   lookup callback, and a callback cannot suspend. The walk is pure and
+   deterministic, so a cache miss suspends the whole restore on
+   `Await{GetGrid}` and the walk is re-run against the warmer snapshot. The
+   continuation records every grid already asked for, which is
+   `fetchGridSync`'s one-shot rule made explicit — a transport failure
+   latches nothing, so without it a grid that will not load would be asked
+   forever. Bounded by the number of ids in the address.
+
+6. **A restore's continuations are the restore's, not a pane's.**
+   `Machine.Forget(paneID)` retires by pane, and forgetting the pane is a
+   step the restore itself performs, so a pane-keyed continuation would
+   cancel the restore mid-reset and leave the URL suppressed for the rest of
+   the session. They carry `GuardAlways` and check the pane inside the step,
+   which ends the restore — and hands the address back — when it is gone.
+
+`Result` gained `Tile` and `Wells`; a search with no hit arrives as `OK`
+false, the same "no" as a search that could not run, because both leave the
+pane where it is. `PaneView` gained `Scratch`, replacing the per-verb copies
+in `DoorWorld` (dead) and `LeaveWorld`: the ascent's ephemeral delete and the
+restore's heal ask one question of one field.
+
+One branch is kept without a test because the walk cannot reach it: a content
+leaf whose row is not cached. The walk only names a leaf it read, so the
+uncached default is the same defensive fallback `applyURLState` carried.
 
 ## Open question for the owner
 

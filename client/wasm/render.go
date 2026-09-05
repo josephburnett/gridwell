@@ -1214,31 +1214,36 @@ func (a *App) fetchTileContent(tileID string) {
 	}
 	go func() {
 		defer done()
-		// Coalesced repaint: body fetches land in bursts (#265).
-		a.loadTileContent(ctx, tileID, a.scheduleFrame)
+		// Coalesced repaint: body fetches land in bursts (#265). The failure
+		// is already on the strip; this path has nothing waiting on it.
+		_ = a.loadTileContent(ctx, tileID, a.scheduleFrame)
 	}()
 }
 
 // loadTileContent reads one tile's bytes into the cache and refreshes the
-// text overlay from them, then runs then() — the caller's repaint. It is the
-// one content-fetch body: the lazy render-path fetch above and the URL boot's
-// cursor-placing fetch (fetchBlobAndSetCursor) differ only in their guards
-// and in what they do once the bytes have landed. Blocking, so both callers
-// run it on their own goroutine.
+// text overlay from them, then runs then() — the caller's repaint — and
+// reports whether the read landed. It is the one content-fetch body: the lazy
+// render-path fetch above and the restore's cursor-placing read
+// (RequestReadContent) differ only in their guards and in what they do once
+// the bytes are in. Blocking, so both callers run it on their own goroutine.
+//
+// The error is returned as well as surfaced, because a caller waiting on the
+// bytes has a continuation to retire either way.
 //
 // Content is routable by tile id (ReadContent); blob ids carry no plugin
 // namespace and are not routable on their own. The cache is the one text-body
 // store every overlay reads from.
-func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) {
+func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
 	data, _, version, err := a.cl.ReadContent(ctx, tileID)
 	if err != nil {
 		// The tile body would otherwise never appear: say why.
 		a.surfaceRPCError("ReadContent", err)
-		return
+		return err
 	}
 	a.c.PutFetchedContent(tileID, data, version)
 	a.refreshFileOverlay()
 	then()
+	return nil
 }
 
 // tileBody returns a text tile's body bytes, fetching lazily on a miss. Every

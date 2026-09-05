@@ -12,11 +12,10 @@ const (
 	GestureDescend GestureKind = iota
 	// GestureAscend leaves N levels of a pane's place: PaneID, N, Animate.
 	GestureAscend
-	// GestureRestore installs a place decoded from a URL: PaneID, Raw.
-	// (Phase B.)
+	// GestureRestore installs a place decoded from a URL: PaneID (empty =
+	// the focused pane), Raw, Reset.
 	GestureRestore
 	// GestureRestoreFromHistory installs a whole session place: Raw.
-	// (Phase B.)
 	GestureRestoreFromHistory
 	// GesturePromote turns an ephemeral visit into a persistent tile:
 	// PaneID, DestPaneID, OldID, Created. (Phase C.)
@@ -46,7 +45,11 @@ type Gesture struct {
 	N       int
 	Animate bool
 
-	Raw        string
+	Raw string
+	// Reset asks a restore for the popstate half: the per-pane teardown a
+	// reload would do, and the address handed back to the browser at the end.
+	// A boot restore lands over whatever the pane already shows.
+	Reset      bool
 	DestPaneID string
 	OldID      string
 	Created    rpc.Tile

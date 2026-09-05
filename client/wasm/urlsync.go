@@ -4,14 +4,14 @@ package main
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/client/textedit"
 	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textcursor"
-	"github.com/josephburnett/gridwell/client/urlwalk"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
@@ -277,22 +277,16 @@ func (a *App) scheduleURLUpdate() {
 }
 
 // writeURLNow encodes the focused pane's state and writes it to the browser
-// history: the one history writer. Push against replace is the tested
-// pane.URLPushesEntry decision over the diff between this write's place and
-// the last one written. Structural navigation — a descent, an ascent, a
-// pane-tile boundary — pushes an entry so back traverses it, while framing
-// changes and pane-focus switches replace in place. No call site carries a
-// "structural" bit: the intent is derived from state, so a forgotten flag is
-// unrepresentable. During a popstate restore (urlRestoring) every write
-// replaces, because the restore re-encodes the place the browser already
-// navigated to and pushing would corrupt the stack being traversed.
+// history: the one history writer, and the DOM half of it. Whether to write
+// at all, and push against replace, are the machine's — a popstate restore in
+// flight owns the URL, and the push decision diffs this write's structural
+// place against the last one written. Structural navigation — a descent, an
+// ascent, a pane-tile boundary — pushes an entry so back traverses it, while
+// framing changes and pane-focus switches replace in place.
 //
 // Idempotent; safe even when no user change has happened.
 func (a *App) writeURLNow() {
-	// A restore in flight owns the URL: a write here would clobber the entry
-	// the browser just navigated to with mid-restore pane state. The
-	// restore's final step re-runs this with the flag down.
-	if a.urlRestoring {
+	if !a.nav.URLWritable() {
 		return
 	}
 	state := a.encodeFocusedPaneURL()
@@ -301,15 +295,11 @@ func (a *App) writeURLNow() {
 	if p := a.tree.FocusedPane(); p != nil {
 		paneID = p.ID
 	}
-	place := pane.URLPlaceOf(paneID, state)
-	push := pane.URLPushesEntry(a.urlPrevPlace, place, a.urlPlaceSeen)
-	a.urlPrevPlace = place
-	a.urlPlaceSeen = true
-	if push {
+	if a.nav.URLWrote(pane.URLPlaceOf(paneID, state)) {
 		js.Global().Get("history").Call("pushState", nil, "", raw)
-	} else {
-		js.Global().Get("history").Call("replaceState", nil, "", raw)
+		return
 	}
+	js.Global().Get("history").Call("replaceState", nil, "", raw)
 }
 
 // withE2EParam re-appends the e2e harness gate. pane.EncodeURL rebuilds the
@@ -325,57 +315,6 @@ func (a *App) withE2EParam(raw string) string {
 		return raw + "&e2e=1"
 	}
 	return raw + "?e2e=1"
-}
-
-// restoreFromHistory applies a browser back or forward (popstate): a
-// reload-equivalent restore of the focused pane at the URL the browser
-// navigated to. It runs on its own goroutine, because fetches block. The
-// session scaffolding a reload would lose — the pane's outer frames, live
-// streams, selection — resets here too, deliberately: back is navigation to a
-// place, and the place's truth (content, framing) is server-owned, so what is
-// dropped is transient scaffolding, never data.
-//
-// The caller, the popstate listener, has already set urlRestoring and
-// captured raw. Both must happen synchronously in the event callback, before
-// any pending debounced write can fire and clobber the target entry's URL.
-func (a *App) restoreFromHistory(raw string) {
-	// Leaving the current place: the same boundary flushes every other
-	// navigation performs (pending text + framing still in their debounce
-	// windows).
-	a.flushDirtyText()
-	a.flushFramingSave()
-
-	defer func() {
-		a.urlRestoring = false
-		// Re-seed the diff baseline at the restored place: seen=false makes
-		// the write a replace even if the restore truncated the path.
-		a.urlPlaceSeen = false
-		a.writeURLNow()
-	}()
-
-	// The popped URL names the whole place. Navigation inside a pane tile
-	// never pushes entries, since the URL is constant there, so a popstate
-	// always crosses a place boundary: exit any level stack through its real
-	// exit path, layout flushes included, before restoring.
-	a.ascendLevels(a.ws.Depth())
-
-	p := a.tree.FocusedPane()
-	if p == nil {
-		return
-	}
-	// Reload-equivalent per-pane reset: close live streams and clear the
-	// pane's place down to one frame. applyURLState installs the decoded
-	// place over it, so a deeper frame left standing here would survive a
-	// restore to a shallower place.
-	a.menu.Close()
-	// Land whatever is animating before the reset: a restore replaces the
-	// place, and a transition dropped here would leave its descent half done.
-	a.trans.CancelAll()
-	a.forgetPane(p.ID)
-	p.Reset(pane.Frame{GridID: a.home, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
-	a.refreshFileOverlay()
-
-	a.applyURLState(raw)
 }
 
 // encodeFocusedPaneURL projects the focused pane's place into the URL DTO.
@@ -413,15 +352,13 @@ func (a *App) textareaCursorRowCol() (int, int) {
 	return col, row
 }
 
-// applyURLOnBoot reads window.location, decodes it, and walks the
-// tile-id list against the user's grids to set up the focused pane.
-// Loose on input: an id that's missing from the current grid is
-// silently skipped — we stay in the same grid and try the next id.
-// This lets URLs like `/g/.../19/9999/15/14/12` (with 9999 invalid)
-// still resolve down to 12. After applying, replaceState the cleaned
-// URL so what's in the bar matches what's on screen.
+// applyURLOnBoot restores the place window.location names: the boot arm of
+// the one restore verb. Loose on input — an id missing from the current grid
+// is skipped, so a bookmarked address degrades gracefully as the canvas
+// changes underneath it — and the address is rewritten afterward so the bar
+// matches what is on screen. client/nav owns all of that.
 func (a *App) applyURLOnBoot() {
-	a.applyURLState(locationPath())
+	a.runGesture(nav.Gesture{Kind: nav.GestureRestore, Raw: locationPath()})
 }
 
 // locationPath is what the browser's address bar currently says, in the exact
@@ -435,204 +372,6 @@ func locationPath() string {
 		raw += s
 	}
 	return raw
-}
-
-// applyURLState decodes raw and places the focused pane there — the
-// idempotent "decode a URL and go there" routine shared by boot and the
-// popstate restore (restoreFromHistory). See applyURLOnBoot for the
-// loose-input contract.
-func (a *App) applyURLState(raw string) {
-	state, err := pane.DecodeURL(raw)
-	if err != nil {
-		// Bad URL — drop to root.
-		state = pane.URLState{}
-	}
-
-	// A workspace place restores the innermost pane tile from its blob; the
-	// workspace stack stays empty above it (nesting is session-only), so a
-	// bar ascent falls back to the pane tile's containing grid.
-	if state.Workspace != "" {
-		go a.bootWorkspace(state.Workspace)
-		return
-	}
-
-	p := a.tree.FocusedPane()
-	if p == nil {
-		return
-	}
-
-	// No anchor → home, the landing page (already the pane's boot anchor).
-	// The walk below still applies so "/" plus a viewport restores.
-	if state.Anchor == "" {
-		state.Anchor = a.home
-		if state.Anchor == "" {
-			// Bootstrap couldn't learn any home (no plugins, no node
-			// identity); the error is already on the strip. Nothing to
-			// restore into.
-			a.draw()
-			a.scheduleURLUpdate()
-			return
-		}
-	}
-	p.Reset(pane.Frame{GridID: state.Anchor, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
-
-	// The URL's path segments are bare well ids within the anchor's grid
-	// namespace; qualify them with the anchor's NAMESPACE — everything up to
-	// its last segment — so they match the grid's keys. For a plain plugin
-	// root ("uuid/1") that is the plugin uuid; for a remote grid reached
-	// through a mount ("ssh1/rp1/1") it is the whole chain prefix.
-	anchorPrefix := rpc.NamespaceOf(state.Anchor)
-	qualified := make([]string, len(state.TileIDs))
-	for i, id := range state.TileIDs {
-		qualified[i] = rpc.QualifyID(anchorPrefix, id)
-	}
-
-	// No path → sit at the anchor's root grid, at its PERSISTED root view
-	// (persistFraming's root arm writes it) unless the URL carries its own
-	// viewport — this call site passed literal 0,0,1 for years, so every
-	// relaunch opened home at the origin no matter what the user left
-	// behind (the guiding rule, violated at boot; the parameters were even
-	// unit-tested, just never fed).
-	if len(qualified) == 0 {
-		a.fetchGridSync(state.Anchor)
-		rcx, rcy, rz, _ := a.persistedGridView(p, state.Anchor, nil)
-		if bv := pane.URLBootViewport(state.X, state.Y, state.Zoom, rcx, rcy, rz); bv.Apply {
-			p.Cx = bv.Cx
-			p.Cy = bv.Cy
-			if bv.SetZoom {
-				p.Zoom = bv.Zoom
-			}
-		}
-		a.draw()
-		a.scheduleURLUpdate()
-		return
-	}
-
-	// Walk the path from the anchor, fetching each grid as we go. The pure walk
-	// skips ids missing from the current grid, descends at well boundaries, and
-	// stops at a content leaf.
-	resolvedPath, textTileID := urlwalk.Walk(state.Anchor, qualified,
-		func(gid string) (map[string]urlwalk.Tile, bool) {
-			if _, ok := a.c.Grid(gid); !ok {
-				if !a.fetchGridSync(gid) {
-					return nil, false
-				}
-			}
-			g, _ := a.c.Grid(gid)
-			tiles := make(map[string]urlwalk.Tile, len(g.Tiles))
-			for id, n := range g.Tiles {
-				tiles[id] = urlwalk.Tile{
-					ChildGridID: n.ChildGridID,
-					IsWell:      rpc.IsWellKind(n.Kind),
-					IsContent:   rpc.IsContentDescentKind(n.Kind),
-				}
-			}
-			return tiles, true
-		})
-
-	// The decoded place, built by the one decoder: a root grid, the walked
-	// doorway path, and the content leaf when there is one. The outer frames
-	// carry no viewport, because nothing encodes those, so the ascent out of
-	// here lands on each grid's persisted framing.
-	viewport := p.Frame
-	p.Stack = pane.StackAt(state.Anchor, resolvedPath, textTileID)
-	p.Cx, p.Cy, p.Zoom = viewport.Cx, viewport.Cy, viewport.Zoom
-	if p.Zoom <= 0 {
-		p.Zoom = 1
-	}
-	if textTileID != "" {
-		// Mode follows the one descent decision (descentTextMode — a
-		// read-only tile always restores RENDERED, the selectable face);
-		// a URL that encodes a text cursor forces text mode. Scale is
-		// fixed; scroll restores from the tile's stored text_y.
-		file, cached := a.cachedFile(p, textTileID)
-		if cached {
-			p.TextMode = a.descentTextMode(&file, state.CursorMode)
-			p.TextScrollY = float64(file.TextY)
-		} else {
-			// Uncached: no row to read; the one owner decides the default.
-			p.TextMode = textedit.DescentMode(textedit.ModeInput{TextDocument: true, CursorURL: state.CursorMode})
-		}
-		p.TextZoom = a.textScaleFor(p) // base × the tile's content zoom
-		a.fetchBlobAndSetCursor(textTileID, state)
-		// Refresh overlay so the textarea (text mode) appears.
-		a.refreshFileOverlay()
-		// A reload lands back inside the descent, so re-engage it: the shell
-		// reconnects and the url reopens, through the same one-owner
-		// decision every descent applies.
-		a.navReEngage(p.ID, textTileID)
-	} else {
-		p.Cx = state.X
-		p.Cy = state.Y
-		if state.Zoom > 0 {
-			p.Zoom = state.Zoom
-		}
-	}
-
-	a.fetchGrid(a.gridIDForPane(p))
-	a.draw()
-	// Replace the URL in case we truncated.
-	a.scheduleURLUpdate()
-}
-
-// cachedFile returns the file tile at the leaf of `path` with id
-// tileID, if cached. Used during URL boot to honor a previously
-// stored ViewZoom before the blob arrives.
-func (a *App) cachedFile(p *pane.Pane, tileID string) (rpc.Tile, bool) {
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		return rpc.Tile{}, false
-	}
-	n, ok := g.Tiles[tileID]
-	return n, ok
-}
-
-// fetchGridSync fetches a grid and waits for the result. Returns true
-// on success. Used during URL walk where we need the cache populated
-// before continuing the walk.
-func (a *App) fetchGridSync(id string) bool {
-	if a.gridLoadFailed[id] {
-		return false
-	}
-	if _, ok := a.c.Grid(id); ok {
-		return true
-	}
-	// Claim-free (the walk blocks on its own answer, and a background fetch
-	// for the same grid must not turn the walk into a no-op) but bounded
-	// like every other fetch: a boot that waits forever on a dead socket is
-	// a blank screen with no explanation.
-	ctx, cancel := a.gridFetch.Context()
-	defer cancel()
-	return a.loadGrid(ctx, id) == nil
-}
-
-// fetchBlobAndSetCursor pulls the file's bytes and, once they're in
-// the cache, places the cursor at (state.Col, state.Row) inside the
-// textarea. Asynchronous because GetBlob is over the wire.
-func (a *App) fetchBlobAndSetCursor(textTileID string, state pane.URLState) {
-	gid := a.gridIDForPane(a.tree.FocusedPane())
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		return
-	}
-	if _, ok := g.Tiles[textTileID]; !ok {
-		return
-	}
-	go func() {
-		// Claim-free, like the walk above, and bounded the same way.
-		ctx, cancel := a.contentFetch.Context()
-		defer cancel()
-		// loadTileContent stores the bytes and refreshes the overlay (in
-		// text mode that seeds the textarea from the body); the cursor is
-		// what this path adds, and it goes after the seeding.
-		a.loadTileContent(ctx, textTileID, func() {
-			if state.CursorMode {
-				a.placeCursorAt(state.Col, state.Row)
-			}
-			a.draw()
-		})
-	}()
 }
 
 // placeCursorAt converts (col, row) into a character offset and

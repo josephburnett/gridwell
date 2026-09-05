@@ -115,7 +115,7 @@ func (a *App) refreshRenderedOverlay() {
 	}
 	// A read-only tile always shows its rendered, selectable face, whatever
 	// mode the session carried in. This display-time guard makes
-	// descentTextMode's rule hold from every entry point, including a
+	// textedit.DescentMode's rule hold from every entry point, including a
 	// restored session.
 	if a.tileReadOnly(&t) {
 		mode = rpc.TextModeRendered

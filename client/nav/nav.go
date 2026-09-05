@@ -52,6 +52,18 @@ type Plan struct {
 type Machine struct {
 	next  Token
 	conts map[Token]cont
+
+	// The one history writer's push-against-replace baseline: the structural
+	// place the last write named, and whether there has been one. They are
+	// navigation facts — "did the user go somewhere, or just pan?" — so they
+	// live with the verbs that move the pane rather than beside the DOM call
+	// that spends them.
+	urlPrevPlace pane.URLPlace
+	urlPlaceSeen bool
+	// urlRestoring marks a popstate restore in flight, which owns the URL:
+	// it re-encodes the place the browser already navigated to, and a write
+	// from anywhere else would clobber that entry.
+	urlRestoring bool
 }
 
 // New returns a machine with nothing outstanding.
@@ -71,6 +83,10 @@ type cont struct {
 	TileID string
 	Tile   rpc.Tile
 	Stack  pane.Stack
+	// Restore is set on the restore paths' continuations, whose data is a
+	// whole decoded address mid-walk. They leave PaneID empty on purpose:
+	// see awaitGrid.
+	Restore *restoreData
 }
 
 // step is the closed set of things the machine does when an answer lands.
@@ -92,6 +108,14 @@ const (
 	// stepHealed re-anchors a restored pane once the locate answers, and then
 	// engages it.
 	stepHealed
+	// stepRestoreRoot frames a pathless restore once the anchor grid has been
+	// asked for.
+	stepRestoreRoot
+	// stepRestoreWalk re-runs the URL walk against the warmer snapshot.
+	stepRestoreWalk
+	// stepRestoreCursor places the text cursor the address encodes, once the
+	// body has seeded the textarea.
+	stepRestoreCursor
 )
 
 // mint registers c and returns its token.
@@ -131,10 +155,29 @@ func (m *Machine) Do(g Gesture, w World) Plan {
 		return m.ascend(g, w)
 	case GestureReEngage:
 		return m.reEngage(g, w)
+	case GestureRestore:
+		return m.restore(g, w)
+	case GestureRestoreFromHistory:
+		return m.restoreFromHistory(g, w)
 	}
-	// Restore, RestoreFromHistory, Promote, EnterLevel and LeaveLevels are
-	// phases B and C; the shim still owns them and never hands them here.
+	// Promote, EnterLevel and LeaveLevels are phase C; the shim still owns
+	// them and never hands them here.
 	return Plan{}
+}
+
+// URLWritable reports whether the one history writer may write now. A
+// popstate restore in flight owns the URL until its last step hands it back.
+func (m *Machine) URLWritable() bool { return !m.urlRestoring }
+
+// URLWrote records the structural place a history write named and answers
+// push against replace over the diff. pane.URLPushesEntry owns the rule; the
+// machine owns the baseline it diffs against, so no call site carries a
+// "structural" bit and a forgotten flag is unrepresentable.
+func (m *Machine) URLWrote(place pane.URLPlace) (push bool) {
+	push = pane.URLPushesEntry(m.urlPrevPlace, place, m.urlPlaceSeen)
+	m.urlPrevPlace = place
+	m.urlPlaceSeen = true
+	return push
 }
 
 // Resume delivers an awaited answer. The guard is evaluated against the fresh
@@ -173,6 +216,18 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 			landHealed(c.PaneID, c.Tile, r.Wells, &pl)
 		}
 		m.autoLiveOnDescent(c.PaneID, c.Tile, w, &pl)
+	case stepRestoreRoot:
+		return m.restoreRoot(c.Restore, w, &pl)
+	case stepRestoreWalk:
+		return m.restoreWalk(c.Restore, w, &pl)
+	case stepRestoreCursor:
+		// The bytes have landed and seeded the textarea; the cursor the
+		// address encodes goes after the seeding, or it lands in an empty
+		// document and is lost.
+		if r.OK && c.Restore.State.CursorMode {
+			pl.add(Effect{Kind: EffPlaceCursor,
+				Col: c.Restore.State.Col, Row: c.Restore.State.Row})
+		}
 	}
 	return pl.plan()
 }

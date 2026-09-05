@@ -136,16 +136,6 @@ type App struct {
 	// exists.
 	wsPending *wsPending
 
-	// urlPrevPlace and urlPlaceSeen are the URL writer's push-against-replace
-	// diff baseline: the structural place the last history write named, since
-	// writeURLNow pushes only when the place changed structurally.
-	// urlRestoring marks an in-flight popstate restore, during which every
-	// write replaces, because pushing would corrupt the stack being
-	// traversed. Owned by urlsync.go.
-	urlPrevPlace pane.URLPlace
-	urlPlaceSeen bool
-	urlRestoring bool
-
 	// caps is the host capability set (client/caps), derived once at boot
 	// from bridge presence. Feature gates read a.caps; nothing else asks the
 	// bridge to make a behavior decision.
@@ -773,14 +763,13 @@ func main() {
 
 	// popstate: the browser's back and forward traverse descents and
 	// ascents, since writeURLNow pushes an entry per structural navigation.
-	// The flag and the target URL are captured here, synchronously: a
-	// pending debounced write firing after this callback returns must find
-	// the writer suppressed, or it clobbers the entry the browser just
-	// navigated to. The restore itself fetches, so it runs on a goroutine.
+	// The restore runs HERE, in the callback: it suspends on its reads rather
+	// than blocking, and planning it marks the URL the restore's, so a
+	// pending debounced write firing after this callback returns finds the
+	// writer suppressed instead of clobbering the entry the browser just
+	// navigated to.
 	app.win.Call("addEventListener", "popstate", js.FuncOf(func(this js.Value, args []js.Value) any {
-		app.urlRestoring = true
-		raw := locationPath()
-		go app.restoreFromHistory(raw)
+		app.runGesture(nav.Gesture{Kind: nav.GestureRestoreFromHistory, Raw: locationPath()})
 		return nil
 	}))
 
@@ -895,8 +884,8 @@ func (a *App) resize() {
 
 // loadGrid is the one GetGrid-to-cache hop: one call, one failure flag, one
 // error key ("grid:<id>") surfaced and resolved through the strip. The async
-// renderer path (fetchGrid) and the synchronous URL walk (fetchGridSync) both
-// come here, so gridLoadFailed has one writer.
+// renderer path (fetchGrid) and the restore walk's awaited read
+// (RequestGetGrid) both come here, so gridLoadFailed has one writer.
 func (a *App) loadGrid(ctx context.Context, id string) error {
 	resp, err := a.cl.GetGrid(ctx, id)
 	if err != nil {

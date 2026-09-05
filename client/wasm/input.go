@@ -1086,16 +1086,6 @@ const zoomDistFactor = 4.0
 // (nav.go): a mounted well and a cross-plugin clone take the same path a
 // plain well does, with a frame pushed so ascent returns exactly here.
 
-// descentTextMode applies textedit.DescentMode (the one owner) to a
-// cached tile row at descent; cursorURL is the restore path's extra
-// input (an address that encodes a text cursor).
-func (a *App) descentTextMode(file *rpc.Tile, cursorURL bool) string {
-	return textedit.DescentMode(textedit.ModeInput{
-		TextDocument: file.TextDocument(), ReadOnly: a.tileReadOnly(file),
-		Cached: true, CursorURL: cursorURL, Stored: file.TextMode,
-	})
-}
-
 // persistedGridView resolves the framing the grid at (anchor, path) was left
 // at, from the row that owns it: the containing well's framing for a nested
 // grid, the plugin's persisted root view for a root. It is the restore for

@@ -82,7 +82,64 @@ func (a *App) navWorld(g nav.Gesture) nav.World {
 		w.Door = a.navWorldForDescend(&g.Door)
 	case nav.GestureAscend:
 		w.Leave = a.navWorldForAscend(g.PaneID)
+	case nav.GestureRestore:
+		w.Restore = a.navWorldForRestore().Restore
 	}
+	return w
+}
+
+// navWorldForRestore is the whole snapshot a restore and every step of its
+// walk are planned against: the common half plus the cache as the walk reads
+// it.
+//
+// The cached set is projected whole, not a chosen subset, because which grids
+// a path reaches is what the walk decides — a gatherer that guessed would be
+// running the walk itself. Restores are boot and popstate only, so this runs
+// a handful of times a session.
+func (a *App) navWorldForRestore() nav.World {
+	w := a.navWorldCommon()
+	rw := &nav.RestoreWorld{
+		Grids:     map[string]map[string]nav.RestoreTile{},
+		Failed:    map[string]bool{},
+		RootViews: map[string]nav.Viewport{},
+	}
+	for _, gid := range a.c.KnownGridIDs() {
+		g, ok := a.c.Grid(gid)
+		if !ok {
+			continue
+		}
+		rows := make(map[string]nav.RestoreTile, len(g.Tiles))
+		for id, t := range g.Tiles {
+			rows[id] = nav.RestoreTile{
+				ChildGridID:  t.ChildGridID,
+				IsWell:       rpc.IsWellKind(t.Kind),
+				IsContent:    rpc.IsContentDescentKind(t.Kind),
+				TextDocument: t.TextDocument(),
+				ReadOnly:     a.tileReadOnly(&t),
+				TextY:        t.TextY,
+				TextMode:     t.TextMode,
+			}
+		}
+		rw.Grids[gid] = rows
+	}
+	for id := range a.gridLoadFailed {
+		rw.Failed[id] = true
+	}
+	// The framing each plugin root was left at, from the row that owns it.
+	// Which root the address names is the machine's to decode, so every one
+	// is resolved; ByRoot's answer set is exactly the set persistedGridView
+	// can resolve, and a restore is always the focused pane's.
+	if p := a.tree.FocusedPane(); p != nil {
+		for _, pl := range a.allPlugins() {
+			if pl.RootGridID == "" {
+				continue
+			}
+			if cx, cy, zoom, ok := a.persistedGridView(p, pl.RootGridID, nil); ok {
+				rw.RootViews[pl.RootGridID] = nav.Viewport{Cx: cx, Cy: cy, Zoom: zoom}
+			}
+		}
+	}
+	w.Restore = rw
 	return w
 }
 

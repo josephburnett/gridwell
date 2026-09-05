@@ -30,8 +30,17 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.navInstallPlace(e)
 	case nav.EffClearSelection:
 		a.clearSelected(e.PaneID)
+	case nav.EffForgetPane:
+		a.forgetPane(e.PaneID)
+	case nav.EffInstallLevel:
+		// A boot restore's level: the tile id is all the machine can say
+		// until phase C owns the resolution. It fetches, so it runs on its
+		// own goroutine, as it did from applyURLState.
+		go a.bootWorkspace(e.TileID)
 	case nav.EffFlushFraming:
 		a.flushFramingSave()
+	case nav.EffFlushDirtyText:
+		a.flushDirtyText()
 	case nav.EffPersistFraming:
 		a.navPersistFraming(e)
 	case nav.EffSaveText:
@@ -71,6 +80,10 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.menu.Close()
 	case nav.EffScheduleURLUpdate:
 		a.scheduleURLUpdate()
+	case nav.EffWriteURLNow:
+		a.writeURLNow()
+	case nav.EffPlaceCursor:
+		a.placeCursorAt(e.Col, e.Row)
 	case nav.EffDeleteEphemeral:
 		a.deleteEphemeralTile(e.GridID, e.TileID)
 	case nav.EffReport:
@@ -229,6 +242,30 @@ func (a *App) navAwait(e nav.Effect) {
 			// answer.
 			a.c.UpdateTile(tile.GridID, *tile)
 			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Tile: tile}, a.navWorldCommon()))
+		}()
+	case nav.RequestGetGrid:
+		id := e.Request.ID
+		go func() {
+			// Claim-free — the walk waits on its own answer, and a background
+			// fetch for the same grid must not turn the walk into a no-op —
+			// but bounded like every other fetch: a boot that waits forever
+			// on a dead socket is a blank screen with no explanation.
+			ctx, cancel := a.gridFetch.Context()
+			defer cancel()
+			ok := a.loadGrid(ctx, id) == nil
+			a.runNav(a.nav.Resume(tok, nav.Result{OK: ok}, a.navWorldForRestore()))
+		}()
+	case nav.RequestReadContent:
+		id := e.Request.ID
+		go func() {
+			// Claim-free, like the walk above, and bounded the same way.
+			ctx, cancel := a.contentFetch.Context()
+			defer cancel()
+			// loadTileContent stores the bytes and refreshes the overlay (in
+			// text mode that seeds the textarea from the body); what this
+			// path adds is the cursor, and it goes after the seeding.
+			err := a.loadTileContent(ctx, id, func() {})
+			a.runNav(a.nav.Resume(tok, nav.Result{OK: err == nil}, a.navWorldCommon()))
 		}()
 	case nav.RequestSearch:
 		req := e.Request
