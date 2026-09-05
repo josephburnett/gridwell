@@ -48,9 +48,9 @@ not the same kind of thing:
   the guard bounces the user's own click. The `lastUserClickMs` check as
   written is backward-looking; it cannot see a press that has not arrived yet.
   A renderer ack cannot help here either — it is even further behind.
-  **This ordering is unmeasured and must be measured (§5, M1).** If step 2
-  precedes step 4, the 1500 ms is not doing what its comment claims: it is
-  covering the *second* click and the recheck, not the first.
+  **Measured (§5, M1): step 2 precedes step 4, 8/8.** The 1500 ms is not doing
+  what its comment claims: it covers the *second* click and the recheck, not
+  the first.
 - **4 → 7 (stamp before ack).** A genuine ack window: main knows a press
   landed and is waiting for the renderer to agree that the pane is focused.
   A clock here can be replaced by the ack itself, with a deadline (§3).
@@ -62,8 +62,11 @@ Pane focus is a separate, renderer-owned fact and is unaffected. So a wrong
 bounce does not break `live-view-focus.spec.ts` (which asserts pane focus). Its
 user-visible cost is narrower and untested: **you click into a text field in a
 live page and your keystrokes go to the canvas instead.** A second click within
-1500 ms works, because the stamp is fresh by then. That is a falsifiable
-prediction, and §5 M1 settles it.
+1500 ms works, because the stamp is fresh by then. That was a falsifiable
+prediction; §5 M1 settles it — the bounce is real on every first click, and on
+Linux the damage is masked by the click's own widget-focus commit landing
+after the bounce and winning. The report is wrong either way, and the mask is
+the platform's accident, not the guard's.
 
 ## 3. Can an owned fact replace the clock?
 
@@ -93,43 +96,51 @@ main tolerates silence. Worth doing; not on its own a removal.
 ### (b) An Electron-native fact
 
 `webContents.on('input-event', (_e, inputEvent) => …)` exists in the pinned
-Electron (`electron.d.ts`, `InputEvent.type` includes `'mouseDown'`). It fires
-in the browser process when an input event is sent to that WebContents — no
-renderer round trip, no IPC. It is the same fact the preload forwards, obtained
-one process earlier, and it can replace `lastUserClickMs` outright: both
-`input-event` and `focus` are emitted from B, so their order is deterministic
-rather than racy. If `input-event` precedes `focus` (§5, M2) the guard becomes
-causal — *this focus followed a mouseDown into this view* — with no window and
-no constant, and a `focus` with no preceding `mouseDown` is provably a steal,
-bounced immediately.
+Electron (`electron.d.ts`, `InputEvent.type` includes `'mouseDown'`,
+`'touchStart'` and `'pointerDown'`). It fires in the browser process when an
+input event is sent to that WebContents — no renderer round trip, no IPC. It is
+the same fact the preload forwards, obtained one process earlier, and it can
+replace `lastUserClickMs` outright: both `input-event` and `focus` are emitted
+from B, so their order is deterministic rather than racy.
 
-Two caveats to pin in the measurement. `sendInputEvent` from main also emits
-`input-event`, so the correlation must be typed to `mouseDown` only —
-`touchScroll` injects `mouseWheel` and nothing else in the tree synthesizes a
-press. And a Tab into the view, or a page `.focus()` after a click elsewhere,
-still wants an upper bound on the correlation; but that bound is a staleness
-bound on a fact main owns, not a guess at another process's latency.
+M2 measured that order, and it is the opposite of the hoped-for one: `focus`
+fires **first**, `input-event`/`mouseDown` 0.1–3.0 ms later, 8/8. Chromium
+focuses the widget in the browser process while routing the press, before
+forwarding the press to the renderer. So no fact — not the stamp, not
+`input-event`, not an ack — exists yet at the instant the `focus` event fires.
+The guard cannot be causal *backwards*. What it can be is causal *forwards*:
+do not decide in the focus handler at all, and one settle later ask whether a
+press into this view arrived after this focus. `input-event` is the right
+observer for that question because it is main's own — a wedged page delays the
+preload's IPC stamp arbitrarily, and cannot delay the input router.
+
+One caveat holds: `sendInputEvent` from main also emits `input-event`, so the
+correlation must be typed to press-shaped events only — `touchScroll` injects
+`mouseWheel`, and nothing else in the tree synthesizes a press.
 
 For the post-bounce commit (`FOCUS_RECHECK_MS`), the candidate owned fact is
-the root webContents' `blur`. A commit that lands after `rootWC.focus()` blurs
-the root; if at that moment no entry has `focused === true` and some entry's
-`webContents.isFocused()`, that is the same steal, detected by an event instead
-of a poll. Not an assumption — `rootWC` also blurs legitimately when the user
-clicks into the focused pane's view — so it is measurement M3.
+the root webContents' `blur`. M3 measured it and it fails: `root:blur` fires
+0.2 ms *before* the view's `focus`, as part of the same focus move, so it is
+the steal itself and not a signal that a later commit overrode the bounce. M3
+also measured something more useful: an immediate `rootWC.focus()` from inside
+the focus handler never takes — the in-flight widget-focus commit wins — and
+the bounce at +121 ms is the only one that ever lands.
 
-### Verdict: PARTIALLY REPLACEABLE
+### Verdict: REPLACEABLE, by deferring rather than by correlating backwards
 
 - **Intent** ("was this focus the user's?") becomes an owned native fact:
-  `input-event`/`mouseDown` correlation on the same view, in the same process,
-  deterministically ordered — pending M2. That removes
-  `USER_CLICK_FOCUS_GRACE_MS` as a correctness heuristic.
-- **Ack** ("has the renderer agreed?") becomes an explicit ack with a bounded
-  deadline. The bound is irreducible and must be **documented as unavoidable**:
-  main cannot distinguish a slow renderer from one that will never answer, and
-  the safe default on silence is to hand focus back.
-- **Commit** (`FOCUS_RECHECK_MS`) reduces to the root-blur fact if M3 holds;
-  otherwise it stays, documented as unavoidable, because Chromium emits no
-  second `focus` for a commit that lands after ours.
+  a press-shaped `input-event` on the same view, in the same process, counted
+  and compared against the count snapshotted at the `focus` event. No clock,
+  no window, no `USER_CLICK_FOCUS_GRACE_MS`.
+- **Ack** ("has the renderer agreed?") is not needed. The renderer's
+  `focused` is already read at the settle; the press correlation answers the
+  intent question a round trip earlier, so no deadline on the renderer is
+  introduced.
+- **Commit** (`FOCUS_RECHECK_MS`) survives, renamed to the settle it always
+  was, and is **documented as unavoidable with M3 quoted**: Chromium emits no
+  event for a widget-focus commit that lands after ours, and an immediate
+  bounce is swallowed by it. The one constant left in the guard is how long
+  main waits for that commit — never a decision about whose focus it is.
 
 No constant is deleted on faith; each survives only with a measurement on
 record.
@@ -191,26 +202,75 @@ the second bounce. A naive extraction drops it silently. It is untested today.
 ## 5. Measurements
 
 These are harness scenarios, not code changes, and they gate §3's conclusions.
-Each runs in `capture-harness.ts` (which already drives the registry directly
-and already has a focus-steal scenario) under `make check-electron`.
 
-- **M1 — `focus` vs `VIEW.leftdown`.** Place a view on an unfocused pane
-  through the real IPC path (`bridge-harness.ts`), synthesize a left
-  `mouseDown` with `sendInputEvent`, and record the arrival order and delta of
-  the `focus` event and the `noteUserClick` stamp. Decides whether the first
-  click into an unfocused live pane is bounced today.
+- **M1 — `focus` vs `VIEW.leftdown`.** Place a view on an unfocused pane, press
+  left into it, and record the arrival order and delta of the `focus` event and
+  the `noteUserClick` stamp. Decides whether the first click into an unfocused
+  live pane is bounced today.
 - **M2 — `input-event` vs `focus`.** The same press, recording `input-event`
-  (`type === 'mouseDown'`) against `focus`. If `input-event` precedes `focus`
-  deterministically over many presses, the grace constant becomes a causal
-  check.
+  against `focus`.
 - **M3 — root `blur` after a bounce.** Force a steal, call `rootWC.focus()`,
   and record whether the delayed widget-focus commit blurs the root
-  webContents. If it does, `FOCUS_RECHECK_MS` becomes an event.
+  webContents.
 
-Record each result here. A constant that survives gets its measurement quoted
-in its comment: the lens asks that a remaining heuristic be documented as
-unavoidable, and a measurement is what makes that documentation true rather
-than asserted.
+### Measured
+
+Run 2026-09-05 on the Linux dev box (Electron 43, user-space Xvfb, one
+throwaway harness deleted after the run). The press had to be a **real OS
+click**: `sendInputEvent` injects straight into the renderer's input router and
+bypasses Chromium's browser-process focus routing, so a synthetic press emits
+`input-event` and the preload's IPC stamp but **no `focus` event at all** and
+leaves `isFocused()` false (4/4). The box has no xdotool, so the click was
+delivered as an XTEST `FakeInput` over the raw X protocol on the Xvfb socket.
+That detail matters for anyone rerunning this: a harness that only calls
+`sendInputEvent` cannot see M1's ordering.
+
+**M1 — the first click into an unfocused live pane IS bounced. 8/8.** Times in
+ms from the press, one representative trial, and the order was identical in all
+eight:
+
+| event | where | t |
+|---|---|---|
+| root `blur` | B | 104.2 |
+| `onFocusStolen` (the guard fires) | B | 104.3 |
+| view `focus` | B | 104.4 |
+| `input-event` `mouseDown` | B | 104.5 |
+| `noteUserClick` (`VIEW.leftdown` IPC) | B | 105.1 |
+
+`focus` → `input-event` was 0.1–3.0 ms across the eight; `focus` →
+`noteUserClick` was 0.7–3.8 ms. The stamp is always later than the focus event,
+so the guard always reads a stale stamp on a first click and always reports a
+steal for a click the user made.
+
+Its user-visible cost on Linux is nil today, and by accident: `isFocused()` was
+still true 1.2 s after every one of the eight bounces. The `rootWC.focus()` the
+bounce triggers is swallowed by the click's own in-flight widget-focus commit,
+and the recheck 120 ms later then allows the view because the stamp has arrived
+by then. Two wrongs. On a host where the immediate `rootWC.focus()` does take,
+nothing re-focuses the view and the user's click loses keyboard focus for good.
+
+**M2 — NEGATIVE. `input-event` does not precede `focus`; it follows it** by
+0.1–3.0 ms, 8/8 (rows 3 and 4 above). Chromium focuses the widget in the
+browser process while routing the press and forwards the press afterwards. A
+guard that decides inside the focus handler is blind whatever fact it reads.
+What M2 does establish is that the press reaches **main** 0.6–0.9 ms before the
+renderer's IPC stamp does, on a fact main owns and page JS cannot delay.
+
+**M3 — NEGATIVE as a replacement, decisive as a justification.** `root:blur`
+fired 0.2 ms *before* the view's `focus`, i.e. as the first half of the same
+focus move, not as a later commit overriding a bounce — it cannot distinguish
+the two. And the immediate bounce never took: forcing a steal with `wc.focus()`
+produced `onFocusStolen` at +0.2 ms with no view `blur` and no `root:focus`
+following it; the second bounce, from the recheck at +121 ms, is the one that
+moved focus back (view `blur` +121.2, `root:focus` +121.3). So
+`FOCUS_RECHECK_MS` is not an optimisation over an immediate bounce — it is the
+only bounce that works, and it stays.
+
+**What the three together say.** The window §2 asks the clock to cover cannot
+be covered *at the focus event*, because at that instant nothing has happened
+yet but the focus. It can be covered *one settle later*, by a fact main owns:
+did a press land in this view after this focus? That is the design in §4, and
+it deletes `USER_CLICK_FOCUS_GRACE_MS` rather than shortening it.
 
 ## 6. `webviews.ts` path audit
 
