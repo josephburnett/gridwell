@@ -311,21 +311,21 @@ file; GAP means nothing exercises the path.
 | 17 | focus announce before popup | `bridge-harness.ts` (order assertion); `e2e/context-menu-focus.spec.ts` |
 | 18 | `canFreeze` / `durable` gating | PARTIAL — `contextmenu.test.ts` covers the template; `url-circle-menu.spec.ts` the durable positive; the ephemeral negative at the registry is uncovered |
 | 19 | zoom chord relay + `zoomChordRelays` | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` `zoomChordKey` |
-| 20 | F11 fullscreen relay | **GAP** — and its canvas sibling in `window.ts` is untested too |
+| 20 | F11 fullscreen relay | `capture-harness.ts` F11 scenario, against a stand-in window (real fullscreen needs a window manager, and xvfb has none) — both toggle directions. Its canvas sibling in `window.ts` is still untested |
 | 21 | `setWindowOpenHandler` / `openBelowUrl` filter | `e2e/open-below.spec.ts` (both arms); `e2e/stacked-visit-orphan.spec.ts`; `viewutil.test.ts` |
 | 22 | `touchScroll` injection (sign + coords) | `capture-harness.ts` touch scenario, which pins the direction separately from "did nothing" |
-| 23 | nav events | PARTIAL — `capture-harness.ts` asserts a nav event with the right tileId and title; `did-navigate-in-page` specifically is uncovered |
+| 23 | nav events | `capture-harness.ts` — the document-load event with the right tileId and title, plus the in-page scenario: a hash change and a pushState each report the new address off a loopback origin |
 | 24 | `did-fail-load` filter → `onError` | `e2e/errsurface.spec.ts`; `viewutil.test.ts` filter + message |
-| 25 | `render-process-gone` → `onError` | **GAP** at the integration level — only `renderProcessGoneMessage` is unit-tested; the `getURL()` try/catch after a crash is untested |
+| 25 | `render-process-gone` → `onError` | `capture-harness.ts` crash scenario — a real `forcefullyCrashRenderer`, the notice surfaces, and it names the page, so the post-crash `getURL()` is exercised; `viewutil.test.ts` pins the message |
 | 26 | focus steal: bounce on `focus` when unfocused | `e2e/url-focus-steal.spec.ts`; `capture-harness.ts` place-focus scenario |
 | 27 | focus steal: a user press suppressing a bounce | `capture-harness.ts` click-into-unfocused scenario (the grab, then the press, then no steal — the measured order) |
 | 28 | focus steal: the `FOCUS_SETTLE_MS` arm | `capture-harness.ts` settle-arm scenario (bounce, one confirmation, no chain) and press-during-settle scenario |
 | 29 | focus steal: view died under the settle timer | `capture-harness.ts` died-under-settle scenario; verified against the unguarded code, where it wedges |
-| 30 | `applyMinWidthZoom` / `setZoom` composition | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` (three units). The `setZoomFactor` try/catch and the `did-finish-load` re-apply are not separately asserted |
+| 30 | `applyMinWidthZoom` / `setZoom` composition | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` (three units); `capture-harness.ts` zoom re-apply scenario for the `did-finish-load` arm. The `setZoomFactor` try/catch is a best-effort early call, re-applied on load by that same arm |
 | 31 | `goBack`, including the no-op at the start of history | `capture-harness.ts`; `contextmenu.test.ts` enablement flags |
 
-**Gap count: 4 GAP rows — 13, 14, 20, 25 — plus 3
-partials: 18, 23, 30.** Rows 6b and 7b are split out of items 6 and 7
+**Gap count: 2 GAP rows — 13, 14 — plus 1
+partial: 18.** Rows 6b and 7b are split out of items 6 and 7
 because each has a covered half and an uncovered half. Rows 27, 28 and 29, the
 focus family, were closed by phase 2; 13 at the time this table was written.
 

@@ -62,6 +62,19 @@ async function waitForNonEmptyCapture(
   return '';
 }
 
+// startPage serves one tiny html page on loopback. A data: url has an opaque
+// origin, so it has no localStorage and no same-document navigation; the
+// scenarios that need either need a real origin.
+async function startPage(): Promise<{ url: string; close: () => void }> {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<title>HarnessPage</title><body>page</body>');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+  const port = (server.address() as { port: number }).port;
+  return { url: `http://127.0.0.1:${port}/`, close: () => server.close() };
+}
+
 app.whenReady().then(async () => {
   const navEvents: NavEvent[] = [];
   const win = new BaseWindow({ width: 800, height: 600, show: true });
@@ -457,12 +470,7 @@ app.whenReady().then(async () => {
   // draft. The claim is about bytes on disk, so that is what this reads — the
   // partition's own leveldb, before and after the remove. A data: url has an
   // opaque origin and no storage at all, hence the loopback server.
-  const lsServer = http.createServer((_req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end('<title>storage</title><body>storage</body>');
-  });
-  await new Promise<void>((r) => lsServer.listen(0, '127.0.0.1', () => r()));
-  const lsPort = (lsServer.address() as { port: number }).port;
+  const lsPage = await startPage();
   const MARKER = 'GWFLUSHMARKER12345';
   const lsDir = path.join(
     profileDir,
@@ -481,16 +489,16 @@ app.whenReady().then(async () => {
     }
   };
   const regS = new WebviewRegistry(win, {});
-  await regS.place('paneS', 'u1/65', `http://127.0.0.1:${lsPort}/`, { x: 0, y: 0, width: 400, height: 300 });
+  await regS.place('paneS', 'u1/65', lsPage.url, { x: 0, y: 0, width: 400, height: 300 });
   const wcS = regS.webContentsFor('paneS')!;
-  if (!(await waitFor(() => wcS.getURL().startsWith('http://127.0.0.1:'), 6000))) fail('storage page never loaded');
+  if (!(await waitFor(() => wcS.getURL() === lsPage.url, 6000))) fail('storage page never loaded');
   await wcS.executeJavaScript(`localStorage.setItem('gwdraft', ${JSON.stringify(MARKER)})`);
   // Chromium batches DOM-storage commits by seconds; nothing between the write
   // and the remove is slow enough for one, so the write is still in memory.
   if (markerOnDisk()) fail('precondition broke: Chromium committed the write before remove() flushed');
   await regS.remove('paneS');
   if (!markerOnDisk()) fail('remove() did not commit localStorage: the draft died with the view');
-  lsServer.close();
+  lsPage.close();
   console.log('storage flush ok: the write was in memory, remove() put it on disk');
 
   // ── remove() cancels a pending settle timer ─────────────────────────────
@@ -525,6 +533,99 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, FOCUS_SETTLE_MS * 4));
   if (cancelSteals.length !== 1) fail(`a removed pane kept bouncing (${cancelSteals.length} steals)`);
   console.log('settle cancel ok: the pending timer was cleared and never fired again');
+
+  // ── F11 inside a live view toggles the host window ──────────────────────
+  // window.ts owns F11 on the canvas, but a focused live view holds OS keyboard
+  // focus, so that handler never sees the key; the registry mirrors it. The
+  // host window is a stand-in here on purpose: real fullscreen needs a window
+  // manager, and there is none under xvfb, so asserting isFullScreen() on a
+  // real BaseWindow would test the display server. What must be pinned is the
+  // relay — the key reaches the window's own toggle — and both directions of it.
+  let fullScreen = false;
+  const fsCalls: boolean[] = [];
+  const fakeWin = {
+    contentView: win.contentView,
+    getContentBounds: () => win.getContentBounds(),
+    isFullScreen: () => fullScreen,
+    setFullScreen: (v: boolean) => {
+      fullScreen = v;
+      fsCalls.push(v);
+    },
+  } as unknown as BaseWindow;
+  const regK = new WebviewRegistry(fakeWin, {});
+  await regK.place('paneK', 'u1/67', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  const wcK = regK.webContentsFor('paneK')!;
+  wcK.focus();
+  wcK.sendInputEvent({ type: 'keyDown', keyCode: 'F11' });
+  wcK.sendInputEvent({ type: 'keyUp', keyCode: 'F11' });
+  if (!(await waitFor(() => fsCalls.length >= 1, 4000))) fail('F11 in a live view never reached the window');
+  if (fsCalls[0] !== true) fail('the first F11 did not enter fullscreen');
+  wcK.sendInputEvent({ type: 'keyDown', keyCode: 'F11' });
+  wcK.sendInputEvent({ type: 'keyUp', keyCode: 'F11' });
+  if (!(await waitFor(() => fsCalls.length >= 2, 4000))) fail('the second F11 never reached the window');
+  if (fsCalls[1] !== false) fail('F11 does not toggle: the second press did not leave fullscreen');
+  await regK.remove('paneK');
+  console.log('F11 relay ok: the key toggles the host window, both directions');
+
+  // ── a same-document navigation is still a navigation ────────────────────
+  // did-navigate fires for a document load; a hash change or a pushState fires
+  // did-navigate-in-page only. Both change the tile's address, and the
+  // renderer's cached address is what the bar shows and what a freeze
+  // persists, so both must emit. A data: url cannot do either — its origin is
+  // opaque — hence the loopback page.
+  const inPageNavs: NavEvent[] = [];
+  const navPage = await startPage();
+  const regN = new WebviewRegistry(win, { onNav: (ev) => inPageNavs.push(ev) });
+  await regN.place('paneN', 'u1/69', navPage.url, { x: 0, y: 0, width: 400, height: 300 });
+  const wcN = regN.webContentsFor('paneN')!;
+  if (!(await waitFor(() => wcN.getURL() === navPage.url, 6000))) fail('the nav page never loaded');
+  inPageNavs.length = 0;
+  await wcN.executeJavaScript('location.hash = "#deep"');
+  if (!(await waitFor(() => inPageNavs.some((n) => n.url.endsWith('#deep')), 4000))) {
+    fail('a hash navigation emitted no nav event');
+  }
+  await wcN.executeJavaScript('history.pushState({}, "", "/pushed")');
+  if (!(await waitFor(() => inPageNavs.some((n) => n.url.endsWith('/pushed')), 4000))) {
+    fail('a pushState emitted no nav event');
+  }
+  if (inPageNavs.some((n) => n.tileId !== 'u1/69')) fail('an in-page nav event carried the wrong tile');
+  await regN.remove('paneN');
+  navPage.close();
+  console.log('in-page nav ok: a hash change and a pushState both report the new address');
+
+  // ── a crashed renderer says so ──────────────────────────────────────────
+  // Unreported, render-process-gone leaves the view blank with no signal at
+  // all. The message names the page, which means getURL() is read on a
+  // webContents whose renderer has just died — the read the code wraps in a
+  // try/catch so a throw there cannot swallow the notice.
+  const crashErrs: string[] = [];
+  const regP = new WebviewRegistry(win, { onError: (ev) => crashErrs.push(ev.message) });
+  await regP.place('paneP', 'u1/70', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  if ((await waitForNonEmptyCapture(regP, 'paneP', 6000)).length === 0) fail('crash scenario: no frame within 6s');
+  regP.webContentsFor('paneP')!.forcefullyCrashRenderer();
+  if (!(await waitFor(() => crashErrs.some((m) => m.startsWith('page crashed')), 6000))) {
+    fail(`a crashed renderer was not reported (errors: ${JSON.stringify(crashErrs)})`);
+  }
+  const crashMsg = crashErrs.find((m) => m.startsWith('page crashed'))!;
+  if (!crashMsg.includes('data:text/html')) fail(`the crash report does not name the page: ${crashMsg}`);
+  await regP.remove('paneP');
+  console.log('render-process-gone ok: the crash is reported and names the page');
+
+  // ── the min-width zoom survives a navigation ────────────────────────────
+  // zoomFactor is per-document: Chromium resets it across a navigation, so a
+  // narrow pane would reflow to a cramped mobile layout on the second page
+  // unless did-finish-load re-applies the composed factor.
+  const regZ = new WebviewRegistry(win, {});
+  await regZ.place('paneZ', 'u1/71', DATA_URL, { x: 0, y: 0, width: 320, height: 300 });
+  const wcZ = regZ.webContentsFor('paneZ')!;
+  if (!(await waitFor(() => wcZ.getZoomFactor() < 1, 6000))) fail('the min-width zoom never applied');
+  wcZ.setZoomFactor(1); // whatever the new document would start at
+  await wcZ.loadURL('data:text/html,' + encodeURIComponent('<title>Second</title>second'));
+  if (!(await waitFor(() => wcZ.getZoomFactor() < 1, 6000))) {
+    fail(`a navigation dropped the min-width zoom (factor ${wcZ.getZoomFactor()})`);
+  }
+  await regZ.remove('paneZ');
+  console.log('zoom re-apply ok: the composed factor is back after a navigation');
 
   console.log('HARNESS PASS');
   app.exit(0);
