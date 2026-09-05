@@ -336,6 +336,7 @@ copy:
 | is this write still owed | `outbox.Record` |
 | the bytes, their version, edited or not | one cache entry per tile id |
 | does this descent go live | `shellconn.DecideAutoLive` |
+| does a live surface still belong on screen | `pane.SurfaceOf` |
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
 | is this pane animating, and where a displaced one lands | `transition.Set` |
@@ -374,7 +375,7 @@ pane is inside" and do not spread the word.
 | An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
 | Text preview never re-wraps | `PreviewWindowFrame` takes only the tile's facts |
-| Focus steal is impossible | the registry's focus guard; `control-focus.spec.ts` |
+| Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place` and `setHidden`; `url-focus-steal.spec.ts`, the capture harness |
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
 | User state survives an unreachable source | the rows the user TOUCHED answer (an untouched entry has no row and is absent until the source speaks); fs/proc sweep rules |
