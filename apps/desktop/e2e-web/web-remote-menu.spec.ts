@@ -27,7 +27,7 @@ async function rpcJSON(node: Served, method: string, body: unknown): Promise<any
 }
 
 type Fixtures = {
-  world: { local: Served; far: Served; killFar: () => Promise<void> };
+  world: { local: Served; far: Served; killFar: () => Promise<void>; reviveFar: () => Promise<void> };
   window: Page;
   gw: GridwellDriver;
 };
@@ -39,7 +39,7 @@ const test = base.extend<Fixtures>({
     const farHome = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-far-'));
     fs.writeFileSync(path.join(farHome, 'server.yaml'), '');
     const farPort = await freePort();
-    const far = await spawnServe(farHome, farPort);
+    let far = await spawnServe(farHome, farPort);
 
     // The connection is server.yaml config: declared before the first boot and
     // reconciled into the transport at start.
@@ -55,10 +55,20 @@ const test = base.extend<Fixtures>({
 
     await use({
       local,
-      far,
+      // A getter, because reviveFar replaces the process: a spec that killed the
+      // machine and brought it back must reach the one that is running now.
+      get far() {
+        return far;
+      },
       // The partition switch the stale-affordance spec uses: the far node dies
       // mid-session, exactly like a machine going dark.
       killFar: () => stopServe(far.child),
+      // The same machine coming back: same home, same address, same node id, so
+      // the connection self-heals rather than landing somewhere new. This is
+      // partition_test.go's revival shape in the browser gate.
+      reviveFar: async () => {
+        far = await spawnServe(farHome, farPort);
+      },
     });
 
     for (const c of [local, far]) {
@@ -77,6 +87,66 @@ const test = base.extend<Fixtures>({
     await use(new GridwellDriver(window, world.local.origin));
   },
 });
+
+// enterFarRoom is the shared preamble of the two mount specs below: learn the
+// yaml-declared connection's root, put one tile in the far node's home, link
+// that home into the local grid, descend into it, and wait for the room to
+// arrive live. It returns the far room's qualified grid id and the cell the
+// link well sits on.
+//
+// The room arrives, then it is read. The node serves a remembered grid
+// immediately and revalidates behind it, and the client's own Subscribe kicked a
+// whole-source prefetch of this connection at boot — before the far node grew
+// the tile — so the first answers for this room are a legitimately empty memory
+// inside its freshness window, corrected when the revalidation's GridChanged
+// lands. A single read races that correction, hence the poll.
+async function enterFarRoom(
+  gw: GridwellDriver,
+  world: { local: Served; far: Served },
+): Promise<{ farHomeGrid: string; cx: number; cy: number; localGrid: string; liveTiles: number }> {
+  let farHomeGrid = '';
+  await expect
+    .poll(
+      async () => {
+        const lp = await rpcJSON(world.local, 'Handshake', {});
+        const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
+        farHomeGrid = row?.rootGridId ?? '';
+        return farHomeGrid;
+      },
+      { timeout: 20_000 },
+    )
+    .not.toBe('');
+  const farLp = await rpcJSON(world.far, 'Handshake', {});
+  await rpcJSON(world.far, 'CreateTile', {
+    gridId: farLp.plugins[0].rootGridId,
+    tile: { kind: 'text', x: 1, y: 1, w: 1, h: 1 },
+  });
+
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await rpcJSON(world.local, 'CreateTile', {
+    gridId: f.gridID,
+    tile: { kind: 'well', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
+  });
+  await expect.poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)).toBe(true);
+  await gw.descendCell(cx, cy);
+  const inside = (await gw.panes()).find((p) => p.focused)!;
+  expect(inside.gridID).toBe(farHomeGrid);
+  expect(inside.stale, 'a live remote room is not stale').toBeFalsy();
+  let liveTiles = 0;
+  await expect
+    .poll(
+      async () => {
+        liveTiles = ((await gw.getGrid(farHomeGrid)).tiles ?? []).length;
+        return liveTiles;
+      },
+      { message: 'the live room arrives, remembered-empty first or not', timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
+  return { farHomeGrid, cx, cy, localGrid: f.gridID, liveTiles };
+}
 
 test('the + menu inside a remote pane is the remote node, and its creations land there', async ({
   gw,
@@ -206,55 +276,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 // surfaces as the bar's quiet offline chip, read here through the panes() hook.
 // Nothing moves and nothing blanks.
 test('a dark mount serves the remembered room, marked stale', async ({ gw, window, world }) => {
-  // The yaml-declared connection: its learned root is the mount target.
-  let farHomeGrid = '';
-  await expect
-    .poll(
-      async () => {
-        const lp = await rpcJSON(world.local, 'Handshake', {});
-        const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
-        farHomeGrid = row?.rootGridId ?? '';
-        return farHomeGrid;
-      },
-      { timeout: 20_000 },
-    )
-    .not.toBe('');
-  const farLp = await rpcJSON(world.far, 'Handshake', {});
-  await rpcJSON(world.far, 'CreateTile', {
-    gridId: farLp.plugins[0].rootGridId,
-    tile: { kind: 'text', x: 1, y: 1, w: 1, h: 1 },
-  });
-
-  // Link the far home into the local grid and descend: live first.
-  await gw.enterPlugin('home');
-  const f = await gw.focused();
-  const cx = Math.round(f.cx);
-  const cy = Math.round(f.cy);
-  await rpcJSON(world.local, 'CreateTile', {
-    gridId: f.gridID,
-    tile: { kind: 'well', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
-  });
-  await expect.poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)).toBe(true);
-  await gw.descendCell(cx, cy);
-  let inside = (await gw.panes()).find((p) => p.focused)!;
-  expect(inside.gridID).toBe(farHomeGrid);
-  expect(inside.stale, 'a live remote room is not stale').toBeFalsy();
-  // The room arrives, then it is read. The node serves a remembered grid
-  // immediately and revalidates behind it, and the client's own Subscribe
-  // kicked a whole-source prefetch of this connection at boot — before the
-  // far node grew the tile above — so the first answers for this room are a
-  // legitimately empty memory inside its freshness window, corrected when the
-  // revalidation's GridChanged lands. A single read races that correction.
-  let liveTiles: any[] = [];
-  await expect
-    .poll(
-      async () => {
-        liveTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
-        return liveTiles.length;
-      },
-      { message: 'the live room arrives, remembered-empty first or not', timeout: 20_000 },
-    )
-    .toBeGreaterThan(0);
+  const { farHomeGrid, cx, cy, liveTiles } = await enterFarRoom(gw, world);
 
   // The machine goes dark. Leave and re-enter: the room re-reads through the
   // source cache and arrives as a marked memory, tiles intact. The room is
@@ -272,6 +294,74 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
     }, { message: 'the re-entered room says it is a memory (#256)', timeout: 20_000 })
     .toBe(true);
   const staleTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
-  expect(staleTiles.length, 'the memory renders every remembered tile').toBe(liveTiles.length);
+  expect(staleTiles.length, 'the memory renders every remembered tile').toBe(liveTiles);
   void window;
+});
+
+// The machine comes back, and everything its going dark caused undoes itself
+// with nobody touching anything. This is the client half of the freshness
+// traces — the two rows docs/freshness.md's gap list left open:
+//
+//   (a) the client's GridChanged arm: the event clears the per-grid failure
+//       latch and refetches, so the cached chip clears with no gesture.
+//   (b) the client's health arms: reportPluginHealth fires retryKick(true) in
+//       BOTH directions, and its sticky notice resolves on recovery.
+//
+// Both are asserted the same way, because both are only observable as absence
+// of a gesture: after the far node dies, and again after it revives, this spec
+// polls the client's own state and does nothing else. No ascent, no descent, no
+// click. Every refetch it sees was the client's own reaction to an event.
+test('a revived mount clears its chip and its notice with nobody touching anything', async ({
+  gw,
+  window,
+  world,
+}) => {
+  test.setTimeout(240_000);
+  const { farHomeGrid } = await enterFarRoom(gw, world);
+  const notices = async (): Promise<{ source: string; message: string }[]> =>
+    (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? [];
+  const health = async () => (await notices()).filter((n) => String(n.source).startsWith('plugin:'));
+  const focusedStale = async () => {
+    const p = (await gw.panes()).find((q) => q.focused);
+    return p?.gridID === farHomeGrid ? p.stale === true : null;
+  };
+  expect(await health(), 'a live mount posts no health notice').toEqual([]);
+
+  // ── Down ──────────────────────────────────────────────────────────────
+  // The connection's stream ends, the node publishes one health event, and the
+  // client posts the sticky notice keyed by the connection's uuid.
+  await world.killFar();
+  await expect
+    .poll(async () => (await health()).map((n) => n.message).join('|'), {
+      message: 'the down transition reaches the strip',
+      timeout: 60_000,
+    })
+    .toContain('live updates stopped');
+  // And the down direction resyncs: a source going down changes what its grids
+  // ARE, so retryKick(true) refetches this room with no gesture, and the answer
+  // it gets back is the node's memory of it, stamped.
+  await expect
+    .poll(focusedStale, {
+      message: 'the chip appears with no gesture: the down kick refetched',
+      timeout: 60_000,
+    })
+    .toBe(true);
+
+  // ── Up ────────────────────────────────────────────────────────────────
+  // Same home, same address, same node id: the connection self-heals. The
+  // healthy event resolves the notice and kicks the same resync, and the
+  // revalidation's GridChanged clears the latch behind it.
+  await world.reviveFar();
+  await expect
+    .poll(async () => (await health()).length, {
+      message: 'the recovery resolves the notice',
+      timeout: 120_000,
+    })
+    .toBe(0);
+  await expect
+    .poll(focusedStale, {
+      message: 'the chip clears with no gesture (freshness.md trace (a))',
+      timeout: 120_000,
+    })
+    .toBe(false);
 });

@@ -316,7 +316,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A stale answer is never remembered | `sourcecache_test.go:TestAStaleAnswerIsNeverRemembered` |
 | The event crosses layer stream → fan-in → qualification → client, and the next read serves the correction | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient` |
 | Refresh after a blind window replaces the whole tile set | `sourcecache_test.go:TestRefreshReconcilesWhatChangedWhileBlind` |
-| **GAP** — the client's own arm: `GridChanged` clears `gridLoadFailed` and calls `fetchGrid`, and the chip clears with no gesture | Proposed: extend `apps/desktop/e2e-web/web-remote-menu.spec.ts` to revive the far node (`partition_test.go` shows the shape) and poll the focused pane's `stale` back to false. |
+| The client's own arm: `GridChanged` clears `gridLoadFailed` and calls `fetchGrid`, and the chip clears with no gesture | `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a revived mount clears its chip and its notice with nobody touching anything") — the far node dies and comes back on the same home and address, and the spec polls the focused pane's `stale` back to false having touched nothing |
 
 ### Trace (b)
 
@@ -333,7 +333,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The stale bit reaches the bar as the cached chip | `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
-| **GAP** — the client's health arms: `reportPluginHealth` fires `retryKick(true)` in BOTH directions, and the notice resolves on recovery | Proposed: same revived-far-node spec as trace (a)'s gap, additionally asserting the `plugin:` notice appears and then leaves the strip. |
+| The client's health arms: `reportPluginHealth` fires `retryKick(true)` in BOTH directions, and the notice resolves on recovery | The same revived-mount spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and each direction's kick is what refetches the room — the chip appears, and later clears, with no gesture either time |
 | A single connection's recovery does NOT re-warm the whole source | `sourcecache/prefetch_seam_test.go:TestOneConnectionsRecoveryDoesNotReWalkTheSource` (the comments now say so too; the behaviour is question 5 below) |
 
 ### Trace (c)
