@@ -304,12 +304,12 @@ file; GAP means nothing exercises the path.
 | 10 | `remove` detach-failure arm (`failed to detach live view`) | `capture-harness.ts` detach-failure scenario — the window is destroyed under the registry, so `removeChildView` throws; `remove()` still resolves and reports |
 | 11 | `remove` `flushStorageData` / localStorage survival | `capture-harness.ts` storage-flush scenario — a real origin off a loopback server writes the marker, the partition's leveldb does not hold it, `remove()` puts it there |
 | 12 | `remove` cancelling the pending `focusSettle` | `capture-harness.ts` settle-cancel scenario — every `FOCUS_SETTLE_MS` timeout the registry arms is recorded, and the one pending at the remove must be the one cleared |
-| 13 | `capture` failing streak → `onError` | **GAP** |
-| 14 | `capture` recovered → `onError` | **GAP** |
+| 13 | `capture` failing streak → `onError` | `capture-harness.ts` capture-streak scenario — a destroyed view, two captures, exactly one report |
+| 14 | `capture` recovered → `onError` | **UNCOVERABLE** — the arm is unreachable, not merely untested; see below |
 | 15 | context menu, in-page right-click door | `e2e/url-context-menu.spec.ts` (both tests) |
 | 16 | context menu, `showMenu` bar-circle door | `e2e/url-circle-menu.spec.ts`; `bridge-harness.ts` |
 | 17 | focus announce before popup | `bridge-harness.ts` (order assertion); `e2e/context-menu-focus.spec.ts` |
-| 18 | `canFreeze` / `durable` gating | PARTIAL — `contextmenu.test.ts` covers the template; `url-circle-menu.spec.ts` the durable positive; the ephemeral negative at the registry is uncovered |
+| 18 | `canFreeze` / `durable` gating | `contextmenu.test.ts` covers the template; `url-circle-menu.spec.ts` the durable positive; `capture-harness.ts` canFreeze scenario reads `durable` off the entry through both doors — offered on the durable tile, withheld from the ephemeral visit |
 | 19 | zoom chord relay + `zoomChordRelays` | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` `zoomChordKey` |
 | 20 | F11 fullscreen relay | `capture-harness.ts` F11 scenario, against a stand-in window (real fullscreen needs a window manager, and xvfb has none) — both toggle directions. Its canvas sibling in `window.ts` is still untested |
 | 21 | `setWindowOpenHandler` / `openBelowUrl` filter | `e2e/open-below.spec.ts` (both arms); `e2e/stacked-visit-orphan.spec.ts`; `viewutil.test.ts` |
@@ -324,15 +324,27 @@ file; GAP means nothing exercises the path.
 | 30 | `applyMinWidthZoom` / `setZoom` composition | `e2e/content-zoom.spec.ts`; `viewutil.test.ts` (three units); `capture-harness.ts` zoom re-apply scenario for the `did-finish-load` arm. The `setZoomFactor` try/catch is a best-effort early call, re-applied on load by that same arm |
 | 31 | `goBack`, including the no-op at the start of history | `capture-harness.ts`; `contextmenu.test.ts` enablement flags |
 
-**Gap count: 2 GAP rows — 13, 14 — plus 1
-partial: 18.** Rows 6b and 7b are split out of items 6 and 7
-because each has a covered half and an uncovered half. Rows 27, 28 and 29, the
-focus family, were closed by phase 2; 13 at the time this table was written.
+**Gap count: 0 GAP rows.** One row, 14, is marked UNCOVERABLE with its reason
+below. Rows 6b and 7b are split out of items 6 and 7 because each has a covered
+half and an uncovered half. Rows 27, 28 and 29, the focus family, were closed by
+phase 2; 13 at the time this table was written, all of them error or edge arms —
+the class this file's own comments argue hardest for ("must be loud", "must not
+fail silently", "hangs main behind an error dialog"). That was the shape of the
+deficiency: the happy paths were well covered and the failure arms were not.
 
-Every gap except 20 is an error or edge arm — the class this file's own
-comments argue hardest for ("must be loud", "must not fail silently", "hangs
-main behind an error dialog"). That is the shape of the deficiency: the happy
-paths are well covered and the failure arms are not.
+**Row 14 is unreachable, not untested.** `capture()` enters the failing streak
+only when `captureJpegBase64` *throws*, and that function swallows every
+rejection: `withTimeout` resolves `null` for a rejected or slow `capturePage`,
+which `capture()` returns as `''` with no report at all. The one synchronous
+throw left is reading `.webContents` off a destroyed view — and a destroyed view
+never captures again. So `captureFailing` can be set and never cleared, and no
+test can reach the recovery report without changing what `capture()` treats as a
+failure. Measured while writing row 13: a `forcefullyCrashRenderer`'d view
+captures empty with no streak report, and captures fine again once reloaded.
+A question for the owner rather than a change taken here: should the silent
+cases — a timeout, an empty image, a rejected capture — be what counts as a
+failing streak? Those are the actual "frozen mirror with no evidence", and they
+are exactly what the streak does not see.
 
 ## 7. Phases
 

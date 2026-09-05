@@ -6,7 +6,7 @@
 //   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
 //
 // Prints "HARNESS PASS" or "HARNESS FAIL: ..." and exits 0 or 1.
-import { app, BaseWindow, BrowserWindow, WebContentsView } from 'electron';
+import { app, BaseWindow, BrowserWindow, Menu, WebContentsView } from 'electron';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as os from 'node:os';
@@ -626,6 +626,54 @@ app.whenReady().then(async () => {
   }
   await regZ.remove('paneZ');
   console.log('zoom re-apply ok: the composed factor is back after a navigation');
+
+  // ── a mirror capture that fails leaves evidence, once per streak ────────
+  // A frozen mirror is otherwise evidence-free: the pane shows a stale frame
+  // and nothing anywhere says why. The report must fire on the transition into
+  // failure and NOT once per captured frame — the pump captures every live pane
+  // on a timer, so a per-frame report would bury the log.
+  const capErrs: string[] = [];
+  const regM = new WebviewRegistry(win, { onError: (ev) => capErrs.push(ev.message) });
+  await regM.place('paneM', 'u1/72', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  if ((await waitForNonEmptyCapture(regM, 'paneM', 6000)).length === 0) fail('mirror scenario: no frame within 6s');
+  regM.webContentsFor('paneM')!.close(); // destroyed behind the registry's back
+  await new Promise((r) => setTimeout(r, 300));
+  if ((await regM.capture('paneM')) !== '') fail('a capture of a destroyed view returned a frame');
+  if ((await regM.capture('paneM')) !== '') fail('the second capture of a destroyed view returned a frame');
+  const failing = capErrs.filter((m) => m.includes('mirror capture failing'));
+  if (failing.length !== 1) fail(`a failing capture streak reported ${failing.length} times, want 1`);
+  await regM.remove('paneM');
+  console.log('capture streak ok: the failure is reported once, not per frame');
+
+  // ── Freeze Page appears only where there is something to freeze ─────────
+  // canFreeze is the registry's half of the gating: contextmenu.test.ts owns
+  // the template's arms, and url-circle-menu.spec.ts the durable positive. What
+  // was uncovered is the registry reading `durable` off the entry — an
+  // ephemeral visit has no tile to re-descend into, so offering the item would
+  // promise a freeze that lands nowhere. The menu is built for real and popped
+  // through a stand-in, because a native popup under xvfb cannot be read back.
+  const menuCtor = Menu as unknown as {
+    buildFromTemplate: (t: { label?: string }[]) => { popup: (o?: unknown) => void };
+  };
+  const realBuildMenu = menuCtor.buildFromTemplate;
+  let popped: { label?: string }[] = [];
+  menuCtor.buildFromTemplate = (t) => {
+    popped = t;
+    return { popup: () => {} };
+  };
+  const regMenu = new WebviewRegistry(win, {});
+  await regMenu.place('paneEph', 'u1/73', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false);
+  await regMenu.place('paneDur', 'u1/74', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', true);
+  regMenu.showMenu('paneEph');
+  const ephItems = popped.map((i) => i.label).filter(Boolean);
+  regMenu.showMenu('paneDur');
+  const durItems = popped.map((i) => i.label).filter(Boolean);
+  menuCtor.buildFromTemplate = realBuildMenu;
+  if (ephItems.includes('Freeze Page')) fail(`an ephemeral visit offered Freeze Page: ${ephItems.join(',')}`);
+  if (!durItems.includes('Freeze Page')) fail(`a durable tile did not offer Freeze Page: ${durItems.join(',')}`);
+  await regMenu.remove('paneEph');
+  await regMenu.remove('paneDur');
+  console.log('canFreeze ok: offered on the durable tile, withheld from the ephemeral visit');
 
   console.log('HARNESS PASS');
   app.exit(0);
