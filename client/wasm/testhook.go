@@ -389,10 +389,16 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 		tiles = append(tiles, id)
 	}
 	return map[string]any{
-		"transition":   a.trans.Any(),
-		"tileMutates":  a.tileMutates,
-		"wsPending":    a.wsPending != nil,
+		"transition":  a.trans.Any(),
+		"tileMutates": a.tileMutates,
+		"wsPending":   a.wsPending != nil,
+		// All three armed gesture states, not just the one idle() gates on:
+		// a press that arms the wrong gesture and a press that arms nothing
+		// read identically from "dragging" alone, and a spec that sees no
+		// ghost needs to know which state took the press.
 		"dragging":     a.dragging != nil,
+		"leftResize":   a.leftResize != nil,
+		"rightDrag":    a.rightDrag != nil,
 		"gridInflight": grids,
 		"tileInflight": tiles,
 	}

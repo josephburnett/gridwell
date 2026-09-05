@@ -34,42 +34,52 @@ test('a left drag whose release is never seen still commits and unhides its tile
   const from = await gw.cellCenter(home.id, cx, cy);
   const to = await gw.cellCenter(home.id, cx + 1, cy);
 
-  // Press and drag past the threshold: the ghost materializes and hides the
-  // source tile it stands in for. Both events go in one synchronous turn,
-  // like the recovery move below: Playwright drives a virtual mouse, so the
-  // real cursor stays parked at the screen center, and any layer change
-  // Chromium notices under it arrives as a mousemove with no button held —
-  // which IS a lost release, and would end this drag before it is asserted on.
-  await window.evaluate(
-    ([fx, fy]: number[]) => {
+  // The whole gesture in ONE synchronous turn, and its mid-gesture state read
+  // inside that turn rather than polled for after it:
+  //
+  //   press → past the threshold (the ghost materializes and hides the source
+  //   tile it stands in for) → the release we never see, a move over the
+  //   target reporting no button held and no mouseup at all, which is what
+  //   the window hears when the button came up somewhere else.
+  //
+  // One turn because this press does not exist in Chromium's own input state:
+  // Playwright drives a virtual mouse, so the real cursor stays parked at the
+  // screen center with no button down, and any move Chromium emits on its own
+  // — a layer change under that cursor — carries buttons 0, which IS a lost
+  // release and would end this drag early. Between two evaluates there is a
+  // window for one; inside a turn there is none, and a user's real press,
+  // which the platform knows about, has no such ambiguity to begin with.
+  //
+  // (flake, 2026-09-04: three runs saw hiddenTileID stay "" from the first
+  // poll onward — a ghost that never existed, not one that armed and died.
+  // Unreproduced since on a freshly built tree; docs/flake-ledger.md carries
+  // the evidence. Hence armed: the whole state comes back, so a repeat names
+  // what took the press instead of reporting an empty string.)
+  const armed = await window.evaluate(
+    ([fx, fy, tx, ty]: number[]) => {
+      const t = (window as any).__gridwellTest;
       const canvas = document.querySelector('canvas')!;
-      const fire = (type: string, x: number, y: number) =>
+      const fire = (type: string, x: number, y: number, buttons: number) =>
         canvas.dispatchEvent(
-          new MouseEvent(type, { clientX: x, clientY: y, buttons: 1, button: 0, bubbles: true }),
+          new MouseEvent(type, { clientX: x, clientY: y, buttons, button: 0, bubbles: true }),
         );
-      fire('mousedown', fx, fy);
-      fire('mousemove', fx + 8, fy + 8);
+      fire('mousedown', fx, fy, 1);
+      fire('mousemove', fx + 8, fy + 8, 1);
+      const state = {
+        ghost: t.ghost(),
+        idle: t.idleDetail(),
+        paletteOpen: t.palette().open,
+        panes: t.panes().map((p: any) => ({ id: p.id, gridID: p.gridID, x: p.x, y: p.y, w: p.w, h: p.h })),
+      };
+      fire('mousemove', tx, ty, 0);
+      return state;
     },
-    [from.x, from.y],
+    [from.x, from.y, to.x, to.y],
   );
-  await expect
-    .poll(() => window.evaluate(() => (window as any).__gridwellTest.ghost().hiddenTileID), {
-      message: 'the armed drag hides the source tile',
-      timeout: 5_000,
-    })
-    .toBe(tileID);
-
-  // The release we never see: a move over the target that reports no button
-  // held, and no mouseup at all. This is what the window hears when the button
-  // came up somewhere else.
-  await window.evaluate(
-    ([tx, ty]: number[]) => {
-      document.querySelector('canvas')!.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: tx, clientY: ty, buttons: 0, bubbles: true }),
-      );
-    },
-    [to.x, to.y],
-  );
+  expect(
+    armed.ghost.hiddenTileID,
+    `the armed drag hides the source tile — armed state: ${JSON.stringify(armed)}`,
+  ).toBe(tileID);
 
   // Nothing stays armed …
   await expect
