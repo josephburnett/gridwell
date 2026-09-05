@@ -187,17 +187,18 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
     await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(want * 0.97);
   }
 
-  // ...and the zoom is persisted as framing on the scratch tile, which proves
-  // the forward ran through the wasm owner rather than a main-side
-  // setZoomFactor.
-  await expect
-    .poll(
-      async () => {
-        const snap: any = await gw.getGrid(scratch);
-        const t = (snap.tiles ?? []).find((t: any) => t.kind === 'url');
-        return Number(t?.contentZoom ?? 0);
-      },
-      { timeout: 10_000 },
-    )
-    .toBeCloseTo(1.331, 2);
+  // That the forward ran through the wasm owner, and not a main-side
+  // setZoomFactor, is what zoomKeyRelays above already witnesses: main
+  // intercepted, the owner received, the owner applied. The owner's OTHER
+  // half is that it wrote nothing — this visit is ephemeral, off-grid in the
+  // scratch grid and deleted on ascent, and a durable framing write about it
+  // would mark a row the user never asked to keep (possiblyEphemeral). The
+  // browser suite pins the same contract on an ephemeral shell.
+  const snap: any = await gw.getGrid(scratch);
+  const t = (snap.tiles ?? []).find((t: any) => t.kind === 'url');
+  expect(Number(t?.contentZoom ?? 0), 'the ephemeral row is unmarked').toBe(0);
+  const posts = await window.evaluate(
+    () => Number((window as any).__gridwellTest.persistPosts().SetContentZoom ?? 0),
+  );
+  expect(posts, 'no SetContentZoom about a row ascent deletes').toBe(0);
 });

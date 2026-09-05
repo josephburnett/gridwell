@@ -116,7 +116,8 @@ func (a *App) contentZoomKeyFromView(paneID, key string) {
 }
 
 // applyContentZoom updates the cache (the one client copy every reader uses),
-// pokes the live surface for the kinds that hold native state, and persists.
+// pokes the live surface for the kinds that hold native state, and persists —
+// the last only for a descent that outlives the pane leaving it.
 func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	if t.ServesPage {
 		// A serves_page descent has no persisted content_zoom, because the
@@ -139,6 +140,14 @@ func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	}
 	a.refreshFileOverlay() // textarea font tracks the scale in text mode
 	a.draw()
+	// The zoom above is live for the session either way; only the write is
+	// conditional. An ephemeral visit's row is deleted on ascent, so
+	// persisting its zoom marks a row the user never asked to keep — the
+	// contract on possiblyEphemeral, which every durable write about a
+	// descent reads (persistTextScroll is the same shape).
+	if a.possiblyEphemeral(p, t) {
+		return
+	}
 	// Through the framing dispatcher like every other framing write: a
 	// fire-and-forget call here would reconcile no verdict, and a transport
 	// failure would leave the zoom client-only until the next descent
