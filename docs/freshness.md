@@ -1,8 +1,9 @@
 # Freshness
 
-How an answer gets old, who notices, and what the user sees. Six layers own
-a rule each; no layer knows the next one's. This traces a fact through all
-of them, so "why is this stale" is a lookup rather than an excavation.
+How an answer gets old, who notices, and what the user sees. Seven layers
+own a rule each; no layer knows the next one's. This traces a fact through
+all of them, so "why is this stale" can be looked up instead of dug out of
+the code.
 
 The one rule underneath: a memory may be served, but it is always labelled,
 and nothing the user made is dropped without a server verdict.
@@ -33,7 +34,7 @@ itself gone — fails the read outright at `cp.Info`, because the declared
 face is the plugin's own fact and nothing can supply it.
 
 **3. The transport** — `internal/connection/connection.go`. Reachability is
-a state, not a moment. `fanInRemote` loops `namespace.Follow` on each
+remembered, not only announced when it changes. `fanInRemote` loops `namespace.Follow` on each
 connection's stream; when it ends, `noteHealth` records `s.dark[name]` (one
 writer) and publishes one `EventPluginHealth` — the transition, not one per
 retry. `Server.Subscribe` opens with `darkNow()`, so a subscriber attaching
