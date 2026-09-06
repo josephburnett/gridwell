@@ -220,6 +220,9 @@ url, a typed name. It is the optimistic-concurrency claim for those three
 writes and nothing else. `claimContentVersion` + `finishContentEdit` claim
 and bump; `loadForWrite` + `emitTileChanged` do neither. Captures (title,
 preview, url trail, shell title), framing, and layout ride the second pair.
+Those three words name three origins of one enforced class — a user gesture,
+a machine observation, an arrangement — and the store has exactly two pairs,
+so a reader looking for a third will not find one.
 The request fields that used to carry a claim are `reserved`, so a stale
 claim cannot be expressed. `version_rule_test.go` is the table.
 
