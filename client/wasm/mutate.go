@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/outbox"
+	"github.com/josephburnett/gridwell/client/textedit"
 )
 
 // This file is the mutation dispatch layer. It is two paths:
@@ -359,26 +360,29 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 }
 
 // enqueueTextSave posts a content write through the per-tile serial queue.
-// The version is claimed at send time — after any earlier write for the same
-// tile has completed and advanced the save basis — so pipelined saves chain
+// The claim is read at send time — after any earlier write for the same tile
+// has completed and advanced the save basis — so pipelined saves chain
 // versions instead of both claiming the same one and losing the second edit
 // to a conflict reconcile.
 //
-// The claim is the cache's SaveBasis, the version of the bytes this edit is
-// based on, never the grid row version. The row advances when a foreign
-// writer's event or a grid refetch lands, without this client ever seeing the
-// new content, so claiming it would carry the current version with stale
-// bytes past the server's concurrency check and destroy the foreign edit.
-// Claiming the basis makes that save conflict instead, which reconciles
-// visibly. fallbackVersion, the enqueue-time row version, is used only if the
-// content entry is gone, so the server still sees the write and surfaces the
-// real story.
-func (a *App) enqueueTextSave(gid string, tileID string, fallbackVersion int64, data []byte) {
-	a.persist.textSaves.Enqueue(tileID, func() {
-		version := fallbackVersion
-		if base, ok := a.c.SaveBasis(tileID); ok {
-			version = base
-		}
-		a.postWriteContent(gid, tileID, version, data)
+// rowOwnsContent and rowVersion are the caller's snapshot of the row it
+// gathered the bytes from, the fallback for a content entry that is gone by
+// send time. What the write claims is textedit.SaveClaim's rule, and only
+// its: see saveClaimedContent.
+func (a *App) enqueueTextSave(gid, cid string, rowOwnsContent bool, rowVersion int64, data []byte) {
+	a.persist.textSaves.Enqueue(cid, func() {
+		a.saveClaimedContent(gid, cid, rowOwnsContent, rowVersion, data)
 	})
+}
+
+// saveClaimedContent claims a version and posts one text content write. It
+// runs at the head of the save queue and is the only place in the client that
+// answers "what version does this save claim" — textedit.SaveClaim owns the
+// rule, this reads the two facts it needs and dispatches. Every text write
+// goes through here (the debounced sweep and outbox drain via
+// enqueueTextSave, the ascent flush directly), so no path can spell the claim
+// differently.
+func (a *App) saveClaimedContent(gid, cid string, rowOwnsContent bool, rowVersion int64, data []byte) (rpc.Tile, bool) {
+	basis, haveBasis := a.c.SaveBasis(cid)
+	return a.postWriteContent(gid, cid, textedit.SaveClaim(rowOwnsContent, rowVersion, basis, haveBasis), data)
 }

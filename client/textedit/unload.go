@@ -22,17 +22,17 @@ const (
 // ever becomes dirty. The server issues the verdict either way. Skipping that
 // case would lose the edit outright: unload is the one flush with no next
 // sweep behind it.
-func DecideUnloadFlush(rowKnown, rowEditableText bool, rowVersion int64, basis int64, haveBasis bool) (claim int64, do UnloadFlush) {
+//
+// What it beacons with is SaveClaim's, like every other text write: this
+// decides whether to write, not what to claim.
+func DecideUnloadFlush(rowKnown, rowEditableText, rowOwnsContent bool, rowVersion, basis int64, haveBasis bool) (claim int64, do UnloadFlush) {
 	if rowKnown && !rowEditableText {
 		return 0, UnloadSkip
 	}
-	if haveBasis {
-		return basis, UnloadBeacon
+	if !haveBasis && !rowKnown {
+		return 0, UnloadAsync
 	}
-	if rowKnown {
-		return rowVersion, UnloadBeacon
-	}
-	return 0, UnloadAsync
+	return SaveClaim(rowKnown && rowOwnsContent, rowVersion, basis, haveBasis), UnloadBeacon
 }
 
 // Framing is a text tile's persisted window: scroll, size, and mode — the

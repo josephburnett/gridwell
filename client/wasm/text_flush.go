@@ -111,19 +111,7 @@ func (a *App) postTileContent(cid string, t *rpc.Tile, data []byte) {
 	if !t.TextDocument() || a.tileReadOnly(t) {
 		return
 	}
-	a.enqueueTextSave(t.GridID, cid, a.saveFallbackVersion(cid, t), data)
-}
-
-// saveFallbackVersion is the claim a save falls back on when the cache has no
-// content entry to draw a SaveBasis from. It is only meaningful when t is the
-// owner row: a link row's version tracks its own placement, never the
-// target's bytes, so 0 forces the save to claim the basis — always present
-// once content was fetched to edit — or to conflict visibly.
-func (a *App) saveFallbackVersion(cid string, t *rpc.Tile) int64 {
-	if t.ID != cid {
-		return 0
-	}
-	return t.Version
+	a.enqueueTextSave(t.GridID, cid, t.ID == cid, t.Version, data)
 }
 
 // beaconTileContent is flushTileContent's beforeunload arm: the bytes leave
@@ -140,12 +128,13 @@ func (a *App) saveFallbackVersion(cid string, t *rpc.Tile) int64 {
 func (a *App) beaconTileContent(cid string, t *rpc.Tile, data []byte) bool {
 	basis, haveBasis := a.c.SaveBasis(cid)
 	var rowVersion int64
-	editable := false
+	editable, owner := false, false
 	if t != nil {
 		rowVersion = t.Version
 		editable = t.TextDocument() && !a.tileReadOnly(t)
+		owner = t.ID == cid
 	}
-	version, do := textedit.DecideUnloadFlush(t != nil, editable, rowVersion, basis, haveBasis)
+	version, do := textedit.DecideUnloadFlush(t != nil, editable, owner, rowVersion, basis, haveBasis)
 	switch do {
 	case textedit.UnloadSkip:
 		return true // nothing may write; not a fallback case
@@ -225,42 +214,19 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	mode := p.TextMode
 	// Through the per-tile save queue: a debounced keystroke save may still
 	// be in flight, and this flush claims a version too, so the queue
-	// serializes them and the version is read at send time.
+	// serializes them and the claim is read at send time.
 	a.persist.textSaves.Enqueue(file.ID, func() {
-		curVersion := file.Version
-		if g, ok := a.c.Grid(gid); ok {
-			if f, ok := g.Tiles[file.ID]; ok {
-				curVersion = f.Version
-			}
-		}
-		// Update the content first if the user was editing. The content
-		// write claims the save basis — the version of the bytes the entry
-		// derives from — never the row version read above: a foreign
-		// writer's event advances the row without this client seeing the new
-		// bytes, and claiming it would save the stale entry right over the
-		// foreign edit. A stale basis conflicts at the server and reconciles
-		// visibly instead.
+		// Update the content first if the user was editing, through the one
+		// claim-and-post door every text write uses. The write addresses the
+		// content owner, so a link's doc saves under its target's id, as
+		// flushTileContent does, and the fallback row is this snapshot — the
+		// row as the flush read it, above, with the bytes. Re-reading the
+		// row here would claim a version a foreign writer may have advanced
+		// since, vouching for bytes this client never saw.
 		if hasBuf {
-			// The write addresses the content owner, so a link's doc saves
-			// under its target's id, as flushTileContent does. The row
-			// version is a valid fallback only when this row is the owner.
 			cid := file.ContentID()
-			saveVersion := curVersion
-			if file.ID != cid {
-				saveVersion = 0
-			}
-			if base, ok := a.c.SaveBasis(cid); ok {
-				saveVersion = base
-			}
-			tile, ok := a.postWriteContent(gid, cid, saveVersion, buf)
-			if !ok {
+			if _, ok := a.saveClaimedContent(gid, cid, file.ID == cid, file.Version, buf); !ok {
 				return
-			}
-			if file.ID == cid {
-				// The SetTextView below claims this row's version, so only
-				// advance it when the content write bumped this same row: a
-				// link's target version is a different row's fact.
-				curVersion = tile.Version
 			}
 		}
 		// Persist the framed window and mode so re-descent and the preview
