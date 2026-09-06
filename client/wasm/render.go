@@ -429,7 +429,9 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 			items = append(items, paletteItem{isPlugin: true, plugin: rpc.EntryPlugin(pl, *e), entry: e})
 		}
 	}
-	if a.gridWritable(a.gridIDForPane(p)) {
+	// Unknown is not writable: the creation swatches appear once the grid
+	// says it takes tiles, never on a guess that a click would then refuse.
+	if writable, _ := a.gridWritable(a.gridIDForPane(p)); writable {
 		for _, k := range primitiveKinds {
 			// The shell swatch obeys the context node's policy, and only
 			// that. The PTY rides the web door, so every host can attach,
@@ -1038,9 +1040,12 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 // read-only view of host state, because the plugin has no write-back, so the
 // rendered/raw toggle, the textarea overlay, and the ascent's content write
 // all consult this and the user cannot type into one and silently re-post a
-// stale buffer.
+// stale buffer. Unknown is read-only too: no caret over content whose grid
+// has not said it takes writes, since the alternative is typing the server
+// then refuses.
 func (a *App) tileReadOnly(n *rpc.Tile) bool {
-	return n.Kind == rpc.KindText && !a.gridWritable(n.GridID)
+	writable, _ := a.gridWritable(n.GridID)
+	return n.Kind == rpc.KindText && !writable
 }
 
 // tileOutside reports whether a tile should be rendered with the "outside

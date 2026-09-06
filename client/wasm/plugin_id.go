@@ -39,30 +39,28 @@ func (a *App) deadLink(n *rpc.Tile) bool {
 	return deadref.DeadTile(n, a.plugins, a.nodeID())
 }
 
-// gridWritable reports whether the grid accepts new or edited tiles. The fact
-// is per grid and travels on the grid (Grid.Writable, stamped by the serving
-// node from the owning plugin's Info): a uuid lookup against the local plugin
-// list cannot answer for a remote plugin reached through an ssh mount, whose
-// local first segment is the transit plugin. An uncached grid is treated as
-// not writable, since nothing renders from it yet.
-func (a *App) gridWritable(gridID string) bool {
+// gridWritable reports whether the grid accepts new or edited tiles, and
+// whether that is known. The fact is per grid and travels on the grid
+// (Grid.Writable, stamped by the serving node from the owning plugin's Info):
+// a uuid lookup against the local plugin list cannot answer for a remote
+// plugin reached through an ssh mount, whose local first segment is the
+// transit plugin.
+//
+// An uncached grid answers (false, false) — not known yet, never a guess —
+// and each caller picks its own safe default at the call site, where the
+// reason is visible (the scratch.For convention). The two defaults are both
+// live: a write gate treats unknown as not writable, while a drop gesture
+// must not be refused on ignorance, since the server is the authority until
+// the fetch lands.
+func (a *App) gridWritable(gridID string) (writable, known bool) {
 	if gridID == "" {
-		return false
+		return false, false
 	}
 	g, ok := a.c.Grid(gridID)
 	if !ok {
-		return false
+		return false, false
 	}
-	return g.Meta.Writable
-}
-
-// gridKnownReadOnly reports that the grid is cached and declares itself
-// read-only. It differs from !gridWritable: an uncached grid is unknown, and
-// a drop gesture must not be rejected on ignorance — the server is the
-// authority when the fetch has not landed yet.
-func (a *App) gridKnownReadOnly(gridID string) bool {
-	g, ok := a.c.Grid(gridID)
-	return ok && !g.Meta.Writable
+	return g.Meta.Writable, true
 }
 
 // pluginByRoot returns the menu row rooted at gridID — the row whose root

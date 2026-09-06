@@ -73,7 +73,10 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	if !in.HasTarget {
 		return in, t, 0, 0
 	}
-	in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
+	// Unknown is not read-only: a drop must not be refused because the
+	// target grid's fetch has not landed. The server is the authority.
+	targetWritable, targetKnown := a.gridWritable(t.gridID)
+	in.TargetReadOnly = targetKnown && !targetWritable
 	in.SameGrid = t.gridID == d.srcGridID
 	in.CrossPlugin = dropCrossNamespace(d, t)
 	if !d.intent.Creates() {

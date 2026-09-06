@@ -1415,7 +1415,11 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 	// back.
 	if d.item.isPlugin {
 		droppable := pluginhealth.Classify(d.item.plugin) == pluginhealth.Enterable
-		if !droppable || !a.gridWritable(t.gridID) {
+		// Unknown is not writable here: this drop mints a link right away,
+		// and minting into a grid that may refuse it would show a tile the
+		// next read takes back.
+		writable, _ := a.gridWritable(t.gridID)
+		if !droppable || !writable {
 			a.cancelDragSnapBack(d)
 			return
 		}
