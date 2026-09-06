@@ -211,9 +211,9 @@ func (a *App) thShellFeed(_ js.Value, args []js.Value) any {
 }
 
 // thShellRenderer returns which renderer the focused pane's live shell
-// attached: "webgl" or "canvas", with "" for no live shell. The e2e asserts
-// "webgl", so a platform change cannot silently downgrade the terminal
-// renderer and bring back the rendering artifacts the canvas renderer has.
+// attached: "webgl" or "dom" (attachShellRenderer's two kinds), with "" for
+// no live shell. The e2e asserts "webgl", so a platform change cannot
+// silently downgrade the terminal to the slower DOM fallback.
 func (a *App) thShellRenderer(js.Value, []js.Value) any {
 	if conn := a.shellConnFor(a.tree.Focus); conn != nil {
 		return conn.rendererKind

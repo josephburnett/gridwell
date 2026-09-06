@@ -39,10 +39,10 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
   await gw.clickBarName('right');
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);
 
-  // The terminal runs on the WebGL renderer, never the canvas fallback, whose
-  // dirty-region artifacts show as corrupted text. Chromium can drop software
-  // WebGL out from under it, so this assertion makes such a downgrade a loud
-  // suite failure.
+  // The terminal runs on the WebGL renderer, never the slower DOM fallback
+  // attachShellRenderer drops to when WebGL2 is unavailable. Chromium can drop
+  // software WebGL out from under it, so this assertion makes such a downgrade
+  // a loud suite failure.
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellRenderer()))
     .toBe('webgl');
