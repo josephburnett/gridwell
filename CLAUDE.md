@@ -113,6 +113,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   because the config stopped declaring it — the row and its landing stay,
   its links go dead by the roster, and the stanza brings them back.
   Secrets stay host-local file paths.
+- A plugin's collections are + menu entries, one per collection
+  (`InfoResponse.menu_entries`, each naming a context key). A plugin never
+  wraps them in a synthetic root grid of wells. `root_context` is the
+  primary collection and gets no menu entry of its own.
 - A node has no grid of its own. A mount lands on the far node's home.
   Plugins and connections live on the + menu's top row.
 - The web door always has a password (the minted 0600 `web-password` file;

@@ -56,6 +56,13 @@ content: no config, no state, and every page generated in the plugin.
 empty = none), `watch`, `writable`, and `menu_entries` (the + menu additions
 the node stamps onto your grids).
 
+If your source has several collections, declare one `menu_entries` row per
+collection, each naming its context key. Do not invent a wrapper context
+whose entries are wells onto the others: that is a grid the user did not
+make and cannot arrange. `root_context` is your primary collection and gets
+no menu entry of its own — a mail plugin lands on the inbox and declares
+"reply later" and "set aside" beside it.
+
 ## Listings
 
 `List` enumerates one context. Say whether it is `authoritative`: a key
