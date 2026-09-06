@@ -7,6 +7,8 @@ federate across plugins and machines. The one rule: things stay as you left
 them.
 
 This doc says how the machine works. `CLAUDE.md` says how to change it.
+`docs/concepts.md` lists every distinction a user can see and what each one
+does.
 
 ## Layers
 
