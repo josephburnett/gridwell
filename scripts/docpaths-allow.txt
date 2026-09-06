@@ -2,3 +2,6 @@
 # although it does not exist in the tree. Every line says why.
 # A gitignored runtime cache dir that `make vendor` creates:
 apps/desktop/README.md apps/desktop/.cache
+# A gitignored e2e-output dir (.gitignore: test-results/), absent on a fresh
+# checkout; the gates workflow uploads it as a failure artifact when it exists:
+.github/workflows/gates.yml apps/desktop/test-results
