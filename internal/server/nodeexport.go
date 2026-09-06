@@ -33,8 +33,9 @@ func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
 // gRPC, what a remote mounter's ssh tunnel dials. It is ungated by design and
 // served only on the 0600 unix socket node.listenConnectionDoor opens; there is no
 // address form, and ssh is the authenticated transport between nodes. Serve it
-// with NodeProtocols, because gRPC over a cleartext tunnel needs HTTP/2
-// without TLS, which plain net/http refuses by default.
+// with ConnectionDoorServer, because gRPC over a cleartext tunnel needs HTTP/2
+// without TLS, which plain net/http refuses by default, and because the door
+// must carry no deadline (see there).
 //
 // This and internal/connection/dial are the connection hop's two ends, and the two
 // ends of the only gRPC in the node besides the plugin subprocess: one writes
@@ -46,11 +47,30 @@ func (s *Server) ConnectionHandler() http.Handler {
 	return g
 }
 
+// ConnectionDoorServer is the http.Server that serves the connection door:
+// the one shape, so the production node and every harness put the same
+// server in front of h, and a test that holds a stream through it holds it
+// through what the node runs.
+//
+// No deadline of any kind, deliberately. The door carries long-lived gRPC
+// streams (the event Subscribe above all) over unencrypted HTTP/2, and
+// net/http arms ReadHeaderTimeout on the raw conn before it hands the
+// conn to the HTTP/2 server (Go 1.26.6), whose only disarm is tied to
+// ReadTimeout; WriteTimeout becomes a per-stream deadline there too. Any of
+// them is a ticking close on every stream and every unary call that lands
+// after it, seen by the mounter as "error reading from server: EOF". A
+// slow-header peer is not a concern this door has: it is a 0600 unix socket
+// reachable only through the owning uid's ssh, and gRPC keepalive is what
+// polices a silent peer.
+func ConnectionDoorServer(h http.Handler) *http.Server {
+	return &http.Server{Handler: h, Protocols: NodeProtocols()}
+}
+
 // NodeProtocols is the protocol set for any http.Server serving the connection
 // door: HTTP/1.1 plus unencrypted HTTP/2 for raw gRPC through an ssh tunnel,
 // where the connection is already private and TLS-only h2 would refuse the
-// mounter. One owner here, so the production server and every test harness
-// negotiate identically.
+// mounter. ConnectionDoorServer is its one caller; it is named on its own so
+// the protocol set reads as the decision it is.
 func NodeProtocols() *http.Protocols {
 	p := new(http.Protocols)
 	p.SetHTTP1(true)

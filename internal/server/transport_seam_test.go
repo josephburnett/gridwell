@@ -106,9 +106,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	remoteReg.SetLabel("rnode1", "home")
 	remoteSrv := servertest.New(t, remoteReg, server.Config{ID: "rnode1"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
-	remoteHTTP.Config.Handler = remoteSrv.ConnectionHandler()
-	remoteHTTP.Config.Protocols = server.NodeProtocols()
-	remoteHTTP.EnableHTTP2 = true
+	remoteHTTP.Config = server.ConnectionDoorServer(remoteSrv.ConnectionHandler())
 	remoteHTTP.Start()
 	t.Cleanup(remoteHTTP.Close)
 	grpcConn, err := grpc.NewClient(strings.TrimPrefix(remoteHTTP.URL, "http://"),

@@ -216,12 +216,8 @@ func Start(opts Options) (*Node, error) {
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
 	}
-	connSrv := &http.Server{
-		Handler:           srv.ConnectionHandler(),
-		Protocols:         server.NodeProtocols(),
-		ReadHeaderTimeout: 10 * time.Second,
-		BaseContext:       func(net.Listener) context.Context { return requestCtx },
-	}
+	connSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
+	connSrv.BaseContext = func(net.Listener) context.Context { return requestCtx }
 	ln, err := net.Listen("tcp", cfg.Web.Bind)
 	if err != nil {
 		cancel()

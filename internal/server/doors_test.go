@@ -25,7 +25,7 @@ func TestWebDoorServesNoGRPC(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		hs := &http.Server{Handler: h, Protocols: NodeProtocols()}
+		hs := ConnectionDoorServer(h)
 		go hs.Serve(ln)
 		t.Cleanup(func() { hs.Close() })
 		return ln.Addr().String()

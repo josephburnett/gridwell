@@ -6,7 +6,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"io"
 	"net"
-	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -59,7 +58,7 @@ func remoteNode(t *testing.T) (string, namespace.Namespace) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := &http.Server{Handler: srv.ConnectionHandler(), Protocols: server.NodeProtocols()}
+	httpSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 	return sock, direct

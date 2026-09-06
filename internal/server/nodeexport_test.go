@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"net/http"
 	"testing"
 	"time"
 
@@ -113,7 +112,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := &http.Server{Handler: srv.ConnectionHandler(), Protocols: server.NodeProtocols()}
+	httpSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 
