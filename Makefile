@@ -3,7 +3,7 @@
 BIN := ./gridwell
 # Built plugin binaries — the plugins target below and clean
 # must agree; this is the one list.
-ALL_PLUGIN_BIN := ./gridwell-plugin-fs ./gridwell-plugin-proc ./gridwell-plugin-gitlab
+ALL_PLUGIN_BIN := ./gridwell-plugin-fs ./gridwell-plugin-proc ./gridwell-plugin-gitlab ./gridwell-plugin-pages
 
 # The plugins live in their own repository — gridwell owns the door, the
 # plugins repo owns the plugins. PLUGINS_DIR is the one place that says where
@@ -55,6 +55,7 @@ plugins:
 	cd $(PLUGINS_DIR)/fs && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-fs ./cmd/gridwell-plugin-fs
 	cd $(PLUGINS_DIR)/proc && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-proc ./cmd/gridwell-plugin-proc
 	cd $(PLUGINS_DIR)/gitlab && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-gitlab ./cmd/gridwell-plugin-gitlab
+	cd $(PLUGINS_DIR)/pages && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-pages ./cmd/gridwell-plugin-pages
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's

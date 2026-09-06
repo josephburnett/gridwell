@@ -10,9 +10,11 @@ The host never knows your name; every behavior rides a declaration on the
 wire.
 
 The shipped plugins live in their own repository,
-`github.com/josephburnett/gridwell-plugins` (`fs`, `proc`, `gitlab`), and use
-the same door as anyone else's: each is its own Go module importing only the
-api. `gitlab` is the worked example. `fs` is the fullest surface.
+`github.com/josephburnett/gridwell-plugins` (`fs`, `proc`, `gitlab`, `pages`),
+and use the same door as anyone else's: each is its own Go module importing
+only the api. `pages` is the smallest one, and the example for serving web
+content: no config, no state, and every page generated in the plugin.
+`gitlab` is the worked example. `fs` is the fullest surface.
 
 ## The contract
 
@@ -60,7 +62,11 @@ absent from an authoritative listing is gone; absent from a non-authoritative
 one means "not seen this pass", and the node keeps the entry until `Probe`
 answers GONE. A `placement_hint` seeds an entry's first placement only. An
 entry with `serves_page` presents its `ServeContent` HTML on descent,
-sandboxed by the node.
+sandboxed by the node. It stays a `text` entry: a `url` entry's own address
+wins over `serves_page`, and a page tile has no address to declare because
+the node derives one when the page is opened. The page is served at a
+directory URL, so an ordinary relative URL inside it comes back as
+`ServeContent` on the same key with that name as the `subpath`.
 
 ## Deletes
 
@@ -76,6 +82,6 @@ every link to the tile survive a delete that keeps the thing.
 `test/boundary` fails the build if any gridwell package — test files included
 — imports a plugin implementation or names the plugins repository in a go.mod,
 or if the api gains a dependency outside its budget. `make check` builds every
-module standalone and spawns the real fs, proc and gitlab binaries through the
-production loader. `make check-connections` spawns the real binaries through a
+module standalone and spawns the real shipped binaries through the production
+loader. `make check-connections` spawns the real binaries through a
 real ssh tunnel.
