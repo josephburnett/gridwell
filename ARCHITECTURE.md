@@ -363,6 +363,7 @@ copy:
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | does this descent go live | `shellconn.DecideAutoLive` |
+| what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | is the menu open, on which pane | `client/menu` |

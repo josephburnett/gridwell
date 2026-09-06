@@ -6,6 +6,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/barslot"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -238,49 +239,69 @@ func (a *App) drawBarTitle(top float64) {
 	c.Set("textAlign", "start")
 }
 
+// barSlotMode resolves the focused pane's slot mode: the impure half of the
+// slot, gathering the world facts barslot.Decide reads. The one lazy fact is
+// the shell refresh button's visibility, resolved only on a frozen shell
+// descent — shellRefreshButtonVisible kicks a ShellSessionAlive probe as a
+// side effect, and that probe belongs to the state that shows the button.
+// Since Decide reads the field on that arm alone, the guard cannot change the
+// verdict.
+func (a *App) barSlotMode(p *pane.Pane) barslot.Mode {
+	in := barslot.Input{
+		Descent:      p.ContentID() != "",
+		URLDescent:   a.isURLDescent(p),
+		ShellDescent: a.isShellDescent(p),
+		URLLive:      a.urlViewFor(p.ID) != nil,
+		ShellLive:    a.hasShellStream(p.ID),
+		CanLiveURL:   a.caps.LiveURL,
+	}
+	if in.ShellDescent && !in.ShellLive {
+		if t, ok := a.descendedGridTile(p); ok {
+			in.ShellRefreshVisible = a.shellRefreshButtonVisible(&t)
+		}
+	}
+	return barslot.Decide(in)
+}
+
+// descendedGridTile resolves the row the focused pane is descended into from
+// the pane's own grid, with no scratch-grid fallback: the slot's go-live and
+// refresh actions name a tile the grid holds, so an ephemeral visit — which
+// has no row there — has nothing to open and the slot does nothing.
+func (a *App) descendedGridTile(p *pane.Pane) (rpc.Tile, bool) {
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return rpc.Tile{}, false
+	}
+	t, ok := g.Tiles[p.ContentID()]
+	return t, ok
+}
+
 // drawBarSlot paints the bar's right-end circle for the focused pane's mode.
-// A URL descent shows back when live, refresh when frozen, or the slashed
-// no-live button; a frozen shell shows refresh; a grid shows the + menu
-// button, and the trashcan during a tile drag. A markdown descent draws
-// nothing: its slot is occupied by the DOM text-mode toggle at the same
-// center.
+// barslot.Decide says which mode; this only maps it to pixels, so the glyph
+// drawn is the same verdict barSlotClick acts on. A grid's + button carries
+// the trashcan during a tile drag, which is drawPlusButton's own business.
 func (a *App) drawBarSlot() {
 	p := a.tree.FocusedPane()
 	if p == nil {
 		return
 	}
-	if p.ContentID() != "" {
-		switch {
-		case a.isURLDescent(p):
-			if a.urlViewFor(p.ID) != nil {
-				a.drawURLBackButton()
-			} else if a.caps.LiveURL {
-				a.drawURLRefreshButton()
-			} else {
-				a.drawURLOpenTabButton()
-			}
-		case a.isShellDescent(p) && !a.hasShellStream(p.ID):
-			// Frozen shell descent: refresh either creates a fresh tmux
-			// session, when there is no snapshot yet, or attaches to the
-			// existing one. Hidden when the session is gone, since the JPEG
-			// is all that remains. shellRefreshButtonVisible decides, and
-			// kicks off the ShellSessionAlive probe when the answer is not
-			// cached yet.
-			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-				if file, ok := g.Tiles[p.ContentID()]; ok && a.shellRefreshButtonVisible(&file) {
-					a.drawURLRefreshButton()
-				}
-			}
-		}
-		return
+	switch a.barSlotMode(p) {
+	case barslot.ModeURLBack:
+		a.drawURLBackButton()
+	case barslot.ModeURLGoLive, barslot.ModeShellRefresh:
+		a.drawURLRefreshButton()
+	case barslot.ModeURLOpenTab:
+		a.drawURLOpenTabButton()
+	case barslot.ModePlus:
+		a.drawPlusButton(p)
 	}
-	a.drawPlusButton(p)
 }
 
 // barSlotClick dispatches a click on the bar's circle slot, always acting on
 // the focused pane; the slot never transfers focus. Left-click only: the
 // ascent gesture is clicking the previous crumb, and middle-click on a pane
-// remains the in-pane shortcut.
+// remains the in-pane shortcut. The mode is barslot.Decide's, the same
+// verdict drawBarSlot drew, so the button always does what it shows.
 func (a *App) barSlotClick(button int) {
 	p := a.tree.FocusedPane()
 	if p == nil {
@@ -289,40 +310,32 @@ func (a *App) barSlotClick(button int) {
 	if button != 0 {
 		return
 	}
-	switch {
-	case a.isShellDescent(p):
-		if !a.hasShellStream(p.ID) {
-			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-				if tile, ok := g.Tiles[p.ContentID()]; ok && a.shellRefreshButtonVisible(&tile) {
-					a.openShellStream(p, tile.ID)
-				}
-			}
+	switch a.barSlotMode(p) {
+	case barslot.ModeURLBack:
+		a.bridgeGoBack(p.ID)
+	case barslot.ModeURLGoLive:
+		if t, ok := a.descendedGridTile(p); ok {
+			a.openURLStream(p, t.ID)
 		}
-	case a.isURLDescent(p):
-		if a.urlViewFor(p.ID) != nil {
-			a.bridgeGoBack(p.ID)
-		} else if !a.caps.LiveURL {
-			// A browser host cannot place a live view, so the next-best
-			// descent is the browser's own: open the address in a new tab.
-			// The tile stays frozen and untouched — this gesture persists
-			// nothing. Synchronous within the click, so the popup rides the
-			// user-gesture allowance.
-			a.openURLInNewTab(p)
-		} else {
-			// Frozen: go live (place the native view).
-			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-				if tile, ok := g.Tiles[p.ContentID()]; ok {
-					a.openURLStream(p, tile.ID)
-				}
-			}
+	case barslot.ModeURLOpenTab:
+		// A browser host cannot place a live view, so the next-best descent
+		// is the browser's own: open the address in a new tab. The tile stays
+		// frozen and untouched — this gesture persists nothing. Synchronous
+		// within the click, so the popup rides the user-gesture allowance.
+		a.openURLInNewTab(p)
+	case barslot.ModeShellRefresh:
+		// Refresh either creates a fresh tmux session, when there is no
+		// snapshot yet, or attaches to the existing one.
+		if t, ok := a.descendedGridTile(p); ok {
+			a.openShellStream(p, t.ID)
 		}
-	case p.ContentID() != "":
-		// A markdown descent's slot is the DOM toggle button, which handles
-		// its own clicks; a canvas click reaching here just missed it.
-	default:
+	case barslot.ModePlus:
 		a.menu.Toggle(p.ID)
 		a.draw()
 	}
+	// ModeNothing: a markdown descent's slot is the DOM toggle button, which
+	// handles its own clicks, and a canvas click reaching here just missed it;
+	// a live shell and a shell whose session is gone have no slot gesture.
 }
 
 // openURLInNewTab opens the focused pane's web-content address in a new
