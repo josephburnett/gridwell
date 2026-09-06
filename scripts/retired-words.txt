@@ -21,6 +21,5 @@ viewY
 # where a home already has it written down — the server.yaml `federation:`
 # key, the <home>/federation.sock socket file, and the serving banner's
 # federation= field — so it is allowed in internal/config, which owns the key,
-# on any line that spells the socket file or the banner field, and in the plan
-# that records the rename.
-federation internal/config/|docs/one-cache\.md|.*federation\.sock|.*federation=|.*`federation|.*cfg\.Federation|.*config\.FederationSocket
+# and on any line that spells the socket file or the banner field.
+federation internal/config/|.*federation\.sock|.*federation=|.*`federation|.*cfg\.Federation|.*config\.FederationSocket

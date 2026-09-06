@@ -2,5 +2,3 @@
 # although it does not exist in the tree. Every line says why.
 # A gitignored runtime cache dir that `make vendor` creates:
 apps/desktop/README.md apps/desktop/.cache
-# The plan names the old package as the source of a rename that has happened:
-docs/one-cache.md internal/remote
