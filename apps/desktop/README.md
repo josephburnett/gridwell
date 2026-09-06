@@ -20,8 +20,8 @@ GRIDWELL_HOME=/path make launch  # against another home
 ```
 
 `make launch` builds the sidecar + wasm, compiles the TS, and runs Electron
-with Chromium's OS sandbox on. Live URL tiles load untrusted web content, so
-the sandbox is the containment that matters; a modern Linux/WSL2 kernel with
+with Chromium's OS sandbox on. Live URL tiles load untrusted web content, and
+the sandbox is what contains it; a modern Linux/WSL2 kernel with
 unprivileged user namespaces needs no setuid helper. The app spawns
 `<repo>/gridwell serve` with an ephemeral loopback port as `--bind-default`,
 waits for the bound address, and loads the renderer from that origin. An
