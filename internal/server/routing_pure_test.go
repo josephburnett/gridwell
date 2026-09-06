@@ -227,7 +227,7 @@ func TestSplitPluginID(t *testing.T) {
 	}
 }
 
-// The sentinel→class mapping itself is pinned in internal/store
+// The sentinel→class mapping itself is pinned in api/gwerr
 // (TestClassifyError / TestEverySentinelIsClassified); here we only assert
 // the server consumes it (TestAsConnectError below drives the store-sentinel
 // fall-through path).

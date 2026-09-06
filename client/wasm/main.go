@@ -1287,7 +1287,7 @@ func (a *App) startSSE() {
 			// PluginHealth: a plugin's own event stream, not this client's
 			// connection to the server, went dark or recovered. See
 			// fanInEvents and watchPlugin in
-			// internal/server/connect_handler.go. The source is distinct per
+			// internal/server/router.go. The source is distinct per
 			// plugin, keyed by uuid, so one plugin's outage neither
 			// coalesces with nor clears another's, or the top-level "events"
 			// disconnect notice above.

@@ -86,7 +86,7 @@ func repoRoot(t *testing.T) string {
 }
 
 // Binary resolves gridwell-plugin-<kind> the way the loader does
-// (internal/cli.resolveBinary): GRIDWELL_PLUGIN_DIR names the directory, and
+// (resolveBinary in internal/cli): GRIDWELL_PLUGIN_DIR names the directory, and
 // otherwise it is the repository root, which is where `make build` writes the
 // binaries it builds out of the plugins repo.
 func Binary(t *testing.T, kind string) string {

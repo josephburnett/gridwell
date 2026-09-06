@@ -11,7 +11,8 @@ import * as path from 'node:path';
 // loads; seeding only fs would leave proc and gitlab uncrossed.
 
 // A todo the fake serves. The JSON shape is the wire form of
-// plugins/gitlab/todos.Todo, from GET /api/v4/todos: one pending review request.
+// the gitlab plugin's todos.Todo, from GET /api/v4/todos: one pending review
+// request.
 const TODO = {
   id: 7,
   action_name: 'review_requested',

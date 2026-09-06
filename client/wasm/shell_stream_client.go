@@ -487,7 +487,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	term.Call("registerLinkProvider", links)
 
 	// OSC 5522: the gridwell-open browser shim ($BROWSER in every session,
-	// internal/tmux) hands back a url a terminal app tried to open — emacs
+	// internal/local/tmux) hands back a url a terminal app tried to open — emacs
 	// browse-url, xdg-open — so it descends into an ephemeral url tile here
 	// instead of spawning a browser on the host. The sequence rides the PTY
 	// byte stream (tmux passthrough, then the socket, then term.write), so

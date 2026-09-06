@@ -2,9 +2,10 @@ module github.com/josephburnett/gridwell
 
 go 1.26.6
 
-// The api module lives in this repo (docs/plugin.md): the contract every
-// plugin builds against, carved out so the arrows are structural. The
-// replace makes the in-repo copy authoritative for the app build.
+// The api module lives in this repo (ARCHITECTURE.md, Module boundaries): the
+// contract every plugin builds against, carved out so the arrows are
+// structural. The replace makes the in-repo copy authoritative for the app
+// build.
 require (
 	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/internal/doctype v0.0.0-00010101000000-000000000000

@@ -131,7 +131,7 @@ func convertLegacy(data []byte) (*ServerConfig, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&old); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("this looks like a pre-one-node config, but it carries a key the converter has never seen: %w — convert it by hand (see docs/one-node.md)", err)
+		return nil, fmt.Errorf("this looks like a pre-one-node config, but it carries a key the converter has never seen: %w — convert it by hand (see ARCHITECTURE.md, The node)", err)
 	}
 
 	out := &ServerConfig{

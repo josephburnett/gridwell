@@ -2,8 +2,8 @@ module github.com/josephburnett/gridwell/apps/gridwell
 
 go 1.26.6
 
-// A LEAF COMPOSER (docs/plugin.md): replaces every in-repo sibling —
-// replace directives only apply in the main module, so each leaf
+// A LEAF COMPOSER (ARCHITECTURE.md, Module boundaries): replaces every in-repo
+// sibling — replace directives only apply in the main module, so each leaf
 // repeats the set.
 
 replace (
