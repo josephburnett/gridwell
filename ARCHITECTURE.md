@@ -135,8 +135,8 @@ tiles, shells, and the event stream. Shells are tmux sessions on a private
 socket, so they survive restarts.
 
 **Plugins** speak `plugin.v1`. They live in their own repository,
-`github.com/josephburnett/gridwell-plugins` — the shipped fs, proc and gitlab
-plugins and anyone else's alike, on the same footing. Each runs as a
+`github.com/josephburnett/gridwell-plugins` — the shipped fs, proc, gitlab
+and pages plugins and anyone else's alike, on the same footing. Each runs as a
 supervised subprocess (`internal/plugin`, the one owner of whether a plugin
 is alive): one that dies is respawned with a backoff, the down and up reach
 the strip as that namespace's health event, and while it is down its calls

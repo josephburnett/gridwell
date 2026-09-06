@@ -92,8 +92,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   survives at two hops only: the plugin subprocess and the connection
   door. Both node-side doors are codecs over the one router.
 - Plugins are the third-party door, and they live in their own repository,
-  `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc and
-  gitlab on the same footing as anyone else's. This repo owns the door: the
+  `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc, gitlab
+  and pages on the same footing as anyone else's. This repo owns the door: the
   proto, `api/gen/plugin/v1`, and the go-plugin handshake (`api/compose`).
   No gridwell package, TEST FILES INCLUDED, imports a plugin implementation
   or names that repository in a go.mod, and nothing switches on a plugin
