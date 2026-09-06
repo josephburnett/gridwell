@@ -1,13 +1,14 @@
 # Writing a plugin
 
-A plugin is a separate program (or a compiled-in factory) that serves the
-`plugin.v1` gRPC service (`api/plugin/v1/plugin.proto`). It answers in its
+A plugin is a separate program that serves the `plugin.v1` gRPC service
+(`api/plugin/v1/plugin.proto`); `compose.LoadPlugin` spawns its binary, and
+that is the only way a node reaches one. It answers in its
 own stable string keys — a path, a message id, a todo id — and never sees
 ids, layout, or a database. It keeps no node fact; what it may keep is its own
 memory of its source, in the directory the node hands it (`state_dir`). The node mints ids against your keys, stores
 placement and framing, and serves the full Gridwell surface on your behalf.
-The host never knows your name; every behavior rides a declaration on the
-wire.
+The host never switches on which plugin you are; every behavior you get
+comes from something you declared on the wire.
 
 The shipped plugins live in their own repository,
 `github.com/josephburnett/gridwell-plugins` (`fs`, `proc`, `gitlab`, `pages`),
