@@ -10,7 +10,7 @@
 // where the canvas and every shell overlay live.
 //
 // Why the decision is deferred instead of taken in the focus handler, measured
-// in docs/debt/w2-native-seam.md §5 on a real OS click, 8/8: Chromium focuses
+// on a real OS click, 8/8: Chromium focuses
 // the widget in the browser process *while routing the press*, and forwards the
 // press afterwards. At the instant the `focus` event fires, nothing about the
 // press has happened yet — not the browser-process `input-event` (0.1–3.0 ms
@@ -23,8 +23,8 @@
 // decides, and again after a bounce before it confirms.
 //
 // It is the one constant left, and it is unavoidable: Chromium emits no event
-// for a widget-focus commit, so there is nothing to wait *on*. M3 measured what
-// it is worth — an immediate `rootWC.focus()` from inside the focus handler is
+// for a widget-focus commit, so there is nothing to wait *on*. Measuring showed
+// what it is worth — an immediate `rootWC.focus()` from inside the focus handler is
 // swallowed by the in-flight commit every time (no view `blur`, no root
 // `focus`), while the bounce 121 ms later is the one that actually moves focus
 // back. The settle is therefore not a delay bolted onto a working bounce; it is

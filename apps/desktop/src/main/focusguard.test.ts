@@ -24,7 +24,7 @@ const TABLE: { name: string; in: GuardInput; want: GuardAction }[] = [
   },
   {
     name: '2. a grab on an unfocused pane decides nothing yet',
-    // The measured reason (docs/debt/w2-native-seam.md §5 M1): at the focus
+    // The measured reason: at the focus
     // event the press that may explain it has not been dispatched. Bouncing
     // here reports a steal for the user's own first click.
     in: input(),

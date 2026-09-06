@@ -11,8 +11,6 @@
 // never stores a second copy of where a pane is. The one fact it owns is the
 // set of suspended continuations: which async answers are still owed, and
 // what each one still needs to be true when it lands.
-//
-// Design: docs/debt/w1-nav-orchestration.md.
 package nav
 
 import (

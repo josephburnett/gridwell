@@ -564,8 +564,8 @@ export class WebviewRegistry {
     //
     // What it must not do is DECIDE there. Chromium focuses the widget while
     // routing a press and forwards the press afterwards, so at the focus event
-    // a user's click and a page's grab look identical (measured, 8/8:
-    // docs/debt/w2-native-seam.md §5). The guard therefore snapshots the press
+    // a user's click and a page's grab look identical (measured 8/8 on a real
+    // OS click). The guard therefore snapshots the press
     // count and asks focusguard, which defers; one settle later the press has
     // arrived if there was one, and the same pure function decides.
     //

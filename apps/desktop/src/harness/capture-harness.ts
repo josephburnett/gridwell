@@ -267,8 +267,8 @@ app.whenReady().then(async () => {
   console.log('place focus ok: unfocused placement bounced, focused placement kept');
 
   // ── the user's own click into an unfocused live pane is not a steal ──────
-  // The guard's hardest case, and the one it got wrong until W2 measured it
-  // (docs/debt/w2-native-seam.md §5, M1): Chromium focuses the widget in the
+  // The guard's hardest case, and the one it got wrong until it was measured
+  // on a real OS click: Chromium focuses the widget in the
   // browser process WHILE routing the press and forwards the press afterwards,
   // so at the `focus` event nothing about the click has arrived yet — not the
   // browser-process input-event, not the preload's IPC. A guard that decides

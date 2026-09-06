@@ -29,8 +29,8 @@ free. Do not run it casually; the user initiates it deliberately.
 2. **Read all of it.** Every file, in full, with the Read tool — no skimming,
    no sampling, no delegating the reading to subagents (the whole point is one
    context holding the whole system). Also read `CLAUDE.md`,
-   `ARCHITECTURE.md`, `internal/local/store/CLAUDE.md`,
-   `docs/debt-program.md`, and `docs/flake-ledger.md`.
+   `ARCHITECTURE.md`, `internal/local/store/CLAUDE.md`, `docs/concepts.md`,
+   `docs/freshness.md`, and `docs/flake-ledger.md`.
 
 3. **Assess through the lenses below.** For each: CLEAN or NOT CLEAN, with
    the evidence named (`file:line` or package). A lens is NOT CLEAN on one
@@ -38,9 +38,8 @@ free. Do not run it casually; the user initiates it deliberately.
 
 4. **Report**: the per-lens table first, then the narrative (verdict /
    strong / strains / net), then — if any lens is NOT CLEAN — what would
-   make it clean, concretely. Compare against the previous assessment
-   (baseline: 2026-09-05, recorded in `docs/debt-program.md`) and say what
-   moved.
+   make it clean, concretely. If the user supplies an earlier assessment,
+   compare against it and say what moved.
 
 ## The lenses and their bars
 
@@ -66,9 +65,9 @@ decision exists only in `client/wasm/*` or `apps/desktop/src/main/webviews.ts`
 without a pure, tested twin.
 
 **4. Concept economy & exception surface.** Enumerate the user-facing
-concepts and states (tile kinds, link shapes, ephemeral/trash/levels,
-dead/dark/stale/broken/rootless, framing vs. content vs. capture). Each
-distinction must earn its place, and the plugin exception surface
+concepts and states; `docs/concepts.md` is the current list, and part of the
+lens is whether it still matches the code. Each distinction must earn its
+place, and the plugin exception surface
 (read-only, host_content, serves_page, text_presentation, stale, dead) must
 route through named single-owner predicates rather than per-call-site arms.
 CLEAN when no two concepts could merge without losing a decided behavior AND
@@ -112,4 +111,4 @@ invariants from the tree alone — name anything that would mislead them.
 - Scale/performance ceilings (full repaint, O(n) cache walks) are decided
   trade-offs, not debt — note them only if the decision comment is missing.
 - Record nothing in the repo from this skill itself; the report goes to the
-  user, who decides what becomes a workstream in `docs/debt-program.md`.
+  user, who decides what becomes a GitHub issue.
