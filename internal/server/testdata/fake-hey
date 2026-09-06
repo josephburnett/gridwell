@@ -1,0 +1,74 @@
+#!/bin/sh
+# fake-hey is a stand-in for the HEY CLI: the two commands the hey plugin
+# runs, answered without a HEY account, so a seam test can drive the shipped
+# gridwell-plugin-hey binary hermetically.
+#
+# It is DATA, not code shared with the plugin: the plugin lives in another
+# repository and the two repositories share the CLI's contract, never a
+# package. That contract is
+#
+#   hey box view <box> --json --all     the response envelope, data.postings
+#   hey thread read <topic-id> --html   a bare HTML5 document, no envelope
+#
+# and the plugin is pointed at this script by its `binary` config key.
+set -e
+
+# The plugin must never let the CLI prompt: a prompt with nothing to read it
+# would hang the sweep. Refuse to answer if it forgot.
+if [ "$HEY_NONINTERACTIVE" != "1" ]; then
+  echo "Error: interactive" >&2
+  exit 1
+fi
+
+case "$1 $2" in
+  "box view")
+    case "$3" in
+      imbox)
+        cat <<'JSON'
+{"ok":true,"data":{"id":1,"kind":"imbox","name":"Imbox","postings":[
+ {"id":900,"topic_id":101,"kind":"topic","name":"Lunch plans","summary":"Are you free friday?","seen":false,"created_at":"2026-01-05T14:03:00Z","creator":{"name":"Alice","email_address":"alice@example.com"}},
+ {"id":902,"topic_id":102,"kind":"topic","name":"Invoice 41","summary":"attached","seen":true,"created_at":"2026-01-06T09:15:00Z","creator":{"name":"Bob","email_address":"bob@example.com"}}
+]},"summary":"2 threads in Imbox"}
+JSON
+        ;;
+      laterbox)
+        cat <<'JSON'
+{"ok":true,"data":{"id":2,"kind":"laterbox","name":"Reply Later","postings":[
+ {"id":910,"topic_id":201,"kind":"topic","name":"Conference talk","summary":"can you speak?","seen":true,"created_at":"2026-01-07T11:00:00Z","creator":{"name":"Carol","email_address":"carol@example.com"}}
+]},"summary":"1 thread in Reply Later"}
+JSON
+        ;;
+      asidebox)
+        cat <<'JSON'
+{"ok":true,"data":{"id":3,"kind":"asidebox","name":"Set Aside","postings":[
+ {"id":920,"topic_id":301,"kind":"topic","name":"Lease renewal","summary":"sign by march","seen":true,"created_at":"2026-01-08T08:00:00Z","creator":{"name":"Dan","email_address":"dan@example.com"}}
+]},"summary":"1 thread in Set Aside"}
+JSON
+        ;;
+      *)
+        echo '{"ok":false,"error":"no box of kind","code":"not_found"}' >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  "thread read")
+    # --html carries no envelope, in success or in failure.
+    cat <<HTML
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8">
+<title>Thread $3</title></head>
+<body>
+<article id="entry-1" data-entry-id="1" data-created-at="2026-01-05T14:03:00Z">
+<header>thread $3</header>
+<p>Are you free friday?</p>
+</article>
+</body>
+</html>
+HTML
+    ;;
+  *)
+    echo "Error: unknown command" >&2
+    exit 1
+    ;;
+esac
