@@ -151,7 +151,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		strokeTileFrame(a.cctx, x, y, w, h, colorFocusBorder, true /* dashed */, false /* selected */)
 		a.drawPluginGlyph(door.RowGlyph(item.plugin), x, y, w, h)
 		a.drawTileBannerLabel(&n, x, y, w, h, false)
-		// Broken and rootless plugins get the same health tint their link
+		// A broken or waiting plugin gets the same health tint its link
 		// tiles do; the click guard explains on click.
 		a.drawPluginHealthTint(&n, x, y, w, h)
 	} else {
@@ -198,13 +198,16 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 // node's plugin tiles surface their state through descent errors instead.
 func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
 	// A link with no target is not enterable wherever it lives: a broken or
-	// rootless plugin link, one to a remote plugin included, whose health
+	// waiting plugin link, one to a remote plugin included, whose health
 	// the local plugin list cannot know. Dim it; the descent guard explains
 	// on click.
 	if pluginhealth.UnrootedLink(n) {
-		color := colorLauncherRootlessTint
-		// The local plugin list knows more: broken (Info failed) gets the
-		// alarm tint, rootless the softer one.
+		// The neutral dimming is also what a row this node cannot classify
+		// gets — a remote plugin's launcher — because not knowing yet is
+		// exactly the waiting face.
+		color := colorLauncherWaitingTint
+		// The local plugin list knows more: a failure of any kind gets the
+		// alarm tint, waiting the neutral one.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.ID)); ok {
 			if pluginhealth.Classify(pl) == pluginhealth.Broken {
 				color = colorLauncherBrokenTint

@@ -120,14 +120,15 @@ const (
 	colorMenuBg     = "#16181f"
 	colorMenuItemHi = "#e8e9ee"
 	colorMuted      = "#6c6f78"
-	// Launcher tile tints for a non-enterable plugin (client/pluginhealth):
-	// broken (Info failed/timed out) gets a red-tinted overlay — the same
-	// alarm family as the error notice strip; rootless (healthy, no root
-	// configured) gets a plain gray dimming — a configuration gap, not a
-	// failure. Drawn as a translucent overlay atop the normal tile so the
-	// plugin glyph / preview underneath still reads.
-	colorLauncherBrokenTint   = "rgba(180, 40, 40, 0.38)"
-	colorLauncherRootlessTint = "rgba(40, 40, 46, 0.55)"
+	// Launcher tile tints for a non-enterable plugin (client/pluginhealth).
+	// Two, because there are two statuses: broken — every failure, whatever
+	// the reason — gets a red-tinted overlay, the same alarm family as the
+	// error notice strip; waiting (asked, no answer yet) gets a plain gray
+	// dimming, the neutral family the "loading …" grid notice reads in,
+	// because nothing has gone wrong yet. Drawn as translucent overlays atop
+	// the normal tile so the plugin glyph / preview underneath still reads.
+	colorLauncherBrokenTint  = "rgba(180, 40, 40, 0.38)"
+	colorLauncherWaitingTint = "rgba(40, 40, 46, 0.55)"
 	// A dead link (client/deadref): a link into a namespace this node no
 	// longer declares. It is a state, not a failure, so it gets no alarm
 	// color — the veil fades the tile most of the way back to the

@@ -5,50 +5,61 @@ import { test, expect } from './fixtures';
 // and behave differently from an enterable one. Otherwise it renders as an
 // ordinary swatch whose click silently does nothing.
 //
-// The broken-plugin case, where Info fails or times out, is not covered here: a
+// There are two non-enterable statuses, not three: every failure is "broken",
+// whatever the reason, and only the reason text differs. A plugin that answered
+// and declared no root is one of those failures — nothing to enter is not
+// working — so it draws in the alarm tint and reports at Error severity, with
+// the missing config named in the message for whoever is debugging. "Waiting"
+// is the other status and means asked-not-answered, which only a connection row
+// can be; conn-config.spec.ts covers it.
+//
+// The crashed-plugin case, where Info fails outright, is not covered here: a
 // plugin that fails to spawn aborts the whole server by design, in
-// internal/plugin's loader, so no real app boot reaches a broken swatch. That
-// case is covered at the buildPluginInfo and pluginInfo unit level in
+// internal/plugin's loader, so no real app boot reaches it. That case is
+// covered at the buildPluginInfo and pluginInfo unit level in
 // internal/server/plugininfo_test.go.
-test.use({ extraPlugins: [{ kind: 'fs', name: 'rootless' }] });
+test.use({ extraPlugins: [{ kind: 'fs', name: 'noroot' }] });
 
-test('a rootless plugin swatch is inert and reports a notice instead of descending', async ({ gw, window }) => {
+test('a plugin with no root is inert and reports a notice instead of descending', async ({
+  gw,
+  window,
+}) => {
   const pls = await gw.plugins();
-  const rootless = pls.find((p) => p.label === 'rootless');
-  expect(rootless, 'rootless fs plugin configured').toBeTruthy();
-  expect(rootless!.rootGridID, 'a rootless plugin has no root grid').toBe('');
-  expect(rootless!.status, 'classified as rootless, not broken or enterable').toBe('rootless');
-  expect(rootless!.infoError, 'a rootless (not broken) plugin carries no InfoError').toBe('');
+  const noroot = pls.find((p) => p.label === 'noroot');
+  expect(noroot, 'rootless fs plugin configured').toBeTruthy();
+  expect(noroot!.rootGridID, 'it declared no root grid').toBe('');
+  expect(noroot!.status, 'nothing to enter is a failure: broken, not waiting').toBe('broken');
+  expect(noroot!.infoError, 'and it got there without any Info error').toBe('');
 
-  // Boot skipped the rootless plugin and landed on home.
+  // Boot skipped it and landed on home.
   const before = await gw.focused();
   expect(before.anchor, 'boots into the first rooted plugin, not the fs plugin').toBe(
     pls.find((p) => p.label === 'home')!.rootGridID,
   );
 
-  // The + menu shows the rootless plugin's swatch with its classification, the
-  // tint the render path reads. Click it.
+  // The + menu shows the swatch with its classification, the tint the render
+  // path reads. Click it.
   await gw.openPalette();
   const pal = await gw.palette();
-  const swatch = pal.items.find((i) => i.isPlugin && i.label === 'rootless');
-  expect(swatch, 'rootless plugin swatch in the + menu').toBeTruthy();
-  expect(swatch!.status, 'swatch carries the pluginhealth classification').toBe('rootless');
+  const swatch = pal.items.find((i) => i.isPlugin && i.label === 'noroot');
+  expect(swatch, 'the plugin swatch is in the + menu').toBeTruthy();
+  expect(swatch!.status, 'swatch carries the pluginhealth classification').toBe('broken');
   await window.mouse.click(swatch!.x + swatch!.w / 2, swatch!.y + swatch!.h / 2);
   await gw.waitIdle();
 
   // It must not have descended: the focused pane is still anchored at home, not
   // inside the fs plugin's root.
   const after = await gw.focused();
-  expect(after.anchor, 'click on a rootless swatch must not descend').toBe(before.anchor);
+  expect(after.anchor, 'click on a non-enterable swatch must not descend').toBe(before.anchor);
 
   // Instead a notice must appear, attributed to this plugin by uuid, which is
   // ClickNotice's source key since labels can collide across connections, at
-  // Info severity because it is a fixable configuration gap rather than a
-  // failure, and naming the fix.
-  const rootlessRow = pls.find((p) => p.label === 'rootless')!;
+  // Error severity like every other broken row, and carrying the specific
+  // reason so the fix is findable.
+  const norootRow = pls.find((p) => p.label === 'noroot')!;
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-  const notice = errs.notices.find((n: any) => n.source === 'launcher:' + rootlessRow.uuid);
+  const notice = errs.notices.find((n: any) => n.source === 'launcher:' + norootRow.uuid);
   expect(notice, 'a notice keyed by the plugin uuid is present').toBeTruthy();
-  expect(notice.severity).toBe('info');
+  expect(notice.severity).toBe('error');
   expect(notice.message).toContain('no root configured');
 });

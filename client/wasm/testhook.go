@@ -618,8 +618,8 @@ func pluginStatusName(pl rpc.PluginInfo) string {
 	switch pluginhealth.Classify(pl) {
 	case pluginhealth.Broken:
 		return "broken"
-	case pluginhealth.Rootless:
-		return "rootless"
+	case pluginhealth.Waiting:
+		return "waiting"
 	}
 	return "enterable"
 }

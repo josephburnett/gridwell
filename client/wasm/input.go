@@ -1295,7 +1295,7 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 // so the ghost renderer can paint the in-flight tile using the same drawNode
 // path that a real tile would use. A plugin item is the shared synthetic
 // exit well (rpc.PluginWellTile) with the plugin's uuid as its id, so the
-// health tint and the broken/rootless descent guard can name the plugin.
+// health tint and the not-enterable descent guard can name the plugin.
 func paletteItemGhostNode(item paletteItem) rpc.Tile {
 	if item.isPlugin {
 		t := rpc.PluginWellTile(item.plugin)

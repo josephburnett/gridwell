@@ -84,8 +84,8 @@ func (m *Machine) descend(g Gesture, w World) Plan {
 // neither feels rushed. C is zero-length when ViewZoom is unset.
 func (m *Machine) descendGrid(p PaneView, well rpc.Tile, w World, pl *planner) {
 	if well.ChildGridID == "" {
-		// A link tile whose target is not available: a broken or rootless
-		// plugin, or a connection whose remote has not answered. Say why
+		// A link tile whose target is not available: a broken plugin, or
+		// a connection whose remote has not answered yet. Say why
 		// instead of silently doing nothing; pluginhealth owns the wording,
 		// and the gatherer has already asked it.
 		if n := w.Door.Health; n != nil {
