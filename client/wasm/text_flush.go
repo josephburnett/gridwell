@@ -3,12 +3,18 @@
 package main
 
 import (
+	"context"
+
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
-// This file is the one way text content reaches the server.
+// This file is the one way text content reaches the server: the debounced
+// sweep, the outbox drain, the beforeunload beacon, and the ascent flush
+// (saveTextBeforeAscent), which posts the body and the framed window
+// together when a pane leaves a text descent.
 //
 // The cache entry ({bytes, base, dirty}, keyed by tile id) owns a text tile's
 // current body: textarea keystrokes mirror into it through the input
@@ -160,4 +166,129 @@ func (a *App) contentKey(tileID string) string {
 		return t.ContentID()
 	}
 	return tileID
+}
+
+// saveTextBeforeAscent posts the editor buffer (if text mode is active)
+// and the framed window back to the server, through the dispatcher: a
+// failure reacts via clientsync (transport parks in the outbox, a verdict
+// refetches and surfaces) like every other mutation.
+func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
+	// SetTextView, and the framed-window cache patch, are text-tile
+	// concerns: url and shell tiles carry no text framing, and the server's
+	// SetTextView rejects non-text kinds with InvalidArgument, which would
+	// surface as an error the user has to read. A serves_page descent is web
+	// content and carries no text framing either.
+	if !file.TextDocument() {
+		return
+	}
+	gid := a.gridIDForPane(p)
+	r := paneRectFor(a, p)
+	scrollX := int64(p.TextScrollX + 0.5)
+	scrollY := int64(p.TextScrollY + 0.5)
+
+	// Content: read the tile's own cache entry, and only when it carries an
+	// unsaved edit. Never the DOM. Reading the singleton textarea here would
+	// attribute its bytes to whatever tile this pane points at, so a bulk
+	// flush — a pane collapse, a level boundary — over a pane the singleton
+	// was not bound to would save one document's bytes as another's content.
+	// Posting unconditionally would also make a merely-opened tile rewrite
+	// its blob and bump its version on every visit; dirty-gating keeps a
+	// pure read write-free.
+	// Read-only host tiles have no write-back at all: no content, since the
+	// body is derived, and no framing store either — the fs plugin's SetTile
+	// refuses text framing, so posting SetTextView from here would only
+	// manufacture an error strip. Their mode and scroll stay session
+	// facts.
+	if a.tileReadOnly(&file) {
+		return
+	}
+	buf, hasBuf := a.c.DirtyContent(file.ContentID())
+
+	// The framed window in doc px: scroll position + the inner box size
+	// (= screen px, since scale is fixed at 1.0). The parent-grid preview
+	// crops this rectangle out of the re-rendered doc.
+	_, _, iw, ih := textInnerBox(r)
+	viewW := int64(iw + 0.5)
+	viewH := int64(ih + 0.5)
+
+	// Patch the cache immediately so the ascent transition (and any other
+	// pane previewing this tile) reflects the framed window + mode before
+	// the server round-trip lands.
+	patched := file
+	patched.TextX = scrollX
+	patched.TextY = scrollY
+	patched.TextW = viewW
+	patched.TextH = viewH
+	patched.TextMode = p.TextMode
+	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
+
+	mode := p.TextMode
+	// Through the per-tile save queue: a debounced keystroke save may still
+	// be in flight, and this flush claims a version too, so the queue
+	// serializes them and the version is read at send time.
+	a.persist.textSaves.Enqueue(file.ID, func() {
+		curVersion := file.Version
+		if g, ok := a.c.Grid(gid); ok {
+			if f, ok := g.Tiles[file.ID]; ok {
+				curVersion = f.Version
+			}
+		}
+		// Update the content first if the user was editing. The content
+		// write claims the save basis — the version of the bytes the entry
+		// derives from — never the row version read above: a foreign
+		// writer's event advances the row without this client seeing the new
+		// bytes, and claiming it would save the stale entry right over the
+		// foreign edit. A stale basis conflicts at the server and reconciles
+		// visibly instead.
+		if hasBuf {
+			// The write addresses the content owner, so a link's doc saves
+			// under its target's id, as flushTileContent does. The row
+			// version is a valid fallback only when this row is the owner.
+			cid := file.ContentID()
+			saveVersion := curVersion
+			if file.ID != cid {
+				saveVersion = 0
+			}
+			if base, ok := a.c.SaveBasis(cid); ok {
+				saveVersion = base
+			}
+			tile, ok := a.postWriteContent(gid, cid, saveVersion, buf)
+			if !ok {
+				return
+			}
+			if file.ID == cid {
+				// The SetTextView below claims this row's version, so only
+				// advance it when the content write bumped this same row: a
+				// link's target version is a different row's fact.
+				curVersion = tile.Version
+			}
+		}
+		// Persist the framed window and mode so re-descent and the preview
+		// show it however the user left it across reloads, and only when
+		// something changed (textedit.FramingChanged, the one rule): a pure
+		// descend-and-ascent must not write.
+		next := textedit.Framing{X: scrollX, Y: scrollY, W: viewW, H: viewH, Mode: mode}
+		if !textedit.FramingChanged(textedit.FramingOf(file), next) {
+			return
+		}
+		req := &rpc.SetTextViewRequest{
+			TileID:   file.ID,
+			TextX:    scrollX,
+			TextY:    scrollY,
+			TextW:    viewW,
+			TextH:    viewH,
+			TextMode: mode,
+		}
+		a.do(write{
+			label: "SetTextView", gid: gid, id: file.ID, refetchOnOK: true,
+			call: func(ctx context.Context) error {
+				_, err := a.cl.SetTextView(ctx, req)
+				return err
+			},
+			beacon: func() (string, []byte, string) {
+				path, body := rpc.SetTextViewBeacon(req)
+				return path, body, rpc.BeaconJSONType
+			},
+		})
+	})
 }
