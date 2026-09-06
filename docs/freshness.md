@@ -334,7 +334,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
 | The client's health arms: `reportPluginHealth` fires `retryKick(true)` in BOTH directions, and the notice resolves on recovery | The same revived-mount spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and each direction's kick is what refetches the room — the chip appears, and later clears, with no gesture either time |
-| A single connection's recovery does NOT re-warm the whole source | `sourcecache/prefetch_seam_test.go:TestOneConnectionsRecoveryDoesNotReWalkTheSource` (the comments now say so too; the behaviour is question 5 below) |
+| A single connection's recovery does NOT re-warm the whole source | `sourcecache/prefetch_seam_test.go:TestOneConnectionsRecoveryDoesNotReWalkTheSource`, and the comments in `prefetch.go` and `Layer.Subscribe` |
 
 ### Trace (c)
 
@@ -351,42 +351,5 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Live: typing survives a server outage and saves itself after restart; settled framing lands too; a swallowed grid read un-latches | `apps/desktop/e2e-web/web-outage.spec.ts` |
 | A foreign edit becomes visible, and opening/closing never stomps it | `apps/desktop/e2e/foreign-writer.spec.ts` |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
-| `Cache.UpdateTile` — the response path — skips the interlock, and only `App.textSaves`' serialization keeps that unreachable | `outbox_seam_test.go:TestAResponseRowSkipsTheInterlock` (pins today's behaviour; question 2 below is the decision) |
+| `Cache.UpdateTile` — the response path — skips the interlock, and only `App.textSaves`' serialization keeps that unreachable | `outbox_seam_test.go:TestAResponseRowSkipsTheInterlock` |
 | `syncContentOutbox`'s derivation: dirty→park, clean→ack, and the pre-drain sweep over the dirty set | `client/outbox/outbox_test.go:TestRecordContentIsTheDirtinessFork`, `TestSyncContentParksTheDirtySetInOrder` (`Outbox.RecordContent`/`SyncContent`; `mutate.go` is glue) |
-
-### Simplification candidates — questions for the owner
-
-Decisions NOT taken; nothing below was changed.
-
-1. **Two dark-writers in the cache.** `noteReach` and `applyEvent`'s health
-   arm write the same `Layer.dark` map, and differ only in that the first
-   announces a `GridChanged` and the second deliberately does not. Should
-   they unify behind one `setDark(source, dark, announce bool)`, or is the
-   two-call-site shape worth keeping because the announce asymmetry is a real
-   difference in what the client already knows?
-2. **`Cache.UpdateTile` is a second row-writer.** It skips both the echo
-   interlock and `reconcileContent`, and `postWriteContent` uses it for the
-   write response alongside the URL stream's use.
-   `TestAResponseRowSkipsTheInterlock` pins what that costs: an older response
-   landing after a newer row DOES roll the tile back, and the only thing
-   making that unreachable is `App.textSaves`' per-tile serialization three
-   layers away. Should the response path go through `Apply` (or a guarded
-   upsert that shares the interlock), so there is one door into a grid's tile
-   map?
-3. **`retryKick(true)` is blunt on purpose.** One plugin or connection
-   flapping resyncs every grid the client holds, in both health directions.
-   The comment says a narrower cure would need routing state the client does
-   not keep — is that still the decision, or is `Grid.node_ns` (already on
-   the wire) enough to narrow it?
-4. **One `freshWindow` for every source.** 30s is a single constant across
-   plugins-behind-connections, remote homes, and everything else. Is one
-   window right, or should a source known dark for a long time widen it so a
-   recovered connection is not re-walked on every read?
-5. **The prefetch's trigger.** The walk fires only on a `Layer.Subscribe`
-   establishment, and the transport's `Subscribe` is a hub stream that
-   survives one connection's outage — so a single connection recovering never
-   re-kicks it, and a grid nobody re-opened keeps what the cache last
-   remembered until the next establishment. The comments in `prefetch.go` and
-   `Layer.Subscribe` claimed the opposite and now say this;
-   `TestOneConnectionsRecoveryDoesNotReWalkTheSource` pins it. The behaviour
-   is still open: should `Layer.applyEvent`'s health-up kick the walk?
