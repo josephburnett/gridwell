@@ -8,7 +8,6 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -407,7 +406,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	if !textToggleVisible(&file, a.tileReadOnly(&file)) {
+	if !textedit.ToggleVisible(&file, a.tileReadOnly(&file)) {
 		hide()
 		return
 	}
@@ -593,7 +592,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	// host file flips between rendered and raw source, and the textarea
 	// guard in refreshFileOverlay keeps raw mode caret-free either way.
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if file, ok := g.Tiles[p.ContentID()]; ok && !textToggleVisible(&file, a.tileReadOnly(&file)) {
+		if file, ok := g.Tiles[p.ContentID()]; ok && !textedit.ToggleVisible(&file, a.tileReadOnly(&file)) {
 			return
 		}
 	}
@@ -616,22 +615,4 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	a.refreshFileOverlay()
 	a.draw()
 	a.scheduleURLUpdate()
-}
-
-// textToggleVisible decides whether the rendered/raw toggle exists for a text
-// tile. The owning plugin's text_presentation is the authority when declared:
-// "both" keeps the flip between rendered and raw source, with the textarea
-// guard still keeping raw read-only, while "plain" and "rendered" are
-// single-presentation. An undeclared tile follows the default rule: a
-// writable doc always toggles, and a read-only tile toggles only when its
-// name is renderable (an fs .md or .org), because a metadata summary has
-// nothing to flip.
-func textToggleVisible(file *rpc.Tile, readOnly bool) bool {
-	switch file.TextPresentation {
-	case rpc.TextPresentationBoth:
-		return true
-	case rpc.TextPresentationPlain, rpc.TextPresentationRendered:
-		return false
-	}
-	return !readOnly || markdown.Renderable(file.AltText)
 }

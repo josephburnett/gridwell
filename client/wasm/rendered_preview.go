@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/client/textedit"
 )
 
 // Rendered grid previews: a text tile whose stored text_mode is "rendered"
@@ -88,7 +89,7 @@ func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPrevie
 	// output (unclosed <br>, <img>) becomes well-formed XML — the SVG
 	// foreignObject is an XML context.
 	div := a.doc.Call("createElement", "div")
-	div.Set("innerHTML", presentationHTML(n, body))
+	div.Set("innerHTML", textedit.PresentationHTML(n, body))
 	xhtml := js.Global().Get("XMLSerializer").New().Call("serializeToString", div).String()
 	svg := markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, colorFileInnerBg)
 
