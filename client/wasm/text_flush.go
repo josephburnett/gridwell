@@ -80,9 +80,10 @@ func (a *App) flushTileContent(tileID string) {
 }
 
 // postTileContent is flushTileContent's ordinary arm: the page is alive, so
-// the bytes go through the per-tile serial save queue. A no-op for non-text
-// and read-only rows, whose entries cannot normally be dirty; the guard is
-// belt and braces.
+// the bytes go through the per-tile serial save queue. A no-op for rows that
+// own no document body — a non-text kind, a page row (rpc.Tile.TextDocument)
+// — and for read-only ones, whose entries cannot normally be dirty; the guard
+// is belt and braces.
 func (a *App) postTileContent(cid string, t *rpc.Tile, data []byte) {
 	if t == nil {
 		// The owner row is in no cached grid. That is not a dead end: a leaf
@@ -101,7 +102,7 @@ func (a *App) postTileContent(cid string, t *rpc.Tile, data []byte) {
 		a.fetchTileByID(cid)
 		return
 	}
-	if t.Kind != rpc.KindText || a.tileReadOnly(t) {
+	if !t.TextDocument() || a.tileReadOnly(t) {
 		return
 	}
 	a.enqueueTextSave(t.GridID, cid, a.saveFallbackVersion(cid, t), data)
@@ -136,7 +137,7 @@ func (a *App) beaconTileContent(cid string, t *rpc.Tile, data []byte) bool {
 	editable := false
 	if t != nil {
 		rowVersion = t.Version
-		editable = t.Kind == rpc.KindText && !a.tileReadOnly(t)
+		editable = t.TextDocument() && !a.tileReadOnly(t)
 	}
 	version, do := textedit.DecideUnloadFlush(t != nil, editable, rowVersion, basis, haveBasis)
 	switch do {

@@ -106,7 +106,7 @@ func (a *App) refreshRenderedOverlay() {
 		return
 	}
 	t, ok := a.descendedTile(p)
-	if !ok || t.Kind != rpc.KindText {
+	if !ok || !t.TextDocument() {
 		hide()
 		return
 	}
@@ -169,7 +169,7 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 		return
 	}
 	t, ok := a.descendedTile(p)
-	if !ok || t.Kind != rpc.KindText || markdown.IsOrg(t.AltText) {
+	if !ok || !t.TextDocument() || markdown.IsOrg(t.AltText) {
 		// Org checkboxes render via go-org and have no source mapping here.
 		ev.Call("preventDefault")
 		return

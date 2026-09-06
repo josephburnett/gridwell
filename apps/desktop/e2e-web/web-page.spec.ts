@@ -35,6 +35,21 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
 
+  // The frozen face is the whole descent. A page tile is a file whose
+  // presentation is a page, so it has no document body: the rendered overlay
+  // and the rendered/raw toggle both belong to a text DOCUMENT and must stay
+  // hidden here. The overlay only fills once an async body fetch lands (fs
+  // answers an image with a markdown metadata summary, which renders as a
+  // document), so poll a window rather than sampling once.
+  const rendered = window.locator('#gw-rendered-view');
+  const toggle = window.locator('#gw-text-toggle');
+  const until = Date.now() + 3_000;
+  while (Date.now() < until) {
+    await expect(rendered, 'no rendered overlay over a page tile').toBeHidden();
+    await expect(toggle, 'no rendered/raw toggle over a page tile').toBeHidden();
+    await window.waitForTimeout(100);
+  }
+
   // The circle is the open-in-new-tab affordance, exactly as for a frozen url
   // tile on a browser host, pointing at the derived door address, which serves
   // the real image bytes.

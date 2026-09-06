@@ -383,8 +383,9 @@ func (a *App) ensureFileToggle() {
 }
 
 // refreshFileToggle positions and styles the floating toggle for a markdown
-// descent, in any mode, and hides it otherwise. URL tiles use a canvas back
-// button instead, so they are excluded.
+// descent, in any mode, and hides it otherwise. Web content is excluded: a url
+// tile uses a canvas back button instead, and a page tile has no document body
+// to show a second face of (rpc.Tile.TextDocument).
 func (a *App) refreshFileToggle() {
 	a.ensureFileToggle()
 	style := a.overlays.textToggleBtn.Get("style")
@@ -402,7 +403,7 @@ func (a *App) refreshFileToggle() {
 		return
 	}
 	file, ok := g.Tiles[p.ContentID()]
-	if !ok || file.Kind != rpc.KindText {
+	if !ok || !file.TextDocument() {
 		hide()
 		return
 	}
