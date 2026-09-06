@@ -7,8 +7,9 @@ says how it works. Read it first. This file says how to change it.
 
 ## The rule: things stay as you left them
 
-Nothing changes except by the user's explicit action. Step out and look back:
-byte-identical. Step back in: the same. Reading never mutates.
+Nothing changes except by the user's explicit action. Step out and look back
+and it is byte-identical; step back in and it is the same. Reading never
+mutates.
 
 When a decision is unclear, this rule wins — over performance, elegance, and
 convenience. Ask of every change: is everything the user didn't touch
@@ -24,8 +25,8 @@ never bumps `version`, and there is no cross-plugin move.
    shapes to copy. A change that leaves the copy-count the same has not
    fixed the class; aim for the design where the bug cannot be written.
 2. **Root-cause first.** State the mechanism in one sentence before touching
-   anything. If you cannot name it, keep digging. A retry, a `setTimeout`, a
-   nil-check that hides the nil — smells, not fixes.
+   anything. If you cannot name it, keep digging. A retry, a `setTimeout`, or
+   a nil-check that hides the nil is a smell, not a fix.
 3. **Every bug fix is a test first.** A reproducing test that fails for the
    real reason; a fix for the class, not the instance; a commit message that
    answers "why was this not caught?" and closes the gap. If the code isn't
@@ -65,7 +66,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   itself at the first load — the config shape and the `db/<id>/` layout
   both, originals set aside, never deleted. Those are the only config
   writes.
-- The forever file holds node facts only: minted ids, layout, framing, the
+- `gridwell.db` holds node facts only: minted ids, layout, framing, the
   user's bytes, connections, tombstones. What a connection last answered is
   cache.
 - The storage format is additive by default. Dead storage — no released
@@ -164,8 +165,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   the in-pane shortcut.
 - A left-drag on a pane boundary resizes it. A press grabs at most one
   divider per axis, so at the corner of three panes it grabs both and the
-  one drag moves both — two ordinary resizes sharing a gesture, not a
-  gesture of its own. `pane.GrabDividers`.
+  one drag moves both: two ordinary resizes sharing one gesture, rather than
+  a gesture of its own. `pane.GrabDividers`.
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.
