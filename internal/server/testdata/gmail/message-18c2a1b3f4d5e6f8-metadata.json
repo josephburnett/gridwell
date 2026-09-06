@@ -1,0 +1,19 @@
+{
+  "id": "18c2a1b3f4d5e6f8",
+  "threadId": "18c2a1b3f4d5e6f8",
+  "labelIds": ["INBOX", "STARRED"],
+  "snippet": "attached",
+  "sizeEstimate": 2210,
+  "historyId": "9912346",
+  "internalDate": "1767690900000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      {"name": "Subject", "value": "Invoice 41"},
+      {"name": "From", "value": "Bob Example <bob@example.com>"},
+      {"name": "Date", "value": "Tue, 6 Jan 2026 09:15:00 +0000"}
+    ]
+  }
+}

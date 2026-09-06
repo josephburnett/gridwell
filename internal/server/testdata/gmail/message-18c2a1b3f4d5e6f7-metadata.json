@@ -1,0 +1,19 @@
+{
+  "id": "18c2a1b3f4d5e6f7",
+  "threadId": "18c2a1b3f4d5e6f7",
+  "labelIds": ["UNREAD", "INBOX", "IMPORTANT"],
+  "snippet": "Are you free friday? I was thinking of the place by the river &mdash;",
+  "sizeEstimate": 4231,
+  "historyId": "9912345",
+  "internalDate": "1767621780000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      {"name": "Subject", "value": "Lunch plans"},
+      {"name": "From", "value": "Alice Example <alice@example.com>"},
+      {"name": "Date", "value": "Mon, 5 Jan 2026 14:03:00 +0000"}
+    ]
+  }
+}

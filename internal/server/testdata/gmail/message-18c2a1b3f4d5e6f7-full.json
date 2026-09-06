@@ -1,0 +1,34 @@
+{
+  "id": "18c2a1b3f4d5e6f7",
+  "threadId": "18c2a1b3f4d5e6f7",
+  "labelIds": ["UNREAD", "INBOX"],
+  "snippet": "Are you free friday?",
+  "internalDate": "1767621780000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      {"name": "Subject", "value": "Lunch plans"},
+      {"name": "From", "value": "Alice Example <alice@example.com>"},
+      {"name": "Content-Type", "value": "multipart/alternative; boundary=\"000000000000abcdef\""}
+    ],
+    "body": {"size": 0},
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "text/plain",
+        "filename": "",
+        "headers": [{"name": "Content-Type", "value": "text/plain; charset=\"UTF-8\""}],
+        "body": {"size": 21, "data": "QXJlIHlvdSBmcmVlIGZyaWRheT8"}
+      },
+      {
+        "partId": "1",
+        "mimeType": "text/html",
+        "filename": "",
+        "headers": [{"name": "Content-Type", "value": "text/html; charset=\"UTF-8\""}],
+        "body": {"size": 54, "data": "PGRpdiBkaXI9Imx0ciI-QXJlIHlvdSBmcmVlIDxiPmZyaWRheTwvYj4_PC9kaXY-"}
+      }
+    ]
+  }
+}
