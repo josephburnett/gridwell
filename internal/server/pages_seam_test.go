@@ -35,8 +35,7 @@ func pagesServer(t *testing.T) (*httptest.Server, *gridwellv1.GetGridResponse) {
 	cl := newPluginClient(t, "pages", nil)
 	reg := plugin.NewRegistry()
 	reg.Register(pagesNS, "pages", cl, nil)
-	hs := httptest.NewServer(mustNew(t, reg, Config{}).WebHandler())
-	t.Cleanup(hs.Close)
+	hs := webDoorTest(t, mustNew(t, reg, Config{}).WebHandler())
 
 	ctx := t.Context()
 	info, err := cl.Info(ctx, &gridwellv1.InfoRequest{})

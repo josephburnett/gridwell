@@ -211,11 +211,8 @@ func Start(opts Options) (*Node, error) {
 	// door is a 0600 unix socket, or closed, and never TCP, so no config can
 	// expose the ungated gRPC export to another uid, let alone a network. ssh
 	// tunnels terminate on it.
-	webSrv := &http.Server{
-		Handler:           srv.WebHandler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		BaseContext:       func(net.Listener) context.Context { return requestCtx },
-	}
+	webSrv := server.WebDoorServer(srv.WebHandler())
+	webSrv.BaseContext = func(net.Listener) context.Context { return requestCtx }
 	connSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
 	connSrv.BaseContext = func(net.Listener) context.Context { return requestCtx }
 	ln, err := net.Listen("tcp", cfg.Web.Bind)

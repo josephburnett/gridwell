@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -91,8 +90,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
 	srv := mustNew(t, reg, Config{Password: "pw"})
-	hs := httptest.NewServer(srv.WebHandler())
-	t.Cleanup(hs.Close)
+	webDoorTest(t, srv.WebHandler())
 	ctx := context.Background()
 
 	// Root: one well per week, hinted into the epoch-anchored column.

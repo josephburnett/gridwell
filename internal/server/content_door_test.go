@@ -99,8 +99,7 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 	reg := plugin.NewRegistry()
 	reg.Register("uf1", "fs", fsClient, nil)
 	srv := mustNew(t, reg, Config{Password: password})
-	hs = httptest.NewServer(srv.WebHandler())
-	t.Cleanup(hs.Close)
+	hs = webDoorTest(t, srv.WebHandler())
 
 	ctx := context.Background()
 	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
