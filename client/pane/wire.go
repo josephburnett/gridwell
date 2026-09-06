@@ -52,9 +52,11 @@ func ChainPrefix(tileID string) string {
 }
 
 // The persisted format itself — structs, media type, version — is
-// api/panelayout. The store reads the same blobs for its reap's protection
-// set, so there is one definition and no second decoder to drift. This file
-// is the client half: Tree to LayoutV1 and back.
+// api/panelayout, and so is the server's one reading of it: which content
+// tiles a blob references (panelayout.TextFocusIDs) is answered there for both
+// the boot sweep's protection set and the delete-time reap. This file is the
+// client half — Tree to LayoutV1 and back — and it derives nothing the server
+// also derives, so there is no second decoder to drift.
 const LayoutMediaType = panelayout.LayoutMediaType
 
 const layoutVersion = panelayout.Version
@@ -134,10 +136,13 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 //
 // The place is written twice by design: Place is the whole frame stack, and
 // Anchor/Path/TextFocus are its projection onto the innermost namespace
-// level, which is all a Gridwell older than Place can read and all the
-// store's reap scans. Place is omitted wherever the projection already holds
-// the whole place (Stack.ProjectionHolds), so the common blob is byte-identical
-// to what earlier versions wrote and a pure visit still never writes.
+// level, which is all a Gridwell older than Place can read and all
+// panelayout.TextFocusIDs scans. TextFocus is therefore written whenever the
+// leaf is descended into content, Place or no Place: it is the server's one
+// record of the reference. Place is omitted wherever the projection already
+// holds the whole place (Stack.ProjectionHolds), so the common blob is
+// byte-identical to what earlier versions wrote and a pure visit still never
+// writes.
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)
 	home := &LayoutPane{ID: bareID, Zoom: 1}
@@ -354,26 +359,4 @@ func paneIDNum(id string) (int, bool) {
 		return 0, false
 	}
 	return n, true
-}
-
-// LeafTextFocusIDs returns the TextFocus tile id of every leaf that has one:
-// the pane tile's content descents, in tree order. The delete-time ephemeral
-// reap reads the references this way without any client machinery. The ids
-// are in whatever frame the decoder's abs produced.
-func LeafTextFocusIDs(t *Tree) []string {
-	var out []string
-	var walk func(n TreeNode)
-	walk = func(n TreeNode) {
-		if n.Pane != nil {
-			if id := n.Pane.ContentID(); id != "" {
-				out = append(out, id)
-			}
-		}
-		if n.Split != nil {
-			walk(n.Split.A)
-			walk(n.Split.B)
-		}
-	}
-	walk(t.Root)
-	return out
 }

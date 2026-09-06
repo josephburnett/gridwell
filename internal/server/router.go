@@ -11,8 +11,8 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/panelayout"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -714,6 +714,12 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 // a readable pane layout, and an unreadable blob — corrupt, or written by a
 // newer Gridwell — yields nothing rather than a guess; the boot sweep reclaims
 // the leftovers once the pane tile is gone.
+//
+// "Which content tiles does this blob reference" has one owner,
+// panelayout.TextFocusIDs, which the store's boot sweep reads for its
+// protection set. This reap is the other side of that same question — reap
+// here, spare there — so it must be the same derivation or the two drift and
+// an ephemeral is reaped or kept wrongly.
 func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namespace.Namespace, localID, qualifiedID string) []string {
 	tr, err := owner.GetTile(ctx, &pb.GetTileRequest{TileId: localID})
 	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindPane || tr.GetTile().BlobId == 0 {
@@ -723,14 +729,15 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 	if err != nil || len(body) == 0 {
 		return nil
 	}
-	// Blob ids are in this node's frame: the encoder strips the reader's
-	// transit prefix, which is empty for a locally-owned pane tile.
-	tree, err := pane.DecodeLayout(body, func(id string) string { return id }, "")
+	// Blob ids are already in this node's frame: the encoder strips the
+	// reader's transit prefix, which is empty for a locally-owned pane tile,
+	// and reapWorkspaceEphemerals routes each id from here.
+	ids, err := panelayout.TextFocusIDs(body)
 	if err != nil {
 		log.Printf("gridwell: delete %s: layout blob unreadable, reaping nothing: %v", qualifiedID, err)
 		return nil
 	}
-	return pane.LeafTextFocusIDs(tree)
+	return ids
 }
 
 // reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed

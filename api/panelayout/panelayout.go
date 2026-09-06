@@ -1,8 +1,8 @@
 // Package panelayout is the persisted pane-layout format: a pane tile's
-// blob wire shape. It is contract, not client machinery — the home store
-// scans blobs for the text tiles a pane tile references (the ephemeral
-// reap's protection set) and the client encodes and decodes full trees
-// from the same structs, so there is no second decoder to drift.
+// blob wire shape. It is contract, not client machinery — the client encodes
+// and decodes full trees from these structs, and the server derives the one
+// thing it needs from a blob here (TextFocusIDs), so there is no second
+// decoder to drift.
 //
 // Versioning: bump Version only with a new DTO type and a decoder that
 // still accepts every older version. A blob written by a newer Gridwell is
@@ -67,7 +67,7 @@ type LayoutFrame struct {
 //
 // Anchor, Path and TextFocus are the same place projected onto its innermost
 // namespace level — the only shape a Gridwell older than Place can read, and
-// the shape the store's reap scans for referenced text tiles. Place wins
+// the shape TextFocusIDs scans for referenced content tiles. Place wins
 // wherever it is present, and it is written only where the projection would
 // lose a level (a crossing below the top, a content frame below the top), so
 // a place the projection holds in full encodes byte-identically to what
@@ -100,8 +100,18 @@ func Parse(data []byte) (*LayoutV1, error) {
 }
 
 // TextFocusIDs returns every leaf's TextFocus id in the blob: the content
-// tiles a pane tile references. The store's reap reads this to protect
-// those documents without holding any client tree machinery.
+// tiles a pane tile references. It is the ONE answer to that question on the
+// server, read from both sides of the ephemeral reap — the store's boot sweep
+// protects these ids, and the router reaps them when the pane tile is
+// destroyed — so the two cannot disagree about what a blob references. The
+// projection field is what it reads, not the Place stack, because every
+// encoder writes TextFocus for a content descent and blobs older than Place
+// carry nothing else.
+//
+// It is deliberately loose on structure: a node carrying both a pane and a
+// split still yields the ids it does carry, since a reference named by the
+// blob is a real reference either way, and the reap acts only on ids that
+// also turn out to live on the owner's scratch grid.
 func TextFocusIDs(data []byte) ([]string, error) {
 	l, err := Parse(data)
 	if err != nil {

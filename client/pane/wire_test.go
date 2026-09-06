@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/panelayout"
 )
 
 // treesEqual compares two trees on everything the layout persists: structure,
@@ -460,22 +462,34 @@ func TestLayoutOmitsPlaceWhenTheProjectionHoldsIt(t *testing.T) {
 	}
 }
 
-// TestLeafTextFocusIDs: the delete-time ephemeral reap reads a pane tile's
-// content descents straight off the decoded tree — every leaf's TextFocus, in
-// tree order, empty ones skipped.
-func TestLeafTextFocusIDs(t *testing.T) {
-	blob := []byte(`{"v":1,"root":{"split":{"dir":"v","ratio":0.5,` +
-		`"a":{"pane":{"id":"p1","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"u/7"}},` +
-		`"b":{"split":{"dir":"h","ratio":0.5,` +
-		`"a":{"pane":{"id":"p2","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1}},` +
-		`"b":{"pane":{"id":"p3","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"u/9"}}}}}},"focus":"p1"}`)
-	tree, err := DecodeLayout(blob, func(id string) string { return id }, "")
-	if err != nil {
-		t.Fatalf("DecodeLayout: %v", err)
+// TestEncoderAlwaysWritesTextFocus: TextFocus is the server's one record of a
+// leaf's content descent (panelayout.TextFocusIDs reads it, for both the boot
+// sweep's protection set and the delete-time reap), so the encoder must write
+// it for every content descent — including the deep places where it also
+// writes the full Place stack, whose top frame says the same thing.
+func TestEncoderAlwaysWritesTextFocus(t *testing.T) {
+	tr := NewTree()
+	p := tr.FocusedPane()
+	p.Stack = NewStack("plugin/1")
+	p.Push(Frame{GridID: "other/1", Door: "plugin/9", Zoom: 1})
+	p.Push(Frame{Door: "other/12", Content: true})
+	if p.ProjectionHolds() {
+		t.Fatal("fixture no longer forces Place; pick a deeper place")
 	}
-	got := LeafTextFocusIDs(tree)
-	if len(got) != 2 || got[0] != "u/7" || got[1] != "u/9" {
-		t.Errorf("LeafTextFocusIDs = %v, want [u/7 u/9]", got)
+
+	data, _, err := EncodeLayout(tr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(`"place"`)) {
+		t.Fatalf("expected the full place stack in the blob: %s", data)
+	}
+	ids, err := panelayout.TextFocusIDs(data)
+	if err != nil {
+		t.Fatalf("TextFocusIDs: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != "other/12" {
+		t.Errorf("the server sees %v referenced, want [other/12]: %s", ids, data)
 	}
 }
 
