@@ -13,6 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/wsbar"
@@ -395,20 +396,49 @@ type paletteItem struct {
 	promotePane string
 }
 
-// paletteItems returns the palette entries for pane p, in display order:
-// every configured plugin first, in server.yaml order, as the palette's top
-// row, then — only when the pane's current grid is writable — the tile
-// primitives. A read-only grid, such as an fs or proc grid, shows plugins
-// only. A shells-disabled node offers no shell primitive: every palette
-// consumer — layout, hit-testing, drag ghosts, the test hook — reads this one
-// list, so the swatch is gone from all of them at once.
+// paletteItems returns the palette entries for pane p, in display order: the
+// plugin section first — every configured plugin in server.yaml order, with
+// its declared root entries — as the palette's top row, then, only when the
+// pane's current grid is writable, the tile primitives. The section is folded
+// away unless the user has opened it on this menu opening, and a folded
+// section contributes NO items: every palette consumer — layout, hit-testing,
+// drag ghosts, the test hook — reads this one list, so a swatch that is not
+// shown cannot be clicked, dragged or hovered either. A read-only grid, such
+// as an fs or proc grid, shows plugins only. A shells-disabled node offers no
+// shell primitive.
 func (a *App) paletteItems(p *pane.Pane) []paletteItem {
+	items, _ := a.paletteView(p)
+	return items
+}
+
+// paletteView returns the palette's items and the section decision they were
+// composed under — what the popover shows, and whether it carries the
+// disclosure strip. palette.Show is the one owner of that decision; this
+// counts the two groups and pours them in.
+func (a *App) paletteView(p *pane.Pane) ([]paletteItem, palette.Shown) {
+	plugins, primitives := a.paletteGroups(p)
+	show := palette.Show(palette.Section{
+		Plugins:    len(plugins),
+		Primitives: len(primitives),
+		Expanded:   a.menu.PluginsExpanded(),
+	})
+	if !show.Plugins {
+		plugins = nil
+	}
+	return append(plugins, primitives...), show
+}
+
+// paletteGroups builds the palette's two groups for pane p: the plugin
+// section, and the primitives the pane's grid takes. Neither is filtered by
+// the fold — that is paletteView's composition step — so the counts handed to
+// palette.Show are the ones the node actually declares.
+func (a *App) paletteGroups(p *pane.Pane) (plugins, primitives []paletteItem) {
 	// The menu belongs to the pane's node: a remote pane's top row is the
 	// remote node's plugins, exactly what a direct client of that node sees,
 	// and the shell primitive obeys that node's policy. "" — local, or a
 	// grid not yet cached — is the boot handshake.
 	ctx := a.menuCtx(p)
-	items := make([]paletteItem, 0, len(ctx.plugins)+len(primitiveKinds))
+	items := make([]paletteItem, 0, len(ctx.plugins))
 	for _, pl := range ctx.plugins {
 		items = append(items, paletteItem{isPlugin: true, plugin: pl})
 		// The plugin's root entries ride its row: extra doorways it declares
@@ -429,6 +459,7 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 			items = append(items, paletteItem{isPlugin: true, plugin: rpc.EntryPlugin(pl, *e), entry: e})
 		}
 	}
+	prims := make([]paletteItem, 0, len(primitiveKinds))
 	// Unknown is not writable: the creation swatches appear once the grid
 	// says it takes tiles, never on a guess that a click would then refuse.
 	if writable, _ := a.gridWritable(a.gridIDForPane(p)); writable {
@@ -440,10 +471,10 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 			if k == tplShell && ctx.shellsDisabled {
 				continue
 			}
-			items = append(items, paletteItem{primitive: k})
+			prims = append(prims, paletteItem{primitive: k})
 		}
 	}
-	return items
+	return items, prims
 }
 
 // paletteTopRow counts the plugin swatches in items: the layout's row split.

@@ -18,6 +18,20 @@ test('touch: tap opens the + menu and descends into a plugin', async ({ gw, wind
   await window.waitForFunction(() => (window as any).__gridwellTest.palette().open, null, {
     timeout: 5_000,
   });
+  // The plugin section is folded on every opening: a finger opens it by
+  // tapping the chevron strip, which is a press like any other.
+  const folded = await gw.palette();
+  expect(folded.toggle.present, 'the folded section offers its chevron').toBe(true);
+  expect(folded.items.some((i) => i.isPlugin), 'and hides the plugin swatches').toBe(false);
+  await window.touchscreen.tap(
+    folded.toggle.x + folded.toggle.w / 2,
+    folded.toggle.y + folded.toggle.h / 2,
+  );
+  await window.waitForFunction(
+    () => (window as any).__gridwellTest.palette().toggle.expanded,
+    null,
+    { timeout: 5_000 },
+  );
   const open = await gw.palette();
   const swatch = open.items.find((i) => i.isPlugin && i.label === 'home');
   expect(swatch, 'plugin swatch present in the + menu').toBeTruthy();

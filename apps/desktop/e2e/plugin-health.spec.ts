@@ -40,6 +40,7 @@ test('a plugin with no root is inert and reports a notice instead of descending'
   // The + menu shows the swatch with its classification, the tint the render
   // path reads. Click it.
   await gw.openPalette();
+  await gw.expandPlugins();
   const pal = await gw.palette();
   const swatch = pal.items.find((i) => i.isPlugin && i.label === 'noroot');
   expect(swatch, 'the plugin swatch is in the + menu').toBeTruthy();

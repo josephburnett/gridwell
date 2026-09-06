@@ -216,3 +216,54 @@ func TestTransferFocusForwardedPathClosesMenu(t *testing.T) {
 		t.Fatal("forwarded press must close the menu on the de-focused pane")
 	}
 }
+
+// The plugin section is folded on every opening. The flag is live state, not
+// a preference: a reopened menu shows the primitives first however the user
+// left the last one.
+func TestPluginsCollapsedOnEveryOpen(t *testing.T) {
+	s := New()
+	s.Open("p1")
+	if s.PluginsExpanded() {
+		t.Fatal("a freshly opened menu must have the plugin section folded")
+	}
+	if !s.TogglePlugins() {
+		t.Fatal("TogglePlugins must report the section open")
+	}
+	if !s.PluginsExpanded() {
+		t.Fatal("PluginsExpanded must follow the toggle")
+	}
+	s.Close()
+	if s.PluginsExpanded() {
+		t.Fatal("Close must drop the fold, so no stale state survives the menu")
+	}
+	s.Open("p1")
+	if s.PluginsExpanded() {
+		t.Fatal("reopening the same pane's menu must start folded again")
+	}
+	s.TogglePlugins()
+	s.Open("p2") // the menu moved to another pane
+	if s.PluginsExpanded() {
+		t.Fatal("opening on another pane must start folded")
+	}
+}
+
+// Toggling the section is not a focus or open-state gesture: only the fold and
+// the now-meaningless hover change.
+func TestTogglePluginsTouchesOnlyTheFold(t *testing.T) {
+	s := New()
+	s.Open("p1")
+	s.SetHover(3)
+	s.TogglePlugins()
+	if !s.OpenOn("p1") {
+		t.Fatal("TogglePlugins must leave the menu open on its pane")
+	}
+	if s.Hover() != -1 {
+		t.Fatalf("Hover = %d, want -1: the swatch list under the pointer changed", s.Hover())
+	}
+	if s.TogglePlugins() {
+		t.Fatal("a second toggle must fold the section back")
+	}
+	if !s.OpenOn("p1") {
+		t.Fatal("folding back must still leave the menu open on its pane")
+	}
+}

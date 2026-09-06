@@ -1,5 +1,6 @@
 // Package menu owns the live UI state of the "+" creation menu: whether it is
-// open, which pane it is open on, and which palette item is hovered.
+// open, which pane it is open on, which palette item is hovered, and whether
+// the plugin and connection section is unfolded.
 //
 // This is the single owner. The menu is open on at most one pane at a time,
 // the focused one. Every transition goes through a method here and nothing
@@ -22,9 +23,10 @@ const noHover = -1
 // State is the single owner of the + menu's live state. The zero value is not
 // valid (hover would read as item 0); construct with New.
 type State struct {
-	open   bool
-	paneID string
-	hover  int
+	open     bool
+	paneID   string
+	hover    int
+	expanded bool
 }
 
 // New returns a closed menu with no hovered item.
@@ -50,20 +52,39 @@ func (s *State) PaneID() string {
 // Hover returns the hovered palette-item index, or -1 when nothing is hovered.
 func (s *State) Hover() int { return s.hover }
 
-// Open opens the menu on paneID. Idempotent on the target; always resets hover,
-// since the pointer has not yet moved over the freshly-shown palette.
+// PluginsExpanded reports whether the plugin and connection section is
+// unfolded. It is live state like the hover, not a preference: every opening
+// starts collapsed, so a menu opened after a session of expanding still shows
+// the primitives first.
+func (s *State) PluginsExpanded() bool { return s.expanded }
+
+// TogglePlugins flips the plugin section open or shut and returns the new
+// state. It touches nothing else: the menu stays open on the same pane, and
+// the pane keeps its focus and selection. Hover is dropped, because the
+// swatch list under the pointer has just changed.
+func (s *State) TogglePlugins() bool {
+	s.expanded = !s.expanded
+	s.hover = noHover
+	return s.expanded
+}
+
+// Open opens the menu on paneID. Idempotent on the target; always resets hover
+// and the plugin fold, since the pointer has not yet moved over the
+// freshly-shown palette and every opening starts collapsed.
 func (s *State) Open(paneID string) {
 	s.open = true
 	s.paneID = paneID
 	s.hover = noHover
+	s.expanded = false
 }
 
-// Close closes the menu and clears the remembered pane and hover, so nothing
-// downstream can read a stale pane id off a closed menu.
+// Close closes the menu and clears the remembered pane, hover and fold, so
+// nothing downstream can read a stale pane id off a closed menu.
 func (s *State) Close() {
 	s.open = false
 	s.paneID = ""
 	s.hover = noHover
+	s.expanded = false
 }
 
 // Toggle is the corner "+" click: close if already open on paneID, otherwise

@@ -13,6 +13,7 @@ test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] 
 test('the plugin fs declares no tool it cannot honor (#271)', async ({ gw, window }) => {
   await gw.enterPlugin('code');
   await gw.openPalette();
+  await gw.expandPlugins();
   const pal = await window.evaluate(() => (window as any).__gridwellTest.palette());
   const labels = (pal.items ?? []).map((i: any) => i.label);
   expect(labels, 'no dead-end search entry on plugin fs').not.toContain('search');

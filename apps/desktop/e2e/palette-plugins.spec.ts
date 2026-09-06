@@ -73,6 +73,7 @@ test('a plugin anchor rides in the URL path and survives a reload (issue #193)',
 test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
   await gw.plugins();
   await gw.openPalette();
+  await gw.expandPlugins();
   const pal = await gw.palette();
 
   const plugins = pal.items.filter((i) => i.isPlugin);
@@ -142,6 +143,7 @@ test('a menu row wears the same face in the bar: a globe for a connection, a gri
 }) => {
   await gw.enterPlugin('home');
   await gw.openPalette();
+  await gw.expandPlugins();
   const rows = (await gw.palette()).items.filter((i) => i.isPlugin && i.rootGridID);
   const home = rows.find((r) => r.label === 'home' || r.kind === 'home')!;
   const conn = rows.find((r) => r.kind === 'connection')!;

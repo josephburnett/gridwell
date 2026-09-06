@@ -82,6 +82,20 @@ export interface PluginDescriptor {
   rootViewZoom: number;
 }
 
+// PaletteToggle is the plugin section's disclosure strip: whether the popover
+// carries one, which way the chevron points ("up" collapsed, "down" expanded,
+// "none" when there is no control), whether the section's swatches are in
+// items, and the rect a press works it by.
+export interface PaletteToggle {
+  present: boolean;
+  chevron: string;
+  expanded: boolean;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface PaletteInfo {
   open: boolean;
   plusX: number;
@@ -90,6 +104,7 @@ export interface PaletteInfo {
   // The hovered swatch index, -1 for none: what the palette highlights, read
   // off client/menu, the one owner of the menu's live state.
   hover: number;
+  toggle: PaletteToggle;
 }
 
 export class GridwellDriver {
@@ -263,6 +278,34 @@ export class GridwellDriver {
     });
   }
 
+  // expandPlugins unfolds the + menu's plugin and connection section by
+  // clicking its chevron strip: the gesture every plugin swatch is now behind,
+  // since a menu opens collapsed. It no-ops when the section is already shown
+  // — expanded, or a popover with no control at all, such as a read-only
+  // grid's menu — so a caller never has to ask which state it is in.
+  async expandPlugins(): Promise<void> {
+    // The control appears with the section, and a remote pane's menu waits on
+    // the far node's plugin list, so wait for one or the other rather than
+    // reading a menu that has not been told yet.
+    await this.win.waitForFunction(
+      () => {
+        const p = (window as any).__gridwellTest.palette();
+        return p.open && p.toggle && (p.toggle.expanded || p.toggle.present);
+      },
+      null,
+      { timeout: 15_000 },
+    );
+    const pal = await this.palette();
+    if (pal.toggle.expanded) return;
+    const t = pal.toggle;
+    await this.win.mouse.click(t.x + t.w / 2, t.y + t.h / 2);
+    await this.win.waitForFunction(
+      () => (window as any).__gridwellTest.palette().toggle.expanded,
+      null,
+      { timeout: 5_000 },
+    );
+  }
+
   // focusPane left-clicks the empty center of the given pane to move focus to
   // it. The grid is empty after an entry or split, so the press lands on no
   // tile: a pure focus click, with no descend and no pan. It exercises the
@@ -286,6 +329,7 @@ export class GridwellDriver {
   // (cx, cy) of the focused pane: the drop-a-link gesture, distinct from
   // clickPluginSwatch's descend.
   async dragPluginLink(match: string, cx: number, cy: number): Promise<void> {
+    await this.expandPlugins();
     const pal = await this.palette();
     const item = pal.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
     if (!item) throw new Error(`no plugin swatch ${match}; have ${pal.items.map((i) => i.kind)}`);
@@ -339,6 +383,7 @@ export class GridwellDriver {
   // The pane lands in the plugin's root grid.
   async clickPluginSwatch(match: string): Promise<void> {
     await this.openPalette();
+    await this.expandPlugins();
     const pal = await this.palette();
     const item = pal.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
     if (!item) throw new Error(`no plugin swatch ${match}; have ${pal.items.map((i) => i.kind)}`);

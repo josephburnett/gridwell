@@ -404,6 +404,15 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// click so the popover stays open.
 	if mp, mr, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 0 {
 		if a.pointInPalette(mp, sx, sy) {
+			// The plugin section's disclosure strip: press it and the section
+			// folds or unfolds in place. It is not a swatch, so no drag arms
+			// and the release does nothing, and it changes only the menu —
+			// the pane keeps its focus and its selection.
+			if a.pointInPaletteToggle(mp, sx, sy) {
+				a.menu.TogglePlugins()
+				a.draw()
+				return nil
+			}
 			if idx := a.paletteTileIndexAt(mp, sx, sy); idx >= 0 {
 				a.startPaletteDrag(mp, mr, idx, sx, sy)
 			}

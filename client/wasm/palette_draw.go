@@ -21,17 +21,26 @@ import (
 // given pane. The palette package owns the geometry; wasm only has to
 // pour the inputs in.
 func (a *App) paletteLayoutFor(p *pane.Pane) palette.Layout {
+	l, _ := a.paletteLayoutAndShow(p)
+	return l
+}
+
+// paletteLayoutAndShow builds the layout together with the section decision
+// behind it, for the two callers that draw or hit-test the disclosure strip.
+func (a *App) paletteLayoutAndShow(p *pane.Pane) (palette.Layout, palette.Shown) {
 	cx, cy := a.plusButtonCenter()
-	items := a.paletteItems(p)
+	items, show := a.paletteView(p)
 	return palette.Layout{
 		Cfg:      palette.Default(),
 		PlusX:    cx,
 		PlusY:    cy,
 		NumTiles: len(items),
 		// Plugins fill the top row; the primitives, if any, drop to a second
-		// row below. Both counts come from the one item list.
+		// row below. Both counts come from the one item list, so a folded
+		// section leaves the top row empty rather than needing a second flag.
 		TopRow: paletteTopRow(items),
-	}
+		Toggle: show.Toggle,
+	}, show
 }
 
 // plusButtonCenter returns the screen-space center of the circle button in
@@ -116,9 +125,10 @@ func (a *App) paletteTileRect(p *pane.Pane, i int) (x, y, w, h float64) {
 	return tr.X, tr.Y, tr.W, tr.H
 }
 
-// drawPalette paints the creation popover: a background container and
-// a row of preview tiles per palette item group — plugins on top, then
-// the tile primitives in writable grids.
+// drawPalette paints the creation popover: a background container, the
+// disclosure strip for the plugin section when there is one, and a row of
+// preview tiles per palette item group — plugins on top, then the tile
+// primitives in writable grids.
 func (a *App) drawPalette(p *pane.Pane) {
 	mx, my, mw, mh := a.paletteRect(p)
 	a.cctx.Set("fillStyle", colorMenuBg)
@@ -126,11 +136,43 @@ func (a *App) drawPalette(p *pane.Pane) {
 	a.cctx.Set("strokeStyle", colorPaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
-	for i, item := range a.paletteItems(p) {
+	items, show := a.paletteView(p)
+	for i, item := range items {
 		tx, ty, tw, th := a.paletteTileRect(p, i)
 		hovered := a.menu.Hover() == i
 		a.drawPaletteItem(item, tx, ty, tw, th, hovered)
 	}
+	if show.Toggle {
+		a.drawPaletteToggle(a.paletteLayoutFor(p).ToggleRect(), show.Chevron)
+	}
+}
+
+// drawPaletteToggle paints the plugin section's disclosure strip: a flat band
+// with a centered chevron pointing the way the press moves the section — up
+// to open it above the primitives, down to fold it back. It is drawn as a
+// band, never as a swatch, so nothing about it invites the drag a template
+// tile takes.
+func (a *App) drawPaletteToggle(r pane.Rect, c palette.Chevron) {
+	a.cctx.Set("fillStyle", colorPlusBg)
+	a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
+	// Chevron: two strokes meeting at a point, half the strip's height.
+	cx := r.X + r.W/2
+	cy := r.Y + r.H/2
+	const halfW = 6.0
+	// The apex sits above the ends for "up" (canvas y grows downward) and
+	// below them for "down".
+	dy := -3.0
+	if c == palette.ChevronDown {
+		dy = -dy
+	}
+	a.cctx.Set("strokeStyle", colorPlusFg)
+	a.cctx.Set("lineWidth", 2.0)
+	a.cctx.Call("beginPath")
+	a.cctx.Call("moveTo", cx-halfW, cy-dy)
+	a.cctx.Call("lineTo", cx, cy+dy)
+	a.cctx.Call("lineTo", cx+halfW, cy-dy)
+	a.cctx.Call("stroke")
+	a.cctx.Set("lineWidth", 1.0)
 }
 
 // drawPaletteItem renders one preview tile inside the palette. The body
@@ -226,4 +268,11 @@ func (a *App) paletteTileIndexAt(p *pane.Pane, x, y float64) int {
 // pointInPalette is the wasm-side adapter for palette.Layout.PointInPopover.
 func (a *App) pointInPalette(p *pane.Pane, x, y float64) bool {
 	return a.paletteLayoutFor(p).PointInPopover(x, y)
+}
+
+// pointInPaletteToggle is the wasm-side adapter for
+// palette.Layout.PointInToggle: false whenever the popover has no strip, so
+// the press path needs no second guard.
+func (a *App) pointInPaletteToggle(p *pane.Pane, x, y float64) bool {
+	return a.paletteLayoutFor(p).PointInToggle(x, y)
 }

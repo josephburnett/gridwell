@@ -118,7 +118,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   wraps them in a synthetic root grid of wells. `root_context` is the
   primary collection and gets no menu entry of its own.
 - A node has no grid of its own. A mount lands on the far node's home.
-  Plugins and connections live on the + menu's top row.
+  Plugins and connections live on the + menu's top row. That row is an open
+  set, so it is folded: a menu opens on the primitives with a chevron strip
+  for the section above it, and every opening starts folded — the fold is the
+  menu's live state and dies with it (`client/palette` decides what a state
+  shows, `client/menu` owns the flag).
 - The web door always has a password (the minted 0600 `web-password` file;
   delete it to rotate). The connection door is a 0600 unix socket, never
   TCP. Its `server.yaml` key stays `federation:` and its file stays

@@ -208,6 +208,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   await expect.poll(async () => (await gw.barName()).label).toBe('my far place');
 
   await gw.openPalette();
+  await gw.expandPlugins();
   await expect
     .poll(
       async () => {

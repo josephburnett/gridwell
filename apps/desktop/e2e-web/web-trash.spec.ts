@@ -24,6 +24,7 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   // The trashcan swatch is a declared root entry on the + menu's top row, and
   // clicking it descends like any other swatch.
   await gw.openPalette();
+  await gw.expandPlugins();
   const pal = await gw.palette();
   const trash = pal.items.find((i) => i.isPlugin && i.entry === 'trash');
   expect(trash, 'the + menu offers the declared trash root').toBeTruthy();

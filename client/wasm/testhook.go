@@ -634,6 +634,7 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		return map[string]any{"open": false}
 	}
 	px, py := a.plusButtonCenter()
+	l, show := a.paletteLayoutAndShow(p)
 	items := a.paletteItems(p)
 	entries := make([]any, 0, len(items))
 	for i, item := range items {
@@ -667,11 +668,25 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		}
 		entries = append(entries, e)
 	}
+	tr := l.ToggleRect()
 	return map[string]any{
 		"open":  a.menu.OpenOn(p.ID),
 		"plusX": px,
 		"plusY": py,
 		"items": entries,
+		// The plugin section's disclosure strip: whether the popover carries
+		// one, which way its chevron points, whether the section is unfolded,
+		// and the rect a press lands on — the same rect pointInPaletteToggle
+		// hit-tests, so a click at its center works the control.
+		"toggle": map[string]any{
+			"present":  show.Toggle,
+			"chevron":  show.Chevron.String(),
+			"expanded": show.Plugins,
+			"x":        tr.X,
+			"y":        tr.Y,
+			"w":        tr.W,
+			"h":        tr.H,
+		},
 		// The hovered swatch index, -1 for none: what the palette highlights,
 		// straight off client/menu, the one owner. A spec asserts the hover
 		// routed to the menu's pane without reading pixels.
