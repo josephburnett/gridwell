@@ -44,8 +44,7 @@ func newAuthTestServer(t *testing.T, password string) (*httptest.Server, string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hs := httptest.NewServer(srv.WebHandler())
-	t.Cleanup(hs.Close)
+	hs := webDoorTest(t, srv.WebHandler())
 	return hs, root
 }
 

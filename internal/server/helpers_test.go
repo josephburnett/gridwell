@@ -37,9 +37,20 @@ func mustNew(t testing.TB, reg *plugin.Registry, cfg Config) *Server {
 // notice a wiring mistake in it.
 func serveWeb(t testing.TB, srv *Server) *httptest.Server {
 	t.Helper()
-	hs := httptest.NewServer(srv.WebHandler())
+	return withCookie(t, webDoorTest(t, srv.WebHandler()), srv.cfg.Password)
+}
+
+// webDoorTest serves h on an httptest server whose config is the production
+// web door shape (WebDoorServer), started and closed at cleanup. An in-package
+// harness crosses the server the node runs, not httptest's default one — the
+// copy that diverged on the connection door and must not on this one.
+func webDoorTest(t testing.TB, h http.Handler) *httptest.Server {
+	t.Helper()
+	hs := httptest.NewUnstartedServer(nil)
+	hs.Config = WebDoorServer(h)
+	hs.Start()
 	t.Cleanup(hs.Close)
-	return withCookie(t, hs, srv.cfg.Password)
+	return hs
 }
 
 // withCookie seeds hs's client with the auth cookie for password.

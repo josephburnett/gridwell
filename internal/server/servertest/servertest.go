@@ -38,7 +38,9 @@ func New(t testing.TB, reg *plugin.Registry, cfg server.Config) *server.Server {
 // Closed at test cleanup.
 func Serve(t testing.TB, srv *server.Server) *httptest.Server {
 	t.Helper()
-	hs := httptest.NewServer(srv.WebHandler())
+	hs := httptest.NewUnstartedServer(nil)
+	hs.Config = server.WebDoorServer(srv.WebHandler())
+	hs.Start()
 	t.Cleanup(hs.Close)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

@@ -14,6 +14,7 @@ package server
 
 import (
 	"net/http"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -28,6 +29,27 @@ import (
 // this door is just an unknown route and binding the web UI to a network
 // address exposes exactly the gated surface and nothing else.
 func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
+
+// WebDoorServer is the http.Server that serves the web door: the one shape,
+// so the production node and every test harness put the same server in front
+// of the browser handler. A door's listener and server configuration is a fact
+// with one owner, not glue each harness rewrites — that copy is what diverged
+// on the connection door (see ConnectionDoorServer). The node sets BaseContext
+// per its own listener; everything else the web door needs is here.
+//
+// ReadHeaderTimeout stays, and here alone. Unlike the connection door — which
+// must carry no deadline because a deadline becomes a stream killer on its
+// unencrypted-HTTP/2 gRPC (see ConnectionDoorServer) — the web door faces a
+// network: it binds where config says, a tailnet address is fine because it is
+// password-gated, so slow-header protection against an unauthenticated peer is
+// wanted, and it carries no long-lived raw-gRPC stream for the deadline to cut.
+// No Protocols: the web door refuses raw gRPC by design (TestWebDoorServesNoGRPC).
+func WebDoorServer(h http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+}
 
 // ConnectionHandler is the connection door: the Gridwell service over raw
 // gRPC, what a remote mounter's ssh tunnel dials. It is ungated by design and
