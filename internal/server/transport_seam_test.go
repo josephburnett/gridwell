@@ -518,3 +518,83 @@ func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {
 		}
 	}
 }
+
+// A leaf link on the local home whose target lives through a connection —
+// an ordinary ctrl + right-drag out of a mounted node — resolves at the
+// serving node like any other link. contentRoute is the one resolution
+// point, and it must follow the target through the SAME routing lookup the
+// rest of the node uses: a connection-chained target
+// ("<node>/<conn>/<remote>/<tile>") is owned by the transport, not by home,
+// so a follow that peels only the first segment answers home and the read
+// 404s. Both content doors that resolve a link — ReadContent and
+// GetTilePreview — cross the seam here.
+func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
+	lp, err := h.localCl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localHome, remoteRoot := lp.HomeGridID, lp.Connections[0].RootGridID
+
+	// The target: a text tile on the far node, addressed through the chain.
+	body := []byte("# through geneva")
+	src, err := h.localCl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: remoteRoot, X: 0, Y: 0, W: 2, H: 2, Data: body,
+	})
+	if err != nil {
+		t.Fatalf("create remote text: %v", err)
+	}
+	if !strings.HasPrefix(src.ID, localNodeID+"/geneva/") {
+		t.Fatalf("target id = %q, want a connection chain", src.ID)
+	}
+
+	// The link: a leaf link on the LOCAL home pointing at it.
+	link, err := h.localCl.CreateLeafLink(ctx, &rpc.CreateLeafLinkRequest{
+		GridID: localHome, X: 4, Y: 0, W: 2, H: 2, Kind: rpc.KindText,
+		LinkTargetID: src.ID, Label: "through geneva",
+	})
+	if err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+
+	// Reading the LINK's own id — what a session restore hands ReadContent —
+	// returns the target's bytes.
+	data, _, version, err := h.localCl.ReadContent(ctx, link.ID)
+	if err != nil {
+		t.Fatalf("read through a link into a connection: %v", err)
+	}
+	if string(data) != string(body) {
+		t.Errorf("link content = %q, want the target's %q", data, body)
+	}
+	if version != src.Version {
+		t.Errorf("link content version = %d, want the target's %d", version, src.Version)
+	}
+
+	// The preview door resolves the same link the same way.
+	jpeg := []byte("\xff\xd8fake-jpeg-bytes")
+	url, err := h.localCl.CreateURL(ctx, &rpc.CreateURLRequest{
+		GridID: remoteRoot, X: 0, Y: 4, W: 2, H: 2, URL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("create remote url: %v", err)
+	}
+	if _, err := h.localCl.SetURLState(ctx, &rpc.SetURLStateRequest{TileID: url.ID, JPEG: jpeg}); err != nil {
+		t.Fatalf("freeze: %v", err)
+	}
+	urlLink, err := h.localCl.CreateLeafLink(ctx, &rpc.CreateLeafLinkRequest{
+		GridID: localHome, X: 4, Y: 4, W: 2, H: 2, Kind: rpc.KindURL,
+		LinkTargetID: url.ID, Label: "example",
+	})
+	if err != nil {
+		t.Fatalf("create url link: %v", err)
+	}
+	got, err := h.localCl.GetTilePreview(ctx, urlLink.ID)
+	if err != nil {
+		t.Fatalf("preview through a link into a connection: %v", err)
+	}
+	if string(got) != string(jpeg) {
+		t.Errorf("link preview = %q, want the target's jpeg", got)
+	}
+}

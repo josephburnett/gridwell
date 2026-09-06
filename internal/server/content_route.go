@@ -47,13 +47,15 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	if target == "" {
 		return c, local, nil
 	}
-	// A leaf plugin stores its target already qualified from this node's
-	// perspective, so it routes like any other id.
-	tuuid, tlocal, ok := rpc.SplitID(target)
-	if !ok {
+	if _, _, ok := rpc.SplitID(target); !ok {
 		return nil, "", status.Errorf(gcodes.Internal, "link target %q is not qualified", target)
 	}
-	tc, found := s.routeClient(tuuid)
+	// A leaf plugin stores its target already qualified from this node's
+	// perspective, so it routes like any other id — through resolve, the one
+	// owner of "who serves this qualified id". Peeling the target's first
+	// segment by hand would answer home for a connection-chained target
+	// ("<node>/<conn>/<remote>/<tile>"), which the transport owns.
+	tc, tlocal, tuuid, _, found := s.resolve(target)
 	if !found {
 		return nil, "", status.Errorf(gcodes.NotFound, "no plugin %q for link target %q", tuuid, target)
 	}
