@@ -6,6 +6,12 @@
 //
 // When a stream opens, closes, or reports its end is client/shellstream's
 // business; this package only turns those calls into frames.
+//
+// That is why this package carries no test file of its own: a unit test here
+// would assert against a second spelling of the protocol, which is the bug
+// class the door already has. internal/server/shell_door_seam_test.go and
+// transport_seam_test.go dial through this dialer into the real /shell
+// handler, so the coverage crosses the seam it is about.
 package shellws
 
 import (
