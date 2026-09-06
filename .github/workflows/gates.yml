@@ -5,6 +5,11 @@
 # gate here is a Makefile target: the Makefile is the one recipe and this file
 # only sequences them, which test/boundary pins.
 name: gates
+# No `paths:` filter, deliberately: a dependency or toolchain bump, or any
+# cross-cutting change, is every seam at once and must always reach these
+# gates. A filter that made them conditional on go.mod / package-lock.json
+# would let a plain router or door change through on the per-commit gate
+# alone. Keep them unconditional.
 on:
   push:
     branches: [main]
