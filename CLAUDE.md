@@ -193,7 +193,7 @@ and that is where the worst bugs live.
 | `make check-electron` | the `WebContentsView` bridge under xvfb | the live url path, `webviews.ts`, the preload |
 | `make check-e2e` | the full app as a black box | any `apps/desktop` change, the native layer, cross-seam behavior |
 | `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, the shell door |
-| `make check-connections` | the real binaries through a real ssh tunnel | plugin spawn, the export, id routing |
+| `make check-connections` | the real binaries through a real ssh tunnel | plugin spawn, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
 
 If a change touches the native layer, `make check` passing means nothing.
 Run the electron or e2e gate and add a spec. The gates rebuild at start, so
