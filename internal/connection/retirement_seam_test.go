@@ -2,7 +2,6 @@ package connection
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/deadref"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -41,18 +41,18 @@ func (c landingClient) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest
 	return &gridwellv1.GetGridResponse{Grid: &gridwellv1.Grid{Id: req.GridId}}, nil
 }
 
-// sharedConnDB opens the connections table on a handle the test owns, the
+// sharedConnDB binds the connection store to a node store the test owns, the
 // production shape: closing a transport leaves the store open for the next
-// boot.
+// boot. The store is what makes the connections table, so the file is opened
+// through it.
 func sharedConnDB(t *testing.T) *DB {
 	t.Helper()
-	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "conns.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	db, err := NewDB(sqlDB)
+	t.Cleanup(func() { _ = st.Close() })
+	db, err := NewDB(st.SQL())
 	if err != nil {
 		t.Fatal(err)
 	}

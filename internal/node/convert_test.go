@@ -32,6 +32,17 @@ CREATE TABLE layout (tile_id INTEGER PRIMARY KEY, x INTEGER NOT NULL DEFAULT 0, 
   text_x INTEGER NOT NULL DEFAULT 0, text_y INTEGER NOT NULL DEFAULT 0, text_w INTEGER NOT NULL DEFAULT 0, text_h INTEGER NOT NULL DEFAULT 0,
   text_mode TEXT NOT NULL DEFAULT '', content_zoom REAL NOT NULL DEFAULT 0);`
 
+// legacyConnectionsDDL is the retired standalone transport store's one table,
+// as the converter reads it. The live table has the same shape but belongs to
+// the node store now, which renders it from its column descriptor; this text
+// is frozen because it describes a file that is no longer written.
+const legacyConnectionsDDL = `
+CREATE TABLE IF NOT EXISTS connections (
+  name        TEXT    PRIMARY KEY,
+  remote_root TEXT    NOT NULL DEFAULT '',
+  deleted     INTEGER NOT NULL DEFAULT 0
+);`
+
 // legacyHome is the fixture every conversion test starts from: a home in the
 // per-namespace layout — a home store with an exit well into a plugin grid, a
 // leaf link into a plugin tile, and a pane layout anchored in the plugin; the
@@ -114,18 +125,24 @@ func buildLegacyHome(t *testing.T) legacyHome {
 	must(`INSERT INTO cache_listings (grid_id, entries, authoritative) VALUES (1, ?, 1)`, listing)
 	mem.Close()
 
-	// The old transport store.
+	// The old transport store: its own file, with the connections table
+	// spelled out as the pre-one-node binary wrote it. The DDL is frozen here
+	// rather than borrowed from the node store, which is what the conversion
+	// reads this file INTO — a legacy file must be built from the legacy text.
 	rsql, err := sql.Open("sqlite", filepath.Join(oldDir, "remote.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rdb, err := connection.NewDB(rsql)
-	if err != nil {
+	if _, err := rsql.ExecContext(ctx, legacyConnectionsDDL); err != nil {
 		t.Fatal(err)
 	}
-	_ = rdb.Ensure(ctx, "geneva")
-	_ = rdb.SetRemoteRoot(ctx, "geneva", "rn/1")
-	_ = rdb.Tombstone(ctx, "olddead")
+	for _, r := range [][]any{{"geneva", "rn/1", 0}, {"olddead", "", 1}} {
+		if _, err := rsql.ExecContext(ctx,
+			`INSERT INTO connections (name, remote_root, deleted) VALUES (?, ?, ?)`,
+			r[0], r[1], r[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
 	rsql.Close()
 	if err := os.MkdirAll(filepath.Join(home, "cache"), 0o700); err != nil {
 		t.Fatal(err)

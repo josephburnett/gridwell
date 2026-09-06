@@ -206,6 +206,50 @@ CREATE TABLE IF NOT EXISTS session (
 );
 `
 
+// connectionsDDLAdHoc is the `connections` table exactly as internal/connection
+// created it before schema v13: its own CREATE TABLE IF NOT EXISTS on the
+// node's shared handle, beside the chain rather than in it. Frozen here for
+// the same reason sessionDDLV1 is — a genuine old file must be built from the
+// text the old binary wrote, never from today's descriptor, or the adoption
+// would be tested against a table the current shape had just created.
+const connectionsDDLAdHoc = `
+CREATE TABLE IF NOT EXISTS connections (
+  name        TEXT    PRIMARY KEY,
+  remote_root TEXT    NOT NULL DEFAULT '',
+  deleted     INTEGER NOT NULL DEFAULT 0
+);`
+
+// connRow is one connections row as the tests compare them: every column the
+// table has, so "byte-identical in meaning" is checked in full and not by a
+// sample.
+type connRow struct {
+	name       string
+	remoteRoot string
+	deleted    int64
+}
+
+// connectionRows reads every connections row, ordered by name.
+func connectionRows(t *testing.T, db *sql.DB) []connRow {
+	t.Helper()
+	rows, err := db.Query(`SELECT name, remote_root, deleted FROM connections ORDER BY name`)
+	if err != nil {
+		t.Fatalf("read connections: %v", err)
+	}
+	defer rows.Close()
+	var out []connRow
+	for rows.Next() {
+		var r connRow
+		if err := rows.Scan(&r.name, &r.remoteRoot, &r.deleted); err != nil {
+			t.Fatalf("scan connection row: %v", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 // buildDBAtV1 creates a file DB whose tables come from the FROZEN tablesV1 text
 // (never the current tablesDDL()), bootstraps a root grid, and stamps our application_id
 // + user_version=1 — a faithful "DB written by a v1 binary". Returns the open
@@ -1055,6 +1099,60 @@ func init() {
 			}
 			if tomb != 1 {
 				t.Error("a retired key came back live across v12")
+			}
+		},
+	})
+
+	// v13 adopts the `connections` table into the chain. What this fixture
+	// reaches is the CREATE arm: a chain-built v12 file has no connections
+	// table at all, because only a node that ran a transport ever had one,
+	// and a home that never dialled anything must still come out of v13 with
+	// the table the store now materializes. The adopt-an-existing-table arm —
+	// the one that matters for a live home — needs a genuine old file:
+	// TestMigrateV13OverAGenuineV12File.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 13,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'text', 90, 9, 1, 1, 'v12 text', 100, 100)`); err != nil {
+				t.Fatalf("seed v12 tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			if got := connectionRows(t, db); len(got) != 0 {
+				t.Errorf("a node that never dialled anything has %d connection rows, want none", len(got))
+			}
+			// The table the transport writes through is there and takes the
+			// three writes it makes: a fresh declaration, a learned landing,
+			// a retirement.
+			if _, err := db.Exec(`INSERT OR IGNORE INTO connections (name) VALUES ('rtb')`); err != nil {
+				t.Fatalf("the transport cannot declare a connection after v13: %v", err)
+			}
+			if _, err := db.Exec(`UPDATE connections SET remote_root = 'rnode1/7' WHERE name = 'rtb'`); err != nil {
+				t.Fatalf("record a learned landing: %v", err)
+			}
+			if _, err := db.Exec(`INSERT OR IGNORE INTO connections (name) VALUES ('gone')`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`UPDATE connections SET deleted = 1 WHERE name = 'gone'`); err != nil {
+				t.Fatal(err)
+			}
+			want := []connRow{{"gone", "", 1}, {"rtb", "rnode1/7", 0}}
+			if got := connectionRows(t, db); !reflect.DeepEqual(got, want) {
+				t.Errorf("connections after v13 = %+v, want %+v", got, want)
+			}
+			// A name is a primary key: the table can never hold it twice,
+			// because it is the namespace segment references are written
+			// through.
+			if _, err := db.Exec(`INSERT INTO connections (name) VALUES ('rtb')`); err == nil {
+				t.Error("the adopted table accepted a duplicate connection name")
+			}
+			// And the row that was already in the file is untouched.
+			var alt string
+			if err := db.QueryRow(`SELECT alt_text FROM tiles WHERE alt_text = 'v12 text'`).Scan(&alt); err != nil {
+				t.Fatalf("the v12 tile did not survive v13: %v", err)
 			}
 		},
 	})

@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"image"
 	"image/png"
 	"net/http"
@@ -258,12 +257,13 @@ func TestContentDoorThroughAConnection(t *testing.T) {
 	}
 	farNode := newPluginClient(t, "fs", map[string]string{"root": dir})
 
-	sqlDB, err := sql.Open("sqlite", t.TempDir()+"/conns.db")
+	// The local node's own store owns the connections table.
+	connStore, err := store.Open(t.TempDir() + "/gridwell.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	db, err := connection.NewDB(sqlDB)
+	t.Cleanup(func() { _ = connStore.Close() })
+	db, err := connection.NewDB(connStore.SQL())
 	if err != nil {
 		t.Fatal(err)
 	}

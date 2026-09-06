@@ -30,7 +30,7 @@ const applicationID = 0x4757654C // "GWeL"
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB
 // stamp shortcut in applyMigrations sound. The full contract is
 // internal/local/store/CLAUDE.md.
-const schemaVersion = 12
+const schemaVersion = 13
 
 // migration is one step that brings a DB from version to-1 up to version to.
 // Additive — a column with a default, a table, an index — is the default and
@@ -127,6 +127,21 @@ var migrations = []migration{
 	// CHECK, no AUTOINCREMENT seed, and nothing referencing it, so tiles and
 	// grids are not touched and no sequence is disturbed.
 	{to: 12, run: migrateV12},
+	// v13 adopts the `connections` table into the chain. It predates this
+	// discipline: internal/connection created it with a CREATE TABLE IF NOT
+	// EXISTS of its own on the node's shared handle, beside the chain rather
+	// than in it, so the first change to its shape would have had no
+	// migration lane and no fixture proving old rows survive. The shape is
+	// the store's from here; internal/connection keeps the queries.
+	//
+	// Adoption, not conversion: the descriptor renders exactly the columns
+	// the ad-hoc statement wrote — name TEXT PRIMARY KEY, remote_root TEXT
+	// NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0 — so an
+	// existing table is taken as it stands, with no rebuild and nothing to
+	// convert. Every row keeps its meaning: a learned landing, and the
+	// tombstone that mirrors a retired name. A home that never dialled
+	// anything has no table and gets one. IF NOT EXISTS is both cases.
+	{to: 13, run: migrateV13},
 }
 
 // migrateV12 drops the retired `listings` table. IfExists because a file may
@@ -134,6 +149,15 @@ var migrations = []migration{
 // through v9, and a fresh Open no longer materializes it.
 func migrateV12(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS listings`)
+	return err
+}
+
+// migrateV13 adopts or creates the connections table; see the chain entry. It
+// renders connectionsTableDDL rather than a literal, because the shape it
+// materializes is the same one a fresh Open does — that identity is what makes
+// adopting an existing table legal, and TestSchemaEquivalence pins it.
+func migrateV13(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, connectionsTableDDL())
 	return err
 }
 

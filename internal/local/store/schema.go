@@ -58,23 +58,30 @@ CREATE TABLE IF NOT EXISTS system (
 -- uses.
 `
 
-// tablesDDL returns the grids, tiles, and blobs DDL for the main database:
-// the always-current schema a fresh Open materializes directly. The grids and
-// tiles halves are rendered from the column descriptor in columns.go, which is
-// where a column is described. Every column added there must be matched by a
-// migration; TestSchemaEquivalence proves the two agree. The schema-evolution
-// contract is internal/local/store/CLAUDE.md.
+// tablesDDL returns the grids, tiles, blobs, and connections DDL for the main
+// database: the always-current schema a fresh Open materializes directly. The
+// grids, tiles, and connections halves are rendered from the column descriptor
+// in columns.go, which is where a column is described. Every column added
+// there must be matched by a migration; TestSchemaEquivalence proves the two
+// agree. The schema-evolution contract is internal/local/store/CLAUDE.md.
 //
 // The tiles table is built by tilesTableDDL so its one DDL source is shared
 // with the CHECK-rebuild migration path (migrations.go): a rebuild creates
 // tiles_new from the same text a fresh Open uses, so the two cannot drift.
 func tablesDDL() string {
-	return gridsTableDDL() + blobsTemplate + tilesTableDDL("tiles") + tilesIndexDDL
+	return gridsTableDDL() + blobsTemplate + tilesTableDDL("tiles") + tilesIndexDDL +
+		connectionsTableDDL()
 }
 
 // gridsTableDDL renders the grids table from the column descriptor in
 // columns.go, which is also what the SELECT list and the scan read.
 func gridsTableDDL() string { return createTable("grids", gridsColumns, "") }
+
+// connectionsTableDDL renders the connections table from the column descriptor
+// in columns.go. The store owns this shape; internal/connection owns the
+// queries over it and holds no DDL of its own. One text, shared by the fresh
+// path here and by the v13 migration that adopted the table into the chain.
+func connectionsTableDDL() string { return createTable("connections", connectionsColumns, "") }
 
 const blobsTemplate = `
 CREATE TABLE IF NOT EXISTS blobs (

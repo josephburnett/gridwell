@@ -3,7 +3,6 @@ package sourcecache
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -52,12 +51,14 @@ func connFixtureWith(t *testing.T, opts Options, wrap func(namespace.Namespace) 
 		t.Fatal(err)
 	}
 	far = newDarkable(local.New(st, nil))
-	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "remote.db"))
+	// The near node's own store: it owns the connections table the transport
+	// writes through.
+	near, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	db, err := connection.NewDB(sqlDB)
+	t.Cleanup(func() { _ = near.Close() })
+	db, err := connection.NewDB(near.SQL())
 	if err != nil {
 		t.Fatal(err)
 	}

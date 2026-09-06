@@ -6,6 +6,10 @@ package connection
 // Everything else about a connection — where it is, how to reach it, what it
 // is called — is config, read fresh every boot.
 //
+// The rows live in the node's one database and their shape belongs to
+// internal/local/store, which renders the DDL from its column descriptor and
+// migrates it with everything else. This file holds the queries only.
+//
 // The `deleted` flag is not a fact of its own: it is the mirror of the
 // config's retired_names, which is the one owner of retirement, reconciled
 // onto these rows at boot (see New) so route and Probe can read "retired" off
@@ -32,19 +36,26 @@ type DB struct {
 	owned bool // Close closes the handle only when this DB opened it
 }
 
-const connSchema = `
-CREATE TABLE IF NOT EXISTS connections (
-  name        TEXT    PRIMARY KEY,
-  remote_root TEXT    NOT NULL DEFAULT '',
-  deleted     INTEGER NOT NULL DEFAULT 0
-);`
-
-// NewDB installs the connections table on the node's one database handle. A
-// second handle on the same SQLite file would meet an instant SQLITE_BUSY.
-// Close is a no-op; the store owns the handle.
+// NewDB binds the connection store to the node's one database handle. A second
+// handle on the same SQLite file would meet an instant SQLITE_BUSY. Close is a
+// no-op; the store owns the handle.
+//
+// The connections table is the store's too: internal/local/store renders its
+// DDL from the column descriptor and the migration chain evolves it, so this
+// package holds no DDL and only the queries below. What is checked here is
+// that the handle really came from an opened store — a handle the store never
+// migrated would otherwise fail at the first Get, long after the wiring
+// mistake that caused it.
 func NewDB(db *sql.DB) (*DB, error) {
-	if _, err := db.Exec(connSchema); err != nil {
-		return nil, fmt.Errorf("connection: init schema: %w", err)
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'connections'`).
+		Scan(&n); err != nil {
+		return nil, fmt.Errorf("connection: look for the connections table: %w", err)
+	}
+	if n == 0 {
+		return nil, errors.New("connection: no connections table on this handle; " +
+			"the node's store owns that DDL, so the handle must come from store.Open")
 	}
 	return &DB{db: db}, nil
 }

@@ -227,6 +227,37 @@ field, which is why it is storage-only here.`,
 	{name: "root_zoom", ddl: "REAL", since: 11},
 }
 
+// connectionsColumns is the connections table, in DDL order: what the node
+// remembers about a connection beyond what server.yaml declares. It is
+// storage-only — no column is on the wire, and internal/connection owns the
+// queries that read and write these rows — but the SHAPE is the store's, so
+// the table evolves through the one migration chain like every other node
+// fact. It reached the chain at v13, which adopted the table
+// internal/connection used to create for itself; the rows in a live home are
+// older than that, and v13 takes them exactly as they stand.
+var connectionsColumns = []column[struct{}]{
+	{
+		name: "name", ddl: "TEXT PRIMARY KEY", since: 13,
+		comment: `The connection's immutable name, as server.yaml declares it. It is
+the namespace segment stored references are written through, so it is
+never reassigned and never held twice.`,
+	},
+	{
+		name: "remote_root", ddl: "TEXT NOT NULL DEFAULT ''", since: 13,
+		comment: `The learned landing: the far node's home grid id, remembered so a
+dark remote still has a room to show through the source cache. '' is
+a connection that has never answered.`,
+	},
+	{
+		name: "deleted", ddl: "INTEGER NOT NULL DEFAULT 0", since: 13,
+		comment: `The retirement mirror, and not a fact of its own: retired_names in
+server.yaml is the one owner of retirement, reconciled onto this row
+at boot so route and Probe can read it off the row they already hold.
+A name the config merely stopped declaring is NOT retired and keeps
+its 0.`,
+	},
+}
+
 // createTable renders a CREATE TABLE from a column table: each column's
 // comment, then its name padded to the table's widest, then its DDL.
 // trailing is the table-level constraint text (the tiles CHECK), appended

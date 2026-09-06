@@ -1,21 +1,24 @@
 package connection
 
 import (
-	"database/sql"
 	"fmt"
+
+	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
-// OpenDB opens a standalone connection store at path: the test-only shape.
-// Production shares the node's one handle through NewDB.
+// OpenDB opens a node store of its own at path and binds the connection store
+// to its handle: the test-only shape. Production shares the node's one handle
+// through NewDB. It goes through store.Open because the store owns the
+// connections table's DDL — there is no other way to make a file that has one.
+// DB.Close then closes that handle, which is all Store.Close does.
 func OpenDB(path string) (*DB, error) {
-	db, err := sql.Open("sqlite", path)
+	st, err := store.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("connection: open %q: %w", path, err)
 	}
-	db.SetMaxOpenConns(1)
-	d, err := NewDB(db)
+	d, err := NewDB(st.SQL())
 	if err != nil {
-		_ = db.Close()
+		_ = st.Close()
 		return nil, err
 	}
 	d.owned = true

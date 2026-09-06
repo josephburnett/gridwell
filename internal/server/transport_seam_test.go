@@ -9,7 +9,6 @@ package server_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"net/http/httptest"
@@ -120,12 +119,13 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	t.Cleanup(func() { _ = grpcConn.Close() })
 	remoteExport := gridwellv1.NewGridwellClient(grpcConn)
 
-	sqlDB, err := sql.Open("sqlite", t.TempDir()+"/remote.db")
+	// The local node's own store owns the connections table.
+	connStore, err := store.Open(t.TempDir() + "/gridwell.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	db, err := connection.NewDB(sqlDB)
+	t.Cleanup(func() { _ = connStore.Close() })
+	db, err := connection.NewDB(connStore.SQL())
 	if err != nil {
 		t.Fatal(err)
 	}

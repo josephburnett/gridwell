@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"testing"
 )
@@ -417,5 +418,69 @@ func TestMigrateV11OverAGenuineV10File(t *testing.T) {
 	}
 	if found != 1 {
 		t.Errorf("the odd well is not in the reopened grid (%d matches)", found)
+	}
+}
+
+// TestMigrateV13OverAGenuineV12File covers the arm the fixture cannot reach:
+// ADOPTION. Every home that has ever dialled a connection already has a
+// `connections` table, created by internal/connection's own CREATE TABLE
+// beside the chain, and v13 takes it as it stands. A chain-built v12 file has
+// no such table, so the genuine v12 shape is put back by hand here and v13 is
+// run over it.
+//
+// The invariant under test: the rows are node facts the user cannot retype —
+// a learned landing is how a dark remote still shows a room, and a tombstone
+// is a name reserved forever. Every one of them must come through unchanged,
+// the table's shape must equal the one a fresh Open renders, and the file must
+// still open through the production door, whose verifySchema now checks this
+// table too.
+func TestMigrateV13OverAGenuineV12File(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "genuinev12.db")
+	db, _ := buildDBAtV1(t, path)
+	applyMigrationsUpTo(t, db, 12)
+
+	if _, err := db.ExecContext(ctx, connectionsDDLAdHoc); err != nil {
+		t.Fatalf("restore the ad-hoc connections table: %v", err)
+	}
+	for _, r := range []connRow{
+		{"geneva", "rnode1/7", 0},  // dialled, landing learned
+		{"never", "", 0},           // declared, never answered
+		{"olddead", "rnode2/3", 1}, // retired: the name is reserved forever
+	} {
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO connections (name, remote_root, deleted) VALUES (?, ?, ?)`,
+			r.name, r.remoteRoot, r.deleted); err != nil {
+			t.Fatalf("plant the v12 connection %q: %v", r.name, err)
+		}
+	}
+	before := connectionRows(t, db)
+
+	if err := storeOver(db).migrateUp(ctx, migrations, 13); err != nil {
+		t.Fatalf("migrate a genuine v12 file to v13: %v", err)
+	}
+
+	if after := connectionRows(t, db); !reflect.DeepEqual(after, before) {
+		t.Errorf("v13 changed the connection rows:\n before = %+v\n after  = %+v", before, after)
+	}
+	// The adopted table's shape is the shape a fresh Open renders — that is
+	// what makes adoption legal without a rebuild.
+	fresh, _ := newTestStoreFile(t)
+	if want, got := tableColumnsFP(t, fresh.db, "connections"), tableColumnsFP(t, db, "connections"); !reflect.DeepEqual(want, got) {
+		t.Errorf("the adopted connections shape differs from a fresh one:\n fresh   = %+v\n adopted = %+v", want, got)
+	}
+
+	// And the file OPENS through the production door: the chain re-runs as a
+	// no-op, verifySchema accepts the adopted table, and the rows read back.
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("a genuine v12 file must open after v13: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if after := connectionRows(t, s.db); !reflect.DeepEqual(after, before) {
+		t.Errorf("connections after reopen = %+v, want %+v", after, before)
 	}
 }

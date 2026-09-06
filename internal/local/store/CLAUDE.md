@@ -34,12 +34,16 @@ intact.
 
 ## How the schema is represented
 
-- `columns.go` (`tilesColumns`, `gridsColumns`) is the one description of
-  a column: name, SQL type and constraints, comment, the version whose data
-  it carries (`since`), the `rpc.Tile`/`rpc.Grid` field it binds to when on
-  the wire, and a `noCopy` reason when a clone skips it. The DDL, the
-  SELECT, the scan, the clone INSERT, and every rebuild copy list derive
-  from it. Only the tiles kind `CHECK` (`tilesCheck`) is literal text.
+- `columns.go` (`tilesColumns`, `gridsColumns`, `connectionsColumns`) is the
+  one description of a column: name, SQL type and constraints, comment, the
+  version whose data it carries (`since`), the `rpc.Tile`/`rpc.Grid` field it
+  binds to when on the wire, and a `noCopy` reason when a clone skips it. The
+  DDL, the SELECT, the scan, the clone INSERT, and every rebuild copy list
+  derive from it. Only the tiles kind `CHECK` (`tilesCheck`) is literal text.
+- `connections` is in the chain like everything else, adopted by v13. The
+  store owns its shape; `internal/connection` owns the queries and holds no
+  DDL, and `NewDB` refuses a handle this store never opened. The `system` KV
+  table and `_gridwell_meta` stay outside: neither carries a user fact.
 - `schema.go` `tablesDDL()` renders the descriptor: the shape a fresh
   `Open` materializes. `tablesV1` is the frozen v1 base. Never edit it.
   Tests build genuine old files from it and migrate them forward.
