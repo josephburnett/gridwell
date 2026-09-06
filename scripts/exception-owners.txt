@@ -9,10 +9,8 @@
 # derivation. client/textedit reads the answer, not the field, so it is here
 # only for the wire type it re-exports. url_preview keys a preview blob on
 # serves_page alone on purpose: any page-serving row wants that key, url tile
-# or not. content_zoom is an open question in docs/debt/w4-concepts.md —
-# PageContent would also cover a url row flagged serves_page, which is a
-# behavior change, not a rename.
-\.ServesPage\b api/rpc/|client/textedit/|client/wasm/url_preview\.go|client/wasm/content_zoom\.go
+# or not.
+\.ServesPage\b api/rpc/|client/textedit/|client/wasm/url_preview\.go
 # text_presentation: the faces a text tile has. textedit.ToggleVisible (which
 # faces exist) and textedit.PresentationHTML (which renderer draws one) are its
 # two owners, in a package `make check` executes.

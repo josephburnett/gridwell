@@ -119,10 +119,14 @@ func (a *App) contentZoomKeyFromView(paneID, key string) {
 // pokes the live surface for the kinds that hold native state, and persists —
 // the last only for a descent that outlives the pane leaving it.
 func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
-	if t.ServesPage {
+	if t.PageContent() {
 		// A serves_page descent has no persisted content_zoom, because the
 		// owning plugin stores no url state, and a client-only zoom would
 		// break the no-client-state rule. The chord is inert here.
+		//
+		// PageContent's second half (kind is not url) is identity here: the
+		// plugin door refuses an entry declaring both, so no row can reach a
+		// client with a url kind and serves_page set.
 		return
 	}
 	nt := *t

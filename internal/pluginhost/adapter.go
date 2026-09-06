@@ -237,6 +237,27 @@ func (a *Adapter) emitGridChanged(gridID string) {
 	}})
 }
 
+// checkEntries refuses a listing that declares a shape the node cannot
+// present. It runs once, at the door where a plugin's entries enter, so a
+// refused shape never reaches the store, the wire, or a client.
+//
+// The one shape refused today: kind "url" together with serves_page. A url
+// entry names the address it opens; a page has no address of its own and is
+// served at the node's /content/ door. Both at once is neither, and it failed
+// silently — every reader answers the url arm first, so the page simply never
+// served and nothing said why. A misbehaving plugin is told, loudly, with the
+// key that is wrong.
+func checkEntries(entries []*pluginv1.Entry) error {
+	for _, e := range entries {
+		if e.Kind == rpc.KindURL && e.ServesPage {
+			return status.Errorf(codes.InvalidArgument,
+				"plugin: entry %q declares kind url and serves_page; a url entry opens url_string, a page has no address of its own — declare one or the other",
+				e.Key)
+		}
+	}
+	return nil
+}
+
 // engineEntries converts listing entries for the store's merge.
 func engineEntries(entries []*pluginv1.Entry) []store.Entry {
 	out := make([]store.Entry, len(entries))
@@ -406,6 +427,9 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 			return nil, err
 		}
 		stale, resp = true, &pluginv1.ListResponse{}
+	}
+	if err := checkEntries(resp.Entries); err != nil {
+		return nil, err
 	}
 	// An authoritative listing is a verdict on every key: rows it does not
 	// mention are gone, and their ids retire. Only rows are swept; an

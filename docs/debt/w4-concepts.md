@@ -354,6 +354,13 @@ the node rejecting a `serves_page` url entry at the plugin door, so the
 shape never reaches a client? The second closes the class; the first closes
 this line. Either way the allow-list entry comes out.
 
+**Answered (2026-09-05): refuse the row.** Nothing wants the combined shape
+— a url entry must supply `url_string` and a page has no address — and it
+failed silently, since `webAddress` answers `UrlString` first and the page
+never served. `checkEntries` in `internal/pluginhost` refuses an entry
+declaring both, at the one door a plugin's entries enter. The line then
+takes `PageContent()` as identity, and the allow-list entry is out.
+
 Not to be confused with Q4's separate gap in the same function: the
 `possiblyEphemeral` guard `applyContentZoom` was missing has since landed,
 and the sweep did not disturb it.
