@@ -39,8 +39,9 @@ An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
 The remainder passes through untouched, so any depth of mounting routes the
 same way. Ids going out are re-qualified once (`qualifyTilesFor`): a leaf
 prefixes and derives `Tile.reference`; transit prepends one segment and
-trusts the wire bits (`rpc.TransitQualifyTiles`). Qualification clones —
-that clone is the whole protection for messages shared by pointer.
+trusts the wire bits (`rpc.TransitQualifyTiles`). Qualification clones, and
+that clone is what keeps a message shared by pointer from being changed
+under another reader.
 
 A segment has one of three shapes, and `rpc.ShapeOf` is the one classifier
 every reader shares. Plugin and node ids are 7-char lowercase base36 with a
@@ -48,8 +49,8 @@ leading letter (`idshape.NewShortID`); a tile is a store row id in decimal
 digits, or a KEY FORM — `~` followed by the plugin key's unpadded base64url
 (`rpc.KeyTileID`), which names a tile by what it is rather than by a row.
 The leading byte separates all three, so a URL path and the router's peel
-both tell a namespace segment from a tile id without asking anyone. Ids are
-never reassigned.
+both tell a namespace segment from a tile id with no lookup. Ids are never
+reassigned.
 
 ## The contract
 
@@ -100,8 +101,8 @@ Two listeners. The web door (`web.bind`) serves Connect, the content door,
 and the shell door behind a password cookie; serve mints the 0600
 `web-password` file and prints it, delete it to rotate. The connection door
 is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
-`server.yaml` key is `federation:` and its file is `federation.sock` — the
-word's two survivors, kept because a home already has them written down.
+`server.yaml` key is `federation:` and its file is `federation.sock`, kept
+because an existing home already has them written down.
 
 ## The node
 
@@ -119,7 +120,7 @@ beside it folds into `gridwell.db` (`internal/config/legacy.go` then
 guessing refuses and leaves the file as it was. Serve mints what is absent.
 Those are the only two config writes.
 
-The fold is crash-safe, because it runs once, on real data, under a kill it
+The fold has to be crash-safe: it runs once, on real data, under a kill it
 does not control (the desktop wrapper SIGTERMs a sidecar that has not
 announced itself). It is built into `gridwell.db.converting` and published
 with one rename, so a kill leaves either the untouched `db/` to retry from or
@@ -162,26 +163,27 @@ carries the reason, and every read through the name fails loudly until the
 operator retires the name or restores the target.
 A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection
-name, and the same transit rule applies at both hops. The fan-in holds each
-connection's reachability as a state, not a moment: the transport's event
-stream opens with every connection that is dark right now, so a client that
+name, and the same transit rule applies at both hops. The fan-in remembers
+each connection's reachability rather than only publishing the transition:
+the transport's event stream opens with every connection that is dark right now, so a client that
 subscribes after the machine died is told, and the cache in front of it
 stamps what it remembers.
 
 The host-local half of a row is checked before the node serves: a missing
 `addr`, a `key` or `known_hosts` path that is not there or not readable fails
-`serve`, naming the connection and the exact path. Those are facts this
-machine can settle, and a connection that could never dial is a
-misconfiguration, not a row that comes up dark. Whether the far node answers
+`serve`, naming the connection and the exact path. This machine can settle
+those facts on its own, and a connection that could never dial is a
+misconfiguration, so it fails serve rather than coming up dark at runtime.
+Whether the far node answers
 is not asked — offline boot is decided behavior, so an unreachable remote
 stays a runtime state, with its reason on its menu row and the cache
 answering for it.
 
 **Cache** (`internal/sourcecache`) is the one read-through cache, in front
 of the one seam that crosses a network — the transport — in one disposable
-file (`cache.db`). A cache earns its keep across a network and nowhere
-else: home is the durable store, and a plugin is a subprocess on this
-machine, so both are read live. A remembered grid serves first — unstamped
+file (`cache.db`). A cache is worth its cost only across a network: home is
+the durable store, and a plugin is a subprocess on this machine, so both are
+read live. A remembered grid serves first — unstamped
 inside the freshness window, stamped `stale` past it, and stamped inside it
 too once the connection is known dark, with one background revalidation
 kicked — so a remote round trip never sits on the read path. Darkness is
@@ -243,8 +245,8 @@ defect — extract it.
 
 **Place.** A pane's place is one stack of frames (`client/pane/place.go`). A
 frame is the grid you are in, the tile you came through, and your viewport
-there. Every descent pushes a frame; every ascent pops one. The viewport you
-left a level at is the frame you left. The URL (`url.go`) and the pane-tile
+there. Every descent pushes a frame; every ascent pops one, restoring the
+viewport that frame holds. The URL (`url.go`) and the pane-tile
 layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
 project it. A pane tile swaps the whole pane tree instead — that is the one
 second axis (`levels.go`), and it is session-only.
