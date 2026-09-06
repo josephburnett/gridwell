@@ -229,3 +229,80 @@ func TestNoPluginImplementation(t *testing.T) {
 		}
 	}
 }
+
+// doorServerOwners maps each source file allowed to construct a door server
+// to why it may. Two construction shapes are pinned here: the raw http.Server
+// literal and the raw gRPC server constructor. Both are how a node door is
+// stood up, and both were copied inline across production and its harnesses
+// until a copy diverged (1b7f98d8: the connection door's header timeout lived
+// in node.go and not in the harnesses that served it, and Go 1.26.6 turned
+// that timeout into a stream killer on exactly the path no harness ran). The
+// shapes now have one owner each; this pins that.
+//
+// nodeexport.go is the door owner: WebDoorServer and ConnectionDoorServer are
+// the two http.Server shapes, and ConnectionHandler is the one gRPC server the
+// node doors carry. The other two entries are not node doors and are exempt on
+// their merits: plugintest stands up a plugin subprocess's own gRPC server
+// (the third-party door, not a node door), and the namespace round-trip test
+// stands up a throwaway gRPC server to exercise the namespace codec end to end.
+var doorServerOwners = map[string]string{
+	"internal/server/nodeexport.go":        "the node's door owner: WebDoorServer, ConnectionDoorServer, ConnectionHandler",
+	"internal/plugintest/plugintest.go":    "not a node door: the plugin subprocess's own gRPC server",
+	"internal/namespace/roundtrip_test.go": "not a node door: a throwaway gRPC server for the namespace codec test",
+}
+
+// TestOneDoorServerOwner is the standing pin on door-server construction: no
+// file in this repository, TEST FILES INCLUDED, builds a raw http.Server or a
+// raw gRPC server outside the owners above. A node door's listener and server
+// configuration is a fact with one owner, not glue every harness rewrites — a
+// harness that builds its own server serves a shape the node does not run, and
+// every seam test then crosses a door the production node never opens. It is
+// machinery, not a review argument, because this exact copy has diverged twice
+// on the connection door alone. Grep, not review, like TestNoPluginImplementation.
+func TestOneDoorServerOwner(t *testing.T) {
+	root := repoRoot(t)
+	// Built by concatenation so this file does not match its own needles.
+	httpNeedle := "&http.Server" + "{"
+	grpcNeedle := "grpc.NewServer" + "("
+	skipDir := map[string]bool{".git": true, "node_modules": true}
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDir[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if _, ok := doorServerOwners[rel]; ok {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		sc := bufio.NewScanner(bytes.NewReader(data))
+		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+		for line := 1; sc.Scan(); line++ {
+			text := sc.Text()
+			if strings.Contains(text, httpNeedle) {
+				t.Errorf("%s:%d builds a raw http.Server — a node door's server shape has one owner (server.WebDoorServer / server.ConnectionDoorServer); route through it", rel, line)
+			}
+			if strings.Contains(text, grpcNeedle) {
+				t.Errorf("%s:%d builds a raw gRPC server — the node door's gRPC server lives in %s; if this is not a node door, exempt it in doorServerOwners with the reason", rel, line, "internal/server/nodeexport.go")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
