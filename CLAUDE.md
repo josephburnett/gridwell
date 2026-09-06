@@ -205,6 +205,10 @@ never edit sources while one runs. A flake rerun only counts against a
 freshly built tree. A spec on `docs/flake-ledger.md` still gets a fresh look
 before you blame a change.
 
+A dependency or toolchain bump commits under the `deps:` prefix, and its
+message names the gates it ran. The bump touches every seam at once, so the
+green it earns is only worth the gates behind it.
+
 ## Before you commit
 
 - [ ] I named the mechanism (fix) or the one owner of any new fact
