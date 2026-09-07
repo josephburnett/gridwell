@@ -57,8 +57,8 @@ verdict function; forced copies at the native seam are pinned by drift tests.
 The production/test boundary does not exempt a copy: a shape the node runs
 (a server, a dialer, a spawn) that a harness re-spells instead of calling the
 owner is a duplicate fact, and the harness copy is the one that lets a seam
-test pass against a door the node does not run — the 2026-09-06 federation
-outage was exactly this. For each owned construction, grep the whole tree,
+test pass against a door the node does not run — the 2026-09-06 connection
+door outage was exactly this. For each owned construction, grep the whole tree,
 tests included, for re-spellings; where an enforcement exists (the
 `test/boundary` door-server check), confirm it covers the shape. CLEAN when
 no unpinned duplicate fact is found.
