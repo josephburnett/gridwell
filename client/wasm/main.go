@@ -447,8 +447,9 @@ type persistState struct {
 	// leaks handles. See scheduler below.
 	sched scheduler
 
-	// textSaves serializes content writes per tile so pipelined saves chain
-	// versions instead of racing; see enqueueTextSave.
+	// textSaves serializes content writes per document — the chain is
+	// textedit.SaveQueueKey's, so a leaf link and its target share one — so
+	// pipelined saves chain versions instead of racing; see enqueueTextSave.
 	textSaves *textedit.SaveQueue
 
 	// wellWheelPending holds well tiles whose preview framing the hover wheel

@@ -359,19 +359,21 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 	return *tile, true
 }
 
-// enqueueTextSave posts a content write through the per-tile serial queue.
-// The claim is read at send time — after any earlier write for the same tile
-// has completed and advanced the save basis — so pipelined saves chain
-// versions instead of both claiming the same one and losing the second edit
-// to a conflict reconcile.
+// enqueueTextSave posts a content write through the document's serial queue.
+// The claim is read at send time — after any earlier write for the same
+// document has completed and advanced the save basis — so pipelined saves
+// chain versions instead of both claiming the same one and losing the second
+// edit to a conflict reconcile.
 //
-// rowOwnsContent and rowVersion are the caller's snapshot of the row it
-// gathered the bytes from, the fallback for a content entry that is gone by
-// send time. What the write claims is textedit.SaveClaim's rule, and only
-// its: see saveClaimedContent.
-func (a *App) enqueueTextSave(gid, cid string, rowOwnsContent bool, rowVersion int64, data []byte) {
-	a.persist.textSaves.Enqueue(cid, func() {
-		a.saveClaimedContent(gid, cid, rowOwnsContent, rowVersion, data)
+// tileID is the row the bytes were gathered from and cid the id that owns
+// them; which chain that pair rides is textedit.SaveQueueKey's rule, the same
+// one the ascent flush reads, so a leaf link and its target cannot end up on
+// two chains. rowVersion is the caller's snapshot of that row, the fallback
+// for a content entry that is gone by send time. What the write claims is
+// textedit.SaveClaim's rule, and only its: see saveClaimedContent.
+func (a *App) enqueueTextSave(gid, tileID, cid string, rowVersion int64, data []byte) {
+	a.persist.textSaves.Enqueue(textedit.SaveQueueKey(tileID, cid), func() {
+		a.saveClaimedContent(gid, cid, tileID == cid, rowVersion, data)
 	})
 }
 

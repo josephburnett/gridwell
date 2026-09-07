@@ -111,7 +111,7 @@ func (a *App) postTileContent(cid string, t *rpc.Tile, data []byte) {
 	if !t.TextDocument() || a.tileReadOnly(t) {
 		return
 	}
-	a.enqueueTextSave(t.GridID, cid, t.ID == cid, t.Version, data)
+	a.enqueueTextSave(t.GridID, t.ID, cid, t.Version, data)
 }
 
 // beaconTileContent is flushTileContent's beforeunload arm: the bytes leave
@@ -212,10 +212,13 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
 
 	mode := p.TextMode
-	// Through the per-tile save queue: a debounced keystroke save may still
+	// Through the document's save queue: a debounced keystroke save may still
 	// be in flight, and this flush claims a version too, so the queue
-	// serializes them and the claim is read at send time.
-	a.persist.textSaves.Enqueue(file.ID, func() {
+	// serializes them and the claim is read at send time. The chain is named
+	// by textedit.SaveQueueKey, the same rule the debounce sweep reads —
+	// keyed on the viewed row here, a leaf link's ascent flush would ride a
+	// chain of its own and race the sweep for the one basis they share.
+	a.persist.textSaves.Enqueue(textedit.SaveQueueKey(file.ID, file.ContentID()), func() {
 		// Update the content first if the user was editing, through the one
 		// claim-and-post door every text write uses. The write addresses the
 		// content owner, so a link's doc saves under its target's id, as
