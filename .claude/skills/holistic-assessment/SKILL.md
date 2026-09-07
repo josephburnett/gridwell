@@ -79,6 +79,12 @@ lens is whether it still matches the code. Each distinction must earn its
 place, and the plugin exception surface
 (read-only, host_content, serves_page, text_presentation, stale, dead) must
 route through named single-owner predicates rather than per-call-site arms.
+Ask the merge question of every concept, wire fields included: state what
+decided behavior would be lost if this concept collapsed into its neighbor,
+and if the answer is nothing, it is a useless abstraction — name it. A
+default that privileges one member of a uniform set is the tell
+(`root_context` privileged one collection over the menu entries that already
+expressed all of them, and a plugin had to fake a root to work around it).
 CLEAN when no two concepts could merge without losing a decided behavior AND
 no exception check bypasses its owning predicate.
 
