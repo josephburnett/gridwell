@@ -18,7 +18,9 @@ free. Do not run it casually; the user initiates it deliberately.
 ## Procedure
 
 1. **Enumerate** the production sources. Tests, generated code, e2e,
-   harnesses, and test infrastructure are excluded:
+   harnesses, and test infrastructure are excluded from the full read — but
+   not from lens 2's re-spelling greps, which cross that boundary on
+   purpose:
 
    ```
    find . -path ./.git -prune -o -type f \( -name '*.go' -o -name '*.ts' \) -print \
@@ -52,7 +54,14 @@ to minting. CLEAN when no violation of the written contract is found.
 **2. One fact, one owner.** No fact stored or derived in two places unless
 one derives from the other; every gesture's preview and commit share one
 verdict function; forced copies at the native seam are pinned by drift tests.
-CLEAN when no unpinned duplicate fact is found.
+The production/test boundary does not exempt a copy: a shape the node runs
+(a server, a dialer, a spawn) that a harness re-spells instead of calling the
+owner is a duplicate fact, and the harness copy is the one that lets a seam
+test pass against a door the node does not run — the 2026-09-06 federation
+outage was exactly this. For each owned construction, grep the whole tree,
+tests included, for re-spellings; where an enforcement exists (the
+`test/boundary` door-server check), confirm it covers the shape. CLEAN when
+no unpinned duplicate fact is found.
 
 **3. Decisions live in pure packages.** A policy decision — any branching on
 world state that changes a user-visible outcome — lives in a js-free
@@ -96,9 +105,27 @@ verdict. CLEAN when no swallow is found.
 **8. Test posture.** Every pure package has real tests; the native gates
 cover what `make check` cannot; `docs/flake-ledger.md` has no unexplained
 OPEN rows; every bug-shaped comment ("this happened once") has a pinning
-test. CLEAN when no untested pure package and no unexplained flake remains.
+test. Time is a tested dimension: enumerate every declared duration —
+timeouts, deadlines, TTLs, backoffs, grace windows — and each one has a test
+whose wait is bound to its value (or a fake clock where the design allows
+one). A declared timeout no test waits out is untested, whatever the
+coverage numbers say; tests avoid long waits by habit, and a failure that
+needs wall-clock time to appear is invisible to every gate built that way.
+CLEAN when no untested pure package, no unexplained flake, and no untested
+declared duration remains.
 
-**9. Maintainability.** Comments record decisions and constraints, not
+**9. Inherited behavior.** The toolchain and dependencies are a seam: a
+point release can change what unchanged code means (Go 1.26.6 turned a
+header timeout into a stream-killing deadline on the connection door). The
+bar is not predicting such changes; it is that each one has somewhere to
+land: seam tests exercise the production shapes over real transports with
+holds bound to declared values, the gate table names which gates a
+dependency or toolchain bump runs, and recent `deps:` commits name the gates
+they ran. CLEAN when the bump convention is honored in the history and every
+inherited behavior a decision comment relies on is pinned by a test that
+would fail if the platform changed it.
+
+**10. Maintainability.** Comments record decisions and constraints, not
 mechanics; `client/wasm` App state is grouped by owner; no policy-bearing
 file has grown past ~1.5k lines without a recorded reason; `docs/` matches
 the code it describes. CLEAN when a fresh reader could reconstruct the
