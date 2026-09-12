@@ -13,6 +13,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/urlview"
 )
 
 // sendBeacon posts one write so it survives the page; contentType picks the
@@ -50,24 +51,24 @@ func (a *App) flushOnUnload() {
 	a.flushURLStateOnUnload()
 }
 
-// flushURLStateOnUnload beacons the address and title a live durable page
-// navigated to. Persisting it only at teardown would lose it, since the
-// bridge's IPC reply never arrives during unload. No jpeg and no history
-// rides the beacon, because the bridge holds both and is unreachable now; the
-// store skips empty fields, so the previous face and trail survive.
+// flushURLStateOnUnload beacons the address and title a live page navigated
+// to, for every view urlview.DecideUnloadURLState says owns one. Persisting it
+// only at teardown would lose it, since the bridge's IPC reply never arrives
+// during unload. No jpeg and no history rides the beacon, because the bridge
+// holds both and is unreachable now; the store skips empty fields, so the
+// previous face and trail survive.
 func (a *App) flushURLStateOnUnload() {
 	for _, pl := range a.locals {
 		v := pl.urlView
-		if v == nil || v.page || !v.durable || !v.navDirty {
+		if v == nil {
 			continue
 		}
-		url := v.lastURL
-		if url == "" {
-			if ct := a.cachedTileByID(v.tileID); ct != nil {
-				url = ct.UrlString
-			}
+		cached := ""
+		if ct := a.cachedTileByID(v.tileID); ct != nil {
+			cached = ct.UrlString
 		}
-		if url == "" {
+		url, write := urlview.DecideUnloadURLState(v.page, v.durable, v.navDirty, v.lastURL, cached)
+		if !write {
 			continue
 		}
 		if path, body := rpc.SetTileBeacon(&gridwellv1.SetTileRequest{TileId: v.tileID,
