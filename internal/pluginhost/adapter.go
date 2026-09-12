@@ -906,10 +906,15 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 // same arbitration synthesize runs, where only a definitive GONE retires:
 // retiring a row whose thing is still there would snap the tile back under a
 // fresh id and kill every link to it.
+//
+// A tile_id that does not resolve is answered with the failure resolveTile
+// classified, as home answers the same ids: an empty success would tell the
+// client the delete happened, and the tile it refetches is still sitting
+// there with nothing said about why.
 func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
-		return &gridwellv1.DeleteTileResponse{}, nil
+		return nil, err
 	}
 	if _, err := a.cp.Delete(ctx, &pluginv1.DeleteRequest{Key: ref.key}); err != nil {
 		return nil, err

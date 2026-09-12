@@ -3,6 +3,7 @@ package pluginhost_test
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -159,6 +160,99 @@ func TestDeleteRetiresOnlyWhatTheSourceSaysIsGone(t *testing.T) {
 			}
 			if after.Tiles[0].GetX() != 5 || after.Tiles[0].GetY() != 5 {
 				t.Errorf("the listing put the entry back at its hint: %+v", after.Tiles[0])
+			}
+		})
+	}
+}
+
+// A delete the node cannot resolve says so. An empty success tells the client
+// the gesture landed: it refetches, the tile is still sitting there, and
+// nothing anywhere says why — a store error reads to the user as "it just
+// didn't delete." Home answers the same ids NotFound and InvalidArgument, and
+// resolveTile already classifies them.
+func TestDeleteSurfacesWhatItCouldNotResolve(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		id       func(t *testing.T, ns *store.Namespace, st *store.Store) string
+		wantCode codes.Code
+	}{
+		{
+			name:     "a row id naming no row",
+			id:       func(*testing.T, *store.Namespace, *store.Store) string { return "987654" },
+			wantCode: codes.NotFound,
+		},
+		{
+			name: "a row the node already retired",
+			id: func(t *testing.T, ns *store.Namespace, _ *store.Store) string {
+				row := rowIDOf(t, ns, "r", "todo:1")
+				id, err := strconv.ParseInt(row, 10, 64)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := ns.Retire(id); err != nil {
+					t.Fatal(err)
+				}
+				return row
+			},
+			wantCode: codes.NotFound,
+		},
+		{
+			name:     "an id that names no tile at all",
+			id:       func(*testing.T, *store.Namespace, *store.Store) string { return "not-a-tile-id" },
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "a store that cannot answer",
+			id: func(t *testing.T, ns *store.Namespace, st *store.Store) string {
+				row := rowIDOf(t, ns, "r", "todo:1")
+				if err := st.Close(); err != nil {
+					t.Fatal(err)
+				}
+				return row
+			},
+			// A store failure is nobody's known class; whatever it is, it is
+			// not a delete that happened.
+			wantCode: codes.Unknown,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = memStore.Close() })
+			impl := &deletePlugin{presence: pluginv1.ProbeResponse_PRESENCE_GONE}
+			cp, cpCloser, err := plugintest.Loopback(impl)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(cpCloser)
+			ns := memStore.Namespace("p1")
+			client := pluginhost.New(cp, ns, nil)
+			ctx := context.Background()
+
+			info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			g, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: plugintest.Landing(t, info)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			addr := g.Tiles[0].Id
+			if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: addr, X: 5, Y: 5, W: 3, H: 2}); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = client.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tc.id(t, ns, memStore)})
+			if err == nil {
+				t.Fatal("DeleteTile answered success for a tile it never resolved")
+			}
+			if got := status.Code(err); got != tc.wantCode {
+				t.Errorf("DeleteTile = %v (code %v), want code %v", err, got, tc.wantCode)
+			}
+			if got := impl.deleteCount(); got != 0 {
+				t.Errorf("the plugin saw %d deletes for a tile the node could not resolve", got)
 			}
 		})
 	}
