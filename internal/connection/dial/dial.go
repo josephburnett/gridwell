@@ -157,19 +157,23 @@ func (r *redialer) close() {
 	}
 }
 
+// keepaliveParams is the HTTP/2 ping policy on a connection's streams. A far
+// side that dies without an error would leave long-lived streams blocked in
+// Recv forever; the timeout makes that Unavailable and the fan-in's retry
+// rebuilds. A var so keepalive_seam_test.go can lower it and wait one out;
+// grpc-go raises any Time under 10s to 10s, so that is the floor a test sees.
+var keepaliveParams = keepalive.ClientParameters{
+	Time:    30 * time.Second,
+	Timeout: 10 * time.Second,
+}
+
 // grpcDialOptions is the posture both dials wear, so the ssh bridge and the
 // direct socket cannot drift apart. Each caller adds only what its transport
 // needs.
 func grpcDialOptions() []grpc.DialOption {
 	return []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// HTTP/2 pings. A far side that dies without an error would leave
-		// long-lived streams blocked in Recv forever; the timeout makes that
-		// Unavailable and the fan-in's retry rebuilds.
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:    30 * time.Second,
-			Timeout: 10 * time.Second,
-		}),
+		grpc.WithKeepaliveParams(keepaliveParams),
 		// One user's connection, so cap the backoff well below gRPC's
 		// two-minute default and a healed network heals in seconds.
 		grpc.WithConnectParams(grpc.ConnectParams{
