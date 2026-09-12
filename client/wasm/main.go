@@ -1,9 +1,9 @@
 //go:build js && wasm
 
-// Package main is the WASM entry point for the Gridwell client. It is a thin
-// wiring shim: anything testable lives in client/pane, client/markdown,
-// client/dragdrop and client/cache, because the code here reaches into
-// syscall/js and is exercised only in a browser.
+// Package main is the WASM entry point for the Gridwell client: canvas, DOM,
+// and the RPC calls. The code here reaches into syscall/js and is exercised
+// only in a browser, so every decision belongs in one of the pure, tested
+// client/* packages instead — ARCHITECTURE.md, "The client".
 package main
 
 import (
