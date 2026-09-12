@@ -197,10 +197,6 @@ func (p *Plugin) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 	return &gridwellv1.SearchResponse{Results: res}, nil
 }
 
-// contentChunkBytes is small enough to stream a large body without one giant
-// message, large enough that a typical text tile is one chunk.
-const contentChunkBytes = 256 * 1024
-
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
 // the row version the bytes belong to, the caller's save basis; later chunks
 // carry data only. Empty content still sends the meta chunk, so the version
@@ -211,16 +207,16 @@ func (p *Plugin) ReadContent(ctx context.Context, req *gridwellv1.ReadContentReq
 		return errToStatus(err)
 	}
 	first := &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}
-	if len(data) <= contentChunkBytes {
+	if len(data) <= rpc.ContentChunkBytes {
 		first.Data = data
 		return send(first)
 	}
-	first.Data = data[:contentChunkBytes]
+	first.Data = data[:rpc.ContentChunkBytes]
 	if err := send(first); err != nil {
 		return err
 	}
-	for off := contentChunkBytes; off < len(data); off += contentChunkBytes {
-		end := min(off+contentChunkBytes, len(data))
+	for off := rpc.ContentChunkBytes; off < len(data); off += rpc.ContentChunkBytes {
+		end := min(off+rpc.ContentChunkBytes, len(data))
 		if err := send(&gridwellv1.ContentChunk{Data: data[off:end]}); err != nil {
 			return err
 		}

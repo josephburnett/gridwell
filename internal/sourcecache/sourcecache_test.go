@@ -1,9 +1,11 @@
 package sourcecache
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -1109,5 +1112,58 @@ func TestAnEmptyBodyIsRemembered(t *testing.T) {
 	upstream.goDark()
 	if _, _, data := readContent(t, cc, id); len(data) != 0 {
 		t.Fatalf("the dark read of a remembered empty body = %q, want empty", data)
+	}
+}
+
+// chunkShape is the framing of one content stream: the length of each chunk's
+// data, in order.
+func chunkShape(t *testing.T, c namespace.Namespace, tileID string) []int {
+	t.Helper()
+	var shape []int
+	if err := c.ReadContent(context.Background(), &pb.ReadContentRequest{TileId: tileID},
+		func(ch *pb.ContentChunk) error {
+			shape = append(shape, len(ch.GetData()))
+			return nil
+		}); err != nil {
+		t.Fatalf("ReadContent: %v", err)
+	}
+	return shape
+}
+
+// A remembered body comes back framed like the live one, so no caller can tell
+// a memory from a live answer by the shape of the stream. The two producers —
+// the source's ReadContent and this layer's replay — hold that only by reading
+// the one chunk size, rpc.ContentChunkBytes.
+func TestRememberedStreamHasTheLiveChunkShape(t *testing.T) {
+	cc, upstream, root, _ := fixture(t)
+	ctx := context.Background()
+
+	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := txt.GetTile().GetId()
+	// A body of more than two chunks, ending mid-chunk.
+	body := make([]byte, 2*rpc.ContentChunkBytes+7)
+	for i := range body {
+		body[i] = byte(i)
+	}
+	writeOne(t, cc, id, txt.GetTile().GetVersion(), body)
+
+	live := chunkShape(t, cc, id)
+	want := []int{rpc.ContentChunkBytes, rpc.ContentChunkBytes, 7}
+	if !slices.Equal(live, want) {
+		t.Fatalf("live chunk shape %v, want %v", live, want)
+	}
+
+	upstream.goDark()
+	remembered := chunkShape(t, cc, id)
+	if !slices.Equal(remembered, live) {
+		t.Errorf("remembered chunk shape %v, live %v", remembered, live)
+	}
+	_, _, got := readContent(t, cc, id)
+	if !bytes.Equal(got, body) {
+		t.Errorf("remembered body differs from what was written")
 	}
 }

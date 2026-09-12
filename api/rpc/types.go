@@ -1,6 +1,7 @@
 // Package rpc is the Go side of the Gridwell RPC service: the id codec, the
-// kind and glyph vocabularies, the tile predicates, the beacon bodies and the
-// Client. data.proto is the one description of a record and of the wire.
+// kind and glyph vocabularies, the tile predicates, the content stream's
+// bounds, the beacon bodies and the Client. data.proto is the one description
+// of a record and of the wire.
 package rpc
 
 import (
@@ -22,6 +23,17 @@ const (
 	// into the store's CHECK.
 	KindPane = "pane"
 )
+
+// ContentChunkBytes is the size of every content chunk but the last: small
+// enough to stream a large body without one giant message, large enough that a
+// typical text tile is one chunk. Every producer of a content stream uses it,
+// so no reader can tell one producer from another by the framing.
+const ContentChunkBytes = 256 * 1024
+
+// MaxContentBytes is the largest content body the door carries, whichever way
+// it flows: what a write is refused above, what a cache declines to remember,
+// what the store's blob column holds (store.MaxBlobBytes).
+const MaxContentBytes = 16 * 1024 * 1024
 
 // IsWellKind: an exit well is still a well, said by its child_grid_id and not
 // by its kind.

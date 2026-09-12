@@ -17,8 +17,9 @@ func urlSchemeAllowed(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }
 
-// MaxBlobBytes caps a single uploaded text-tile blob size.
-const MaxBlobBytes = 16 * 1024 * 1024
+// MaxBlobBytes caps a single uploaded text-tile blob size; see
+// rpc.MaxContentBytes.
+const MaxBlobBytes = rpc.MaxContentBytes
 
 // claimContentVersion verifies the caller's content claim against the row. It
 // is the store's only optimistic-concurrency check, and "version is the claim

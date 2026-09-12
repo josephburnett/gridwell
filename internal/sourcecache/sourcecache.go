@@ -87,15 +87,6 @@ CREATE TABLE IF NOT EXISTS servecontent (
 );
 `
 
-// contentChunkBytes mirrors the plugins' ReadContent chunking so a
-// cache-served stream is shaped like a live one.
-const contentChunkBytes = 256 * 1024
-
-// maxCachedContentBytes bounds one cached body. It matches the store's blob
-// cap, so anything a plugin can serve as tile content fits; a larger stream
-// passes through live, uncached.
-const maxCachedContentBytes = 16 * 1024 * 1024
-
 // freshWindow is how long a remembered grid answers without a revalidation. It
 // also keeps refresh from feeding on itself: the client's refetch lands inside
 // the window of the revalidation that caused it.
@@ -707,7 +698,7 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 		}
 		if !oversized {
 			data = append(data, ch.GetData()...)
-			if len(data) > maxCachedContentBytes {
+			if len(data) > rpc.MaxContentBytes {
 				oversized = true
 				data = nil
 			}
@@ -740,7 +731,7 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 func sendChunked(data []byte, emit func(b []byte, first bool) error) error {
 	first := true
 	for {
-		n := min(len(data), contentChunkBytes)
+		n := min(len(data), rpc.ContentChunkBytes)
 		if err := emit(data[:n], first); err != nil {
 			return err
 		}

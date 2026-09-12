@@ -130,15 +130,11 @@ func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, m
 	return data, mediaType, version, nil
 }
 
-// writeContentChunkBytes bounds each upload message; the server reassembles
-// and commits once, at clean close.
-const writeContentChunkBytes = 256 * 1024
-
 // WriteContent is version-claimed and commits at close, so a failure anywhere
 // leaves the old value intact. data is the complete new value.
 func (c *Client) WriteContent(ctx context.Context, tileID string, version int64, data []byte) (*pb.Tile, error) {
 	stream := c.cl.WriteContent(ctx)
-	end := min(writeContentChunkBytes, len(data))
+	end := min(ContentChunkBytes, len(data))
 	if err := stream.Send(&pb.WriteContentRequest{TileId: tileID, Version: version, Data: data[:end]}); err != nil {
 		_, cerr := stream.CloseAndReceive()
 		if cerr != nil {
@@ -146,8 +142,8 @@ func (c *Client) WriteContent(ctx context.Context, tileID string, version int64,
 		}
 		return nil, err
 	}
-	for off := end; off < len(data); off += writeContentChunkBytes {
-		e := min(off+writeContentChunkBytes, len(data))
+	for off := end; off < len(data); off += ContentChunkBytes {
+		e := min(off+ContentChunkBytes, len(data))
 		if err := stream.Send(&pb.WriteContentRequest{Data: data[off:e]}); err != nil {
 			_, cerr := stream.CloseAndReceive()
 			if cerr != nil {

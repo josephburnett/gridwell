@@ -27,7 +27,7 @@ var (
 	// prefetchMaxGrids caps the traversal breadth.
 	prefetchMaxGrids = 4096
 	// prefetchContentBudget caps the sum of content bodies fetched by one
-	// walk; per-entry bodies are already capped by maxCachedContentBytes.
+	// walk; per-entry bodies are already capped by rpc.MaxContentBytes.
 	prefetchContentBudget = 256 << 20
 	// prefetchPause is the gap between RPCs, so a background walk never
 	// crowds out the user's own reads on a slow link. A test lengthens it and
