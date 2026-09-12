@@ -47,6 +47,25 @@ func TreeAtPlace(idPrefix, anchor string, path []string, cx, cy, zoom float64) *
 	return t
 }
 
+// PopEphemeralContent pops every leaf whose content descent ephemeral reports
+// as ephemeral; it is asked only about a leaf in content. A captured
+// arrangement is durable while an ephemeral descent dies with the visit that
+// made it, so naming one would keep that visit's view alive past the boundary.
+func PopEphemeralContent(t *Tree, ephemeral func(p *Pane, contentID string) bool) {
+	if t == nil || ephemeral == nil {
+		return
+	}
+	t.Walk(func(p *Pane) {
+		id := p.ContentID()
+		if id == "" {
+			return
+		}
+		if ephemeral(p, id) {
+			p.Pop()
+		}
+	})
+}
+
 // Levels is the window's nesting, bottom (first entered) to top (current).
 type Levels struct {
 	frames []Level

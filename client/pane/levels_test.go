@@ -78,3 +78,40 @@ func TestShouldPersistDiffsAndReadOnly(t *testing.T) {
 		t.Fatal("nil frame / empty bytes must not persist")
 	}
 }
+
+// A capture pops the ephemeral content descents and nothing else: a leaf on a
+// grid, a leaf in durable content and a leaf whose content the predicate keeps
+// all survive untouched.
+func TestPopEphemeralContent(t *testing.T) {
+	tree := NewTree()
+	onGrid := tree.FocusedPane()
+	onGrid.Stack = StackAt("g1", nil, "")
+	eph := &Pane{ID: "p2", Stack: StackAt("g1", []string{"d1"}, "scratch")}
+	durable := &Pane{ID: "p3", Stack: StackAt("g1", nil, "keep")}
+	unknown := &Pane{ID: "p4", Stack: StackAt("g1", nil, "unknown")}
+	tree.Root = TreeNode{Split: &Split{Dir: Vertical, Ratio: 0.5,
+		A: TreeNode{Split: &Split{Dir: Horizontal, Ratio: 0.5,
+			A: TreeNode{Pane: onGrid}, B: TreeNode{Pane: eph}}},
+		B: TreeNode{Split: &Split{Dir: Horizontal, Ratio: 0.5,
+			A: TreeNode{Pane: durable}, B: TreeNode{Pane: unknown}}}}}
+
+	var asked []string
+	PopEphemeralContent(tree, func(p *Pane, contentID string) bool {
+		asked = append(asked, p.ID+":"+contentID)
+		return contentID == "scratch"
+	})
+	if len(asked) != 3 || asked[0] != "p2:scratch" || asked[1] != "p3:keep" || asked[2] != "p4:unknown" {
+		t.Fatalf("asked = %v; a leaf on a grid must not be asked", asked)
+	}
+	if eph.ContentID() != "" || eph.Depth() != 2 || eph.Door != "d1" {
+		t.Fatalf("ephemeral leaf not popped onto its doorway: %+v", eph.Frames())
+	}
+	if durable.ContentID() != "keep" || unknown.ContentID() != "unknown" {
+		t.Fatalf("a kept content frame was popped: %q %q", durable.ContentID(), unknown.ContentID())
+	}
+	if onGrid.ContentID() != "" || onGrid.Depth() != 1 {
+		t.Fatalf("a leaf on a grid was changed: %+v", onGrid.Frames())
+	}
+	PopEphemeralContent(nil, func(*Pane, string) bool { return true })
+	PopEphemeralContent(tree, nil)
+}

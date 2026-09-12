@@ -80,35 +80,49 @@ func (a *App) navPopLevel(e nav.Effect) {
 // initial arrangement, through the persister's own encode and decode pair, so
 // the capture is byte-for-byte what the first flush stores. Any failure
 // yields the single-pane default, because a capture must not block the
-// descent.
+// descent, and says so: the arrangement the user was looking at is not the
+// one they get.
 func (a *App) captureWorkspaceTree(tileID, idPrefix, originPane string) *pane.Tree {
 	prefix := pane.ChainPrefix(tileID)
-	data, _, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
+	data, skipped, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
 		rest, ok := strings.CutPrefix(id, prefix)
 		return rest, ok
 	})
+	a.reportLayoutSkipped(tileID, skipped)
 	if err == nil {
-		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix); derr == nil {
-			// An ephemeral descent is session state that dies on ascent, so
-			// a durable capture must not reference it and a copy going live
-			// would keep the outer visit's view alive past the boundary.
-			t.Walk(func(cp *pane.Pane) {
-				if cp.ContentID() == "" {
-					return
-				}
-				if tile := a.findTileByID(cp.ContentID()); tile != nil && a.possiblyEphemeral(cp, tile) {
-					cp.Pop()
-				}
+		t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix)
+		if derr == nil {
+			pane.PopEphemeralContent(t, func(cp *pane.Pane, contentID string) bool {
+				// A tile this client has not cached cannot be asked about, so
+				// the frame stays; the fetch findTileByID kicks answers later
+				// visits.
+				tile := a.findTileByID(contentID)
+				return tile != nil && a.possiblyEphemeral(cp, tile)
 			})
 			return t
 		}
+		err = derr
 	}
+	a.reportErr(errsurface.Error, "layout:"+tileID,
+		"workspace layout capture failed — opened with one pane: "+err.Error())
 	var origin pane.Stack
 	if op := a.tree.FindPane(originPane); op != nil {
 		origin = op.Stack
 	}
 	return pane.TreeAtPlace(idPrefix, origin.Anchor(), origin.Path(),
 		origin.Cx, origin.Cy, origin.Zoom)
+}
+
+// reportLayoutSkipped posts the one notice for panes an encode could not place
+// in the owning node's frame, for the two callers that encode the live tree.
+func (a *App) reportLayoutSkipped(tileID string, skipped []string) {
+	if len(skipped) == 0 {
+		return
+	}
+	// A pane looking outside the owning node's reach persists as home. One
+	// coalesced notice on the source key, not one per save.
+	a.reportErr(errsurface.Info, "layout:"+tileID,
+		"a pane views content the workspace's node cannot reach; it will reopen at home")
 }
 
 // restoreWorkspaceLeaves applies the boot-blank fixups a freshly-installed
@@ -177,12 +191,7 @@ func (a *App) flushWorkspaceSave() {
 		a.reportErr(errsurface.Error, "layout:"+top.TileID, "workspace layout encode failed: "+err.Error())
 		return
 	}
-	if len(skipped) > 0 {
-		// A pane looking outside the owning node's reach persists as home.
-		// One coalesced notice on the source key, not one per save.
-		a.reportErr(errsurface.Info, "layout:"+top.TileID,
-			"a pane views content the workspace's node cannot reach; it will reopen at home")
-	}
+	a.reportLayoutSkipped(top.TileID, skipped)
 	if !pane.ShouldPersist(top, data) {
 		return
 	}
