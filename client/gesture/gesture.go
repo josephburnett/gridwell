@@ -1,6 +1,7 @@
-// Package gesture classifies a right-button-down into a Kind and resolves the
-// gestures whose release is geometry. A gesture whose release is a drop stays
-// in the App.
+// Package gesture classifies a button-down into a verdict and resolves the
+// gestures whose release is geometry: a Kind for the right button, a
+// ClickVerdict for a bare left-click on a tile. A gesture whose release is a
+// drop stays in the App.
 package gesture
 
 import "github.com/josephburnett/gridwell/client/pane"

@@ -551,8 +551,9 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 }
 
 // attemptDescentOrAscent routes a bare left-click, which only ever descends.
-// inNewPane is the ctrl-click ask, and only a descent splits, so the
-// url-configure prompt stays in place.
+// It resolves the tile's facts and obeys gesture.DecideTileClick; inNewPane is
+// the ctrl-click ask. Which frame a descent pushes is the tile's declaration;
+// see nav.go.
 func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, inNewPane bool) bool {
 	if p.ContentID() != "" {
 		// Ascent lives on the middle button and the bar's crumb click.
@@ -563,24 +564,26 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 	if hit == nil {
 		return false
 	}
-	// An address-less url tile asks for its address on the first descent. A
-	// url link resolves through its target and never prompts.
-	if hit.Kind == rpc.KindURL && hit.UrlString == "" && !rpc.LeafLink(hit) {
+	switch gesture.DecideTileClick(gesture.ClickInput{
+		Well:           rpc.IsWellKind(hit.Kind),
+		ContentDescent: rpc.IsContentDescentKind(hit.Kind),
+		Workspace:      rpc.IsWorkspaceKind(hit.Kind),
+		URL:            hit.Kind == rpc.KindURL,
+		URLEmpty:       hit.UrlString == "",
+		LeafLink:       rpc.LeafLink(hit),
+		DeadLink:       a.deadLink(hit),
+		SplitNav:       inNewPane,
+	}) {
+	case gesture.ClickConfigureURL:
 		a.openConfigureURL(p, hit)
 		return true
-	}
-	if !rpc.IsWellKind(hit.Kind) && !rpc.IsContentDescentKind(hit.Kind) &&
-		!rpc.IsWorkspaceKind(hit.Kind) {
+	case gesture.ClickNone:
 		return false
+	case gesture.ClickDescendSplit:
+		a.descend(a.splitBelowForOpen(p), hit)
+		return true
 	}
-	// Which frame the descent pushes is the tile's declaration; see nav.go.
-	target := p
-	if inNewPane && !a.deadLink(hit) {
-		// Ctrl asked for the descent in a new pane. A dead link descends
-		// nowhere (descend's own guard), so it births no pane either.
-		target = a.splitBelowForOpen(p)
-	}
-	a.descend(target, hit)
+	a.descend(p, hit)
 	return true
 }
 
