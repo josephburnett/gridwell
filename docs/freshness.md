@@ -118,7 +118,9 @@ face it fed never loaded, never retried, and never said a word.
 `retryKick(true, cache.EverySource)` on the next successful subscribe: clear
 the failure latches, cancel every fetch set, refetch every named and
 known grid, then `syncContentOutbox` and drain. `retryBackstop` runs
-`retryKick(false, …)` every 30s while anything is parked.
+`retryKick(false, …)` every `retry.Backstop` while anything is parked.
+`client/retry` owns that cadence, the two reconnect waits, and the boot
+handshake's backoff.
 
 The kick's second argument is its SCOPE, and `client/cache` owns what that
 covers. A health event names one source; every cached id says which source
@@ -442,6 +444,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |
 | Live: typing survives a server outage and saves itself after restart; settled framing lands too; a swallowed grid read un-latches | `apps/desktop/e2e-web/web-outage.spec.ts` |
+| The backstop re-posts a parked write on its interval and not before, at a cadence the spec retunes | `apps/desktop/e2e-web/web-outage.spec.ts` ("a write the network swallows re-posts on the backstop interval, not before"), `client/retry/retry_test.go` |
 | A foreign edit becomes visible, and opening/closing never stomps it | `apps/desktop/e2e/foreign-writer.spec.ts` |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
 | An older write RESPONSE is refused by the same interlock an older echo is: one door into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneDoor`, `TestUpdateTileAgesTheBodyToo` (unit) |

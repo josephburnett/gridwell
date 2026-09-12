@@ -363,3 +363,69 @@ test('a write the network swallows parks in the outbox and drains itself', async
     )
     .toBeGreaterThan(0);
 });
+
+// The backstop's own clock. The test above proves a parked write drains
+// itself; nothing in it would notice if the interval were a minute or a
+// millisecond, and docs/freshness.md quotes the cadence as a guarantee. This
+// one retunes `retry.Backstop` through the e2e hook and bounds the re-post
+// from both sides. The ephemeral delete is the write, because it is sent once
+// on the ascent and nothing but the backstop sends it again: a framing write
+// settles more than once after a pan, so a landed row would not say who landed
+// it. The route aborts rather than hanging — the same dropped link a killed
+// server gives, with no request left in flight to hang the idle wait.
+test('the backstop re-posts a parked write on its interval, not before', async ({
+  gw,
+  window,
+}) => {
+  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
+  await gw.enterPlugin('home');
+
+  await gw.clickPaletteSwatch('shell');
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  const ephemeralID = (await gw.focused()).textFocus;
+
+  const rows = async () => ((await gw.getGrid(scratchGridID)).tiles ?? []).length;
+  const parked = () => window.evaluate(() => (window as any).__gridwellTest.outbox());
+  expect(await rows(), 'the scratch row is there to be cleaned up').toBe(1);
+
+  let dropped = true;
+  await window.route('**/gridwell.v1.Gridwell/DeleteTile', async (route) => {
+    if (dropped && (route.request().postData() ?? '').includes(ephemeralID)) return route.abort();
+    await route.continue();
+  });
+
+  // The ascent's delete fires into the dropped link and parks.
+  await gw.ascendViaCrumb();
+  await expect
+    .poll(parked, { message: 'the dropped delete is parked', timeout: 20_000 })
+    .toContain('DeleteTile:' + ephemeralID);
+
+  // Retuning restarts the wait in flight, so the next re-post is this far from
+  // here and no earlier landing can be a tick that was already due.
+  expect(
+    await window.evaluate((ms: number) => (window as any).__gridwellTest.setBackstopMs(ms), 20_000),
+    'the cadence the client is running on',
+  ).toBe(20_000);
+
+  // The link is open from here on, so the only thing between the parked delete
+  // and the server is the backstop.
+  dropped = false;
+
+  await window.waitForTimeout(6_000);
+  expect(await rows(), 'nothing re-posts inside the interval').toBe(1);
+  expect(await parked(), 'the delete is still owed a verdict').toContain(
+    'DeleteTile:' + ephemeralID,
+  );
+
+  // And within: one tick of the lowered interval lands it, with no user action.
+  await window.evaluate(() => (window as any).__gridwellTest.setBackstopMs(1_000));
+  await expect
+    .poll(rows, {
+      // Tight, so a client still running the unlowered cadence cannot pass by
+      // having a tick of its own fall inside the window.
+      message: 'the parked delete reaches the server on the next backstop tick',
+      timeout: 8_000,
+    })
+    .toBe(0);
+  await expect.poll(parked, { timeout: 10_000 }).not.toContain('DeleteTile:' + ephemeralID);
+});

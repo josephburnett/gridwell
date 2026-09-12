@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
@@ -24,8 +25,8 @@ import (
 // but installs nothing unless the page carries ?e2e=1. Accessors read
 // through the same geometry helpers the input handlers hit-test against, so
 // a spec learns where to click while the server's GetGrid stays the
-// independent oracle for what was created. shellVisitURL and setTransitionMs
-// are the two that mutate.
+// independent oracle for what was created. shellVisitURL, setTransitionMs and
+// setBackstopMs are the three that mutate.
 func (a *App) installTestHook() {
 	search := js.Global().Get("location").Get("search").String()
 	if !strings.Contains(search, "e2e=1") {
@@ -47,6 +48,15 @@ func (a *App) installTestHook() {
 				totalTransitionMs = args[0].Float()
 			}
 			return nil
+		}),
+		"setBackstopMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
+			// Retunes the outbox re-post cadence, restarting the wait in
+			// flight, so a spec can bound the backstop from both sides
+			// without sitting out retry.Backstop.
+			if len(args) == 1 {
+				a.backstop.Set(time.Duration(args[0].Float()) * time.Millisecond)
+			}
+			return float64(a.backstop.Duration().Milliseconds())
 		}),
 		"workspace":     js.FuncOf(a.thWorkspace),
 		"bar":           js.FuncOf(a.thBar),

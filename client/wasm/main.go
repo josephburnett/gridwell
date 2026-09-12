@@ -29,6 +29,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
+	"github.com/josephburnett/gridwell/client/retry"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -161,6 +162,10 @@ type App struct {
 
 	// renderedPanePaints is e2e attribution: an unfocused pane paints raster.
 	renderedPanePaints map[string]int
+
+	// backstop is the outbox re-post cadence, retry.Backstop until the e2e
+	// lowers it to bound one.
+	backstop *retry.Interval
 }
 
 // overlayState holds the DOM singletons layered over the canvas. Each is
@@ -534,6 +539,7 @@ func main() {
 		shellAliveProbing:  map[string][]func(bool){},
 		traces:             map[string]traceState{},
 		renderedPanePaints: map[string]int{},
+		backstop:           retry.NewInterval(retry.Backstop),
 	}
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()
@@ -601,7 +607,7 @@ func main() {
 func (a *App) bootstrap() {
 	// The handshake retries until it lands: firing it once would leave one blip
 	// at boot as a permanently empty shell until a manual reload.
-	backoff := time.Second
+	backoff := retry.Backoff{First: retry.HandshakeFirst, Max: retry.HandshakeMax}
 	var plugins *gridwellv1.HandshakeResponse
 	for {
 		// Bounded, so the backoff loop is what it says: an unbounded handshake
@@ -620,10 +626,7 @@ func (a *App) bootstrap() {
 		// Say why, or an empty landing page reads as "my plugins vanished".
 		a.reportErr(errsurface.Error, "rpc:Handshake", "plugin list failed — retrying: "+rpcErrText(err))
 		a.draw()
-		time.Sleep(backoff)
-		if backoff < 15*time.Second {
-			backoff *= 2
-		}
+		time.Sleep(backoff.Next())
 	}
 	a.plugins = rpc.MenuRows(plugins)
 	// The node's shells_disabled folds into the capability set at boot and is
@@ -920,7 +923,7 @@ func (a *App) startSSE() {
 			// stale. It coalesces, and resolves itself on reconnect below.
 			a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
 			gap = true
-			time.Sleep(time.Second)
+			time.Sleep(retry.SubscribeRetry)
 			continue
 		}
 		a.resolveErr("events")
@@ -964,7 +967,7 @@ func (a *App) startSSE() {
 			}
 		}
 		stream.Close()
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(retry.StreamEndPause)
 	}
 }
 
@@ -996,8 +999,8 @@ func (a *App) retryKick(resync bool, source string) {
 		}
 	}
 	a.syncContentOutbox()
-	for _, retry := range a.persist.out.Drain() {
-		retry()
+	for _, resend := range a.persist.out.Drain() {
+		resend()
 	}
 }
 
@@ -1005,7 +1008,7 @@ func (a *App) retryKick(resync bool, source string) {
 // that may never come: the stream survives blips a unary write does not.
 func (a *App) retryBackstop() {
 	for {
-		time.Sleep(30 * time.Second)
+		a.backstop.Wait()
 		a.syncContentOutbox()
 		if a.persist.out.Len() > 0 {
 			a.retryKick(false, cache.EverySource)
