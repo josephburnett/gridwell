@@ -279,13 +279,19 @@ func (n *Node) ServeBackground() <-chan error {
 	return errCh
 }
 
-// Close drains in-flight requests, bounded, then closes the registry.
+// closeDrainWait bounds Close's drain. Every request context is cancelled
+// first, so this is what a handler that ignores its own cancellation costs the
+// shutdown, once. A var so a test can wait it out; see drainwait_test.go.
+var closeDrainWait = 5 * time.Second
+
+// Close drains in-flight requests, bounded by closeDrainWait, then closes the
+// registry.
 // Idempotent by contract: the CLI both defers it and calls it to report the
 // error, and the second call returns the first's verdict.
 func (n *Node) Close() error {
 	n.closeOnce.Do(func() {
 		n.cancelRequest()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), closeDrainWait)
 		defer cancel()
 		err := n.webSrv.Shutdown(ctx)
 		if n.ConnLn != nil {
