@@ -135,7 +135,6 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		}},
 		// The server reads capabilities from this handshake, never from the
 		// kind string.
-		Watch:        true,
 		Writable:     true,
 		RootViewCx:   view.Cx,
 		RootViewCy:   view.Cy,

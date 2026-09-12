@@ -772,10 +772,10 @@ func (rt *router) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send fu
 			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, uuid) }, events)
 	}
 	if t, ok := rt.srv.pluginReg.Transport(); ok && rt.srv.cfg.ID != "" {
-		// The transport always watches: it fans in every connection's events,
-		// and there is no handshake to ask.
+		// The transport is ready as soon as it exists: it fans in every
+		// connection's events, and there is no handshake to ask.
 		go watchPlugin(subCtx, rt.srv.cfg.ID, true, t,
-			func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{Watch: true}, nil }, events)
+			func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events)
 	}
 
 	for {
@@ -790,8 +790,8 @@ func (rt *router) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send fu
 	}
 }
 
-// watchPlugin resolves whether plugin uuid supports live events and hands off
-// to fanInEvents. The Info fetch is retried with fanInEvents' backoff, because
+// watchPlugin waits for plugin uuid to answer Info and hands off to
+// fanInEvents. The Info fetch is retried with fanInEvents' backoff, because
 // giving up after one failure would permanently exclude a plugin that was
 // merely slow to start. It owns the health transitions until Info succeeds;
 // after that fanInEvents does.
@@ -799,7 +799,7 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 	backoff := time.Second
 	healthy := true // assume healthy until the first failure
 	for {
-		info, err := infoOf(ctx)
+		_, err := infoOf(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -819,16 +819,12 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 			}
 			continue
 		}
-		// Report recovery before the Watch check: a plugin that went down on a
-		// transient Info failure and comes back as Watch:false must still
-		// clear its notice, or the client shows "live updates stopped"
-		// forever for a plugin that never had them.
+		// A plugin that went down on a transient Info failure and came back
+		// must have its notice cleared here, before the fan-in takes over, or
+		// the client shows "live updates stopped" for a plugin that is up.
 		if !healthy {
 			healthy = true
 			reportHealth(ctx, events, uuid, true, "")
-		}
-		if !info.Watch {
-			return // this plugin emits no events: nothing to fan in, not a failure
 		}
 		fanInEvents(ctx, uuid, transit, ns, events) // owns health from here; returns only when ctx ends
 		return
@@ -930,7 +926,6 @@ func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse
 	}
 	return &pb.InfoResponse{
 		Kind:       "node",
-		Watch:      true,
 		Writable:   false,
 		RootGridId: root,
 	}, nil

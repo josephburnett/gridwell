@@ -56,7 +56,7 @@ type fake struct {
 }
 
 func (f *fake) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "fake", Watch: true}, nil
+	return &pb.InfoResponse{Kind: "fake"}, nil
 }
 func (f *fake) Probe(context.Context, *pb.ProbeRequest) (*pb.ProbeResponse, error) {
 	return &pb.ProbeResponse{}, nil

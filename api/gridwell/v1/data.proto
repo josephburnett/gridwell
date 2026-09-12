@@ -234,7 +234,7 @@ message InfoResponse {
   string kind           = 1;   // e.g. "home", "fs", "proc"
   string display_name   = 2;
   int64  schema_version = 3;
-  bool   watch          = 4;   // implements Subscribe for live change events
+  reserved 4; // watch
   // root_grid_id is the plugin's default root: fs uses its configured
   // root, proc pid 1, the home its singleton root. Click-enter descends
   // here.
@@ -248,7 +248,7 @@ message InfoResponse {
   // not support ephemeral visits, such as fs and proc.
   string scratch_grid_id = 8;
   // writable reports that this plugin accepts CreateTile, so new primitives can
-  // be dropped into its grids. Like watch, the plugin declares it once here.
+  // be dropped into its grids. The plugin declares it once here.
   // A node that re-derived it from the kind string would present a remote
   // plugin reached through a connection as read-only.
   bool writable = 9;

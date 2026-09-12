@@ -662,13 +662,13 @@ func (streaming) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*
 }
 
 func (streaming) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "test", Watch: true}, nil
+	return &pb.InfoResponse{Kind: "test"}, nil
 }
 
 // TestRevalidationEmitsGridChanged closes the serve-first loop for a
 // namespace the node never watched: stale served, refresh lands a different
 // answer, GridChanged fires on the layer's own stream, and the next read
-// serves the correction. Info declares the door.
+// serves the correction.
 func TestRevalidationEmitsGridChanged(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -682,11 +682,6 @@ func TestRevalidationEmitsGridChanged(t *testing.T) {
 	}
 	up := &streaming{Namespace: local.New(st, nil)}
 	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
-
-	info, err := cc.Info(ctx, &pb.InfoRequest{})
-	if err != nil || !info.GetWatch() {
-		t.Fatalf("layer Info = (%+v, %v), want watch: the layer has a stream to offer", info, err)
-	}
 
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)

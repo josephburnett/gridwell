@@ -83,11 +83,9 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		Kind:        ci.Kind,
 		DisplayName: ci.DisplayName,
 		Glyph:       ci.Glyph,
-		// Watch and Writable describe the doors this adapter opens, not the
-		// plugin's answer: Watch because Subscribe below is a stream, and
-		// Writable false because there is no WriteContent here and passing
-		// the plugin's through would offer editing that is then refused.
-		Watch:    true,
+		// Writable describes the door this adapter opens, not the plugin's
+		// answer: false because there is no WriteContent here and passing the
+		// plugin's through would offer editing that is then refused.
 		Writable: false,
 	}
 	for _, m := range declaredEntries(ci) {

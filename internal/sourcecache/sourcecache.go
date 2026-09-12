@@ -382,10 +382,6 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 				ON CONFLICT(k) DO UPDATE SET proto=excluded.proto`, b)
 			c.noteCache("store info", werr)
 		}
-		// The layer always has an event stream to offer (see Subscribe), so
-		// the door it declares is its own. Flipped after the store: what the
-		// source said is what is remembered.
-		resp.Watch = true
 		return resp, nil
 	}
 	if !gwerr.IsTransport(err) {
@@ -399,7 +395,6 @@ func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse,
 	if uerr := proto.Unmarshal(b, cached); uerr != nil {
 		return nil, err
 	}
-	cached.Watch = true // the layer's door, same as the live path
 	return cached, nil
 }
 

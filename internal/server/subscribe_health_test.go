@@ -15,8 +15,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// flakyWatchPlugin is a plugin whose Info always succeeds and declares
-// Watch: true, but whose Subscribe stream fails its first failSubFirstN
+// flakyWatchPlugin is a plugin whose Info always succeeds, but whose
+// Subscribe stream fails its first failSubFirstN
 // calls before settling into a healthy (never-sending, context-lived)
 // stream. It is the seam-level fake for fanInEvents' down/recovery
 // transition — a unit test on fanInEvents in isolation would not prove the
@@ -28,7 +28,7 @@ type flakyWatchPlugin struct {
 }
 
 func (p *flakyWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1", Watch: true}, nil
+	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1"}, nil
 }
 
 func (p *flakyWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
@@ -102,7 +102,7 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 }
 
 // alwaysFailInfoWatchPlugin fails Info on its first failInfoFirstN calls,
-// then succeeds with Watch: true. Models the bug this test guards against:
+// then succeeds. Models the bug this test guards against:
 // before the fix, a single failed Info AT SUBSCRIBE TIME permanently excluded
 // the plugin from that stream's fan-in — retrying never happened.
 type alwaysFailInfoWatchPlugin struct {
@@ -116,7 +116,7 @@ func (p *alwaysFailInfoWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.
 	if n <= p.failInfoFirstN {
 		return nil, errors.New("simulated info failure")
 	}
-	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1", Watch: true}, nil
+	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1"}, nil
 }
 
 func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
@@ -156,52 +156,5 @@ func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) 
 	}
 	if got := fake.infoCalls.Load(); got < 2 {
 		t.Errorf("Info called %d times, want at least 2 (fail, then a retried success) — the permanent-exclusion bug never retries", got)
-	}
-}
-
-// noWatchAfterInfoFailPlugin fails Info once, then succeeds with Watch: false
-// (the fs/proc shape — no event stream to fan in).
-type noWatchAfterInfoFailPlugin struct {
-	namespace.Unimplemented
-	infoCalls atomic.Int32
-}
-
-func (p *noWatchAfterInfoFailPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	if p.infoCalls.Add(1) == 1 {
-		return nil, errors.New("simulated info failure")
-	}
-	return &pb.InfoResponse{Kind: "fs", DisplayName: "F", RootGridId: "1", Watch: false}, nil
-}
-
-// TestWatchPluginResolvesHealthBeforeNoWatchReturn: a plugin that reported
-// health-down during a transient Info failure and then recovers as a
-// Watch:false plugin (fs/proc) must still emit the recovery event. If the
-// !info.Watch early-return runs before the recovery report, the client keeps
-// a stale "live updates stopped" notice forever for a plugin that never had
-// live updates to begin with.
-func TestWatchPluginResolvesHealthBeforeNoWatchReturn(t *testing.T) {
-	fake := &noWatchAfterInfoFailPlugin{}
-	client := fake
-	reg := plugin.NewRegistry()
-	reg.Register("u-3", "fs", client, nil)
-	srv := mustNew(t, reg, Config{})
-	hs := serveWeb(t, srv)
-	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	stream, err := cl.Subscribe(ctx)
-	if err != nil {
-		t.Fatalf("subscribe: %v", err)
-	}
-	defer stream.Close()
-
-	down := recvHealth(t, stream)
-	if down.Healthy {
-		t.Fatalf("first health event = %+v, want down (the transient Info failure)", down)
-	}
-	up := recvHealth(t, stream)
-	if !up.Healthy {
-		t.Fatalf("second health event = %+v, want recovery even though Watch=false", up)
 	}
 }
