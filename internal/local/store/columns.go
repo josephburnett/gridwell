@@ -137,8 +137,8 @@ schema v3, additive.`,
 		name: "url_history", ddl: "TEXT", since: 4,
 		comment: `url_history is a url tile's persisted navigation back-stack — JSON
 {index, entries:[{url,title}]}, capped — captured at freeze so a
-revived tile can still go back. Content; it rides the freeze
-writeback. Added at schema v4, additive.`,
+revived tile can still go back. A capture: it rides the freeze
+writeback and never bumps version. Added at schema v4, additive.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.UrlHistory} },
 	},
 	{
