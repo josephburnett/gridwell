@@ -19,6 +19,22 @@ import (
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 )
 
+// bootInfoWait bounds the launch gate below. A var so a test can wait it out;
+// see bootinfo_test.go.
+var bootInfoWait = 5 * time.Second
+
+// bootInfo is the launch gate: a plugin that cannot answer Info inside
+// bootInfoWait does not come up, because a plugin without the config it needs
+// must not present as an empty grid, and one that never answers must not hold
+// the boot. The answer itself is discarded: the router reads declarations per
+// request.
+func bootInfo(ns namespace.Namespace) error {
+	ctx, cancel := context.WithTimeout(context.Background(), bootInfoWait)
+	defer cancel()
+	_, err := ns.Info(ctx, &gridwellv1.InfoRequest{})
+	return err
+}
+
 // LoadInto registers every content plugin in reg, keyed by its ID: a
 // subprocess fronted by the pluginhost adapter over the node-owned store.
 // Nothing is cached in front of it, a subprocess on this machine being a call
@@ -30,13 +46,7 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.St
 		if err != nil {
 			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, err)
 		}
-		// A failing Info stops the launch, because a plugin without the
-		// config it needs must not come up as an empty grid. The answer
-		// itself is discarded: the router reads declarations per request.
-		ictx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, ierr := ns.Info(ictx, &gridwellv1.InfoRequest{})
-		cancel()
-		if ierr != nil {
+		if ierr := bootInfo(ns); ierr != nil {
 			if closer != nil {
 				closer()
 			}
