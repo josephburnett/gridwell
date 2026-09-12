@@ -30,7 +30,8 @@ var (
 	// walk; per-entry bodies are already capped by maxCachedContentBytes.
 	prefetchContentBudget = 256 << 20
 	// prefetchPause is the gap between RPCs, so a background walk never
-	// crowds out the user's own reads on a slow link.
+	// crowds out the user's own reads on a slow link. A test lengthens it and
+	// times a walk against it; see prefetchpause_test.go.
 	prefetchPause = 2 * time.Millisecond
 )
 
