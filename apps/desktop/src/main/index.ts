@@ -8,6 +8,7 @@ import { sanitizeUserAgent, allowPermission, SESSION_PARTITION } from './viewuti
 import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
 import { AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE_S } from './authconst';
+import { QuitFlush } from './quit';
 
 // See userdata.ts. The e2e fixture also passes --user-data-dir as a Chromium
 // switch; this covers a launch that sets GRIDWELL_HOME without it.
@@ -141,48 +142,43 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// Quit is two-phase, because the renderer's unload flush needs the views and
-// the sidecar still alive: close the windows, wait for each beforeunload, then
-// stop the sidecar. Tearing either down first loses the live tile's page, trail
-// and unsaved text. A watchdog caps the wait.
-let quitFlushed = false;
-app.on('before-quit', (e) => {
-  quitting = true;
-  if (quitFlushed) return;
-  e.preventDefault();
-  const finish = (): void => {
-    if (quitFlushed) return;
-    quitFlushed = true;
+// quit.ts owns the sequence and its watchdog; this is the Electron end of it.
+const quitFlush = new QuitFlush({
+  closeWindows: async () => {
+    await Promise.all(
+      BrowserWindow.getAllWindows().map(
+        (w) =>
+          new Promise<void>((res) => {
+            if (w.isDestroyed()) return res();
+            w.once('closed', () => res());
+            w.close();
+          }),
+      ),
+    );
+  },
+  stopMirror: () => {
     if (pump) {
       pump.stop();
       pump = null;
     }
+  },
+  removeAll: () => {
     const reg = registry;
     registry = null;
-    const done = (): void => {
-      if (sidecar) {
-        sidecar.stop();
-        sidecar = null;
-      }
-      app.quit();
-    };
-    // removeAll runs for its localStorage flush; its captures are moot.
-    if (reg) void reg.removeAll().then(done, done);
-    else done();
-  };
-  const watchdog = setTimeout(finish, 2000);
-  const wins = BrowserWindow.getAllWindows();
-  void Promise.all(
-    wins.map(
-      (w) =>
-        new Promise<void>((res) => {
-          if (w.isDestroyed()) return res();
-          w.once('closed', () => res());
-          w.close();
-        }),
-    ),
-  ).then(() => {
-    clearTimeout(watchdog);
-    finish();
-  });
+    return reg ? reg.removeAll() : Promise.resolve();
+  },
+  stopSidecar: () => {
+    if (sidecar) {
+      sidecar.stop();
+      sidecar = null;
+    }
+  },
+  quit: () => app.quit(),
+});
+
+app.on('before-quit', (e) => {
+  quitting = true;
+  if (quitFlush.flushed) return;
+  e.preventDefault();
+  quitFlush.begin();
 });

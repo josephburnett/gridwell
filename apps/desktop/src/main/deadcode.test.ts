@@ -37,6 +37,8 @@ const ALLOWED: Record<string, string> = {
     'the declared capture bound; captureAttempt and captureJpegBase64 default to it, so only the test that waits it out names it',
   'main/capture.ts:CaptureAttempt':
     'the labelled outcome of one capture; captureAttempt returns it and describeAttempt takes it, and the executor holds it in an inferred const',
+  'main/quit.ts:QUIT_FLUSH_WATCHDOG_MS':
+    'the declared quit-flush bound; QuitFlush caps its own wait with it, so only the tests that wait it out name it',
   'main/capturestreak.ts:AttemptKind':
     'the decision\'s input vocabulary; the executor passes attempt.kind structurally, so only the table test names the type',
   'main/capturestreak.ts:StreakReport':

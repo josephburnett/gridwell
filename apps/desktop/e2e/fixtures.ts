@@ -232,7 +232,14 @@ export const test = base.extend<Fixtures>({
     // close() does not settle when a live shell stream existed at close time:
     // the Electron process exits with code 0 while the Playwright-side promise
     // hangs. So close() races a deadline and the exit is verified here.
-    const proc = app.process();
+    // A spec that ended by quitting the app leaves no process handle to read,
+    // and teardown must still finish: that is the whole point of this block.
+    let proc: ChildProcess | null = null;
+    try {
+      proc = app.process();
+    } catch {
+      // Already exited.
+    }
     const closed = await Promise.race([
       app.close().then(
         () => true,
@@ -246,7 +253,7 @@ export const test = base.extend<Fixtures>({
     if (!closed) {
       // Expected only with a live shell, so elsewhere it is new information.
       console.warn('[e2e teardown] electronApp.close() did not settle in 10s; proceeding with direct cleanup');
-      if (proc.exitCode === null) {
+      if (proc && proc.exitCode === null) {
         // Still alive, rather than the wedge where it has already exited. The
         // sidecar would otherwise never receive before-quit's SIGTERM.
         proc.kill('SIGKILL');
