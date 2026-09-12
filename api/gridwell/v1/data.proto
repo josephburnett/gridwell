@@ -212,11 +212,11 @@ message Tile {
 
   reserved 34; // menu_entry
 
-  // status_detail is the owning plugin's current trouble with this tile, for
-  // the client to display verbatim. A connection well whose last dial failed
-  // carries that error until the connection comes up, so the failure surfaces
-  // instead of presenting as a tile that is waiting. Wire-only, derived.
-  // Never a stored column, never set by clients.
+  // status_detail is the owning plugin's word about this tile's state —
+  // "unread", "done" — which nothing outside that plugin can derive. The
+  // client draws it muted after the name (client/tilebanner) and never
+  // instead of it. Plugin-declared through the Entry, wire-only: never a
+  // stored column, never set by clients.
   string status_detail = 35;
 }
 

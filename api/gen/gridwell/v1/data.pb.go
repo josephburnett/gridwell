@@ -435,11 +435,11 @@ type Tile struct {
 	// documents. Plugin-derived from the content itself, such as the filename or
 	// a sniff in fs. Wire-only, never a stored column.
 	TextPresentation string `protobuf:"bytes,33,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
-	// status_detail is the owning plugin's current trouble with this tile, for
-	// the client to display verbatim. A connection well whose last dial failed
-	// carries that error until the connection comes up, so the failure surfaces
-	// instead of presenting as a tile that is waiting. Wire-only, derived.
-	// Never a stored column, never set by clients.
+	// status_detail is the owning plugin's word about this tile's state —
+	// "unread", "done" — which nothing outside that plugin can derive. The
+	// client draws it muted after the name (client/tilebanner) and never
+	// instead of it. Plugin-declared through the Entry, wire-only: never a
+	// stored column, never set by clients.
 	StatusDetail  string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -80,8 +80,10 @@ it, wearing your own name and face. Declare both and the entries win.
 absent from an authoritative listing is gone; absent from a non-authoritative
 one means "not seen this pass", and the node keeps the entry until `Probe`
 answers GONE. A `placement_hint` seeds an entry's first placement only. An
-entry with `serves_page` presents its `ServeContent` HTML on descent,
-sandboxed by the node. It stays a `text` entry: a `url` entry's own address
+entry's `status_detail` is one word about its state — "unread", "done" — which
+the client draws muted after the tile's name: a note on the name, never a
+second name. An entry with `serves_page` presents its `ServeContent` HTML on
+descent, sandboxed by the node. It stays a `text` entry: a `url` entry's own address
 wins over `serves_page`, and a page tile has no address to declare because
 the node derives one when the page is opened. The page is served at a
 directory URL, so an ordinary relative URL inside it comes back as

@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/tilebanner"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -835,7 +836,8 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	// Every well is blue; a cross-plugin well differs by the dash, which always
 	// means a link, a reference you can unlink.
 	strokeTileFrame(a.cctx, x, y, w, h, colorFocusBorder, dashed, selected)
-	// A plain well gets no banner: tileBannerLabel returns "" for it.
+	// A plain well gets no banner: it has no alt text, and tilebanner.Runs
+	// returns "" for it.
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
@@ -874,11 +876,7 @@ func isLinkTile(n *gridwellv1.Tile) bool {
 func setTileDash(c js.Value)   { c.Call("setLineDash", jsArray(5, 3)) }
 func clearTileDash(c js.Value) { c.Call("setLineDash", jsArray()) }
 
-// tileBannerLabel is AltText, which the server stamps at insert time from a
-// per-kind derivation. The client has no opinion; "" suppresses the banner.
-func tileBannerLabel(n *gridwellv1.Tile) string {
-	return n.AltText
-}
+const bannerFontFamily = `ui-sans-serif, system-ui, -apple-system, sans-serif`
 
 // bannerGeom clamps the banner's font to 9 to 16 screen px, so the label reads
 // at a constant size across zoom. The text preview reads the same formula.
@@ -907,7 +905,7 @@ func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outsid
 // drawTileBannerLabelIn names the text color rather than deriving it: one
 // banner geometry, so a dead link's grey label lands in the same place.
 func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, textColor string) {
-	label := tileBannerLabel(n)
+	label, status := tilebanner.Runs(n)
 	if label == "" {
 		return
 	}
@@ -927,11 +925,20 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	withClip(a.cctx, ix, iy, iw, ih, func() {
 		a.cctx.Set("fillStyle", colorSourceLabelBg)
 		a.cctx.Call("fillRect", ix, iy, iw, bannerH)
-		setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true)
+		setFont(a.cctx, fontPx, bannerFontFamily, true)
 		a.cctx.Set("fillStyle", textColor)
 		a.cctx.Set("textBaseline", "middle")
 		a.cctx.Set("textAlign", "start")
 		a.cctx.Call("fillText", label, ix+4, iy+bannerH/2)
+		if status != "" {
+			// The status is the plugin's word, so it is drawn in the one muted
+			// color and never in the tile's own: it reads as a note on the
+			// name, not as part of it.
+			labelW := a.cctx.Call("measureText", label).Get("width").Float()
+			setFont(a.cctx, fontPx, bannerFontFamily, false)
+			a.cctx.Set("fillStyle", colorMuted)
+			a.cctx.Call("fillText", status, ix+4+labelW+fontPx/2, iy+bannerH/2)
+		}
 		a.cctx.Set("textBaseline", "top")
 	})
 }
