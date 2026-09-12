@@ -323,3 +323,87 @@ func TestPumpDoesNotLeakWhenOutputUndrained(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// setSigtermGrace rewrites the SIGTERM grace for one test and restores it.
+func setSigtermGrace(t *testing.T, d time.Duration) time.Duration {
+	t.Helper()
+	was := sigtermGrace
+	t.Cleanup(func() { sigtermGrace = was })
+	sigtermGrace = d
+	return sigtermGrace
+}
+
+// startScript runs one bash script on a real PTY.
+func startScript(t *testing.T, script string) *Session {
+	t.Helper()
+	s, err := Start(Config{
+		Cwd:      "/",
+		Cols:     80,
+		Rows:     24,
+		BashPath: requireBash(t),
+		Args:     []string{"--norc", "--noprofile", "-c", script},
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	return s
+}
+
+// A shell that traps SIGTERM and keeps running is killed, and the grace is
+// what it costs: Close waits sigtermGrace before SIGKILL and no longer, so a
+// closing pane never hangs on a process that will not leave.
+func TestCloseKillsAProcessThatTrapsSIGTERMAtTheGrace(t *testing.T) {
+	grace := setSigtermGrace(t, 200*time.Millisecond)
+	s := startScript(t, `trap "" TERM; echo trapped; while :; do sleep 0.05; done`)
+	// The marker is the trap being installed: a SIGTERM sent before bash runs
+	// the trap line kills it outright and times nothing.
+	if out := drainUntil(t, s, "trapped", 10*time.Second); !bytes.Contains(out, []byte("trapped")) {
+		t.Fatalf("the shell never installed the trap: %q", out)
+	}
+	// Drained, because Close's kill path waits on the process, not on a
+	// reader: a full output channel must not be what the timing measures.
+	go func() {
+		for range s.Output() {
+		}
+	}()
+
+	done := make(chan time.Duration, 1)
+	start := time.Now()
+	go func() {
+		_ = s.Close()
+		done <- time.Since(start)
+	}()
+	var took time.Duration
+	select {
+	case took = <-done:
+	case <-time.After(3 * grace / 2):
+		t.Fatalf("Close was still waiting after %v — SIGKILL must follow sigtermGrace (%v)", 3*grace/2, grace)
+	}
+	if took < grace {
+		t.Fatalf("Close returned after %v, before sigtermGrace (%v) — a shell gets the whole grace to exit on SIGTERM", took, grace)
+	}
+	select {
+	case <-s.Done():
+	default:
+		t.Fatal("Close returned with the process still running")
+	}
+}
+
+// The other side of the same grace: a shell that honors SIGTERM is gone inside
+// it, so the wait is a ceiling on one that hangs and never a delay on a pane
+// closing normally.
+func TestCloseReturnsWhenAProcessHonorsSIGTERM(t *testing.T) {
+	// Generous, because what is asserted is that none of it is spent.
+	grace := setSigtermGrace(t, 2*time.Second)
+	s := startScript(t, `while :; do sleep 0.05; done`)
+	go func() {
+		for range s.Output() {
+		}
+	}()
+
+	start := time.Now()
+	_ = s.Close()
+	if took := time.Since(start); took >= grace {
+		t.Fatalf("Close took %v; a shell that honors SIGTERM must not wait out sigtermGrace (%v)", took, grace)
+	}
+}

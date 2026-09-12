@@ -21,6 +21,11 @@ import (
 // back-pressures the process; dropping bytes could truncate an escape sequence.
 const outputBufferFrames = 64
 
+// sigtermGrace is what Close gives the process group to honor SIGTERM before
+// it sends SIGKILL, for a subprocess that hangs instead of respecting it. A
+// var so a test can wait it out; see shelldriver_unix_test.go.
+var sigtermGrace = 500 * time.Millisecond
+
 // Session is one live PTY. Every method is safe to call concurrently, and one
 // that needs the PTY after Close returns an error rather than panicking on a
 // torn-down descriptor.
@@ -144,7 +149,7 @@ func (s *Session) Resize(cols, rows uint16) error {
 // Done returns a channel closed when the spawned process has fully exited.
 func (s *Session) Done() <-chan struct{} { return s.doneCh }
 
-// Close sends SIGTERM, then SIGKILL after a short grace. Repeat calls are
+// Close sends SIGTERM, then SIGKILL after sigtermGrace. Repeat calls are
 // no-ops. The error it returns is the process's exit status, not a teardown
 // failure.
 func (s *Session) Close() error {
@@ -161,8 +166,7 @@ func (s *Session) Close() error {
 		}
 		select {
 		case <-s.doneCh:
-		case <-time.After(500 * time.Millisecond):
-			// For a subprocess that hangs instead of respecting SIGTERM.
+		case <-time.After(sigtermGrace):
 			if s.cmd != nil && s.cmd.Process != nil {
 				pgid, err := syscall.Getpgid(s.pid)
 				if err == nil {
