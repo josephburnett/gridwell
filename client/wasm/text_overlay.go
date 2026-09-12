@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -235,8 +236,10 @@ func (a *App) ensureFileTextarea() {
 		canvasRect := a.canvas.Call("getBoundingClientRect")
 		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
 		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
-		// The right button was released somewhere we did not see.
-		if buttons := ev.Get("buttons").Int(); buttons&2 == 0 {
+		// The release may have happened somewhere we did not see. Only the
+		// right drag is forwarded here, so that is the only arm offered.
+		buttons := ev.Get("buttons").Int()
+		if gesture.RecoverRelease(buttons, gesture.Armed{RightDrag: true}) == gesture.FinishRightDrag {
 			a.finishRightDrag(sx, sy)
 			return nil
 		}

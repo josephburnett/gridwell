@@ -71,27 +71,28 @@ func (a *App) gestureInFlight() bool {
 	return a.leftResize != nil || a.rightDrag != nil || a.dragging != nil
 }
 
-// MouseEvent.buttons names what is held; MouseEvent.button, what changed.
-const (
-	buttonsLeft  = 1
-	buttonsRight = 2
-)
+// armed reports the three gesture states to the verdict; see
+// gesture.RecoverRelease.
+func (a *App) armed() gesture.Armed {
+	return gesture.Armed{
+		LeftResize:  a.leftResize != nil,
+		RightDrag:   a.rightDrag != nil,
+		Drag:        a.dragging != nil,
+		DragCreates: a.dragging != nil && a.dragging.intent.Creates(),
+	}
+}
 
-// recoverLostRelease treats a move reporting the gesture's own button already
-// up as that release arriving late, so each state finishes through its own
-// commit path, never by being cleared. The order matches onMouseUp's.
+// recoverLostRelease runs the commit path gesture.RecoverRelease names.
 func (a *App) recoverLostRelease(buttons int, sx, sy float64) bool {
-	switch {
-	case a.leftResize != nil && buttons&buttonsLeft == 0:
+	switch gesture.RecoverRelease(buttons, a.armed()) {
+	case gesture.FinishLeftResize:
 		// From the last applied cursor, never this stray re-entry point.
 		a.finishLeftResize()
 		return true
-	case a.rightDrag != nil && buttons&buttonsRight == 0:
+	case gesture.FinishRightDrag:
 		a.finishRightDrag(sx, sy)
 		return true
-	case a.dragging != nil && buttons&buttonsLeft == 0:
-		// finishLeftDrag refuses a creating drag (a right-button copy or link
-		// armed in parallel), which stays armed for its own button's release.
+	case gesture.FinishLeftDrag:
 		return a.finishLeftDrag(sx, sy)
 	}
 	return false
