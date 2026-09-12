@@ -158,7 +158,7 @@ func openLayer(t *testing.T, upstream namespace.Namespace, dbPath string, opts O
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	return s.Front(upstream, opts)
+	return s.front(upstream, opts)
 }
 
 // fixture is the TRANSPORT's shape: the cache in front of a namespace

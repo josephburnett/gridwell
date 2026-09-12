@@ -232,11 +232,20 @@ var _ namespace.Namespace = (*Layer)(nil)
 // single-writer per file, so a handle per namespace would only put each
 // layer's write behind another handle's busy timeout.
 type Store struct {
-	db     *sql.DB
+	db *sql.DB
+	// down is why this store has no file at all, empty when it has one.
+	down   string
 	mu     sync.Mutex
 	closed bool
 	layers []*Layer
 }
+
+// Unavailable is the store for a node whose cache file could not be opened.
+// It fronts pass-through and reports the missing cache as the namespace's
+// health: losing serve-first and offline reading fails no read and shows
+// nowhere, so a node that only logged it would look healthy for hours. The
+// caller gets a Store either way, so the node has one cache path.
+func Unavailable(detail string) *Store { return &Store{down: detail} }
 
 // Open opens (or creates) the node's cache DB at dbPath.
 func Open(dbPath string) (*Store, error) {
@@ -260,9 +269,32 @@ func Open(dbPath string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Front puts the cache in front of one namespace under the given policy. The
-// store owns the returned layer and shuts it down before the file goes away.
-func (s *Store) Front(upstream namespace.Namespace, opts Options) *Layer {
+// Front puts the cache in front of one namespace under the given policy: a
+// Layer over an open file, and the pass-through below over a store with none.
+// The store owns what it returns and shuts it down before the file goes away.
+func (s *Store) Front(upstream namespace.Namespace, opts Options) namespace.Namespace {
+	if s.down != "" {
+		return &missing{Namespace: upstream, detail: s.down}
+	}
+	return s.front(upstream, opts)
+}
+
+// missing is the front over a store with no file. Every call passes through;
+// the stream opens with the health, once per subscriber, because a cache that
+// never opened has no transition to announce.
+type missing struct {
+	namespace.Namespace
+	detail string
+}
+
+func (m *missing) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	if err := send(healthEvent(false, m.detail)); err != nil {
+		return err
+	}
+	return m.Namespace.Subscribe(ctx, in, send)
+}
+
+func (s *Store) front(upstream namespace.Namespace, opts Options) *Layer {
 	c := &Layer{Namespace: upstream, db: s.db, opts: opts,
 		revalInflight: map[string]bool{}, subs: map[int]chan *pb.Event{}, dark: map[string]bool{}}
 	c.pf.running = map[string]bool{}
@@ -291,6 +323,9 @@ func (s *Store) Close() error {
 	for _, c := range layers {
 		c.stopWalks()    // the walk is out before its DB goes away
 		c.revalWG.Wait() // and so is every in-flight revalidation
+	}
+	if s.db == nil {
+		return nil
 	}
 	return s.db.Close()
 }
@@ -323,12 +358,18 @@ func (c *Layer) noteCache(op string, err error) {
 	c.emitHealth(true, "")
 }
 
-// emitHealth announces a health transition to the synthetic stream's
-// subscribers. The uuid rides empty; the fan-in fills it.
-func (c *Layer) emitHealth(healthy bool, detail string) {
-	ev := &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+// healthEvent is a cache-side health report on the wire. The uuid rides empty;
+// the fan-in fills it (see rpc.QualifyEventIDs).
+func healthEvent(healthy bool, detail string) *pb.Event {
+	return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
 		Healthy: healthy, Detail: detail,
 	}}}
+}
+
+// emitHealth announces a health transition to the synthetic stream's
+// subscribers.
+func (c *Layer) emitHealth(healthy bool, detail string) {
+	ev := healthEvent(healthy, detail)
 	c.subsMu.Lock()
 	defer c.subsMu.Unlock()
 	for _, ch := range c.subs {

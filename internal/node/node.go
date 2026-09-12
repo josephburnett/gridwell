@@ -134,9 +134,7 @@ func Start(opts Options) (*Node, error) {
 	reg := plugin.NewRegistry()
 	fail := func(err error) (*Node, error) {
 		reg.Close()
-		if cache != nil {
-			_ = cache.Close()
-		}
+		_ = cache.Close()
 		st.Close()
 		return nil, err
 	}
@@ -154,9 +152,6 @@ func Start(opts Options) (*Node, error) {
 	// The transport gets prefetch: offline readability means everything on the
 	// far machine, not only what was visited.
 	if err := startTransport(reg, st, cfg, func(ns namespace.Namespace) namespace.Namespace {
-		if cache == nil {
-			return ns
-		}
 		return cache.Front(ns, sourcecache.Options{Prefetch: true})
 	}); err != nil {
 		return fail(fmt.Errorf("transport: %w", err))
@@ -204,22 +199,30 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 }
 
 // openCache opens <home>/cache.db. A cache that cannot open degrades to the
-// uncached node, loudly but never fatally: refusing to serve because an
-// availability layer broke would invert its purpose.
+// uncached node, never fatally: refusing to serve because an availability
+// layer broke would invert its purpose. It is not silent either — the node
+// still answers every read, so the lost serve-first and offline reading would
+// show nowhere, and sourcecache.Unavailable puts the reason on the client's
+// strip as the transport's health.
 func openCache(cfg *config.ServerConfig) *sourcecache.Store {
+	cache, err := openCacheFile(cfg)
+	if err == nil {
+		return cache
+	}
+	log.Printf("gridwell: source cache: %v (connections run uncached)", err)
+	return sourcecache.Unavailable("the source cache could not be opened (" + err.Error() +
+		"): what a connection answers is not remembered, so every read waits on the far machine and nothing reads while it is unreachable")
+}
+
+// openCacheFile is the cache file, or why there is none.
+func openCacheFile(cfg *config.ServerConfig) (*sourcecache.Store, error) {
 	if cfg.CacheDir == "" {
-		return nil
+		return nil, errors.New("no cache directory is configured")
 	}
 	if err := os.MkdirAll(cfg.CacheDir, 0o700); err != nil {
-		log.Printf("gridwell: source cache dir %s: %v (connections run uncached)", cfg.CacheDir, err)
-		return nil
+		return nil, fmt.Errorf("cache dir %s: %w", cfg.CacheDir, err)
 	}
-	cache, err := sourcecache.Open(config.CacheFile(cfg.CacheDir))
-	if err != nil {
-		log.Printf("gridwell: source cache: %v (connections run uncached)", err)
-		return nil
-	}
-	return cache
+	return sourcecache.Open(config.CacheFile(cfg.CacheDir))
 }
 
 // startTransport reconciles the connection store against the declared
@@ -290,9 +293,7 @@ func (n *Node) Close() error {
 		}
 		// The cache closes BEFORE the transport it fronts: its prefetch walk
 		// reads through it and must be out before either goes away.
-		if n.cache != nil {
-			err = errors.Join(err, n.cache.Close())
-		}
+		err = errors.Join(err, n.cache.Close())
 		n.Reg.Close()
 		err = errors.Join(err, n.st.Close())
 		n.closeErr = err

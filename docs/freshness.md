@@ -372,8 +372,13 @@ every link to it.
 
 **The cache is disposable.** `cache.db` may be deleted at any moment. Every
 guarantee here degrades to "the first read pays the source's full latency",
-and `noteCache` surfaces a cache that cannot remember as this namespace's
-health, because a silently broken cache runs unnoticed for hours.
+and a cache that cannot remember surfaces as this namespace's health, because
+a silently broken cache runs unnoticed for hours. Two shapes, one report:
+`noteCache` announces the transitions of an open file whose writes fail, and a
+file that never opened at all is `sourcecache.Unavailable` — the store
+`node.openCache` hands back either way, fronting pass-through and opening
+every subscriber's stream with the reason (`missing.Subscribe`), so the node
+has one cache path and no branch.
 
 **Dark is not dead.** Darkness comes back; a namespace the node does not
 declare is `client/deadref`'s business, is never fetched for, and raises no
@@ -422,6 +427,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | It walks only the source that recovered | `prefetch_seam_test.go:TestARecoveryWalksOnlyTheSourceThatRecovered` (two connections, two far nodes) |
 | A flap storm does not stack walks: single-flight per source | `prefetch_seam_test.go:TestAFlapStormDoesNotStackWalks` |
 | Real binaries, real ssh: a revived connection warms what nobody read, so a second partition serves it | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
+| A cache that never opened reaches a real subscriber as the transport's health | `internal/node/cache_health_test.go:TestAnUnopenableCacheSurfacesAsHealth`, `TestAnOpenedCacheReportsNothing` |
 
 ### Trace (c)
 
