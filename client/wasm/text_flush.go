@@ -67,7 +67,7 @@ func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
 		// leaf link's target may live in a grid this client never fetched.
 		// Only a definitive server answer reports the orphan; a transport
 		// failure retries quietly.
-		if a.fetch.tileLoadFailed[cid] {
+		if a.fetch.tileLoadFailed.Has(cid) {
 			a.reportErr(errsurface.Error, "textedit",
 				"unsaved text edit has no destination — its tile is no longer known")
 			return

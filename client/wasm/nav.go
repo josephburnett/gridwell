@@ -127,7 +127,7 @@ func (a *App) navWorldForRestore() nav.World {
 		}
 		rw.Grids[gid] = rows
 	}
-	for id := range a.fetch.gridLoadFailed {
+	for _, id := range a.fetch.gridLoadFailed.Keys() {
 		rw.Failed[id] = true
 	}
 	// Which doorway the address names is the machine's to decode, so every

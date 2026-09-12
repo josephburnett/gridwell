@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"maps"
 	"strconv"
 	"syscall/js"
 	"time"
@@ -238,8 +237,8 @@ func newViewCaches() viewCaches {
 // elsewhere is how a swallowed request holds a key for the life of the page.
 type fetchState struct {
 	// gridLoadFailed lets the renderer say so and stops the URL walk retrying
-	// in a tight loop. loadGrid is the one writer.
-	gridLoadFailed map[string]bool
+	// in a tight loop. inflight.Latch owns what latching means.
+	gridLoadFailed *inflight.Latch
 
 	// gridFetch dedupes GetGrid, which every draw fires on a cache miss. A
 	// request lost with its link used to hold its id forever.
@@ -252,7 +251,7 @@ type fetchState struct {
 	// tileFetch: a routable id may name a tile whose grid was never visited.
 	tileFetch *inflight.Set
 	// tileLoadFailed stops a missing id re-firing GetTile every frame forever.
-	tileLoadFailed map[string]bool
+	tileLoadFailed *inflight.Latch
 
 	// previewFetch dedupes GetTilePreview, fired on every draw until decoded.
 	previewFetch *inflight.Set
@@ -264,11 +263,11 @@ type fetchState struct {
 // newFetchState is the one place the group is constructed.
 func newFetchState() fetchState {
 	return fetchState{
-		gridLoadFailed: map[string]bool{},
+		gridLoadFailed: inflight.NewLatch(),
 		gridFetch:      inflight.New(inflight.Deadline),
 		contentFetch:   inflight.New(inflight.Deadline),
 		tileFetch:      inflight.New(inflight.Deadline),
-		tileLoadFailed: map[string]bool{},
+		tileLoadFailed: inflight.NewLatch(),
 		previewFetch:   inflight.New(inflight.Deadline),
 		menuFetch:      inflight.New(inflight.Deadline),
 	}
@@ -678,25 +677,23 @@ func (a *App) resize() {
 	a.cctx.Call("setTransform", dpr, 0, 0, dpr, 0, 0)
 }
 
-// loadGrid is the one GetGrid-to-cache hop, so gridLoadFailed has one writer:
-// the renderer's fetchGrid and the restore walk's awaited read both come here.
+// loadGrid is the one GetGrid-to-cache hop: the renderer's fetchGrid and the
+// restore walk's awaited read both come here.
 func (a *App) loadGrid(ctx context.Context, id string) error {
 	resp, err := a.cl.GetGrid(ctx, id)
 	if err != nil {
-		// A verdict latches: the same ask gets the same answer, so fetchGrid
-		// stops until a retry-justifying path clears it. Transport does not.
 		if clientsync.Of(err) != clientsync.OutcomeTransport {
-			a.fetch.gridLoadFailed[id] = true
+			a.fetch.gridLoadFailed.Set(id)
 		}
 		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
 		return err
 	}
 	a.resolveErr("grid:" + id)
-	delete(a.fetch.gridLoadFailed, id)
+	a.fetch.gridLoadFailed.Clear(id)
 	if resp.Grid.Id != id {
 		// The cache keys by the answered name and every frame resolves by the
 		// asked one, so answering under another id strands the pane on 200s.
-		a.fetch.gridLoadFailed[id] = true
+		a.fetch.gridLoadFailed.Set(id)
 		a.reportErr(errsurface.Error, "grid:"+id,
 			"asked for grid "+id+", was answered "+resp.Grid.Id+" — the view of "+id+" cannot load")
 	}
@@ -707,15 +704,13 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 // fetchGrid loads a grid in the background, deduped per id: the renderer fires
 // it on every cache miss every frame, which would otherwise dogpile the server.
 func (a *App) fetchGrid(id string) {
-	// A latched grid is not re-asked: the paths that justify a retry clear the
-	// latch. fetchGrid clearing it turned one verdict into a per-frame loop.
-	if id == "" || a.fetch.gridLoadFailed[id] {
+	if id == "" || a.fetch.gridLoadFailed.Has(id) {
 		return
 	}
 	// A grid in a namespace this node does not declare is never asked for: the
 	// latch stands in for the answer, and no verdict reaches the strip.
 	if a.deadNamespace(id) {
-		a.fetch.gridLoadFailed[id] = true
+		a.fetch.gridLoadFailed.Set(id)
 		return
 	}
 	ctx, done, ok := a.fetch.gridFetch.Begin(id)
@@ -737,13 +732,13 @@ func (a *App) fetchGrid(id string) {
 // fetchTileByID resolves a routable tile id whose grid is not cached: GetTile
 // locates it, then fetchGrid pulls its grid in so findTileByID hits.
 func (a *App) fetchTileByID(tileID string) {
-	if tileID == "" || a.fetch.tileLoadFailed[tileID] {
+	if tileID == "" || a.fetch.tileLoadFailed.Has(tileID) {
 		return
 	}
 	// Same rule as fetchGrid: an undeclared namespace is not asked. A leaf link
 	// into a removed plugin stays its own dead face.
 	if a.deadNamespace(tileID) {
-		a.fetch.tileLoadFailed[tileID] = true
+		a.fetch.tileLoadFailed.Set(tileID)
 		return
 	}
 	ctx, done, ok := a.fetch.tileFetch.Begin(tileID)
@@ -754,10 +749,8 @@ func (a *App) fetchTileByID(tileID string) {
 		defer done()
 		tile, err := a.cl.GetTile(ctx, tileID)
 		if err != nil || tile == nil {
-			// Latch only on a server verdict: a broken reference answers the
-			// same way every time. A transport failure latches nothing.
 			if clientsync.Of(err) != clientsync.OutcomeTransport {
-				a.fetch.tileLoadFailed[tileID] = true
+				a.fetch.tileLoadFailed.Set(tileID)
 				// The asker is a crumb or a descent, which without this draw
 				// an empty content box named "unnamed" and say nothing. An
 				// outage is not named once per id: the same read's grid says
@@ -881,7 +874,7 @@ func (a *App) landTransition(tr *transition.Transition) {
 		return
 	}
 	a.clearSelected(p.ID)
-	a.fetch.gridLoadFailed = map[string]bool{}
+	a.fetch.gridLoadFailed.Reset()
 	a.fetchGrid(a.gridIDForPane(p))
 	if tr.TraceTileID != "" {
 		// Keep the frame loop alive for the fade.
@@ -960,7 +953,7 @@ func (a *App) startSSE() {
 			// GridChanged is the one per-grid signal, so it also clears that
 			// grid's latch. Unconditional: the next descent would read stale.
 			if g := ev.GetGridChanged(); g != nil {
-				delete(a.fetch.gridLoadFailed, g.GridId)
+				a.fetch.gridLoadFailed.Clear(g.GridId)
 				a.fetchGrid(g.GridId)
 			}
 			// A plugin's own event stream, not this client's connection, went
@@ -984,9 +977,9 @@ func (a *App) retryKick(resync bool, source string) {
 	if resync {
 		served := func(id string) bool { return cache.ServedBy(id, source) }
 		// Failure latches are gap state: a grid that failed while the link was
-		// down deserves a fresh attempt. This source's only.
-		maps.DeleteFunc(a.fetch.tileLoadFailed, func(id string, _ bool) bool { return served(id) })
-		maps.DeleteFunc(a.fetch.gridLoadFailed, func(id string, _ bool) bool { return served(id) })
+		// down deserves a fresh attempt.
+		a.fetch.tileLoadFailed.ClearIf(served)
+		a.fetch.gridLoadFailed.ClearIf(served)
 		// So is a fetch still in flight: a request that dies with its link never
 		// returns, and its claim would keep every retry away forever. Re-ask for
 		// the grids by name, since a pane waiting on one it never received is

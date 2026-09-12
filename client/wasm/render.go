@@ -1242,7 +1242,7 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if pl, ok := a.pluginByUUID(uuidOf(gid)); ok && pl.Label != "" {
 		name = pl.Label
 	}
-	label := pane.GridNotice(name, a.fetch.gridLoadFailed[gid])
+	label := pane.GridNotice(name, a.fetch.gridLoadFailed.Has(gid))
 	a.cctx.Call("save")
 	a.cctx.Set("fillStyle", colorMuted)
 	a.cctx.Set("font", "13px system-ui, sans-serif")

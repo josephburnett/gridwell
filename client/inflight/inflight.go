@@ -1,8 +1,8 @@
-// Package inflight bounds every client RPC and dedupes fetches by key. A
-// claim ends when its fetch returns or CancelIf declares its link gone; a
-// claim that outlived its request would dedupe every retry away and leave a
-// pane loading with no error. Only the event Subscribe and the shell
-// WebSocket are unbounded.
+// Package inflight bounds every client RPC and owns, per key, whether a fetch
+// is outstanding (Set) or has failed (Latch). A claim ends when its fetch
+// returns or CancelIf declares its link gone; a claim that outlived its
+// request would dedupe every retry away and leave a pane loading with no
+// error. Only the event Subscribe and the shell WebSocket are unbounded.
 package inflight
 
 import (
