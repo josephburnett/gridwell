@@ -233,7 +233,7 @@ message InfoRequest {}
 message InfoResponse {
   string kind           = 1;   // e.g. "home", "fs", "proc"
   string display_name   = 2;
-  int64  schema_version = 3;
+  reserved 3; // schema_version
   reserved 4; // watch
   // root_grid_id is the plugin's default root: fs uses its configured
   // root, proc pid 1, the home its singleton root. Click-enter descends

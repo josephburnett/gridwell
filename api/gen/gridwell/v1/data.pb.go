@@ -719,10 +719,9 @@ func (*InfoRequest) Descriptor() ([]byte, []int) {
 }
 
 type InfoResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // e.g. "home", "fs", "proc"
-	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	SchemaVersion int64                  `protobuf:"varint,3,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Kind        string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // e.g. "home", "fs", "proc"
+	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// root_grid_id is the plugin's default root: fs uses its configured
 	// root, proc pid 1, the home its singleton root. Click-enter descends
 	// here.
@@ -800,13 +799,6 @@ func (x *InfoResponse) GetDisplayName() string {
 		return x.DisplayName
 	}
 	return ""
-}
-
-func (x *InfoResponse) GetSchemaVersion() int64 {
-	if x != nil {
-		return x.SchemaVersion
-	}
-	return 0
 }
 
 func (x *InfoResponse) GetRootGridId() string {
@@ -3377,11 +3369,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
 	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
-	"\vInfoRequest\"\xb1\x03\n" +
+	"\vInfoRequest\"\x90\x03\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
-	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
-	"\x0eschema_version\x18\x03 \x01(\x03R\rschemaVersion\x12 \n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
 	"rootGridId\x12&\n" +
 	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\x12\x1a\n" +
@@ -3393,7 +3384,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
+	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +

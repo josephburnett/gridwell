@@ -205,11 +205,6 @@ func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 	return v, nil
 }
 
-// SchemaVersion returns the schema generation this binary materializes. It is
-// exposed so the Info handshake reports the real version rather than a literal
-// that could drift from the stored one.
-func (s *Store) SchemaVersion() int { return schemaVersion }
-
 // SetPluginID injects the config id the binary verified against its DB at
 // spawn. The system.plugin_uuid row is a second, independently minted identity
 // nothing outside this store sees: qualified references carry the config id,

@@ -121,7 +121,6 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		Glyph:         rpc.GlyphWell,
 		Kind:          "home",
 		DisplayName:   "home",
-		SchemaVersion: int64(p.st.SchemaVersion()),
 		RootGridId:    id,
 		ScratchGridId: scratch,
 		// The trashcan is a declared menu entry, so the host and client learn

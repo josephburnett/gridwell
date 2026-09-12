@@ -382,11 +382,6 @@ func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 		t.Errorf("Info.RootViewZoom = %v, want 1.75", info1.RootViewZoom)
 	}
 
-	// A root framing write must not change the root grid's own version;
-	// schema_version reflects the DB format, not a content edit.
-	if info1.SchemaVersion != info0.SchemaVersion {
-		t.Errorf("schema_version changed after the root framing write: %d → %d", info0.SchemaVersion, info1.SchemaVersion)
-	}
 }
 
 // TestCleanupScratchSweepsEphemeralTiles: the startup sweep deletes every
