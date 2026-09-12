@@ -16,6 +16,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
 
@@ -40,13 +41,14 @@ func nodeServing(t *testing.T, handle func(ctx context.Context)) *Node {
 	in := make(chan struct{})
 	var once bool
 	requestCtx, cancel := context.WithCancel(context.Background())
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// The door's one server shape, so the drain under test is the one the node runs.
+	srv := server.WebDoorServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !once {
 			once = true
 			close(in)
 		}
 		handle(r.Context())
-	})}
+	}))
 	srv.BaseContext = func(net.Listener) context.Context { return requestCtx }
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
