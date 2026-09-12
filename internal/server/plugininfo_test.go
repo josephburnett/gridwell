@@ -198,7 +198,7 @@ func (p *countingInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoRes
 	if p.failFirst && n == 1 {
 		return nil, errors.New("transient info failure")
 	}
-	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1"}, nil
+	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
 // TestListPluginsCachesInfo: repeat Handshake calls serve the handshake from

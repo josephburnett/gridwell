@@ -662,7 +662,7 @@ func (streaming) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*
 }
 
 func (streaming) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "test"}, nil
+	return &pb.InfoResponse{}, nil
 }
 
 // TestRevalidationEmitsGridChanged closes the serve-first loop for a

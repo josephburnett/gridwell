@@ -67,8 +67,8 @@ func TestInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Kind != "home" {
-		t.Errorf("Kind = %q, want home", resp.Kind)
+	if resp.DisplayName != "home" {
+		t.Errorf("DisplayName = %q, want home", resp.DisplayName)
 	}
 	if resp.RootGridId == "" {
 		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)

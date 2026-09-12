@@ -28,7 +28,7 @@ type flakyWatchPlugin struct {
 }
 
 func (p *flakyWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1"}, nil
+	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
 func (p *flakyWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
@@ -116,7 +116,7 @@ func (p *alwaysFailInfoWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.
 	if n <= p.failInfoFirstN {
 		return nil, errors.New("simulated info failure")
 	}
-	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1"}, nil
+	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
 func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {

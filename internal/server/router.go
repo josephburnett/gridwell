@@ -925,7 +925,6 @@ func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse
 		}
 	}
 	return &pb.InfoResponse{
-		Kind:       "node",
 		Writable:   false,
 		RootGridId: root,
 	}, nil

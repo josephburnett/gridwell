@@ -80,7 +80,6 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		return nil, err
 	}
 	resp := &gridwellv1.InfoResponse{
-		Kind:        ci.Kind,
 		DisplayName: ci.DisplayName,
 		Glyph:       ci.Glyph,
 		// Writable describes the door this adapter opens, not the plugin's

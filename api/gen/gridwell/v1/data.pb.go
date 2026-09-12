@@ -720,7 +720,6 @@ func (*InfoRequest) Descriptor() ([]byte, []int) {
 
 type InfoResponse struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
-	Kind        string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // e.g. "home", "fs", "proc"
 	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// root_grid_id is the plugin's default root: fs uses its configured
 	// root, proc pid 1, the home its singleton root. Click-enter descends
@@ -785,13 +784,6 @@ func (x *InfoResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use InfoResponse.ProtoReflect.Descriptor instead.
 func (*InfoResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *InfoResponse) GetKind() string {
-	if x != nil {
-		return x.Kind
-	}
-	return ""
 }
 
 func (x *InfoResponse) GetDisplayName() string {
@@ -3369,9 +3361,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
 	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
-	"\vInfoRequest\"\x90\x03\n" +
-	"\fInfoResponse\x12\x12\n" +
-	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
+	"\vInfoRequest\"\x82\x03\n" +
+	"\fInfoResponse\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
 	"rootGridId\x12&\n" +
@@ -3384,7 +3375,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
+	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +

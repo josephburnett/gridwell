@@ -28,7 +28,7 @@ type farConnection struct {
 }
 
 func (f *farConnection) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "node"}, nil
+	return &pb.InfoResponse{}, nil
 }
 
 func (f *farConnection) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {

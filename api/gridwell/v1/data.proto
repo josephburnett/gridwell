@@ -231,7 +231,7 @@ message Tile {
 // unload, is the only lifecycle.
 message InfoRequest {}
 message InfoResponse {
-  string kind           = 1;   // e.g. "home", "fs", "proc"
+  reserved 1; // kind
   string display_name   = 2;
   reserved 3; // schema_version
   reserved 4; // watch

@@ -119,7 +119,6 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	}
 	return &gridwellv1.InfoResponse{
 		Glyph:         rpc.GlyphWell,
-		Kind:          "home",
 		DisplayName:   "home",
 		RootGridId:    id,
 		ScratchGridId: scratch,
