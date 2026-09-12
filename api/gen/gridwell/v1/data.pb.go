@@ -3119,8 +3119,8 @@ func (x *TileRemoved) GetTileId() string {
 }
 
 // EventPluginHealth reports a transition in a plugin's event-stream health, as
-// the router's fan-in sees it (fanInEvents and watchPlugin in
-// internal/server/router.go). It is emitted on the down transition, with
+// the router's fan-in sees it (watchPlugin in internal/server/router.go,
+// over namespace.Refollow). It is emitted on the down transition, with
 // healthy=false and detail carrying the dial, recv or Info error that caused
 // it, and again on recovery with healthy=true and detail="". Only on a change
 // of state, so a flapping plugin does not spam the client.

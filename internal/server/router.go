@@ -754,9 +754,9 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 // events through Info.watch, a capability and never the kind string.
 //
 // Failures heal rather than silently ending a namespace's events for the life
-// of the client stream: watchPlugin re-dials Info and fanInEvents re-dials the
-// stream, and the client hears about the outage and the recovery through an
-// EventPluginHealth instead of tiles quietly going stale.
+// of the client stream: watchPlugin re-dials Info and the stream through
+// namespace.Refollow, and the client hears about the outage and the recovery
+// through an EventPluginHealth instead of tiles quietly going stale.
 func (rt *router) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -790,95 +790,31 @@ func (rt *router) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send fu
 	}
 }
 
-// watchPlugin waits for plugin uuid to answer Info and hands off to
-// fanInEvents. The Info fetch is retried with fanInEvents' backoff, because
-// giving up after one failure would permanently exclude a plugin that was
-// merely slow to start. It owns the health transitions until Info succeeds;
-// after that fanInEvents does.
+// watchPlugin fans plugin uuid's events into the client's stream until ctx
+// ends. namespace.Refollow owns the re-dial and the health transitions, and
+// the Info fetch rides that same loop rather than deciding once: giving up
+// after one failure would permanently exclude a plugin that was merely slow
+// to start.
 func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event) {
-	backoff := time.Second
-	healthy := true // assume healthy until the first failure
-	for {
-		_, err := infoOf(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				return
+	namespace.Refollow{
+		Label: "subscribe: plugin " + uuid,
+		Down:  func(detail string) { reportHealth(ctx, events, uuid, false, detail) },
+		Up:    func() { reportHealth(ctx, events, uuid, true, "") },
+		Attempt: func(ctx context.Context, established func()) error {
+			if _, err := infoOf(ctx); err != nil {
+				return err
 			}
-			log.Printf("gridwell: subscribe: info %s: %v — retrying fan-in in %v", uuid, err, backoff)
-			if healthy {
-				healthy = false
-				reportHealth(ctx, events, uuid, false, err.Error())
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-			if backoff < 30*time.Second {
-				backoff *= 2
-			}
-			continue
-		}
-		// A plugin that went down on a transient Info failure and came back
-		// must have its notice cleared here, before the fan-in takes over, or
-		// the client shows "live updates stopped" for a plugin that is up.
-		if !healthy {
-			healthy = true
-			reportHealth(ctx, events, uuid, true, "")
-		}
-		fanInEvents(ctx, uuid, transit, ns, events) // owns health from here; returns only when ctx ends
-		return
-	}
-}
-
-// fanInEvents relays one namespace's Subscribe stream until ctx ends, re-dialing
-// with backoff so a plugin restart resumes its events. Failures are reported as
-// an EventPluginHealth transition, not once per retry, because events that
-// silently stop present as "tiles stopped updating" with no evidence.
-func fanInEvents(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, events chan<- *pb.Event) {
-	backoff := time.Second
-	healthy := true // caller (watchPlugin) already reported recovery if it was ever down
-	for {
-		// namespace.Follow supplies the moment a callback stream has no open to
-		// report; established is what "this namespace is back" means.
-		err := namespace.Follow(ctx, ns, &pb.SubscribeRequest{},
-			func(ev *pb.Event) error {
-				select {
-				case events <- qualifyEvent(uuid, transit, ev):
-					return nil
-				case <-ctx.Done():
-					return ctx.Err()
-				}
-			},
-			func() {
-				if !healthy {
-					healthy = true
-					reportHealth(ctx, events, uuid, true, "")
-				}
-				backoff = time.Second // a live stream: reset for the next outage
-			})
-		if ctx.Err() != nil {
-			return
-		}
-		// A stream that ends, error or clean, is an outage, and never silent.
-		detail := "the event stream ended"
-		if err != nil {
-			detail = err.Error()
-		}
-		log.Printf("gridwell: subscribe: plugin %s stream ended: %v (retrying in %v)", uuid, detail, backoff)
-		if healthy {
-			healthy = false
-			reportHealth(ctx, events, uuid, false, detail)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(backoff):
-		}
-		if backoff < 30*time.Second {
-			backoff *= 2
-		}
-	}
+			return namespace.Follow(ctx, ns, &pb.SubscribeRequest{},
+				func(ev *pb.Event) error {
+					select {
+					case events <- qualifyEvent(uuid, transit, ev):
+						return nil
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}, established)
+		},
+	}.Run(ctx)
 }
 
 // reportHealth pushes an EventPluginHealth down the path a namespace's own

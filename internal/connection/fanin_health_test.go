@@ -2,10 +2,12 @@ package connection
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/internal/namespace"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/josephburnett/gridwell/internal/namespace"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,8 +26,8 @@ func (deadSubscribeClient) Subscribe(context.Context, *gridwellv1.SubscribeReque
 }
 
 // A connection whose event stream dies must say so: the fan-in publishes an
-// EventPluginHealth down transition, the same contract fanInEvents keeps for
-// local plugins. Retrying silently presents as tiles that stopped updating
+// EventPluginHealth down transition, the same contract the node's plugin
+// fan-in keeps. Retrying silently presents as tiles that stopped updating
 // with no evidence.
 func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
 	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
@@ -103,5 +105,65 @@ func TestASubscriberArrivingAfterTheOutageIsToldOfIt(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("a subscriber arriving after the outage was never told the connection is dark")
+	}
+}
+
+// flakySubscribeClient's stream fails its first failN dials, then lives until
+// its context ends: a tunnel that comes back.
+type flakySubscribeClient struct {
+	namespace.Namespace
+	calls atomic.Int32
+	failN int32
+}
+
+func (c *flakySubscribeClient) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, _ func(*gridwellv1.Event) error) error {
+	if c.calls.Add(1) <= c.failN {
+		return status.Error(codes.Unavailable, "tunnel down")
+	}
+	<-ctx.Done()
+	return nil
+}
+
+// A connection's fan-in waits namespace.DefaultBackoff, the same policy the
+// node's plugin fan-in waits, and reports the outage once however many
+// re-dials it takes. Lowering the policy is what proves the loop reads it.
+func TestFanInRemoteRetriesOnTheDeclaredBackoff(t *testing.T) {
+	was := namespace.DefaultBackoff
+	t.Cleanup(func() { namespace.DefaultBackoff = was })
+	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}
+
+	s := newTestServer(t, openConnDB(t))
+	events, unsub := s.hub.Subscribe()
+	t.Cleanup(unsub)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	start := time.Now()
+	go s.fanInRemote(ctx, "rtb", &flakySubscribeClient{failN: 4})
+
+	downs := 0
+	for {
+		select {
+		case ev := <-events:
+			ph := ev.GetPluginHealth()
+			if ph == nil {
+				continue
+			}
+			if !ph.Healthy {
+				downs++
+				continue
+			}
+			if downs != 1 {
+				t.Fatalf("%d down transitions before the recovery: four re-dials are one outage", downs)
+			}
+			// Far under the 15s four failures would take on the declared
+			// policy, and loose enough for a loaded machine.
+			if took := time.Since(start); took > 3*time.Second {
+				t.Errorf("recovery took %v: the fan-in is waiting on numbers of its own, not namespace.DefaultBackoff", took)
+			}
+			return
+		case <-time.After(5 * time.Second):
+			t.Fatal("the connection came back and the fan-in never published the recovery")
+		}
 	}
 }

@@ -15,11 +15,10 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// flakyWatchPlugin is a plugin whose Info always succeeds, but whose
-// Subscribe stream fails its first failSubFirstN
-// calls before settling into a healthy (never-sending, context-lived)
-// stream. It is the seam-level fake for fanInEvents' down/recovery
-// transition — a unit test on fanInEvents in isolation would not prove the
+// flakyWatchPlugin is a plugin whose Info always succeeds and whose Subscribe
+// stream fails its first failSubFirstN calls before settling into a healthy
+// (never-sending, context-lived) stream. It is the seam-level fake for the fan-in's down/recovery
+// transition — a unit test on the loop in isolation would not prove the
 // transition reaches a real client stream over the real wire; this does.
 type flakyWatchPlugin struct {
 	namespace.Unimplemented
@@ -62,7 +61,7 @@ func recvHealth(t *testing.T, stream *rpc.EventStream) *pb.EventPluginHealth {
 // stream once and asserts the client's Subscribe stream receives an
 // EventPluginHealth(healthy=false) transition followed by
 // EventPluginHealth(healthy=true) on the retry that succeeds — proving
-// fanInEvents' backoff loop tells the client about the outage
+// the fan-in's backoff loop tells the client about the outage
 // instead of the client silently going stale with tiles that stop updating.
 func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	fake := &flakyWatchPlugin{failSubFirstN: 1}
@@ -156,5 +155,43 @@ func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) 
 	}
 	if got := fake.infoCalls.Load(); got < 2 {
 		t.Errorf("Info called %d times, want at least 2 (fail, then a retried success) — the permanent-exclusion bug never retries", got)
+	}
+}
+
+// The fan-in's waiting is namespace.DefaultBackoff and nothing of its own:
+// lower the policy and four dead re-dials pass in milliseconds, where the
+// declared 1s doubling would spend fifteen seconds on them. Without this the
+// numbers in the loop answer to no test.
+func TestSubscribeFanInRetriesOnTheDeclaredBackoff(t *testing.T) {
+	was := namespace.DefaultBackoff
+	t.Cleanup(func() { namespace.DefaultBackoff = was })
+	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}
+
+	fake := &flakyWatchPlugin{failSubFirstN: 4}
+	reg := plugin.NewRegistry()
+	reg.Register("u-4", "test", fake, nil)
+	srv := mustNew(t, reg, Config{})
+	hs := serveWeb(t, srv)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	stream, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	defer stream.Close()
+
+	start := time.Now()
+	if down := recvHealth(t, stream); down.Healthy {
+		t.Fatalf("first health event = %+v, want the down transition", down)
+	}
+	if up := recvHealth(t, stream); !up.Healthy {
+		t.Fatalf("second health event = %+v, want recovery", up)
+	}
+	// Generous against a loaded machine, and still far under the 15s the
+	// declared policy would take for four failures.
+	if took := time.Since(start); took > 3*time.Second {
+		t.Errorf("recovery took %v: the fan-in is waiting on numbers of its own, not namespace.DefaultBackoff", took)
 	}
 }

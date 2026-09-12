@@ -591,34 +591,22 @@ func (s *Server) darkNow() []*gridwellv1.Event {
 }
 
 // fanInRemote forwards a connection's remote change events, each id prefixed
-// with the connection segment. The transport underneath self-heals, so a
-// dropped stream re-subscribes, never silently: each transition is published
-// as an EventPluginHealth, the contract the node's fanInEvents keeps.
+// with the connection segment, and re-dials the stream through
+// namespace.Refollow so a dropped one comes back. Never silently: each
+// transition rides noteHealth, which is also what a later subscriber is told.
 func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Namespace) {
-	for {
-		// Established, not opened: a callback stream has no open to report, so
-		// namespace.Follow decides the moment for both fan-ins.
-		err := namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{},
-			func(ev *gridwellv1.Event) error {
-				s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
-				return nil
-			},
-			func() { s.noteHealth(ns, true, "") })
-		if ctx.Err() != nil {
-			return
-		}
-		detail := "the connection's event stream ended"
-		if err != nil {
-			detail = err.Error()
-		}
-		log.Printf("gridwell: connection %s: event stream ended: %v (retrying in 5s)", ns, detail)
-		s.noteHealth(ns, false, detail)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(5 * time.Second):
-		}
-	}
+	namespace.Refollow{
+		Label: "connection " + ns,
+		Down:  func(detail string) { s.noteHealth(ns, false, detail) },
+		Up:    func() { s.noteHealth(ns, true, "") },
+		Attempt: func(ctx context.Context, established func()) error {
+			return namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{},
+				func(ev *gridwellv1.Event) error {
+					s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
+					return nil
+				}, established)
+		},
+	}.Run(ctx)
 }
 
 // Handshake forwards a namespaced request through the named connection: peel

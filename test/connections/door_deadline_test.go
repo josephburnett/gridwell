@@ -8,7 +8,7 @@
 // change to the ssh or h2 path lands first.
 //
 // The symptom is a flap rather than the client's stream ending, because the
-// local node's fanInRemote retries every five seconds and publishes an
+// local node's fanInRemote re-dials with backoff and publishes an
 // EventPluginHealth with Healthy false when the door cuts its tunneled stream.
 // The hold is derived from server.ConnectionDoorServer, so it tracks a
 // re-added deadline on its own; the door declares none today, so it is the
