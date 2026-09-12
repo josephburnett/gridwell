@@ -11,6 +11,8 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
@@ -291,5 +293,131 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	}
 	if !strings.Contains(p.InfoError, "plugin exploded") {
 		t.Errorf("InfoError = %q, want it to mention the underlying failure", p.InfoError)
+	}
+}
+
+// infoFlakePlugin is a real namespace whose Info handshake can be failed at
+// will: the hung or just-restarted plugin, without a subprocess.
+type infoFlakePlugin struct {
+	namespace.Namespace
+	fail atomic.Bool
+}
+
+func (p *infoFlakePlugin) Info(ctx context.Context, req *pb.InfoRequest) (*pb.InfoResponse, error) {
+	if p.fail.Load() {
+		return nil, errors.New("plugin not responding")
+	}
+	return p.Namespace.Info(ctx, req)
+}
+
+// TestGetGridFailsWhenOwnerInfoFails crosses the read seam a buildPluginInfo
+// unit test cannot reach: server -> Connect wire -> rpc.Client.GetGrid. Grid
+// writable, scratch_grid_id and menu_entries come from the owning namespace's
+// Info and from nowhere else, so a failed handshake must fail the read. The
+// alternative — answering the grid with the fields unset — is a room that
+// presents read-only with no + primitives and no ephemeral visits, and that
+// flips back to writable on the next read, because Info is not negatively
+// cached.
+func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	uuid, err := st.PluginUUID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bareRoot, err := st.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ns := &infoFlakePlugin{Namespace: local.New(st, nil)}
+	reg := plugin.NewRegistry()
+	reg.Register(uuid, "home", ns, nil)
+	srv := mustNew(t, reg, Config{ID: uuid})
+	hs := serveWeb(t, srv)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	root := uuid + "/" + bareRoot
+	ns.fail.Store(true)
+	resp, err := cl.GetGrid(ctx, root)
+	if err == nil {
+		g := resp.GetGrid()
+		t.Fatalf("GetGrid answered while the owner's Info was failing: writable=%v scratch=%q menu entries=%d",
+			g.GetWritable(), g.GetScratchGridId(), len(g.GetMenuEntries()))
+	}
+	if !strings.Contains(err.Error(), "plugin not responding") {
+		t.Errorf("GetGrid error = %v, want it to carry the handshake failure", err)
+	}
+
+	// Not negatively cached: the same read answers the declared face once the
+	// handshake works again, so the failure is an outage and not a verdict.
+	ns.fail.Store(false)
+	resp, err = cl.GetGrid(ctx, root)
+	if err != nil {
+		t.Fatalf("GetGrid after recovery: %v", err)
+	}
+	g := resp.GetGrid()
+	if !g.GetWritable() || g.GetScratchGridId() == "" || len(g.GetMenuEntries()) == 0 {
+		t.Errorf("recovered grid: writable=%v scratch=%q menu entries=%d, want the home namespace's full declared face",
+			g.GetWritable(), g.GetScratchGridId(), len(g.GetMenuEntries()))
+	}
+}
+
+// scratchlessPlugin declares a writable grid and no scratch grid of its own:
+// its ephemeral visits land in the node home's scratch grid.
+type scratchlessPlugin struct {
+	namespace.Unimplemented
+}
+
+func (scratchlessPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1", Writable: true}, nil
+}
+
+func (scratchlessPlugin) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	return &pb.GetGridResponse{Grid: &pb.Grid{Id: req.GridId}}, nil
+}
+
+// TestGetGridFailsWhenHomeInfoFails is the other arm of the same fact: the
+// scratch grid a plugin without one borrows is the node home's, read from
+// home's Info. A home that will not answer must fail the read too, or the grid
+// is answered with no landing for its ephemeral visits and nothing says so.
+func TestGetGridFailsWhenHomeInfoFails(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	homeUUID, err := st.PluginUUID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := &infoFlakePlugin{Namespace: local.New(st, nil)}
+	reg := plugin.NewRegistry()
+	reg.Register(homeUUID, "home", home, nil)
+	reg.Register("u-scratchless", "test", scratchlessPlugin{}, nil)
+	srv := mustNew(t, reg, Config{ID: homeUUID})
+	hs := serveWeb(t, srv)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	home.fail.Store(true)
+	resp, err := cl.GetGrid(ctx, "u-scratchless/1")
+	if err == nil {
+		t.Fatalf("GetGrid answered while home's Info was failing: scratch=%q", resp.GetGrid().GetScratchGridId())
+	}
+	if !strings.Contains(err.Error(), "plugin not responding") {
+		t.Errorf("GetGrid error = %v, want it to carry home's handshake failure", err)
+	}
+
+	home.fail.Store(false)
+	resp, err = cl.GetGrid(ctx, "u-scratchless/1")
+	if err != nil {
+		t.Fatalf("GetGrid after recovery: %v", err)
+	}
+	if got := resp.GetGrid().GetScratchGridId(); !strings.HasPrefix(got, homeUUID+"/") {
+		t.Errorf("scratch grid = %q, want the node home's", got)
 	}
 }

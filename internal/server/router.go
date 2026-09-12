@@ -92,28 +92,51 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	} else {
 		g = qualifyGrid(uuid, resp.Grid)
 		if g != nil {
-			if info, ierr := rt.srv.pluginInfo(ctx, uuid); ierr == nil {
-				g.Writable = info.Writable
-				if info.ScratchGridId != "" {
-					g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
-				} else if hu := rt.srv.homeUUID(); hu != "" && hu != uuid {
-					// A plugin with no scratch grid still serves grids whose
-					// links open as ephemeral visits, and those land in the
-					// node's home scratch grid. Stamped on the grid, which is
-					// what chains through mounts.
-					if hinfo, herr := rt.srv.pluginInfo(ctx, hu); herr == nil && hinfo.ScratchGridId != "" {
-						g.ScratchGridId = rpc.QualifyID(hu, hinfo.ScratchGridId)
-					}
-				}
-				// The plugin's declared (+) menu additions.
-				g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
+			// The declared face has no other source, so a handshake that does
+			// not answer fails the read rather than presenting a read-only
+			// room with no primitives and no ephemeral visits — one that
+			// flips back on the next read, since Info is not negatively
+			// cached. pluginhost.Adapter.synthesize applies the same rule.
+			info, ierr := rt.srv.pluginInfo(ctx, uuid)
+			if ierr != nil {
+				return nil, infoFaceError(req.GridId, uuid, ierr)
 			}
+			g.Writable = info.Writable
+			if info.ScratchGridId != "" {
+				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
+			} else if hu := rt.srv.homeUUID(); hu != "" && hu != uuid {
+				// A plugin with no scratch grid still serves grids whose
+				// links open as ephemeral visits, and those land in the
+				// node's home scratch grid. Stamped on the grid, which is
+				// what chains through mounts.
+				hinfo, herr := rt.srv.pluginInfo(ctx, hu)
+				if herr != nil {
+					return nil, infoFaceError(req.GridId, hu, herr)
+				}
+				if hinfo.ScratchGridId != "" {
+					g.ScratchGridId = rpc.QualifyID(hu, hinfo.ScratchGridId)
+				}
+			}
+			// The plugin's declared (+) menu additions.
+			g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		}
 	}
 	return &pb.GetGridResponse{
 		Grid:  g,
 		Tiles: qualifyTilesFor(transit, uuid, resp.Tiles),
 	}, nil
+}
+
+// infoFaceError says which grid could not be answered and why. A plugin that
+// never answered its handshake is an outage, so the code is transport-class
+// unless the plugin gave one of its own, and the client re-asks rather than
+// latching the grid as a verdict.
+func infoFaceError(gridID, uuid string, err error) error {
+	code := status.Code(err)
+	if code == gcodes.Unknown {
+		code = gcodes.Unavailable
+	}
+	return status.Errorf(code, "grid %s: plugin %s handshake failed, so the grid's declared face is unknown: %v", gridID, uuid, err)
 }
 
 func (rt *router) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
@@ -649,7 +672,11 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 		// Ephemeral means the tile's grid is the owning namespace's scratch
 		// grid, the fact GetGrid stamps from Info.
 		info, err := rt.srv.pluginInfo(ctx, euuid)
-		if err != nil || info.ScratchGridId == "" {
+		if err != nil {
+			log.Printf("gridwell: delete %s: not reaping candidate %s: plugin %s handshake failed: %v", qualifiedID, id, euuid, err)
+			continue
+		}
+		if info.ScratchGridId == "" {
 			continue
 		}
 		et, err := ec.GetTile(ctx, &pb.GetTileRequest{TileId: elocal})
