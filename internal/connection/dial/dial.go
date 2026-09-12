@@ -157,6 +157,32 @@ func (r *redialer) close() {
 	}
 }
 
+// grpcDialOptions is the posture both dials wear, so the ssh bridge and the
+// direct socket cannot drift apart. Each caller adds only what its transport
+// needs.
+func grpcDialOptions() []grpc.DialOption {
+	return []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// HTTP/2 pings. A far side that dies without an error would leave
+		// long-lived streams blocked in Recv forever; the timeout makes that
+		// Unavailable and the fan-in's retry rebuilds.
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:    30 * time.Second,
+			Timeout: 10 * time.Second,
+		}),
+		// One user's connection, so cap the backoff well below gRPC's
+		// two-minute default and a healed network heals in seconds.
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  time.Second,
+				Multiplier: 1.6,
+				Jitter:     0.2,
+				MaxDelay:   10 * time.Second,
+			},
+		}),
+	}
+}
+
 // Dial returns a client of the remote node's export plus a closer. The client
 // speaks the remote's qualified ids verbatim, and the transit qualification
 // prepends this connection's segment on the way back, so chains compose one
@@ -188,27 +214,9 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 	// A fixed passthrough target: gRPC's resolvers would strip the leading
 	// slash off a socket path, and the dialer opens cfg.Addr regardless.
 	conn, err := grpc.NewClient("passthrough:///connection",
-		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+		append(grpcDialOptions(), grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
 			return rd.dial("unix", cfg.Addr)
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// HTTP/2 pings through the tunnel. A session that dies without an
-		// error would leave long-lived streams blocked in Recv forever; the
-		// timeout makes that Unavailable and the fan-in's retry rebuilds.
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:    30 * time.Second,
-			Timeout: 10 * time.Second,
-		}),
-		// One user's tunnel, so cap the backoff well below gRPC's two-minute
-		// default and a healed network heals the connection in seconds.
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff: backoff.Config{
-				BaseDelay:  time.Second,
-				Multiplier: 1.6,
-				Jitter:     0.2,
-				MaxDelay:   10 * time.Second,
-			},
-		}),
+		}))...,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("grpc over tunnel: %w", err)
@@ -222,25 +230,11 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 }
 
 // dialDirect is a plain gRPC connection to another node's door on this
-// machine, with the tunnel's keepalive and healing posture. There is no auth:
-// the socket's 0600 mode is the gate, admitting the same uid only. Across
-// machines the ssh bridge is the one authenticated transport.
+// machine. There is no auth: the socket's 0600 mode is the gate, admitting the
+// same uid only. Across machines the ssh bridge is the one authenticated
+// transport.
 func dialDirect(addr string) (namespace.Namespace, func(), error) {
-	conn, err := grpc.NewClient("unix:"+addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:    30 * time.Second,
-			Timeout: 10 * time.Second,
-		}),
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff: backoff.Config{
-				BaseDelay:  time.Second,
-				Multiplier: 1.6,
-				Jitter:     0.2,
-				MaxDelay:   10 * time.Second,
-			},
-		}),
-	)
+	conn, err := grpc.NewClient("unix:"+addr, grpcDialOptions()...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("direct dial %s: %w", addr, err)
 	}
