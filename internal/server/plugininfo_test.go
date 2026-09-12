@@ -373,7 +373,7 @@ type scratchlessPlugin struct {
 }
 
 func (scratchlessPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1", Writable: true}, nil
+	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1", Writable: true}, nil
 }
 
 func (scratchlessPlugin) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
