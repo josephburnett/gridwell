@@ -354,18 +354,10 @@ func (a *App) liveOverlaysHidden() bool {
 }
 
 // isURLDescent branches input between Gridwell's gestures and native URL
-// interaction.
+// interaction. descentKind resolves an ephemeral url visit too, so live-url
+// input handling works for it.
 func (a *App) isURLDescent(p *pane.Pane) bool {
-	if p == nil {
-		return false
-	}
-	// descendedTile resolves an ephemeral url visit too, so live-url input
-	// handling works for it.
-	t, ok := a.descendedTile(p)
-	if !ok {
-		return false
-	}
-	return rpc.WebContent(t)
+	return a.descentKind(p) == rpc.DescentURL
 }
 
 // updateCachedTileURL rewrites UrlString on a tile, driven by the bridge's

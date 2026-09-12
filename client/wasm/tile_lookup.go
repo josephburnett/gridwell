@@ -4,6 +4,7 @@ package main
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -69,4 +70,18 @@ func (a *App) descendedTile(p *pane.Pane) (*gridwellv1.Tile, bool) {
 		return t, true
 	}
 	return nil, false
+}
+
+// descentKind classifies what the pane is descended into, off the one
+// resolver, so the url arm and the shell arm cannot disagree about an
+// ephemeral visit. rpc.DescentOf owns the classification.
+func (a *App) descentKind(p *pane.Pane) rpc.Descent {
+	if p == nil {
+		return rpc.DescentNone
+	}
+	t, ok := a.descendedTile(p)
+	if !ok {
+		return rpc.DescentNone
+	}
+	return rpc.DescentOf(t)
 }

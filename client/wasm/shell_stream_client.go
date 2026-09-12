@@ -70,22 +70,12 @@ type shellStreamConn struct {
 
 var shellLog = taggedLog("[shellstream]")
 
-// isShellDescent gates the input layer's switch from native gestures to PTY
-// forwarding.
+// isShellDescent is the bar slot's shell arm (barslot.Input.ShellDescent). It
+// reads descentKind, the same resolver as isURLDescent, so an ephemeral shell
+// visit is a shell descent here too; what the slot then offers for one is
+// descendedGridTile's business.
 func (a *App) isShellDescent(p *pane.Pane) bool {
-	if p == nil || p.ContentID() == "" {
-		return false
-	}
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		return false
-	}
-	t, ok := g.Tiles[p.ContentID()]
-	if !ok {
-		return false
-	}
-	return t.Kind == rpc.KindShell
+	return a.descentKind(p) == rpc.DescentShell
 }
 
 func (a *App) hasShellStream(paneID string) bool {

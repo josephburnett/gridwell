@@ -291,3 +291,27 @@ func TestLeafLink(t *testing.T) {
 		t.Error("a row that owns its content is not a leaf link")
 	}
 }
+
+// TestDescentOf pins the one classification the bar slot and the input layer
+// both read, including the tile a shell page row would make ambiguous: a
+// serves_page shell is web content, because the page door answers for it.
+func TestDescentOf(t *testing.T) {
+	cases := []struct {
+		name string
+		tile *pb.Tile
+		want Descent
+	}{
+		{"url tile", &pb.Tile{Kind: KindURL}, DescentURL},
+		{"page tile", &pb.Tile{Kind: KindText, ServesPage: true}, DescentURL},
+		{"shell tile", &pb.Tile{Kind: KindShell}, DescentShell},
+		{"shell page row", &pb.Tile{Kind: KindShell, ServesPage: true}, DescentURL},
+		{"text document", &pb.Tile{Kind: KindText}, DescentNone},
+		{"well", &pb.Tile{Kind: KindWell}, DescentNone},
+		{"unresolved", nil, DescentNone},
+	}
+	for _, c := range cases {
+		if got := DescentOf(c.tile); got != c.want {
+			t.Errorf("%s: DescentOf = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

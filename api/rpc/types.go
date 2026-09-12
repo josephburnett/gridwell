@@ -213,6 +213,32 @@ func PageContent(t *pb.Tile) bool {
 	return t.ServesPage && t.Kind != KindURL
 }
 
+// Descent is the content family a pane descended into a tile is showing: a
+// web surface, a terminal, or neither. Web wins for a shell row flagged
+// serves_page, so that priority is decided here rather than in each caller's
+// arm order.
+type Descent int
+
+const (
+	DescentNone Descent = iota
+	DescentURL
+	DescentShell
+)
+
+// DescentOf classifies the tile a pane is descended into. A nil tile — one the
+// client has not resolved — is DescentNone.
+func DescentOf(t *pb.Tile) Descent {
+	switch {
+	case t == nil:
+		return DescentNone
+	case WebContent(t):
+		return DescentURL
+	case t.Kind == KindShell:
+		return DescentShell
+	}
+	return DescentNone
+}
+
 // LeafLink is one content tile shown in a second place, owning no bytes of its
 // own. ContentID answers whose content it is.
 func LeafLink(t *pb.Tile) bool {
