@@ -41,6 +41,12 @@ type Dialer func(cfg dial.Config) (namespace.Namespace, func(), error)
 // test can wait it out; see bootwait_test.go.
 var bootDialWait = 5 * time.Second
 
+// learnRootWait bounds the Info that learns where a connection lands. A far
+// node that accepts the dial and then never answers fails the learn here, with
+// the reason on its row, rather than holding the caller forever. A var so a
+// test can wait it out; see learnwait_test.go.
+var learnRootWait = 15 * time.Second
+
 // Server is the transport: a namespace.Namespace whose ids are chains through
 // its connections, each itself a Namespace read off the far node's connection
 // door.
@@ -457,7 +463,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 	if verified {
 		return root, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), learnRootWait)
 	defer cancel()
 	info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
