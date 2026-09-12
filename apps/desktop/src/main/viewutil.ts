@@ -47,8 +47,11 @@ export function boundsEqual(a: Bounds, b: Bounds): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
-// The key set matches handleContentZoomKey in the wasm client; diverge and the
-// two focus states zoom differently.
+// A copy of the chord's key set, owned by the Key* constants in
+// client/contentzoom: a live view holds OS keyboard focus, so main recognizes
+// the chord here before forwarding it, and Go and TypeScript share no source.
+// Diverge and the two focus states zoom differently; the drift lint in
+// gesture-threshold.test.ts pins this copy.
 export function zoomChordKey(input: { key: string; control?: boolean; meta?: boolean }): string {
   if (!input.control && !input.meta) return '';
   switch (input.key) {

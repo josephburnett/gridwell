@@ -261,8 +261,8 @@ test('classifyRightPress: a fast flick past the far threshold is a drag (#119)',
 });
 
 
-// The live-view zoom forward accepts exactly the key set the wasm handler
-// accepts. A drift here makes the two focus states zoom differently.
+// The modifier gate around the chord: no Ctrl/Cmd, no zoom. The key set
+// itself is client/contentzoom's, pinned by gesture-threshold.test.ts.
 test('zoomChordKey matches the wasm chord set', () => {
   assert.equal(zoomChordKey({ key: '=', control: true }), '=');
   assert.equal(zoomChordKey({ key: '+', control: true }), '+');

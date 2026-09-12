@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/caps"
+	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -264,11 +265,11 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	opts.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
 	// Scaled by the tile's persisted content zoom, so a zoomed terminal comes
 	// back at your size on every descent.
-	fontSize := int(shellBaseFontPx)
+	zoom := 1.0
 	if t := a.findTileByID(tileID); t != nil {
-		fontSize = int(shellBaseFontPx*contentZoomOf(t) + 0.5)
+		zoom = contentzoom.Of(t.GetContentZoom())
 	}
-	opts.Set("fontSize", fontSize)
+	opts.Set("fontSize", contentzoom.ShellFontPx(zoom))
 	// No convertEol: the PTY's ONLCR already delivers CRLF, and with it set
 	// xterm snaps to column 0 on every bare LF, scattering scroll-region output.
 	opts.Set("cursorBlink", true)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -153,7 +154,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	// The focus fact rides the placement, because going live is not always a
 	// gesture on the focused pane. The handle is set before main answers, so
 	// a refusal takes it back down.
-	a.bridgePlace(p.ID, t.Id, addr, b, contentZoomOf(t), t.UrlHistory, durable,
+	a.bridgePlace(p.ID, t.Id, addr, b, contentzoom.Of(t.GetContentZoom()), t.UrlHistory, durable,
 		a.liveOverlaysHidden(), p.ID == a.tree.Focus,
 		func() { a.dropFailedURLView(p.ID, v) })
 	a.draw()

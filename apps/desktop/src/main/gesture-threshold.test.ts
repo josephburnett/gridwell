@@ -28,6 +28,11 @@ function literal(path: string, re: RegExp): number {
   return parseFloat(literalText(path, re));
 }
 
+function literals(path: string, re: RegExp): string[] {
+  const src = readFileSync(resolve(repoRoot, path), 'utf8');
+  return [...src.matchAll(re)].map((m) => m[1]);
+}
+
 test('the drag threshold agrees across the canvas and both native copies', () => {
   const canvas = literal('client/wasm/main.go', /dragThreshold\s*=\s*([\d.]+)/);
   const viewutil = literal('apps/desktop/src/main/viewutil.ts', /RIGHT_DRAG_THRESHOLD\s*=\s*([\d.]+)/);
@@ -85,4 +90,23 @@ test('the preload sends on the same VIEW channels ipc.ts declares', () => {
       `urlview-preload.ts VIEW_${key.toUpperCase()} drifted from ipc.ts VIEW.${key} (the owner); the handler would never fire`,
     );
   }
+});
+
+// Drift lint for the content-zoom chord. The Key* constants in
+// client/contentzoom own the set, and viewutil.ts copies it because a live url
+// view holds OS keyboard focus and main must recognize the chord before
+// forwarding it. A key only Go knows is dead over a live page; one only
+// TypeScript knows is forwarded and dropped. Either way the zoom works in one
+// focus state and not the other.
+test('the zoom chord keys agree between client/contentzoom and viewutil', () => {
+  const owner = literals('client/contentzoom/contentzoom.go', /\bKey\w*\s*=\s*"([^"]*)"/g);
+  const fn = literalText('apps/desktop/src/main/viewutil.ts', /(export function zoomChordKey[\s\S]*?\n})/);
+  const copy = [...fn.matchAll(/case '([^']*)':/g)].map((m) => m[1]);
+
+  assert.ok(owner.length === 4, `expected 4 chord keys in client/contentzoom, got ${JSON.stringify(owner)}`);
+  assert.deepEqual(
+    [...copy].sort(),
+    [...owner].sort(),
+    'viewutil.ts zoomChordKey drifted from the Key* constants in client/contentzoom (the owner)',
+  );
 });
