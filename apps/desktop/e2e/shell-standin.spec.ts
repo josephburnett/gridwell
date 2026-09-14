@@ -51,6 +51,20 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
+  // The stand-in is only ever as fresh as the mirror that fills the cache, and
+  // that interval is free-running from boot, so there is no arm to time it
+  // from: its rate is the binding. A parked overlay skips a pass, which is why
+  // this is counted here, before the + menu opens. The bounds are wide enough
+  // for a dropped frame and far too tight for a cadence off by double.
+  const c = await gw.cadences();
+  const before = await gw.shellMirrors();
+  const at = Date.now();
+  await window.waitForTimeout(c.shellMirrorMs * 8);
+  const passes = (await gw.shellMirrors()) - before;
+  const due = (Date.now() - at) / c.shellMirrorMs;
+  expect(passes, 'the mirror is sampling the live shell').toBeGreaterThan(due * 0.5);
+  expect(passes, 'and no faster than its interval').toBeLessThan(due * 2);
+
   // Focus the other pane with a focus-only click, leaving the shell overlay
   // visible on its now-unfocused pane, and record the live canvas's screen rect.
   const other = (await gw.panes()).find((p) => p.id !== shellPaneId)!;

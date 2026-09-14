@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
+import { settle, timeToLand } from './cadence';
 
 // Drives the text-editing gesture end to end: create a markdown tile, descend
 // into it, type, ascend, and assert the typed content reached the server through
@@ -32,8 +33,27 @@ test('typing into a descended text tile persists to the server', async ({ gw, wi
     .poll(async () =>
       toggle.evaluate((el: HTMLElement) => getComputedStyle(el).backgroundColor))
     .toBe('rgb(138, 160, 90)'); // #8aa05a, the text-family button hue
+  // The save is debounced, and nothing can reach the server before that wait
+  // elapses, so one keystroke times it from below off the client's own value.
+  const c = await gw.cadences();
   const marker = 'gridwell-e2e-typed';
-  await gw.typeText(marker);
+  const saved = async () => {
+    try {
+      return (await gw.getTileContent(created.id)).includes(marker[0]);
+    } catch {
+      return false; // an untouched tile has no content to read yet
+    }
+  };
+  await gw.waitIdle();
+  await settle(window, c.textSaveMs);
+  const landed = await timeToLand(
+    window,
+    () => window.keyboard.type(marker[0]),
+    { saved },
+    c.textSaveMs * 20,
+  );
+  expect(landed.saved, 'the save waited out its debounce').toBeGreaterThanOrEqual(c.textSaveMs);
+  await gw.typeText(marker.slice(1));
 
   // The ascent flushes the edit.
   await gw.ascendViaCrumb();

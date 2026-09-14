@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
+import { settle, timeToLand } from './cadence';
 
 // Reload inside a workspace. The url is the pane tile, through `?w=`, since the
 // workspace is the place and its interior is server-owned, so a fresh boot
@@ -24,17 +25,32 @@ test('reload restores the workspace from ?w=; post-reload bar ascent lands at th
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
   expect(pt).toBeTruthy();
 
-  // The split is the arrangement the reload must bring back.
+  // The split is the arrangement the reload must bring back. The persister is
+  // debounced and re-arms from draw(), so the descent's own write has to fire
+  // before the clock starts; then nothing but that wait stands between the
+  // split and the blob, and it is timed off the client's own value.
+  const c = await gw.cadences();
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
-  await gw.splitFocusedPaneVertical();
-  await expect.poll(async () => {
-    try {
-      return (await gw.getTileContent(pt!.id)).includes('"split"');
-    } catch {
-      return false;
-    }
-  }, { message: 'persister must write the split before the reload', timeout: 10_000 }).toBe(true);
+  await gw.waitIdle();
+  await settle(window, c.workspaceSaveMs);
+  const landed = await timeToLand(
+    window,
+    () => gw.splitFocusedPaneVertical(),
+    {
+      split: async () => {
+        try {
+          return (await gw.getTileContent(pt!.id)).includes('"split"');
+        } catch {
+          return false;
+        }
+      },
+    },
+    c.workspaceSaveMs * 20,
+  );
+  expect(landed.split, 'the layout waited out its debounce').toBeGreaterThanOrEqual(
+    c.workspaceSaveMs,
+  );
 
   // The url now names the workspace as the place.
   expect(window.url()).toContain('w=');

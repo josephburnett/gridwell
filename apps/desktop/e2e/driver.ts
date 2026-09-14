@@ -33,6 +33,16 @@ export interface PaneInfo {
   tileIds: string[];
 }
 
+// The waits client/cadence declares, in ms.
+export interface Cadences {
+  textSaveMs: number;
+  urlUpdateMs: number;
+  framingSaveMs: number;
+  workspaceSaveMs: number;
+  shellMirrorMs: number;
+  traceFadeMs: number;
+}
+
 export interface PaletteItem {
   index: number;
   // Doorway swatches sit in the top row, one per declared doorway. A click
@@ -128,6 +138,18 @@ export class GridwellDriver {
     const f = ps.find((p) => p.focused);
     if (!f) throw new Error('no focused pane');
     return f;
+  }
+
+  // The client's named waits, in ms, straight off client/cadence. A spec
+  // derives its own waits from these, so a retuned cadence retunes the spec
+  // with it and a spec can never sleep less than the debounce it waits on.
+  cadences(): Promise<Cadences> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.cadences());
+  }
+
+  // How many mirror passes the live-shell snapshotter has taken since boot.
+  shellMirrors(): Promise<number> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.shellMirrors());
   }
 
   // Waits for Handshake to land.
@@ -630,7 +652,9 @@ export class GridwellDriver {
     return getTileContent(this.origin, tileID);
   }
 
-  // Types into whatever has keyboard focus, then waits for the debounced save.
+  // Types into whatever has keyboard focus. The save is debounced and idle()
+  // does not cover it, so a caller that needs the bytes on the server waits on
+  // getTileContent, bounded by cadences().textSaveMs.
   async typeText(s: string): Promise<void> {
     await this.win.keyboard.type(s);
     await this.waitIdle();

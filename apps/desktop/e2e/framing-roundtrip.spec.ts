@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { settle, timeToLand } from './cadence';
 
 // The descend, reframe, ascend round trip: preview equals descent target
 // equals ascent return. The tests read framing from the panes() hook, the live
@@ -74,10 +75,13 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
   expect(back.cy, 'center y restored after re-entry').toBeCloseTo(left.cy, 1);
 });
 
-test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
+test('a reframe persists without ascending (issue #190)', async ({ gw, window }) => {
   // The settle persister is what makes framing survive leaving a grid any way
   // other than an ascent: a reload, a pane switch, a url edit, a deeper
-  // descent.
+  // descent. One wheel arms both waits it rides, so both are timed here off
+  // the values the client declares: the url replaces on the shorter one and
+  // the server write settles after it, which is the order client/cadence pins.
+  const c = await gw.cadences();
   await gw.enterPlugin('home');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
@@ -88,24 +92,45 @@ test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
   await gw.descendCell(cx, cy);
   const childGrid = (await gw.focused()).gridID;
 
-  await gw.wheelAtFocusedCenter(-300);
-  const zc = await gw.focused();
-  await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
+  const storedZoom = async () => {
+    const pg = await gw.getGrid(parentGrid);
+    const w = (pg.tiles ?? []).find((t: { childGridId?: string }) => t.childGridId === childGrid);
+    return Number((w as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+  };
+  const href = () => window.evaluate(() => globalThis.location.href);
+
+  // The descent's own writes have to be done before the clock starts.
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  const zoomBefore = await storedZoom();
+  const urlBefore = await href();
+
+  // No ascent, no navigation, and no wait for idle: the poll has to start
+  // inside the debounce, or an already-elapsed wait would pass at any cadence.
+  const p = await gw.focused();
+  const landed = await timeToLand(
+    window,
+    async () => {
+      await window.mouse.move(p.x + p.w / 2, p.y + p.h / 2);
+      await window.mouse.wheel(0, -300);
+    },
+    {
+      url: async () => (await href()) !== urlBefore,
+      framing: async () => (await storedZoom()) !== zoomBefore,
+    },
+    c.framingSaveMs * 20,
+  );
+  expect(landed.url, 'the url waited out its debounce').toBeGreaterThanOrEqual(c.urlUpdateMs);
+  expect(landed.framing, 'the framing waited out its debounce').toBeGreaterThanOrEqual(
+    c.framingSaveMs,
+  );
+  expect(landed.url, 'the url settles first, so a bookmark describes the resting view').toBeLessThan(
+    landed.framing,
+  );
+
   const left = await gw.focused();
   expect(left.zoom, 'the reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
-
-  // No ascent, no navigation: the debounced settle persister alone must write
-  // the framing. A fresh well's zoom is 0 until the first write.
-  await expect
-    .poll(
-      async () => {
-        const pg = await gw.getGrid(parentGrid);
-        const w = (pg.tiles ?? []).find((t: { childGridId?: string }) => t.childGridId === childGrid);
-        return Number((w as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
-      },
-      { timeout: 5_000 },
-    )
-    .toBeGreaterThan(0);
+  expect(await storedZoom(), 'the persisted framing is the reframe').toBeGreaterThan(0);
 });
 
 test('a plugin root reframe persists without ascending (issue #190)', async ({ gw }) => {
@@ -239,7 +264,9 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   // The url writer is debounced, so reload only once the descent path is in the
   // url; otherwise the reload lands at the root with nothing to ascend from.
   await expect
-    .poll(() => window.evaluate(() => globalThis.location.pathname), { timeout: 10_000 })
+    .poll(() => window.evaluate(() => globalThis.location.pathname), {
+      timeout: (await gw.cadences()).urlUpdateMs * 40,
+    })
     .not.toBe('/');
 
   await window.reload();
