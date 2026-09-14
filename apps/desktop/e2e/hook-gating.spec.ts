@@ -2,9 +2,9 @@ import { test as base, expect, _electron as electron } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { test, seedHome } from './fixtures';
+import { treeEnv } from './runtree';
 
 const DESKTOP_DIR = path.resolve(__dirname, '..');
-const REPO_ROOT = path.resolve(DESKTOP_DIR, '..', '..');
 
 // The introspection hook is compiled into the normal wasm binary, so its
 // safety rests entirely on the ?e2e=1 gate. These two tests pin both sides of
@@ -25,8 +25,7 @@ base('hook is absent without the flag', async () => {
       ...process.env,
       GRIDWELL_E2E: '', // explicitly off
       GRIDWELL_HOME: home,
-      GRIDWELL_SIDECAR: path.join(REPO_ROOT, 'gridwell'),
-      GRIDWELL_STATIC: path.join(REPO_ROOT, 'web'),
+      ...treeEnv(),
     },
   });
   try {

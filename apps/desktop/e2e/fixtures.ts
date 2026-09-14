@@ -5,13 +5,14 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { GridwellDriver } from './driver';
 import { setOracleAuth } from './oracle';
 import { makeHome, pluginUUIDs, killTmuxServers } from './homes';
+import { serveBin, treeEnv } from './runtree';
 import { parseServingLine } from '../src/main/lines';
 import { freePort } from '../src/main/freeport';
 
-// apps/desktop, and the repo root two levels up, where `make build` lays out the
-// sidecar, the plugin binaries and web/.
+// apps/desktop, the app directory `electron .` launches. The artifacts a launch
+// runs come from the run's own snapshot, never from the checkout beside it
+// (runtree.ts).
 const DESKTOP_DIR = path.resolve(__dirname, '..');
-const REPO_ROOT = path.resolve(DESKTOP_DIR, '..', '..');
 
 // One content plugin to declare in the seeded home's server.yaml.
 export interface PluginSpec {
@@ -55,10 +56,9 @@ export interface FarNode {
 async function spawnFarNode(label: string): Promise<FarNode> {
   const home = makeHome();
   fs.writeFileSync(path.join(home, 'server.yaml'), '');
-  const bin = path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
   const port = await freePort();
-  const child = spawn(bin, ['serve', '--bind', `127.0.0.1:${port}`], {
-    env: { ...process.env, GRIDWELL_HOME: home, GRIDWELL_PLUGIN_DIR: REPO_ROOT },
+  const child = spawn(serveBin(), ['serve', '--bind', `127.0.0.1:${port}`], {
+    env: { ...process.env, ...treeEnv(), GRIDWELL_HOME: home },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
@@ -204,8 +204,7 @@ export const test = base.extend<Fixtures>({
         ),
         GRIDWELL_E2E: '1',
         GRIDWELL_HOME: home,
-        GRIDWELL_SIDECAR: path.join(REPO_ROOT, 'gridwell'),
-        GRIDWELL_STATIC: path.join(REPO_ROOT, 'web'),
+        ...treeEnv(),
       },
     });
     await use(app);

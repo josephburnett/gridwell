@@ -11,6 +11,11 @@ import { defineConfig } from '@playwright/test';
 // GRIDWELL_WEB_CHROMIUM if the binary lives elsewhere.
 export default defineConfig({
   testDir: './e2e-web',
+  // The same two hooks the Electron gate runs: the leak sweep, and the snapshot
+  // of the artifacts this run tests (e2e/runtree.ts), which the served node and
+  // its plugins are launched from.
+  globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

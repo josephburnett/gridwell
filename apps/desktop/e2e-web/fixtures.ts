@@ -1,8 +1,8 @@
 import { test as base, Page } from '@playwright/test';
 import { spawn, ChildProcess } from 'node:child_process';
-import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome, PluginSpec } from '../e2e/fixtures';
+import { serveBin, staticDir, treeEnv } from '../e2e/runtree';
 import { GridwellDriver } from '../e2e/driver';
 import { setOracleAuth } from '../e2e/oracle';
 import { parseServingLine } from '../src/main/lines';
@@ -13,11 +13,6 @@ import { freePort } from '../src/main/freeport';
 // alone sees the client booting with no window.gridwell bridge, the live-url
 // affordances degrading through client/caps, and client/touchgest on the real
 // canvas. GridwellDriver and the oracle are reused verbatim from ../e2e.
-
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-
-// The stock server binary, or what GRIDWELL_SERVE_BIN names.
-export const serveBin = () => path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
 
 // The sidecar's own electron-free picker.
 export { freePort };
@@ -46,8 +41,8 @@ export async function spawnServe(home: string, port: number, extraArgs: string[]
   const origin = `http://127.0.0.1:${port}`;
   const child = spawn(
     serveBin(),
-    ['serve', '--bind', `127.0.0.1:${port}`, '--static', path.join(REPO_ROOT, 'web'), ...extraArgs],
-    { env: { ...process.env, GRIDWELL_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] },
+    ['serve', '--bind', `127.0.0.1:${port}`, '--static', staticDir(), ...extraArgs],
+    { env: { ...process.env, ...treeEnv(), GRIDWELL_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   let output = '';
   child.stdout!.on('data', (d) => (output += d));

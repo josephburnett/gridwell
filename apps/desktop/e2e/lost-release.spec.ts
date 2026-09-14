@@ -46,9 +46,12 @@ test('a left drag whose release is never seen still commits and unhides its tile
   // the strip (errsurface.StripHeight), and the press would land on a layout
   // the read never saw.
   //
-  // flake, 2026-09-04: hiddenTileID stayed "" from the first poll in three runs
-  // and has not reproduced since; docs/flake-ledger.md carries the evidence.
-  // armed returns the whole state so a repeat names what took the press.
+  // flake, 2026-09-04, closed: hiddenTileID stayed "" from the first poll in
+  // three runs, in the window a peer session was rebuilding this press path in
+  // the shared checkout every test launched from. A run now tests the artifacts
+  // it copied at setup (e2e/runtree.ts); docs/flake-ledger.md carries the
+  // evidence. armed returns the whole state so a repeat names what took the
+  // press.
   const armed = await window.evaluate(
     ([paneID, ox, oy]: [string, number, number]) => {
       const t = (window as any).__gridwellTest;

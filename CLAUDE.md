@@ -230,10 +230,13 @@ and that is where the worst bugs live.
 | `make check-connections` | the real binaries through a real ssh tunnel | plugin spawn, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
 
 If a change touches the native layer, `make check` passing means nothing.
-Run the electron or e2e gate and add a spec. The gates rebuild at start, so
-never edit sources while one runs. A flake rerun only counts against a
-freshly built tree. A spec on `docs/flake-ledger.md` still gets a fresh look
-before you blame a change.
+Run the electron or e2e gate and add a spec. The gates rebuild at start, and
+`check-e2e` and `check-web` then test the artifacts they copied at that
+moment (`apps/desktop/e2e/runtree.ts`), so a rebuild beside a running one
+cannot change what it tests; the other gates have no such pin, so still do
+not edit sources while one runs. A flake rerun only counts against a freshly
+built tree. A spec on `docs/flake-ledger.md` still gets a fresh look before
+you blame a change.
 
 A dependency or toolchain bump commits under the `deps:` prefix, and its
 message names the gates it ran. The bump touches every seam at once, so the

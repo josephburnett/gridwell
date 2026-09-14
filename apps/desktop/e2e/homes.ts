@@ -3,21 +3,26 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 
-// Helpers for the throwaway homes the e2e suite creates (seedHome in
-// fixtures.ts) and the leak sweep that keeps an aborted run from polluting
-// later ones.
+// Helpers for the throwaway directories the e2e suite creates — the seeded
+// homes (seedHome in fixtures.ts) and the run's artifact snapshot (runtree.ts)
+// — and the leak sweep that keeps an aborted run from polluting later ones.
 
-// A throwaway home, named for the process that owns it. The pid rides in the
-// name mkdtemp creates atomically, so a home is never for an instant a
-// directory the sweep cannot attribute; that name is the one owner of "a run
-// is using this home".
-export function makeHome(): string {
+// A throwaway directory, named for the process that owns it. The pid rides in
+// the name mkdtemp creates atomically, so such a directory is never for an
+// instant one the sweep cannot attribute; that name is the one owner of "a run
+// is using this".
+export function makeRunDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `gridwell-e2e-p${process.pid}-`));
 }
 
-// Whether the process a home's name claims is still running. A name carrying
-// no pid comes from a release before makeHome owned the shape, so nobody holds
-// it.
+// A throwaway home, for one test's node.
+export function makeHome(): string {
+  return makeRunDir();
+}
+
+// Whether the process a directory's name claims is still running. A name
+// carrying no pid comes from a release before makeRunDir owned the shape, so
+// nobody holds it.
 function ownerAlive(name: string): boolean {
   const m = name.match(/^gridwell-e2e-p(\d+)-/);
   if (!m) return false;
@@ -63,8 +68,10 @@ export function killTmuxServers(uuids: string[]): void {
 // timeout gets the worker SIGKILLed and never runs, so those leaks accumulate.
 // Sweeping at the start of each run survives any kind of kill. Only the
 // gridwell-e2e- mkdtemp prefix is touched, never the user's real ~/.gridwell,
-// and only a home no live process owns: two runs share one os.tmpdir(), so a
-// sweep that took every home deleted the other run's out from under its test.
+// and only a directory no live process owns: two runs share one os.tmpdir(), so
+// a sweep that took every home deleted the other run's out from under its test.
+// A dead run's artifact snapshot carries the same name shape and goes the same
+// way.
 export function sweepLeakedHomes(): void {
   const tmp = os.tmpdir();
   let names: string[] = [];
