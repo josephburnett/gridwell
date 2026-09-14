@@ -114,13 +114,13 @@ per-node context. A deduped read that kept a claim of its own — a bare bool
 beside its own cache — was bounded by nothing and cancelled by nothing, so a
 request the network swallowed held its key for the life of the page and the
 face it fed never loaded, never retried, and never said a word.
-`App.startSSE` marks a `gap` on any stream break and fires
-`retryKick(true, cache.EverySource)` on the next successful subscribe: clear
+`retry.Reconnect` marks a gap on any stream break and tells `App.startSSE` to
+fire `retryKick(true, cache.EverySource)` on the next successful subscribe: clear
 the failure latches, cancel every fetch set, refetch every named and
 known grid, then `syncContentOutbox` and drain. `retryBackstop` runs
 `retryKick(false, …)` every `retry.Backstop` while anything is parked.
-`client/retry` owns that cadence, the two reconnect waits, and the boot
-handshake's backoff.
+`client/retry` owns that cadence, the two reconnect waits and the gap they
+pace, and the boot handshake's backoff.
 
 The kick's second argument is its SCOPE, and `client/cache` owns what that
 covers. A health event names one source; every cached id says which source

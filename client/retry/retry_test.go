@@ -87,3 +87,90 @@ func TestSetRestartsTheWaitFromNow(t *testing.T) {
 		t.Fatal("the wait never returned")
 	}
 }
+
+func TestReconnectWaitsAreTheDeclaredCadence(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		wait func(*Reconnect) time.Duration
+		want time.Duration
+	}{
+		{"a failed subscribe", (*Reconnect).SubscribeFailed, SubscribeRetry},
+		{"a stream that ended", (*Reconnect).StreamEnded, StreamEndPause},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var r Reconnect
+			// Flat, not a backoff: the tenth break waits what the first did.
+			start := time.Now()
+			for i := 0; i < 10; i++ {
+				if got := c.wait(&r); got != c.want {
+					t.Fatalf("break %d waited %v, want %v", i+1, got, c.want)
+				}
+			}
+			time.Sleep(c.wait(&r))
+			if el := time.Since(start); el < c.want {
+				t.Fatalf("serving the wait took %v, short of %v", el, c.want)
+			}
+		})
+	}
+}
+
+func TestReconnectKicksOncePerGap(t *testing.T) {
+	const (
+		failed    = "subscribe failed"
+		ended     = "stream ended"
+		subscribe = "subscribed"
+	)
+	for _, c := range []struct {
+		name string
+		seq  []string
+		want []bool // one entry per "subscribed" in seq
+	}{{
+		name: "the first stream missed nothing",
+		seq:  []string{subscribe},
+		want: []bool{false},
+	}, {
+		name: "a failed dial is a gap",
+		seq:  []string{failed, subscribe},
+		want: []bool{true},
+	}, {
+		name: "a clean EOF is a gap too",
+		seq:  []string{ended, subscribe},
+		want: []bool{true},
+	}, {
+		name: "many failures are one gap, so one kick",
+		seq:  []string{failed, failed, failed, subscribe},
+		want: []bool{true},
+	}, {
+		// Asking twice is not a second gap.
+		name: "the kick is consumed",
+		seq:  []string{failed, subscribe, subscribe},
+		want: []bool{true, false},
+	}, {
+		name: "each gap gets its own kick",
+		seq:  []string{ended, subscribe, ended, subscribe},
+		want: []bool{true, true},
+	}} {
+		t.Run(c.name, func(t *testing.T) {
+			var r Reconnect
+			var got []bool
+			for _, step := range c.seq {
+				switch step {
+				case failed:
+					r.SubscribeFailed()
+				case ended:
+					r.StreamEnded()
+				case subscribe:
+					got = append(got, r.Subscribed())
+				}
+			}
+			if len(got) != len(c.want) {
+				t.Fatalf("subscribed %d times, want %d", len(got), len(c.want))
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Fatalf("stream %d kicked %v, want %v", i+1, got[i], c.want[i])
+				}
+			}
+		})
+	}
+}

@@ -912,23 +912,22 @@ func (a *App) ghostHiddenPane() string {
 	return a.ghost.hiddenPaneID
 }
 
-// startSSE reconnects after a backoff, and a reconnect after a gap fires the
-// retry kick, because Subscribe has no cursor and the gap's events are gone.
+// startSSE keeps one event stream open for the life of the page. retry.Reconnect
+// decides the waits and which stream owes a resync kick; this loop sleeps and
+// kicks what it is told to.
 func (a *App) startSSE() {
-	gap := false
+	var pace retry.Reconnect
 	for {
 		stream, err := a.cl.Subscribe(context.Background())
 		if err != nil {
 			// Until this reconnects, everything on screen is silently going
 			// stale. It coalesces, and resolves itself on reconnect below.
 			a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
-			gap = true
-			time.Sleep(retry.SubscribeRetry)
+			time.Sleep(pace.SubscribeFailed())
 			continue
 		}
 		a.resolveErr("events")
-		if gap {
-			gap = false
+		if pace.Subscribed() {
 			// The gap swallowed events without saying whose, so nothing scopes.
 			a.retryKick(true, cache.EverySource)
 		}
@@ -936,12 +935,9 @@ func (a *App) startSSE() {
 			ev, ok, err := stream.Recv()
 			if err != nil {
 				a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
-				gap = true
 				break
 			}
 			if !ok {
-				// A clean EOF is still a gap: no cursor to resume from.
-				gap = true
 				break
 			}
 			if a.c.Apply(ev) {
@@ -967,7 +963,7 @@ func (a *App) startSSE() {
 			}
 		}
 		stream.Close()
-		time.Sleep(retry.StreamEndPause)
+		time.Sleep(pace.StreamEnded())
 	}
 }
 

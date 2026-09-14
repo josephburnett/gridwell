@@ -93,3 +93,32 @@ func (i *Interval) Wait() {
 		}
 	}
 }
+
+// Reconnect paces the client's event stream and remembers whether a gap
+// swallowed events. Subscribe carries no cursor, so every way a stream breaks
+// — a failed dial, a read error, a clean EOF — loses whatever arrived while
+// the client was off it, and the next stream that opens owes one resync kick.
+// See docs/freshness.md layer 7.
+type Reconnect struct {
+	gap bool
+}
+
+// SubscribeFailed is the wait before asking again.
+func (r *Reconnect) SubscribeFailed() time.Duration {
+	r.gap = true
+	return SubscribeRetry
+}
+
+// Subscribed reports whether this stream owes a resync kick: once per gap,
+// and never for the first stream, which missed nothing.
+func (r *Reconnect) Subscribed() bool {
+	kick := r.gap
+	r.gap = false
+	return kick
+}
+
+// StreamEnded is the pause before re-subscribing.
+func (r *Reconnect) StreamEnded() time.Duration {
+	r.gap = true
+	return StreamEndPause
+}
