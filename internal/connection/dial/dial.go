@@ -194,6 +194,18 @@ var keepaliveParams = keepalive.ClientParameters{
 	Timeout: 10 * time.Second,
 }
 
+// connectBackoff is the wait between reconnect attempts on a connection. This
+// is one user's own node, so the cap sits well below gRPC's two-minute default
+// and a healed network heals in seconds. grpc-go floors none of it: the 20s
+// MinConnectTimeout bounds one attempt, not the wait between them. A var so
+// connectbackoff_seam_test.go can lower it and watch a reconnect land.
+var connectBackoff = backoff.Config{
+	BaseDelay:  time.Second,
+	Multiplier: 1.6,
+	Jitter:     0.2,
+	MaxDelay:   10 * time.Second,
+}
+
 // grpcDialOptions is the posture both dials wear, so the ssh bridge and the
 // direct socket cannot drift apart. Each caller adds only what its transport
 // needs.
@@ -201,16 +213,7 @@ func grpcDialOptions() []grpc.DialOption {
 	return []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepaliveParams),
-		// One user's connection, so cap the backoff well below gRPC's
-		// two-minute default and a healed network heals in seconds.
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff: backoff.Config{
-				BaseDelay:  time.Second,
-				Multiplier: 1.6,
-				Jitter:     0.2,
-				MaxDelay:   10 * time.Second,
-			},
-		}),
+		grpc.WithConnectParams(grpc.ConnectParams{Backoff: connectBackoff}),
 	}
 }
 

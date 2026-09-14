@@ -21,14 +21,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/local"
-	"github.com/josephburnett/gridwell/internal/local/shellsvc"
-	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
-	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
 // deadDoor serves normally until freeze, after which every byte in either
@@ -91,22 +85,13 @@ func (c *deadConn) Write(p []byte) (int, error) {
 // it with the switch that kills it silently.
 func silentDoor(t *testing.T) (string, *deadDoor) {
 	t.Helper()
-	reg := plugin.NewRegistry()
-	st, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-	reg.Register("ur1", "home", local.New(st, shellsvc.NewManager(shellsvctest.New())), nil)
-	srv := servertest.New(t, reg, server.Config{})
-
 	sock := filepath.Join(t.TempDir(), "federation.sock")
 	ln, err := server.ListenConnectionDoor(sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	door := &deadDoor{Listener: ln, frozen: make(chan struct{}), closed: make(chan struct{})}
-	httpSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
+	httpSrv := server.ConnectionDoorServer(doorHandler(t))
 	go httpSrv.Serve(door)
 	t.Cleanup(func() {
 		close(door.closed)
