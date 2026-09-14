@@ -129,22 +129,49 @@ func (r *redialer) establish() (*ssh.Client, error) {
 	if r.client != nil {
 		return r.client, nil
 	}
-	c, err := ssh.Dial("tcp", r.host, &ssh.ClientConfig{
+	c, err := sshDial(r.host, sshHandshakeTimeout, &ssh.ClientConfig{
 		User:            r.user,
 		Auth:            r.auth,
 		HostKeyCallback: r.hostKey,
 		// Recomputed each dial in case the user just fixed the file. See
 		// hostalgos.go.
 		HostKeyAlgorithms: hostKeyAlgorithmsFor(r.hostKey, r.host),
-		// Without it a black-holing network hangs the handshake, and mu with
-		// it, indefinitely.
-		Timeout: 10 * time.Second,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ssh dial %q: %w", r.host, err)
 	}
 	r.client = c
 	return c, nil
+}
+
+// sshHandshakeTimeout bounds one whole ssh dial, connect and handshake both.
+// Without it a black-holing network hangs establish, and mu with it,
+// indefinitely. A var so handshaketimeout_seam_test.go can lower it and wait
+// one out.
+var sshHandshakeTimeout = 10 * time.Second
+
+// sshDial is ssh.Dial with the handshake under the deadline too:
+// ssh.ClientConfig.Timeout covers only the TCP connect, so a peer that accepts
+// and then says nothing parks the version exchange forever. timeout must be
+// positive. NewClientConn closes the conn on its own errors.
+func sshDial(addr string, timeout time.Duration, cfg *ssh.ClientConfig) (*ssh.Client, error) {
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		c.Close()
+		return nil, err
+	}
+	return ssh.NewClient(c, chans, reqs), nil
 }
 
 func (r *redialer) close() {
