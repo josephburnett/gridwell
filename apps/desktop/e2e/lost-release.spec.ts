@@ -24,8 +24,15 @@ test('a left drag whose release is never seen still commits and unhides its tile
   expect(tile, 'the tile landed on the cell we dragged it to').toBeTruthy();
   const tileID = tile!.id;
 
-  const from = await gw.cellCenter(home.id, cx, cy);
-  const to = await gw.cellCenter(home.id, cx + 1, cy);
+  // The create has settled — dragCreate ended on idle() — so the client holds
+  // what the server holds. Asserted rather than assumed, because a press over
+  // a tile the client's own cache is missing arms a pan, and from the ghost
+  // alone that is indistinguishable from a press nothing took.
+  const before = (await gw.panes()).find((p) => p.id === home.id)!;
+  expect(
+    before.tileIds,
+    'the client received the tile the server has, before anything presses on it',
+  ).toContain(tileID);
 
   // The whole gesture runs in one synchronous turn, and its mid-gesture state is
   // read inside that turn: a press, a move past the threshold so the ghost
@@ -34,31 +41,50 @@ test('a left drag whose release is never seen still commits and unhides its tile
   // came up somewhere else. It has to be one turn because Playwright's virtual
   // mouse leaves the real cursor parked with no button down, so a move Chromium
   // emits on its own between two evaluates carries buttons 0 and would end the
-  // drag early.
+  // drag early. The cell centres are resolved in that same turn: a notice
+  // raised between a separate read and the press moves every pane rect by half
+  // the strip (errsurface.StripHeight), and the press would land on a layout
+  // the read never saw.
   //
   // flake, 2026-09-04: hiddenTileID stayed "" from the first poll in three runs
   // and has not reproduced since; docs/flake-ledger.md carries the evidence.
   // armed returns the whole state so a repeat names what took the press.
   const armed = await window.evaluate(
-    ([fx, fy, tx, ty]: number[]) => {
+    ([paneID, ox, oy]: [string, number, number]) => {
       const t = (window as any).__gridwellTest;
       const canvas = document.querySelector('canvas')!;
+      const from = t.cellCenter(paneID, ox, oy);
+      const to = t.cellCenter(paneID, ox + 1, oy);
       const fire = (type: string, x: number, y: number, buttons: number) =>
         canvas.dispatchEvent(
           new MouseEvent(type, { clientX: x, clientY: y, buttons, button: 0, bubbles: true }),
         );
-      fire('mousedown', fx, fy, 1);
-      fire('mousemove', fx + 8, fy + 8, 1);
+      fire('mousedown', from.x, from.y, 1);
+      fire('mousemove', from.x + 8, from.y + 8, 1);
       const state = {
         ghost: t.ghost(),
         idle: t.idleDetail(),
         paletteOpen: t.palette().open,
-        panes: t.panes().map((p: any) => ({ id: p.id, gridID: p.gridID, x: p.x, y: p.y, w: p.w, h: p.h })),
+        from,
+        to,
+        // The strip is layout: a notice up at the press moved every pane.
+        stripH: t.errors().stripH,
+        panes: t.panes().map((p: any) => ({
+          id: p.id,
+          gridID: p.gridID,
+          x: p.x,
+          y: p.y,
+          w: p.w,
+          h: p.h,
+          // What tileAtCell reads. A press that found no tile at the cell and
+          // a press another gesture took read identically from the ghost.
+          tileIds: p.tileIds,
+        })),
       };
-      fire('mousemove', tx, ty, 0);
+      fire('mousemove', to.x, to.y, 0);
       return state;
     },
-    [from.x, from.y, to.x, to.y],
+    [home.id, cx, cy] as [string, number, number],
   );
   expect(
     armed.ghost.hiddenTileID,
