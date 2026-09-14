@@ -32,25 +32,34 @@ type Set struct {
 
 // claim is one key's in-flight fetch. Identity is the pointer, so a late
 // release is told from its successor's.
-type claim struct{ cancel context.CancelFunc }
+type claim struct {
+	cancel context.CancelFunc
+	// owed records an ask this claim refused. The refused caller asked
+	// because something changed, and a request already in flight answers
+	// from before that change, so dropping the ask would leave the cache
+	// older than the change that asked for it.
+	owed bool
+}
 
 func New(d time.Duration) *Set {
 	return &Set{d: d, m: map[string]*claim{}}
 }
 
-// Begin claims key for one fetch; ok is false when one already holds it. The
-// fetch must use the returned context, which is what CancelIf cancels, and
-// must call done when it returns.
-func (s *Set) Begin(key string) (ctx context.Context, done func(), ok bool) {
+// Begin claims key for one fetch; ok is false when one already holds it, and
+// the holder is then owed a re-ask. The fetch must use the returned context,
+// which is what CancelIf cancels, and must call done when it returns; done
+// reports whether an ask was refused while the claim was held.
+func (s *Set) Begin(key string) (ctx context.Context, done func() bool, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, held := s.m[key]; held {
+	if c, held := s.m[key]; held {
+		c.owed = true
 		return nil, nil, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.d)
 	c := &claim{cancel: cancel}
 	s.m[key] = c
-	return ctx, func() { s.release(key, c) }, true
+	return ctx, func() bool { return s.release(key, c) }, true
 }
 
 // Context is a bounded context with no claim. CancelIf cannot reach it, so
@@ -59,16 +68,18 @@ func (s *Set) Context() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), s.d)
 }
 
-// release drops c's claim on key if c still holds it. A cancelled fetch
-// returns after a fresh one has taken the key, and freeing the fresh claim
-// would drop the dogpile guard for as long as it runs.
-func (s *Set) release(key string, c *claim) {
+// release drops c's claim on key if c still holds it and reports whether an
+// ask was refused meanwhile. A cancelled fetch returns after a fresh one has
+// taken the key, and freeing the fresh claim would drop the dogpile guard for
+// as long as it runs; the successor carries its own owed flag.
+func (s *Set) release(key string, c *claim) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.m[key] == c {
 		delete(s.m, key)
 	}
 	c.cancel()
+	return c.owed
 }
 
 // CancelIf drops and cancels every claim whose key match reports, returning

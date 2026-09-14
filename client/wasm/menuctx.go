@@ -67,7 +67,7 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 // fetchMenuCtx loads one remote node's menu on the claim menuCtx opened for
 // it. A failure leaves the context unfetched and surfaces. Nothing else
 // retries: every draw of the open menu asks again, which is the retry.
-func (a *App) fetchMenuCtx(ctx context.Context, done func(), ns string) {
+func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 	defer done()
 	lp, err := a.cl.HandshakeNS(ctx, ns)
 	if err != nil {

@@ -723,14 +723,21 @@ func (a *App) fetchGrid(id string) {
 		return
 	}
 	go func() {
-		defer done()
-		if a.loadGrid(ctx, id) != nil {
+		err := a.loadGrid(ctx, id)
+		// An ask refused while this one was on the wire describes a grid this
+		// answer was taken too early to hold, so it is re-asked rather than
+		// lost; see inflight.Set.Begin.
+		owed := done()
+		if err != nil {
 			a.draw()
-			return
+		} else {
+			// Coalesced repaint: completions land in bursts, and one draw per
+			// child-grid read would be hundreds of repaints for a big directory.
+			a.scheduleFrame()
 		}
-		// Coalesced repaint: completions land in bursts, and one draw per
-		// child-grid read would be hundreds of repaints for a big directory.
-		a.scheduleFrame()
+		if owed {
+			a.fetchGrid(id)
+		}
 	}()
 }
 

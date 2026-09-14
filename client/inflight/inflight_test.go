@@ -156,3 +156,52 @@ func TestBoundedCarriesTheDeadline(t *testing.T) {
 		t.Errorf("the caller's cancel must end it: %v", ctx.Err())
 	}
 }
+
+// The sequence a dropped refetch loses: a request is in flight, the thing it
+// asks about changes, and the ask that change makes is refused. The answer
+// already on the wire was taken before the change, so without the owed flag
+// the cache keeps a snapshot older than the change that asked for it.
+func TestARefusedAskIsOwedToTheHolder(t *testing.T) {
+	s := New(time.Minute)
+	server, cache, changed := "v1", "", false
+	var fetch func()
+	fetch = func() {
+		_, done, ok := s.Begin("g1")
+		if !ok {
+			return
+		}
+		read := server // the answer leaves the server now
+		if !changed {
+			// The change lands while this request is on the wire, and the
+			// ask it makes is the one Begin refuses.
+			changed, server = true, "v2"
+			fetch()
+		}
+		cache = read
+		if done() {
+			fetch()
+		}
+	}
+	fetch()
+	if cache != "v2" {
+		t.Errorf("cache = %q, want %q: the ask refused mid-flight was dropped", cache, "v2")
+	}
+}
+
+func TestOwedIsPerClaimAndClearsWithIt(t *testing.T) {
+	s := New(time.Minute)
+	_, done, _ := s.Begin("g1")
+	if _, _, ok := s.Begin("g1"); ok {
+		t.Fatal("a second fetch for a key already in flight must be refused")
+	}
+	if !done() {
+		t.Error("the holder of a refused ask must be told it is owed a re-ask")
+	}
+	_, done2, ok := s.Begin("g1")
+	if !ok {
+		t.Fatal("a released key must be claimable again")
+	}
+	if done2() {
+		t.Error("a fresh claim starts owed nothing; the flag died with its claim")
+	}
+}
