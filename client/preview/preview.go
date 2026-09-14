@@ -23,7 +23,8 @@ type Decoder interface {
 // Cache invalidates an entry when the server-side preview blob id changes. One
 // mutex protects the entry map, so every method is goroutine-safe.
 type Cache struct {
-	dec Decoder
+	dec      Decoder
+	onDecErr func(tileID string)
 
 	mu      sync.Mutex
 	entries map[string]*entry
@@ -36,20 +37,26 @@ type entry struct {
 	// gen rises with every Put, so a decode whose onReady fires after a newer
 	// Put superseded it is discarded.
 	gen int64
-	// empty is a settled miss. Without it every frame re-asks the server for
-	// tiles that will never have a preview.
-	empty bool
+	// missBlob is the blob id a completed fetch or decode produced no image
+	// for; 0 is none, and no fetch carries blob id 0. It is separate from
+	// blobID so a tile can hold last blob's image and this blob's settled
+	// miss at once. Without it every frame re-asks the server for a tile
+	// whose answer will never become an image.
+	missBlob int64
 }
 
 // wildcardBlobID marks bytes captured locally before the server blob id was
 // known. Get matches it against any non-zero expected blob id.
 const wildcardBlobID int64 = -1
 
-// NewCache requires a non-nil dec.
-func NewCache(dec Decoder) *Cache {
+// NewCache requires a non-nil dec. onDecErr fires once per failed decode with
+// the tile id, so bytes that never become a picture reach the user instead of
+// vanishing; nil silences it.
+func NewCache(dec Decoder, onDecErr func(tileID string)) *Cache {
 	return &Cache{
-		dec:     dec,
-		entries: map[string]*entry{},
+		dec:      dec,
+		onDecErr: onDecErr,
+		entries:  map[string]*entry{},
 	}
 }
 
@@ -80,21 +87,26 @@ func (c *Cache) Put(tileID string, blobID int64, bytes []byte, onReady func()) {
 
 // PutEmpty records that the server answered with no preview. A completed fetch
 // settles the cache either way, an unsettled empty result re-firing on every
-// draw. A later Put, or a changed blob id, supersedes it.
+// draw. A later Put, or a changed blob id, supersedes it. An image already
+// held for another blob id stays: it is what the tile looks like.
 func (c *Cache) PutEmpty(tileID string, blobID int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e, ok := c.entries[tileID]; ok && e.image != nil && e.image.Truthy() {
-		return // a real image is never downgraded to a recorded miss
+	e, ok := c.entries[tileID]
+	if !ok {
+		e = &entry{}
+		c.entries[tileID] = e
 	}
-	c.entries[tileID] = &entry{blobID: blobID, empty: true}
+	e.missBlob = blobID
 }
 
+// KnownEmpty answers whether a completed fetch or decode already settled this
+// blob id as having no image, which is how a caller stops re-fetching.
 func (c *Cache) KnownEmpty(tileID string, blobID int64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[tileID]
-	return ok && e.empty && e.blobID == blobID
+	return ok && e.missBlob != 0 && e.missBlob == blobID
 }
 
 // PutWildcard serves the flows that hold JPEG bytes before the server blob id
@@ -135,15 +147,28 @@ func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
 			}
 			cur.image = img
 			cur.blobID = blobID
+			cur.missBlob = 0 // an installed image is the fresher answer
 			c.mu.Unlock()
 			if onReady != nil {
 				onReady()
 			}
 		},
 		func() {
-			// No image is installed. The entry's gen has already risen, which
-			// discards any in-flight predecessor, and Get keeps returning the
-			// prior image if there is one.
+			c.mu.Lock()
+			cur, ok := c.entries[tileID]
+			if !ok || cur.gen != gen {
+				// Superseded or dropped: the newer Put owns the answer.
+				c.mu.Unlock()
+				return
+			}
+			// No image is installed, so Get keeps returning the prior image if
+			// there is one; the miss is what stops the caller re-fetching
+			// these bytes on every draw.
+			cur.missBlob = blobID
+			c.mu.Unlock()
+			if c.onDecErr != nil {
+				c.onDecErr(tileID)
+			}
 		},
 	)
 }

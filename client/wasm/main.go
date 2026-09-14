@@ -228,9 +228,9 @@ type viewCaches struct {
 }
 
 // newViewCaches is the one place the group is constructed.
-func newViewCaches() viewCaches {
+func newViewCaches(onPreviewDecodeErr func(tileID string)) viewCaches {
 	return viewCaches{
-		urlPreview:   preview.NewCache(preview.NewJSDecoder()),
+		urlPreview:   preview.NewCache(preview.NewJSDecoder(), onPreviewDecodeErr),
 		wrapCache:    map[string][]string{},
 		renderedPrev: map[string]*renderedPreview{},
 		paneLayouts:  map[string]*paneLayoutEntry{},
@@ -534,13 +534,13 @@ func main() {
 		caps:               caps.Derive(bridgeCaps(), false),
 		fetch:              newFetchState(),
 		persist:            newPersistState(),
-		views:              newViewCaches(),
 		shellAlive:         map[string]bool{},
 		shellAliveProbing:  map[string][]func(bool){},
 		traces:             map[string]traceState{},
 		renderedPanePaints: map[string]int{},
 		backstop:           retry.NewInterval(retry.Backstop),
 	}
+	app.views = newViewCaches(app.previewDecodeFailed)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()
 	app.canvas = app.doc.Call("getElementById", "canvas")

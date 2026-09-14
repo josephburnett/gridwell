@@ -80,7 +80,7 @@ func (d *fakeDecoder) pendingCount() int {
 
 // TestGetEmptyReturnsNotOK pins that a new cache has nothing in it.
 func TestGetEmptyReturnsNotOK(t *testing.T) {
-	c := NewCache(&fakeDecoder{})
+	c := NewCache(&fakeDecoder{}, nil)
 	if _, ok := c.Get("42", 1); ok {
 		t.Errorf("Get on empty cache returned ok")
 	}
@@ -92,7 +92,7 @@ func TestGetEmptyReturnsNotOK(t *testing.T) {
 // miss.
 func TestPutEmptySettlesTheMiss(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 
 	c.PutEmpty("42", 7)
 	if !c.KnownEmpty("42", 7) {
@@ -118,7 +118,7 @@ func TestPutEmptySettlesTheMiss(t *testing.T) {
 // and Get with that blob id returns the same image.
 func TestPutGetRoundTrip(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 
 	var ready bool
 	c.Put("42", 7, []byte("jpeg-bytes"), func() { ready = true })
@@ -143,7 +143,7 @@ func TestPutGetRoundTrip(t *testing.T) {
 // misses so the renderer re-fetches.
 func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 7, []byte("old"), nil)
 	d.resolveAll()
 	if _, ok := c.Get("42", 8); ok {
@@ -160,7 +160,7 @@ func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 // says is not there.
 func TestGetWithZeroBlobIDAlwaysMisses(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 7, []byte("x"), nil)
 	d.resolveAll()
 	if _, ok := c.Get("42", 0); ok {
@@ -173,7 +173,7 @@ func TestGetWithZeroBlobIDAlwaysMisses(t *testing.T) {
 // whatever blob id the tile advertises.
 func TestPutWildcardMatchesAnyBlobID(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.PutWildcard("42", []byte("captured-locally"), nil)
 	d.resolveAll()
 	for _, want := range []int64{1, 99, 12345} {
@@ -198,7 +198,7 @@ func TestPutWildcardMatchesAnyBlobID(t *testing.T) {
 // updates the cache.
 func TestPutSupersedesPreviousImage(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 1, []byte("first"), nil)
 	imgs1 := d.resolveAll()
 	c.Put("42", 2, []byte("second"), nil)
@@ -218,7 +218,7 @@ func TestPutSupersedesPreviousImage(t *testing.T) {
 // first.
 func TestPutLateResultIsDiscarded(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 1, []byte("first"), nil)  // pending[0]
 	c.Put("42", 2, []byte("second"), nil) // pending[1]
 	// The second resolves first and installs.
@@ -243,7 +243,7 @@ func TestPutLateResultIsDiscarded(t *testing.T) {
 // the cache or the Decoder.
 func TestPutWithEmptyBytesIsNoOp(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 1, nil, nil)
 	c.Put("42", 1, []byte{}, nil)
 	if d.pendingCount() != 0 {
@@ -255,7 +255,7 @@ func TestPutWithEmptyBytesIsNoOp(t *testing.T) {
 // existing cached image in place, so a corrupt JPEG does not blank the screen.
 func TestPutDecodeErrorLeavesEntryUntouched(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 1, []byte("good"), nil)
 	d.resolveAll()
 	good, ok := c.Get("42", 1)
@@ -270,13 +270,19 @@ func TestPutDecodeErrorLeavesEntryUntouched(t *testing.T) {
 	if !ok || got != good {
 		t.Errorf("decode failure clobbered the prior good entry")
 	}
+	// And blob 2 is settled, so the caller stops asking for bytes that will
+	// not decode. A prior image does not exempt the tile from the loop: Get
+	// misses for blob 2 whatever is held for blob 1.
+	if !c.KnownEmpty("42", 2) {
+		t.Errorf("decode failure left blob 2 unsettled; the caller re-fetches every draw")
+	}
 }
 
 // TestDropRemovesEntry pins that deleting a tile drops its cache row, revokes
 // the image, and takes a second Drop without complaint.
 func TestDropRemovesEntry(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 1, []byte("x"), nil)
 	imgs := d.resolveAll()
 	c.Drop("42")
@@ -293,7 +299,7 @@ func TestDropRemovesEntry(t *testing.T) {
 // misses. The cache turns ok only once the decode is installed.
 func TestGetWhileDecodingReturnsNotOK(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 1, []byte("pending"), nil)
 	if _, ok := c.Get("42", 1); ok {
 		t.Errorf("Get returned ok while decode was still pending")
@@ -309,11 +315,69 @@ func TestGetWhileDecodingReturnsNotOK(t *testing.T) {
 // after teardown.
 func TestRevokedImageReportsNotTruthyAndGetMisses(t *testing.T) {
 	d := &fakeDecoder{}
-	c := NewCache(d)
+	c := NewCache(d, nil)
 	c.Put("42", 1, []byte("x"), nil)
 	imgs := d.resolveAll()
 	imgs[0].Revoke()
 	if _, ok := c.Get("42", 1); ok {
 		t.Errorf("Get returned ok for a revoked image")
+	}
+}
+
+// TestPutDecodeErrorSettlesTheMiss pins that a decode failure on a tile with
+// no prior image is a settled answer for that blob id, reported once. Left
+// unsettled, Get misses and KnownEmpty is false forever, so the caller's fetch
+// guard re-asks the server on every draw, one RPC per frame, silently.
+func TestPutDecodeErrorSettlesTheMiss(t *testing.T) {
+	d := &fakeDecoder{}
+	var reported []string
+	c := NewCache(d, func(tileID string) { reported = append(reported, tileID) })
+
+	c.Put("42", 7, []byte("corrupt"), nil)
+	d.failNext(0)
+	if _, ok := c.Get("42", 7); ok {
+		t.Error("a failed decode is not an image")
+	}
+	if !c.KnownEmpty("42", 7) {
+		t.Error("a failed decode must settle the miss for its blob id")
+	}
+	if len(reported) != 1 || reported[0] != "42" {
+		t.Errorf("decode failure reported %v; want one report for tile 42", reported)
+	}
+
+	// A new blob id is a new question, and a Put that decodes answers it.
+	if c.KnownEmpty("42", 8) {
+		t.Error("a NEW blob id must not inherit the failed blob's miss")
+	}
+	c.Put("42", 8, []byte("good"), nil)
+	d.resolveAll()
+	if _, ok := c.Get("42", 8); !ok {
+		t.Fatal("a decoding Put after a failed one must install")
+	}
+	if c.KnownEmpty("42", 8) {
+		t.Error("an installed image is not a miss")
+	}
+}
+
+// TestPutDecodeErrorFromSupersededPutIsIgnored pins that a late failure from a
+// Put a newer one replaced records nothing and says nothing: the newer Put
+// owns the entry's answer.
+func TestPutDecodeErrorFromSupersededPutIsIgnored(t *testing.T) {
+	d := &fakeDecoder{}
+	var reported []string
+	c := NewCache(d, func(tileID string) { reported = append(reported, tileID) })
+	c.Put("42", 1, []byte("corrupt"), nil) // pending[0]
+	c.Put("42", 2, []byte("good"), nil)    // pending[1]
+	img := d.resolve(1)
+	d.failNext(0)
+	got, ok := c.Get("42", 2)
+	if !ok || got != img {
+		t.Error("a superseded decode failure displaced the winner")
+	}
+	if c.KnownEmpty("42", 1) {
+		t.Error("a superseded decode failure recorded a miss")
+	}
+	if len(reported) != 0 {
+		t.Errorf("a superseded decode failure reported %v; want nothing", reported)
 	}
 }

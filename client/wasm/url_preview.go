@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
 )
@@ -204,7 +205,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 		}
 		if len(jpeg) == 0 {
 			// Leaving the miss unrecorded would re-fire this fetch on every
-			// draw, one RPC per non-decodable tile per frame.
+			// draw, one RPC per preview-less tile per frame.
 			a.views.urlPreview.PutEmpty(tileID, blobID)
 			return
 		}
@@ -220,4 +221,11 @@ func (a *App) shellStandinRect(img js.Value, x, y float64) (dx, dy, dw, dh float
 	return preview.StandinDstRect(
 		img.Get("naturalWidth").Float(), img.Get("naturalHeight").Float(),
 		dpr, x, y)
+}
+
+// previewDecodeFailed is preview.Cache's verdict on bytes that never became a
+// picture. The cache settles that blob id, so this fires once per failed blob
+// rather than once per frame.
+func (a *App) previewDecodeFailed(tileID string) {
+	a.reportErr(errsurface.Error, "preview:"+tileID, "preview image could not be decoded")
 }
