@@ -7,6 +7,29 @@ import * as fs from 'node:fs';
 // fixtures.ts) and the leak sweep that keeps an aborted run from polluting
 // later ones.
 
+// A throwaway home, named for the process that owns it. The pid rides in the
+// name mkdtemp creates atomically, so a home is never for an instant a
+// directory the sweep cannot attribute; that name is the one owner of "a run
+// is using this home".
+export function makeHome(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), `gridwell-e2e-p${process.pid}-`));
+}
+
+// Whether the process a home's name claims is still running. A name carrying
+// no pid comes from a release before makeHome owned the shape, so nobody holds
+// it.
+function ownerAlive(name: string): boolean {
+  const m = name.match(/^gridwell-e2e-p(\d+)-/);
+  if (!m) return false;
+  try {
+    process.kill(Number(m[1]), 0);
+    return true;
+  } catch (err: unknown) {
+    // EPERM: alive, and not ours to signal. ESRCH: gone.
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 // Every minted id in <home>/server.yaml, the node's own and any plugin row's.
 // Teardown and the sweep kill the tmux servers those ids name.
 export function pluginUUIDs(home: string): string[] {
@@ -39,7 +62,9 @@ export function killTmuxServers(uuids: string[]): void {
 // The per-test teardown already cleans up, but a teardown that exceeds the test
 // timeout gets the worker SIGKILLed and never runs, so those leaks accumulate.
 // Sweeping at the start of each run survives any kind of kill. Only the
-// gridwell-e2e- mkdtemp prefix is touched, never the user's real ~/.gridwell.
+// gridwell-e2e- mkdtemp prefix is touched, never the user's real ~/.gridwell,
+// and only a home no live process owns: two runs share one os.tmpdir(), so a
+// sweep that took every home deleted the other run's out from under its test.
 export function sweepLeakedHomes(): void {
   const tmp = os.tmpdir();
   let names: string[] = [];
@@ -51,6 +76,7 @@ export function sweepLeakedHomes(): void {
   let swept = 0;
   for (const name of names) {
     if (!name.startsWith('gridwell-e2e-')) continue;
+    if (ownerAlive(name)) continue;
     const home = path.join(tmp, name);
     killTmuxServers(pluginUUIDs(home));
     try {

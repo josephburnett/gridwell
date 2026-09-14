@@ -1,11 +1,10 @@
 import { test as base, _electron as electron, ElectronApplication, Page } from '@playwright/test';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import * as fs from 'node:fs';
 import { spawn, ChildProcess } from 'node:child_process';
 import { GridwellDriver } from './driver';
 import { setOracleAuth } from './oracle';
-import { pluginUUIDs, killTmuxServers } from './homes';
+import { makeHome, pluginUUIDs, killTmuxServers } from './homes';
 import { parseServingLine } from '../src/main/lines';
 import { freePort } from '../src/main/freeport';
 
@@ -26,7 +25,7 @@ export interface PluginSpec {
 // `extraYaml` appends raw sections such as a connections: list. Callers remove
 // the returned dir on teardown.
 export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
+  const home = makeHome();
   let yaml = '';
   if (extra.length) {
     yaml += 'plugins:\n';
@@ -54,7 +53,7 @@ export interface FarNode {
 // Boots a fresh node on a loopback port and waits for its banner. Its
 // connection socket lives under its home, which the local node dials.
 async function spawnFarNode(label: string): Promise<FarNode> {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
+  const home = makeHome();
   fs.writeFileSync(path.join(home, 'server.yaml'), '');
   const bin = path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
   const port = await freePort();
