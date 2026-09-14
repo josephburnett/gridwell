@@ -11,6 +11,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textcursor"
@@ -18,20 +19,12 @@ import (
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
-// urlUpdateDebounceMs coalesces wheel and keystroke bursts into one
-// history.replaceState, while staying short enough for a quick bookmark.
-const urlUpdateDebounceMs = 150
-
-// framingSaveDebounceMs is longer than the URL debounce, so a continuous
-// pan or zoom persists only its resting state.
-const framingSaveDebounceMs = 600
-
 // scheduleFramingSave arms the debounced framing persister from draw(). Every
 // state change redraws, so there is no per-gesture hook to forget. Writing
 // only at ascent would lose the viewport whenever a grid is left another
 // way.
 func (a *App) scheduleFramingSave() {
-	a.persist.sched.framingSave.arm(framingSaveDebounceMs)
+	a.persist.sched.framingSave.arm(cadence.FramingSaveMs)
 }
 
 // flushFramingSave persists every pane's settled grid framing. persistFraming
@@ -225,7 +218,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 // scheduleURLUpdate marks the URL out of date. Cheap to call from any
 // state-mutating path.
 func (a *App) scheduleURLUpdate() {
-	a.persist.sched.urlUpdate.arm(urlUpdateDebounceMs)
+	a.persist.sched.urlUpdate.arm(cadence.URLUpdateMs)
 }
 
 // writeURLNow is the one history writer, the DOM half of it. Whether to write

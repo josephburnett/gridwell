@@ -14,14 +14,11 @@ import (
 	"strings"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 )
-
-// wsSaveDebounceMs is the persister's coalescing window: a reload inside it
-// loses at most that much arrangement.
-const wsSaveDebounceMs = 500
 
 // wsExpandState is the first-descent capture animation: the pane tile's rect
 // at arm, growing into the level outline. Drawn for as long as the machine
@@ -172,7 +169,7 @@ func (a *App) scheduleWorkspaceSave() {
 	if a.ws.Depth() == 0 {
 		return
 	}
-	a.persist.sched.wsSave.arm(wsSaveDebounceMs)
+	a.persist.sched.wsSave.arm(cadence.WorkspaceSaveMs)
 }
 
 // flushWorkspaceSave persists the current layout if it changed: the

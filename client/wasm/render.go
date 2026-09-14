@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/palette"
@@ -611,7 +612,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
 						drawTraceOutline(a.cctx, left, top,
 							float64(n.W)*cellSize, float64(n.H)*cellSize,
-							anim.FadeAlpha(nowMs(), tr.startMs, traceDurMs))
+							anim.FadeAlpha(nowMs(), tr.startMs, cadence.TraceFadeMs))
 					}
 				}
 				a.drawEdgeIndicators(g.Tiles, pscreen, r)

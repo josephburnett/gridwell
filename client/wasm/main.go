@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
@@ -146,6 +147,10 @@ type App struct {
 
 	// shells owns the PTY lifecycle rules; this file hands it a dialer.
 	shells *shellstream.Registry
+
+	// shellMirrorPasses counts mirror ticks. e2e-only: the mirror writes into a
+	// cache and nothing else reports that it ran.
+	shellMirrorPasses int
 
 	// traces holds the per-pane ascent-trace highlight, ephemeral like selection.
 	traces map[string]traceState
@@ -441,9 +446,6 @@ type traceState struct {
 	tileID  string
 	startMs float64
 }
-
-// traceDurMs is how long the ascent-trace outline takes to fade out.
-const traceDurMs = 2000.0
 
 // ghost is a transient floating render of a tile within one pane.
 // displayedCellSize lerps toward targetCellSize each frame, so the ghost
@@ -838,7 +840,7 @@ func (a *App) frame() {
 func (a *App) pruneTraces(now float64) bool {
 	alive := false
 	for paneID, tr := range a.traces {
-		if anim.FadeAlpha(now, tr.startMs, traceDurMs) <= 0 {
+		if anim.FadeAlpha(now, tr.startMs, cadence.TraceFadeMs) <= 0 {
 			delete(a.traces, paneID)
 			continue
 		}

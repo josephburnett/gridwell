@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -537,18 +538,15 @@ func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 	a.draw()
 }
 
-// shellMirrorIntervalMs is how often a live shell is snapshotted into the
-// shared preview cache. The URL mirror pump cannot do this job: it lives in
-// the Electron main process and cannot see the xterm canvas.
-const shellMirrorIntervalMs = 250
-
 // installShellMirror starts the one mirror interval, alive for the app's life.
+// The URL mirror pump cannot do this job: it lives in the Electron main process
+// and cannot see the xterm canvas.
 func (a *App) installShellMirror() {
 	cb := js.FuncOf(func(js.Value, []js.Value) any {
 		a.mirrorLiveShells()
 		return nil
 	})
-	js.Global().Call("setInterval", cb, shellMirrorIntervalMs)
+	js.Global().Call("setInterval", cb, cadence.ShellMirrorMs)
 }
 
 // mirrorLiveShells snapshots every live shell terminal into the preview cache,
@@ -558,6 +556,7 @@ func (a *App) mirrorLiveShells() {
 	if a.liveOverlaysHidden() {
 		return
 	}
+	a.shellMirrorPasses++
 	for _, pl := range a.locals {
 		conn := pl.shellConn
 		if conn == nil || conn.closed {

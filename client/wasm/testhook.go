@@ -12,6 +12,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
@@ -58,6 +59,22 @@ func (a *App) installTestHook() {
 			}
 			return float64(a.backstop.Duration().Milliseconds())
 		}),
+		// The client's named waits, in ms, so a spec derives its own from the
+		// value instead of restating it; see client/cadence.
+		"cadences": js.FuncOf(func(js.Value, []js.Value) any {
+			return map[string]any{
+				"textSaveMs":      cadence.TextSaveMs,
+				"urlUpdateMs":     cadence.URLUpdateMs,
+				"framingSaveMs":   cadence.FramingSaveMs,
+				"workspaceSaveMs": cadence.WorkspaceSaveMs,
+				"shellMirrorMs":   cadence.ShellMirrorMs,
+				"traceFadeMs":     cadence.TraceFadeMs,
+			}
+		}),
+		// Mirror passes taken since boot. The interval is free-running, with no
+		// arming instant to time from, so its rate is the only thing a spec can
+		// bound; the snapshot itself lands in a cache nothing else reports.
+		"shellMirrors":  js.FuncOf(func(js.Value, []js.Value) any { return a.shellMirrorPasses }),
 		"workspace":     js.FuncOf(a.thWorkspace),
 		"bar":           js.FuncOf(a.thBar),
 		"plugins":       js.FuncOf(a.thPlugins),
@@ -251,7 +268,7 @@ func (a *App) thTraces(_ js.Value, _ []js.Value) any {
 		o := js.Global().Get("Object").New()
 		o.Set("paneId", paneID)
 		o.Set("tileId", tr.tileID)
-		o.Set("alpha", anim.FadeAlpha(now, tr.startMs, traceDurMs))
+		o.Set("alpha", anim.FadeAlpha(now, tr.startMs, cadence.TraceFadeMs))
 		out.Call("push", o)
 	}
 	return out

@@ -7,16 +7,13 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
-
-// textSaveDebounceMs is the delay from the first keystroke since the last save
-// to the next save fire, so continuous typing saves at most once per interval.
-const textSaveDebounceMs = 600
 
 // pxf is the one place the overlay code turns a float coordinate into a CSS
 // style value.
@@ -32,7 +29,7 @@ func setBoundsPx(style js.Value, left, top, width, height float64) {
 // scheduleFileSave no-ops when a save is already pending, so every keystroke
 // can call it.
 func (a *App) scheduleFileSave() {
-	a.persist.sched.textSave.arm(textSaveDebounceMs)
+	a.persist.sched.textSave.arm(cadence.TextSaveMs)
 }
 
 // textFitZoom returns the parent zoom at which the text tile's cell footprint
