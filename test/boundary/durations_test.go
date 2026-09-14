@@ -22,13 +22,11 @@ var allowedUntested = map[string]string{
 	"snapMs":     "the drag ghost's flight to its landing cell: pixels only, gating nothing a test could observe",
 	"snapBackMs": "the drag ghost's flight home after a refused drop: pixels only, gating nothing a test could observe",
 
-	"writeTimeout":             "untested at 2026-09-13; lens 8",
-	"shellMirrorIntervalMs":    "untested at 2026-09-13; lens 8",
-	"textSaveDebounceMs":       "untested at 2026-09-13; lens 8",
-	"urlUpdateDebounceMs":      "untested at 2026-09-13; lens 8",
-	"framingSaveDebounceMs":    "untested at 2026-09-13; lens 8",
-	"wsSaveDebounceMs":         "untested at 2026-09-13; lens 8",
-	"defaultShellWriteTimeout": "untested at 2026-09-13; lens 8",
+	"shellMirrorIntervalMs": "untested at 2026-09-13; lens 8",
+	"textSaveDebounceMs":    "untested at 2026-09-13; lens 8",
+	"urlUpdateDebounceMs":   "untested at 2026-09-13; lens 8",
+	"framingSaveDebounceMs": "untested at 2026-09-13; lens 8",
+	"wsSaveDebounceMs":      "untested at 2026-09-13; lens 8",
 }
 
 // A declared duration is a promise about timing, and lens 8 of the holistic

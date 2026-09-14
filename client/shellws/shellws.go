@@ -17,10 +17,10 @@ import (
 	"github.com/josephburnett/gridwell/client/shellwire"
 )
 
-// writeTimeout bounds one frame write, so a wedged socket surfaces as an error
-// instead of parking the terminal's keystrokes forever. Options.WriteTimeout
-// lowers it for the seam test that wedges a socket for real.
-const writeTimeout = 30 * time.Second
+// DefaultWriteTimeout bounds one frame write, so a wedged socket surfaces as an
+// error instead of parking the terminal's keystrokes forever. It is exported
+// because the seam test that binds it dials this package from outside.
+const DefaultWriteTimeout = 30 * time.Second
 
 type Options struct {
 	// Origin is the page's own http(s) origin; the door is same-origin by
@@ -30,7 +30,8 @@ type Options struct {
 	// its own cookies and forbids setting handshake headers.
 	HTTPClient *http.Client
 	Header     http.Header
-	// WriteTimeout overrides writeTimeout for one dialer; zero is the default.
+	// WriteTimeout overrides DefaultWriteTimeout for one dialer; zero takes
+	// the default.
 	WriteTimeout time.Duration
 }
 
@@ -39,7 +40,7 @@ func Dialer(o Options) shellstream.Dialer {
 		ctx, cancel := context.WithCancel(context.Background())
 		bound := o.WriteTimeout
 		if bound == 0 {
-			bound = writeTimeout
+			bound = DefaultWriteTimeout
 		}
 		c := &conn{wake: make(chan struct{}, 1), ctx: ctx, cancel: cancel, onEnd: onEnd, writeBound: bound}
 		addr, err := shellwire.AttachURL(o.Origin, tileID, cols, rows)
@@ -69,7 +70,7 @@ type conn struct {
 	wake   chan struct{}
 	ctx    context.Context
 	cancel context.CancelFunc
-	// writeBound is this conn's frame-write bound; see writeTimeout.
+	// writeBound is this conn's frame-write bound; see DefaultWriteTimeout.
 	writeBound time.Duration
 
 	once  sync.Once

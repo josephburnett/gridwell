@@ -443,3 +443,21 @@ func TestShellClientSurfacesAWedgedSocket(t *testing.T) {
 		t.Fatalf("a wedged socket parked the terminal for %v; the write bound is %v", 20*bound, bound)
 	}
 }
+
+// Both wedge tests above run at a bound of their own, so neither would notice
+// the declared values drifting, and the door reads the Server's field rather
+// than the constant. Thirty seconds is the budget a briefly stalled peer gets
+// before its socket counts as gone: long enough that a paused viewer or a slow
+// hop is not killed, short enough that nothing holds a PTY for a minute.
+func TestShellWriteBoundsAreTheDeclaredOnes(t *testing.T) {
+	if defaultShellWriteTimeout != 30*time.Second {
+		t.Errorf("the door bounds a PTY-output frame write at %v, want 30s", defaultShellWriteTimeout)
+	}
+	if shellws.DefaultWriteTimeout != 30*time.Second {
+		t.Errorf("the client bounds a keystroke frame write at %v, want 30s", shellws.DefaultWriteTimeout)
+	}
+	srv := mustNew(t, plugin.NewRegistry(), Config{})
+	if srv.shellWriteTimeout != defaultShellWriteTimeout {
+		t.Errorf("New built a server bounding writes at %v, want defaultShellWriteTimeout (%v)", srv.shellWriteTimeout, defaultShellWriteTimeout)
+	}
+}
