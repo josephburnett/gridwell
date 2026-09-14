@@ -21,12 +21,6 @@ import (
 var allowedUntested = map[string]string{
 	"snapMs":     "the drag ghost's flight to its landing cell: pixels only, gating nothing a test could observe",
 	"snapBackMs": "the drag ghost's flight home after a refused drop: pixels only, gating nothing a test could observe",
-
-	"shellMirrorIntervalMs": "untested at 2026-09-13; lens 8",
-	"textSaveDebounceMs":    "untested at 2026-09-13; lens 8",
-	"urlUpdateDebounceMs":   "untested at 2026-09-13; lens 8",
-	"framingSaveDebounceMs": "untested at 2026-09-13; lens 8",
-	"wsSaveDebounceMs":      "untested at 2026-09-13; lens 8",
 }
 
 // A declared duration is a promise about timing, and lens 8 of the holistic
@@ -151,7 +145,8 @@ func declaredDurations(t *testing.T, root string) []durationDecl {
 // goDurations reads the package-level const and var declarations: a value
 // spelled in time units anywhere inside it (a plain product, or a struct
 // literal field like the keepalive parameters and the dial backoff), a
-// declared time.Duration, or a client/wasm millisecond count.
+// declared time.Duration, or a millisecond count named *Ms, wherever it
+// lives: client/cadence owns the shim's, and a wait is a wait in any package.
 func goDurations(t *testing.T, rel, path string) []durationDecl {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -159,7 +154,6 @@ func goDurations(t *testing.T, rel, path string) []durationDecl {
 	if err != nil {
 		t.Fatalf("parse %s: %v", rel, err)
 	}
-	wasm := strings.HasPrefix(rel, filepath.Join("client", "wasm"))
 	var out []durationDecl
 	for _, decl := range f.Decls {
 		gen, ok := decl.(*ast.GenDecl)
@@ -183,7 +177,7 @@ func goDurations(t *testing.T, rel, path string) []durationDecl {
 				})
 			}
 			for i, name := range spec.Names {
-				ms := wasm && msName(name.Name) && i < len(spec.Values) && isNumber(spec.Values[i])
+				ms := msName(name.Name) && i < len(spec.Values) && isNumber(spec.Values[i])
 				if !isDuration && !ms {
 					continue
 				}
