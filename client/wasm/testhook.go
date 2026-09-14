@@ -131,6 +131,7 @@ func (a *App) installTestHook() {
 		"shellStandin": js.FuncOf(a.thShellStandin),
 		"shellText":    js.FuncOf(a.thShellText),
 		"shellFeed":    js.FuncOf(a.thShellFeed),
+		"shellBuffer":  js.FuncOf(a.thShellBuffer),
 		"rawRows":      js.FuncOf(a.thRawRows),
 		"shellCellPx": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// Screen center of terminal cell (col, row), 0-based, so a spec
@@ -200,6 +201,29 @@ func (a *App) thShellText(js.Value, []js.Value) any {
 		out += line.Call("translateToString", true).String() + "\n"
 	}
 	return out
+}
+
+// thShellBuffer returns which of the focused terminal's two buffers is active
+// and where its cursor and scrollback stand, so a spec that cannot find its
+// text says whether the row was erased, scrolled away, or written to the
+// buffer the other one hid. null for no live shell.
+func (a *App) thShellBuffer(js.Value, []js.Value) any {
+	conn := a.shellConnFor(a.tree.Focus)
+	if conn == nil || !conn.term.Truthy() {
+		return nil
+	}
+	buf := conn.term.Get("buffer").Get("active")
+	return map[string]any{
+		"type":     buf.Get("type").String(),
+		"length":   buf.Get("length").Int(),
+		"baseY":    buf.Get("baseY").Int(),
+		"cursorX":  buf.Get("cursorX").Int(),
+		"cursorY":  buf.Get("cursorY").Int(),
+		"cols":     conn.term.Get("cols").Int(),
+		"rows":     conn.term.Get("rows").Int(),
+		"renderer": conn.rendererKind,
+		"closed":   conn.closed,
+	}
 }
 
 // thShellFeed writes a raw string into the focused pane's terminal directly,

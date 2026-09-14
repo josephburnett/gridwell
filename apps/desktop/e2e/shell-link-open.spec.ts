@@ -280,24 +280,34 @@ test('an OSC 8 hyperlink in a shell opens the visit below, not a browser', async
   // scanner cannot see this link. The linkifier's own hyperlink is the only one
   // here.
   const url = `${gw.origin}/wasm_exec.js?osc8=1`;
-  await window.evaluate(
+  const fed = await window.evaluate(
     (u: string) =>
       (window as any).__gridwellTest.shellFeed(
         `\r\n\u001b]8;;${u}\u001b\\OSC8CLICKME\u001b]8;;\u001b\\\r\n`,
       ),
     url,
   );
+  // A feed with no live terminal writes nowhere and says so only in its return
+  // value; unchecked, that reads downstream as "the row never rendered".
+  expect(fed, 'shellFeed found no live terminal').toBe(true);
+
   // The fed row must render before it can be clicked. This poll is a known
   // flake with no mechanism yet: once in a full run it never saw the marker
   // while the same built tree passed four times in isolation.
-  // docs/flake-ledger.md carries the evidence.
+  // docs/flake-ledger.md carries the evidence and asks the next occurrence to
+  // name itself, so the poll carries the whole terminal state: a bare -1 says
+  // only "not in the active buffer", not whether the row was erased, scrolled
+  // away, or written to the buffer the other one hid.
   const markerRow = (t: string) => t.split('\n').findIndex((l) => l.includes('OSC8CLICKME'));
-  await expect
-    .poll(
-      async () => markerRow(await window.evaluate(() => (window as any).__gridwellTest.shellText())),
-      { timeout: 10_000 },
-    )
-    .toBeGreaterThanOrEqual(0);
+  const fedState = async () => {
+    const s = await window.evaluate(() => ({
+      text: (window as any).__gridwellTest.shellText() as string,
+      buf: (window as any).__gridwellTest.shellBuffer(),
+    }));
+    const tail = s.text.split('\n').filter((l: string) => l.trim() !== '').slice(-8);
+    return `row=${markerRow(s.text)} buf=${JSON.stringify(s.buf)} tail=${JSON.stringify(tail)}`;
+  };
+  await expect.poll(fedState, { timeout: 10_000 }).toMatch(/^row=\d/);
   const text: string = await window.evaluate(() => (window as any).__gridwellTest.shellText());
   const row = markerRow(text);
   const pt = await window.evaluate(
