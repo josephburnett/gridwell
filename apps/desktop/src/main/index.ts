@@ -19,10 +19,6 @@ applyUserDataOverride((name, value) => app.setPath(name as Parameters<typeof app
 // artifacts from the terminal's canvas fallback.
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
-// How often live views are captured so other panes showing the same tile
-// mirror them; see MirrorPump in capture.ts.
-const MIRROR_INTERVAL_MS = 250;
-
 // Gridwell desktop entry.
 
 let sidecar: Sidecar | null = null;
@@ -109,7 +105,7 @@ async function boot(): Promise<void> {
 
   // Each frame lands in the tile's preview cache, and so in every frozen pane
   // showing it.
-  pump = new MirrorPump(MIRROR_INTERVAL_MS, async () => {
+  pump = new MirrorPump(async () => {
     for (const paneId of reg.paneIds()) {
       const jpeg = await reg.capture(paneId);
       const tileId = reg.tileIdFor(paneId);

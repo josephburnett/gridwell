@@ -91,30 +91,48 @@ function settleWithin<T>(p: Promise<T>, ms: number): Promise<Settled<T>> {
   });
 }
 
-// MirrorPump captures every live pane on a timer, so a tile mirrored in a
-// second pane stays fresh. The cadence is low: previews need no frame rate.
-export class MirrorPump {
-  private timer: NodeJS.Timeout | null = null;
-  private readonly intervalMs: number;
-  private readonly tick: () => Promise<void>;
+// How often live views are captured so other panes showing the same tile
+// mirror them. Previews need no frame rate, so the cadence is low.
+export const MIRROR_INTERVAL_MS = 250;
 
-  constructor(intervalMs: number, tick: () => Promise<void>) {
-    this.intervalMs = intervalMs;
-    this.tick = tick;
+type Timer = unknown;
+
+interface PumpTimers {
+  // Seams, so a test can read the scheduled cadence instead of waiting it out.
+  setTimer?: (fn: () => void, ms: number) => Timer;
+  clearTimer?: (timer: Timer) => void;
+}
+
+// MirrorPump captures every live pane on a timer, so a tile mirrored in a
+// second pane stays fresh. It owns the cadence: a caller that picked its own
+// would be a second copy of a decision about how fresh a preview has to be.
+export class MirrorPump {
+  private timer: Timer = null;
+  private readonly setTimer: (fn: () => void, ms: number) => Timer;
+  private readonly clearTimer: (timer: Timer) => void;
+
+  constructor(
+    private readonly tick: () => Promise<void>,
+    timers: PumpTimers = {},
+  ) {
+    this.setTimer = timers.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+    this.clearTimer = timers.clearTimer ?? ((t) => clearTimeout(t as NodeJS.Timeout));
   }
 
   start(): void {
     if (this.timer) return;
     const loop = async () => {
+      // One failed round must not end the pump: every mirrored preview would
+      // stay frozen until the app restarts.
       await this.tick().catch(() => {});
-      if (this.timer) this.timer = setTimeout(loop, this.intervalMs);
+      if (this.timer) this.timer = this.setTimer(loop, MIRROR_INTERVAL_MS);
     };
-    this.timer = setTimeout(loop, this.intervalMs);
+    this.timer = this.setTimer(loop, MIRROR_INTERVAL_MS);
   }
 
   stop(): void {
     if (this.timer) {
-      clearTimeout(this.timer);
+      this.clearTimer(this.timer);
       this.timer = null;
     }
   }
