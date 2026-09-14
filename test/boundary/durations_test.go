@@ -22,9 +22,6 @@ var allowedUntested = map[string]string{
 	"snapMs":     "the drag ghost's flight to its landing cell: pixels only, gating nothing a test could observe",
 	"snapBackMs": "the drag ghost's flight home after a refused drop: pixels only, gating nothing a test could observe",
 
-	"MIRROR_INTERVAL_MS":       "untested at 2026-09-13; lens 8",
-	"SubscribeRetry":           "untested at 2026-09-13; lens 8",
-	"StreamEndPause":           "untested at 2026-09-13; lens 8",
 	"writeTimeout":             "untested at 2026-09-13; lens 8",
 	"shellMirrorIntervalMs":    "untested at 2026-09-13; lens 8",
 	"textSaveDebounceMs":       "untested at 2026-09-13; lens 8",
