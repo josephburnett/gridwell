@@ -19,17 +19,19 @@ test('a bare LF keeps the cursor column (#211)', async ({ gw, window }) => {
   await gw.dragCreate('shell', sx, sy);
   await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  // tmux's attach paint erases anything written before it; one owner decides
+  // when a write can land (driver.shellAttached).
+  await gw.shellAttached();
 
   // \r\n starts at column 0 whatever the prompt; the marker after the bare \n
-  // must land at column 13. tmux may repaint over the injected text at any
-  // moment, so each poll attempt feeds and reads in one go.
+  // must land at column 13.
+  const fed = await window.evaluate(() =>
+    (window as any).__gridwellTest.shellFeed('\r\nCOLTEST-12345\nEND-MARKER\r\n'),
+  );
+  expect(fed, 'shellFeed found no live terminal').toBe(true);
   await expect
     .poll(
       async () => {
-        const fed = await window.evaluate(() =>
-          (window as any).__gridwellTest.shellFeed('\r\nCOLTEST-12345\nEND-MARKER\r\n'),
-        );
-        if (!fed) return 'feed refused';
         const lines = ((await shellText(window)) as string).split('\n');
         return lines.find((l) => l.includes('END-MARKER')) ?? 'marker not visible';
       },

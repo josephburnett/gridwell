@@ -276,6 +276,13 @@ test('an OSC 8 hyperlink in a shell opens the visit below, not a browser', async
     };
   });
 
+  // The renderer attaching says a terminal exists, not that its PTY does: the
+  // conn is registered before the /shell socket is dialled. tmux clears the
+  // screen when it paints the attach, so a row written before that is erased
+  // and never returns — this test's flake. The neighbours above are immune
+  // because their round trip through the PTY is itself the proof.
+  await gw.shellAttached();
+
   // The url rides the sequence and the cells say only OSC8CLICKME, so the url
   // scanner cannot see this link. The linkifier's own hyperlink is the only one
   // here.
@@ -291,13 +298,9 @@ test('an OSC 8 hyperlink in a shell opens the visit below, not a browser', async
   // value; unchecked, that reads downstream as "the row never rendered".
   expect(fed, 'shellFeed found no live terminal').toBe(true);
 
-  // The fed row must render before it can be clicked. This poll is a known
-  // flake with no mechanism yet: once in a full run it never saw the marker
-  // while the same built tree passed four times in isolation.
-  // docs/flake-ledger.md carries the evidence and asks the next occurrence to
-  // name itself, so the poll carries the whole terminal state: a bare -1 says
-  // only "not in the active buffer", not whether the row was erased, scrolled
-  // away, or written to the buffer the other one hid.
+  // The fed row must render before it can be clicked. This poll was the flake
+  // the shellAttached wait above closes; it carries the whole terminal state so
+  // a bare -1 can never again mean only "not found". docs/flake-ledger.md.
   const markerRow = (t: string) => t.split('\n').findIndex((l) => l.includes('OSC8CLICKME'));
   const fedState = async () => {
     const s = await window.evaluate(() => ({

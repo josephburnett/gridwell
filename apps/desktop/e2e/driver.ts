@@ -392,6 +392,26 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
+  // Blocks until the focused pane's terminal is attached to its PTY and tmux
+  // has painted the attach. That paint CLEARS the screen, so anything written
+  // into the terminal before it (shellFeed) is erased and never returns. A
+  // command's own output is the proof: the PTY carries input only once
+  // attached, and tmux paints before it reads. Matched on the output row, never
+  // the echoed command line, which carries the marker too.
+  async shellAttached(timeout = 30_000): Promise<void> {
+    const marker = `gw-attached-${Math.random().toString(36).slice(2, 8)}`;
+    await this.win.keyboard.type(`printf '%s\\n' ${marker}`);
+    await this.win.keyboard.press('Enter');
+    await this.win.waitForFunction(
+      (m) =>
+        ((window as any).__gridwellTest.shellText() as string)
+          .split('\n')
+          .some((l) => l.trim() === m),
+      marker,
+      { timeout },
+    );
+  }
+
   // Single-clicks a cell's center to descend into the tile there.
   async descendCell(cx: number, cy: number): Promise<void> {
     const f = await this.focused();
