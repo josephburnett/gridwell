@@ -240,3 +240,58 @@ func TestDurableFiles(t *testing.T) {
 		t.Fatalf("DurableFiles = %v", got)
 	}
 }
+
+// Save writes the minted ids into the document as it was loaded and nothing
+// else: a default the file left absent stays absent, a path stays in the
+// user's spelling, and the user's comments stay. Anything more is a config
+// write the user did not make, and an explicit web.bind is how the desktop's
+// --bind-default stops winning.
+func TestSaveWritesOnlyTheMintedIDs(t *testing.T) {
+	dir := t.TempDir()
+	src := "# my node\nplugins:\n  - kind: fs # files\n    binary: ~/bin/gridwell-plugin-fs\n    config:\n      root: ~/notes\n"
+	p := write(t, dir, src)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !Mint(cfg) {
+		t.Fatal("expected a mint")
+	}
+	if err := Save(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	got := string(raw)
+	for _, want := range []string{"id: " + cfg.ID, "id: " + cfg.Plugins[0].ID, "~/bin/gridwell-plugin-fs", "~/notes", "# my node", "# files"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("saved file lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "bind") || strings.Contains(got, "/home/") {
+		t.Errorf("saved file carries a derived field:\n%s", got)
+	}
+	back, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Web.BindSet || back.Web.Bind != Defaults.Web.Bind {
+		t.Fatalf("a bind the file never had is now written down: %+v", back.Web)
+	}
+	if back.ID != cfg.ID || back.Plugins[0].ID != cfg.Plugins[0].ID {
+		t.Fatalf("ids did not round-trip: %+v vs %+v", back, cfg)
+	}
+}
+
+// A fresh home has no file to edit, so the mint writes the id and only the id.
+func TestSaveFreshHomeWritesOnlyTheID(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "server.yaml")
+	fresh := Defaults
+	Mint(&fresh)
+	if err := Save(p, &fresh); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	if string(raw) != "id: "+fresh.ID+"\n" {
+		t.Fatalf("fresh save = %q, want the id alone", raw)
+	}
+}

@@ -52,6 +52,12 @@ type ServerConfig struct {
 	WebPassword string `yaml:"-"`
 	// CacheDir is derived by serve, <home>/cache; empty disables caching.
 	CacheDir string `yaml:"-"`
+
+	// doc is the file as loaded, comments and all. Save edits the minted ids
+	// into it and writes it back, so a default Parse filled in or a path it
+	// expanded can never reach the file: the struct is what the node reads,
+	// the document is what the user wrote. nil is a home with no file yet.
+	doc *yaml.Node
 }
 
 type WebConfig struct {
@@ -170,6 +176,13 @@ func Parse(data []byte) (*ServerConfig, error) {
 	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
 		return nil, retiredKeyHint(err)
 	}
+	// The same bytes a second time, as a document: the decode above already
+	// refused every unknown key, so this cannot fail on shape.
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	cfg.doc = &doc
 	// Presence first: the default below can no longer tell it apart.
 	cfg.Web.BindSet = cfg.Web.Bind != ""
 	if cfg.Web.Bind == "" {
@@ -221,10 +234,17 @@ func Mint(cfg *ServerConfig) bool {
 	return changed
 }
 
-// Save writes cfg 0600 through a temp file and a rename, so a crash never
-// loses the only copy of the node's ids.
+// Save writes the minted ids into the loaded document and writes it back
+// 0600, through a temp file and a rename so a crash never loses the only copy
+// of the node's ids. It is the one config write, and it writes only what Mint
+// minted: a field the file left absent stays absent, and the document's
+// comments and spelling survive.
 func Save(path string, cfg *ServerConfig) error {
-	out, err := yaml.Marshal(cfg)
+	root, err := mintedDocument(cfg)
+	if err != nil {
+		return err
+	}
+	out, err := yaml.Marshal(root)
 	if err != nil {
 		return fmt.Errorf("config: marshal: %w", err)
 	}
@@ -239,6 +259,64 @@ func Save(path string, cfg *ServerConfig) error {
 		return fmt.Errorf("config: rename %s: %w", path, err)
 	}
 	return nil
+}
+
+// mintedDocument is the loaded document with cfg's ids set on it. A home with
+// no file gets a document holding the node id alone, which is all a fresh
+// Defaults has to mint; anything else on a nil document has no user spelling
+// to keep and is refused rather than invented.
+func mintedDocument(cfg *ServerConfig) (*yaml.Node, error) {
+	root := cfg.doc
+	if root == nil || len(root.Content) == 0 {
+		if len(cfg.Plugins) > 0 {
+			return nil, errors.New("config: cannot mint plugin ids into a document that was never loaded")
+		}
+		root = &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	}
+	top := root.Content[0]
+	if top.Kind != yaml.MappingNode {
+		return nil, errors.New("config: server.yaml is not a mapping")
+	}
+	setScalar(top, "id", cfg.ID)
+	plugins := mappingValue(top, "plugins")
+	if plugins == nil {
+		if len(cfg.Plugins) > 0 {
+			return nil, errors.New("config: plugins declared but the document has no plugins list")
+		}
+		return root, nil
+	}
+	if plugins.Kind != yaml.SequenceNode || len(plugins.Content) != len(cfg.Plugins) {
+		return nil, fmt.Errorf("config: the document lists %d plugins, the config %d", len(plugins.Content), len(cfg.Plugins))
+	}
+	for i, item := range plugins.Content {
+		if item.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("config: plugins[%d] is not a mapping", i)
+		}
+		setScalar(item, "id", cfg.Plugins[i].ID)
+	}
+	return root, nil
+}
+
+// mappingValue is the value node under key in a mapping, nil when absent.
+func mappingValue(m *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// setScalar sets key to value in a mapping, in place where the key exists and
+// first otherwise, so a minted id lands where a hand-written one would.
+func setScalar(m *yaml.Node, key, value string) {
+	if v := mappingValue(m, key); v != nil {
+		v.Kind, v.Tag, v.Value = yaml.ScalarNode, "!!str", value
+		return
+	}
+	k := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
+	v := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+	m.Content = append([]*yaml.Node{k, v}, m.Content...)
 }
 
 // validateIDs is the one door that catches a hand-edited id before it is
