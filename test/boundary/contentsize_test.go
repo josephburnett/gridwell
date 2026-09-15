@@ -32,8 +32,7 @@ func TestContentSizesHaveOneOwner(t *testing.T) {
 			return rerr
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "vendor", "gen":
+			if pruned(root, path, d) || d.Name() == "gen" {
 				return fs.SkipDir
 			}
 			return nil

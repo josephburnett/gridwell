@@ -47,13 +47,12 @@ var kindLiteralOK = map[string]string{
 // vocabulary that nothing tells you has drifted.
 func TestKindVocabularyOwner(t *testing.T) {
 	root := repoRoot(t)
-	skipDir := map[string]bool{".git": true, "node_modules": true, "gen": true}
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if skipDir[d.Name()] {
+			if pruned(root, path, d) || d.Name() == "gen" {
 				return filepath.SkipDir
 			}
 			return nil

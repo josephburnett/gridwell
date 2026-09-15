@@ -250,8 +250,7 @@ func walkRepo(t *testing.T, root string, visit func(rel, path string, data []byt
 			return err
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "vendor":
+			if pruned(root, path, d) {
 				return fs.SkipDir
 			}
 			return nil

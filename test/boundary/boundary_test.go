@@ -235,13 +235,12 @@ func TestOneDoorServerOwner(t *testing.T) {
 	httpNeedle := "&http.Server" + "{"
 	grpcNeedle := "grpc.NewServer" + "("
 	unixNeedle := "net.Listen(" + `"unix"`
-	skipDir := map[string]bool{".git": true, "node_modules": true}
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if skipDir[d.Name()] {
+			if pruned(root, path, d) {
 				return filepath.SkipDir
 			}
 			return nil
