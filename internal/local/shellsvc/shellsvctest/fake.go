@@ -21,6 +21,7 @@ type FakeStreamer struct {
 	sessions []*FakeSession
 	killed   []string
 	PaneCmd  string // canned PaneCommand answer
+	PaneErr  error  // when set, PaneCommand fails with it: tmux unreachable
 	// OpenErr, when set, makes every OpenSession fail with it and open no
 	// session, which is how the real streamer behaves when the PTY layer
 	// refuses: no tmux server, a failed exec, or a platform with no PTY.
@@ -80,6 +81,9 @@ func (f *FakeStreamer) ListLiveTileIDs() ([]string, error) {
 func (f *FakeStreamer) PaneCommand(string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.PaneErr != nil {
+		return "", f.PaneErr
+	}
 	return f.PaneCmd, nil
 }
 

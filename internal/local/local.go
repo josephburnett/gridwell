@@ -6,6 +6,7 @@ package local
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 
@@ -419,7 +420,15 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 		}
 		return status.Error(codes.Internal, err.Error())
 	}
-	defer p.shell.Release(tileID, session, stopOld, func() { p.captureShellTitle(tileID) })
+	// Detach fires after the PTY is closed and this stream is already ending,
+	// so there is no channel back to the client and the log is the surface. The
+	// user is owed nothing more: a capture that does not land leaves the tile
+	// under the name it is already showing.
+	defer p.shell.Release(tileID, session, stopOld, func() {
+		if err := p.captureShellTitle(tileID); err != nil {
+			log.Printf("gridwell: home: shell title capture for tile %s: %v", tileID, err)
+		}
+	})
 
 	ctx, cancel := context.WithCancel(sctx)
 	defer cancel()
@@ -466,13 +475,18 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 }
 
 // captureShellTitle stamps the tile's label with its tmux session's foreground
-// command on detach, the way a url tile captures the page title. Best-effort.
-func (p *Plugin) captureShellTitle(tileID string) {
+// command on detach, the way a url tile captures the page title. It returns
+// why it could not, for the one detach log site.
+func (p *Plugin) captureShellTitle(tileID string) error {
 	cmd, err := p.shell.PaneCommand(tileID)
-	if err != nil || cmd == "" {
-		return
+	if err != nil {
+		return fmt.Errorf("read the foreground command: %w", err)
 	}
-	_ = p.st.SetTileAlt(context.Background(), tileID, cmd, false)
+	if cmd == "" {
+		return nil // tmux answers "" for a session that is gone: nothing to stamp
+	}
+	// The detach context outlives the stream's, which is already cancelled.
+	return p.st.SetTileAlt(context.Background(), tileID, cmd, false)
 }
 
 func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
