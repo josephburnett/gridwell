@@ -345,6 +345,8 @@ func decodeBase64(v js.Value) []byte {
 	}
 	b, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
+		// Both callers are preview frames, where no bytes and unusable bytes
+		// are the same thing: the tile keeps the face it had.
 		return nil
 	}
 	return b

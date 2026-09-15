@@ -181,6 +181,8 @@ export class WebviewRegistry {
         source: 'electron:webview',
         message: `pane ${paneId}: live view replaced (${stale.tileId} → ${tileId}) without a close; its final frame is lost`,
       });
+      // remove() reports its own failures and the lost frame is already on
+      // the strip, so a rejection here must not stop the replacement view.
       await this.remove(paneId).catch(() => {});
     }
     const view = new WebContentsView({

@@ -2,12 +2,14 @@ package connection
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -124,5 +126,46 @@ func TestLandingCheckHealsWhenTheTargetComesBack(t *testing.T) {
 	}
 	if d := s.Rows(ctx)[0].StatusDetail; d != "" {
 		t.Fatalf("status detail = %q, want it cleared", d)
+	}
+}
+
+// A landing the node cannot write down is a connection that will never serve:
+// nothing through it resolves and the next boot learns it all over again. The
+// connection's own row is the only place that can say so, so the store failure
+// has to reach it like a dial failure does.
+func TestLandingThatCannotBeStoredSaysSoOnTheRow(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := NewDB(st.SQL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Ensure(ctx, "rtb"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(db, landingDialer("rnode1/7"), "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	// The store is gone under a connection whose landing is still unlearned,
+	// which is what a first learn against a broken DB meets.
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s.ConnectAll(ctx)
+	rows := s.Rows(ctx)
+	if len(rows) != 1 {
+		t.Fatalf("rows = %+v, want one", rows)
+	}
+	if rows[0].StatusDetail == "" {
+		t.Fatal("the row says nothing: a landing that cannot be stored leaves the connection dead with no reason given")
+	}
+	if rows[0].RootGridID != "" {
+		t.Fatalf("root = %q, want none: the landing was never written down", rows[0].RootGridID)
 	}
 }

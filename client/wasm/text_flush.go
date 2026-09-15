@@ -59,26 +59,25 @@ func (a *App) flushTileContent(tileID string) {
 	a.postTileContent(cid, t, data)
 }
 
-// postTileContent is flushTileContent's ordinary arm: the bytes go through
-// the per-tile serial save queue.
+// postTileContent is flushTileContent's ordinary arm. What each state of the
+// owner row does with the bytes is textedit.DecideFlush's; the bytes stay
+// dirty in every arm but the post, so the sweep keeps them.
 func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
-	if t == nil {
+	editable := t != nil && rpc.TextDocument(t) && !a.tileReadOnly(t)
+	switch textedit.DecideFlush(t != nil, editable, a.fetch.tileLoadFailed.Has(cid)) {
+	case textedit.FlushFetchRow:
 		// The owner row is in no cached grid, which is not a dead end: a
 		// leaf link's target may live in a grid this client never fetched.
-		// Only a definitive server answer reports the orphan; a transport
-		// failure retries quietly.
-		if a.fetch.tileLoadFailed.Has(cid) {
-			a.reportErr(errsurface.Error, "textedit",
-				"unsaved text edit has no destination — its tile is no longer known")
-			return
-		}
 		a.fetchTileByID(cid)
-		return
+	case textedit.FlushNoRow:
+		a.reportErr(errsurface.Error, "textedit",
+			"unsaved text edit has no destination — its tile is no longer known")
+	case textedit.FlushUnwritable:
+		a.reportErr(errsurface.Error, "textedit",
+			"unsaved text edit is not being saved — its tile no longer accepts edits")
+	case textedit.FlushPost:
+		a.enqueueTextSave(t.GridId, t.Id, cid, t.Version, data)
 	}
-	if !rpc.TextDocument(t) || a.tileReadOnly(t) {
-		return
-	}
-	a.enqueueTextSave(t.GridId, t.Id, cid, t.Version, data)
 }
 
 // beaconTileContent is flushTileContent's beforeunload arm. What may write,

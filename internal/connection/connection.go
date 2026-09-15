@@ -485,6 +485,10 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 	}
 	if root == "" {
 		if err := s.db.SetRemoteRoot(ctx, name, info.RootGridId); err != nil {
+			// Unlearned, the connection never verifies and nothing through it
+			// resolves. kickRootFetch drops this error, so the row is the only
+			// place that can say why.
+			s.setRootErr(name, err.Error())
 			return "", err
 		}
 	}

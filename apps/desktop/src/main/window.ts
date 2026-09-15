@@ -39,6 +39,8 @@ export function createRootWindow(origin: string): RootWindow {
 
   // ?e2e=1 makes the wasm client install its read-only window.__gridwellTest.
   const query = process.env.GRIDWELL_E2E === '1' ? '?e2e=1' : '';
+  // A rejection needs no notice of ours: no renderer exists yet to draw one,
+  // and Chromium paints its own error page in the window.
   void win.loadURL(origin + '/' + query);
 
   // Forwarding keeps a failure in the app's log after the notice expires off
