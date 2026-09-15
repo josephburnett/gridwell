@@ -11,6 +11,7 @@ import {
   composeZoom,
   serializeHistory,
   reviveNavigation,
+  restoreRefusedMessage,
   URL_MIN_LAYOUT_WIDTH,
   shouldSurfaceFailLoad,
   failLoadMessage,
@@ -237,7 +238,16 @@ export class WebviewRegistry {
     // the tile's user-editable address.
     const nav = reviveNavigation(url, history);
     if (nav.kind === 'restore') {
-      void view.webContents.navigationHistory.restore({ entries: nav.history.entries, index: nav.history.index });
+      // A url Chromium refuses outright commits nothing and fires no
+      // did-fail-load, so the pane sits blank and this report is the only
+      // notice. Loading the address after it would only repeat the refusal:
+      // reviveNavigation restores a stack only when its active entry is that
+      // same address.
+      view.webContents.navigationHistory
+        .restore({ entries: nav.history.entries, index: nav.history.index })
+        .catch((err: unknown) => {
+          this.cb.onError?.({ source: 'electron:webview', message: restoreRefusedMessage(paneId, err) });
+        });
     } else {
       void view.webContents.loadURL(url);
     }
