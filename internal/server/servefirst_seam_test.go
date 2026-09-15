@@ -31,6 +31,17 @@ func (f *farConnection) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse
 	return &pb.InfoResponse{}, nil
 }
 
+// Handshake is what the transport declares about itself: one connection, its
+// landing already learned. The router's handshake reads the rows from here.
+func (f *farConnection) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: farConn, Label: "Geneva", RootGridId: farRoot}}}, nil
+}
+
+const (
+	farConn = "geneva"
+	farRoot = farConn + "/rnode1/g1"
+)
+
 func (f *farConnection) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	resp := &pb.GetGridResponse{Grid: &pb.Grid{Id: in.GridId}}
 	for i := int32(0); i < f.tiles.Load(); i++ {
@@ -76,11 +87,8 @@ func TestServeFirstEventReachesTheClient(t *testing.T) {
 	// past it, so every read serves the remembering and revalidates — the
 	// aged-cache shape without the wait.
 	front := cache.Front(far, sourcecache.Options{Prefetch: true, FreshWindow: time.Millisecond})
-	const conn = "geneva"
-	root := conn + "/rnode1/g1"
-	reg.SetTransport(front, func(context.Context) []plugin.ConnectionRow {
-		return []plugin.ConnectionRow{{Name: conn, Label: "Geneva", RootGridID: root}}
-	}, nil)
+	root := farRoot
+	reg.SetTransport(front, nil)
 
 	const nodeID = "lnode1"
 	srv := mustNew(t, reg, Config{ID: nodeID})

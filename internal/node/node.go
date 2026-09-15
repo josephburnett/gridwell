@@ -239,15 +239,7 @@ func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerCon
 		return err
 	}
 	impl.ConnectAll(context.Background())
-	rows := func(ctx context.Context) []plugin.ConnectionRow {
-		out := []plugin.ConnectionRow{}
-		for _, r := range impl.Rows(ctx) {
-			out = append(out, plugin.ConnectionRow{Name: r.Name, Label: r.Label, RootGridID: r.RootGridID,
-				StatusDetail: r.StatusDetail, ViewCx: r.ViewCx, ViewCy: r.ViewCy, ViewZoom: r.ViewZoom})
-		}
-		return out
-	}
-	reg.SetTransport(front(impl), rows, func() { closeImpl(impl) })
+	reg.SetTransport(front(impl), func() { closeImpl(impl) })
 	return nil
 }
 

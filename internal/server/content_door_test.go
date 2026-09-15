@@ -274,7 +274,7 @@ func TestContentDoorThroughAConnection(t *testing.T) {
 	transport.ConnectAll(context.Background())
 
 	reg := plugin.NewRegistry()
-	reg.SetTransport(transport, nil, nil)
+	reg.SetTransport(transport, nil)
 	srv := mustNew(t, reg, Config{ID: "lnode1"})
 	hs := serveWeb(t, srv)
 

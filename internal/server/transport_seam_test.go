@@ -153,14 +153,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	localReg := plugin.NewRegistry()
 	localReg.Register(localNodeID, "home", homeClient, nil)
 	localReg.SetLabel(localNodeID, "home")
-	localReg.SetTransport(tClient, func(ctx context.Context) []plugin.ConnectionRow {
-		var out []plugin.ConnectionRow
-		for _, r := range transport.Rows(ctx) {
-			out = append(out, plugin.ConnectionRow{Name: r.Name, Label: r.Label, RootGridID: r.RootGridID,
-				StatusDetail: r.StatusDetail, ViewCx: r.ViewCx, ViewCy: r.ViewCy, ViewZoom: r.ViewZoom})
-		}
-		return out
-	}, nil)
+	localReg.SetTransport(tClient, nil)
 	localSrv := servertest.New(t, localReg, server.Config{ID: localNodeID})
 	localHTTP := servertest.Serve(t, localSrv)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())

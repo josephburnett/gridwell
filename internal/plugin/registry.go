@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"context"
 	"sync"
 
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -25,17 +24,10 @@ type Registry struct {
 	closers map[string]func()
 	// transport is the node's connection namespace, "<id>/<conn>/…". It is
 	// not a plugin: the node's id qualifies it, so it has no uuid of its own
-	// and never lists in Ordered.
+	// and never lists in Ordered. What it declares about its connections is
+	// its own Handshake's answer, asked like any other namespace's.
 	transport      namespace.Namespace
-	transportRows  func(context.Context) []ConnectionRow
 	transportClose func()
-}
-
-// ConnectionRow mirrors internal/connection.Row, here so the registry needs no
-// transport import.
-type ConnectionRow struct {
-	Name, Label, RootGridID, StatusDetail string
-	ViewCx, ViewCy, ViewZoom              float64
 }
 
 func NewRegistry() *Registry {
@@ -88,22 +80,11 @@ func (r *Registry) Ordered() []struct{ UUID, Kind string } {
 	return out
 }
 
-// SetTransport installs the connection namespace, its row lister for the
-// handshake, and the closer Close runs.
-func (r *Registry) SetTransport(ns namespace.Namespace, rows func(context.Context) []ConnectionRow, closer func()) {
+// SetTransport installs the connection namespace and the closer Close runs.
+func (r *Registry) SetTransport(ns namespace.Namespace, closer func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.transport, r.transportRows, r.transportClose = ns, rows, closer
-}
-
-func (r *Registry) Connections(ctx context.Context) []ConnectionRow {
-	r.mu.RLock()
-	rows := r.transportRows
-	r.mu.RUnlock()
-	if rows == nil {
-		return nil
-	}
-	return rows(ctx)
+	r.transport, r.transportClose = ns, closer
 }
 
 func (r *Registry) Transport() (namespace.Namespace, bool) {
@@ -129,7 +110,7 @@ func (r *Registry) Close() {
 	if r.transportClose != nil {
 		r.transportClose()
 	}
-	r.transport, r.transportRows, r.transportClose = nil, nil, nil
+	r.transport, r.transportClose = nil, nil
 	r.clients = make(map[string]namespace.Namespace)
 	r.kinds = make(map[string]string)
 	r.labels = make(map[string]string)

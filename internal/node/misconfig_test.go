@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 )
 
@@ -143,11 +144,19 @@ func TestStartServesWhenTheRemoteIsMerelyUnreachable(t *testing.T) {
 		t.Fatalf("an unreachable remote must not fail the boot: %v", err)
 	}
 	defer n.Close()
-	rows := n.Reg.Connections(t.Context())
+	transport, ok := n.Reg.Transport()
+	if !ok {
+		t.Fatal("no transport installed")
+	}
+	hs, err := transport.Handshake(t.Context(), &pb.HandshakeRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := hs.Connections
 	if len(rows) != 1 {
 		t.Fatalf("rows = %+v", rows)
 	}
-	if rows[0].RootGridID != "" || rows[0].StatusDetail == "" {
+	if rows[0].RootGridId != "" || rows[0].StatusDetail == "" {
 		t.Fatalf("a dark connection must be pending with its reason on the row, got %+v", rows[0])
 	}
 }

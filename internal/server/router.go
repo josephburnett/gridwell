@@ -203,16 +203,16 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 				resp.HomeViewCx, resp.HomeViewCy, resp.HomeViewZoom = p.RootViewCx, p.RootViewCy, p.RootViewZoom
 			}
 		}
-		// One row per connection, under the node's own id.
-		for _, c := range rt.srv.pluginReg.Connections(ctx) {
-			row := &pb.ConnectionInfo{
-				Uuid: rpc.QualifyID(rt.srv.cfg.ID, c.Name), Label: c.Label,
-				RootViewCx: c.ViewCx, RootViewCy: c.ViewCy, RootViewZoom: c.ViewZoom, StatusDetail: c.StatusDetail,
+		// One row per connection, under the node's own id. What a connection
+		// is, its landing and its status, is the transport's own handshake
+		// (connection.Server.Rows), asked here as every namespace is asked and
+		// re-qualified one hop, so no second row shape can drift from it.
+		if t, ok := rt.srv.pluginReg.Transport(); ok {
+			tr, err := t.Handshake(ctx, &pb.HandshakeRequest{})
+			if err != nil {
+				return nil, err
 			}
-			if c.RootGridID != "" {
-				row.RootGridId = rpc.QualifyID(rt.srv.cfg.ID, c.RootGridID)
-			}
-			resp.Connections = append(resp.Connections, row)
+			resp.Connections = rpc.TransitQualifyPluginList(rt.srv.cfg.ID, tr).Connections
 		}
 	}
 	return resp, nil
