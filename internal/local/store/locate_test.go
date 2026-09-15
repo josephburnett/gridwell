@@ -85,7 +85,7 @@ func TestSearchText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetTileAlt(ctx, mustTileID(t, named.Id), "Gopher Conference", true); err != nil {
+	if err := s.SetTileAlt(ctx, named.Id, "Gopher Conference", true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -129,14 +129,4 @@ func TestSearchText(t *testing.T) {
 	if res, _ := s.Search(ctx, "gopher", 0); len(res) != 2 {
 		t.Errorf("scratch tile surfaced: %d results, want still 2", len(res))
 	}
-}
-
-// mustTileID parses a store-local tile id for direct store helpers.
-func mustTileID(t *testing.T, id string) int64 {
-	t.Helper()
-	n, err := parseID(id)
-	if err != nil {
-		t.Fatalf("parse id %q: %v", id, err)
-	}
-	return n
 }

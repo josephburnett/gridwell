@@ -154,7 +154,7 @@ var versionCases = []versionCase{
 		// The shell detach path baking in the tmux foreground command.
 		name: "SetTileAlt/automatic capture", subject: shellSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			return s.SetTileAlt(ctx, mustParseID(t, tile.Id), "vim CLAUDE.md", false)
+			return s.SetTileAlt(ctx, tile.Id, "vim CLAUDE.md", false)
 		},
 	},
 	{

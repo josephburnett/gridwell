@@ -73,7 +73,11 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 // gesture, which latches alt_user; user=false is an automatic capture, which
 // no-ops once the user owns the name. RenameTile is the versioned wire verb
 // and shares setAltTx, so the latch arbitration has one implementation.
-func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string, user bool) error {
+func (s *Store) SetTileAlt(ctx context.Context, tileIDStr, alt string, user bool) error {
+	tileID, err := parseID(tileIDStr)
+	if err != nil {
+		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		if _, err := s.loadTile(ctx, tx, tileID); err != nil {
 			return err

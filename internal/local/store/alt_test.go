@@ -17,10 +17,9 @@ func TestUserRenameWinsOverCaptures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}
-	id := mustParseID(t, tile.Id)
 
 	// A capture before any rename lands normally.
-	if err := s.SetTileAlt(ctx, id, "captured-title", false); err != nil {
+	if err := s.SetTileAlt(ctx, tile.Id, "captured-title", false); err != nil {
 		t.Fatalf("capture: %v", err)
 	}
 	if got := altOf(t, s, tile.Id); got != "captured-title" {
@@ -28,13 +27,13 @@ func TestUserRenameWinsOverCaptures(t *testing.T) {
 	}
 
 	// The user renames: this owns the name from now on.
-	if err := s.SetTileAlt(ctx, id, "my-name", true); err != nil {
+	if err := s.SetTileAlt(ctx, tile.Id, "my-name", true); err != nil {
 		t.Fatalf("user rename: %v", err)
 	}
 
 	// A later capture must NOT overwrite (and must not bump the version).
 	before, _ := s.GetTile(ctx, tile.Id)
-	if err := s.SetTileAlt(ctx, id, "sneaky-capture", false); err != nil {
+	if err := s.SetTileAlt(ctx, tile.Id, "sneaky-capture", false); err != nil {
 		t.Fatalf("post-rename capture errored (should no-op): %v", err)
 	}
 	after, _ := s.GetTile(ctx, tile.Id)
@@ -54,7 +53,7 @@ func TestUserRenameWinsOverCaptures(t *testing.T) {
 	}
 
 	// A SECOND user rename does overwrite.
-	if err := s.SetTileAlt(ctx, id, "renamed-again", true); err != nil {
+	if err := s.SetTileAlt(ctx, tile.Id, "renamed-again", true); err != nil {
 		t.Fatalf("second rename: %v", err)
 	}
 	if got := altOf(t, s, tile.Id); got != "renamed-again" {

@@ -34,8 +34,7 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// ...and a user rename, which latches alt_user.
-	tileIDInt, _ := parseID(tile.Id)
-	if err := s.SetTileAlt(ctx, tileIDInt, "my page", true); err != nil {
+	if err := s.SetTileAlt(ctx, tile.Id, "my page", true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -60,8 +59,7 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 	// The behavioral half of alt_user: an automatic (non-user) title capture
 	// on the CLONE must defer to the copied user-owned name, exactly as it
 	// would on the source.
-	cloneIDInt, _ := parseID(clone.Id)
-	if err := s.SetTileAlt(ctx, cloneIDInt, "Captured Page Title", false); err != nil {
+	if err := s.SetTileAlt(ctx, clone.Id, "Captured Page Title", false); err != nil {
 		t.Fatal(err)
 	}
 	after, err := s.GetTile(ctx, clone.Id)

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -473,11 +472,7 @@ func (p *Plugin) captureShellTitle(tileID string) {
 	if err != nil || cmd == "" {
 		return
 	}
-	id, err := strconv.ParseInt(tileID, 10, 64)
-	if err != nil {
-		return
-	}
-	_ = p.st.SetTileAlt(context.Background(), id, cmd, false)
+	_ = p.st.SetTileAlt(context.Background(), tileID, cmd, false)
 }
 
 func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
