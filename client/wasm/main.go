@@ -30,6 +30,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
+	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/retry"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
@@ -221,8 +222,9 @@ type viewCaches struct {
 	// wrapCache memoizes raw-text soft-wrap results, reset wholesale when full.
 	wrapCache map[string][]string
 
-	// renderedPrev caches rasterized rendered-mode previews by tile id.
-	renderedPrev map[string]*renderedPreview
+	// renderedPrev caches rasterized rendered-mode previews, invalidating
+	// itself when a tile's version or its layout width moves.
+	renderedPrev *rasterprev.Cache
 
 	// paneLayouts memoizes the decode, invalidated by blob generation; the
 	// truth is the tile row plus its content bytes.
@@ -233,11 +235,11 @@ type viewCaches struct {
 }
 
 // newViewCaches is the one place the group is constructed.
-func newViewCaches(onPreviewDecodeErr func(tileID string)) viewCaches {
+func newViewCaches(onPreviewDecodeErr, onRasterErr func(tileID string)) viewCaches {
 	return viewCaches{
 		urlPreview:   preview.NewCache(preview.NewJSDecoder(), onPreviewDecodeErr),
 		wrapCache:    map[string][]string{},
-		renderedPrev: map[string]*renderedPreview{},
+		renderedPrev: rasterprev.NewCache(svgRasterizer{}, onRasterErr),
 		paneLayouts:  map[string]*paneLayoutEntry{},
 		menuCtxs:     map[string]*menuContext{},
 	}
@@ -542,7 +544,7 @@ func main() {
 		renderedPanePaints: map[string]int{},
 		backstop:           retry.NewInterval(retry.Backstop),
 	}
-	app.views = newViewCaches(app.previewDecodeFailed)
+	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()
 	app.canvas = app.doc.Call("getElementById", "canvas")
@@ -956,7 +958,7 @@ func (a *App) startSSE() {
 			// released, or deleting tiles leaks browser image resources.
 			if r := ev.GetTileRemoved(); r != nil {
 				a.views.urlPreview.Drop(r.TileId)
-				a.dropRenderedPreview(r.TileId)
+				a.views.renderedPrev.Drop(r.TileId)
 			}
 			// GridChanged is the one per-grid signal, so it also clears that
 			// grid's latch. Unconditional: the next descent would read stale.

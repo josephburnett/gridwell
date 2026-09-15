@@ -4,12 +4,11 @@ package main
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"math"
-	"strconv"
-	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
@@ -17,94 +16,93 @@ import (
 // previews as the rendered document, so how you leave a tile is how it
 // presents from outside. markdown.RenderHTML stays the one renderer, and this
 // rasterizes its output through an SVG foreignObject image. Rasterization is
-// async, so raw source paints until the image decodes.
+// async, so raw source paints until the image decodes. rasterprev.Cache owns
+// every caching decision; this file is the blob-and-Image glue.
 
 // renderedPreviewMaxH caps the rasterized document height in CSS px. Beyond
 // it a preview falls back to raw source: previews are a glance, not a
 // reader.
 const renderedPreviewMaxH = 4000.0
 
-// renderedPreviewBucket quantizes the layout width so continuous grid zoom
-// re-rasterizes at steps, not per frame.
-const renderedPreviewBucket = 64.0
+// svgRasterizer is rasterprev.Rasterizer's only implementation.
+type svgRasterizer struct{}
 
-// renderedPreview is one tile's cached raster.
-type renderedPreview struct {
-	key     string
-	img     js.Value
-	url     string
-	rasterW float64
-	ready   bool
-	failed  bool
-}
-
-// renderedPreviewFor returns the raster for tile n at roughly logical width
-// contentW, kicking an async rasterization on a miss. ok stays false until
-// the image decodes, so the caller paints raw source. The cache is keyed per
-// (tile, width bucket): two consumers at different widths would otherwise
-// replace one entry every frame, each revoking the other's loading blob
-// URL.
-func (a *App) renderedPreviewFor(n *gridwellv1.Tile, contentW float64) (*renderedPreview, bool) {
-	bucket := math.Max(renderedPreviewBucket,
-		math.Round(contentW/renderedPreviewBucket)*renderedPreviewBucket)
-	isOrg := markdown.IsOrg(n.AltText)
-	mapKey := n.Id + "\x00" + strconv.FormatFloat(bucket, 'f', 0, 64)
-	key := n.Id + "\x00" + strconv.FormatInt(n.Version, 10) + "\x00" +
-		strconv.FormatFloat(bucket, 'f', 0, 64) + "\x00" + strconv.FormatBool(isOrg)
-	if e, ok := a.views.renderedPrev[mapKey]; ok && e.key == key {
-		return e, e.ready && !e.failed
-	}
-	body, ok := a.tileBody(n)
-	if !ok {
-		return nil, false // blob fetch in flight; the raw path warms it too
-	}
-	// Replace a stale same-bucket entry and sweep other buckets whose version
-	// moved on; they re-rasterize on next use.
-	if old, ok := a.views.renderedPrev[mapKey]; ok && old.url != "" {
-		js.Global().Get("URL").Call("revokeObjectURL", old.url)
-	}
-	stalePrefix := n.Id + "\x00"
-	for mk, old := range a.views.renderedPrev {
-		if mk != mapKey && strings.HasPrefix(mk, stalePrefix) && old.key != "" &&
-			!strings.HasPrefix(old.key, n.Id+"\x00"+strconv.FormatInt(n.Version, 10)+"\x00") {
-			if old.url != "" {
-				js.Global().Get("URL").Call("revokeObjectURL", old.url)
-			}
-			delete(a.views.renderedPrev, mk)
-		}
-	}
-	e := &renderedPreview{key: key, rasterW: bucket}
-	a.views.renderedPrev[mapKey] = e
-
-	// The SVG foreignObject is an XML context, so serialize through the DOM
-	// to make goldmark's HTML5 output well-formed.
-	div := a.doc.Call("createElement", "div")
-	div.Set("innerHTML", textedit.PresentationHTML(n, body))
-	xhtml := js.Global().Get("XMLSerializer").New().Call("serializeToString", div).String()
-	svg := markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, colorFileInnerBg)
-
+// Rasterize allocates an onload and an onerror js.Func, both released once
+// either fires.
+func (svgRasterizer) Rasterize(svg string, onReady func(rasterprev.Raster), onError func()) {
 	blob := js.Global().Get("Blob").New(
 		js.ValueOf([]any{svg}), js.ValueOf(map[string]any{"type": "image/svg+xml"}))
-	e.url = js.Global().Get("URL").Call("createObjectURL", blob).String()
+	url := js.Global().Get("URL").Call("createObjectURL", blob).String()
 	img := js.Global().Get("Image").New()
 	var onload, onerror js.Func
 	release := func() { onload.Release(); onerror.Release() }
 	onload = js.FuncOf(func(js.Value, []js.Value) any {
-		e.ready = true
 		release()
-		a.draw()
+		onReady(&svgRaster{img: img, url: url})
 		return nil
 	})
 	onerror = js.FuncOf(func(js.Value, []js.Value) any {
-		e.failed = true // raw source stays the preview; never retry-loop
 		release()
+		js.Global().Get("URL").Call("revokeObjectURL", url)
+		onError()
 		return nil
 	})
 	img.Set("onload", onload)
 	img.Set("onerror", onerror)
-	img.Set("src", e.url)
-	e.img = img
-	return e, false
+	img.Set("src", url)
+}
+
+// svgRaster wraps a loaded HTMLImageElement and the object URL behind it.
+type svgRaster struct {
+	img     js.Value
+	url     string
+	revoked bool
+}
+
+// Truthy is false after Revoke, the object URL being gone.
+func (r *svgRaster) Truthy() bool { return r != nil && !r.revoked && r.img.Truthy() }
+
+// Revoke releases the createObjectURL. It is idempotent.
+func (r *svgRaster) Revoke() {
+	if r == nil || r.revoked {
+		return
+	}
+	r.revoked = true
+	js.Global().Get("URL").Call("revokeObjectURL", r.url)
+}
+
+// renderedRasterFor returns the loaded raster for tile n at roughly logical
+// width contentW and the width it was made at, kicking an async
+// rasterization on a miss. ok stays false until the image decodes, so the
+// caller paints raw source.
+func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value, float64, bool) {
+	bucket := rasterprev.Bucket(contentW)
+	k := rasterprev.Key{
+		TileID:  n.Id,
+		Version: n.Version,
+		Bucket:  bucket,
+		Org:     markdown.IsOrg(n.AltText),
+	}
+	r, ok := a.views.renderedPrev.Ensure(k, func() (string, bool) {
+		body, ok := a.tileBody(n)
+		if !ok {
+			return "", false // blob fetch in flight; the raw path warms it too
+		}
+		// The SVG foreignObject is an XML context, so serialize through the
+		// DOM to make goldmark's HTML5 output well-formed.
+		div := a.doc.Call("createElement", "div")
+		div.Set("innerHTML", textedit.PresentationHTML(n, body))
+		xhtml := js.Global().Get("XMLSerializer").New().Call("serializeToString", div).String()
+		return markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, colorFileInnerBg), true
+	}, func() { a.draw() })
+	if !ok {
+		return js.Value{}, bucket, false
+	}
+	sr, ok := r.(*svgRaster)
+	if !ok {
+		return js.Value{}, bucket, false
+	}
+	return sr.img, bucket, true
 }
 
 // drawRenderedPreview windows the tile's raster at the preview frame's
@@ -112,11 +110,11 @@ func (a *App) renderedPreviewFor(n *gridwellv1.Tile, contentW float64) (*rendere
 // fallback.
 func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFrame,
 	x, y, w, h, topInset float64) bool {
-	e, ok := a.renderedPreviewFor(n, frame.ContentW)
+	img, rasterW, ok := a.renderedRasterFor(n, frame.ContentW)
 	if !ok {
 		return false
 	}
-	s := w / e.rasterW
+	s := w / rasterW
 	if s <= 0 {
 		return false
 	}
@@ -128,23 +126,15 @@ func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFram
 	if sy+sh > renderedPreviewMaxH {
 		sh = renderedPreviewMaxH - sy
 	}
-	a.cctx.Call("drawImage", e.img, 0, sy, e.rasterW, sh,
+	a.cctx.Call("drawImage", img, 0, sy, rasterW, sh,
 		x, y+topInset, w, sh*s)
 	return true
 }
 
-// dropRenderedPreview releases a removed tile's entries, revoking their blob
-// URLs. Fired from the TileRemoved arm beside urlPreview.Drop, so the two
-// preview caches age out together and deleting text tiles leaks nothing.
-func (a *App) dropRenderedPreview(tileID string) {
-	prefix := tileID + "\x00"
-	for mk, e := range a.views.renderedPrev {
-		if !strings.HasPrefix(mk, prefix) {
-			continue
-		}
-		if e.url != "" {
-			js.Global().Get("URL").Call("revokeObjectURL", e.url)
-		}
-		delete(a.views.renderedPrev, mk)
-	}
+// renderedRasterFailed is rasterprev.Cache's verdict on a document that never
+// became a picture. The cache settles that key, so this fires once per
+// (tile, version, width bucket) rather than once per frame.
+func (a *App) renderedRasterFailed(tileID string) {
+	a.reportErr(errsurface.Error, "rendered-preview:"+tileID,
+		"rendered preview could not be drawn — showing source")
 }

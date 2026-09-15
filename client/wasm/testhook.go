@@ -159,21 +159,10 @@ func (a *App) installTestHook() {
 		"renderedPreviews": js.FuncOf(func(js.Value, []js.Value) any {
 			// The rendered-raster cache: tile id to decode state.
 			out := map[string]any{}
-			for mk, e := range a.views.renderedPrev {
-				// The cache keys per (tile, width bucket); the hook
-				// aggregates per tile, ready when any bucket decoded.
-				id := mk
-				if i := strings.IndexByte(mk, 0); i >= 0 {
-					id = mk[:i]
-				}
-				prev, _ := out[id].(map[string]any)
-				ready := e.ready && !e.failed
-				if prev != nil {
-					ready = ready || prev["ready"].(bool)
-				}
+			for id, st := range a.views.renderedPrev.States() {
 				out[id] = map[string]any{
-					"ready":      ready,
-					"failed":     e.failed,
+					"ready":      st.Ready,
+					"failed":     st.Failed,
 					"panePaints": a.renderedPanePaints[id],
 				}
 			}
