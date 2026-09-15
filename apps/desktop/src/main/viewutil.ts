@@ -123,6 +123,12 @@ export function reviveNavigation(
   return { kind: 'restore', history: h };
 }
 
+// The notice for a back-stack Chromium refused: the pane and the reason it gave.
+export function restoreRefusedMessage(paneId: string, err: unknown): string {
+  const reason = (err instanceof Error ? err.message : String(err)) || 'no reason given';
+  return `pane ${paneId}: stored back-stack refused (${reason}); the page did not load`;
+}
+
 // null for a corrupt blob, which then falls back to a plain loadURL.
 export function parseHistory(json: string | undefined): UrlHistory | null {
   if (!json) return null;

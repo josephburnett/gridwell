@@ -377,6 +377,41 @@ app.whenReady().then(async () => {
   await regR.remove('paneR');
   console.log('place replace ok: reported, old view destroyed, replacement stands');
 
+  // ── a refused back-stack is the only thing that says so ─────────────────
+  // navigationHistory.restore rejects for an entry Chromium will not load, and
+  // a url it refuses outright commits nothing and fires no did-fail-load, so
+  // the pane sits blank: this report is the whole notice.
+  const REFUSED_URL = 'view-source:http://127.0.0.1:1/';
+  const refusedHistory = JSON.stringify({
+    index: 1,
+    entries: [
+      { url: DATA_URL, title: 'HarnessTitle' },
+      { url: REFUSED_URL, title: 'refused' },
+    ],
+  });
+  const refuseErrs: ErrorEvent[] = [];
+  const regRefuse = new WebviewRegistry(win, { onError: (ev) => refuseErrs.push(ev) });
+  await regRefuse.place('paneS', 'u1/63', REFUSED_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, refusedHistory);
+  if (!(await waitFor(() => refuseErrs.length > 0, 8000))) {
+    fail('a refused back-stack reported nothing: the pane is blank and the user is not told');
+  }
+  const refusal = refuseErrs[0];
+  if (refusal.source !== 'electron:webview') fail(`the refusal came from ${refusal.source}`);
+  if (!refusal.message.includes('paneS') || !refusal.message.includes('back-stack refused')) {
+    fail(`the refusal does not name the pane and what happened: ${refusal.message}`);
+  }
+  if (!refusal.message.includes('ERR_')) fail(`the refusal carries no reason: ${refusal.message}`);
+  // Nothing else speaks for this failure, which is why the report exists.
+  await new Promise((r) => setTimeout(r, 1000));
+  if (refuseErrs.length !== 1) {
+    fail(`a refusal reported ${refuseErrs.length} times: ${JSON.stringify(refuseErrs.map((ev) => ev.message))}`);
+  }
+  // Nothing loaded, and the stack was left where Chromium refused it.
+  const atRefuse = regRefuse.webContentsFor('paneS')!.getURL();
+  if (!atRefuse.includes('127.0.0.1:1')) fail(`the refused entry is not what the pane sits on: ${atRefuse}`);
+  await regRefuse.remove('paneS');
+  console.log('restore refusal ok: reported once, with its reason, by nothing else');
+
   // ── setBounds returns early when nothing moved ──────────────────────────
   // syncURLViews calls setBounds every frame, so the equal-bounds early return
   // is the difference between a no-op and re-applying the composed zoom sixty

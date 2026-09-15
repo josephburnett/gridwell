@@ -13,6 +13,7 @@ import {
   serializeHistory,
   parseHistory,
   reviveNavigation,
+  restoreRefusedMessage,
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   classifyRightPress,
@@ -321,4 +322,15 @@ test('reviveNavigation: the edited address beats a stale back-stack', () => {
   // never break revive.
   assert.deepEqual(reviveNavigation('https://c.example/', ''), { kind: 'load' });
   assert.deepEqual(reviveNavigation('https://c.example/', '{broken'), { kind: 'load' });
+});
+
+test('restoreRefusedMessage names the pane, the reason and the consequence', () => {
+  const m = restoreRefusedMessage('p3', new Error("ERR_FAILED (-2) loading 'gopher://x/'"));
+  assert.ok(m.includes('p3'));
+  assert.ok(m.includes('ERR_FAILED'));
+  assert.ok(m.includes('gopher://x/'));
+  assert.ok(m.includes('did not load'));
+  // A rejection need not be an Error, and a reasonless one still reads.
+  assert.ok(restoreRefusedMessage('p3', 'refused').includes('refused'));
+  assert.ok(restoreRefusedMessage('p3', new Error('')).includes('no reason given'));
 });
