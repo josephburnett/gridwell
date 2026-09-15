@@ -110,3 +110,12 @@ test('the zoom chord keys agree between client/contentzoom and viewutil', () => 
     'viewutil.ts zoomChordKey drifted from the Key* constants in client/contentzoom (the owner)',
   );
 });
+
+// The two mirror pumps, the url one in main and the shell one in the wasm,
+// share one cadence. client/cadence owns it; capture.ts copies it because Go
+// and TypeScript share no source.
+test('the mirror cadence agrees between client/cadence and capture.ts', () => {
+  const owner = literal('client/cadence/cadence.go', /ShellMirrorMs\s*=\s*(\d+)/);
+  const copy = literal('apps/desktop/src/main/capture.ts', /MIRROR_INTERVAL_MS\s*=\s*(\d+)/);
+  assert.equal(copy, owner, 'capture.ts MIRROR_INTERVAL_MS drifted from cadence.ShellMirrorMs (the owner)');
+});

@@ -92,7 +92,9 @@ function settleWithin<T>(p: Promise<T>, ms: number): Promise<Settled<T>> {
 }
 
 // How often live views are captured so other panes showing the same tile
-// mirror them. Previews need no frame rate, so the cadence is low.
+// mirror them. A copy of cadence.ShellMirrorMs, the owner: the two mirror
+// pumps share one cadence, and Go and TypeScript share no source, so
+// gesture-threshold.test.ts pins this to it.
 export const MIRROR_INTERVAL_MS = 250;
 
 type Timer = unknown;

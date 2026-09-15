@@ -24,8 +24,10 @@ const (
 	// inside it loses at most that much arrangement.
 	WorkspaceSaveMs = 500
 
-	// ShellMirrorMs is how often a live shell is snapshotted into the shared
-	// preview cache. Nothing arms it; it runs from boot for the app's life.
+	// ShellMirrorMs is how often a live surface is snapshotted into the shared
+	// preview cache. Nothing arms it; it runs from boot for the app's life. It
+	// is the owner of the mirror cadence: the url mirror pump in
+	// apps/desktop/src/main/capture.ts keeps a forced copy, drift-linted.
 	ShellMirrorMs = 250
 
 	// TraceFadeMs is how long the ascent-trace outline takes to fade out.
