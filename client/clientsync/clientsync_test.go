@@ -8,10 +8,28 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/api/gwerr"
 )
+
+// Of's transport set is gwerr.IsTransport's, read across the one gRPC-to-Connect
+// table: for every code the server can answer, the client says Transport
+// exactly when the server side would degrade to a memory. The two spellings
+// cannot share a value, since the client sees Connect codes and the node gRPC
+// ones, so this is the pin.
+func TestOfAgreesWithGwerrIsTransport(t *testing.T) {
+	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {
+		want := gwerr.IsTransport(status.Error(c, "x"))
+		got := Of(connect.NewError(gwerr.ConnectCode(c), errors.New("x"))) == OutcomeTransport
+		if got != want {
+			t.Errorf("code %v: client Transport=%v, server IsTransport=%v", c, got, want)
+		}
+	}
+}
 
 // TestOf pins the classifier over nil, each coded class, and a bare
 // non-connect error, which comes from below the protocol.

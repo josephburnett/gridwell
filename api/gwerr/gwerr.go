@@ -108,7 +108,8 @@ func ClassifyError(err error) ErrorClass {
 // IsTransport reports that the far side of a gRPC hop never spoke. Every
 // server-side hop that degrades to a remembered answer keys on this alone,
 // so a coded answer such as NotFound is never served from a cache.
-// clientsync.Of is the client twin on the same three codes.
+// clientsync.Of is the client twin on the same three codes, pinned to this one
+// by TestOfAgreesWithGwerrIsTransport.
 func IsTransport(err error) bool {
 	switch status.Code(err) {
 	case codes.Unavailable, codes.DeadlineExceeded, codes.Canceled:
