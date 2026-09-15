@@ -131,3 +131,36 @@ func TestIsTransportPinsWireCodes(t *testing.T) {
 		t.Error("nil and non-status errors are not transport failures")
 	}
 }
+
+// The class table is total and ToStatus is what both hops read: a sentinel
+// becomes its class's code, a status error is not re-coded, and an
+// unclassified error passes through as its own Unknown.
+func TestStatusCodeIsTotal(t *testing.T) {
+	for _, c := range []ErrorClass{ClassInternal, ClassNotFound, ClassInvalidArgument, ClassConflict} {
+		if _, ok := classCodes[c]; !ok {
+			t.Errorf("class %d has no status code", c)
+		}
+	}
+	if StatusCode(ErrorClass(99)) != codes.Internal {
+		t.Error("an unknown class must read as Internal")
+	}
+	for _, s := range sentinelClasses {
+		want := StatusCode(s.Class)
+		if s.Class == ClassInternal {
+			want = codes.Unknown
+		}
+		if got := status.Code(ToStatus(fmt.Errorf("tile 7: %w", s.Err))); got != want {
+			t.Errorf("ToStatus(%v) code = %v, want %v", s.Err, got, want)
+		}
+	}
+	own := status.Error(codes.Unavailable, "dark")
+	if ToStatus(own) != own {
+		t.Error("a status error must pass through untouched")
+	}
+	if ToStatus(nil) != nil {
+		t.Error("nil must stay nil")
+	}
+	if plain := errors.New("boom"); ToStatus(plain) != plain {
+		t.Error("an unclassified error must pass through as itself")
+	}
+}

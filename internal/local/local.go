@@ -11,6 +11,7 @@ import (
 	"log"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -537,22 +538,6 @@ func tileResp(t *gridwellv1.Tile, err error) (*gridwellv1.TileResponse, error) {
 	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
-// errToStatus maps a store sentinel to a gRPC status code so the
-// classification survives the routing hop. store.ClassifyError owns the
-// table, so this cannot drift from the server's mapping; an unclassified
-// error passes through as codes.Unknown.
-func errToStatus(err error) error {
-	if err == nil {
-		return nil
-	}
-	switch store.ClassifyError(err) {
-	case store.ClassNotFound:
-		return status.Error(codes.NotFound, err.Error())
-	case store.ClassInvalidArgument:
-		return status.Error(codes.InvalidArgument, err.Error())
-	case store.ClassConflict:
-		return status.Error(codes.FailedPrecondition, err.Error())
-	default:
-		return err
-	}
-}
+// errToStatus is gwerr.ToStatus, the one class-to-code table, so home's
+// answer cannot drift from the Connect codec's.
+func errToStatus(err error) error { return gwerr.ToStatus(err) }
