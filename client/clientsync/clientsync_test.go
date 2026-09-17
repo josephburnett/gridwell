@@ -188,3 +188,35 @@ func TestReactGridRead(t *testing.T) {
 		}
 	}
 }
+
+func TestNoticesFor(t *testing.T) {
+	cases := []struct {
+		name     string
+		r        Reaction
+		o        Outcome
+		ownWords bool
+		want     Notices
+	}{
+		{"success says nothing", React(OutcomeOK), OutcomeOK, true, Notices{}},
+		{"a verdict with no words gets the generic line", React(OutcomeRejected), OutcomeRejected, false, Notices{Generic: true}},
+		{"a verdict with words gets both", React(OutcomeRejected), OutcomeRejected, true, Notices{Generic: true, Own: OwnFailed}},
+		{"transport with no words gets the generic line", React(OutcomeTransport), OutcomeTransport, false, Notices{Generic: true}},
+		{"transport with words says will-retry alone", React(OutcomeTransport), OutcomeTransport, true, Notices{Own: OwnRetry}},
+		{"a conflict is silent generically and spoken in its own words", React(OutcomeConflict), OutcomeConflict, true, Notices{Own: OwnFailed}},
+	}
+	for _, c := range cases {
+		if got := NoticesFor(c.r, c.o, c.ownWords); got != c.want {
+			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestReactRead(t *testing.T) {
+	for o, want := range map[Outcome]LatchVerdict{
+		OutcomeOK: LatchClear, OutcomeTransport: LatchKeep, OutcomeRejected: LatchSet, OutcomeConflict: LatchSet,
+	} {
+		if got := ReactRead(o); got != want {
+			t.Errorf("outcome %v: got %v, want %v", o, got, want)
+		}
+	}
+}

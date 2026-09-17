@@ -116,18 +116,16 @@ func (a *App) do(w write) error {
 	if r.Refetch {
 		a.refetchGridOnConflict(w.gid, w.label)
 	}
-	// On a transport blip "will retry" is the whole story, so a write with
-	// its own words does not also get the generic rpc: notice.
-	if r.Log && !(w.source != "" && o == clientsync.OutcomeTransport) {
+	// clientsync.NoticesFor says which notices this outcome posts.
+	n := clientsync.NoticesFor(r, o, w.source != "")
+	if n.Generic {
 		a.surfaceRPCError(w.label, err)
 	}
-	if w.source != "" {
-		switch {
-		case o == clientsync.OutcomeTransport:
-			a.reportErr(errsurface.Info, w.source, w.failText+": server unreachable — will retry")
-		case err != nil:
-			a.reportErr(errsurface.Error, w.source, w.failText+": "+rpcErrText(err))
-		}
+	switch n.Own {
+	case clientsync.OwnRetry:
+		a.reportErr(errsurface.Info, w.source, w.failText+": server unreachable — will retry")
+	case clientsync.OwnFailed:
+		a.reportErr(errsurface.Error, w.source, w.failText+": "+rpcErrText(err))
 	}
 	if err != nil {
 		if w.undo != nil {

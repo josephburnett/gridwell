@@ -112,6 +112,56 @@ func IsUnimplemented(err error) bool {
 	return errors.As(err, &ce) && ce.Code() == connect.CodeUnimplemented
 }
 
+// OwnNotice is what a write's own-words notice says, for a write that has
+// words of its own (a source and a failText).
+type OwnNotice int
+
+const (
+	OwnNone OwnNotice = iota
+	// OwnRetry is the Info line "server unreachable — will retry".
+	OwnRetry
+	// OwnFailed is the Error line carrying the server's reason.
+	OwnFailed
+)
+
+// Notices is which notices a finished write posts: the generic rpc: line, and
+// the write's own. On a transport blip "will retry" is the whole story, so a
+// write with its own words does not also get the generic line.
+type Notices struct {
+	Generic bool
+	Own     OwnNotice
+}
+
+// NoticesFor is the one table, over the reaction the outcome already earned.
+func NoticesFor(r Reaction, o Outcome, ownWords bool) Notices {
+	n := Notices{Generic: r.Log}
+	if !ownWords {
+		return n
+	}
+	switch o {
+	case OutcomeOK:
+	case OutcomeTransport:
+		n.Generic = false
+		n.Own = OwnRetry
+	default:
+		n.Own = OwnFailed
+	}
+	return n
+}
+
+// ReactRead is what one read's outcome says about the asked id's failure
+// latch: an answer clears it, a verdict sets it, and a transport failure
+// says nothing, so it leaves the latch as it found it.
+func ReactRead(o Outcome) LatchVerdict {
+	switch o {
+	case OutcomeOK:
+		return LatchClear
+	case OutcomeTransport:
+		return LatchKeep
+	}
+	return LatchSet
+}
+
 // GridRead is what one GetGrid answer calls for. The cache keys a grid by the
 // id it was answered under and every frame resolves by the id it was asked
 // for, so an answer under another name would strand the pane loading forever
@@ -137,14 +187,9 @@ const (
 
 // ReactGridRead is the one table for a grid read's outcome.
 func ReactGridRead(asked, answered string, o Outcome) GridRead {
-	switch o {
-	case OutcomeOK:
-		if answered != asked {
-			return GridRead{Latch: LatchSet, Store: true, Renamed: true}
-		}
-		return GridRead{Latch: LatchClear, Store: true}
-	case OutcomeTransport:
-		return GridRead{}
+	r := GridRead{Latch: ReactRead(o), Store: o == OutcomeOK}
+	if o == OutcomeOK && answered != asked {
+		r.Latch, r.Renamed = LatchSet, true
 	}
-	return GridRead{Latch: LatchSet}
+	return r
 }
