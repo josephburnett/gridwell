@@ -159,11 +159,15 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
 	sx, sy := mouseXY(args[0], a.canvas)
-	// A wheel over the bar zooms the focused pane from its center: the escape
-	// hatch for a grid tiled wall to wall with wells. The band is below panes.
+	// The band is under no pane, so a wheel there is classified for the
+	// focused pane; gesture.ClassifyWheel owns what it does.
 	if bx, top, bw, barOK := a.bottomBarRect(); barOK &&
 		wsbar.Where(sx, sy, bx, top, bw) == wsbar.ZoneBar {
-		if fp := a.tree.FocusedPane(); fp != nil && fp.ContentID() == "" {
+		fp := a.tree.FocusedPane()
+		if fp == nil {
+			return nil
+		}
+		if gesture.ClassifyWheel(gesture.WheelInput{OverBar: true, TextFocused: fp.ContentID() != ""}) == gesture.WheelZoomFocused {
 			fr := a.paneRectByID(fp.ID)
 			a.wheelZoomPaneAt(fp, fr, dy, fr.X+fr.W/2, fr.Y+fr.H/2)
 		}

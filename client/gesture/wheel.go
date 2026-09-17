@@ -12,11 +12,18 @@ const (
 	WheelSwallow
 	// WheelIgnore leaves the canvas alone; a textarea overlay scrolls itself.
 	WheelIgnore
+	// WheelZoomFocused zooms the focused pane about its own centre: the wheel
+	// is over the bar, which no pane is under, so it is the escape hatch for a
+	// grid tiled wall to wall with wells.
+	WheelZoomFocused
 )
 
 // WheelInput is the state ClassifyWheel decides on; the caller resolves the
 // impure facts.
 type WheelInput struct {
+	// OverBar is a wheel in the bar's band, where there is no pane under the
+	// cursor; every other field then describes the FOCUSED pane.
+	OverBar bool
 	// TextFocused means the pane is descended into a content tile.
 	TextFocused      bool
 	URLDescent       bool
@@ -55,6 +62,12 @@ func RectCoverage(rx, ry, rw, rh, bx, by, bw, bh float64) float64 {
 // ClassifyWheel routes a wheel event. Inside a descent a live url view over
 // the content box swallows strays because the view scrolls itself.
 func ClassifyWheel(in WheelInput) WheelAction {
+	if in.OverBar {
+		if in.TextFocused {
+			return WheelIgnore
+		}
+		return WheelZoomFocused
+	}
 	if !in.TextFocused {
 		if in.OverEnterableWell {
 			if in.ZoomOut && in.WellCoverage > WellZoomOutRedirect {

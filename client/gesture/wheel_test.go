@@ -9,6 +9,11 @@ func TestClassifyWheel(t *testing.T) {
 		want WheelAction
 	}{
 		{"grid view zooms", WheelInput{}, WheelZoomPane},
+		// The bar is under no pane, so a wheel there zooms the focused pane
+		// about its centre, or nothing when that pane is inside a document.
+		{"over the bar zooms the focused grid pane", WheelInput{OverBar: true}, WheelZoomFocused},
+		{"over the bar, a focused content pane is left alone", WheelInput{OverBar: true, TextFocused: true}, WheelIgnore},
+		{"over the bar, a well under nothing claims nothing", WheelInput{OverBar: true, OverEnterableWell: true}, WheelZoomFocused},
 		{"grid view zooms even with live view flags", WheelInput{LiveURLView: true, InContentBox: true}, WheelZoomPane},
 		// An enterable well under the cursor zooms its own preview, and
 		// empty space zooms the pane.
