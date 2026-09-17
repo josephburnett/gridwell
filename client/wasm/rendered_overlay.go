@@ -150,20 +150,21 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 		return
 	}
 	t, ok := a.descendedTile(p)
-	if !ok || !rpc.TextDocument(t) || markdown.IsOrg(t.AltText) {
-		// Org checkboxes render via go-org and have no source mapping here.
+	if !ok {
 		ev.Call("preventDefault")
 		return
 	}
-	if a.tileReadOnly(t) {
+	body, cached := a.tileBody(t)
+	// textedit.DecideCheckboxClick owns the refusals; the marker mapping below
+	// is markdown.ToggleTask's own verdict.
+	switch textedit.DecideCheckboxClick(rpc.TextDocument(t), markdown.IsOrg(t.AltText), a.tileReadOnly(t), cached) {
+	case textedit.CheckboxRevert:
+		ev.Call("preventDefault")
+		return
+	case textedit.CheckboxReadOnly:
 		ev.Call("preventDefault")
 		a.reportErr(errsurface.Info, "textedit",
 			"this document is read-only — the checkbox was not changed")
-		return
-	}
-	body, ok := a.tileBody(t)
-	if !ok {
-		ev.Call("preventDefault")
 		return
 	}
 	inputs := a.overlays.renderedView.Call("querySelectorAll", `input[type="checkbox"]`)

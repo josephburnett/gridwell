@@ -34,3 +34,34 @@ func PresentationHTML(t *gridwellv1.Tile, body []byte) string {
 	}
 	return markdown.RenderHTML(body, markdown.IsOrg(t.AltText))
 }
+
+// CheckboxClick is what a click on a rendered task-list checkbox does, the
+// one interactive control in the read-only rendered view.
+type CheckboxClick int
+
+const (
+	// CheckboxRevert lets the native flip revert and says nothing: the row is
+	// not a document, its org source has no marker mapping, or its bytes have
+	// not landed yet, so nothing was ever going to change.
+	CheckboxRevert CheckboxClick = iota
+	// CheckboxReadOnly reverts and says so, because the user asked for an
+	// edit the document cannot take.
+	CheckboxReadOnly
+	// CheckboxToggle flips the source marker through the edit path.
+	CheckboxToggle
+)
+
+// DecideCheckboxClick reads the refusals before the edit. Read-only is the
+// one refusal worth a word: the other three are states the face already
+// shows or a fetch about to land.
+func DecideCheckboxClick(textDocument, org, readOnly, bodyCached bool) CheckboxClick {
+	switch {
+	case !textDocument || org:
+		return CheckboxRevert
+	case readOnly:
+		return CheckboxReadOnly
+	case !bodyCached:
+		return CheckboxRevert
+	}
+	return CheckboxToggle
+}

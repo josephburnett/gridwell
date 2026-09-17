@@ -68,3 +68,23 @@ func TestPresentationHTMLTable(t *testing.T) {
 		}
 	}
 }
+
+func TestDecideCheckboxClick(t *testing.T) {
+	cases := []struct {
+		name                                    string
+		textDocument, org, readOnly, bodyCached bool
+		want                                    CheckboxClick
+	}{
+		{"an editable markdown document toggles", true, false, false, true, CheckboxToggle},
+		{"a page tile reverts silently", false, false, false, true, CheckboxRevert},
+		{"an org document reverts silently", true, true, false, true, CheckboxRevert},
+		{"a read-only document says so", true, false, true, true, CheckboxReadOnly},
+		{"a read-only org document still reverts silently", true, true, true, true, CheckboxRevert},
+		{"a body not yet cached reverts silently", true, false, false, false, CheckboxRevert},
+	}
+	for _, c := range cases {
+		if got := DecideCheckboxClick(c.textDocument, c.org, c.readOnly, c.bodyCached); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
