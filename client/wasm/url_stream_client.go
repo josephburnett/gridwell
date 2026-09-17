@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/urlview"
 )
 
 // urlView is the renderer-side handle for one live URL tile, a native
@@ -142,12 +143,12 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	// pane's frame is this view's descent.
 	v := &urlView{tileID: t.Id, paneID: p.ID, descentID: p.ContentID(), bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
 	a.local(p.ID).urlView = v
-	// durable means the descended row survives ascent. A page view is not:
-	// it carries no standing freeze and no history writeback.
-	durable := !page
-	if tile, ok := a.descendedTile(p); ok && a.possiblyEphemeral(p, tile) {
-		durable = false
+	// urlview.Durable says whether the descended row survives ascent.
+	possiblyEphemeral := false
+	if tile, ok := a.descendedTile(p); ok {
+		possiblyEphemeral = a.possiblyEphemeral(p, tile)
 	}
+	durable := urlview.Durable(page, possiblyEphemeral)
 	v.durable = durable
 	addr := a.webAddress(t)
 	urlLog("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
@@ -210,8 +211,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%s", paneID, tileID)
 	a.bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
-		// A page view persists nothing: the plugin owns its frozen face.
-		if freeze && !v.page && (len(jpeg) > 0 || url != "" || title != "") {
+		if urlview.PersistFreeze(freeze, v.page, jpeg, url, title) {
 			gid := a.gridIDForPathFrom(anchor, path)
 			if target != nil {
 				gid = target.gridID

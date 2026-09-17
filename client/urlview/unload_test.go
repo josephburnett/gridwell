@@ -25,3 +25,43 @@ func TestDecideUnloadURLStateTable(t *testing.T) {
 		}
 	}
 }
+
+func TestDurable(t *testing.T) {
+	cases := []struct {
+		name                    string
+		page, possiblyEphemeral bool
+		want                    bool
+	}{
+		{"a placed url tile", false, false, true},
+		{"a page view is its plugin's", true, false, false},
+		{"an ephemeral visit", false, true, false},
+		{"not known yet counts as ephemeral", false, true, false},
+	}
+	for _, c := range cases {
+		if got := Durable(c.page, c.possiblyEphemeral); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestPersistFreeze(t *testing.T) {
+	cases := []struct {
+		name         string
+		freeze, page bool
+		jpeg         []byte
+		url, title   string
+		want         bool
+	}{
+		{"a frame alone persists", true, false, []byte{1}, "", "", true},
+		{"an address alone persists", true, false, nil, "https://a.test/", "", true},
+		{"a title alone persists", true, false, nil, "", "t", true},
+		{"an empty capture never overwrites", true, false, nil, "", "", false},
+		{"a page view persists nothing", true, true, []byte{1}, "https://a.test/", "t", false},
+		{"an ephemeral ascent asked for no freeze", false, false, []byte{1}, "https://a.test/", "t", false},
+	}
+	for _, c := range cases {
+		if got := PersistFreeze(c.freeze, c.page, c.jpeg, c.url, c.title); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
