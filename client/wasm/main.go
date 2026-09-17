@@ -28,6 +28,7 @@ import (
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/panepreview"
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/rasterprev"
@@ -228,19 +229,19 @@ type viewCaches struct {
 
 	// paneLayouts memoizes the decode, invalidated by blob generation; the
 	// truth is the tile row plus its content bytes.
-	paneLayouts map[string]*paneLayoutEntry
+	paneLayouts *panepreview.Layouts
 
 	// menuCtxs is keyed by the grid-stamped node_ns; "" is a.plugins, a.caps.
 	menuCtxs map[string]*menuContext
 }
 
 // newViewCaches is the one place the group is constructed.
-func newViewCaches(onPreviewDecodeErr, onRasterErr func(tileID string)) viewCaches {
+func newViewCaches(onPreviewDecodeErr, onRasterErr func(tileID string), onLayoutErr func(tileID string, err error)) viewCaches {
 	return viewCaches{
 		urlPreview:   preview.NewCache(preview.NewJSDecoder(), onPreviewDecodeErr),
 		wrapCache:    map[string][]string{},
 		renderedPrev: rasterprev.NewCache(svgRasterizer{}, onRasterErr),
-		paneLayouts:  map[string]*paneLayoutEntry{},
+		paneLayouts:  panepreview.NewLayouts(onLayoutErr),
 		menuCtxs:     map[string]*menuContext{},
 	}
 }
@@ -544,7 +545,7 @@ func main() {
 		renderedPanePaints: map[string]int{},
 		backstop:           retry.NewInterval(retry.Backstop),
 	}
-	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed)
+	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed, app.paneLayoutUnreadable)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()
 	app.canvas = app.doc.Call("getElementById", "canvas")

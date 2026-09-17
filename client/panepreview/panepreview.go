@@ -1,4 +1,5 @@
-// Package panepreview computes the geometry of a pane tile's mini-render. The
+// Package panepreview owns a pane tile's face from outside: the memo of its
+// decoded layout (layouts.go) and the geometry of its mini-render. The
 // preview is the live workspace shrunk uniformly by Scale, and pane.Layout is
 // affine in its root rect, so descending into the tile lands on what the
 // preview showed, only bigger.

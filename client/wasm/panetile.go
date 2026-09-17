@@ -2,9 +2,9 @@
 
 package main
 
-// The pane tile's client face: the layout memo and the mini-render preview.
-// The geometry is client/panepreview's and the codec client/pane's; this is
-// cache, fetch and draw glue.
+// The pane tile's client face. The layout memo and the geometry are
+// client/panepreview's and the codec client/pane's; this is fetch and draw
+// glue.
 
 import (
 	"context"
@@ -16,46 +16,23 @@ import (
 	"github.com/josephburnett/gridwell/client/panepreview"
 )
 
-// paneLayoutEntry memoizes one pane tile's decoded pane tree by blob
-// generation. A nil tree records a decode failure, reported once rather than
-// per frame.
-type paneLayoutEntry struct {
-	blobID int64
-	tree   *pane.Tree
+// paneTileLayout is panepreview.Layouts over the content cache; the memo
+// policy is that package's. A missing body kicks its fetch here.
+func (a *App) paneTileLayout(n *gridwellv1.Tile) (*pane.Tree, bool) {
+	return a.views.paneLayouts.Tree(n.Id, n.BlobId, func() ([]byte, bool) {
+		body, ok := a.c.TileContent(n.Id)
+		if !ok {
+			a.fetchTileContent(n.Id)
+		}
+		return body, ok
+	})
 }
 
-// paneTileLayout returns the decoded pane tree, memoized by (tile, blob)
-// generation. Another view's layout write invalidates through the tile row.
-// Until the new bytes land the last decoded arrangement keeps drawing, which
-// beats a blank flash. False for a never-arranged tile, a not-yet-fetched
-// layout, or a corrupt blob.
-func (a *App) paneTileLayout(n *gridwellv1.Tile) (*pane.Tree, bool) {
-	if n.BlobId == 0 {
-		return nil, false
-	}
-	e := a.views.paneLayouts[n.Id]
-	if e != nil && e.blobID == n.BlobId {
-		return e.tree, e.tree != nil
-	}
-	body, ok := a.c.TileContent(n.Id)
-	if !ok {
-		a.fetchTileContent(n.Id)
-		if e != nil && e.tree != nil {
-			return e.tree, true
-		}
-		return nil, false
-	}
-	prefix := pane.ChainPrefix(n.Id)
-	tree, err := pane.DecodeLayout(body, func(id string) string { return prefix + id }, "")
-	if err != nil {
-		// The memo entry below short-circuits the next frames, so a corrupt
-		// layout cannot spam the strip.
-		a.reportErr(errsurface.Error, "layout:"+n.Id, "workspace layout unreadable: "+err.Error())
-		a.views.paneLayouts[n.Id] = &paneLayoutEntry{blobID: n.BlobId}
-		return nil, false
-	}
-	a.views.paneLayouts[n.Id] = &paneLayoutEntry{blobID: n.BlobId, tree: tree}
-	return tree, true
+// paneLayoutUnreadable is panepreview.Layouts' verdict on a blob that will
+// not decode: once per (tile, blob), so a corrupt layout cannot spam the
+// strip.
+func (a *App) paneLayoutUnreadable(tileID string, err error) {
+	a.reportErr(errsurface.Error, "layout:"+tileID, "workspace layout unreadable: "+err.Error())
 }
 
 // drawPaneTilePreview draws the stored layout small: dividers plus each
