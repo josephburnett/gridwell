@@ -765,23 +765,26 @@ func (a *App) fetchTileByID(tileID string) {
 	go func() {
 		defer done()
 		tile, err := a.cl.GetTile(ctx, tileID)
-		if err != nil || tile == nil {
-			if clientsync.Of(err) != clientsync.OutcomeTransport {
-				a.fetch.tileLoadFailed.Set(tileID)
-				// The asker is a crumb or a descent, which without this draw
-				// an empty content box named "unnamed" and say nothing. An
-				// outage is not named once per id: the same read's grid says
-				// it once under "grid:".
-				detail := "the row is gone"
-				if err != nil {
-					detail = rpcErrText(err)
-				}
-				a.reportErr(errsurface.Error, "tile:"+tileID, "tile unavailable: "+detail)
-			}
-			return
+		o := clientsync.Of(err)
+		if err == nil && tile == nil {
+			o = clientsync.OutcomeRejected // an empty answer is the server's no
 		}
-		a.resolveErr("tile:" + tileID)
-		a.fetchGrid(tile.GridId)
+		// clientsync.ReactRead owns the latch; an outage is not named once per
+		// id, because the same read's grid says it once under "grid:".
+		switch clientsync.ReactRead(o) {
+		case clientsync.LatchSet:
+			a.fetch.tileLoadFailed.Set(tileID)
+			// The asker is a crumb or a descent, which would otherwise draw an
+			// empty content box named "unnamed" and say nothing.
+			detail := "the row is gone"
+			if err != nil {
+				detail = rpcErrText(err)
+			}
+			a.reportErr(errsurface.Error, "tile:"+tileID, "tile unavailable: "+detail)
+		case clientsync.LatchClear:
+			a.resolveErr("tile:" + tileID)
+			a.fetchGrid(tile.GridId)
+		}
 	}()
 }
 
