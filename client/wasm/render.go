@@ -343,12 +343,12 @@ func (a *App) paletteGroups(p *pane.Pane) (plugins, primitives []paletteItem) {
 		items = append(items, paletteItem{isPlugin: true, plugin: s.Plugin, entry: s.Entry})
 	}
 	prims := make([]paletteItem, 0, len(primitiveKinds))
-	// Unknown is not writable: no swatch on a guess a click would then refuse.
-	if writable, _ := a.gridWritable(a.gridIDForPane(p)); writable {
+	// palette.Offer decides which primitives this grid and its node offer.
+	writable, _ := a.gridWritable(a.gridIDForPane(p))
+	offer := palette.Offer{Writable: writable, ShellsDisabled: ctx.shellsDisabled}
+	if offer.Primitives() {
 		for _, k := range primitiveKinds {
-			// The shell swatch obeys the context node's policy alone: the PTY
-			// rides the web door, so local caps would be a second, wrong owner.
-			if k == tplShell && ctx.shellsDisabled {
+			if k == tplShell && !offer.Shell() {
 				continue
 			}
 			prims = append(prims, paletteItem{primitive: k})
