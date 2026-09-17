@@ -688,24 +688,27 @@ func (a *App) resize() {
 // restore walk's awaited read both come here.
 func (a *App) loadGrid(ctx context.Context, id string) error {
 	resp, err := a.cl.GetGrid(ctx, id)
-	if err != nil {
-		if clientsync.Of(err) != clientsync.OutcomeTransport {
-			a.fetch.gridLoadFailed.Set(id)
-		}
-		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
-		return err
-	}
-	a.resolveErr("grid:" + id)
-	a.fetch.gridLoadFailed.Clear(id)
-	if resp.Grid.Id != id {
-		// The cache keys by the answered name and every frame resolves by the
-		// asked one, so answering under another id strands the pane on 200s.
+	// clientsync.ReactGridRead is the one table; this runs its arms.
+	r := clientsync.ReactGridRead(id, resp.GetGrid().GetId(), clientsync.Of(err))
+	switch r.Latch {
+	case clientsync.LatchSet:
 		a.fetch.gridLoadFailed.Set(id)
+	case clientsync.LatchClear:
+		a.fetch.gridLoadFailed.Clear(id)
+	}
+	switch {
+	case err != nil:
+		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
+	case r.Renamed:
 		a.reportErr(errsurface.Error, "grid:"+id,
 			"asked for grid "+id+", was answered "+resp.Grid.Id+" — the view of "+id+" cannot load")
+	default:
+		a.resolveErr("grid:" + id)
 	}
-	a.c.PutGrid(resp.Grid, resp.Tiles)
-	return nil
+	if r.Store {
+		a.c.PutGrid(resp.Grid, resp.Tiles)
+	}
+	return err
 }
 
 // fetchGrid loads a grid in the background, deduped per id: the renderer fires

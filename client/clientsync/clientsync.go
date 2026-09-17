@@ -111,3 +111,40 @@ func IsUnimplemented(err error) bool {
 	var ce *connect.Error
 	return errors.As(err, &ce) && ce.Code() == connect.CodeUnimplemented
 }
+
+// GridRead is what one GetGrid answer calls for. The cache keys a grid by the
+// id it was answered under and every frame resolves by the id it was asked
+// for, so an answer under another name would strand the pane loading forever
+// with a 200 behind it: that is a verdict on the asked id, latched and
+// reported, though the rows are still worth remembering under their own.
+type GridRead struct {
+	Latch LatchVerdict
+	// Store puts the answered rows in the cache.
+	Store bool
+	// Renamed is the answered-under-another-id case, which the notice names.
+	Renamed bool
+}
+
+// LatchVerdict is what an answer says about the asked id's failure latch. A
+// transport failure says nothing, so it leaves the latch as it found it.
+type LatchVerdict int
+
+const (
+	LatchKeep LatchVerdict = iota
+	LatchSet
+	LatchClear
+)
+
+// ReactGridRead is the one table for a grid read's outcome.
+func ReactGridRead(asked, answered string, o Outcome) GridRead {
+	switch o {
+	case OutcomeOK:
+		if answered != asked {
+			return GridRead{Latch: LatchSet, Store: true, Renamed: true}
+		}
+		return GridRead{Latch: LatchClear, Store: true}
+	case OutcomeTransport:
+		return GridRead{}
+	}
+	return GridRead{Latch: LatchSet}
+}

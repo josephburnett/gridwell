@@ -168,3 +168,23 @@ func TestOfReadsOurOwnDeadlineAsTransport(t *testing.T) {
 		})
 	}
 }
+
+func TestReactGridRead(t *testing.T) {
+	cases := []struct {
+		name            string
+		asked, answered string
+		o               Outcome
+		want            GridRead
+	}{
+		{"answered as asked", "n1/7", "n1/7", OutcomeOK, GridRead{Latch: LatchClear, Store: true}},
+		{"answered under another id latches, reports, and still stores", "n1/7", "n1/8", OutcomeOK, GridRead{Latch: LatchSet, Store: true, Renamed: true}},
+		{"transport touches no latch", "n1/7", "", OutcomeTransport, GridRead{}},
+		{"a verdict latches", "n1/7", "", OutcomeRejected, GridRead{Latch: LatchSet}},
+		{"a conflict latches", "n1/7", "", OutcomeConflict, GridRead{Latch: LatchSet}},
+	}
+	for _, c := range cases {
+		if got := ReactGridRead(c.asked, c.answered, c.o); got != c.want {
+			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
