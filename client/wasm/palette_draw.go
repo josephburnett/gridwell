@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/tileface"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
@@ -178,7 +179,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		// tiles do.
 		a.drawPluginHealthTint(n, x, y, w, h)
 	} else {
-		outside := tileOutside(n, false)
+		outside := tileface.Outside(n, false)
 		drawNode(a.cctx, n, x, y, w, h, false, outside, tileBorderPx, false)
 		if pr, ok := primitiveFor(item.primitive); ok {
 			pr.glyph(a, x, y, w, h)

@@ -19,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/tilebanner"
+	"github.com/josephburnett/gridwell/client/tileface"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -599,7 +600,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						continue
 					}
 					nn := n
-					outside := tileOutside(nn, inHost)
+					outside := tileface.Outside(nn, inHost)
 					dashed := !inHost && isLinkTile(nn)
 					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, outside, dashed, p.ID)
 					a.drawPluginHealthTint(nn, left, top, w, h)
@@ -850,22 +851,6 @@ func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
 	return n.Kind == rpc.KindText && !writable
 }
 
-// tileOutside reports the outside-Gridwell treatment: a grid that declares
-// host_content, so every row in it is host state; an exit well, wherever it
-// sits; or a shell tile.
-func tileOutside(n *gridwellv1.Tile, parentHostContent bool) bool {
-	if parentHostContent {
-		return true
-	}
-	if isExitWell(n) {
-		return true
-	}
-	if n.Kind == rpc.KindShell {
-		return true
-	}
-	return false
-}
-
 // isLinkTile reports a reference rather than owned content: dropping one on the
 // trashcan unlinks it, where an owned well deletes for real. Reference is the
 // one signal, and a uuid comparison would miss a same-plugin mount.
@@ -944,24 +929,18 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	})
 }
 
-// bannerTextColor echoes the tile's own outline, so label and border read as
-// one. A cross-plugin well is blue like every well: it is dashed, not recolored.
+// bannerTextColor is the pixels half of tileface.BannerHue.
 func bannerTextColor(n *gridwellv1.Tile, outside bool) string {
-	if n.Kind == rpc.KindShell {
+	switch tileface.BannerHue(n, outside) {
+	case tileface.HueShell:
 		return colorShellBorder
-	}
-	if isExitWell(n) {
+	case tileface.HueWell:
 		return colorFocusBorder
-	}
-	if outside {
+	case tileface.HueHost:
 		return colorPluginBorder
-	}
-	switch n.Kind {
-	case rpc.KindWell:
-		return colorFocusBorder
-	case rpc.KindURL:
+	case tileface.HueURL:
 		return colorURLLine
-	case rpc.KindText:
+	case tileface.HueText:
 		return colorMarkdownLine
 	}
 	return colorMuted
@@ -1048,7 +1027,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		nn := n
 		// url and shell children do not overlay their JPEGs, so a well's
 		// interior reads uniformly.
-		drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(nn, childInHost), borderPx, false)
+		drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileface.Outside(nn, childInHost), borderPx, false)
 	}
 }
 
@@ -1092,7 +1071,7 @@ func drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool,
 // hole it animates toward 1 and cross-fades into a trashcan, reversibly.
 func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
 	// No parent grid is in play, so the ghost's own kind is the outside signal.
-	outside := tileOutside(n, false)
+	outside := tileface.Outside(n, false)
 	// A dragged link shows dashed, and so does a drop that will create one:
 	// dashed always means this is, or becomes, a reference. It is how the user
 	// learns mid-drag which right-button mode is armed.
