@@ -108,3 +108,19 @@ func TestDecideLinkPress(t *testing.T) {
 		}
 	}
 }
+
+// A stream end that says the session is gone leaves a known dead answer; any
+// other end forgets, so the next descent probes rather than trusting either.
+func TestExitAliveFeedsTheProbe(t *testing.T) {
+	if alive, known := ExitAlive(true); alive || !known {
+		t.Fatalf("session gone: got (%v, %v), want (false, true)", alive, known)
+	}
+	if _, known := ExitAlive(false); known {
+		t.Fatal("a plain stream end must not be remembered as a verdict")
+	}
+	// The forgotten answer routes a snapshotted tile back through the probe.
+	_, known := ExitAlive(false)
+	if got := DecideAutoLive(false, true, true, true, true, known, false, false); got != AutoLiveProbeShell {
+		t.Fatalf("after a plain end a snapshotted shell should probe, got %v", got)
+	}
+}

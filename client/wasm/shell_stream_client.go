@@ -516,16 +516,15 @@ func (a *App) onShellData(paneID string, data []byte) {
 }
 
 // onShellExit handles an unexpected stream end; a local close is suppressed by
-// the registry. sessionGone is the server's definitive verdict, so the cache
-// flips; any other end carries none, so the cached answer is dropped.
+// the registry. What the end says about the session is shellconn.ExitAlive's.
 func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 	conn := a.shellConnFor(paneID)
 	if conn == nil {
 		return
 	}
 	shellLog("exit pane=%s tile=%s gone=%v msg=%q", paneID, conn.tileID, sessionGone, message)
-	if sessionGone {
-		a.setShellAlive(conn.tileID, false)
+	if alive, known := shellconn.ExitAlive(sessionGone); known {
+		a.setShellAlive(conn.tileID, alive)
 	} else {
 		delete(a.shellAlive, conn.tileID)
 	}

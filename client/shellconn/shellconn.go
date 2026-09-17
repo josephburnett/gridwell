@@ -102,3 +102,15 @@ func DecideLinkPress(hoveredURL, mouseTracking string, modifier bool) bool {
 	}
 	return mouseTracking != "" && mouseTracking != MouseTrackingNone
 }
+
+// ExitAlive is what a stream's end says about the session's liveness, the
+// fact DecideAutoLive and DecideShellRefreshVisible read back. sessionGone is
+// the server's definitive verdict, so the answer is known dead; any other
+// end carries none, so the cached answer is forgotten and the next descent
+// probes again.
+func ExitAlive(sessionGone bool) (alive, known bool) {
+	if sessionGone {
+		return false, true
+	}
+	return false, false
+}
