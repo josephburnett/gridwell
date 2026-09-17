@@ -43,10 +43,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 	originY := y - p.TextScrollY*scale
 
 	withClip(a.cctx, x, y, w, h, func() {
-		mode := p.TextMode
-		if mode == "" {
-			mode = rpc.TextModeRendered
-		}
+		mode := textedit.ShownMode(p.TextMode, a.tileReadOnly(n))
 		ready := a.overlays.textareaReady
 		if mode == rpc.TextModeRendered {
 			ready = a.overlays.renderedReady

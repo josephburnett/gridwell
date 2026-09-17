@@ -390,21 +390,21 @@ func (a *App) refreshFileOverlay() {
 	ta := a.overlays.textTextarea
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
+	// textedit.ShownMode owns which face shows: an uncached row is not yet
+	// known read-only, so the pane's own mode stands until the row lands.
+	readOnly := false
+	if p != nil {
+		if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+			if file, ok := g.Tiles[p.ContentID()]; ok {
+				readOnly = a.tileReadOnly(file)
+			}
+		}
+	}
+	if p == nil || p.ContentID() == "" || textedit.ShownMode(p.TextMode, readOnly) != rpc.TextModeText {
 		ta.Get("style").Set("display", "none")
 		// Back to the canvas so ascent and other gestures keep working.
 		a.focusCanvas()
 		return
-	}
-	// Source-backed text tiles are read-only. The server-stored mode can
-	// outlive the source key being set, so a stale "text" must not show the
-	// textarea.
-	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if file, ok := g.Tiles[p.ContentID()]; ok && a.tileReadOnly(file) {
-			ta.Get("style").Set("display", "none")
-			a.focusCanvas()
-			return
-		}
 	}
 	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {

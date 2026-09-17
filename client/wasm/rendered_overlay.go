@@ -106,17 +106,7 @@ func (a *App) refreshRenderedOverlay() {
 		hide()
 		return
 	}
-	mode := p.TextMode
-	if mode == "" {
-		mode = rpc.TextModeRendered
-	}
-	// A read-only tile always shows its rendered, selectable face. This
-	// display-time guard makes textedit.DescentMode's rule hold from every
-	// entry point, a restored session included.
-	if a.tileReadOnly(t) {
-		mode = rpc.TextModeRendered
-	}
-	if mode != rpc.TextModeRendered {
+	if textedit.ShownMode(p.TextMode, a.tileReadOnly(t)) != rpc.TextModeRendered {
 		hide()
 		return
 	}

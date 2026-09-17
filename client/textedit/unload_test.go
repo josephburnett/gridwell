@@ -69,3 +69,31 @@ func TestDescentModeTable(t *testing.T) {
 		}
 	}
 }
+
+func TestShownModeIsDescentModeAtDisplayTime(t *testing.T) {
+	cases := []struct {
+		name     string
+		paneMode string
+		readOnly bool
+		want     string
+	}{
+		{"text stays text", rpc.TextModeText, false, rpc.TextModeText},
+		{"rendered stays rendered", rpc.TextModeRendered, false, rpc.TextModeRendered},
+		{"no mode is rendered", "", false, rpc.TextModeRendered},
+		{"read-only renders a stale text mode", rpc.TextModeText, true, rpc.TextModeRendered},
+		{"read-only renders no mode", "", true, rpc.TextModeRendered},
+	}
+	for _, c := range cases {
+		if got := ShownMode(c.paneMode, c.readOnly); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+	// A descent's installed mode is shown as installed: the two rules agree
+	// on every editable document.
+	for _, stored := range []string{"", rpc.TextModeText, rpc.TextModeRendered} {
+		in := ModeInput{TextDocument: true, Cached: true, Stored: stored}
+		if got := ShownMode(DescentMode(in), false); got != DescentMode(in) {
+			t.Errorf("stored %q: descent installs %q, display shows %q", stored, DescentMode(in), got)
+		}
+	}
+}

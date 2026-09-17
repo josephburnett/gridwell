@@ -71,3 +71,14 @@ func DescentMode(in ModeInput) string {
 	}
 	return in.Stored
 }
+
+// ShownMode is the face a descended pane shows now, DescentMode's rule read at
+// display time: a read-only row renders whatever mode a restored session left
+// on the pane, and no mode at all is rendered. Every display path reads it, so
+// a stale "text" cannot open a textarea over content the user cannot change.
+func ShownMode(paneMode string, readOnly bool) string {
+	if readOnly || paneMode == "" {
+		return rpc.TextModeRendered
+	}
+	return paneMode
+}
