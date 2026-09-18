@@ -92,7 +92,7 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		// framing the node remembers rides along, so re-entering lands where
 		// the user left it.
 		out := &gridwellv1.MenuEntry{
-			Id: m.Id, Label: m.Label, Glyph: m.Glyph, Color: m.Color,
+			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
 		}
 		if m.Context != "" {
 			id, err := a.canonicalGridID(m.Context)

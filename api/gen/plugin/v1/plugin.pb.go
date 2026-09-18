@@ -263,7 +263,6 @@ type MenuEntry struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	Glyph         string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`
-	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`
 	Context       string                 `protobuf:"bytes,7,opt,name=context,proto3" json:"context,omitempty"` // the target context key
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -316,13 +315,6 @@ func (x *MenuEntry) GetLabel() string {
 func (x *MenuEntry) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
-	}
-	return ""
-}
-
-func (x *MenuEntry) GetColor() string {
-	if x != nil {
-		return x.Color
 	}
 	return ""
 }
@@ -1601,13 +1593,12 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x05watch\x18\x05 \x01(\bR\x05watch\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x127\n" +
 	"\fmenu_entries\x18\a \x03(\v2\x14.plugin.v1.MenuEntryR\vmenuEntries\x12!\n" +
-	"\fhost_content\x18\b \x01(\bR\vhostContent\"\x83\x01\n" +
+	"\fhost_content\x18\b \x01(\bR\vhostContent\"s\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
-	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x14\n" +
-	"\x05color\x18\x04 \x01(\tR\x05color\x12\x18\n" +
-	"\acontext\x18\a \x01(\tR\acontextJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"'\n" +
+	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x18\n" +
+	"\acontext\x18\a \x01(\tR\acontextJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"'\n" +
 	"\vListRequest\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\"\x83\x01\n" +
 	"\fListResponse\x12*\n" +

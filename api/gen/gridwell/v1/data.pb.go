@@ -244,7 +244,6 @@ type MenuEntry struct {
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // entry identity within the plugin
 	Label  string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                 // swatch label, verbatim
 	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default face)
-	Color  string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`                 // optional CSS accent for the swatch border/glyph ("" = default)
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
 	// meaning as PluginInfo.root_view_*. A doorway carries the framing of the
@@ -305,13 +304,6 @@ func (x *MenuEntry) GetLabel() string {
 func (x *MenuEntry) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
-	}
-	return ""
-}
-
-func (x *MenuEntry) GetColor() string {
-	if x != nil {
-		return x.Color
 	}
 	return ""
 }
@@ -3286,17 +3278,16 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x12!\n" +
 	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
 	"\x05glyph\x18\x0e \x01(\tR\x05glyphJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"\"\xd1\x01\n" +
+	"\"\xc1\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
-	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x14\n" +
-	"\x05color\x18\x04 \x01(\tR\x05color\x12\x17\n" +
+	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x17\n" +
 	"\agrid_id\x18\a \x01(\tR\x06gridId\x12\x17\n" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xc6\x06\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xc6\x06\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +

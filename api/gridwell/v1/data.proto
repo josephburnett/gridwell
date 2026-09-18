@@ -87,8 +87,7 @@ message MenuEntry {
   string id           = 1; // entry identity within the plugin
   string label        = 2; // swatch label, verbatim
   string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default face)
-  string color        = 4; // optional CSS accent for the swatch border/glyph ("" = default)
-  reserved 5, 6; // kind, param_schema
+  reserved 4, 5, 6; // color, kind, param_schema
   string grid_id      = 7; // the target grid, qualified per hop
   // view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
   // meaning as PluginInfo.root_view_*. A doorway carries the framing of the
