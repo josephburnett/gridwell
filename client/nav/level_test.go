@@ -334,7 +334,7 @@ func TestLeaveLevels(t *testing.T) {
 			EffCloseMenu, EffFlushDroppedSubtree, EffPopLevel}) {
 			t.Fatalf("effects = %v, want the hop", kinds(plan))
 		}
-		if e := only(t, plan, EffPopLevel); e.GridID != "" || e.OriginPane != "pane1" {
+		if e := only(t, plan, EffPopLevel); e.GridID != "" {
 			t.Fatalf("pop = %+v, want the parked tree's own landing", e)
 		}
 		if plan.Next == nil || !plan.Next.Outer || !plan.Next.Animate {

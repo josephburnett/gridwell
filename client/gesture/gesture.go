@@ -11,9 +11,6 @@ type Kind int
 
 const (
 	None Kind = iota
-	// Ascend is armed on the corner circle. Release inside it ascends,
-	// dragging out cancels.
-	Ascend
 	// TileCenter is the copy and link handle, a tile's inner third; ctrl at
 	// the press makes it a link.
 	TileCenter

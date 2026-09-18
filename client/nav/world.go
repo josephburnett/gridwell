@@ -22,11 +22,7 @@ type PaneView struct {
 	// Cx, Cy, Zoom are the live viewport, the transition's scratch values
 	// mid-animation.
 	Cx, Cy, Zoom float64
-	TextScrollX  float64
-	TextScrollY  float64
-	TextMode     string
 	Rect         pane.Rect
-	OnScreen     bool
 	// GridID is the grid the place names, resolved by the gatherer because the
 	// walk reads the cache and kicks its own fetches.
 	GridID string
@@ -45,9 +41,8 @@ type Notice struct {
 
 // DoorWorld is what only the shim can resolve about the doorway row.
 type DoorWorld struct {
-	DeadLink        bool // deadref.DeadTile
-	IsLink          bool // isLinkTile, the row's reference declaration
-	ChildGridCached bool
+	DeadLink bool // deadref.DeadTile
+	IsLink   bool // isLinkTile, the row's reference declaration
 	// Health is pluginhealth.ClickNotice for a link with no child grid, nil
 	// when there is none or the question does not arise.
 	Health   *Notice
@@ -153,9 +148,6 @@ type World struct {
 	Animating  map[string]bool // trans.Active per pane
 	MenuOpenOn string          // the pane the + menu is open on, "" for none
 	Caps       caps.Caps
-	// Surfaces is every pane holding a live surface, keyed by the content it
-	// shows: the input to pane.TakeOver.
-	Surfaces   []pane.Holder
 	LevelDepth int
 	LevelTop   *pane.Level
 

@@ -27,7 +27,7 @@ const (
 	// the swap), Baseline, KeepOuter, IDPrefix.
 	EffInstallLevel
 	// EffPopLevel leaves one pane-tile level, restoring the tree it parked or
-	// a fresh pane at GridID: OriginPane, TileID, GridID.
+	// a fresh pane at GridID: GridID.
 	EffPopLevel
 
 	// EffFlushFraming persists every pane's settled grid framing now; the
@@ -116,19 +116,17 @@ type Effect struct {
 	Tile *gridwellv1.Tile
 
 	// Place and tree.
-	Stack      *pane.Stack
-	Viewport   *Viewport
-	Foot       pane.Footprint
-	Zoom       float64
-	Level      *pane.Level
-	Tree       *pane.Tree
-	Baseline   []byte
-	KeepOuter  bool
-	Capture    bool
-	IDPrefix   string
-	Animate    bool
-	OriginPane string
-	Count      int
+	Stack     *pane.Stack
+	Viewport  *Viewport
+	Foot      pane.Footprint
+	Zoom      float64
+	Level     *pane.Level
+	Tree      *pane.Tree
+	Baseline  []byte
+	KeepOuter bool
+	Capture   bool
+	IDPrefix  string
+	Count     int
 
 	// Writeback.
 	Owner pane.FramingOwner

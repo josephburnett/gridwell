@@ -155,7 +155,6 @@ func (a *App) navWorldCommon() nav.World {
 		Animating:       map[string]bool{},
 		MenuOpenOn:      a.menu.PaneID(),
 		Caps:            a.caps,
-		Surfaces:        append(a.urlSurfaces(), a.shellSurfaces()...),
 		LevelDepth:      a.ws.Depth(),
 		LevelTop:        a.ws.Top(),
 		ShellAlive:      map[string]bool{},
@@ -163,23 +162,19 @@ func (a *App) navWorldCommon() nav.World {
 	}
 	rects := a.layoutPanes()
 	a.tree.Walk(func(p *pane.Pane) {
-		r, onScreen := rects[p.ID]
+		r := rects[p.ID]
 		// One walk of the place per pane: the grid and its scratch stamp are
 		// the same read.
 		gid := a.gridIDForPane(p)
 		w.Panes = append(w.Panes, nav.PaneView{
-			ID:          p.ID,
-			Stack:       p.Stack.Clone(),
-			Cx:          p.Cx,
-			Cy:          p.Cy,
-			Zoom:        p.Zoom,
-			TextScrollX: p.TextScrollX,
-			TextScrollY: p.TextScrollY,
-			TextMode:    p.TextMode,
-			Rect:        r,
-			OnScreen:    onScreen,
-			GridID:      gid,
-			Scratch:     a.scratchGridIn(gid),
+			ID:      p.ID,
+			Stack:   p.Stack.Clone(),
+			Cx:      p.Cx,
+			Cy:      p.Cy,
+			Zoom:    p.Zoom,
+			Rect:    r,
+			GridID:  gid,
+			Scratch: a.scratchGridIn(gid),
 		})
 		w.Animating[p.ID] = a.trans.Active(p.ID)
 	})
@@ -200,11 +195,7 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 		IsLink:   isLinkTile(tile),
 		ReadOnly: a.tileReadOnly(tile),
 	}
-	if tile.ChildGridId != "" {
-		_, d.ChildGridCached = a.c.Grid(tile.ChildGridId)
-		return d
-	}
-	if !rpc.IsWellKind(tile.Kind) {
+	if tile.ChildGridId != "" || !rpc.IsWellKind(tile.Kind) {
 		return d
 	}
 	// A doorway with no target: ask pluginhealth why, so the click says
