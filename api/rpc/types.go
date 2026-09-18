@@ -138,18 +138,10 @@ func IsConnectionRow(pl *pb.PluginInfo) bool {
 	return pl.GetKind() == PluginKindConnection
 }
 
-// HomeGrid is the qualified grid id "/" means, falling back to the first
-// rooted row for a node that does not send home_grid_id.
+// HomeGrid is the qualified grid id "/" means: the handshake's home_grid_id,
+// a field and never a row's position. "" is a node that learned no home.
 func HomeGrid(l *pb.HandshakeResponse) string {
-	if l.HomeGridId != "" {
-		return l.HomeGridId
-	}
-	for _, pl := range l.Plugins {
-		if pl.RootGridId != "" {
-			return pl.RootGridId
-		}
-	}
-	return ""
+	return l.GetHomeGridId()
 }
 
 // IsContentDescentKind: descending one of these sets pane.TextFocus rather

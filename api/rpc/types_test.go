@@ -207,24 +207,19 @@ func TestKindPartition(t *testing.T) {
 	}
 }
 
-// TestHomeGrid: "/" means the handshake's home_grid_id, falling back to the
-// first rooted plugin row and skipping rootless ones. It is the one boot and
-// URL home derivation.
+// TestHomeGrid: "/" means the handshake's home_grid_id and never a row's
+// position, so a rooted first row is not a home. It is the one boot, URL and
+// mount landing derivation.
 func TestHomeGrid(t *testing.T) {
 	first := &pb.PluginInfo{Uuid: "p1", RootGridId: "p1/1"}
-	second := &pb.PluginInfo{Uuid: "p2", RootGridId: "p2/1"}
-	rootless := &pb.PluginInfo{Uuid: "p0"} // no root_grid_id: broken or rootless
 	if got := HomeGrid(&pb.HandshakeResponse{HomeGridId: "n/1", Plugins: []*pb.PluginInfo{first}}); got != "n/1" {
 		t.Errorf("HomeGrid = %q, want the handshake's home_grid_id", got)
 	}
-	if got := HomeGrid(&pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rootless, second}}); got != "p2/1" {
-		t.Errorf("HomeGrid = %q, want p2/1 (the first rooted row, when the field is absent)", got)
+	if got := HomeGrid(&pb.HandshakeResponse{Plugins: []*pb.PluginInfo{first}}); got != "" {
+		t.Errorf("HomeGrid = %q, want \"\": a rooted row is not a home", got)
 	}
-	if got := HomeGrid(&pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rootless}}); got != "" {
-		t.Errorf("HomeGrid = %q, want \"\" (nothing rooted)", got)
-	}
-	if got := HomeGrid(&pb.HandshakeResponse{}); got != "" {
-		t.Errorf("HomeGrid(empty) = %q, want empty", got)
+	if got := HomeGrid(nil); got != "" {
+		t.Errorf("HomeGrid(nil) = %q, want empty", got)
 	}
 }
 

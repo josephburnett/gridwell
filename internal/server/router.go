@@ -195,13 +195,15 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		// cookie-authenticated mux.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
 	}
-	if rt.srv.cfg.ID != "" {
-		for _, p := range out {
-			if p.Uuid == rt.srv.cfg.ID {
-				resp.HomeGridId = p.RootGridId
-				resp.HomeViewCx, resp.HomeViewCy, resp.HomeViewZoom = p.RootViewCx, p.RootViewCy, p.RootViewZoom
-			}
+	// The home row is the node's own; homeUUID names it, so a registry wired
+	// without an id still lands somewhere.
+	for _, p := range out {
+		if p.Uuid == rt.srv.homeUUID() {
+			resp.HomeGridId = p.RootGridId
+			resp.HomeViewCx, resp.HomeViewCy, resp.HomeViewZoom = p.RootViewCx, p.RootViewCy, p.RootViewZoom
 		}
+	}
+	if rt.srv.cfg.ID != "" {
 		// One row per connection, under the node's own id, after the content
 		// plugins. What a connection is, its landing and its status, is the
 		// transport's own handshake (connection.Server.Rows), asked here as
@@ -854,16 +856,9 @@ func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse
 	if err != nil {
 		return nil, err
 	}
-	root := ""
-	for _, p := range lp.Plugins {
-		if p.RootGridId != "" {
-			root = p.RootGridId
-			break
-		}
-	}
 	return &pb.InfoResponse{
 		Writable:   false,
-		RootGridId: root,
+		RootGridId: rpc.HomeGrid(lp),
 	}, nil
 }
 
