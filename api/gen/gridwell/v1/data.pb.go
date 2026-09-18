@@ -2215,12 +2215,9 @@ type HandshakeResponse struct {
 	// plugins: the node's home (first) and its content plugins.
 	Plugins []*PluginInfo `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
 	// home_grid_id is where a client lands ("/"): the home's root grid,
-	// qualified. It is a field, never derived from row order. home_view_* is
-	// its persisted viewport, and zero zoom means never set.
-	HomeGridId   string  `protobuf:"bytes,9,opt,name=home_grid_id,json=homeGridId,proto3" json:"home_grid_id,omitempty"`
-	HomeViewCx   float64 `protobuf:"fixed64,10,opt,name=home_view_cx,json=homeViewCx,proto3" json:"home_view_cx,omitempty"`
-	HomeViewCy   float64 `protobuf:"fixed64,11,opt,name=home_view_cy,json=homeViewCy,proto3" json:"home_view_cy,omitempty"`
-	HomeViewZoom float64 `protobuf:"fixed64,12,opt,name=home_view_zoom,json=homeViewZoom,proto3" json:"home_view_zoom,omitempty"`
+	// qualified. It is a field, never derived from row order; the row rooted
+	// there carries the home's framing.
+	HomeGridId string `protobuf:"bytes,9,opt,name=home_grid_id,json=homeGridId,proto3" json:"home_grid_id,omitempty"`
 	// connections is RETIRED; see ConnectionInfo. A connection is a plugins
 	// row with kind "connection", after the home and the content plugins.
 	Connections []*ConnectionInfo `protobuf:"bytes,13,rep,name=connections,proto3" json:"connections,omitempty"`
@@ -2287,27 +2284,6 @@ func (x *HandshakeResponse) GetHomeGridId() string {
 		return x.HomeGridId
 	}
 	return ""
-}
-
-func (x *HandshakeResponse) GetHomeViewCx() float64 {
-	if x != nil {
-		return x.HomeViewCx
-	}
-	return 0
-}
-
-func (x *HandshakeResponse) GetHomeViewCy() float64 {
-	if x != nil {
-		return x.HomeViewCy
-	}
-	return 0
-}
-
-func (x *HandshakeResponse) GetHomeViewZoom() float64 {
-	if x != nil {
-		return x.HomeViewZoom
-	}
-	return 0
 }
 
 func (x *HandshakeResponse) GetConnections() []*ConnectionInfo {
@@ -3475,20 +3451,15 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\froot_view_cy\x18\x05 \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\x06 \x01(\x01R\frootViewZoom\x12#\n" +
-	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xfd\x02\n" +
+	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xa5\x02\n" +
 	"\x11HandshakeResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12 \n" +
 	"\fhome_grid_id\x18\t \x01(\tR\n" +
-	"homeGridId\x12 \n" +
-	"\fhome_view_cx\x18\n" +
-	" \x01(\x01R\n" +
-	"homeViewCx\x12 \n" +
-	"\fhome_view_cy\x18\v \x01(\x01R\n" +
-	"homeViewCy\x12$\n" +
-	"\x0ehome_view_zoom\x18\f \x01(\x01R\fhomeViewZoom\x12=\n" +
+	"homeGridId\x12=\n" +
 	"\vconnections\x18\r \x03(\v2\x1b.gridwell.v1.ConnectionInfoR\vconnections\x12'\n" +
 	"\x0fshells_disabled\x18\x04 \x01(\bR\x0eshellsDisabled\x12#\n" +
-	"\rcontent_token\x18\x05 \x01(\tR\fcontentTokenJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"5\n" +
+	"\rcontent_token\x18\x05 \x01(\tR\fcontentTokenJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\r\"5\n" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"_\n" +
 	"\x11CreateTileRequest\x12\x17\n" +

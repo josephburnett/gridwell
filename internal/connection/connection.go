@@ -265,7 +265,9 @@ func (s *Server) Rows(ctx context.Context) []Row {
 			if lc != nil {
 				vctx, cancel := context.WithTimeout(ctx, rowsHandshakeWait)
 				if lp, err := lc.client.Handshake(vctx, &gridwellv1.HandshakeRequest{}); err == nil {
-					r.ViewCx, r.ViewCy, r.ViewZoom = lp.HomeViewCx, lp.HomeViewCy, lp.HomeViewZoom
+					if h := rpc.HomeRow(lp); h != nil {
+						r.ViewCx, r.ViewCy, r.ViewZoom = h.RootViewCx, h.RootViewCy, h.RootViewZoom
+					}
 				}
 				cancel()
 			}

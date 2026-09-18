@@ -487,16 +487,14 @@ message ConnectionInfo {
   string status_detail = 7;   // the last dial/learn failure while pending
 }
 message HandshakeResponse {
-  reserved 2, 3, 6, 7, 8; // a node grid's identity and viewport
+  reserved 2, 3, 6, 7, 8;   // a node grid's identity and viewport
+  reserved 10, 11, 12;      // the home row's root_view_*, once copied here
   // plugins: the node's home (first) and its content plugins.
   repeated PluginInfo plugins = 1;
   // home_grid_id is where a client lands ("/"): the home's root grid,
-  // qualified. It is a field, never derived from row order. home_view_* is
-  // its persisted viewport, and zero zoom means never set.
+  // qualified. It is a field, never derived from row order; the row rooted
+  // there carries the home's framing.
   string home_grid_id   = 9;
-  double home_view_cx   = 10;
-  double home_view_cy   = 11;
-  double home_view_zoom = 12;
   // connections is RETIRED; see ConnectionInfo. A connection is a plugins
   // row with kind "connection", after the home and the content plugins.
   repeated ConnectionInfo connections = 13;

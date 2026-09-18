@@ -200,7 +200,6 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 	for _, p := range out {
 		if p.Uuid == rt.srv.homeUUID() {
 			resp.HomeGridId = p.RootGridId
-			resp.HomeViewCx, resp.HomeViewCy, resp.HomeViewZoom = p.RootViewCx, p.RootViewCy, p.RootViewZoom
 		}
 	}
 	if rt.srv.cfg.ID != "" {

@@ -144,6 +144,21 @@ func HomeGrid(l *pb.HandshakeResponse) string {
 	return l.GetHomeGridId()
 }
 
+// HomeRow is the plugins row rooted at HomeGrid, the one owner of the home's
+// framing; nil when the node learned no home.
+func HomeRow(l *pb.HandshakeResponse) *pb.PluginInfo {
+	home := HomeGrid(l)
+	if home == "" {
+		return nil
+	}
+	for _, p := range l.GetPlugins() {
+		if p.GetRootGridId() == home {
+			return p
+		}
+	}
+	return nil
+}
+
 // IsContentDescentKind: descending one of these sets pane.TextFocus rather
 // than pushing a grid. Click-to-descend and the URL-restore walk share it, or
 // a descent encoded into the URL would be dropped on reload.

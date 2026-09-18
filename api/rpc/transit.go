@@ -119,9 +119,6 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 	}
 	out := &pb.HandshakeResponse{
 		ShellsDisabled: resp.ShellsDisabled,
-		HomeViewCx:     resp.HomeViewCx,
-		HomeViewCy:     resp.HomeViewCy,
-		HomeViewZoom:   resp.HomeViewZoom,
 	}
 	if resp.HomeGridId != "" {
 		out.HomeGridId = QualifyID(prefix, resp.HomeGridId)

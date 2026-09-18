@@ -25,11 +25,14 @@ func (hangingHandshakeClient) Handshake(ctx context.Context, _ *gridwellv1.Hands
 	return nil, ctx.Err()
 }
 
-// framedClient answers the handshake with the far home's viewport.
+// framedClient answers the handshake with a framed home row, as a node does.
 type framedClient struct{ landingClient }
 
 func (framedClient) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
-	return &gridwellv1.HandshakeResponse{HomeViewCx: 3, HomeViewCy: 4, HomeViewZoom: 2}, nil
+	return &gridwellv1.HandshakeResponse{
+		HomeGridId: "rnode1/7",
+		Plugins:    []*gridwellv1.PluginInfo{{RootGridId: "rnode1/7", RootViewCx: 3, RootViewCy: 4, RootViewZoom: 2}},
+	}, nil
 }
 
 // shortRowsHandshakeWait shrinks the framing bound for one test and restores it.

@@ -223,6 +223,23 @@ func TestHomeGrid(t *testing.T) {
 	}
 }
 
+// TestHomeRow: the home's framing is read from the row rooted at
+// home_grid_id, never from a row's position or a copy on the handshake.
+func TestHomeRow(t *testing.T) {
+	other := &pb.PluginInfo{Uuid: "p", RootGridId: "n/2", RootViewZoom: 9}
+	home := &pb.PluginInfo{Uuid: "n", RootGridId: "n/1", RootViewCx: 3, RootViewCy: 4, RootViewZoom: 2}
+	l := &pb.HandshakeResponse{HomeGridId: "n/1", Plugins: []*pb.PluginInfo{other, home}}
+	if got := HomeRow(l); got != home {
+		t.Errorf("HomeRow = %v, want the row rooted at home_grid_id", got)
+	}
+	if got := HomeRow(&pb.HandshakeResponse{Plugins: []*pb.PluginInfo{other}}); got != nil {
+		t.Errorf("HomeRow = %v, want nil: no home_grid_id names no row", got)
+	}
+	if got := HomeRow(&pb.HandshakeResponse{HomeGridId: "n/3", Plugins: []*pb.PluginInfo{other}}); got != nil {
+		t.Errorf("HomeRow = %v, want nil: a home no row is rooted at", got)
+	}
+}
+
 // TestContentID: the one resolution point for read-through. A leaf link's
 // content operations key by its target; an owned tile keys by itself. Every
 // client content door (body fetch, edit buffer, save routing, preview fetch,
