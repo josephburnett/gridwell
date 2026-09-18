@@ -31,6 +31,7 @@ here.
 | **grid frame** | One doorway crossing, with the viewport you left it at. The whole of where a pane is. |
 | **content frame** | A frame whose place is a tile rather than a grid (`pane.ContentFrame`): text scroll, text mode, and content zoom live here. A descent into a document is an ordinary level you can ascend out of. |
 | **level** | A pane-tile descent (`pane.Level`), session-only. One pane tile can hold a whole arrangement without the frame stack encoding a tree. |
+| **zoomed pane** | One leaf owns the whole window while the split ratios beneath it stay untouched (`pane.Tree.Zoomed`, the ⛶ title, a click on the title). Session-only; a structural edit unzooms first. |
 
 ## Lifecycle spaces
 
@@ -56,7 +57,7 @@ here.
 | Concept | What it does |
 |---|---|
 | **content** | The user's bytes: a text body, a typed url, a typed name. The only class that claims a version and can 409. |
-| **framing** | Where you left a view: `SetFraming`, `SetTextView`, `SetContentZoom`. No claim, no bump. |
+| **framing** | Where you left a view: `SetFraming`, and `SetTile`'s text-window, content-zoom and url-frozen arms. No claim, no bump. |
 | **capture** | What the machine observed: a preview JPEG, a page title, a url trail. No claim, no bump. |
 | **layout** | Where things sit: place, clone, delete. No claim, no bump; last-writer-wins. |
 
@@ -76,6 +77,8 @@ class, and the word says who started the write.
 | **text_presentation: rendered** | Document render only; no toggle. |
 | **text_presentation: both** | The toggle stays, whether or not the tile is writable. |
 | **url_frozen** | A standing user intent not to go live. A preview is what a frozen tile looks like; the intent is why it stays that way. |
+| **status_detail** | The owning plugin's one word about a tile's state ("unread", "done"), drawn muted after the name (`tilebanner.Runs`). A note on a name, never a second name, and nothing outside the plugin can derive it. |
+| **identity glyph** | The face a namespace wears on its swatch, its ghost and the crumb of the grid it roots (`door.GlyphFor`): declared by the plugin or the entry, globe for a connection, well for home. An unknown name degrades to the globe, so the client learns no plugin kinds. |
 
 `client/textedit` owns the first two presentation rules (`ToggleVisible`,
 `PresentationHTML`), so `make check` executes them.
