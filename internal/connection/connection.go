@@ -626,11 +626,8 @@ func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest
 	if ns == "" {
 		resp := &gridwellv1.HandshakeResponse{}
 		for _, r := range s.Rows(ctx) {
-			resp.Connections = append(resp.Connections, &gridwellv1.ConnectionInfo{
-				Uuid: r.Name, Label: r.Label, RootGridId: r.RootGridID,
-				RootViewCx: r.ViewCx, RootViewCy: r.ViewCy, RootViewZoom: r.ViewZoom,
-				StatusDetail: r.StatusDetail,
-			})
+			resp.Plugins = append(resp.Plugins, rpc.ConnectionRow(r.Name, r.Label, r.RootGridID, r.StatusDetail,
+				rpc.Framing{Cx: r.ViewCx, Cy: r.ViewCy, Zoom: r.ViewZoom}))
 		}
 		return resp, nil
 	}

@@ -190,7 +190,6 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 	// Home is the node's own store, where "/" lands. Its row is first because
 	// the registry registers it first, which no client has to know.
 	resp := &pb.HandshakeResponse{
-		Plugins:        out,
 		ShellsDisabled: rt.srv.cfg.DisableShells,
 		// The /content/ door's capability, handed out only here, on the
 		// cookie-authenticated mux.
@@ -203,18 +202,20 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 				resp.HomeViewCx, resp.HomeViewCy, resp.HomeViewZoom = p.RootViewCx, p.RootViewCy, p.RootViewZoom
 			}
 		}
-		// One row per connection, under the node's own id. What a connection
-		// is, its landing and its status, is the transport's own handshake
-		// (connection.Server.Rows), asked here as every namespace is asked and
-		// re-qualified one hop, so no second row shape can drift from it.
+		// One row per connection, under the node's own id, after the content
+		// plugins. What a connection is, its landing and its status, is the
+		// transport's own handshake (connection.Server.Rows), asked here as
+		// every namespace is asked and re-qualified one hop, so no second row
+		// shape can drift from it.
 		if t, ok := rt.srv.pluginReg.Transport(); ok {
 			tr, err := t.Handshake(ctx, &pb.HandshakeRequest{})
 			if err != nil {
 				return nil, err
 			}
-			resp.Connections = rpc.TransitQualifyPluginList(rt.srv.cfg.ID, tr).Connections
+			out = append(out, rpc.TransitQualifyPluginList(rt.srv.cfg.ID, tr).Plugins...)
 		}
 	}
+	resp.Plugins = out
 	return resp, nil
 }
 

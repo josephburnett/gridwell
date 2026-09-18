@@ -13,7 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 )
 
-// Doorways composes the section in rpc.MenuRows order, each row's declared
+// Doorways composes the section in handshake order, each row's declared
 // entries directly after it.
 func Doorways(rows []*gridwellv1.PluginInfo) []door.Place {
 	out := make([]door.Place, 0, len(rows))

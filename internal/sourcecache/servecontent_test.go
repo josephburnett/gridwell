@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -167,7 +168,7 @@ func (p *pageFake) Handshake(context.Context, *pb.HandshakeRequest) (*pb.Handsha
 	if p.dark {
 		return nil, status.Error(codes.Unavailable, "tunnel down")
 	}
-	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: "u1", RootGridId: "1"}}}, nil
+	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "1", "", rpc.Framing{})}}, nil
 }
 func (p *pageFake) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if p.dark {

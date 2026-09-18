@@ -13,7 +13,7 @@ const (
 	gone = "z9gonee"
 )
 
-// roster is rpc.MenuRows' shape: home, one plugin, one connection whose UUID
+// roster is the handshake's shape: home, one plugin, one connection whose UUID
 // is "<node>/<name>".
 func roster() []*gridwellv1.PluginInfo {
 	return []*gridwellv1.PluginInfo{

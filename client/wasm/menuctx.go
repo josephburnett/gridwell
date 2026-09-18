@@ -11,7 +11,6 @@ import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
-	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -77,7 +76,7 @@ func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 		return
 	}
 	mc := a.views.menuCtxs[ns]
-	mc.plugins = rpc.MenuRows(lp)
+	mc.plugins = lp.Plugins
 	mc.shellsDisabled = lp.ShellsDisabled
 	mc.fetched = true
 	a.draw()

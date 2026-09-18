@@ -633,7 +633,7 @@ func (a *App) bootstrap() {
 		a.draw()
 		time.Sleep(backoff.Next())
 	}
-	a.plugins = rpc.MenuRows(plugins)
+	a.plugins = plugins.Plugins
 	// The node's shells_disabled folds into the capability set at boot and is
 	// immutable after, so caps stays the one owner of what this client can do.
 	a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)

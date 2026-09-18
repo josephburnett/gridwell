@@ -13,6 +13,7 @@ import (
 	"time"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
@@ -31,7 +32,7 @@ type gated struct {
 // Handshake is the walk's doorstep: what a namespace answers for itself is
 // where its content begins, and the walk starts at the root declared here.
 func (g *gated) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
-	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: "u1", RootGridId: g.root}}}, nil
+	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", g.root, "", rpc.Framing{})}}, nil
 }
 
 func (g *gated) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {

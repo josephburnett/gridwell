@@ -182,10 +182,11 @@ func TestConnectionThroughTheChain(t *testing.T) {
 	if !strings.HasPrefix(lp.HomeGridId, localNodeID+"/") {
 		t.Fatalf("home_grid_id = %q, want the local home", lp.HomeGridId)
 	}
-	if len(lp.Connections) != 1 {
-		t.Fatalf("connections = %+v, want one", lp.Connections)
+	conns := connectionRows(lp)
+	if len(conns) != 1 {
+		t.Fatalf("connections = %+v, want one", conns)
 	}
-	conn := lp.Connections[0]
+	conn := conns[0]
 	wantRoot := localNodeID + "/geneva/rnode1/" + h.rootBare
 	if conn.Uuid != localNodeID+"/geneva" || conn.Label != "Geneva" || conn.RootGridId != wantRoot {
 		t.Fatalf("connection row = %+v, want uuid %s/geneva rooted at %s", conn, localNodeID, wantRoot)
@@ -239,7 +240,7 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := lp.Connections[0].RootGridId
+	root := connectionRows(lp)[0].RootGridId
 	// Hop 1: the transport's own stream carries the remote's events with
 	// the connection segment prepended.
 	transportEvents := make(chan *gridwellv1.Event, 32)
@@ -373,8 +374,9 @@ func TestDialFailureRidesTheRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lp.Connections) != 1 || lp.Connections[0].RootGridId != "" || !strings.Contains(lp.Connections[0].StatusDetail, "host key mismatch") {
-		t.Fatalf("pending row = %+v, want no root and the dial failure as status", lp.Connections)
+	conns := connectionRows(lp)
+	if len(conns) != 1 || conns[0].RootGridId != "" || !strings.Contains(conns[0].InfoError, "host key mismatch") {
+		t.Fatalf("pending row = %+v, want no root and the dial failure as status", conns)
 	}
 	if _, err := h.localCl.GetGrid(ctx, localNodeID+"/dead/x/1"); err == nil {
 		t.Fatal("a read through a dead connection must fail, not answer empty")
@@ -395,7 +397,7 @@ func TestShellDoorThroughAConnection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteRoot := lp.Connections[0].RootGridId
+	remoteRoot := connectionRows(lp)[0].RootGridId
 
 	// The shell tile lives on the REMOTE, created through the chain.
 	tile, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: remoteRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1}})
@@ -445,7 +447,7 @@ func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := lp.Connections[0].RootGridId
+	root := connectionRows(lp)[0].RootGridId
 
 	const subscribers = 4
 	ids := make(chan string, subscribers*8)
@@ -513,7 +515,7 @@ func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	localHome, remoteRoot := lp.HomeGridId, lp.Connections[0].RootGridId
+	localHome, remoteRoot := lp.HomeGridId, connectionRows(lp)[0].RootGridId
 
 	// The target: a text tile on the far node, addressed through the chain.
 	body := []byte("# through geneva")
@@ -564,4 +566,15 @@ func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
 	if string(got) != string(jpeg) {
 		t.Errorf("link preview = %q, want the target's jpeg", got)
 	}
+}
+
+// connectionRows is the handshake's connection rows, by their declared kind.
+func connectionRows(l *gridwellv1.HandshakeResponse) []*gridwellv1.PluginInfo {
+	var out []*gridwellv1.PluginInfo
+	for _, pl := range l.GetPlugins() {
+		if rpc.IsConnectionRow(pl) {
+			out = append(out, pl)
+		}
+	}
+	return out
 }

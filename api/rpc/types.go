@@ -118,26 +118,24 @@ func PluginWellTile(pl *pb.PluginInfo) *pb.Tile {
 // plugin row; never the shape of the uuid.
 const PluginKindConnection = "connection"
 
-// ConnectionRow presents a connection as a menu row, the one shape every menu
-// flow already handles. A pending connection is rootless with its failure in
-// StatusDetail, so health reads it as waiting, not broken.
-func ConnectionRow(c *pb.ConnectionInfo) *pb.PluginInfo {
+// ConnectionRow is the one shape a connection takes in the + menu: a plugins
+// row of kind connection wearing the globe, its landing as the root and the
+// last dial or learn failure as InfoError. A pending connection is rootless
+// with its failure in InfoError, so health reads it as waiting, not broken.
+// The transport mints one per declared connection and the transit fold mints
+// one per retired ConnectionInfo; nothing else spells the row.
+func ConnectionRow(uuid, label, rootGridID, statusDetail string, view Framing) *pb.PluginInfo {
 	return &pb.PluginInfo{
-		Uuid: c.Uuid, Kind: PluginKindConnection, Label: c.Label, Glyph: GlyphGlobe,
-		RootGridId: c.RootGridId, InfoError: c.StatusDetail,
-		RootViewCx: c.RootViewCx, RootViewCy: c.RootViewCy, RootViewZoom: c.RootViewZoom,
+		Uuid: uuid, Kind: PluginKindConnection, Label: label, Glyph: GlyphGlobe,
+		RootGridId: rootGridID, InfoError: statusDetail,
+		RootViewCx: view.Cx, RootViewCy: view.Cy, RootViewZoom: view.Zoom,
 	}
 }
 
-// MenuRows is the + menu's top row: the node's plugins, home first, then its
-// connections.
-func MenuRows(l *pb.HandshakeResponse) []*pb.PluginInfo {
-	out := make([]*pb.PluginInfo, 0, len(l.Plugins)+len(l.Connections))
-	out = append(out, l.Plugins...)
-	for _, c := range l.Connections {
-		out = append(out, ConnectionRow(c))
-	}
-	return out
+// IsConnectionRow reads the declared kind, the one fact that says a row is a
+// connection.
+func IsConnectionRow(pl *pb.PluginInfo) bool {
+	return pl.GetKind() == PluginKindConnection
 }
 
 // HomeGrid is the qualified grid id "/" means, falling back to the first

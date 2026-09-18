@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -32,7 +33,7 @@ func (u *linkUpstream) Handshake(context.Context, *pb.HandshakeRequest) (*pb.Han
 	if u.dark {
 		return nil, u.offline()
 	}
-	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: "u1", RootGridId: "u1/g1"}}}, nil
+	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "u1/g1", "", rpc.Framing{})}}, nil
 }
 
 func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {

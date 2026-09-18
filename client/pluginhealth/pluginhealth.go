@@ -31,7 +31,7 @@ func Classify(pl *gridwellv1.PluginInfo) Status {
 		return Broken
 	}
 	if pl.RootGridId == "" {
-		if pl.Kind == rpc.PluginKindConnection {
+		if rpc.IsConnectionRow(pl) {
 			return Waiting
 		}
 		return NoDoor

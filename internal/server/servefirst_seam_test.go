@@ -34,7 +34,7 @@ func (f *farConnection) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse
 // Handshake is what the transport declares about itself: one connection, its
 // landing already learned. The router's handshake reads the rows from here.
 func (f *farConnection) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
-	return &pb.HandshakeResponse{Connections: []*pb.ConnectionInfo{{Uuid: farConn, Label: "Geneva", RootGridId: farRoot}}}, nil
+	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow(farConn, "Geneva", farRoot, "", rpc.Framing{})}}, nil
 }
 
 const (
@@ -100,10 +100,11 @@ func TestServeFirstEventReachesTheClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	if len(list.Connections) != 1 {
-		t.Fatalf("connections = %+v, want the one", list.Connections)
+	conns := connectionRows(list)
+	if len(conns) != 1 {
+		t.Fatalf("connections = %+v, want the one", conns)
 	}
-	qualified := list.Connections[0].RootGridId
+	qualified := conns[0].RootGridId
 	if qualified != nodeID+"/"+root {
 		t.Fatalf("connection root = %q, want %q", qualified, nodeID+"/"+root)
 	}
@@ -179,4 +180,15 @@ func TestServeFirstEventReachesTheClient(t *testing.T) {
 	if len(after.Tiles) <= len(warm.Tiles) {
 		t.Fatalf("post-event listing = %d tiles, want more than the warm %d", len(after.Tiles), len(warm.Tiles))
 	}
+}
+
+// connectionRows is the handshake's connection rows, by their declared kind.
+func connectionRows(l *pb.HandshakeResponse) []*pb.PluginInfo {
+	var out []*pb.PluginInfo
+	for _, pl := range l.GetPlugins() {
+		if rpc.IsConnectionRow(pl) {
+			out = append(out, pl)
+		}
+	}
+	return out
 }

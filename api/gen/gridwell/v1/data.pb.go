@@ -2112,10 +2112,12 @@ func (x *PluginInfo) GetMenuEntries() []*MenuEntry {
 	return nil
 }
 
-// ConnectionInfo is one of the node's connections as the handshake lists
-// it: a row in the + menu that descends into the remote node's home. uuid
-// is "<node id>/<connection name>", the namespace every reference through
-// the connection carries.
+// ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
+// kind "connection", rpc.ConnectionRow's shape, because the + menu is one
+// uniform set of rows and this message was a second spelling of one member
+// of it. The message and field 13 are kept forever and read in one place,
+// rpc.TransitQualifyPluginList, so a node built before the fold keeps
+// presenting its connections; nothing writes them.
 type ConnectionInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Uuid          string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
@@ -2219,7 +2221,8 @@ type HandshakeResponse struct {
 	HomeViewCx   float64 `protobuf:"fixed64,10,opt,name=home_view_cx,json=homeViewCx,proto3" json:"home_view_cx,omitempty"`
 	HomeViewCy   float64 `protobuf:"fixed64,11,opt,name=home_view_cy,json=homeViewCy,proto3" json:"home_view_cy,omitempty"`
 	HomeViewZoom float64 `protobuf:"fixed64,12,opt,name=home_view_zoom,json=homeViewZoom,proto3" json:"home_view_zoom,omitempty"`
-	// connections: the node's remote nodes, in config order.
+	// connections is RETIRED; see ConnectionInfo. A connection is a plugins
+	// row with kind "connection", after the home and the content plugins.
 	Connections []*ConnectionInfo `protobuf:"bytes,13,rep,name=connections,proto3" json:"connections,omitempty"`
 	// shells_disabled: this node refuses shell tiles outright, from server.yaml's
 	// disable_shells. The client removes the shell primitive from the + palette,

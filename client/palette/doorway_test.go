@@ -58,8 +58,8 @@ func TestDoorwaysTable(t *testing.T) {
 	}, {
 		name: "a connection is a place, answered or not",
 		rows: []*gridwellv1.PluginInfo{
-			rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "n1/rtb", Label: "rtb", RootGridId: "n1/rtb/1"}),
-			rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "n1/far", Label: "far"}),
+			rpc.ConnectionRow("n1/rtb", "rtb", "n1/rtb/1", "", rpc.Framing{}),
+			rpc.ConnectionRow("n1/far", "far", "", "", rpc.Framing{}),
 		},
 		want: []string{"rtb", "far"},
 	}, {
@@ -74,7 +74,7 @@ func TestDoorwaysTable(t *testing.T) {
 			{Uuid: "n1", Label: "home", RootGridId: "n1/1",
 				MenuEntries: []*gridwellv1.MenuEntry{entry("trash", "trash", "n1/9")}},
 			{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{entry("feed", "Feed", "hey/2")}},
-			rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "n1/rtb", Label: "rtb", RootGridId: "n1/rtb/1"}),
+			rpc.ConnectionRow("n1/rtb", "rtb", "n1/rtb/1", "", rpc.Framing{}),
 		},
 		want: []string{"home", "home · trash", "hey · Feed", "rtb"},
 	}}

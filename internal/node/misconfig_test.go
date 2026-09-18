@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 )
 
@@ -152,11 +153,11 @@ func TestStartServesWhenTheRemoteIsMerelyUnreachable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := hs.Connections
+	rows := connectionRows(hs)
 	if len(rows) != 1 {
 		t.Fatalf("rows = %+v", rows)
 	}
-	if rows[0].RootGridId != "" || rows[0].StatusDetail == "" {
+	if rows[0].RootGridId != "" || rows[0].InfoError == "" {
 		t.Fatalf("a dark connection must be pending with its reason on the row, got %+v", rows[0])
 	}
 }
@@ -184,4 +185,15 @@ func TestStartRefusesTheOldPerNamespaceLayout(t *testing.T) {
 	if _, err := os.Stat(config.DBFile(home)); !os.IsNotExist(err) {
 		t.Fatalf("%s was minted beside the old layout", config.DBFile(home))
 	}
+}
+
+// connectionRows is the handshake's connection rows, by their declared kind.
+func connectionRows(l *pb.HandshakeResponse) []*pb.PluginInfo {
+	var out []*pb.PluginInfo
+	for _, pl := range l.GetPlugins() {
+		if rpc.IsConnectionRow(pl) {
+			out = append(out, pl)
+		}
+	}
+	return out
 }

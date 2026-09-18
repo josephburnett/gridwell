@@ -16,16 +16,16 @@ func TestClassifyTable(t *testing.T) {
 		want Status
 	}{
 		{"rooted plugin", &gridwellv1.PluginInfo{Label: "Home", RootGridId: "u/1"}, Enterable},
-		{"rooted connection", rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "c1", RootGridId: "c1/1"}), Enterable},
+		{"rooted connection", rpc.ConnectionRow("c1", "", "c1/1", "", rpc.Framing{}), Enterable},
 		{"info failed", &gridwellv1.PluginInfo{Label: "Files", InfoError: "plugin not responding: connection refused"}, Broken},
 		// A plugin contributes doorways rather than being one, so no root of
 		// its own is the healthy shape.
 		{"answered, entries and no root", &gridwellv1.PluginInfo{Label: "Mail",
 			MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed", Label: "Feed", GridId: "u/2"}}}, NoDoor},
 		{"answered, nothing declared", &gridwellv1.PluginInfo{Label: "Files"}, NoDoor},
-		{"connection not answered yet", rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "c1", Label: "rtb"}), Waiting},
-		{"connection that failed to dial", rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "c1", Label: "rtb",
-			StatusDetail: "dial tcp 127.0.0.1:1: connection refused"}), Broken},
+		{"connection not answered yet", rpc.ConnectionRow("c1", "rtb", "", "", rpc.Framing{}), Waiting},
+		{"connection that failed to dial", rpc.ConnectionRow("c1", "rtb", "",
+			"dial tcp 127.0.0.1:1: connection refused", rpc.Framing{}), Broken},
 		// A recorded error outranks a root: the error is the newer fact.
 		{"rooted but errored", &gridwellv1.PluginInfo{Label: "Files", RootGridId: "u/1", InfoError: "boom"}, Broken},
 	}
@@ -40,8 +40,8 @@ func TestClassifyTable(t *testing.T) {
 // distinguishes them.
 func TestBrokenIsOneStatusWithTheReasonInTheText(t *testing.T) {
 	failed := &gridwellv1.PluginInfo{Uuid: "u1", Label: "Files", InfoError: "plugin not responding: boom"}
-	dialed := rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "u2", Label: "Files",
-		StatusDetail: "dial tcp 127.0.0.1:1: connection refused"})
+	dialed := rpc.ConnectionRow("u2", "Files", "",
+		"dial tcp 127.0.0.1:1: connection refused", rpc.Framing{})
 	if Classify(failed) != Broken || Classify(dialed) != Broken {
 		t.Fatalf("both failures must be Broken: %v %v", Classify(failed), Classify(dialed))
 	}
@@ -104,11 +104,11 @@ func TestClickNotice_SourceKeyedByLabelCoalesces(t *testing.T) {
 // A connection row is recognized by its declared kind, not its uuid shape, so
 // this case is built through rpc.ConnectionRow, the one minter.
 func TestClickNotice_PendingConnection(t *testing.T) {
-	pl := rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "conn1", Label: "rtb"})
+	pl := rpc.ConnectionRow("conn1", "rtb", "", "", rpc.Framing{})
 	if _, _, msg, _ := ClickNotice(pl); !strings.Contains(msg, "loading rtb") {
 		t.Fatalf("an unsegmented connection uuid must still read as loading: %q", msg)
 	}
-	pl = rpc.ConnectionRow(&gridwellv1.ConnectionInfo{Uuid: "sshx/conn1", Label: "rtb"})
+	pl = rpc.ConnectionRow("sshx/conn1", "rtb", "", "", rpc.Framing{})
 	sev, source, msg, ok := ClickNotice(pl)
 	if !ok || source != "launcher:sshx/conn1" {
 		t.Fatalf("notice = %v %q %q %v (keyed by UUID — labels can collide)", sev, source, msg, ok)
