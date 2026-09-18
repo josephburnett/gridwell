@@ -297,7 +297,7 @@ func (m *Machine) autoLiveOnDescent(paneID string, tile *gridwellv1.Tile, w Worl
 	cid := rpc.ContentID(tile)
 	switch shellconn.DecideAutoLive(
 		rpc.WebContent(tile), tile.Kind == rpc.KindShell,
-		w.Caps.LiveURL, w.Caps.LiveShell,
+		w.Caps.LiveURL, w.Caps.Shells,
 		tile.PreviewBlobId != 0, w.ShellAliveKnown[cid], w.ShellAlive[cid],
 		tile.UrlFrozen) {
 	case shellconn.AutoLiveURL:

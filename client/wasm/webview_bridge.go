@@ -24,7 +24,7 @@ func bridge() js.Value {
 }
 
 // bridgeCaps reads the host's own declaration of which bridge halves it
-// implements. A bridge without the field is the full Electron preload.
+// implements. A missing bridge, or one declaring nothing, is a plain browser.
 // Shells are not on the list: the PTY rides the web door.
 func bridgeCaps() caps.Bridge {
 	g := bridge()
@@ -33,12 +33,9 @@ func bridgeCaps() caps.Bridge {
 	}
 	c := g.Get("caps")
 	if !c.Truthy() {
-		return caps.LegacyBridge()
+		return caps.NoBridge()
 	}
-	return caps.Bridge{
-		Present: true,
-		LiveURL: c.Get("liveUrl").Truthy(),
-	}
+	return caps.Bridge{LiveURL: c.Get("liveUrl").Truthy()}
 }
 
 // viewBounds is a content-box rectangle in CSS px, what panebox.ContentBox

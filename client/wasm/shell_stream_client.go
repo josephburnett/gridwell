@@ -154,7 +154,7 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 // opens the tile's PTY on the /shell WebSocket. A second call for the same pane
 // closes the previous attachment first. disable_shells refuses, preview stays.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
-	if !a.caps.LiveShell {
+	if !a.caps.Shells {
 		a.reportErr(caps.ShellNotice())
 		return
 	}

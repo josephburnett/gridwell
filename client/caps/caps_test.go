@@ -8,28 +8,29 @@ import (
 )
 
 func TestDerive(t *testing.T) {
-	if !Derive(LegacyBridge(), false).LiveURL {
-		t.Errorf("bridge present must enable live URL views")
+	urlBridge := Bridge{LiveURL: true}
+	if !Derive(urlBridge, false).LiveURL {
+		t.Errorf("a bridge declaring live url must enable live URL views")
 	}
 	if Derive(NoBridge(), false).LiveURL {
 		t.Errorf("no bridge must disable live URL views")
 	}
-	if c := Derive(LegacyBridge(), false); !c.Shells || !c.LiveShell {
-		t.Errorf("shells enabled + bridge: want Shells and LiveShell, got %+v", c)
+	// A bridge that declares nothing is a plain browser.
+	if Derive(Bridge{}, false).LiveURL {
+		t.Errorf("a bridge declaring nothing must disable live URL views")
 	}
-	if c := Derive(LegacyBridge(), true); c.Shells || c.LiveShell {
-		t.Errorf("shells_disabled must kill both Shells and LiveShell, got %+v", c)
+	if c := Derive(urlBridge, false); !c.Shells {
+		t.Errorf("shells enabled + bridge: want Shells, got %+v", c)
+	}
+	if c := Derive(urlBridge, true); c.Shells {
+		t.Errorf("shells_disabled must kill Shells, got %+v", c)
 	}
 	// The PTY rides the web door, so a browser attaches one too.
-	if c := Derive(NoBridge(), false); !c.LiveShell || !c.Shells {
+	if c := Derive(NoBridge(), false); !c.Shells {
 		t.Errorf("browser host: shells are live there too, got %+v", c)
 	}
-	if c := Derive(NoBridge(), true); c.LiveShell || c.Shells {
+	if c := Derive(NoBridge(), true); c.Shells {
 		t.Errorf("browser host on a shells-disabled node: nothing, got %+v", c)
-	}
-	urlOnly := Bridge{Present: true, LiveURL: true}
-	if c := Derive(urlOnly, false); !c.LiveURL || !c.LiveShell || !c.Shells {
-		t.Errorf("url-only bridge: shells still ride the web door, got %+v", c)
 	}
 }
 

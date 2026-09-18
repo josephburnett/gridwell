@@ -31,7 +31,7 @@ func baseWorld(panes ...PaneView) World {
 		Animating:       map[string]bool{},
 		ShellAlive:      map[string]bool{},
 		ShellAliveKnown: map[string]bool{},
-		Caps:            caps.Caps{LiveURL: true, LiveShell: true, Shells: true},
+		Caps:            caps.Caps{LiveURL: true, Shells: true},
 	}
 	if len(panes) > 0 {
 		w.Focus = panes[0].ID
@@ -336,38 +336,38 @@ func TestDescendLandGoesLive(t *testing.T) {
 	}{{
 		name: "url opens the native view",
 		tile: &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "g1", W: 2, H: 2},
-		caps: caps.Caps{LiveURL: true, LiveShell: true},
+		caps: caps.Caps{LiveURL: true, Shells: true},
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffOpenStream, EffScheduleURLUpdate},
 	}, {
 		name: "a browser host stays frozen",
 		tile: &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "g1", W: 2, H: 2},
-		caps: caps.Caps{LiveShell: true},
+		caps: caps.Caps{Shells: true},
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}, {
 		name: "a frozen url stays frozen",
 		tile: &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "g1", W: 2, H: 2, UrlFrozen: true},
-		caps: caps.Caps{LiveURL: true, LiveShell: true},
+		caps: caps.Caps{LiveURL: true, Shells: true},
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}, {
 		name: "a fresh shell creates",
 		tile: &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2},
-		caps: caps.Caps{LiveURL: true, LiveShell: true},
+		caps: caps.Caps{LiveURL: true, Shells: true},
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffOpenStream, EffScheduleURLUpdate},
 	}, {
 		name:  "a shell with an unknown session probes first",
 		tile:  &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9},
-		caps:  caps.Caps{LiveURL: true, LiveShell: true},
+		caps:  caps.Caps{LiveURL: true, Shells: true},
 		want:  []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay, EffAwait, EffScheduleURLUpdate},
 		alive: map[string]bool{},
 		known: map[string]bool{},
 	}, {
 		name:  "a shell known dead stays frozen",
 		tile:  &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9},
-		caps:  caps.Caps{LiveURL: true, LiveShell: true},
+		caps:  caps.Caps{LiveURL: true, Shells: true},
 		alive: map[string]bool{"s1": false},
 		known: map[string]bool{"s1": true},
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
@@ -375,7 +375,7 @@ func TestDescendLandGoesLive(t *testing.T) {
 	}, {
 		name: "text stays frozen",
 		tile: &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", W: 2, H: 2},
-		caps: caps.Caps{LiveURL: true, LiveShell: true},
+		caps: caps.Caps{LiveURL: true, Shells: true},
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}}

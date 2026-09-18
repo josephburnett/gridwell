@@ -9,26 +9,21 @@ import "github.com/josephburnett/gridwell/client/errsurface"
 
 // Caps is derived once at boot and immutable after.
 type Caps struct {
-	LiveURL   bool
-	LiveShell bool
-	// Shells is whether shell tiles exist on this node at all. Without them
-	// the + palette offers no shell primitive and the server refuses creates.
+	LiveURL bool
+	// Shells is whether shell tiles exist on this node at all: the + palette
+	// offers the primitive, a descent attaches, and the server accepts a
+	// create. Without them every one of those is refused.
 	Shells bool
 }
 
 // Bridge is what the native host declares it can do, window.gridwell's caps
 // field. A host declares each half it implements, so one can place live url
-// views without the rest of the desktop. Shells are not on the list because
-// the PTY rides the web door.
+// views without the rest of the desktop, and a bridge that declares nothing
+// is a plain browser. Shells are not on the list because the PTY rides the
+// web door.
 type Bridge struct {
-	Present bool
 	// LiveURL is whether the host implements placeWebview and setBounds.
 	LiveURL bool
-}
-
-// LegacyBridge is what a bridge with no caps field is taken to declare.
-func LegacyBridge() Bridge {
-	return Bridge{Present: true, LiveURL: true}
 }
 
 // NoBridge is a plain browser host.
@@ -38,9 +33,8 @@ func NoBridge() Bridge { return Bridge{} }
 // when that fact lands, and not after.
 func Derive(bridge Bridge, shellsDisabled bool) Caps {
 	return Caps{
-		LiveURL:   bridge.Present && bridge.LiveURL,
-		LiveShell: !shellsDisabled,
-		Shells:    !shellsDisabled,
+		LiveURL: bridge.LiveURL,
+		Shells:  !shellsDisabled,
 	}
 }
 
