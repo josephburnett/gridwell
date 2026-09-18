@@ -176,7 +176,7 @@ func (p *pageFake) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGri
 	}
 	return &pb.GetGridResponse{
 		Grid:  &pb.Grid{Id: in.GetGridId(), HostContent: true},
-		Tiles: []*pb.Tile{{Id: "7", GridId: in.GetGridId(), Kind: "url", ServesPage: true}},
+		Tiles: []*pb.Tile{{Id: "7", GridId: in.GetGridId(), Kind: rpc.KindText, ServesPage: true}},
 	}, nil
 }
 func (p *pageFake) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {

@@ -446,7 +446,7 @@ message PluginInfo {
   string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
   string kind          = 2;   // "home", "fs", "proc", "connection"
   string label         = 3;   // display name
-  bool   writable      = 4;   // accepts new tiles (primitives can be created in it)
+  reserved 4;                 // writable; Grid.writable is the fact
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
                               // grid; click-enter descends here
   string scratch_grid_id = 6; // qualified <uuid>/<id> of the plugin's off-grid

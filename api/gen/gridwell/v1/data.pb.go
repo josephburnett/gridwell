@@ -1971,7 +1971,6 @@ type PluginInfo struct {
 	Uuid       string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the plugin's namespace; child grids are <uuid>/<id>
 	Kind       string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "home", "fs", "proc", "connection"
 	Label      string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
-	Writable   bool                   `protobuf:"varint,4,opt,name=writable,proto3" json:"writable,omitempty"`                        // accepts new tiles (primitives can be created in it)
 	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
 	// grid; click-enter descends here
 	ScratchGridId string `protobuf:"bytes,6,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's off-grid
@@ -2047,13 +2046,6 @@ func (x *PluginInfo) GetLabel() string {
 		return x.Label
 	}
 	return ""
-}
-
-func (x *PluginInfo) GetWritable() bool {
-	if x != nil {
-		return x.Writable
-	}
-	return false
 }
 
 func (x *PluginInfo) GetRootGridId() string {
@@ -3421,13 +3413,12 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eSearchResponse\x123\n" +
 	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"0\n" +
 	"\x10HandshakeRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\x90\x03\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xfa\x02\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1a\n" +
-	"\bwritable\x18\x04 \x01(\bR\bwritable\x12 \n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
 	"rootGridId\x12&\n" +
 	"\x0fscratch_grid_id\x18\x06 \x01(\tR\rscratchGridId\x12 \n" +
@@ -3440,7 +3431,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12\x14\n" +
 	"\x05glyph\x18\f \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\v\x10\f\"\xeb\x01\n" +
+	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xeb\x01\n" +
 	"\x0eConnectionInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
