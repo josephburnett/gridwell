@@ -14,7 +14,7 @@ func TestBlobKeyKeysPagesBySentinelAndURLsByNothing(t *testing.T) {
 		want int64
 	}{
 		{"a captured tile keys by its blob", &pb.Tile{Kind: rpc.KindURL, PreviewBlobId: 7}, 7},
-		{"a page keys by the sentinel", &pb.Tile{Kind: rpc.KindText, ServesPage: true}, PageBlobID},
+		{"a page keys by no generation", &pb.Tile{Kind: rpc.KindText, ServesPage: true}, ungeneratedBlobID},
 		{"a page with a capture still keys by its blob",
 			&pb.Tile{Kind: rpc.KindText, ServesPage: true, PreviewBlobId: 9}, 9},
 		{"an uncaptured url has no preview to fetch", &pb.Tile{Kind: rpc.KindURL}, 0},

@@ -31,7 +31,7 @@ type Cache struct {
 }
 
 type entry struct {
-	// blobID is the preview_blob_id decoded from, or wildcardBlobID.
+	// blobID is the preview_blob_id decoded from, or ungeneratedBlobID.
 	blobID int64
 	image  Image
 	// gen rises with every Put, so a decode whose onReady fires after a newer
@@ -45,9 +45,10 @@ type entry struct {
 	missBlob int64
 }
 
-// wildcardBlobID marks bytes captured locally before the server blob id was
-// known. Get matches it against any non-zero expected blob id.
-const wildcardBlobID int64 = -1
+// ungeneratedBlobID keys a face the server minted no generation for: a page's,
+// and bytes captured locally before the server blob id was known. Get matches
+// it against any non-zero expected blob id.
+const ungeneratedBlobID int64 = -1
 
 // NewCache requires a non-nil dec. onDecErr fires once per failed decode with
 // the tile id, so bytes that never become a picture reach the user instead of
@@ -61,9 +62,9 @@ func NewCache(dec Decoder, onDecErr func(tileID string)) *Cache {
 }
 
 // Get hits when the entry's image is loaded and its blob id matches wantBlobID
-// or is the wildcard. A wantBlobID of 0 means the server says the tile is
-// blank, so an entry keyed to a real blob id misses; a wildcard entry hits,
-// being a local capture parked ahead of the server.
+// or is ungenerated. A wantBlobID of 0 means the server says the tile is
+// blank, so an entry keyed to a real blob id misses; an ungenerated entry
+// hits, being a local capture parked ahead of the server.
 func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -71,7 +72,7 @@ func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	if !ok || e.image == nil || !e.image.Truthy() {
 		return nil, false
 	}
-	if e.blobID != wildcardBlobID && (wantBlobID == 0 || e.blobID != wantBlobID) {
+	if e.blobID != ungeneratedBlobID && (wantBlobID == 0 || e.blobID != wantBlobID) {
 		return nil, false
 	}
 	return e.image, true
@@ -113,7 +114,7 @@ func (c *Cache) KnownEmpty(tileID string, blobID int64) bool {
 // is known: the URL stream's frames and the shell freeze snapshot. The entry
 // matches any non-zero wantBlobID until a specific Put supersedes it.
 func (c *Cache) PutWildcard(tileID string, bytes []byte, onReady func()) {
-	c.put(tileID, wildcardBlobID, bytes, onReady)
+	c.put(tileID, ungeneratedBlobID, bytes, onReady)
 }
 
 func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
