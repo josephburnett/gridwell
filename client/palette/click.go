@@ -8,13 +8,12 @@ package palette
 type ClickTarget int
 
 const (
-	// ClickNothing leaves the menu open and the pane untouched.
+	// ClickNothing leaves the menu open and the pane untouched: a swatch
+	// that only creates by being dragged, and the bar's promote crumb, whose
+	// visit the pane already shows.
 	ClickNothing ClickTarget = iota
 	// ClickEnter descends into the grid a doorway swatch names.
 	ClickEnter
-	// ClickHere is the bar's promote crumb: the pane already shows that
-	// visit, so a click does nothing.
-	ClickHere
 	// ClickVisit opens the ephemeral visit without placing a tile.
 	ClickVisit
 )
@@ -31,13 +30,13 @@ type Swatch struct {
 
 // ClickOn asks identity before kind, because a row can carry more than one
 // flag: a plugin row's primitive fields are zero and the promote crumb is
-// spelled as a url template.
+// spelled as a url template, so Promote is read before Visits.
 func ClickOn(s Swatch) ClickTarget {
 	switch {
 	case s.IsPlugin:
 		return ClickEnter
 	case s.Promote:
-		return ClickHere
+		return ClickNothing
 	case s.Visits:
 		return ClickVisit
 	default:

@@ -97,9 +97,7 @@ func (a *App) clickTemplate(d *dragState) {
 		a.descend(fp, well)
 	case palette.ClickVisit:
 		pr.click(a, fp)
-	case palette.ClickHere, palette.ClickNothing:
-		// The crumb you are standing on, or a swatch that only creates by
-		// being dragged.
+	case palette.ClickNothing:
 	}
 }
 

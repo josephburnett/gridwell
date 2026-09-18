@@ -11,7 +11,7 @@ func TestClickOn(t *testing.T) {
 		want ClickTarget
 	}{
 		{"a plugin row enters it", Swatch{IsPlugin: true}, ClickEnter},
-		{"the promote crumb is where you already are", Swatch{Promote: true}, ClickHere},
+		{"the promote crumb is where you already are", Swatch{Promote: true}, ClickNothing},
 		{"a primitive that declares a visit opens it", Swatch{Visits: true}, ClickVisit},
 		{"a primitive that declares none does nothing", Swatch{}, ClickNothing},
 		// A plugin row carries the zero primitive kind and the promote
@@ -19,7 +19,7 @@ func TestClickOn(t *testing.T) {
 		{"a plugin row beats its zero-value primitive",
 			Swatch{IsPlugin: true, Visits: true}, ClickEnter},
 		{"the promote crumb beats the url primitive it is spelled as",
-			Swatch{Promote: true, Visits: true}, ClickHere},
+			Swatch{Promote: true, Visits: true}, ClickNothing},
 	}
 	for _, c := range cases {
 		if got := ClickOn(c.in); got != c.want {
