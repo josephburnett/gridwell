@@ -128,7 +128,6 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 			Uuid:         QualifyID(prefix, p.Uuid),
 			Kind:         p.Kind,
 			Label:        p.Label,
-			Writable:     p.Writable,
 			RootViewCx:   p.RootViewCx,
 			RootViewCy:   p.RootViewCy,
 			RootViewZoom: p.RootViewZoom,

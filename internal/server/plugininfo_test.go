@@ -27,7 +27,6 @@ func TestBuildPluginInfo_InfoPresent(t *testing.T) {
 		RootGridId:    "7",
 		ScratchGridId: "9",
 		DisplayName:   "ignored-when-config-label-set",
-		Writable:      true, // the handshake declares the capability
 	}, nil)
 	if got.RootGridId != "uuid-1/7" {
 		t.Errorf("RootGridId = %q, want qualified uuid-1/7", got.RootGridId)
@@ -38,37 +37,12 @@ func TestBuildPluginInfo_InfoPresent(t *testing.T) {
 	if got.Label != "Home" {
 		t.Errorf("Label = %q, want the configured label Home", got.Label)
 	}
-	if !got.Writable {
-		t.Error("a plugin whose Info declares writable must be writable")
-	}
-}
-
-// The point of handshake-declared capabilities: a remote home reached
-// through the ssh proxy has local kind "remote", but its forwarded Info still
-// says writable — it must be presented writable, not stranded read-only by a
-// kind check.
-func TestBuildPluginInfo_WritableFromHandshakeNotKind(t *testing.T) {
-	got := buildPluginInfo("u", "remote", "Remote", &pb.InfoResponse{
-		RootGridId: "1",
-		Writable:   true,
-	}, nil)
-	if !got.Writable {
-		t.Error("an ssh-kind plugin whose Info declares writable must be writable")
-	}
-	// And the inverse: kind alone earns nothing.
-	got = buildPluginInfo("u", "home", "Local", &pb.InfoResponse{RootGridId: "1"}, nil)
-	if got.Writable {
-		t.Error("writable must come from the Info handshake, not the kind string")
-	}
 }
 
 func TestBuildPluginInfo_LabelFallsBackToDisplayName(t *testing.T) {
 	got := buildPluginInfo("u", "fs", "", &pb.InfoResponse{DisplayName: "Files"}, nil)
 	if got.Label != "Files" {
 		t.Errorf("Label = %q, want Info DisplayName Files when no config label", got.Label)
-	}
-	if got.Writable {
-		t.Error("fs (whose Info does not declare writable) must not be writable")
 	}
 }
 

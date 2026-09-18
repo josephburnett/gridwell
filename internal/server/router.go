@@ -224,13 +224,11 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 // Info handshake. info is nil when Info failed, with infoErr the reason: the
 // plugin is still listed, so the menu never blanks a configured plugin, but
 // without a clickable root. Broken and healthy-but-rootless both leave
-// RootGridId == "", so InfoError is what distinguishes them. writable comes
-// from Info, never the kind string. It is pure, so the fallbacks are
-// unit-tested without standing up a plugin.
+// RootGridId == "", so InfoError is what distinguishes them. It is pure, so
+// the fallbacks are unit-tested without standing up a plugin.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
 	label := configLabel
 	var rootGridID, scratchGridID, infoError string
-	var writable bool
 	var glyph string
 	var menuEntries []*pb.MenuEntry
 	var rootViewCx, rootViewCy, rootViewZoom float64
@@ -245,7 +243,6 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		if label == "" {
 			label = info.DisplayName
 		}
-		writable = info.Writable
 		glyph = info.Glyph
 		menuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		// Forwarded verbatim from Info; the client seeds its doorway framing
@@ -267,7 +264,6 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		Uuid:          uuid,
 		Kind:          kind,
 		Label:         label,
-		Writable:      writable,
 		RootGridId:    rootGridID,
 		ScratchGridId: scratchGridID,
 		RootViewCx:    rootViewCx,

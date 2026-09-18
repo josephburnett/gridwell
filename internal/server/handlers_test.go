@@ -372,7 +372,7 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 }
 
 // TestListPlugins: the + menu source lists configured plugins in config
-// order, with kind, label, and writability (only home accepts new tiles).
+// order, with kind and label.
 func TestListPlugins(t *testing.T) {
 	cl, _, _ := newTestServerWithPlugins(t)
 	list, err := cl.Handshake(context.Background())
@@ -384,8 +384,8 @@ func TestListPlugins(t *testing.T) {
 	if len(plugins) != 3 {
 		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
 	}
-	if plugins[0].Kind != "home" || !plugins[0].Writable {
-		t.Errorf("plugin[0] = %+v, want writable localdb", plugins[0])
+	if plugins[0].Kind != "home" {
+		t.Errorf("plugin[0] = %+v, want the home row", plugins[0])
 	}
 	// Each plugin advertises its qualified root grid id (for click-enter).
 	if !strings.HasPrefix(plugins[0].RootGridId, plugins[0].Uuid+"/") {
@@ -402,11 +402,11 @@ func TestListPlugins(t *testing.T) {
 	if plugins[1].ScratchGridId != "" {
 		t.Errorf("fs plugin should have no scratch grid, got %q", plugins[1].ScratchGridId)
 	}
-	if plugins[1].Kind != "fs" || plugins[1].Writable {
-		t.Errorf("plugin[1] = %+v, want read-only fs", plugins[1])
+	if plugins[1].Kind != "fs" {
+		t.Errorf("plugin[1] = %+v, want fs", plugins[1])
 	}
-	if plugins[2].Kind != "proc" || plugins[2].Writable {
-		t.Errorf("plugin[2] = %+v, want read-only proc", plugins[2])
+	if plugins[2].Kind != "proc" {
+		t.Errorf("plugin[2] = %+v, want proc", plugins[2])
 	}
 }
 
