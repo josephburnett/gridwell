@@ -95,11 +95,9 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
   window,
   gw,
 }) => {
-  // The ephemeral url tile lands in the scratch grid, advertised on the
-  // plugin's entry.
-  const scratch = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
-  expect(scratch, 'localdb advertises a scratch grid').toBeTruthy();
+  // The ephemeral url tile lands in the scratch grid stamped on home.
   await gw.enterPlugin('home');
+  const scratch = await gw.scratchGridID('home');
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );

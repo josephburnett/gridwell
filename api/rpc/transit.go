@@ -137,9 +137,6 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 		if p.RootGridId != "" {
 			q.RootGridId = QualifyID(prefix, p.RootGridId)
 		}
-		if p.ScratchGridId != "" {
-			q.ScratchGridId = QualifyID(prefix, p.ScratchGridId)
-		}
 		q.MenuEntries = QualifyMenuEntries(prefix, p.MenuEntries)
 		out.Plugins = append(out.Plugins, q)
 	}

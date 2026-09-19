@@ -77,6 +77,8 @@ export interface PluginDescriptor {
   // one and its grids are in menuEntries.
   rootGridID: string;
   menuEntries: PluginCollection[];
+  // The scratch grid stamped on rootGridID, where ephemeral visits from it
+  // land: empty until that grid is cached, so read it through scratchGridID().
   scratchGridID: string;
   infoError: string;
   status: string;
@@ -273,6 +275,20 @@ export class GridwellDriver {
     const f = await this.focused();
     if (pl.rootGridID && f.gridID === pl.rootGridID) return; // already there
     await this.clickPluginSwatch(match);
+  }
+
+  // The scratch grid of the plugin's root grid, once the client has that grid.
+  async scratchGridID(match: string): Promise<string> {
+    await this.win.waitForFunction(
+      (m: string) =>
+        ((window as any).__gridwellTest.plugins() as PluginDescriptor[]).some(
+          (p) => (p.kind === m || p.label === m) && p.scratchGridID !== '',
+        ),
+      match,
+      { timeout: 15_000 },
+    );
+    const pls = await this.plugins();
+    return pls.find((p) => p.kind === match || p.label === match)!.scratchGridID;
   }
 
   // Clicks the focused pane's + button. It no-ops when the menu is already

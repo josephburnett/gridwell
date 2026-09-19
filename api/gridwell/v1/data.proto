@@ -448,8 +448,7 @@ message PluginInfo {
   reserved 4;                 // writable; Grid.writable is the fact
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
                               // grid; click-enter descends here
-  string scratch_grid_id = 6; // qualified <uuid>/<id> of the plugin's off-grid
-                              // scratch grid for ephemeral url tiles; "" if none
+  reserved 6;                 // scratch_grid_id; Grid.scratch_grid_id is the fact
   // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport,
   // forwarded verbatim from InfoResponse. Zero means never visited; the
   // client substitutes the default calibrated zoom on enterPlugin.

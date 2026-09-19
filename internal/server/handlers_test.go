@@ -391,16 +391,14 @@ func TestListPlugins(t *testing.T) {
 	if !strings.HasPrefix(plugins[0].RootGridId, plugins[0].Uuid+"/") {
 		t.Errorf("plugin[0] root_grid_id = %q, want %q prefix", plugins[0].RootGridId, plugins[0].Uuid)
 	}
-	// Home advertises a qualified scratch grid id (the ephemeral-url
-	// target), distinct from its root. fs/proc have none.
-	if !strings.HasPrefix(plugins[0].ScratchGridId, plugins[0].Uuid+"/") {
-		t.Errorf("plugin[0] scratch_grid_id = %q, want %q prefix", plugins[0].ScratchGridId, plugins[0].Uuid)
+	// The home grid is stamped with a qualified scratch grid (the
+	// ephemeral-url target), distinct from itself; the row carries none.
+	home, err := cl.GetGrid(context.Background(), plugins[0].RootGridId)
+	if err != nil {
+		t.Fatalf("GetGrid(home): %v", err)
 	}
-	if plugins[0].ScratchGridId == plugins[0].RootGridId {
-		t.Errorf("scratch grid id %q must differ from root", plugins[0].ScratchGridId)
-	}
-	if plugins[1].ScratchGridId != "" {
-		t.Errorf("fs plugin should have no scratch grid, got %q", plugins[1].ScratchGridId)
+	if s := home.GetGrid().GetScratchGridId(); !strings.HasPrefix(s, plugins[0].Uuid+"/") || s == plugins[0].RootGridId {
+		t.Errorf("home scratch_grid_id = %q, want %q-prefixed and not the root", s, plugins[0].Uuid)
 	}
 	if plugins[1].Kind != "fs" {
 		t.Errorf("plugin[1] = %+v, want fs", plugins[1])
@@ -408,6 +406,20 @@ func TestListPlugins(t *testing.T) {
 	if plugins[2].Kind != "proc" {
 		t.Errorf("plugin[2] = %+v, want proc", plugins[2])
 	}
+}
+
+// homeScratchOf reads the scratch grid stamped on the home row's grid, the
+// one place the fact is served.
+func homeScratchOf(t *testing.T, cl *rpc.Client, home *gridwellv1.PluginInfo) string {
+	t.Helper()
+	g, err := cl.GetGrid(context.Background(), home.RootGridId)
+	if err != nil {
+		t.Fatalf("GetGrid(home): %v", err)
+	}
+	if g.GetGrid().GetScratchGridId() == "" {
+		t.Fatal("home grid carries no scratch grid")
+	}
+	return g.GetGrid().GetScratchGridId()
 }
 
 // TestCreateScratchURLRoutes: creating a url tile whose grid is home's
@@ -422,10 +434,7 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	scratch := plugins.Plugins[0].ScratchGridId
-	if scratch == "" {
-		t.Fatal("localdb advertised no scratch grid")
-	}
+	scratch := homeScratchOf(t, cl, plugins.Plugins[0])
 	// Empty path + scratch grid: a normal create here would fail path validation
 	// (the scratch grid is off-grid); the scratch route bypasses it.
 	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: "https://example.com/ephemeral"}})
@@ -461,10 +470,7 @@ func TestPluginGridCarriesHomeScratch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	homeScratch := hs.Plugins[0].ScratchGridId
-	if homeScratch == "" {
-		t.Fatal("home advertised no scratch grid")
-	}
+	homeScratch := homeScratchOf(t, cl, hs.Plugins[0])
 	fsRoot := plugintest.LandingOf(t, hs.Plugins[1])
 	g, err := cl.GetGrid(ctx, fsRoot)
 	if err != nil {

@@ -1964,9 +1964,6 @@ type PluginInfo struct {
 	Kind       string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "home", "fs", "proc", "connection"
 	Label      string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
 	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
-	// grid; click-enter descends here
-	ScratchGridId string `protobuf:"bytes,6,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's off-grid
-	// scratch grid for ephemeral url tiles; "" if none
 	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport,
 	// forwarded verbatim from InfoResponse. Zero means never visited; the
 	// client substitutes the default calibrated zoom on enterPlugin.
@@ -2043,13 +2040,6 @@ func (x *PluginInfo) GetLabel() string {
 func (x *PluginInfo) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
-	}
-	return ""
-}
-
-func (x *PluginInfo) GetScratchGridId() string {
-	if x != nil {
-		return x.ScratchGridId
 	}
 	return ""
 }
@@ -3404,15 +3394,14 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eSearchResponse\x123\n" +
 	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"0\n" +
 	"\x10HandshakeRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xfa\x02\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xd8\x02\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
-	"rootGridId\x12&\n" +
-	"\x0fscratch_grid_id\x18\x06 \x01(\tR\rscratchGridId\x12 \n" +
+	"rootGridId\x12 \n" +
 	"\froot_view_cx\x18\a \x01(\x01R\n" +
 	"rootViewCx\x12 \n" +
 	"\froot_view_cy\x18\b \x01(\x01R\n" +
@@ -3422,7 +3411,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12\x14\n" +
 	"\x05glyph\x18\f \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xeb\x01\n" +
+	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
 	"\x0eConnectionInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +

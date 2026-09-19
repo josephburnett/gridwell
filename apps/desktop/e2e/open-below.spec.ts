@@ -10,10 +10,8 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   window,
   gw,
 }) => {
-  const local = (await gw.plugins()).find((l) => l.kind === 'home');
-  const scratchGridID = local!.scratchGridID;
-
   await gw.enterPlugin('home');
+  const scratchGridID = await gw.scratchGridID('home');
   const panesBefore = (await gw.panes()).length;
 
   // Poll for the navigated view rather than a webContents count: the count

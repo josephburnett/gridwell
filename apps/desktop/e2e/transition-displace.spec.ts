@@ -31,10 +31,8 @@ test('a second link-open mid-animation does not void the first pane descent', as
   window,
   gw,
 }) => {
-  const local = (await gw.plugins()).find((l) => l.kind === 'home');
-  const scratchGridID = local!.scratchGridID;
-
   await gw.enterPlugin('home');
+  const scratchGridID = await gw.scratchGridID('home');
   const panesBefore = (await gw.panes()).length;
 
   // A live ephemeral visit: the page that will pop the two links.

@@ -576,10 +576,15 @@ func (a *App) paneTileIDs(p *pane.Pane) []any {
 // where it has one, declared collections, pluginhealth class. Empty until
 // Handshake lands; the driver polls. A plugin names no grid of its own, so
 // rootGridID is empty for one and its collections are where a spec finds a
-// grid.
+// grid. scratchGridID is the root grid's stamp, empty until that grid is
+// cached, as scratch.For reads it.
 func (a *App) thPlugins(js.Value, []js.Value) any {
 	out := make([]any, 0, len(a.plugins))
 	for i, pl := range a.plugins {
+		scratchGridID := ""
+		if g, ok := a.c.Grid(pl.RootGridId); ok {
+			scratchGridID = g.Meta.ScratchGridId
+		}
 		entries := make([]any, 0, len(pl.MenuEntries))
 		for _, e := range pl.MenuEntries {
 			entries = append(entries, map[string]any{
@@ -598,7 +603,7 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 			"uuid":          pl.Uuid,
 			"rootGridID":    pl.RootGridId,
 			"menuEntries":   entries,
-			"scratchGridID": pl.ScratchGridId,
+			"scratchGridID": scratchGridID,
 			"infoError":     pl.InfoError,
 			"status":        pluginStatusName(pl),
 			"rootViewCx":    pl.RootViewCx,

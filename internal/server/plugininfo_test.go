@@ -24,15 +24,11 @@ import (
 
 func TestBuildPluginInfo_InfoPresent(t *testing.T) {
 	got := buildPluginInfo("uuid-1", "home", "Home", &pb.InfoResponse{
-		RootGridId:    "7",
-		ScratchGridId: "9",
-		DisplayName:   "ignored-when-config-label-set",
+		RootGridId:  "7",
+		DisplayName: "ignored-when-config-label-set",
 	}, nil)
 	if got.RootGridId != "uuid-1/7" {
 		t.Errorf("RootGridId = %q, want qualified uuid-1/7", got.RootGridId)
-	}
-	if got.ScratchGridId != "uuid-1/9" {
-		t.Errorf("ScratchGridId = %q, want qualified uuid-1/9", got.ScratchGridId)
 	}
 	if got.Label != "Home" {
 		t.Errorf("Label = %q, want the configured label Home", got.Label)
@@ -48,15 +44,14 @@ func TestBuildPluginInfo_LabelFallsBackToDisplayName(t *testing.T) {
 
 // The degraded case: Info failed or timed out → info is nil. The plugin is still
 // listed (so the + menu never drops a configured plugin), with no clickable
-// root/scratch grid and the configured label.
+// root grid and the configured label.
 func TestBuildPluginInfo_NilInfoStillListedWithConfigLabel(t *testing.T) {
 	got := buildPluginInfo("u", "proc", "Processes", nil, errors.New("dial: connection refused"))
 	if got.Label != "Processes" {
 		t.Errorf("Label = %q, want the configured label even when Info failed", got.Label)
 	}
-	if got.RootGridId != "" || got.ScratchGridId != "" {
-		t.Errorf("a failed Info must leave root/scratch empty, got root=%q scratch=%q",
-			got.RootGridId, got.ScratchGridId)
+	if got.RootGridId != "" {
+		t.Errorf("a failed Info must leave the root empty, got root=%q", got.RootGridId)
 	}
 	if got.Kind != "proc" || got.Uuid != "u" {
 		t.Errorf("identity must survive a failed Info: kind=%q uuid=%q", got.Kind, got.Uuid)
@@ -115,15 +110,12 @@ func TestBuildPluginInfo_ErrorRidesAlongsideLiveInfo(t *testing.T) {
 	}
 }
 
-func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
-	// A plugin whose Info omits the grids (e.g. no ephemeral support) must not
-	// emit a bare "uuid/" — empty stays empty.
-	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "3"}, nil)
-	if got.RootGridId != "u/3" {
-		t.Errorf("RootGridId = %q, want u/3", got.RootGridId)
-	}
-	if got.ScratchGridId != "" {
-		t.Errorf("ScratchGridId = %q, want empty (no scratch grid)", got.ScratchGridId)
+func TestBuildPluginInfo_EmptyGridIdNotQualified(t *testing.T) {
+	// A plugin whose Info names no root must not emit a bare "uuid/" — empty
+	// stays empty.
+	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{}, nil)
+	if got.RootGridId != "" {
+		t.Errorf("RootGridId = %q, want empty", got.RootGridId)
 	}
 }
 

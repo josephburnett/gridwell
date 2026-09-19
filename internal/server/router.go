@@ -228,17 +228,13 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 // the fallbacks are unit-tested without standing up a plugin.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
 	label := configLabel
-	var rootGridID, scratchGridID, infoError string
+	var rootGridID, infoError string
 	var glyph string
 	var menuEntries []*pb.MenuEntry
 	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
 		if info.RootGridId != "" {
 			rootGridID = rpc.QualifyID(uuid, info.RootGridId)
-		}
-		// Empty for a plugin that supports no ephemeral visits.
-		if info.ScratchGridId != "" {
-			scratchGridID = rpc.QualifyID(uuid, info.ScratchGridId)
 		}
 		if label == "" {
 			label = info.DisplayName
@@ -261,17 +257,16 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		label = kind
 	}
 	return &pb.PluginInfo{
-		Uuid:          uuid,
-		Kind:          kind,
-		Label:         label,
-		RootGridId:    rootGridID,
-		ScratchGridId: scratchGridID,
-		RootViewCx:    rootViewCx,
-		RootViewCy:    rootViewCy,
-		RootViewZoom:  rootViewZoom,
-		InfoError:     infoError,
-		Glyph:         glyph,
-		MenuEntries:   menuEntries,
+		Uuid:         uuid,
+		Kind:         kind,
+		Label:        label,
+		RootGridId:   rootGridID,
+		RootViewCx:   rootViewCx,
+		RootViewCy:   rootViewCy,
+		RootViewZoom: rootViewZoom,
+		InfoError:    infoError,
+		Glyph:        glyph,
+		MenuEntries:  menuEntries,
 	}
 }
 

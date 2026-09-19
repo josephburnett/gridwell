@@ -15,11 +15,8 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
 }) => {
   const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
 
-  const local = (await gw.plugins()).find((l) => l.kind === 'home');
-  const scratchGridID = local!.scratchGridID;
-  expect(scratchGridID, 'localdb advertises a scratch grid').toBeTruthy();
-
   await gw.enterPlugin('home');
+  const scratchGridID = await gw.scratchGridID('home');
   const home = await gw.focused();
 
   const shellCx = Math.round(home.cx);

@@ -12,7 +12,7 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
 }) => {
   await gw.enterPlugin('home');
   const home = await gw.focused();
-  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
+  const scratchGridID = await gw.scratchGridID('home');
 
   // Two panes on the home grid; the visit happens in the second, focused one.
   await gw.splitFocusedPaneVertical();
