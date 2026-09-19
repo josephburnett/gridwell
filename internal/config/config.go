@@ -364,24 +364,33 @@ func validateIDs(cfg *ServerConfig) error {
 	return nil
 }
 
+// expandPaths applies ExpandHome to every path server.yaml can spell with a
+// tilde. The home directory is asked for once, and only a path that needs it
+// fails when there is none.
 func expandPaths(cfg *ServerConfig) error {
+	home, herr := os.UserHomeDir()
+	expand := func(p string) (string, error) {
+		if !needsHome(p) {
+			return p, nil
+		}
+		if herr != nil {
+			return "", fmt.Errorf("config: home dir: %w", herr)
+		}
+		return ExpandHome(p, home), nil
+	}
 	var err error
-	if cfg.Federation.Socket, err = expandHome(cfg.Federation.Socket); err != nil {
+	if cfg.Federation.Socket, err = expand(cfg.Federation.Socket); err != nil {
 		return err
 	}
-	if cfg.StaticDir != "" {
-		if cfg.StaticDir, err = expandHome(cfg.StaticDir); err != nil {
-			return err
-		}
+	if cfg.StaticDir, err = expand(cfg.StaticDir); err != nil {
+		return err
 	}
 	for i := range cfg.Plugins {
-		if cfg.Plugins[i].Binary != "" {
-			if cfg.Plugins[i].Binary, err = expandHome(cfg.Plugins[i].Binary); err != nil {
-				return err
-			}
+		if cfg.Plugins[i].Binary, err = expand(cfg.Plugins[i].Binary); err != nil {
+			return err
 		}
 		for k, v := range cfg.Plugins[i].Config {
-			if cfg.Plugins[i].Config[k], err = expandHome(v); err != nil {
+			if cfg.Plugins[i].Config[k], err = expand(v); err != nil {
 				return err
 			}
 		}
@@ -426,13 +435,18 @@ func EnsurePasswordFile(home string) (string, error) {
 	return pw, nil
 }
 
-func expandHome(p string) (string, error) {
-	if !strings.HasPrefix(p, "~/") {
-		return p, nil
+// ExpandHome is the one tilde grammar every host-local path in server.yaml
+// reads, the `connections:` key paths included: "~" is home, "~/x" is under
+// it, and anything else is verbatim, so "~user" is never guessed at. An empty
+// home expands nothing, for a caller with no home to default from.
+func ExpandHome(p, home string) string {
+	if home == "" || !needsHome(p) {
+		return p
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("config: home dir: %w", err)
+	if p == "~" {
+		return home
 	}
-	return filepath.Join(home, p[2:]), nil
+	return filepath.Join(home, p[2:])
 }
+
+func needsHome(p string) bool { return p == "~" || strings.HasPrefix(p, "~/") }

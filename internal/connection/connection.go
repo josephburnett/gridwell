@@ -338,8 +338,8 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 	cfg := dial.Config{
 		User:       c.User,
-		KeyPath:    expandHome(c.Key, s.home),
-		KnownHosts: expandHome(c.KnownHosts, s.home),
+		KeyPath:    config.ExpandHome(c.Key, s.home),
+		KnownHosts: config.ExpandHome(c.KnownHosts, s.home),
 		Addr:       c.Addr,
 	}
 	if cfg.Addr == "" {
@@ -375,19 +375,6 @@ func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 		return dial.Config{}, err
 	}
 	return cfg, nil
-}
-
-func expandHome(p, home string) string {
-	if home == "" {
-		return p
-	}
-	if p == "~" {
-		return home
-	}
-	if strings.HasPrefix(p, "~/") {
-		return filepath.Join(home, p[2:])
-	}
-	return p
 }
 
 // firstExisting returns the first path that exists, or else the first path,

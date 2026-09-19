@@ -295,3 +295,30 @@ func TestSaveFreshHomeWritesOnlyTheID(t *testing.T) {
 		t.Fatalf("fresh save = %q, want the id alone", raw)
 	}
 }
+
+// ExpandHome is the one tilde grammar, read by this package's own paths and by
+// the transport's key and known_hosts paths: a bare "~" and a "~/" prefix
+// expand, "~user" and everything else is verbatim, and no home expands nothing.
+func TestExpandHomeGrammar(t *testing.T) {
+	for _, c := range []struct{ p, home, want string }{
+		{"~", "/h", "/h"},
+		{"~/x/y", "/h", filepath.Join("/h", "x/y")},
+		{"~user/x", "/h", "~user/x"},
+		{"/abs", "/h", "/abs"},
+		{"rel", "/h", "rel"},
+		{"~/x", "", "~/x"},
+	} {
+		if got := ExpandHome(c.p, c.home); got != c.want {
+			t.Errorf("ExpandHome(%q, %q) = %q, want %q", c.p, c.home, got, c.want)
+		}
+	}
+	// The file reads the same grammar, so a bare "~" is home here too.
+	home, _ := os.UserHomeDir()
+	cfg, err := Load(write(t, t.TempDir(), "plugins:\n  - id: p1\n    kind: fs\n    config:\n      root: \"~\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Plugins[0].Config["root"] != home {
+		t.Fatalf("bare ~ = %q, want %q", cfg.Plugins[0].Config["root"], home)
+	}
+}
