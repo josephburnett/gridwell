@@ -52,18 +52,24 @@ func TestDecodeJPEGDataURL(t *testing.T) {
 
 // Descending engages: a url opens, an alive or fresh shell opens, a dead
 // shell stays frozen, a host without the capability stays silently frozen,
-// and unknown aliveness probes. A serves_page tile gets the url verdict.
+// and unknown aliveness probes. A serves_page tile gets the url verdict. The
+// user's standing freeze beats every one of those, for either kind.
 func TestDecideAutoLive(t *testing.T) {
 	cases := []struct {
-		name                                                                           string
-		webContent, kindShell, liveURL, liveShell, hasPreview, known, alive, urlFrozen bool
-		want                                                                           AutoLive
+		name                                                                        string
+		webContent, kindShell, liveURL, liveShell, hasPreview, known, alive, frozen bool
+		want                                                                        AutoLive
 	}{
 		{"url on Electron opens", true, false, true, true, true, false, false, false, AutoLiveURL},
 		{"url in a browser stays frozen", true, false, false, false, true, false, false, false, AutoLiveNone},
 		// The user's standing freeze beats the engagement default until
 		// the reconnect gesture clears it.
 		{"user-frozen url stays frozen", true, false, true, true, true, false, false, true, AutoLiveNone},
+		{"user-frozen shell stays frozen", false, true, true, true, true, true, true, true, AutoLiveNone},
+		// A capture that came back empty leaves a frozen tile looking never
+		// opened, and creating a second session behind the freeze would be a
+		// tmux nobody asked for.
+		{"user-frozen shell with no preview creates nothing", false, true, true, true, false, false, false, true, AutoLiveNone},
 		{"page tile on Electron opens", true, false, true, true, false, false, false, false, AutoLiveURL},
 		{"page tile in a browser stays frozen", true, false, false, false, false, false, false, false, AutoLiveNone},
 		{"fresh shell creates", false, true, true, true, false, false, false, false, AutoLiveShell},
@@ -75,7 +81,7 @@ func TestDecideAutoLive(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := DecideAutoLive(c.webContent, c.kindShell, c.liveURL, c.liveShell, c.hasPreview, c.known, c.alive, c.urlFrozen)
+			got := DecideAutoLive(c.webContent, c.kindShell, c.liveURL, c.liveShell, c.hasPreview, c.known, c.alive, c.frozen)
 			if got != c.want {
 				t.Errorf("DecideAutoLive = %v, want %v", got, c.want)
 			}

@@ -13,6 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/golive"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
@@ -154,9 +155,21 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 // opens the tile's PTY on the /shell WebSocket. A second call for the same pane
 // closes the previous attachment first. disable_shells refuses, preview stays.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
-	if !a.caps.Shells {
+	frozen := false
+	if t := a.findTileByID(tileID); t != nil {
+		frozen = t.UrlFrozen
+	}
+	// Attaching is the shell's reconnect gesture, so it clears the standing
+	// freeze by the rule the url side runs. A shell link never follows its
+	// target: the session keys by the owner id below, so the link row is both
+	// where the freeze lives and where it is cleared.
+	plan, ok := golive.Decide(a.caps.Shells, frozen, false)
+	if !ok {
 		a.reportErr(caps.ShellNotice())
 		return
+	}
+	if plan.Unfreeze {
+		a.postFrozen(tileID, false, nil)
 	}
 	// The PTY session, the alive cache and the freeze writeback all key by the
 	// id that owns the session.
