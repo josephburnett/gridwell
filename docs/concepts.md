@@ -50,8 +50,11 @@ here.
 | **stale** (`Grid.Meta.Stale`) | This grid is a memory rather than an answer. One bar chip; it never moves or restyles a tile. |
 | **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
 | **broken** (`pluginhealth.Broken`) | A launcher that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
-| **no door** (`pluginhealth.NoDoor`) | Answered, and it is not a place: the row names no grid of its own. That is every plugin, since a plugin declares collections as + menu entries rather than being one. Healthy, and it contributes no swatch of its own. |
 | **unknown** | Not yet known, which is neither yes nor no. `scratch.For` and `a.gridWritable` both return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
+
+`pluginhealth.Classify` answers only for a row that can be a door: a node's
+home, a connection, a plugin's collection swatch. A plugin's own row is none of
+those, so it has no status at all — nothing draws it, and no click reaches it.
 
 ## Write classes
 

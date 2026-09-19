@@ -223,7 +223,7 @@ func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 		color := colorLauncherWaitingTint
 		// The local plugin list knows more: a failure gets the alarm tint.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.Id)); ok {
-			if pluginhealth.Classify(pl) == pluginhealth.Broken {
+			if st, classified := pluginhealth.Classify(pl); classified && st == pluginhealth.Broken {
 				color = colorLauncherBrokenTint
 			}
 		}

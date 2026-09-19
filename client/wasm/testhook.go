@@ -614,16 +614,18 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 	return out
 }
 
-// pluginStatusName is the stable string for a plugin's pluginhealth class,
-// shared by thPlugins/thPalette.
+// pluginStatusName is the stable string for a row's pluginhealth class,
+// shared by thPlugins/thPalette; "" for a row pluginhealth does not classify.
 func pluginStatusName(pl *gridwellv1.PluginInfo) string {
-	switch pluginhealth.Classify(pl) {
+	st, classified := pluginhealth.Classify(pl)
+	if !classified {
+		return ""
+	}
+	switch st {
 	case pluginhealth.Broken:
 		return "broken"
 	case pluginhealth.Waiting:
 		return "waiting"
-	case pluginhealth.NoDoor:
-		return "nodoor"
 	}
 	return "enterable"
 }
