@@ -248,11 +248,12 @@ layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
 project it. A pane tile swaps the whole pane tree instead — that is the one
 second axis (`levels.go`), and it is session-only.
 
-There is one `descend` and one `ascend` (`client/wasm/nav.go`). Which frame
-a descent pushes is the tile's own declaration: a well or link pushes a grid
-frame, a text/url/shell/page tile pushes a content frame, a pane tile
-descends the window a level. Every ascent hop writes framing back through
-`SetFraming` and freezes a live preview, with no claim and no version bump.
+There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
+descent lands is the tile's own declaration: a well or link pushes a frame
+onto the child grid, a text/url/shell/page tile pushes one onto the tile
+itself, a pane tile descends the window a level. Every ascent hop writes
+framing back through `SetFraming` and freezes a live preview, with no claim
+and no version bump.
 A debounced settle persister does the same without waiting for an ascent.
 
 **Content.** A cache entry ({bytes, base version, dirty}, keyed by tile id)

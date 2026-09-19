@@ -8,7 +8,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **well** | The only tile with a child grid, and the only doorway that pushes a grid frame. |
+| **well** | The only tile with a child grid, and the only doorway that pushes a frame onto a grid. |
 | **text** | The only tile the user types into, and the only one whose `version` claims bytes. |
 | **url** | The only tile with an address of its own and a Chromium session behind it. |
 | **shell** | The only tile whose content is a host process. It survives ascent as a tmux session. |
@@ -29,9 +29,8 @@ here.
 |---|---|
 | **collection** | One grid a plugin serves, declared as a + menu entry (`door.PlacesOf`). A plugin has no place of its own, so a collection is the only way in, and it is named for its instance — "hey · Feed" (`door.EntryName`). |
 | **menu fold** | The + menu's doorway row is an open set, so it opens folded behind a chevron over the primitives, and every opening starts folded. The fold is the menu's live state (`client/menu`); what a folded or open menu shows is `client/palette`'s. |
-| **grid frame** | One doorway crossing, with the viewport you left it at. The whole of where a pane is. |
-| **content frame** | A frame whose place is a tile rather than a grid (`pane.ContentFrame`): text scroll, text mode, and content zoom live here. A descent into a document is an ordinary level you can ascend out of. |
-| **level** | A pane-tile descent (`pane.Level`), session-only. One pane tile can hold a whole arrangement without the frame stack encoding a tree. |
+| **frame** | One step through a doorway (`pane.Frame`), into a grid or into a tile, with where you left it. The whole of where a pane is, and a descent into a document is the same step as a descent into a grid, ascended out of the same way. Text scroll, text mode and content zoom belong to the tile's row, written by `SetTile`; the frame carries the working copy while you are inside it, as it carries the viewport `SetFraming` writes back to the doorway's row. |
+| **level** | A pane-tile descent (`pane.Level`), session-only: a frame moves one pane, a level parks the window's whole pane tree. One pane tile can hold a whole arrangement without the frame stack encoding a tree. |
 | **zoomed pane** | One leaf owns the whole window while the split ratios beneath it stay untouched (`pane.Tree.Zoomed`, the ⛶ title, a click on the title). Session-only; a structural edit unzooms first. |
 
 ## Lifecycle spaces
