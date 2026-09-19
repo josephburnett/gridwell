@@ -113,11 +113,13 @@ func (a *App) do(w write) error {
 	if w.optimistic {
 		r = clientsync.ReactOptimistic(o)
 	}
-	if r.Refetch {
-		a.refetchGridOnConflict(w.gid, w.label)
-	}
 	// clientsync.NoticesFor says which notices this outcome posts.
 	n := clientsync.NoticesFor(r, o, w.source != "")
+	if n.Reloaded {
+		a.refetchGridOnConflict(w.gid, w.label)
+	} else if r.Refetch {
+		a.fetchGrid(w.gid)
+	}
 	if n.Generic {
 		a.surfaceRPCError(w.label, err)
 	}
@@ -255,7 +257,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 			// never evicts content, so the rejected edit would linger
 			// looking saved.
 			a.c.DropTileContent(tileID)
-			if o == clientsync.OutcomeConflict {
+			if clientsync.NoticesFor(r, o, false).Reloaded {
 				a.refetchGridOnConflict(gid, "WriteContent")
 			} else {
 				a.fetchGrid(gid)

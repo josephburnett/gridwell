@@ -202,7 +202,11 @@ func TestNoticesFor(t *testing.T) {
 		{"a verdict with words gets both", React(OutcomeRejected), OutcomeRejected, true, Notices{Generic: true, Own: OwnFailed}},
 		{"transport with no words gets the generic line", React(OutcomeTransport), OutcomeTransport, false, Notices{Generic: true}},
 		{"transport with words says will-retry alone", React(OutcomeTransport), OutcomeTransport, true, Notices{Own: OwnRetry}},
-		{"a conflict is silent generically and spoken in its own words", React(OutcomeConflict), OutcomeConflict, true, Notices{Own: OwnFailed}},
+		{"a conflict is silent generically and spoken in its own words", React(OutcomeConflict), OutcomeConflict, true, Notices{Own: OwnFailed, Reloaded: true}},
+		{"an optimistic conflict says it reloaded", ReactOptimistic(OutcomeConflict), OutcomeConflict, false, Notices{Reloaded: true}},
+		{"an optimistic rejection refetches without claiming a change elsewhere", ReactOptimistic(OutcomeRejected), OutcomeRejected, false, Notices{Generic: true}},
+		{"a save conflict says it reloaded", ReactSave(OutcomeConflict), OutcomeConflict, true, Notices{Generic: true, Own: OwnFailed, Reloaded: true}},
+		{"a save rejection does not", ReactSave(OutcomeRejected), OutcomeRejected, true, Notices{Generic: true, Own: OwnFailed}},
 	}
 	for _, c := range cases {
 		if got := NoticesFor(c.r, c.o, c.ownWords); got != c.want {

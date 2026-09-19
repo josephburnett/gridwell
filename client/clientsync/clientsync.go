@@ -126,15 +126,19 @@ const (
 
 // Notices is which notices a finished write posts: the generic rpc: line, and
 // the write's own. On a transport blip "will retry" is the whole story, so a
-// write with its own words does not also get the generic line.
+// write with its own words does not also get the generic line. Reloaded is
+// the "changed elsewhere — reloaded" line beside a refetch: only a conflict
+// means someone else's bytes are about to replace the user's; a rejected
+// write refetches too, but nothing changed elsewhere.
 type Notices struct {
-	Generic bool
-	Own     OwnNotice
+	Generic  bool
+	Own      OwnNotice
+	Reloaded bool
 }
 
 // NoticesFor is the one table, over the reaction the outcome already earned.
 func NoticesFor(r Reaction, o Outcome, ownWords bool) Notices {
-	n := Notices{Generic: r.Log}
+	n := Notices{Generic: r.Log, Reloaded: r.Refetch && o == OutcomeConflict}
 	if !ownWords {
 		return n
 	}
