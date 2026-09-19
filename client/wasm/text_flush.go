@@ -128,13 +128,13 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	scrollY := int64(p.TextScrollY + 0.5)
 
 	// Dirty-gating keeps a pure read write-free: posting unconditionally
-	// would bump a merely-opened tile's version on every visit. A read-only
-	// row posts no content but still posts framing, which is a node fact for
-	// every text tile.
+	// would bump a merely-opened tile's version on every visit. Whether this
+	// row takes the bytes is textedit.DecideFlush's, as for the sweep; a row
+	// that will not still posts framing, which is a node fact for every text
+	// tile, and the sweep reports the bytes it keeps.
 	buf, hasBuf := a.c.DirtyContent(rpc.ContentID(file))
-	if a.tileReadOnly(file) {
-		hasBuf = false
-	}
+	editable := rpc.TextDocument(file) && !a.tileReadOnly(file)
+	hasBuf = hasBuf && textedit.DecideFlush(true, editable, false) == textedit.FlushPost
 
 	// Doc px, which equals screen px since scale is fixed at 1.0. The
 	// parent-grid preview crops this rectangle out of the re-rendered doc.
