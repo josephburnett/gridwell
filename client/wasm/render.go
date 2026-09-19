@@ -686,6 +686,25 @@ func (a *App) drawURLRefreshButton() {
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
 }
 
+// drawFreezeButton is the bar-slot button on a live shell descent: a click
+// takes the screenshot and detaches. Once frozen the same circle carries the
+// reconnect arrow, so one button is the freeze and the thaw in turn.
+func (a *App) drawFreezeButton() {
+	cx, cy := a.plusButtonCenter()
+	a.drawCircleButtonChrome(cx, cy)
+
+	band, _ := a.barTheme()
+	beginSlotGlyph(a.cctx, band)
+	a.cctx.Call("beginPath")
+	const r = 7.0
+	for _, d := range [][2]float64{{0, r}, {r * 0.87, r * 0.5}, {r * 0.87, -r * 0.5}} {
+		a.cctx.Call("moveTo", cx-d[0], cy-d[1])
+		a.cctx.Call("lineTo", cx+d[0], cy+d[1])
+	}
+	a.cctx.Call("stroke")
+	endGlyph(a.cctx)
+}
+
 // drawURLOpenTabButton replaces the refresh button where the host cannot go
 // live (caps.LiveURL false): a click opens the address in a browser tab, the
 // next-best descent, and the tile stays frozen.

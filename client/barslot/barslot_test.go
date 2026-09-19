@@ -42,7 +42,7 @@ func TestDecide(t *testing.T) {
 		},
 		{
 			"a frozen shell whose refresh shows goes live",
-			Input{Descent: true, ShellDescent: true, ShellRefreshVisible: true},
+			Input{Descent: true, ShellDescent: true, Durable: true, ShellRefreshVisible: true},
 			ModeGoLive,
 		},
 		{
@@ -51,8 +51,13 @@ func TestDecide(t *testing.T) {
 			ModeNothing,
 		},
 		{
-			"a live shell shows nothing",
-			Input{Descent: true, ShellDescent: true, ShellLive: true, ShellRefreshVisible: true},
+			"a live shell freezes",
+			Input{Descent: true, ShellDescent: true, ShellLive: true, Durable: true, ShellRefreshVisible: true},
+			ModeFreeze,
+		},
+		{
+			"an ephemeral live shell has no row to freeze onto",
+			Input{Descent: true, ShellDescent: true, ShellLive: true},
 			ModeNothing,
 		},
 		{
@@ -84,6 +89,11 @@ func TestDecideURLBeatsShell(t *testing.T) {
 		want Mode
 	}{
 		{
+			"a live url wins over a live shell's freeze",
+			Input{Descent: true, URLDescent: true, URLLive: true, ShellDescent: true, ShellLive: true, Durable: true},
+			ModeURLBack,
+		},
+		{
 			"a live url wins over a frozen shell's refresh",
 			Input{Descent: true, URLDescent: true, URLLive: true, ShellDescent: true, ShellRefreshVisible: true},
 			ModeURLBack,
@@ -110,6 +120,8 @@ func TestDecideGridIgnoresDescentFacts(t *testing.T) {
 		URLDescent:          true,
 		URLLive:             true,
 		ShellDescent:        true,
+		ShellLive:           true,
+		Durable:             true,
 		ShellRefreshVisible: true,
 		CanLiveURL:          true,
 	}

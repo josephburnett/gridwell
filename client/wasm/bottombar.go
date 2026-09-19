@@ -234,8 +234,12 @@ func (a *App) barSlotMode(p *pane.Pane) barslot.Mode {
 		ShellLive:    a.hasShellStream(p.ID),
 		CanLiveURL:   a.caps.LiveURL,
 	}
-	if in.ShellDescent && !in.ShellLive {
-		if t, ok := a.descendedGridTile(p); ok {
+	if in.ShellDescent {
+		// The pane's own grid, with no scratch fallback: an ephemeral visit
+		// resolves to nothing, which is exactly what Durable means.
+		t, ok := a.descendedGridTile(p)
+		in.Durable = ok
+		if ok && !in.ShellLive {
 			in.ShellRefreshVisible = a.shellRefreshButtonVisible(t)
 		}
 	}
@@ -268,6 +272,8 @@ func (a *App) drawBarSlot() {
 		a.drawURLRefreshButton()
 	case barslot.ModeURLOpenTab:
 		a.drawURLOpenTabButton()
+	case barslot.ModeFreeze:
+		a.drawFreezeButton()
 	case barslot.ModePlus:
 		a.drawPlusButton(p)
 	}
@@ -297,6 +303,8 @@ func (a *App) barSlotClick(button int) {
 				a.openURLStream(p, t.Id)
 			}
 		}
+	case barslot.ModeFreeze:
+		a.freezeShellPane(p)
 	case barslot.ModeURLOpenTab:
 		// A browser host cannot place a live view, so the next-best descent
 		// is a new tab. The tile stays frozen and this persists nothing.
@@ -308,7 +316,7 @@ func (a *App) barSlotClick(button int) {
 		a.draw()
 	}
 	// ModeNothing: a markdown descent's slot is the DOM toggle button, which
-	// handles its own clicks; a live shell has no slot gesture.
+	// handles its own clicks; an ephemeral shell visit has no row to freeze.
 }
 
 // openURLInNewTab is the frozen host's answer to "descend live". A tile with

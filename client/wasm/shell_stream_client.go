@@ -604,6 +604,25 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 	a.releaseShellStream(paneID, conn)
 }
 
+// freezeShellPane runs the bar circle's freeze on a live shell: the standing
+// intent lands on the descended row, the terminal's current face becomes the
+// tile's preview through the ordinary close capture, and the attachment ends.
+// The tmux session keeps running, the way a frozen url keeps its address: a
+// freeze is a screenshot, not a kill, so the reconnect finds the session where
+// it left it. An ephemeral visit resolves to no row and freezes nothing.
+func (a *App) freezeShellPane(p *pane.Pane) {
+	t, ok := a.descendedGridTile(p)
+	if !ok || t.Kind != rpc.KindShell {
+		return
+	}
+	a.postFrozen(t.Id, true, func() {
+		// A freeze still owed to the server is the outbox's business, so the
+		// teardown runs whatever the write did.
+		a.closeShellStream(p.ID, true)
+		a.draw()
+	})
+}
+
 // closeAllShellStreams runs on beforeunload so the server's freeze-and-destroy
 // happens before the tab goes away. shellSurfaces is a snapshot.
 func (a *App) closeAllShellStreams() {
