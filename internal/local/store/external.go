@@ -84,9 +84,6 @@ type ExtTile struct {
 	ChildGridID int64
 }
 
-// DefaultGridWidth is the auto-place wrap width for an entry with no hint.
-const DefaultGridWidth int64 = 8
-
 // ContextID resolves a context key to its grid id, minting on first sight.
 func (n *Namespace) ContextID(key string) (int64, error) {
 	var id int64
@@ -193,12 +190,10 @@ func entryKind(e Entry) string {
 	return e.Kind
 }
 
-// derivePlacement is the one auto-place rule: a hint seeds a first placement,
-// otherwise the entry takes the next free cell in reading order. Overlay
-// derives with it and Mint stores what Overlay derived, so touching a tile
-// never moves it.
+// derivePlacement seeds a first placement from the hint, else takes the next
+// free cell by the one auto-place rule (autoplace.go). Overlay derives with it
+// and Mint stores what Overlay derived, so touching a tile never moves it.
 func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y, w, h int64) {
-	w, h = 1, 1
 	if hint != nil {
 		x, y, w, h = hint.X, hint.Y, hint.W, hint.H
 		if w < 1 {
@@ -210,7 +205,7 @@ func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y,
 		occupyRect(occupied, x, y, w, h)
 		return x, y, w, h
 	}
-	x, y = nextEmptyCell(occupied, DefaultGridWidth, cur)
+	x, y = nextFreeRect(occupied, cur, 1, 1)
 	return x, y, 1, 1
 }
 
@@ -424,38 +419,4 @@ func (n *Namespace) RootFraming(gridID int64) (f rpc.Framing, ok bool, err error
 		return rpc.Framing{}, false, nil
 	}
 	return rpc.Framing{Cx: ncx.Float64, Cy: ncy.Float64, Zoom: nzoom.Float64}, true, nil
-}
-
-// ── auto-place ───────────────────────────────────────────────────────────────
-
-type cursor struct{ x, y int64 }
-
-func nextEmptyCell(occupied map[[2]int64]bool, width int64, cur *cursor) (int64, int64) {
-	cx, cy := cur.x, cur.y
-	for {
-		if !occupied[[2]int64{cx, cy}] {
-			occupied[[2]int64{cx, cy}] = true
-			cur.x, cur.y = cx, cy
-			return cx, cy
-		}
-		cx++
-		if cx >= width {
-			cx = 0
-			cy++
-		}
-	}
-}
-
-func occupyRect(occupied map[[2]int64]bool, x, y, w, h int64) {
-	if w < 1 {
-		w = 1
-	}
-	if h < 1 {
-		h = 1
-	}
-	for dx := int64(0); dx < w; dx++ {
-		for dy := int64(0); dy < h; dy++ {
-			occupied[[2]int64{x + dx, y + dy}] = true
-		}
-	}
 }

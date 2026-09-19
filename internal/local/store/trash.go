@@ -21,10 +21,6 @@ import (
 
 const systemKeyTrashGridID = "trash_grid_id"
 
-// trashCols is the fixed fill width for trash placement. It is layout only;
-// the user can rearrange afterwards and it stays as left.
-const trashCols = 8
-
 // trashAncestryCap bounds the ancestor walk, which a cycle would loop forever.
 const trashAncestryCap = 256
 
@@ -160,7 +156,7 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 	if err != nil {
 		return err
 	}
-	x, y, err := firstFreeCell(ctx, tx, monthGrid, t.W, t.H)
+	x, y, err := s.firstFreeCell(ctx, tx, monthGrid, t.W, t.H)
 	if err != nil {
 		return err
 	}
@@ -215,7 +211,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 	if err != nil {
 		return 0, false, err
 	}
-	x, y, err := firstFreeCell(ctx, tx, trashID, 1, 1)
+	x, y, err := s.firstFreeCell(ctx, tx, trashID, 1, 1)
 	if err != nil {
 		return 0, false, err
 	}
@@ -230,18 +226,18 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 	return child, true, nil
 }
 
-// firstFreeCell scans a trashCols-wide fill for the first slot that fits
-// (w, h) without overlap: row-major, unbounded downward.
-func firstFreeCell(ctx context.Context, tx *sql.Tx, gridID, w, h int64) (int64, int64, error) {
-	for y := int64(0); ; y++ {
-		for x := int64(0); x < trashCols; x++ {
-			over, err := overlapsExisting(ctx, tx, gridID, x, y, w, h)
-			if err != nil {
-				return 0, 0, err
-			}
-			if !over {
-				return x, y, nil
-			}
-		}
+// firstFreeCell is the one auto-place rule (autoplace.go) over the grid's
+// rows: the first slot from the origin that fits (w, h).
+func (s *Store) firstFreeCell(ctx context.Context, tx *sql.Tx, gridID, w, h int64) (int64, int64, error) {
+	tiles, err := s.loadTilesInGrid(ctx, tx, gridID)
+	if err != nil {
+		return 0, 0, err
 	}
+	occupied := map[[2]int64]bool{}
+	for _, t := range tiles {
+		occupyRect(occupied, t.X, t.Y, t.W, t.H)
+	}
+	var cur cursor
+	x, y := nextFreeRect(occupied, &cur, w, h)
+	return x, y, nil
 }
