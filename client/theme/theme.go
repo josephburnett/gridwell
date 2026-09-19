@@ -152,8 +152,9 @@ type Palette struct {
 	// BarInk is the bar's own lettering and the circle button's rim, over a
 	// band of any family.
 	BarInk string
-	// PaneTileCrumbIdle is a pane-tile crumb for a level you are not in.
-	PaneTileCrumbIdle string
+	// CrumbIdle is a crumb that is not where you are: a pane-tile level you
+	// are outside, and the outline of one whose row has not arrived yet.
+	CrumbIdle string
 	// The bar chip on a pane whose room is a memory.
 	CachedChipBg string
 	CachedChipFg string
@@ -249,14 +250,14 @@ var dark = Palette{
 	DeadLinkVeil:       "rgba(12, 13, 17, 0.72)",
 	DeadLink:           "#5c5f68",
 
-	BarGridBand:       "#151b2e",
-	BarTextBand:       "#1b2213",
-	BarPluginBand:     "#241e12",
-	BarEphemeralBand:  "#1d1f24",
-	BarInk:            "#dff4f4",
-	PaneTileCrumbIdle: "#1d4a4a",
-	CachedChipBg:      "#8a6d2f",
-	CachedChipFg:      "#f4e3b2",
+	BarGridBand:      "#151b2e",
+	BarTextBand:      "#1b2213",
+	BarPluginBand:    "#241e12",
+	BarEphemeralBand: "#1d1f24",
+	BarInk:           "#dff4f4",
+	CrumbIdle:        "#1d4a4a",
+	CachedChipBg:     "#8a6d2f",
+	CachedChipFg:     "#f4e3b2",
 
 	TextFg:           "#d8d9de",
 	ShellCursor:      "#c87a5a",
@@ -347,14 +348,14 @@ var light = Palette{
 	DeadLinkVeil:       "rgba(246, 247, 250, 0.72)",
 	DeadLink:           "#9b9ea6",
 
-	BarGridBand:       "#e3e9f8",
-	BarTextBand:       "#eef4e0",
-	BarPluginBand:     "#f5efe2",
-	BarEphemeralBand:  "#eceef2",
-	BarInk:            "#1d2e2e",
-	PaneTileCrumbIdle: "#bfe0e0",
-	CachedChipBg:      "#e6c67c",
-	CachedChipFg:      "#4a3708",
+	BarGridBand:      "#e3e9f8",
+	BarTextBand:      "#eef4e0",
+	BarPluginBand:    "#f5efe2",
+	BarEphemeralBand: "#eceef2",
+	BarInk:           "#1d2e2e",
+	CrumbIdle:        "#bfe0e0",
+	CachedChipBg:     "#e6c67c",
+	CachedChipFg:     "#4a3708",
 
 	TextFg:           "#23252c",
 	ShellCursor:      "#a3502a",

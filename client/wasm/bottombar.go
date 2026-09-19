@@ -149,7 +149,7 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	if level == a.ws.Depth() {
 		c.Set("fillStyle", a.pal.PaneTileBorder)
 	} else {
-		c.Set("fillStyle", a.pal.PaneTileCrumbIdle)
+		c.Set("fillStyle", a.pal.CrumbIdle)
 	}
 	c.Call("fillRect", s.X+2, top+3, s.W-4, wsbar.RowH-6)
 	label := ""
@@ -370,7 +370,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 		} else {
 			// The row is not cached, so draw a placeholder; the fetch kicked
 			// by chainCrumbTile fills it in.
-			c.Set("strokeStyle", a.pal.PaneTileCrumbIdle)
+			c.Set("strokeStyle", a.pal.CrumbIdle)
 			c.Set("lineWidth", 1.0)
 			c.Call("strokeRect", x+1, y+1, side-2, side-2)
 		}
