@@ -91,8 +91,7 @@ transit), which fails the read when the owner's handshake does not answer.
 `Grid.glyph` (the grid's identity face) come from the owning plugin's
 `Info` through `pluginhost/adapter.go`; they are what the client reads
 instead of knowing a plugin's kind, which is why a dark plugin fails the
-read rather than serving a grid with a face nobody declared. `Grid.node_ns` comes from `TransitQualifyGrid` alone. `Grid.stale`
-is raised by whoever serves a remembered answer.
+read rather than serving a grid with a face nobody declared. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
 
 ## The router
 
@@ -179,10 +178,11 @@ answering for it.
 of the one seam that crosses a network — the transport — in one disposable
 file (`cache.db`). A cache is worth its cost only across a network: home is
 the durable store, and a plugin is a subprocess on this machine, so both are
-read live. A remembered grid serves first — unstamped
-inside the freshness window, stamped `stale` past it, and stamped inside it
-too once the connection is known dark, with one background revalidation
-kicked — so a remote round trip never sits on the read path. Darkness is
+read live. A remembered grid serves first, exactly as it was remembered, with
+one background revalidation kicked past the freshness window or once the
+connection is known dark — so a remote round trip never sits on the read
+path. Nothing on the answer says it is a memory: that is the source's health,
+and the client derives it there (`client/cache.SourceDark`). Darkness is
 learned from any pass-through call that fails transport-shaped and from the
 connection's own health on the stream the layer relays, cleared by the next
 answer; the discovery announces the grid at hand, and the client re-reads
@@ -191,8 +191,8 @@ revalidation that finds drift emits a `GridChanged` on the layer's own
 event stream, served alongside the connection's own, and the client's
 refetch serves the correction; a verdict evicts the remembered grid so it
 surfaces on the next read. Other reads pass through and remember, and on a
-transport-class failure serve the remembered answer stamped `stale`. Writes
-always pass through, and their responses fold into the remembered rows.
+transport-class failure serve the remembered answer. Writes always pass
+through, and their responses fold into the remembered rows.
 Prefetch is a per-seam option only the transport takes, rooted at the
 connections the fronted namespace's own handshake declares. A dark node is
 answered by the cache. A dark *source* (the plugin answers, its directory
@@ -278,9 +278,9 @@ reads the handshake roster the + menu is built from, asks the router's own peel
 node's declaration rather than from a failed fetch. A dead link is drawn grey
 and inert, is never fetched for, raises no notice, and does not descend; it can
 still be selected, read, and deleted. Dead is not dark: a declared plugin that
-is down and a declared connection that will not answer are health and
-staleness, and a chain through a declared connection is the far node's to
-judge, so it is never judged here. Dead is not always forever, either: a
+is down and a declared connection that will not answer are health, and a
+chain through a declared connection is the far node's to judge, so it is
+never judged here. Dead is not always forever, either: a
 retired connection name never returns, but a namespace merely undeclared is
 dead only while it is undeclared — declare it again and every link through it
 is live again, unchanged.
