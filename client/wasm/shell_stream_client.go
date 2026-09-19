@@ -579,6 +579,12 @@ func (a *App) mirrorLiveShells() {
 
 // termTheme is xterm's palette, the same three roles the canvas paints with.
 // A live terminal is restyled by assigning this to term.options.theme.
+//
+// A freeze photographs that terminal, so the stored preview blob is in the
+// theme the shell was live in and stays that way until the tile is reopened
+// and frozen again. That is deliberate: a capture is what the tile looked
+// like, and rewriting a stored blob to follow a view preference would change
+// bytes the user did not touch.
 func (a *App) termTheme() js.Value {
 	th := js.Global().Get("Object").New()
 	th.Set("background", a.pal.Bg)

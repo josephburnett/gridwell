@@ -93,6 +93,7 @@ func (a *App) refreshRenderedOverlayBg() {
 	}
 	if a.overlays.textTextarea.Truthy() {
 		st := a.overlays.textTextarea.Get("style")
+		st.Set("background", a.pal.FileInnerBg)
 		st.Set("color", a.pal.TextFg)
 		st.Set("caretColor", a.pal.TextFg)
 	}

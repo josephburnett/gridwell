@@ -286,9 +286,8 @@ func (a *App) ensureFileToggle() {
 	style.Set("width", pxf(2*plusButtonRadius))
 	style.Set("height", pxf(2*plusButtonRadius))
 	style.Set("borderRadius", "50%")
-	// background and color come from barTheme on every refreshFileToggle, so
-	// there is no second, frozen copy of the theme fact.
-	style.Set("border", "1px solid "+a.pal.BarInk)
+	// The rim, background and color come from the palette on every
+	// refreshFileToggle, so there is no second, frozen copy of the theme fact.
 	style.Set("cursor", "pointer")
 	style.Set("alignItems", "center")
 	style.Set("justifyContent", "center")
@@ -365,8 +364,9 @@ func (a *App) refreshFileToggle() {
 	cx, cy := a.plusButtonCenter()
 	style.Set("left", pxf(cx-plusButtonRadius))
 	style.Set("top", pxf(cy-plusButtonRadius))
-	// The same family shades as the canvas slot buttons.
+	// The same family shades and rim as the canvas slot buttons.
 	band, button := a.barTheme()
+	style.Set("border", "1px solid "+a.pal.BarInk)
 	style.Set("background", button)
 	style.Set("color", band)
 	// The glyph names the target mode: an italic serif "a" renders, a
