@@ -22,7 +22,7 @@ type Cache struct {
 	// dark is the sources whose latest health event said they are not
 	// answering, keyed by that event's uuid. It is what makes a room a
 	// memory, and it lives beside the grids because the join from a source to
-	// what it serves is ServedBy's, here. A launcher row's InfoError is the
+	// what it serves is ServedBy's, here. A handshake entry's InfoError is the
 	// handshake's separate record of a source that would not answer then.
 	dark map[string]bool
 	// content is the one text-body store, keyed by tile id because blob ids
