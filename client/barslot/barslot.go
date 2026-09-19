@@ -4,9 +4,7 @@
 // the shim keeps the input gathering, the pixels and the effect dispatch.
 package barslot
 
-// Mode names both a glyph and an action. ModeURLGoLive and ModeShellRefresh
-// draw the same refresh glyph but stay separate modes, one click placing a url
-// view and the other attaching a PTY.
+// Mode names both a glyph and an action.
 type Mode int
 
 const (
@@ -16,14 +14,13 @@ const (
 	ModeNothing Mode = iota
 	// ModeURLBack runs history.back().
 	ModeURLBack
-	// ModeURLGoLive opens the url stream.
-	ModeURLGoLive
+	// ModeGoLive reopens the descended tile: a url view placed, or a tmux
+	// session created for a never-opened shell tile and attached. One glyph
+	// and one meaning, so the caller dispatches on the tile's kind.
+	ModeGoLive
 	// ModeURLOpenTab opens the address in a new browser tab; the tile stays
 	// frozen.
 	ModeURLOpenTab
-	// ModeShellRefresh creates a tmux session for a never-opened tile, or
-	// attaches to the existing one.
-	ModeShellRefresh
 	// ModePlus is the + menu toggle. The drawer swaps in the trashcan while a
 	// tile drag is in flight.
 	ModePlus
@@ -60,13 +57,13 @@ func Decide(in Input) Mode {
 		case in.URLLive:
 			return ModeURLBack
 		case in.CanLiveURL:
-			return ModeURLGoLive
+			return ModeGoLive
 		default:
 			return ModeURLOpenTab
 		}
 	case in.ShellDescent:
 		if !in.ShellLive && in.ShellRefreshVisible {
-			return ModeShellRefresh
+			return ModeGoLive
 		}
 	}
 	return ModeNothing

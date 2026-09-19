@@ -264,7 +264,7 @@ func (a *App) drawBarSlot() {
 	switch a.barSlotMode(p) {
 	case barslot.ModeURLBack:
 		a.drawURLBackButton()
-	case barslot.ModeURLGoLive, barslot.ModeShellRefresh:
+	case barslot.ModeGoLive:
 		a.drawURLRefreshButton()
 	case barslot.ModeURLOpenTab:
 		a.drawURLOpenTabButton()
@@ -287,9 +287,15 @@ func (a *App) barSlotClick(button int) {
 	switch a.barSlotMode(p) {
 	case barslot.ModeURLBack:
 		a.bridgeGoBack(p.ID)
-	case barslot.ModeURLGoLive:
+	case barslot.ModeGoLive:
+		// One verdict, one glyph; which stream reopens is the descended
+		// tile's kind, which the pane already knows.
 		if t, ok := a.descendedGridTile(p); ok {
-			a.openURLStream(p, t.Id)
+			if a.isShellDescent(p) {
+				a.openShellStream(p, t.Id)
+			} else {
+				a.openURLStream(p, t.Id)
+			}
 		}
 	case barslot.ModeURLOpenTab:
 		// A browser host cannot place a live view, so the next-best descent
@@ -297,12 +303,6 @@ func (a *App) barSlotClick(button int) {
 		// Synchronous within the click, so the popup rides the user-gesture
 		// allowance.
 		a.openURLInNewTab(p)
-	case barslot.ModeShellRefresh:
-		// Creates a fresh tmux session when there is no snapshot yet, else
-		// attaches to the existing one.
-		if t, ok := a.descendedGridTile(p); ok {
-			a.openShellStream(p, t.Id)
-		}
 	case barslot.ModePlus:
 		a.menu.Toggle(p.ID)
 		a.draw()

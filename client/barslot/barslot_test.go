@@ -33,7 +33,7 @@ func TestDecide(t *testing.T) {
 		{
 			"a frozen url descent on a live-capable host goes live",
 			Input{Descent: true, URLDescent: true, CanLiveURL: true},
-			ModeURLGoLive,
+			ModeGoLive,
 		},
 		{
 			"a frozen url descent on a browser host opens a new tab",
@@ -41,9 +41,9 @@ func TestDecide(t *testing.T) {
 			ModeURLOpenTab,
 		},
 		{
-			"a frozen shell whose refresh shows refreshes",
+			"a frozen shell whose refresh shows goes live",
 			Input{Descent: true, ShellDescent: true, ShellRefreshVisible: true},
-			ModeShellRefresh,
+			ModeGoLive,
 		},
 		{
 			"a frozen shell whose session is gone shows nothing",
@@ -76,16 +76,30 @@ func TestDecide(t *testing.T) {
 }
 
 // No real pane is both, so nothing but this test holds the priority still.
+// Both rows pick an input the two arms answer differently.
 func TestDecideURLBeatsShell(t *testing.T) {
-	in := Input{
-		Descent:             true,
-		URLDescent:          true,
-		ShellDescent:        true,
-		CanLiveURL:          true,
-		ShellRefreshVisible: true,
+	cases := []struct {
+		name string
+		in   Input
+		want Mode
+	}{
+		{
+			"a live url wins over a frozen shell's refresh",
+			Input{Descent: true, URLDescent: true, URLLive: true, ShellDescent: true, ShellRefreshVisible: true},
+			ModeURLBack,
+		},
+		{
+			"a browser host's new tab wins over a frozen shell's refresh",
+			Input{Descent: true, URLDescent: true, ShellDescent: true, ShellRefreshVisible: true},
+			ModeURLOpenTab,
+		},
 	}
-	if got := Decide(in); got != ModeURLGoLive {
-		t.Fatalf("Decide(url and shell) = %v, want %v", got, ModeURLGoLive)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Decide(c.in); got != c.want {
+				t.Fatalf("Decide(url and shell) = %v, want %v", got, c.want)
+			}
+		})
 	}
 }
 
