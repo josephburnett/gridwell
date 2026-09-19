@@ -193,7 +193,13 @@ func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title,
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
 	a.bridgeCall(g, "removeWebview", args, func(res js.Value) {
-		onFreeze(decodeBase64(res.Get("jpegBase64")), jsString(res.Get("url")),
+		jpeg, ok := decodeBase64(res.Get("jpegBase64"))
+		if !ok {
+			// The tile keeps the face it had, and the user is told why the
+			// page they just left is not on it.
+			a.reportErr(errsurface.Error, "electron:webview", "the final frame of "+paneID+" was unreadable — the tile keeps its old face")
+		}
+		onFreeze(jpeg, jsString(res.Get("url")),
 			jsString(res.Get("title")), jsString(res.Get("history")))
 	}, func() {
 		// A refused teardown still releases the caller's closure, which holds
@@ -238,8 +244,9 @@ func (a *App) installWebviewListeners() {
 	onFrame := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
 		tileID := jsString(ev.Get("tileId"))
-		jpeg := decodeBase64(ev.Get("jpegBase64"))
-		if len(jpeg) > 0 {
+		// An unreadable preview frame is the same as none: the next one
+		// replaces it, and the tile keeps the face it had until then.
+		if jpeg, _ := decodeBase64(ev.Get("jpegBase64")); len(jpeg) > 0 {
 			a.views.urlPreview.PutWildcard(tileID, jpeg, func() { a.draw() })
 		}
 		return nil
@@ -335,18 +342,19 @@ func (a *App) installWebviewListeners() {
 	// Listeners live for the lifetime of the app, so no Release.
 }
 
-func decodeBase64(v js.Value) []byte {
+// decodeBase64 reads a bridge frame. ok is false only for bytes that are
+// not base64: an absent frame is nil and ok, since the bridge sends none for
+// a page that never painted.
+func decodeBase64(v js.Value) ([]byte, bool) {
 	s := jsString(v)
 	if s == "" {
-		return nil
+		return nil, true
 	}
 	b, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		// Both callers are preview frames, where no bytes and unusable bytes
-		// are the same thing: the tile keeps the face it had.
-		return nil
+		return nil, false
 	}
-	return b
+	return b, true
 }
 
 func jsString(v js.Value) string {
