@@ -420,10 +420,10 @@ type Tile struct {
 	// media type in fs. Never a stored column.
 	ServesPage bool `protobuf:"varint,32,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
 	// text_presentation is the owning plugin's declaration of how a text tile's
-	// body presents: "plain" for monospace with no markdown interpretation,
-	// "rendered" for the document renderer only, or "both" for rendered by
-	// default with a toggle to the raw source. "" means no declaration and the
-	// stored user text_mode rules, which is the case for the home's own
+	// body presents: "plain" for monospace with no markdown interpretation, or
+	// "both" for rendered by default with a toggle to the raw source. There is
+	// no document-only value: the user can always reach the source bytes. "" is
+	// no declaration and the stored user text_mode rules, as for the home's own
 	// documents. Plugin-derived from the content itself, such as the filename or
 	// a sniff in fs. Wire-only, never a stored column.
 	TextPresentation string `protobuf:"bytes,33,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`

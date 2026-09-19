@@ -220,16 +220,32 @@ func (a *Adapter) emitGridChanged(gridID string) {
 	}})
 }
 
-// checkEntries refuses a shape the node cannot present, at the one door where a
-// plugin's entries enter, so it never reaches the store, the wire or a client.
-// The one shape refused today is kind "url" together with serves_page: every
-// reader answers the url arm first, so the page would never serve.
-func checkEntries(entries []*pluginv1.Entry) error {
+// retiredPresentationRendered meant document only, with no way back to the
+// source bytes. A plugin never hides those, so the door reads it as "both".
+const retiredPresentationRendered = "rendered"
+
+// acceptEntries is the one door a plugin's entries enter by: it refuses a shape
+// the node cannot present and maps a retired declaration onto the live
+// vocabulary, so neither the store, the wire nor a client meets either one.
+// Kind "url" with serves_page is refused because every reader answers the url
+// arm first, so the page would never serve; an unknown text_presentation is
+// refused because reading it as undeclared would ignore the author's
+// declaration in silence.
+func acceptEntries(entries []*pluginv1.Entry) error {
 	for _, e := range entries {
 		if e.Kind == rpc.KindURL && e.ServesPage {
 			return status.Errorf(codes.InvalidArgument,
 				"plugin: entry %q declares kind url and serves_page; a url entry opens url_string, a page has no address of its own — declare one or the other",
 				e.Key)
+		}
+		switch e.TextPresentation {
+		case "", rpc.TextPresentationPlain, rpc.TextPresentationBoth:
+		case retiredPresentationRendered:
+			e.TextPresentation = rpc.TextPresentationBoth
+		default:
+			return status.Errorf(codes.InvalidArgument,
+				"plugin: entry %q declares text_presentation %q; the vocabulary is %q, %q, or nothing at all",
+				e.Key, e.TextPresentation, rpc.TextPresentationPlain, rpc.TextPresentationBoth)
 		}
 	}
 	return nil
@@ -355,7 +371,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 		stale, resp = true, &pluginv1.ListResponse{}
 	}
-	if err := checkEntries(resp.Entries); err != nil {
+	if err := acceptEntries(resp.Entries); err != nil {
 		return nil, err
 	}
 	// An authoritative listing is a verdict on every key, so rows it does not

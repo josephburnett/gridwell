@@ -30,8 +30,6 @@ func TestToggleVisibleTable(t *testing.T) {
 
 		{"plain, writable", rpc.TextPresentationPlain, false, "notes.md", false},
 		{"plain, read-only", rpc.TextPresentationPlain, true, "notes.md", false},
-		{"rendered, writable", rpc.TextPresentationRendered, false, "notes.md", false},
-		{"rendered, read-only", rpc.TextPresentationRendered, true, "notes.md", false},
 	}
 	for _, c := range cases {
 		tile := &gridwellv1.Tile{Kind: rpc.KindText, TextPresentation: c.presentation, AltText: c.altText}
@@ -54,7 +52,6 @@ func TestPresentationHTMLTable(t *testing.T) {
 		{"plain is verbatim", rpc.TextPresentationPlain, "notes.md", "* one", "<h2"},
 		{"undeclared markdown name renders a list", "", "notes.md", "<li", "<h2"},
 		{"undeclared org name renders a heading", "", "notes.org", "<h2", ""},
-		{"rendered declaration renders too", rpc.TextPresentationRendered, "notes.md", "<li", ""},
 		{"both declaration renders too", rpc.TextPresentationBoth, "notes.md", "<li", ""},
 	}
 	for _, c := range cases {

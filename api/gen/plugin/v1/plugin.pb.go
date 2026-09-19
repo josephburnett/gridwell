@@ -446,8 +446,13 @@ type Entry struct {
 	Kind  string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"` // "well" | "text" | "url"
 	Label string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	// child_context: wells only — the context this entry opens into.
-	ChildContext     string `protobuf:"bytes,4,opt,name=child_context,json=childContext,proto3" json:"child_context,omitempty"`
-	ServesPage       bool   `protobuf:"varint,5,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
+	ChildContext string `protobuf:"bytes,4,opt,name=child_context,json=childContext,proto3" json:"child_context,omitempty"`
+	ServesPage   bool   `protobuf:"varint,5,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
+	// text_presentation says how a text entry's body presents: "plain" for
+	// verbatim monospace, "both" for the document renderer with a toggle to the
+	// raw source, "" for no declaration. "rendered" is RETIRED — it hid the
+	// source bytes, which the app never allows, and the node reads it as "both".
+	// Any other value is refused at the door.
 	TextPresentation string `protobuf:"bytes,6,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
 	StatusDetail     string `protobuf:"bytes,7,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	// url entries: the address itself.

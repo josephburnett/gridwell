@@ -73,14 +73,18 @@ class, and the word says who started the write.
 |---|---|
 | **read-only** (`a.tileReadOnly`) | A text tile in a grid that is not writable: no textarea, no save, no checkbox flip, rendered face only. Nobody types into a derived body and silently re-posts it. |
 | **host_content** (`Grid.Meta.HostContent`) | Every row in this grid projects host state and gets the red "outside Gridwell" treatment. The plugin declares it, so the client never learns plugin kinds. |
-| **serves_page** | This tile's face and descent are web content served at the `/content/` door: a file whose presentation is a page, with no address of its own. A url entry that also declares it is refused at the plugin door (`checkEntries`). |
+| **serves_page** | This tile's face and descent are web content served at the `/content/` door: a file whose presentation is a page, with no address of its own. A url entry that also declares it is refused at the plugin door (`acceptEntries`). |
 | **text_presentation: plain** | Verbatim preformatted text; no rendered/raw toggle. |
-| **text_presentation: rendered** | Document render only; no toggle. |
-| **text_presentation: both** | The toggle stays, whether or not the tile is writable. |
+| **text_presentation: both** | The tile is a document: rendered by default, with the toggle to the raw source, whether or not the tile is writable. |
 | **url_frozen** | A standing user intent not to go live. A preview is what a frozen tile looks like; the intent is why it stays that way. |
 | **content zoom** (`Tile.content_zoom`) | The scale of what renders inside one text, shell or url tile, stored on its row by `SetTile`'s content-zoom arm, so a document reads larger without the grid moving and stays that size wherever the tile is shown. Pane zoom is the grid's viewport; this is the tile's. `client/contentzoom` owns the chord and the range. |
 | **status_detail** | The owning plugin's one word about a tile's state ("unread", "done"), drawn muted after the name (`tilebanner.Runs`). A note on a name, never a second name, and nothing outside the plugin can derive it. |
 | **identity glyph** | The face a namespace wears on its swatch, its ghost and the crumb of the grid it roots (`door.GlyphFor`): declared by the plugin or the entry, globe for a connection, well for home. An unknown name degrades to the globe, so the client learns no plugin kinds. |
+
+A plugin says whether its text is a document; the user can always see the
+source. That is why there are two values and not three: a declaration that
+rendered a body with no way back to its bytes is retired, and `acceptEntries`
+reads the retired word as `both` so an old plugin binary keeps presenting.
 
 `client/textedit` owns the first two presentation rules (`ToggleVisible`,
 `PresentationHTML`), so `make check` executes them.

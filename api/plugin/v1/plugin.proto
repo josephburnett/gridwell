@@ -105,6 +105,11 @@ message Entry {
   // child_context: wells only — the context this entry opens into.
   string child_context = 4;
   bool   serves_page       = 5;
+  // text_presentation says how a text entry's body presents: "plain" for
+  // verbatim monospace, "both" for the document renderer with a toggle to the
+  // raw source, "" for no declaration. "rendered" is RETIRED — it hid the
+  // source bytes, which the app never allows, and the node reads it as "both".
+  // Any other value is refused at the door.
   string text_presentation = 6;
   string status_detail     = 7;
   // url entries: the address itself.
