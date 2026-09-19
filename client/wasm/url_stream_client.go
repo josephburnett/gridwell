@@ -90,30 +90,28 @@ func (a *App) webAddress(t *gridwellv1.Tile) string {
 }
 
 // openURLStream goes live: main places a native WebContentsView for (pane,
-// tile). No-op outside Electron.
+// tile). What that does to the row is urlview.DecideGoLive's; this resolves
+// the row and runs the plan.
 func (a *App) openURLStream(p *pane.Pane, tileID string) {
-	if !a.caps.LiveURL {
-		urlLog("live URL unavailable on this host (no Electron bridge); tile stays frozen")
-		return
-	}
 	t, ok := a.urlTileForPane(p, tileID)
 	if !ok {
 		return
 	}
-	if t.UrlFrozen {
-		// Going live is the unfreeze, so the two facts never coexist. This
-		// only fires on the explicit reconnect click, since DecideAutoLive
-		// blocks auto-live while the intent is set.
-		a.postURLFrozen(t.Id, false, nil)
-	}
-	if !rpc.LeafLink(t) {
-		a.placeURLView(p.ID, t)
+	plan, ok := urlview.DecideGoLive(a.caps.LiveURL, t.UrlFrozen, rpc.LeafLink(t))
+	if !ok {
+		urlLog("live URL unavailable on this host (no Electron bridge); tile stays frozen")
 		return
 	}
-	// A url link goes live as its target, which owns the url string, session
-	// partition, history and freeze writeback. That row is read first, since
-	// its grid is likely never loaded.
-	a.runGesture(nav.Gesture{Kind: nav.GestureFollowLink, PaneID: p.ID, Door: t})
+	if plan.Unfreeze {
+		a.postURLFrozen(t.Id, false, nil)
+	}
+	if plan.FollowLink {
+		// The target's row is read first, since its grid is likely never
+		// loaded.
+		a.runGesture(nav.Gesture{Kind: nav.GestureFollowLink, PaneID: p.ID, Door: t})
+		return
+	}
+	a.placeURLView(p.ID, t)
 }
 
 // placeURLView places the native WebContentsView for pane paneID showing
