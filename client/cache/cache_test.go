@@ -622,19 +622,19 @@ func TestDirtyAccessors(t *testing.T) {
 // rather than making every call site spell the nil check.
 func TestGridDeclarationsAreNilSafe(t *testing.T) {
 	c := New()
-	c.PutGrid(&gridwellv1.Grid{Id: "1", HostContent: true, Stale: true}, nil)
+	c.PutGrid(&gridwellv1.Grid{Id: "1", HostContent: true}, nil)
 	c.PutGrid(&gridwellv1.Grid{Id: "2"}, nil)
 
 	g, ok := c.Grid("1")
-	if !ok || !g.HostContent() || !g.Stale() {
-		t.Errorf("declared grid: HostContent=%v Stale=%v, want both true", g.HostContent(), g.Stale())
+	if !ok || !g.HostContent() {
+		t.Errorf("declared grid: HostContent=%v, want true", g.HostContent())
 	}
 	plain, ok := c.Grid("2")
-	if !ok || plain.HostContent() || plain.Stale() {
-		t.Errorf("undeclared grid: HostContent=%v Stale=%v, want both false", plain.HostContent(), plain.Stale())
+	if !ok || plain.HostContent() {
+		t.Errorf("undeclared grid: HostContent=%v, want false", plain.HostContent())
 	}
 	var missing *Grid
-	if missing.HostContent() || missing.Stale() {
+	if missing.HostContent() {
 		t.Error("an unfetched grid declares nothing")
 	}
 }

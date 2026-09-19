@@ -112,20 +112,20 @@ func (a *App) drawBottomBar() {
 		}
 	}
 	a.drawBarTitle(top)
-	a.drawStaleChip(bx, top, bw)
+	a.drawMemoryChip(bx, top, bw)
 	a.drawBarSlot()
 }
 
-// drawStaleChip marks a focused pane whose grid is a cache-served memory,
-// from the wire-level stale bit. Bar chrome only: staleness never moves or
-// restyles tiles, so the room renders exactly as remembered.
-func (a *App) drawStaleChip(bx, top, bw float64) {
+// drawMemoryChip marks a focused pane whose room is a memory: the source
+// serving it is not answering, so what is on screen is the node's remembering
+// of it. Bar chrome only — darkness never moves or restyles tiles, so the room
+// renders exactly as remembered.
+func (a *App) drawMemoryChip(bx, top, bw float64) {
 	p := a.tree.FocusedPane()
 	if p == nil {
 		return
 	}
-	g, ok := a.c.Grid(a.gridIDForPane(p))
-	if !ok || !g.Stale() {
+	if !a.c.SourceDark(a.gridIDForPane(p)) {
 		return
 	}
 	const chipW, chipH = 52.0, 16.0

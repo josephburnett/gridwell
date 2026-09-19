@@ -101,14 +101,6 @@ type Grid struct {
 	// writable. "" only when the owning plugin's Info was unreachable.
 	// Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
-	// stale marks a remembered answer: the source could not answer, or has not
-	// confirmed this answer within the cache's freshness window, and a refresh
-	// is in flight whose GridChanged follows if it finds drift. Two node-side
-	// stampers share the meaning, internal/sourcecache on its serve-first and
-	// dark paths and a plugin adapter answering a dark source from the rows it
-	// minted. An answer already stamped stale is never remembered. Wire-only,
-	// never persisted.
-	Stale bool `protobuf:"varint,12,opt,name=stale,proto3" json:"stale,omitempty"`
 	// node_ns is the namespace chain of the node serving this grid, from the
 	// receiver's perspective: "" for a grid served by the node you are talking
 	// to, "<transit>/<conn>" or deeper through mounts, each transit hop
@@ -196,13 +188,6 @@ func (x *Grid) GetScratchGridId() string {
 		return x.ScratchGridId
 	}
 	return ""
-}
-
-func (x *Grid) GetStale() bool {
-	if x != nil {
-		return x.Stale
-	}
-	return false
 }
 
 func (x *Grid) GetNodeNs() string {
@@ -3256,19 +3241,18 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xb5\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xa5\x02\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
-	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12\x14\n" +
-	"\x05stale\x18\f \x01(\bR\x05stale\x12\x17\n" +
+	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12\x17\n" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x129\n" +
 	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x12!\n" +
 	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
 	"\x05glyph\x18\x0e \x01(\tR\x05glyphJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"\"\xc1\x01\n" +
+	"J\x04\b\f\x10\r\"\xc1\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +

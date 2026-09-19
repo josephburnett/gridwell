@@ -133,7 +133,7 @@ async function enterFarRoom(
   await gw.descendCell(cx, cy);
   const inside = (await gw.panes()).find((p) => p.focused)!;
   expect(inside.gridID).toBe(farHomeGrid);
-  expect(inside.stale, 'a live remote room is not stale').toBeFalsy();
+  expect(inside.stale, 'a live remote room is not a memory').toBeFalsy();
   let liveTiles = 0;
   await expect
     .poll(
@@ -270,18 +270,16 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 });
 
 // A mounted machine going dark degrades the remote pane to a cache-served
-// memory: the tiles render exactly as remembered, and the wire's stale bit
-// surfaces as the bar's quiet offline chip, read here through the panes() hook.
-// Nothing moves and nothing blanks.
+// memory: the tiles render exactly as remembered, and the bar shows its quiet
+// offline chip, read here through the panes() hook. Nothing moves and nothing
+// blanks.
 test('a dark mount serves the remembered room, marked stale', async ({ gw, window, world }) => {
   const { farHomeGrid, cx, cy, liveTiles } = await enterFarRoom(gw, world);
 
   // Leave and re-enter: the room re-reads through the source cache and arrives
-  // as a marked memory, tiles intact. The room is young enough to be inside the
-  // cache's freshness window, so what makes it a memory is the node learning the
-  // connection is dark, through its health or a call of its own failing, and the
-  // client re-reading after that. Hence the poll: the stamp lands a beat after
-  // the machine does.
+  // whole. What says it is a memory is the connection's health, which the node
+  // publishes when the far node's stream ends and the client folds in per
+  // source. Hence the poll: the chip lands a beat after the machine does.
   await world.killFar();
   await gw.ascendViaCrumb();
   await gw.descendCell(cx, cy);
@@ -289,7 +287,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
     .poll(async () => {
       const p = (await gw.panes()).find((q) => q.focused);
       return p?.gridID === farHomeGrid && p.stale === true;
-    }, { message: 'the re-entered room says it is a memory (#256)', timeout: 20_000 })
+    }, { message: 'the re-entered room says it is a memory (#256)', timeout: 60_000 })
     .toBe(true);
   const staleTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
   expect(staleTiles.length, 'the memory renders every remembered tile').toBe(liveTiles);
@@ -300,12 +298,12 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
 // with nobody touching anything. This is the client half of the two rows
 // docs/freshness.md's gap list left open:
 //
-//   (a) the GridChanged arm clears the per-grid failure latch and refetches, so
-//       the cached chip clears with no gesture.
-//   (b) reportPluginHealth kicks a resync scoped to the source the event names,
-//       in BOTH directions, and its sticky notice resolves on recovery. This
-//       room is served through the connection that flapped, so it is inside
-//       that scope (cache.ServedBy).
+//   (a) the GridChanged arm clears the per-grid failure latch and refetches.
+//   (b) reportPluginHealth folds the transition into the cache and kicks a
+//       resync scoped to the source the event names, in BOTH directions, and
+//       its sticky notice resolves on recovery. This room is served through the
+//       connection that flapped, so it is inside that scope (cache.ServedBy),
+//       and the chip is that same fact drawn (cache.SourceDark).
 //
 // Both are only observable as the absence of a gesture, so after the far node
 // dies, and again after it revives, this spec polls the client's own state and
@@ -337,19 +335,18 @@ test('a revived mount clears its chip and its notice with nobody touching anythi
       timeout: 60_000,
     })
     .toContain('live updates stopped');
-  // A source going down changes what its grids ARE, so the kick scoped to that
-  // source refetches this room with no gesture, and the answer is the node's
-  // memory of it, stamped.
+  // A source going down changes what its grids ARE: the room is the node's
+  // memory of it from here on, and the chip says so with no gesture.
   await expect
     .poll(focusedStale, {
-      message: 'the chip appears with no gesture: the down kick refetched',
+      message: 'the chip appears with no gesture',
       timeout: 60_000,
     })
     .toBe(true);
 
   // ── Up ────────────────────────────────────────────────────────────────
-  // The healthy event resolves the notice and kicks the same resync, and the
-  // revalidation's GridChanged clears the latch behind it.
+  // The healthy event resolves the notice, clears the darkness, and kicks the
+  // same resync; the revalidation's GridChanged clears the latch behind it.
   await world.reviveFar();
   await expect
     .poll(async () => (await health()).length, {
@@ -359,7 +356,7 @@ test('a revived mount clears its chip and its notice with nobody touching anythi
     .toBe(0);
   await expect
     .poll(focusedStale, {
-      message: 'the chip clears with no gesture (freshness.md trace (a))',
+      message: 'the chip clears with no gesture (freshness.md trace (b))',
       timeout: 120_000,
     })
     .toBe(false);

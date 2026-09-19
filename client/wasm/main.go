@@ -1107,6 +1107,9 @@ func (a *App) resolveErr(source string) {
 // signal, and its recovery is a healed gap.
 func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
 	r := events.ReactHealth(h)
+	// The client's one copy of which sources are not answering; every room
+	// one serves is a memory, which is what the bar draws.
+	a.c.NoteHealth(h.PluginUuid, h.Healthy)
 	if r.Resolve {
 		a.resolveErr(r.Source)
 	}

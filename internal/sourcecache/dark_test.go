@@ -15,12 +15,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// The stale bit means "this serve is a memory". Past the window a remembered
-// answer is one because nothing has confirmed it; inside the window it is one
-// as soon as the connection is known dark, because then a memory is all it
-// can be. Darkness is learned two ways, and both are tested across the real
-// transport seam, because both are facts that cross it: a pass-through call
-// that fails, and the connection's own health on the stream this layer
+// Darkness is the layer's own fact about a source: while it holds, a
+// remembered grid serves without ever asking the source, and every read
+// revalidates behind. It is learned two ways, and both are tested across the
+// real transport seam, because both are facts that cross it: a pass-through
+// call that fails, and the connection's own health on the stream this layer
 // relays.
 
 // The two directions driven through every transition and compared. They are one
@@ -121,27 +120,27 @@ func announced(ch chan *pb.Event) []*pb.Event {
 	}
 }
 
-// awaitStale polls a grid read until the answer says it is a memory.
-func awaitStale(t *testing.T, cc *Layer, gridID string, why string) {
+// awaitDark polls until the layer has learned that source is not answering.
+func awaitDark(t *testing.T, cc *Layer, source string, why string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		g, err := cc.GetGrid(context.Background(), &pb.GetGridRequest{GridId: gridID})
-		if err == nil && g.GetGrid().GetStale() {
+		if cc.isDark(source) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%s: the within-window read never said it was a memory (%v)", why, err)
+			t.Fatalf("%s: the layer never learned the source was dark", why)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 }
 
 // A failed call is darkness: the room the user re-enters right after the
-// machine died is inside its freshness window, so nothing about the answer's
-// age says it is a memory. What says so is that the connection cannot be
-// reached.
-func TestAFailedCallMakesAWithinWindowServeAMemory(t *testing.T) {
+// machine died is inside its freshness window, so its age says nothing. What
+// says the source is not answering is that a call through the connection
+// failed — and the remembered room still serves, which is the point of
+// knowing.
+func TestAFailedCallIsDarkness(t *testing.T) {
 	cc, far, farRoot, conn := connFixture(t, Options{})
 	ctx := context.Background()
 	root := qualify(conn, farRoot)
@@ -155,50 +154,44 @@ func TestAFailedCallMakesAWithinWindowServeAMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The machine goes away, and nothing has noticed yet: a within-window
-	// serve is still a serve. Stamping here would call every fresh answer a
-	// memory the moment any connection anywhere blinked.
+	// The machine goes away, and nothing has noticed yet. Believing it here
+	// would call every source dark the moment any connection anywhere blinked.
 	far.goDark()
-	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if g.GetGrid().GetStale() {
-		t.Fatal("a within-window serve is not a memory while the connection is not known dark")
+	if cc.isDark(conn) {
+		t.Fatal("no call has failed yet: nothing knows the connection is gone")
 	}
 
-	// One call through the connection fails; now the layer knows.
+	// One call through the connection fails; now the layer knows, and the
+	// remembered room still serves, whole.
 	if err := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: tileID},
 		func(*pb.ContentChunk) error { return nil }); status.Code(err) != codes.Unavailable {
 		t.Fatalf("read of an unremembered body on a dark connection = %v, want Unavailable", err)
 	}
-	stale, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
-	if err != nil {
-		t.Fatal(err)
+	if !cc.isDark(conn) {
+		t.Fatal("a call that failed transport-shaped is how this layer learns (#256)")
 	}
-	if !stale.GetGrid().GetStale() {
-		t.Fatal("a within-window serve from a connection known dark is a memory (#256)")
+	dark, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	if err != nil {
+		t.Fatalf("a dark connection must still serve the remembered room: %v", err)
+	}
+	if len(dark.GetTiles()) != 1 || dark.GetTiles()[0].GetId() != tileID {
+		t.Fatalf("the dark serve = %v, want the remembered tile", dark.GetTiles())
 	}
 
-	// The machine is back and answers: the next serve is a serve again.
+	// The machine is back and answers: the next answer clears it.
 	far.goLive()
 	if _, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: tileID}); err != nil {
 		t.Fatal(err)
 	}
-	again, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.GetGrid().GetStale() {
-		t.Fatal("darkness must clear on the next answer: this serve is live again")
+	if cc.isDark(conn) {
+		t.Fatal("darkness must clear on the next answer")
 	}
 }
 
 // The other direction, and the one the user actually meets: the machine dies
 // while nobody is calling it. The connection's fan-in sees its event stream
-// end and says so on the stream this layer relays, so the room re-entered a
-// second later already says it is a memory — no call of the cache's own has
-// to fail first.
+// end and says so on the stream this layer relays, so the layer knows without
+// a call of its own having to fail first.
 func TestAConnectionsHealthIsDarkness(t *testing.T) {
 	cc, far, farRoot, conn := connFixture(t, Options{})
 	ctx := context.Background()
@@ -215,10 +208,9 @@ func TestAConnectionsHealthIsDarkness(t *testing.T) {
 	}()
 
 	far.goDark()
-	// Nothing here calls through the connection: every read below is a
-	// within-window hit, answered without touching the source. Only the
-	// health event can make it say memory.
-	awaitStale(t, cc, root, "the connection's health went down")
+	// Nothing here calls through the connection, so only the relayed health
+	// event can teach this.
+	awaitDark(t, cc, conn, "the connection's health went down")
 }
 
 // halfOpen answers everything but one read, which fails transport-shaped:
@@ -232,11 +224,10 @@ func (halfOpen) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) (*pb.
 	return nil, status.Error(codes.Unavailable, "tunnel down")
 }
 
-// Discovering darkness announces the grid at hand, because a client already
-// holding that room is looking at a memory and does not know it: it refetches
-// on GridChanged, and the refetch is what carries the stamp and the cached
-// chip to the screen. Without the event the room looks live until something
-// else happens to make the client read again.
+// Discovering darkness announces the grid at hand, because this layer found
+// it alone: nobody else saw the call fail, so without the event the room the
+// client is holding goes on being refreshed from a source that is gone, and
+// nothing ever revalidates it.
 func TestDarkDiscoveryTellsTheClientToReRead(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {

@@ -45,7 +45,7 @@ content: no config, no state, and every page generated in the plugin.
   events, WriteContent = read-only, GetPreview = no thumbnail, Delete =
   refused.
 - **Errors**: transport-shaped failures (Unavailable, DeadlineExceeded)
-  mean "not right now" and the node serves what it has, stamped stale.
+  mean "not right now" and the node serves what it has.
   Coded answers mean what they say. Never answer NotFound for something
   that exists but is unreachable.
 

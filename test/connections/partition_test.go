@@ -2,7 +2,7 @@
 
 // The mid-session partition gate: a mount that dies under a live session. It
 // warms internal/sourcecache through a real tunnel, SIGKILLs the remote node,
-// and asserts the offline story end to end: a warmed read serves stale,
+// and asserts the offline story end to end: a warmed read serves the memory,
 // never-read bytes fail honestly, the offline deep copy copies what is cached
 // and links what is not, and a revived remote answers live and re-kicks the
 // prefetch walk.
@@ -152,8 +152,9 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// The partition.
 	stopRemote()
 
-	// Warmed reads serve stale. This polls, because the dial layer needs a
-	// beat to answer Unavailable instead of hanging on half-open sockets.
+	// Warmed reads serve the remembering. This polls, because the dial layer
+	// needs a beat to answer Unavailable instead of hanging on half-open
+	// sockets.
 	deadline := time.Now().Add(60 * time.Second)
 	var staleBody []byte
 	var err error
@@ -167,22 +168,10 @@ func TestMountPartitionServesCache(t *testing.T) {
 	if err != nil || string(staleBody) != "warmed words" {
 		t.Fatalf("dark warmed read = %q (%v), want the cached bytes", staleBody, err)
 	}
-	// The stale bit crosses sourcecache, the server and Connect JSON, which
-	// is what the client's offline chip reads. It polls because the bit waits
-	// on the node learning the connection is dark, from a call of its own
-	// failing transport-shaped or from the health on the event stream.
-	deadline = time.Now().Add(60 * time.Second)
-	var g map[string]any
-	for {
-		g = rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": wellChild})
-		if gm, ok := g["grid"].(map[string]any); ok && gm["stale"] == true {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("dark grid read grid=%v, want stale=true on the wire", g["grid"])
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
+	// The room itself still serves, whole, out of the cache. Nothing on the
+	// answer says it is a memory: that is the connection's health, awaited
+	// below, and the client's offline chip is drawn from there.
+	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": wellChild})
 	if len(g["tiles"].([]any)) != 3 {
 		t.Fatalf("dark grid read has %d tiles, want the cached 3", len(g["tiles"].([]any)))
 	}

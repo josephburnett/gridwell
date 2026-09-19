@@ -1,7 +1,7 @@
 // Package deadref decides whether a link points into a namespace this node
 // does not declare. Such a link is dead: greyed, never fetched, nothing said
 // about it. A declared namespace that is down is not dead, but pluginhealth's
-// and Grid.Meta.Stale's. The verdict is the handshake roster's, read fresh.
+// and cache.SourceDark's. The verdict is the handshake roster's, read fresh.
 package deadref
 
 import (

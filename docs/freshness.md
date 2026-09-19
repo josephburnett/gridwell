@@ -24,10 +24,10 @@ below branches on it.
 JOIN: the plugin's `List` supplies the entries, `store.Namespace.Overlay`
 lays the minted rows over them. `Adapter.synthesize` degrades by whose fact
 is missing. A listing that fails transport-shaped is replaced by an empty,
-NON-AUTHORITATIVE one and the grid is stamped `Stale: true`: every row the
-node minted still reads, with the same ids, placement, and labels, and
-nothing retires. An entry with no row has nothing to answer from and is
-simply absent. Retirement needs a verdict — an authoritative listing sweeps
+NON-AUTHORITATIVE one: every row the node minted still reads, with the same
+ids, placement, and labels, and nothing retires. An entry with no row has
+nothing to answer from and is simply absent. Retirement needs a verdict — an
+authoritative listing sweeps
 by `mem.Sweep`, a live non-authoritative one sweeps only rows whose `Probe`
 answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
 itself gone — fails the read outright at `cp.Info`, because the declared
@@ -45,10 +45,12 @@ FailedPrecondition on every read, never a staleness.
 
 **4. The source cache** — `internal/sourcecache/`. In front of the
 transport only, over the disposable `cache.db`. A remembered grid serves
-FIRST (`Layer.GetGrid`): inside `freshWindow` (30s) with the source not
-known dark it serves as-is; otherwise `Grid.Stale = true` — this serve is a
-memory — and one background `revalidateGrid` is kicked, single-flight per
-grid id. Only a miss waits on the source. Darkness is `Layer.dark`, keyed by
+FIRST (`Layer.GetGrid`), exactly as it was remembered: past `freshWindow`
+(30s) or with the source known dark, one background `revalidateGrid` is
+kicked behind it, single-flight per grid id. Only a miss waits on the source.
+Nothing on the answer says it is a memory — that is the source's health, and
+the client derives it from there (`client/cache.SourceDark`). Darkness is
+`Layer.dark`, keyed by
 connection segment (`sourceOf`), learned from two directions that are the
 same fact — `noteReach`, from any pass-through call that failed
 transport-shaped, and `applyEvent`'s health arm, from the connection's own
@@ -56,12 +58,10 @@ health on the stream this layer relays — and written through one door,
 `setDark`, whose transition back to light is also what re-warms that source.
 Every other read passes through and remembers, falling back to the remembered
 answer on a transport-class failure only. Writes always pass through and fold
-their responses into the remembered rows (`foldWrite`). A stale answer is
-never remembered
-(`getGridLive`), so a degraded read cannot overwrite the good one it
-degraded from. `prefetch.go` warms every source on Subscribe and one source
-when it comes back; `servecontent.go` gives the `/content/` door the same
-treatment under its own caps.
+their responses into the remembered rows (`foldWrite`). `prefetch.go` warms
+every source on Subscribe and one source when it comes back;
+`servecontent.go` gives the `/content/` door the same treatment under its own
+caps.
 
 **5. The server fan-in** — `internal/server/router.go`. `Subscribe` starts
 one `watchPlugin` per namespace plus one for the transport. `watchPlugin`
@@ -139,10 +139,10 @@ their link and are still owed an answer. A stream gap passes
 says whose events it swallowed. The outbox drain is scoped by neither: a
 parked write is owed a verdict whatever flapped.
 
-## Trace (a): a stale serve corrects itself
+## Trace (a): a memory corrects itself
 
-A remembered grid past its window, the revalidation behind it, and the chip
-clearing with no user gesture.
+A remembered grid past its window, the revalidation behind it, and the room
+correcting with no user gesture.
 
 1. `client/wasm/main.go:App.fetchGrid` misses in the cache, claims the id
    through `inflight.Set.Begin`, and calls `App.loadGrid` → `rpc.Client.GetGrid`.
@@ -150,22 +150,23 @@ clearing with no user gesture.
    connection segment (`Server.resolve`) and lands on the cache layer, which
    is what the registry holds as the transport.
 3. `sourcecache.Layer.GetGrid` hits `loadGrid`. `time.Since(fetchedAt)` is
-   past `c.window()`, so `cached.Grid.Stale = true` and `revalidateGrid` is
-   kicked. The remembered rows return immediately — the far round trip never
-   sits on the read path.
+   past `c.window()`, so `revalidateGrid` is kicked. The remembered rows
+   return immediately, unchanged — the far round trip never sits on the read
+   path.
 4. The router qualifies the answer (`qualifyTilesFor`,
-   `rpc.TransitQualifyGrid`). `Grid.stale` rides out untouched: it is raised
-   by whoever serves a remembered answer and read by whoever displays one.
+   `rpc.TransitQualifyGrid`). An age is not a fact about the grid, so the
+   answer carries none: with the source still answering, a memory this fresh
+   is what every serve is.
 5. `App.loadGrid` → `cache.Cache.PutGrid`, which runs `reconcileContent` per
-   replaced row. `client/wasm/bottombar.go:App.drawStaleChip` reads
-   `a.c.Grid(...).Meta.Stale` for the focused pane and paints the amber
-   "cached" chip. Nothing else about the room changes: staleness is bar
-   chrome, never tile styling.
+   replaced row. The bar draws no chip, because the source is not dark
+   (`client/wasm/bottombar.go:App.drawMemoryChip` reads
+   `cache.Cache.SourceDark`). Nothing else about the room changes: the chip
+   is bar chrome, never tile styling.
 6. In the background, `Layer.revalidateGrid`'s goroutine runs on `pf.ctx`
    (so a cancelled click never kills a refresh other readers want), loads the
    old rows, and calls `getGridLive` → the transport → the far node.
    `noteReachGrid` records reachability from the outcome.
-7. A non-stale answer is stored by `storeGrid` — the grid row and the whole
+7. The answer is stored by `storeGrid` — the grid row and the whole
    tile set in one transaction, tiles upserted. If `!gridRespEqual(old, resp)`,
    `emitGridChanged(gridID)` goes onto the layer's own subscriber channels. A
    verdict instead (`err != nil && !gwerr.IsTransport(err)`) → `evictGrid` and
@@ -183,8 +184,8 @@ clearing with no user gesture.
     unconditionally, for grids nobody is looking at too.
 11. The refetch re-enters `Layer.GetGrid`. The rows were re-stored moments
     ago, so the hit is inside the window; with the source not dark it serves
-    unstamped. `PutGrid` replaces the cached grid, `Meta.Stale` is false, and
-    the next `drawStaleChip` paints nothing.
+    and revalidates nothing. `PutGrid` replaces the cached grid and the
+    correction is on screen, with no gesture.
 
 `freshWindow` is also what stops the loop feeding on itself: the client's
 refetch lands inside the window of the revalidation that caused it, so a
@@ -211,7 +212,8 @@ fails transport-shaped: `Layer.GetTile`, `GetTilePreview`, `ReadContent`,
 `noteReach` → `setDark(source, true, announce)`. It announces, because this
 layer discovered the transition alone and nobody else watched the call fail:
 on the transition only, `emitGridChanged` names the grid at hand, so a client
-already holding that room re-reads and sees the stamp.
+already holding that room re-reads rather than sitting on rows nothing is
+revalidating.
 
 **Down, discovered by the cache — direction two.** The transport's health event
 arrives on the stream this layer relays and lands in `Layer.applyEvent`'s
@@ -225,17 +227,22 @@ matters in practice — the machine usually dies while nobody is calling it, and
 without it the room would look live until some call happened to fail.
 
 **What the user sees while dark.** A remembered grid serves inside its
-window but stamped, because `Layer.GetGrid` consults `isDark` alongside the
-age; the bar shows the "cached" chip. Bodies, previews, and door pages fall
-back to remembered entries where there are any; where there are none the
+window and revalidates behind it anyway, because `Layer.GetGrid` consults
+`isDark` alongside the age; the bar shows the "cached" chip, which the client
+draws from the same health the node learned. Bodies, previews, and door pages
+fall back to remembered entries where there are any; where there are none the
 transport error stands and the read fails honestly. Links through the
 connection are NOT dead — `client/deadref` answers from the node's
 declaration, and a declared connection that will not answer is health, not
 deadness.
 
 **On the client.** `App.startSSE` routes a `PluginHealth` event to
-`App.reportPluginHealth`. Unhealthy posts a sticky notice keyed
-`plugin:<node>/<conn>` ("live updates stopped — …") and then calls
+`App.reportPluginHealth`, which folds the transition into `Cache.NoteHealth`
+— the client's one copy of which sources are not answering. Every room served
+through one is a memory, and that is what the bar's chip says
+(`Cache.SourceDark`, joined by `ServedBy`, the rule a resync is scoped by).
+Unhealthy then posts a sticky notice keyed
+`plugin:<node>/<conn>` ("live updates stopped — …") and calls
 `retryKick(true, h.PluginUUID)`. The down direction resyncs exactly as the up
 one does, and at exactly the same scope: a source going down changes what its
 grids ARE, and which grids those are is the join `cache.ServedBy` makes of
@@ -245,12 +252,12 @@ the health uuid and the ids the client already holds.
 publishes the recovery, and `learnRoot` publishes one too on a first or
 healed landing. `Layer.applyEvent` clears `dark[conn]`; the next successful
 pass-through call would have cleared it anyway through `noteReach`.
-`App.reportPluginHealth` resolves the notice and fires
-`retryKick(true, h.PluginUUID)`, which cancels this source's in-flight
-fetches, clears its latches, and refetches `Cache.ResyncSet` of it — every
-cached grid chained through it, and nobody else's. Those reads hit the cache
-inside their windows with the source no longer dark, so they serve unstamped
-and the chip clears.
+`App.reportPluginHealth` clears the darkness, so the chip goes, resolves the
+notice, and fires `retryKick(true, h.PluginUUID)`, which cancels this source's
+in-flight fetches, clears its latches, and refetches `Cache.ResyncSet` of it —
+every cached grid chained through it, and nobody else's. Those reads hit the
+cache inside their windows with the source no longer dark, so they serve what
+the revalidation has re-stored by then.
 
 The recovery also re-kicks the prefetch walk, for that one source
 (`Layer.kickPrefetch`, from `setDark`'s transition out of darkness). The
@@ -394,13 +401,12 @@ Each cross-layer behaviour in the three traces, and what pins it.
 
 | Behaviour | Pinned by |
 |---|---|
-| Past-window hit serves stamped and kicks one revalidation | `sourcecache_test.go:TestStaleBitMarksAnswersPastTheirWindow`, `TestServeFirstNeverWaitsOnTheSource` |
+| A past-window hit serves the remembering unchanged and kicks one revalidation | `sourcecache_test.go:TestAPastWindowServeIsTheRememberedAnswer`, `TestServeFirstNeverWaitsOnTheSource` |
 | Revalidation that finds drift emits `GridChanged` | `sourcecache_test.go:TestRevalidationEmitsGridChanged` |
 | A verdict evicts and announces | `sourcecache_test.go:TestRevalidationVerdictEvicts` |
-| A stale answer is never remembered | `sourcecache_test.go:TestAStaleAnswerIsNeverRemembered` |
 | The event crosses layer stream → fan-in → qualification → client, and the next read serves the correction | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient` |
 | Refresh after a blind window replaces the whole tile set | `sourcecache_test.go:TestRefreshReconcilesWhatChangedWhileBlind` |
-| The client's own arm: `GridChanged` clears `gridLoadFailed` and calls `fetchGrid`, and the chip clears with no gesture | `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a revived mount clears its chip and its notice with nobody touching anything") — the far node dies and comes back on the same home and address, and the spec polls the focused pane's `stale` back to false having touched nothing |
+| The client's own arm: `GridChanged` clears `gridLoadFailed` and calls `fetchGrid` | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient`, `client/events/events_test.go:TestRouteTable` |
 
 ### Trace (b)
 
@@ -408,17 +414,17 @@ Each cross-layer behaviour in the three traces, and what pins it.
 |---|---|
 | The transport learns darkness from its own stream and publishes once | `internal/connection/fanin_health_test.go:TestFanInRemotePublishesHealthOnStreamDeath` |
 | A subscriber arriving after the outage is told (`darkNow`) | `fanin_health_test.go:TestASubscriberArrivingAfterTheOutageIsToldOfIt` |
-| Direction one: a failed pass-through makes a within-window serve a memory, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallMakesAWithinWindowServeAMemory` |
-| Direction two: the relayed health event alone makes it a memory | `dark_test.go:TestAConnectionsHealthIsDarkness` |
+| Direction one: a failed pass-through is darkness, the remembered room still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
+| Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
-| Serve stale when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
+| Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
-| Real binaries, real ssh: warmed reads serve stale, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
-| The stale bit reaches the bar as the cached chip | `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |
+| Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
+| A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
-| The client's health arms: `reportPluginHealth` kicks in BOTH directions, and the notice resolves on recovery | The same revived-mount spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and each direction's kick is what refetches the room — the chip appears, and later clears, with no gesture either time |
+| The client's health arms: `reportPluginHealth` folds the transition in and kicks in BOTH directions, and the notice resolves on recovery | The same revived-mount spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and the chip appears and later clears with no gesture either time |
 | A flap resyncs the flapping source's grids and NOBODY else's, including a chain through it | `client/cache/resync_test.go:TestAFlapResyncsOnlyTheGridsItsSourceServes`, `TestAConnectionsFlapOwnsEveryGridChainedThroughIt`; the chain rule at its owner, `api/rpc/segment_test.go:TestChainedThroughIsTheWholeChainNotOneNodesPeel` |
 | The gap paths keep their breadth: `cache.EverySource` is the whole cache | `client/cache/resync_test.go:TestEverySourceIsTheWholeCache` |
 | A flap cancels only the fetches that rode through it | `client/inflight/inflight_test.go:TestCancelIfLeavesTheFetchesThatKeptTheirLink` |

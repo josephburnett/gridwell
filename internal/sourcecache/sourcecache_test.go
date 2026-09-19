@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"google.golang.org/protobuf/proto"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
@@ -540,7 +542,7 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 // ── serve-first ─────────────────────────────────────────────────────────
 
 // ageGrid pushes a remembered grid past the freshness window, the test's
-// stand-in for waiting the window out: the next read serves it stamped stale
+// stand-in for waiting the window out: the next read serves the remembering
 // and kicks a revalidation.
 func ageGrid(t *testing.T, cc *Layer, gridID string) {
 	t.Helper()
@@ -586,8 +588,8 @@ func (g *midwalk) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGr
 }
 
 // TestServeFirstNeverWaitsOnTheSource is the feature: a remembered grid
-// answers immediately while the source is mid-walk, stamped stale past its
-// window, and the walk lands behind as the revalidation.
+// answers immediately while the source is mid-walk, and the walk lands behind
+// as the revalidation.
 func TestServeFirstNeverWaitsOnTheSource(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -630,9 +632,6 @@ func TestServeFirstNeverWaitsOnTheSource(t *testing.T) {
 		if g == nil {
 			t.FailNow()
 		}
-		if !g.GetGrid().GetStale() {
-			t.Error("the served remembering must wear the stale bit")
-		}
 		if len(g.GetTiles()) != 0 {
 			t.Errorf("served %d tiles, want the remembered 0 (the walk has not landed)", len(g.GetTiles()))
 		}
@@ -666,8 +665,8 @@ func (streaming) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error
 }
 
 // TestRevalidationEmitsGridChanged closes the serve-first loop for a
-// namespace the node never watched: stale served, refresh lands a different
-// answer, GridChanged fires on the layer's own stream, and the next read
+// namespace the node never watched: the remembering served, refresh lands a
+// different answer, GridChanged fires on the layer's own stream, and the next read
 // serves the correction.
 func TestRevalidationEmitsGridChanged(t *testing.T) {
 	st, err := store.Open(":memory:")
@@ -720,12 +719,12 @@ func TestRevalidationEmitsGridChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	ageGrid(t, cc, root)
-	stale, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	remembered, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stale.GetTiles()) != 0 {
-		t.Fatalf("the stale answer already has %d tiles; it must be the remembering", len(stale.GetTiles()))
+	if len(remembered.GetTiles()) != 0 {
+		t.Fatalf("the served answer already has %d tiles; it must be the remembering", len(remembered.GetTiles()))
 	}
 	select {
 	case ev := <-evs:
@@ -740,8 +739,8 @@ func TestRevalidationEmitsGridChanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.GetGrid().GetStale() || len(again.GetTiles()) != 1 || again.GetTiles()[0].GetId() != txt.GetTile().GetId() {
-		t.Fatalf("post-event read = stale:%v tiles:%v, want the fresh correction", again.GetGrid().GetStale(), again.GetTiles())
+	if len(again.GetTiles()) != 1 || again.GetTiles()[0].GetId() != txt.GetTile().GetId() {
+		t.Fatalf("post-event read = %v, want the fresh correction", again.GetTiles())
 	}
 }
 
@@ -960,115 +959,38 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 	waitHealth(true, "the healed store never cleared the health")
 }
 
-func TestStaleBitMarksAnswersPastTheirWindow(t *testing.T) {
+// A remembered answer is served as it was remembered, past its window and
+// with the source dark alike: the wire carries no "this is a memory" bit,
+// because whether a source is answering is its health and that fact has one
+// owner. What the age and the darkness change is the revalidation the read
+// kicks behind it.
+func TestAPastWindowServeIsTheRememberedAnswer(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
 	live, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if live.GetGrid().GetStale() {
-		t.Error("a live answer must never wear the stale bit")
-	}
-	// Within the window a remembered answer serves as good as live: the
-	// machine is gone, but nothing has learned that yet, and an unlearned
-	// absence must not stamp fresh answers (dark_test.go owns the learning).
+	// The machine is gone and the answer is old: the serve is a memory in
+	// every sense the node has, and it is the remembered answer itself.
 	upstream.goDark()
-	fresh, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fresh.GetGrid().GetStale() {
-		t.Error("a within-window answer must not wear the stale bit")
-	}
-	// Past the window it says so on the wire (#256, serve-first edition) —
-	// and stays said while the source is dark, since the revalidation the
-	// read kicks fails transport-shaped and changes nothing.
 	ageGrid(t, cc, root)
-	stale, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	served, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !stale.GetGrid().GetStale() {
-		t.Error("a remembered answer past its window must say so on the wire (#256)")
+	if !proto.Equal(live, served) {
+		t.Errorf("past-window serve = %v, want the remembered answer unchanged: %v", served, live)
 	}
-	// Back alive: the next read still serves the remembered answer, and the
-	// revalidation it kicks lands and clears the bit, which is never stored.
+	// Back alive: the revalidation the read kicks lands and re-stores, which
+	// is what the age was ever for.
 	upstream.goLive()
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
-	awaitFresh(t, cc, root)
-	again, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.GetGrid().GetStale() {
-		t.Error("the stale bit leaked into the stored row")
-	}
-}
-
-// degrading is an upstream that answers, but with a degraded grid: the shape a
-// plugin adapter takes when its source goes dark, holding the rows it minted,
-// no source facts, stamped stale. The cache must not remember it, because the
-// degraded answer succeeds and nothing else would ever put the good one
-// back.
-type degrading struct {
-	namespace.Namespace
-	degraded bool
-}
-
-func (d *degrading) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
-	resp, err := d.Namespace.GetGrid(ctx, in)
-	if err != nil || !d.degraded {
-		return resp, err
-	}
-	resp.Grid.Stale = true
-	resp.Tiles = nil // whatever the source said is missing
-	return resp, nil
-}
-
-func TestAStaleAnswerIsNeverRemembered(t *testing.T) {
-	st, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	ctx := context.Background()
-	root, err := st.RootGridID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw := local.New(st, nil)
-	if _, err := raw.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
-		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}}); err != nil {
-		t.Fatal(err)
-	}
-	up := &degrading{Namespace: raw}
-	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{})
-	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
-		t.Fatal(err)
-	}
-
-	up.degraded = true
-	// Age the row so the read revalidates against the degraded upstream; the
-	// revalidation must not store the degraded answer. There is no landing to
-	// await — a stale answer changes nothing — so give it every chance the
-	// no-prefetch test above gives a walk, then look.
-	ageGrid(t, cc, root)
-	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(500 * time.Millisecond)
-	cached, _, ok := cc.loadGrid(ctx, root)
-	if !ok {
-		t.Fatal("the good answer was dropped")
-	}
-	if len(cached.GetTiles()) != 1 {
-		t.Fatalf("a stale answer overwrote the good one: %d tiles remembered, want 1", len(cached.GetTiles()))
-	}
-	if cached.GetGrid().GetStale() {
-		t.Fatal("the stale bit was stored")
+	fresh := awaitFresh(t, cc, root)
+	if !proto.Equal(live.GetGrid(), fresh.GetGrid()) {
+		t.Errorf("revalidation stored %v, want the source's answer %v", fresh.GetGrid(), live.GetGrid())
 	}
 }
 
