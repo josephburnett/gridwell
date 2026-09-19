@@ -81,7 +81,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	roster := func(s *Server) []*gridwellv1.PluginInfo {
 		var out []*gridwellv1.PluginInfo
 		for _, r := range s.Rows(ctx) {
-			out = append(out, &gridwellv1.PluginInfo{Uuid: rpc.QualifyID(nodeID, r.Name), RootGridId: r.RootGridID})
+			out = append(out, &gridwellv1.PluginInfo{Uuid: rpc.QualifyID(nodeID, r.Uuid), RootGridId: r.RootGridId})
 		}
 		// A node always declares its own home, so the roster is never empty
 		// and deadref always has a declaration to answer from.
@@ -152,7 +152,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	t.Cleanup(func() { _ = s3.Close() })
 	s3.ConnectAll(ctx)
 	rows := s3.Rows(ctx)
-	if len(rows) != 1 || rows[0].RootGridID != "rtb/rnode1/7" {
+	if len(rows) != 1 || rows[0].RootGridId != "rtb/rnode1/7" {
 		t.Fatalf("boot 3 rows = %+v, want rtb on its remembered landing", rows)
 	}
 	if deadref.DeadTile(ref, roster(s3), nodeID) {

@@ -107,18 +107,6 @@ type liveConn struct {
 	verified bool
 }
 
-// Row is a connection as the handshake lists it; the node qualifies the uuid
-// with its own id.
-type Row struct {
-	Name         string
-	Label        string
-	RootGridID   string // "<name>/<remote home>" once learned, "" while pending
-	StatusDetail string // the last dial/learn failure while pending
-	ViewCx       float64
-	ViewCy       float64
-	ViewZoom     float64
-}
-
 // The router calls the transport as a Go value; the compiler says so.
 var _ namespace.Namespace = (*Server)(nil)
 
@@ -234,45 +222,45 @@ func (s *Server) ConnectAll(ctx context.Context) {
 	}
 }
 
-// Rows lists the declared connections for the handshake, in config order. A
-// dark one contributes zeros.
-func (s *Server) Rows(ctx context.Context) []Row {
-	out := make([]Row, 0, len(s.order))
+// Rows lists the declared connections as the handshake answers them, in
+// config order, each the one row shape a connection has (rpc.ConnectionRow):
+// the uuid is the bare name, which the node qualifies with its own id. A dark
+// one contributes zero framing.
+func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
+	out := make([]*gridwellv1.PluginInfo, 0, len(s.order))
 	for _, name := range s.order {
 		c := s.conns[name]
 		s.kickRootFetch(c)
-		r := Row{Name: name, Label: c.Cfg.Label}
-		if r.Label == "" {
-			r.Label = name
+		label := c.Cfg.Label
+		if label == "" {
+			label = name
 		}
 		s.mu.Lock()
 		root := c.RemoteRoot
 		lc := s.live[name]
-		r.StatusDetail = s.rootErr[name]
+		status := s.rootErr[name]
 		mismatch := s.mismatch[name]
 		s.mu.Unlock()
-		if mismatch != "" {
+		var rootGridID string
+		var view rpc.Framing
+		switch {
+		case mismatch != "":
 			// The landing verdict outranks the learned root: the row keeps the
 			// landing its references name, and says why nothing answers.
-			r.RootGridID = rpc.QualifyID(name, root)
-			r.StatusDetail = mismatch
-			out = append(out, r)
-			continue
-		}
-		if root != "" {
-			r.RootGridID = rpc.QualifyID(name, root)
-			r.StatusDetail = ""
+			rootGridID, status = rpc.QualifyID(name, root), mismatch
+		case root != "":
+			rootGridID, status = rpc.QualifyID(name, root), ""
 			if lc != nil {
 				vctx, cancel := context.WithTimeout(ctx, rowsHandshakeWait)
 				if lp, err := lc.client.Handshake(vctx, &gridwellv1.HandshakeRequest{}); err == nil {
 					if h := rpc.HomeRow(lp); h != nil {
-						r.ViewCx, r.ViewCy, r.ViewZoom = h.RootViewCx, h.RootViewCy, h.RootViewZoom
+						view = rpc.Framing{Cx: h.RootViewCx, Cy: h.RootViewCy, Zoom: h.RootViewZoom}
 					}
 				}
 				cancel()
 			}
 		}
-		out = append(out, r)
+		out = append(out, rpc.ConnectionRow(name, label, rootGridID, status, view))
 	}
 	return out
 }
@@ -613,12 +601,7 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
 	ns := req.GetNamespace()
 	if ns == "" {
-		resp := &gridwellv1.HandshakeResponse{}
-		for _, r := range s.Rows(ctx) {
-			resp.Plugins = append(resp.Plugins, rpc.ConnectionRow(r.Name, r.Label, r.RootGridID, r.StatusDetail,
-				rpc.Framing{Cx: r.ViewCx, Cy: r.ViewCy, Zoom: r.ViewZoom}))
-		}
-		return resp, nil
+		return &gridwellv1.HandshakeResponse{Plugins: s.Rows(ctx)}, nil
 	}
 	first, rest, ok := rpc.SplitID(ns)
 	if !ok {

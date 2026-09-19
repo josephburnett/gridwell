@@ -42,7 +42,7 @@ func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := s.Rows(ctx)
-	if len(rows) != 2 || rows[0].Name != "geneva" || rows[0].Label != "geneva" || rows[1].Name != "rtb" {
+	if len(rows) != 2 || rows[0].Uuid != "geneva" || rows[0].Label != "geneva" || rows[1].Uuid != "rtb" {
 		t.Fatalf("rows = %+v", rows)
 	}
 	if r, _ := db.Get(ctx, "olddead"); !r.Deleted {
@@ -74,7 +74,7 @@ func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 		t.Fatalf("a name the config merely dropped must be declarable again: %v", err)
 	}
 	rows = s2.Rows(ctx)
-	if len(rows) != 2 || rows[1].Name != "rtb" || rows[1].RootGridID != "rtb/rnode1/3" {
+	if len(rows) != 2 || rows[1].Uuid != "rtb" || rows[1].RootGridId != "rtb/rnode1/3" {
 		t.Fatalf("rows = %+v, want rtb back on its remembered landing", rows)
 	}
 	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "olddead", Addr: "/t"}}, []string{"olddead"}); err == nil || !strings.Contains(err.Error(), "RETIRED") {

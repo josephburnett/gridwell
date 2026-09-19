@@ -50,7 +50,7 @@ func TestLearnRootGivesUpAtItsBound(t *testing.T) {
 		t.Fatalf("learnRoot gave up after %v, before learnRootWait (%v) — a slow far node gets its wait", got.took, wait)
 	}
 	rows := s.Rows(context.Background())
-	if len(rows) != 1 || !strings.Contains(rows[0].StatusDetail, "deadline exceeded") {
+	if len(rows) != 1 || !strings.Contains(rows[0].InfoError, "deadline exceeded") {
 		t.Fatalf("row = %+v, want the timeout on the connection's own row", rows)
 	}
 }

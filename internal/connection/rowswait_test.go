@@ -68,7 +68,7 @@ func TestRowsAnswerAtTheHandshakeBoundWhenTheFarNodeHangs(t *testing.T) {
 
 	type outcome struct {
 		took time.Duration
-		rows []Row
+		rows []*gridwellv1.PluginInfo
 	}
 	done := make(chan outcome, 1)
 	start := time.Now()
@@ -85,11 +85,11 @@ func TestRowsAnswerAtTheHandshakeBoundWhenTheFarNodeHangs(t *testing.T) {
 	if got.took < wait {
 		t.Fatalf("Rows returned after %v, before rowsHandshakeWait (%v) — a slow far node gets its wait", got.took, wait)
 	}
-	if len(got.rows) != 1 || got.rows[0].RootGridID != "rtb/rnode1/7" {
+	if len(got.rows) != 1 || got.rows[0].RootGridId != "rtb/rnode1/7" {
 		t.Fatalf("rows = %+v, want the landing the row was learned on", got.rows)
 	}
-	if r := got.rows[0]; r.ViewCx != 0 || r.ViewCy != 0 || r.ViewZoom != 0 {
-		t.Fatalf("row framing = %v,%v,%v; a hung handshake contributes zeros", r.ViewCx, r.ViewCy, r.ViewZoom)
+	if r := got.rows[0]; r.RootViewCx != 0 || r.RootViewCy != 0 || r.RootViewZoom != 0 {
+		t.Fatalf("row framing = %v,%v,%v; a hung handshake contributes zeros", r.RootViewCx, r.RootViewCy, r.RootViewZoom)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestRowsCarryTheFramingOfAConnectionThatAnswers(t *testing.T) {
 	if took := time.Since(start); took >= rowsHandshakeWait {
 		t.Fatalf("Rows took %v against a far node that answered at once", took)
 	}
-	if len(rows) != 1 || rows[0].ViewZoom != 2 || rows[0].ViewCx != 3 || rows[0].ViewCy != 4 {
+	if len(rows) != 1 || rows[0].RootViewZoom != 2 || rows[0].RootViewCx != 3 || rows[0].RootViewCy != 4 {
 		t.Fatalf("rows = %+v, want the far home's framing", rows)
 	}
 }

@@ -77,7 +77,7 @@ func TestBootServesAnywayWhenAConnectionNeverAnswers(t *testing.T) {
 	case <-time.After(10 * wait):
 		t.Fatalf("a connection that never answers held up serve past bootDialWait (%v)", wait)
 	}
-	if rows := s.Rows(ctx); len(rows) != 1 || rows[0].RootGridID != "" {
+	if rows := s.Rows(ctx); len(rows) != 1 || rows[0].RootGridId != "" {
 		t.Fatalf("rows = %+v, want the connection pending, not landed", rows)
 	}
 
@@ -85,7 +85,7 @@ func TestBootServesAnywayWhenAConnectionNeverAnswers(t *testing.T) {
 	close(gate)
 	deadline := time.Now().Add(30 * wait)
 	for {
-		if rows := s.Rows(ctx); rows[0].RootGridID == "rtb/rnode1/7" {
+		if rows := s.Rows(ctx); rows[0].RootGridId == "rtb/rnode1/7" {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -110,7 +110,7 @@ func TestBootWaitsForAConnectionThatAnswersInsideIt(t *testing.T) {
 	s.ConnectAll(ctx)
 
 	rows := s.Rows(ctx)
-	if len(rows) != 1 || rows[0].RootGridID != "rtb/rnode1/7" {
+	if len(rows) != 1 || rows[0].RootGridId != "rtb/rnode1/7" {
 		t.Fatalf("rows = %+v, want the connection landed before ConnectAll returned", rows)
 	}
 }

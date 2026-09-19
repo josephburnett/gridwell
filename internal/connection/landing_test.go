@@ -63,7 +63,7 @@ func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 		t.Fatalf("stored remote_root = %q — a different node's answer must NEVER overwrite the landing references name", r.RemoteRoot)
 	}
 	rows := s.Rows(ctx)
-	if len(rows) != 1 || !strings.Contains(rows[0].StatusDetail, "lands on a different node") {
+	if len(rows) != 1 || !strings.Contains(rows[0].InfoError, "lands on a different node") {
 		t.Fatalf("row = %+v, want the reason on the connection's own row", rows)
 	}
 	_, err = s.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"})
@@ -83,7 +83,7 @@ func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 	t.Cleanup(func() { _ = s2.Close() })
 	s2.ConnectAll(ctx)
 	rows = s2.Rows(ctx)
-	if len(rows) != 1 || rows[0].StatusDetail != "" || rows[0].RootGridID != "rtb/rnode1/7" {
+	if len(rows) != 1 || rows[0].InfoError != "" || rows[0].RootGridId != "rtb/rnode1/7" {
 		t.Fatalf("row = %+v, want the matching landing served clean", rows)
 	}
 	if _, err := s2.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {
@@ -124,7 +124,7 @@ func TestLandingCheckHealsWhenTheTargetComesBack(t *testing.T) {
 	if _, err := s.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {
 		t.Fatalf("the connection must serve again: %v", err)
 	}
-	if d := s.Rows(ctx)[0].StatusDetail; d != "" {
+	if d := s.Rows(ctx)[0].InfoError; d != "" {
 		t.Fatalf("status detail = %q, want it cleared", d)
 	}
 }
@@ -162,10 +162,10 @@ func TestLandingThatCannotBeStoredSaysSoOnTheRow(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("rows = %+v, want one", rows)
 	}
-	if rows[0].StatusDetail == "" {
+	if rows[0].InfoError == "" {
 		t.Fatal("the row says nothing: a landing that cannot be stored leaves the connection dead with no reason given")
 	}
-	if rows[0].RootGridID != "" {
-		t.Fatalf("root = %q, want none: the landing was never written down", rows[0].RootGridID)
+	if rows[0].RootGridId != "" {
+		t.Fatalf("root = %q, want none: the landing was never written down", rows[0].RootGridId)
 	}
 }
