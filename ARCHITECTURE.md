@@ -364,6 +364,8 @@ copy:
 | what a tile's banner reads | `tilebanner.Runs` (name, then the plugin's status) |
 | does a tile draw as host state, and which hue its banner wears | `tileface.Outside`, `tileface.BannerHue` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
+| what that slot's right-click offers | `circlemenu.For` |
+| what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | is the menu open, on which pane | `client/menu` |

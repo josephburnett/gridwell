@@ -50,7 +50,9 @@ never bumps `version`, and there is no cross-plugin move.
    written through the store and reflected by an event. The exceptions are
    decided, not accidental: the session pane tree, the selection, the outer
    frames of a pane's place, the pane-tile level stack, Chromium's own
-   session storage. Do not add to that list without a decision.
+   session storage, and the theme — a client view preference, not a fact
+   about your things, so it lives in `localStorage` (2026-09-19). Do not add
+   to that list without a decision.
 8. **DRY is correctness.** If a fix in one place doesn't fix an identical
    behavior elsewhere, unify them.
 9. **Commit each logical change on its own.** Never batch. If an
