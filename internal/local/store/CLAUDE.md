@@ -14,8 +14,8 @@ A listing writes only to rows that exist: `Refresh` keeps a touched row's
 outage snapshot at what the source last said, and `Sweep` tombstones a row
 whose key an authoritative listing no longer names.
 The consequence for an outage: the rows the user touched answer an
-unreachable source, unchanged and stamped stale; an untouched entry has no
-row and is simply absent until the source speaks again.
+unreachable source, unchanged; an untouched entry has no row and is simply
+absent until the source speaks again.
 
 ## The promise
 

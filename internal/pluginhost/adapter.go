@@ -11,10 +11,13 @@
 // to the rows that exist, through the store's Refresh and Sweep.
 //
 // Outages split by whose fact is missing. A dark source costs only what the
-// source says: every minted row still reads, stamped stale, while an entry
-// with no row is absent. A dark plugin fails the read, because nothing fronts
-// a plugin: a subprocess on this machine is a call away, so there are no
-// remembered answers to serve.
+// source says: every minted row still reads while an entry with no row is
+// absent, and the adapter publishes that outage as this namespace's health,
+// the same event the supervisor publishes about the subprocess — a declared
+// source that is not answering is one fact, whichever half of the plugin it
+// is. A dark plugin fails the read, because nothing fronts a plugin: a
+// subprocess on this machine is a call away, so there are no remembered
+// answers to serve.
 package pluginhost
 
 import (
@@ -58,10 +61,18 @@ type Adapter struct {
 	sup Supervisor
 
 	// subs are this namespace's event subscribers. The stream carries the
-	// supervisor's health and the grids the adapter's own writes changed.
+	// supervisor's health, the source's, and the grids the adapter's own
+	// writes changed.
 	subsMu sync.Mutex
 	subs   map[int]chan *gridwellv1.Event
 	subSeq int
+
+	// srcDark is what the last listing found, held only to announce the
+	// transitions: every read would otherwise republish an outage the client
+	// already knows about. noteSource is the one writer.
+	srcMu     sync.Mutex
+	srcDark   bool
+	srcDetail string
 }
 
 // A plugin reaches the router as a Go value; the compiler is what says so.
@@ -139,12 +150,13 @@ func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 	return f, err
 }
 
-// Subscribe serves this namespace's event stream: the supervisor's health, and
-// a GridChanged for a grid the adapter's own writes changed, so a second pane
-// repaints instead of holding a placement the user has moved. A subscriber
-// arriving while the plugin is down is told at once, since nothing else would
-// tell it until recovery; a healthy plugin announces nothing, because a health
-// event costs the client a full resync.
+// Subscribe serves this namespace's event stream: the plugin's health, its
+// subprocess and its source alike, and a GridChanged for a grid the adapter's
+// own writes changed, so a second pane repaints instead of holding a
+// placement the user has moved. A subscriber
+// arriving while the plugin or its source is down is told at once, since
+// nothing else would tell it until recovery; a healthy plugin announces
+// nothing, because a health event costs the client a full resync.
 func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	id, ch := a.addSub()
 	defer a.removeSub(id)
@@ -155,6 +167,11 @@ func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest,
 			if err := send(healthEvent(healthy, detail)); err != nil {
 				return err
 			}
+		}
+	}
+	if dark, detail := a.sourceDark(); dark {
+		if err := send(healthEvent(false, detail)); err != nil {
+			return err
 		}
 	}
 	for {
@@ -207,6 +224,44 @@ func healthEvent(healthy bool, detail string) *gridwellv1.Event {
 }
 
 func (a *Adapter) emitHealth(healthy bool, detail string) { a.emit(healthEvent(healthy, detail)) }
+
+// noteSource records what a listing found and announces the transition, so a
+// client holding a room whose source stopped answering is told without a call
+// of its own having to fail. The subprocess being gone is the supervisor's to
+// publish and is not news about the source, so it is neither announced nor
+// remembered here.
+func (a *Adapter) noteSource(dark bool, detail string) {
+	if a.sup != nil {
+		if healthy, _ := a.sup.Health(); !healthy {
+			return
+		}
+	}
+	a.srcMu.Lock()
+	changed := dark != a.srcDark
+	a.srcDark, a.srcDetail = dark, detail
+	a.srcMu.Unlock()
+	if changed {
+		a.emitHealth(!dark, detail)
+	}
+}
+
+// sourceDark is what a subscriber arriving mid-outage is owed: nothing else
+// would tell it until the source comes back.
+func (a *Adapter) sourceDark() (bool, string) {
+	a.srcMu.Lock()
+	defer a.srcMu.Unlock()
+	return a.srcDark, a.srcDetail
+}
+
+// sourceDetail names which half of the plugin the outage is. The client's
+// notice says only that live updates stopped, so this is where the user is
+// told it was the directory or the API rather than the process.
+func sourceDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	return "the source is not answering: " + err.Error()
+}
 
 // emitGridChanged announces that a grid this adapter serves has changed,
 // under the canonical address (canonicalGridID), so a listener does not have
@@ -371,6 +426,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 		dark, resp = true, &pluginv1.ListResponse{}
 	}
+	a.noteSource(dark, sourceDetail(err))
 	if err := acceptEntries(resp.Entries); err != nil {
 		return nil, err
 	}

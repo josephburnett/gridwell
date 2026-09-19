@@ -26,10 +26,14 @@ lays the minted rows over them. `Adapter.synthesize` degrades by whose fact
 is missing. A listing that fails transport-shaped is replaced by an empty,
 NON-AUTHORITATIVE one: every row the node minted still reads, with the same
 ids, placement, and labels, and nothing retires. An entry with no row has
-nothing to answer from and is simply absent. Retirement needs a verdict — an
-authoritative listing sweeps
-by `mem.Sweep`, a live non-authoritative one sweeps only rows whose `Probe`
-answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
+nothing to answer from and is simply absent. The adapter publishes that
+outage as this namespace's health (`Adapter.noteSource`) — the transition
+only, on the same event and uuid the supervisor uses for the subprocess,
+because "a declared source is not answering" is one fact whichever half of
+the plugin it is — so the client marks the rooms it serves as memories with
+no call of its own having to fail. Retirement needs a verdict — an
+authoritative listing sweeps by `mem.Sweep`, a live non-authoritative one
+sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
 itself gone — fails the read outright at `cp.Info`, because the declared
 face is the plugin's own fact and nothing can supply it.
 
@@ -417,6 +421,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction one: a failed pass-through is darkness, the remembered room still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
+| A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
