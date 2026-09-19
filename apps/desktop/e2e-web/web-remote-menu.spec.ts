@@ -108,7 +108,7 @@ async function enterFarRoom(
     .poll(
       async () => {
         const lp = await rpcJSON(world.local, 'Handshake', {});
-        const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
+        const row = (lp.plugins ?? []).find((p: any) => p.kind === 'connection' && p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
@@ -160,7 +160,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     .poll(
       async () => {
         const lp = await rpcJSON(world.local, 'Handshake', {});
-        const row = (lp.connections ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
+        const row = (lp.plugins ?? []).find((p: any) => p.kind === 'connection' && p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
