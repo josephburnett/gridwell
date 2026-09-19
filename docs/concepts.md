@@ -28,6 +28,7 @@ here.
 | Concept | What it does |
 |---|---|
 | **collection** | One grid a plugin serves, declared as a + menu entry (`door.PlacesOf`). A plugin has no place of its own, so a collection is the only way in, and it is named for its instance — "hey · Feed" (`door.EntryName`). |
+| **menu fold** | The + menu's doorway row is an open set, so it opens folded behind a chevron over the primitives, and every opening starts folded. The fold is the menu's live state (`client/menu`); what a folded or open menu shows is `client/palette`'s. |
 | **grid frame** | One doorway crossing, with the viewport you left it at. The whole of where a pane is. |
 | **content frame** | A frame whose place is a tile rather than a grid (`pane.ContentFrame`): text scroll, text mode, and content zoom live here. A descent into a document is an ordinary level you can ascend out of. |
 | **level** | A pane-tile descent (`pane.Level`), session-only. One pane tile can hold a whole arrangement without the frame stack encoding a tree. |
@@ -77,6 +78,7 @@ class, and the word says who started the write.
 | **text_presentation: rendered** | Document render only; no toggle. |
 | **text_presentation: both** | The toggle stays, whether or not the tile is writable. |
 | **url_frozen** | A standing user intent not to go live. A preview is what a frozen tile looks like; the intent is why it stays that way. |
+| **content zoom** (`Tile.content_zoom`) | The scale of what renders inside one text, shell or url tile, stored on its row by `SetTile`'s content-zoom arm, so a document reads larger without the grid moving and stays that size wherever the tile is shown. Pane zoom is the grid's viewport; this is the tile's. `client/contentzoom` owns the chord and the range. |
 | **status_detail** | The owning plugin's one word about a tile's state ("unread", "done"), drawn muted after the name (`tilebanner.Runs`). A note on a name, never a second name, and nothing outside the plugin can derive it. |
 | **identity glyph** | The face a namespace wears on its swatch, its ghost and the crumb of the grid it roots (`door.GlyphFor`): declared by the plugin or the entry, globe for a connection, well for home. An unknown name degrades to the globe, so the client learns no plugin kinds. |
 
