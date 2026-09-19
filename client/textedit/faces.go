@@ -19,7 +19,7 @@ func ToggleVisible(file *gridwellv1.Tile, readOnly bool) bool {
 	switch file.TextPresentation {
 	case rpc.TextPresentationBoth:
 		return true
-	case rpc.TextPresentationPlain, rpc.TextPresentationRendered:
+	case rpc.TextPresentationPlain:
 		return false
 	}
 	return !readOnly || markdown.Renderable(file.AltText)

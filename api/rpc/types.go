@@ -256,11 +256,12 @@ func PageURL(origin, contentToken, tileID string) string {
 	return origin + "/content/" + contentToken + "/" + tileID + "/"
 }
 
-// The text_presentation vocabulary.
+// The text_presentation vocabulary: whether a plugin's text body is a
+// document. There is no document-only value, because the user can always
+// reach the source bytes.
 const (
-	TextPresentationPlain    = "plain"
-	TextPresentationRendered = "rendered"
-	TextPresentationBoth     = "both"
+	TextPresentationPlain = "plain"
+	TextPresentationBoth  = "both"
 )
 
 // ContentID is the tile id that owns a tile's content: a leaf link's target, or
