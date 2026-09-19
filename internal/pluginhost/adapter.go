@@ -26,6 +26,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
@@ -230,19 +231,6 @@ func checkEntries(entries []*pluginv1.Entry) error {
 	return nil
 }
 
-// engineEntries converts listing entries for the store's merge.
-func engineEntries(entries []*pluginv1.Entry) []store.Entry {
-	out := make([]store.Entry, len(entries))
-	for i, e := range entries {
-		le := store.Entry{Key: e.Key, Kind: e.Kind, Label: e.Label, ChildContext: e.ChildContext, URL: e.UrlString}
-		if h := e.PlacementHint; h != nil {
-			le.Hint = &store.Hint{X: h.X, Y: h.Y, W: h.W, H: h.H}
-		}
-		out[i] = le
-	}
-	return out
-}
-
 // buildTiles joins the overlay's rows with the listing's content facts, naming
 // each by its derived address, a well's child grid included: the id a well
 // hands the client must be the id GetGrid answers under.
@@ -253,25 +241,12 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 	}
 	out := make([]*gridwellv1.Tile, 0, len(tiles))
 	for _, t := range tiles {
-		pt := &gridwellv1.Tile{
-			Id:          tileAddr(context, t.Key),
-			GridId:      gridID,
-			Kind:        t.Kind,
-			X:           t.X,
-			Y:           t.Y,
-			W:           t.W,
-			H:           t.H,
-			ViewCx:      t.ViewCx,
-			ViewCy:      t.ViewCy,
-			ViewZoom:    t.ViewZoom,
-			TextX:       t.TextX,
-			TextY:       t.TextY,
-			TextW:       t.TextW,
-			TextH:       t.TextH,
-			TextMode:    t.TextMode,
-			ContentZoom: t.ContentZoom,
-			AltText:     t.Label,
-		}
+		// The row's stored columns ride as they are; the three ids are the
+		// node's derived addresses, never the row's own numbers.
+		pt := proto.Clone(t.Tile).(*gridwellv1.Tile)
+		pt.Id = tileAddr(context, t.Key)
+		pt.GridId = gridID
+		pt.ChildGridId = ""
 		e, listed := byKey[t.Key]
 		switch {
 		case listed && e.ChildContext != "":
@@ -390,16 +365,15 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 			return nil, err
 		}
 	}
-	entries := engineEntries(resp.Entries)
 	// The rows' outage snapshot follows what the source last said. A listed
 	// entry reads by the join instead, so this writes only where the source
 	// changed something.
 	if !stale && gid != 0 {
-		if err := a.mem.Refresh(gid, entries); err != nil {
+		if err := a.mem.Refresh(gid, resp.Entries); err != nil {
 			return nil, err
 		}
 	}
-	tiles, err := a.mem.Overlay(gid, entries)
+	tiles, err := a.mem.Overlay(gid, resp.Entries)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +540,7 @@ func (a *Adapter) mint(ctx context.Context, tileID string) (int64, error) {
 			return 0, err
 		}
 	}
-	return a.mem.Mint(gid, engineEntries([]*pluginv1.Entry{entry})[0], child, row.X, row.Y, row.W, row.H)
+	return a.mem.Mint(gid, entry, child, row.X, row.Y, row.W, row.H)
 }
 
 // MintRef is the router's canonicalizer, called before a reference to a plugin

@@ -26,7 +26,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -46,42 +49,19 @@ func (s *Store) Namespace(ns string) *Namespace {
 // second handle on the same file would meet an instant SQLITE_BUSY.
 func (s *Store) SQL() *sql.DB { return s.db }
 
-// Entry mirrors the plugin Entry without a proto dependency.
-type Entry struct {
-	Key          string
-	Kind         string
-	Label        string
-	ChildContext string // wells: the context key this entry opens into
-	URL          string // url entries: the address (the row's url_string)
-	// Hint, when non-nil, seeds the entry's FIRST placement only.
-	Hint *Hint
-}
-
-// Hint is a plugin's suggested first placement.
-type Hint struct{ X, Y, W, H int64 }
-
-// ExtTile is one joined entry: the plugin's content facts over the user's
-// stored arrangement. ID is the minted row id, or 0 when the entry has no row
-// and X/Y/W/H are therefore derived. The caller names every such tile by its
-// key either way; see pluginhost.tileAddr.
+// ExtTile is one joined entry: the node's row, or a derived placement when
+// the entry has none, under the plugin's key. Tile holds the row's stored
+// columns as the wire record they are, scanned through the one column
+// descriptor (columns.go), and the listing's content facts are laid over it
+// by the caller. ID is the minted row id, 0 when the entry has no row and the
+// placement is derived; ChildGridID is the minted grid of a well's child
+// context, 0 for a leaf. The caller names every such tile by its key either
+// way; see pluginhost.tileAddr.
 type ExtTile struct {
 	ID          int64
 	Key         string
-	Kind        string
-	Label       string
-	X, Y, W, H  int64
-	ViewCx      float64
-	ViewCy      float64
-	ViewZoom    float64
-	TextX       int64
-	TextY       int64
-	TextW       int64
-	TextH       int64
-	TextMode    string
-	ContentZoom float64
-	// ChildGridID is the minted grid id of the entry's child context;
-	// 0 for leaves.
 	ChildGridID int64
+	*gridwellv1.Tile
 }
 
 // ContextID resolves a context key to its grid id, minting on first sight.
@@ -134,7 +114,7 @@ func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned 
 // mention follow at the end, answering from their stored snapshot, which is
 // what makes a touched tile survive an outage. gridID may be 0: a context
 // nobody has touched has no grid row, so every entry is derived.
-func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
+func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile, error) {
 	rows := map[string]ExtTile{}
 	var stored []ExtTile
 	if gridID != 0 {
@@ -161,17 +141,17 @@ func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 		// row then overrides its own slot. If a minted entry gave up its
 		// slot, every entry after it would shift by a cell the moment the
 		// user dragged it, and dragging one tile would rearrange the room.
-		x, y, w, h := derivePlacement(occupied, &cur, e.Hint)
+		x, y, w, h := derivePlacement(occupied, &cur, e.PlacementHint)
 		if r, ok := rows[e.Key]; ok {
 			matched[e.Key] = true
 			// The row owns identity, placement and framing; the listing owns
 			// the content facts.
-			r.Kind, r.Label = entryKind(e), e.Label
+			r.Kind, r.AltText = entryKind(e), e.Label
 			out = append(out, r)
 			continue
 		}
-		out = append(out, ExtTile{Key: e.Key, Kind: entryKind(e), Label: e.Label,
-			X: x, Y: y, W: w, H: h})
+		out = append(out, ExtTile{Key: e.Key, Tile: &gridwellv1.Tile{
+			Kind: entryKind(e), AltText: e.Label, X: x, Y: y, W: w, H: h}})
 	}
 	for _, r := range stored {
 		if !matched[r.Key] {
@@ -183,7 +163,7 @@ func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 
 // entryKind is the kind an entry answers with; "" reads as text, the one
 // default, applied where the join and the mint both see it.
-func entryKind(e Entry) string {
+func entryKind(e *pluginv1.Entry) string {
 	if e.Kind == "" {
 		return "text"
 	}
@@ -193,7 +173,7 @@ func entryKind(e Entry) string {
 // derivePlacement seeds a first placement from the hint, else takes the next
 // free cell by the one auto-place rule (autoplace.go). Overlay derives with it
 // and Mint stores what Overlay derived, so touching a tile never moves it.
-func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y, w, h int64) {
+func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *pluginv1.PlacementHint) (x, y, w, h int64) {
 	if hint != nil {
 		x, y, w, h = hint.X, hint.Y, hint.W, hint.H
 		if w < 1 {
@@ -214,7 +194,7 @@ func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y,
 // outage case. It is the one INSERT, called by pluginhost.Adapter.mint when a
 // durable fact has been made. An entry that already has a live row returns
 // that row's id and writes nothing.
-func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h int64) (int64, error) {
+func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, y, w, h int64) (int64, error) {
 	if id, ok, err := n.LiveTileID(gridID, e.Key); err != nil || ok {
 		return id, err
 	}
@@ -224,7 +204,7 @@ func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h in
 		child = childGridID
 	}
 	if kind == "url" {
-		url = e.URL
+		url = e.UrlString
 	}
 	now := n.s.now().UnixNano()
 	res, err := n.s.db.Exec(`INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
@@ -244,7 +224,7 @@ func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h in
 // nothing. child_grid_id is deliberately not refreshed: it is a stored
 // reference, and re-pointing one because a listing came back differently is
 // how a link starts naming something the user never linked.
-func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
+func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 	if gridID == 0 || len(entries) == 0 {
 		return nil
 	}
@@ -263,7 +243,7 @@ func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
 			continue
 		}
 		kind := entryKind(e)
-		if r.Kind == kind && r.Label == e.Label {
+		if r.Kind == kind && r.AltText == e.Label {
 			continue
 		}
 		if _, err := n.s.db.Exec(`UPDATE tiles SET kind = ?, alt_text = ?, updated_at = ?
@@ -325,24 +305,34 @@ func (n *Namespace) LiveTileID(gridID int64, key string) (int64, bool, error) {
 	return id, true, nil
 }
 
-// tiles lists the live rows of a grid, by id.
+// tiles lists the live rows of a grid, by id, the stored columns through the
+// one descriptor and the key beside them.
 func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
-	rows, err := n.s.db.Query(`SELECT id, key, kind, alt_text, x, y, w, h, view_cx, view_cy, view_zoom,
-		text_x, text_y, text_w, text_h, COALESCE(text_mode, ''), content_zoom, COALESCE(child_grid_id, 0)
-		FROM tiles WHERE ns = ? AND grid_id = ? AND tombstoned = 0 ORDER BY id`, n.ns, gridID)
+	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key FROM tiles
+		WHERE ns = ? AND grid_id = ? AND tombstoned = 0 ORDER BY id`, n.ns, gridID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []ExtTile
 	for rows.Next() {
-		var t ExtTile
-		if err := rows.Scan(&t.ID, &t.Key, &t.Kind, &t.Label, &t.X, &t.Y, &t.W, &t.H,
-			&t.ViewCx, &t.ViewCy, &t.ViewZoom,
-			&t.TextX, &t.TextY, &t.TextW, &t.TextH, &t.TextMode, &t.ContentZoom, &t.ChildGridID); err != nil {
+		t := &gridwellv1.Tile{}
+		var key string
+		if err := rows.Scan(append(scanDests(tilesColumns, t), &key)...); err != nil {
 			return nil, err
 		}
-		out = append(out, t)
+		id, err := strconv.ParseInt(t.Id, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("store: row id %q: %w", t.Id, err)
+		}
+		// A leaf's child_grid_id is NULL, which the descriptor reads as "".
+		var child int64
+		if t.ChildGridId != "" {
+			if child, err = strconv.ParseInt(t.ChildGridId, 10, 64); err != nil {
+				return nil, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
+			}
+		}
+		out = append(out, ExtTile{ID: id, Key: key, ChildGridID: child, Tile: t})
 	}
 	return out, rows.Err()
 }

@@ -2,11 +2,11 @@ package store
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"testing"
 
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -24,19 +24,29 @@ func openExt(t *testing.T) (*Store, *Namespace) {
 	return st, st.Namespace("plug1")
 }
 
-func textEntries(keys ...string) []Entry {
-	out := make([]Entry, len(keys))
+func textEntries(keys ...string) []*pluginv1.Entry {
+	out := make([]*pluginv1.Entry, len(keys))
 	for i, k := range keys {
-		out[i] = Entry{Key: k, Kind: "text", Label: k}
+		out[i] = &pluginv1.Entry{Key: k, Kind: "text", Label: k}
 	}
 	return out
+}
+
+// sameExt compares what the join decides about an entry: identity, placement
+// and the content facts the listing supplied. A row read back from the store
+// carries more columns than a derived placement does, so the wire record is
+// not compared whole.
+func sameExt(a, b ExtTile) bool {
+	return a.ID == b.ID && a.Key == b.Key && a.ChildGridID == b.ChildGridID &&
+		a.X == b.X && a.Y == b.Y && a.W == b.W && a.H == b.H &&
+		a.Kind == b.Kind && a.AltText == b.AltText
 }
 
 // mintAll sweeps, joins, and mints every entry the join derived. Nothing in
 // the product does this, a row costing a durable touch, but a test about
 // placement or retirement wants rows for every key, at exactly the placements
 // the join derived.
-func mintAll(t *testing.T, d *Namespace, gid int64, entries []Entry, authoritative bool) []ExtTile {
+func mintAll(t *testing.T, d *Namespace, gid int64, entries []*pluginv1.Entry, authoritative bool) []ExtTile {
 	t.Helper()
 	if authoritative {
 		present := map[string]bool{}
@@ -51,7 +61,7 @@ func mintAll(t *testing.T, d *Namespace, gid int64, entries []Entry, authoritati
 	if err != nil {
 		t.Fatal(err)
 	}
-	byKey := map[string]Entry{}
+	byKey := map[string]*pluginv1.Entry{}
 	for _, e := range entries {
 		byKey[e.Key] = e
 	}
@@ -98,7 +108,7 @@ func TestExtMergeIsIdempotent(t *testing.T) {
 		t.Fatalf("want 3 tiles, got %d then %d", len(first), len(second))
 	}
 	for i := range first {
-		if first[i] != second[i] {
+		if !sameExt(first[i], second[i]) {
 			t.Fatalf("merge not idempotent: %+v != %+v", first[i], second[i])
 		}
 	}
@@ -156,7 +166,7 @@ func TestExtUserPlacementSurvivesMerges(t *testing.T) {
 func TestExtHintSeedsFirstSightOnly(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.ContextID("cal")
-	ev := []Entry{{Key: "event1", Kind: "text", Label: "e", Hint: &Hint{X: 10, Y: 2, W: 2, H: 1}}}
+	ev := []*pluginv1.Entry{{Key: "event1", Kind: "text", Label: "e", PlacementHint: &pluginv1.PlacementHint{X: 10, Y: 2, W: 2, H: 1}}}
 	tiles := mintAll(t, d, gid, ev, true)
 	e := extByKey(t, tiles, "event1")
 	if e.X != 10 || e.Y != 2 || e.W != 2 {
@@ -165,7 +175,7 @@ func TestExtHintSeedsFirstSightOnly(t *testing.T) {
 	if err := d.Place(e.ID, 0, 0, 1, 1); err != nil {
 		t.Fatal(err)
 	}
-	ev[0].Hint = &Hint{X: 20, Y: 20, W: 1, H: 1}
+	ev[0].PlacementHint = &pluginv1.PlacementHint{X: 20, Y: 20, W: 1, H: 1}
 	tiles = mintAll(t, d, gid, ev, true)
 	if e := extByKey(t, tiles, "event1"); e.X != 0 || e.Y != 0 {
 		t.Fatalf("a hint moved a placed tile: %+v", e)
@@ -211,7 +221,7 @@ func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
 func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.ContextID("root")
-	listing := []Entry{{Key: "dir", Kind: "well", Label: "dir", ChildContext: "root/dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", URL: "https://a"}}
+	listing := []*pluginv1.Entry{{Key: "dir", Kind: "well", Label: "dir", ChildContext: "root/dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}}
 	tiles := mintAll(t, d, gid, listing, true)
 	dir, f := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
 	if dir.ChildGridID == 0 {
@@ -232,7 +242,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	if dir2.ViewCx != 3 || dir2.ViewCy != -1 || dir2.ViewZoom != 1.5 {
 		t.Fatalf("well framing lost: %+v", dir2)
 	}
-	if f2.TextY != 120 || f2.TextW != 400 || f2.TextMode != "rendered" || f2.ContentZoom != 1.25 || f2.Label != "f renamed" {
+	if f2.TextY != 120 || f2.TextW != 400 || f2.TextMode != "rendered" || f2.ContentZoom != 1.25 || f2.AltText != "f renamed" {
 		t.Fatalf("text framing/facts lost: %+v", f2)
 	}
 	if cgid, err := d.ContextID("root/dir"); err != nil || cgid != dir.ChildGridID {
@@ -343,8 +353,12 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 		}
 		if pass == 0 {
 			first = tiles
-		} else if fmt.Sprint(tiles) != fmt.Sprint(first) {
-			t.Fatalf("pass %d derived a different answer than pass 0", pass)
+			continue
+		}
+		for i := range tiles {
+			if !sameExt(tiles[i], first[i]) {
+				t.Fatalf("pass %d derived a different answer than pass 0: %v vs %v", pass, tiles[i], first[i])
+			}
 		}
 	}
 	if got := rowCount(t, st); got != before {
@@ -352,7 +366,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 	}
 	// One durable touch: the row lands where the join was already answering.
 	want := extByKey(t, first, "f42")
-	id, err := d.Mint(gid, Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, want.X, want.Y, want.W, want.H)
+	id, err := d.Mint(gid, &pluginv1.Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, want.X, want.Y, want.W, want.H)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +387,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 		}
 	}
 	// Idempotent: a second mint of the same key is the same row.
-	again, err := d.Mint(gid, Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, 9, 9, 1, 1)
+	again, err := d.Mint(gid, &pluginv1.Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, 9, 9, 1, 1)
 	if err != nil || again != id {
 		t.Fatalf("second mint = %d (%v), want the first row %d", again, err, id)
 	}
@@ -392,7 +406,7 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	}
 	// The user drags "b" well clear of the flow.
 	b := extByKey(t, before, "b")
-	if _, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
+	if _, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
 		t.Fatal(err)
 	}
 	id, _, err := d.LiveTileID(gid, "b")
