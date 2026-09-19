@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { urlContextMenuTemplate } from './contextmenu';
+import { choiceMenuTemplate, urlContextMenuTemplate } from './contextmenu';
 
 // The template's parameter shapes, read off the function. Nothing outside
 // contextmenu.ts names them, so they are not exported.
@@ -146,4 +146,31 @@ test('Freeze Page appears only for a durable tile and fires the action', () => {
   const eph = urlContextMenuTemplate(baseParams(), actions);
   assert.ok(!labels(eph).includes('Freeze Page'), 'an ephemeral visit offers no freeze');
   assert.ok(!eph.some((i) => i.label?.startsWith('Clear Site Data')), 'clear site data is gone');
+});
+
+// The choice menu is a renderer declaration rendered verbatim: one radio row
+// per item, in order, checked as declared, and the click hands the id straight
+// back. A row it read for meaning would be a second owner of the choice.
+test('choiceMenuTemplate renders declared choices verbatim and returns the id', () => {
+  const picked: string[] = [];
+  const items = choiceMenuTemplate(
+    [
+      { id: 'dark', label: 'Dark mode', checked: true },
+      { id: 'light', label: 'Light mode', checked: false },
+    ],
+    (id) => picked.push(id),
+  );
+  assert.deepEqual(
+    items.map((i) => [i.label, i.type, i.checked]),
+    [
+      ['Dark mode', 'radio', true],
+      ['Light mode', 'radio', false],
+    ],
+  );
+  items[1].click?.();
+  assert.deepEqual(picked, ['light']);
+});
+
+test('choiceMenuTemplate on no choices is an empty menu, not a stray row', () => {
+  assert.deepEqual(choiceMenuTemplate([], () => {}), []);
 });

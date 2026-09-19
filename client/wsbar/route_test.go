@@ -40,7 +40,7 @@ func TestRouteClick(t *testing.T) {
 			barClick(0, 380), ActionSlot, -1},
 		{"a middle press on the slot still runs the slot, which ignores it",
 			barClick(1, 380), ActionSlot, -1},
-		{"a right press on the slot of a frozen descent does nothing",
+		{"a right press on a slot with no menu does nothing",
 			barClick(2, 380), ActionNone, -1},
 		{"a left press on the title zooms the pane",
 			barClick(0, 210), ActionZoom, -1},
@@ -75,16 +75,16 @@ func TestRouteClick(t *testing.T) {
 	}
 }
 
-// The slot is the bar's right end whatever the chain does, so a live url
-// descent's native menu is reachable there and nowhere else.
-func TestRouteClickURLMenu(t *testing.T) {
+// The slot is the bar's right end whatever the chain does, so the circle's
+// menu is reachable there and nowhere else, and only on the right button.
+func TestRouteClickSlotMenu(t *testing.T) {
 	in := barClick(2, 380)
-	in.URLMenu = true
-	if got := RouteClick(in); got.Action != ActionURLMenu {
-		t.Fatalf("RouteClick(right on a live url slot) = %v, want %v", got.Action, ActionURLMenu)
+	in.SlotMenu = true
+	if got := RouteClick(in); got.Action != ActionSlotMenu {
+		t.Fatalf("RouteClick(right on a slot with a menu) = %v, want %v", got.Action, ActionSlotMenu)
 	}
 	in = barClick(0, 380)
-	in.URLMenu = true
+	in.SlotMenu = true
 	if got := RouteClick(in); got.Action != ActionSlot {
 		t.Fatalf("RouteClick(left on a live url slot) = %v, want %v", got.Action, ActionSlot)
 	}

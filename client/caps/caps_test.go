@@ -19,6 +19,13 @@ func TestDerive(t *testing.T) {
 	if Derive(Bridge{}, false).LiveURL {
 		t.Errorf("a bridge declaring nothing must disable live URL views")
 	}
+	// Each half is declared on its own, so a host with one does not get both.
+	if c := Derive(Bridge{LiveURL: true}, false); c.ChoiceMenu {
+		t.Errorf("live url alone must not imply a native menu, got %+v", c)
+	}
+	if c := Derive(Bridge{ChoiceMenu: true}, false); !c.ChoiceMenu || c.LiveURL {
+		t.Errorf("a menu-only bridge: want ChoiceMenu alone, got %+v", c)
+	}
 	if c := Derive(urlBridge, false); !c.Shells {
 		t.Errorf("shells enabled + bridge: want Shells, got %+v", c)
 	}

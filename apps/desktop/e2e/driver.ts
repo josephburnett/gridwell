@@ -183,6 +183,26 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.palette());
   }
 
+  // Which palette the client is wearing, client/theme's own spelling. It is a
+  // view preference and never a server fact, so the hook is its only oracle.
+  theme(): Promise<string> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.theme());
+  }
+
+  // The bar circle's center: the + menu toggle on a grid, and the one place
+  // the circle's right-click menu opens from.
+  async circleCenter(): Promise<{ x: number; y: number }> {
+    const bar = await this.bar();
+    return { x: bar.left + bar.width - 24, y: bar.top + bar.height / 2 };
+  }
+
+  // Right-clicks the circle, which pops whatever circlemenu.For says that
+  // slot offers.
+  async rightClickCircle(): Promise<void> {
+    const c = await this.circleCenter();
+    await this.win.mouse.click(c.x, c.y, { button: 'right' });
+  }
+
   // The one bar's drawn rectangle plus every segment's rect and identity. It
   // rides whichever pane has focus: left and width are that pane's span, top
   // the reserved full-width row it sits in.

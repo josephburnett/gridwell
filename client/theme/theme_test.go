@@ -9,7 +9,7 @@ import (
 // The two palettes are one shape with two sets of values, so a drawing site
 // can read any role without asking which theme is on.
 func TestBothPalettesFillEveryRole(t *testing.T) {
-	for _, th := range []Theme{Dark, Light} {
+	for _, th := range All() {
 		p := Of(th)
 		v := reflect.ValueOf(p)
 		for i := 0; i < v.NumField(); i++ {
@@ -49,12 +49,36 @@ func TestDefaultIsDark(t *testing.T) {
 	}
 }
 
-// The one spelling a stored value and the e2e hook share.
-func TestStrings(t *testing.T) {
-	want := map[Theme]string{Dark: "dark", Light: "light"}
-	for th, s := range want {
-		if th.String() != s {
-			t.Errorf("%d.String() = %q, want %q", int(th), th.String(), s)
+// The one spelling a stored value, a menu id and the e2e hook share.
+func TestStringsAndLabels(t *testing.T) {
+	str := map[Theme]string{Dark: "dark", Light: "light"}
+	label := map[Theme]string{Dark: "Dark mode", Light: "Light mode"}
+	for _, th := range All() {
+		if th.String() != str[th] {
+			t.Errorf("%d.String() = %q, want %q", int(th), th.String(), str[th])
+		}
+		if th.Label() != label[th] {
+			t.Errorf("%v.Label() = %q, want %q", th, th.Label(), label[th])
+		}
+	}
+}
+
+// A value written by one release is read by the next.
+func TestParseRoundTrip(t *testing.T) {
+	for _, th := range All() {
+		got, ok := Parse(th.String())
+		if !ok || got != th {
+			t.Errorf("Parse(%q) = %v, %v; want %v, true", th.String(), got, ok, th)
+		}
+	}
+}
+
+// An unreadable or unwritten preference is the default, and says so.
+func TestParseUnknownFallsBackToDefault(t *testing.T) {
+	for _, s := range []string{"", "Dark", "solarized", "null"} {
+		got, ok := Parse(s)
+		if ok || got != Default() {
+			t.Errorf("Parse(%q) = %v, %v; want %v, false", s, got, ok, Default())
 		}
 	}
 }

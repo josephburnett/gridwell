@@ -35,7 +35,10 @@ func bridgeCaps() caps.Bridge {
 	if !c.Truthy() {
 		return caps.NoBridge()
 	}
-	return caps.Bridge{LiveURL: c.Get("liveUrl").Truthy()}
+	return caps.Bridge{
+		LiveURL:    c.Get("liveUrl").Truthy(),
+		ChoiceMenu: c.Get("choiceMenu").Truthy(),
+	}
 }
 
 // viewBounds is a content-box rectangle in CSS px, what panebox.ContentBox

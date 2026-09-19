@@ -16,8 +16,9 @@ const (
 	ActionNone Action = iota
 	// ActionPass leaves the press to the pane under it.
 	ActionPass
-	// ActionURLMenu pops a live url view's own context menu over the slot.
-	ActionURLMenu
+	// ActionSlotMenu pops the circle slot's right-click menu; which menu that
+	// is belongs to client/circlemenu, not to the bar.
+	ActionSlotMenu
 	// ActionSlot runs the circle slot's verdict; see barslot.
 	ActionSlot
 	// ActionRename edits the centered title.
@@ -50,9 +51,9 @@ type Click struct {
 	// Title is the centered title's span; ok=false when it did not fit.
 	TitleX, TitleW float64
 	TitleOK        bool
-	// URLMenu is whether the focused pane is a live url descent, the one
-	// descent with a native menu to pop.
-	URLMenu bool
+	// SlotMenu is whether the slot's mode has a right-click menu at all; see
+	// circlemenu.For.
+	SlotMenu bool
 	// Promote is whether the pane's current visit is an ephemeral url, which
 	// makes its crumb a drag handle rather than an ascent.
 	Promote bool
@@ -78,8 +79,8 @@ func RouteClick(in Click) Hit {
 	if in.Button == 2 {
 		switch {
 		case inSlot:
-			if in.URLMenu {
-				return Hit{Action: ActionURLMenu}
+			if in.SlotMenu {
+				return Hit{Action: ActionSlotMenu}
 			}
 			return Hit{Action: ActionNone}
 		case inTitle:

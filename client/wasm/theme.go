@@ -3,6 +3,8 @@
 package main
 
 import (
+	"syscall/js"
+
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/theme"
 )
@@ -11,6 +13,44 @@ import (
 // custom properties, and the surfaces that hold a color of their own rather
 // than reading one per frame — the rendered-document stylesheet and a live
 // terminal — are restyled. The canvas needs nothing but a redraw.
+
+// themeKey is where the preference lives. It is a client view preference and
+// not a fact about the user's things, so it never reaches the store or the
+// wire; Chromium's own storage is its decided home (CLAUDE.md rule 7). A
+// browser that refuses storage still switches, for this session only.
+const themeKey = "gridwell.theme"
+
+// setTheme is the user's pick: apply it and remember it.
+func (a *App) setTheme(t theme.Theme) {
+	a.applyTheme(t)
+	a.storeTheme(t)
+}
+
+// storedTheme reads the preference at boot. Anything unreadable or unknown is
+// the default, which is what a first run is too.
+func (a *App) storedTheme() theme.Theme {
+	defer func() { recover() }()
+	ls := a.win.Get("localStorage")
+	if !ls.Truthy() {
+		return theme.Default()
+	}
+	v := ls.Call("getItem", themeKey)
+	if v.Type() != js.TypeString {
+		return theme.Default()
+	}
+	t, _ := theme.Parse(v.String())
+	return t
+}
+
+// storeTheme remembers the pick. A browser with storage blocked throws here,
+// and that is not a failure the user can do anything about: the theme is on
+// screen either way, and it is back to the default next load.
+func (a *App) storeTheme(t theme.Theme) {
+	defer func() { recover() }()
+	if ls := a.win.Get("localStorage"); ls.Truthy() {
+		ls.Call("setItem", themeKey, t.String())
+	}
+}
 
 // applyTheme installs t as the active palette everywhere something is already
 // wearing a color. It is the one writer of a.pal, so no surface can be left in

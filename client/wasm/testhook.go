@@ -86,6 +86,10 @@ func (a *App) installTestHook() {
 			}
 			return a.barSlotMode(p).String()
 		}),
+		// Which palette is on screen, by client/theme's own spelling. It is
+		// the one observable of a view preference whose only other evidence
+		// is canvas pixels.
+		"theme":         js.FuncOf(func(js.Value, []js.Value) any { return a.themeName.String() }),
 		"plugins":       js.FuncOf(a.thPlugins),
 		"palette":       js.FuncOf(a.thPalette),
 		"ghost":         js.FuncOf(a.thGhost),

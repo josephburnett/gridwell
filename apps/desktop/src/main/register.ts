@@ -1,4 +1,4 @@
-import { ipcMain, BaseWindow, WebContents } from 'electron';
+import { ipcMain, BaseWindow, Menu, MenuItemConstructorOptions, WebContents } from 'electron';
 import {
   CH,
   EV,
@@ -18,7 +18,9 @@ import {
   FreezeURLEvent,
   ContextMenuEvent,
   ZoomKeyEvent,
+  ChoiceMenuArgs,
 } from './ipc';
+import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
 
 // safeSend is the one guard every main-to-renderer push goes through: the
@@ -87,6 +89,24 @@ export function registerWebviewIpc(
 
   ipcMain.handle(CH.showMenu, (_e, a: PaneRef): void => {
     registry.showMenu(a.paneId);
+  });
+
+  // A menu of choices the renderer declared. The answer is the chosen id, or
+  // null when the menu closes untouched, so the renderer changes nothing on a
+  // dismissal. Both doors settle the same promise once, because a click and
+  // the close callback can both fire.
+  ipcMain.handle(CH.choiceMenu, (_e, a: ChoiceMenuArgs): Promise<string | null> => {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (id: string | null) => {
+        if (settled) return;
+        settled = true;
+        resolve(id);
+      };
+      const template = choiceMenuTemplate(a.items, done);
+      const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
+      menu.popup({ window: win, callback: () => done(null) });
+    });
   });
 
 }

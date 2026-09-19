@@ -21,12 +21,36 @@ const (
 // Default is what a client with no stored preference wears.
 func Default() Theme { return Dark }
 
-// String is the theme's one spelling outside this package.
+// All is every theme a user may pick, in menu order.
+func All() []Theme { return []Theme{Dark, Light} }
+
+// String is the theme's one spelling outside this package: the stored
+// preference, the menu item's id, and the e2e hook all read it.
 func (t Theme) String() string {
 	if t == Light {
 		return "light"
 	}
 	return "dark"
+}
+
+// Label is what a menu row reads.
+func (t Theme) Label() string {
+	if t == Light {
+		return "Light mode"
+	}
+	return "Dark mode"
+}
+
+// Parse reads String back. An absent or unreadable preference is not something
+// the user can act on, so it lands on Default and says it was not a choice.
+func Parse(s string) (Theme, bool) {
+	switch s {
+	case "dark":
+		return Dark, true
+	case "light":
+		return Light, true
+	}
+	return Default(), false
 }
 
 // Palette is every color the client draws, once. A field is a role, not a

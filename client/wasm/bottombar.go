@@ -418,7 +418,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 			in.TitleX, in.TitleW, in.TitleOK = tx-bx, tw, true
 		}
 		if p != nil {
-			in.URLMenu = a.isURLDescent(p) && a.urlViewFor(p.ID) != nil
+			in.SlotMenu = a.slotHasMenu(p)
 			if t, ok := a.descendedTile(p); ok && t.Kind == rpc.KindURL &&
 				a.certainlyEphemeral(p, t) {
 				visit, in.Promote = t, true
@@ -429,8 +429,8 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	switch hit.Action {
 	case wsbar.ActionPass:
 		return false
-	case wsbar.ActionURLMenu:
-		a.bridgeShowMenu(p.ID)
+	case wsbar.ActionSlotMenu:
+		a.openCircleMenu(p)
 	case wsbar.ActionSlot:
 		a.barSlotClick(button)
 	case wsbar.ActionRename:

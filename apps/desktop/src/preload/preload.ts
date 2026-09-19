@@ -12,6 +12,7 @@ import {
   OpenBelowEvent,
   FreezeURLEvent,
   ContextMenuEvent,
+  ChoiceMenuArgs,
   ZoomKeyEvent,
   RemoveArgs,
   PaneRef,
@@ -26,7 +27,7 @@ const api = {
   version: 1,
   // Which parts of the bridge this preload implements. caps.Derive reads it, so
   // exposing the bridge does not imply every native feature.
-  caps: { liveUrl: true },
+  caps: { liveUrl: true, choiceMenu: true },
 
   placeWebview(args: PlaceArgs): Promise<void> {
     return ipcRenderer.invoke(CH.place, args);
@@ -47,9 +48,14 @@ const api = {
   goBack(args: PaneRef): Promise<void> {
     return ipcRenderer.invoke(CH.goBack, args);
   },
-  // The bar circle's right-click, with no in-page context.
+  // The bar circle's right-click over a live url, with no in-page context.
   showMenu(args: PaneRef): Promise<void> {
     return ipcRenderer.invoke(CH.showMenu, args);
+  },
+  // A native menu of the choices the renderer declares, answering with the
+  // chosen id or null. The renderer owns what the rows mean.
+  showChoiceMenu(args: ChoiceMenuArgs): Promise<string | null> {
+    return ipcRenderer.invoke(CH.choiceMenu, args);
   },
 
 

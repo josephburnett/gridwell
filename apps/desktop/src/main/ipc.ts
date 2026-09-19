@@ -17,9 +17,12 @@ export const CH = {
   setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom)
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
-  showMenu: 'gw:showMenu', // PaneRef → void. The bar circle's right-click,
-                           // which works even when the page hijacks
-                           // contextmenu.
+  showMenu: 'gw:showMenu', // PaneRef → void. The bar circle's right-click
+                           // over a live url, which works even when the page
+                           // hijacks contextmenu.
+  choiceMenu: 'gw:choiceMenu', // ChoiceMenuArgs → string | null (the chosen id,
+                               // null if dismissed). The renderer declares the
+                               // rows; main knows nothing of what they mean.
 } as const;
 
 // Live url view's preload → main (send, fire-and-forget). The view swallows the
@@ -68,6 +71,18 @@ export interface ForwardedRightdown {
 
 export interface PaneRef {
   paneId: string;
+}
+
+// One exclusive choice in a menu the renderer declared. client/circlemenu owns
+// the rows; nothing here reads id or label for a decision.
+export interface ChoiceItem {
+  id: string;
+  label: string;
+  checked: boolean;
+}
+
+export interface ChoiceMenuArgs {
+  items: ChoiceItem[];
 }
 
 export interface PlaceArgs {

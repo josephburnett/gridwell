@@ -206,6 +206,11 @@ type overlayState struct {
 	renderedReady   bool
 	lastRenderedKey string
 
+	// choiceMenu is the DOM popover the circle's right-click opens on a host
+	// with no native menu; choiceMenuCbs are its listener removers.
+	choiceMenu    js.Value
+	choiceMenuCbs []func()
+
 	// wsExpand is the in-flight first-descent capture animation, nil when none.
 	wsExpand *wsExpandState
 
@@ -565,7 +570,7 @@ func main() {
 	app.tree = pane.NewTree()
 	app.tree.FocusedPane().Zoom = 1.0
 	// After the canvas and the tree, because applying a palette redraws.
-	app.applyTheme(theme.Default())
+	app.applyTheme(app.storedTheme())
 	app.resize()
 
 	app.win.Call("addEventListener", "resize", js.FuncOf(func(this js.Value, args []js.Value) any {

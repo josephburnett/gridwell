@@ -1,5 +1,7 @@
-// Which items a right-click over a live url WebContentsView offers; it has no
-// built-in menu. webviews.ts supplies the actions and builds the menu.
+// Which items the two native menus offer. webviews.ts supplies the live url
+// view's actions, register.ts the choice menu's; neither menu is built here.
+
+import { ChoiceItem } from './ipc';
 
 // ContextParams is the subset of Electron's ContextMenuParams the menu needs,
 // plus the two navigation flags, which live on webContents.
@@ -34,7 +36,8 @@ interface ContextActions {
 // the module imports nothing from electron.
 interface MenuTemplateItem {
   label?: string;
-  type?: 'separator';
+  type?: 'separator' | 'radio';
+  checked?: boolean;
   enabled?: boolean;
   click?: () => void;
 }
@@ -68,4 +71,19 @@ export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): Men
   }
 
   return items;
+}
+
+// A menu of exclusive choices the renderer declared, one radio row each. It
+// knows nothing about what is being chosen: the ids, labels and which one is
+// checked all arrive on the wire, so a new kind of choice needs no change here.
+export function choiceMenuTemplate(
+  items: ChoiceItem[],
+  choose: (id: string) => void,
+): MenuTemplateItem[] {
+  return items.map((it) => ({
+    label: it.label,
+    type: 'radio' as const,
+    checked: it.checked,
+    click: () => choose(it.id),
+  }));
 }
