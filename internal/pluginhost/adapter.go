@@ -101,7 +101,11 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 				return nil, err
 			}
 			out.GridId = id
-			out.ViewCx, out.ViewCy, out.ViewZoom = a.contextFraming(m.Context)
+			f, err := a.contextFraming(m.Context)
+			if err != nil {
+				return nil, err
+			}
+			out.ViewCx, out.ViewCy, out.ViewZoom = f.Cx, f.Cy, f.Zoom
 		}
 		resp.MenuEntries = append(resp.MenuEntries, out)
 	}
@@ -122,17 +126,16 @@ func declaredEntries(ci *pluginv1.InfoResponse) []*pluginv1.MenuEntry {
 
 // contextFraming is the framing the node remembers for one context's grid, the
 // one read behind every doorway the handshake declares, so a collection cannot
-// get a rule of its own.
-func (a *Adapter) contextFraming(ckey string) (cx, cy, zoom float64) {
+// get a rule of its own. Never visited is zero framing; a store that cannot be
+// read is an error, because a zero would land the user at a view they never
+// left and say nothing.
+func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 	gid, ok, err := a.mem.LookupContext(ckey)
 	if err != nil || !ok {
-		return 0, 0, 0
+		return rpc.Framing{}, err
 	}
-	f, ok, err := a.mem.RootFraming(gid)
-	if err != nil || !ok {
-		return 0, 0, 0
-	}
-	return f.Cx, f.Cy, f.Zoom
+	f, _, err := a.mem.RootFraming(gid)
+	return f, err
 }
 
 // Subscribe serves this namespace's event stream: the supervisor's health, and

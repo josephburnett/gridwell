@@ -92,3 +92,28 @@ func TestAMenuEntryRemembersItsFraming(t *testing.T) {
 		t.Errorf("grid id = %q, want the same grid the framing was written to (%q)", got.GridId, feed.GridId)
 	}
 }
+
+// A store the handshake cannot read is an error on the handshake, not a
+// collection reopening at zero framing with nothing said.
+func TestAnUnreadableStoreFailsTheHandshake(t *testing.T) {
+	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp, closer, err := plugintest.Loopback(collectionsPlugin{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closer)
+	a := pluginhost.New(cp, memStore.Namespace("p1"), nil)
+	ctx := context.Background()
+	if _, err := a.Info(ctx, &gridwellv1.InfoRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := memStore.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Info(ctx, &gridwellv1.InfoRequest{}); err == nil {
+		t.Fatal("Info over a closed store answered; the store failure must surface")
+	}
+}
