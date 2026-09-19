@@ -29,7 +29,7 @@ func setBoundsPx(style js.Value, left, top, width, height float64) {
 // scheduleFileSave no-ops when a save is already pending, so every keystroke
 // can call it.
 func (a *App) scheduleFileSave() {
-	a.persist.sched.textSave.arm(cadence.TextSaveMs)
+	a.persist.sched.textSave.Arm(cadence.TextSaveMs)
 }
 
 // textFitZoom returns the parent zoom at which the text tile's cell footprint
@@ -117,12 +117,6 @@ func (a *App) ensureFileTextarea() {
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
 
-	a.persist.sched.textSave.set(func() {
-		// Sweep every dirty content entry, whoever holds focus now. A sweep
-		// over tile-keyed entries cannot strand an edit whose pane moved on,
-		// so no fire-time guard on focus or mode is needed.
-		a.flushDirtyText()
-	})
 	a.overlays.textTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the keystroke into the cache under the tile the textarea is
 		// bound to, the one owner of unsaved text. The DOM value is a view;

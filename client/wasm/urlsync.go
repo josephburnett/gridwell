@@ -24,7 +24,7 @@ import (
 // only at ascent would lose the viewport whenever a grid is left another
 // way.
 func (a *App) scheduleFramingSave() {
-	a.persist.sched.framingSave.arm(cadence.FramingSaveMs)
+	a.persist.sched.framingSave.Arm(cadence.FramingSaveMs)
 }
 
 // flushFramingSave persists every pane's settled grid framing. persistFraming
@@ -218,7 +218,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 // scheduleURLUpdate marks the URL out of date. Cheap to call from any
 // state-mutating path.
 func (a *App) scheduleURLUpdate() {
-	a.persist.sched.urlUpdate.arm(cadence.URLUpdateMs)
+	a.persist.sched.urlUpdate.Arm(cadence.URLUpdateMs)
 }
 
 // writeURLNow is the one history writer, the DOM half of it. Whether to write

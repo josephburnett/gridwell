@@ -169,7 +169,7 @@ func (a *App) scheduleWorkspaceSave() {
 	if a.ws.Depth() == 0 {
 		return
 	}
-	a.persist.sched.wsSave.arm(cadence.WorkspaceSaveMs)
+	a.persist.sched.wsSave.Arm(cadence.WorkspaceSaveMs)
 }
 
 // flushWorkspaceSave persists the current layout if it changed: the

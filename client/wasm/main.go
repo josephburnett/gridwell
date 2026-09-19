@@ -20,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/clientsync"
+	"github.com/josephburnett/gridwell/client/debounce"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/events"
@@ -303,29 +304,17 @@ func newFetchState() fetchState {
 	}
 }
 
-// debounce is one coalescing deferred callback. Its js.Func is allocated once,
-// by set(), so re-arming never leaks a handle.
-type debounce struct {
-	pending bool
-	cb      js.Func
-}
-
-// set is called once, at startup.
-func (d *debounce) set(body func()) {
-	d.cb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		d.pending = false
-		body()
+// setTimeoutMs is the shim's debounce.Schedule: one js.Func per armed run,
+// released when it fires. A debounce coalesces, so at most one is alive per
+// settle window.
+func setTimeoutMs(ms int, fire func()) {
+	var cb js.Func
+	cb = js.FuncOf(func(js.Value, []js.Value) any {
+		cb.Release()
+		fire()
 		return nil
 	})
-}
-
-// arm only coalesces; caller-side conditions stay at the call site.
-func (d *debounce) arm(ms int) {
-	if d.pending {
-		return
-	}
-	d.pending = true
-	js.Global().Call("setTimeout", d.cb, ms)
+	js.Global().Call("setTimeout", cb, ms)
 }
 
 // persistState is the write-out side of the client. The navigation machine
@@ -350,10 +339,12 @@ type persistState struct {
 	out *outbox.Outbox
 }
 
-// newPersistState is the one place the group is built. The debounces get their
-// bodies at boot, in afterBootstrap, since those close over the App.
-func newPersistState() persistState {
+// newPersistState is the one place the group is built. It takes the App
+// because a debounce holds its body from construction, and the first draw
+// arms two of them: see client/debounce.
+func newPersistState(a *App) persistState {
 	return persistState{
+		sched:            newScheduler(a),
 		textSaves:        textedit.NewSaveQueue(),
 		wellWheelPending: map[string]wellWheelDrift{},
 		persistPosts:     map[string]int{},
@@ -364,19 +355,37 @@ func newPersistState() persistState {
 type scheduler struct {
 	rafScheduled bool
 
-	// wsSave's callback encodes, hash-diffs, and posts the layout on a change.
-	wsSave debounce
+	// wsSave's body encodes, hash-diffs, and posts the layout on a change.
+	wsSave *debounce.Debounce
 
-	urlUpdate debounce
+	urlUpdate *debounce.Debounce
 
-	// framingSave's callback flushes settled framing through the no-op-guarded
+	// framingSave's body flushes settled framing through the no-op-guarded
 	// writers.
-	framingSave debounce
+	framingSave *debounce.Debounce
 
-	textSave debounce
+	textSave *debounce.Debounce
 
 	// errExpire lets one-shot notices leave the strip without polling.
-	errExpire debounce
+	errExpire *debounce.Debounce
+}
+
+// newScheduler binds every settle timer to what it runs, before the App can
+// draw. draw() ends by arming two of these, so a timer bound any later would
+// take that arm with nothing to fire and never accept another.
+func newScheduler(a *App) scheduler {
+	return scheduler{
+		wsSave:      debounce.New(setTimeoutMs, a.flushWorkspaceSave),
+		urlUpdate:   debounce.New(setTimeoutMs, a.writeURLNow),
+		framingSave: debounce.New(setTimeoutMs, a.flushFramingSave),
+		textSave:    debounce.New(setTimeoutMs, a.flushDirtyText),
+		errExpire: debounce.New(setTimeoutMs, func() {
+			if a.errs.Expire(time.Now()) {
+				a.scheduleFrame() // strip shrank; panes reclaim the height on redraw
+			}
+			a.scheduleErrExpiry()
+		}),
+	}
 }
 
 // wellWheelDrift is one well's not-yet-persisted hover-wheel view. The center
@@ -555,13 +564,14 @@ func main() {
 		errs:               errsurface.New(),
 		caps:               caps.Derive(bridgeCaps(), false),
 		fetch:              newFetchState(),
-		persist:            newPersistState(),
 		shellAlive:         map[string]bool{},
 		shellAliveProbing:  map[string][]func(bool){},
 		traces:             map[string]traceState{},
 		renderedPanePaints: map[string]int{},
 		backstop:           retry.NewInterval(retry.Backstop),
 	}
+	// Before anything can draw: the settle timers close over the App.
+	app.persist = newPersistState(app)
 	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed, app.paneLayoutUnreadable)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()
@@ -670,16 +680,6 @@ func (a *App) afterBootstrap() {
 	if a.home != "" {
 		a.fetchGrid(a.home)
 	}
-
-	a.persist.sched.wsSave.set(a.flushWorkspaceSave)
-	a.persist.sched.urlUpdate.set(a.writeURLNow)
-	a.persist.sched.framingSave.set(a.flushFramingSave)
-	a.persist.sched.errExpire.set(func() {
-		if a.errs.Expire(time.Now()) {
-			a.scheduleFrame() // strip shrank; panes reclaim the height on redraw
-		}
-		a.scheduleErrExpiry()
-	})
 
 	go a.startSSE()
 	// The slow retry net behind the reconnect kick.
@@ -1099,7 +1099,7 @@ func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 // scheduleErrExpiry arms one setTimeout for the soonest deadline; the callback
 // prunes and re-arms, so a pushed-out deadline fires early, never late.
 func (a *App) scheduleErrExpiry() {
-	if a.persist.sched.errExpire.pending {
+	if a.persist.sched.errExpire.Pending() {
 		return
 	}
 	d, ok := a.errs.NextDeadline(time.Now())
@@ -1111,7 +1111,7 @@ func (a *App) scheduleErrExpiry() {
 	if ms < 1 {
 		ms = 1
 	}
-	a.persist.sched.errExpire.arm(ms)
+	a.persist.sched.errExpire.Arm(ms)
 }
 
 // resolveErr clears a source's notice when its condition heals.
