@@ -601,7 +601,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 					nn := n
 					outside := tileface.Outside(nn, inHost)
-					dashed := !inHost && isLinkTile(nn)
+					dashed := isLinkTile(nn)
 					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, outside, dashed, p.ID)
 					a.drawPluginHealthTint(nn, left, top, w, h)
 					a.drawDeadLinkFace(nn, left, top, w, h)
