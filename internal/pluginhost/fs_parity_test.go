@@ -11,7 +11,9 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -85,9 +87,9 @@ func darken(t *testing.T, root string) (lighten func()) {
 func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	// A source that stops answering costs the user what they ARRANGED and
 	// nothing more: the adapter joins an empty non-authoritative listing, so
-	// the rows the user touched still read, stamped stale and retiring
-	// nothing, while an entry nobody ever touched has no row to read from and
-	// is simply absent until the source speaks again.
+	// the rows the user touched still read, retiring nothing, while an entry
+	// nobody ever touched has no row to read from and is simply absent until
+	// the source speaks again.
 	root := seedTree(t)
 	v2 := pluginNode(t, root)
 	ctx := context.Background()
@@ -453,4 +455,112 @@ func TestAnEntriesOnlyPluginPresentsAndServes(t *testing.T) {
 	if len(g.Tiles) == 0 {
 		t.Errorf("the collection listed nothing; the tree has files in it")
 	}
+}
+
+// healthStream turns a client's event stream into the health transitions it
+// carries. The Subscribe call rides the goroutine too, because the server
+// sends nothing until it has something to say: a test waiting for the stream
+// itself would hang where it should fail.
+func healthStream(ctx context.Context, cl *rpc.Client) <-chan *gridwellv1.EventPluginHealth {
+	out := make(chan *gridwellv1.EventPluginHealth, 16)
+	go func() {
+		s, err := cl.Subscribe(ctx)
+		if err != nil {
+			return // the awaiting test says so, with what it was waiting for
+		}
+		for {
+			ev, ok, rerr := s.Recv()
+			if rerr != nil || !ok {
+				return
+			}
+			h := ev.GetPluginHealth()
+			if h == nil {
+				continue
+			}
+			select {
+			case out <- h:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return out
+}
+
+// awaitHealth waits for the next transition and says what it was.
+func awaitHealth(t *testing.T, ch <-chan *gridwellv1.EventPluginHealth, healthy bool, why string) *gridwellv1.EventPluginHealth {
+	t.Helper()
+	select {
+	case h := <-ch:
+		if h.GetHealthy() != healthy {
+			t.Fatalf("%s: got healthy=%v (%s) instead", why, h.GetHealthy(), h.GetDetail())
+		}
+		return h
+	case <-time.After(20 * time.Second):
+		t.Fatalf("%s: no health event arrived", why)
+	}
+	return nil
+}
+
+// A source that stops answering is this namespace's health, published by the
+// adapter: the client hears it on the stream it already holds, with no call of
+// its own having to fail, and the rooms that source serves are memories from
+// then on (client/cache.SourceDark). It is the same event and the same uuid
+// the supervisor uses for the subprocess, because "a declared source is not
+// answering" is one fact whichever half of the plugin it is. Across the real
+// wiring — the shipped binary, the node's fan-in, the client's stream —
+// because the fact crosses all three.
+func TestADarkSourceIsPublishedAsHealth(t *testing.T) {
+	root := seedTree(t)
+	v2 := pluginNode(t, root)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pl, err := v2.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootGrid := plugintest.LandingOf(t, pl.Plugins[0])
+	if _, err := v2.GetGrid(ctx, rootGrid); err != nil {
+		t.Fatal(err)
+	}
+
+	// The source goes dark with nobody attached. A subscriber arriving now is
+	// owed the outage, since the transition it missed is not repeated.
+	lighten := darken(t, root)
+	if _, err := v2.GetGrid(ctx, rootGrid); err != nil {
+		t.Fatalf("a dark source must still serve the node's rows: %v", err)
+	}
+	health := healthStream(ctx, v2)
+	down := awaitHealth(t, health, false, "a subscriber arriving mid-outage is told")
+	if down.GetPluginUuid() == "" {
+		t.Error("the fan-in must name the namespace the outage is about")
+	}
+	if !strings.Contains(down.GetDetail(), "source is not answering") {
+		t.Errorf("detail = %q, want the source named rather than the process", down.GetDetail())
+	}
+
+	// The recovery is a transition on the stream this client is holding.
+	lighten()
+	if _, err := v2.GetGrid(ctx, rootGrid); err != nil {
+		t.Fatal(err)
+	}
+	awaitHealth(t, health, true, "the source answered again")
+
+	// Only the transitions: every listing would otherwise republish an outage
+	// the client already knows about, and each one costs it a full resync.
+	if _, err := v2.GetGrid(ctx, rootGrid); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case h := <-health:
+		t.Fatalf("a second healthy listing republished health: %+v", h)
+	case <-time.After(time.Second):
+	}
+
+	// And the user's own case: the source dies under a live stream.
+	darken(t, root)
+	if _, err := v2.GetGrid(ctx, rootGrid); err != nil {
+		t.Fatal(err)
+	}
+	awaitHealth(t, health, false, "the source went dark under a live stream")
 }

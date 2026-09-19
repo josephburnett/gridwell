@@ -6,8 +6,7 @@
 // to drift against the contract. A grid read serves first and refreshes behind
 // (GetGrid); every other read passes through and falls back to the remembered
 // answer on a transport failure only, since an answered "gone" is never
-// masked. An answer already stamped stale is never remembered, because it
-// would overwrite the good answer it degraded from.
+// masked.
 package sourcecache
 
 import (

@@ -197,8 +197,9 @@ Prefetch is a per-seam option only the transport takes, rooted at the
 connections the fronted namespace's own handshake declares. A dark node is
 answered by the cache. A dark *source* (the plugin answers, its directory
 or API does not) is answered by the durable rows, so a move made during the
-outage still lands; a dark *plugin* has nothing to answer from and fails
-honestly.
+outage still lands, and the adapter publishes it as that namespace's health,
+the same event the supervisor uses for the subprocess; a dark *plugin* has
+nothing to answer from and fails honestly.
 
 ### The store
 

@@ -45,7 +45,7 @@ here.
 | Concept | What it does |
 |---|---|
 | **dead** (`client/deadref`) | The namespace is not declared. Nothing is asked and nothing is said, so an undeclared plugin cannot storm the strip. |
-| **dark** (`internal/sourcecache`, health events) | Declared, not answering right now. Fetched, reported, recovers on its own. It is one fact: a room served by a dark source is a memory rather than an answer, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
+| **dark** (`internal/sourcecache` and `internal/pluginhost`, health events) | Declared, not answering right now — a connection that will not dial, or a plugin whose directory or API stopped answering while its process still does. Fetched, reported, recovers on its own. It is one fact: a room served by a dark source is a memory rather than an answer, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
 | **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
 | **broken** (`pluginhealth.Broken`) | A doorway that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
 | **unknown** | Not yet known, which is neither yes nor no. `scratch.For` and `a.gridWritable` both return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
