@@ -111,7 +111,7 @@ type Palette struct {
 	NoEntryStroke string
 	Locked        string
 	Selected      string
-	// Trace is brighter than the selection gold, so both can show at once.
+	// Trace reads stronger than the selection gold, so both can show at once.
 	Trace   string
 	EdgeDot string
 	PlusBg  string
@@ -326,9 +326,9 @@ var light = Palette{
 	NoEntryFill:   "#c93030",
 	NoEntryStroke: "#ffffff",
 	Locked:        "#e3e3e8",
-	Selected:      "#9d6500",
-	Trace:         "#c08400",
-	EdgeDot:       "#8f9cb6",
+	Selected:      "#a8731a",
+	Trace:         "#7f4300",
+	EdgeDot:       "#7d8aa6",
 	PlusBg:        "#e7e8ee",
 	PlusBgHi:      "#d4d8e6",
 	PlusBgDelete:  "#f0b2aa",
@@ -346,7 +346,7 @@ var light = Palette{
 	DoorwayBrokenTint:  "rgba(200, 60, 60, 0.24)",
 	DoorwayWaitingTint: "rgba(210, 210, 216, 0.55)",
 	DeadLinkVeil:       "rgba(246, 247, 250, 0.72)",
-	DeadLink:           "#9b9ea6",
+	DeadLink:           "#8d9099",
 
 	BarGridBand:      "#e3e9f8",
 	BarTextBand:      "#eef4e0",
