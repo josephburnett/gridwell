@@ -604,13 +604,13 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 	a.releaseShellStream(paneID, conn)
 }
 
-// freezeShellPane runs the bar circle's freeze on a live shell: the standing
+// freezeShellPaneByIntent runs the bar circle's freeze on a live shell: the standing
 // intent lands on the descended row, the terminal's current face becomes the
 // tile's preview through the ordinary close capture, and the attachment ends.
 // The tmux session keeps running, the way a frozen url keeps its address: a
 // freeze is a screenshot, not a kill, so the reconnect finds the session where
 // it left it. An ephemeral visit resolves to no row and freezes nothing.
-func (a *App) freezeShellPane(p *pane.Pane) {
+func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
 	t, ok := a.descendedGridTile(p)
 	if !ok || t.Kind != rpc.KindShell {
 		return

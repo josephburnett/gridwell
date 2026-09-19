@@ -304,7 +304,7 @@ func (a *App) barSlotClick(button int) {
 			}
 		}
 	case barslot.ModeFreeze:
-		a.freezeShellPane(p)
+		a.freezeShellPaneByIntent(p)
 	case barslot.ModeURLOpenTab:
 		// A browser host cannot place a live view, so the next-best descent
 		// is a new tab. The tile stays frozen and this persists nothing.

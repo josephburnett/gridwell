@@ -1,7 +1,7 @@
 // Package shellconn holds the decisions the wasm shell attachment makes: what
-// a descent of any kind does about liveness, whether the refresh button shows, who owns a
-// link press, and how a freeze capture decodes. Stream lifecycle is
-// client/shellstream, over the dialer in client/shellws.
+// a descent of any kind does about liveness, whether the refresh button
+// shows, who owns a link press, and how a freeze capture decodes. Stream
+// lifecycle is client/shellstream, over the dialer in client/shellws.
 package shellconn
 
 import "encoding/base64"
