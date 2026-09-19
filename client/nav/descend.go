@@ -89,7 +89,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 		base.MenuOpen = w.MenuOpenOn == p.ID
 		pl.add(Effect{Kind: EffCloseMenu})
 		// The synthetic well an in-grid + menu descent goes through rounds
-		// the launcher's position, so recentre on the exact footprint.
+		// the doorway's position, so recentre on the exact footprint.
 		mid.Cx = float64(well.X) + float64(well.W)/2
 		mid.Cy = float64(well.Y) + float64(well.H)/2
 	}

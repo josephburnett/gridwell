@@ -18,7 +18,7 @@ func TargetID(t *gridwellv1.Tile) string {
 	if t.LinkTargetId != "" {
 		return t.LinkTargetId
 	}
-	// A childless reference is a menu swatch or launcher tile, which names no
+	// A childless reference is a menu swatch or doorway tile, which names no
 	// namespace and stays pluginhealth's.
 	return t.ChildGridId
 }

@@ -103,8 +103,8 @@ func TestClickNotice_KeyedByUUID(t *testing.T) {
 	if !ok {
 		t.Fatal("ClickNotice for a broken plugin must return ok=true")
 	}
-	if source != "launcher:uux1" {
-		t.Errorf("source = %q, want launcher:uux1 (the UUID — labels can collide)", source)
+	if source != "doorway:uux1" {
+		t.Errorf("source = %q, want doorway:uux1 (the UUID — labels can collide)", source)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestClickNotice_PendingConnection(t *testing.T) {
 	}
 	pl = rpc.ConnectionRow("sshx/conn1", "rtb", "", "", rpc.Framing{})
 	sev, source, msg, ok := ClickNotice(pl)
-	if !ok || source != "launcher:sshx/conn1" {
+	if !ok || source != "doorway:sshx/conn1" {
 		t.Fatalf("notice = %v %q %q %v (keyed by UUID — labels can collide)", sev, source, msg, ok)
 	}
 	if sev != errsurface.Info {
@@ -150,8 +150,8 @@ func TestUnrootedLink(t *testing.T) {
 		tile *gridwellv1.Tile
 		want bool
 	}{
-		{"launcher with no root", &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true}, true},
-		{"launcher with a root", &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: "fs/1"}, false},
+		{"doorway with no root", &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true}, true},
+		{"doorway with a root", &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: "fs/1"}, false},
 		{"leaf link", &gridwellv1.Tile{Kind: rpc.KindText, Reference: true, LinkTargetId: "fs/2"}, false},
 		{"plain well", &gridwellv1.Tile{Kind: rpc.KindWell, ChildGridId: "3"}, false},
 	}

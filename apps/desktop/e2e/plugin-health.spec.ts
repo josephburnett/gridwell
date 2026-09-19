@@ -30,6 +30,6 @@ test('a plugin that declares no doorway is healthy and shows nothing', async ({ 
   expect(swatch, 'a plugin with no doorway contributes no swatch').toBeFalsy();
 
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-  const notice = errs.notices.find((n: any) => n.source === 'launcher:' + noroot!.uuid);
+  const notice = errs.notices.find((n: any) => n.source === 'doorway:' + noroot!.uuid);
   expect(notice, 'a healthy plugin reports nothing').toBeFalsy();
 });

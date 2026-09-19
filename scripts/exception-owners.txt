@@ -29,7 +29,7 @@ KindText\b api/rpc/|client/cache/|client/pane/border\.go|client/tileface/|client
 # whether there is one, deadref reads it to name a dead namespace.
 \.LinkTargetID\b api/rpc/|client/deadref/
 # reference: isLinkTile draws it, deadref classifies it, pluginhealth's
-# UnrootedLink is the launcher precondition.
+# UnrootedLink is the doorway precondition.
 \.Reference\b api/rpc/|client/deadref/|client/pluginhealth/|client/wasm/render\.go
 # The two grid-wide declarations. cache.Grid owns both, nil-safe.
 Meta\.HostContent\b client/cache/

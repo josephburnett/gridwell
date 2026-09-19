@@ -239,10 +239,10 @@ func TestDescendLinkWithNoChildGrid(t *testing.T) {
 	t.Run("health notice", func(t *testing.T) {
 		w := baseWorld(gridPane("pane1", "g1"))
 		w.Door = &DoorWorld{IsLink: true, Health: &Notice{
-			Severity: errsurface.Error, Source: "launcher:u1", Message: "files: boom"}}
+			Severity: errsurface.Error, Source: "doorway:u1", Message: "files: boom"}}
 		plan := New().Do(descendGesture("pane1", link), w)
 		r := only(t, plan, EffReport)
-		if r.Severity != errsurface.Error || r.Source != "launcher:u1" || r.Message != "files: boom" {
+		if r.Severity != errsurface.Error || r.Source != "doorway:u1" || r.Message != "files: boom" {
 			t.Fatalf("report = %+v, want pluginhealth's wording verbatim", r)
 		}
 		if len(plan.Effects) != 3 {

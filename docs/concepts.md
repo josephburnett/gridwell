@@ -49,7 +49,7 @@ here.
 | **dark** (`internal/sourcecache`, health events) | Declared, not answering right now. Fetched, reported, recovers on its own. |
 | **stale** (`Grid.Meta.Stale`) | This grid is a memory rather than an answer. One bar chip; it never moves or restyles a tile. |
 | **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
-| **broken** (`pluginhealth.Broken`) | A launcher that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
+| **broken** (`pluginhealth.Broken`) | A doorway that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
 | **unknown** | Not yet known, which is neither yes nor no. `scratch.For` and `a.gridWritable` both return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
 
 `pluginhealth.Classify` answers only for a row that can be a door: a node's

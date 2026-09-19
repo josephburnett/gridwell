@@ -92,11 +92,11 @@ const (
 	colorMenuBg     = "#16181f"
 	colorMenuItemHi = "#e8e9ee"
 	colorMuted      = "#6c6f78"
-	// Launcher tints for a non-enterable plugin (client/pluginhealth). Broken,
+	// Doorway tints for a non-enterable row (client/pluginhealth). Broken,
 	// every failure whatever the reason, takes the red alarm family; waiting
 	// takes neutral gray, because nothing has gone wrong yet.
-	colorLauncherBrokenTint  = "rgba(180, 40, 40, 0.38)"
-	colorLauncherWaitingTint = "rgba(40, 40, 46, 0.55)"
+	colorDoorwayBrokenTint  = "rgba(180, 40, 40, 0.38)"
+	colorDoorwayWaitingTint = "rgba(40, 40, 46, 0.55)"
 	// A dead link (client/deadref) is a state, not a failure, so it gets no
 	// alarm color: the veil fades the tile back toward the background, and the
 	// outline and label are redrawn muted, keeping the dash and the name.

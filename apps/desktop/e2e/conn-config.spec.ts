@@ -45,7 +45,7 @@ test('clicking a pending connection says WHY, not nothing-to-descend-into', asyn
   await expect
     .poll(async () => {
       const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-      return (errs.notices ?? []).some((n: any) => n.source === 'launcher:' + rtb.uuid);
+      return (errs.notices ?? []).some((n: any) => n.source === 'doorway:' + rtb.uuid);
     })
     .toBe(true);
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
