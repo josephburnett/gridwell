@@ -19,7 +19,8 @@ export interface PaneInfo {
   anchor: string;
   path: string[];
   textFocus: string;
-  // The pane's grid is a cache-served memory: the wire's stale bit.
+  // The pane's room is a memory: the source serving it is dark. The key keeps
+  // the older name; the client derives it (client/cache.SourceDark).
   stale?: boolean;
   textMode: string;
   cx: number;

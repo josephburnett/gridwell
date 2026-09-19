@@ -100,7 +100,7 @@ func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(before.Tiles) == 0 || before.Grid.Stale {
+	if len(before.Tiles) == 0 {
 		t.Fatalf("bad first read: %+v", before.Grid)
 	}
 	// One durable touch: the user drags notes.md somewhere. That is what
@@ -125,23 +125,17 @@ func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dark source surfaced as an error instead of the remembered answer: %v", err)
 	}
-	if !after.Grid.Stale {
-		t.Fatal("remembered answer not stamped stale")
-	}
 	if len(after.Tiles) != 1 {
 		t.Fatalf("dark source answered %d tiles, want only the touched one: %+v", len(after.Tiles), after.Tiles)
 	}
 	if got := after.Tiles[0]; got.Id != placed.Id || got.X != 7 || got.Y != 3 || got.AltText != "notes.md" {
 		t.Fatalf("the touched row drifted in the dark: %+v", got)
 	}
-	// The source returns; the stale stamp clears and every entry is back.
+	// The source returns and every entry is back.
 	lighten()
 	healed, err := v2.GetGrid(ctx, rootGrid)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if healed.Grid.Stale {
-		t.Fatal("healed source still stamped stale")
 	}
 	if len(healed.Tiles) != len(before.Tiles) {
 		t.Fatalf("healed listing = %d tiles, want the original %d", len(healed.Tiles), len(before.Tiles))

@@ -19,6 +19,12 @@ import (
 type Cache struct {
 	mu    sync.Mutex
 	grids map[string]*Grid
+	// dark is the sources whose latest health event said they are not
+	// answering, keyed by that event's uuid. It is what makes a room a
+	// memory, and it lives beside the grids because the join from a source to
+	// what it serves is ServedBy's, here. A launcher row's InfoError is the
+	// handshake's separate record of a source that would not answer then.
+	dark map[string]bool
 	// content is the one text-body store, keyed by tile id because blob ids
 	// are not routable and editing one clone must leave a sibling alone. Each
 	// entry binds its bytes to the version they derive from, so a foreign
@@ -45,13 +51,9 @@ type Grid struct {
 // how the client never learns a plugin kind.
 func (g *Grid) HostContent() bool { return g != nil && g.Meta.HostContent }
 
-// Stale reports that this grid is a remembering rather than an answer. It is
-// one bar chip and never moves or restyles a tile.
-func (g *Grid) Stale() bool { return g != nil && g.Meta.Stale }
-
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{}}
+	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{}, dark: map[string]bool{}}
 }
 
 // PutFetchedContent stores a body read from the server under the version it
@@ -238,6 +240,37 @@ func ServedBy(id, source string) bool {
 // name, which is how a read about a node rather than its contents is keyed.
 func Reaches(ns, source string) bool {
 	return source == EverySource || ns == source || rpc.ChainedThrough(ns, source)
+}
+
+// NoteHealth folds one health transition in. The empty uuid names no source
+// and is dropped rather than read as EverySource, which would call every room
+// in the client a memory.
+func (c *Cache) NoteHealth(uuid string, healthy bool) {
+	if uuid == EverySource {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if healthy {
+		delete(c.dark, uuid)
+		return
+	}
+	c.dark[uuid] = true
+}
+
+// SourceDark reports that the source serving gridID is not answering, so this
+// room is a memory rather than an answer. Derived, never stored and never on
+// the wire: darkness is one fact and the bar's chip is its projection onto
+// one room.
+func (c *Cache) SourceDark(gridID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for src := range c.dark {
+		if ServedBy(gridID, src) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResyncSet is every cached grid served through source, sorted. One owner, so

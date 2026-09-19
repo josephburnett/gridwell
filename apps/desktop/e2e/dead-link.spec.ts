@@ -91,8 +91,8 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
 });
 
 // The boundary. A plugin the node DECLARES is alive whatever state it is in,
-// so its link tiles must never grey. Health and staleness cover a declared
-// source that is down, and greying it would hide one that is coming back.
+// so its link tiles must never grey. Health covers a declared source that is
+// down, and greying it would hide one that is coming back.
 const FS_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-deadlink-'));
 
 test.describe('a declared namespace is never dead', () => {

@@ -113,9 +113,6 @@ func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the plugin is back and the read still failed: %v", err)
 	}
-	if healed.Grid.Stale {
-		t.Fatal("a live read must never wear the stale bit")
-	}
 	if len(healed.Tiles) != len(before.Tiles) {
 		t.Fatalf("healed listing = %d tiles, want the original %d", len(healed.Tiles), len(before.Tiles))
 	}
@@ -194,12 +191,8 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dark source surfaced as an error: %v", err)
 	}
-	// The rows answer, stamped stale and retiring nothing. An entry nobody
-	// touched has no row to read from and is simply absent until the source
-	// speaks again.
-	if !g.Grid.Stale {
-		t.Fatal("a rows-only answer must say so on the wire")
-	}
+	// The rows answer, retiring nothing. An entry nobody touched has no row to
+	// read from and is simply absent until the source speaks again.
 	if len(g.Tiles) != 1 {
 		t.Fatalf("dark source answered %d tiles, want only the touched one: %+v", len(g.Tiles), g.Tiles)
 	}
@@ -217,9 +210,6 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	healed, err := cl.GetGrid(ctx, rootGrid)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if healed.Grid.Stale {
-		t.Fatal("healed source still stamped stale")
 	}
 	for _, tile := range healed.Tiles {
 		if tile.Id == moved.Id && (tile.X != 9 || tile.Y != 9) {

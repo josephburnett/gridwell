@@ -425,21 +425,16 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 	return cached, nil
 }
 
-// GetGrid serves first and refreshes behind: within freshWindow and with the
-// connection not known dark the remembered answer serves as-is, otherwise it
-// serves stamped stale and kicks one background revalidation whose landing
-// emits a GridChanged. Only a miss waits on the source.
+// GetGrid serves first and refreshes behind: the remembered answer returns as
+// it was remembered, and past freshWindow or with the connection known dark
+// one background revalidation is kicked whose landing emits a GridChanged.
+// Only a miss waits on the source. Nothing on the answer says it is a memory:
+// that is the source's health, and the client derives it from there.
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if cached, fetchedAt, hit := c.loadGrid(ctx, in.GridId); hit {
-		if time.Since(time.Unix(fetchedAt, 0)) < c.window() && !c.isDark(sourceOf(in.GridId)) {
-			return cached, nil
+		if time.Since(time.Unix(fetchedAt, 0)) >= c.window() || c.isDark(sourceOf(in.GridId)) {
+			c.revalidateGrid(in.GridId)
 		}
-		// The stale bit is wire-only, never stored, so the revalidation
-		// re-stores the grid without it.
-		if cached.GetGrid() != nil {
-			cached.Grid.Stale = true
-		}
-		c.revalidateGrid(in.GridId)
 		return cached, nil
 	}
 	// A miss has nothing better than the source's word.
@@ -448,26 +443,22 @@ func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 
 // getGridLive reads one grid from the source and remembers the answer: the
 // miss path, the revalidation, and the prefetch walk, which must never be
-// answered by the rows it is warming. A stale answer is never remembered,
-// because it would overwrite the good answer it degraded from with a poorer
-// one that succeeds and that nothing but a live read would correct.
+// answered by the rows it is warming.
 func (c *Layer) getGridLive(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {
 	resp, err := c.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: gridID})
 	c.noteReachGrid(err, gridID)
 	if err != nil {
 		return nil, err
 	}
-	if !resp.GetGrid().GetStale() {
-		c.storeGrid(ctx, gridID, resp)
-	}
+	c.storeGrid(ctx, gridID, resp)
 	return resp, nil
 }
 
 // revalidateGrid refreshes one remembered grid in the background, single-flight
 // per grid id, on the layer's own context so a canceled click never kills a
 // refresh other readers want. A changed answer is stored and announced; a
-// transport failure or a stale-stamped answer changes nothing; a verdict
-// evicts, so the next read surfaces it instead of a remembered ghost.
+// transport failure changes nothing; a verdict evicts, so the next read
+// surfaces it instead of a remembered ghost.
 func (c *Layer) revalidateGrid(gridID string) {
 	c.revalMu.Lock()
 	if c.revalInflight[gridID] {
@@ -488,7 +479,7 @@ func (c *Layer) revalidateGrid(gridID string) {
 		old, _, hit := c.loadGrid(ctx, gridID)
 		resp, err := c.getGridLive(ctx, gridID)
 		switch {
-		case err == nil && !resp.GetGrid().GetStale():
+		case err == nil:
 			if !hit || !gridRespEqual(old, resp) {
 				c.emitGridChanged(gridID)
 			}

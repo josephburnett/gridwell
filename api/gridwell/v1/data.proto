@@ -40,14 +40,9 @@ message Grid {
   string scratch_grid_id = 7;
   reserved 8; // proxy_endpoint
   reserved 9; // create_schemas
-  // stale marks a remembered answer: the source could not answer, or has not
-  // confirmed this answer within the cache's freshness window, and a refresh
-  // is in flight whose GridChanged follows if it finds drift. Two node-side
-  // stampers share the meaning, internal/sourcecache on its serve-first and
-  // dark paths and a plugin adapter answering a dark source from the rows it
-  // minted. An answer already stamped stale is never remembered. Wire-only,
-  // never persisted.
-  bool stale = 12;
+  // The client derives "this room is a memory" from the health of the source
+  // serving it: one fact, client/cache.SourceDark.
+  reserved 12; // stale
   // node_ns is the namespace chain of the node serving this grid, from the
   // receiver's perspective: "" for a grid served by the node you are talking
   // to, "<transit>/<conn>" or deeper through mounts, each transit hop

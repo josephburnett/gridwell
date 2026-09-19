@@ -539,11 +539,9 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			// The tile this pane is descended into, "" when on a grid.
 			"textFocus": p.ContentID(),
 			"textMode":  p.TextMode,
-			// From the wire stale bit: what the bar's offline chip reads.
-			"stale": func() bool {
-				g, ok := a.c.Grid(a.gridIDForPane(p))
-				return ok && g.Meta.Stale
-			}(),
+			// What the bar's offline chip reads: the source serving this
+			// room is dark. The key keeps the older name the specs poll.
+			"stale": a.c.SourceDark(a.gridIDForPane(p)),
 			// Viewport center in grid cells plus zoom, so a spec can drop on
 			// a cell it knows is on-screen whatever the stored framing.
 			"cx":   p.Cx,

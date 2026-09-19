@@ -346,21 +346,21 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	// A transport-shaped failure is "not right now", not a verdict, so the
 	// adapter carries on with an empty non-authoritative listing and nothing
 	// retires. The rows are the whole remembered answer, so an entry with no
-	// row is absent for as long as the source is.
-	stale := false
+	// row is absent for as long as the source is dark.
+	dark := false
 	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Context: ckey})
 	if err != nil {
 		if !gwerr.IsTransport(err) {
 			return nil, err
 		}
-		stale, resp = true, &pluginv1.ListResponse{}
+		dark, resp = true, &pluginv1.ListResponse{}
 	}
 	if err := checkEntries(resp.Entries); err != nil {
 		return nil, err
 	}
 	// An authoritative listing is a verdict on every key, so rows it does not
 	// mention retire. An untouched entry has nothing to retire.
-	if !stale && resp.Authoritative && gid != 0 {
+	if !dark && resp.Authoritative && gid != 0 {
 		present := map[string]bool{}
 		for _, e := range resp.Entries {
 			present[e.Key] = true
@@ -372,7 +372,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	// The rows' outage snapshot follows what the source last said. A listed
 	// entry reads by the join instead, so this writes only where the source
 	// changed something.
-	if !stale && gid != 0 {
+	if !dark && gid != 0 {
 		if err := a.mem.Refresh(gid, resp.Entries); err != nil {
 			return nil, err
 		}
@@ -384,7 +384,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	// A live non-authoritative listing sweeps by arbitration: rows it did not
 	// include are probed, and only a definitive GONE retires them. An
 	// untouched entry never reaches this arm.
-	if !stale && !resp.Authoritative {
+	if !dark && !resp.Authoritative {
 		live := map[string]bool{}
 		for _, e := range resp.Entries {
 			live[e.Key] = true
@@ -421,7 +421,6 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		Id:          canonical,
 		HostContent: ci.HostContent,
 		Glyph:       ci.Glyph,
-		Stale:       stale,
 	}
 	wire, err := buildTiles(canonical, ckey, tiles, resp.Entries, a.canonicalGridID, a.mem.ContextKey)
 	if err != nil {
