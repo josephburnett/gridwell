@@ -82,7 +82,8 @@ No request carries a descent path. The server derives location from rows it
 owns. Sessions and networks never cross the wire.
 
 Wire-only fields are derived in exactly one place each. `Tile.reference`
-(this tile is a link) comes from `server.qualifyTiles`. `Tile.serves_page`,
+(this tile is a link) comes from `server.qualifyTiles`. `Tile.serves_page`
+(this url tile opens at the /content/ door, and only a url entry may say so),
 `text_presentation`, and `status_detail` come from the plugin's `Entry`
 through `pluginhost/adapter.go`. `Grid.writable`, `scratch_grid_id`, and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
@@ -251,7 +252,7 @@ second axis (`levels.go`), and it is session-only.
 
 There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
 descent lands is the tile's own declaration: a well or link pushes a frame
-onto the child grid, a text/url/shell/page tile pushes one onto the tile
+onto the child grid, a text, url or shell tile pushes one onto the tile
 itself, a pane tile descends the window a level. Every ascent hop writes
 framing back through `SetFraming` and freezes a live preview, with no claim
 and no version bump.

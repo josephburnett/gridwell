@@ -164,7 +164,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   `federation.sock`: an existing home already has them written down.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never
-  interchangeable with the cookie.
+  interchangeable with the cookie. It is either a text tile or a url tile: a
+  text tile cannot serve from the plugin, so `serves_page` rides a url entry
+  and the door refuses it on every other kind.
 
 **Experience**
 

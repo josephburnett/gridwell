@@ -3,11 +3,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-// The web-content door on a browser host. With no Electron bridge a serves_page
-// tile cannot go live in place, so the descent shows the frozen face and the bar
-// circle opens the derived /content/ address in a new tab, the same degradation
-// a url tile gets over the same code path. The door serves the image bytes
-// sandboxed and with no cookie.
+// The web-content door on a browser host. With no Electron bridge a url tile
+// cannot go live in place, so the descent shows the frozen face and the bar
+// circle opens the derived /content/ address in a new tab — the same
+// degradation, over the same code path, as a url tile at its own address. The
+// door serves the image bytes sandboxed and with no cookie.
 
 const PNG_1X1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -28,18 +28,18 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   const snap = await gw.getGrid(f.gridID);
   const cat = (snap.tiles ?? []).find((t) => t.altText === 'cat.png')!;
   expect(cat, 'the fs root grid lists cat.png').toBeTruthy();
-  expect(cat.servesPage, 'an image file declares serves_page on the wire').toBe(true);
+  expect(cat.kind, 'an image file is a url tile').toBe('url');
+  expect(cat.servesPage, 'whose page the plugin serves at the door').toBe(true);
 
   // With no bridge the tile stays frozen, through DecideAutoLive's browser arm.
   // No dead modal and no error: the pane presents the frozen face.
   await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
 
-  // A page tile has no document body, so the rendered overlay and the
-  // rendered/raw toggle, which belong to a text document, must stay hidden. The
-  // overlay would only fill once an async body fetch lands, since fs answers an
-  // image with a markdown metadata summary, so poll a window rather than
-  // sampling once.
+  // A url tile has no document body, so the rendered overlay and the
+  // rendered/raw toggle, which belong to a text document, must stay hidden.
+  // Nothing fetches a body for it at all now, but poll a window rather than
+  // sampling once: an overlay that filled late would still be a failure.
   const rendered = window.locator('#gw-rendered-view');
   const toggle = window.locator('#gw-text-toggle');
   const until = Date.now() + 3_000;

@@ -83,11 +83,14 @@ answers GONE. A `placement_hint` seeds an entry's first placement only. An
 entry's `status_detail` is one word about its state — "unread", "done" — which
 the client draws muted after the tile's name: a note on the name, never a
 second name. An entry with `serves_page` presents its `ServeContent` HTML on
-descent, sandboxed by the node. It stays a `text` entry: a `url` entry's own address
-wins over `serves_page`, and a page tile has no address to declare because
-the node derives one when the page is opened. The page is served at a
-directory URL, so an ordinary relative URL inside it comes back as
-`ServeContent` on the same key with that name as the `subpath`.
+descent, sandboxed by the node. It is a `url` entry, and only a `url` entry:
+serving a page is what that entry's address is, and the node refuses the
+declaration on any other kind. Leave `url_string` empty — the node derives the
+address when the page is opened — and serve a document body from a `text` entry
+instead if you want one, which is a second entry, not a second face on this
+one. The page is served at a directory URL, so an ordinary relative URL inside
+it comes back as `ServeContent` on the same key with that name as the
+`subpath`.
 
 ## Deletes
 

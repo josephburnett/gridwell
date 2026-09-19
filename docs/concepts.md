@@ -74,7 +74,7 @@ class, and the word says who started the write.
 |---|---|
 | **read-only** (`a.tileReadOnly`) | A text tile in a grid that is not writable: no textarea, no save, no checkbox flip, rendered face only. Nobody types into a derived body and silently re-posts it. |
 | **host_content** (`Grid.Meta.HostContent`) | Every row in this grid projects host state and gets the red "outside Gridwell" treatment. The plugin declares it, so the client never learns plugin kinds. |
-| **serves_page** | This tile's face and descent are web content served at the `/content/` door: a file whose presentation is a page, with no address of its own. A url entry that also declares it is refused at the plugin door (`acceptEntries`). |
+| **serves_page** | This url tile opens at the `/content/` door, where its plugin serves the page, instead of at an address of its own. It is either a text tile or a url tile: a text tile cannot serve from the plugin, so the plugin door (`acceptEntries`) refuses the declaration on every kind but url. |
 | **text_presentation: plain** | Verbatim preformatted text; no rendered/raw toggle. |
 | **text_presentation: both** | The tile is a document: rendered by default, with the toggle to the raw source, whether or not the tile is writable. |
 | **frozen** (`Tile.url_frozen`) | A standing user intent not to go live, on a url or a shell alike. The preview is what a frozen tile looks like; the intent is why it stays that way. Freezing is a screenshot, not a kill: the address still resolves, the tmux session still runs, and a clone taken while frozen keeps that face. The reconnect gesture is the one thing that clears it. The field name is from before a shell could be frozen. |
