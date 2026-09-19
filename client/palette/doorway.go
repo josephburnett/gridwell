@@ -21,7 +21,7 @@ func Doorways(rows []*gridwellv1.PluginInfo) []door.Place {
 		row := rows[i]
 		places := door.PlacesOf(row)
 		out = append(out, places...)
-		if len(places) == 0 && pluginhealth.Classify(row) != pluginhealth.NoDoor {
+		if _, classified := pluginhealth.Classify(row); len(places) == 0 && classified {
 			out = append(out, door.Place{Plugin: row})
 		}
 	}

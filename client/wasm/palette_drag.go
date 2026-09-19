@@ -150,7 +150,8 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
 		r.Writable, _ = a.gridWritable(t.gridID)
 		if r.Doorway {
-			r.Enterable = pluginhealth.Classify(d.item.plugin) == pluginhealth.Enterable
+			st, classified := pluginhealth.Classify(d.item.plugin)
+			r.Enterable = classified && st == pluginhealth.Enterable
 		}
 	}
 	switch palette.DropOn(r) {

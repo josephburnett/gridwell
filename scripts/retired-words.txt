@@ -20,3 +20,8 @@ viewY
 # federation= field — so it is allowed in internal/config, which owns the key,
 # and on any line that spells the socket file or the banner field.
 federation internal/config/|.*federation\.sock|.*federation=|.*`federation|.*cfg\.Federation|.*config\.FederationSocket
+# "launcher" — a well onto a place is a doorway, the word the + menu, the
+# crumbs and client/door already use; "launcher" named the same tile and said
+# nothing more. Allowed for the shadow launchers, the browser-opening scripts a
+# shell's PATH points at, which are a different thing.
+launcher internal/local/tmux/|internal/local/shellsvc/

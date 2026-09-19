@@ -22,7 +22,7 @@ func testColors() BorderColors {
 }
 
 func TestBorderColorPluginRootGridIsBlue(t *testing.T) {
-	// A pane at a plugin's root grid (no descent, not the launcher) is a
+	// A pane at a plugin's root grid (no descent, not the doorway) is a
 	// grid like any other — blue, not brown.
 	if got := BorderColor(BorderInput{}, testColors()); got != "FOCUS_FADED" {
 		t.Errorf("plugin root grid + not focused: got %q, want FOCUS_FADED", got)

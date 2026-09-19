@@ -15,7 +15,7 @@ test('a plugin that declares no doorway is healthy and shows nothing', async ({ 
   expect(noroot, 'rootless fs plugin configured').toBeTruthy();
   expect(noroot!.rootGridID, 'it declared no grid of its own').toBe('');
   expect(noroot!.infoError, 'and it answered without any Info error').toBe('');
-  expect(noroot!.status, 'answered with no doorway is healthy, not broken').toBe('nodoor');
+  expect(noroot!.status, 'a plugin is not a place, so it has no status at all').toBe('');
 
   // A node's home is where "/" means, and no plugin competes for it.
   const before = await gw.focused();
@@ -30,6 +30,6 @@ test('a plugin that declares no doorway is healthy and shows nothing', async ({ 
   expect(swatch, 'a plugin with no doorway contributes no swatch').toBeFalsy();
 
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-  const notice = errs.notices.find((n: any) => n.source === 'launcher:' + noroot!.uuid);
+  const notice = errs.notices.find((n: any) => n.source === 'doorway:' + noroot!.uuid);
   expect(notice, 'a healthy plugin reports nothing').toBeFalsy();
 });

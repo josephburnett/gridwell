@@ -130,7 +130,7 @@ func TestIsExitWell(t *testing.T) {
 		{"synthetic node, both ids empty, is not an exit well",
 			&pb.Tile{Kind: KindWell}, false},
 		// A menu swatch's exact shape: no owning grid, qualified child grid.
-		{"synthetic launcher node (empty grid_id, qualified child_grid_id) is an exit well",
+		{"synthetic doorway node (empty grid_id, qualified child_grid_id) is an exit well",
 			&pb.Tile{Kind: KindWell, ChildGridId: "plugin-uuid/1"}, true},
 	}
 	for _, c := range cases {
@@ -154,14 +154,14 @@ func TestPluginWellTile(t *testing.T) {
 		t.Errorf("PluginWellTile ChildGridID = %q, want %q", got.ChildGridId, pl.RootGridId)
 	}
 	if !IsExitWell(got) {
-		t.Errorf("PluginWellTile is not an exit well; launcher would draw an inert interior well")
+		t.Errorf("PluginWellTile is not an exit well; a doorway would draw an inert interior well")
 	}
 	// Reference is the one "this is a link" signal, and the client reads it
 	// alone. This synthetic tile never passes through the server's
 	// qualifyTiles, so it must stamp the bit itself or the menu swatch loses
 	// its dashed border.
 	if !got.Reference {
-		t.Error("PluginWellTile does not set Reference; the launcher swatch would render as owned content, not a link")
+		t.Error("PluginWellTile does not set Reference; the doorway swatch would render as owned content, not a link")
 	}
 	if got.AltText != pl.Label {
 		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)

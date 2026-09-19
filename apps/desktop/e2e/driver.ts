@@ -81,6 +81,8 @@ export interface PluginDescriptor {
   // land: empty until that grid is cached, so read it through scratchGridID().
   scratchGridID: string;
   infoError: string;
+  // The row's pluginhealth class; "" for a plugin's own row, which has none
+  // because a plugin is not a place.
   status: string;
   // The handshake's persisted view of that grid; zoom 0 means never set. The
   // server-side oracle for a root-grid reframe.

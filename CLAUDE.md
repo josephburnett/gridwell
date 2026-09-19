@@ -144,7 +144,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   a plugin that answers a root_context and NO entries gets one derived entry
   onto it, so an old binary keeps presenting. Declare both and the entries
   win; there is no privileged collection. A plugin that declares none
-  contributes nothing and is healthy (`pluginhealth.NoDoor`), not broken.
+  contributes nothing and is healthy, not broken: `pluginhealth` gives its row
+  no status at all.
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections

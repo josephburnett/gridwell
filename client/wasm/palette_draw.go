@@ -220,11 +220,11 @@ func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	if pluginhealth.UnrootedLink(n) {
 		// A row this node cannot classify gets the neutral dimming too,
 		// because not knowing yet is exactly the waiting face.
-		color := colorLauncherWaitingTint
+		color := colorDoorwayWaitingTint
 		// The local plugin list knows more: a failure gets the alarm tint.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.Id)); ok {
-			if pluginhealth.Classify(pl) == pluginhealth.Broken {
-				color = colorLauncherBrokenTint
+			if st, classified := pluginhealth.Classify(pl); classified && st == pluginhealth.Broken {
+				color = colorDoorwayBrokenTint
 			}
 		}
 		a.cctx.Set("fillStyle", color)
