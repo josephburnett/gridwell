@@ -22,6 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/events"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/menu"
@@ -961,23 +962,20 @@ func (a *App) startSSE() {
 			if a.c.Apply(ev) {
 				a.draw()
 			}
-			// A removed tile's decoded preview and its object URL must be
-			// released, or deleting tiles leaks browser image resources.
-			if r := ev.GetTileRemoved(); r != nil {
-				a.views.urlPreview.Drop(r.TileId)
-				a.views.renderedPrev.Drop(r.TileId)
+			// events.Route is the one table; this runs its arms.
+			plan := events.Route(ev)
+			if plan.DropPreviews != "" {
+				a.views.urlPreview.Drop(plan.DropPreviews)
+				a.views.renderedPrev.Drop(plan.DropPreviews)
 			}
-			// GridChanged is the one per-grid signal, so it also clears that
-			// grid's latch. Unconditional: the next descent would read stale.
-			if g := ev.GetGridChanged(); g != nil {
-				a.fetch.gridLoadFailed.Clear(g.GridId)
-				a.fetchGrid(g.GridId)
+			if plan.ClearLatch != "" {
+				a.fetch.gridLoadFailed.Clear(plan.ClearLatch)
 			}
-			// A plugin's own event stream, not this client's connection, went
-			// dark or recovered. The source is per uuid, so plugins do not
-			// clear each other.
-			if h := ev.GetPluginHealth(); h != nil {
-				a.reportPluginHealth(h)
+			if plan.Fetch != "" {
+				a.fetchGrid(plan.Fetch)
+			}
+			if plan.Health != nil {
+				a.reportPluginHealth(plan.Health)
 			}
 		}
 		stream.Close()
@@ -1104,23 +1102,20 @@ func (a *App) resolveErr(source string) {
 	a.scheduleFrame()
 }
 
-// reportPluginHealth surfaces a health transition, because a plugin's stream
-// being down means its tiles stopped updating with no other signal.
+// reportPluginHealth runs events.ReactHealth's plan for a transition: a
+// plugin's stream being down means its tiles stopped updating with no other
+// signal, and its recovery is a healed gap.
 func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
-	source := "plugin:" + h.PluginUuid
-	if h.Healthy {
-		// A recovered plugin is a healed gap for its tiles: the fan-in resumed
-		// with no backlog, so this client missed its events too.
-		a.resolveErr(source)
-		a.retryKick(true, h.PluginUuid)
-		return
+	r := events.ReactHealth(h)
+	if r.Resolve {
+		a.resolveErr(r.Source)
 	}
-	label := h.PluginUuid
-	if pl, ok := a.pluginByUUID(h.PluginUuid); ok && pl.Label != "" {
-		label = pl.Label
+	if r.Report {
+		label := h.PluginUuid
+		if pl, ok := a.pluginByUUID(h.PluginUuid); ok && pl.Label != "" {
+			label = pl.Label
+		}
+		a.reportErr(errsurface.Error, r.Source, label+": live updates stopped — "+h.Detail)
 	}
-	a.reportErr(errsurface.Error, source, label+": live updates stopped — "+h.Detail)
-	// A source going down changes what its grids are: a connection's rooms
-	// become the node's stale memory, and nothing says so until a re-read.
-	a.retryKick(true, h.PluginUuid)
+	a.retryKick(true, r.Resync)
 }

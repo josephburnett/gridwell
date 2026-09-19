@@ -38,12 +38,20 @@ type Notice struct {
 // recurring failure stays up while it recurs.
 const ExpireAfter = 10 * time.Second
 
+// pluginHealthPrefix keys a namespace's health notice; PluginHealthSource
+// spells it and Sticky reads it.
+const pluginHealthPrefix = "plugin:"
+
+// PluginHealthSource is the source a namespace's health notice lives under,
+// one per uuid, so a flapping source updates its row in place.
+func PluginHealthSource(uuid string) string { return pluginHealthPrefix + uuid }
+
 // Sticky names an ongoing condition, reported once on the transition, that
 // would otherwise expire while still true. Plugin health resolves on the
 // recovery event; the backend notice can only be dismissed. This table is the
 // one owner; report sites do not choose.
 func Sticky(source string) bool {
-	return source == "electron:backend" || strings.HasPrefix(source, "plugin:")
+	return source == "electron:backend" || strings.HasPrefix(source, pluginHealthPrefix)
 }
 
 // maxNotices is a safety valve against an unattended failure loop, not a
