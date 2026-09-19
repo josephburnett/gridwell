@@ -729,22 +729,17 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 }
 
 // ShellSessionAlive routes the per-descent probe to the namespace holding the
-// PTY. An infrastructure error reports not-alive rather than a Connect error:
-// the client only cares whether the refresh button hides.
+// PTY. With disable_shells every session is dead by design, a verdict; any
+// other failure is the owner's to answer and the client's to report.
 func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	// With disable_shells every session is unreachable by design.
 	if rt.srv.cfg.DisableShells {
 		return &pb.ShellSessionAliveResponse{Alive: false}, nil
 	}
 	c, local, _, _, err := rt.route(req.TileId)
 	if err != nil {
-		return &pb.ShellSessionAliveResponse{Alive: false}, nil
+		return nil, err
 	}
-	resp, err := c.ShellSessionAlive(ctx, &pb.ShellSessionAliveRequest{TileId: local})
-	if err != nil {
-		return &pb.ShellSessionAliveResponse{Alive: false}, nil
-	}
-	return resp, nil
+	return c.ShellSessionAlive(ctx, &pb.ShellSessionAliveRequest{TileId: local})
 }
 
 // Subscribe fans every watching namespace's change-event stream into the

@@ -377,11 +377,17 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	}
 }
 
+// ShellSessionAlive is the per-descent liveness probe. A host with no shells
+// answers dead, which is a verdict; a tmux that cannot be asked is not, and
+// answering dead for it would hide the refresh affordance with nothing said.
 func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
 	if p.shell == nil {
 		return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
 	}
-	alive, _ := p.shell.HasSession(req.TileId)
+	alive, err := p.shell.HasSession(req.TileId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	return &gridwellv1.ShellSessionAliveResponse{Alive: alive}, nil
 }
 

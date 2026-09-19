@@ -2,8 +2,10 @@ package local_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -186,13 +188,17 @@ func TestShellSessionAlive_NoShellHost(t *testing.T) {
 }
 
 // fakeStreamer is a shellsvc.Streamer stub: it reports a session is alive but
-// never opens a real PTY, so the manager can be exercised without tmux.
-type fakeStreamer struct{ alive bool }
+// never opens a real PTY, so the manager can be exercised without tmux. A
+// non-nil probeErr is the tmux that cannot be asked.
+type fakeStreamer struct {
+	alive    bool
+	probeErr error
+}
 
 func (f *fakeStreamer) OpenSession(string, tmux.Mode, uint16, uint16) (shellsvc.Session, error) {
 	return nil, nil
 }
-func (f *fakeStreamer) HasSession(string) (bool, error)    { return f.alive, nil }
+func (f *fakeStreamer) HasSession(string) (bool, error)    { return f.alive, f.probeErr }
 func (f *fakeStreamer) Kill(string) error                  { return nil }
 func (f *fakeStreamer) ListLiveTileIDs() ([]string, error) { return nil, nil }
 func (f *fakeStreamer) PaneCommand(string) (string, error) { return "", nil }
@@ -212,6 +218,22 @@ func TestShellSessionAlive_WithShellHost(t *testing.T) {
 	}
 	if !resp.Alive {
 		t.Error("expected Alive=true from the fake streamer")
+	}
+}
+
+// A tmux that cannot be asked is not a dead session. Answering dead would
+// hide the refresh affordance and say nothing; the error is the answer, and
+// the client's probe-failure notice is what reads it.
+func TestShellSessionAlive_InfrastructureErrorSurfaces(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	p := local.New(st, shellsvc.NewManager(&fakeStreamer{alive: true, probeErr: errors.New("tmux: socket refused")}))
+	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
+	if err == nil || !strings.Contains(err.Error(), "socket refused") {
+		t.Fatalf("resp=%v err=%v; an infrastructure failure must surface, not read as dead", resp, err)
 	}
 }
 
