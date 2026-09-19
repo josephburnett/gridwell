@@ -39,9 +39,9 @@ CREATE TABLE IF NOT EXISTS system (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- Keys: root_grid_id. Home's root framing is not here: it lives on its
--- root grid row, ns = '', in the same three columns every other root
--- uses.
+-- Keys: root_grid_id, plugin_uuid, scratch_grid_id, trash_grid_id. Home's
+-- root framing is not here: it lives on its root grid row, ns = '', in the
+-- same three columns every other root uses.
 `
 
 // tablesDDL is the always-current schema a fresh Open materializes. The grids,

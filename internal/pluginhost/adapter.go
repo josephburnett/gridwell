@@ -4,10 +4,11 @@
 // decision lives in the store and every content derivation in the plugin, so
 // presentation verbs terminate here and content verbs pass through.
 //
-// Listing writes nothing: a grid's answer is a join of the plugin's List with
+// Listing mints nothing: a grid's answer is a join of the plugin's List with
 // store.Namespace.Overlay, and every entry is answered under its derived
 // address (address.go), row or no row. A row appears only when the user makes
-// a durable fact about an entry, which is Adapter.mint.
+// a durable fact about an entry, which is Adapter.mint; a listing writes only
+// to the rows that exist, through the store's Refresh and Sweep.
 //
 // Outages split by whose fact is missing. A dark source costs only what the
 // source says: every minted row still reads, stamped stale, while an entry

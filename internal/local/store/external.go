@@ -16,10 +16,11 @@ package store
 // in its state_dir.
 //
 // A row exists only once the user has made a durable fact about an entry.
-// Listing writes nothing: Overlay is a read-only join, and an entry with no
-// row is answered at a placement derived by the same algorithm Mint stores. So
-// a dark source answers from the touched rows, unchanged and stamped stale,
-// and an untouched entry is simply absent until the source speaks again.
+// Listing mints nothing: Overlay is a read-only join, and an entry with no
+// row is answered at a placement derived by the same algorithm Mint stores;
+// Refresh and Sweep write only to rows that exist. So a dark source answers
+// from the touched rows, unchanged and stamped stale, and an untouched entry
+// is simply absent until the source speaks again.
 
 import (
 	"context"

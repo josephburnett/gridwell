@@ -176,10 +176,10 @@ clearing with no user gesture.
    for the transport with `transit=true`.
 9. `qualifyEvent` prepends the node id. The connection segment is already on
    the id, because the cache's own ids are `<conn>/<remote-id>`.
-10. `router.Subscribe`'s loop sends it. `App.startSSE` sees
-    a `GridChanged`, deletes `a.gridLoadFailed[gridID]` — the event is
-    the one per-grid signal that something changed, so it is also what clears
-    a verdict latch — and calls `App.fetchGrid(gridID)`. It does this
+10. `router.Subscribe`'s loop sends it. `App.startSSE` runs `events.Route`'s
+    plan for a `GridChanged`: it clears the grid's `fetch.gridLoadFailed`
+    latch — the event is the one per-grid signal that something changed, so
+    it is also what clears a verdict latch — and calls `App.fetchGrid(gridID)`. It does this
     unconditionally, for grids nobody is looking at too.
 11. The refetch re-enters `Layer.GetGrid`. The rows were re-stored moments
     ago, so the hit is inside the window; with the source not dark it serves
@@ -444,7 +444,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |
 | Live: typing survives a server outage and saves itself after restart; settled framing lands too; a swallowed grid read un-latches | `apps/desktop/e2e-web/web-outage.spec.ts` |
-| The backstop re-posts a parked write on its interval and not before, at a cadence the spec retunes | `apps/desktop/e2e-web/web-outage.spec.ts` ("a write the network swallows re-posts on the backstop interval, not before"), `client/retry/retry_test.go` |
+| The backstop re-posts a parked write on its interval and not before, at a cadence the spec retunes | `apps/desktop/e2e-web/web-outage.spec.ts` ("the backstop re-posts a parked write on its interval, not before"), `client/retry/retry_test.go` |
 | A foreign edit becomes visible, and opening/closing never stomps it | `apps/desktop/e2e/foreign-writer.spec.ts` |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
 | An older write RESPONSE is refused by the same interlock an older echo is: one door into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneDoor`, `TestUpdateTileAgesTheBodyToo` (unit) |
