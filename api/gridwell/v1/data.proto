@@ -181,9 +181,11 @@ message Tile {
   // unlinks.
   string link_target_id = 29;
 
-  // url_frozen is the user's standing freeze on a url tile: set by the
-  // explicit freeze gesture, cleared by the reconnect button. While set,
-  // descending does not auto-go-live. The transient navigate-away freeze is
+  // url_frozen is the user's standing freeze on a tile that can go live, url
+  // or shell: set by the explicit freeze gesture, cleared by the reconnect
+  // button. While set, descending does not auto-go-live, and the preview is
+  // what the tile keeps looking like. The name is from before a shell could be
+  // frozen and cannot be renamed. The transient navigate-away freeze is
   // separate and auto-revives on return. Framing-class: written by the SetTile
   // url_frozen arm only, and it never bumps version.
   bool url_frozen = 30;
@@ -604,9 +606,9 @@ message SetTileRequest {
   // bumps version. Refused for wells. optional so presence is explicit,
   // because 0 is a meaningful stored value.
   optional double content_zoom = 7;
-  // url_frozen is the user's standing freeze on a url tile. Framing: no
-  // claim, and it never bumps version. Refused for non-url tiles. optional
-  // so clearing (false) is distinct from absent.
+  // url_frozen is the user's standing freeze on a url or shell tile. Framing:
+  // no claim, and it never bumps version. Refused for a kind that cannot go
+  // live. optional so clearing (false) is distinct from absent.
   optional bool url_frozen = 8;
   reserved 9; // adopt_child_grid
 }

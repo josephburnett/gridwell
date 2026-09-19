@@ -49,7 +49,7 @@ var migrations = []migration{
 	// branch, and a url link row has url_string NULL, which the v5 branch
 	// forbade, so this is a rebuild. Old rows get NULL, their old meaning.
 	{to: 6, run: rebuildTilesForLinkTarget},
-	// v7: url_frozen, the user's standing freeze on a url tile. If-missing
+	// v7: url_frozen, the user's standing freeze. If-missing
 	// because the v6 rebuild materializes the current template.
 	{to: 7, run: addColumnIfMissingDDL("tiles", "url_frozen",
 		`ALTER TABLE tiles ADD COLUMN url_frozen INTEGER NOT NULL DEFAULT 0`)},

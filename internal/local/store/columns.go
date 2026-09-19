@@ -155,9 +155,11 @@ the CHECK gained the link branch.`,
 	},
 	{
 		name: "url_frozen", ddl: "INTEGER NOT NULL DEFAULT 0", since: 7,
-		comment: `url_frozen=1 is the user's standing freeze on a url tile: descending
-does not auto-go-live until the reconnect gesture clears it. Framing;
-it never bumps version. Added at schema v7, additive.`,
+		comment: `url_frozen=1 is the user's standing freeze on a tile that can go
+live, url or shell: descending does not auto-go-live until the
+reconnect gesture clears it, and the preview is what the tile keeps
+looking like. The name is from before a shell could be frozen.
+Framing; it never bumps version. Added at schema v7, additive.`,
 		bind: func(t *gridwellv1.Tile) any { return intBool{&t.UrlFrozen} },
 	},
 	{

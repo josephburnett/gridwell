@@ -103,7 +103,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 		return
 	}
 	if plan.Unfreeze {
-		a.postURLFrozen(t.Id, false, nil)
+		a.postFrozen(t.Id, false, nil)
 	}
 	if plan.FollowLink {
 		// The target's row is read first, since its grid is likely never
@@ -259,7 +259,7 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 	if !ok || tile.Kind != rpc.KindURL || a.possiblyEphemeral(p, tile) {
 		return
 	}
-	a.postURLFrozen(tile.Id, true, func() {
+	a.postFrozen(tile.Id, true, func() {
 		// A freeze still owed to the server is the outbox's business, so the
 		// teardown runs whatever the write did.
 		a.closeURLStream(paneID, true)
@@ -267,21 +267,21 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 	})
 }
 
-// postURLFrozen is the one dispatcher for the standing freeze intent, both
-// directions keying the same outbox entry so the last gesture wins. after
-// runs once the first attempt finishes, because the teardown must happen
-// exactly once however often the write is retried.
-func (a *App) postURLFrozen(tileID string, frozen bool, after func()) {
+// postFrozen is the one dispatcher for the standing freeze intent, for every
+// kind and both directions, keying the same outbox entry so the last gesture
+// wins. after runs once the first attempt finishes, because the teardown must
+// happen exactly once however often the write is retried.
+func (a *App) postFrozen(tileID string, frozen bool, after func()) {
 	var tile *gridwellv1.Tile
 	var once sync.Once
 	a.post(write{
-		label: "SetURLFrozen", gid: a.gridIDOfTile(tileID), id: tileID,
+		label: "SetFrozen", gid: a.gridIDOfTile(tileID), id: tileID,
 		// Its own source, because the teardown's capture reports under
 		// "urlfreeze" on the same gesture and tile.
-		source: "urlfrozen", failText: "freeze state save failed",
+		source: "frozen", failText: "freeze state save failed",
 		call: func(ctx context.Context) error {
 			var err error
-			tile, err = a.cl.SetURLFrozen(ctx, tileID, frozen)
+			tile, err = a.cl.SetFrozen(ctx, tileID, frozen)
 			return err
 		},
 		then: func() {
