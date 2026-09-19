@@ -128,7 +128,7 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		MenuEntries: []*gridwellv1.MenuEntry{{
 			Id:     "trash",
 			Label:  "trash",
-			Glyph:  "trash",
+			Glyph:  rpc.GlyphTrash,
 			GridId: trash,
 			ViewCx: trashView.Cx, ViewCy: trashView.Cy, ViewZoom: trashView.Zoom,
 		}},
