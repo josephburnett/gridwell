@@ -175,7 +175,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   per content tile — opening it elsewhere takes over.
 - Descent goes live. The frozen preview is what a tile looks like from
   outside; entering a url reopens it, entering a shell reconnects. One
-  owner decides (`shellconn.DecideAutoLive`).
+  owner decides (`shellconn.DecideAutoLive`). The freeze gesture is the
+  standing exception, for url and shell alike: it is a screenshot, so the
+  tile keeps that face, the address and the tmux session keep existing, a
+  clone taken while frozen keeps the copy, and only the reconnect clears it
+  (`client/golive`).
 - Shells ride the web door: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
