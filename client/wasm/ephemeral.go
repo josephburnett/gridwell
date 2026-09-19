@@ -140,10 +140,9 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 	})
 }
 
-// openLinkBelow handles a link opened out of a live tile. It splits the pane
-// and opens an ephemeral visit below, so the link renders beside the page it
-// came from; if the split fails the visit opens in place, so the link is
-// never silently dropped.
+// openLinkBelow handles a link opened out of a live tile: an ephemeral visit
+// in the pane pane.SplitBelowForOpen names, below the page it came from or in
+// its place, so the link is never silently dropped.
 func (a *App) openLinkBelow(paneID, url string) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
@@ -154,17 +153,15 @@ func (a *App) openLinkBelow(paneID, url string) {
 	if a.scratchOrReport(p) == "" {
 		return
 	}
-	// SplitOnSideAt splits the focused pane, and a background page can call
+	// The split is of the focused pane, and a background page can call
 	// window.open, so focus the link's pane first.
 	a.focusToPane(p)
-	newP := a.splitBelowForOpen(p)
-	if newP == p {
-		a.visitEphemeralURL(p, url)
-		return
+	target, split := a.splitBelowForOpen(p)
+	if split {
+		a.draw()
+		a.scheduleURLUpdate()
 	}
-	a.draw()
-	a.scheduleURLUpdate()
-	a.visitEphemeralURL(newP, url)
+	a.visitEphemeralURL(target, url)
 }
 
 // shellURLActivate opens a url clicked in a live shell below, exactly like a

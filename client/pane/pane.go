@@ -284,6 +284,25 @@ func (t *Tree) SetFocus(id string) error {
 	return nil
 }
 
+// SplitBelowForOpen is the one programmatic split: a link opened out of a
+// live tile and a ctrl-click descent both land in a new pane below the
+// focused one, at half its height. target is that pane, or the focused pane
+// itself when it is too short for two minimum panes, so an open never lands
+// nowhere. shedContent reports that the new pane cloned a content level: one
+// live surface per tile means the clone cannot keep the descent, so the
+// caller ascends it before opening.
+func (t *Tree) SplitBelowForOpen(r Rect) (target *Pane, split, shedContent bool) {
+	focused := t.FocusedPane()
+	if !CanSplit(SideBottom, r) {
+		return focused, false, false
+	}
+	newP, err := t.SplitOnSideAt(SideBottom, 0.5)
+	if err != nil {
+		return focused, false, false
+	}
+	return newP, true, newP.ContentID() != ""
+}
+
 // StillDescended is the moved-on guard every async descent path applies after
 // an await; nil p means closed. Existence alone is not enough, because a late
 // placement would leave a native surface over a pane that moved.

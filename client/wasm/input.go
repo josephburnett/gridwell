@@ -585,7 +585,8 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 	case gesture.ClickNone:
 		return false
 	case gesture.ClickDescendSplit:
-		a.descend(a.splitBelowForOpen(p), hit)
+		target, _ := a.splitBelowForOpen(p)
+		a.descend(target, hit)
 		return true
 	}
 	a.descend(p, hit)
@@ -639,26 +640,18 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 	return cx, cy, zoom, true
 }
 
-// splitBelowForOpen is the one programmatic split: a link opened out of a live
-// tile and a ctrl-click descent land in the same place. A pane too short for
-// two minimum panes returns p itself. The new pane sheds its inherited content
-// level, which a live view cannot duplicate, unanimated: no ascent was asked.
-func (a *App) splitBelowForOpen(p *pane.Pane) *pane.Pane {
-	if !pane.CanSplit(pane.SideBottom, paneRectFor(a, p)) {
-		return p
-	}
+// splitBelowForOpen runs pane.SplitBelowForOpen, the one programmatic split,
+// for the focused pane p. The shed ascent is unanimated: no ascent was asked.
+func (a *App) splitBelowForOpen(p *pane.Pane) (target *pane.Pane, split bool) {
 	prev := a.tree.Focus
-	newP, err := a.tree.SplitOnSideAt(pane.SideBottom, 0.5)
-	if err != nil {
-		return p
-	}
-	// SplitOnSideAt moves focus to the new pane, so the menu has to be told, or
+	target, split, shed := a.tree.SplitBelowForOpen(paneRectFor(a, p))
+	// The split moves focus to the new pane, so the menu has to be told, or
 	// it stays open on a pane that no longer has focus.
 	a.menu.TransferFocus(prev, a.tree.Focus)
-	if newP.ContentID() != "" {
-		a.ascend(newP, 1, false)
+	if shed {
+		a.ascend(target, 1, false)
 	}
-	return newP
+	return target, split
 }
 
 func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {

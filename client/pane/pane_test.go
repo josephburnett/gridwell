@@ -433,3 +433,30 @@ func TestGridNotice(t *testing.T) {
 		t.Errorf("failed = %q", got)
 	}
 }
+
+// A link out of a live tile and a ctrl-click descent open in the same place:
+// a new pane below the focused one, or the focused pane itself when it is too
+// short to split. A clone of a content descent reports that it must leave it.
+func TestSplitBelowForOpen(t *testing.T) {
+	tr := NewTree()
+	first := tr.FocusedPane()
+	first.Stack = StackAt("u/1", []string{"1"}, "")
+	short := Rect{X: 0, Y: 0, W: 400, H: 2 * MinPanePx}
+	if p, split, shed := tr.SplitBelowForOpen(short); p != first || split || shed || tr.Count() != 1 {
+		t.Fatalf("too short: (%v, %v, %v) with %d panes, want the focused pane and no split", p.ID, split, shed, tr.Count())
+	}
+	tall := Rect{X: 0, Y: 0, W: 400, H: 10 * MinPanePx}
+	p, split, shed := tr.SplitBelowForOpen(tall)
+	if !split || shed || p == first || tr.Focus != p.ID || tr.Count() != 2 {
+		t.Fatalf("tall grid pane: (%v, %v, %v) focus=%s panes=%d", p.ID, split, shed, tr.Focus, tr.Count())
+	}
+	if p.Anchor() != "u/1" || len(p.Path()) != 1 {
+		t.Fatalf("the new pane is not a clone of the place: %+v", p.Stack)
+	}
+	// A content descent is cloned too, and the clone must shed it.
+	p.Push(Frame{Door: "77", Content: true, Zoom: 1})
+	q, split, shed := tr.SplitBelowForOpen(tall)
+	if !split || !shed || q.ContentID() != "77" {
+		t.Fatalf("content clone: (%v, %v, %v) content=%q", q.ID, split, shed, q.ContentID())
+	}
+}
