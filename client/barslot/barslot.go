@@ -53,6 +53,23 @@ type Input struct {
 	Durable bool
 }
 
+// String is the mode's name, the one spelling of it outside this package.
+func (m Mode) String() string {
+	switch m {
+	case ModeURLBack:
+		return "back"
+	case ModeGoLive:
+		return "golive"
+	case ModeURLOpenTab:
+		return "opentab"
+	case ModeFreeze:
+		return "freeze"
+	case ModePlus:
+		return "plus"
+	}
+	return "nothing"
+}
+
 // Decide tests URLDescent before ShellDescent. The two cannot both be true, a
 // shell tile not being web content, but the priority is fixed here rather than
 // in each caller's arm order.

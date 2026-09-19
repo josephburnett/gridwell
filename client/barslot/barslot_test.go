@@ -129,3 +129,19 @@ func TestDecideGridIgnoresDescentFacts(t *testing.T) {
 		t.Fatalf("Decide(no descent) = %v, want %v", got, ModePlus)
 	}
 }
+
+// The e2e asserts the circle by name, so a mode with no name of its own would
+// read there as another mode's affordance.
+func TestModeNames(t *testing.T) {
+	seen := map[string]bool{}
+	for m := ModeNothing; m <= ModePlus; m++ {
+		name := m.String()
+		if name == "" || (name == "nothing" && m != ModeNothing) {
+			t.Errorf("mode %d has no name of its own (%q)", int(m), name)
+		}
+		if seen[name] {
+			t.Errorf("mode %d repeats the name %q", int(m), name)
+		}
+		seen[name] = true
+	}
+}
