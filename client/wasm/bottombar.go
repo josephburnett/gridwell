@@ -40,25 +40,25 @@ func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
 func (a *App) barTheme() (band, button string) {
 	p := a.tree.FocusedPane()
 	if p == nil {
-		return colorBg, colorFocusBorder
+		return a.pal.Bg, a.pal.FocusBorder
 	}
 	g, gridOK := a.c.Grid(a.gridIDForPane(p))
 	in := a.borderInputFor(p, g, gridOK, true, a.urlViewFor(p.ID) != nil)
 	switch pane.FamilyOf(in) {
 	case pane.FamilyText:
-		return "#1b2213", colorMarkdownLine
+		return a.pal.BarTextBand, a.pal.MarkdownLine
 	case pane.FamilyURL:
-		return colorURLFill, colorURLLine
+		return a.pal.URLFill, a.pal.URLLine
 	case pane.FamilyURLLive:
-		return colorURLFill, colorURLLiveLine
+		return a.pal.URLFill, a.pal.URLLiveLine
 	case pane.FamilyShell:
-		return colorShellFill, colorShellBorder
+		return a.pal.ShellFill, a.pal.ShellBorder
 	case pane.FamilyExit:
-		return "#241e12", colorPluginBorder
+		return a.pal.BarPluginBand, a.pal.PluginBorder
 	case pane.FamilyEphemeral:
-		return "#1d1f24", colorEphemeralBorder
+		return a.pal.BarEphemeralBand, a.pal.EphemeralBorder
 	}
-	return "#151b2e", colorFocusBorder
+	return a.pal.BarGridBand, a.pal.FocusBorder
 }
 
 // navCrumb is pane.NavCrumb; navChain is the stack's NavChain for the
@@ -132,9 +132,9 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 	x := bx + bw - wsbar.SlotW - chipW - 8
 	y := top + (wsbar.RowH-chipH)/2
 	c := a.cctx
-	c.Set("fillStyle", "#8a6d2f")
+	c.Set("fillStyle", a.pal.CachedChipBg)
 	c.Call("fillRect", x, y, chipW, chipH)
-	c.Set("fillStyle", "#f4e3b2")
+	c.Set("fillStyle", a.pal.CachedChipFg)
 	c.Set("font", "10px system-ui, sans-serif")
 	c.Set("textAlign", "center")
 	c.Set("textBaseline", "middle")
@@ -147,9 +147,9 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	c := a.cctx
 	if level == a.ws.Depth() {
-		c.Set("fillStyle", colorPaneTileBorder)
+		c.Set("fillStyle", a.pal.PaneTileBorder)
 	} else {
-		c.Set("fillStyle", "#1d4a4a")
+		c.Set("fillStyle", a.pal.PaneTileCrumbIdle)
 	}
 	c.Call("fillRect", s.X+2, top+3, s.W-4, wsbar.RowH-6)
 	label := ""
@@ -159,7 +159,7 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	if label == "" {
 		label = "workspace"
 	}
-	c.Set("fillStyle", "#dff4f4")
+	c.Set("fillStyle", a.pal.BarInk)
 	withClip(c, s.X+2, top, s.W-4, wsbar.RowH, func() {
 		c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
 	})
@@ -207,9 +207,9 @@ func (a *App) drawBarTitle(top float64) {
 		return
 	}
 	c := a.cctx
-	color := "#dff4f4"
+	color := a.pal.BarInk
 	if muted {
-		color = colorMuted
+		color = a.pal.Muted
 	}
 	c.Set("fillStyle", color)
 	c.Set("font", "12px system-ui, sans-serif")
@@ -355,10 +355,10 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 		if cr.Anchor != "" {
 			// A root crumb: the namespace's identity glyph, the same drawing
 			// as its menu swatch.
-			c.Set("fillStyle", colorBg)
+			c.Set("fillStyle", a.pal.Bg)
 			c.Call("fillRect", x, y, side, side)
 			a.drawPluginGlyph(a.pluginGlyph(cr.Anchor), x, y, side, side)
-			c.Set("strokeStyle", colorFocusBorder)
+			c.Set("strokeStyle", a.pal.FocusBorder)
 			c.Set("lineWidth", 1.0)
 			c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)
 		} else if t := a.chainCrumbTile(cr); t != nil {
@@ -370,7 +370,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 		} else {
 			// The row is not cached, so draw a placeholder; the fetch kicked
 			// by chainCrumbTile fills it in.
-			c.Set("strokeStyle", "#1d4a4a")
+			c.Set("strokeStyle", a.pal.PaneTileCrumbIdle)
 			c.Set("lineWidth", 1.0)
 			c.Call("strokeRect", x+1, y+1, side-2, side-2)
 		}

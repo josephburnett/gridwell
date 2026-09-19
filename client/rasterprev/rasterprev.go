@@ -16,12 +16,14 @@ func Bucket(contentW float64) float64 {
 }
 
 // Key identifies one raster. Version is the tile's, so new bytes never draw
-// the old picture; Org is part of the identity because it picks the renderer.
+// the old picture; Org is part of the identity because it picks the renderer,
+// and Theme because the document is rasterized in the colors on screen.
 type Key struct {
 	TileID  string
 	Version int64
 	Bucket  float64
 	Org     bool
+	Theme   string
 }
 
 // Raster is the loaded image handle the renderer draws.

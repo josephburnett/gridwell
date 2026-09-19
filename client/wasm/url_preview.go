@@ -19,8 +19,8 @@ import (
 // drawImageContain draws img with object-fit: contain semantics. A preview is
 // always shown whole, never cover-cropped, so a radically different aspect
 // ratio still reads as what it is.
-func drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
-	c.Set("fillStyle", "#000")
+func (a *App) drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
+	c.Set("fillStyle", a.pal.PreviewLetterbox)
 	c.Call("fillRect", x, y, w, h)
 	iw := img.Get("naturalWidth").Float()
 	ih := img.Get("naturalHeight").Float()
@@ -41,7 +41,7 @@ func (a *App) drawPreviewFace(n *gridwellv1.Tile, x, y, w, h float64, fill strin
 	a.cctx.Call("fillRect", x, y, w, h)
 	if cached, ok := a.views.urlPreview.Get(rpc.ContentID(n), blobID); ok {
 		if img, ok := previewImage(cached); ok {
-			drawImageContain(a.cctx, img, x, y, w, h)
+			a.drawImageContain(a.cctx, img, x, y, w, h)
 		}
 		return
 	}
@@ -54,7 +54,7 @@ func (a *App) drawPreviewPlaceholder(label string, x, y, w, h float64) {
 	if w <= 20 || h <= 20 {
 		return
 	}
-	a.cctx.Set("fillStyle", colorMuted)
+	a.cctx.Set("fillStyle", a.pal.Muted)
 	a.cctx.Set("font", "12px monospace")
 	a.cctx.Call("fillText", label, x+8, y+18, w-16)
 }
@@ -66,10 +66,10 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 	// The native view paints over this box, so the JPEG here shows while it
 	// is parked during a gesture. Bounds are syncURLViews'.
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, preview.BlobKey(n), func() {
+		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, preview.BlobKey(n), func() {
 			a.fetchURLPreview(rpc.ContentID(n), preview.BlobKey(n))
 			label := urlTileLabel(n)
-			a.cctx.Set("fillStyle", colorMuted)
+			a.cctx.Set("fillStyle", a.pal.Muted)
 			a.cctx.Set("font", "16px monospace")
 			a.cctx.Call("fillText", label, x+16, y+32, w-32)
 		})
@@ -81,7 +81,7 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 // positioned for the frame.
 func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h float64) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", colorShellFill)
+		a.cctx.Set("fillStyle", a.pal.ShellFill)
 		a.cctx.Call("fillRect", x, y, w, h)
 
 		if cached, ok := a.views.urlPreview.Get(rpc.ContentID(n), n.PreviewBlobId); ok {
@@ -98,7 +98,7 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h f
 		} else if !a.hasShellStream(p.ID) {
 			// No preview and no live stream: show the glyph so the descent
 			// reads as a frozen shell rather than a blank box.
-			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
+			drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder)
 		}
 	})
 }
@@ -107,17 +107,17 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h f
 // because bash runs outside Gridwell's data world.
 func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, colorShellFill, n.PreviewBlobId, func() {
+		a.drawPreviewFace(n, x, y, w, h, a.pal.ShellFill, n.PreviewBlobId, func() {
 			if n.PreviewBlobId != 0 {
 				a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 			} else if w > 20 && h > 20 {
 				// A palette drop never refreshed, so paint the glyph rather
 				// than a blank box.
-				drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
+				drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder)
 			}
 		})
 
-		strokeTileFrame(a.cctx, x, y, w, h, colorShellBorder, dashed, selected)
+		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.ShellBorder, dashed, selected)
 	})
 }
 
@@ -127,12 +127,12 @@ func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, da
 func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
 		key := preview.BlobKey(n)
-		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, key, func() {
+		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, key, func() {
 			a.drawPreviewPlaceholder(urlTileLabel(n), x, y, w, h)
 			a.fetchURLPreview(rpc.ContentID(n), key)
 		})
 
-		strokeTileFrame(a.cctx, x, y, w, h, colorURLLine, dashed, selected)
+		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.URLLine, dashed, selected)
 	})
 }
 

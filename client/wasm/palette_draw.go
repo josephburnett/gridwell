@@ -73,13 +73,13 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 	band, button := a.barTheme()
 	bg := button
 	if hot {
-		bg = colorPlusBgDelete
+		bg = a.pal.PlusBgDelete
 	}
 	a.cctx.Set("fillStyle", bg)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, plusButtonRadius, 0, 2*math.Pi)
 	a.cctx.Call("fill")
-	a.cctx.Set("strokeStyle", "#dff4f4")
+	a.cctx.Set("strokeStyle", a.pal.BarInk)
 	if a.menu.OpenOn(p.ID) {
 		a.cctx.Set("lineWidth", 2.0)
 	} else {
@@ -90,7 +90,7 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 
 	if deleting {
 		side := plusButtonRadius * 1.4
-		drawTrashcanIcon(a.cctx, cx-side/2, cy-side/2, side, side)
+		a.drawTrashcanIcon(a.cctx, cx-side/2, cy-side/2, side, side)
 		return
 	}
 
@@ -121,9 +121,9 @@ func (a *App) paletteTileRect(p *pane.Pane, i int) (x, y, w, h float64) {
 // strip when there is one, plugins on top, then the primitives.
 func (a *App) drawPalette(p *pane.Pane) {
 	mx, my, mw, mh := a.paletteRect(p)
-	a.cctx.Set("fillStyle", colorMenuBg)
+	a.cctx.Set("fillStyle", a.pal.MenuBg)
 	a.cctx.Call("fillRect", mx, my, mw, mh)
-	a.cctx.Set("strokeStyle", colorPaneBorder)
+	a.cctx.Set("strokeStyle", a.pal.PaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
 	items, show := a.paletteView(p)
@@ -141,7 +141,7 @@ func (a *App) drawPalette(p *pane.Pane) {
 // pointing the way the press moves the section. A band and never a swatch, so
 // nothing invites the drag a template tile takes.
 func (a *App) drawPaletteToggle(r pane.Rect, c palette.Chevron) {
-	a.cctx.Set("fillStyle", colorPlusBg)
+	a.cctx.Set("fillStyle", a.pal.PlusBg)
 	a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
@@ -151,7 +151,7 @@ func (a *App) drawPaletteToggle(r pane.Rect, c palette.Chevron) {
 	if c == palette.ChevronDown {
 		dy = -dy
 	}
-	a.cctx.Set("strokeStyle", colorPlusFg)
+	a.cctx.Set("strokeStyle", a.pal.PlusFg)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("moveTo", cx-halfW, cy-dy)
@@ -170,9 +170,9 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		// A plugin swatch is the linked well it drops into a grid, dashed
 		// because a cross-plugin link can be unlinked. Drawn identically
 		// here, as the drag ghost, and once dropped.
-		a.cctx.Set("fillStyle", colorBg)
+		a.cctx.Set("fillStyle", a.pal.Bg)
 		a.cctx.Call("fillRect", x, y, w, h)
-		strokeTileFrame(a.cctx, x, y, w, h, colorFocusBorder, true /* dashed */, false /* selected */)
+		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, true /* dashed */, false /* selected */)
 		a.drawPluginGlyph(door.RowGlyph(item.plugin), x, y, w, h)
 		a.drawTileBannerLabel(n, x, y, w, h, false)
 		// A broken or waiting plugin gets the same health tint its link
@@ -180,13 +180,13 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		a.drawPluginHealthTint(n, x, y, w, h)
 	} else {
 		outside := tileface.Outside(n, false)
-		drawNode(a.cctx, n, x, y, w, h, false, outside, tileBorderPx, false)
+		a.drawNode(a.cctx, n, x, y, w, h, false, outside, tileBorderPx, false)
 		if pr, ok := primitiveFor(item.primitive); ok {
 			pr.glyph(a, x, y, w, h)
 		}
 	}
 	if hovered {
-		drawSelectedTileOutline(a.cctx, x, y, w, h)
+		a.drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
 }
 
@@ -197,17 +197,17 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 	switch glyph {
 	case rpc.GlyphFolder:
-		drawFolderGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		drawFolderGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	case rpc.GlyphProcess:
-		drawProcessGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		drawProcessGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	case rpc.GlyphWell:
-		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		drawWellGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	case rpc.GlyphTrash:
-		drawTrashGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		drawTrashGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	default:
 		// rpc.GlyphGlobe, declared by every connection, and equally any name
 		// this client does not know.
-		drawGlobeGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		drawGlobeGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	}
 }
 
@@ -220,11 +220,11 @@ func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	if pluginhealth.UnrootedLink(n) {
 		// A row this node cannot classify gets the neutral dimming too,
 		// because not knowing yet is exactly the waiting face.
-		color := colorDoorwayWaitingTint
+		color := a.pal.DoorwayWaitingTint
 		// The local plugin list knows more: a failure gets the alarm tint.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.Id)); ok {
 			if st, classified := pluginhealth.Classify(pl); classified && st == pluginhealth.Broken {
-				color = colorDoorwayBrokenTint
+				color = a.pal.DoorwayBrokenTint
 			}
 		}
 		a.cctx.Set("fillStyle", color)

@@ -73,7 +73,7 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 		return
 	}
 
-	a.cctx.Set("strokeStyle", colorMuted)
+	a.cctx.Set("strokeStyle", a.pal.Muted)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Set("lineCap", "round")
 	a.cctx.Set("lineJoin", "round")
@@ -105,7 +105,7 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	// special, since go-live lives in the bar slot.
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
-	drawSwapGlyph(a.cctx, cx, cy, 16, colorMuted)
+	drawSwapGlyph(a.cctx, cx, cy, 16, a.pal.Muted)
 
 	endGlyph(a.cctx)
 }
@@ -158,8 +158,8 @@ func (a *App) drawTileHotspotOverlay(rd *rightDragState) {
 	innerL := left + tw
 	innerT := top + th
 
-	a.cctx.Set("strokeStyle", colorMuted)
-	a.cctx.Set("fillStyle", colorMuted)
+	a.cctx.Set("strokeStyle", a.pal.Muted)
+	a.cctx.Set("fillStyle", a.pal.Muted)
 	a.cctx.Set("lineWidth", 1.0)
 
 	// No internal 3x3 grid lines: the outer band is one continuous zone, not
@@ -229,7 +229,7 @@ func (a *App) drawTileResizePreview(rd *rightDragState) {
 	cellSize := cellPx * rd.tilePane.Zoom
 	w := float64(rd.tileNewW) * cellSize
 	h := float64(rd.tileNewH) * cellSize
-	a.cctx.Set("strokeStyle", colorTileResize)
+	a.cctx.Set("strokeStyle", a.pal.TileResize)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("setLineDash", jsArray(6, 4))
 	a.cctx.Call("strokeRect", left, top, w, h)
@@ -272,7 +272,7 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 	g, gridOK := a.c.Grid(gid)
 	urlLive := a.urlViewFor(host.ID) != nil
 
-	color := colorSplitInactive
+	color := a.pal.SplitInactive
 	if active {
 		color = a.paneBorderColorFor(host, g, gridOK, true /* focused */, urlLive)
 	}
@@ -286,7 +286,7 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 	}
 	// A dark casing, so the line stays visible against the grey
 	// markdown-preview background. Same path, stroked twice.
-	a.cctx.Set("strokeStyle", "rgba(0,0,0,0.55)")
+	a.cctx.Set("strokeStyle", a.pal.ScrimStroke)
 	a.cctx.Set("lineWidth", 4.5)
 	a.cctx.Call("stroke")
 	a.cctx.Set("strokeStyle", color)
@@ -298,7 +298,7 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 // drawSplitAxisHint paints two opposing arrows along the split's axis at the
 // grab point: drag either way to open a new pane on that side.
 func (a *App) drawSplitAxisHint(r pane.Rect, rd *rightDragState) {
-	a.cctx.Set("strokeStyle", colorMuted)
+	a.cctx.Set("strokeStyle", a.pal.Muted)
 	a.cctx.Set("lineWidth", 1.0)
 	arm := math.Min(r.W, r.H) * 0.12
 	if rd.splitAxis == pane.Horizontal {
@@ -323,7 +323,7 @@ func (a *App) drawSwapPreview(rd *rightDragState) {
 	y1 := originRect.Y + originRect.H/2
 
 	// Faint, so the origin pane's content stays readable.
-	a.cctx.Set("strokeStyle", colorMuted)
+	a.cctx.Set("strokeStyle", a.pal.Muted)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("setLineDash", jsArray(4, 4))
 	a.cctx.Call("strokeRect",
@@ -335,13 +335,13 @@ func (a *App) drawSwapPreview(rd *rightDragState) {
 	activeTarget := ok && destPane.ID != rd.originPaneID
 	if !activeTarget {
 		// No destination yet, so just the gesture identity.
-		drawSwapGlyph(a.cctx, rd.curX, rd.curY, 18, colorMuted)
+		drawSwapGlyph(a.cctx, rd.curX, rd.curY, 18, a.pal.Muted)
 		return
 	}
 	x2 := destRect.X + destRect.W/2
 	y2 := destRect.Y + destRect.H/2
-	a.cctx.Set("strokeStyle", colorSwapArrow)
-	a.cctx.Set("fillStyle", colorSwapArrow)
+	a.cctx.Set("strokeStyle", a.pal.SwapArrow)
+	a.cctx.Set("fillStyle", a.pal.SwapArrow)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("moveTo", x1, y1)
@@ -398,7 +398,7 @@ func (a *App) drawResizeAxisPreview(ax *leftResizeAxis) {
 	}
 	aRect, _ := pane.SplitRect(r, ax.splitDir, ax.targetSplit.Ratio)
 	// A grey band along the shared edge, plus a double-headed arrow.
-	a.cctx.Set("strokeStyle", colorMuted)
+	a.cctx.Set("strokeStyle", a.pal.Muted)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("setLineDash", jsArray(4, 4))
 	a.cctx.Call("beginPath")
@@ -430,24 +430,24 @@ func (a *App) drawResizeAxisPreview(ax *leftResizeAxis) {
 		return
 	}
 	for _, rr := range pane.SegmentRects(root, rootRect, ax.targetSplit, red) {
-		strokeTileBorder(a.cctx, rr.X, rr.Y, rr.W, rr.H, colorCloseWarn, paneBorderPx)
+		strokeTileBorder(a.cctx, rr.X, rr.Y, rr.W, rr.H, a.pal.CloseWarn, paneBorderPx)
 	}
 	a.cctx.Set("lineWidth", 1.0)
 }
 
 // drawGhostNoEntryBadge paints the "no entry" sign over a ghost whose drop
 // would be rejected.
-func drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
+func (a *App) drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
 	radius := size * 0.32
 	if radius < 14 {
 		radius = 14
 	}
 	ringW := radius * 0.18
-	c.Set("fillStyle", colorNoEntryFill)
+	c.Set("fillStyle", a.pal.NoEntryFill)
 	c.Call("beginPath")
 	c.Call("arc", cx, cy, radius, 0.0, 2*math.Pi, false)
 	c.Call("fill")
-	c.Set("strokeStyle", colorNoEntryStroke)
+	c.Set("strokeStyle", a.pal.NoEntryStroke)
 	c.Set("lineWidth", ringW)
 	c.Call("beginPath")
 	c.Call("arc", cx, cy, radius-ringW/2-1, 0.0, 2*math.Pi, false)
@@ -466,14 +466,14 @@ func drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
 // drawGhostLinkBadge paints the chain-link glyph over a ghost whose drop
 // would create a cross-plugin link, so the ghost teaches that a left-drag
 // links rather than copies.
-func drawGhostLinkBadge(c js.Value, cx, cy, size float64) {
+func (a *App) drawGhostLinkBadge(c js.Value, cx, cy, size float64) {
 	stroke := size * 0.10
 	if stroke < 2 {
 		stroke = 2
 	}
 	r := size * 0.20
 	off := r * 0.55
-	c.Set("strokeStyle", colorPlusFg)
+	c.Set("strokeStyle", a.pal.PlusFg)
 	c.Set("lineWidth", stroke)
 	c.Call("beginPath")
 	c.Call("arc", cx-off, cy, r, 0.0, 2*math.Pi, false)

@@ -178,7 +178,7 @@ func drawShellGlyph(c js.Value, x, y, w, h float64, color string) {
 
 // drawTrashcanIcon paints a trash glyph in pure strokes, so it stays legible
 // at every size the ghost shrinks to.
-func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
+func (a *App) drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 	// A margin, so the can does not touch the bounding rect.
 	mx := w * 0.18
 	my := h * 0.12
@@ -188,8 +188,8 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 	bottom := y + h - my
 	bodyTop := top + (bottom-top)*0.22
 	lidHeight := (bodyTop - top) * 0.55
-	c.Set("strokeStyle", colorMenuItemHi)
-	c.Set("fillStyle", colorMenuItemHi)
+	c.Set("strokeStyle", a.pal.MenuItemHi)
+	c.Set("fillStyle", a.pal.MenuItemHi)
 	lw := math.Max(1.5, math.Min(w, h)/22)
 	c.Set("lineWidth", lw)
 

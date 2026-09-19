@@ -824,7 +824,7 @@ func (a *App) thRawRows(js.Value, []js.Value) any {
 		return -1
 	}
 	src := a.overlays.textTextarea.Get("value").String()
-	st := defaultMarkdownStyle()
+	st := a.defaultMarkdownStyle()
 	scale := a.textScaleFor(p)
 	setFont(a.cctx, st.codePx*scale, st.monospace, false)
 	m := a.cctx.Call("measureText", "M")

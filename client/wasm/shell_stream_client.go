@@ -190,7 +190,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	style := container.Get("style")
 	style.Set("position", "absolute")
 	style.Set("display", "block")
-	style.Set("background", "#0c0d11")
+	style.Set("background", a.pal.Bg)
 	style.Set("zIndex", "5")
 	style.Set("overflow", "hidden")
 	// Off-screen until syncShellOverlayPosition places it, so no 0x0 terminal
@@ -286,11 +286,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// No convertEol: the PTY's ONLCR already delivers CRLF, and with it set
 	// xterm snaps to column 0 on every bare LF, scattering scroll-region output.
 	opts.Set("cursorBlink", true)
-	theme := js.Global().Get("Object").New()
-	theme.Set("background", "#0c0d11")
-	theme.Set("foreground", "#d8d9de")
-	theme.Set("cursor", "#c87a5a")
-	opts.Set("theme", theme)
+	opts.Set("theme", a.termTheme())
 	term := Terminal.New(opts)
 
 	// Unicode 11 widths: the default Unicode 6 table gives modern emoji the
@@ -579,6 +575,16 @@ func (a *App) mirrorLiveShells() {
 		}
 		a.views.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.draw() })
 	}
+}
+
+// termTheme is xterm's palette, the same three roles the canvas paints with.
+// A live terminal is restyled by assigning this to term.options.theme.
+func (a *App) termTheme() js.Value {
+	th := js.Global().Get("Object").New()
+	th.Set("background", a.pal.Bg)
+	th.Set("foreground", a.pal.TextFg)
+	th.Set("cursor", a.pal.ShellCursor)
+	return th
 }
 
 // closeShellStream is the freeze path: capture a JPEG, post it, end the stream.

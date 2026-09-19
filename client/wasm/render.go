@@ -25,86 +25,6 @@ import (
 )
 
 const (
-	colorBg          = "#0c0d11"
-	colorFileInnerBg = "#1c1f26"
-	// Error rows read as alarm; Info rows, an expected reconciliation, take the
-	// focus-blue family so they read as a note.
-	colorErrStripBg    = "#3a1216"
-	colorErrStripText  = "#ff9a9a"
-	colorInfoStripBg   = "#16203a"
-	colorInfoStripText = "#9ab0ff"
-	colorPaneBorder    = "#1f2229"
-	colorFocusBorder   = "#4a6fff"
-	// colorFocusBorderFaded is the outline for a descended but unfocused pane,
-	// so the focused one pops while the others stay visibly inside something.
-	colorFocusBorderFaded = "#2c3d70"
-	// colorPluginBorder is the warm brown of plugin and host identity: an
-	// earth-tone ground reading as a boundary, not a grid you can place in.
-	colorPluginBorder      = "#7a6a4a"
-	colorPluginBorderFaded = "#4a4233"
-	// colorPluginFill is host content's body, so it does not read as editable.
-	colorPluginFill = "#2a2419"
-	// Grid lines are uniformly blue: every grid is a grid, whatever owns it.
-	colorGridLineInterior = "#1c2540"
-	// Each kind has its own identity: text olive green, url purple.
-	colorMarkdownFill      = "#2c3a1a"
-	colorMarkdownLine      = "#8aa05a"
-	colorMarkdownLineFaded = "#4a5a3a"
-	colorURLFill           = "#2b1a3a"
-	colorURLLine           = "#7a5a9a"
-	colorURLLineFaded      = "#4a3a5a"
-	// colorURLLiveLine is a url tile with a native view attached: the same
-	// purple, brighter, and its faded variant stays brighter than the frozen
-	// one, so live against frozen reads across unfocused panes.
-	colorURLLiveLine      = "#a07acc"
-	colorURLLiveLineFaded = "#5c4478"
-	// colorShellBorder: bash runs outside Gridwell's data world, so it gets its
-	// own warm hue, not plugin brown.
-	colorShellBorder      = "#d4863a"
-	colorShellBorderFaded = "#6e4a22"
-	// colorShellFill is the body behind a shell tile's preview or glyph.
-	colorShellFill = "#2e220f"
-
-	// Pane tiles: teal, a hue no other kind uses.
-	colorPaneTileFill   = "#10282b"
-	colorPaneTileBorder = "#3aa8a8"
-	// colorEphemeralBorder overrides the kind color, because ascending deletes
-	// the tile, a shell's tmux session included, and the border is the warning.
-	colorEphemeralBorder      = "#8b8e96"
-	colorEphemeralBorderFaded = "#4b4d52"
-	// colorSourceLabelBg is dark enough that a label reads over any preview.
-	colorSourceLabelBg = "rgba(20, 12, 8, 0.78)"
-	// colorNoEntry{Fill,Stroke} draw the no-entry badge on a rejected drop.
-	colorNoEntryFill   = "#c93030"
-	colorNoEntryStroke = "#f6f6f6"
-	colorLocked        = "#26262a"
-	colorSelected      = "#e3b16f"
-	// colorTrace is brighter than the gold selection, so both can show at once.
-	colorTrace    = "#ffd94a"
-	colorEdgeDot  = "#5a6a8a"
-	colorPlusBg   = "#23252d"
-	colorPlusBgHi = "#2d3140"
-	// colorPlusBgDelete confirms that a release over the trashcan deletes.
-	colorPlusBgDelete = "#6e2b22"
-	colorPlusFg       = "#c8c9ce"
-	// colorNoLiveFg dims the slashed go-live glyph where caps.LiveURL is false.
-	colorNoLiveFg   = "#787b84"
-	colorMenuBg     = "#16181f"
-	colorMenuItemHi = "#e8e9ee"
-	colorMuted      = "#6c6f78"
-	// Doorway tints for a non-enterable row (client/pluginhealth). Broken,
-	// every failure whatever the reason, takes the red alarm family; waiting
-	// takes neutral gray, because nothing has gone wrong yet.
-	colorDoorwayBrokenTint  = "rgba(180, 40, 40, 0.38)"
-	colorDoorwayWaitingTint = "rgba(40, 40, 46, 0.55)"
-	// A dead link (client/deadref) is a state, not a failure, so it gets no
-	// alarm color: the veil fades the tile back toward the background, and the
-	// outline and label are redrawn muted, keeping the dash and the name.
-	colorDeadLinkVeil = "rgba(12, 13, 17, 0.72)"
-	colorDeadLink     = "#5c5f68"
-)
-
-const (
 	// paneBorderPx is the inset around a pane's live content view. It is
 	// load-bearing: the strip between two live-tile panes is the only surface
 	// that can grab the divider, since a WebContentsView eats input over its own.
@@ -150,8 +70,8 @@ func previewBorderPxFor(previewCell float64) float64 {
 
 // drawSelectedTileOutline sits just outside the cell, so it is independent of
 // the kind-specific border.
-func drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
-	c.Set("strokeStyle", colorSelected)
+func (a *App) drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
+	c.Set("strokeStyle", a.pal.Selected)
 	c.Set("lineWidth", 2.0)
 	c.Call("strokeRect", x-1, y-1, w+2, h+2)
 	c.Set("lineWidth", 1.0)
@@ -159,7 +79,7 @@ func drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
 
 // strokeTileFrame is the coda every full-size tile renderer ends with, in one
 // order for all of them, so no renderer can drift into a different one.
-func strokeTileFrame(c js.Value, x, y, w, h float64, color string, dashed, selected bool) {
+func (a *App) strokeTileFrame(c js.Value, x, y, w, h float64, color string, dashed, selected bool) {
 	if dashed {
 		setTileDash(c)
 	}
@@ -168,7 +88,7 @@ func strokeTileFrame(c js.Value, x, y, w, h float64, color string, dashed, selec
 		clearTileDash(c)
 	}
 	if selected {
-		drawSelectedTileOutline(c, x, y, w, h)
+		a.drawSelectedTileOutline(c, x, y, w, h)
 	}
 }
 
@@ -178,20 +98,20 @@ func (a *App) drawDeadLinkFace(n *gridwellv1.Tile, x, y, w, h float64) {
 	if !a.deadLink(n) {
 		return
 	}
-	a.cctx.Set("fillStyle", colorDeadLinkVeil)
+	a.cctx.Set("fillStyle", a.pal.DeadLinkVeil)
 	a.cctx.Call("fillRect", x, y, w, h)
-	strokeTileFrame(a.cctx, x, y, w, h, colorDeadLink, true, false)
-	a.drawTileBannerLabelIn(n, x, y, w, h, colorDeadLink)
+	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.DeadLink, true, false)
+	a.drawTileBannerLabelIn(n, x, y, w, h, a.pal.DeadLink)
 }
 
 // drawTraceOutline is the selection outline's geometry, thicker and faded.
-func drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
+func (a *App) drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
 	if alpha <= 0 {
 		return
 	}
 	c.Call("save")
 	c.Set("globalAlpha", alpha)
-	c.Set("strokeStyle", colorTrace)
+	c.Set("strokeStyle", a.pal.Trace)
 	c.Set("lineWidth", 3.0)
 	c.Call("strokeRect", x-2, y-2, w+4, h+4)
 	c.Call("restore")
@@ -245,33 +165,33 @@ func init() {
 		{
 			kind: tplWell, name: "well",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindWell, W: 1, H: 1},
-			glyph:  func(a *App, x, y, w, h float64) { drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder) },
+			glyph:  func(a *App, x, y, w, h float64) { drawWellGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder) },
 			create: func(a *App, gid string, cellX, cellY int64) { a.createWellAtCell(gid, cellX, cellY) },
 		},
 		{
 			kind: tplMarkdown, name: "markdown",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindText, W: 1, H: 1},
-			glyph:  func(a *App, x, y, w, h float64) { drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine) },
+			glyph:  func(a *App, x, y, w, h float64) { drawDocumentGlyph(a.cctx, x, y, w, h, a.pal.MarkdownLine) },
 			create: func(a *App, gid string, cellX, cellY int64) { a.createTextAtCell(gid, []byte{}, cellX, cellY) },
 		},
 		{
 			kind: tplURL, name: "url",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindURL, W: 1, H: 1},
-			glyph:  func(a *App, x, y, w, h float64) { drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine) },
+			glyph:  func(a *App, x, y, w, h float64) { drawGlobeGlyph(a.cctx, x, y, w, h, a.pal.URLLine) },
 			create: func(a *App, gid string, cellX, cellY int64) { a.createURLAtCell(gid, cellX, cellY) },
 			click:  func(a *App, p *pane.Pane) { a.visitURLFromMenu(p) },
 		},
 		{
 			kind: tplShell, name: "shell",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"},
-			glyph:  func(a *App, x, y, w, h float64) { drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder) },
+			glyph:  func(a *App, x, y, w, h float64) { drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder) },
 			create: func(a *App, gid string, cellX, cellY int64) { a.createShellAtCell(gid, cellX, cellY) },
 			click:  func(a *App, p *pane.Pane) { a.visitShellFromMenu(p) },
 		},
 		{
 			kind: tplPane, name: "pane",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindPane, W: 1, H: 1, AltText: "workspace"},
-			glyph:  func(a *App, x, y, w, h float64) { drawPaneGlyph(a.cctx, x, y, w, h, colorPaneTileBorder) },
+			glyph:  func(a *App, x, y, w, h float64) { drawPaneGlyph(a.cctx, x, y, w, h, a.pal.PaneTileBorder) },
 			create: func(a *App, gid string, cellX, cellY int64) { a.createPaneAtCell(gid, cellX, cellY) },
 		},
 	}
@@ -395,7 +315,7 @@ func (a *App) draw() {
 		}
 	}
 
-	a.cctx.Set("fillStyle", colorBg)
+	a.cctx.Set("fillStyle", a.pal.Bg)
 	a.cctx.Call("fillRect", 0, 0, a.width, a.height)
 
 	rects := a.layoutPanes()
@@ -439,7 +359,7 @@ func (a *App) draw() {
 	if a.ws.Depth() > 0 {
 		// The same height the layout used, so the outline stays off the bands.
 		h := a.paneAreaH()
-		a.cctx.Set("strokeStyle", colorPaneTileBorder)
+		a.cctx.Set("strokeStyle", a.pal.PaneTileBorder)
 		a.cctx.Set("lineWidth", wsOutlinePx)
 		a.cctx.Call("strokeRect", wsOutlinePx/2, wsOutlinePx/2,
 			a.width-wsOutlinePx, h-wsOutlinePx)
@@ -455,7 +375,7 @@ func (a *App) draw() {
 		k := anim.EaseOutCubic(t)
 		lerp := func(from, to float64) float64 { return from + (to-from)*k }
 		h := a.paneAreaH()
-		a.cctx.Set("strokeStyle", colorPaneTileBorder)
+		a.cctx.Set("strokeStyle", a.pal.PaneTileBorder)
 		a.cctx.Set("lineWidth", lerp(tileBorderPx, wsOutlinePx))
 		a.cctx.Call("strokeRect",
 			lerp(e.x, wsOutlinePx/2), lerp(e.y, wsOutlinePx/2),
@@ -512,9 +432,9 @@ func (a *App) drawErrStrip() {
 	}
 	top := a.height - stripH
 	for _, row := range errsurface.Rows(notices, top) {
-		bg, fg := colorErrStripBg, colorErrStripText
+		bg, fg := a.pal.ErrStripBg, a.pal.ErrStripText
 		if row.Notice.Severity == errsurface.Info {
-			bg, fg = colorInfoStripBg, colorInfoStripText
+			bg, fg = a.pal.InfoStripBg, a.pal.InfoStripText
 		}
 		a.cctx.Set("fillStyle", bg)
 		a.cctx.Call("fillRect", 0, row.Y, a.width, errsurface.RowH)
@@ -546,10 +466,10 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// the coordinate system. A focused text tile has none, so it gets a
 		// plain background.
 		if p.ContentID() != "" {
-			a.cctx.Set("fillStyle", colorBg)
+			a.cctx.Set("fillStyle", a.pal.Bg)
 			a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 		} else {
-			a.drawGridLines(colorGridLineInterior, pscreen, r)
+			a.drawGridLines(a.pal.GridLineInterior, pscreen, r)
 		}
 
 		if !gridOK && gid != "" && p.ContentID() == "" {
@@ -570,7 +490,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					switch {
 					case rpc.TextDocument(file):
 						ix, iy, iw, ih := textInnerBox(r)
-						a.cctx.Set("fillStyle", colorFileInnerBg)
+						a.cctx.Set("fillStyle", a.pal.FileInnerBg)
 						a.cctx.Call("fillRect", ix, iy, iw, ih)
 						a.drawMarkdownInPane(p, file, ix, iy, iw, ih)
 					case rpc.WebContent(file):
@@ -583,7 +503,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						a.drawShellTileInPane(p, file, ix, iy, iw, ih)
 					default:
 						ix, iy, iw, ih := textInnerBox(r)
-						a.cctx.Set("fillStyle", colorFileInnerBg)
+						a.cctx.Set("fillStyle", a.pal.FileInnerBg)
 						a.cctx.Call("fillRect", ix, iy, iw, ih)
 					}
 				}
@@ -611,7 +531,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				if tr, ok := a.traces[p.ID]; ok {
 					if n, ok := g.Tiles[tr.tileID]; ok {
 						left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
-						drawTraceOutline(a.cctx, left, top,
+						a.drawTraceOutline(a.cctx, left, top,
 							float64(n.W)*cellSize, float64(n.H)*cellSize,
 							anim.FadeAlpha(nowMs(), tr.startMs, cadence.TraceFadeMs))
 					}
@@ -652,7 +572,7 @@ func (a *App) drawCircleButtonChrome(cx, cy float64) {
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, plusButtonRadius, 0, 2*math.Pi)
 	a.cctx.Call("fill")
-	a.cctx.Set("strokeStyle", "#dff4f4")
+	a.cctx.Set("strokeStyle", a.pal.BarInk)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("stroke")
 }
@@ -800,7 +720,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		return
 	}
 	if n.Kind != rpc.KindWell {
-		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
+		a.drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
 		return
 	}
 	// Recursion stops at one level, because drawChildPreview paints its children
@@ -810,7 +730,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		a.fetchGrid(n.ChildGridId)
 	}
 	// Matching the pane, so the outline crossing the screen edge has no jump.
-	a.cctx.Set("fillStyle", colorBg)
+	a.cctx.Set("fillStyle", a.pal.Bg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
 	// previewCell is parentCell times the well's intrinsic ViewZoom. At
@@ -833,7 +753,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 			wellCenterY := y + h/2
 			originX := wellCenterX - viewCenterX*previewCell
 			originY := wellCenterY - viewCenterY*previewCell
-			drawGridLinesIn(a.cctx, colorGridLineInterior, x, y, w, h, previewCell, originX, originY)
+			drawGridLinesIn(a.cctx, a.pal.GridLineInterior, x, y, w, h, previewCell, originX, originY)
 
 			if showPreview {
 				// The hide scopes to the pane being painted (paintPaneID).
@@ -849,7 +769,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 
 	// Every well is blue; a cross-plugin well differs by the dash, which always
 	// means a link, a reference you can unlink.
-	strokeTileFrame(a.cctx, x, y, w, h, colorFocusBorder, dashed, selected)
+	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, dashed, selected)
 	// A plain well gets no banner: it has no alt text, and tilebanner.Runs
 	// returns "" for it.
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
@@ -897,7 +817,7 @@ func bannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
 // drawTileBannerLabel paints the label at the top of the tile in its own kind
 // color, clipped to the tile rect.
 func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outside bool) {
-	a.drawTileBannerLabelIn(n, x, y, w, h, bannerTextColor(n, outside))
+	a.drawTileBannerLabelIn(n, x, y, w, h, a.bannerTextColor(n, outside))
 }
 
 // drawTileBannerLabelIn names the text color rather than deriving it: one
@@ -921,7 +841,7 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 		return
 	}
 	withClip(a.cctx, ix, iy, iw, ih, func() {
-		a.cctx.Set("fillStyle", colorSourceLabelBg)
+		a.cctx.Set("fillStyle", a.pal.SourceLabelBg)
 		a.cctx.Call("fillRect", ix, iy, iw, bannerH)
 		setFont(a.cctx, fontPx, bannerFontFamily, true)
 		a.cctx.Set("fillStyle", textColor)
@@ -934,7 +854,7 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 			// name, not as part of it.
 			labelW := a.cctx.Call("measureText", label).Get("width").Float()
 			setFont(a.cctx, fontPx, bannerFontFamily, false)
-			a.cctx.Set("fillStyle", colorMuted)
+			a.cctx.Set("fillStyle", a.pal.Muted)
 			a.cctx.Call("fillText", status, ix+4+labelW+fontPx/2, iy+bannerH/2)
 		}
 		a.cctx.Set("textBaseline", "top")
@@ -942,20 +862,20 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 }
 
 // bannerTextColor is the pixels half of tileface.BannerHue.
-func bannerTextColor(n *gridwellv1.Tile, outside bool) string {
+func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 	switch tileface.BannerHue(n, outside) {
 	case tileface.HueShell:
-		return colorShellBorder
+		return a.pal.ShellBorder
 	case tileface.HueWell:
-		return colorFocusBorder
+		return a.pal.FocusBorder
 	case tileface.HueHost:
-		return colorPluginBorder
+		return a.pal.PluginBorder
 	case tileface.HueURL:
-		return colorURLLine
+		return a.pal.URLLine
 	case tileface.HueText:
-		return colorMarkdownLine
+		return a.pal.MarkdownLine
 	}
-	return colorMuted
+	return a.pal.Muted
 }
 
 // fetchTileContent never doubles an in-flight fetch: concurrent fetches for one
@@ -1039,35 +959,35 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		nn := n
 		// url and shell children do not overlay their JPEGs, so a well's
 		// interior reads uniformly.
-		drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileface.Outside(nn, childInHost), borderPx, false)
+		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileface.Outside(nn, childInHost), borderPx, false)
 	}
 }
 
 // drawNode is the flat renderer, used for nested previews and for non-well
 // tiles; the parent-grid renderer is drawNodeWithPreview.
-func drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64, dashed bool) {
+func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64, dashed bool) {
 	// dashed marks a link, and every kind honors it or lies about ownership.
 	if dashed {
 		setTileDash(c)
 		defer clearTileDash(c)
 	}
 	// An unknown kind keeps the locked grey body and gets no outline.
-	fill, line := colorLocked, ""
+	fill, line := a.pal.Locked, ""
 	switch n.Kind {
 	case rpc.KindWell:
-		fill, line = colorBg, colorFocusBorder
+		fill, line = a.pal.Bg, a.pal.FocusBorder
 	case rpc.KindURL:
-		fill, line = colorURLFill, colorURLLine
+		fill, line = a.pal.URLFill, a.pal.URLLine
 	case rpc.KindShell:
-		fill, line = colorShellFill, colorShellBorder
+		fill, line = a.pal.ShellFill, a.pal.ShellBorder
 	case rpc.KindText:
-		fill, line = colorMarkdownFill, colorMarkdownLine
+		fill, line = a.pal.MarkdownFill, a.pal.MarkdownLine
 		if outside {
-			fill, line = colorPluginFill, colorPluginBorder
+			fill, line = a.pal.PluginFill, a.pal.PluginBorder
 		}
 	case rpc.KindPane:
 		// The flat face a pane tile shows one level down, and in a ghost.
-		fill, line = colorPaneTileFill, colorPaneTileBorder
+		fill, line = a.pal.PaneTileFill, a.pal.PaneTileBorder
 	}
 	c.Set("fillStyle", fill)
 	c.Call("fillRect", x, y, w, h)
@@ -1075,7 +995,7 @@ func drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool,
 		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	}
 	if selected {
-		drawSelectedTileOutline(c, x, y, w, h)
+		a.drawSelectedTileOutline(c, x, y, w, h)
 	}
 }
 
@@ -1092,9 +1012,9 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")
 		if a.ghost != nil {
 			if a.ghost.forbidden {
-				drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
+				a.drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
 			} else if a.ghost.link {
-				drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
+				a.drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
 			}
 		}
 		return
@@ -1109,7 +1029,7 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)
-	drawTrashcanIcon(a.cctx, x, y, w, h)
+	a.drawTrashcanIcon(a.cctx, x, y, w, h)
 	a.cctx.Set("globalAlpha", 1.0)
 }
 
@@ -1117,7 +1037,7 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float
 // uncached grid falls back to the generic blue, so the user still sees that
 // they descended into something.
 func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
-	return pane.BorderColor(a.borderInputFor(p, g, gridOK, focused, urlLive), paneBorderColors)
+	return pane.BorderColor(a.borderInputFor(p, g, gridOK, focused, urlLive), a.paneBorderColors())
 }
 
 // borderInputFor resolves the facts pane.FamilyOf classifies on, shared with
@@ -1144,22 +1064,24 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 	return in
 }
 
-// paneBorderColors bundles this renderer's constants for pane.BorderColor.
-var paneBorderColors = pane.BorderColors{
-	Focused:        colorFocusBorder,
-	FocusedFaded:   colorFocusBorderFaded,
-	Text:           colorMarkdownLine,
-	TextFaded:      colorMarkdownLineFaded,
-	URL:            colorURLLine,
-	URLFaded:       colorURLLineFaded,
-	URLLive:        colorURLLiveLine,
-	URLLiveFaded:   colorURLLiveLineFaded,
-	Shell:          colorShellBorder,
-	ShellFaded:     colorShellBorderFaded,
-	Exit:           colorPluginBorder,
-	ExitFaded:      colorPluginBorderFaded,
-	Ephemeral:      colorEphemeralBorder,
-	EphemeralFaded: colorEphemeralBorderFaded,
+// paneBorderColors bundles the active palette for pane.BorderColor.
+func (a *App) paneBorderColors() pane.BorderColors {
+	return pane.BorderColors{
+		Focused:        a.pal.FocusBorder,
+		FocusedFaded:   a.pal.FocusBorderFaded,
+		Text:           a.pal.MarkdownLine,
+		TextFaded:      a.pal.MarkdownLineFaded,
+		URL:            a.pal.URLLine,
+		URLFaded:       a.pal.URLLineFaded,
+		URLLive:        a.pal.URLLiveLine,
+		URLLiveFaded:   a.pal.URLLiveLineFaded,
+		Shell:          a.pal.ShellBorder,
+		ShellFaded:     a.pal.ShellBorderFaded,
+		Exit:           a.pal.PluginBorder,
+		ExitFaded:      a.pal.PluginBorderFaded,
+		Ephemeral:      a.pal.EphemeralBorder,
+		EphemeralFaded: a.pal.EphemeralBorderFaded,
+	}
 }
 
 // drawEdgeIndicators marks every tile entirely outside the viewport, where the
@@ -1174,7 +1096,7 @@ func (a *App) drawEdgeIndicators(nodes map[string]*gridwellv1.Tile, ps dragdrop.
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
 
-	a.cctx.Set("fillStyle", colorEdgeDot)
+	a.cctx.Set("fillStyle", a.pal.EdgeDot)
 	for _, n := range nodes {
 		sx, sy := ps.CellToScreen(float64(n.X), float64(n.Y))
 		w := float64(n.W) * cellSize
@@ -1243,7 +1165,7 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	}
 	label := pane.GridNotice(name, a.fetch.gridLoadFailed.Has(gid))
 	a.cctx.Call("save")
-	a.cctx.Set("fillStyle", colorMuted)
+	a.cctx.Set("fillStyle", a.pal.Muted)
 	a.cctx.Set("font", "13px system-ui, sans-serif")
 	a.cctx.Set("textAlign", "center")
 	a.cctx.Set("textBaseline", "middle")

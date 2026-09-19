@@ -13,15 +13,6 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// colorTileResize is the same blue as an active split and swap.
-const colorTileResize = "#4a6fff"
-
-const (
-	colorSplitInactive = "#6c6f78" // grey
-	colorSwapArrow     = "#4a6fff"
-	colorCloseWarn     = "#e0727a" // red
-)
-
 // resizeBandPx is the band near each pane edge where a drag grabs a divider.
 const resizeBandPx = 10.0
 

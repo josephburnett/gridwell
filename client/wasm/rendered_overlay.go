@@ -19,14 +19,19 @@ import (
 // markdown.RenderHTML's sanitized output. The canvas paints raw source for
 // every non-focused view, and this div is the one styled surface.
 
+// renderedViewSel scopes the overlay's stylesheet; the rasterized preview
+// wears the same rules under its own root class.
+const renderedViewSel = "#gw-rendered-view"
+
 // ensureRenderedView creates the overlay div and its scoped stylesheet.
 func (a *App) ensureRenderedView() {
 	if a.overlays.renderedView.Truthy() {
 		return
 	}
 	st := a.doc.Call("createElement", "style")
-	st.Set("textContent", markdown.RenderedCSS("#gw-rendered-view"))
+	st.Set("textContent", markdown.RenderedCSS(renderedViewSel, a.pal))
 	a.doc.Get("head").Call("appendChild", st)
+	a.overlays.renderedStyle = st
 
 	div := a.doc.Call("createElement", "div")
 	div.Set("id", "gw-rendered-view")
@@ -35,7 +40,7 @@ func (a *App) ensureRenderedView() {
 	s.Set("display", "none")
 	s.Set("overflow", "auto")
 	s.Set("boxSizing", "border-box")
-	s.Set("background", colorFileInnerBg)
+	s.Set("background", a.pal.FileInnerBg)
 	s.Set("zIndex", "5")
 	s.Set("padding", "6px 10px")
 

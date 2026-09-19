@@ -41,12 +41,12 @@ func (a *App) paneLayoutUnreadable(tileID string, err error) {
 // face. A never-arranged layout shows the split glyph.
 func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	c := a.cctx
-	c.Set("fillStyle", colorPaneTileFill)
+	c.Set("fillStyle", a.pal.PaneTileFill)
 	c.Call("fillRect", x, y, w, h)
 
 	tree, ok := a.paneTileLayout(n)
 	if !ok {
-		drawPaneGlyph(c, x, y, w, h, colorPaneTileBorder)
+		drawPaneGlyph(c, x, y, w, h, a.pal.PaneTileBorder)
 	} else {
 		tileRect := pane.Rect{X: x, Y: y, W: w, H: h}
 		scale := panepreview.Scale(tileRect, a.rootLayoutRect())
@@ -56,13 +56,13 @@ func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, select
 			}
 			// On top, so the split structure reads at any size.
 			for _, d := range pane.Dividers(tree, tileRect, 1) {
-				c.Set("fillStyle", colorPaneTileBorder)
+				c.Set("fillStyle", a.pal.PaneTileBorder)
 				c.Call("fillRect", d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1))
 			}
 		})
 	}
 
-	strokeTileFrame(c, x, y, w, h, colorPaneTileBorder, dashed, selected)
+	a.strokeTileFrame(c, x, y, w, h, a.pal.PaneTileBorder, dashed, selected)
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
@@ -83,7 +83,7 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2
 		originX := cx - leaf.Pane.Cx*leaf.PreviewCell
 		originY := cy - leaf.Pane.Cy*leaf.PreviewCell
-		drawGridLinesIn(c, colorGridLineInterior, r.X, r.Y, r.W, r.H, leaf.PreviewCell, originX, originY)
+		drawGridLinesIn(c, a.pal.GridLineInterior, r.X, r.Y, r.W, r.H, leaf.PreviewCell, originX, originY)
 		if g, ok := a.c.Grid(gid); ok {
 			a.drawChildPreview(g, leaf.Pane.Cx, leaf.Pane.Cy, cx, cy, leaf.PreviewCell,
 				r.X, r.Y, r.W, r.H, "")

@@ -68,7 +68,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 				}
 			}
 			if body, ok := a.tileBody(n); ok {
-				drawMarkdownText(a.cctx, string(body), originX, originY,
+				a.drawMarkdownText(a.cctx, string(body), originX, originY,
 					a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
 			}
 		} else {
@@ -87,7 +87,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", colorFileInnerBg)
+		a.cctx.Set("fillStyle", a.pal.FileInnerBg)
 		a.cctx.Call("fillRect", x, y, w, h)
 
 		// Content starts below the banner strip, on bannerGeom's shared
@@ -105,7 +105,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 			}
 			if !drawn {
 				if body, ok := a.tileBody(n); ok {
-					drawMarkdownText(a.cctx, string(body),
+					a.drawMarkdownText(a.cctx, string(body),
 						x-scrollX*scale, y+topInset-scrollY*scale,
 						frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
 				}
@@ -116,11 +116,11 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 	// A host file the markdown renderer can show is text-green like any
 	// document, and one it cannot is muted grey. markdown.Renderable is the
 	// same rule the fs plugin serves bodies by, so the color never lies.
-	outlineColor := colorMarkdownLine
+	outlineColor := a.pal.MarkdownLine
 	if outside && !markdown.Renderable(n.AltText) {
-		outlineColor = colorMuted
+		outlineColor = a.pal.Muted
 	}
-	strokeTileFrame(a.cctx, x, y, w, h, outlineColor, dashed, selected)
+	a.strokeTileFrame(a.cctx, x, y, w, h, outlineColor, dashed, selected)
 }
 
 // markdownStyle is the raw-text painter's font, spacing and color in logical
@@ -133,12 +133,12 @@ type markdownStyle struct {
 	textColor string
 }
 
-func defaultMarkdownStyle() markdownStyle {
+func (a *App) defaultMarkdownStyle() markdownStyle {
 	return markdownStyle{
 		codePx:    13,
 		pad:       6,
 		monospace: `ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
-		textColor: "#d8d9de",
+		textColor: a.pal.TextFg,
 	}
 }
 
@@ -162,9 +162,9 @@ const rawTextLineHeight = 1.35
 // soft-wraps to the same columns the editing textarea shows: the face is
 // monospace, so the budget is a pure column count and the text cannot reflow
 // when focus moves.
-func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
+func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
 	wrap func(src string, cols int) []string) {
-	st := defaultMarkdownStyle()
+	st := a.defaultMarkdownStyle()
 	fontPx := st.codePx
 	setFont(c, fontPx*scale, st.monospace, false)
 	c.Set("fillStyle", st.textColor)

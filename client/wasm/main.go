@@ -37,6 +37,7 @@ import (
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/client/textedit"
+	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/touchgest"
 	"github.com/josephburnett/gridwell/client/transition"
 )
@@ -108,6 +109,12 @@ type App struct {
 
 	// caps is derived once at boot; nothing else asks the bridge for a decision.
 	caps caps.Caps
+
+	// pal is the colors every paint reads and themeName is which palette that
+	// is. a.setTheme is the one writer: it restyles the DOM and redraws, so no
+	// surface can be left wearing the palette before it.
+	pal       theme.Palette
+	themeName theme.Theme
 
 	// origin is the serving origin and contentToken the /content/ door's path
 	// capability. A served page's address is derived at use time, never
@@ -192,7 +199,10 @@ type overlayState struct {
 
 	// renderedReady mirrors textareaReady for rendered mode; lastRenderedKey
 	// caches the render, so scrolling never re-renders.
-	renderedView    js.Value
+	renderedView js.Value
+	// renderedStyle is the overlay's scoped stylesheet element, kept so a
+	// theme switch rewrites it in place rather than stacking a second sheet.
+	renderedStyle   js.Value
 	renderedReady   bool
 	lastRenderedKey string
 
@@ -554,6 +564,8 @@ func main() {
 	app.cctx = app.canvas.Call("getContext", "2d")
 	app.tree = pane.NewTree()
 	app.tree.FocusedPane().Zoom = 1.0
+	// After the canvas and the tree, because applying a palette redraws.
+	app.applyTheme(theme.Default())
 	app.resize()
 
 	app.win.Call("addEventListener", "resize", js.FuncOf(func(this js.Value, args []js.Value) any {

@@ -93,8 +93,8 @@ func (a *App) ensureFileTextarea() {
 	style := ta.Get("style")
 	style.Set("position", "absolute")
 	style.Set("display", "none")
-	style.Set("background", colorFileInnerBg)
-	style.Set("color", "#d8d9de")
+	style.Set("background", a.pal.FileInnerBg)
+	style.Set("color", a.pal.TextFg)
 	style.Set("border", "0")
 	style.Set("outline", "none")
 	// border-box so the padding fits inside the width and height
@@ -104,7 +104,7 @@ func (a *App) ensureFileTextarea() {
 	// Metrics mirror drawMarkdownText exactly so raw text does not reflow when
 	// focus enters or leaves the pane. The painter replicates this line box's
 	// baseline, not the other way round, so the inset here stays uniform.
-	mst := defaultMarkdownStyle()
+	mst := a.defaultMarkdownStyle()
 	style.Set("padding", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
 	style.Set("margin", "0")
 	style.Set("resize", "none")
@@ -112,7 +112,7 @@ func (a *App) ensureFileTextarea() {
 	style.Set("fontSize", pxf(mst.codePx))
 	style.Set("lineHeight", strconv.FormatFloat(rawTextLineHeight, 'f', 2, 64))
 	style.Set("zIndex", "5")
-	style.Set("caretColor", "#d8d9de")
+	style.Set("caretColor", a.pal.TextFg)
 	ta.Set("spellcheck", false)
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
@@ -288,7 +288,7 @@ func (a *App) ensureFileToggle() {
 	style.Set("borderRadius", "50%")
 	// background and color come from barTheme on every refreshFileToggle, so
 	// there is no second, frozen copy of the theme fact.
-	style.Set("border", "1px solid #dff4f4")
+	style.Set("border", "1px solid "+a.pal.BarInk)
 	style.Set("cursor", "pointer")
 	style.Set("alignItems", "center")
 	style.Set("justifyContent", "center")
@@ -497,7 +497,7 @@ func (a *App) syncTextOverlayPosition() {
 func (a *App) textTextareaBox(p *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
 	// The font size is the canvas painter's codePx at the pane's live scale,
 	// so focused and blurred raw text are the same size. See drawMarkdownText.
-	b, fp := panebox.TextareaBox(r, textSideInset, defaultMarkdownStyle().codePx, a.textScaleFor(p))
+	b, fp := panebox.TextareaBox(r, textSideInset, a.defaultMarkdownStyle().codePx, a.textScaleFor(p))
 	return b.X, b.Y, b.W, b.H, fp
 }
 

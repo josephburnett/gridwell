@@ -82,6 +82,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 		Version: n.Version,
 		Bucket:  bucket,
 		Org:     markdown.IsOrg(n.AltText),
+		Theme:   a.themeName.String(),
 	}
 	r, ok := a.views.renderedPrev.Ensure(k, func() (string, bool) {
 		body, ok := a.tileBody(n)
@@ -93,7 +94,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 		div := a.doc.Call("createElement", "div")
 		div.Set("innerHTML", textedit.PresentationHTML(n, body))
 		xhtml := js.Global().Get("XMLSerializer").New().Call("serializeToString", div).String()
-		return markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, colorFileInnerBg), true
+		return markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, a.pal), true
 	}, func() { a.draw() })
 	if !ok {
 		return js.Value{}, bucket, false
