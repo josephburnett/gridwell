@@ -220,3 +220,26 @@ func TestReactRead(t *testing.T) {
 		}
 	}
 }
+
+func TestReactPreviewTable(t *testing.T) {
+	unimpl := connect.NewError(connect.CodeUnimplemented, errors.New("no previews"))
+	down := connect.NewError(connect.CodeUnavailable, errors.New("dark"))
+	verdict := connect.NewError(connect.CodeNotFound, errors.New("no tile"))
+	cases := []struct {
+		name  string
+		err   error
+		empty bool
+		want  PreviewReaction
+	}{
+		{"bytes are the face", nil, false, PreviewReaction{Store: true}},
+		{"an empty answer settles the miss", nil, true, PreviewReaction{Settle: true}},
+		{"no previews served settles it too", unimpl, false, PreviewReaction{Settle: true}},
+		{"a dark source surfaces and retries", down, false, PreviewReaction{Surface: true}},
+		{"a verdict surfaces and retries", verdict, false, PreviewReaction{Surface: true}},
+	}
+	for _, c := range cases {
+		if got := ReactPreview(c.err, c.empty); got != c.want {
+			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}

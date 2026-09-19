@@ -193,3 +193,31 @@ func ReactGridRead(asked, answered string, o Outcome) GridRead {
 	}
 	return r
 }
+
+// PreviewReaction is what one preview fetch's outcome calls for. A preview
+// face is asked for on every draw until something settles it, so a fetch
+// that ends without an image must say whether the tile has one.
+type PreviewReaction struct {
+	// Store keeps the bytes as the face.
+	Store bool
+	// Settle records that this blob has no image, so the next draw does not
+	// ask again: the server answered empty, or the namespace serves no
+	// previews at all, which is a capability and never a failure.
+	Settle bool
+	// Surface reports the failure. The miss stays unsettled, so the next draw
+	// retries: a transport failure or a verdict may not stand forever.
+	Surface bool
+}
+
+// ReactPreview is the one table for a preview fetch's outcome.
+func ReactPreview(err error, empty bool) PreviewReaction {
+	switch {
+	case err == nil && empty:
+		return PreviewReaction{Settle: true}
+	case err == nil:
+		return PreviewReaction{Store: true}
+	case IsUnimplemented(err):
+		return PreviewReaction{Settle: true}
+	}
+	return PreviewReaction{Surface: true}
+}

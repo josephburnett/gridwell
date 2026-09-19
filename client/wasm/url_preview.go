@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
@@ -193,23 +194,17 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	go func() {
 		defer done()
 		jpeg, err := a.cl.GetTilePreview(ctx, tileID)
-		if err != nil {
-			// Unimplemented is a capability property, so the tile shows its
-			// label.
-			if !isUnimplemented(err) {
-				a.surfaceRPCError("GetTilePreview", err)
-				return // transient — the next draw may retry
-			}
-			a.views.urlPreview.PutEmpty(tileID, blobID)
-			return
+		// clientsync.ReactPreview is the one table; this runs its arms.
+		r := clientsync.ReactPreview(err, len(jpeg) == 0)
+		if r.Surface {
+			a.surfaceRPCError("GetTilePreview", err)
 		}
-		if len(jpeg) == 0 {
-			// Leaving the miss unrecorded would re-fire this fetch on every
-			// draw, one RPC per preview-less tile per frame.
+		if r.Settle {
 			a.views.urlPreview.PutEmpty(tileID, blobID)
-			return
 		}
-		a.views.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame() })
+		if r.Store {
+			a.views.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame() })
+		}
 	}()
 }
 
