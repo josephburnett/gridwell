@@ -88,10 +88,10 @@ func TestSetTileContentZoomArm(t *testing.T) {
 	}
 }
 
-// TestSetTileURLFrozenArm pins the standing-freeze bit: it is framing, so no
-// version bump; set and clear both round-trip; and it is refused off the url
-// kind.
-func TestSetTileURLFrozenArm(t *testing.T) {
+// TestSetTileFrozenArm pins the standing-freeze bit: it is framing, so no
+// version bump; set and clear both round-trip; it reaches every kind that can
+// go live, url and shell alike; and it is refused off them.
+func TestSetTileFrozenArm(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
@@ -123,7 +123,32 @@ func TestSetTileURLFrozenArm(t *testing.T) {
 		t.Error("url_frozen did not clear")
 	}
 
-	// Only url tiles carry the intent.
+	// A shell carries the same intent: the freeze gesture is the screenshot,
+	// and descending must not reattach until the reconnect clears it.
+	shell := createTile(t, p, root, &gridwellv1.Tile{Kind: "shell", X: 5, Y: 0, W: 1, H: 1}, nil)
+	r, err = p.SetTile(ctx, &gridwellv1.SetTileRequest{
+		TileId: shell.Id, Version: shell.Version, UrlFrozen: frozen(true),
+	})
+	if err != nil {
+		t.Fatalf("freeze shell: %v", err)
+	}
+	if !r.Tile.UrlFrozen {
+		t.Error("url_frozen did not set on a shell tile")
+	}
+	if r.Tile.Version != shell.Version {
+		t.Errorf("url_frozen is framing: version must not bump (%d -> %d)", shell.Version, r.Tile.Version)
+	}
+	r, err = p.SetTile(ctx, &gridwellv1.SetTileRequest{
+		TileId: shell.Id, Version: shell.Version, UrlFrozen: frozen(false),
+	})
+	if err != nil {
+		t.Fatalf("unfreeze shell: %v", err)
+	}
+	if r.Tile.UrlFrozen {
+		t.Error("url_frozen did not clear on a shell tile")
+	}
+
+	// Only a tile that can go live carries the intent.
 	text := createTile(t, p, root, &gridwellv1.Tile{Kind: "text", X: 3, Y: 0, W: 1, H: 1}, []byte("# t"))
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
 		TileId: text.Id, Version: text.Version, UrlFrozen: frozen(true),

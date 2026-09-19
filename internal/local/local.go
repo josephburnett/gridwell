@@ -351,7 +351,7 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return tileResp(p.st.SetContentZoom(ctx, req.TileId, *req.ContentZoom))
 	}
 	if req.UrlFrozen != nil {
-		return tileResp(p.st.SetURLFrozen(ctx, req.TileId, *req.UrlFrozen))
+		return tileResp(p.st.SetFrozen(ctx, req.TileId, *req.UrlFrozen))
 	}
 	t := req.Tile
 	if t == nil {

@@ -389,9 +389,11 @@ type Tile struct {
 	// and reference is the derived bit over both shapes. Deleting a link only
 	// unlinks.
 	LinkTargetId string `protobuf:"bytes,29,opt,name=link_target_id,json=linkTargetId,proto3" json:"link_target_id,omitempty"`
-	// url_frozen is the user's standing freeze on a url tile: set by the
-	// explicit freeze gesture, cleared by the reconnect button. While set,
-	// descending does not auto-go-live. The transient navigate-away freeze is
+	// url_frozen is the user's standing freeze on a tile that can go live, url
+	// or shell: set by the explicit freeze gesture, cleared by the reconnect
+	// button. While set, descending does not auto-go-live, and the preview is
+	// what the tile keeps looking like. The name is from before a shell could be
+	// frozen and cannot be renamed. The transient navigate-away freeze is
 	// separate and auto-revives on return. Framing-class: written by the SetTile
 	// url_frozen arm only, and it never bumps version.
 	UrlFrozen bool `protobuf:"varint,30,opt,name=url_frozen,json=urlFrozen,proto3" json:"url_frozen,omitempty"`
@@ -2577,9 +2579,9 @@ type SetTileRequest struct {
 	// bumps version. Refused for wells. optional so presence is explicit,
 	// because 0 is a meaningful stored value.
 	ContentZoom *float64 `protobuf:"fixed64,7,opt,name=content_zoom,json=contentZoom,proto3,oneof" json:"content_zoom,omitempty"`
-	// url_frozen is the user's standing freeze on a url tile. Framing: no
-	// claim, and it never bumps version. Refused for non-url tiles. optional
-	// so clearing (false) is distinct from absent.
+	// url_frozen is the user's standing freeze on a url or shell tile. Framing:
+	// no claim, and it never bumps version. Refused for a kind that cannot go
+	// live. optional so clearing (false) is distinct from absent.
 	UrlFrozen     *bool `protobuf:"varint,8,opt,name=url_frozen,json=urlFrozen,proto3,oneof" json:"url_frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

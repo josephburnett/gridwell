@@ -74,9 +74,18 @@ func (a *App) installTestHook() {
 		// Mirror passes taken since boot. The interval is free-running, with no
 		// arming instant to time from, so its rate is the only thing a spec can
 		// bound; the snapshot itself lands in a cache nothing else reports.
-		"shellMirrors":  js.FuncOf(func(js.Value, []js.Value) any { return a.shellMirrorPasses }),
-		"workspace":     js.FuncOf(a.thWorkspace),
-		"bar":           js.FuncOf(a.thBar),
+		"shellMirrors": js.FuncOf(func(js.Value, []js.Value) any { return a.shellMirrorPasses }),
+		"workspace":    js.FuncOf(a.thWorkspace),
+		"bar":          js.FuncOf(a.thBar),
+		// What the bar circle is offering the focused pane, by name, so a spec
+		// clicks it knowing which of the slot's verdicts it is about to run.
+		"barSlot": js.FuncOf(func(js.Value, []js.Value) any {
+			p := a.tree.FocusedPane()
+			if p == nil {
+				return ""
+			}
+			return a.barSlotMode(p).String()
+		}),
 		"plugins":       js.FuncOf(a.thPlugins),
 		"palette":       js.FuncOf(a.thPalette),
 		"ghost":         js.FuncOf(a.thGhost),

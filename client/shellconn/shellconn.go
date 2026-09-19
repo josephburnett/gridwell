@@ -1,7 +1,7 @@
 // Package shellconn holds the decisions the wasm shell attachment makes: what
-// a descent does about liveness, whether the refresh button shows, who owns a
-// link press, and how a freeze capture decodes. Stream lifecycle is
-// client/shellstream, over the dialer in client/shellws.
+// a descent of any kind does about liveness, whether the refresh button
+// shows, who owns a link press, and how a freeze capture decodes. Stream
+// lifecycle is client/shellstream, over the dialer in client/shellws.
 package shellconn
 
 import "encoding/base64"
@@ -38,13 +38,16 @@ const (
 )
 
 // DecideAutoLive reads the same aliveness facts DecideShellRefreshVisible
-// does, so the two agree about what a dead session means. urlFrozen is the
-// user's standing freeze, which beats the engagement default until the
-// reconnect gesture clears it.
-func DecideAutoLive(webContent, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive, urlFrozen bool) AutoLive {
+// does, so the two agree about what a dead session means. frozen is the user's
+// standing freeze, one arm for every kind: it beats the engagement default
+// until the reconnect gesture clears it (client/golive).
+func DecideAutoLive(webContent, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive, frozen bool) AutoLive {
+	if frozen {
+		return AutoLiveNone
+	}
 	switch {
 	case webContent:
-		if liveURL && !urlFrozen {
+		if liveURL {
 			return AutoLiveURL
 		}
 	case kindShell:

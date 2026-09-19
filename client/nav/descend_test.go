@@ -358,6 +358,14 @@ func TestDescendLandGoesLive(t *testing.T) {
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffOpenStream, EffScheduleURLUpdate},
 	}, {
+		name:  "a frozen shell stays frozen, with no probe",
+		tile:  &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9, UrlFrozen: true},
+		caps:  caps.Caps{LiveURL: true, Shells: true},
+		alive: map[string]bool{"s1": true},
+		known: map[string]bool{"s1": true},
+		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
+			EffScheduleURLUpdate},
+	}, {
 		name:  "a shell with an unknown session probes first",
 		tile:  &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9},
 		caps:  caps.Caps{LiveURL: true, Shells: true},

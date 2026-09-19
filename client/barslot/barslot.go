@@ -9,8 +9,8 @@ type Mode int
 
 const (
 	// ModeNothing covers a markdown descent, whose slot holds the DOM
-	// text-mode toggle at the same center, a live shell descent, and a frozen
-	// shell whose tmux session is gone.
+	// text-mode toggle at the same center, an ephemeral shell visit, and a
+	// frozen shell whose tmux session is gone.
 	ModeNothing Mode = iota
 	// ModeURLBack runs history.back().
 	ModeURLBack
@@ -21,6 +21,11 @@ const (
 	// ModeURLOpenTab opens the address in a new browser tab; the tile stays
 	// frozen.
 	ModeURLOpenTab
+	// ModeFreeze is the screenshot: the live surface's face becomes the tile's
+	// preview, the standing freeze lands on the row, and the surface closes.
+	// Only a live shell reaches it — a live url's slot is its back button, so
+	// that freeze rides the view's own context menu instead.
+	ModeFreeze
 	// ModePlus is the + menu toggle. The drawer swaps in the trashcan while a
 	// tile drag is in flight.
 	ModePlus
@@ -42,6 +47,27 @@ type Input struct {
 	// the frozen-shell arm reads it, and the caller must resolve it lazily
 	// because resolving it kicks a liveness probe.
 	ShellRefreshVisible bool
+	// Durable is whether the descended row is one the pane's own grid holds.
+	// An ephemeral visit is deleted on ascent, so there is nothing for a
+	// standing freeze to be about.
+	Durable bool
+}
+
+// String is the mode's name, the one spelling of it outside this package.
+func (m Mode) String() string {
+	switch m {
+	case ModeURLBack:
+		return "back"
+	case ModeGoLive:
+		return "golive"
+	case ModeURLOpenTab:
+		return "opentab"
+	case ModeFreeze:
+		return "freeze"
+	case ModePlus:
+		return "plus"
+	}
+	return "nothing"
 }
 
 // Decide tests URLDescent before ShellDescent. The two cannot both be true, a
@@ -62,7 +88,12 @@ func Decide(in Input) Mode {
 			return ModeURLOpenTab
 		}
 	case in.ShellDescent:
-		if !in.ShellLive && in.ShellRefreshVisible {
+		switch {
+		case in.ShellLive:
+			if in.Durable {
+				return ModeFreeze
+			}
+		case in.ShellRefreshVisible:
 			return ModeGoLive
 		}
 	}

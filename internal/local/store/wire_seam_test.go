@@ -105,7 +105,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 	if _, err := s.SetContentZoom(ctx, url.Id, 1.25); err != nil {
 		t.Fatal(err)
 	}
-	url, err = s.SetURLFrozen(ctx, url.Id, true)
+	url, err = s.SetFrozen(ctx, url.Id, true)
 	if err != nil {
 		t.Fatal(err)
 	}

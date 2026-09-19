@@ -188,9 +188,9 @@ var versionCases = []versionCase{
 		},
 	},
 	{
-		name: "SetURLFrozen/standing freeze", subject: urlSubject, bumps: false,
+		name: "SetFrozen/standing freeze", subject: urlSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.SetURLFrozen(ctx, tile.Id, true)
+			_, err := s.SetFrozen(ctx, tile.Id, true)
 			return err
 		},
 	},

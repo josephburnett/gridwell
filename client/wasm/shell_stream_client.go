@@ -13,6 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/golive"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
@@ -154,9 +155,21 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 // opens the tile's PTY on the /shell WebSocket. A second call for the same pane
 // closes the previous attachment first. disable_shells refuses, preview stays.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
-	if !a.caps.Shells {
+	frozen := false
+	if t := a.findTileByID(tileID); t != nil {
+		frozen = t.UrlFrozen
+	}
+	// Attaching is the shell's reconnect gesture, so it clears the standing
+	// freeze by the rule the url side runs. A shell link never follows its
+	// target: the session keys by the owner id below, so the link row is both
+	// where the freeze lives and where it is cleared.
+	plan, ok := golive.Decide(a.caps.Shells, frozen, false)
+	if !ok {
 		a.reportErr(caps.ShellNotice())
 		return
+	}
+	if plan.Unfreeze {
+		a.postFrozen(tileID, false, nil)
 	}
 	// The PTY session, the alive cache and the freeze writeback all key by the
 	// id that owns the session.
@@ -589,6 +602,25 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 	a.shells.Close(paneID)
 	// The registry suppresses the exit report for a local close.
 	a.releaseShellStream(paneID, conn)
+}
+
+// freezeShellPaneByIntent runs the bar circle's freeze on a live shell: the standing
+// intent lands on the descended row, the terminal's current face becomes the
+// tile's preview through the ordinary close capture, and the attachment ends.
+// The tmux session keeps running, the way a frozen url keeps its address: a
+// freeze is a screenshot, not a kill, so the reconnect finds the session where
+// it left it. An ephemeral visit resolves to no row and freezes nothing.
+func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
+	t, ok := a.descendedGridTile(p)
+	if !ok || t.Kind != rpc.KindShell {
+		return
+	}
+	a.postFrozen(t.Id, true, func() {
+		// A freeze still owed to the server is the outbox's business, so the
+		// teardown runs whatever the write did.
+		a.closeShellStream(p.ID, true)
+		a.draw()
+	})
 }
 
 // closeAllShellStreams runs on beforeunload so the server's freeze-and-destroy

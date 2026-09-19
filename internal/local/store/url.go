@@ -143,34 +143,6 @@ func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoo
 	return out, err
 }
 
-// SetURLFrozen persists the user's standing freeze on a url tile: descending
-// must not auto-go-live until the reconnect gesture clears it. It is framing,
-// so no claim and no bump, and it is refused for every other kind.
-func (s *Store) SetURLFrozen(ctx context.Context, tileIDStr string, frozen bool) (*gridwellv1.Tile, error) {
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
-		if err != nil {
-			return err
-		}
-		if n.Kind != rpc.KindURL {
-			return fmt.Errorf("%w: url_frozen only applies to url tiles", ErrInvalidArgument)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET url_frozen = ?, updated_at = ? WHERE id = ?`,
-			boolToInt(frozen), s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
-		return err
-	})
-	return out, err
-}
-
 // boolToInt maps a bool onto SQLite's 0 and 1 integer convention.
 func boolToInt(b bool) int64 {
 	if b {
