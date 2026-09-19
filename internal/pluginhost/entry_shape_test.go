@@ -60,38 +60,38 @@ func listedBy(t *testing.T, entries ...*pluginv1.Entry) (*gridwellv1.Grid, []*gr
 	return resp.Grid, resp.Tiles, nil
 }
 
-// A url entry supplies the address it opens; a page has no address of its own
-// and is served at the node's /content/ door. An entry declaring both is
-// neither, and it fails in silence, because the client answers UrlString first
-// and the page never serves. The node refuses the shape at the door, which is
-// the only place that can close it: with the entry gone, no client can be
-// handed the combination at all.
-func TestAUrlEntryThatAlsoServesAPageIsRefused(t *testing.T) {
-	_, _, err := listedBy(t, &pluginv1.Entry{
-		Key: "both", Kind: "url", Label: "both", ServesPage: true,
-		UrlString: "https://example.invalid/",
-	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("GetGrid = %v, want InvalidArgument: a url entry that also serves a page is not a shape the node can present", err)
-	}
-	if !strings.Contains(err.Error(), "both") {
-		t.Errorf("error = %v, want the offending entry key named so the plugin author can find it", err)
+// A served page is the address a url tile opens, so it rides kind "url" and no
+// other: on a text entry it would put a document body and a page on one row,
+// which is the shape the decision closes — a text tile cannot serve from the
+// plugin. The door is the only place that can close it: with the entry gone,
+// no client can be handed the combination at all.
+func TestAPageOnAnyKindButUrlIsRefused(t *testing.T) {
+	for _, kind := range []string{"text", "well", "shell", ""} {
+		_, _, err := listedBy(t, &pluginv1.Entry{
+			Key: "solo", Kind: kind, Label: "solo", ServesPage: true,
+		})
+		if status.Code(err) != codes.InvalidArgument {
+			t.Fatalf("kind %q: GetGrid = %v, want InvalidArgument: only a url entry serves a page", kind, err)
+		}
+		if !strings.Contains(err.Error(), "solo") {
+			t.Errorf("kind %q: error = %v, want the offending entry key named so the plugin author can find it", kind, err)
+		}
 	}
 }
 
-// The two halves apart are ordinary and stay so: a url entry with an address,
-// and a page entry of any other kind. Refusing the combination must not
-// refuse either one.
-func TestEitherHalfAloneIsListedNormally(t *testing.T) {
+// Both url shapes list side by side — one carrying its address, one whose page
+// the plugin serves — and a text entry beside them keeps its document body.
+func TestBothUrlShapesAndATextEntryAreListedNormally(t *testing.T) {
 	_, tiles, err := listedBy(t,
 		&pluginv1.Entry{Key: "u", Kind: "url", Label: "u", UrlString: "https://example.invalid/"},
-		&pluginv1.Entry{Key: "p", Kind: "text", Label: "p", ServesPage: true},
+		&pluginv1.Entry{Key: "p", Kind: "url", Label: "p", ServesPage: true},
+		&pluginv1.Entry{Key: "d", Kind: "text", Label: "d"},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tiles) != 2 {
-		t.Fatalf("listed %d tiles, want 2", len(tiles))
+	if len(tiles) != 3 {
+		t.Fatalf("listed %d tiles, want 3", len(tiles))
 	}
 	for _, tile := range tiles {
 		switch tile.AltText {
@@ -100,8 +100,12 @@ func TestEitherHalfAloneIsListedNormally(t *testing.T) {
 				t.Errorf("url tile = url %q servesPage %v", tile.UrlString, tile.ServesPage)
 			}
 		case "p":
-			if !tile.ServesPage || tile.UrlString != "" {
-				t.Errorf("page tile = url %q servesPage %v", tile.UrlString, tile.ServesPage)
+			if tile.Kind != rpc.KindURL || !tile.ServesPage || tile.UrlString != "" {
+				t.Errorf("page tile = kind %q url %q servesPage %v", tile.Kind, tile.UrlString, tile.ServesPage)
+			}
+		case "d":
+			if tile.Kind != rpc.KindText || tile.ServesPage {
+				t.Errorf("text tile = kind %q servesPage %v", tile.Kind, tile.ServesPage)
 			}
 		}
 	}

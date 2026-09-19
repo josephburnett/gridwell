@@ -100,10 +100,17 @@ message ListResponse {
 
 message Entry {
   string key   = 1; // stable, unique within the plugin
-  string kind  = 2; // "well" | "text" | "url"
+  // kind: "well" | "text" | "url". A text entry is a document body the plugin
+  // answers from ReadContent; a url entry is an address. Only a url entry may
+  // serve a page.
+  string kind  = 2;
   string label = 3;
   // child_context: wells only — the context this entry opens into.
   string child_context = 4;
+  // serves_page: this entry's web content is the plugin's, served through
+  // ServeContent. It is a url entry's address in place of url_string — the
+  // node derives one at its /content/ door — so it rides kind "url" alone and
+  // the door refuses it on any other kind.
   bool   serves_page       = 5;
   // text_presentation says how a text entry's body presents: "plain" for
   // verbatim monospace, "both" for the document renderer with a toggle to the

@@ -397,14 +397,14 @@ type Tile struct {
 	// separate and auto-revives on return. Framing-class: written by the SetTile
 	// url_frozen arm only, and it never bumps version.
 	UrlFrozen bool `protobuf:"varint,30,opt,name=url_frozen,json=urlFrozen,proto3" json:"url_frozen,omitempty"`
-	// serves_page: the owning plugin serves this tile's content as web content
-	// through the /content/ door, over the ServeContent RPC. The client gives
-	// the descent url-tile semantics, a live native view on a desktop host and
-	// open-in-new-tab on a browser host, at the derived address
-	// /content/<content-token>/<tile-id>/. That address is built at render time
-	// from the current origin and never persisted, because ports are ephemeral.
-	// Plugin-declared, derived from the content itself, such as the filename's
-	// media type in fs. Never a stored column.
+	// serves_page: this url tile opens at the address the node derives for its
+	// /content/ door, /content/<content-token>/<tile-id>/, where the owning
+	// plugin answers ServeContent. It stands in place of a url_string of its
+	// own, and it is built at render time from the current origin and never
+	// persisted, because ports are ephemeral. Url tiles only: the plugin entry
+	// door refuses the declaration on every other kind, so a text tile never
+	// serves one. Plugin-declared, derived from the content itself, such as the
+	// filename's media type in fs. Never a stored column.
 	ServesPage bool `protobuf:"varint,32,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
 	// text_presentation is the owning plugin's declaration of how a text tile's
 	// body presents: "plain" for monospace with no markdown interpretation, or

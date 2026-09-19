@@ -202,8 +202,8 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		return false
 	}
 	// A body is what the walk fetches; everything else renders offline from
-	// its cached row and preview. A page has none, its face being the door's.
-	if rpc.IsBodyKind(t.GetKind()) && !rpc.PageContent(t) && w.spent < prefetchContentBudget {
+	// its cached row and preview.
+	if rpc.IsBodyKind(t.GetKind()) && w.spent < prefetchContentBudget {
 		if !w.pause() {
 			return false
 		}
@@ -216,8 +216,8 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		}
 		w.spent += n
 	}
-	// A serves_page tile's face-value body is its door page at the root
-	// subpath, rpc.PageURL's target, bounded like every other body.
+	// A served page's body is the door page at the root subpath, rpc.PageURL's
+	// target, bounded like every other body.
 	if rpc.PageContent(t) && w.spent < prefetchContentBudget {
 		if !w.pause() {
 			return false

@@ -6,7 +6,7 @@ package server
 //
 // What the seam has to hold: the adapter turns each declared context into a
 // grid id the node can serve, both grids list through that mapping, and a
-// message is a text tile carrying serves_page whose page the door serves. The
+// message is a url tile carrying serves_page whose page the door serves. The
 // config crosses it too — the node hands over paths to the user's credential
 // and token, never their contents, plus a private state directory, and nothing
 // cached there carries a secret.
@@ -205,12 +205,12 @@ func TestGmailPluginDeclaresAndListsBothCollections(t *testing.T) {
 	if len(inbox.Tiles) != 2 {
 		t.Fatalf("the inbox = %v, want its two messages", inbox.Tiles)
 	}
-	// Every message arrives as a text tile that serves a page. That is the
-	// shape the whole client rests on: a url tile's own address wins over
-	// serves_page, so a message declared kind "url" would hand the node an
-	// address it does not have and the message would never be served.
+	// Every message arrives as a url tile whose page the plugin serves. That
+	// is the shape the whole client rests on: the address is the node's to
+	// derive at its /content/ door, so the message declares none of its own,
+	// and a text tile could not serve one at all.
 	for _, tl := range inbox.Tiles {
-		if tl.Kind != rpc.KindText || !tl.ServesPage || tl.UrlString != "" {
+		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" {
 			t.Errorf("%s = kind %q serves_page %v url %q", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString)
 		}
 	}

@@ -7,7 +7,7 @@ package server
 // Three things can only be wrong here: the adapter turns each declared context
 // into a grid id the node can serve, so a menu entry with no grid id opens
 // nothing; every collection lists through that mapping, not just the root; and
-// an email is a text tile carrying serves_page, so the plugin never sees a URL
+// an email is a url tile carrying serves_page, so the plugin never sees a URL
 // and the door never sees the email.
 //
 // Nothing is injected. The plugin lives in another repository, so the
@@ -107,10 +107,10 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 		tileWithLabel(t, g, c.holds)
 	}
 
-	// Every email arrives as a text tile that serves a page. That is the shape
-	// the whole client rests on: a url tile's own address wins over
-	// serves_page, so an email declared kind "url" would hand the node an
-	// address it does not have and the email would never be served.
+	// Every email arrives as a url tile whose page the plugin serves. That is
+	// the shape the whole client rests on: the address is the node's to derive
+	// at its /content/ door, so the email declares none of its own, and a text
+	// tile could not serve one at all.
 	root, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 		t.Fatalf("the Imbox = %v, want its two threads", root.Tiles)
 	}
 	for _, tl := range root.Tiles {
-		if tl.Kind != rpc.KindText || !tl.ServesPage || tl.UrlString != "" {
+		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" {
 			t.Errorf("%s = kind %q serves_page %v url %q", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString)
 		}
 	}

@@ -442,12 +442,19 @@ func (x *ListResponse) GetSourceLabel() string {
 
 type Entry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`   // stable, unique within the plugin
-	Kind  string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"` // "well" | "text" | "url"
-	Label string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"` // stable, unique within the plugin
+	// kind: "well" | "text" | "url". A text entry is a document body the plugin
+	// answers from ReadContent; a url entry is an address. Only a url entry may
+	// serve a page.
+	Kind  string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	// child_context: wells only — the context this entry opens into.
 	ChildContext string `protobuf:"bytes,4,opt,name=child_context,json=childContext,proto3" json:"child_context,omitempty"`
-	ServesPage   bool   `protobuf:"varint,5,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
+	// serves_page: this entry's web content is the plugin's, served through
+	// ServeContent. It is a url entry's address in place of url_string — the
+	// node derives one at its /content/ door — so it rides kind "url" alone and
+	// the door refuses it on any other kind.
+	ServesPage bool `protobuf:"varint,5,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
 	// text_presentation says how a text entry's body presents: "plain" for
 	// verbatim monospace, "both" for the document renderer with a toggle to the
 	// raw source, "" for no declaration. "rendered" is RETIRED — it hid the

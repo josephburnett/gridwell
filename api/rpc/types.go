@@ -198,30 +198,29 @@ const (
 	TextModeText     = "text"
 )
 
-// WebContent is a url tile at its own address or a serves_page tile at the
-// /content/ door. Every url-tile semantic keys off it, so the two cannot
-// diverge.
+// WebContent is a url tile: at the address it carries, or at the /content/
+// door when its plugin serves the page. Every url-tile semantic keys off it,
+// so the two cannot diverge.
 func WebContent(t *pb.Tile) bool {
-	return t.Kind == KindURL || t.ServesPage
+	return t.Kind == KindURL
 }
 
-// TextDocument is a tile whose content is its own document body; a serves_page
-// row is a file presented as a page and has none.
+// TextDocument is a tile whose content is its own document body. Every text
+// tile has one: a served page is a url tile, serves_page on another kind being
+// refused at the entry door (pluginhost.acceptEntries).
 func TextDocument(t *pb.Tile) bool {
-	return t.Kind == KindText && !t.ServesPage
+	return t.Kind == KindText
 }
 
-// PageContent is a tile presented at the /content/ door. It holds no persisted
-// url state, zoom or freeze intent, so its address is derived at use time
-// (PageURL); a url tile is never one however it is flagged.
+// PageContent is a url tile whose plugin serves the page. It carries no
+// address, zoom or freeze intent of its own, so its address is derived at use
+// time (PageURL).
 func PageContent(t *pb.Tile) bool {
-	return t.ServesPage && t.Kind != KindURL
+	return t.Kind == KindURL && t.ServesPage
 }
 
 // Descent is the content family a pane descended into a tile is showing: a
-// web surface, a terminal, or neither. Web wins for a shell row flagged
-// serves_page, so that priority is decided here rather than in each caller's
-// arm order.
+// web surface, a terminal, or neither.
 type Descent int
 
 const (

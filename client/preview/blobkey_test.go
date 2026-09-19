@@ -14,14 +14,13 @@ func TestBlobKeyKeysPagesBySentinelAndURLsByNothing(t *testing.T) {
 		want int64
 	}{
 		{"a captured tile keys by its blob", &pb.Tile{Kind: rpc.KindURL, PreviewBlobId: 7}, 7},
-		{"a page keys by no generation", &pb.Tile{Kind: rpc.KindText, ServesPage: true}, ungeneratedBlobID},
+		{"a page keys by no generation", &pb.Tile{Kind: rpc.KindURL, ServesPage: true}, ungeneratedBlobID},
 		{"a page with a capture still keys by its blob",
-			&pb.Tile{Kind: rpc.KindText, ServesPage: true, PreviewBlobId: 9}, 9},
+			&pb.Tile{Kind: rpc.KindURL, ServesPage: true, PreviewBlobId: 9}, 9},
+		// The whole point of rpc.PageContent: a url tile at its own address
+		// has no face at the door, so the sentinel is not its key.
 		{"an uncaptured url has no preview to fetch", &pb.Tile{Kind: rpc.KindURL}, 0},
-		// The whole point of rpc.PageContent: a url tile is never a page
-		// however it is flagged, so the sentinel is not its key.
-		{"a url flagged serves_page is still not a page",
-			&pb.Tile{Kind: rpc.KindURL, ServesPage: true}, 0},
+		{"a text document has none either", &pb.Tile{Kind: rpc.KindText}, 0},
 	}
 	for _, c := range cases {
 		if got := BlobKey(c.tile); got != c.want {

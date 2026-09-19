@@ -282,16 +282,16 @@ const retiredPresentationRendered = "rendered"
 // acceptEntries is the one door a plugin's entries enter by: it refuses a shape
 // the node cannot present and maps a retired declaration onto the live
 // vocabulary, so neither the store, the wire nor a client meets either one.
-// Kind "url" with serves_page is refused because every reader answers the url
-// arm first, so the page would never serve; an unknown text_presentation is
-// refused because reading it as undeclared would ignore the author's
-// declaration in silence.
+// serves_page on any kind but url is refused because a served page IS the
+// address a url tile opens, and no other kind has a descent that would open
+// one; an unknown text_presentation is refused because reading it as
+// undeclared would ignore the author's declaration in silence.
 func acceptEntries(entries []*pluginv1.Entry) error {
 	for _, e := range entries {
-		if e.Kind == rpc.KindURL && e.ServesPage {
+		if e.ServesPage && e.Kind != rpc.KindURL {
 			return status.Errorf(codes.InvalidArgument,
-				"plugin: entry %q declares kind url and serves_page; a url entry opens url_string, a page has no address of its own — declare one or the other",
-				e.Key)
+				"plugin: entry %q declares kind %q and serves_page; only a url entry serves a page, the node deriving its address — declare kind %q, or drop serves_page and serve a document body instead",
+				e.Key, e.Kind, rpc.KindURL)
 		}
 		switch e.TextPresentation {
 		case "", rpc.TextPresentationPlain, rpc.TextPresentationBoth:

@@ -65,37 +65,37 @@ func tileByLabel(t *testing.T, grid *gridwellv1.GetGridResponse, label string) *
 	return nil
 }
 
-// A page tile arrives as a TEXT tile carrying serves_page, with no url of its
-// own. That is the shape the whole client rests on: a url tile's own address
-// wins over serves_page, so a plugin that declared kind "url" for a page would
-// hand the node an address it does not have and the page would never be
-// served. The node does not police the combination, so this is where the
-// shipped plugin's choice is pinned.
-func TestPagesPluginServesPageTilesAsTextRows(t *testing.T) {
+// A page tile arrives as a URL tile carrying serves_page, with no url of its
+// own: the address is the node's to derive at the /content/ door. The entry
+// door refuses that declaration on every other kind, and this is where the
+// shipped plugin's side of it is pinned.
+func TestPagesPluginServesPageTilesAsURLRows(t *testing.T) {
 	_, grid := pagesServer(t)
 
 	pages := 0
 	for _, tl := range grid.Tiles {
-		if tl.Kind != rpc.KindText {
-			t.Errorf("%s is kind %q; every entry this plugin lists is a text row", tl.AltText, tl.Kind)
-		}
 		if tl.UrlString != "" {
-			t.Errorf("%s carries url %q; a page tile has no address of its own", tl.AltText, tl.UrlString)
+			t.Errorf("%s carries url %q; the node derives a served page's address", tl.AltText, tl.UrlString)
 		}
-		if tl.ServesPage {
-			pages++
-			if tl.PreviewBlobId == 0 {
-				t.Errorf("%s serves a page but declares no face generation", tl.AltText)
-			}
+		if !tl.ServesPage {
+			continue
+		}
+		pages++
+		if tl.Kind != rpc.KindURL {
+			t.Errorf("%s is kind %q; a page is served from a url row", tl.AltText, tl.Kind)
+		}
+		if tl.PreviewBlobId == 0 {
+			t.Errorf("%s serves a page but declares no face generation", tl.AltText)
 		}
 	}
 	if pages < 2 {
 		t.Fatalf("%d page tiles; the plugin exists to demonstrate pages", pages)
 	}
-	// And the contrast tile is a plain text row, so "text tile" and "page
-	// tile" are visibly different things on the same wire shape.
-	if about := tileByLabel(t, grid, "about"); about.ServesPage {
-		t.Error("the about tile declares serves_page; it is the plain-text contrast")
+	// And the contrast tile is a plain text row, so a page and a document are
+	// two kinds rather than one kind flagged two ways.
+	if about := tileByLabel(t, grid, "about"); about.ServesPage || about.Kind != rpc.KindText {
+		t.Errorf("the about tile = kind %q serves_page %v; it is the plain-text contrast",
+			about.Kind, about.ServesPage)
 	}
 }
 

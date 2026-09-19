@@ -13,9 +13,8 @@ func BlobKey(t *pb.Tile) int64 {
 	if t.PreviewBlobId != 0 {
 		return t.PreviewBlobId
 	}
-	// rpc.PageContent, not the serves_page bit: a url tile is never a page
-	// however it is flagged, and keying one to the sentinel would hand it a
-	// face the /content/ door never serves.
+	// A url tile at its own address has no door face, so the sentinel would
+	// send its fetch somewhere the /content/ door never answers.
 	if rpc.PageContent(t) {
 		return ungeneratedBlobID
 	}

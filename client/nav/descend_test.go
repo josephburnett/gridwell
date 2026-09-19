@@ -89,7 +89,7 @@ func TestDescendPlans(t *testing.T) {
 	url := &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "g1", X: 0, Y: 0, W: 3, H: 2,
 		UrlString: "https://example.test/"}
 	shell := &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
-	page := &gridwellv1.Tile{Id: "p1t", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2,
+	page := &gridwellv1.Tile{Id: "p1t", Kind: rpc.KindURL, GridId: "g1", X: 0, Y: 0, W: 3, H: 2,
 		ServesPage: true}
 	wsTile := &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindPane, GridId: "g1", X: 0, Y: 0, W: 2, H: 2}
 

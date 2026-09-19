@@ -258,9 +258,10 @@ func TestContentID(t *testing.T) {
 
 // TestTextDocumentAndPageContent pins the two derivations of "is this a
 // page", which were spelled three ways across the shim before they had
-// owners. The last row is the shape only the wire permits: a url row that
-// also carries serves_page. Its own address wins, so it is web content and a
-// url tile, never a page tile and never a document.
+// owners. A served page is a url tile: web content wherever the address comes
+// from, and never a document. The last row is the shape the entry door refuses
+// (pluginhost.acceptEntries), so no client meets it; read here it is the plain
+// document its kind says it is.
 func TestTextDocumentAndPageContent(t *testing.T) {
 	cases := []struct {
 		name                   string
@@ -268,10 +269,10 @@ func TestTextDocumentAndPageContent(t *testing.T) {
 		document, page, webCon bool
 	}{
 		{"text document", &pb.Tile{Kind: KindText}, true, false, false},
-		{"page tile", &pb.Tile{Kind: KindText, ServesPage: true}, false, true, true},
-		{"url tile", &pb.Tile{Kind: KindURL}, false, false, true},
+		{"page tile", &pb.Tile{Kind: KindURL, ServesPage: true}, false, true, true},
+		{"url tile at its own address", &pb.Tile{Kind: KindURL}, false, false, true},
 		{"well", &pb.Tile{Kind: KindWell}, false, false, false},
-		{"url row flagged serves_page", &pb.Tile{Kind: KindURL, ServesPage: true}, false, false, true},
+		{"text row flagged serves_page", &pb.Tile{Kind: KindText, ServesPage: true}, true, false, false},
 	}
 	for _, c := range cases {
 		if got := TextDocument(c.tile); got != c.document {
@@ -305,8 +306,8 @@ func TestLeafLink(t *testing.T) {
 }
 
 // TestDescentOf pins the one classification the bar slot and the input layer
-// both read, including the tile a shell page row would make ambiguous: a
-// serves_page shell is web content, because the page door answers for it.
+// both read. It is a partition of the kinds, so no tile is two families at
+// once and no reader has an arm order to get wrong.
 func TestDescentOf(t *testing.T) {
 	cases := []struct {
 		name string
@@ -314,9 +315,8 @@ func TestDescentOf(t *testing.T) {
 		want Descent
 	}{
 		{"url tile", &pb.Tile{Kind: KindURL}, DescentURL},
-		{"page tile", &pb.Tile{Kind: KindText, ServesPage: true}, DescentURL},
+		{"page tile", &pb.Tile{Kind: KindURL, ServesPage: true}, DescentURL},
 		{"shell tile", &pb.Tile{Kind: KindShell}, DescentShell},
-		{"shell page row", &pb.Tile{Kind: KindShell, ServesPage: true}, DescentURL},
 		{"text document", &pb.Tile{Kind: KindText}, DescentNone},
 		{"well", &pb.Tile{Kind: KindWell}, DescentNone},
 		{"unresolved", nil, DescentNone},
