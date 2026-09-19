@@ -4,7 +4,11 @@
 // lifecycle is client/shellstream, over the dialer in client/shellws.
 package shellconn
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+
+	"github.com/josephburnett/gridwell/api/rpc"
+)
 
 // DecodeJPEGDataURL decodes in Go rather than through JS atob, whose binary
 // string re-encodes as UTF-8 through js.Value.String() and doubles every byte
@@ -37,20 +41,21 @@ const (
 	AutoLiveProbeShell
 )
 
-// DecideAutoLive reads the same aliveness facts DecideShellRefreshVisible
+// DecideAutoLive dispatches on the content family the descent landed in
+// (rpc.DescentOf) and reads the same aliveness facts DecideShellRefreshVisible
 // does, so the two agree about what a dead session means. frozen is the user's
 // standing freeze, one arm for every kind: it beats the engagement default
 // until the reconnect gesture clears it (client/golive).
-func DecideAutoLive(webContent, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive, frozen bool) AutoLive {
+func DecideAutoLive(d rpc.Descent, liveURL, liveShell, hasPreview, aliveKnown, alive, frozen bool) AutoLive {
 	if frozen {
 		return AutoLiveNone
 	}
-	switch {
-	case webContent:
+	switch d {
+	case rpc.DescentURL:
 		if liveURL {
 			return AutoLiveURL
 		}
-	case kindShell:
+	case rpc.DescentShell:
 		if !liveShell {
 			return AutoLiveNone
 		}

@@ -4,6 +4,8 @@
 // the shim keeps the input gathering, the pixels and the effect dispatch.
 package barslot
 
+import "github.com/josephburnett/gridwell/api/rpc"
+
 // Mode names both a glyph and an action.
 type Mode int
 
@@ -34,13 +36,14 @@ const (
 // Input is the world state the slot's mode reads. The caller resolves every
 // field; nothing here is re-derived.
 type Input struct {
-	// Descent is pane.ContentID() != "".
+	// Descent is pane.ContentID() != "": the pane is inside a tile, of
+	// whatever kind.
 	Descent bool
-	// URLDescent is rpc.WebContent: a url tile or a serves_page tile.
-	URLDescent   bool
-	ShellDescent bool
-	URLLive      bool
-	ShellLive    bool
+	// Content is rpc.DescentOf for that tile. It is one classification, so no
+	// pane is both a url descent and a shell descent.
+	Content   rpc.Descent
+	URLLive   bool
+	ShellLive bool
 	// CanLiveURL is caps.LiveURL.
 	CanLiveURL bool
 	// ShellRefreshVisible is shellconn.DecideShellRefreshVisible's Show. Only
@@ -70,15 +73,13 @@ func (m Mode) String() string {
 	return "nothing"
 }
 
-// Decide tests URLDescent before ShellDescent. The two cannot both be true, a
-// shell tile not being web content, but the priority is fixed here rather than
-// in each caller's arm order.
+// Decide dispatches on the content family the pane is descended into.
 func Decide(in Input) Mode {
 	if !in.Descent {
 		return ModePlus
 	}
-	switch {
-	case in.URLDescent:
+	switch in.Content {
+	case rpc.DescentURL:
 		switch {
 		case in.URLLive:
 			return ModeURLBack
@@ -87,7 +88,7 @@ func Decide(in Input) Mode {
 		default:
 			return ModeURLOpenTab
 		}
-	case in.ShellDescent:
+	case rpc.DescentShell:
 		switch {
 		case in.ShellLive:
 			if in.Durable {

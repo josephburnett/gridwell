@@ -68,32 +68,11 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 	withClip(a.cctx, x, y, w, h, func() {
 		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, preview.BlobKey(n), func() {
 			a.fetchURLPreview(rpc.ContentID(n), preview.BlobKey(n))
-			label := n.UrlString
-			if label == "" {
-				label = n.AltText // a page tile has no address
-			}
+			label := urlTileLabel(n)
 			a.cctx.Set("fillStyle", colorMuted)
 			a.cctx.Set("font", "16px monospace")
 			a.cctx.Call("fillText", label, x+16, y+32, w-32)
 		})
-	})
-}
-
-// drawPageTile draws the plugin-derived preview inside the text family's
-// border, because a page tile is a file and only its presentation is web
-// content.
-func (a *App) drawPageTile(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
-	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, preview.BlobKey(n), func() {
-			a.drawPreviewPlaceholder(n.AltText, x, y, w, h)
-			a.fetchURLPreview(rpc.ContentID(n), preview.BlobKey(n))
-		})
-
-		line := colorMarkdownLine
-		if outside {
-			line = colorMarkdownLineFaded
-		}
-		strokeTileFrame(a.cctx, x, y, w, h, line, dashed, selected)
 	})
 }
 
@@ -142,16 +121,29 @@ func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, da
 	})
 }
 
-// drawURLTile renders a URL tile in the parent grid view.
+// drawURLTile renders a URL tile in the parent grid view. A tile whose plugin
+// serves its page has a face the plugin derives and no address to name; both
+// ride the same two owners, preview.BlobKey and urlTileLabel.
 func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, n.PreviewBlobId, func() {
-			a.drawPreviewPlaceholder(n.UrlString, x, y, w, h)
-			a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
+		key := preview.BlobKey(n)
+		a.drawPreviewFace(n, x, y, w, h, colorFileInnerBg, key, func() {
+			a.drawPreviewPlaceholder(urlTileLabel(n), x, y, w, h)
+			a.fetchURLPreview(rpc.ContentID(n), key)
 		})
 
 		strokeTileFrame(a.cctx, x, y, w, h, colorURLLine, dashed, selected)
 	})
+}
+
+// urlTileLabel is what a url tile's face reads before its preview arrives: its
+// address, or its name when the plugin serves the page and there is no address
+// to show.
+func urlTileLabel(n *gridwellv1.Tile) string {
+	if n.UrlString != "" {
+		return n.UrlString
+	}
+	return n.AltText
 }
 
 // previewImage is the one cast from the cache's preview.Image to the js.Value

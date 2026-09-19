@@ -28,6 +28,9 @@ type ClickInput struct {
 	// URL is rpc.KindURL and URLEmpty its typed address being blank.
 	URL      bool
 	URLEmpty bool
+	// Page is rpc.PageContent: the owning plugin serves this url tile's page,
+	// so the node derives the address and there is none for the user to type.
+	Page bool
 	// LeafLink is rpc.LeafLink: the address lives on the target, so a link
 	// never prompts for one.
 	LeafLink bool
@@ -39,10 +42,11 @@ type ClickInput struct {
 
 // DecideTileClick reads the prompt arm before the kind partition, because an
 // address-less url tile is a content-descent kind and would otherwise descend
-// onto nothing.
+// onto nothing. The prompt is for an address the user owns: a link's lives on
+// its target, and a served page's is the node's to derive.
 func DecideTileClick(in ClickInput) ClickVerdict {
 	switch {
-	case in.URL && in.URLEmpty && !in.LeafLink:
+	case in.URL && in.URLEmpty && !in.LeafLink && !in.Page:
 		return ClickConfigureURL
 	case !in.Well && !in.ContentDescent && !in.Workspace:
 		return ClickNone

@@ -574,8 +574,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						a.cctx.Call("fillRect", ix, iy, iw, ih)
 						a.drawMarkdownInPane(p, file, ix, iy, iw, ih)
 					case rpc.WebContent(file):
-						// url and serves_page tiles take the same web-content
-						// descent: frozen preview, or live native view.
+						// One descent for both url shapes, its own address or
+						// the door's: frozen preview, or live native view.
 						ix, iy, iw, ih := paneContentBox(r)
 						a.drawURLTileInPane(file, ix, iy, iw, ih)
 					case file.Kind == rpc.KindShell:
@@ -784,13 +784,6 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
 	case rpc.KindText:
-		if !rpc.TextDocument(n) {
-			// A page tile is a file whose presentation is web, so its face is
-			// its image in the text family's border.
-			a.drawPageTile(n, x, y, w, h, selected, outside, dashed)
-			a.drawTileBannerLabel(n, x, y, w, h, outside)
-			return
-		}
 		a.drawMarkdownNode(n, x, y, w, h, selected, outside, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return

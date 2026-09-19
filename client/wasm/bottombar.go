@@ -227,14 +227,13 @@ func (a *App) drawBarTitle(top float64) {
 // same arm alone, so the guard cannot change the verdict.
 func (a *App) barSlotMode(p *pane.Pane) barslot.Mode {
 	in := barslot.Input{
-		Descent:      p.ContentID() != "",
-		URLDescent:   a.isURLDescent(p),
-		ShellDescent: a.isShellDescent(p),
-		URLLive:      a.urlViewFor(p.ID) != nil,
-		ShellLive:    a.hasShellStream(p.ID),
-		CanLiveURL:   a.caps.LiveURL,
+		Descent:    p.ContentID() != "",
+		Content:    a.descentKind(p),
+		URLLive:    a.urlViewFor(p.ID) != nil,
+		ShellLive:  a.hasShellStream(p.ID),
+		CanLiveURL: a.caps.LiveURL,
 	}
-	if in.ShellDescent {
+	if in.Content == rpc.DescentShell {
 		// The pane's own grid, with no scratch fallback: an ephemeral visit
 		// resolves to nothing, which is exactly what Durable means.
 		t, ok := a.descendedGridTile(p)

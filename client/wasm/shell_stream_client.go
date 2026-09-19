@@ -73,10 +73,9 @@ type shellStreamConn struct {
 
 var shellLog = taggedLog("[shellstream]")
 
-// isShellDescent is the bar slot's shell arm (barslot.Input.ShellDescent). It
-// reads descentKind, the same resolver as isURLDescent, so an ephemeral shell
-// visit is a shell descent here too; what the slot then offers for one is
-// descendedGridTile's business.
+// isShellDescent reads descentKind, the same resolver as isURLDescent, so an
+// ephemeral shell visit is a shell descent here too; what the bar slot then
+// offers for one is descendedGridTile's business.
 func (a *App) isShellDescent(p *pane.Pane) bool {
 	return a.descentKind(p) == rpc.DescentShell
 }

@@ -140,7 +140,7 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 	}
 
 	// Fetch the blob eagerly so it is likely cached when the transition
-	// lands. A url or serves_page tile has none: its descent is the page.
+	// lands. A url tile has none: its descent is the page.
 	if rpc.TextDocument(file) {
 		// A source-backed body is host state, not versioned content: its
 		// version is always 0, so a cache entry from the first open would
@@ -296,8 +296,7 @@ func (m *Machine) autoLiveOnDescent(paneID string, tile *gridwellv1.Tile, w Worl
 	// cannot disagree about a dead session.
 	cid := rpc.ContentID(tile)
 	switch shellconn.DecideAutoLive(
-		rpc.WebContent(tile), tile.Kind == rpc.KindShell,
-		w.Caps.LiveURL, w.Caps.Shells,
+		rpc.DescentOf(tile), w.Caps.LiveURL, w.Caps.Shells,
 		tile.PreviewBlobId != 0, w.ShellAliveKnown[cid], w.ShellAlive[cid],
 		tile.UrlFrozen) {
 	case shellconn.AutoLiveURL:

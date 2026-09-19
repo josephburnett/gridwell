@@ -110,7 +110,8 @@ type App struct {
 	caps caps.Caps
 
 	// origin is the serving origin and contentToken the /content/ door's path
-	// capability. A page tile's address is derived at use time, never persisted.
+	// capability. A served page's address is derived at use time, never
+	// persisted.
 	origin       string
 	contentToken string
 

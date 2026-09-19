@@ -117,8 +117,8 @@ func (a *App) contentKey(tileID string) string {
 // pane leaves a text descent, through the dispatcher like every other
 // mutation.
 func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
-	// url, shell and serves_page rows carry no text framing, and the server
-	// rejects a non-text kind with InvalidArgument.
+	// A url or shell row carries no text framing, and the server rejects a
+	// non-text kind with InvalidArgument.
 	if !rpc.TextDocument(file) {
 		return
 	}

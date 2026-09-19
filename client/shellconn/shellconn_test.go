@@ -1,6 +1,10 @@
 package shellconn
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
+)
 
 // TestDecideShellRefreshVisible tables the refresh button's visibility,
 // including that a tile with no preview always shows and an unknown session
@@ -52,36 +56,38 @@ func TestDecodeJPEGDataURL(t *testing.T) {
 
 // Descending engages: a url opens, an alive or fresh shell opens, a dead
 // shell stays frozen, a host without the capability stays silently frozen,
-// and unknown aliveness probes. A serves_page tile gets the url verdict. The
-// user's standing freeze beats every one of those, for either kind.
+// and unknown aliveness probes. A url tile whose plugin serves its page is a
+// url descent like any other. The user's standing freeze beats every one of
+// those, for either family.
 func TestDecideAutoLive(t *testing.T) {
 	cases := []struct {
-		name                                                                        string
-		webContent, kindShell, liveURL, liveShell, hasPreview, known, alive, frozen bool
-		want                                                                        AutoLive
+		name                                                 string
+		descent                                              rpc.Descent
+		liveURL, liveShell, hasPreview, known, alive, frozen bool
+		want                                                 AutoLive
 	}{
-		{"url on Electron opens", true, false, true, true, true, false, false, false, AutoLiveURL},
-		{"url in a browser stays frozen", true, false, false, false, true, false, false, false, AutoLiveNone},
+		{"url on Electron opens", rpc.DescentURL, true, true, true, false, false, false, AutoLiveURL},
+		{"url in a browser stays frozen", rpc.DescentURL, false, false, true, false, false, false, AutoLiveNone},
 		// The user's standing freeze beats the engagement default until
 		// the reconnect gesture clears it.
-		{"user-frozen url stays frozen", true, false, true, true, true, false, false, true, AutoLiveNone},
-		{"user-frozen shell stays frozen", false, true, true, true, true, true, true, true, AutoLiveNone},
+		{"user-frozen url stays frozen", rpc.DescentURL, true, true, true, false, false, true, AutoLiveNone},
+		{"user-frozen shell stays frozen", rpc.DescentShell, true, true, true, true, true, true, AutoLiveNone},
 		// A capture that came back empty leaves a frozen tile looking never
 		// opened, and creating a second session behind the freeze would be a
 		// tmux nobody asked for.
-		{"user-frozen shell with no preview creates nothing", false, true, true, true, false, false, false, true, AutoLiveNone},
-		{"page tile on Electron opens", true, false, true, true, false, false, false, false, AutoLiveURL},
-		{"page tile in a browser stays frozen", true, false, false, false, false, false, false, false, AutoLiveNone},
-		{"fresh shell creates", false, true, true, true, false, false, false, false, AutoLiveShell},
-		{"alive shell reconnects", false, true, true, true, true, true, true, false, AutoLiveShell},
-		{"dead shell stays frozen", false, true, true, true, true, true, false, false, AutoLiveNone},
-		{"unknown shell probes", false, true, true, true, true, false, false, false, AutoLiveProbeShell},
-		{"shell in a browser stays frozen", false, true, false, false, true, true, true, false, AutoLiveNone},
-		{"text does nothing", false, false, true, true, true, true, true, false, AutoLiveNone},
+		{"user-frozen shell with no preview creates nothing", rpc.DescentShell, true, true, false, false, false, true, AutoLiveNone},
+		{"page tile on Electron opens", rpc.DescentURL, true, true, false, false, false, false, AutoLiveURL},
+		{"page tile in a browser stays frozen", rpc.DescentURL, false, false, false, false, false, false, AutoLiveNone},
+		{"fresh shell creates", rpc.DescentShell, true, true, false, false, false, false, AutoLiveShell},
+		{"alive shell reconnects", rpc.DescentShell, true, true, true, true, true, false, AutoLiveShell},
+		{"dead shell stays frozen", rpc.DescentShell, true, true, true, true, false, false, AutoLiveNone},
+		{"unknown shell probes", rpc.DescentShell, true, true, true, false, false, false, AutoLiveProbeShell},
+		{"shell in a browser stays frozen", rpc.DescentShell, false, false, true, true, true, false, AutoLiveNone},
+		{"text does nothing", rpc.DescentNone, true, true, true, true, true, false, AutoLiveNone},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := DecideAutoLive(c.webContent, c.kindShell, c.liveURL, c.liveShell, c.hasPreview, c.known, c.alive, c.frozen)
+			got := DecideAutoLive(c.descent, c.liveURL, c.liveShell, c.hasPreview, c.known, c.alive, c.frozen)
 			if got != c.want {
 				t.Errorf("DecideAutoLive = %v, want %v", got, c.want)
 			}
@@ -126,7 +132,7 @@ func TestExitAliveFeedsTheProbe(t *testing.T) {
 	}
 	// The forgotten answer routes a snapshotted tile back through the probe.
 	_, known := ExitAlive(false)
-	if got := DecideAutoLive(false, true, true, true, true, known, false, false); got != AutoLiveProbeShell {
+	if got := DecideAutoLive(rpc.DescentShell, true, true, true, known, false, false); got != AutoLiveProbeShell {
 		t.Fatalf("after a plain end a snapshotted shell should probe, got %v", got)
 	}
 }

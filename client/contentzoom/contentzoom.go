@@ -66,7 +66,7 @@ func Decide(kind string, pageContent, possiblyEphemeral bool, key string, cur fl
 		return Verdict{}
 	}
 	if pageContent {
-		// A serves_page descent has no persisted content_zoom, because the
+		// A served page's descent has no persisted content_zoom, because the
 		// owning plugin stores no url state and a client-only zoom would
 		// break the no-client-state rule. The chord is still this tile's.
 		return Verdict{Consume: true}

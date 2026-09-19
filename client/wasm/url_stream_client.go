@@ -34,8 +34,8 @@ type urlView struct {
 	// to resolve this tile's leaf grid.
 	anchor string
 	path   []string
-	// page marks a serves_page view, whose close skips the freeze writeback:
-	// the owning plugin derives its frozen face and stores nothing.
+	// page marks a view on a plugin-served page, whose close skips the freeze
+	// writeback: the owning plugin derives its frozen face and stores nothing.
 	page bool
 	// durable mirrors placeURLView's freeze eligibility: false for a page
 	// view or an ephemeral visit, whose state a tab close must not persist.
@@ -60,8 +60,8 @@ func contentViewBounds(r pane.Rect) viewBounds {
 	return viewBounds{X: x, Y: y, W: w, H: h}
 }
 
-// urlTileForPane resolves the web-content tile a pane is descended into. A
-// url tile and a serves_page tile share one view.
+// urlTileForPane resolves the url tile a pane is descended into. A tile at its
+// own address and one whose plugin serves its page share the one view.
 func (a *App) urlTileForPane(p *pane.Pane, tileID string) (*gridwellv1.Tile, bool) {
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 		if t, ok := g.Tiles[tileID]; ok && rpc.WebContent(t) {
@@ -76,18 +76,16 @@ func (a *App) urlTileForPane(p *pane.Pane, tileID string) (*gridwellv1.Tile, boo
 	return nil, false
 }
 
-// webAddress resolves the address a web-content tile presents at. A
-// serves_page tile's door address is derived at use time, never persisted,
-// because the desktop origin is an ephemeral port.
+// webAddress resolves the address a url tile presents at, through
+// urlview.Address. A served page's door address is derived at use time, never
+// persisted, because the desktop origin is an ephemeral port; every content op
+// keys by the owner.
 func (a *App) webAddress(t *gridwellv1.Tile) string {
-	if t.Kind == rpc.KindURL {
-		return t.UrlString
+	if !rpc.WebContent(t) {
+		return ""
 	}
-	if rpc.PageContent(t) {
-		// Every content op keys by the owner.
-		return rpc.PageURL(a.origin, a.contentToken, rpc.ContentID(t))
-	}
-	return ""
+	return urlview.Address(rpc.PageContent(t),
+		rpc.PageURL(a.origin, a.contentToken, rpc.ContentID(t)), t.UrlString)
 }
 
 // openURLStream goes live: main places a native WebContentsView for (pane,
