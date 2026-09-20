@@ -520,3 +520,55 @@ func TestClonePaneAcrossPluginsNeverArranged(t *testing.T) {
 		t.Errorf("never-arranged copy grew a blob: %+v", cp)
 	}
 }
+
+// TestCloneURLAcrossPluginsCarriesFace: the frozen preview is what a url tile
+// looks like from outside, so a copy of one wears the same face — at the top
+// level, exactly as a url one level down inside a deep-copied well does.
+func TestCloneURLAcrossPluginsCarriesFace(t *testing.T) {
+	cl, _, rootA, _, rootB := twoPluginServer(t)
+	ctx := context.Background()
+
+	u, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: "https://example.com/album"}})
+	if err != nil {
+		t.Fatalf("CreateURL: %v", err)
+	}
+	jpeg := []byte("\xff\xd8frozen-face")
+	frozen, err := cl.SetTile(ctx, &gridwellv1.SetTileRequest{
+		TileId:  u.Id,
+		Tile:    &gridwellv1.Tile{Kind: rpc.KindURL, UrlString: "https://example.com/album", AltText: "album", UrlHistory: `["https://example.com/"]`},
+		Preview: jpeg,
+	})
+	if err != nil {
+		t.Fatalf("freeze: %v", err)
+	}
+	if frozen.PreviewBlobId == 0 {
+		t.Fatalf("the source never froze: %+v", frozen)
+	}
+
+	cp, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+		TileId: u.Id, DestGridId: rootB, X: 2, Y: 2,
+	})
+	if err != nil {
+		t.Fatalf("cross-plugin url clone: %v", err)
+	}
+	if cp.PreviewBlobId == 0 {
+		t.Errorf("the clone answered faceless: %+v", cp)
+	}
+	got, err := cl.GetTile(ctx, cp.Id)
+	if err != nil {
+		t.Fatalf("read the copy: %v", err)
+	}
+	if got.PreviewBlobId == 0 {
+		t.Fatalf("the copy carries no frozen face: %+v", got)
+	}
+	face, err := cl.GetTilePreview(ctx, cp.Id)
+	if err != nil {
+		t.Fatalf("copy preview: %v", err)
+	}
+	if string(face) != string(jpeg) {
+		t.Errorf("copied face = %q, want the source's %q", face, jpeg)
+	}
+	if got.UrlHistory != frozen.UrlHistory {
+		t.Errorf("copied history = %q, want the source's %q", got.UrlHistory, frozen.UrlHistory)
+	}
+}
