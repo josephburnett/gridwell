@@ -5,9 +5,58 @@ package pane
 // ancestor splits included, until the sum of minimums walls the drag.
 //
 // The corridor, the maximal run of same-axis subtrees around the boundary, is
-// flattened into an ordered size list, moved with sequential compression, and
-// written back as ratios. Perpendicular subtrees ride along whole: their
-// cross-size changes, their internal ratios never do.
+// one value: openCorridor reads it off the live layout as an ordered size
+// list, and every entry point here opens one, moves it with sequential
+// compression, and writes it back as ratios. Perpendicular subtrees ride
+// along whole: their cross-size changes, their internal ratios never do.
+
+// corridor is that geometry, read once: the topmost same-axis ancestor split
+// and its live rect, the segments in axis order with their current sizes, and
+// the index the dragged boundary sits after. One read is the point: walls, red
+// thresholds, overlay rects and the move cannot disagree about where a segment
+// is.
+type corridor struct {
+	top          *Split
+	rect         Rect
+	segs         []TreeNode
+	start, total float64
+	sizes        []float64
+	bIdx         int
+}
+
+// openCorridor fails where the drag has no corridor to move: target is not in
+// the tree, or its boundary has no segment on one side.
+func openCorridor(root TreeNode, rootRect Rect, target *Split) (corridor, bool) {
+	top, ok := corridorTop(root, target)
+	if !ok {
+		return corridor{}, false
+	}
+	rect, ok := LocateSplit(root, rootRect, top)
+	if !ok {
+		return corridor{}, false
+	}
+	node := TreeNode{Split: top}
+	c := corridor{top: top, rect: rect, segs: flattenCorridor(node, target.Dir)}
+	c.start, c.total = axisSpan(rect, target.Dir)
+	c.sizes = segmentSizes(node, target.Dir, c.total)
+	c.bIdx = boundaryIndex(c.segs, target)
+	if c.bIdx < 0 || c.bIdx+1 >= len(c.segs) {
+		return corridor{}, false
+	}
+	return c, true
+}
+
+func (c corridor) walls(dir Direction, minPx float64) (lo, hi float64) {
+	lo = c.start
+	for _, s := range c.segs[:c.bIdx+1] {
+		lo += minSize(s, dir, minPx)
+	}
+	hi = c.start + c.total
+	for _, s := range c.segs[c.bIdx+1:] {
+		hi -= minSize(s, dir, minPx)
+	}
+	return lo, hi
+}
 
 // CorridorWalls is the [lo, hi] cursor bounds of target's boundary drag: where
 // everything between the boundary and each end of the corridor sits at its
@@ -16,25 +65,11 @@ package pane
 // reading a different geometry would close panes on a legal mid-corridor
 // release.
 func CorridorWalls(root TreeNode, rootRect Rect, target *Split, minPx float64) (lo, hi float64, ok bool) {
-	top, topRect, ok := corridorTop(root, rootRect, target)
+	c, ok := openCorridor(root, rootRect, target)
 	if !ok {
 		return 0, 0, false
 	}
-	topNode := TreeNode{Split: top}
-	segs := flattenCorridor(topNode, target.Dir)
-	start, total := axisSpan(topRect, target.Dir)
-	bIdx := boundaryIndex(segs, target)
-	if bIdx < 0 || bIdx+1 >= len(segs) {
-		return 0, 0, false
-	}
-	lo = start
-	for _, s := range segs[:bIdx+1] {
-		lo += minSize(s, target.Dir, minPx)
-	}
-	hi = start + total
-	for _, s := range segs[bIdx+1:] {
-		hi -= minSize(s, target.Dir, minPx)
-	}
+	lo, hi = c.walls(target.Dir, minPx)
 	return lo, hi, true
 }
 
@@ -59,21 +94,15 @@ type CrushPlan struct {
 // PlanCrush captures the corridor segments at arm. Red state starts empty, so
 // a bare click closes nothing.
 func PlanCrush(root TreeNode, rootRect Rect, target *Split, minPx float64) (CrushPlan, bool) {
-	top, _, ok := corridorTop(root, rootRect, target)
+	c, ok := openCorridor(root, rootRect, target)
 	if !ok {
 		return CrushPlan{}, false
 	}
-	topNode := TreeNode{Split: top}
-	all := flattenCorridor(topNode, target.Dir)
-	bIdx := boundaryIndex(all, target)
-	if bIdx < 0 || bIdx+1 >= len(all) {
-		return CrushPlan{}, false
-	}
 	var plan CrushPlan
-	for i := bIdx; i >= 0; i-- {
-		plan.ASegs = append(plan.ASegs, all[i])
+	for i := c.bIdx; i >= 0; i-- {
+		plan.ASegs = append(plan.ASegs, c.segs[i])
 	}
-	plan.BSegs = append(plan.BSegs, all[bIdx+1:]...)
+	plan.BSegs = append(plan.BSegs, c.segs[c.bIdx+1:]...)
 	plan.aRed = make([]bool, len(plan.ASegs))
 	plan.bRed = make([]bool, len(plan.BSegs))
 	return plan, true
@@ -85,26 +114,18 @@ func PlanCrush(root TreeNode, rootRect Rect, target *Split, minPx float64) (Crus
 // exactly, and only the pre-move snapshot separates pressed deeper from backed
 // off.
 func (cp *CrushPlan) Update(root TreeNode, rootRect Rect, target *Split, minPx, cursorPx float64) {
-	top, topRect, ok := corridorTop(root, rootRect, target)
+	c, ok := openCorridor(root, rootRect, target)
 	if !ok {
 		return
 	}
-	topNode := TreeNode{Split: top}
-	all := flattenCorridor(topNode, target.Dir)
-	start, total := axisSpan(topRect, target.Dir)
-	sizes := segmentSizes(topNode, target.Dir, total)
-	bIdx := boundaryIndex(all, target)
-	if bIdx < 0 {
-		return
-	}
-	edges := make([]float64, len(all)+1)
-	edges[0] = start
-	for i, sz := range sizes {
+	edges := make([]float64, len(c.segs)+1)
+	edges[0] = c.start
+	for i, sz := range c.sizes {
 		edges[i+1] = edges[i] + sz
 	}
 	for k := range cp.ASegs {
-		i := bIdx - k
-		th := edges[i] + minSize(all[i], target.Dir, minPx)
+		i := c.bIdx - k
+		th := edges[i] + minSize(c.segs[i], target.Dir, minPx)
 		switch {
 		case cursorPx < th-crushEps:
 			cp.aRed[k] = true
@@ -113,8 +134,8 @@ func (cp *CrushPlan) Update(root TreeNode, rootRect Rect, target *Split, minPx, 
 		}
 	}
 	for k := range cp.BSegs {
-		i := bIdx + 1 + k
-		th := edges[i+1] - minSize(all[i], target.Dir, minPx)
+		i := c.bIdx + 1 + k
+		th := edges[i+1] - minSize(c.segs[i], target.Dir, minPx)
 		switch {
 		case cursorPx > th+crushEps:
 			cp.bRed[k] = true
@@ -149,30 +170,25 @@ func (cp *CrushPlan) Red() []TreeNode {
 // SegmentRects is the live rects of corridor segments, for the red overlay.
 // Recomputed from current sizes, so the overlay tracks the crush.
 func SegmentRects(root TreeNode, rootRect Rect, target *Split, want []TreeNode) []Rect {
-	top, topRect, ok := corridorTop(root, rootRect, target)
+	c, ok := openCorridor(root, rootRect, target)
 	if !ok {
 		return nil
 	}
-	topNode := TreeNode{Split: top}
-	all := flattenCorridor(topNode, target.Dir)
-	_, total := axisSpan(topRect, target.Dir)
-	sizes := segmentSizes(topNode, target.Dir, total)
-	start, _ := axisSpan(topRect, target.Dir)
 	out := make([]Rect, 0, len(want))
 	for _, w := range want {
-		off := start
-		for i, s := range all {
+		off := c.start
+		for i, s := range c.segs {
 			if s == w {
-				r := topRect
+				r := c.rect
 				if target.Dir == Horizontal {
-					r.Y, r.H = off, sizes[i]
+					r.Y, r.H = off, c.sizes[i]
 				} else {
-					r.X, r.W = off, sizes[i]
+					r.X, r.W = off, c.sizes[i]
 				}
 				out = append(out, r)
 				break
 			}
-			off += sizes[i]
+			off += c.sizes[i]
 		}
 	}
 	return out
@@ -253,16 +269,8 @@ func ResizeThrough(root TreeNode, rootRect Rect, target *Split, cursorPx, minPx 
 	if !ok {
 		return
 	}
-	top, topRect, ok := corridorTop(root, rootRect, target)
+	c, ok := openCorridor(root, rootRect, target)
 	if !ok {
-		return
-	}
-	topNode := TreeNode{Split: top}
-	segs := flattenCorridor(topNode, target.Dir)
-	start, total := axisSpan(topRect, target.Dir)
-	sizes := segmentSizes(topNode, target.Dir, total)
-	bIdx := boundaryIndex(segs, target)
-	if bIdx < 0 || bIdx+1 >= len(segs) {
 		return
 	}
 	pos := cursorPx
@@ -273,8 +281,8 @@ func ResizeThrough(root TreeNode, rootRect Rect, target *Split, cursorPx, minPx 
 		pos = hi
 	}
 
-	cur := start
-	for _, sz := range sizes[:bIdx+1] {
+	cur := c.start
+	for _, sz := range c.sizes[:c.bIdx+1] {
 		cur += sz
 	}
 	delta := pos - cur
@@ -285,20 +293,19 @@ func ResizeThrough(root TreeNode, rootRect Rect, target *Split, cursorPx, minPx 
 	// One side shrinks outward from the boundary; all the growth goes to the
 	// adjacent segment on the other side.
 	if delta < 0 {
-		takeSequential(segs[:bIdx+1], sizes[:bIdx+1], -delta, target.Dir, minPx, true)
-		sizes[bIdx+1] += -delta
+		takeSequential(c.segs[:c.bIdx+1], c.sizes[:c.bIdx+1], -delta, target.Dir, minPx, true)
+		c.sizes[c.bIdx+1] += -delta
 	} else {
-		takeSequential(segs[bIdx+1:], sizes[bIdx+1:], delta, target.Dir, minPx, false)
-		sizes[bIdx] += delta
+		takeSequential(c.segs[c.bIdx+1:], c.sizes[c.bIdx+1:], delta, target.Dir, minPx, false)
+		c.sizes[c.bIdx] += delta
 	}
 
-	applySizes(topNode, target.Dir, segs, sizes)
+	applySizes(TreeNode{Split: c.top}, target.Dir, c.segs, c.sizes)
 }
 
-// corridorTop is target's topmost same-axis ancestor split and its laid-out
-// rect: the corridor the drag can reach. A perpendicular parent, or the root,
-// ends the climb.
-func corridorTop(root TreeNode, rootRect Rect, target *Split) (*Split, Rect, bool) {
+// corridorTop is target's topmost same-axis ancestor split: the corridor the
+// drag can reach. A perpendicular parent, or the root, ends the climb.
+func corridorTop(root TreeNode, target *Split) (*Split, bool) {
 	var path []*Split
 	var find func(n TreeNode) bool
 	find = func(n TreeNode) bool {
@@ -315,9 +322,7 @@ func corridorTop(root TreeNode, rootRect Rect, target *Split) (*Split, Rect, boo
 		return false
 	}
 	if !find(root) {
-		if root.Split != target {
-			return nil, Rect{}, false
-		}
+		return nil, false
 	}
 	// path is appended on unwind, so it runs leaf to root: climb while the
 	// immediate parent splits along the same axis.
@@ -329,22 +334,7 @@ func corridorTop(root TreeNode, rootRect Rect, target *Split) (*Split, Rect, boo
 		}
 		break
 	}
-	var locate func(n TreeNode, r Rect) (Rect, bool)
-	locate = func(n TreeNode, r Rect) (Rect, bool) {
-		if n.Split == nil {
-			return Rect{}, false
-		}
-		if n.Split == top {
-			return r, true
-		}
-		a, b := SplitRect(r, n.Split.Dir, n.Split.Ratio)
-		if rr, ok := locate(n.Split.A, a); ok {
-			return rr, true
-		}
-		return locate(n.Split.B, b)
-	}
-	r, ok := locate(root, rootRect)
-	return top, r, ok
+	return top, true
 }
 
 // flattenCorridor lists, in axis order, the maximal subtrees of n that are not
