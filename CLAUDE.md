@@ -184,7 +184,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   standing exception, for url and shell alike: it is a screenshot, so the
   tile keeps that face, the address and the tmux session keep existing, a
   clone taken while frozen keeps the copy, and only the reconnect clears it
-  (`client/golive`).
+  (`shellconn.DecideGoLive`).
 - Shells ride the web door: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
