@@ -709,7 +709,7 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 		return nil, err
 	}
 	if req.GridId != "" {
-		want, err := a.resolveGridContext(req.GridId)
+		_, want, err := a.resolveGrid(req.GridId)
 		if err != nil {
 			return nil, err
 		}
@@ -725,12 +725,6 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 		return nil, err
 	}
 	return a.changedRow(ctx, id)
-}
-
-// resolveGridContext is resolveGrid's context half, minting nothing.
-func (a *Adapter) resolveGridContext(gridID string) (string, error) {
-	_, ckey, err := a.resolveGrid(gridID)
-	return ckey, err
 }
 
 // SetTile terminates the framing arms at the store. Rename is refused because
@@ -779,7 +773,7 @@ func (a *Adapter) changedRow(ctx context.Context, id int64) (*gridwellv1.TileRes
 func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	f := rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
 	if req.RootGridId != "" {
-		ckey, err := a.resolveGridContext(req.RootGridId)
+		_, ckey, err := a.resolveGrid(req.RootGridId)
 		if err != nil {
 			return nil, err
 		}
