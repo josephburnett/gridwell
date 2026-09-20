@@ -9,7 +9,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -217,39 +216,6 @@ func (a *App) ensureFileTextarea() {
 	})
 	ta.Call("addEventListener", "mousedown", mdCb)
 
-	// Forward to the right-button handlers while a right-drag is in flight;
-	// without this, dragging over the textarea would freeze the gesture.
-	mmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		if a.rightDrag == nil {
-			return nil
-		}
-		ev := args[0]
-		canvasRect := a.canvas.Call("getBoundingClientRect")
-		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
-		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
-		// The release may have happened somewhere we did not see. Only the
-		// right drag is forwarded here, so that is the only arm offered.
-		buttons := ev.Get("buttons").Int()
-		if gesture.RecoverRelease(buttons, gesture.Armed{RightDrag: true}) == gesture.FinishRightDrag {
-			a.finishRightDrag(sx, sy)
-			return nil
-		}
-		a.onRightMove(sx, sy)
-		return nil
-	})
-	ta.Call("addEventListener", "mousemove", mmCb)
-	muCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		ev := args[0]
-		if a.rightDrag == nil || ev.Get("button").Int() != 2 {
-			return nil
-		}
-		canvasRect := a.canvas.Call("getBoundingClientRect")
-		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
-		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
-		a.finishRightDrag(sx, sy)
-		return nil
-	})
-	ta.Call("addEventListener", "mouseup", muCb)
 	cmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")
 		return nil
