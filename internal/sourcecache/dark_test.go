@@ -10,6 +10,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -77,10 +79,10 @@ func TestBothDirectionsLearnTheSameDarkness(t *testing.T) {
 			if transition {
 				wantCalls = 1
 			}
-			if got := len(announced(calls)); got != wantCalls {
+			if got := len(announced(t, byCall, calls)); got != wantCalls {
 				t.Errorf("the call direction announced %d times, want %d", got, wantCalls)
 			}
-			if got := len(announced(healths)); got != 0 {
+			if got := len(announced(t, byHealth, healths)); got != 0 {
 				t.Errorf("the health direction announced %d times, want 0: "+
 					"the client is receiving this same event on this same stream", got)
 			}
@@ -90,11 +92,11 @@ func TestBothDirectionsLearnTheSameDarkness(t *testing.T) {
 
 // darkFixture is a layer with nothing but a dark map and one subscriber, which
 // is all setDark touches. Its announcements land in the returned channel.
-func darkFixture(t *testing.T) (*Layer, chan *pb.Event) {
+func darkFixture(t *testing.T) (*Layer, <-chan *pb.Event) {
 	t.Helper()
-	c := &Layer{dark: map[string]bool{}, subs: map[int]chan *pb.Event{}}
-	ch := make(chan *pb.Event, 8)
-	c.subs[1] = ch
+	c := &Layer{dark: map[string]bool{}, hub: eventhub.New(rpc.EventKey)}
+	ch, detach := c.hub.Subscribe()
+	t.Cleanup(detach)
 	return c, ch
 }
 
@@ -106,15 +108,23 @@ func seedDark(c *Layer, dark bool) {
 	c.dark["conn"] = dark
 }
 
-// announced takes whatever is waiting on an announcement channel right now. Both
-// directions emit synchronously, so anything owed is already there.
-func announced(ch chan *pb.Event) []*pb.Event {
+// announced takes the announcements a direction owed. The fan-out delivers on
+// a pump of its own, so a sentinel published behind them is what makes "none"
+// provable: delivery is in first-touch order, so anything announced before the
+// sentinel is in hand by the time it arrives.
+func announced(t *testing.T, c *Layer, ch <-chan *pb.Event) []*pb.Event {
+	t.Helper()
+	c.emitGridChanged("sentinel")
 	var out []*pb.Event
 	for {
 		select {
 		case ev := <-ch:
+			if ev.GetGridChanged().GetGridId() == "sentinel" {
+				return out
+			}
 			out = append(out, ev)
-		default:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the sentinel never arrived; the announcement stream is stuck")
 			return out
 		}
 	}
@@ -262,21 +272,7 @@ func TestDarkDiscoveryTellsTheClientToReRead(t *testing.T) {
 			return nil
 		})
 	}()
-	// The subscription registers asynchronously; the discovery is a one-shot
-	// transition, so let the stream be there before causing it.
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		cc.subsMu.Lock()
-		n := len(cc.subs)
-		cc.subsMu.Unlock()
-		if n > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the layer's own stream never registered the subscriber")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	awaitSubscriber(t, cc, events)
 
 	if _, err := cc.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: txt.GetTile().GetId()}); err == nil {
 		t.Fatal("the preview read was supposed to fail transport-shaped")
