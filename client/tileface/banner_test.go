@@ -1,4 +1,4 @@
-package tilebanner
+package tileface
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 
 // The status is the plugin's word about the tile, never a second name: it can
 // only follow a name, so a plugin cannot rename a tile through it.
-func TestRuns(t *testing.T) {
+func TestBannerRuns(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		tile         *gridwellv1.Tile
@@ -26,9 +26,9 @@ func TestRuns(t *testing.T) {
 			&gridwellv1.Tile{Kind: rpc.KindWell}, "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			label, status := Runs(tc.tile)
+			label, status := BannerRuns(tc.tile)
 			if label != tc.label || status != tc.statu {
-				t.Errorf("Runs = (%q, %q), want (%q, %q)", label, status, tc.label, tc.statu)
+				t.Errorf("BannerRuns = (%q, %q), want (%q, %q)", label, status, tc.label, tc.statu)
 			}
 		})
 	}
