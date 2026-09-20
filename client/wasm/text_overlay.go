@@ -9,7 +9,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -166,95 +165,26 @@ func (a *App) ensureFileTextarea() {
 	// No wheel listener: text mode uses the textarea's native scroll, and
 	// TextZoom is fixed for the visit.
 
-	// The textarea covers the whole pane in text mode, so canvas click handlers
-	// never see clicks here. An edge-zone left mousedown ascends; a right
-	// mousedown goes through the canvas listener's own entry point, so split,
-	// swap and resize work over the textarea.
-	mdCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		ev := args[0]
-		button := ev.Get("button").Int()
-		canvasRect := a.canvas.Call("getBoundingClientRect")
-		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
-		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
-		if button == 2 {
-			ev.Call("preventDefault")
-			if a.trans.Any() {
-				return nil
-			}
-			p, r, ok := a.paneAtScreen(sx, sy)
-			if !ok {
-				return nil
-			}
-			a.onRightDown(p, r, sx, sy, rightDragIntent(ev))
-			return nil
-		}
-		if button == 1 {
-			// Middle-click ascends, same as on the canvas, which never sees
-			// this press.
-			ev.Call("preventDefault")
-			if a.trans.Any() {
-				return nil
-			}
-			if p := a.tree.FocusedPane(); p != nil {
-				a.menu.Close()
-				a.ascendPane(p)
-			}
-			return nil
-		}
-		if button != 0 {
-			return nil
+	// The textarea covers the whole pane in text mode, so the canvas never sees
+	// a press here and installOverlayMouse hands the pane gestures back. The
+	// left button is the textarea's, for the caret and the selection, except at
+	// the edge, where the pane has no margin left to click and the press
+	// ascends. The textarea lives for the session, so nothing releases its
+	// js.Funcs.
+	a.installOverlayMouse(ta, func(ev js.Value, sx, sy float64) bool {
+		if ev.Get("button").Int() != 0 {
+			return false
 		}
 		p := a.tree.FocusedPane()
 		if p == nil || p.ContentID() == "" {
-			return nil
+			return true
 		}
-		r := paneRectFor(a, p)
-		if !pointInFileInner(r, sx, sy) {
+		if !pointInFileInner(paneRectFor(a, p), sx, sy) {
 			ev.Call("preventDefault")
 			a.ascend(p, 1, true)
 		}
-		return nil
+		return true
 	})
-	ta.Call("addEventListener", "mousedown", mdCb)
-
-	// Forward to the right-button handlers while a right-drag is in flight;
-	// without this, dragging over the textarea would freeze the gesture.
-	mmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		if a.rightDrag == nil {
-			return nil
-		}
-		ev := args[0]
-		canvasRect := a.canvas.Call("getBoundingClientRect")
-		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
-		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
-		// The release may have happened somewhere we did not see. Only the
-		// right drag is forwarded here, so that is the only arm offered.
-		buttons := ev.Get("buttons").Int()
-		if gesture.RecoverRelease(buttons, gesture.Armed{RightDrag: true}) == gesture.FinishRightDrag {
-			a.finishRightDrag(sx, sy)
-			return nil
-		}
-		a.onRightMove(sx, sy)
-		return nil
-	})
-	ta.Call("addEventListener", "mousemove", mmCb)
-	muCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		ev := args[0]
-		if a.rightDrag == nil || ev.Get("button").Int() != 2 {
-			return nil
-		}
-		canvasRect := a.canvas.Call("getBoundingClientRect")
-		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
-		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
-		a.finishRightDrag(sx, sy)
-		return nil
-	})
-	ta.Call("addEventListener", "mouseup", muCb)
-	cmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		args[0].Call("preventDefault")
-		return nil
-	})
-	ta.Call("addEventListener", "contextmenu", cmCb)
 
 	// Multi-finger touches forward into the touch gesture machine, the analogue
 	// of the mouse forwarding above. Single-finger touches keep native textarea
