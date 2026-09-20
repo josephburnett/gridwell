@@ -1,8 +1,6 @@
 // Package events owns what the client does with one event off the Subscribe
-// stream, beyond folding it into the cache: which caches a removal drops,
-// what a grid's change signal clears and refetches, and how a health
-// transition reports and resyncs. The shim applies the event and runs the
-// plan; nothing here reads the DOM or the wire.
+// stream, beyond folding it into the cache. The shim applies the event and
+// runs the plan; nothing here reads the DOM or the wire.
 package events
 
 import (
@@ -17,9 +15,8 @@ type Plan struct {
 	// raster must be released, or deleting tiles leaks browser images.
 	DropPreviews string
 	// ClearLatch and Fetch name a changed grid. GridChanged is the one
-	// per-grid signal, so it is also what clears a grid's failure latch, and
-	// the refetch is unconditional: the next descent would otherwise read
-	// stale.
+	// per-grid signal, so it also clears that grid's failure latch, and the
+	// refetch is unconditional: the next descent would otherwise read stale.
 	ClearLatch string
 	Fetch      string
 	// Health is a namespace's stream going dark or recovering; ReactHealth
@@ -42,9 +39,9 @@ func Route(ev *pb.Event) Plan {
 }
 
 // HealthReaction is what a health transition costs the user. Both directions
-// resync the source's grids: down changes what they are, a remembered room in
-// place of a live one, and up means the fan-in resumed with no backlog, so
-// this client missed that source's events too.
+// resync the source's grids: down changes what they are, and up means the
+// fan-in resumed with no backlog, so this client missed that source's events
+// too.
 type HealthReaction struct {
 	// Source is the errsurface key, one sticky notice per namespace.
 	Source string
