@@ -1,7 +1,6 @@
 // Package golive owns what an explicit reconnect does to the row it descended
 // into, for every kind that can go live. Going live IS the unfreeze, so the
-// standing freeze and a live surface never coexist, and the rule is written
-// once rather than once per kind.
+// standing freeze and a live surface never coexist.
 package golive
 
 // Plan is what the caller does with the row before the surface is placed.
