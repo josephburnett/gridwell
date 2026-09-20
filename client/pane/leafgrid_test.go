@@ -1,4 +1,4 @@
-package gridpath
+package pane
 
 import "testing"
 

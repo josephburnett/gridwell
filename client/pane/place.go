@@ -9,9 +9,9 @@ import "slices"
 
 // Frame is one level of a pane's place. GridID is set only where it is
 // authoritative, on the bottom frame and on a namespace crossing; an ordinary
-// well frame derives its grid through gridpath.ResolveLeafGrid, since a
-// derived fact must not be copied. Content marks a frame whose place is the
-// door tile itself, with no grid of its own.
+// well frame derives its grid through ResolveLeafGrid, since a derived fact
+// must not be copied. Content marks a frame whose place is the door tile
+// itself, with no grid of its own.
 type Frame struct {
 	GridID  string
 	Door    string

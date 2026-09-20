@@ -24,7 +24,6 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/events"
-	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -1058,9 +1057,9 @@ func (a *App) gridIDForPane(p *pane.Pane) string {
 // gridIDForPathFrom walks path, of well row ids, from anchor to the leaf grid
 // id. It returns anchor for an empty or stale path, and "" when anchor is "".
 func (a *App) gridIDForPathFrom(anchor string, p []string) string {
-	// The walk is the pure gridpath.ResolveLeafGrid; the closure does the cache
+	// The walk is the pure pane.ResolveLeafGrid; the closure does the cache
 	// read and kicks a background fetch on a miss.
-	return gridpath.ResolveLeafGrid(anchor, p,
+	return pane.ResolveLeafGrid(anchor, p,
 		func(gid, wellID string) (string, bool, bool) {
 			g, ok := a.c.Grid(gid)
 			if !ok {
