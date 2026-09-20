@@ -67,10 +67,7 @@ func (a *App) flushWellWheelSaves() {
 				_, err := a.cl.SetFraming(ctx, req)
 				return err
 			},
-			func() (string, []byte, string) {
-				path, body := rpc.SetFramingBeacon(req)
-				return path, body, rpc.BeaconJSONType
-			})
+			jsonBeacon(func() (string, []byte) { return rpc.SetFramingBeacon(req) }))
 	}
 }
 
@@ -171,10 +168,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 			_, err := a.cl.SetFraming(ctx, &req)
 			return err
 		},
-		func() (string, []byte, string) {
-			path, body := rpc.SetFramingBeacon(&req)
-			return path, body, rpc.BeaconJSONType
-		})
+		jsonBeacon(func() (string, []byte) { return rpc.SetFramingBeacon(&req) }))
 }
 
 // persistTextScroll is the settle persister's text arm: a text descent's
@@ -209,10 +203,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 			_, err := a.cl.SetTile(ctx, req)
 			return err
 		},
-		func() (string, []byte, string) {
-			path, body := rpc.SetTileBeacon(req)
-			return path, body, rpc.BeaconJSONType
-		})
+		jsonBeacon(func() (string, []byte) { return rpc.SetTileBeacon(req) }))
 }
 
 // scheduleURLUpdate marks the URL out of date. Cheap to call from any

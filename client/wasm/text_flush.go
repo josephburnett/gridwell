@@ -183,10 +183,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 				_, err := a.cl.SetTile(ctx, req)
 				return err
 			},
-			beacon: func() (string, []byte, string) {
-				path, body := rpc.SetTileBeacon(req)
-				return path, body, rpc.BeaconJSONType
-			},
+			beacon: jsonBeacon(func() (string, []byte) { return rpc.SetTileBeacon(req) }),
 		})
 	})
 }

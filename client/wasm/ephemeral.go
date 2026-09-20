@@ -115,11 +115,8 @@ func (a *App) deleteEphemeralTile(gridID, tileID string) {
 	a.post(write{
 		label: "DeleteTile", gid: gridID, id: tileID,
 		source: "ephemeral", failText: "ephemeral tile cleanup failed",
-		call: func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
-		beacon: func() (string, []byte, string) {
-			path, body := rpc.DeleteTileBeacon(req)
-			return path, body, rpc.BeaconJSONType
-		},
+		call:   func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
+		beacon: jsonBeacon(func() (string, []byte) { return rpc.DeleteTileBeacon(req) }),
 	})
 }
 

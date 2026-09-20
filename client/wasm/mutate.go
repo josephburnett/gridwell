@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/inflight"
@@ -201,6 +202,15 @@ func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess 
 			}
 		},
 	})
+}
+
+// jsonBeacon wraps a *Beacon builder as a dispatcher beacon. Every beacon the
+// client sends is JSON, so no caller names the content type.
+func jsonBeacon(build func() (string, []byte)) func() (string, []byte, string) {
+	return func() (string, []byte, string) {
+		path, body := build()
+		return path, body, rpc.BeaconJSONType
+	}
 }
 
 // postFramingPersist dispatches a settle-persister framing write. id is the
