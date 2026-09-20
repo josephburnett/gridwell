@@ -1,9 +1,7 @@
 // Package tileface owns what a tile's face says about its row from outside:
 // whether it draws in the outside-Gridwell treatment, and which hue its banner
-// wears. Both are one classification each, read by the grid renderer, the
-// child preview, the palette swatch and the drag ghost, so no painter can
-// answer differently from another. It is js-free; the shim maps a hue to a
-// color and paints.
+// wears. One classification each, read by every painter of a row, so no two
+// can answer differently. It is js-free; the shim maps a hue to a color.
 package tileface
 
 import (
@@ -11,9 +9,8 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Outside reports the outside-Gridwell treatment: a grid that declares
-// host_content, so every row in it is host state; an exit well, wherever it
-// sits; or a shell tile.
+// Outside reports the outside-Gridwell treatment. A grid that declares
+// host_content makes every row in it host state, whatever the row is.
 func Outside(t *gridwellv1.Tile, parentHostContent bool) bool {
 	return parentHostContent || rpc.IsExitWell(t) || t.Kind == rpc.KindShell
 }
@@ -35,9 +32,8 @@ const (
 	HueText
 )
 
-// BannerHue answers in the outline's priority: a shell's warmth first, then a
-// well's blue whichever grid it sits in, then the host treatment, then the
-// kind. outside is Outside's answer for the same row.
+// BannerHue answers in the outline's priority, so a well keeps its blue
+// whichever grid it sits in. outside is Outside's answer for the same row.
 func BannerHue(t *gridwellv1.Tile, outside bool) Hue {
 	switch {
 	case t.Kind == rpc.KindShell:
