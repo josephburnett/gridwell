@@ -2,7 +2,6 @@ package nav
 
 import (
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/urlwalk"
@@ -285,11 +284,11 @@ func walkURL(d *restoreData, rw *RestoreWorld) (path []string, leaf, need string
 	return path, leaf, need
 }
 
-// leafRow is the content leaf's cached row. gridpath.ResolveLeafGrid owns the
+// leafRow is the content leaf's cached row. pane.ResolveLeafGrid owns the
 // walk to its grid, the same one the shim resolves a pane's grid with, so the
 // two cannot land in different grids.
 func leafRow(anchor string, path []string, leaf string, rw *RestoreWorld) (RestoreTile, bool) {
-	gid := gridpath.ResolveLeafGrid(anchor, path,
+	gid := pane.ResolveLeafGrid(anchor, path,
 		func(gid, wellID string) (string, bool, bool) {
 			rows, ok := rw.rows(gid)
 			if !ok {

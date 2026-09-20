@@ -18,7 +18,6 @@ import (
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
-	"github.com/josephburnett/gridwell/client/tilebanner"
 	"github.com/josephburnett/gridwell/client/tileface"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -770,7 +769,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	// Every well is blue; a cross-plugin well differs by the dash, which always
 	// means a link, a reference you can unlink.
 	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, dashed, selected)
-	// A plain well gets no banner: it has no alt text, and tilebanner.Runs
+	// A plain well gets no banner: it has no alt text, and tileface.BannerRuns
 	// returns "" for it.
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
@@ -823,7 +822,7 @@ func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outsid
 // drawTileBannerLabelIn names the text color rather than deriving it: one
 // banner geometry, so a dead link's grey label lands in the same place.
 func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, textColor string) {
-	label, status := tilebanner.Runs(n)
+	label, status := tileface.BannerRuns(n)
 	if label == "" {
 		return
 	}

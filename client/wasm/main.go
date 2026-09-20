@@ -24,14 +24,12 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/events"
-	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
-	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/retry"
@@ -401,7 +399,7 @@ type wellWheelDrift struct {
 // paneLocal is the single owner of one pane's session-local state. App.local
 // creates it and App.forgetPane removes it, so none of it outlives its pane.
 type paneLocal struct {
-	panestate.State
+	pane.SessionState
 	urlView   *urlView
 	shellConn *shellStreamConn
 }
@@ -425,7 +423,7 @@ func (a *App) urlViewFor(paneID string) *urlView {
 func (a *App) local(paneID string) *paneLocal {
 	pl := a.locals[paneID]
 	if pl == nil {
-		pl = &paneLocal{State: panestate.New()}
+		pl = &paneLocal{SessionState: pane.NewSessionState()}
 		a.locals[paneID] = pl
 	}
 	return pl
@@ -1059,9 +1057,9 @@ func (a *App) gridIDForPane(p *pane.Pane) string {
 // gridIDForPathFrom walks path, of well row ids, from anchor to the leaf grid
 // id. It returns anchor for an empty or stale path, and "" when anchor is "".
 func (a *App) gridIDForPathFrom(anchor string, p []string) string {
-	// The walk is the pure gridpath.ResolveLeafGrid; the closure does the cache
+	// The walk is the pure pane.ResolveLeafGrid; the closure does the cache
 	// read and kicks a background fetch on a miss.
-	return gridpath.ResolveLeafGrid(anchor, p,
+	return pane.ResolveLeafGrid(anchor, p,
 		func(gid, wellID string) (string, bool, bool) {
 			g, ok := a.c.Grid(gid)
 			if !ok {

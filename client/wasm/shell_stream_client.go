@@ -13,7 +13,6 @@ import (
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/golive"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
@@ -163,7 +162,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// freeze by the rule the url side runs. A shell link never follows its
 	// target: the session keys by the owner id below, so the link row is both
 	// where the freeze lives and where it is cleared.
-	plan, ok := golive.Decide(a.caps.Shells, frozen, false)
+	plan, ok := shellconn.DecideGoLive(a.caps.Shells, frozen, false)
 	if !ok {
 		a.reportErr(caps.ShellNotice())
 		return

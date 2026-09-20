@@ -1,7 +1,8 @@
 // Package tileface owns what a tile's face says about its row from outside:
-// whether it draws in the outside-Gridwell treatment, and which hue its banner
-// wears. One classification each, read by every painter of a row, so no two
-// can answer differently. It is js-free; the shim maps a hue to a color.
+// whether it draws in the outside-Gridwell treatment, what its banner reads,
+// and which hue that banner wears. One classification each, read by every
+// painter of a row, so no two can answer differently. It is js-free; the shim
+// maps a hue to a color.
 package tileface
 
 import (

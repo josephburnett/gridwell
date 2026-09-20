@@ -45,7 +45,7 @@ const (
 // (rpc.DescentOf) and reads the same aliveness facts DecideShellRefreshVisible
 // does, so the two agree about what a dead session means. frozen is the user's
 // standing freeze, one arm for every kind: it beats the engagement default
-// until the reconnect gesture clears it (client/golive).
+// until the reconnect gesture clears it (DecideGoLive).
 func DecideAutoLive(d rpc.Descent, liveURL, liveShell, hasPreview, aliveKnown, alive, frozen bool) AutoLive {
 	if frozen {
 		return AutoLiveNone

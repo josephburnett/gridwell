@@ -361,7 +361,7 @@ copy:
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | does this descent go live | `shellconn.DecideAutoLive` |
-| what a tile's banner reads | `tilebanner.Runs` (name, then the plugin's status) |
+| what a tile's banner reads | `tileface.BannerRuns` (name, then the plugin's status) |
 | does a tile draw as host state, and which hue its banner wears | `tileface.Outside`, `tileface.BannerHue` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | what that slot's right-click offers | `circlemenu.For` |

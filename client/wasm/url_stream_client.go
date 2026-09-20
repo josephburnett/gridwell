@@ -13,9 +13,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/contentzoom"
-	"github.com/josephburnett/gridwell/client/golive"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/urlview"
 )
 
@@ -89,14 +89,14 @@ func (a *App) webAddress(t *gridwellv1.Tile) string {
 }
 
 // openURLStream goes live: main places a native WebContentsView for (pane,
-// tile). What that does to the row is golive.Decide's; this resolves the row
-// and runs the plan.
+// tile). What that does to the row is shellconn.DecideGoLive's; this resolves
+// the row and runs the plan.
 func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	t, ok := a.urlTileForPane(p, tileID)
 	if !ok {
 		return
 	}
-	plan, ok := golive.Decide(a.caps.LiveURL, t.UrlFrozen, rpc.LeafLink(t))
+	plan, ok := shellconn.DecideGoLive(a.caps.LiveURL, t.UrlFrozen, rpc.LeafLink(t))
 	if !ok {
 		urlLog("live URL unavailable on this host (no Electron bridge); tile stays frozen")
 		return
