@@ -1,9 +1,8 @@
 package palette
 
 // Which primitives the + menu offers on a grid. Both facts are the serving
-// node's, read off its grid and its handshake: the grid's writable bit, and
-// the node's shells policy, since the PTY rides that node's web door and the
-// client's own caps would be a second, wrong owner.
+// node's: the PTY rides that node's web door, so the client's own caps would
+// be a second, wrong owner of the shells policy.
 
 // Offer is what the grid and its node declare.
 type Offer struct {

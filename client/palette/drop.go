@@ -7,13 +7,11 @@ package palette
 type Drop int
 
 const (
-	// DropSnapBack returns the ghost to its swatch and leaves the menu open:
-	// no grid under the cursor, cells already occupied, or a doorway that
-	// cannot be linked from here.
+	// DropSnapBack returns the ghost to its swatch and leaves the menu open.
 	DropSnapBack Drop = iota
-	// DropRefuse is a primitive over another node's grid. The swatch was gated
-	// by the menu's node, so this refuses visibly rather than snapping back
-	// with no reason given.
+	// DropRefuse is a primitive over another node's grid: the swatch was gated
+	// by the menu's node, so it refuses visibly rather than snapping back with
+	// no reason given.
 	DropRefuse
 	// DropLink places an exit well onto the doorway's root grid.
 	DropLink
@@ -34,9 +32,8 @@ type Release struct {
 	Occupied bool
 	// Doorway marks a plugin, connection or declared-root swatch.
 	Doorway bool
-	// Enterable is pluginhealth.Classify == Enterable. Only a doorway carries
-	// a declaration to classify, and DropOn reads this on that arm alone, so
-	// the caller may leave it false elsewhere.
+	// Enterable is pluginhealth.Classify == Enterable. DropOn reads it on the
+	// doorway arm alone, so the caller may leave it false elsewhere.
 	Enterable bool
 	// Writable is the destination grid's writable bit. Unknown is not
 	// writable: minting into a grid that may refuse the link would show a tile
