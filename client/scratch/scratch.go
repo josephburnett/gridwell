@@ -1,7 +1,7 @@
 // Package scratch answers where a pane's ephemeral visits live, reading only
-// Grid.scratch_grid_id, the stamp the serving node chains through mounts. The
-// answer cannot be guessed from an id, a mounted remote grid's first segment
-// being the local node, so it is three-valued and an uncached grid is told not
+// Grid.scratch_grid_id, the stamp the serving node chains through mounts. A
+// mounted remote grid's first segment is the local node, so the answer cannot
+// be guessed from an id: it is three-valued, and an uncached grid is told not
 // known rather than handed a guess.
 package scratch
 
@@ -12,9 +12,8 @@ type Grid struct {
 	ScratchGridID string
 }
 
-// For returns the scratch grid that ephemeral visits from g land in. An
-// uncached grid answers ("", false), not known; a cached grid whose node
-// stamped none answers ("", true), a known nowhere.
+// For returns the scratch grid that ephemeral visits from g land in. A cached
+// grid whose node stamped none answers ("", true), a known nowhere.
 func For(g Grid) (id string, known bool) {
 	if !g.Cached {
 		return "", false
