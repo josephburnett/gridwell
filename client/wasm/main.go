@@ -31,7 +31,6 @@ import (
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
-	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/retry"
@@ -401,7 +400,7 @@ type wellWheelDrift struct {
 // paneLocal is the single owner of one pane's session-local state. App.local
 // creates it and App.forgetPane removes it, so none of it outlives its pane.
 type paneLocal struct {
-	panestate.State
+	pane.SessionState
 	urlView   *urlView
 	shellConn *shellStreamConn
 }
@@ -425,7 +424,7 @@ func (a *App) urlViewFor(paneID string) *urlView {
 func (a *App) local(paneID string) *paneLocal {
 	pl := a.locals[paneID]
 	if pl == nil {
-		pl = &paneLocal{State: panestate.New()}
+		pl = &paneLocal{SessionState: pane.NewSessionState()}
 		a.locals[paneID] = pl
 	}
 	return pl
