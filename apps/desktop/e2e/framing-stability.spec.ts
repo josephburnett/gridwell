@@ -313,3 +313,32 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
   await gw.waitIdle(30_000);
   expect(await rootView(), 'the landing moved it too').toEqual(settled);
 });
+
+// Reading never mutates. A zero row is not a framing but the absence of one,
+// and its readers show a fallback in its place, so the settle persister must
+// diff against that fallback: against the row itself every grid is stamped on
+// the first settle tick after it is merely looked at, and a root grid's stamp
+// is derived from the window it was looked at in.
+test('looking at a grid never stamps a framing on it', async ({ gw, window }) => {
+  await gw.enterPlugin('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  const uuid = (await gw.plugins()).find((p) => p.kind === 'home')!.uuid;
+  // Two settle windows with no gesture in them at all.
+  await window.waitForTimeout(1500);
+  const pl = (await gw.plugins()).find((p) => p.uuid === uuid)!;
+  expect(Number(pl.rootViewZoom ?? 0), 'the root grid was stamped by being looked at').toBe(0);
+
+  // A descent is a look too: the doorway it entered by keeps its zero.
+  await gw.descendCell(cx, cy);
+  await gw.waitIdle();
+  await window.waitForTimeout(1500);
+  const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  expect(
+    Number((well as { viewZoom?: number | string }).viewZoom ?? 0),
+    'the doorway was stamped by being descended through',
+  ).toBe(0);
+});

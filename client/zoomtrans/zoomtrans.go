@@ -8,6 +8,8 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
 	"slices"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // Endpoints is one end of a transition: descent path, viewport center in
@@ -206,6 +208,27 @@ func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	cx, cy = EffectiveCenter(w)
 	return cx, cy, LiveFromIntrinsic(ratio, OvertakeZoom(w, paneW, paneH, cellPx))
+}
+
+// ShownWellFraming is the framing a doorway row is already showing: the stored
+// one, or what StoredView puts in its place when the row is the never-visited
+// sentinel. The framing writeback diffs against this rather than against the
+// zero row, which is not a framing at all, so a grid the user only looked at
+// is never stamped with one.
+func ShownWellFraming(w Well) rpc.Framing {
+	cx, cy := EffectiveCenter(w)
+	return rpc.Framing{Cx: cx, Cy: cy, Zoom: EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)}
+}
+
+// ShownRootFraming is ShownWellFraming for a root grid, which no doorway leads
+// into: an unvisited root sits at the grid origin at live zoom 1, not at
+// DefaultWellViewZoom's preview calibration, so its intrinsic zoom is one over
+// the synthetic 1×1 overtake and depends on the pane it is read in.
+func ShownRootFraming(stored rpc.Framing, overtake float64) rpc.Framing {
+	if stored.Zoom > 0 {
+		return stored
+	}
+	return rpc.Framing{Zoom: IntrinsicFromLive(1, overtake)}
 }
 
 // Ascent computes the endpoints of an ascent back through w: from to mid in

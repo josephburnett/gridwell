@@ -3,6 +3,8 @@ package zoomtrans
 import (
 	"math"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
@@ -542,5 +544,55 @@ func TestNeverVisitedFramingCentersTheFootprint(t *testing.T) {
 	v := Well{W: 3, H: 2, ViewZoom: 0.4}
 	if cx, cy := EffectiveCenter(v); cx != 0 || cy != 0 {
 		t.Errorf("visited center = (%v, %v), want (0, 0)", cx, cy)
+	}
+}
+
+// The round trip above is byte-identical only because the row is a framing. A
+// never-visited row is not one: its readers show a fallback in its place, so
+// what a writeback must diff against is that fallback, never the zero row.
+// Otherwise the first settle tick after a grid is merely looked at stamps a
+// framing on it, and a root grid's stamp is derived from the pane it was
+// looked at in.
+func TestShowingAGridNeverStampsAFramingOnIt(t *testing.T) {
+	const cell = 64.0
+	for _, pane := range [][2]float64{{1280, 800}, {480, 900}} {
+		paneW, paneH := pane[0], pane[1]
+		for _, w := range []Well{
+			{X: 0, Y: 0, W: 1, H: 1},
+			{X: 4, Y: 2, W: 3, H: 2},
+			{X: 2, Y: 3, W: 2, H: 2, ViewCx: 5.37, ViewCy: -7.125, ViewZoom: 0.4},
+		} {
+			cx, cy, live := StoredView(w, paneW, paneH, cell)
+			saved := rpc.Framing{Cx: cx, Cy: cy,
+				Zoom: IntrinsicFromLive(live, OvertakeZoom(w, paneW, paneH, cell))}
+			if !ShownWellFraming(w).SameAs(saved) {
+				t.Errorf("pane %vx%v: showing %+v and saving back what it shows stamped %+v",
+					paneW, paneH, w, saved)
+			}
+		}
+		// A root grid is entered by no doorway, so its unvisited view is the
+		// origin at live zoom 1 rather than the preview calibration.
+		overtake := Overtake(1, 1, paneW, paneH, cell)
+		shown := ShownRootFraming(rpc.Framing{}, overtake)
+		if !shown.SameAs(rpc.Framing{Zoom: IntrinsicFromLive(1, overtake)}) {
+			t.Errorf("pane %vx%v: showing an unvisited root stamped %+v", paneW, paneH, shown)
+		}
+		// What the user does move is still a write.
+		if shown.SameAs(rpc.Framing{Cx: 1, Zoom: shown.Zoom}) {
+			t.Errorf("pane %vx%v: a pan of an unvisited root must still be written", paneW, paneH)
+		}
+		if shown.SameAs(rpc.Framing{Zoom: IntrinsicFromLive(2, overtake)}) {
+			t.Errorf("pane %vx%v: a zoom of an unvisited root must still be written", paneW, paneH)
+		}
+	}
+	if ShownWellFraming(Well{W: 1, H: 1}).
+		SameAs(rpc.Framing{Cx: 0.5, Cy: 0.5, Zoom: 2 * DefaultWellViewZoom}) {
+		t.Error("a reframe of an unvisited doorway must still be written")
+	}
+	// The stamp is what makes this matter: a root grid's would carry the
+	// window it was looked at in into a window it was not.
+	if ShownRootFraming(rpc.Framing{}, Overtake(1, 1, 1280, 800, cell)).
+		SameAs(ShownRootFraming(rpc.Framing{}, Overtake(1, 1, 480, 900, cell))) {
+		t.Fatal("the two panes above must disagree, or the case is not covered")
 	}
 }
