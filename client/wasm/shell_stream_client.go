@@ -44,9 +44,10 @@ type shellStreamConn struct {
 
 	onData         js.Func
 	onResize       js.Func
-	onMouse        js.Func // right-button gesture, focus, link press
-	onLinkProvide  js.Func // xterm link provider: scans lines for http(s) urls
-	onLinkActivate js.Func // a link click opens an ephemeral url descent
+	onMouse        js.Func   // the release and click tail of a link press
+	mouseFns       []js.Func // from installOverlayMouse
+	onLinkProvide  js.Func   // xterm link provider: scans lines for http(s) urls
+	onLinkActivate js.Func   // a link click opens an ephemeral url descent
 	onLinkHover    js.Func
 	onLinkLeave    js.Func
 	onOSCURL       js.Func   // OSC 5522 from the gridwell-open shim
@@ -204,64 +205,50 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// Assigned below; the handlers read it only when an event arrives.
 	var conn *shellStreamConn
 
-	// The overlay paints above the canvas and would otherwise swallow the
-	// right-button mousedown that starts a pane gesture. The right button
-	// forwards into the canvas gesture pipeline; the left stays with xterm,
-	// except for pane focus and a press on a link.
+	// installOverlayMouse hands back the presses this overlay would otherwise
+	// swallow. Every other press stays the terminal's — the left selects, and
+	// on Linux the middle one pastes the primary selection, so it cannot be
+	// the canvas's ascent — save for pane focus and a press on a link.
+	mouseFns := a.installOverlayMouse(container, func(ev js.Value, _, _ float64) bool {
+		// A press on a link is Gridwell's alone: xterm would both activate
+		// it and report the press, and the application would then open the
+		// same url again through its own opener.
+		if conn != nil {
+			conn.pendingLink = ""
+			if ev.Get("button").Int() == 0 && shellconn.DecideLinkPress(
+				conn.hoveredURL, mouseTrackingMode(conn.term), modifierHeld(ev)) {
+				conn.pendingLink = conn.hoveredURL
+				ev.Call("preventDefault")
+				ev.Call("stopPropagation")
+			}
+		}
+		// Pane focus still follows the click, because the overlay swallows
+		// the mousedown and the canvas path never runs.
+		if cur := a.tree.FindPane(p.ID); cur != nil {
+			a.focusToPane(cur)
+		}
+		return true
+	})
+
+	// The tail of a press this overlay took from xterm: xterm must neither
+	// report the release nor activate the link itself.
 	onMouse := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
-		switch ev.Get("type").String() {
-		case "contextmenu":
-			ev.Call("preventDefault")
-			return nil
-		case "mouseup", "click":
-			// The tail of a press this overlay took from xterm: xterm must
-			// neither report the release nor activate the link itself.
-			if conn == nil || conn.pendingLink == "" {
-				return nil
-			}
-			ev.Call("preventDefault")
-			ev.Call("stopPropagation")
-			if ev.Get("type").String() == "click" {
-				url := conn.pendingLink
-				conn.pendingLink = ""
-				a.shellURLActivate(p.ID, url)
-			}
-			return nil
-		}
-		if ev.Get("button").Int() != 2 {
-			// A press on a link is Gridwell's alone: xterm would both activate
-			// it and report the press, and the application would then open the
-			// same url again through its own opener.
-			if conn != nil {
-				conn.pendingLink = ""
-				if ev.Get("button").Int() == 0 && shellconn.DecideLinkPress(
-					conn.hoveredURL, mouseTrackingMode(conn.term), modifierHeld(ev)) {
-					conn.pendingLink = conn.hoveredURL
-					ev.Call("preventDefault")
-					ev.Call("stopPropagation")
-				}
-			}
-			// Pane focus still follows the click, because the overlay swallows
-			// the mousedown and the canvas path never runs.
-			if cur := a.tree.FindPane(p.ID); cur != nil {
-				a.focusToPane(cur)
-			}
+		if conn == nil || conn.pendingLink == "" {
 			return nil
 		}
 		ev.Call("preventDefault")
 		ev.Call("stopPropagation")
-		a.onMouseDown(js.Null(), args)
-		// onRightDown arms the gesture but does not redraw. Park the overlay so
-		// the rest of the drag lands on the canvas, not this div.
-		a.draw()
+		if ev.Get("type").String() == "click" {
+			url := conn.pendingLink
+			conn.pendingLink = ""
+			a.shellURLActivate(p.ID, url)
+		}
 		return nil
 	})
 	// Capture phase so we win over xterm's own inner listeners.
-	container.Call("addEventListener", "mousedown", onMouse, true)
 	container.Call("addEventListener", "mouseup", onMouse, true)
 	container.Call("addEventListener", "click", onMouse, true)
-	container.Call("addEventListener", "contextmenu", onMouse, true)
 
 	Terminal := js.Global().Get("Terminal")
 	if !Terminal.Truthy() {
@@ -324,6 +311,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		anchor:       p.Anchor(),
 		path:         slices.Clone(p.Path()),
 		onMouse:      onMouse,
+		mouseFns:     mouseFns,
 		touchFns:     touchFns,
 		lastCols:     uint16(cols),
 		lastRows:     uint16(rows),
@@ -694,6 +682,9 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	}
 	if conn.onOSCURL.Truthy() {
 		conn.onOSCURL.Release()
+	}
+	for _, f := range conn.mouseFns {
+		f.Release()
 	}
 	for _, f := range conn.touchFns {
 		f.Release()
