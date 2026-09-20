@@ -128,3 +128,63 @@ test('the bar circle right-clicks to a theme menu; light survives a reload', asy
     });
   }
 });
+
+// The darkest pixel in a rect, as an average channel. A near-black shade left
+// in a light-mode band shows up here whatever its hue.
+async function darkestIn(window: any, x: number, y: number, w: number, h: number): Promise<number> {
+  return window.evaluate(
+    ([px, py, pw, ph]: number[]) => {
+      const c = document.getElementById('canvas') as HTMLCanvasElement;
+      const ctx = c.getContext('2d')!;
+      const dpr = c.width / c.getBoundingClientRect().width;
+      const d = ctx.getImageData(
+        Math.round(px * dpr), Math.round(py * dpr),
+        Math.max(1, Math.round(pw * dpr)), Math.max(1, Math.round(ph * dpr)),
+      ).data;
+      let min = 255;
+      for (let i = 0; i < d.length; i += 4) {
+        min = Math.min(min, (d[i] + d[i + 1] + d[i + 2]) / 3);
+      }
+      return min;
+    },
+    [x, y, w, h],
+  );
+}
+
+// The preference is the browser's, so a spec wanting light can write it and
+// reload; the menu seam is the test above.
+async function wearLight(gw: any, window: any): Promise<void> {
+  await window.evaluate(() => localStorage.setItem('gridwell.theme', 'light'));
+  await window.reload();
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  await gw.waitIdle();
+  await expect.poll(() => gw.theme(), { timeout: 20_000 }).toBe('light');
+}
+
+test('the wide pane-tile crumb is a band lighter than the ink it carries', async ({
+  gw,
+  window,
+}) => {
+  await wearLight(gw, window);
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+
+  await gw.openPalette();
+  await gw.dragCreate('pane', cx, cy);
+  await gw.descendCell(cx, cy);
+  await expect
+    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
+    .toBe(1);
+
+  const bar = await gw.bar();
+  const crumb = bar.segments.find((s) => s.kind === 'pane');
+  expect(crumb, 'inside a pane tile the bar draws its crumb').toBeTruthy();
+  expect(
+    await darkestIn(window, crumb!.x + crumb!.w - 12, bar.top + bar.height / 2 - 2, 8, 4),
+    'the crumb band is lighter than the ink it carries',
+  ).toBeGreaterThan(128);
+
+  await gw.leaveWorkspace(0);
+});

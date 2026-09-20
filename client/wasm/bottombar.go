@@ -147,7 +147,7 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	c := a.cctx
 	if level == a.ws.Depth() {
-		c.Set("fillStyle", a.pal.PaneTileBorder)
+		c.Set("fillStyle", a.pal.CrumbHere)
 	} else {
 		c.Set("fillStyle", a.pal.CrumbIdle)
 	}

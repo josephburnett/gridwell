@@ -152,6 +152,9 @@ type Palette struct {
 	// BarInk is the bar's own lettering and the circle button's rim, over a
 	// band of any family.
 	BarInk string
+	// CrumbHere is the wide pane-tile crumb for the level you are in, a band
+	// carrying BarInk, where PaneTileBorder is a line drawn on a tile body.
+	CrumbHere string
 	// CrumbIdle is a crumb that is not where you are: a pane-tile level you
 	// are outside, and the outline of one whose row has not arrived yet.
 	CrumbIdle string
@@ -255,6 +258,7 @@ var dark = Palette{
 	BarPluginBand:    "#241e12",
 	BarEphemeralBand: "#1d1f24",
 	BarInk:           "#dff4f4",
+	CrumbHere:        "#3aa8a8",
 	CrumbIdle:        "#1d4a4a",
 	CachedChipBg:     "#8a6d2f",
 	CachedChipFg:     "#f4e3b2",
@@ -353,6 +357,7 @@ var light = Palette{
 	BarPluginBand:    "#f5efe2",
 	BarEphemeralBand: "#eceef2",
 	BarInk:           "#1d2e2e",
+	CrumbHere:        "#7fc9c9",
 	CrumbIdle:        "#bfe0e0",
 	CachedChipBg:     "#e6c67c",
 	CachedChipFg:     "#4a3708",
