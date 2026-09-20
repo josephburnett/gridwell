@@ -36,6 +36,7 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
@@ -60,12 +61,9 @@ type Adapter struct {
 	mem *store.Namespace
 	sup Supervisor
 
-	// subs are this namespace's event subscribers. The stream carries the
-	// supervisor's health, the source's, and the grids the adapter's own
-	// writes changed.
-	subsMu sync.Mutex
-	subs   map[int]chan *gridwellv1.Event
-	subSeq int
+	// hub fans this namespace's stream out: the supervisor's health, the
+	// source's, and the grids the adapter's own writes changed.
+	hub *eventhub.Hub[*gridwellv1.Event]
 
 	// srcDark is what the last listing found, held only to announce the
 	// transitions: every read would otherwise republish an outage the client
@@ -80,7 +78,7 @@ var _ namespace.Namespace = (*Adapter)(nil)
 
 // New builds the adapter; the caller owns both halves' lifecycles.
 func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapter {
-	return &Adapter{cp: cp, mem: mem, sup: sup, subs: map[int]chan *gridwellv1.Event{}}
+	return &Adapter{cp: cp, mem: mem, sup: sup, hub: eventhub.New(rpc.EventKey)}
 }
 
 // Info translates the plugin handshake, resolving each declared collection's
@@ -153,13 +151,13 @@ func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 // Subscribe serves this namespace's event stream: the plugin's health, its
 // subprocess and its source alike, and a GridChanged for a grid the adapter's
 // own writes changed, so a second pane repaints instead of holding a
-// placement the user has moved. A subscriber
-// arriving while the plugin or its source is down is told at once, since
-// nothing else would tell it until recovery; a healthy plugin announces
-// nothing, because a health event costs the client a full resync.
+// placement the user has moved. A subscriber arriving while the plugin or its
+// source is down is told at once, since nothing else would tell it until
+// recovery; a healthy plugin announces nothing, because a health event costs
+// the client a full resync.
 func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
-	id, ch := a.addSub()
-	defer a.removeSub(id)
+	ch, detach := a.hub.Subscribe()
+	defer detach()
 	if a.sup != nil {
 		cancel := a.sup.OnHealth(func(healthy bool, detail string) { a.emitHealth(healthy, detail) })
 		defer cancel()
@@ -178,39 +176,13 @@ func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest,
 		select {
 		case <-ctx.Done():
 			return nil
-		case ev := <-ch:
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
 			if err := send(ev); err != nil {
 				return err
 			}
-		}
-	}
-}
-
-func (a *Adapter) addSub() (int, chan *gridwellv1.Event) {
-	ch := make(chan *gridwellv1.Event, 64)
-	a.subsMu.Lock()
-	defer a.subsMu.Unlock()
-	a.subSeq++
-	a.subs[a.subSeq] = ch
-	return a.subSeq, ch
-}
-
-func (a *Adapter) removeSub(id int) {
-	a.subsMu.Lock()
-	defer a.subsMu.Unlock()
-	delete(a.subs, id)
-}
-
-// emit hands one event to every subscriber. A subscriber too far behind loses
-// it rather than blocking the writer: every event here is a cue to look again,
-// never a fact only it carries.
-func (a *Adapter) emit(ev *gridwellv1.Event) {
-	a.subsMu.Lock()
-	defer a.subsMu.Unlock()
-	for _, ch := range a.subs {
-		select {
-		case ch <- ev:
-		default:
 		}
 	}
 }
@@ -223,7 +195,9 @@ func healthEvent(healthy bool, detail string) *gridwellv1.Event {
 	}}
 }
 
-func (a *Adapter) emitHealth(healthy bool, detail string) { a.emit(healthEvent(healthy, detail)) }
+func (a *Adapter) emitHealth(healthy bool, detail string) {
+	a.hub.Publish(healthEvent(healthy, detail))
+}
 
 // noteSource records what a listing found and announces the transition, so a
 // client holding a room whose source stopped answering is told without a call
@@ -270,7 +244,7 @@ func (a *Adapter) emitGridChanged(gridID string) {
 	if gridID == "" {
 		return
 	}
-	a.emit(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{
 		GridChanged: &gridwellv1.GridChanged{GridId: gridID},
 	}})
 }
