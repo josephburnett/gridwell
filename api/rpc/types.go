@@ -24,10 +24,9 @@ const (
 	KindPane = "pane"
 )
 
-// ContentChunkBytes is the size of every content chunk but the last: small
-// enough to stream a large body without one giant message, large enough that a
-// typical text tile is one chunk. Every producer of a content stream uses it,
-// so no reader can tell one producer from another by the framing.
+// ContentChunkBytes is the size of every content chunk but the last. Every
+// producer of a content stream uses it, so no reader can tell one producer
+// from another by the framing.
 const ContentChunkBytes = 256 * 1024
 
 // MaxContentBytes is the largest content body the door carries, whichever way
@@ -106,8 +105,8 @@ func PluginWellTile(pl *pb.PluginInfo) *pb.Tile {
 		// A menu swatch is a link by nature, so it renders dashed like a
 		// mounted plugin well.
 		Reference: true,
-		// The plugin's persisted root framing carries across verbatim, so
-		// the synthetic tile lands at the left-off view.
+		// The plugin's persisted root framing carries across, so the
+		// swatch lands at the left-off view.
 		ViewCx:   pl.RootViewCx,
 		ViewCy:   pl.RootViewCy,
 		ViewZoom: pl.RootViewZoom,
@@ -120,10 +119,10 @@ const PluginKindConnection = "connection"
 
 // ConnectionRow is the one shape a connection takes in the + menu: a plugins
 // row of kind connection wearing the globe, its landing as the root and the
-// last dial or learn failure as InfoError. A pending connection is rootless
-// with its failure in InfoError, so health reads it as waiting, not broken.
-// The transport mints one per declared connection and the transit fold mints
-// one per retired ConnectionInfo; nothing else spells the row.
+// last dial or learn failure as InfoError. A pending connection is rootless,
+// so health reads it as waiting, not broken. The transport mints one per
+// declared connection and the transit fold one per retired ConnectionInfo;
+// nothing else spells the row.
 func ConnectionRow(uuid, label, rootGridID, statusDetail string, view Framing) *pb.PluginInfo {
 	return &pb.PluginInfo{
 		Uuid: uuid, Kind: PluginKindConnection, Label: label, Glyph: GlyphGlobe,
@@ -132,8 +131,7 @@ func ConnectionRow(uuid, label, rootGridID, statusDetail string, view Framing) *
 	}
 }
 
-// IsConnectionRow reads the declared kind, the one fact that says a row is a
-// connection.
+// IsConnectionRow reads the declared kind; see PluginKindConnection.
 func IsConnectionRow(pl *pb.PluginInfo) bool {
 	return pl.GetKind() == PluginKindConnection
 }
