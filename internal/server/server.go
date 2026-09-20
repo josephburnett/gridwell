@@ -117,6 +117,34 @@ func (s *Server) clientForID(id string) (ns namespace.Namespace, local string, o
 	return c, local, found
 }
 
+// namespaceRow is one namespace this node declares. Kind is the registry's
+// configured kind, empty for the transport, whose rows carry their own.
+type namespaceRow struct {
+	UUID, Kind string
+	NS         namespace.Namespace
+	Transit    bool
+}
+
+// namespaces enumerates what this node declares, in the one order every
+// fan-out takes: the registered plugins as configured, then the transport
+// under the node's own id, which is the id a connection's rows re-qualify
+// through and the only transit namespace. A node without an id declares no
+// connections.
+func (s *Server) namespaces() []namespaceRow {
+	var out []namespaceRow
+	for _, p := range s.pluginReg.Ordered() {
+		c, ok := s.routeClient(p.UUID)
+		if !ok {
+			continue
+		}
+		out = append(out, namespaceRow{UUID: p.UUID, Kind: p.Kind, NS: c})
+	}
+	if t, ok := s.pluginReg.Transport(); ok && s.cfg.ID != "" {
+		out = append(out, namespaceRow{UUID: s.cfg.ID, NS: t, Transit: true})
+	}
+	return out
+}
+
 // homeUUID is the configured node id, or the first registered entry when a test
 // wires a registry without one, since home is registered first.
 func (s *Server) homeUUID() string {

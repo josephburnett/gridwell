@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/panelayout"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -176,47 +175,45 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		return rpc.TransitQualifyPluginList(hop, resp), nil
 	}
 	var out []*pb.PluginInfo
-	for _, p := range rt.srv.pluginReg.Ordered() {
+	for _, n := range rt.srv.namespaces() {
+		if n.Transit {
+			// One row per connection, under the node's own id, after the
+			// content plugins. What a connection is, its landing and its
+			// status, is the transport's own handshake
+			// (connection.Server.Rows), asked here as every namespace is asked
+			// and re-qualified one hop, so no second row shape can drift from
+			// it.
+			tr, err := n.NS.Handshake(ctx, &pb.HandshakeRequest{})
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, rpc.TransitQualifyPluginList(n.UUID, tr).Plugins...)
+			continue
+		}
 		// The server.yaml display name is authoritative, since the menu and a
 		// mounted well must agree; buildPluginInfo owns the fallbacks.
-		label := rt.srv.pluginReg.Label(p.UUID)
+		label := rt.srv.pluginReg.Label(n.UUID)
 		// Bounded and cached per uuid, so a hung plugin degrades to a
 		// config-only entry. A failed Info leaves info nil and the error rides
 		// along, or broken and healthy-but-rootless would be identical on the
 		// wire.
-		info, err := rt.srv.pluginInfo(ctx, p.UUID)
-		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
+		info, err := rt.srv.pluginInfo(ctx, n.UUID)
+		out = append(out, buildPluginInfo(n.UUID, n.Kind, label, info, err))
 	}
-	// Home is the node's own store, where "/" lands. Its row is first because
-	// the registry registers it first, which no client has to know.
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,
 		// The /content/ door's capability, handed out only here, on the
 		// cookie-authenticated mux.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
+		Plugins:      out,
 	}
-	// The home row is the node's own; homeUUID names it, so a registry wired
-	// without an id still lands somewhere.
+	// Home is the node's own store, where "/" lands; homeUUID names its row, so
+	// a registry wired without an id still lands somewhere.
 	for _, p := range out {
 		if p.Uuid == rt.srv.homeUUID() {
 			resp.HomeGridId = p.RootGridId
 		}
 	}
-	if rt.srv.cfg.ID != "" {
-		// One row per connection, under the node's own id, after the content
-		// plugins. What a connection is, its landing and its status, is the
-		// transport's own handshake (connection.Server.Rows), asked here as
-		// every namespace is asked and re-qualified one hop, so no second row
-		// shape can drift from it.
-		if t, ok := rt.srv.pluginReg.Transport(); ok {
-			tr, err := t.Handshake(ctx, &pb.HandshakeRequest{})
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, rpc.TransitQualifyPluginList(rt.srv.cfg.ID, tr).Plugins...)
-		}
-	}
-	resp.Plugins = out
 	return resp, nil
 }
 
@@ -297,28 +294,16 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		return qualifySearch(transit, uuid, resp), nil
 	}
 	out := &pb.SearchResponse{}
-	for _, p := range rt.srv.pluginReg.Ordered() {
-		c, ok := rt.srv.routeClient(p.UUID)
-		if !ok {
-			continue
-		}
+	// The transport is one of these namespaces, and it fans out again to every
+	// connection, in chains this node re-qualifies under its own id.
+	for _, n := range rt.srv.namespaces() {
 		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := c.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, p.UUID), Limit: m.Limit})
+		resp, err := n.NS.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, n.UUID), Limit: m.Limit})
 		cancel()
 		if err != nil {
 			continue // Unimplemented, a timeout, a dead plugin: no answer here
 		}
-		out.Results = append(out.Results, qualifySearch(false, p.UUID, resp).Results...)
-	}
-	// The transport fans out to every connection, in chains this node
-	// re-qualifies under its own id.
-	if t, ok := rt.srv.pluginReg.Transport(); ok && rt.srv.cfg.ID != "" {
-		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := t.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, rt.srv.cfg.ID), Limit: m.Limit})
-		cancel()
-		if err == nil {
-			out.Results = append(out.Results, qualifySearch(true, rt.srv.cfg.ID, resp).Results...)
-		}
+		out.Results = append(out.Results, qualifySearch(n.Transit, n.UUID, resp).Results...)
 	}
 	return out, nil
 }
@@ -422,41 +407,25 @@ func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// cloneAcrossPlugins reads the source tile, then creates the link or byte copy
-// in the destination plugin.
+// cloneAcrossPlugins reads the source tile and lands the copy at the dropped
+// cell. What a copy of a tile is, per kind, is deepCopyTile's (deepcopy.go);
+// this level owns only what a top-level gesture must answer for: the
+// host-content refusal and the partial-copy wording.
 func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
 	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
 	if err != nil {
 		return nil, err
 	}
-	// Qualify to the server-global view, so the link target below is what the
+	srcLocalTile := resp.GetTile()
+	// Qualify to the server-global view, so what decides below is what the
 	// client would see.
-	st := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{resp.GetTile()})[0]
+	st := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{srcLocalTile})[0]
 	// No version claim: a clone is layout and the source row is untouched.
-
-	create := &pb.CreateTileRequest{
-		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H,
-			AltText: st.AltText},
+	dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
+	if err != nil {
+		return nil, err
 	}
-	var copyBody []byte
-	switch {
-	case rpc.IsWellKind(st.Kind) && st.Reference:
-		// Cloning a link copies the link: the same shared child grid and
-		// framing, as a within-plugin clone of an exit well does. This is
-		// also how a mount is made.
-		create.Tile.ChildGridId = st.ChildGridId
-		create.Tile.ViewCx = st.ViewCx
-		create.Tile.ViewCy = st.ViewCy
-		create.Tile.ViewZoom = st.ViewZoom
-	case rpc.IsWellKind(st.Kind):
-		// A deep copy (deepcopy.go) is top-down by necessity, so a mid-walk
-		// failure leaves a visible, deletable partial with the error
-		// surfaced.
-		dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
-		if err != nil {
-			return nil, err
-		}
-		srcLocalTile := resp.GetTile()
+	if rpc.IsWellKind(st.Kind) && !st.Reference {
 		// Host content is refused before anything is created: its rows are
 		// metadata stubs, so the copy would be a forest of summaries rather
 		// than the files. Read off the grid, so this never learns a kind.
@@ -464,87 +433,12 @@ func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest
 			return nil, status.Error(gcodes.Unimplemented,
 				"deep copy of a host-content well is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
 		}
-		out, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID,
-			srcLocalTile, dst, dstLocal, m.X, m.Y)
-		if err != nil {
-			if out != nil {
-				// The partial is visible, so say what stopped the walk.
-				return nil, status.Errorf(gcodes.Aborted,
-					"deep copy incomplete (the partial copy remains, delete it if unwanted): %v", err)
-			}
-			if gwerr.IsTransport(err) {
-				// The whole room is dark, so degrade the top-level well to
-				// exactly the exit well a left-drag would have made.
-				create.Tile.ChildGridId = st.ChildGridId
-				create.Tile.ViewCx = st.ViewCx
-				create.Tile.ViewCy = st.ViewCy
-				create.Tile.ViewZoom = st.ViewZoom
-				break
-			}
-			return nil, err
-		}
-		return rt.tileResp(dstUUID, dstTransit, out, nil)
-	case st.LinkTargetId != "":
-		// The tile being copied is a reference, so the copy is one too.
-		create.Tile.LinkTargetId = st.LinkTargetId
-	case st.Kind == rpc.KindText:
-		// The bytes follow the create as a WriteContent below; an unreachable
-		// source degrades the copy to a link, the deep walk's rule.
-		if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
-			if gwerr.IsTransport(err) {
-				create.Tile.LinkTargetId = st.Id
-				copyBody = nil
-				break
-			}
-			return nil, err
-		}
-	case st.Kind == rpc.KindURL:
-		create.Tile.UrlString = st.UrlString
-	case st.Kind == rpc.KindShell:
-		// A PTY session is namespace-local, so the copy is a fresh shell.
-	case st.Kind == rpc.KindPane:
-		// A pane tile clones as a byte copy of its blob. Its ids are
-		// owner-frame-relative, so the copy's panes keep naming the original
-		// places: link semantics carried in bytes, not a child_grid_id.
-		if st.BlobId != 0 {
-			if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
-				if gwerr.IsTransport(err) {
-					// Degrade to a link, as text does above.
-					create.Tile.LinkTargetId = st.Id
-					copyBody = nil
-					break
-				}
-				return nil, err
-			}
-		}
-	default:
-		return nil, status.Errorf(gcodes.InvalidArgument,
-			"cross-plugin clone: unsupported tile kind %q", st.Kind)
 	}
-
-	dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
-	if err != nil {
-		return nil, err
-	}
-	create.GridId = dstLocal
-	if err := rt.mintReferences(ctx, create.Tile); err != nil {
-		return nil, err
-	}
-	out, err := dst.CreateTile(ctx, create)
-	if err != nil {
-		return rt.tileResp(dstUUID, dstTransit, out, err)
-	}
-	if copyBody != nil {
-		// Not atomic with the create: a failure leaves a visible, deletable
-		// empty copy and surfaces, never a silent half-state.
-		if _, werr := writeAllContent(ctx, dst, out.GetTile().GetId(), out.GetTile().GetVersion(), copyBody); werr != nil {
-			return nil, werr
-		}
-		// Re-read so the response row carries the post-write version.
-		fresh, gerr := dst.GetTile(ctx, &pb.GetTileRequest{TileId: out.GetTile().GetId()})
-		if gerr == nil {
-			out = fresh
-		}
+	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, dst, dstLocal, m.X, m.Y)
+	if err != nil && out != nil {
+		// The partial is visible, so say what stopped the walk.
+		return nil, status.Errorf(gcodes.Aborted,
+			"deep copy incomplete (the partial copy remains, delete it if unwanted): %v", err)
 	}
 	return rt.tileResp(dstUUID, dstTransit, out, err)
 }
@@ -750,20 +644,16 @@ func (rt *router) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send fu
 	defer cancel()
 
 	events := make(chan *pb.Event, 64)
-	for _, p := range rt.srv.pluginReg.Ordered() {
-		c, ok := rt.srv.pluginReg.Get(p.UUID)
-		if !ok {
+	for _, n := range rt.srv.namespaces() {
+		if n.Transit {
+			// The transport is ready as soon as it exists: it fans in every
+			// connection's events, and there is no handshake to ask.
+			go watchPlugin(subCtx, n.UUID, true, n.NS,
+				func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events)
 			continue
 		}
-		uuid := p.UUID
-		go watchPlugin(subCtx, uuid, false, c,
-			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, uuid) }, events)
-	}
-	if t, ok := rt.srv.pluginReg.Transport(); ok && rt.srv.cfg.ID != "" {
-		// The transport is ready as soon as it exists: it fans in every
-		// connection's events, and there is no handshake to ask.
-		go watchPlugin(subCtx, rt.srv.cfg.ID, true, t,
-			func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events)
+		go watchPlugin(subCtx, n.UUID, false, n.NS,
+			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, n.UUID) }, events)
 	}
 
 	for {
