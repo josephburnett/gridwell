@@ -2,11 +2,9 @@
 // client's settle timers, which fire once after the last of a burst rather
 // than once per frame.
 //
-// A Debounce holds what it runs from the moment it exists. One that could be
-// armed before it had a body would mark a run pending against a run that can
-// never happen, and since only a run clears the flag, it would refuse every
-// arm after that — retired for the life of the page, silently, with the
-// gesture-driven flushes still working so nothing looks broken.
+// A Debounce holds what it runs from the moment it exists. Only a run clears
+// the pending flag, so one armed before it had a body would refuse every arm
+// after that, silently, for the life of the page.
 package debounce
 
 // Schedule defers fire by ms. The shim's is setTimeout; a test's is a queue.
@@ -38,8 +36,8 @@ func (d *Debounce) Arm(ms int) bool {
 // Pending reports whether a run is waiting.
 func (d *Debounce) Pending() bool { return d.pending }
 
-// fire clears pending before the body runs, so a body that arms again from
-// inside its own run opens a fresh window instead of being swallowed.
+// fire clears pending first, so a body that arms from inside its own run
+// opens a fresh window instead of being swallowed.
 func (d *Debounce) fire() {
 	d.pending = false
 	d.body()
