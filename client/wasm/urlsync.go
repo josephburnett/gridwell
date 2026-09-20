@@ -104,7 +104,9 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 // row that owns it. `door` is the doorway tile the pane entered by, living
 // under (doorAnchor, doorPath); nil means a root grid, whose own row owns the
 // framing. The zoom is measured against the doorway's footprint, 1x1 for a
-// root, so preview and descent agree. A no-op when nothing moved.
+// root, so preview and descent agree. A no-op when nothing moved, which is
+// measured against what the grid is shown at, never against the stored row:
+// see zoomtrans.ShownWellFraming.
 func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor string, doorPath []string) {
 	// Never a mid-animation viewport: a pane's centre and zoom are then the
 	// transition's scratch values, and storing one would make a frame of an
@@ -114,6 +116,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 	if a.trans.Active(p.ID) {
 		return
 	}
+	r := paneRectFor(a, p)
 	var (
 		req    gridwellv1.SetFramingRequest
 		foot   = zoomtrans.Well{W: 1, H: 1}
@@ -123,7 +126,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 	)
 	if door != nil {
 		foot = zoomtrans.Well{W: door.W, H: door.H}
-		cur = rpc.Framing{Cx: door.ViewCx, Cy: door.ViewCy, Zoom: door.ViewZoom}
+		cur = zoomtrans.ShownWellFraming(zoomtrans.WellOf(door))
 		gridID = a.gridIDForPathFrom(doorAnchor, doorPath)
 		req = gridwellv1.SetFramingRequest{TileId: door.Id}
 		commit = func(f rpc.Framing) {
@@ -139,12 +142,13 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		if !ok {
 			return
 		}
-		cur = rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}
+		cur = zoomtrans.ShownRootFraming(
+			rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom},
+			zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx))
 		gridID = p.Anchor()
 		req = gridwellv1.SetFramingRequest{RootGridId: p.Anchor()}
 		commit = func(f rpc.Framing) { a.cacheDoorwayFraming(p.Anchor(), f) }
 	}
-	r := paneRectFor(a, p)
 	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy,
 		Zoom: zoomtrans.IntrinsicFromLive(p.Zoom, zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx))}
 	if cur.SameAs(next) {
