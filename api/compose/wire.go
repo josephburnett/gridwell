@@ -1,8 +1,7 @@
 // Package compose is the plugin door this repository owns: the go-plugin
-// handshake both sides present, and the host-side spawn in plugin.go. A
-// plugin is always an out-of-process binary, so third-party code runs with
-// its own dependency graph. The guest-side helper and every plugin live in
-// github.com/josephburnett/gridwell-plugins.
+// handshake both sides present, and the host-side spawn. A plugin is always
+// an out-of-process binary, so third-party code runs with its own dependency
+// graph. The guest-side helper and every plugin live in gridwell-plugins.
 package compose
 
 import (

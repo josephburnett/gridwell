@@ -2,7 +2,7 @@
 // store, plugin adapter or connection, is a Go value the router calls
 // directly, and the two codecs here carry the same method set onto the two
 // wires that remain. The four gRPC stream shapes become Go control flow,
-// decided once here so no implementation invents its own:
+// decided once so no implementation invents its own:
 //
 //   - unary:            (ctx, *Request) (*Response, error)
 //   - server-streaming: (ctx, *Request, send func(*Chunk) error) error
@@ -16,8 +16,8 @@
 // # Errors
 //
 // Errors are gRPC status errors, always. The client classifies by code, so the
-// code must read the same whether the answer came from a Go call, the Connect
-// codec, or two connection hops away.
+// code must read the same from a Go call, the Connect codec, or two connection
+// hops away.
 //
 // # Message ownership
 //

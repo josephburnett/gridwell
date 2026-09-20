@@ -22,16 +22,15 @@ import (
 
 // WebHandler is the browser door: static files, Connect RPCs, the /shell
 // socket and the /content/ pages, behind the password gate in auth.go. Raw
-// gRPC is not demuxed here, so binding `web.bind` to a network address exposes
-// exactly the gated surface and nothing else.
+// gRPC is not demuxed here, so `web.bind` on a network address exposes exactly
+// that gated surface.
 func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
 
-// WebDoorServer is the web door's one server shape, so the production node and
-// every test harness put the same server in front of the browser handler; the
-// node sets BaseContext per its own listener. ReadHeaderTimeout stays here
-// alone, because this door faces a network and carries no raw-gRPC stream for
-// a deadline to cut. No Protocols: it refuses raw gRPC by design
-// (TestWebDoorServesNoGRPC).
+// WebDoorServer is the web door's one server shape, so the node and every test
+// harness put the same server in front of the browser handler; the node sets
+// BaseContext per its own listener. ReadHeaderTimeout stays here alone,
+// because this door carries no raw-gRPC stream for a deadline to cut, and the
+// absent Protocols is what refuses raw gRPC (TestWebDoorServesNoGRPC).
 func WebDoorServer(h http.Handler) *http.Server {
 	return &http.Server{
 		Handler:           h,
@@ -40,10 +39,10 @@ func WebDoorServer(h http.Handler) *http.Server {
 }
 
 // ConnectionHandler is the connection door: the Gridwell service over raw gRPC,
-// what a remote mounter's ssh tunnel dials. Its gate is the kernel, the 0600
-// unix socket ListenConnectionDoor opens, and ssh is the authenticated
-// transport between nodes. Serve it with ConnectionDoorServer. It and
-// internal/connection/dial are the connection hop's two ends.
+// what a remote mounter's ssh tunnel dials, and internal/connection/dial is the
+// other end. Its gate is the kernel, the 0600 unix socket ListenConnectionDoor
+// opens, with ssh as the authenticated transport. Serve it with
+// ConnectionDoorServer.
 func (s *Server) ConnectionHandler() http.Handler {
 	g := grpc.NewServer()
 	pb.RegisterGridwellServer(g, namespace.Server(newRouter(s)))
@@ -53,12 +52,10 @@ func (s *Server) ConnectionHandler() http.Handler {
 // ConnectionDoorServer is the connection door's one server shape, so a test
 // that holds a stream through it holds it through what the node runs.
 //
-// No deadline of any kind, deliberately. net/http arms ReadHeaderTimeout on the
-// raw conn before handing it to the HTTP/2 server (Go 1.26.6), whose only
-// disarm is tied to ReadTimeout, and WriteTimeout becomes a per-stream deadline
-// there too, so any deadline is a ticking close on every long-lived gRPC stream
-// through this door. A slow-header peer is no concern on a 0600 unix socket,
-// and gRPC keepalive polices a silent one.
+// No deadline of any kind, deliberately. net/http hands every one of them to
+// the HTTP/2 server as a ticking close on a long-lived gRPC stream (Go
+// 1.26.6). A slow-header peer is no concern on a 0600 unix socket, and gRPC
+// keepalive polices a silent one.
 func ConnectionDoorServer(h http.Handler) *http.Server {
 	return &http.Server{Handler: h, Protocols: NodeProtocols()}
 }
