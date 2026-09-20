@@ -44,18 +44,18 @@ var migrations = []migration{
 	{to: 4, run: addColumnDDL(`ALTER TABLE tiles ADD COLUMN url_history TEXT`)},
 	// v5: the 'pane' tile kind. A kind lives in the tiles table-level CHECK,
 	// which ALTER TABLE cannot touch, so this is a table rebuild.
-	{to: 5, run: rebuildTilesForPaneKind},
+	{to: 5, run: rebuildTilesReading(4)},
 	// v6: link_target_id, the leaf-link variant. The CHECK gains the link
 	// branch, and a url link row has url_string NULL, which the v5 branch
 	// forbade, so this is a rebuild. Old rows get NULL, their old meaning.
-	{to: 6, run: rebuildTilesForLinkTarget},
+	{to: 6, run: rebuildTilesReading(5)},
 	// v7: url_frozen, the user's standing freeze. If-missing
 	// because the v6 rebuild materializes the current template.
 	{to: 7, run: addColumnIfMissingDDL("tiles", "url_frozen",
 		`ALTER TABLE tiles ADD COLUMN url_frozen INTEGER NOT NULL DEFAULT 0`)},
 	// v8: configure_plugin_id, marking a childless well. The well CHECK gains
 	// that variant, so this is a rebuild; old rows copy through unchanged.
-	{to: 8, run: rebuildTilesForConfigurePlugin},
+	{to: 8, run: rebuildTilesReading(7)},
 	// v9: every plugin's memory joins the home tables — ns, key and
 	// tombstoned on tiles; ns, context_key and a root viewport on grids; the
 	// listings table; two partial unique indexes. Every column carries a
@@ -114,24 +114,15 @@ func migrateV13(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
-// rebuildTilesForPaneKind is the v5 rebuild, adding the 'pane' kind to the
-// CHECK. The chain's convergence contract lives here: a rebuild creates
-// tiles_new from the current tilesTableDDL, so an old DB replaying v5 lands
-// on the latest shape and the later rebuild steps are idempotent re-runs.
-func rebuildTilesForPaneKind(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx, 4)
-}
-
-// rebuildTilesForLinkTarget is the v6 rebuild, adding link_target_id and the
-// CHECK's link branch.
-func rebuildTilesForLinkTarget(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx, 5)
-}
-
-// rebuildTilesForConfigurePlugin is the v8 rebuild. It reads a v7-shaped
-// table, so it copies the v7 column list.
-func rebuildTilesForConfigurePlugin(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx, 7)
+// rebuildTilesReading is a chain entry that rebuilds tiles from a table of
+// version n's shape. The chain's convergence contract lives here: a rebuild
+// creates tiles_new from the current tilesTableDDL, so an old DB replaying an
+// early rebuild lands on the latest shape and every later rebuild is an
+// idempotent re-run.
+func rebuildTilesReading(n int) func(ctx context.Context, tx *sql.Tx) error {
+	return func(ctx context.Context, tx *sql.Tx) error {
+		return rebuildTiles(ctx, tx, n)
+	}
 }
 
 // rebuildTiles rebuilds the tiles table into the current shape: create
@@ -408,29 +399,15 @@ func adoptStalePluginWells(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-// hasColumn is the one PRAGMA table_info read the migration steps share.
+// hasColumn asks the migration steps' question of tableColumnFPs, the one
+// reader of PRAGMA table_info.
 func hasColumn(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
-	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	cols, err := tableColumnFPs(ctx, tx, table)
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var (
-			cid       int
-			name, typ string
-			notnull   int
-			dflt      sql.NullString
-			pk        int
-		)
-		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
-			return false, err
-		}
-		if name == column {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
+	_, ok := cols[column]
+	return ok, nil
 }
 
 // addColumnIfMissingDDL is addColumnDDL for a column added after a rebuild
