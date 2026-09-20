@@ -10,6 +10,8 @@ import (
 	"sort"
 	"sync"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -325,6 +327,21 @@ func (c *Cache) UpdateTile(gridID string, t *gridwellv1.Tile) {
 		return
 	}
 	c.putTileLocked(g, t)
+}
+
+// PatchTile folds an optimistic local change to one handed-out row in, and
+// reports whether it landed. edit sees a clone, so the cached row is never
+// written through the pointer Grid handed out and the caller's own copy is
+// left alone. It takes the event path, because an optimistic patch and the
+// server's own answer for the same row must reconcile by one rule.
+func (c *Cache) PatchTile(t *gridwellv1.Tile, edit func(*gridwellv1.Tile)) bool {
+	if t == nil {
+		return false
+	}
+	patched := proto.CloneOf(t)
+	edit(patched)
+	return c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: patched}}})
 }
 
 // Apply consumes a Subscribe event, returning whether visible state changed.

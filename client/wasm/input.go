@@ -3,8 +3,6 @@
 package main
 
 import (
-	"google.golang.org/protobuf/proto"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"syscall/js"
 
@@ -241,12 +239,9 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		if !changed {
 			return nil
 		}
-		updated := proto.CloneOf(hoverWell)
-		updated.ViewCx = cx1
-		updated.ViewCy = cy1
-		updated.ViewZoom = ratio
-		a.c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-			TileChanged: &gridwellv1.TileChanged{Tile: updated}}})
+		a.c.PatchTile(hoverWell, func(t *gridwellv1.Tile) {
+			t.ViewCx, t.ViewCy, t.ViewZoom = cx1, cy1, ratio
+		})
 		a.persist.wellWheelPending[hoverWell.Id] = wellWheelDrift{
 			gridID: a.gridIDForPane(p), cx: cx1, cy: cy1,
 			ratio: ratio, version: hoverWell.Version,

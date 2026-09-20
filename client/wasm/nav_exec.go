@@ -7,6 +7,8 @@ package main
 // decides anything.
 
 import (
+	"context"
+
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -257,78 +259,78 @@ func (a *App) navAwait(e nav.Effect) {
 		})
 	case nav.RequestGetTile:
 		id := e.Request.ID
-		go func() {
-			// Claim-free, since the machine waits on its own answer, but
-			// bounded: a read the network swallows would leave the
-			// continuation owed forever.
-			ctx, cancel := inflight.Bounded()
-			defer cancel()
+		// Claim-free, since the machine waits on its own answer, but
+		// bounded: a read the network swallows would leave the continuation
+		// owed forever.
+		a.await(tok, inflight.Bounded, a.navWorldCommon, func(ctx context.Context) nav.Result {
 			tile, err := a.cl.GetTile(ctx, id)
 			if err != nil {
 				// Whether the failure is worth a notice is the step's call,
 				// so the text rides the answer rather than surfacing here.
-				a.runNav(a.nav.Resume(tok, nav.Result{Err: rpcErrText(err)}, a.navWorldCommon()))
-				return
+				return nav.Result{Err: rpcErrText(err)}
 			}
 			// The row lands in the cache first, so the place it heals to and
 			// the row the renderer draws are the same answer.
 			a.c.UpdateTile(tile.GridId, tile)
-			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Tile: tile}, a.navWorldCommon()))
-		}()
+			return nav.Result{OK: true, Tile: tile}
+		})
 	case nav.RequestGetGrid:
 		id := e.Request.ID
-		go func() {
-			// Claim-free, because a background fetch for the same grid must
-			// not turn the walk into a no-op, but bounded: a boot that waits
-			// forever on a dead socket is a blank screen.
-			ctx, cancel := a.fetch.gridFetch.Context()
-			defer cancel()
-			ok := a.loadGrid(ctx, id) == nil
-			a.runNav(a.nav.Resume(tok, nav.Result{OK: ok}, a.navWorldForRestore()))
-		}()
+		// Claim-free, because a background fetch for the same grid must not
+		// turn the walk into a no-op, but bounded: a boot that waits forever
+		// on a dead socket is a blank screen.
+		a.await(tok, a.fetch.gridFetch.Context, a.navWorldForRestore,
+			func(ctx context.Context) nav.Result {
+				return nav.Result{OK: a.loadGrid(ctx, id) == nil}
+			})
 	case nav.RequestReadContent:
 		id := e.Request.ID
-		go func() {
-			// Claim-free, like the walk above, and bounded the same way.
-			ctx, cancel := a.fetch.contentFetch.Context()
-			defer cancel()
-			// loadTileContent seeds the textarea from the body, and the
-			// cursor this path adds goes after that.
-			err := a.loadTileContent(ctx, id, func() {})
-			a.runNav(a.nav.Resume(tok, nav.Result{OK: err == nil}, a.navWorldCommon()))
-		}()
+		// Claim-free, like the walk above, and bounded the same way.
+		a.await(tok, a.fetch.contentFetch.Context, a.navWorldCommon,
+			func(ctx context.Context) nav.Result {
+				// loadTileContent seeds the textarea from the body, and the
+				// cursor this path adds goes after that.
+				return nav.Result{OK: a.loadTileContent(ctx, id, func() {}) == nil}
+			})
 	case nav.RequestReadLayout:
 		id := e.Request.ID
-		go func() {
-			// The bytes go straight back to the machine, which owns the
-			// codec call: a layout is not a document, so it never seeds the
-			// text overlay and is not cached as a body.
-			ctx, cancel := inflight.Bounded()
-			defer cancel()
+		// The bytes go straight back to the machine, which owns the codec
+		// call: a layout is not a document, so it never seeds the text
+		// overlay and is not cached as a body.
+		a.await(tok, inflight.Bounded, a.navWorldCommon, func(ctx context.Context) nav.Result {
 			data, _, _, err := a.cl.ReadContent(ctx, id)
 			if err != nil {
-				a.runNav(a.nav.Resume(tok, nav.Result{Err: rpcErrText(err)}, a.navWorldCommon()))
-				return
+				return nav.Result{Err: rpcErrText(err)}
 			}
-			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Data: data}, a.navWorldCommon()))
-		}()
+			return nav.Result{OK: true, Data: data}
+		})
 	case nav.RequestSearch:
 		req := e.Request
-		go func() {
-			// A search the network swallows resolves as no result on the
-			// deadline, which the machine already handles, rather than a
-			// walk that never resumes.
-			ctx, cancel := inflight.Bounded()
-			defer cancel()
+		// A search the network swallows resolves as no result on the
+		// deadline, which the machine already handles, rather than a walk
+		// that never resumes.
+		a.await(tok, inflight.Bounded, a.navWorldCommon, func(ctx context.Context) nav.Result {
 			res, err := a.cl.Search(ctx, req.Query, req.Scope, int32(req.Limit))
 			if err != nil || len(res) == 0 {
-				a.runNav(a.nav.Resume(tok, nav.Result{}, a.navWorldCommon()))
-				return
+				return nav.Result{}
 			}
-			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Wells: res[0].Path},
-				a.navWorldCommon()))
-		}()
+			return nav.Result{OK: true, Wells: res[0].Path}
+		})
 	default:
 		a.reportErr(errsurface.Error, "nav", "no executor for this navigation request")
 	}
+}
+
+// await runs one navigation read off the main goroutine and resumes the
+// continuation with what it answered. bound is the read's deadline and world
+// the snapshot the machine re-plans against, because the restore walk plans
+// against a different one from every other read.
+func (a *App) await(tok nav.Token, bound func() (context.Context, context.CancelFunc),
+	world func() nav.World, call func(context.Context) nav.Result) {
+	go func() {
+		ctx, cancel := bound()
+		defer cancel()
+		res := call(ctx)
+		a.runNav(a.nav.Resume(tok, res, world()))
+	}()
 }

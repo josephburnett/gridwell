@@ -44,10 +44,6 @@ func (a *App) openChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 // bridgeChoiceMenu hands the rows to the host's native menu, which answers
 // with the chosen id or null.
 func (a *App) bridgeChoiceMenu(items []circlemenu.Item, onPick func(string)) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
 	rows := js.Global().Get("Array").New()
 	for _, it := range items {
 		o := js.Global().Get("Object").New()
@@ -56,9 +52,7 @@ func (a *App) bridgeChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 		o.Set("checked", it.Checked)
 		rows.Call("push", o)
 	}
-	args := js.Global().Get("Object").New()
-	args.Set("items", rows)
-	a.bridgeCall(g, "showChoiceMenu", args, func(res js.Value) {
+	a.bridgeVerb("showChoiceMenu", map[string]any{"items": rows}, func(res js.Value) {
 		if res.Type() == js.TypeString {
 			onPick(res.String())
 		}

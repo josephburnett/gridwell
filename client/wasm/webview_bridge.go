@@ -103,6 +103,23 @@ func (a *App) bridgeCall(g js.Value, method string, args js.Value, onOK func(js.
 	promise.Call("then", then, catch)
 }
 
+// bridgeVerb is the one call shape: the fields become the verb's single
+// argument object, and false says there is no bridge, which a caller whose
+// promise carries a payload must answer for itself.
+func (a *App) bridgeVerb(method string, fields map[string]any,
+	onOK func(js.Value), onFail func()) bool {
+	g := bridge()
+	if !g.Truthy() {
+		return false
+	}
+	args := js.Global().Get("Object").New()
+	for k, v := range fields {
+		args.Set(k, v)
+	}
+	a.bridgeCall(g, method, args, onOK, onFail)
+	return true
+}
+
 // rejectionText renders a promise rejection reason for the strip.
 func rejectionText(v js.Value) string {
 	if v.Type() == js.TypeObject {
@@ -120,82 +137,50 @@ func rejectionText(v js.Value) string {
 // the one host-local session. onFail runs when main refuses: no view exists,
 // so the caller's live handle must go.
 func (a *App) bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden, focused bool, onFail func()) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	args := js.Global().Get("Object").New()
-	args.Set("paneId", paneID)
-	args.Set("tileId", tileID)
-	args.Set("url", url)
-	args.Set("bounds", b.toJS())
-	args.Set("contentZoom", contentZoom)
-	args.Set("history", history)
-	// This frame's gesture-hide verdict, so a view placed mid-drag or under
-	// the palette starts parked. The registry never guesses.
-	args.Set("hidden", hidden)
-	// The renderer owns focus, and a view goes live on paths that are not a
-	// gesture on the focused pane, so this cannot be inferred. Chromium
-	// focuses the new widget as it attaches, so a wrong guess leaks a frame
-	// of keystrokes into it.
-	args.Set("focused", focused)
-	// durable gates the context menu's Freeze Page, since an ephemeral visit
-	// has nothing to re-descend into.
-	args.Set("durable", durable)
-	a.bridgeCall(g, "placeWebview", args, nil, onFail)
+	a.bridgeVerb("placeWebview", map[string]any{
+		"paneId":      paneID,
+		"tileId":      tileID,
+		"url":         url,
+		"bounds":      b.toJS(),
+		"contentZoom": contentZoom,
+		"history":     history,
+		// This frame's gesture-hide verdict, so a view placed mid-drag or
+		// under the palette starts parked. The registry never guesses.
+		"hidden": hidden,
+		// The renderer owns focus, and a view goes live on paths that are not
+		// a gesture on the focused pane, so this cannot be inferred. Chromium
+		// focuses the new widget as it attaches, so a wrong guess leaks a
+		// frame of keystrokes into it.
+		"focused": focused,
+		// durable gates the context menu's Freeze Page, since an ephemeral
+		// visit has nothing to re-descend into.
+		"durable": durable,
+	}, nil, onFail)
 }
 
 func (a *App) bridgeSetBounds(paneID string, b viewBounds) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	args := js.Global().Get("Object").New()
-	args.Set("paneId", paneID)
-	args.Set("bounds", b.toJS())
-	a.bridgeCall(g, "setBounds", args, nil, nil)
+	a.bridgeVerb("setBounds", map[string]any{"paneId": paneID, "bounds": b.toJS()}, nil, nil)
 }
 
 // bridgeSetHidden parks and unparks the view so canvas overlays can paint
 // where the native view would occlude. focused feeds main's focus-steal
 // guard.
 func (a *App) bridgeSetHidden(paneID string, hidden, focused bool) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	args := js.Global().Get("Object").New()
-	args.Set("paneId", paneID)
-	args.Set("hidden", hidden)
-	args.Set("focused", focused)
-	a.bridgeCall(g, "setHidden", args, nil, nil)
+	a.bridgeVerb("setHidden",
+		map[string]any{"paneId": paneID, "hidden": hidden, "focused": focused}, nil, nil)
 }
 
 // bridgeSetZoom sets the tile's content_zoom on the live view. Main composes
 // it with the min-width layout zoom by multiplying, so neither overwrites the
 // other.
 func (a *App) bridgeSetZoom(paneID string, zoom float64) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	args := js.Global().Get("Object").New()
-	args.Set("paneId", paneID)
-	args.Set("zoom", zoom)
-	a.bridgeCall(g, "setZoom", args, nil, nil)
+	a.bridgeVerb("setZoom", map[string]any{"paneId": paneID, "zoom": zoom}, nil, nil)
 }
 
 // bridgeRemove tears the view down and hands onFreeze the final frame, url
 // and title. A missing bridge or failed capture yields empty values.
 func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history string)) {
-	g := bridge()
-	if !g.Truthy() {
-		onFreeze(nil, "", "", "")
-		return
-	}
-	args := js.Global().Get("Object").New()
-	args.Set("paneId", paneID)
-	a.bridgeCall(g, "removeWebview", args, func(res js.Value) {
+	ok := a.bridgeVerb("removeWebview", map[string]any{"paneId": paneID}, func(res js.Value) {
 		jpeg, ok := decodeBase64(res.Get("jpegBase64"))
 		if !ok {
 			// The tile keeps the face it had, and the user is told why the
@@ -210,30 +195,21 @@ func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title,
 		// overwrites a good preview.
 		onFreeze(nil, "", "", "")
 	})
+	if !ok {
+		onFreeze(nil, "", "", "")
+	}
 }
 
 // bridgeGoBack is the bar slot's back button.
 func (a *App) bridgeGoBack(paneID string) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	args := js.Global().Get("Object").New()
-	args.Set("paneId", paneID)
-	a.bridgeCall(g, "goBack", args, nil, nil)
+	a.bridgeVerb("goBack", map[string]any{"paneId": paneID}, nil, nil)
 }
 
 // bridgeShowMenu pops the live view's context menu from the bar circle's
 // right-click. A page that hijacks contextmenu makes the in-page menu
 // unreachable, and the circle sits outside the view's rect.
 func (a *App) bridgeShowMenu(paneID string) {
-	g := bridge()
-	if !g.Truthy() {
-		return
-	}
-	args := js.Global().Get("Object").New()
-	args.Set("paneId", paneID)
-	a.bridgeCall(g, "showMenu", args, nil, nil)
+	a.bridgeVerb("showMenu", map[string]any{"paneId": paneID}, nil, nil)
 }
 
 // installWebviewListeners registers the main-to-renderer push handlers.
@@ -244,22 +220,24 @@ func (a *App) installWebviewListeners() {
 	if !g.Truthy() {
 		return
 	}
-	onFrame := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		tileID := jsString(ev.Get("tileId"))
-		// An unreadable preview frame is the same as none: the next one
-		// replaces it, and the tile keeps the face it had until then.
-		if jpeg, _ := decodeBase64(ev.Get("jpegBase64")); len(jpeg) > 0 {
-			a.views.urlPreview.PutWildcard(tileID, jpeg, func() { a.draw() })
-		}
-		return nil
-	})
-	onNav := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		tileID := jsString(ev.Get("tileId"))
-		url := jsString(ev.Get("url"))
-		title := jsString(ev.Get("title"))
-		if url != "" {
+	for _, l := range []struct {
+		name string
+		fn   func(ev js.Value)
+	}{
+		{"onFrame", func(ev js.Value) {
+			// An unreadable preview frame is the same as none: the next one
+			// replaces it, and the tile keeps the face it had until then.
+			if jpeg, _ := decodeBase64(ev.Get("jpegBase64")); len(jpeg) > 0 {
+				a.views.urlPreview.PutWildcard(jsString(ev.Get("tileId")), jpeg, func() { a.draw() })
+			}
+		}},
+		{"onNav", func(ev js.Value) {
+			tileID := jsString(ev.Get("tileId"))
+			url := jsString(ev.Get("url"))
+			title := jsString(ev.Get("title"))
+			if url == "" {
+				return
+			}
 			a.updateCachedTileURL(tileID, url)
 			// The unload beacon reads navDirty and lastTitle, because it
 			// cannot wait for the bridge's freeze reply.
@@ -271,78 +249,57 @@ func (a *App) installWebviewListeners() {
 				}
 			}
 			a.draw()
-		}
-		return nil
-	})
-	// The native view owns the press, so the preload forwards it in canvas
-	// coords.
-	onRightForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.onForwardedRightDown(ev.Get("x").Float(), ev.Get("y").Float())
-		return nil
-	})
-	// The ascend gesture, which the native view swallows, forwarded in canvas
-	// coords.
-	onMiddleForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.onForwardedMiddleDown(ev.Get("x").Float(), ev.Get("y").Float())
-		return nil
-	})
-	// A focus-transfer intent. The preload did not prevent the click, so
-	// in-page interaction stays with the page.
-	onLeftForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.onForwardedLeftDown(ev.Get("x").Float(), ev.Get("y").Float())
-		return nil
-	})
-	// The page tried to open a new window. Main denies the popup and forwards
-	// the url, and the link opens as an ephemeral visit below.
-	onOpenBelow := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
-		return nil
-	})
-	// "Freeze Page" in a live view's context menu.
-	onFreezeURL := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
-		return nil
-	})
-	// The view swallows a plain right-press, so this is the only signal that
-	// focus must move to the pane the menu acts in, before it can act.
-	onContextMenu := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.onForwardedContextMenu(jsString(ev.Get("paneId")))
-		return nil
-	})
-	// The window-level keydown never fires while a live view owns OS keyboard
-	// focus, so main relays the chord keyed by pane.
-	onZoomKey := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		a.zoomKeyRelays++
-		a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
-		return nil
-	})
-	// Main reports every webview, session and sidecar failure over this one
-	// channel, into the same error surface every other failure path uses.
-	onError := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		ev := p[0]
-		source := jsString(ev.Get("source"))
-		message := jsString(ev.Get("message"))
-		a.reportErr(errsurface.Error, source, message)
-		return nil
-	})
-	g.Call("onFrame", onFrame)
-	g.Call("onNav", onNav)
-	g.Call("onRightForward", onRightForward)
-	g.Call("onMiddleForward", onMiddleForward)
-	g.Call("onLeftForward", onLeftForward)
-	g.Call("onOpenBelow", onOpenBelow)
-	g.Call("onFreezeURL", onFreezeURL)
-	g.Call("onContextMenu", onContextMenu)
-	g.Call("onZoomKey", onZoomKey)
-	g.Call("onError", onError)
-	// Listeners live for the lifetime of the app, so no Release.
+		}},
+		// The native view owns the press, so the preload forwards it in
+		// canvas coords.
+		{"onRightForward", func(ev js.Value) {
+			a.onForwardedRightDown(ev.Get("x").Float(), ev.Get("y").Float())
+		}},
+		// The ascend gesture, which the native view swallows, forwarded in
+		// canvas coords.
+		{"onMiddleForward", func(ev js.Value) {
+			a.onForwardedMiddleDown(ev.Get("x").Float(), ev.Get("y").Float())
+		}},
+		// A focus-transfer intent. The preload did not prevent the click, so
+		// in-page interaction stays with the page.
+		{"onLeftForward", func(ev js.Value) {
+			a.onForwardedLeftDown(ev.Get("x").Float(), ev.Get("y").Float())
+		}},
+		// The page tried to open a new window. Main denies the popup and
+		// forwards the url, and the link opens as an ephemeral visit below.
+		{"onOpenBelow", func(ev js.Value) {
+			a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
+		}},
+		// "Freeze Page" in a live view's context menu.
+		{"onFreezeURL", func(ev js.Value) {
+			a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
+		}},
+		// The view swallows a plain right-press, so this is the only signal
+		// that focus must move to the pane the menu acts in, before it can
+		// act.
+		{"onContextMenu", func(ev js.Value) {
+			a.onForwardedContextMenu(jsString(ev.Get("paneId")))
+		}},
+		// The window-level keydown never fires while a live view owns OS
+		// keyboard focus, so main relays the chord keyed by pane.
+		{"onZoomKey", func(ev js.Value) {
+			a.zoomKeyRelays++
+			a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
+		}},
+		// Main reports every webview, session and sidecar failure over this
+		// one channel, into the same error surface every other failure path
+		// uses.
+		{"onError", func(ev js.Value) {
+			a.reportErr(errsurface.Error, jsString(ev.Get("source")), jsString(ev.Get("message")))
+		}},
+	} {
+		fn := l.fn
+		// Listeners live for the lifetime of the app, so no Release.
+		g.Call(l.name, js.FuncOf(func(_ js.Value, p []js.Value) any {
+			fn(p[0])
+			return nil
+		}))
+	}
 }
 
 // decodeBase64 reads a bridge frame. ok is false only for bytes that are

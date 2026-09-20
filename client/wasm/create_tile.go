@@ -15,14 +15,21 @@ import (
 // already allowed. openConfigureURL rides along because a bare url tile's
 // address is asked for on its first descent, not at create.
 
+// createTile is the one create call. Every primitive, link and ephemeral
+// visit lands its row through here, so the label the outbox keys on and the
+// continuation the row feeds are one shape rather than a copy per caller.
+func (a *App) createTile(label, gid string, req *gridwellv1.CreateTileRequest,
+	onSuccess func(*gridwellv1.Tile)) {
+	a.postTileMutate(label, gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
+		return a.cl.CreateTile(ctx, req)
+	}, onSuccess)
+}
+
 // createWellAtCell creates an unnamed well; naming happens from inside,
 // through the bar title.
 func (a *App) createWellAtCell(gid string, cellX, cellY int64) {
-	req := &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: cellX, Y: cellY, W: 1, H: 1}}
-	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, nil)
+	a.createTile("CreateWell", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }
 
 func (a *App) createTextAtCell(gid string, data []byte, cellX, cellY int64) {
@@ -36,11 +43,8 @@ func (a *App) createTextAtCell(gid string, data []byte, cellX, cellY int64) {
 // createURLAtCell lands an address-less url tile. The first descent prompts
 // for the address and writes it as the tile's content.
 func (a *App) createURLAtCell(gid string, cellX, cellY int64) {
-	req := &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: cellX, Y: cellY, W: 1, H: 1}}
-	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, nil)
+	a.createTile("CreateURL", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }
 
 // openConfigureURL prompts for a bare url tile's address on its first
@@ -90,11 +94,8 @@ func (a *App) openConfigureURL(p *pane.Pane, t *gridwellv1.Tile) {
 // createShellAtCell lands a shell tile. The first descent creates its private
 // tmux session, and re-descending reattaches to the same one.
 func (a *App) createShellAtCell(gid string, cellX, cellY int64) {
-	req := &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: cellX, Y: cellY, W: 1, H: 1}}
 	// No auto-descent, like every other primitive. DecideAutoLive's
 	// fresh-shell arm creates the session on the first descent.
-	a.postTileMutate("CreateShell", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, nil)
+	a.createTile("CreateShell", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }

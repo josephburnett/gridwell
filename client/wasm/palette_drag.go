@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
 
@@ -189,11 +188,8 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 // root grid, seeding its framing from the plugin's persisted root view so the
 // preview shows what descent will show.
 func (a *App) createPluginLinkAtCell(gid string, pl *gridwellv1.PluginInfo, cellX, cellY int64) {
-	req := &gridwellv1.CreateTileRequest{GridId: gid,
+	a.createTile("CreateWell", gid, &gridwellv1.CreateTileRequest{GridId: gid,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: cellX, Y: cellY, W: 1, H: 1,
 			ChildGridId: pl.RootGridId, AltText: pl.Label,
-			ViewCx: pl.RootViewCx, ViewCy: pl.RootViewCy, ViewZoom: pl.RootViewZoom}}
-	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, nil)
+			ViewCx: pl.RootViewCx, ViewCy: pl.RootViewCy, ViewZoom: pl.RootViewZoom}}, nil)
 }

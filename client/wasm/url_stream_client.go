@@ -230,10 +230,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 					}
 					return err
 				},
-				beacon: func() (string, []byte, string) {
-					path, body := rpc.SetTileBeacon(req)
-					return path, body, rpc.BeaconJSONType
-				},
+				beacon: jsonBeacon(func() (string, []byte) { return rpc.SetTileBeacon(req) }),
 			})
 		}
 		if len(jpeg) > 0 {
