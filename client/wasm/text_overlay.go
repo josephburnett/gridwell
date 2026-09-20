@@ -360,7 +360,7 @@ func (a *App) refreshFileToggle() {
 	style.Set("top", pxf(cy-plusButtonRadius))
 	// The same family shades and rim as the canvas slot buttons.
 	band, button := a.barTheme()
-	style.Set("border", "1px solid "+a.pal.BarInk)
+	style.Set("border", "1px solid "+a.pal.CircleRim)
 	style.Set("background", button)
 	style.Set("color", band)
 	// The glyph names the target mode: an italic serif "a" renders, a

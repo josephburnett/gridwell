@@ -572,7 +572,7 @@ func (a *App) drawCircleButtonChrome(cx, cy float64) {
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, plusButtonRadius, 0, 2*math.Pi)
 	a.cctx.Call("fill")
-	a.cctx.Set("strokeStyle", a.pal.BarInk)
+	a.cctx.Set("strokeStyle", a.pal.CircleRim)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("stroke")
 }

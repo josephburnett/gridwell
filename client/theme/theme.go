@@ -149,9 +149,12 @@ type Palette struct {
 	BarTextBand      string
 	BarPluginBand    string
 	BarEphemeralBand string
-	// BarInk is the bar's own lettering and the circle button's rim, over a
-	// band of any family.
+	// BarInk is the bar's own lettering, over a band of any family.
 	BarInk string
+	// CircleRim lifts the circle button off the band it sits on. It is a
+	// casing and not lettering, so it stays lighter than the chip in both
+	// palettes.
+	CircleRim string
 	// CrumbHere is the wide pane-tile crumb for the level you are in, a band
 	// carrying BarInk, where PaneTileBorder is a line drawn on a tile body.
 	CrumbHere string
@@ -258,6 +261,7 @@ var dark = Palette{
 	BarPluginBand:    "#241e12",
 	BarEphemeralBand: "#1d1f24",
 	BarInk:           "#dff4f4",
+	CircleRim:        "#dff4f4",
 	CrumbHere:        "#3aa8a8",
 	CrumbIdle:        "#1d4a4a",
 	CachedChipBg:     "#8a6d2f",
@@ -357,6 +361,7 @@ var light = Palette{
 	BarPluginBand:    "#f5efe2",
 	BarEphemeralBand: "#eceef2",
 	BarInk:           "#1d2e2e",
+	CircleRim:        "#ffffff",
 	CrumbHere:        "#7fc9c9",
 	CrumbIdle:        "#bfe0e0",
 	CachedChipBg:     "#e6c67c",

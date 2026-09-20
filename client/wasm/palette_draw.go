@@ -79,7 +79,7 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, plusButtonRadius, 0, 2*math.Pi)
 	a.cctx.Call("fill")
-	a.cctx.Set("strokeStyle", a.pal.BarInk)
+	a.cctx.Set("strokeStyle", a.pal.CircleRim)
 	if a.menu.OpenOn(p.ID) {
 		a.cctx.Set("lineWidth", 2.0)
 	} else {
