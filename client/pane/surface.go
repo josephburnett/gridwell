@@ -1,9 +1,8 @@
 package pane
 
 // A live surface belongs to one pane and to the descent that opened it.
-// Whether it still belongs on screen is one question and both surface kinds
-// ask it here: two hand-written copies is how a pane that moved on kept a
-// native page pinned over whatever it showed next.
+// Whether it still belongs on screen is one question, and both surface kinds
+// ask it here.
 
 // SurfaceVerdict is one frame's sweep for one live surface.
 type SurfaceVerdict int
@@ -20,9 +19,8 @@ const (
 
 // SurfaceOf answers it for one surface. descentID is the pane frame the
 // surface was opened for, not always the tile it shows: a live link's surface
-// belongs to the link's target while the frame carries the link row, and
-// comparing the frame's own id is what keeps such a link from being orphaned
-// or re-placed every frame.
+// belongs to the link's target while the frame carries the link row, so
+// passing the target's id would orphan it every frame.
 func SurfaceOf(onScreen bool, paneContentID, descentID string) SurfaceVerdict {
 	if !onScreen {
 		return SurfacePark
