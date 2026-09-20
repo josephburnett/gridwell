@@ -235,15 +235,13 @@ func (s *Store) CreateURL(ctx context.Context, gridID string, x, y, w, h int64, 
 		})
 }
 
-// CreateScratchURL creates a url tile in the scratch grid: descending into a
-// url without placing a tile. It runs no overlap check, because the scratch
-// grid is never rendered and two visits may share a cell. The tile is
-// otherwise normal and persistent. See ScratchGridID.
-func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.Tile, error) {
-	urlString := strings.TrimSpace(url)
-	if !urlSchemeAllowed(urlString) {
-		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
-	}
+// createScratch is createTile for the scratch grid: the grid comes from
+// ScratchGridID rather than the caller, and there is no overlap check because
+// the scratch grid is never rendered and two visits may share a cell.
+func (s *Store) createScratch(
+	ctx context.Context,
+	insert func(tx *sql.Tx, gridID, now int64) (tileID int64, err error),
+) (*gridwellv1.Tile, error) {
 	scratch, err := s.ScratchGridID(ctx)
 	if err != nil {
 		return nil, err
@@ -254,8 +252,7 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.T
 	}
 	var out *gridwellv1.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		now := s.now().Unix()
-		tileID, err := insertURLRow(ctx, tx, gridID, 0, 0, 1, 1, urlString, now)
+		tileID, err := insert(tx, gridID, s.now().Unix())
 		if err != nil {
 			return err
 		}
@@ -268,39 +265,33 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.T
 	return out, err
 }
 
+// CreateScratchURL creates a url tile in the scratch grid: descending into a
+// url without placing a tile. The tile is otherwise normal and persistent.
+// See ScratchGridID.
+func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.Tile, error) {
+	urlString := strings.TrimSpace(url)
+	if !urlSchemeAllowed(urlString) {
+		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
+	}
+	return s.createScratch(ctx, func(tx *sql.Tx, gridID, now int64) (int64, error) {
+		return insertURLRow(ctx, tx, gridID, 0, 0, 1, 1, urlString, now)
+	})
+}
+
 // CreateScratchShell is CreateScratchURL's shell twin. Unlike a placed shell
 // it is deleted on ascent, which kills the tmux session, so nothing persists.
 func (s *Store) CreateScratchShell(ctx context.Context) (*gridwellv1.Tile, error) {
-	scratch, err := s.ScratchGridID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	gridID, err := parseID(scratch)
-	if err != nil {
-		return nil, err
-	}
-	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		now := s.now().Unix()
+	return s.createScratch(ctx, func(tx *sql.Tx, gridID, now int64) (int64, error) {
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO tiles (grid_id, kind, x, y, w, h,
 				alt_text, created_at, updated_at)
 			VALUES (?, 'shell', 0, 0, 1, 1, 'shell', ?, ?)`,
 			gridID, now, now)
 		if err != nil {
-			return fmt.Errorf("insert scratch shell tile: %w", err)
+			return 0, fmt.Errorf("insert scratch shell tile: %w", err)
 		}
-		tileID, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
-			return err
-		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
-		return err
+		return res.LastInsertId()
 	})
-	return out, err
 }
 
 // SetTextView updates a text tile's framed window and its rendered or text
