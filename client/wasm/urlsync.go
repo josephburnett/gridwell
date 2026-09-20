@@ -3,8 +3,6 @@
 package main
 
 import (
-	"google.golang.org/protobuf/proto"
-
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"strings"
@@ -129,12 +127,9 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		gridID = a.gridIDForPathFrom(doorAnchor, doorPath)
 		req = gridwellv1.SetFramingRequest{TileId: door.Id}
 		commit = func(f rpc.Framing) {
-			// cache.Grid hands out the cached rows themselves, so patch a
-			// clone through Apply rather than behind it.
-			patched := proto.CloneOf(door)
-			patched.ViewCx, patched.ViewCy, patched.ViewZoom = f.Cx, f.Cy, f.Zoom
-			a.c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-				TileChanged: &gridwellv1.TileChanged{Tile: patched}}})
+			a.c.PatchTile(door, func(t *gridwellv1.Tile) {
+				t.ViewCx, t.ViewCy, t.ViewZoom = f.Cx, f.Cy, f.Zoom
+			})
 		}
 	} else {
 		if len(p.Path()) > 0 || p.ContentID() != "" {
@@ -192,12 +187,11 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	req := &gridwellv1.SetTileRequest{TileId: file.Id,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindText,
 			TextX: next.X, TextY: next.Y, TextW: next.W, TextH: next.H, TextMode: next.Mode}}
-	patched := proto.CloneOf(file)
-	patched.TextX, patched.TextY = scrollX, scrollY
-	patched.TextW, patched.TextH = next.W, next.H
-	patched.TextMode = p.TextMode
-	a.c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: patched}}})
+	a.c.PatchTile(file, func(t *gridwellv1.Tile) {
+		t.TextX, t.TextY = scrollX, scrollY
+		t.TextW, t.TextH = next.W, next.H
+		t.TextMode = p.TextMode
+	})
 	a.postFramingPersist("SetTextView", gid, file.Id,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetTile(ctx, req)

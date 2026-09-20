@@ -679,6 +679,57 @@ func TestAClonedRowLandsThroughUpdateTile(t *testing.T) {
 	}
 }
 
+// PatchTile is the one optimistic patch: the caller's row stays as it was
+// handed out, and the change lands on the cached row through the same arm a
+// TileChanged event takes.
+func TestPatchTileEditsACloneAndLands(t *testing.T) {
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
+		{Id: "100", GridId: "1", Kind: rpc.KindWell, W: 1, H: 1, Version: 9},
+	})
+	handed := mustRow(t, c, "1", "100")
+	before := proto.CloneOf(handed)
+
+	if !c.PatchTile(handed, func(n *gridwellv1.Tile) { n.ViewZoom = 2.5 }) {
+		t.Fatal("PatchTile reported no change")
+	}
+
+	if !proto.Equal(handed, before) {
+		t.Errorf("the handed-out row was edited: %v, want %v", handed, before)
+	}
+	if got := mustRow(t, c, "1", "100"); got.ViewZoom != 2.5 {
+		t.Errorf("view_zoom = %v, want the patch's 2.5", got.ViewZoom)
+	}
+}
+
+// The patch rides Apply, so the version interlock decides it: a row the cache
+// already holds at a later version is not rolled back by a stale patch.
+func TestPatchTileObeysTheVersionInterlock(t *testing.T) {
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
+		{Id: "100", GridId: "1", Kind: rpc.KindText, W: 1, H: 1, Version: 9},
+	})
+	stale := proto.CloneOf(mustRow(t, c, "1", "100"))
+	stale.Version = 8
+
+	if c.PatchTile(stale, func(n *gridwellv1.Tile) { n.TextX = 42 }) {
+		t.Error("a patch older than the cached row landed")
+	}
+	if got := mustRow(t, c, "1", "100"); got.TextX != 0 {
+		t.Errorf("text_x = %d, want the cached row's 0", got.TextX)
+	}
+}
+
+// A patch for a grid this client never fetched is dropped, like any event for
+// one: nothing asks for a room nobody is in.
+func TestPatchTileDropsAnUncachedGrid(t *testing.T) {
+	c := New()
+	if c.PatchTile(&gridwellv1.Tile{Id: "100", GridId: "9", Kind: rpc.KindWell},
+		func(n *gridwellv1.Tile) { n.ViewZoom = 2 }) {
+		t.Error("a patch into an uncached grid reported a change")
+	}
+}
+
 func mustRow(t *testing.T, c *Cache, gridID, tileID string) *gridwellv1.Tile {
 	t.Helper()
 	g, ok := c.Grid(gridID)

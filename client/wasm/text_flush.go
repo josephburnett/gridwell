@@ -3,8 +3,6 @@
 package main
 
 import (
-	"google.golang.org/protobuf/proto"
-
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
@@ -144,14 +142,13 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 
 	// Patch the cache first, so the ascent transition reflects the framed
 	// window before the round trip lands.
-	patched := proto.CloneOf(file)
-	patched.TextX = scrollX
-	patched.TextY = scrollY
-	patched.TextW = viewW
-	patched.TextH = viewH
-	patched.TextMode = p.TextMode
-	a.c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: patched}}})
+	a.c.PatchTile(file, func(t *gridwellv1.Tile) {
+		t.TextX = scrollX
+		t.TextY = scrollY
+		t.TextW = viewW
+		t.TextH = viewH
+		t.TextMode = p.TextMode
+	})
 
 	mode := p.TextMode
 	// Through the document's save queue, because a debounced keystroke save
