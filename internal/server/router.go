@@ -175,47 +175,45 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		return rpc.TransitQualifyPluginList(hop, resp), nil
 	}
 	var out []*pb.PluginInfo
-	for _, p := range rt.srv.pluginReg.Ordered() {
+	for _, n := range rt.srv.namespaces() {
+		if n.Transit {
+			// One row per connection, under the node's own id, after the
+			// content plugins. What a connection is, its landing and its
+			// status, is the transport's own handshake
+			// (connection.Server.Rows), asked here as every namespace is asked
+			// and re-qualified one hop, so no second row shape can drift from
+			// it.
+			tr, err := n.NS.Handshake(ctx, &pb.HandshakeRequest{})
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, rpc.TransitQualifyPluginList(n.UUID, tr).Plugins...)
+			continue
+		}
 		// The server.yaml display name is authoritative, since the menu and a
 		// mounted well must agree; buildPluginInfo owns the fallbacks.
-		label := rt.srv.pluginReg.Label(p.UUID)
+		label := rt.srv.pluginReg.Label(n.UUID)
 		// Bounded and cached per uuid, so a hung plugin degrades to a
 		// config-only entry. A failed Info leaves info nil and the error rides
 		// along, or broken and healthy-but-rootless would be identical on the
 		// wire.
-		info, err := rt.srv.pluginInfo(ctx, p.UUID)
-		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
+		info, err := rt.srv.pluginInfo(ctx, n.UUID)
+		out = append(out, buildPluginInfo(n.UUID, n.Kind, label, info, err))
 	}
-	// Home is the node's own store, where "/" lands. Its row is first because
-	// the registry registers it first, which no client has to know.
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,
 		// The /content/ door's capability, handed out only here, on the
 		// cookie-authenticated mux.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
+		Plugins:      out,
 	}
-	// The home row is the node's own; homeUUID names it, so a registry wired
-	// without an id still lands somewhere.
+	// Home is the node's own store, where "/" lands; homeUUID names its row, so
+	// a registry wired without an id still lands somewhere.
 	for _, p := range out {
 		if p.Uuid == rt.srv.homeUUID() {
 			resp.HomeGridId = p.RootGridId
 		}
 	}
-	if rt.srv.cfg.ID != "" {
-		// One row per connection, under the node's own id, after the content
-		// plugins. What a connection is, its landing and its status, is the
-		// transport's own handshake (connection.Server.Rows), asked here as
-		// every namespace is asked and re-qualified one hop, so no second row
-		// shape can drift from it.
-		if t, ok := rt.srv.pluginReg.Transport(); ok {
-			tr, err := t.Handshake(ctx, &pb.HandshakeRequest{})
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, rpc.TransitQualifyPluginList(rt.srv.cfg.ID, tr).Plugins...)
-		}
-	}
-	resp.Plugins = out
 	return resp, nil
 }
 
@@ -296,28 +294,16 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		return qualifySearch(transit, uuid, resp), nil
 	}
 	out := &pb.SearchResponse{}
-	for _, p := range rt.srv.pluginReg.Ordered() {
-		c, ok := rt.srv.routeClient(p.UUID)
-		if !ok {
-			continue
-		}
+	// The transport is one of these namespaces, and it fans out again to every
+	// connection, in chains this node re-qualifies under its own id.
+	for _, n := range rt.srv.namespaces() {
 		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := c.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, p.UUID), Limit: m.Limit})
+		resp, err := n.NS.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, n.UUID), Limit: m.Limit})
 		cancel()
 		if err != nil {
 			continue // Unimplemented, a timeout, a dead plugin: no answer here
 		}
-		out.Results = append(out.Results, qualifySearch(false, p.UUID, resp).Results...)
-	}
-	// The transport fans out to every connection, in chains this node
-	// re-qualifies under its own id.
-	if t, ok := rt.srv.pluginReg.Transport(); ok && rt.srv.cfg.ID != "" {
-		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := t.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, rt.srv.cfg.ID), Limit: m.Limit})
-		cancel()
-		if err == nil {
-			out.Results = append(out.Results, qualifySearch(true, rt.srv.cfg.ID, resp).Results...)
-		}
+		out.Results = append(out.Results, qualifySearch(n.Transit, n.UUID, resp).Results...)
 	}
 	return out, nil
 }
@@ -658,20 +644,16 @@ func (rt *router) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send fu
 	defer cancel()
 
 	events := make(chan *pb.Event, 64)
-	for _, p := range rt.srv.pluginReg.Ordered() {
-		c, ok := rt.srv.pluginReg.Get(p.UUID)
-		if !ok {
+	for _, n := range rt.srv.namespaces() {
+		if n.Transit {
+			// The transport is ready as soon as it exists: it fans in every
+			// connection's events, and there is no handshake to ask.
+			go watchPlugin(subCtx, n.UUID, true, n.NS,
+				func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events)
 			continue
 		}
-		uuid := p.UUID
-		go watchPlugin(subCtx, uuid, false, c,
-			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, uuid) }, events)
-	}
-	if t, ok := rt.srv.pluginReg.Transport(); ok && rt.srv.cfg.ID != "" {
-		// The transport is ready as soon as it exists: it fans in every
-		// connection's events, and there is no handshake to ask.
-		go watchPlugin(subCtx, rt.srv.cfg.ID, true, t,
-			func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events)
+		go watchPlugin(subCtx, n.UUID, false, n.NS,
+			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, n.UUID) }, events)
 	}
 
 	for {
