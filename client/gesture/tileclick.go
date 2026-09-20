@@ -42,8 +42,7 @@ type ClickInput struct {
 
 // DecideTileClick reads the prompt arm before the kind partition, because an
 // address-less url tile is a content-descent kind and would otherwise descend
-// onto nothing. The prompt is for an address the user owns: a link's lives on
-// its target, and a served page's is the node's to derive.
+// onto nothing.
 func DecideTileClick(in ClickInput) ClickVerdict {
 	switch {
 	case in.URL && in.URLEmpty && !in.LeafLink && !in.Page:
