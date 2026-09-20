@@ -25,6 +25,7 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/dbformat"
+	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	_ "modernc.org/sqlite"
 )
@@ -123,11 +124,9 @@ type Layer struct {
 	revalInflight map[string]bool
 	revalWG       sync.WaitGroup
 
-	// subs are this layer's own event subscribers, fed by revalidations that
-	// changed or evicted a grid and by cache-store health transitions.
-	subsMu sync.Mutex
-	subs   map[int]chan *pb.Event
-	subSeq int
+	// hub fans this layer's own stream out, fed by revalidations that changed
+	// or evicted a grid and by cache-store health transitions.
+	hub *eventhub.Hub[*pb.Event]
 
 	// cacheDown remembers that stores are failing, so the transition, not
 	// every failure, surfaces as this namespace's health.
@@ -286,7 +285,7 @@ func (m *missing) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send f
 
 func (s *Store) front(upstream namespace.Namespace, opts Options) *Layer {
 	c := &Layer{Namespace: upstream, db: s.db, opts: opts,
-		revalInflight: map[string]bool{}, subs: map[int]chan *pb.Event{}, dark: map[string]bool{}}
+		revalInflight: map[string]bool{}, hub: eventhub.New(rpc.EventKey), dark: map[string]bool{}}
 	c.pf.running = map[string]bool{}
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
 	s.mu.Lock()
@@ -359,15 +358,7 @@ func healthEvent(healthy bool, detail string) *pb.Event {
 // emitHealth announces a health transition to the synthetic stream's
 // subscribers.
 func (c *Layer) emitHealth(healthy bool, detail string) {
-	ev := healthEvent(healthy, detail)
-	c.subsMu.Lock()
-	defer c.subsMu.Unlock()
-	for _, ch := range c.subs {
-		select {
-		case ch <- ev:
-		default:
-		}
-	}
+	c.hub.Publish(healthEvent(healthy, detail))
 }
 
 func now() int64 { return time.Now().Unix() }
@@ -773,8 +764,8 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 		defer sendMu.Unlock()
 		return send(ev)
 	}
-	id, ch := c.addSub()
-	defer c.removeSub(id)
+	ch, detach := c.hub.Subscribe()
+	defer detach()
 	var ownErr error
 	own := make(chan struct{})
 	go func() {
@@ -783,7 +774,10 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 			select {
 			case <-ctx.Done():
 				return
-			case ev := <-ch:
+			case ev, ok := <-ch:
+				if !ok {
+					return
+				}
 				if err := emit(ev); err != nil {
 					ownErr = err
 					cancel()
@@ -810,37 +804,10 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 	return ownErr
 }
 
-// addSub registers one synthetic-stream subscriber.
-func (c *Layer) addSub() (int, chan *pb.Event) {
-	ch := make(chan *pb.Event, 64)
-	c.subsMu.Lock()
-	defer c.subsMu.Unlock()
-	c.subSeq++
-	c.subs[c.subSeq] = ch
-	return c.subSeq, ch
-}
-
-func (c *Layer) removeSub(id int) {
-	c.subsMu.Lock()
-	defer c.subsMu.Unlock()
-	delete(c.subs, id)
-}
-
 // emitGridChanged announces one changed or evicted grid to the synthetic
-// stream's subscribers, under this layer's local id. A subscriber too far
-// behind loses the event rather than blocking a revalidation: the rows are
-// stored, so it is a missed refresh, not a missed fact.
+// stream's subscribers, under this layer's local id.
 func (c *Layer) emitGridChanged(gridID string) {
-	ev := &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: gridID}}}
-	c.subsMu.Lock()
-	defer c.subsMu.Unlock()
-	for _, ch := range c.subs {
-		select {
-		case ch <- ev:
-		default:
-			log.Printf("gridwell: sourcecache: a subscriber missed GridChanged %s (buffer full)", gridID)
-		}
-	}
+	c.hub.Publish(&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: gridID}}})
 }
 
 // applyEvent folds one event into the cache. GridChanged carries only an id,

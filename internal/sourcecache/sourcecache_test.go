@@ -166,6 +166,39 @@ func openLayer(t *testing.T, upstream namespace.Namespace, dbPath string, opts O
 	return s.front(upstream, opts)
 }
 
+// awaitSubscriber waits for a Subscribe riding a goroutine to attach, and
+// leaves the stream as it found it. Attaching is synchronous, but the call
+// that does it is a goroutine, so an event published before it lands is
+// nobody's: publish until one comes back, then drain what the probing left
+// behind with one last sentinel, which delivery in first-touch order puts
+// after every probe.
+func awaitSubscriber(t *testing.T, cc *Layer, seen <-chan *pb.Event) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for attached := false; !attached; {
+		cc.emitGridChanged("attach-probe")
+		select {
+		case <-seen:
+			attached = true
+		case <-time.After(20 * time.Millisecond):
+			if time.Now().After(deadline) {
+				t.Fatal("the layer's own stream never registered the subscriber")
+			}
+		}
+	}
+	cc.emitGridChanged("attach-done")
+	for {
+		select {
+		case ev := <-seen:
+			if ev.GetGridChanged().GetGridId() == "attach-done" {
+				return
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the attach sentinel never arrived; the stream is stuck")
+		}
+	}
+}
+
 // fixture is the TRANSPORT's shape: the cache in front of a namespace
 // whose absence is a machine going dark, so the prefetch policy is on.
 func fixture(t *testing.T) (cc *Layer, upstream *darkable, root string, dbPath string) {
@@ -695,21 +728,7 @@ func TestRevalidationEmitsGridChanged(t *testing.T) {
 			return nil
 		})
 	}()
-	// The subscriber registers asynchronously; wait for it, or the emit
-	// races past an empty subscriber set.
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		cc.subsMu.Lock()
-		n := len(cc.subs)
-		cc.subsMu.Unlock()
-		if n > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the synthetic subscription never registered")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	awaitSubscriber(t, cc, evs)
 
 	// The source changes while nobody is looking; an out-of-window read
 	// serves the remembering and kicks the refresh that finds the change.
@@ -906,19 +925,7 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 			return nil
 		})
 	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		cc.subsMu.Lock()
-		n := len(cc.subs)
-		cc.subsMu.Unlock()
-		if n > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the synthetic subscription never registered")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	awaitSubscriber(t, cc, evs)
 
 	// The cache breaks: the next live read's store fails and the health goes
 	// down, with the failure in the detail.

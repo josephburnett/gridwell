@@ -279,3 +279,53 @@ func TestOneDoorServerOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// No file here, test files included, keeps a subscriber set as a map of
+// channels outside internal/eventhub. Three fan-outs once existed where the
+// tree declared one, and each copy dropped a distinct change when a consumer
+// stalled. eventhub.Hub is the one fan-out and the one drop policy.
+func TestOneEventFanOut(t *testing.T) {
+	root := repoRoot(t)
+	// Concatenated so this file does not match its own needle.
+	needle := "]chan" + " "
+	hub := filepath.Join("internal", "eventhub") + string(filepath.Separator)
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if pruned(root, path, d) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(rel, hub) {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		sc := bufio.NewScanner(bytes.NewReader(data))
+		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+		for line := 1; sc.Scan(); line++ {
+			text := sc.Text()
+			i := strings.Index(text, needle)
+			if i < 0 || !strings.Contains(text[:i], "map[") {
+				continue
+			}
+			t.Errorf("%s:%d keeps a map of channels — an event fan-out has one owner, internal/eventhub, which coalesces per entity instead of dropping; use eventhub.Hub", rel, line)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
