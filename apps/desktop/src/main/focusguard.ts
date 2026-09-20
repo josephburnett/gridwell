@@ -4,9 +4,9 @@
 // Chromium focuses the widget while it routes the press and forwards the press
 // 0.1-3.8 ms later. webviews.ts owns the state and timer.
 
-// How long the guard waits before it decides, and again after a bounce before
-// it confirms. Chromium emits no event for a widget-focus commit, and a
-// rootWC.focus() from inside the focus handler is swallowed by that commit.
+// How long the guard waits before it decides, and again to confirm a bounce.
+// Chromium emits no event for a widget-focus commit, and a rootWC.focus() from
+// inside the focus handler is swallowed by that commit.
 export const FOCUS_SETTLE_MS = 120;
 
 // touchScroll injects `mouseWheel` through sendInputEvent, which also raises
@@ -26,7 +26,7 @@ export interface GuardInput {
   // so the executor passes true.
   viewHoldsOSFocus: boolean;
   // A press between the two is the user's click arriving. The count is
-  // monotonic, so there is no clock to step backwards and no window to tune.
+  // monotonic, so there is no clock to step backwards.
   pressesAtFocus: number;
   pressesNow: number;
   // alreadyBounced keeps the confirmation from chaining forever.
@@ -39,8 +39,7 @@ export type GuardAction =
   // settleMs is null when this bounce was already the confirmation.
   | { kind: 'bounce'; settleMs: number | null };
 
-// Every arm reads a fact someone owns: the renderer's paneFocused, Chromium's
-// viewHoldsOSFocus, and main's press count.
+// Every arm reads a fact someone else owns; this package keeps none.
 export function decideFocus(i: GuardInput): GuardAction {
   if (i.paneFocused) return { kind: 'allow' };
   // A bounce landed, or the user moved on; nothing is left to take back.

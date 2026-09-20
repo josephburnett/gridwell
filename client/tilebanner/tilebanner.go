@@ -1,6 +1,6 @@
 // Package tilebanner owns what a tile's banner reads: the name the server
 // stamped and, after it, the owning plugin's status_detail — a word about the
-// tile's state ("unread", "done") that nothing outside the plugin can derive.
+// tile's state that nothing outside the plugin can derive.
 package tilebanner
 
 import gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"

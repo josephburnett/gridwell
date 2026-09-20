@@ -1,7 +1,6 @@
 // Package circlemenu owns what a right-click on the bottom bar's circle slot
-// offers. barslot.Decide says what the slot is and what a left-click runs;
-// this says what the other button pops on that same verdict, so the two are
-// read together and no mode can grow a menu the slot does not stand for.
+// offers. It reads barslot.Decide's verdict, so no mode can grow a menu the
+// slot does not stand for.
 package circlemenu
 
 import (
@@ -19,7 +18,7 @@ const (
 	// and are built by the host, which is why this carries none.
 	MenuURL
 	// MenuTheme chooses the client's palette. Its rows are ThemeItems, drawn
-	// natively where the host has a menu and as a DOM popover where it has not.
+	// by whichever renderer caps.ChoiceMenu names.
 	MenuTheme
 )
 
