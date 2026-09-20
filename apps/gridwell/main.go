@@ -1,6 +1,6 @@
-// gridwell is the host binary: every plugin is an out-of-process
-// gridwell-plugin-* binary named by config or found on PATH. This module
-// imports no plugin implementations, which test/boundary pins.
+// gridwell is the host binary. Every plugin is an out-of-process
+// gridwell-plugin-* binary, so this module imports no plugin implementation;
+// test/boundary pins that.
 package main
 
 import (
