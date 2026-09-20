@@ -1,15 +1,14 @@
 package cli
 
-// The per-home serve lock: one `gridwell serve` per Gridwell home. Two
-// servers over the same database would each cache and write independently,
-// and SQLite's WAL locking would not stop them. An exclusive flock on
+// The per-home serve lock: one `gridwell serve` per Gridwell home, since two
+// servers over one database would each cache and write independently and
+// SQLite's WAL locking would not stop them. An exclusive flock on
 // <home>/serve.lock dies with its holder, so there is no stale-pidfile
-// protocol. The file holds the holder's banner, which a conflicting serve
-// re-emits as "already serving" so the desktop app connects to the running
-// server instead of starting a second one.
+// protocol; its banner is what a second serve reports, so the desktop app
+// joins the running server instead of starting one.
 
-// errServeLockHeld reports the conflict with the holder's banner, empty when
-// the holder has not written it yet. Both platform halves name it.
+// errServeLockHeld carries the holder's banner, empty until the holder has
+// written it. Both platform halves name it.
 type errServeLockHeld struct {
 	banner string
 }
