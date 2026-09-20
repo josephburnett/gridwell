@@ -106,11 +106,7 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
 		}
 		if m.Context != "" {
-			id, err := a.canonicalGridID(m.Context)
-			if err != nil {
-				return nil, err
-			}
-			out.GridId = id
+			out.GridId = gridAddr(m.Context)
 			f, err := a.contextFraming(m.Context)
 			if err != nil {
 				return nil, err
@@ -238,7 +234,7 @@ func sourceDetail(err error) string {
 }
 
 // emitGridChanged announces that a grid this adapter serves has changed,
-// under the canonical address (canonicalGridID), so a listener does not have
+// under the derived address (gridAddr), so a listener does not have
 // to know whether the write minted anything.
 func (a *Adapter) emitGridChanged(gridID string) {
 	if gridID == "" {
@@ -283,7 +279,7 @@ func acceptEntries(entries []*pluginv1.Entry) error {
 // buildTiles joins the overlay's rows with the listing's content facts, naming
 // each by its derived address, a well's child grid included: the id a well
 // hands the client must be the id GetGrid answers under.
-func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*pluginv1.Entry, childGrid func(string) (string, error), rowContext func(int64) (string, error)) ([]*gridwellv1.Tile, error) {
+func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*pluginv1.Entry, rowContext func(int64) (string, error)) ([]*gridwellv1.Tile, error) {
 	byKey := map[string]*pluginv1.Entry{}
 	for _, e := range entries {
 		byKey[e.Key] = e
@@ -299,11 +295,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 		e, listed := byKey[t.Key]
 		switch {
 		case listed && e.ChildContext != "":
-			cg, err := childGrid(e.ChildContext)
-			if err != nil {
-				return nil, err
-			}
-			pt.ChildGridId = cg
+			pt.ChildGridId = gridAddr(e.ChildContext)
 		case t.ChildGridID != 0:
 			// A minted well the listing does not carry, from a dark or stale
 			// source. The row remembers which child grid, and its context is
@@ -312,11 +304,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 			if err != nil {
 				return nil, err
 			}
-			cg, err := childGrid(ck)
-			if err != nil {
-				return nil, err
-			}
-			pt.ChildGridId = cg
+			pt.ChildGridId = gridAddr(ck)
 		}
 		if listed {
 			pt.ServesPage = e.ServesPage
@@ -363,13 +351,6 @@ func (a *Adapter) resolveGrid(gridID string) (gid int64, context string, err err
 	default:
 		return 0, "", status.Errorf(codes.InvalidArgument, "plugin: invalid grid_id %q", gridID)
 	}
-}
-
-// canonicalGridID stays the derived address even after the store mints a row:
-// the address is the name, the row is storage. Both still resolve on the way in
-// (resolveGrid), so a reference stored before this rule keeps working.
-func (a *Adapter) canonicalGridID(context string) (string, error) {
-	return gridAddr(context), nil
 }
 
 // grid is GetGrid's core, shared with GetTile so the two cannot disagree.
@@ -459,16 +440,13 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	if err != nil {
 		return nil, err
 	}
-	canonical, err := a.canonicalGridID(ckey)
-	if err != nil {
-		return nil, err
-	}
+	addr := gridAddr(ckey)
 	g := &gridwellv1.Grid{
-		Id:          canonical,
+		Id:          addr,
 		HostContent: ci.HostContent,
 		Glyph:       ci.Glyph,
 	}
-	wire, err := buildTiles(canonical, ckey, tiles, resp.Entries, a.canonicalGridID, a.mem.ContextKey)
+	wire, err := buildTiles(addr, ckey, tiles, resp.Entries, a.mem.ContextKey)
 	if err != nil {
 		return nil, err
 	}
@@ -671,11 +649,7 @@ func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*g
 			if err != nil {
 				return nil, err
 			}
-			cgid, err := a.canonicalGridID(r.ContextPath[i])
-			if err != nil {
-				return nil, err
-			}
-			well := parent.tileOpening(cgid)
+			well := parent.tileOpening(gridAddr(r.ContextPath[i]))
 			if well == nil {
 				placed = false
 				break
@@ -735,7 +709,7 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 		return nil, err
 	}
 	if req.GridId != "" {
-		want, err := a.resolveGridContext(req.GridId)
+		_, want, err := a.resolveGrid(req.GridId)
 		if err != nil {
 			return nil, err
 		}
@@ -750,13 +724,7 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err := a.mem.Place(id, req.X, req.Y, req.W, req.H); err != nil {
 		return nil, err
 	}
-	return a.changed(a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)}))
-}
-
-// resolveGridContext is resolveGrid's context half, minting nothing.
-func (a *Adapter) resolveGridContext(gridID string) (string, error) {
-	_, ckey, err := a.resolveGrid(gridID)
-	return ckey, err
+	return a.changedRow(ctx, id)
 }
 
 // SetTile terminates the framing arms at the store. Rename is refused because
@@ -785,12 +753,14 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())
 		}
 	}
-	return a.changed(a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)}))
+	return a.changedRow(ctx, id)
 }
 
-// changed announces the grid a write landed in, on the way back out with the
-// write's own answer, so no write can forget to say what it moved.
-func (a *Adapter) changed(resp *gridwellv1.TileResponse, err error) (*gridwellv1.TileResponse, error) {
+// changedRow is every store write's way back out: it reads the minted row back
+// as the write's own answer and announces the grid it landed in, so no write
+// can forget to say what it moved.
+func (a *Adapter) changedRow(ctx context.Context, id int64) (*gridwellv1.TileResponse, error) {
+	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
 	if err == nil {
 		a.emitGridChanged(resp.GetTile().GetGridId())
 	}
@@ -803,7 +773,7 @@ func (a *Adapter) changed(resp *gridwellv1.TileResponse, err error) (*gridwellv1
 func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	f := rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
 	if req.RootGridId != "" {
-		ckey, err := a.resolveGridContext(req.RootGridId)
+		_, ckey, err := a.resolveGrid(req.RootGridId)
 		if err != nil {
 			return nil, err
 		}
@@ -826,7 +796,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	if err := a.mem.SetFraming(id, 0, f); err != nil {
 		return nil, err
 	}
-	t, err := a.changed(a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)}))
+	t, err := a.changedRow(ctx, id)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,9 @@ import (
 
 const addrSep = "\x00"
 
+// gridAddr names a context, minted row or not: the address is the name and the
+// row is storage. Both shapes resolve on the way in (Adapter.resolveGrid), so a
+// reference stored before that rule keeps working.
 func gridAddr(context string) string { return rpc.KeyTileID(context) }
 
 // tileAddr renders an entry as its one public id. The row a first durable fact
