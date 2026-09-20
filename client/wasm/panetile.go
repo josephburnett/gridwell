@@ -7,7 +7,6 @@ package main
 // glue.
 
 import (
-	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -94,9 +93,6 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 // createPaneAtCell lands an unnamed pane tile with no layout blob, so it is
 // never-arranged and the first descent installs the default single pane.
 func (a *App) createPaneAtCell(gid string, cellX, cellY int64) {
-	req := &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: cellX, Y: cellY, W: 1, H: 1}}
-	a.postTileMutate("CreatePane", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, nil)
+	a.createTile("CreatePane", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }

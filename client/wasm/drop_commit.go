@@ -165,23 +165,17 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	src := d.snapshotTile
 	dstGridID := t.gridID
 	if rpc.IsWellKind(src.Kind) {
-		req := &gridwellv1.CreateTileRequest{GridId: dstGridID,
+		a.createTile("CreateWell", dstGridID, &gridwellv1.CreateTileRequest{GridId: dstGridID,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: dropX, Y: dropY, W: src.W, H: src.H,
 				ChildGridId: src.ChildGridId, AltText: src.AltText,
-				ViewCx: src.ViewCx, ViewCy: src.ViewCy, ViewZoom: src.ViewZoom}}
-		a.postTileMutate("CreateWell", dstGridID, func(ctx context.Context) (*gridwellv1.Tile, error) {
-			return a.cl.CreateTile(ctx, req)
-		}, nil)
+				ViewCx: src.ViewCx, ViewCy: src.ViewCy, ViewZoom: src.ViewZoom}}, nil)
 		return
 	}
 	// The same read-through every content operation takes.
 	target := rpc.ContentID(src)
-	req := &gridwellv1.CreateTileRequest{GridId: dstGridID,
+	a.createTile("CreateLeafLink", dstGridID, &gridwellv1.CreateTileRequest{GridId: dstGridID,
 		Tile: &gridwellv1.Tile{Kind: src.Kind, X: dropX, Y: dropY, W: src.W, H: src.H,
-			LinkTargetId: target, AltText: src.AltText}}
-	a.postTileMutate("CreateLeafLink", dstGridID, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, nil)
+			LinkTargetId: target, AltText: src.AltText}}, nil)
 }
 
 // occupiedForDrop reports whether the dropped footprint overlaps a cached

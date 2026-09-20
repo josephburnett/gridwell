@@ -59,24 +59,27 @@ func (a *App) scratchOrReport(p *pane.Pane) string {
 	return s
 }
 
-// visitEphemeralURL creates an ephemeral url tile in the scratch grid and
-// descends into it, going live. The descent does not re-anchor the pane,
-// which keeps its grid and focuses the off-grid tile descendedTile resolves.
-func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
+// visitEphemeral creates tile in the pane's scratch grid and descends into
+// it, going live. The descent does not re-anchor the pane, which keeps its
+// grid and focuses the off-grid tile descendedTile resolves. label is the
+// kind's own, because it keys the parked write.
+func (a *App) visitEphemeral(p *pane.Pane, label string, tile *gridwellv1.Tile) {
 	scratch := a.scratchOrReport(p)
 	if scratch == "" {
 		return
 	}
 	paneID := p.ID
-	req := &gridwellv1.CreateTileRequest{GridId: scratch,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: url}}
-	a.postTileMutate("CreateURL", scratch, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, func(tile *gridwellv1.Tile) {
-		if fp := a.tree.FindPane(paneID); fp != nil {
-			a.descend(fp, tile)
-		}
-	})
+	a.createTile(label, scratch, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: tile},
+		func(created *gridwellv1.Tile) {
+			if fp := a.tree.FindPane(paneID); fp != nil {
+				a.descend(fp, created)
+			}
+		})
+}
+
+func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
+	a.visitEphemeral(p, "CreateURL",
+		&gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: url})
 }
 
 // certainlyEphemeral: t is a scratch-grid tile of the pane's grid, and that
@@ -120,24 +123,11 @@ func (a *App) deleteEphemeralTile(gridID, tileID string) {
 	})
 }
 
-// visitEphemeralShell is visitEphemeralURL's shell twin, with the opposite
-// exit contract: ascent deletes the tile and its tmux session, which the gray
-// border warns about.
+// visitEphemeralShell has the opposite exit contract to the url visit: ascent
+// deletes the tile and its tmux session, which the gray border warns about.
 func (a *App) visitEphemeralShell(p *pane.Pane) {
-	scratch := a.scratchOrReport(p)
-	if scratch == "" {
-		return
-	}
-	paneID := p.ID
-	req := &gridwellv1.CreateTileRequest{GridId: scratch,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1}}
-	a.postTileMutate("CreateShell", scratch, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, func(tile *gridwellv1.Tile) {
-		if fp := a.tree.FindPane(paneID); fp != nil {
-			a.descend(fp, tile)
-		}
-	})
+	a.visitEphemeral(p, "CreateShell",
+		&gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1})
 }
 
 // openLinkBelow handles a link opened out of a live tile: an ephemeral visit
@@ -191,14 +181,12 @@ func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, c
 	}
 	destID := destPaneID
 	oldID := t.Id
-	req := &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: cellX, Y: cellY, W: 1, H: 1, UrlString: url}}
-	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CreateTile(ctx, req)
-	}, func(created *gridwellv1.Tile) {
-		// The create was the await. The rest is the promote verb, planned
-		// against the world as it is when the row lands.
-		a.runGesture(nav.Gesture{Kind: nav.GesturePromote, PaneID: originPaneID,
-			DestPaneID: destID, OldID: oldID, Created: created})
-	})
+	a.createTile("CreateURL", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: cellX, Y: cellY, W: 1, H: 1, UrlString: url}},
+		func(created *gridwellv1.Tile) {
+			// The create was the await. The rest is the promote verb, planned
+			// against the world as it is when the row lands.
+			a.runGesture(nav.Gesture{Kind: nav.GesturePromote, PaneID: originPaneID,
+				DestPaneID: destID, OldID: oldID, Created: created})
+		})
 }
