@@ -29,7 +29,6 @@ type urlView struct {
 	// link and not tileID. The per-frame sweep compares it against the pane's
 	// descent to spot one that moved on.
 	descentID string
-	bounds    viewBounds
 	// anchor and path are captured at go-live, because the freeze needs them
 	// to resolve this tile's leaf grid.
 	anchor string
@@ -138,7 +137,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	page := rpc.PageContent(t)
 	// Every caller places into the descent the pane is already in, so the
 	// pane's frame is this view's descent.
-	v := &urlView{tileID: t.Id, paneID: p.ID, descentID: p.ContentID(), bounds: b, anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
+	v := &urlView{tileID: t.Id, paneID: p.ID, descentID: p.ContentID(), anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
 	a.local(p.ID).urlView = v
 	// urlview.Durable says whether the descended row survives ascent.
 	possiblyEphemeral := false
@@ -330,9 +329,7 @@ func (a *App) syncURLViews() {
 			continue
 		}
 		// The canvas draws the parked frame into the very same box.
-		b := contentViewBounds(r)
-		v.bounds = b
-		a.bridgeSetBounds(paneID, b)
+		a.bridgeSetBounds(paneID, contentViewBounds(r))
 		// focused feeds main's focus-steal guard in webviews.ts: only the
 		// focused pane's view may take keyboard focus back after a park.
 		a.bridgeSetHidden(paneID, hidden, paneID == a.tree.Focus)
