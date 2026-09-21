@@ -212,11 +212,10 @@ check: fmt-check proto-check wasm plugins
 PW_FLAGS ?=
 
 # check-electron runs the live-tile harnesses under a virtual display,
-# exercising the real Electron WebContentsView, so it is needed only for a
-# change to the live url path. Shells ride a WebSocket on the web door, so
-# check-web owns that path. It needs xvfb and a prior `make vendor` for
-# node_modules. The npm scripts wrap xvfb-run themselves, so do not wrap them
-# again.
+# exercising the real Electron WebContentsView. Shells ride a WebSocket on the
+# web door, so check-web owns that path; CLAUDE.md's Gates table says when to
+# run either. It needs xvfb and a prior `make vendor` for node_modules. The
+# npm scripts wrap xvfb-run themselves, so do not wrap them again.
 check-electron: node-modules
 	cd $(DESKTOP) && npm run test:integration && npm run test:bridge
 
@@ -243,8 +242,7 @@ check-web: build node-modules
 # tunnel, with one write and read crossing every hop. The in-process seam
 # tests cannot see go-plugin spawn, so a failure that only happens in a
 # spawned process leaves them green. The `connections` build tag keeps `make
-# check` fast. It is headless. Run it for any change to plugin spawn, the
-# dialer, the node export or routing.
+# check` fast. It is headless. CLAUDE.md's Gates table says when to run it.
 check-connections: build
 	cd test/connections && go test -tags connections -count=1 .
 
