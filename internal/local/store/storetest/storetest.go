@@ -106,3 +106,95 @@ func Diff(before, after string) string {
 	}
 	return "  (rows equal; the difference is trailing)"
 }
+
+// Dump is the file as table → row id → column → value. The row id is the
+// row's first column, which is the primary key of every table a node database
+// has.
+type Dump map[string]map[string]map[string]string
+
+// DumpOf reads the whole file into a Dump.
+func DumpOf(t *testing.T, db *sql.DB) Dump {
+	t.Helper()
+	out := Dump{}
+	var tables []string
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
+	if err != nil {
+		t.Fatalf("storetest: list tables: %v", err)
+	}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		tables = append(tables, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tbl := range tables {
+		out[tbl] = map[string]map[string]string{}
+		rs, err := db.Query(`SELECT * FROM "` + tbl + `"`)
+		if err != nil {
+			t.Fatalf("storetest: dump %s: %v", tbl, err)
+		}
+		cols, err := rs.Columns()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rs.Next() {
+			cells := make([]any, len(cols))
+			ptrs := make([]any, len(cols))
+			for i := range cells {
+				ptrs[i] = &cells[i]
+			}
+			if err := rs.Scan(ptrs...); err != nil {
+				t.Fatal(err)
+			}
+			row := map[string]string{}
+			for i, c := range cells {
+				if raw, ok := c.([]byte); ok {
+					row[cols[i]] = fmt.Sprintf("%x", raw)
+					continue
+				}
+				row[cols[i]] = fmt.Sprintf("%v", c)
+			}
+			out[tbl][row[cols[0]]] = row
+		}
+		rs.Close()
+		if err := rs.Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return out
+}
+
+// Changed names every difference between two dumps, sorted: "tiles[7].x" for a
+// column that changed, "+tiles[9]" for a row that appeared, "-grids[3]" for one
+// that went.
+func Changed(before, after Dump) []string {
+	var out []string
+	for tbl, rows := range after {
+		for id, row := range rows {
+			old, ok := before[tbl][id]
+			if !ok {
+				out = append(out, "+"+tbl+"["+id+"]")
+				continue
+			}
+			for col, v := range row {
+				if old[col] != v {
+					out = append(out, tbl+"["+id+"]."+col)
+				}
+			}
+		}
+	}
+	for tbl, rows := range before {
+		for id := range rows {
+			if _, ok := after[tbl][id]; !ok {
+				out = append(out, "-"+tbl+"["+id+"]")
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
