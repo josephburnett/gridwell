@@ -112,6 +112,9 @@ func (s *Store) setAltTx(ctx context.Context, tx *sql.Tx, tileID int64, alt stri
 	return err
 }
 
+// The column a content-zoom write touches, here and in Namespace.SetContentZoom.
+const contentZoomSet = `content_zoom = ?`
+
 // SetContentZoom persists the per-tile content scale. It is framing, so no
 // claim and no bump. Wells are refused: their view_zoom is the grid viewport,
 // a different fact with its own writer.
@@ -133,7 +136,7 @@ func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoo
 			return fmt.Errorf("%w: a well has no content zoom", ErrInvalidArgument)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET content_zoom = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET `+contentZoomSet+`, updated_at = ? WHERE id = ?`,
 			contentZoom, s.now().Unix(), tileID); err != nil {
 			return err
 		}

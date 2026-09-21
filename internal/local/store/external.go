@@ -314,28 +314,25 @@ func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []ExtTile
-	for rows.Next() {
-		t := &gridwellv1.Tile{}
+	return collect(rows, func(rows *sql.Rows) (ExtTile, error) {
 		var key string
-		if err := rows.Scan(append(scanDests(tilesColumns, t), &key)...); err != nil {
-			return nil, err
+		t, err := scanTile(rows, &key)
+		if err != nil {
+			return ExtTile{}, err
 		}
 		id, err := strconv.ParseInt(t.Id, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("store: row id %q: %w", t.Id, err)
+			return ExtTile{}, fmt.Errorf("store: row id %q: %w", t.Id, err)
 		}
 		// A leaf's child_grid_id is NULL, which the descriptor reads as "".
 		var child int64
 		if t.ChildGridId != "" {
 			if child, err = strconv.ParseInt(t.ChildGridId, 10, 64); err != nil {
-				return nil, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
+				return ExtTile{}, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
 			}
 		}
-		out = append(out, ExtTile{ID: id, Key: key, ChildGridID: child, Tile: t})
-	}
-	return out, rows.Err()
+		return ExtTile{ID: id, Key: key, ChildGridID: child, Tile: t}, nil
+	})
 }
 
 // exec runs a single-row UPDATE on a live row of this namespace, mapping zero
@@ -358,7 +355,7 @@ func (n *Namespace) exec(set string, tileID int64, args ...any) error {
 
 // Place is the placement writeback; the grid never changes.
 func (n *Namespace) Place(tileID, x, y, w, h int64) error {
-	return n.exec(`x = ?, y = ?, w = ?, h = ?`, tileID, x, y, w, h)
+	return n.exec(placementSet, tileID, x, y, w, h)
 }
 
 // SetFraming persists framing into this namespace's memory, the one writer of
@@ -380,12 +377,12 @@ func (n *Namespace) SetTextView(tileID, tx, ty, tw, th int64, mode string) error
 	if mode != "" {
 		m = mode
 	}
-	return n.exec(`text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?`, tileID, tx, ty, tw, th, m)
+	return n.exec(textViewSet+textModeSet, tileID, tx, ty, tw, th, m)
 }
 
 // SetContentZoom persists the per-tile content scale.
 func (n *Namespace) SetContentZoom(tileID int64, zoom float64) error {
-	return n.exec(`content_zoom = ?`, tileID, zoom)
+	return n.exec(contentZoomSet, tileID, zoom)
 }
 
 // Retire tombstones one tile row: the delete-gesture path.

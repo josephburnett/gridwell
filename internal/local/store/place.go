@@ -9,6 +9,10 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
+// placementSet is the footprint a placement write touches, here and in
+// Namespace.Place. The grid rides beside it on home's side alone.
+const placementSet = `x = ?, y = ?, w = ?, h = ?`
+
 // PlaceTile is the single placement writeback: placement is one fact,
 // (grid_id, x, y, w, h), and this verb owns all of it, id-addressed with no
 // descent path. Placement is layout, not content: no claim, no bump, and when
@@ -59,7 +63,7 @@ func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest)
 		}
 
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET grid_id = ?, x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET grid_id = ?, `+placementSet+`, updated_at = ? WHERE id = ?`,
 			destGridID, req.X, req.Y, req.W, req.H, s.now().Unix(), tileID); err != nil {
 			return err
 		}

@@ -295,6 +295,13 @@ func (s *Store) CreateScratchShell(ctx context.Context) (*gridwellv1.Tile, error
 	})
 }
 
+// The columns a text view write touches, here and in Namespace.SetTextView.
+// The mode rides beside the window on every row but a link.
+const (
+	textViewSet = `text_x = ?, text_y = ?, text_w = ?, text_h = ?`
+	textModeSet = `, text_mode = ?`
+)
+
 // SetTextView updates a text tile's framed window and its rendered or text
 // mode. Like SetFraming this is framing, not content: no claim, no bump.
 func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY, textW, textH int64, textMode string) (*gridwellv1.Tile, error) {
@@ -313,7 +320,7 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 			// text_mode NULL on a link, because framing is per-link local and
 			// the mode is not.
 			_, err := tx.ExecContext(ctx,
-				`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, updated_at = ? WHERE id = ?`,
+				`UPDATE tiles SET `+textViewSet+`, updated_at = ? WHERE id = ?`,
 				textX, textY, textW, textH, s.now().Unix(), tileID)
 			if err != nil {
 				return err
@@ -326,7 +333,7 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 			textModeArg = textMode
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET `+textViewSet+textModeSet+`, updated_at = ? WHERE id = ?`,
 			textX, textY, textW, textH, textModeArg, s.now().Unix(), tileID); err != nil {
 			return err
 		}

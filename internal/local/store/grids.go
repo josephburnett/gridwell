@@ -56,12 +56,13 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*grid
 // Both derive from columns.go, so they cannot fall out of step.
 var tileColumns = wireColumns(tilesColumns)
 
-// scanTile scans a single row into a Tile.
+// scanTile scans a single row into a Tile. extra takes the destinations of any
+// columns a caller selected beyond the descriptor's, in their SELECT order.
 func scanTile(scanner interface {
 	Scan(dest ...any) error
-}) (*gridwellv1.Tile, error) {
+}, extra ...any) (*gridwellv1.Tile, error) {
 	var n gridwellv1.Tile
-	if err := scanner.Scan(scanDests(tilesColumns, &n)...); err != nil {
+	if err := scanner.Scan(append(scanDests(tilesColumns, &n), extra...)...); err != nil {
 		return nil, err
 	}
 	return &n, nil
