@@ -23,7 +23,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -68,22 +67,24 @@ type Server struct {
 
 	mu   sync.Mutex
 	live map[string]*liveConn // by name
-	// rootErr is a connection's last dial or root-fetch failure, by name: the
-	// one fact behind a pending row's status. Never persisted.
-	rootErr map[string]string
-	// dark is the detail of each connection's last down transition, by name,
-	// absent while its event stream is up. Reachability is a state, not a
-	// moment, so a subscriber attaching after the machine died is told from
-	// here. One writer, noteHealth.
-	dark map[string]string
-	// mismatch is the landing verdict, by name: set when the far end answers a
-	// home that is not the one this connection's stored references were
-	// written against. It is a refusal, not a failure, so it lives apart from
-	// rootErr and dark. One writer, learnRoot. Never persisted: the stored
-	// landing is the fact, and this is what the last answer said about it.
-	mismatch map[string]string
+	// health holds every connection the transport cannot reach, by name;
+	// absent is reachable. A refused dial, a failed learn, a dead stream and
+	// a landing that moved are one fact, so the row's status, the transition
+	// that publishes and what a late subscriber is told cannot disagree. One
+	// writer, note. Never persisted.
+	health map[string]connState
 
 	hub *eventhub.Hub[*gridwellv1.Event]
+}
+
+// connState is a connection's reachability as of the last answer.
+type connState struct {
+	up     bool
+	detail string // why it is down; "" when up
+	// mismatch is the landing refusal: the far end answered a home that is not
+	// the one this connection's stored references were written against, so the
+	// row keeps its landing and says why nothing answers.
+	mismatch bool
 }
 
 // Conn is one declared connection with what the store remembers about it.
@@ -114,12 +115,15 @@ var _ namespace.Namespace = (*Server)(nil)
 // connections. server.yaml is authoritative about what is declared and
 // retired_names about what is retired.
 //
-// Retirement is explicit: a declared name that retired_names holds is refused,
-// and a retired name is reserved forever. A stored name the config merely does
+// A retired name is reserved forever. A stored name the config merely does
 // not declare is left exactly as it is, so its mounts and links go dead by the
 // boot roster (client/deadref) and come back with its stanza. Boot never
 // retires a name on absence, and the `deleted` column is written from
 // retired_names here and nowhere else.
+//
+// What a name may be — a segment, declared once, never also retired — is
+// config.validateIDs' verdict, taken on the bytes before they are anything
+// here.
 //
 // home is the host's home directory; "" means no ~ defaults, so keys must be
 // explicit paths.
@@ -130,22 +134,13 @@ var _ namespace.Namespace = (*Server)(nil)
 func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
 	s := &Server{db: db, dial: dialer, home: home, conns: map[string]*Conn{},
-		live: map[string]*liveConn{}, rootErr: map[string]string{}, dark: map[string]string{},
-		mismatch: map[string]string{}, hub: eventhub.New(rpc.EventKey)}
+		live: map[string]*liveConn{}, health: map[string]connState{},
+		hub: eventhub.New(rpc.EventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
 		retiredSet[r] = true
 	}
 	for _, c := range conns {
-		if err := idshape.ValidateSegment("connection name", c.Name); err != nil {
-			return nil, err
-		}
-		if _, dup := s.conns[c.Name]; dup {
-			return nil, fmt.Errorf("connection %q declared twice", c.Name)
-		}
-		if retiredSet[c.Name] {
-			return nil, fmt.Errorf("connection %q: this name is RETIRED — a retired name never returns; mint a new one", c.Name)
-		}
 		// The host-local half of the row: facts this machine can settle, so a
 		// connection that can never dial fails the boot instead of coming up
 		// quietly dark. Whether the far node answers is deliberately not
@@ -238,16 +233,16 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 		s.mu.Lock()
 		root := c.RemoteRoot
 		lc := s.live[name]
-		status := s.rootErr[name]
-		mismatch := s.mismatch[name]
 		s.mu.Unlock()
+		st := s.stateOf(name)
+		status := st.detail
 		var rootGridID string
 		var view rpc.Framing
 		switch {
-		case mismatch != "":
+		case st.mismatch:
 			// The landing verdict outranks the learned root: the row keeps the
 			// landing its references name, and says why nothing answers.
-			rootGridID, status = rpc.QualifyID(name, root), mismatch
+			rootGridID = rpc.QualifyID(name, root)
 		case root != "":
 			rootGridID, status = rpc.QualifyID(name, root), ""
 			if lc != nil {
@@ -300,11 +295,8 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	}
 	// A connection whose landing contradicts the stored one serves nothing:
 	// these ids were written against the node that is no longer there.
-	s.mu.Lock()
-	mismatch := s.mismatch[first]
-	s.mu.Unlock()
-	if mismatch != "" {
-		return nil, "", status.Error(codes.FailedPrecondition, "connection: "+mismatch)
+	if st := s.stateOf(first); st.mismatch {
+		return nil, "", status.Error(codes.FailedPrecondition, "connection: "+st.detail)
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
@@ -381,47 +373,38 @@ func firstExisting(paths ...string) string {
 // catches only what changed underneath a running node.
 func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	name := c.Cfg.Name
+	// The dial runs under the lock so two readers cannot build two transports
+	// for one connection; note takes it in turn, so every failure unlocks
+	// first. The bare error is recorded: the status wrapper is routing noise
+	// to whoever reads the row.
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if lc, ok := s.live[name]; ok {
+		s.mu.Unlock()
 		return lc, nil
 	}
 	cfg, err := s.dialConfig(c.Cfg)
-	if err != nil {
-		s.rootErr[name] = err.Error()
-		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: %v", name, err)
+	if err == nil && s.dial == nil {
+		err = errors.New("no dialer")
 	}
-	if s.dial == nil {
-		s.rootErr[name] = "no dialer"
-		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: no dialer", name)
+	if err != nil {
+		s.mu.Unlock()
+		s.note(name, connState{detail: err.Error()})
+		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: %v", name, err)
 	}
 	client, closer, err := s.dial(cfg)
 	if err != nil {
-		// Record the bare dial error: the wrapper is routing noise to whoever
-		// reads the row status.
-		s.rootErr[name] = err.Error()
+		s.mu.Unlock()
+		s.note(name, connState{detail: err.Error()})
 		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: %v", name, err)
 	}
-	delete(s.rootErr, name) // transport constructed; the learn may still fail
 	ctx, cancel := context.WithCancel(context.Background())
 	lc := &liveConn{client: client, closer: closer, cancel: cancel}
 	s.live[name] = lc
+	s.mu.Unlock()
 	// Remote change events flow from the moment the connection is live,
 	// prefixed with its segment: the node's fan-in shape one level down.
 	go s.fanInRemote(ctx, name, client)
 	return lc, nil
-}
-
-// setRootErr records a connection's last dial or root-fetch failure; "" clears
-// it.
-func (s *Server) setRootErr(name, detail string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if detail == "" {
-		delete(s.rootErr, name)
-		return
-	}
-	s.rootErr[name] = detail
 }
 
 // learnRoot dials the transport and asks the far node where this connection
@@ -449,12 +432,12 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 	defer cancel()
 	info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
-		s.setRootErr(name, status.Convert(err).Message())
+		s.note(name, connState{detail: status.Convert(err).Message()})
 		return "", err
 	}
 	if info.RootGridId == "" {
 		err := errors.New("the connected node declared no home")
-		s.setRootErr(name, err.Error())
+		s.note(name, connState{detail: err.Error()})
 		return "", err
 	}
 	if root != "" && info.RootGridId != root {
@@ -465,21 +448,18 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 			// Unlearned, the connection never verifies and nothing through it
 			// resolves. kickRootFetch drops this error, so the row is the only
 			// place that can say why.
-			s.setRootErr(name, err.Error())
+			s.note(name, connState{detail: err.Error()})
 			return "", err
 		}
 	}
-	s.setRootErr(name, "")
 	s.mu.Lock()
 	lc.verified = true
-	healed := s.mismatch[name] != ""
-	delete(s.mismatch, name)
 	c.RemoteRoot = info.RootGridId
 	s.mu.Unlock()
-	// A first landing and a restored one both change what the menu can show,
-	// so both make open clients re-list; an unchanged one says nothing.
-	if root == "" || healed {
-		s.hub.Publish(healthEvent(name, true, ""))
+	// A restored landing is a transition and note publishes it. A first one is
+	// not, and it still changes what the menu can show, so open clients re-list.
+	if !s.note(name, connState{up: true}) && root == "" {
+		s.hub.Publish(rpc.HealthEvent(name, true, ""))
 	}
 	return info.RootGridId, nil
 }
@@ -489,11 +469,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 // the connection keeps asking and restoring the target needs no restart.
 func (s *Server) noteLandingMismatch(name, stored, answered string) error {
 	msg := fmt.Sprintf("connection %q now lands on a different node; stored references name the old one — retire the name or restore the target", name)
-	s.mu.Lock()
-	first := s.mismatch[name] == ""
-	s.mismatch[name] = msg
-	s.mu.Unlock()
-	if first {
+	if s.note(name, connState{detail: msg, mismatch: true}) {
 		log.Printf("gridwell: %s (stored landing %s, the far node answered %s)", msg, stored, answered)
 	}
 	return status.Error(codes.FailedPrecondition, "connection: "+msg)
@@ -506,7 +482,7 @@ func (s *Server) noteLandingMismatch(name, stored, answered string) error {
 func (s *Server) kickRootFetch(c *Conn) {
 	lc, err := s.ensureLive(c)
 	if err != nil {
-		return // recorded in rootErr; the row says why
+		return // recorded in health; the row says why
 	}
 	s.mu.Lock()
 	if lc.verified || lc.rootFetching {
@@ -527,46 +503,56 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}()
 }
 
-// healthEvent is one connection's reachability on the wire.
-func healthEvent(ns string, up bool, detail string) *gridwellv1.Event {
-	return &gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
-		PluginUuid: ns, Healthy: up, Detail: detail,
-	}}}
-}
-
-// noteHealth records one connection's reachability and publishes the
-// transition. The record is what a later subscriber is told and also what
-// decides a transition, so a connection retrying every five seconds publishes
-// once.
-func (s *Server) noteHealth(ns string, up bool, detail string) {
+// note is the one writer of s.health: it records what the transport now knows
+// about a connection and publishes the transition, answering whether it did.
+// The record is also what a later subscriber is told and what decides a
+// transition, so a connection retrying every five seconds publishes once and
+// a reason that sharpens between retries updates the row in silence.
+func (s *Server) note(name string, st connState) bool {
 	s.mu.Lock()
-	if _, wasDark := s.dark[ns]; wasDark == !up {
-		s.mu.Unlock()
-		return
+	prev, known := s.health[name]
+	if !known {
+		prev = connState{up: true}
 	}
-	if up {
-		delete(s.dark, ns)
+	if st.up {
+		delete(s.health, name)
 	} else {
-		s.dark[ns] = detail
+		s.health[name] = st
 	}
 	s.mu.Unlock()
-	s.hub.Publish(healthEvent(ns, up, detail))
+	if prev.up == st.up && prev.mismatch == st.mismatch {
+		return false
+	}
+	s.hub.Publish(rpc.HealthEvent(name, st.up, st.detail))
+	return true
 }
 
-// darkNow is every connection the fan-in currently cannot reach, in name
+// stateOf is what the transport last knew about one connection. Nothing
+// recorded is reachable: health remembers failures, and a connection nobody
+// has heard anything bad about is what a subscriber assumes is live.
+func (s *Server) stateOf(name string) connState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if st, ok := s.health[name]; ok {
+		return st
+	}
+	return connState{up: true}
+}
+
+// darkNow is every connection the transport currently cannot reach, in name
 // order. Only the dark ones: healthy is what a subscriber assumes of a
 // connection it has heard nothing about, and an up event means resync.
 func (s *Server) darkNow() []*gridwellv1.Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	names := make([]string, 0, len(s.dark))
-	for name := range s.dark {
+	names := make([]string, 0, len(s.health))
+	for name := range s.health {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	out := make([]*gridwellv1.Event, 0, len(names))
 	for _, name := range names {
-		out = append(out, healthEvent(name, false, s.dark[name]))
+		out = append(out, rpc.HealthEvent(name, false, s.health[name].detail))
 	}
 	return out
 }
@@ -574,12 +560,12 @@ func (s *Server) darkNow() []*gridwellv1.Event {
 // fanInRemote forwards a connection's remote change events, each id prefixed
 // with the connection segment, and re-dials the stream through
 // namespace.Refollow so a dropped one comes back. Never silently: each
-// transition rides noteHealth, which is also what a later subscriber is told.
+// transition rides note, which is also what a later subscriber is told.
 func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Namespace) {
 	namespace.Refollow{
 		Label: "connection " + ns,
-		Down:  func(detail string) { s.noteHealth(ns, false, detail) },
-		Up:    func() { s.noteHealth(ns, true, "") },
+		Down:  func(detail string) { s.note(ns, connState{detail: detail}) },
+		Up:    func() { s.note(ns, connState{up: true}) },
 		Attempt: func(ctx context.Context, established func()) error {
 			return namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{},
 				func(ev *gridwellv1.Event) error {

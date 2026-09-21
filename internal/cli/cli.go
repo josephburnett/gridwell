@@ -3,8 +3,18 @@
 package cli
 
 import (
+	"fmt"
+	"os"
 	"strings"
 )
+
+// die reports a fatal subcommand error in the one shape every subcommand
+// prints one, and answers 1, the code that means the command failed. status
+// prints through it and answers 2, because its 1 means "not serving".
+func die(cmd string, err error) int {
+	fmt.Fprintf(os.Stderr, "%s: %v\n", cmd, err)
+	return 1
+}
 
 // reorderFlagsFirst groups flag tokens to the front so Go's flag package,
 // which stops at the first non-flag, sees them: "serve --static DIR" and

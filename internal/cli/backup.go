@@ -30,27 +30,23 @@ func RunBackup(args []string) int {
 
 	home, err := config.Home()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "backup: %v\n", err)
-		return 1
+		return die("backup", err)
 	}
 	cfgPath, err := config.DefaultPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "backup: %v\n", err)
-		return 1
+		return die("backup", err)
 	}
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			fmt.Fprintf(os.Stderr, "backup: no config at %s — nothing to back up\n", cfgPath)
-		} else {
-			fmt.Fprintf(os.Stderr, "backup: %v\n", err)
+			return 1
 		}
-		return 1
+		return die("backup", err)
 	}
 
 	if err := backupHome(home, cfgPath, cfg, dest); err != nil {
-		fmt.Fprintf(os.Stderr, "backup: %v\n", err)
-		return 1
+		return die("backup", err)
 	}
 	fmt.Printf("gridwell: backed up gridwell.db + server.yaml to %s\n", dest)
 	return 0

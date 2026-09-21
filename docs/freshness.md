@@ -38,14 +38,16 @@ itself gone — fails the read outright at `cp.Info`, because the declared
 face is the plugin's own fact and nothing can supply it.
 
 **3. The transport** — `internal/connection/connection.go`. Reachability is
-remembered, not only announced when it changes. `fanInRemote` loops `namespace.Follow` on each
-connection's stream; when it ends, `noteHealth` records `s.dark[name]` (one
-writer) and publishes one `EventPluginHealth` — the transition, not one per
-retry. `Server.Subscribe` opens with `darkNow()`, so a subscriber attaching
-after the machine died is told. Landing is checked, not learned:
-`learnRoot` refuses a connection whose far node answers a home other than
-the stored one (`noteLandingMismatch`), and that refusal is a
-FailedPrecondition on every read, never a staleness.
+remembered, not only announced when it changes, and every way a connection
+fails is the same record: a refused dial, a failed learn, a dead stream
+(`fanInRemote`, looping `namespace.Follow`) and a moved landing all go
+through `note`, the one writer of `s.health`, which publishes one
+`EventPluginHealth` per transition, not one per retry. `Server.Subscribe`
+opens with `darkNow()`, so a subscriber attaching after the machine died is
+told. Landing is checked, not learned: `learnRoot` refuses a connection
+whose far node answers a home other than the stored one
+(`noteLandingMismatch`), and that refusal is a FailedPrecondition on every
+read, never a staleness.
 
 **4. The source cache** — `internal/sourcecache/`. In front of the
 transport only, over the disposable `cache.db`. A remembered grid serves

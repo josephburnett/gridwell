@@ -90,11 +90,7 @@ func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb
 		if p.PluginHealth.PluginUuid != "" {
 			uuid = QualifyID(prefix, p.PluginHealth.PluginUuid)
 		}
-		return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-			PluginUuid: uuid,
-			Healthy:    p.PluginHealth.Healthy,
-			Detail:     p.PluginHealth.Detail,
-		}}}
+		return HealthEvent(uuid, p.PluginHealth.Healthy, p.PluginHealth.Detail)
 	}
 	return ev
 }

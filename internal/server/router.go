@@ -698,13 +698,8 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 // reportHealth pushes an EventPluginHealth down the path a namespace's own
 // events take. Best-effort against ctx ending mid-send.
 func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, healthy bool, detail string) {
-	ev := &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		PluginUuid: uuid,
-		Healthy:    healthy,
-		Detail:     detail,
-	}}}
 	select {
-	case events <- ev:
+	case events <- rpc.HealthEvent(uuid, healthy, detail):
 	case <-ctx.Done():
 	}
 }

@@ -40,10 +40,7 @@ const cacheApplicationID int64 = 0x67776d63
 const cacheSchemaVersion = 1
 
 const schemaDDL = `
-CREATE TABLE IF NOT EXISTS info (
-    k     TEXT PRIMARY KEY,
-    proto BLOB NOT NULL
-);
+DROP TABLE IF EXISTS info;
 CREATE TABLE IF NOT EXISTS pluginlists (
     ns    TEXT PRIMARY KEY,
     proto BLOB NOT NULL
@@ -277,7 +274,7 @@ type missing struct {
 }
 
 func (m *missing) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
-	if err := send(healthEvent(false, m.detail)); err != nil {
+	if err := send(rpc.HealthEvent("", false, m.detail)); err != nil {
 		return err
 	}
 	return m.Namespace.Subscribe(ctx, in, send)
@@ -347,46 +344,13 @@ func (c *Layer) noteCache(op string, err error) {
 	c.emitHealth(true, "")
 }
 
-// healthEvent is a cache-side health report on the wire. The uuid rides empty;
-// the fan-in fills it (see rpc.QualifyEventIDs).
-func healthEvent(healthy bool, detail string) *pb.Event {
-	return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		Healthy: healthy, Detail: detail,
-	}}}
-}
-
 // emitHealth announces a health transition to the synthetic stream's
 // subscribers.
 func (c *Layer) emitHealth(healthy bool, detail string) {
-	c.hub.Publish(healthEvent(healthy, detail))
+	c.hub.Publish(rpc.HealthEvent("", healthy, detail))
 }
 
 func now() int64 { return time.Now().Unix() }
-
-func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
-	resp, err := c.Namespace.Info(ctx, in)
-	c.noteReach(err, "", nil) // an unnamed call: reachability, no grid to re-read
-	if err == nil {
-		if b, merr := proto.Marshal(resp); merr == nil {
-			_, werr := c.db.ExecContext(ctx, `INSERT INTO info (k, proto) VALUES ('info', ?)
-				ON CONFLICT(k) DO UPDATE SET proto=excluded.proto`, b)
-			c.noteCache("store info", werr)
-		}
-		return resp, nil
-	}
-	if !gwerr.IsTransport(err) {
-		return nil, err
-	}
-	var b []byte
-	if serr := c.db.QueryRowContext(ctx, `SELECT proto FROM info WHERE k='info'`).Scan(&b); serr != nil {
-		return nil, err // miss: the original transport error stands
-	}
-	cached := &pb.InfoResponse{}
-	if uerr := proto.Unmarshal(b, cached); uerr != nil {
-		return nil, err
-	}
-	return cached, nil
-}
 
 // Handshake forwards the routed plugin list and remembers the answer per
 // namespace, so a remote pane's + menu is readable while the source is dark.
