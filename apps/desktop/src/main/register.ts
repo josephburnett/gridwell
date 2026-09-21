@@ -14,6 +14,7 @@ import {
   ViewTouchScroll,
   ForwardedRightdown,
   ErrorEvent,
+  FrameEvent,
   OpenBelowEvent,
   FreezeURLEvent,
   ContextMenuEvent,
@@ -138,7 +139,7 @@ export function makeZoomKeyForwarder(rootWC: WebContents): (ev: ZoomKeyEvent) =>
 }
 
 export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, jpegBase64: string): void {
-  if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 });
+  if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 } satisfies FrameEvent);
 }
 
 // sendError is the one main-process entry point onto EV.error, so
