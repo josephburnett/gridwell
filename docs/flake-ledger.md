@@ -3,7 +3,9 @@
 Every e2e spec whose history includes a flake, what the flake was, and how
 it was closed. The notes live as comments in the specs (grep `flak` under
 `apps/desktop/e2e`); this page indexes them. `test/boundary` pins that every
-spec carrying such a note is listed here.
+spec carrying such a note is listed here, and the gates read it from the other
+side: a retry that passes a spec with no row here fails the job
+(`scripts/flaky-report.mjs`).
 
 Two rules:
 

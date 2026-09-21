@@ -19,7 +19,10 @@ export default defineConfig({
   retries: 0,
   timeout: 90_000,
   expect: { timeout: 15_000 },
-  reporter: [['list']],
+  // The JSON report is how a retry survives the run: with --retries the list
+  // reporter prints "1 flaky" and Playwright still exits 0, so the gate reads
+  // this file afterwards (scripts/flaky-report.mjs, invoked by check-e2e).
+  reporter: [['list'], ['json', { outputFile: 'playwright-report/e2e.json' }]],
   use: {
     trace: 'retain-on-failure',
   },
