@@ -18,6 +18,7 @@ import {
   renderProcessGoneMessage,
   zoomChordKey,
   openBelowUrl,
+  toContentPoint,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { captureAttempt, captureJpegBase64, describeAttempt } from './capture';
@@ -273,11 +274,11 @@ export class WebviewRegistry {
   touchScroll(sender: WebContents, p: { sx: number; sy: number; dx: number; dy: number }): void {
     for (const e of this.entries.values()) {
       if (e.view.webContents !== sender) continue;
-      const cb = this.win.getContentBounds();
+      const c = toContentPoint(this.win, p);
       e.view.webContents.sendInputEvent({
         type: 'mouseWheel',
-        x: p.sx - cb.x - e.bounds.x,
-        y: p.sy - cb.y - e.bounds.y,
+        x: c.x - e.bounds.x,
+        y: c.y - e.bounds.y,
         deltaX: p.dx,
         deltaY: p.dy,
         // Precise deltas, so the page tracks the finger 1:1 instead of running

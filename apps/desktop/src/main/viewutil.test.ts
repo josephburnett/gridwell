@@ -17,6 +17,7 @@ import {
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   classifyRightPress,
+  toContentPoint,
   sanitizeUserAgent,
   shouldSurfaceFailLoad,
   failLoadMessage,
@@ -333,4 +334,14 @@ test('restoreRefusedMessage names the pane, the reason and the consequence', () 
   // A rejection need not be an Error, and a reasonless one still reads.
   assert.ok(restoreRefusedMessage('p3', 'refused').includes('refused'));
   assert.ok(restoreRefusedMessage('p3', new Error('')).includes('no reason given'));
+});
+
+test('toContentPoint subtracts the window chrome, not the view or the zoom', () => {
+  // A window whose content starts 40px down and 10px in from the screen origin.
+  const win = { getContentBounds: () => ({ x: 10, y: 40 }) };
+  assert.deepEqual(toContentPoint(win, { sx: 10, sy: 40 }), { x: 0, y: 0 });
+  assert.deepEqual(toContentPoint(win, { sx: 110, sy: 140 }), { x: 100, y: 100 });
+  // A press above or left of the content area stays negative rather than
+  // clamping: the canvas decides what an out-of-bounds press means.
+  assert.deepEqual(toContentPoint(win, { sx: 0, sy: 0 }), { x: -10, y: -40 });
 });
