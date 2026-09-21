@@ -160,15 +160,13 @@ func (l Layout) PointInToggle(x, y float64) bool {
 	if !l.Toggle {
 		return false
 	}
-	r := l.ToggleRect()
-	return x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H
+	return l.ToggleRect().Contains(x, y)
 }
 
 // TileIndexAt is -1 off a swatch.
 func (l Layout) TileIndexAt(x, y float64) int {
 	for i := range l.NumTiles {
-		r := l.TileRect(i)
-		if x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H {
+		if l.TileRect(i).Contains(x, y) {
 			return i
 		}
 	}
@@ -178,6 +176,5 @@ func (l Layout) TileIndexAt(x, y float64) int {
 // PointInPopover: a click that misses a swatch but lands here keeps the menu
 // open.
 func (l Layout) PointInPopover(x, y float64) bool {
-	r := l.PopoverRect()
-	return x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H
+	return l.PopoverRect().Contains(x, y)
 }

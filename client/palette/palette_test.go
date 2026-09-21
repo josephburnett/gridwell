@@ -85,6 +85,15 @@ func TestPointInPopover(t *testing.T) {
 	if !l.PointInPopover(pop.X, pop.Y) {
 		t.Error("popover corner should count as inside")
 	}
+	// Half-open, like every other rect in the client: the far edge belongs
+	// to whatever is past it.
+	if l.PointInPopover(pop.X+pop.W, pop.Y) {
+		t.Error("the popover's far edge is outside it")
+	}
+	r0 := l.TileRect(0)
+	if l.TileIndexAt(r0.X+r0.W, r0.Y+r0.H/2) != -1 {
+		t.Error("a swatch's far edge is not on the swatch")
+	}
 }
 
 func TestPopoverTracksCenter(t *testing.T) {
