@@ -96,6 +96,18 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 	return out, rows.Err()
 }
 
+// insertGrid mints an empty grid row. The migration chain keeps its own copy
+// of this INSERT: a migration step must materialize the shape of the version
+// it is building, not the current one.
+func insertGrid(ctx context.Context, x execer, now int64) (int64, error) {
+	res, err := x.ExecContext(ctx,
+		`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`, now, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
 // ancestryCap bounds the well-parent walk, which a cycle would loop forever.
 const ancestryCap = 256
 

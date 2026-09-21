@@ -131,13 +131,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 		return 0, false, err
 	}
 	now := s.now().Unix()
-	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-		now, now)
-	if err != nil {
-		return 0, false, err
-	}
-	child, err := res.LastInsertId()
+	child, err := insertGrid(ctx, tx, now)
 	if err != nil {
 		return 0, false, err
 	}
@@ -145,12 +139,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 	if err != nil {
 		return 0, false, err
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (grid_id, kind, x, y, w, h,
-			view_cx, view_cy, view_zoom, child_grid_id, alt_text,
-			created_at, updated_at)
-		VALUES (?, 'well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?)`,
-		trashID, x, y, child, month, now, now); err != nil {
+	if _, err := insertWellRow(ctx, tx, trashID, x, y, 1, 1, child, month, now); err != nil {
 		return 0, false, err
 	}
 	return child, true, nil

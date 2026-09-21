@@ -126,26 +126,11 @@ func (s *Store) createTile(
 func (s *Store) CreateWell(ctx context.Context, gridID string, x, y, w, h int64, label string) (*gridwellv1.Tile, error) {
 	return s.createTile(ctx, gridID, x, y, w, h,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
-			res, err := tx.ExecContext(ctx,
-				`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-				now, now)
+			childGridID, err := insertGrid(ctx, tx, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert child grid: %w", err)
 			}
-			childGridID, err := res.LastInsertId()
-			if err != nil {
-				return 0, err
-			}
-			res, err = tx.ExecContext(ctx, `
-				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					view_cx, view_cy, view_zoom, child_grid_id, alt_text,
-					created_at, updated_at)
-				VALUES (?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-				gid, x, y, w, h, childGridID, label, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert well: %w", err)
-			}
-			return res.LastInsertId()
+			return insertWellRow(ctx, tx, gid, x, y, w, h, childGridID, label, now)
 		})
 }
 
@@ -205,6 +190,22 @@ func (s *Store) CreateText(ctx context.Context, gridID string, x, y, w, h int64,
 			}
 			return tileID, nil
 		})
+}
+
+// insertWellRow is the single place the interior-well INSERT lives, shared by
+// CreateWell and the trash's month wells so they cannot drift. Zero framing
+// means never visited (framing.go).
+func insertWellRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGridID int64, label string, now int64) (int64, error) {
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO tiles (grid_id, kind, x, y, w, h,
+			view_cx, view_cy, view_zoom, child_grid_id, alt_text,
+			created_at, updated_at)
+		VALUES (?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+		gridID, x, y, w, h, childGridID, label, now, now)
+	if err != nil {
+		return 0, fmt.Errorf("insert well: %w", err)
+	}
+	return res.LastInsertId()
 }
 
 // insertURLRow is the single place the url INSERT lives, shared by CreateURL

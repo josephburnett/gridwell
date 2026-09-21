@@ -150,14 +150,7 @@ func (s *Store) singletonGridTx(ctx context.Context, tx *sql.Tx, key string) (in
 	if ok {
 		return strconv.ParseInt(v, 10, 64)
 	}
-	now := s.now().Unix()
-	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-		now, now)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
+	id, err := insertGrid(ctx, tx, s.now().Unix())
 	if err != nil {
 		return 0, err
 	}
