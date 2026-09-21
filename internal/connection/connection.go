@@ -466,7 +466,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 	// A restored landing is a transition and note publishes it. A first one is
 	// not, and it still changes what the menu can show, so open clients re-list.
 	if !s.note(name, connState{up: true}) && root == "" {
-		s.hub.Publish(healthEvent(name, true, ""))
+		s.hub.Publish(rpc.HealthEvent(name, true, ""))
 	}
 	return info.RootGridId, nil
 }
@@ -510,13 +510,6 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}()
 }
 
-// healthEvent is one connection's reachability on the wire.
-func healthEvent(ns string, up bool, detail string) *gridwellv1.Event {
-	return &gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
-		PluginUuid: ns, Healthy: up, Detail: detail,
-	}}}
-}
-
 // note is the one writer of s.health: it records what the transport now knows
 // about a connection and publishes the transition, answering whether it did.
 // The record is also what a later subscriber is told and what decides a
@@ -537,7 +530,7 @@ func (s *Server) note(name string, st connState) bool {
 	if prev.up == st.up && prev.mismatch == st.mismatch {
 		return false
 	}
-	s.hub.Publish(healthEvent(name, st.up, st.detail))
+	s.hub.Publish(rpc.HealthEvent(name, st.up, st.detail))
 	return true
 }
 
@@ -566,7 +559,7 @@ func (s *Server) darkNow() []*gridwellv1.Event {
 	sort.Strings(names)
 	out := make([]*gridwellv1.Event, 0, len(names))
 	for _, name := range names {
-		out = append(out, healthEvent(name, false, s.health[name].detail))
+		out = append(out, rpc.HealthEvent(name, false, s.health[name].detail))
 	}
 	return out
 }

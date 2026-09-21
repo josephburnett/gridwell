@@ -4,6 +4,16 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
+// HealthEvent is the one shape a namespace's reachability takes on the wire.
+// An empty uuid means "the namespace this rode in from", which the fan-in
+// fills (QualifyEventIDs), so a layer that does not know the uuid the registry
+// gave it still reports.
+func HealthEvent(uuid string, healthy bool, detail string) *pb.Event {
+	return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+		PluginUuid: uuid, Healthy: healthy, Detail: detail,
+	}}}
+}
+
 // EventKey names the entity a wire event is about, so internal/eventhub can
 // replace an older undelivered event for the same entity and drop no distinct
 // one. "" is unkeyable and never coalesces. It is one arm set for every hub:

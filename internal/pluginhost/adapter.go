@@ -158,13 +158,13 @@ func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest,
 		cancel := a.sup.OnHealth(func(healthy bool, detail string) { a.emitHealth(healthy, detail) })
 		defer cancel()
 		if healthy, detail := a.sup.Health(); !healthy {
-			if err := send(healthEvent(healthy, detail)); err != nil {
+			if err := send(rpc.HealthEvent("", healthy, detail)); err != nil {
 				return err
 			}
 		}
 	}
 	if dark, detail := a.sourceDark(); dark {
-		if err := send(healthEvent(false, detail)); err != nil {
+		if err := send(rpc.HealthEvent("", false, detail)); err != nil {
 			return err
 		}
 	}
@@ -183,16 +183,8 @@ func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest,
 	}
 }
 
-// healthEvent is one health state as this namespace announces it. The uuid
-// rides empty; the server's fan-in fills it (rpc.QualifyEventIDs).
-func healthEvent(healthy bool, detail string) *gridwellv1.Event {
-	return &gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{
-		PluginHealth: &gridwellv1.EventPluginHealth{Healthy: healthy, Detail: detail},
-	}}
-}
-
 func (a *Adapter) emitHealth(healthy bool, detail string) {
-	a.hub.Publish(healthEvent(healthy, detail))
+	a.hub.Publish(rpc.HealthEvent("", healthy, detail))
 }
 
 // noteSource records what a listing found and announces the transition, so a

@@ -274,7 +274,7 @@ type missing struct {
 }
 
 func (m *missing) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
-	if err := send(healthEvent(false, m.detail)); err != nil {
+	if err := send(rpc.HealthEvent("", false, m.detail)); err != nil {
 		return err
 	}
 	return m.Namespace.Subscribe(ctx, in, send)
@@ -344,18 +344,10 @@ func (c *Layer) noteCache(op string, err error) {
 	c.emitHealth(true, "")
 }
 
-// healthEvent is a cache-side health report on the wire. The uuid rides empty;
-// the fan-in fills it (see rpc.QualifyEventIDs).
-func healthEvent(healthy bool, detail string) *pb.Event {
-	return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		Healthy: healthy, Detail: detail,
-	}}}
-}
-
 // emitHealth announces a health transition to the synthetic stream's
 // subscribers.
 func (c *Layer) emitHealth(healthy bool, detail string) {
-	c.hub.Publish(healthEvent(healthy, detail))
+	c.hub.Publish(rpc.HealthEvent("", healthy, detail))
 }
 
 func now() int64 { return time.Now().Unix() }
