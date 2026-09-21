@@ -1,0 +1,25 @@
+{
+  "config": { "rootDir": "apps/desktop/e2e" },
+  "suites": [
+    {
+      "title": "lost-release.spec.ts",
+      "file": "lost-release.spec.ts",
+      "specs": [
+        {
+          "title": "a press that never released leaves no ghost",
+          "file": "lost-release.spec.ts",
+          "line": 42,
+          "ok": true,
+          "tests": [{ "status": "flaky" }]
+        },
+        {
+          "title": "a drag that completed",
+          "file": "lost-release.spec.ts",
+          "line": 88,
+          "ok": true,
+          "tests": [{ "status": "expected" }]
+        }
+      ]
+    }
+  ]
+}
