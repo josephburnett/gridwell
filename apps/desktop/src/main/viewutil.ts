@@ -1,4 +1,4 @@
-import type { Bounds } from './ipc';
+import type { Bounds, ForwardedRightdown, ViewRightdown } from './ipc';
 
 // The decisions a live url view obeys, apart from webviews.ts so they run under
 // `node --test` with no Electron import.
@@ -162,6 +162,17 @@ const RIGHT_DRAG_TIME_MS = 200;
 // flick is a gesture and not a click.
 const RIGHT_DRAG_FAR_THRESHOLD = 24;
 
+
+// A press over a live url view arrives in screen coordinates, and the window's
+// content bounds are what put it in the renderer's canvas pixels, which are 1:1
+// with them.
+export function toContentPoint(
+  win: { getContentBounds(): { x: number; y: number } },
+  p: ViewRightdown,
+): ForwardedRightdown {
+  const cb = win.getContentBounds();
+  return { x: p.sx - cb.x, y: p.sy - cb.y };
+}
 
 // classifyRightPress returns true for a drag. urlview-preload.ts inlines the
 // same logic because it cannot import.

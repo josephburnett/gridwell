@@ -18,6 +18,7 @@ import {
   renderProcessGoneMessage,
   zoomChordKey,
   openBelowUrl,
+  toContentPoint,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { captureAttempt, captureJpegBase64, describeAttempt } from './capture';
@@ -71,6 +72,12 @@ export class WebviewRegistry {
   constructor(win: BaseWindow, cb: RegistryCallbacks = {}) {
     this.win = win;
     this.cb = cb;
+  }
+
+  // Every failure the registry notices carries this one source, which
+  // client/errsurface groups its notices by.
+  private reportErr(message: string): void {
+    this.cb.onError?.({ source: 'electron:webview', message });
   }
 
   // The canvas's own F11 handler cannot see the key while a view has focus.
@@ -178,10 +185,7 @@ export class WebviewRegistry {
     if (stale) {
       // closeURLStream is the one path that persists a freeze. Reaching here
       // means a view was replaced without it, so this freeze has no caller.
-      this.cb.onError?.({
-        source: 'electron:webview',
-        message: `pane ${paneId}: live view replaced (${stale.tileId} → ${tileId}) without a close; its final frame is lost`,
-      });
+      this.reportErr(`pane ${paneId}: live view replaced (${stale.tileId} → ${tileId}) without a close; its final frame is lost`);
       // remove() reports its own failures and the lost frame is already on
       // the strip, so a rejection here must not stop the replacement view.
       await this.remove(paneId).catch(() => {});
@@ -248,7 +252,7 @@ export class WebviewRegistry {
       view.webContents.navigationHistory
         .restore({ entries: nav.history.entries, index: nav.history.index })
         .catch((err: unknown) => {
-          this.cb.onError?.({ source: 'electron:webview', message: restoreRefusedMessage(paneId, err) });
+          this.reportErr(restoreRefusedMessage(paneId, err));
         });
     } else {
       void view.webContents.loadURL(url);
@@ -273,11 +277,11 @@ export class WebviewRegistry {
   touchScroll(sender: WebContents, p: { sx: number; sy: number; dx: number; dy: number }): void {
     for (const e of this.entries.values()) {
       if (e.view.webContents !== sender) continue;
-      const cb = this.win.getContentBounds();
+      const c = toContentPoint(this.win, p);
       e.view.webContents.sendInputEvent({
         type: 'mouseWheel',
-        x: p.sx - cb.x - e.bounds.x,
-        y: p.sy - cb.y - e.bounds.y,
+        x: c.x - e.bounds.x,
+        y: c.y - e.bounds.y,
         deltaX: p.dx,
         deltaY: p.dy,
         // Precise deltas, so the page tracks the finger 1:1 instead of running
@@ -356,10 +360,7 @@ export class WebviewRegistry {
       // bridgeRemove in client/wasm/url_stream_client.go drops an empty freeze
       // rather than writing back, so a good preview survives. The crash still
       // surfaces, so the user knows why the tile went stale.
-      this.cb.onError?.({
-        source: 'electron:webview',
-        message: 'view crashed while closing — preview not updated',
-      });
+      this.reportErr('view crashed while closing — preview not updated');
     } finally {
       // Runs even when the capture threw: the renderer has dropped this pane,
       // so a view left attached sits blank over what it ascended into.
@@ -367,10 +368,7 @@ export class WebviewRegistry {
         this.win.contentView.removeChildView(e.view);
         e.view.webContents.close();
       } catch (err) {
-        this.cb.onError?.({
-          source: 'electron:webview',
-          message: 'failed to detach live view — ascend may leave a blank overlay: ' + String(err),
-        });
+        this.reportErr('failed to detach live view — ascend may leave a blank overlay: ' + String(err));
       }
     }
     return { jpegBase64, url, title, history };
@@ -392,7 +390,7 @@ export class WebviewRegistry {
           ? `pane ${paneId}: mirror capture failing: ${describeAttempt(attempt)}`
           : `pane ${paneId}: mirror capture recovered after ${report.afterFailures} failed ` +
             `${report.afterFailures === 1 ? 'capture' : 'captures'}`;
-      this.cb.onError?.({ source: 'electron:webview', message });
+      this.reportErr(message);
     }
     return attempt.kind === 'ok' ? attempt.jpegBase64 : '';
   }
@@ -468,10 +466,7 @@ export class WebviewRegistry {
       'did-fail-load',
       (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
         if (!shouldSurfaceFailLoad(errorCode, isMainFrame)) return;
-        this.cb.onError?.({
-          source: 'electron:webview',
-          message: failLoadMessage(validatedURL, errorDescription, errorCode),
-        });
+        this.reportErr(failLoadMessage(validatedURL, errorDescription, errorCode));
       },
     );
 
@@ -483,10 +478,7 @@ export class WebviewRegistry {
         url = e.view.webContents.getURL();
       } catch {
       }
-      this.cb.onError?.({
-        source: 'electron:webview',
-        message: renderProcessGoneMessage(url, details.reason),
-      });
+      this.reportErr(renderProcessGoneMessage(url, details.reason));
     });
   }
 }

@@ -2,7 +2,8 @@ import { app, BrowserWindow, dialog, session } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
-import { registerWebviewIpc, makeNavForwarder, makeOpenBelowForwarder, makeFreezeURLForwarder, makeContextMenuForwarder, makeZoomKeyForwarder, sendFrame, sendError } from './register';
+import { registerWebviewIpc, forwarder, sendFrame, sendError } from './register';
+import { EV } from './ipc';
 import { MirrorPump } from './capture';
 import { sanitizeUserAgent, allowPermission, SESSION_PARTITION } from './viewutil';
 import { applyUserDataOverride } from './userdata';
@@ -72,12 +73,12 @@ async function boot(): Promise<void> {
   const { win } = createRootWindow(sidecar.origin);
   const rootWC = win.webContents;
   const reg = new WebviewRegistry(win, {
-    onNav: makeNavForwarder(rootWC),
+    onNav: forwarder(rootWC, EV.nav),
     onError: (ev) => sendError(rootWC, ev.source, ev.message),
-    onOpenBelow: makeOpenBelowForwarder(rootWC),
-    onFreezeURL: makeFreezeURLForwarder(rootWC),
-    onContextMenu: makeContextMenuForwarder(rootWC),
-    onZoomKey: makeZoomKeyForwarder(rootWC),
+    onOpenBelow: forwarder(rootWC, EV.openBelow),
+    onFreezeURL: forwarder(rootWC, EV.freezeUrl),
+    onContextMenu: forwarder(rootWC, EV.menuPane),
+    onZoomKey: forwarder(rootWC, EV.zoomKey),
     // Give focus back to the root renderer, where the user was typing.
     onFocusStolen: () => rootWC.focus(),
   });

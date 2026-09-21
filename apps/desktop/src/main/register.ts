@@ -12,14 +12,11 @@ import {
   FreezeResult,
   ViewRightdown,
   ViewTouchScroll,
-  ForwardedRightdown,
   ErrorEvent,
-  OpenBelowEvent,
-  FreezeURLEvent,
-  ContextMenuEvent,
-  ZoomKeyEvent,
+  FrameEvent,
   ChoiceMenuArgs,
 } from './ipc';
+import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
 
@@ -30,32 +27,25 @@ function safeSend(wc: WebContents, channel: string, payload: unknown): void {
 }
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the registry,
-// once, after the root window is created. win's content bounds convert a
-// screen-space press into canvas coordinates.
+// once, after the root window is created. win is the window toContentPoint
+// re-aims a press against.
 export function registerWebviewIpc(
   registry: WebviewRegistry,
   rootWC: WebContents,
   win: BaseWindow,
 ): void {
-  // Begins a pane gesture; the renderer parks the view so the rest of the drag
-  // lands on the canvas.
-  ipcMain.on(VIEW.rightdown, (_event, p: ViewRightdown): void => {
-    const cb = win.getContentBounds();
-    safeSend(rootWC, EV.rightForward, { x: p.sx - cb.x, y: p.sy - cb.y });
-  });
-
-  ipcMain.on(VIEW.middledown, (_event, p: ViewRightdown): void => {
-    const cb = win.getContentBounds();
-    safeSend(rootWC, EV.middleForward, { x: p.sx - cb.x, y: p.sy - cb.y });
-  });
-
-  // A focus-transfer intent; the preload does not suppress it, so the click
-  // still reaches the page.
-  ipcMain.on(VIEW.leftdown, (_event, p: ViewRightdown): void => {
-    const cb = win.getContentBounds();
-    const fwd: ForwardedRightdown = { x: p.sx - cb.x, y: p.sy - cb.y };
-    safeSend(rootWC, EV.leftForward, fwd);
-  });
+  // The live view swallows the renderer's own mouse events, so its preload
+  // sends each press here to be re-aimed at the canvas. What the renderer then
+  // does with one is EV's business in ipc.ts.
+  for (const [inbound, outbound] of [
+    [VIEW.rightdown, EV.rightForward],
+    [VIEW.middledown, EV.middleForward],
+    [VIEW.leftdown, EV.leftForward],
+  ]) {
+    ipcMain.on(inbound, (_event, p: ViewRightdown): void => {
+      safeSend(rootWC, outbound, toContentPoint(win, p));
+    });
+  }
 
   // The registry injects an equivalent mouseWheel back into the view, because
   // Chromium will not gesture-scroll raw touches there.
@@ -111,34 +101,14 @@ export function registerWebviewIpc(
 
 }
 
-export function makeNavForwarder(rootWC: WebContents) {
-  return (ev: { paneId: string; tileId: string; url: string; title: string }) => {
-    safeSend(rootWC, EV.nav, ev);
-  };
-}
-
-// The renderer splits the pane and opens the link as an ephemeral visit.
-export function makeOpenBelowForwarder(rootWC: WebContents): (ev: OpenBelowEvent) => void {
-  return (ev) => safeSend(rootWC, EV.openBelow, ev);
-}
-
-// The wasm tears the view down and persists the standing frozen intent.
-export function makeFreezeURLForwarder(rootWC: WebContents): (ev: FreezeURLEvent) => void {
-  return (ev) => safeSend(rootWC, EV.freezeUrl, ev);
-}
-
-// focusToPane moves focus to that pane before the menu can act.
-export function makeContextMenuForwarder(rootWC: WebContents): (ev: ContextMenuEvent) => void {
-  return (ev) => safeSend(rootWC, EV.menuPane, ev);
-}
-
-// The renderer's applyContentZoom applies and persists the chord.
-export function makeZoomKeyForwarder(rootWC: WebContents): (ev: ZoomKeyEvent) => void {
-  return (ev) => safeSend(rootWC, EV.zoomKey, ev);
+// forwarder pushes a registry callback's event onto its EV channel unchanged;
+// ipc.ts pairs each channel with the shape it carries.
+export function forwarder(rootWC: WebContents, channel: string): (ev: unknown) => void {
+  return (ev) => safeSend(rootWC, channel, ev);
 }
 
 export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, jpegBase64: string): void {
-  if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 });
+  if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 } satisfies FrameEvent);
 }
 
 // sendError is the one main-process entry point onto EV.error, so
