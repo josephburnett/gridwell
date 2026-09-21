@@ -234,14 +234,14 @@ and that is where the worst bugs live.
 |---|---|---|
 | `make check` | Go + TS logic; compiles wasm, executes none of it | every commit |
 | `make check-electron` | the `WebContentsView` bridge under xvfb | the live url path, `webviews.ts`, the preload |
-| `make check-e2e` | the full app as a black box | any `apps/desktop` change, the native layer, cross-seam behavior |
-| `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, the shell door |
+| `make check-e2e` | the full app as a black box | any `apps/desktop` change, anything under `client/wasm` or `web/`, the native layer, cross-seam behavior |
+| `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, the browser-serving path and its shell door |
 | `make check-connections` | the real binaries through a real ssh tunnel | plugin spawn, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
 
-If a change touches the native layer, `make check` passing means nothing.
-Run the electron or e2e gate and add a spec. The gates rebuild at start, and
-`check-e2e` and `check-web` then test the artifacts they copied at that
-moment (`apps/desktop/e2e/runtree.ts`), so a rebuild beside a running one
+If a change touches the native layer or the shim, `make check` passing means
+nothing. Run the electron or e2e gate and add a spec. The gates rebuild at
+start, and `check-e2e` and `check-web` then test the artifacts they copied at
+that moment (`apps/desktop/e2e/runtree.ts`), so a rebuild beside a running one
 cannot change what it tests; the other gates have no such pin, so still do
 not edit sources while one runs. A flake rerun only counts against a freshly
 built tree. A spec on `docs/flake-ledger.md` still gets a fresh look before

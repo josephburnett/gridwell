@@ -235,8 +235,7 @@ check-e2e: build node-modules
 # Chromium, so the repo stays offline-buildable. It is the only gate that sees
 # the phone and tablet client, with no Electron bridge, caps-gated live-url
 # affordances, and client/touchgest driven by real injected TouchEvents. It is
-# headless. Run it for any change to client/caps, client/touchgest, touch.go
-# or the browser-serving path.
+# headless. CLAUDE.md's Gates table says when to run it.
 check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web -- $(PW_FLAGS)
 
