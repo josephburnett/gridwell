@@ -17,17 +17,7 @@ const LiveViewInsetPx = 5.0
 // ContentBox returns the pane shrunk by borderPx on every side. URL tiles
 // render into it and the URL stream mouse handlers hit-test against it.
 func ContentBox(r pane.Rect, borderPx float64) pane.Rect {
-	x := r.X + borderPx
-	y := r.Y + borderPx
-	w := r.W - 2*borderPx
-	h := r.H - 2*borderPx
-	if w < 0 {
-		w = 0
-	}
-	if h < 0 {
-		h = 0
-	}
-	return pane.Rect{X: x, Y: y, W: w, H: h}
+	return InnerBox(r, borderPx)
 }
 
 // PointInContent: every live surface fills that box, as does the canvas frame
@@ -50,24 +40,14 @@ func LiveViewOwnsPoint(overlaysHidden, hasLiveView bool, r pane.Rect, borderPx, 
 
 // TextareaBox's sideInset is the gap between the pane edge and the text.
 func TextareaBox(r pane.Rect, sideInset, baseFontPx, scale float64) (rect pane.Rect, fontPx float64) {
-	fontPx = baseFontPx * scale
-	x := r.X + sideInset
-	y := r.Y + sideInset
-	w := r.W - 2*sideInset
-	h := r.H - 2*sideInset
-	if w < 0 {
-		w = 0
-	}
-	if h < 0 {
-		h = 0
-	}
-	return pane.Rect{X: x, Y: y, W: w, H: h}, fontPx
+	return InnerBox(r, sideInset), baseFontPx * scale
 }
 
-// InnerBox is the textarea's rectangle without the font size.
-func InnerBox(r pane.Rect, sideInset float64) pane.Rect {
-	b, _ := TextareaBox(r, sideInset, 0, 0)
-	return b
+// InnerBox is the pane inset on every side, the one body behind every box in
+// this package. A pane smaller than twice the inset gives up its interior
+// rather than an inside-out rectangle.
+func InnerBox(r pane.Rect, inset float64) pane.Rect {
+	return pane.Rect{X: r.X + inset, Y: r.Y + inset, W: max(r.W-2*inset, 0), H: max(r.H-2*inset, 0)}
 }
 
 // PointInInner reports whether (sx, sy) lies inside InnerBox(r, sideInset).
