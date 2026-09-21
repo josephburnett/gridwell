@@ -113,16 +113,26 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
   const cy = Math.round(home.cy);
   await gw.openPalette();
   await gw.dragCreate('well', cx, cy);
-  // A 15x11 well around the viewport center covers about two thirds of the
-  // content box at zoom 1, which is the no-visible-outer-context state the
-  // redirect exists for.
+  // The redirect exists for the no-visible-outer-context state, so what this
+  // well has to be is bigger than gesture.WellZoomOutRedirect of the content
+  // box — a coverage, not a cell count. Sizing it off the pane's own cell
+  // extent keeps that true at any screen size; a fixed 15x11 covered two
+  // thirds at 1280x800 and under half at 1600x1000.
+  const sized = await gw.focused();
+  const c00 = await gw.cellCenter(sized.id, cx, cy);
+  const c11 = await gw.cellCenter(sized.id, cx + 1, cy + 1);
+  const cellPx = Math.min(c11.x - c00.x, c11.y - c00.y);
+  const wellW = Math.ceil((sized.w * 0.9) / cellPx);
+  const wellH = Math.ceil((sized.h * 0.9) / cellPx);
+  const wx = cx - Math.floor(wellW / 2);
+  const wy = cy - Math.floor(wellH / 2);
   const fresh = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   const sigBefore = await window.evaluate(
     (args) => JSON.stringify((window as any).__gridwellTest.gridSigs(args.gid)[args.id] ?? ''),
     { gid: home.gridID, id: fresh.id },
   );
   const { placeTile } = await import('./oracle');
-  await placeTile(gw.origin, fresh.id, fresh.version as number, home.gridID, cx - 7, cy - 5, 15, 11);
+  await placeTile(gw.origin, fresh.id, fresh.version as number, home.gridID, wx, wy, wellW, wellH);
   // The resize is a foreign write, so wait until the client's cache applied the
   // TileChanged event. Otherwise the wheel below still sees a 1x1 well, with
   // near-zero coverage, and routes to the well zoom.
@@ -139,7 +149,7 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
   await gw.waitIdle();
 
   const zoomedIn = (await gw.focused()).zoom;
-  const wellBefore = tileAt(await gw.getGrid(home.gridID), 'well', cx - 7, cy - 5)!;
+  const wellBefore = tileAt(await gw.getGrid(home.gridID), 'well', wx, wy)!;
 
   // Wheeling out over the well's center is the redirect: the pane zooms out and
   // the well's stored preview framing stays byte-identical.
@@ -155,7 +165,7 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
     })
     .toBeLessThan(zoomedIn);
   await gw.waitIdle();
-  const wellAfter = tileAt(await gw.getGrid(home.gridID), 'well', cx - 7, cy - 5)!;
+  const wellAfter = tileAt(await gw.getGrid(home.gridID), 'well', wx, wy)!;
   expect(wellAfter.viewZoom ?? 0, 'the well framing must not move on a redirected zoom-out').toEqual(
     wellBefore.viewZoom ?? 0,
   );
@@ -169,7 +179,7 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
     .poll(
       async () =>
         Number(
-          (tileAt(await gw.getGrid(home.gridID), 'well', cx - 7, cy - 5) as {
+          (tileAt(await gw.getGrid(home.gridID), 'well', wx, wy) as {
             viewZoom?: number | string;
           })?.viewZoom ?? 0,
         ),
