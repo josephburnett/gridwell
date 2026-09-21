@@ -2,7 +2,7 @@
 // fails fast with a cause, or hangs. A fake child process drives every path
 // under `node --test`, with no Go binary, no Electron and no network, through
 // the test seams in StartOptions.
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -76,9 +76,18 @@ test('gives up on SILENCE and kills the child when nothing is announced', async 
   assert.ok(child.killed, 'the hung child is terminated, not leaked');
 });
 
-test('a slow but TALKING boot is never killed: every line re-arms the window', async () => {
+// The silence window is a timer, so the two tests that race it drive the
+// clock by hand: a real 30ms sleep against a real 40ms window loses under load.
+async function speakAfter(t: TestContext, child: FakeChild, ms: number, line: string) {
+  t.mock.timers.tick(ms);
+  child.stdout.write(`${line}\n`);
+  await new Promise((r) => setImmediate(r)); // the line reaches the reader
+}
+
+test('a slow but TALKING boot is never killed: every line re-arms the window', async (t) => {
   // A long boot, where each step announces itself and then takes longer than
   // the whole window before the next one. Only silence may end a boot.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const child = new FakeChild();
   const p = boot(child, 40);
   for (const line of [
@@ -86,22 +95,21 @@ test('a slow but TALKING boot is never killed: every line re-arms the window', a
     'gridwell: home: orphan cleanup killed 3 stale shell session(s)',
     'gridwell: plugin fs (fs) respawned',
   ]) {
-    await new Promise((r) => setTimeout(r, 30)); // under the window, every time
-    child.stdout.write(`${line}\n`);
+    await speakAfter(t, child, 30, line); // under the window, every time
   }
-  await new Promise((r) => setTimeout(r, 30));
-  child.stdout.write('gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1)\n');
+  await speakAfter(t, child, 30, 'gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1)');
   const sc = await p; // well past 40ms, and alive throughout
   assert.equal(sc.origin, 'http://127.0.0.1:9999');
   assert.equal(child.killed, false, 'a talking process must never be killed for being slow');
   sc.stop();
 });
 
-test('silence AFTER progress still ends the boot: the window re-arms, it does not vanish', async () => {
+test('silence AFTER progress still ends the boot: the window re-arms, it does not vanish', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const child = new FakeChild();
   const p = boot(child, 40);
-  await new Promise((r) => setTimeout(r, 20));
-  child.stdout.write('gridwell: home: scratch cleanup removed 41 ephemeral tile(s)\n');
+  await speakAfter(t, child, 20, 'gridwell: home: scratch cleanup removed 41 ephemeral tile(s)');
+  t.mock.timers.tick(40);
   await assert.rejects(p, /went silent for 40ms/);
   assert.ok(child.killed, 'a hung process is still terminated, however far it got');
 });
