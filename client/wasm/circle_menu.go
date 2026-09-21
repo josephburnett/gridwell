@@ -140,11 +140,9 @@ func (a *App) openDOMChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 	// One task later: the press that opened the menu is still bubbling, and a
 	// window listener added now would be called by it and close the menu at
 	// once.
-	var arm js.Func
-	arm = js.FuncOf(func(js.Value, []js.Value) any {
-		arm.Release()
+	setTimeoutMs(0, func() {
 		if !a.overlays.choiceMenu.Equal(box) {
-			return nil // already dismissed
+			return // already dismissed
 		}
 		a.overlays.choiceMenuCbs = append(a.overlays.choiceMenuCbs,
 			listen(a.win, "mousedown", func(js.Value) { a.closeDOMChoiceMenu() }),
@@ -153,9 +151,7 @@ func (a *App) openDOMChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 					a.closeDOMChoiceMenu()
 				}
 			}))
-		return nil
 	})
-	js.Global().Call("setTimeout", arm, 0)
 }
 
 // closeDOMChoiceMenu removes the popover and releases its callbacks. It is
