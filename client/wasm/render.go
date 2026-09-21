@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
@@ -41,6 +42,33 @@ func withClip(c js.Value, x, y, w, h float64, paint func()) {
 	c.Call("rect", x, y, w, h)
 	c.Call("clip")
 	paint()
+	c.Call("restore")
+}
+
+// labelOpts is the face drawLabel wears. An empty align or baseline is the
+// canvas default, and maxW 0 is unconstrained.
+type labelOpts struct {
+	font     string
+	fill     string
+	align    string
+	baseline string
+	maxW     float64
+}
+
+// drawLabel paints one label and leaves the canvas as it found it. Every
+// fillText goes through here except the raw-text painter, which sets one face
+// for a whole document; see drawMarkdownText.
+func drawLabel(c js.Value, text string, x, y float64, o labelOpts) {
+	c.Call("save")
+	c.Set("font", o.font)
+	c.Set("fillStyle", o.fill)
+	c.Set("textAlign", cmp.Or(o.align, "start"))
+	c.Set("textBaseline", cmp.Or(o.baseline, "alphabetic"))
+	if o.maxW > 0 {
+		c.Call("fillText", text, x, y, o.maxW)
+	} else {
+		c.Call("fillText", text, x, y)
+	}
 	c.Call("restore")
 }
 
@@ -437,16 +465,14 @@ func (a *App) drawErrStrip() {
 		}
 		a.cctx.Set("fillStyle", bg)
 		a.cctx.Call("fillRect", 0, row.Y, a.width, errsurface.RowH)
-		a.cctx.Set("fillStyle", fg)
-		a.cctx.Set("font", "12px system-ui, sans-serif")
-		a.cctx.Set("textBaseline", "middle")
 		label := errsurface.Label(row.Notice)
 		if row.OverflowCount > 0 {
 			label += "  (+" + strconv.Itoa(row.OverflowCount) + " more)"
 		}
-		a.cctx.Call("fillText", label, 12, row.Y+errsurface.RowH/2)
+		drawLabel(a.cctx, label, 12, row.Y+errsurface.RowH/2, labelOpts{
+			font: "12px system-ui, sans-serif", fill: fg, baseline: "middle",
+		})
 	}
-	a.cctx.Set("textBaseline", "alphabetic")
 }
 
 // drawPane draws the chrome even when the target grid has not loaded, so the
@@ -842,21 +868,21 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	withClip(a.cctx, ix, iy, iw, ih, func() {
 		a.cctx.Set("fillStyle", a.pal.SourceLabelBg)
 		a.cctx.Call("fillRect", ix, iy, iw, bannerH)
-		setFont(a.cctx, fontPx, bannerFontFamily, true)
-		a.cctx.Set("fillStyle", textColor)
-		a.cctx.Set("textBaseline", "middle")
-		a.cctx.Set("textAlign", "start")
-		a.cctx.Call("fillText", label, ix+4, iy+bannerH/2)
+		bold := fontSpec(fontPx, bannerFontFamily, true)
+		drawLabel(a.cctx, label, ix+4, iy+bannerH/2, labelOpts{
+			font: bold, fill: textColor, baseline: "middle",
+		})
 		if status != "" {
 			// The status is the plugin's word, so it is drawn in the one muted
 			// color and never in the tile's own: it reads as a note on the
 			// name, not as part of it.
+			a.cctx.Set("font", bold)
 			labelW := a.cctx.Call("measureText", label).Get("width").Float()
-			setFont(a.cctx, fontPx, bannerFontFamily, false)
-			a.cctx.Set("fillStyle", a.pal.Muted)
-			a.cctx.Call("fillText", status, ix+4+labelW+fontPx/2, iy+bannerH/2)
+			drawLabel(a.cctx, status, ix+4+labelW+fontPx/2, iy+bannerH/2, labelOpts{
+				font: fontSpec(fontPx, bannerFontFamily, false),
+				fill: a.pal.Muted, baseline: "middle",
+			})
 		}
-		a.cctx.Set("textBaseline", "top")
 	})
 }
 
@@ -1163,11 +1189,8 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 		name = pl.Label
 	}
 	label := pane.GridNotice(name, a.fetch.gridLoadFailed.Has(gid))
-	a.cctx.Call("save")
-	a.cctx.Set("fillStyle", a.pal.Muted)
-	a.cctx.Set("font", "13px system-ui, sans-serif")
-	a.cctx.Set("textAlign", "center")
-	a.cctx.Set("textBaseline", "middle")
-	a.cctx.Call("fillText", label, r.X+r.W/2, r.Y+r.H/2, r.W-16)
-	a.cctx.Call("restore")
+	drawLabel(a.cctx, label, r.X+r.W/2, r.Y+r.H/2, labelOpts{
+		font: "13px system-ui, sans-serif", fill: a.pal.Muted,
+		align: "center", baseline: "middle", maxW: r.W - 16,
+	})
 }

@@ -23,6 +23,10 @@ import (
 // is reserved layout so no pane can paint over it. What the bar shows is
 // derived per frame, never stored.
 
+// barFont is the bar's lettering: the title measures with it and every crumb
+// draws in it, so the centered span cannot be sized from a different face.
+const barFont = "12px system-ui, sans-serif"
+
 // bottomBarRect is the bar's drawn rectangle, spanning the focused pane.
 // wsbar.Rect owns the geometry. ok=false when there is no pane to sit under
 // or no room for the band, and the row is then plain background.
@@ -100,8 +104,6 @@ func (a *App) drawBottomBar() {
 
 	chain := a.navChain()
 	segs := a.bottomBarSegments(chain)
-	c.Set("font", "12px system-ui, sans-serif")
-	c.Set("textBaseline", "middle")
 	for _, s := range segs {
 		shifted := s
 		shifted.X += bx
@@ -134,12 +136,10 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 	c := a.cctx
 	c.Set("fillStyle", a.pal.CachedChipBg)
 	c.Call("fillRect", x, y, chipW, chipH)
-	c.Set("fillStyle", a.pal.CachedChipFg)
-	c.Set("font", "10px system-ui, sans-serif")
-	c.Set("textAlign", "center")
-	c.Set("textBaseline", "middle")
-	c.Call("fillText", "cached", x+chipW/2, y+chipH/2)
-	c.Set("textAlign", "start")
+	drawLabel(c, "cached", x+chipW/2, y+chipH/2, labelOpts{
+		font: "10px system-ui, sans-serif", fill: a.pal.CachedChipFg,
+		align: "center", baseline: "middle",
+	})
 }
 
 // drawBoundaryCrumb paints a pane-tile boundary crumb as a wide named bar,
@@ -159,9 +159,10 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	if label == "" {
 		label = "workspace"
 	}
-	c.Set("fillStyle", a.pal.BarInk)
 	withClip(c, s.X+2, top, s.W-4, wsbar.RowH, func() {
-		c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
+		drawLabel(c, label, s.X+10, top+wsbar.RowH/2, labelOpts{
+			font: barFont, fill: a.pal.BarInk, baseline: "middle",
+		})
 	})
 }
 
@@ -181,7 +182,7 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 	if !rectOK {
 		return
 	}
-	a.cctx.Set("font", "12px system-ui, sans-serif")
+	a.cctx.Set("font", barFont)
 	textW := a.cctx.Call("measureText", label).Get("width").Float() + 24
 	segs := a.bottomBarSegments(a.navChain())
 	crumbsEnd := 0.0
@@ -211,14 +212,11 @@ func (a *App) drawBarTitle(top float64) {
 	if muted {
 		color = a.pal.Muted
 	}
-	c.Set("fillStyle", color)
-	c.Set("font", "12px system-ui, sans-serif")
-	c.Set("textBaseline", "middle")
-	c.Set("textAlign", "center")
 	withClip(c, x, top, w, wsbar.RowH, func() {
-		c.Call("fillText", label, x+w/2, top+wsbar.RowH/2)
+		drawLabel(c, label, x+w/2, top+wsbar.RowH/2, labelOpts{
+			font: barFont, fill: color, align: "center", baseline: "middle",
+		})
 	})
-	c.Set("textAlign", "start")
 }
 
 // barSlotMode gathers the world facts barslot.Decide reads. The shell refresh

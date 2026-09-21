@@ -54,9 +54,9 @@ func (a *App) drawPreviewPlaceholder(label string, x, y, w, h float64) {
 	if w <= 20 || h <= 20 {
 		return
 	}
-	a.cctx.Set("fillStyle", a.pal.Muted)
-	a.cctx.Set("font", "12px monospace")
-	a.cctx.Call("fillText", label, x+8, y+18, w-16)
+	drawLabel(a.cctx, label, x+8, y+18, labelOpts{
+		font: "12px monospace", fill: a.pal.Muted, maxW: w - 16,
+	})
 }
 
 // drawURLTileInPane renders the URL tile a pane is descended into. Mirror
@@ -69,9 +69,9 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, preview.BlobKey(n), func() {
 			a.fetchURLPreview(rpc.ContentID(n), preview.BlobKey(n))
 			label := urlTileLabel(n)
-			a.cctx.Set("fillStyle", a.pal.Muted)
-			a.cctx.Set("font", "16px monospace")
-			a.cctx.Call("fillText", label, x+16, y+32, w-32)
+			drawLabel(a.cctx, label, x+16, y+32, labelOpts{
+				font: "16px monospace", fill: a.pal.Muted, maxW: w - 32,
+			})
 		})
 	})
 }
