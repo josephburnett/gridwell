@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/josephburnett/gridwell/internal/config"
@@ -16,12 +15,12 @@ import (
 func RunStatus(_ []string) int {
 	home, err := config.Home()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "status: %v\n", err)
+		die("status", err)
 		return 2
 	}
 	banner, running, err := probeServeLock(home)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "status: %v\n", err)
+		die("status", err)
 		return 2
 	}
 	if running && strings.HasPrefix(banner, "gridwell: serving on ") {

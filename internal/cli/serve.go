@@ -176,21 +176,18 @@ func resolvePluginBinaries(cfg *config.ServerConfig) error {
 func RunServe(args []string) int {
 	home, err := config.Home()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
+		return die("serve", err)
 	}
 	cfgPath, err := config.DefaultPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
+		return die("serve", err)
 	}
 
 	// A missing config file is a fresh home; the node mints its id and
 	// writes the file.
 	cfg, err := buildServeConfig(home, cfgPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
+		return die("serve", err)
 	}
 
 	f, err := parseServeFlags(args, cfg.StaticDir)
@@ -209,14 +206,12 @@ func RunServe(args []string) int {
 		if errors.As(err, &held) && strings.HasPrefix(held.banner, "gridwell: serving on ") {
 			fmt.Println("gridwell: already " + strings.TrimPrefix(held.banner, "gridwell: "))
 		}
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
+		return die("serve", err)
 	}
 	defer lock.Release()
 
 	if err := resolvePluginBinaries(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
+		return die("serve", err)
 	}
 
 	// The CLI's concerns wrap node.Start: the lock above, the banner below,
@@ -228,8 +223,7 @@ func RunServe(args []string) int {
 		StaticFS: staticFS(f.StaticDir),
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
+		return die("serve", err)
 	}
 	defer n.Close()
 
@@ -252,12 +246,10 @@ func RunServe(args []string) int {
 	case <-stop:
 		fmt.Println("gridwell: shutting down")
 	case err := <-errCh:
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
+		return die("serve", err)
 	}
 	if err := n.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "shutdown: %v\n", err)
-		return 1
+		return die("shutdown", err)
 	}
 	return 0
 }
