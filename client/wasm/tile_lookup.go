@@ -7,6 +7,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/textedit"
 )
 
 // Tile-by-id resolution: an ephemeral url visit focuses a tile off the pane's
@@ -55,8 +56,9 @@ func (a *App) findTileByID(id string) *gridwellv1.Tile {
 
 // descendedTile resolves the tile a pane is descended into. The fallback
 // by-id walk is for a tile off the pane's grid: an ephemeral url visit
-// focuses one in the scratch grid without re-anchoring the pane. False when
-// the pane is not descended or the tile is not cached yet.
+// focuses one in the scratch grid, and a delete moves a descended row to the
+// trash, neither of which re-anchors the pane. False when the pane is not
+// descended or the tile is not cached yet.
 func (a *App) descendedTile(p *pane.Pane) (*gridwellv1.Tile, bool) {
 	if p.ContentID() == "" {
 		return nil, false
@@ -70,6 +72,22 @@ func (a *App) descendedTile(p *pane.Pane) (*gridwellv1.Tile, bool) {
 		return t, true
 	}
 	return nil, false
+}
+
+// focusedTextDescent is the one read behind every text overlay: the focused
+// pane, its descended row (nil until the row lands), the box the pane
+// occupies, and textedit.DecideDescent's verdict on what shows.
+func (a *App) focusedTextDescent() (*pane.Pane, *gridwellv1.Tile, pane.Rect, textedit.Descent) {
+	p := a.tree.FocusedPane()
+	if p == nil || p.ContentID() == "" {
+		return nil, nil, pane.Rect{}, textedit.Descent{}
+	}
+	t, _ := a.descendedTile(p)
+	readOnly := false
+	if t != nil {
+		readOnly = a.tileReadOnly(t)
+	}
+	return p, t, paneRectFor(a, p), textedit.DecideDescent(t, readOnly, p.TextMode)
 }
 
 // descentKind classifies what the pane is descended into, off the one

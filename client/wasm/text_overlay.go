@@ -260,28 +260,8 @@ func (a *App) refreshFileToggle() {
 	style := a.overlays.textToggleBtn.Get("style")
 	hide := func() { style.Set("display", "none") }
 
-	p := a.tree.FocusedPane()
-	if p == nil || p.ContentID() == "" || a.isURLDescent(p) {
-		hide()
-		return
-	}
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		hide()
-		return
-	}
-	file, ok := g.Tiles[p.ContentID()]
-	if !ok || !rpc.TextDocument(file) {
-		hide()
-		return
-	}
-	if !textedit.ToggleVisible(file, a.tileReadOnly(file)) {
-		hide()
-		return
-	}
-	r := paneRectFor(a, p)
-	if r.W <= 0 || r.H <= 0 {
+	_, _, r, d := a.focusedTextDescent()
+	if !d.Toggle || r.W <= 0 || r.H <= 0 {
 		hide()
 		return
 	}
@@ -295,7 +275,7 @@ func (a *App) refreshFileToggle() {
 	style.Set("color", band)
 	// The glyph names the target mode: an italic serif "a" renders, a
 	// monospace "a" edits the source.
-	if p.TextMode == rpc.TextModeRendered {
+	if d.Mode == rpc.TextModeRendered {
 		style.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
 		style.Set("fontStyle", "normal")
 	} else {
@@ -313,24 +293,13 @@ func (a *App) refreshFileOverlay() {
 	a.ensureFileTextarea()
 	ta := a.overlays.textTextarea
 
-	p := a.tree.FocusedPane()
-	// textedit.ShownMode owns which face shows: an uncached row is not yet
-	// known read-only, so the pane's own mode stands until the row lands.
-	readOnly := false
-	if p != nil {
-		if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-			if file, ok := g.Tiles[p.ContentID()]; ok {
-				readOnly = a.tileReadOnly(file)
-			}
-		}
-	}
-	if p == nil || p.ContentID() == "" || textedit.ShownMode(p.TextMode, readOnly) != rpc.TextModeText {
+	p, file, r, d := a.focusedTextDescent()
+	if d.Mode != rpc.TextModeText {
 		ta.Get("style").Set("display", "none")
 		// Back to the canvas so ascent and other gestures keep working.
 		a.focusCanvas()
 		return
 	}
-	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		ta.Get("style").Set("display", "none")
 		return
@@ -347,7 +316,6 @@ func (a *App) refreshFileOverlay() {
 	// owns the decision. On a tile switch it clears immediately, before the
 	// blob loads, so the previous tile's buffer never appears as the new
 	// tile's default; the fetch's onComplete calls back here with it.
-	gid := a.gridIDForPane(p)
 	_, pendingEdit := a.c.DirtyContent(a.contentKey(a.overlays.lastTextareaTileID))
 	in := textedit.TextareaSyncInput{
 		FocusedTileID: p.ContentID(),
@@ -355,12 +323,10 @@ func (a *App) refreshFileOverlay() {
 		CurrentValue:  ta.Get("value").String(),
 		PendingEdit:   pendingEdit,
 	}
-	if g, ok := a.c.Grid(gid); ok {
-		if file, ok := g.Tiles[p.ContentID()]; ok {
-			if body, ok := a.tileBody(file); ok {
-				in.BlobCached = true
-				in.BlobContent = string(body)
-			}
+	if file != nil {
+		if body, ok := a.tileBody(file); ok {
+			in.BlobCached = true
+			in.BlobContent = string(body)
 		}
 	}
 	// A rebind rescues nothing and discards nothing: the old tile's typing
@@ -402,12 +368,11 @@ func (a *App) syncTextOverlayPosition() {
 	if display == "none" {
 		return
 	}
-	p := a.tree.FocusedPane()
-	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
+	p, _, r, d := a.focusedTextDescent()
+	if d.Mode != rpc.TextModeText {
 		a.overlays.textTextarea.Get("style").Set("display", "none")
 		return
 	}
-	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
@@ -432,14 +397,9 @@ const textSideInset = 6.0
 
 // onToggleFileMode saves the current buffer before switching to rendered.
 func (a *App) onToggleFileMode(p *pane.Pane) {
-	if p.ContentID() == "" {
+	// A tile with one face has no mode to flip to.
+	if _, _, _, d := a.focusedTextDescent(); !d.Toggle {
 		return
-	}
-	// A read-only non-renderable tile has no mode to flip to.
-	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if file, ok := g.Tiles[p.ContentID()]; ok && !textedit.ToggleVisible(file, a.tileReadOnly(file)) {
-			return
-		}
 	}
 	if p.TextMode == rpc.TextModeText {
 		// Flush pending typing from the cache, where the keystrokes live,
