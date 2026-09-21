@@ -246,15 +246,14 @@ func moveHomeRootFraming(ctx context.Context, tx *sql.Tx) error {
 		if err != nil {
 			return fmt.Errorf("read home root cy: %w", err)
 		}
-		var rootID sql.NullString
-		if err := tx.QueryRowContext(ctx,
-			`SELECT value FROM system WHERE key = ?`, systemKeyRootGridID).Scan(&rootID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		rootID, ok, err := systemValue(ctx, tx, systemKeyRootGridID)
+		if err != nil {
 			return fmt.Errorf("read home root grid id: %w", err)
 		}
-		if rootID.Valid {
+		if ok {
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND ns = ''`,
-				cx+0.5, cy+0.5, zoom, rootID.String); err != nil {
+				cx+0.5, cy+0.5, zoom, rootID); err != nil {
 				return fmt.Errorf("write home root framing: %w", err)
 			}
 		}

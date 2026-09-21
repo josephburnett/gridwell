@@ -24,55 +24,11 @@ const systemKeyTrashGridID = "trash_grid_id"
 // TrashGridID returns the trash grid, creating it on first use by the same
 // system-key pattern as ScratchGridID. Info declares it as a root menu entry.
 func (s *Store) TrashGridID(ctx context.Context) (string, error) {
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyTrashGridID).Scan(&v)
-	if err == nil {
-		return v, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	id, err := s.singletonGrid(ctx, systemKeyTrashGridID)
+	if err != nil {
 		return "", err
 	}
-	if err := s.withTx(ctx, func(tx *sql.Tx) error {
-		id, e := s.trashGridIDTx(ctx, tx)
-		if e != nil {
-			return e
-		}
-		v = strconv.FormatInt(id, 10)
-		return nil
-	}); err != nil {
-		return "", err
-	}
-	return v, nil
-}
-
-// trashGridIDTx reads or mints the trash grid inside an existing transaction.
-// The single writer connection serializes them, so the re-check inside the
-// transaction is the whole idempotence story.
-func (s *Store) trashGridIDTx(ctx context.Context, tx *sql.Tx) (int64, error) {
-	var v string
-	err := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyTrashGridID).Scan(&v)
-	if err == nil {
-		return strconv.ParseInt(v, 10, 64)
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
-	}
-	now := s.now().Unix()
-	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-		now, now)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
-		systemKeyTrashGridID, strconv.FormatInt(id, 10)); err != nil {
-		return 0, err
-	}
-	return id, nil
+	return strconv.FormatInt(id, 10), nil
 }
 
 // deleteBypassesTrash reports a real delete: the tile is in the scratch grid,
@@ -80,13 +36,12 @@ func (s *Store) trashGridIDTx(ctx context.Context, tx *sql.Tx) (int64, error) {
 // because an absent trash grid means nothing can be inside it yet.
 func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int64) (bool, error) {
 	for _, key := range []string{systemKeyScratchGridID, systemKeyTrashGridID} {
-		var v string
-		err := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, key).Scan(&v)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
+		v, ok, err := systemValue(ctx, tx, key)
 		if err != nil {
 			return false, err
+		}
+		if !ok {
+			continue
 		}
 		id, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
@@ -122,7 +77,7 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 	if err != nil {
 		return fmt.Errorf("tile %s: bad grid_id %q: %w", t.Id, t.GridId, err)
 	}
-	trashID, err := s.trashGridIDTx(ctx, tx)
+	trashID, err := s.singletonGridTx(ctx, tx, systemKeyTrashGridID)
 	if err != nil {
 		return err
 	}
