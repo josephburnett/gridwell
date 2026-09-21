@@ -71,6 +71,10 @@ func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault st
 	}
 }
 
+// bannerPrefix opens servingBanner's line; the sidecar and the "already
+// serving" reprint match on it.
+const bannerPrefix = "gridwell: serving on "
+
 // servingBanner is the one-line boot contract with the desktop sidecar,
 // parsed by apps/desktop/src/main/lines.ts. The web door's bound address
 // leads. auth= is the cookie value, so the sidecar authenticates its own
@@ -81,7 +85,7 @@ func servingBanner(addr, fedSocket, staticDir string, plugins int, password stri
 	if staticDir == "" {
 		staticDir = "embedded"
 	}
-	return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d auth=%s federation=%s)",
+	return fmt.Sprintf(bannerPrefix+"%s (static=%s plugins=%d auth=%s federation=%s)",
 		addr, staticDir, plugins, server.AuthToken(password), fedSocket)
 }
 
@@ -203,7 +207,7 @@ func RunServe(args []string) int {
 	lock, err := acquireServeLock(home)
 	if err != nil {
 		var held *errServeLockHeld
-		if errors.As(err, &held) && strings.HasPrefix(held.banner, "gridwell: serving on ") {
+		if errors.As(err, &held) && strings.HasPrefix(held.banner, bannerPrefix) {
 			fmt.Println("gridwell: already " + strings.TrimPrefix(held.banner, "gridwell: "))
 		}
 		return die("serve", err)

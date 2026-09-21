@@ -23,7 +23,7 @@ func RunStatus(_ []string) int {
 		die("status", err)
 		return 2
 	}
-	if running && strings.HasPrefix(banner, "gridwell: serving on ") {
+	if running && strings.HasPrefix(banner, bannerPrefix) {
 		fmt.Println("gridwell: already " + strings.TrimPrefix(banner, "gridwell: "))
 		return 0
 	}
