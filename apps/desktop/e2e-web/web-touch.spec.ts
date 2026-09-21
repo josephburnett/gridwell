@@ -136,6 +136,10 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
     'one-finger drag moved the tile on the server',
   ).toBeTruthy();
 
+  // flake, 2026-09-20, OPEN: this tap read textFocus "" twice on the CI runner
+  // and nowhere else. What waitIdle guarantees after a CDP touch drag is the
+  // open question; docs/flake-ledger.md carries the evidence.
+  //
   // Tap descends into it; two-finger tap ascends back out.
   await window.touchscreen.tap(toPt.x, toPt.y);
   await gw.waitIdle();
