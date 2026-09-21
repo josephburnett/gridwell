@@ -259,9 +259,6 @@ func TestServesStaleWhenDark(t *testing.T) {
 	}
 
 	// Warm every read path online.
-	if _, err := cc.Info(ctx, &pb.InfoRequest{}); err != nil {
-		t.Fatal(err)
-	}
 	warm, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -277,9 +274,6 @@ func TestServesStaleWhenDark(t *testing.T) {
 	// THE TUNNEL DROPS.
 	upstream.goDark()
 
-	if _, err := cc.Info(ctx, &pb.InfoRequest{}); err != nil {
-		t.Fatalf("dark Info should serve the remembered handshake: %v", err)
-	}
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatalf("dark GetGrid should serve stale: %v", err)

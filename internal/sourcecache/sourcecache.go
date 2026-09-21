@@ -40,10 +40,7 @@ const cacheApplicationID int64 = 0x67776d63
 const cacheSchemaVersion = 1
 
 const schemaDDL = `
-CREATE TABLE IF NOT EXISTS info (
-    k     TEXT PRIMARY KEY,
-    proto BLOB NOT NULL
-);
+DROP TABLE IF EXISTS info;
 CREATE TABLE IF NOT EXISTS pluginlists (
     ns    TEXT PRIMARY KEY,
     proto BLOB NOT NULL
@@ -362,31 +359,6 @@ func (c *Layer) emitHealth(healthy bool, detail string) {
 }
 
 func now() int64 { return time.Now().Unix() }
-
-func (c *Layer) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
-	resp, err := c.Namespace.Info(ctx, in)
-	c.noteReach(err, "", nil) // an unnamed call: reachability, no grid to re-read
-	if err == nil {
-		if b, merr := proto.Marshal(resp); merr == nil {
-			_, werr := c.db.ExecContext(ctx, `INSERT INTO info (k, proto) VALUES ('info', ?)
-				ON CONFLICT(k) DO UPDATE SET proto=excluded.proto`, b)
-			c.noteCache("store info", werr)
-		}
-		return resp, nil
-	}
-	if !gwerr.IsTransport(err) {
-		return nil, err
-	}
-	var b []byte
-	if serr := c.db.QueryRowContext(ctx, `SELECT proto FROM info WHERE k='info'`).Scan(&b); serr != nil {
-		return nil, err // miss: the original transport error stands
-	}
-	cached := &pb.InfoResponse{}
-	if uerr := proto.Unmarshal(b, cached); uerr != nil {
-		return nil, err
-	}
-	return cached, nil
-}
 
 // Handshake forwards the routed plugin list and remembers the answer per
 // namespace, so a remote pane's + menu is readable while the source is dark.
