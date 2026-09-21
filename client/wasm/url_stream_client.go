@@ -60,22 +60,6 @@ func contentViewBounds(r pane.Rect) viewBounds {
 	return viewBounds{X: x, Y: y, W: w, H: h}
 }
 
-// urlTileForPane resolves the url tile a pane is descended into. A tile at its
-// own address and one whose plugin serves its page share the one view.
-func (a *App) urlTileForPane(p *pane.Pane, tileID string) (*gridwellv1.Tile, bool) {
-	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if t, ok := g.Tiles[tileID]; ok && rpc.WebContent(t) {
-			return t, true
-		}
-	}
-	// An ephemeral tile is focused in the scratch grid without re-anchoring
-	// the pane, so resolve by id from any cached grid.
-	if t := a.findTileByID(tileID); t != nil && rpc.WebContent(t) {
-		return t, true
-	}
-	return nil, false
-}
-
 // webAddress resolves the address a url tile presents at, through
 // urlview.Address. A served page's door address is derived at use time, never
 // persisted, because the desktop origin is an ephemeral port; every content op
@@ -92,8 +76,10 @@ func (a *App) webAddress(t *gridwellv1.Tile) string {
 // tile). What that does to the row is shellconn.DecideGoLive's; this resolves
 // the row and runs the plan.
 func (a *App) openURLStream(p *pane.Pane, tileID string) {
-	t, ok := a.urlTileForPane(p, tileID)
-	if !ok {
+	// A tile at its own address and one whose plugin serves its page share
+	// the one view.
+	t, ok := a.tileForPane(p, tileID)
+	if !ok || !rpc.WebContent(t) {
 		return
 	}
 	plan, ok := shellconn.DecideGoLive(a.caps.LiveURL, t.UrlFrozen, rpc.LeafLink(t))

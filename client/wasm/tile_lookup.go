@@ -54,24 +54,29 @@ func (a *App) findTileByID(id string) *gridwellv1.Tile {
 	return nil
 }
 
-// descendedTile resolves the tile a pane is descended into. The fallback
-// by-id walk is for a tile off the pane's grid: an ephemeral url visit
-// focuses one in the scratch grid, and a delete moves a descended row to the
-// trash, neither of which re-anchors the pane. False when the pane is not
-// descended or the tile is not cached yet.
-func (a *App) descendedTile(p *pane.Pane) (*gridwellv1.Tile, bool) {
-	if p.ContentID() == "" {
+// tileForPane resolves a tile a pane names. The fallback by-id walk is for a
+// tile off the pane's grid: an ephemeral url visit focuses one in the scratch
+// grid, and a delete moves a descended row to the trash, neither of which
+// re-anchors the pane. False when the tile is not cached yet.
+func (a *App) tileForPane(p *pane.Pane, tileID string) (*gridwellv1.Tile, bool) {
+	if tileID == "" {
 		return nil, false
 	}
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if t, ok := g.Tiles[p.ContentID()]; ok {
+		if t, ok := g.Tiles[tileID]; ok {
 			return t, true
 		}
 	}
-	if t := a.findTileByID(p.ContentID()); t != nil {
+	if t := a.findTileByID(tileID); t != nil {
 		return t, true
 	}
 	return nil, false
+}
+
+// descendedTile resolves the tile a pane is descended into, false when it is
+// not descended.
+func (a *App) descendedTile(p *pane.Pane) (*gridwellv1.Tile, bool) {
+	return a.tileForPane(p, p.ContentID())
 }
 
 // focusedTextDescent is the one read behind every text overlay: the focused
