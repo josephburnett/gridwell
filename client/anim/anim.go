@@ -28,14 +28,7 @@ func Progress(nowMs, startMs, durationMs float64) float64 {
 	if durationMs <= 0 {
 		return 1
 	}
-	t := (nowMs - startMs) / durationMs
-	if t < 0 {
-		return 0
-	}
-	if t > 1 {
-		return 1
-	}
-	return t
+	return min(max((nowMs-startMs)/durationMs, 0), 1)
 }
 
 // Animation is a 2D motion in whatever units the caller chooses.

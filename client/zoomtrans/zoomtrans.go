@@ -76,20 +76,8 @@ func EffectiveCenter(w Well) (cx, cy float64) {
 // jumping, and a clamped zoom leaves the center alone, so there is no drift at
 // the limits.
 func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax float64) (zoom, newCx, newCy float64) {
-	step := deltaY / 200.0
-	if step > 0.5 {
-		step = 0.5
-	}
-	if step < -0.5 {
-		step = -0.5
-	}
-	z := oldZoom * math.Pow(factorBase, -step*4)
-	if z < zMin {
-		z = zMin
-	}
-	if z > zMax {
-		z = zMax
-	}
+	step := min(max(deltaY/200.0, -0.5), 0.5)
+	z := min(max(oldZoom*math.Pow(factorBase, -step*4), zMin), zMax)
 	if z == oldZoom {
 		return z, cx, cy
 	}

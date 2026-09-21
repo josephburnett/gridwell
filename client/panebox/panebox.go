@@ -78,12 +78,4 @@ func ModalCardPos(paneRect pane.Rect, cardW, cardH, winW, winH float64) (x, y fl
 
 // clampAxis keeps [pos, pos+size] inside [0, limit], preferring 0 when size
 // exceeds limit.
-func clampAxis(pos, size, limit float64) float64 {
-	if pos+size > limit {
-		pos = limit - size
-	}
-	if pos < 0 {
-		pos = 0
-	}
-	return pos
-}
+func clampAxis(pos, size, limit float64) float64 { return max(min(pos, limit-size), 0) }

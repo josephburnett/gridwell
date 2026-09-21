@@ -34,15 +34,7 @@ func Of(stored float64) float64 {
 }
 
 // Clamp holds a zoom inside [Min, Max].
-func Clamp(z float64) float64 {
-	if z < Min {
-		return Min
-	}
-	if z > Max {
-		return Max
-	}
-	return z
-}
+func Clamp(z float64) float64 { return min(max(z, Min), Max) }
 
 // ShellFontPx is the terminal font at zoom z.
 func ShellFontPx(z float64) int { return int(shellBaseFontPx*z + 0.5) }

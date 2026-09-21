@@ -164,15 +164,7 @@ func (t *Tree) SplitOnSideAt(side Side, ratio float64) (*Pane, error) {
 	return newP, nil
 }
 
-func clamp01(x float64) float64 {
-	if x < 0 {
-		return 0
-	}
-	if x > 1 {
-		return 1
-	}
-	return x
-}
+func clamp01(x float64) float64 { return min(max(x, 0), 1) }
 
 // findParentSplit is the Split whose direct child is targetID.
 func findParentSplit(n *TreeNode, targetID string) *Split {
