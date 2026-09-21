@@ -46,6 +46,24 @@ func FramingOf(t *gridwellv1.Tile) Framing {
 // FramingChanged reports whether next differs from cur in any field.
 func FramingChanged(cur, next Framing) bool { return cur != next }
 
+// Box is the window a text tile is shown in: the descended pane's inner box,
+// in doc px, which is the rectangle a framing writer measures.
+type Box struct{ W, H int64 }
+
+// ShownFraming is the framing a text row is already showing: the stored one,
+// or, when the row is all zeros and so has never been framed, what its readers
+// put in its place — the top of the doc in the box it is open in, at the mode
+// DescentMode picks with nothing stored. Both framing writers diff against
+// this rather than against the zero row, which is not a framing at all, so a
+// document the user only looked at is never stamped with one.
+func ShownFraming(stored Framing, box Box, readOnly bool) Framing {
+	if stored != (Framing{}) {
+		return stored
+	}
+	return Framing{W: box.W, H: box.H,
+		Mode: DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})}
+}
+
 // ModeInput is everything the descent-mode decision reads.
 type ModeInput struct {
 	TextDocument bool // rpc.TextDocument: nothing else has a text mode

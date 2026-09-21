@@ -140,17 +140,26 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	viewW := int64(iw + 0.5)
 	viewH := int64(ih + 0.5)
 
-	// Patch the cache first, so the ascent transition reflects the framed
-	// window before the round trip lands.
-	a.c.PatchTile(file, func(t *gridwellv1.Tile) {
-		t.TextX = scrollX
-		t.TextY = scrollY
-		t.TextW = viewW
-		t.TextH = viewH
-		t.TextMode = p.TextMode
-	})
+	// Only when something moved, measured against what the tile is shown at
+	// rather than against the stored row: see textedit.ShownFraming. A pure
+	// descend-and-ascent writes nothing, and leaves nothing in the cache
+	// either, since the next ascent diffs against what it finds there.
+	next := textedit.Framing{X: scrollX, Y: scrollY, W: viewW, H: viewH, Mode: p.TextMode}
+	reframed := textedit.FramingChanged(
+		textedit.ShownFraming(textedit.FramingOf(file), textedit.Box{W: viewW, H: viewH}, !editable),
+		next)
+	if reframed {
+		// Patched before the round trip, so the ascent transition reflects
+		// the framed window rather than the one the server still holds.
+		a.c.PatchTile(file, func(t *gridwellv1.Tile) {
+			t.TextX = next.X
+			t.TextY = next.Y
+			t.TextW = next.W
+			t.TextH = next.H
+			t.TextMode = next.Mode
+		})
+	}
 
-	mode := p.TextMode
 	// Through the document's save queue, because a debounced keystroke save
 	// may still be in flight and this claims a version too. The chain is
 	// textedit.SaveQueueKey's, so a leaf link's ascent flush cannot race the
@@ -165,15 +174,12 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 				return
 			}
 		}
-		// Only when something changed, per textedit.FramingChanged: a pure
-		// descend-and-ascent must not write.
-		next := textedit.Framing{X: scrollX, Y: scrollY, W: viewW, H: viewH, Mode: mode}
-		if !textedit.FramingChanged(textedit.FramingOf(file), next) {
+		if !reframed {
 			return
 		}
 		req := &gridwellv1.SetTileRequest{TileId: file.Id,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText,
-				TextX: scrollX, TextY: scrollY, TextW: viewW, TextH: viewH, TextMode: mode}}
+				TextX: next.X, TextY: next.Y, TextW: next.W, TextH: next.H, TextMode: next.Mode}}
 		a.do(write{
 			label: "SetTextView", gid: gid, id: file.Id, refetchOnOK: true,
 			call: func(ctx context.Context) error {

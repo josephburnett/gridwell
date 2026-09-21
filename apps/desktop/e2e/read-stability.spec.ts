@@ -16,11 +16,10 @@ import { settle } from './cadence';
 // freezes a frame, which is what the machine observed rather than what the user
 // left, and it carries no claim and no bump.
 //
-// The trip under test is not a tile's first, uniformly for all four kinds,
-// because a text tile's first look still stamps it: descending into a document
-// nobody has opened writes text_w and text_h from the window it was opened in,
-// and text_mode from the descent. That is the stamp f1161d94 took off a grid
-// row, on the row a text tile keeps its window in.
+// The first trip is asserted too, and it is the one that matters: a row the
+// first look stamps carries a framing from then on, so every trip after it
+// compares equal and a spec that started at the second would pass over the
+// stamp.
 
 // framingWrites is the whole of what the settle persister dispatches.
 async function framingWrites(window: any): Promise<number> {
@@ -94,19 +93,21 @@ for (const kind of ['well', 'markdown', 'url', 'shell'] as const) {
       await gw.waitIdle();
     }
 
-    // The first visit, whose stamp is the header's subject.
-    await roundTrip(gw, window, cx, cy, settleMs);
-
     const before = tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy)!;
     const writes = await framingWrites(window);
 
-    await roundTrip(gw, window, cx, cy, settleMs);
+    for (const trip of ['first', 'second']) {
+      await roundTrip(gw, window, cx, cy, settleMs);
 
-    const after = tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy)!;
-    expect(stable(after), `the ${kind} round trip changed the stored row`).toBe(stable(before));
-    expect(await framingWrites(window), `the ${kind} round trip dispatched a framing write`).toBe(
-      writes,
-    );
+      const after = tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy)!;
+      expect(stable(after), `the ${trip} ${kind} round trip changed the stored row`).toBe(
+        stable(before),
+      );
+      expect(
+        await framingWrites(window),
+        `the ${trip} ${kind} round trip dispatched a framing write`,
+      ).toBe(writes);
+    }
 
     if (kind === 'shell') {
       // tmux outlives the page, so the session goes with the tile.
@@ -135,10 +136,6 @@ for (const kind of ['well', 'markdown'] as const) {
     await expect
       .poll(async () => tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy))
       .toBeTruthy();
-    if (kind === 'markdown') {
-      // Past the first look's stamp; see the header.
-      await roundTrip(gw, window, cx, cy, settleMs);
-    }
     await gw.descendCell(cx, cy);
     await settle(window, settleMs);
     const inside = await gw.focused();

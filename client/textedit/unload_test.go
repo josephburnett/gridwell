@@ -49,6 +49,44 @@ func TestFramingChangedCountsEveryField(t *testing.T) {
 	}
 }
 
+// A never-framed row is not a framing but the absence of one: no window and no
+// mode, and what the tile shows in its place is the top of the doc in the box
+// it is open in, at the mode a descent picks with nothing stored. Both framing
+// writers must diff against that, or the first ascent out of a document nobody
+// has opened stamps it with a window and a mode the user never chose.
+func TestLookingAtADocumentNeverStampsAWindowOnIt(t *testing.T) {
+	for _, box := range []Box{{W: 600, H: 400}, {W: 320, H: 900}} {
+		for _, readOnly := range []bool{false, true} {
+			mode := DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})
+			shown := ShownFraming(Framing{}, box, readOnly)
+			// What an ascent measures after a pure look: the box it was
+			// opened in, the top of the doc, the mode the descent installed.
+			if FramingChanged(shown, Framing{W: box.W, H: box.H, Mode: mode}) {
+				t.Errorf("box %+v read-only %v: a look stamped %+v", box, readOnly, shown)
+			}
+			other := rpc.TextModeRendered
+			if mode == rpc.TextModeRendered {
+				other = rpc.TextModeText
+			}
+			for name, next := range map[string]Framing{
+				"a scroll":   {Y: 120, W: box.W, H: box.H, Mode: mode},
+				"a resize":   {W: box.W + 40, H: box.H, Mode: mode},
+				"a retoggle": {W: box.W, H: box.H, Mode: other},
+			} {
+				if !FramingChanged(shown, next) {
+					t.Errorf("box %+v read-only %v: %s must still be written", box, readOnly, name)
+				}
+			}
+		}
+	}
+	// A framed row is its own framing, whatever box it is read in, so every
+	// reframe of one is written as before.
+	stored := Framing{X: 1, Y: 2, W: 300, H: 400, Mode: rpc.TextModeText}
+	if got := ShownFraming(stored, Box{W: 900, H: 900}, false); got != stored {
+		t.Errorf("a framed row shows %+v, want the stored %+v", got, stored)
+	}
+}
+
 func TestDescentModeTable(t *testing.T) {
 	cases := []struct {
 		name string
