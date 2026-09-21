@@ -247,9 +247,10 @@ not edit sources while one runs. A flake rerun only counts against a freshly
 built tree. A spec on `docs/flake-ledger.md` still gets a fresh look before
 you blame a change.
 
-A dependency or toolchain bump commits under the `deps:` prefix, and its
-message names the gates it ran. The bump touches every seam at once, so the
-green it earns is only worth the gates behind it.
+A dependency or toolchain bump commits under the `deps:` prefix. A `deps:`
+bump or a shim change names the gates it ran in its message: the bump touches
+every seam at once, and nothing in `make check` executes the shim, so in both
+the green a commit earns is only worth the gates behind it.
 
 ## Before you commit
 
@@ -259,6 +260,8 @@ green it earns is only worth the gates behind it.
 - [ ] A test fails before and passes after, across the seam.
 - [ ] For a bug fix, the commit message says why it was not caught.
 - [ ] `make check` is green; the native gates too if I touched that layer.
+- [ ] For a `deps:` bump or a change under the shim, the commit message
+      names the gates it ran.
 - [ ] No error is swallowed. Unacknowledged writes park in `client/outbox`
       and nothing user-made is dropped without a server verdict.
 - [ ] Nothing the user can change lives only on the client.
