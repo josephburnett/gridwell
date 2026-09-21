@@ -121,8 +121,7 @@ func (a *App) paletteTileRect(p *pane.Pane, i int) (x, y, w, h float64) {
 // strip when there is one, plugins on top, then the primitives.
 func (a *App) drawPalette(p *pane.Pane) {
 	mx, my, mw, mh := a.paletteRect(p)
-	a.cctx.Set("fillStyle", a.pal.MenuBg)
-	a.cctx.Call("fillRect", mx, my, mw, mh)
+	fillRectC(a.cctx, mx, my, mw, mh, a.pal.MenuBg)
 	a.cctx.Set("strokeStyle", a.pal.PaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
@@ -141,8 +140,7 @@ func (a *App) drawPalette(p *pane.Pane) {
 // pointing the way the press moves the section. A band and never a swatch, so
 // nothing invites the drag a template tile takes.
 func (a *App) drawPaletteToggle(r pane.Rect, c palette.Chevron) {
-	a.cctx.Set("fillStyle", a.pal.PlusBg)
-	a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
+	fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.PlusBg)
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
 	const halfW = 6.0
@@ -170,8 +168,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		// A plugin swatch is the linked well it drops into a grid, dashed
 		// because a cross-plugin link can be unlinked. Drawn identically
 		// here, as the drag ghost, and once dropped.
-		a.cctx.Set("fillStyle", a.pal.Bg)
-		a.cctx.Call("fillRect", x, y, w, h)
+		fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, true /* dashed */, false /* selected */)
 		a.drawPluginGlyph(door.RowGlyph(item.plugin), x, y, w, h)
 		a.drawTileBannerLabel(n, x, y, w, h, false)
@@ -227,8 +224,7 @@ func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 				color = a.pal.DoorwayBrokenTint
 			}
 		}
-		a.cctx.Set("fillStyle", color)
-		a.cctx.Call("fillRect", x, y, w, h)
+		fillRectC(a.cctx, x, y, w, h, color)
 	}
 }
 

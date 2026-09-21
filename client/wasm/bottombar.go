@@ -99,8 +99,7 @@ func (a *App) drawBottomBar() {
 	}
 	band, _ := a.barTheme()
 	c := a.cctx
-	c.Set("fillStyle", band)
-	c.Call("fillRect", bx, top, bw, wsbar.RowH)
+	fillRectC(c, bx, top, bw, wsbar.RowH, band)
 
 	chain := a.navChain()
 	segs := a.bottomBarSegments(chain)
@@ -134,8 +133,7 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 	x := bx + bw - wsbar.SlotW - chipW - 8
 	y := top + (wsbar.RowH-chipH)/2
 	c := a.cctx
-	c.Set("fillStyle", a.pal.CachedChipBg)
-	c.Call("fillRect", x, y, chipW, chipH)
+	fillRectC(c, x, y, chipW, chipH, a.pal.CachedChipBg)
 	drawLabel(c, "cached", x+chipW/2, y+chipH/2, labelOpts{
 		font: "10px system-ui, sans-serif", fill: a.pal.CachedChipFg,
 		align: "center", baseline: "middle",
@@ -146,12 +144,11 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 // standing out from the preview squares as the obvious rename target.
 func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	c := a.cctx
+	band := a.pal.CrumbIdle
 	if level == a.ws.Depth() {
-		c.Set("fillStyle", a.pal.CrumbHere)
-	} else {
-		c.Set("fillStyle", a.pal.CrumbIdle)
+		band = a.pal.CrumbHere
 	}
-	c.Call("fillRect", s.X+2, top+3, s.W-4, wsbar.RowH-6)
+	fillRectC(c, s.X+2, top+3, s.W-4, wsbar.RowH-6, band)
 	label := ""
 	if f := a.ws.At(level); f != nil {
 		label = f.Name
@@ -353,8 +350,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 		if cr.Anchor != "" {
 			// A root crumb: the namespace's identity glyph, the same drawing
 			// as its menu swatch.
-			c.Set("fillStyle", a.pal.Bg)
-			c.Call("fillRect", x, y, side, side)
+			fillRectC(c, x, y, side, side, a.pal.Bg)
 			a.drawPluginGlyph(a.pluginGlyph(cr.Anchor), x, y, side, side)
 			c.Set("strokeStyle", a.pal.FocusBorder)
 			c.Set("lineWidth", 1.0)

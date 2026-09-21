@@ -45,6 +45,13 @@ func withClip(c js.Value, x, y, w, h float64, paint func()) {
 	c.Call("restore")
 }
 
+// fillRectC fills one rect in color. It leaves fillStyle set, as the two calls
+// it replaces did.
+func fillRectC(c js.Value, x, y, w, h float64, color string) {
+	c.Set("fillStyle", color)
+	c.Call("fillRect", x, y, w, h)
+}
+
 // labelOpts is the face drawLabel wears. An empty align or baseline is the
 // canvas default, and maxW 0 is unconstrained.
 type labelOpts struct {
@@ -125,8 +132,7 @@ func (a *App) drawDeadLinkFace(n *gridwellv1.Tile, x, y, w, h float64) {
 	if !a.deadLink(n) {
 		return
 	}
-	a.cctx.Set("fillStyle", a.pal.DeadLinkVeil)
-	a.cctx.Call("fillRect", x, y, w, h)
+	fillRectC(a.cctx, x, y, w, h, a.pal.DeadLinkVeil)
 	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.DeadLink, true, false)
 	a.drawTileBannerLabelIn(n, x, y, w, h, a.pal.DeadLink)
 }
@@ -342,8 +348,7 @@ func (a *App) draw() {
 		}
 	}
 
-	a.cctx.Set("fillStyle", a.pal.Bg)
-	a.cctx.Call("fillRect", 0, 0, a.width, a.height)
+	fillRectC(a.cctx, 0, 0, a.width, a.height, a.pal.Bg)
 
 	rects := a.layoutPanes()
 	for paneID, r := range rects {
@@ -463,8 +468,7 @@ func (a *App) drawErrStrip() {
 		if row.Notice.Severity == errsurface.Info {
 			bg, fg = a.pal.InfoStripBg, a.pal.InfoStripText
 		}
-		a.cctx.Set("fillStyle", bg)
-		a.cctx.Call("fillRect", 0, row.Y, a.width, errsurface.RowH)
+		fillRectC(a.cctx, 0, row.Y, a.width, errsurface.RowH, bg)
 		label := errsurface.Label(row.Notice)
 		if row.OverflowCount > 0 {
 			label += "  (+" + strconv.Itoa(row.OverflowCount) + " more)"
@@ -491,8 +495,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// the coordinate system. A focused text tile has none, so it gets a
 		// plain background.
 		if p.ContentID() != "" {
-			a.cctx.Set("fillStyle", a.pal.Bg)
-			a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
+			fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.Bg)
 		} else {
 			a.drawGridLines(a.pal.GridLineInterior, pscreen, r)
 		}
@@ -515,8 +518,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					switch {
 					case rpc.TextDocument(file):
 						ix, iy, iw, ih := textInnerBox(r)
-						a.cctx.Set("fillStyle", a.pal.FileInnerBg)
-						a.cctx.Call("fillRect", ix, iy, iw, ih)
+						fillRectC(a.cctx, ix, iy, iw, ih, a.pal.FileInnerBg)
 						a.drawMarkdownInPane(p, file, ix, iy, iw, ih)
 					case rpc.WebContent(file):
 						// One descent for both url shapes, its own address or
@@ -528,8 +530,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						a.drawShellTileInPane(p, file, ix, iy, iw, ih)
 					default:
 						ix, iy, iw, ih := textInnerBox(r)
-						a.cctx.Set("fillStyle", a.pal.FileInnerBg)
-						a.cctx.Call("fillRect", ix, iy, iw, ih)
+						fillRectC(a.cctx, ix, iy, iw, ih, a.pal.FileInnerBg)
 					}
 				}
 			} else {
@@ -755,8 +756,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		a.fetchGrid(n.ChildGridId)
 	}
 	// Matching the pane, so the outline crossing the screen edge has no jump.
-	a.cctx.Set("fillStyle", a.pal.Bg)
-	a.cctx.Call("fillRect", x, y, w, h)
+	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 
 	// previewCell is parentCell times the well's intrinsic ViewZoom. At
 	// parent = Overtake_now it matches the just-after-swap live cell, so the
@@ -866,8 +866,7 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 		return
 	}
 	withClip(a.cctx, ix, iy, iw, ih, func() {
-		a.cctx.Set("fillStyle", a.pal.SourceLabelBg)
-		a.cctx.Call("fillRect", ix, iy, iw, bannerH)
+		fillRectC(a.cctx, ix, iy, iw, bannerH, a.pal.SourceLabelBg)
 		bold := fontSpec(fontPx, bannerFontFamily, true)
 		drawLabel(a.cctx, label, ix+4, iy+bannerH/2, labelOpts{
 			font: bold, fill: textColor, baseline: "middle",
@@ -1014,8 +1013,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 		// The flat face a pane tile shows one level down, and in a ghost.
 		fill, line = a.pal.PaneTileFill, a.pal.PaneTileBorder
 	}
-	c.Set("fillStyle", fill)
-	c.Call("fillRect", x, y, w, h)
+	fillRectC(c, x, y, w, h, fill)
 	if line != "" {
 		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	}

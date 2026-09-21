@@ -87,8 +87,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", a.pal.FileInnerBg)
-		a.cctx.Call("fillRect", x, y, w, h)
+		fillRectC(a.cctx, x, y, w, h, a.pal.FileInnerBg)
 
 		// Content starts below the banner strip, on bannerGeom's shared
 		// formula, so the alt text never overprints the first line.
