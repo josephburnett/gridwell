@@ -75,17 +75,13 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]*gridwel
 		id   int64
 		text string
 	}
-	var hits []hit
-	for rows.Next() {
+	scanHit := func(rows *sql.Rows) (hit, error) {
 		var h hit
-		if err := rows.Scan(&h.id, &h.text); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		hits = append(hits, h)
+		err := rows.Scan(&h.id, &h.text)
+		return h, err
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	hits, err := collect(rows, scanHit)
+	if err != nil {
 		return nil, err
 	}
 	for _, h := range hits {
@@ -105,17 +101,8 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]*gridwel
 	if err != nil {
 		return nil, err
 	}
-	hits = hits[:0]
-	for rows.Next() {
-		var h hit
-		if err := rows.Scan(&h.id, &h.text); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		hits = append(hits, h)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	hits, err = collect(rows, scanHit)
+	if err != nil {
 		return nil, err
 	}
 	for _, h := range hits {

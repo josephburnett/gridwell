@@ -126,26 +126,11 @@ func (s *Store) createTile(
 func (s *Store) CreateWell(ctx context.Context, gridID string, x, y, w, h int64, label string) (*gridwellv1.Tile, error) {
 	return s.createTile(ctx, gridID, x, y, w, h,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
-			res, err := tx.ExecContext(ctx,
-				`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-				now, now)
+			childGridID, err := insertGrid(ctx, tx, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert child grid: %w", err)
 			}
-			childGridID, err := res.LastInsertId()
-			if err != nil {
-				return 0, err
-			}
-			res, err = tx.ExecContext(ctx, `
-				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					view_cx, view_cy, view_zoom, child_grid_id, alt_text,
-					created_at, updated_at)
-				VALUES (?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-				gid, x, y, w, h, childGridID, label, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert well: %w", err)
-			}
-			return res.LastInsertId()
+			return insertWellRow(ctx, tx, gid, x, y, w, h, childGridID, label, now)
 		})
 }
 
@@ -205,6 +190,22 @@ func (s *Store) CreateText(ctx context.Context, gridID string, x, y, w, h int64,
 			}
 			return tileID, nil
 		})
+}
+
+// insertWellRow is the single place the interior-well INSERT lives, shared by
+// CreateWell and the trash's month wells so they cannot drift. Zero framing
+// means never visited (framing.go).
+func insertWellRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGridID int64, label string, now int64) (int64, error) {
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO tiles (grid_id, kind, x, y, w, h,
+			view_cx, view_cy, view_zoom, child_grid_id, alt_text,
+			created_at, updated_at)
+		VALUES (?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+		gridID, x, y, w, h, childGridID, label, now, now)
+	if err != nil {
+		return 0, fmt.Errorf("insert well: %w", err)
+	}
+	return res.LastInsertId()
 }
 
 // insertURLRow is the single place the url INSERT lives, shared by CreateURL
@@ -294,6 +295,13 @@ func (s *Store) CreateScratchShell(ctx context.Context) (*gridwellv1.Tile, error
 	})
 }
 
+// The columns a text view write touches, here and in Namespace.SetTextView.
+// The mode rides beside the window on every row but a link.
+const (
+	textViewSet = `text_x = ?, text_y = ?, text_w = ?, text_h = ?`
+	textModeSet = `, text_mode = ?`
+)
+
 // SetTextView updates a text tile's framed window and its rendered or text
 // mode. Like SetFraming this is framing, not content: no claim, no bump.
 func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY, textW, textH int64, textMode string) (*gridwellv1.Tile, error) {
@@ -312,7 +320,7 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 			// text_mode NULL on a link, because framing is per-link local and
 			// the mode is not.
 			_, err := tx.ExecContext(ctx,
-				`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, updated_at = ? WHERE id = ?`,
+				`UPDATE tiles SET `+textViewSet+`, updated_at = ? WHERE id = ?`,
 				textX, textY, textW, textH, s.now().Unix(), tileID)
 			if err != nil {
 				return err
@@ -325,7 +333,7 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 			textModeArg = textMode
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET `+textViewSet+textModeSet+`, updated_at = ? WHERE id = ?`,
 			textX, textY, textW, textH, textModeArg, s.now().Unix(), tileID); err != nil {
 			return err
 		}

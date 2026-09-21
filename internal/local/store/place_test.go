@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -186,5 +188,41 @@ func TestPlaceTileExitWellHasNoLocalSubtree(t *testing.T) {
 		TileId: exit.Id, GridId: interior.ChildGridId, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("placing an exit well into an interior grid: %v", err)
+	}
+}
+
+// No verb can make a child_grid_id cycle, but a corrupted file can hold one,
+// and the placement walk must answer rather than spin forever.
+func TestPlaceTileAncestryCycleAnswers(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+	moving := placeWell(t, s, root, 0, 0)
+	p := placeWell(t, s, root, 1, 0)
+	q := placeWell(t, s, root, 2, 0)
+
+	// Hang each of the two wells under the other's child grid, so walking up
+	// from either grid never reaches a root.
+	for _, swap := range [][2]string{{p.Id, q.ChildGridId}, {q.Id, p.ChildGridId}} {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE tiles SET grid_id = ? WHERE id = ?`, swap[1], swap[0]); err != nil {
+			t.Fatalf("seed cycle: %v", err)
+		}
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			TileId: moving.Id, GridId: p.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
+		})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "ancestry deeper") {
+			t.Fatalf("place into a cyclic grid: got %v, want the capped-ancestry error", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("PlaceTile hung walking a cyclic ancestry chain")
 	}
 }

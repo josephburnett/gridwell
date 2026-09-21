@@ -56,12 +56,13 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*grid
 // Both derive from columns.go, so they cannot fall out of step.
 var tileColumns = wireColumns(tilesColumns)
 
-// scanTile scans a single row into a Tile.
+// scanTile scans a single row into a Tile. extra takes the destinations of any
+// columns a caller selected beyond the descriptor's, in their SELECT order.
 func scanTile(scanner interface {
 	Scan(dest ...any) error
-}) (*gridwellv1.Tile, error) {
+}, extra ...any) (*gridwellv1.Tile, error) {
 	var n gridwellv1.Tile
-	if err := scanner.Scan(scanDests(tilesColumns, &n)...); err != nil {
+	if err := scanner.Scan(append(scanDests(tilesColumns, &n), extra...)...); err != nil {
 		return nil, err
 	}
 	return &n, nil
@@ -84,16 +85,45 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []*gridwellv1.Tile
-	for rows.Next() {
-		n, err := scanTile(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, n)
+	return collect(rows, func(rows *sql.Rows) (*gridwellv1.Tile, error) { return scanTile(rows) })
+}
+
+// insertGrid mints an empty grid row. The migration chain keeps its own copy
+// of this INSERT: a migration step must materialize the shape of the version
+// it is building, not the current one.
+func insertGrid(ctx context.Context, x execer, now int64) (int64, error) {
+	res, err := x.ExecContext(ctx,
+		`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`, now, now)
+	if err != nil {
+		return 0, err
 	}
-	return out, rows.Err()
+	return res.LastInsertId()
+}
+
+// ancestryCap bounds the well-parent walk, which a cycle would loop forever.
+const ancestryCap = 256
+
+// gridInSubtree walks the well-parent chain from gridID up to a root, reporting
+// whether rootID is on the way. It is the one ancestor walk: the trash's
+// bypass check and placement's own-subtree refusal are both this question.
+func gridInSubtree(ctx context.Context, tx *sql.Tx, gridID, rootID int64) (bool, error) {
+	g := gridID
+	for i := 0; i < ancestryCap; i++ {
+		if g == rootID {
+			return true, nil
+		}
+		var parent int64
+		err := tx.QueryRowContext(ctx,
+			`SELECT grid_id FROM tiles WHERE child_grid_id = ?`, g).Scan(&parent)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		g = parent
+	}
+	return false, fmt.Errorf("grid %d: ancestry deeper than %d (cycle?)", gridID, ancestryCap)
 }
 
 // GetTile returns a single tile by ID.

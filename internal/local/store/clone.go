@@ -197,21 +197,14 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 		blob    sql.NullInt64
 		preview sql.NullInt64
 	}
-	var refs []ref
-	for rows.Next() {
+	refs, err := collect(rows, func(rows *sql.Rows) (ref, error) {
 		var r ref
-		if err := rows.Scan(&r.id, &r.kind, &r.child, &r.blob, &r.preview); err != nil {
-			rows.Close()
-			return err
-		}
-		refs = append(refs, r)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
+		err := rows.Scan(&r.id, &r.kind, &r.child, &r.blob, &r.preview)
+		return r, err
+	})
+	if err != nil {
 		return err
 	}
-	rows.Close()
-
 	for _, r := range refs {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, r.id); err != nil {
 			return err

@@ -21,61 +21,14 @@ import (
 
 const systemKeyTrashGridID = "trash_grid_id"
 
-// trashAncestryCap bounds the ancestor walk, which a cycle would loop forever.
-const trashAncestryCap = 256
-
 // TrashGridID returns the trash grid, creating it on first use by the same
 // system-key pattern as ScratchGridID. Info declares it as a root menu entry.
 func (s *Store) TrashGridID(ctx context.Context) (string, error) {
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyTrashGridID).Scan(&v)
-	if err == nil {
-		return v, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	id, err := s.singletonGrid(ctx, systemKeyTrashGridID)
+	if err != nil {
 		return "", err
 	}
-	if err := s.withTx(ctx, func(tx *sql.Tx) error {
-		id, e := s.trashGridIDTx(ctx, tx)
-		if e != nil {
-			return e
-		}
-		v = strconv.FormatInt(id, 10)
-		return nil
-	}); err != nil {
-		return "", err
-	}
-	return v, nil
-}
-
-// trashGridIDTx reads or mints the trash grid inside an existing transaction.
-// The single writer connection serializes them, so the re-check inside the
-// transaction is the whole idempotence story.
-func (s *Store) trashGridIDTx(ctx context.Context, tx *sql.Tx) (int64, error) {
-	var v string
-	err := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyTrashGridID).Scan(&v)
-	if err == nil {
-		return strconv.ParseInt(v, 10, 64)
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
-	}
-	now := s.now().Unix()
-	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-		now, now)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
-		systemKeyTrashGridID, strconv.FormatInt(id, 10)); err != nil {
-		return 0, err
-	}
-	return id, nil
+	return strconv.FormatInt(id, 10), nil
 }
 
 // deleteBypassesTrash reports a real delete: the tile is in the scratch grid,
@@ -83,13 +36,12 @@ func (s *Store) trashGridIDTx(ctx context.Context, tx *sql.Tx) (int64, error) {
 // because an absent trash grid means nothing can be inside it yet.
 func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int64) (bool, error) {
 	for _, key := range []string{systemKeyScratchGridID, systemKeyTrashGridID} {
-		var v string
-		err := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, key).Scan(&v)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
+		v, ok, err := systemValue(ctx, tx, key)
 		if err != nil {
 			return false, err
+		}
+		if !ok {
+			continue
 		}
 		id, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
@@ -112,28 +64,6 @@ func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int
 	return false, nil
 }
 
-// gridInSubtree walks the well-parent chain from gridID up to a root, reporting
-// whether rootID is on the way.
-func gridInSubtree(ctx context.Context, tx *sql.Tx, gridID, rootID int64) (bool, error) {
-	g := gridID
-	for i := 0; i < trashAncestryCap; i++ {
-		if g == rootID {
-			return true, nil
-		}
-		var parent int64
-		err := tx.QueryRowContext(ctx,
-			`SELECT grid_id FROM tiles WHERE child_grid_id = ?`, g).Scan(&parent)
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		g = parent
-	}
-	return false, fmt.Errorf("grid %d: ancestry deeper than %d (cycle?)", gridID, trashAncestryCap)
-}
-
 // moveTileToTrash files t under the current month's subgrid, minting the month
 // well on first use. It is PlaceTile's cross-grid shape exactly: same row and
 // id, tile version untouched, both grid versions bumped, and TileRemoved plus
@@ -147,7 +77,7 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 	if err != nil {
 		return fmt.Errorf("tile %s: bad grid_id %q: %w", t.Id, t.GridId, err)
 	}
-	trashID, err := s.trashGridIDTx(ctx, tx)
+	trashID, err := s.singletonGridTx(ctx, tx, systemKeyTrashGridID)
 	if err != nil {
 		return err
 	}
@@ -201,13 +131,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 		return 0, false, err
 	}
 	now := s.now().Unix()
-	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-		now, now)
-	if err != nil {
-		return 0, false, err
-	}
-	child, err := res.LastInsertId()
+	child, err := insertGrid(ctx, tx, now)
 	if err != nil {
 		return 0, false, err
 	}
@@ -215,12 +139,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 	if err != nil {
 		return 0, false, err
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (grid_id, kind, x, y, w, h,
-			view_cx, view_cy, view_zoom, child_grid_id, alt_text,
-			created_at, updated_at)
-		VALUES (?, 'well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?)`,
-		trashID, x, y, child, month, now, now); err != nil {
+	if _, err := insertWellRow(ctx, tx, trashID, x, y, 1, 1, child, month, now); err != nil {
 		return 0, false, err
 	}
 	return child, true, nil

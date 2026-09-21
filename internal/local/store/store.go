@@ -106,42 +106,78 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
+// systemValue reads one row of the system KV table. ok is false when the key
+// is absent, which every caller answers for itself.
+func systemValue(ctx context.Context, q gridReader, key string) (string, bool, error) {
+	var v string
+	err := q.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, key).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return v, true, nil
+}
+
+// singletonGrid returns the grid a system key names, minting it on first use.
+// The root, scratch and trash grids are all this one shape.
+func (s *Store) singletonGrid(ctx context.Context, key string) (int64, error) {
+	v, ok, err := systemValue(ctx, s.db, key)
+	if err != nil {
+		return 0, err
+	}
+	if ok {
+		return strconv.ParseInt(v, 10, 64)
+	}
+	var id int64
+	err = s.withTx(ctx, func(tx *sql.Tx) error {
+		id, err = s.singletonGridTx(ctx, tx, key)
+		return err
+	})
+	return id, err
+}
+
+// singletonGridTx reads or mints inside an existing transaction. The re-check
+// here is the whole idempotence story: the single writer connection serializes
+// transactions, so a caller that got there first is visible and its id is
+// returned rather than a second grid made.
+func (s *Store) singletonGridTx(ctx context.Context, tx *sql.Tx, key string) (int64, error) {
+	v, ok, err := systemValue(ctx, tx, key)
+	if err != nil {
+		return 0, err
+	}
+	if ok {
+		return strconv.ParseInt(v, 10, 64)
+	}
+	id, err := insertGrid(ctx, tx, s.now().Unix())
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
+		key, strconv.FormatInt(id, 10)); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // bootstrapRoot inserts the initial root grid if none exists. Framing is not
 // seeded: a NULL root_zoom already means never visited, and the client
 // substitutes the calibrated default until the user positions the view.
 func (s *Store) bootstrapRoot(ctx context.Context) error {
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyRootGridID).Scan(&v)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	_, ok, err := systemValue(ctx, s.db, systemKeyRootGridID)
+	if err != nil || ok {
 		return err
 	}
 	return s.withTx(ctx, func(tx *sql.Tx) error {
-		now := s.now().Unix()
-		res, err := tx.ExecContext(ctx,
-			`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-			now, now)
-		if err != nil {
+		if _, err := s.singletonGridTx(ctx, tx, systemKeyRootGridID); err != nil {
 			return err
 		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		seeds := []struct{ k, v string }{
-			{systemKeyRootGridID, strconv.FormatInt(id, 10)},
-			{systemKeyPluginUUID, s.newID()},
-		}
-		for _, kv := range seeds {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO system (key, value) VALUES (?, ?)`,
-				kv.k, kv.v); err != nil {
-				return err
-			}
-		}
-		return nil
+		// The mint's identity is seeded with the root, never alone: see
+		// PluginUUID.
+		_, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
+			systemKeyPluginUUID, s.newID())
+		return err
 	})
 }
 
@@ -168,41 +204,11 @@ func (s *Store) RootGridID(ctx context.Context) (string, error) {
 // doubles as the visited-url history that feeds autocomplete and a deep link
 // into it still resolves. The id is stored once in system metadata.
 func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyScratchGridID).Scan(&v)
-	if err == nil {
-		return v, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	id, err := s.singletonGrid(ctx, systemKeyScratchGridID)
+	if err != nil {
 		return "", err
 	}
-	if err := s.withTx(ctx, func(tx *sql.Tx) error {
-		// Re-check inside the transaction: the single writer connection
-		// serializes them, so a concurrent caller that got there first is
-		// visible here and its id is returned rather than a second grid made.
-		if e := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyScratchGridID).Scan(&v); e == nil {
-			return nil
-		} else if !errors.Is(e, sql.ErrNoRows) {
-			return e
-		}
-		now := s.now().Unix()
-		res, e := tx.ExecContext(ctx,
-			`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`,
-			now, now)
-		if e != nil {
-			return e
-		}
-		id, e := res.LastInsertId()
-		if e != nil {
-			return e
-		}
-		v = strconv.FormatInt(id, 10)
-		_, e = tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`, systemKeyScratchGridID, v)
-		return e
-	}); err != nil {
-		return "", err
-	}
-	return v, nil
+	return strconv.FormatInt(id, 10), nil
 }
 
 // SetPluginID injects the config id the binary verified against its DB at
@@ -218,9 +224,14 @@ func (s *Store) PluginUUID(ctx context.Context) (string, error) {
 	if s.pluginID != "" {
 		return s.pluginID, nil
 	}
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyPluginUUID).Scan(&v)
-	return v, err
+	v, ok, err := systemValue(ctx, s.db, systemKeyPluginUUID)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", sql.ErrNoRows
+	}
+	return v, nil
 }
 
 // RootFraming returns home's root framing, in the same three columns a plugin
@@ -301,10 +312,12 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 }
 
 func rootGridID(ctx context.Context, q gridReader) (int64, error) {
-	var v string
-	err := q.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyRootGridID).Scan(&v)
+	v, ok, err := systemValue(ctx, q, systemKeyRootGridID)
 	if err != nil {
 		return 0, err
+	}
+	if !ok {
+		return 0, sql.ErrNoRows
 	}
 	return strconv.ParseInt(v, 10, 64)
 }
@@ -312,6 +325,22 @@ func rootGridID(ctx context.Context, q gridReader) (int64, error) {
 // Close releases the underlying database handle.
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+// collect drains rows into a slice and closes them before returning. Every
+// caller needs that: the store runs on one connection, so a cursor still open
+// blocks the queries and writes the collected rows drive.
+func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	defer rows.Close()
+	var out []T
+	for rows.Next() {
+		v, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 // withTx runs fn inside a transaction.

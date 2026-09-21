@@ -86,16 +86,13 @@ func userTableNames(ctx context.Context, q gridReader) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list tables: %w", err)
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
+	return collect(rows, func(rows *sql.Rows) (string, error) {
 		var n string
 		if err := rows.Scan(&n); err != nil {
-			return nil, fmt.Errorf("scan table name: %w", err)
+			return "", fmt.Errorf("scan table name: %w", err)
 		}
-		out = append(out, n)
-	}
-	return out, rows.Err()
+		return n, nil
+	})
 }
 
 // canonicalSchema is the current DDL applied to a throwaway in-memory DB, read
