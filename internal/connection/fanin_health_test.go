@@ -2,11 +2,14 @@ package connection
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/namespace"
 
 	"google.golang.org/grpc/codes"
@@ -105,6 +108,54 @@ func TestASubscriberArrivingAfterTheOutageIsToldOfIt(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("a subscriber arriving after the outage was never told the connection is dark")
+	}
+}
+
+// refusingDialer is a connection that cannot be dialed: the far machine is
+// off, or the tunnel will not open.
+func refusingDialer(detail string) Dialer {
+	return func(dial.Config) (namespace.Namespace, func(), error) {
+		return nil, nil, errors.New(detail)
+	}
+}
+
+// A dial that never connects is the same outage as a stream that died: the
+// connection is unreachable. A client subscribing mid-outage has to be told,
+// or the source cache in front serves a remembered grid as if it were live —
+// the dial failure never reached the fan-in, so nothing ever published it.
+func TestASubscriberIsToldOfAConnectionThatCannotDial(t *testing.T) {
+	ctx := context.Background()
+	s, err := New(sharedConnDB(t), refusingDialer("no route to host"), "",
+		[]config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	s.ConnectAll(ctx)
+
+	events := make(chan *gridwellv1.Event, 8)
+	subCtx, subCancel := context.WithCancel(ctx)
+	t.Cleanup(subCancel)
+	go func() {
+		_ = s.Subscribe(subCtx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+			select {
+			case events <- ev:
+			default:
+			}
+			return nil
+		})
+	}()
+	select {
+	case ev := <-events:
+		ph := ev.GetPluginHealth()
+		if ph == nil {
+			t.Fatalf("first event = %+v, want the connection's health", ev)
+		}
+		if ph.Healthy || ph.PluginUuid != "rtb" || ph.Detail == "" {
+			t.Fatalf("want rtb dark with a reason, got %+v", ph)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("a connection whose dial is failing was never reported dark")
 	}
 }
 
