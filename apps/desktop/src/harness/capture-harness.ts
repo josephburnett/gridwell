@@ -4,6 +4,7 @@
 //
 //   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
 import { app, BaseWindow, BrowserWindow, Menu, WebContentsView } from 'electron';
+import type { WebContents } from 'electron';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as os from 'node:os';
@@ -46,18 +47,52 @@ function fail(msg: string): never {
   throw new Error(msg); // unreachable; satisfies never
 }
 
-async function waitForNonEmptyCapture(
+// A load is an event, so waiting for it costs a cold machine nothing. A frame
+// is a budget, because Chromium announces no first paint. Keeping them apart is
+// what stops a runner that has just unpacked Electron from spending the frame
+// budget on its first renderer.
+const LOAD_BUDGET_MS = 30_000;
+const FRAME_BUDGET_MS = 6_000;
+
+// Resolves on the view's next did-finish-load. Every caller arms this in the
+// same turn that started the navigation, and Chromium emits from the event
+// loop, so the event cannot have fired already.
+function loadFinished(wc: WebContents, what: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`no did-finish-load for ${what} within ${LOAD_BUDGET_MS}ms`)),
+      LOAD_BUDGET_MS,
+    );
+    wc.once('did-finish-load', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+// The first frame a freshly placed view paints. The load is awaited as an
+// event first, so FRAME_BUDGET_MS bounds rendering alone, and a failure says
+// which half ran out.
+async function waitForFirstFrame(
   registry: WebviewRegistry,
   paneId: string,
-  timeoutMs: number,
+  what: string,
 ): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const wc = registry.webContentsFor(paneId);
+  if (!wc) fail(`${what}: no view registered for ${paneId}`);
+  const loadStart = Date.now();
+  await loadFinished(wc, what);
+  const loadMs = Date.now() - loadStart;
+  const frameStart = Date.now();
+  while (Date.now() - frameStart < FRAME_BUDGET_MS) {
     const jpeg = await registry.capture(paneId);
-    if (jpeg.length > 0) return jpeg;
+    if (jpeg.length > 0) {
+      console.log(`${what}: loaded in ${loadMs}ms, first frame ${Date.now() - frameStart}ms after`);
+      return jpeg;
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
-  return '';
+  fail(`${what}: loaded in ${loadMs}ms, then produced no frame within ${FRAME_BUDGET_MS}ms`);
 }
 
 // A data: url has an opaque origin, so it has no localStorage and no
@@ -79,8 +114,7 @@ app.whenReady().then(async () => {
 
   await registry.place('pane1', 'u1/42', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
 
-  const jpeg = await waitForNonEmptyCapture(registry, 'pane1', 6000);
-  if (jpeg.length === 0) fail('capturePage produced no frame within 6s');
+  const jpeg = await waitForFirstFrame(registry, 'pane1', 'first capture');
 
   // base64 of a JPEG starts with "/9j/".
   if (!jpeg.startsWith('/9j/')) fail(`capture is not JPEG base64 (got prefix ${jpeg.slice(0, 8)})`);
@@ -106,14 +140,7 @@ app.whenReady().then(async () => {
   const SECOND_URL = 'data:text/html,' + encodeURIComponent('<title>Second</title>second');
   await registry.place('paneb', 'u1/46', FIRST_URL, { x: 0, y: 0, width: 400, height: 300 });
   const wcb = registry.webContentsFor('paneb')!;
-  const loaded = (url: string) =>
-    new Promise<void>((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error(`no did-finish-load for ${url.slice(0, 40)}`)), 6000);
-      wcb.once('did-finish-load', () => {
-        clearTimeout(t);
-        resolve();
-      });
-    });
+  const loaded = (url: string) => loadFinished(wcb, url.slice(0, 40));
   if (wcb.getURL() !== FIRST_URL) await loaded(FIRST_URL);
   const second = loaded(SECOND_URL);
   await wcb.loadURL(SECOND_URL);
@@ -149,9 +176,7 @@ app.whenReady().then(async () => {
   const deadErrs: string[] = [];
   const reg2 = new WebviewRegistry(win, { onError: (ev) => deadErrs.push(ev.message) });
   await reg2.place('pane2', 'u1/43', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
-  if ((await waitForNonEmptyCapture(reg2, 'pane2', 6000)).length === 0) {
-    fail('dead-view scenario: view produced no frame within 6s');
-  }
+  await waitForFirstFrame(reg2, 'pane2', 'dead-view scenario');
   // Destroy the renderer out from under the registry, the crashed-tab shape.
   reg2.webContentsFor('pane2')!.close();
   await new Promise((r) => setTimeout(r, 300));
@@ -172,9 +197,7 @@ app.whenReady().then(async () => {
   const TALL_URL =
     'data:text/html,' + encodeURIComponent('<body style="margin:0;height:20000px">tall</body>');
   await reg3.place('pane3', 'u1/44', TALL_URL, { x: 0, y: 0, width: 800, height: 600 });
-  if ((await waitForNonEmptyCapture(reg3, 'pane3', 6000)).length === 0) {
-    fail('touch scenario: view produced no frame within 6s');
-  }
+  await waitForFirstFrame(reg3, 'pane3', 'touch scenario');
   const wc3 = reg3.webContentsFor('pane3')!;
   await wc3.executeJavaScript('window.scrollTo(0, 1000)');
   // The view sits at content (0,0), so screen equals the content origin plus
@@ -595,7 +618,7 @@ app.whenReady().then(async () => {
   const crashErrs: string[] = [];
   const regP = new WebviewRegistry(win, { onError: (ev) => crashErrs.push(ev.message) });
   await regP.place('paneP', 'u1/70', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
-  if ((await waitForNonEmptyCapture(regP, 'paneP', 6000)).length === 0) fail('crash scenario: no frame within 6s');
+  await waitForFirstFrame(regP, 'paneP', 'crash scenario');
   regP.webContentsFor('paneP')!.forcefullyCrashRenderer();
   if (!(await waitFor(() => crashErrs.some((m) => m.startsWith('page crashed')), 6000))) {
     fail(`a crashed renderer was not reported (errors: ${JSON.stringify(crashErrs)})`);
@@ -626,7 +649,7 @@ app.whenReady().then(async () => {
   const capErrs: string[] = [];
   const regM = new WebviewRegistry(win, { onError: (ev) => capErrs.push(ev.message) });
   await regM.place('paneM', 'u1/72', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
-  if ((await waitForNonEmptyCapture(regM, 'paneM', 6000)).length === 0) fail('mirror scenario: no frame within 6s');
+  await waitForFirstFrame(regM, 'paneM', 'mirror scenario');
   regM.webContentsFor('paneM')!.close(); // destroyed behind the registry's back
   await new Promise((r) => setTimeout(r, 300));
   if ((await regM.capture('paneM')) !== '') fail('a capture of a destroyed view returned a frame');
@@ -643,14 +666,14 @@ app.whenReady().then(async () => {
   const streakErrs: string[] = [];
   const regCrash = new WebviewRegistry(win, { onError: (ev) => streakErrs.push(ev.message) });
   await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
-  if ((await waitForNonEmptyCapture(regCrash, 'paneCrash', 6000)).length === 0) fail('streak scenario: no frame within 6s');
+  await waitForFirstFrame(regCrash, 'paneCrash', 'streak scenario');
   // A crash sometimes takes the viz process with it under xvfb, and then
   // capturePage rejects for every view forever. A control pane that never
   // crashed tells that environment collapse from the product bug.
   const ctlErrs: string[] = [];
   const regCtl = new WebviewRegistry(win, { onError: (ev) => ctlErrs.push(ev.message) });
   await regCtl.place('paneCtl', 'u1/76', DATA_URL, { x: 400, y: 0, width: 400, height: 300 });
-  if ((await waitForNonEmptyCapture(regCtl, 'paneCtl', 6000)).length === 0) fail('control pane: no frame within 6s');
+  await waitForFirstFrame(regCtl, 'paneCtl', 'control pane');
   const wcCrash = regCrash.webContentsFor('paneCrash')!;
   wcCrash.forcefullyCrashRenderer();
   // Capture until the report lands, so a crash that takes a moment to reach
