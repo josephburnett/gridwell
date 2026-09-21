@@ -145,7 +145,7 @@ func (a *App) installTestHook() {
 		// animation arms one per frame, so "armed grew and live came back to
 		// zero" is the assertion; see oneShot.
 		"oneShots": js.FuncOf(func(js.Value, []js.Value) any {
-			return map[string]any{"armed": oneShotsArmed, "live": oneShotsLive}
+			return map[string]any{"armed": oneShotsArmed, "live": oneShotsLive, "frames": framesArmed}
 		}),
 		"shellStandin": js.FuncOf(a.thShellStandin),
 		"shellText":    js.FuncOf(a.thShellText),

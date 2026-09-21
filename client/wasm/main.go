@@ -319,10 +319,12 @@ func oneShot(fn func()) js.Func {
 	return cb
 }
 
-// oneShotsArmed and oneShotsLive are what the e2e hook asserts on: a js.Func
-// that outlives its call is invisible from both sides of the boundary, so the
-// count is the only evidence.
-var oneShotsArmed, oneShotsLive int
+// oneShotsArmed, oneShotsLive and framesArmed are what the e2e hook asserts
+// on: a js.Func that outlives its call is invisible from both sides of the
+// boundary, so the count is the only evidence. framesArmed says how many of
+// the armed ones were frames, because how many frames a gesture draws is the
+// host's to decide, not the spec's.
+var oneShotsArmed, oneShotsLive, framesArmed int
 
 // listen adds a DOM listener and returns the remover, which also releases the
 // js.Func: a surface opened and closed repeatedly must not leak one per open.
@@ -856,6 +858,7 @@ func (a *App) scheduleFrame() {
 		return
 	}
 	a.persist.sched.rafScheduled = true
+	framesArmed++
 	js.Global().Call("requestAnimationFrame", oneShot(func() {
 		a.persist.sched.rafScheduled = false
 		a.frame()

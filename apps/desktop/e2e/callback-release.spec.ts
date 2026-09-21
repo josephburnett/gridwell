@@ -21,10 +21,13 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
   await gw.ascendViaCrumb();
   const after = await gw.oneShots();
 
-  // The frames really go through the self-releasing form. A drag plus two
-  // transitions arms about 65 of them; the settle timers alone arm 5, which is
-  // what the count falls to if the frame loop stops using it.
-  expect(after.armed - before.armed, 'frames armed one-shot callbacks').toBeGreaterThan(20);
+  // The frames really go through the self-releasing form: every frame the
+  // gesture drew armed one. How many frames that is belongs to the host (a
+  // CI display draws a handful where a desktop draws sixty), so the count is
+  // compared to the frames, not to a number.
+  const frames = after.frames - before.frames;
+  expect(frames, 'the gesture drew frames').toBeGreaterThan(0);
+  expect(after.armed - before.armed, 'frames armed one-shot callbacks').toBeGreaterThanOrEqual(frames);
   // Settle timers armed by the gesture are one-shots too, so the count falls
   // to zero only once they have fired.
   await expect.poll(async () => (await gw.oneShots()).live, { timeout: 15_000 }).toBe(0);
