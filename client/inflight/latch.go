@@ -1,7 +1,8 @@
 package inflight
 
 import (
-	"sort"
+	"maps"
+	"slices"
 	"sync"
 )
 
@@ -62,10 +63,5 @@ func (l *Latch) Reset() {
 func (l *Latch) Keys() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	keys := make([]string, 0, len(l.m))
-	for k := range l.m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return slices.Sorted(maps.Keys(l.m))
 }

@@ -7,7 +7,8 @@ package inflight
 
 import (
 	"context"
-	"sort"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 )
@@ -97,7 +98,7 @@ func (s *Set) CancelIf(match func(key string) bool) []string {
 		c.cancel()
 		delete(s.m, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }
 
@@ -105,12 +106,7 @@ func (s *Set) CancelIf(match func(key string) bool) []string {
 func (s *Set) Keys() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	keys := make([]string, 0, len(s.m))
-	for k := range s.m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return slices.Sorted(maps.Keys(s.m))
 }
 
 func (s *Set) Len() int {
