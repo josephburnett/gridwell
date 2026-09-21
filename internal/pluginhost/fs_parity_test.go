@@ -48,13 +48,15 @@ func seedTree(t *testing.T) string {
 
 func pluginNode(t *testing.T, root string) *rpc.Client {
 	t.Helper()
-	return pluginNodeAt(t, root, filepath.Join(t.TempDir(), "mem.db"))
+	cl, _ := pluginNodeAt(t, root, filepath.Join(t.TempDir(), "mem.db"))
+	return cl
 }
 
-// pluginNodeAt builds the stack over an existing store path: how the
-// conversion parity test serves a converted file. The plugin is the shipped
-// binary, configured with root exactly as a server.yaml plugins: entry would.
-func pluginNodeAt(t *testing.T, root, memPath string) *rpc.Client {
+// pluginNodeAt builds the stack over an existing store path, and hands back the
+// node's store beside the client: the rows are the half of the answer the wire
+// never shows. The plugin is the shipped binary, configured with root exactly
+// as a server.yaml plugins: entry would.
+func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *store.Store) {
 	t.Helper()
 	memStore, err := store.Open(memPath)
 	if err != nil {
@@ -67,7 +69,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) *rpc.Client {
 	reg.Register(fsUUID, "fs", client, nil)
 	srv := servertest.New(t, reg, server.Config{})
 	hs := servertest.Serve(t, srv)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), memStore
 }
 
 // darken makes root unreadable for the rest of the test — EACCES on every
