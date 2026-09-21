@@ -100,16 +100,12 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 	if err != nil {
 		return nil, false, fmt.Errorf("workspace refs: %w", err)
 	}
-	defer rows.Close()
-	var blobIDs []int64
-	for rows.Next() {
+	blobIDs, err := collect(rows, func(rows *sql.Rows) (int64, error) {
 		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, false, err
-		}
-		blobIDs = append(blobIDs, id)
-	}
-	if err := rows.Err(); err != nil {
+		err := rows.Scan(&id)
+		return id, err
+	})
+	if err != nil {
 		return nil, false, err
 	}
 	refs = map[string]bool{}

@@ -327,6 +327,22 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// collect drains rows into a slice and closes them before returning. Every
+// caller needs that: the store runs on one connection, so a cursor still open
+// blocks the queries and writes the collected rows drive.
+func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	defer rows.Close()
+	var out []T
+	for rows.Next() {
+		v, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 // withTx runs fn inside a transaction.
 func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)

@@ -84,16 +84,7 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []*gridwellv1.Tile
-	for rows.Next() {
-		n, err := scanTile(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, n)
-	}
-	return out, rows.Err()
+	return collect(rows, func(rows *sql.Rows) (*gridwellv1.Tile, error) { return scanTile(rows) })
 }
 
 // insertGrid mints an empty grid row. The migration chain keeps its own copy

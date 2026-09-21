@@ -367,17 +367,14 @@ func adoptStalePluginWells(ctx context.Context, tx *sql.Tx) error {
 		return fmt.Errorf("find stale plugin wells: %w", err)
 	}
 	type stale struct{ id, createdAt int64 }
-	var wells []stale
-	for rows.Next() {
+	wells, err := collect(rows, func(rows *sql.Rows) (stale, error) {
 		var w stale
 		if err := rows.Scan(&w.id, &w.createdAt); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan stale plugin well: %w", err)
+			return w, fmt.Errorf("scan stale plugin well: %w", err)
 		}
-		wells = append(wells, w)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+		return w, nil
+	})
+	if err != nil {
 		return err
 	}
 	for _, w := range wells {
