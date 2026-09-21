@@ -2,7 +2,8 @@
 # direct and partition gates, whose sshd is self-contained through dialtest,
 # and the full Electron e2e under xvfb. PW_FLAGS=--retries=1 gives each suite
 # one retry. Every gate here is a Makefile target and this file only sequences
-# them, which test/boundary pins.
+# them, which test/boundary pins. The one step that is not a gate is the
+# shim-commit report, which prints and never fails.
 name: gates
 # There is no `paths:` filter. A dependency or toolchain bump, or any
 # cross-cutting change, is every seam at once, and a filter keyed on go.mod or
@@ -53,6 +54,15 @@ jobs:
       ELECTRON_DISABLE_SANDBOX: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The shim report below reads commit messages, and the default
+          # depth-1 checkout has none to read.
+          fetch-depth: 0
+      # A shim commit's message is the only record that a gate ran, since
+      # `make check` executes none of client/wasm. This warns rather than
+      # fails: a name in a message is a claim, and this job is the proof.
+      - name: shim commits that name no gate
+        run: ./scripts/gates-named.sh "${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.sha }}"
       # The plugins are their own repository. The Makefile's PLUGINS_DIR
       # defaults to ../gridwell-plugins, beside this checkout, and `make
       # build` and `make check` build the plugin binaries from there.
