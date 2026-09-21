@@ -171,9 +171,10 @@ type App struct {
 	// with the registry's counter it brackets the IPC hop.
 	zoomKeyRelays int
 
-	// tileMutates counts tile mutations in flight, so the descent or placement
-	// that follows one has not happened yet. postTileMutate owns it.
-	tileMutates int
+	// writes counts dispatched mutations that have not settled, so the
+	// descent or placement that follows one has not happened yet. `post` and
+	// `do` are its only callers.
+	writes inflight.Writes
 
 	// renderedPanePaints is e2e attribution: an unfocused pane paints raster.
 	renderedPanePaints map[string]int
