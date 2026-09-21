@@ -114,3 +114,62 @@ for (const kind of ['well', 'markdown', 'url', 'shell'] as const) {
     }
   });
 }
+
+// A boot is a read too: the place comes off the URL, the views come off the
+// rows, and until the user moves, nothing about any of them has changed. The
+// settle persister is armed by the first draw, so a boot-time stamp lands here
+// and nowhere else — and a zero proves that only while the persister is
+// actually running, which is why framingFlushes is asserted beside it: an
+// unarmed debounce takes every count quiet with it.
+for (const kind of ['well', 'markdown'] as const) {
+  test(`a reload inside a ${kind} writes nothing until the user moves`, async ({ gw, window }) => {
+    const settleMs = (await gw.cadences()).framingSaveMs;
+    await gw.enterPlugin('home');
+    const home = await gw.focused();
+    const cx = Math.round(home.cx);
+    const cy = Math.round(home.cy);
+    const rowKind = kind === 'markdown' ? 'text' : kind;
+
+    await gw.openPalette();
+    await gw.dragCreate(kind, cx, cy);
+    await expect
+      .poll(async () => tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy))
+      .toBeTruthy();
+    if (kind === 'markdown') {
+      // Past the first look's stamp; see the header.
+      await roundTrip(gw, window, cx, cy, settleMs);
+    }
+    await gw.descendCell(cx, cy);
+    await settle(window, settleMs);
+    const inside = await gw.focused();
+    const before = tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy)!;
+
+    await window.reload();
+    await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+    await expect
+      .poll(async () => (await gw.focused()).gridID, { timeout: 30_000 })
+      .toBe(inside.gridID);
+    await gw.waitIdle(30_000);
+    await settle(window, settleMs);
+    await settle(window, settleMs);
+
+    expect(
+      await window.evaluate(() =>
+        Number((window as any).__gridwellTest.persistPosts().framingFlushes ?? 0),
+      ),
+      'the settle persister never ran, so a zero below would mean nothing',
+    ).toBeGreaterThan(0);
+    expect(await framingWrites(window), `the restored ${kind} was stamped by being restored`).toBe(
+      0,
+    );
+    const after = tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy)!;
+    expect(stable(after), `the reload changed the stored ${kind} row`).toBe(stable(before));
+
+    // And the meter is live: the first gesture after the restore does write.
+    await gw.ascendViaCrumb();
+    await gw.waitIdle();
+    await gw.wheelAtFocusedCenter(-300);
+    await settle(window, settleMs);
+    await expect.poll(() => framingWrites(window), { timeout: 10_000 }).toBeGreaterThan(0);
+  });
+}
