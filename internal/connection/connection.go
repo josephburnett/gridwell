@@ -23,7 +23,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -116,12 +115,15 @@ var _ namespace.Namespace = (*Server)(nil)
 // connections. server.yaml is authoritative about what is declared and
 // retired_names about what is retired.
 //
-// Retirement is explicit: a declared name that retired_names holds is refused,
-// and a retired name is reserved forever. A stored name the config merely does
+// A retired name is reserved forever. A stored name the config merely does
 // not declare is left exactly as it is, so its mounts and links go dead by the
 // boot roster (client/deadref) and come back with its stanza. Boot never
 // retires a name on absence, and the `deleted` column is written from
 // retired_names here and nowhere else.
+//
+// What a name may be — a segment, declared once, never also retired — is
+// config.validateIDs' verdict, taken on the bytes before they are anything
+// here.
 //
 // home is the host's home directory; "" means no ~ defaults, so keys must be
 // explicit paths.
@@ -139,15 +141,6 @@ func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, re
 		retiredSet[r] = true
 	}
 	for _, c := range conns {
-		if err := idshape.ValidateSegment("connection name", c.Name); err != nil {
-			return nil, err
-		}
-		if _, dup := s.conns[c.Name]; dup {
-			return nil, fmt.Errorf("connection %q declared twice", c.Name)
-		}
-		if retiredSet[c.Name] {
-			return nil, fmt.Errorf("connection %q: this name is RETIRED — a retired name never returns; mint a new one", c.Name)
-		}
 		// The host-local half of the row: facts this machine can settle, so a
 		// connection that can never dial fails the boot instead of coming up
 		// quietly dark. Whether the far node answers is deliberately not

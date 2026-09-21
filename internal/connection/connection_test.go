@@ -77,11 +77,31 @@ func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 	if len(rows) != 2 || rows[1].Uuid != "rtb" || rows[1].RootGridId != "rtb/rnode1/3" {
 		t.Fatalf("rows = %+v, want rtb back on its remembered landing", rows)
 	}
-	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "olddead", Addr: "/t"}}, []string{"olddead"}); err == nil || !strings.Contains(err.Error(), "RETIRED") {
-		t.Fatalf("a retired name must never return, got %v", err)
+}
+
+// What a connection may be named — a segment, declared once, never also
+// retired — is settled on the bytes, and the transport is handed the verdict.
+// Across that seam, because a check in both places is two wordings of one
+// refusal and the transport's would be the one nobody ever sees.
+func TestRefusedNamesNeverReachTheTransport(t *testing.T) {
+	shapes := []string{
+		"connections:\n  - name: olddead\n    addr: /t\nretired_names: [olddead]\n",
+		"connections:\n  - name: \"42\"\n    addr: /t\n",
+		"connections:\n  - name: c1\n    addr: /s\n  - name: c1\n    addr: /t\n",
 	}
-	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "42", Addr: "/t"}}, nil); err == nil {
-		t.Fatal("a numeric name is not a namespace segment")
+	refused := 0
+	for _, yml := range shapes {
+		cfg, err := config.Parse([]byte(yml))
+		if err != nil {
+			refused++
+			continue
+		}
+		if _, err := New(openConnDB(t), nil, "", cfg.Connections, cfg.RetiredNames); err == nil {
+			t.Errorf("%q was accepted: config let it through and the transport has no check of its own", yml)
+		}
+	}
+	if refused != len(shapes) {
+		t.Errorf("config refused %d of %d: the door the transport relies on has moved", refused, len(shapes))
 	}
 }
 
@@ -126,9 +146,6 @@ func TestStaleTombstonesHealAndRetiredNamesMirror(t *testing.T) {
 	}
 	if r, _ := db.Get(ctx, "ghost"); !r.Deleted {
 		t.Fatal("retired_names must be mirrored onto the row")
-	}
-	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "ghost", Addr: "/s"}}, []string{"ghost"}); err == nil || !strings.Contains(err.Error(), "RETIRED") {
-		t.Fatalf("declaring a retired name must be refused loudly, got %v", err)
 	}
 }
 
