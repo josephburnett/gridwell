@@ -282,7 +282,7 @@ func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, 
 	// rather than at a stale offset.
 	st.Cx = float64(tile.X) + float64(tile.W)/2
 	st.Cy = float64(tile.Y) + float64(tile.H)/2
-	pl.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &st})
+	pl.install(paneID, st, nil)
 	pl.add(Effect{Kind: EffFetchGrid, GridID: tile.GridId})
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 }

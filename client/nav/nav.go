@@ -300,8 +300,7 @@ func (m *Machine) Land(tok Token, w World) Plan {
 	var pl planner
 	switch c.Step {
 	case stepDescendContentLand:
-		st := c.Stack.Clone()
-		pl.add(Effect{Kind: EffInstallPlace, PaneID: c.PaneID, Stack: &st})
+		pl.install(c.PaneID, c.Stack, nil)
 		pl.add(Effect{Kind: EffScaleContent, PaneID: c.PaneID})
 		// Unsaved edits are untouched: they live tile-scoped in the cache, so
 		// descending this pane elsewhere strands no typing.
@@ -338,3 +337,10 @@ type planner struct {
 func (p *planner) add(e Effect)   { p.effects = append(p.effects, e) }
 func (p *planner) then(g Gesture) { c := g; p.next = &c }
 func (p *planner) plan() Plan     { return Plan{Effects: p.effects, Next: p.next} }
+
+// install installs a pane's place on the plan's own copy of the stack, so what
+// the caller does with its own afterwards reaches nobody.
+func (p *planner) install(paneID string, st pane.Stack, vp *Viewport) {
+	c := st.Clone()
+	p.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &c, Viewport: vp})
+}

@@ -74,9 +74,9 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 		pl.add(Effect{Kind: EffCancelTransition})
 		pl.add(Effect{Kind: EffForgetPane, PaneID: paneID})
 		// Clear to one frame, or a deeper frame left standing would survive a
-		// restore to a shallower place.
-		st := oneFrame(w.Home, p)
-		pl.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &st})
+		// restore to a shallower place. The viewport the pane has stands: a
+		// restore replaces where the pane is, not how it is framed.
+		pl.install(paneID, oneFrame(w.Home, p.Cx, p.Cy, p.Zoom), nil)
 		pl.add(Effect{Kind: EffRefreshOverlay})
 	}
 	state, err := pane.DecodeURL(g.Raw)
@@ -105,8 +105,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 			return m.endRestore(d, &pl)
 		}
 	}
-	anchored := oneFrame(d.State.Anchor, p)
-	pl.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &anchored})
+	pl.install(paneID, oneFrame(d.State.Anchor, p.Cx, p.Cy, p.Zoom), nil)
 
 	// The URL's path segments are bare well ids, so they are qualified with
 	// the anchor's namespace, everything up to its last segment, to match the
@@ -174,7 +173,7 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 		if d.State.Zoom > 0 {
 			v.Zoom = d.State.Zoom
 		}
-		pl.add(Effect{Kind: EffInstallPlace, PaneID: d.PaneID, Stack: &st, Viewport: &v})
+		pl.install(d.PaneID, st, &v)
 		return m.finishRestore(d, pl)
 	}
 	// Mode follows textedit.DescentMode, the one descent decision; scroll
@@ -187,7 +186,7 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 	}
 	st.TextMode = textedit.DescentMode(in)
 	st.TextScrollY = float64(row.TextY)
-	pl.add(Effect{Kind: EffInstallPlace, PaneID: d.PaneID, Stack: &st, Viewport: &v})
+	pl.install(d.PaneID, st, &v)
 	pl.add(Effect{Kind: EffScaleContent, PaneID: d.PaneID})
 	if cached {
 		// The bytes, and the cursor the address encodes once they have seeded
@@ -248,11 +247,11 @@ func (m *Machine) awaitGrid(d *restoreData, gridID string, s step, w World, pl *
 	return true
 }
 
-// oneFrame is the place a restore clears a pane down to, at the viewport the
-// pane already has: a restore replaces where the pane is, not how it is framed.
-func oneFrame(gridID string, p PaneView) pane.Stack {
+// oneFrame is the place a jump clears a pane down to: one frame on gridID at
+// the viewport given, so nothing deeper survives it.
+func oneFrame(gridID string, cx, cy, zoom float64) pane.Stack {
 	var s pane.Stack
-	s.Reset(pane.Frame{GridID: gridID, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
+	s.Reset(pane.Frame{GridID: gridID, Cx: cx, Cy: cy, Zoom: zoom})
 	return s
 }
 
