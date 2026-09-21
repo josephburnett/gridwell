@@ -302,17 +302,50 @@ func newFetchState() fetchState {
 	}
 }
 
-// setTimeoutMs is the shim's debounce.Schedule: one js.Func per armed run,
-// released when it fires. A debounce coalesces, so at most one is alive per
-// settle window.
-func setTimeoutMs(ms int, fire func()) {
+// oneShot is the only way the shim hands the host a callback it will be
+// called back on once. An unreleased js.Func stays in syscall/js's funcs map
+// for the life of the page, and an armed-per-frame callback makes that a leak
+// the size of the animation.
+func oneShot(fn func()) js.Func {
+	oneShotsArmed++
+	oneShotsLive++
 	var cb js.Func
 	cb = js.FuncOf(func(js.Value, []js.Value) any {
+		oneShotsLive--
 		cb.Release()
-		fire()
+		fn()
 		return nil
 	})
-	js.Global().Call("setTimeout", cb, ms)
+	return cb
+}
+
+// oneShotsArmed and oneShotsLive are what the e2e hook asserts on: a js.Func
+// that outlives its call is invisible from both sides of the boundary, so the
+// count is the only evidence.
+var oneShotsArmed, oneShotsLive int
+
+// listen adds a DOM listener and returns the remover, which also releases the
+// js.Func: a surface opened and closed repeatedly must not leak one per open.
+func listen(target js.Value, event string, fn func(js.Value)) func() {
+	cb := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		ev := js.Undefined()
+		if len(args) > 0 {
+			ev = args[0]
+		}
+		fn(ev)
+		return nil
+	})
+	target.Call("addEventListener", event, cb)
+	return func() {
+		target.Call("removeEventListener", event, cb)
+		cb.Release()
+	}
+}
+
+// setTimeoutMs is the shim's debounce.Schedule. A debounce coalesces, so at
+// most one is alive per settle window.
+func setTimeoutMs(ms int, fire func()) {
+	js.Global().Call("setTimeout", oneShot(fire), ms)
 }
 
 // persistState is the write-out side of the client. The navigation machine
@@ -823,10 +856,9 @@ func (a *App) scheduleFrame() {
 		return
 	}
 	a.persist.sched.rafScheduled = true
-	js.Global().Call("requestAnimationFrame", js.FuncOf(func(this js.Value, args []js.Value) any {
+	js.Global().Call("requestAnimationFrame", oneShot(func() {
 		a.persist.sched.rafScheduled = false
 		a.frame()
-		return nil
 	}))
 }
 

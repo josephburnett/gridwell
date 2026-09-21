@@ -148,7 +148,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 
 	orig := strings.TrimSpace(value)
 	closed := false
-	var keyCb, blurCb js.Func
+	var offKey, offBlur func()
 	closeInput := func(commit bool) {
 		if closed {
 			return
@@ -156,16 +156,15 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		closed = true
 		val := strings.TrimSpace(in.Get("value").String())
 		in.Call("remove")
-		keyCb.Release()
-		blurCb.Release()
+		offKey()
+		offBlur()
 		a.overlays.renameEditing = false
 		if commit && val != orig {
 			onCommit(val)
 		}
 		a.draw()
 	}
-	keyCb = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		ev := args[0]
+	offKey = listen(in, "keydown", func(ev js.Value) {
 		ev.Call("stopPropagation")
 		switch ev.Get("key").String() {
 		case "Enter":
@@ -173,14 +172,10 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		case "Escape":
 			closeInput(false)
 		}
-		return nil
 	})
-	blurCb = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+	offBlur = listen(in, "blur", func(js.Value) {
 		closeInput(true) // blur commits; see the doc comment
-		return nil
 	})
-	in.Call("addEventListener", "keydown", keyCb)
-	in.Call("addEventListener", "blur", blurCb)
 	doc.Get("body").Call("appendChild", in)
 	in.Call("focus")
 	in.Call("select")

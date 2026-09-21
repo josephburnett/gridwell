@@ -141,6 +141,12 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
+		// Host callbacks armed since boot and those still unfired. An
+		// animation arms one per frame, so "armed grew and live came back to
+		// zero" is the assertion; see oneShot.
+		"oneShots": js.FuncOf(func(js.Value, []js.Value) any {
+			return map[string]any{"armed": oneShotsArmed, "live": oneShotsLive}
+		}),
 		"shellStandin": js.FuncOf(a.thShellStandin),
 		"shellText":    js.FuncOf(a.thShellText),
 		"shellFeed":    js.FuncOf(a.thShellFeed),

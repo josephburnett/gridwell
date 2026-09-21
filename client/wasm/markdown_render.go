@@ -87,8 +87,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", a.pal.FileInnerBg)
-		a.cctx.Call("fillRect", x, y, w, h)
+		fillRectC(a.cctx, x, y, w, h, a.pal.FileInnerBg)
 
 		// Content starts below the banner strip, on bannerGeom's shared
 		// formula, so the alt text never overprints the first line.
@@ -143,6 +142,12 @@ func (a *App) defaultMarkdownStyle() markdownStyle {
 }
 
 func setFont(c js.Value, sizePx float64, family string, bold bool) {
+	c.Set("font", fontSpec(sizePx, family, bold))
+}
+
+// fontSpec is the one canvas font string, so a measured face and the drawn
+// one cannot drift apart.
+func fontSpec(sizePx float64, family string, bold bool) string {
 	weight := "normal"
 	if bold {
 		weight = "bold"
@@ -150,7 +155,7 @@ func setFont(c js.Value, sizePx float64, family string, bold bool) {
 	if sizePx < 1 {
 		sizePx = 1
 	}
-	c.Set("font", fmt.Sprintf("normal %s %.2fpx %s", weight, sizePx, family))
+	return fmt.Sprintf("normal %s %.2fpx %s", weight, sizePx, family)
 }
 
 // rawTextLineHeight is the line-advance multiple for raw monospace source,
@@ -164,6 +169,10 @@ const rawTextLineHeight = 1.35
 // when focus moves.
 func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
 	wrap func(src string, cols int) []string) {
+	// One face for the whole document: the wrap measure and every line share
+	// it, and the bracket keeps it from outliving the paint.
+	c.Call("save")
+	defer c.Call("restore")
 	st := a.defaultMarkdownStyle()
 	fontPx := st.codePx
 	setFont(c, fontPx*scale, st.monospace, false)

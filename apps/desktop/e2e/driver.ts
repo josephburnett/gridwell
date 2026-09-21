@@ -171,6 +171,12 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.localPaneIds());
   }
 
+  // Host callbacks the shim armed since boot and those still unfired; see
+  // client/wasm's oneShot.
+  oneShots(): Promise<{ armed: number; live: number }> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.oneShots());
+  }
+
   // Left-drags the divider hard to the left edge, crushing the left pane below
   // the close threshold so the release collapses it.
   async collapseLeftPane(): Promise<void> {

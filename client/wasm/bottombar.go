@@ -23,6 +23,10 @@ import (
 // is reserved layout so no pane can paint over it. What the bar shows is
 // derived per frame, never stored.
 
+// barFont is the bar's lettering: the title measures with it and every crumb
+// draws in it, so the centered span cannot be sized from a different face.
+const barFont = "12px system-ui, sans-serif"
+
 // bottomBarRect is the bar's drawn rectangle, spanning the focused pane.
 // wsbar.Rect owns the geometry. ok=false when there is no pane to sit under
 // or no room for the band, and the row is then plain background.
@@ -95,13 +99,10 @@ func (a *App) drawBottomBar() {
 	}
 	band, _ := a.barTheme()
 	c := a.cctx
-	c.Set("fillStyle", band)
-	c.Call("fillRect", bx, top, bw, wsbar.RowH)
+	fillRectC(c, bx, top, bw, wsbar.RowH, band)
 
 	chain := a.navChain()
 	segs := a.bottomBarSegments(chain)
-	c.Set("font", "12px system-ui, sans-serif")
-	c.Set("textBaseline", "middle")
 	for _, s := range segs {
 		shifted := s
 		shifted.X += bx
@@ -132,26 +133,22 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 	x := bx + bw - wsbar.SlotW - chipW - 8
 	y := top + (wsbar.RowH-chipH)/2
 	c := a.cctx
-	c.Set("fillStyle", a.pal.CachedChipBg)
-	c.Call("fillRect", x, y, chipW, chipH)
-	c.Set("fillStyle", a.pal.CachedChipFg)
-	c.Set("font", "10px system-ui, sans-serif")
-	c.Set("textAlign", "center")
-	c.Set("textBaseline", "middle")
-	c.Call("fillText", "cached", x+chipW/2, y+chipH/2)
-	c.Set("textAlign", "start")
+	fillRectC(c, x, y, chipW, chipH, a.pal.CachedChipBg)
+	drawLabel(c, "cached", x+chipW/2, y+chipH/2, labelOpts{
+		font: "10px system-ui, sans-serif", fill: a.pal.CachedChipFg,
+		align: "center", baseline: "middle",
+	})
 }
 
 // drawBoundaryCrumb paints a pane-tile boundary crumb as a wide named bar,
 // standing out from the preview squares as the obvious rename target.
 func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	c := a.cctx
+	band := a.pal.CrumbIdle
 	if level == a.ws.Depth() {
-		c.Set("fillStyle", a.pal.CrumbHere)
-	} else {
-		c.Set("fillStyle", a.pal.CrumbIdle)
+		band = a.pal.CrumbHere
 	}
-	c.Call("fillRect", s.X+2, top+3, s.W-4, wsbar.RowH-6)
+	fillRectC(c, s.X+2, top+3, s.W-4, wsbar.RowH-6, band)
 	label := ""
 	if f := a.ws.At(level); f != nil {
 		label = f.Name
@@ -159,9 +156,10 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	if label == "" {
 		label = "workspace"
 	}
-	c.Set("fillStyle", a.pal.BarInk)
 	withClip(c, s.X+2, top, s.W-4, wsbar.RowH, func() {
-		c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
+		drawLabel(c, label, s.X+10, top+wsbar.RowH/2, labelOpts{
+			font: barFont, fill: a.pal.BarInk, baseline: "middle",
+		})
 	})
 }
 
@@ -181,7 +179,7 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 	if !rectOK {
 		return
 	}
-	a.cctx.Set("font", "12px system-ui, sans-serif")
+	a.cctx.Set("font", barFont)
 	textW := a.cctx.Call("measureText", label).Get("width").Float() + 24
 	segs := a.bottomBarSegments(a.navChain())
 	crumbsEnd := 0.0
@@ -211,14 +209,11 @@ func (a *App) drawBarTitle(top float64) {
 	if muted {
 		color = a.pal.Muted
 	}
-	c.Set("fillStyle", color)
-	c.Set("font", "12px system-ui, sans-serif")
-	c.Set("textBaseline", "middle")
-	c.Set("textAlign", "center")
 	withClip(c, x, top, w, wsbar.RowH, func() {
-		c.Call("fillText", label, x+w/2, top+wsbar.RowH/2)
+		drawLabel(c, label, x+w/2, top+wsbar.RowH/2, labelOpts{
+			font: barFont, fill: color, align: "center", baseline: "middle",
+		})
 	})
-	c.Set("textAlign", "start")
 }
 
 // barSlotMode gathers the world facts barslot.Decide reads. The shell refresh
@@ -355,8 +350,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 		if cr.Anchor != "" {
 			// A root crumb: the namespace's identity glyph, the same drawing
 			// as its menu swatch.
-			c.Set("fillStyle", a.pal.Bg)
-			c.Call("fillRect", x, y, side, side)
+			fillRectC(c, x, y, side, side, a.pal.Bg)
 			a.drawPluginGlyph(a.pluginGlyph(cr.Anchor), x, y, side, side)
 			c.Set("strokeStyle", a.pal.FocusBorder)
 			c.Set("lineWidth", 1.0)

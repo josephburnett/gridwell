@@ -40,8 +40,7 @@ func (a *App) paneLayoutUnreadable(tileID string, err error) {
 // face. A never-arranged layout shows the split glyph.
 func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	c := a.cctx
-	c.Set("fillStyle", a.pal.PaneTileFill)
-	c.Call("fillRect", x, y, w, h)
+	fillRectC(c, x, y, w, h, a.pal.PaneTileFill)
 
 	tree, ok := a.paneTileLayout(n)
 	if !ok {
@@ -55,8 +54,7 @@ func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, select
 			}
 			// On top, so the split structure reads at any size.
 			for _, d := range pane.Dividers(tree, tileRect, 1) {
-				c.Set("fillStyle", a.pal.PaneTileBorder)
-				c.Call("fillRect", d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1))
+				fillRectC(c, d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1), a.pal.PaneTileBorder)
 			}
 		})
 	}

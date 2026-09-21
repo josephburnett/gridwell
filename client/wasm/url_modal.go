@@ -38,9 +38,7 @@ func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 
 // openURLModal shows the URL-entry overlay and invokes onSubmit with the
 // normalized URL. onCancel fires on a dismissal. Validation runs in-modal, so
-// invalid input shows an inline error and keeps the modal open. Listeners are
-// installed fresh on every open and released on close, so repeat opens do not
-// leak js.FuncOf handles.
+// invalid input shows an inline error and keeps the modal open.
 func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url string), onCancel func()) {
 	if a.overlays.urlModalOpen {
 		return
@@ -91,27 +89,17 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 	input.Call("focus")
 	refreshSuggest() // empty input lists a few, so a pick is one key away
 
-	var (
-		submitCb, cancelCb, keydownCb, backdropCb, inputCb, suggestCb js.Func
-	)
+	var offs []func()
 
 	close := func() {
 		a.overlays.urlModalOpen = false
 		defer a.draw() // un-park the live views
 		modal.Get("classList").Call("remove", "open")
 		suggestEl.Set("innerHTML", "")
-		form.Call("removeEventListener", "submit", submitCb)
-		cancelBtn.Call("removeEventListener", "click", cancelCb)
-		modal.Call("removeEventListener", "keydown", keydownCb)
-		modal.Call("removeEventListener", "mousedown", backdropCb)
-		input.Call("removeEventListener", "input", inputCb)
-		suggestEl.Call("removeEventListener", "mousedown", suggestCb)
-		submitCb.Release()
-		cancelCb.Release()
-		keydownCb.Release()
-		backdropCb.Release()
-		inputCb.Release()
-		suggestCb.Release()
+		for _, off := range offs {
+			off()
+		}
+		offs = nil
 		a.canvas.Call("focus")
 	}
 
@@ -135,93 +123,67 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 		}
 	}
 
-	submitCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) > 0 {
-			args[0].Call("preventDefault")
-		}
-		commit()
-		return nil
-	})
-	cancelCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		cancel()
-		return nil
-	})
-	keydownCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) == 0 {
-			return nil
-		}
-		ev := args[0]
-		// Swallow every key, so the canvas's window-level keydown handler
-		// does not also see it.
-		ev.Call("stopPropagation")
-		switch ev.Get("key").String() {
-		case "Escape":
+	offs = []func(){
+		listen(form, "submit", func(ev js.Value) {
 			ev.Call("preventDefault")
-			cancel()
-		case "ArrowDown":
-			if len(suggestions) > 0 {
+			commit()
+		}),
+		listen(cancelBtn, "click", func(js.Value) { cancel() }),
+		// On the modal rather than the document, so this intercepts no keydowns
+		// while the modal is closed.
+		listen(modal, "keydown", func(ev js.Value) {
+			// Swallow every key, so the canvas's window-level keydown handler
+			// does not also see it.
+			ev.Call("stopPropagation")
+			switch ev.Get("key").String() {
+			case "Escape":
 				ev.Call("preventDefault")
-				if activeIdx < len(suggestions)-1 {
-					activeIdx++
+				cancel()
+			case "ArrowDown":
+				if len(suggestions) > 0 {
+					ev.Call("preventDefault")
+					if activeIdx < len(suggestions)-1 {
+						activeIdx++
+					}
+					renderSuggest()
 				}
-				renderSuggest()
-			}
-		case "ArrowUp":
-			if len(suggestions) > 0 {
-				ev.Call("preventDefault")
-				if activeIdx > -1 {
-					activeIdx--
+			case "ArrowUp":
+				if len(suggestions) > 0 {
+					ev.Call("preventDefault")
+					if activeIdx > -1 {
+						activeIdx--
+					}
+					renderSuggest()
 				}
-				renderSuggest()
+			case "Enter":
+				// Fill the highlighted suggestion and let the form's submit fire,
+				// so no preventDefault here.
+				if activeIdx >= 0 && activeIdx < len(suggestions) {
+					input.Set("value", suggestions[activeIdx].URL)
+				}
 			}
-		case "Enter":
-			// Fill the highlighted suggestion and let the form's submit fire,
-			// so no preventDefault here.
-			if activeIdx >= 0 && activeIdx < len(suggestions) {
-				input.Set("value", suggestions[activeIdx].URL)
+		}),
+		listen(modal, "mousedown", func(ev js.Value) {
+			// Clicks on the dim backdrop dismiss; clicks inside the card do not.
+			if ev.Get("target").Equal(modal) {
+				cancel()
 			}
-		}
-		return nil
-	})
-	backdropCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) == 0 {
-			return nil
-		}
-		// Clicks on the dim backdrop dismiss; clicks inside the card do not.
-		if args[0].Get("target").Equal(modal) {
-			cancel()
-		}
-		return nil
-	})
-	inputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		// Clear stale errors as soon as the user edits.
-		errEl.Set("textContent", "")
-		refreshSuggest()
-		return nil
-	})
-	suggestCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) == 0 {
-			return nil
-		}
-		ev := args[0]
-		// mousedown, not click, so this fires before the input blurs, and
-		// preventDefault keeps focus in the input.
-		url := ev.Get("target").Get("dataset").Get("url")
-		if url.Type() != js.TypeString || url.String() == "" {
-			return nil
-		}
-		ev.Call("preventDefault")
-		input.Set("value", url.String())
-		commit()
-		return nil
-	})
-
-	form.Call("addEventListener", "submit", submitCb)
-	cancelBtn.Call("addEventListener", "click", cancelCb)
-	// On the modal rather than the document, so this intercepts no keydowns
-	// while the modal is closed.
-	modal.Call("addEventListener", "keydown", keydownCb)
-	modal.Call("addEventListener", "mousedown", backdropCb)
-	input.Call("addEventListener", "input", inputCb)
-	suggestEl.Call("addEventListener", "mousedown", suggestCb)
+		}),
+		listen(input, "input", func(js.Value) {
+			// Clear stale errors as soon as the user edits.
+			errEl.Set("textContent", "")
+			refreshSuggest()
+		}),
+		listen(suggestEl, "mousedown", func(ev js.Value) {
+			// mousedown, not click, so this fires before the input blurs, and
+			// preventDefault keeps focus in the input.
+			url := ev.Get("target").Get("dataset").Get("url")
+			if url.Type() != js.TypeString || url.String() == "" {
+				return
+			}
+			ev.Call("preventDefault")
+			input.Set("value", url.String())
+			commit()
+		}),
+	}
 }

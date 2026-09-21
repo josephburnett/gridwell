@@ -20,8 +20,7 @@ import (
 // always shown whole, never cover-cropped, so a radically different aspect
 // ratio still reads as what it is.
 func (a *App) drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
-	c.Set("fillStyle", a.pal.PreviewLetterbox)
-	c.Call("fillRect", x, y, w, h)
+	fillRectC(c, x, y, w, h, a.pal.PreviewLetterbox)
 	iw := img.Get("naturalWidth").Float()
 	ih := img.Get("naturalHeight").Float()
 	// A degenerate image or dest falls back to a stretch draw.
@@ -37,8 +36,7 @@ func (a *App) drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
 // nothing is cached. One owner of "cached preview or stand-in", so no tile
 // kind drifts into its own answer.
 func (a *App) drawPreviewFace(n *gridwellv1.Tile, x, y, w, h float64, fill string, blobID int64, fallback func()) {
-	a.cctx.Set("fillStyle", fill)
-	a.cctx.Call("fillRect", x, y, w, h)
+	fillRectC(a.cctx, x, y, w, h, fill)
 	if cached, ok := a.views.urlPreview.Get(rpc.ContentID(n), blobID); ok {
 		if img, ok := previewImage(cached); ok {
 			a.drawImageContain(a.cctx, img, x, y, w, h)
@@ -54,9 +52,9 @@ func (a *App) drawPreviewPlaceholder(label string, x, y, w, h float64) {
 	if w <= 20 || h <= 20 {
 		return
 	}
-	a.cctx.Set("fillStyle", a.pal.Muted)
-	a.cctx.Set("font", "12px monospace")
-	a.cctx.Call("fillText", label, x+8, y+18, w-16)
+	drawLabel(a.cctx, label, x+8, y+18, labelOpts{
+		font: "12px monospace", fill: a.pal.Muted, maxW: w - 16,
+	})
 }
 
 // drawURLTileInPane renders the URL tile a pane is descended into. Mirror
@@ -69,9 +67,9 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, preview.BlobKey(n), func() {
 			a.fetchURLPreview(rpc.ContentID(n), preview.BlobKey(n))
 			label := urlTileLabel(n)
-			a.cctx.Set("fillStyle", a.pal.Muted)
-			a.cctx.Set("font", "16px monospace")
-			a.cctx.Call("fillText", label, x+16, y+32, w-32)
+			drawLabel(a.cctx, label, x+16, y+32, labelOpts{
+				font: "16px monospace", fill: a.pal.Muted, maxW: w - 32,
+			})
 		})
 	})
 }
@@ -81,8 +79,7 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 // positioned for the frame.
 func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h float64) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.cctx.Set("fillStyle", a.pal.ShellFill)
-		a.cctx.Call("fillRect", x, y, w, h)
+		fillRectC(a.cctx, x, y, w, h, a.pal.ShellFill)
 
 		if cached, ok := a.views.urlPreview.Get(rpc.ContentID(n), n.PreviewBlobId); ok {
 			if img, ok := previewImage(cached); ok {

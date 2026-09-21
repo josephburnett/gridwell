@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
@@ -41,6 +42,40 @@ func withClip(c js.Value, x, y, w, h float64, paint func()) {
 	c.Call("rect", x, y, w, h)
 	c.Call("clip")
 	paint()
+	c.Call("restore")
+}
+
+// fillRectC fills one rect in color. It leaves fillStyle set, as the two calls
+// it replaces did.
+func fillRectC(c js.Value, x, y, w, h float64, color string) {
+	c.Set("fillStyle", color)
+	c.Call("fillRect", x, y, w, h)
+}
+
+// labelOpts is the face drawLabel wears. An empty align or baseline is the
+// canvas default, and maxW 0 is unconstrained.
+type labelOpts struct {
+	font     string
+	fill     string
+	align    string
+	baseline string
+	maxW     float64
+}
+
+// drawLabel paints one label and leaves the canvas as it found it. Every
+// fillText goes through here except the raw-text painter, which sets one face
+// for a whole document; see drawMarkdownText.
+func drawLabel(c js.Value, text string, x, y float64, o labelOpts) {
+	c.Call("save")
+	c.Set("font", o.font)
+	c.Set("fillStyle", o.fill)
+	c.Set("textAlign", cmp.Or(o.align, "start"))
+	c.Set("textBaseline", cmp.Or(o.baseline, "alphabetic"))
+	if o.maxW > 0 {
+		c.Call("fillText", text, x, y, o.maxW)
+	} else {
+		c.Call("fillText", text, x, y)
+	}
 	c.Call("restore")
 }
 
@@ -97,8 +132,7 @@ func (a *App) drawDeadLinkFace(n *gridwellv1.Tile, x, y, w, h float64) {
 	if !a.deadLink(n) {
 		return
 	}
-	a.cctx.Set("fillStyle", a.pal.DeadLinkVeil)
-	a.cctx.Call("fillRect", x, y, w, h)
+	fillRectC(a.cctx, x, y, w, h, a.pal.DeadLinkVeil)
 	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.DeadLink, true, false)
 	a.drawTileBannerLabelIn(n, x, y, w, h, a.pal.DeadLink)
 }
@@ -314,8 +348,7 @@ func (a *App) draw() {
 		}
 	}
 
-	a.cctx.Set("fillStyle", a.pal.Bg)
-	a.cctx.Call("fillRect", 0, 0, a.width, a.height)
+	fillRectC(a.cctx, 0, 0, a.width, a.height, a.pal.Bg)
 
 	rects := a.layoutPanes()
 	for paneID, r := range rects {
@@ -435,18 +468,15 @@ func (a *App) drawErrStrip() {
 		if row.Notice.Severity == errsurface.Info {
 			bg, fg = a.pal.InfoStripBg, a.pal.InfoStripText
 		}
-		a.cctx.Set("fillStyle", bg)
-		a.cctx.Call("fillRect", 0, row.Y, a.width, errsurface.RowH)
-		a.cctx.Set("fillStyle", fg)
-		a.cctx.Set("font", "12px system-ui, sans-serif")
-		a.cctx.Set("textBaseline", "middle")
+		fillRectC(a.cctx, 0, row.Y, a.width, errsurface.RowH, bg)
 		label := errsurface.Label(row.Notice)
 		if row.OverflowCount > 0 {
 			label += "  (+" + strconv.Itoa(row.OverflowCount) + " more)"
 		}
-		a.cctx.Call("fillText", label, 12, row.Y+errsurface.RowH/2)
+		drawLabel(a.cctx, label, 12, row.Y+errsurface.RowH/2, labelOpts{
+			font: "12px system-ui, sans-serif", fill: fg, baseline: "middle",
+		})
 	}
-	a.cctx.Set("textBaseline", "alphabetic")
 }
 
 // drawPane draws the chrome even when the target grid has not loaded, so the
@@ -465,8 +495,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// the coordinate system. A focused text tile has none, so it gets a
 		// plain background.
 		if p.ContentID() != "" {
-			a.cctx.Set("fillStyle", a.pal.Bg)
-			a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
+			fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.Bg)
 		} else {
 			a.drawGridLines(a.pal.GridLineInterior, pscreen, r)
 		}
@@ -489,8 +518,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					switch {
 					case rpc.TextDocument(file):
 						ix, iy, iw, ih := textInnerBox(r)
-						a.cctx.Set("fillStyle", a.pal.FileInnerBg)
-						a.cctx.Call("fillRect", ix, iy, iw, ih)
+						fillRectC(a.cctx, ix, iy, iw, ih, a.pal.FileInnerBg)
 						a.drawMarkdownInPane(p, file, ix, iy, iw, ih)
 					case rpc.WebContent(file):
 						// One descent for both url shapes, its own address or
@@ -502,8 +530,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						a.drawShellTileInPane(p, file, ix, iy, iw, ih)
 					default:
 						ix, iy, iw, ih := textInnerBox(r)
-						a.cctx.Set("fillStyle", a.pal.FileInnerBg)
-						a.cctx.Call("fillRect", ix, iy, iw, ih)
+						fillRectC(a.cctx, ix, iy, iw, ih, a.pal.FileInnerBg)
 					}
 				}
 			} else {
@@ -729,8 +756,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		a.fetchGrid(n.ChildGridId)
 	}
 	// Matching the pane, so the outline crossing the screen edge has no jump.
-	a.cctx.Set("fillStyle", a.pal.Bg)
-	a.cctx.Call("fillRect", x, y, w, h)
+	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 
 	// previewCell is parentCell times the well's intrinsic ViewZoom. At
 	// parent = Overtake_now it matches the just-after-swap live cell, so the
@@ -840,23 +866,22 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 		return
 	}
 	withClip(a.cctx, ix, iy, iw, ih, func() {
-		a.cctx.Set("fillStyle", a.pal.SourceLabelBg)
-		a.cctx.Call("fillRect", ix, iy, iw, bannerH)
-		setFont(a.cctx, fontPx, bannerFontFamily, true)
-		a.cctx.Set("fillStyle", textColor)
-		a.cctx.Set("textBaseline", "middle")
-		a.cctx.Set("textAlign", "start")
-		a.cctx.Call("fillText", label, ix+4, iy+bannerH/2)
+		fillRectC(a.cctx, ix, iy, iw, bannerH, a.pal.SourceLabelBg)
+		bold := fontSpec(fontPx, bannerFontFamily, true)
+		drawLabel(a.cctx, label, ix+4, iy+bannerH/2, labelOpts{
+			font: bold, fill: textColor, baseline: "middle",
+		})
 		if status != "" {
 			// The status is the plugin's word, so it is drawn in the one muted
 			// color and never in the tile's own: it reads as a note on the
 			// name, not as part of it.
+			a.cctx.Set("font", bold)
 			labelW := a.cctx.Call("measureText", label).Get("width").Float()
-			setFont(a.cctx, fontPx, bannerFontFamily, false)
-			a.cctx.Set("fillStyle", a.pal.Muted)
-			a.cctx.Call("fillText", status, ix+4+labelW+fontPx/2, iy+bannerH/2)
+			drawLabel(a.cctx, status, ix+4+labelW+fontPx/2, iy+bannerH/2, labelOpts{
+				font: fontSpec(fontPx, bannerFontFamily, false),
+				fill: a.pal.Muted, baseline: "middle",
+			})
 		}
-		a.cctx.Set("textBaseline", "top")
 	})
 }
 
@@ -988,8 +1013,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 		// The flat face a pane tile shows one level down, and in a ghost.
 		fill, line = a.pal.PaneTileFill, a.pal.PaneTileBorder
 	}
-	c.Set("fillStyle", fill)
-	c.Call("fillRect", x, y, w, h)
+	fillRectC(c, x, y, w, h, fill)
 	if line != "" {
 		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	}
@@ -1163,11 +1187,8 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 		name = pl.Label
 	}
 	label := pane.GridNotice(name, a.fetch.gridLoadFailed.Has(gid))
-	a.cctx.Call("save")
-	a.cctx.Set("fillStyle", a.pal.Muted)
-	a.cctx.Set("font", "13px system-ui, sans-serif")
-	a.cctx.Set("textAlign", "center")
-	a.cctx.Set("textBaseline", "middle")
-	a.cctx.Call("fillText", label, r.X+r.W/2, r.Y+r.H/2, r.W-16)
-	a.cctx.Call("restore")
+	drawLabel(a.cctx, label, r.X+r.W/2, r.Y+r.H/2, labelOpts{
+		font: "13px system-ui, sans-serif", fill: a.pal.Muted,
+		align: "center", baseline: "middle", maxW: r.W - 16,
+	})
 }
