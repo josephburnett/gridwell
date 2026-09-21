@@ -211,6 +211,12 @@ check: fmt-check proto-check wasm plugins
 #   make check-e2e PW_FLAGS=--retries=1     # CI's one-retry flake discipline
 PW_FLAGS ?=
 
+# A retry that passes leaves Playwright's exit code 0, so each suite is
+# followed by an audit of its JSON report: a spec that needed a retry and has
+# no row on docs/flake-ledger.md fails the gate. The report paths are the
+# playwright configs' outputFile, which test/boundary pins against these.
+FLAKY_REPORT := node scripts/flaky-report.mjs
+
 # check-electron runs the live-tile harnesses under a virtual display,
 # exercising the real Electron WebContentsView. Shells ride a WebSocket on the
 # web door, so check-web owns that path; CLAUDE.md's Gates table says when to
@@ -229,6 +235,7 @@ check-electron: node-modules
 # prior `make vendor` for node_modules and Playwright.
 check-e2e: build node-modules
 	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e -- $(PW_FLAGS)
+	$(FLAKY_REPORT) $(DESKTOP)/playwright-report/e2e.json
 
 # check-web drives the browser-mode client: `gridwell serve` and the system
 # Chromium, so the repo stays offline-buildable. It is the only gate that sees
@@ -237,6 +244,7 @@ check-e2e: build node-modules
 # headless. CLAUDE.md's Gates table says when to run it.
 check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web -- $(PW_FLAGS)
+	$(FLAKY_REPORT) $(DESKTOP)/playwright-report/web.json
 
 # check-connections is the spawn gate: the real binaries through a real ssh
 # tunnel, with one write and read crossing every hop. The in-process seam

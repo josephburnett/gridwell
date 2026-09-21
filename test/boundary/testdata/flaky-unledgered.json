@@ -1,0 +1,18 @@
+{
+  "config": { "rootDir": "apps/desktop/e2e-web" },
+  "suites": [
+    {
+      "title": "web-core.spec.ts",
+      "file": "web-core.spec.ts",
+      "specs": [
+        {
+          "title": "the browser client boots onto home",
+          "file": "web-core.spec.ts",
+          "line": 9,
+          "ok": true,
+          "tests": [{ "status": "flaky" }]
+        }
+      ]
+    }
+  ]
+}

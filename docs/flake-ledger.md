@@ -3,7 +3,9 @@
 Every e2e spec whose history includes a flake, what the flake was, and how
 it was closed. The notes live as comments in the specs (grep `flak` under
 `apps/desktop/e2e`); this page indexes them. `test/boundary` pins that every
-spec carrying such a note is listed here.
+spec carrying such a note is listed here, and the gates read it from the other
+side: a retry that passes a spec with no row here fails the job
+(`scripts/flaky-report.mjs`).
 
 Two rules:
 
@@ -33,7 +35,11 @@ Two rules:
 
 ## Open: no mechanism yet
 
-None. Every entry above ended as a mechanism.
+Same columns, and a row leaves this section only by naming its mechanism.
+
+| Spec | What flaked | Standing hypothesis | State |
+|---|---|---|---|
+| `apps/desktop/e2e-web/web-touch.spec.ts` (the drag-then-tap test, `web-touch.spec.ts:100`) | 2026-09-20, CI run 35539861848 at commit `8bac7f85`: the web gate failed "touch: drag moves a tile; two-finger tap ascends a descent" on the run and again on its one retry, both at `tap descended into the text tile` — `textFocus` was `""` after the tap that follows the one-finger drag, while the drag's own assertion, that the tile moved to cx+1 ON THE SERVER, had already passed. The next CI run, `4136066a`, was green | the tap needs the CLIENT to hold the tile at cx+1, and what the spec waits on before tapping is `waitIdle()`, whose contract is written for `window.mouse`: it dispatches synchronously into the wasm handlers, so idle cannot be read before the gesture is armed. This drag is raw `Input.dispatchTouchEvent` over CDP, which carries no such guarantee — a wait that is sound for every mouse spec and unproven for this one. Demonstrated neither way | OPEN. Fresh look 2026-09-20 on a freshly built tree (`make build`, `npm run build`) at `027133b0`: `--repeat-each=5` over the file is 25/25 green, 5/5 for this test. Reported before it: 15/15 for this test at `8bac7f85`, 34/34 for the whole web suite at HEAD. Not reproduced off the runner |
 
 ## Environment-only failures (not spec flakes)
 
@@ -48,5 +54,6 @@ None. Every entry above ended as a mechanism.
 
 When a spec gains a flake note, add its row here in the same commit:
 spec path, what was observed, the mechanism in one sentence, and what
-closed it. An entry without a mechanism is an open bug, not a ledger
-line — say so in the "Closed by" column and keep digging.
+closed it. An entry with no mechanism yet is an open bug: it goes in
+"Open: no mechanism yet", carrying the evidence and a fresh look on a
+freshly built tree, and it stays there until someone names the mechanism.

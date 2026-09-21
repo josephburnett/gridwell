@@ -22,7 +22,9 @@ export default defineConfig({
   retries: 0,
   timeout: 90_000,
   expect: { timeout: 15_000 },
-  reporter: [['list']],
+  // Its own file, so a web run never reads the Electron run's retries. See
+  // playwright.config.ts.
+  reporter: [['list'], ['json', { outputFile: 'playwright-report/web.json' }]],
   use: {
     trace: 'retain-on-failure',
     hasTouch: true,

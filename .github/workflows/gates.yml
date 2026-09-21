@@ -1,8 +1,10 @@
 # The heavy gates, on PRs and main: the browser suite, the connection spawn,
 # direct and partition gates, whose sshd is self-contained through dialtest,
 # and the full Electron e2e under xvfb. PW_FLAGS=--retries=1 gives each suite
-# one retry. Every gate here is a Makefile target and this file only sequences
-# them, which test/boundary pins. The one step that is not a gate is the
+# one retry, and the target that runs it fails the job on a retry that passed
+# an unledgered spec (scripts/flaky-report.mjs), so the retry is never silent.
+# Every gate here is a Makefile target and this file only sequences them,
+# which test/boundary pins. The one step that is not a gate is the
 # shim-commit report, which prints and never fails.
 name: gates
 # There is no `paths:` filter. A dependency or toolchain bump, or any
