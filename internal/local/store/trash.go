@@ -21,9 +21,6 @@ import (
 
 const systemKeyTrashGridID = "trash_grid_id"
 
-// trashAncestryCap bounds the ancestor walk, which a cycle would loop forever.
-const trashAncestryCap = 256
-
 // TrashGridID returns the trash grid, creating it on first use by the same
 // system-key pattern as ScratchGridID. Info declares it as a root menu entry.
 func (s *Store) TrashGridID(ctx context.Context) (string, error) {
@@ -110,28 +107,6 @@ func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int
 		}
 	}
 	return false, nil
-}
-
-// gridInSubtree walks the well-parent chain from gridID up to a root, reporting
-// whether rootID is on the way.
-func gridInSubtree(ctx context.Context, tx *sql.Tx, gridID, rootID int64) (bool, error) {
-	g := gridID
-	for i := 0; i < trashAncestryCap; i++ {
-		if g == rootID {
-			return true, nil
-		}
-		var parent int64
-		err := tx.QueryRowContext(ctx,
-			`SELECT grid_id FROM tiles WHERE child_grid_id = ?`, g).Scan(&parent)
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		g = parent
-	}
-	return false, fmt.Errorf("grid %d: ancestry deeper than %d (cycle?)", gridID, trashAncestryCap)
 }
 
 // moveTileToTrash files t under the current month's subgrid, minting the month

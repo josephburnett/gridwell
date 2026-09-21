@@ -82,10 +82,10 @@ func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest)
 }
 
 // wellWouldContainItself refuses placing a well inside its own subtree, walking
-// up from the destination grid through parent wells. Each interior child grid
-// hangs off exactly one well by construction, so the ancestor chain is a
-// server-derived fact and needs no client path. Non-well tiles and exit wells
-// have no local subtree and pass trivially.
+// up from the destination grid through parent wells (gridInSubtree). Each
+// interior child grid hangs off exactly one well by construction, so the
+// ancestor chain is a server-derived fact and needs no client path. Non-well
+// tiles and exit wells have no local subtree and pass trivially.
 func (s *Store) wellWouldContainItself(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile, destGridID int64) error {
 	if !isWellKind(n.Kind) {
 		return nil
@@ -94,20 +94,12 @@ func (s *Store) wellWouldContainItself(ctx context.Context, tx *sql.Tx, n *gridw
 	if err != nil {
 		return nil // qualified, an exit well or link: no local subtree
 	}
-	g := destGridID
-	for {
-		if g == childGrid {
-			return fmt.Errorf("%w: cannot place a well inside its own subtree", ErrInvalidArgument)
-		}
-		var parent int64
-		err := tx.QueryRowContext(ctx,
-			`SELECT grid_id FROM tiles WHERE child_grid_id = ?`, g).Scan(&parent)
-		if err == sql.ErrNoRows {
-			return nil // reached a root or scratch: the destination is outside
-		}
-		if err != nil {
-			return err
-		}
-		g = parent
+	inside, err := gridInSubtree(ctx, tx, destGridID, childGrid)
+	if err != nil {
+		return err
 	}
+	if inside {
+		return fmt.Errorf("%w: cannot place a well inside its own subtree", ErrInvalidArgument)
+	}
+	return nil
 }

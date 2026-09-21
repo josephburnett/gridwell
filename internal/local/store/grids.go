@@ -96,6 +96,32 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 	return out, rows.Err()
 }
 
+// ancestryCap bounds the well-parent walk, which a cycle would loop forever.
+const ancestryCap = 256
+
+// gridInSubtree walks the well-parent chain from gridID up to a root, reporting
+// whether rootID is on the way. It is the one ancestor walk: the trash's
+// bypass check and placement's own-subtree refusal are both this question.
+func gridInSubtree(ctx context.Context, tx *sql.Tx, gridID, rootID int64) (bool, error) {
+	g := gridID
+	for i := 0; i < ancestryCap; i++ {
+		if g == rootID {
+			return true, nil
+		}
+		var parent int64
+		err := tx.QueryRowContext(ctx,
+			`SELECT grid_id FROM tiles WHERE child_grid_id = ?`, g).Scan(&parent)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		g = parent
+	}
+	return false, fmt.Errorf("grid %d: ancestry deeper than %d (cycle?)", gridID, ancestryCap)
+}
+
 // GetTile returns a single tile by ID.
 func (s *Store) GetTile(ctx context.Context, tileID string) (*gridwellv1.Tile, error) {
 	id, err := parseID(tileID)
