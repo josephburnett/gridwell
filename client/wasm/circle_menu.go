@@ -167,24 +167,6 @@ func (a *App) closeDOMChoiceMenu() {
 	}
 }
 
-// listen adds a DOM listener and returns the remover, which also releases the
-// js.Func: a popover opened and closed repeatedly must not leak one per open.
-func listen(target js.Value, event string, fn func(js.Value)) func() {
-	cb := js.FuncOf(func(_ js.Value, args []js.Value) any {
-		ev := js.Undefined()
-		if len(args) > 0 {
-			ev = args[0]
-		}
-		fn(ev)
-		return nil
-	})
-	target.Call("addEventListener", event, cb)
-	return func() {
-		target.Call("removeEventListener", event, cb)
-		cb.Release()
-	}
-}
-
 // slotHasMenu is what wsbar.RouteClick reads to send a right press to the
 // slot's menu rather than swallowing it.
 func (a *App) slotHasMenu(p *pane.Pane) bool {

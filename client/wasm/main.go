@@ -324,6 +324,24 @@ func oneShot(fn func()) js.Func {
 // count is the only evidence.
 var oneShotsArmed, oneShotsLive int
 
+// listen adds a DOM listener and returns the remover, which also releases the
+// js.Func: a surface opened and closed repeatedly must not leak one per open.
+func listen(target js.Value, event string, fn func(js.Value)) func() {
+	cb := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		ev := js.Undefined()
+		if len(args) > 0 {
+			ev = args[0]
+		}
+		fn(ev)
+		return nil
+	})
+	target.Call("addEventListener", event, cb)
+	return func() {
+		target.Call("removeEventListener", event, cb)
+		cb.Release()
+	}
+}
+
 // setTimeoutMs is the shim's debounce.Schedule. A debounce coalesces, so at
 // most one is alive per settle window.
 func setTimeoutMs(ms int, fire func()) {
