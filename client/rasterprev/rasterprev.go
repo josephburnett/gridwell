@@ -4,7 +4,11 @@
 // Rasterizer interface and tests inject a fake.
 package rasterprev
 
-import "math"
+import (
+	"math"
+
+	"github.com/josephburnett/gridwell/client/resload"
+)
 
 // bucketPx quantizes the layout width so continuous grid zoom re-rasterizes at
 // steps, not per frame.
@@ -27,10 +31,7 @@ type Key struct {
 }
 
 // Raster is the loaded image handle the renderer draws.
-type Raster interface {
-	Truthy() bool
-	Revoke()
-}
+type Raster = resload.Resource
 
 // Rasterizer turns an SVG document into a Raster. The wasm rasterizer is
 // asynchronous; the test fake resolves on demand.
@@ -42,8 +43,7 @@ type Rasterizer interface {
 type Cache struct {
 	ras     Rasterizer
 	onErr   func(tileID string)
-	entries map[slot]*entry
-	nextGen int64
+	entries map[slot]*resload.Entry[Key]
 }
 
 // slot is the map key: a tile at one width bucket. Two consumers at different
@@ -54,22 +54,11 @@ type slot struct {
 	bucket float64
 }
 
-type entry struct {
-	key    Key
-	raster Raster
-	// failed is the settled verdict for key: it stops a retry loop, and it is
-	// why the failure reaches the user once per key rather than once per frame.
-	failed bool
-	// gen rises with every rasterization, so a result whose callback fires
-	// after a newer Ensure superseded it is discarded.
-	gen int64
-}
-
 // NewCache requires a non-nil ras. onErr fires once per failed key with the
 // tile id, so a document that never becomes a picture reaches the user instead
 // of silently falling back to raw source; nil silences it.
 func NewCache(ras Rasterizer, onErr func(tileID string)) *Cache {
-	return &Cache{ras: ras, onErr: onErr, entries: map[slot]*entry{}}
+	return &Cache{ras: ras, onErr: onErr, entries: map[slot]*resload.Entry[Key]{}}
 }
 
 // Ensure returns k's raster, starting a rasterization on a miss. ok is false
@@ -79,9 +68,9 @@ func NewCache(ras Rasterizer, onErr func(tileID string)) *Cache {
 // a raster lands.
 func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Raster, bool) {
 	s := slot{tileID: k.TileID, bucket: k.Bucket}
-	if e, ok := c.entries[s]; ok && e.key == k {
-		if e.raster != nil && e.raster.Truthy() {
-			return e.raster, true
+	if e, ok := c.entries[s]; ok && e.Ident == k {
+		if e.Ready() {
+			return e.Res, true
 		}
 		return nil, false
 	}
@@ -89,45 +78,33 @@ func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Rast
 	if !ok {
 		return nil, false
 	}
-	if old, ok := c.entries[s]; ok && old.raster != nil {
-		old.raster.Revoke()
-	}
 	// Other buckets whose version moved on re-rasterize on next use; keeping
 	// one would draw the previous bytes at the next zoom step.
 	for os, old := range c.entries {
-		if os != s && os.tileID == k.TileID && old.key.Version != k.Version {
-			if old.raster != nil {
-				old.raster.Revoke()
-			}
+		if os != s && os.tileID == k.TileID && old.Ident.Version != k.Version {
+			old.Release()
 			delete(c.entries, os)
 		}
 	}
-	c.nextGen++
-	e := &entry{key: k, gen: c.nextGen}
-	c.entries[s] = e
-	gen := e.gen
+	e, ok := c.entries[s]
+	if !ok {
+		e = &resload.Entry[Key]{}
+		c.entries[s] = e
+	}
+	// The slot answers for the key it is rasterizing, so a frame mid-flight
+	// paints raw source instead of the previous version's picture, and asks
+	// for no second rasterization of the same document.
+	e.Adopt(k)
+	gen := e.Begin()
 
 	c.ras.Rasterize(svg,
 		func(r Raster) {
-			cur, ok := c.entries[s]
-			if !ok || cur.gen != gen {
-				if r != nil {
-					r.Revoke()
-				}
-				return
-			}
-			cur.raster = r
-			if onReady != nil {
+			if resload.Take(c.entries[s], gen, k, r) && onReady != nil {
 				onReady()
 			}
 		},
 		func() {
-			cur, ok := c.entries[s]
-			if !ok || cur.gen != gen {
-				return // superseded or dropped: the newer rasterization owns the answer
-			}
-			cur.failed = true
-			if c.onErr != nil {
+			if resload.Miss(c.entries[s], gen, k) && c.onErr != nil {
 				c.onErr(k.TileID)
 			}
 		},
@@ -138,13 +115,10 @@ func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Rast
 // Drop releases a tile's rasters. It is idempotent and runs on tile delete.
 func (c *Cache) Drop(tileID string) {
 	for s, e := range c.entries {
-		if s.tileID != tileID {
-			continue
+		if s.tileID == tileID {
+			e.Release()
+			delete(c.entries, s)
 		}
-		if e.raster != nil {
-			e.raster.Revoke()
-		}
-		delete(c.entries, s)
 	}
 }
 
@@ -160,8 +134,8 @@ func (c *Cache) States() map[string]State {
 	out := map[string]State{}
 	for s, e := range c.entries {
 		st := out[s.tileID]
-		st.Ready = st.Ready || (e.raster != nil && e.raster.Truthy())
-		st.Failed = st.Failed || e.failed
+		st.Ready = st.Ready || e.Ready()
+		st.Failed = st.Failed || e.Failed
 		out[s.tileID] = st
 	}
 	return out

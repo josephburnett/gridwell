@@ -5,13 +5,14 @@
 // behind the Decoder interface and tests inject a synchronous fake.
 package preview
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/josephburnett/gridwell/client/resload"
+)
 
 // Image is the decoded handle the renderer draws.
-type Image interface {
-	Truthy() bool
-	Revoke()
-}
+type Image = resload.Resource
 
 // Decoder turns raw JPEG bytes into an Image. The wasm decoder is
 // asynchronous; the test fake resolves inside Decode so tests are
@@ -27,22 +28,7 @@ type Cache struct {
 	onDecErr func(tileID string)
 
 	mu      sync.Mutex
-	entries map[string]*entry
-}
-
-type entry struct {
-	// blobID is the preview_blob_id decoded from, or ungeneratedBlobID.
-	blobID int64
-	image  Image
-	// gen rises with every Put, so a decode whose onReady fires after a newer
-	// Put superseded it is discarded.
-	gen int64
-	// missBlob is the blob id a completed fetch or decode produced no image
-	// for; 0 is none, and no fetch carries blob id 0. It is separate from
-	// blobID so a tile can hold last blob's image and this blob's settled
-	// miss at once. Without it every frame re-asks the server for a tile
-	// whose answer will never become an image.
-	missBlob int64
+	entries map[string]*resload.Entry[int64]
 }
 
 // ungeneratedBlobID keys a face the server minted no generation for: a page's,
@@ -57,7 +43,7 @@ func NewCache(dec Decoder, onDecErr func(tileID string)) *Cache {
 	return &Cache{
 		dec:      dec,
 		onDecErr: onDecErr,
-		entries:  map[string]*entry{},
+		entries:  map[string]*resload.Entry[int64]{},
 	}
 }
 
@@ -69,13 +55,13 @@ func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[tileID]
-	if !ok || e.image == nil || !e.image.Truthy() {
+	if !ok || !e.Ready() {
 		return nil, false
 	}
-	if e.blobID != ungeneratedBlobID && (wantBlobID == 0 || e.blobID != wantBlobID) {
+	if e.Ident != ungeneratedBlobID && (wantBlobID == 0 || e.Ident != wantBlobID) {
 		return nil, false
 	}
-	return e.image, true
+	return e.Res, true
 }
 
 // Put stores bytes belonging to a known server-side preview blob; locally
@@ -93,12 +79,7 @@ func (c *Cache) Put(tileID string, blobID int64, bytes []byte, onReady func()) {
 func (c *Cache) PutEmpty(tileID string, blobID int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e, ok := c.entries[tileID]
-	if !ok {
-		e = &entry{}
-		c.entries[tileID] = e
-	}
-	e.missBlob = blobID
+	c.at(tileID).Settle(blobID)
 }
 
 // KnownEmpty answers whether a completed fetch or decode already settled this
@@ -107,7 +88,7 @@ func (c *Cache) KnownEmpty(tileID string, blobID int64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[tileID]
-	return ok && e.missBlob != 0 && e.missBlob == blobID
+	return ok && e.Failed && e.FailIdent == blobID
 }
 
 // PutWildcard serves the flows that hold JPEG bytes before the server blob id
@@ -122,52 +103,28 @@ func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
 		return
 	}
 	c.mu.Lock()
-	e, ok := c.entries[tileID]
-	if !ok {
-		e = &entry{}
-		c.entries[tileID] = e
-	}
-	e.gen++
-	gen := e.gen
+	// The entry keeps its image and its blob id until the new one lands, so a
+	// tile goes on showing the face it had while the next decode runs.
+	gen := c.at(tileID).Begin()
 	c.mu.Unlock()
 
 	c.dec.Decode(bytes,
 		func(img Image) {
 			c.mu.Lock()
-			cur, ok := c.entries[tileID]
-			if !ok || cur.gen != gen {
-				// Superseded or dropped before the decode completed.
-				c.mu.Unlock()
-				if img != nil {
-					img.Revoke()
-				}
-				return
-			}
-			if cur.image != nil && cur.image.Truthy() {
-				cur.image.Revoke()
-			}
-			cur.image = img
-			cur.blobID = blobID
-			cur.missBlob = 0 // an installed image is the fresher answer
+			took := resload.Take(c.entries[tileID], gen, blobID, img)
 			c.mu.Unlock()
-			if onReady != nil {
+			if took && onReady != nil {
 				onReady()
 			}
 		},
 		func() {
 			c.mu.Lock()
-			cur, ok := c.entries[tileID]
-			if !ok || cur.gen != gen {
-				// Superseded or dropped: the newer Put owns the answer.
-				c.mu.Unlock()
-				return
-			}
 			// No image is installed, so Get keeps returning the prior image if
 			// there is one; the miss is what stops the caller re-fetching
 			// these bytes on every draw.
-			cur.missBlob = blobID
+			missed := resload.Miss(c.entries[tileID], gen, blobID)
 			c.mu.Unlock()
-			if c.onDecErr != nil {
+			if missed && c.onDecErr != nil {
 				c.onDecErr(tileID)
 			}
 		},
@@ -177,12 +134,19 @@ func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
 // Drop is idempotent and runs on tile delete.
 func (c *Cache) Drop(tileID string) {
 	c.mu.Lock()
-	e, ok := c.entries[tileID]
-	if ok {
+	defer c.mu.Unlock()
+	if e, ok := c.entries[tileID]; ok {
+		e.Release()
 		delete(c.entries, tileID)
 	}
-	c.mu.Unlock()
-	if ok && e.image != nil && e.image.Truthy() {
-		e.image.Revoke()
+}
+
+// at returns tileID's entry, creating it. The caller holds the lock.
+func (c *Cache) at(tileID string) *resload.Entry[int64] {
+	e, ok := c.entries[tileID]
+	if !ok {
+		e = &resload.Entry[int64]{}
+		c.entries[tileID] = e
 	}
+	return e
 }
