@@ -224,8 +224,7 @@ func (m *Machine) installLevel(b *barrier, pl *planner) {
 	}
 	// The animation left the origin pane zoomed into the tile, so its true
 	// place goes back before the outer tree is parked or captured.
-	st := ld.Origin.Clone()
-	pl.add(Effect{Kind: EffInstallPlace, PaneID: ld.PaneID, Stack: &st})
+	pl.install(ld.PaneID, ld.Origin, nil)
 	if b.Failed {
 		return
 	}
@@ -385,9 +384,7 @@ func (m *Machine) levelRecentre(c cont, r Result, w World, pl *planner) {
 	}
 	t := r.Tile
 	cx, cy := pane.Footprint{X: t.X, Y: t.Y, W: t.W, H: t.H}.Center()
-	var st pane.Stack
-	st.Reset(pane.Frame{GridID: t.GridId, Cx: cx, Cy: cy, Zoom: p.Zoom})
-	pl.add(Effect{Kind: EffInstallPlace, PaneID: c.PaneID, Stack: &st})
+	pl.install(c.PaneID, oneFrame(t.GridId, cx, cy, p.Zoom), nil)
 	pl.add(Effect{Kind: EffFetchGrid, GridID: t.GridId})
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 }

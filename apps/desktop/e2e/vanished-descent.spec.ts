@@ -8,8 +8,8 @@ import { deleteTile, tileAt } from './oracle';
 // nothing, which reads as "it just disappeared".
 //
 // Deleting once only moves the row to the trash, where it still reads, so the
-// pane follows it and stays quiet. The second delete is inside the trash, which
-// bypasses it, and that is the verdict.
+// pane follows it, keeps its faces, and stays quiet. The second delete is
+// inside the trash, which bypasses it, and that is the verdict.
 //
 // The by-id read is in the wasm shim, which `make check` compiles and never
 // runs; the seam crossed here is a real GetTile verdict reaching the real strip.
@@ -44,6 +44,12 @@ test('a descent whose row is deleted under it says so on the strip', async ({ gw
     .toBe(false);
   await window.waitForTimeout(2_000);
   expect(await notice(), 'a trashed row still reads, so nothing is said').toBeNull();
+
+  // The faces stay with it. Every text overlay gates on the one resolved row,
+  // so a row the pane's own grid no longer holds cannot leave the doc showing
+  // rendered with no toggle and no editor.
+  await expect(window.locator('#gw-text-toggle'), 'the toggle follows the row').toBeVisible();
+  await expect(window.locator('#gw-text-editor'), 'the editor follows the row').toBeVisible();
 
   // Deleting it out of the trash is the verdict: the id routes, the node
   // answers, and the answer is that there is no such tile.

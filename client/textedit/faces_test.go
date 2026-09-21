@@ -85,3 +85,34 @@ func TestDecideCheckboxClick(t *testing.T) {
 		}
 	}
 }
+
+func TestDecideDescentTable(t *testing.T) {
+	doc := &gridwellv1.Tile{Kind: rpc.KindText, AltText: "notes.md"}
+	url := &gridwellv1.Tile{Kind: rpc.KindURL}
+	cases := []struct {
+		name     string
+		tile     *gridwellv1.Tile
+		readOnly bool
+		paneMode string
+		want     Descent
+	}{
+		{"writable doc in text mode", doc, false, rpc.TextModeText,
+			Descent{Mode: rpc.TextModeText, Toggle: true}},
+		{"writable doc in rendered mode", doc, false, rpc.TextModeRendered,
+			Descent{Mode: rpc.TextModeRendered, Toggle: true}},
+		// The raw face never opens over content the server would refuse,
+		// whatever mode a restored session left on the pane.
+		{"read-only doc a session left in text mode", doc, true, rpc.TextModeText,
+			Descent{Mode: rpc.TextModeRendered, Toggle: true}},
+		{"a url descent has no text face", url, false, rpc.TextModeText, Descent{}},
+		// The row has not landed: the mode the descent chose stands, so the
+		// editor opens on the first frame rather than after the fetch.
+		{"row not landed", nil, false, rpc.TextModeText, Descent{Mode: rpc.TextModeText}},
+		{"row not landed, no mode", nil, false, "", Descent{Mode: rpc.TextModeRendered}},
+	}
+	for _, c := range cases {
+		if got := DecideDescent(c.tile, c.readOnly, c.paneMode); got != c.want {
+			t.Errorf("%s: DecideDescent = %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}

@@ -65,3 +65,27 @@ func DecideCheckboxClick(textDocument, org, readOnly, bodyCached bool) CheckboxC
 	}
 	return CheckboxToggle
 }
+
+// Descent is what a focused text descent shows: the face, and whether the
+// raw/rendered toggle rides with it.
+type Descent struct {
+	Mode   string // "" when nothing text-shaped is descended
+	Toggle bool
+}
+
+// DecideDescent is the one verdict behind the textarea, the rendered view and
+// the file toggle, so a row resolved off the pane's own grid cannot show one
+// of them and hide another. A nil tile is a row that has not landed: the mode
+// the descent chose stands until it does.
+func DecideDescent(tile *gridwellv1.Tile, readOnly bool, paneMode string) Descent {
+	if tile == nil {
+		return Descent{Mode: ShownMode(paneMode, false)}
+	}
+	if !rpc.TextDocument(tile) {
+		return Descent{}
+	}
+	return Descent{
+		Mode:   ShownMode(paneMode, readOnly),
+		Toggle: ToggleVisible(tile, readOnly),
+	}
+}

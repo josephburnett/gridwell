@@ -71,8 +71,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		default:
 			vp = &Viewport{Cx: 0, Cy: 0, Zoom: 1.0}
 		}
-		land := landing.Clone()
-		pl.add(Effect{Kind: EffInstallPlace, PaneID: p.ID, Stack: &land, Viewport: vp})
+		pl.install(p.ID, landing, vp)
 		pl.add(Effect{Kind: EffClearSelection, PaneID: p.ID})
 		m.landOnFrame(p.ID, landing, pl)
 		return

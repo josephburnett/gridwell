@@ -655,6 +655,17 @@ func modifierHeld(ev js.Value) bool {
 		ev.Get("ctrlKey").Truthy() || ev.Get("metaKey").Truthy()
 }
 
+// releaseAll releases the handlers that were installed. A handler an xterm
+// build or a host never gave us is the zero js.Func, which is not Truthy and
+// must not be released.
+func releaseAll(fns ...js.Func) {
+	for _, f := range fns {
+		if f.Truthy() {
+			f.Release()
+		}
+	}
+}
+
 // releaseShellStream tears down the DOM and the js.Func handlers.
 func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	if pl, ok := a.localIf(paneID); ok && pl.shellConn == conn {
@@ -662,32 +673,10 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	}
 	// Dispose before removing the node, so xterm's own listeners do not fire
 	// against a removed element.
-	conn.onData.Release()
-	conn.onResize.Release()
-	if conn.onMouse.Truthy() {
-		conn.onMouse.Release()
-	}
-	if conn.onLinkProvide.Truthy() {
-		conn.onLinkProvide.Release()
-	}
-	if conn.onLinkActivate.Truthy() {
-		conn.onLinkActivate.Release()
-	}
-	if conn.onLinkHover.Truthy() {
-		conn.onLinkHover.Release()
-	}
-	if conn.onLinkLeave.Truthy() {
-		conn.onLinkLeave.Release()
-	}
-	if conn.onOSCURL.Truthy() {
-		conn.onOSCURL.Release()
-	}
-	for _, f := range conn.mouseFns {
-		f.Release()
-	}
-	for _, f := range conn.touchFns {
-		f.Release()
-	}
+	releaseAll(conn.onData, conn.onResize, conn.onMouse, conn.onLinkProvide,
+		conn.onLinkActivate, conn.onLinkHover, conn.onLinkLeave, conn.onOSCURL)
+	releaseAll(conn.mouseFns...)
+	releaseAll(conn.touchFns...)
 	// The mouse-routing target must not outlive the container it names.
 	if a.touchDownTarget.Truthy() && a.touchDownTarget.Equal(conn.container) {
 		a.touchDownTarget = js.Value{}

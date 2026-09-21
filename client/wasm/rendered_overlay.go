@@ -101,17 +101,8 @@ func (a *App) refreshRenderedOverlay() {
 		a.overlays.renderedReady = false
 		a.overlays.lastRenderedKey = ""
 	}
-	p := a.tree.FocusedPane()
-	if p == nil || p.ContentID() == "" {
-		hide()
-		return
-	}
-	t, ok := a.descendedTile(p)
-	if !ok || !rpc.TextDocument(t) {
-		hide()
-		return
-	}
-	if textedit.ShownMode(p.TextMode, a.tileReadOnly(t)) != rpc.TextModeRendered {
+	p, t, r, d := a.focusedTextDescent()
+	if t == nil || d.Mode != rpc.TextModeRendered {
 		hide()
 		return
 	}
@@ -120,7 +111,6 @@ func (a *App) refreshRenderedOverlay() {
 		hide() // the canvas paints raw source until the fetch lands
 		return
 	}
-	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		hide()
 		return
