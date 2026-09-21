@@ -93,9 +93,19 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
+      # setup-node caches the npm tarballs, and the Electron runtime is not
+      # one: the package ships no postinstall and fetches the zip on first
+      # run. Without this the gate below pays for the download and unpack
+      # inside its own clock.
+      - name: cache the Electron runtime
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/package-lock.json') }}
       - name: node modules + playwright
         run: |
           cd apps/desktop && npm ci
+          node node_modules/electron/install.js
           npx playwright install --with-deps chromium
       - name: build
         run: make build
