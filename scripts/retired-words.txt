@@ -16,10 +16,11 @@ viewY
 # "federation" — two words for the edge is one too many: a node connects to a
 # node over a connection, through the connection door. The word survives only
 # where a home already has it written down — the server.yaml `federation:`
-# key, the <home>/federation.sock socket file, and the serving banner's
-# federation= field — so it is allowed in internal/config, which owns the key,
-# and on any line that spells the socket file or the banner field.
-federation internal/config/|.*federation\.sock|.*federation=|.*`federation|.*cfg\.Federation|.*config\.FederationSocket
+# key, the <home>/federation.sock socket file, the serving banner's
+# federation= field, and the e2e spec file already named for it — so it is
+# allowed in internal/config, which owns the key, and on any line that spells
+# one of those names.
+federation internal/config/|.*federation\.sock|.*federation=|.*`federation|.*cfg\.Federation|.*config\.FederationSocket|.*e2e/federation\.spec\.ts
 # "launcher" — a well onto a place is a doorway, the word the + menu, the
 # crumbs and client/door already use; "launcher" named the same tile and said
 # nothing more. Allowed for the shadow launchers, the browser-opening scripts a

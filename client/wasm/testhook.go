@@ -386,13 +386,12 @@ func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 	return nil
 }
 
-// thIdle reports that no transition, drag, fetch, or tile mutation is in
-// flight. Specs poll it instead of sleeping, so they never race the zoom
+// thIdle reports that no transition, drag, fetch, or write is in flight. Specs poll it instead of sleeping, so they never race the zoom
 // animation, the create-then-refetch, or a descent waiting on a row the
 // server has not made yet.
 func (a *App) thIdle(js.Value, []js.Value) any {
 	return !a.trans.Any() &&
-		a.tileMutates == 0 &&
+		!a.writes.Any() &&
 		!a.nav.LevelPending() &&
 		a.dragging == nil &&
 		a.fetch.gridFetch.Len() == 0 &&
@@ -412,7 +411,7 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 	}
 	return map[string]any{
 		"transition":   a.trans.Any(),
-		"tileMutates":  a.tileMutates,
+		"writes":       a.writes.Len(),
 		"levelPending": a.nav.LevelPending(),
 		// All three armed gesture states, not just the one thIdle gates on:
 		// a spec that sees no ghost needs to know which took the press.

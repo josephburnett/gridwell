@@ -47,8 +47,8 @@ type write struct {
 	call        func(ctx context.Context) error
 	// then runs after a successful call, once the refetch is scheduled.
 	then func()
-	// done runs once the write has finished, landed, failed or parked. It is
-	// the release half of an in-flight count.
+	// done runs once the write has finished, landed, failed or parked,
+	// whatever then or undo did.
 	done func()
 	// undo is the visible reconcile for a failure, such as a drag ghost
 	// snapping back. It is the alternative to parking, so `undo` and `id` are
@@ -85,11 +85,20 @@ func rpcErrText(err error) string {
 	return err.Error()
 }
 
-// do runs one non-content mutation: park it in the outbox, react per
-// clientsync's table, surface what failed, run then/undo. Blocking; `post` is
-// the goroutine form. Bounded, so a request the network swallows cannot leave
-// a write parked with no verdict.
+// do runs one non-content mutation and blocks; `post` is the goroutine form.
+// Both count the write in flight before they hand it on, so a spec's idle
+// wait covers every gesture's write and not only the ones whose call site
+// remembered.
 func (a *App) do(w write) error {
+	a.writes.Start()
+	return a.dispatch(w)
+}
+
+// dispatch is the counted body: park the write in the outbox, react per
+// clientsync's table, surface what failed, run then/undo. Bounded, so a
+// request the network swallows cannot leave a write parked with no verdict.
+func (a *App) dispatch(w write) error {
+	defer a.writes.Done()
 	if w.done != nil {
 		defer w.done()
 	}
@@ -150,14 +159,16 @@ func (a *App) do(w write) error {
 	return nil
 }
 
-// post runs do in a goroutine, except during beforeunload, where a goroutine
-// would never be scheduled before the page dies.
+// post runs the write in a goroutine, except during beforeunload, where a
+// goroutine would never be scheduled before the page dies. The count rises
+// before the goroutine, so the gesture's own turn cannot read as idle.
 func (a *App) post(w write) {
+	a.writes.Start()
 	if a.unloading {
-		a.do(w)
+		a.dispatch(w)
 		return
 	}
-	go a.do(w)
+	go a.dispatch(w)
 }
 
 // doOnUnload is `do` during beforeunload. The reply can never arrive and the
@@ -185,12 +196,8 @@ func (a *App) doOnUnload(w write) error {
 // claim, no parked value, a refetch on success.
 func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess func(*gridwellv1.Tile)) {
 	var tile *gridwellv1.Tile
-	// The gesture is not over while the row is being made, since the descent
-	// happens in onSuccess. The e2e idle signal reads this count.
-	a.tileMutates++
 	a.post(write{
 		label: label, gid: gid, refetchOnOK: true,
-		done: func() { a.tileMutates-- },
 		call: func(ctx context.Context) error {
 			var err error
 			tile, err = call(ctx)

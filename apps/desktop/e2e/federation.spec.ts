@@ -75,6 +75,10 @@ test('left-drag links a well across nodes; the source stays; deleting the link n
   expect(srcAfter.childGridId).toBe(src.childGridId);
 });
 
+// Flaked once on CI (2026-09-21, run 35618756780) at the deep-copy read
+// below: waitIdle() could not see a CloneTile in flight, so the spec read the
+// server oracle mid-write. See docs/flake-ledger.md; closed in the client, not
+// here.
 test('right-drag deep-copies a solid well across nodes; a text left-drag links and edits through', async ({ gw }) => {
   const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
 
