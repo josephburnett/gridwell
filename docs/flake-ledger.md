@@ -51,6 +51,23 @@ Same columns, and a row leaves this section only by naming its mechanism.
   traces on failure — the shell-spec failures were never a missing
   tmux, and never reproduced on a dev box.
 
+- **Dev-box viz collapse in the capture harness**
+  (`apps/desktop/src/harness/capture-harness.ts`, the streak-recovery
+  scenario): on the Linux dev box, under a user-namespace Xvfb with the
+  libraries in `~/.local/electron-libs`, `forcefullyCrashRenderer()`
+  followed by `reload()` leaves that view's `capturePage` rejecting with
+  `UnknownVizError` forever, and the harness fails with "a reloaded
+  renderer never captured again". Measured 2026-09-21 at `361ec3ec`:
+  4 failures in 6 runs behind this session's changes, and 1 failure in 2
+  runs on the untouched base, so it predates them. The scenario's escape
+  hatch does not trip, because the failure is per surface, not per
+  process: the untouched control pane keeps capturing while the reloaded
+  one never does. CI passes this scenario on every run — the three
+  `check-electron` failures that day were all at the first scenario, a
+  different mechanism. No mechanism inside Gridwell has been named, so
+  `make check-electron` is about half green on that box and a failure
+  there is worth a second run before it is believed.
+
 ## Adding an entry
 
 When a spec gains a flake note, add its row here in the same commit:
