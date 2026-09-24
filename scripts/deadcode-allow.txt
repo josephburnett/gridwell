@@ -9,7 +9,22 @@
 api/compose/plugin.go pluginGRPCPlugin.GRPCServer
 api/compose/plugin.go pluginGRPCPlugin.GRPCClient
 client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
+
 # connectrpc calls an Interceptor's three wrappers through its own interface.
 internal/server/rpctrace.go traceInterceptor.WrapUnary
 internal/server/rpctrace.go traceInterceptor.WrapStreamingClient
 internal/server/rpctrace.go traceInterceptor.WrapStreamingHandler
+
+# The client's trace ring, whose one caller is the shim's flush. The ring and
+# its tests land before that wiring, and the whole block comes out with it:
+# reaching New, Emit and PendingBatch from client/wasm reaches the rest.
+client/trace/trace.go New
+client/trace/flush.go NeedFlush
+client/trace/requestid.go NewRequestID
+client/trace/trace.go Client.Emit
+client/trace/trace.go Marshal
+client/trace/trace.go emit
+client/trace/trace.go truncate
+client/trace/trace.go copyKV
+client/trace/trace.go Client.PendingBatch
+client/trace/trace.go Client.PendingCount

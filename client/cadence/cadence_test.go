@@ -26,6 +26,7 @@ func TestEveryCadenceIsAWait(t *testing.T) {
 		{"WorkspaceSaveMs", WorkspaceSaveMs},
 		{"ShellMirrorMs", ShellMirrorMs},
 		{"TraceFadeMs", TraceFadeMs},
+		{"TraceFlushMs", TraceFlushMs},
 	} {
 		if c.ms <= 0 {
 			t.Errorf("%s is %dms", c.name, c.ms)

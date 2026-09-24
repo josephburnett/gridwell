@@ -87,12 +87,18 @@ if [ "$flagged" != 0 ]; then
 	echo "delete it, or allowlist it in $allow as \"<file> <Type>.<Method>\" with a reason." >&2
 	exit 1
 fi
-# Method allowances go stale the same way.
+# Method allowances go stale the same way, unless the reachability pass above
+# still reports the symbol: the textual pass matches a method name wherever it
+# is written, so an unrelated package gaining a ".Name(" would otherwise
+# declare a still-unrooted entry stale and leave it with no allowance at all.
 if [ -f "$allow" ]; then
 	while IFS= read -r line; do
 		case "$line" in ''|\#*) continue ;; esac
 		case "$line" in *' '*.*) ;; *) continue ;; esac
-		printf '%s\n' "${uncalled[@]}" | grep -qxF "$line" || { echo "stale allowlist entry (the method has a caller now, or is gone): $line" >&2; flagged=1; }
+		printf '%s\n' "${uncalled[@]}" | grep -qxF "$line" && continue
+		grep -qxF "$line" <<<"$native" && continue
+		echo "stale allowlist entry (the method has a caller now, or is gone): $line" >&2
+		flagged=1
 	done <"$allow"
 	[ "$flagged" = 0 ] || exit 1
 fi

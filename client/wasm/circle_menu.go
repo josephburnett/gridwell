@@ -7,7 +7,6 @@ import (
 
 	"github.com/josephburnett/gridwell/client/circlemenu"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/theme"
 )
 
 // The circle slot's right-click. circlemenu.For says which menu the slot's
@@ -21,11 +20,11 @@ func (a *App) openCircleMenu(p *pane.Pane) {
 	switch circlemenu.For(a.barSlotMode(p)) {
 	case circlemenu.MenuURL:
 		a.bridgeShowMenu(p.ID)
-	case circlemenu.MenuTheme:
-		items := circlemenu.ThemeItems(a.themeName)
-		a.openChoiceMenu(items, func(id string) {
-			if t, ok := theme.Parse(id); ok {
-				a.setTheme(t)
+	case circlemenu.MenuPlus:
+		a.openChoiceMenu(circlemenu.PlusItems(a.themeName), func(id string) {
+			switch v := circlemenu.Choose(id); v.Action {
+			case circlemenu.ActionTheme:
+				a.setTheme(v.Theme)
 			}
 		})
 	}

@@ -31,4 +31,9 @@ const (
 
 	// TraceFadeMs is how long the ascent-trace outline takes to fade out.
 	TraceFadeMs = 2000
+
+	// TraceFlushMs is how long a trace record waits for company before the
+	// client posts it. client/trace.NeedFlush reads it beside the other half
+	// of that decision, the batch a flush will not grow past.
+	TraceFlushMs = 1000
 )
