@@ -154,8 +154,11 @@ func (s *Supervisor) Close() {
 }
 
 func (s *Supervisor) spawn() error {
+	kv := map[string]string{"plugin": s.uuid, "kind": s.kind}
+	trace.Emit("supervisor", "health", "spawn", kv)
 	proc, err := compose.LoadPlugin(s.binary, s.cfg, s.stderr)
 	if err != nil {
+		trace.Emit("supervisor", "health", "spawn failed: "+err.Error(), kv)
 		s.mu.Lock()
 		s.proc = nil
 		s.mu.Unlock()
@@ -165,6 +168,7 @@ func (s *Supervisor) spawn() error {
 	s.mu.Lock()
 	s.proc, s.spawnedAt = proc, time.Now()
 	s.mu.Unlock()
+	trace.Emit("supervisor", "health", "ready", kv)
 	s.setHealth(true, "")
 	return nil
 }
@@ -243,6 +247,12 @@ func (s *Supervisor) setHealth(healthy bool, detail string) {
 	if !changed {
 		return
 	}
+	// The transition, not the retry: this is the one writer of the fact.
+	msg := "up"
+	if !healthy {
+		msg = "down: " + detail
+	}
+	trace.Emit("supervisor", "health", msg, map[string]string{"plugin": s.uuid, "kind": s.kind})
 	s.listenersMu.Lock()
 	fns := make([]func(bool, string), 0, len(s.listeners))
 	for _, fn := range s.listeners {

@@ -28,6 +28,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // Dialer builds a namespace over a remote node's export from a resolved
@@ -382,21 +383,26 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 		s.mu.Unlock()
 		return lc, nil
 	}
+	kv := map[string]string{"conn": name}
+	trace.Emit("connection", "dial", "dial", kv)
 	cfg, err := s.dialConfig(c.Cfg)
 	if err == nil && s.dial == nil {
 		err = errors.New("no dialer")
 	}
 	if err != nil {
 		s.mu.Unlock()
+		trace.Emit("connection", "dial", "dial failed: "+err.Error(), kv)
 		s.note(name, connState{detail: err.Error()})
 		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: %v", name, err)
 	}
 	client, closer, err := s.dial(cfg)
 	if err != nil {
 		s.mu.Unlock()
+		trace.Emit("connection", "dial", "dial failed: "+err.Error(), kv)
 		s.note(name, connState{detail: err.Error()})
 		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: %v", name, err)
 	}
+	trace.Emit("connection", "dial", "dial ok", kv)
 	ctx, cancel := context.WithCancel(context.Background())
 	lc := &liveConn{client: client, closer: closer, cancel: cancel}
 	s.live[name] = lc
@@ -523,6 +529,11 @@ func (s *Server) note(name string, st connState) bool {
 	if prev.up == st.up && prev.mismatch == st.mismatch {
 		return false
 	}
+	msg := "up"
+	if !st.up {
+		msg = "down: " + st.detail
+	}
+	trace.Emit("connection", "health", msg, map[string]string{"conn": name})
 	s.hub.Publish(rpc.HealthEvent(name, st.up, st.detail))
 	return true
 }
