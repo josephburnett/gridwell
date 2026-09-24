@@ -55,7 +55,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// diverge.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
-	verdict := dragdrop.DecideDrop(in)
+	verdict := a.commitVerdict(in, d, t)
 	switch verdict {
 	case dragdrop.DropFocusOnly:
 		// Focus already moved at mousedown.

@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -146,6 +147,7 @@ func (a *App) focusToPane(p *pane.Pane) bool {
 	if !a.menu.TransferFocus(prev, a.tree.Focus) {
 		return false
 	}
+	a.emit(traceevent.Focus(prev, a.tree.Focus))
 	// The textarea overlay only ever lives over the focused pane, so without
 	// this a click on a sibling in text mode strands it.
 	a.refreshFileOverlay()

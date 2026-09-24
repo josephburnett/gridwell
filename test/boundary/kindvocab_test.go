@@ -35,6 +35,7 @@ var kindLiteralOK = map[string]string{
 	"client/wasm/render.go":              "the palette's display and alt-text names, a list that also holds \"markdown\"",
 	"client/wasm/shell_stream_client.go": `"shell" is an errsurface source label and "text" a DOM property`,
 	"client/wasm/testhook.go":            `"pane" is a crumb shape the hook pairs with "chain", "text" a crumb field`,
+	"client/traceevent/traceevent.go":    `"pane" is a trace record's src and its key for a pane id, and "text" names the save queue`,
 	"client/wasm/url_modal.go":           `"url" is a DOM dataset property`,
 	"client/wasm/webview_bridge.go":      `"url" is a bridge event property`,
 

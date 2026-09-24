@@ -10,6 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
@@ -34,6 +35,18 @@ type dropTarget struct {
 // placement asks for the drop cell too. The preview passes false, so it shows
 // the snap-to-cell even over an occupied cell, while the commit does the
 // authoritative overlap check. The two always share the action class.
+// commitVerdict is the verdict of a release that commits, recorded once. The
+// ghost's preview asks dragdrop.DecideDrop directly, being per pointer move.
+func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget) dragdrop.DropAction {
+	v := dragdrop.DecideDrop(in)
+	gridID := ""
+	if t != nil {
+		gridID = t.gridID
+	}
+	a.emit(traceevent.Drop(v, d.tileID, gridID))
+	return v
+}
+
 func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	in dragdrop.DropInput, t *dropTarget, dropX, dropY int64) {
 

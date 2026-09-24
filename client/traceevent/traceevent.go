@@ -5,9 +5,12 @@
 package traceevent
 
 import (
+	"strconv"
 	"strings"
 
+	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/nav"
 )
 
 // Event is one record's own fields; the ring stamps the rest.
@@ -64,6 +67,77 @@ const (
 func FrameScheduled(why string) Event { return Event{Src: "frame", Kind: "schedule", Msg: why} }
 
 func FrameDrawn(why string) Event { return Event{Src: "frame", Kind: "draw", Msg: why} }
+
+// Nav is one navigation verb. Kind is the direction the frame stack moves, so
+// a dump reads as descents and ascents whatever gesture asked for them.
+func Nav(g nav.Gesture) Event {
+	e := Event{Src: "nav"}
+	door := g.Door.GetId()
+	switch g.Kind {
+	case nav.GestureDescend:
+		e.Kind, e.Msg, e.KV = "push", "descend", kv("pane", g.PaneID, "door", door)
+	case nav.GestureEnterLevel:
+		e.Kind, e.Msg, e.KV = "push", "enter pane tile", kv("pane", g.PaneID, "door", door)
+	case nav.GestureFollowLink:
+		e.Kind, e.Msg, e.KV = "push", "follow link", kv("pane", g.PaneID, "door", door)
+	case nav.GestureAscend:
+		e.Kind, e.Msg, e.KV = "pop", "ascend "+strconv.Itoa(g.N), kv("pane", g.PaneID)
+	case nav.GestureLeaveLevels:
+		e.Kind, e.Msg = "pop", "leave "+strconv.Itoa(g.Count)+" levels"
+	case nav.GestureLandLevel:
+		e.Kind, e.Msg, e.KV = "pop", "land level", kv("pane", g.PaneID, "tile", g.TileID)
+	case nav.GestureRestore:
+		e.Kind, e.Msg, e.KV = "restore", "restore "+g.Raw, kv("pane", g.PaneID)
+	case nav.GestureRestoreFromHistory:
+		e.Kind, e.Msg = "restore", "restore session "+g.Raw
+	case nav.GesturePromote:
+		e.Kind, e.Msg, e.KV = "promote", "promote ephemeral", kv("pane", g.PaneID, "tile", g.OldID)
+	case nav.GestureReEngage:
+		e.Kind, e.Msg, e.KV = "reengage", "re-engage content", kv("pane", g.PaneID, "tile", g.TileID)
+	default:
+		e.Kind, e.Msg = "unknown", "unnamed gesture "+strconv.Itoa(int(g.Kind))
+	}
+	return e
+}
+
+// Focus is a real focus transfer; a press on the pane already focused is not
+// one and records nothing.
+func Focus(from, to string) Event {
+	return Event{Src: "pane", Kind: "focus", Msg: "focus moves", KV: kv("from", from, "pane", to)}
+}
+
+// Drop is a committed release. The ghost's preview takes the same verdict and
+// records nothing: that one is per pointer move.
+func Drop(v dragdrop.DropAction, tileID, gridID string) Event {
+	return Event{Src: "drag", Kind: "drop", Msg: dropName(v), KV: kv("tile", tileID, "grid", gridID)}
+}
+
+// dropName is the table over DecideDrop's verdicts.
+func dropName(v dragdrop.DropAction) string {
+	switch v {
+	case dragdrop.DropNavigate:
+		return "navigate"
+	case dragdrop.DropNavigateSplit:
+		return "navigate in a split"
+	case dragdrop.DropFocusOnly:
+		return "focus only"
+	case dragdrop.DropCreateTemplate:
+		return "create"
+	case dragdrop.DropPanEnd:
+		return "pan end"
+	case dragdrop.DropDelete:
+		return "delete"
+	case dragdrop.DropRejected:
+		return "rejected"
+	case dragdrop.DropMove:
+		return "move"
+	case dragdrop.DropClone:
+		return "clone"
+	case dragdrop.DropLink:
+		return "link"
+	}
+	return "unnamed verdict " + strconv.Itoa(int(v))
+}
 
 // FlushFailed is a trace post the node did not keep. It is a record and never
 // a notice: a notice is itself a record, and the two would feed each other.

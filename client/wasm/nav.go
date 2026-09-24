@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // navGestureSteps turns a machine bug into a notice instead of a hang. The
@@ -28,6 +29,9 @@ const navGestureSteps = 64
 // honest that reads state the effects above it changed.
 func (a *App) runGesture(g nav.Gesture) {
 	for i := 0; i < navGestureSteps; i++ {
+		// Every hop, continuations included: a gesture that did not settle is
+		// read by what it asked for next.
+		a.emit(traceevent.Nav(g))
 		plan := a.nav.Do(g, a.navWorld(g))
 		a.runNav(plan)
 		if plan.Next == nil {
