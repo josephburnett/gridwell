@@ -69,9 +69,9 @@ export class TraceClient {
   private readonly ring: (TraceRecord | undefined)[];
   private readonly now: () => number;
   private post: TracePost | null;
-  // A serial counts every record ever emitted, so an acknowledgement survives
-  // a wrap: base is the serial of the oldest record held, and the range still
-  // owed is always [acked, base+count).
+  // The serial arithmetic of client/trace.Client: base is the serial of the
+  // oldest record held, so the range still owed is [acked, base+count) and an
+  // acknowledgement survives a wrap.
   private first = 0;
   private count = 0;
   private base = 0;
@@ -104,9 +104,7 @@ export class TraceClient {
     return this.base + this.count - this.acked;
   }
 
-  // needFlush is client/trace.NeedFlush: a burst is a gesture going wrong,
-  // which is the moment the node most needs to hear, and nothing pending is
-  // nothing to post.
+  // client/trace.NeedFlush.
   needFlush(): boolean {
     const pending = this.pendingCount();
     if (pending <= 0) return false;
@@ -135,13 +133,12 @@ export class TraceClient {
     if (ok) batch.ack();
   }
 
-  // pendingBatch is every unacknowledged record as JSON lines, and the ack to
-  // call once the door has answered.
+  // Every unacknowledged record as JSON lines, and the ack to call once the
+  // door has answered.
   pendingBatch(): { body: string; ack: () => void } | null {
     if (this.dropped > 0) {
       // The evictions since the last batch are one record, which can itself
-      // evict another; that loss rides the next batch. It carries the clock of
-      // the emit that discovered it.
+      // evict another; that loss rides the next batch.
       const n = this.dropped;
       this.dropped = 0;
       this.write({ src: DROP_SRC, kind: DROP_KIND, msg: 'records dropped before the node saw them', kv: { n: String(n) } }, this.lastCT);
@@ -177,8 +174,8 @@ export class TraceClient {
     const origin = TRACE_ORIGIN;
     const { src, kind } = ev;
     const msg = truncate(ev.msg);
-    // Two literals rather than one built up, because a line's bytes are the
-    // contract: kv sits between msg and cid, and is absent when empty.
+    // Two literals, because the line's bytes are the contract: kv sits between
+    // msg and cid, and is absent when empty.
     const kv = sortedKV(ev.kv);
     const rec: TraceRecord = kv
       ? { origin, src, kind, msg, kv, cid: this.cid, ct }
@@ -223,7 +220,7 @@ export function startTrace(post: TracePost): void {
   setInterval(() => void mainRing.tick(), TRACE_FLUSH_MS);
 }
 
-// truncate cuts on a rune boundary, so a long message is still text.
+// The cut lands on a rune boundary, so a long message is still text.
 function truncate(msg: string): string {
   const b = Buffer.from(msg, 'utf8');
   if (b.length <= TRACE_MAX_MSG) return msg;
@@ -233,8 +230,8 @@ function truncate(msg: string): string {
   return b.subarray(0, cut).toString('utf8');
 }
 
-// sortedKV keeps the caller's map out of the ring: a record says what was true
-// when it was emitted.
+// A copy, sorted: a record says what was true when it was emitted, and Go
+// writes a map's keys in this order.
 function sortedKV(kv: Record<string, string> | undefined): Record<string, string> | null {
   if (!kv) return null;
   const keys = Object.keys(kv).sort();
