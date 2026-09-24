@@ -134,3 +134,38 @@ func TestFocusNamesBothEnds(t *testing.T) {
 		t.Errorf("focus record is %+v", e)
 	}
 }
+
+// A record is read by a person and joined on by a machine, so the two halves
+// stay apart: prose in Msg, ids in KV under the names a dump is grepped by.
+func TestFramingSplitsProseFromIds(t *testing.T) {
+	e := Framing("g7abcde", "t7abcde", 1.5, -2, 0.25)
+	if e.Src != "framing" || e.Kind != "persist" {
+		t.Errorf("framing is %q/%q", e.Src, e.Kind)
+	}
+	if e.Msg != "center 1.5,-2 zoom 0.25" {
+		t.Errorf("framing msg is %q", e.Msg)
+	}
+	if e.KV["grid"] != "g7abcde" || e.KV["tile"] != "t7abcde" {
+		t.Errorf("framing kv is %v", e.KV)
+	}
+	// A root grid's framing lives on its own row, so there is no tile to name
+	// and the key is absent rather than empty.
+	if _, ok := Framing("g7abcde", "", 0, 0, 1).KV["tile"]; ok {
+		t.Error("a root framing record claims a tile")
+	}
+}
+
+// A parked write names the operation and the row, which is what says whether
+// the same key was overwritten or a second one joined it.
+func TestTheOutboxRecordsNameTheWriteAndTheCount(t *testing.T) {
+	e := OutboxPark("SetFraming", "t7abcde")
+	if e.Src != "outbox" || e.Kind != "park" || e.Msg != "SetFraming" || e.KV["id"] != "t7abcde" {
+		t.Errorf("park record is %+v", e)
+	}
+	if got := OutboxDrain(3).Msg; got != "3 owed" {
+		t.Errorf("drain record reads %q", got)
+	}
+	if got := TextSave("t7abcde", "c7abcde", 42); got.Msg != "42 bytes" || got.KV["content"] != "c7abcde" {
+		t.Errorf("text save record is %+v", got)
+	}
+}

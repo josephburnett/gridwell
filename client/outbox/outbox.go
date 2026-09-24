@@ -116,6 +116,15 @@ func (o *Outbox) Drain() []func() {
 	return out
 }
 
+// Has reports whether k is still owed, so a caller that wants to say a write
+// parked reads it from here rather than re-deriving Record's rule.
+func (o *Outbox) Has(k Key) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	_, ok := o.m[k]
+	return ok
+}
+
 func (o *Outbox) Len() int {
 	o.mu.Lock()
 	defer o.mu.Unlock()

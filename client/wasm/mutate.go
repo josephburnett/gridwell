@@ -113,12 +113,18 @@ func (a *App) dispatch(w write) error {
 	if w.id != "" {
 		retry = func() { a.post(w) }
 	}
-	o := a.persist.out.Send(outbox.Key{Op: w.label, ID: w.id}, retry, func() clientsync.Outcome {
+	key := outbox.Key{Op: w.label, ID: w.id}
+	o := a.persist.out.Send(key, retry, func() clientsync.Outcome {
 		ctx, cancel := inflight.Bounded()
 		defer cancel()
 		err = w.call(ctx)
 		return clientsync.Of(err)
 	})
+	// Read from the outbox rather than re-derived from the outcome: what is
+	// still owed is its fact.
+	if w.id != "" && a.persist.out.Has(key) {
+		a.emit(traceevent.OutboxPark(w.label, w.id))
+	}
 
 	r := clientsync.React(o)
 	if w.optimistic {
@@ -307,6 +313,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 // pipelined saves chain versions instead of both claiming the same one.
 // rowVersion is the fallback for an entry gone by send time.
 func (a *App) enqueueTextSave(gid, tileID, cid string, rowVersion int64, data []byte) {
+	a.emit(traceevent.TextSave(tileID, cid, len(data)))
 	a.persist.textSaves.Enqueue(textedit.SaveQueueKey(tileID, cid), func() {
 		a.saveClaimedContent(gid, cid, tileID == cid, rowVersion, data)
 	})

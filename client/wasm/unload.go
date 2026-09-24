@@ -45,9 +45,7 @@ func (a *App) flushOnUnload() {
 	a.unloading = true
 	a.flushFramingSave()
 	a.syncContentOutbox()
-	for _, retry := range a.persist.out.Drain() {
-		retry()
-	}
+	a.drainOutbox()
 	a.flushURLStateOnUnload()
 }
 

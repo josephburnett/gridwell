@@ -68,6 +68,33 @@ func FrameScheduled(why string) Event { return Event{Src: "frame", Kind: "schedu
 
 func FrameDrawn(why string) Event { return Event{Src: "frame", Kind: "draw", Msg: why} }
 
+// Framing is one settled viewport writeback. tileID is empty for a root grid,
+// whose own row owns the framing.
+func Framing(gridID, tileID string, cx, cy, zoom float64) Event {
+	return Event{Src: "framing", Kind: "persist",
+		Msg: "center " + f(cx) + "," + f(cy) + " zoom " + f(zoom),
+		KV:  kv("grid", gridID, "tile", tileID)}
+}
+
+func f(v float64) string { return strconv.FormatFloat(v, 'g', 6, 64) }
+
+// OutboxPark is a write the server never answered, now owed; OutboxDrain is
+// the kick that re-posts what is owed. Between the two is where the user's
+// bytes wait out an outage.
+func OutboxPark(op, id string) Event {
+	return Event{Src: "outbox", Kind: "park", Msg: op, KV: kv("id", id)}
+}
+
+func OutboxDrain(n int) Event {
+	return Event{Src: "outbox", Kind: "drain", Msg: strconv.Itoa(n) + " owed"}
+}
+
+// TextSave is one document's bytes entering the save queue.
+func TextSave(tileID, contentID string, n int) Event {
+	return Event{Src: "text", Kind: "save", Msg: strconv.Itoa(n) + " bytes",
+		KV: kv("tile", tileID, "content", contentID)}
+}
+
 // Nav is one navigation verb. Kind is the direction the frame stack moves, so
 // a dump reads as descents and ascents whatever gesture asked for them.
 func Nav(g nav.Gesture) Event {

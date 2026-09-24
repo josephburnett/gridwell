@@ -315,3 +315,21 @@ func TestSendWithNoRetryParksNothing(t *testing.T) {
 		t.Errorf("an unparked write left %v behind", o.Keys())
 	}
 }
+
+// Whether a write is still owed is this package's fact, and a caller that
+// says so out loud must read it here rather than re-deriving Record's rule.
+func TestHasIsWhatIsStillOwed(t *testing.T) {
+	o := New()
+	k := Key{Op: "SetFraming", ID: "t7abcde"}
+	if o.Has(k) {
+		t.Error("a fresh outbox owes a write")
+	}
+	o.Send(k, func() {}, func() clientsync.Outcome { return clientsync.OutcomeTransport })
+	if !o.Has(k) {
+		t.Error("a write the server never answered is not owed")
+	}
+	o.Send(k, func() {}, func() clientsync.Outcome { return clientsync.OutcomeOK })
+	if o.Has(k) {
+		t.Error("a write the server kept is still owed")
+	}
+}

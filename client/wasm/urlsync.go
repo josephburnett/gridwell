@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/textedit"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
@@ -58,6 +59,7 @@ func (a *App) flushWellWheelSaves() {
 		req := &gridwellv1.SetFramingRequest{
 			TileId: tileID, Cx: st.cx, Cy: st.cy, Zoom: st.ratio,
 		}
+		a.emit(traceevent.Framing(gid, tileID, st.cx, st.cy, st.ratio))
 		// The unload transport is the dispatcher's business, so a parked
 		// framing write reaches the beacon path too.
 		a.postFramingPersist("SetFraming", gid, tileID,
@@ -162,6 +164,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 	if key == "" {
 		key = req.RootGridId
 	}
+	a.emit(traceevent.Framing(gridID, req.TileId, next.Cx, next.Cy, next.Zoom))
 	a.postFramingPersist("SetFraming", gridID, key,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetFraming(ctx, &req)

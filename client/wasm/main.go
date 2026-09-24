@@ -1090,7 +1090,19 @@ func (a *App) retryKick(resync bool, source string) {
 		}
 	}
 	a.syncContentOutbox()
-	for _, resend := range a.persist.out.Drain() {
+	a.drainOutbox()
+}
+
+// drainOutbox re-posts everything owed, in the order it was parked. It is the
+// one drain: the unload path takes it too, so a quit and a reconnect cannot
+// treat what is owed differently.
+func (a *App) drainOutbox() {
+	owed := a.persist.out.Drain()
+	if len(owed) == 0 {
+		return
+	}
+	a.emit(traceevent.OutboxDrain(len(owed)))
+	for _, resend := range owed {
 		resend()
 	}
 }
