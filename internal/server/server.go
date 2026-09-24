@@ -41,6 +41,9 @@ type Config struct {
 	// node-wide shell refusal; Handshake carries it so the client drops the
 	// shell primitive from the + palette.
 	DisableShells bool
+	// Home is the Gridwell home node.Options names; the trace door writes its
+	// dumps under it. Empty refuses a dump rather than guessing a directory.
+	Home string
 }
 
 // Server routes every operation through the registry by the first segment of
@@ -202,6 +205,10 @@ func (s *Server) routes() {
 
 	// Exempt from the cookie gate; see content_door.go.
 	s.mux.Handle(contentPathPrefix, s.contentDoor())
+
+	// The diagnostic ring, gated like everything else here (trace_door.go).
+	s.mux.Handle(tracePath, s.traceDoor())
+	s.mux.Handle(traceDumpPath, s.traceDumpDoor())
 
 	if s.cfg.StaticFS != nil {
 		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticFS))

@@ -161,6 +161,7 @@ func Start(opts Options) (*Node, error) {
 		StaticFS:      opts.StaticFS,
 		Password:      cfg.WebPassword,
 		DisableShells: cfg.DisableShells,
+		Home:          opts.Home,
 	})
 	if err != nil {
 		return fail(err)

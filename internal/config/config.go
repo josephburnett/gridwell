@@ -139,6 +139,12 @@ func PluginStateDir(home, id string) string {
 	return filepath.Join(home, "plugins", id)
 }
 
+// DumpsDir is where the node writes a trace dump, <home>/dumps. Disposable:
+// a dump is a reading someone asked for, not a node fact.
+func DumpsDir(home string) string {
+	return filepath.Join(home, "dumps")
+}
+
 // DefaultPath is <home>/server.yaml.
 func DefaultPath() (string, error) {
 	home, err := Home()
