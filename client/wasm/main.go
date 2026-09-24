@@ -866,12 +866,22 @@ func nowMs() float64 {
 	return js.Global().Get("Date").Call("now").Float()
 }
 
-// taggedLog prefixes every message with tag. The prefixes are what a log reader
-// and the e2e suite grep for, so they are output, not decoration.
+// consoleLog prefixes every message with tag. The prefixes are what a log
+// reader and the e2e suite grep for, so they are output, not decoration.
+func consoleLog(tag string) func(format string, args ...any) {
+	return func(format string, args ...any) {
+		js.Global().Get("console").Call("log", tag+" "+fmt.Sprintf(format, args...))
+	}
+}
+
+// taggedLog is consoleLog and a record of the same line: a diagnostic worth
+// writing is worth keeping. A site with a record of its own writes through
+// consoleLog instead, so one operation leaves one record.
 func taggedLog(tag string) func(format string, args ...any) {
+	console := consoleLog(tag)
 	return func(format string, args ...any) {
 		msg := fmt.Sprintf(format, args...)
-		js.Global().Get("console").Call("log", tag+" "+msg)
+		console("%s", msg)
 		app.emit(traceevent.Log(tag, msg))
 	}
 }

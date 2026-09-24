@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/urlview"
 )
 
@@ -50,7 +51,11 @@ type urlView struct {
 	lastTitle string
 }
 
-var urlLog = taggedLog("[urlview]")
+var (
+	urlLog = taggedLog("[urlview]")
+	// The state changes carry their own record; see taggedLog.
+	urlConsole = consoleLog("[urlview]")
+)
 
 // contentViewBounds is the content-box rectangle a hosted webview occupies,
 // in CSS px.
@@ -133,7 +138,8 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	durable := urlview.Durable(page, possiblyEphemeral)
 	v.durable = durable
 	addr := a.webAddress(t)
-	urlLog("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
+	a.emit(traceevent.URLOpen(p.ID, t.Id))
+	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
 	// The focus fact rides the placement, because going live is not always a
 	// gesture on the focused pane. The handle is set before main answers, so
 	// a refusal takes it back down.
@@ -191,7 +197,8 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	}
 	anchor := v.anchor
 	path := slices.Clone(v.path)
-	urlLog("close pane=%s tile=%s", paneID, tileID)
+	a.emit(traceevent.URLClose(paneID, tileID, freeze))
+	urlConsole("close pane=%s tile=%s", paneID, tileID)
 	a.bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
 		if urlview.PersistFreeze(freeze, v.page, jpeg, url, title) {
 			gid := a.gridIDForPathFrom(anchor, path)

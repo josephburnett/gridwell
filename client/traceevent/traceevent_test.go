@@ -199,3 +199,24 @@ func TestEveryEventPayloadIsNamed(t *testing.T) {
 		t.Errorf("the refetch names grid %q", got)
 	}
 }
+
+// A close says whether the surface was frozen or torn down: a frozen tile
+// keeps its face and its session, a closed one does not, and a tile that came
+// back blank is a report about exactly that difference.
+func TestStreamClosesSayWhichKind(t *testing.T) {
+	if got := URLClose("p1", "t7abcde", true).Msg; got != "frozen" {
+		t.Errorf("a frozen url close reads %q", got)
+	}
+	if got := ShellClose("p1", "t7abcde", false).Msg; got != "closed" {
+		t.Errorf("a shell close reads %q", got)
+	}
+	if got := ShellExit("p1", "t7abcde", "the shell exited", true).Msg; got != "the shell exited (session gone)" {
+		t.Errorf("a session-gone exit reads %q", got)
+	}
+	if e := URLOpen("p1", "t7abcde"); e.Src != "url" || e.Kind != "open" || e.KV["pane"] != "p1" {
+		t.Errorf("a url open is %+v", e)
+	}
+	if e := ShellOpen("p1", "t7abcde"); e.Src != "shell" || e.Kind != "open" || e.KV["tile"] != "t7abcde" {
+		t.Errorf("a shell open is %+v", e)
+	}
+}

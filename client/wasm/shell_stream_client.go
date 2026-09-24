@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/urlnorm"
 )
 
@@ -71,7 +72,11 @@ type shellStreamConn struct {
 	lastFitFont        int
 }
 
-var shellLog = taggedLog("[shellstream]")
+var (
+	shellLog = taggedLog("[shellstream]")
+	// The state changes carry their own record; see taggedLog.
+	shellConsole = consoleLog("[shellstream]")
+)
 
 // isShellDescent reads descentKind, the same resolver as isURLDescent, so an
 // ephemeral shell visit is a shell descent here too; what the bar slot then
@@ -296,7 +301,8 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// The fit addon overwrites this, but the bind message starts the PTY.
 	cols := term.Get("cols").Int()
 	rows := term.Get("rows").Int()
-	shellLog("open pane=%s tile=%s cols=%d rows=%d", p.ID, tileID, cols, rows)
+	a.emit(traceevent.ShellOpen(p.ID, tileID))
+	shellConsole("open pane=%s tile=%s cols=%d rows=%d", p.ID, tileID, cols, rows)
 
 	conn = &shellStreamConn{
 		term:         term,
@@ -517,7 +523,8 @@ func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 	if conn == nil {
 		return
 	}
-	shellLog("exit pane=%s tile=%s gone=%v msg=%q", paneID, conn.tileID, sessionGone, message)
+	a.emit(traceevent.ShellExit(paneID, conn.tileID, message, sessionGone))
+	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", paneID, conn.tileID, sessionGone, message)
 	if alive, known := shellconn.ExitAlive(sessionGone); known {
 		a.setShellAlive(conn.tileID, alive)
 	} else {
@@ -589,6 +596,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 		return
 	}
 	conn.closed = true
+	a.emit(traceevent.ShellClose(paneID, conn.tileID, freeze))
 	// Best-effort: the cwd still persists through the server's close handler.
 	if jpegBytes := snapshotShellCanvas(conn.container); freeze && jpegBytes != nil {
 		tileID := conn.tileID

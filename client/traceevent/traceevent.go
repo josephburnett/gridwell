@@ -126,6 +126,42 @@ func OutboxDrain(n int) Event {
 	return Event{Src: "outbox", Kind: "drain", Msg: strconv.Itoa(n) + " owed"}
 }
 
+// URLOpen, URLClose, ShellOpen, ShellClose and ShellExit are the live
+// surfaces' state changes: a descent that went live, and what ended it.
+func URLOpen(paneID, tileID string) Event {
+	return Event{Src: "url", Kind: "open", Msg: "live view opens", KV: kv("pane", paneID, "tile", tileID)}
+}
+
+func URLClose(paneID, tileID string, freeze bool) Event {
+	return Event{Src: "url", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
+}
+
+func ShellOpen(paneID, tileID string) Event {
+	return Event{Src: "shell", Kind: "open", Msg: "stream opens", KV: kv("pane", paneID, "tile", tileID)}
+}
+
+func ShellClose(paneID, tileID string, freeze bool) Event {
+	return Event{Src: "shell", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
+}
+
+// ShellExit is the far end going away, which is not this client closing the
+// stream: sessionGone says the tmux session went with it.
+func ShellExit(paneID, tileID, message string, sessionGone bool) Event {
+	if sessionGone {
+		message += " (session gone)"
+	}
+	return Event{Src: "shell", Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
+}
+
+// closeMsg: a frozen surface keeps its face and its address, a closed one is
+// gone, and which happened is the whole question when a tile comes back blank.
+func closeMsg(freeze bool) string {
+	if freeze {
+		return "frozen"
+	}
+	return "closed"
+}
+
 // TextSave is one document's bytes entering the save queue.
 func TextSave(tileID, contentID string, n int) Event {
 	return Event{Src: "text", Kind: "save", Msg: strconv.Itoa(n) + " bytes",
