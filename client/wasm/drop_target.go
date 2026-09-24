@@ -26,15 +26,6 @@ type dropTarget struct {
 	originY  float64
 }
 
-// dropInputAt gathers every world-read a drop decision needs. The left
-// commit, the right commit and the ghost preview all read it, so the three
-// cannot disagree about the world they decide on. The flavor is d.intent, set
-// by the press: Forbidden is move-only, because no creation is forbidden, and
-// Occupied excludes the dragged tile on a move but nothing on a creation.
-//
-// placement asks for the drop cell too. The preview passes false, so it shows
-// the snap-to-cell even over an occupied cell, while the commit does the
-// authoritative overlap check. The two always share the action class.
 // commitVerdict is the verdict of a release that commits, recorded once. The
 // ghost's preview asks dragdrop.DecideDrop directly, being per pointer move.
 func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget) dragdrop.DropAction {
@@ -47,6 +38,15 @@ func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget) 
 	return v
 }
 
+// dropInputAt gathers every world-read a drop decision needs. The left
+// commit, the right commit and the ghost preview all read it, so the three
+// cannot disagree about the world they decide on. The flavor is d.intent, set
+// by the press: Forbidden is move-only, because no creation is forbidden, and
+// Occupied excludes the dragged tile on a move but nothing on a creation.
+//
+// placement asks for the drop cell too. The preview passes false, so it shows
+// the snap-to-cell even over an occupied cell, while the commit does the
+// authoritative overlap check. The two always share the action class.
 func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	in dragdrop.DropInput, t *dropTarget, dropX, dropY int64) {
 
