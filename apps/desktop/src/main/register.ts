@@ -19,7 +19,12 @@ import {
 import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
-import { logLine } from './trace';
+import { logLine, trace } from './trace';
+import { menuChose, menuOpened } from './viewtrace';
+
+// The renderer's declared choices, as a trace record names them; webviews.ts
+// names the live view's page menu.
+const CHOICE_MENU = 'choice';
 
 // safeSend is the one guard every main-to-renderer push goes through: the
 // window can close mid-flight, and .send on a destroyed WebContents throws.
@@ -88,10 +93,14 @@ export function registerWebviewIpc(
   // the close callback can both fire.
   ipcMain.handle(CH.choiceMenu, (_e, a: ChoiceMenuArgs): Promise<string | null> => {
     return new Promise((resolve) => {
+      trace(menuOpened(CHOICE_MENU));
       let settled = false;
       const done = (id: string | null) => {
         if (settled) return;
         settled = true;
+        // A dismissal is a row of its own, because a menu that changed nothing
+        // and a menu whose row did nothing look the same from outside.
+        trace(menuChose(CHOICE_MENU, id ?? 'dismissed'));
         resolve(id);
       };
       const template = choiceMenuTemplate(a.items, done);

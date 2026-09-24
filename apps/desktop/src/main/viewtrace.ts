@@ -9,6 +9,7 @@ import type { TraceEvent } from './trace';
 // these.
 const VIEW = 'webviews';
 const WINDOW = 'window';
+const MENU = 'contextmenu';
 
 // kv names the pane, because the registry keys everything by it and a dump is
 // read one pane at a time. msg carries what the pane was showing, which no kv
@@ -54,6 +55,17 @@ export function viewNav(paneId: string, tileId: string, done: boolean, url: stri
 // carries, so the trace and the strip cannot disagree.
 export function viewFailed(paneId: string, tileId: string, message: string): TraceEvent {
   return view('fail', paneId, message, { tile: tileId });
+}
+
+// Both native menus, because a menu that popped and a row that ran are two
+// different stories when a click seems to have done nothing. A menu over a
+// live view names its pane; the circle's declared choices have none.
+export function menuOpened(menu: string, paneId?: string): TraceEvent {
+  return { src: MENU, kind: 'open', msg: menu, ...(paneId ? { kv: { view: paneId } } : {}) };
+}
+
+export function menuChose(menu: string, row: string, paneId?: string): TraceEvent {
+  return { src: MENU, kind: 'choose', msg: row, kv: { menu, ...(paneId ? { view: paneId } : {}) } };
 }
 
 export function windowFocused(focused: boolean): TraceEvent {

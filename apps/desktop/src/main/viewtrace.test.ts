@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  menuChose,
+  menuOpened,
   viewBounds,
   viewCreated,
   viewDestroyed,
@@ -59,6 +61,30 @@ test('a navigation record carries the address as its message', () => {
   const r = viewNav('p1', 'u1/7', true, 'https://x.test/a?b=1&c=2');
   assert.equal(r.msg, 'https://x.test/a?b=1&c=2');
   assert.equal(r.kv?.tile, 'u1/7');
+});
+
+// A menu that popped and a row that ran are two records, because a click that
+// seems to have done nothing is exactly the gap between them.
+test('a menu is one record for the pop and one for the row', () => {
+  assert.deepEqual(menuOpened('url', 'p1'), {
+    src: 'contextmenu',
+    kind: 'open',
+    msg: 'url',
+    kv: { view: 'p1' },
+  });
+  assert.deepEqual(menuChose('url', 'Reload', 'p1'), {
+    src: 'contextmenu',
+    kind: 'choose',
+    msg: 'Reload',
+    kv: { menu: 'url', view: 'p1' },
+  });
+});
+
+// The circle's declared choices pop over no pane, and a kv naming one would be
+// a fact nobody owns.
+test('a choice menu record names no pane', () => {
+  assert.equal(menuOpened('choice').kv, undefined);
+  assert.deepEqual(menuChose('choice', 'dump').kv, { menu: 'choice' });
 });
 
 test('the window records name the window, not a pane', () => {

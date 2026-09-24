@@ -26,6 +26,7 @@ function spyActions() {
     forward: rec('forward'),
     reload: rec('reload'),
     freeze: rec('freeze'),
+    chose: rec('chose'),
   };
   return { actions, calls };
 }
@@ -173,4 +174,41 @@ test('choiceMenuTemplate renders declared choices verbatim and returns the id', 
 
 test('choiceMenuTemplate on no choices is an empty menu, not a stray row', () => {
   assert.deepEqual(choiceMenuTemplate([], () => {}), []);
+});
+
+// A row that declares no state is an action. Drawn as a radio it reads as a
+// setting that happens to be off, and the + menu's dump row is exactly that:
+// see client/circlemenu.DumpID, which names no state.
+test('a choice that declares no state is an action row, not an unchecked radio', () => {
+  const picked: string[] = [];
+  const items = choiceMenuTemplate(
+    [
+      { id: 'dark', label: 'Dark mode', checked: true },
+      { id: 'dump', label: 'Dump logs' },
+    ],
+    (id) => picked.push(id),
+  );
+  assert.deepEqual(
+    items.map((i) => [i.label, i.type, i.checked]),
+    [
+      ['Dark mode', 'radio', true],
+      ['Dump logs', undefined, undefined],
+    ],
+  );
+  items[1].click?.();
+  assert.deepEqual(picked, ['dump'], 'the action row still hands its id back');
+});
+
+// Every row of the live view's menu reports the label it ran under, so one
+// caller can say what the user picked and no row can be added that runs
+// unreported.
+test('every url menu row reports its own label before it acts', () => {
+  const { actions, calls } = spyActions();
+  const t = urlContextMenuTemplate(
+    baseParams({ linkURL: 'https://x.test/a', isEditable: true, canFreeze: true }),
+    actions,
+  );
+  const rows = t.filter((i) => i.label);
+  for (const r of rows) r.click!();
+  assert.deepEqual(calls.chose, rows.map((r) => r.label));
 });

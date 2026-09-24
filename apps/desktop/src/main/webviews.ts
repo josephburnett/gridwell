@@ -26,6 +26,8 @@ import { decideStreak, FRESH, StreakState } from './capturestreak';
 import { decideFocus, isPressInput, GuardPhase } from './focusguard';
 import { trace } from './trace';
 import {
+  menuChose,
+  menuOpened,
   viewBounds,
   viewCreated,
   viewDestroyed,
@@ -34,6 +36,10 @@ import {
   viewNav,
   viewShown,
 } from './viewtrace';
+
+// The live view's page menu, as a trace record names it; register.ts names the
+// other one.
+const URL_MENU = 'url';
 
 // __dirname is dist/main at runtime, so the compiled preload sits one level up.
 const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js');
@@ -110,6 +116,7 @@ export class WebviewRegistry {
     // Before the pop, so this pane is focused by the time any item runs, and a
     // dismissed menu has still moved focus, as a left-click does.
     this.cb.onContextMenu?.({ paneId });
+    trace(menuOpened(URL_MENU, paneId));
     const wc = view.webContents;
     const nav = wc.navigationHistory;
     const template = urlContextMenuTemplate(
@@ -139,6 +146,7 @@ export class WebviewRegistry {
         },
         reload: () => wc.reload(),
         freeze: () => this.cb.onFreezeURL?.({ paneId }),
+        chose: (label) => trace(menuChose(URL_MENU, label, paneId)),
       },
     );
     const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);

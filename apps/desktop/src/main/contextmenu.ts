@@ -30,6 +30,9 @@ interface ContextActions {
   // Stores the standing frozen intent, so re-descending stays frozen until the
   // reconnect button clears it.
   freeze(): void;
+  // Every row reports the label it ran under, so one caller can say what the
+  // user picked without the builder knowing what any item means.
+  chose(label: string): void;
 }
 
 // The subset of MenuItemConstructorOptions this builder emits, declared here so
@@ -46,44 +49,54 @@ interface MenuTemplateItem {
 // not apply are omitted, except the navigation block, which disables instead.
 export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): MenuTemplateItem[] {
   const items: MenuTemplateItem[] = [];
+  // One wrapper, so no row can be added that runs without being reported.
+  const row = (label: string, run: () => void, enabled?: boolean): MenuTemplateItem => ({
+    label,
+    ...(enabled === undefined ? {} : { enabled }),
+    click: () => {
+      a.chose(label);
+      run();
+    },
+  });
 
   if (p.linkURL) {
-    items.push({ label: 'Open Link', click: () => a.openLink(p.linkURL) });
-    items.push({ label: 'Copy Link Address', click: () => a.copyLink(p.linkURL) });
+    items.push(row('Open Link', () => a.openLink(p.linkURL)));
+    items.push(row('Copy Link Address', () => a.copyLink(p.linkURL)));
     items.push({ type: 'separator' });
   }
 
   if (p.isEditable) {
-    items.push({ label: 'Cut', enabled: p.editFlags.canCut, click: () => a.cut() });
-    items.push({ label: 'Copy', enabled: p.editFlags.canCopy, click: () => a.copyText(p.selectionText) });
-    items.push({ label: 'Paste', enabled: p.editFlags.canPaste, click: () => a.paste() });
+    items.push(row('Cut', () => a.cut(), p.editFlags.canCut));
+    items.push(row('Copy', () => a.copyText(p.selectionText), p.editFlags.canCopy));
+    items.push(row('Paste', () => a.paste(), p.editFlags.canPaste));
     items.push({ type: 'separator' });
   } else if (p.selectionText) {
-    items.push({ label: 'Copy', click: () => a.copyText(p.selectionText) });
+    items.push(row('Copy', () => a.copyText(p.selectionText)));
     items.push({ type: 'separator' });
   }
 
-  items.push({ label: 'Back', enabled: p.canGoBack, click: () => a.back() });
-  items.push({ label: 'Forward', enabled: p.canGoForward, click: () => a.forward() });
-  items.push({ label: 'Reload', click: () => a.reload() });
+  items.push(row('Back', () => a.back(), p.canGoBack));
+  items.push(row('Forward', () => a.forward(), p.canGoForward));
+  items.push(row('Reload', () => a.reload()));
   if (p.canFreeze) {
-    items.push({ label: 'Freeze Page', click: () => a.freeze() });
+    items.push(row('Freeze Page', () => a.freeze()));
   }
 
   return items;
 }
 
-// A menu of exclusive choices the renderer declared, one radio row each. It
-// knows nothing about what is being chosen: the ids, labels and which one is
-// checked all arrive on the wire, so a new kind of choice needs no change here.
+// A menu of choices the renderer declared. It knows nothing about what is being
+// chosen: the ids, labels and state all arrive on the wire, so a new kind of
+// choice needs no change here. A row that declares state is a radio in the
+// group; a row that declares none is an action, and an action drawn as an
+// unchecked radio reads as a setting that is off.
 export function choiceMenuTemplate(
   items: ChoiceItem[],
   choose: (id: string) => void,
 ): MenuTemplateItem[] {
-  return items.map((it) => ({
-    label: it.label,
-    type: 'radio' as const,
-    checked: it.checked,
-    click: () => choose(it.id),
-  }));
+  return items.map((it) =>
+    it.checked === undefined
+      ? { label: it.label, click: () => choose(it.id) }
+      : { label: it.label, type: 'radio' as const, checked: it.checked, click: () => choose(it.id) },
+  );
 }
