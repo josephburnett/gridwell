@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import { freePort } from './freeport';
 import { sidecarBinary, staticDir } from './paths';
 import { makeLineSplitter, parseServingLine, windowOrigin } from './lines';
+import { trace } from './trace';
 
 export interface Sidecar {
   // From the serve banner: loopback, unless server.yaml `web.bind` pins one.
@@ -31,6 +32,9 @@ interface StartOptions {
   staticPath?: string;
 }
 
+// Every sidecar-lifecycle record wears this src.
+const TRACE_SRC = 'sidecar';
+
 // startSidecar resolves once the serve banner announces the bound address. The
 // wait bounds silence rather than total time, because a fixed deadline SIGTERMs
 // a live working server, and killing one mid-write tears a home in half.
@@ -57,6 +61,19 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   const child = opts.spawnFn
     ? opts.spawnFn(bin, args)
     : spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  trace({ src: TRACE_SRC, kind: 'spawn', msg: [bin, ...args].join(' ') });
+  // The one place an exit is traced, whenever it happens: the settle listeners
+  // below stop at boot, and index.ts's watcher only surfaces the notice. The
+  // sidecar's own stdout is already in the node's ring through its log capture,
+  // so onLog posts nothing.
+  child.on('exit', (code, signal) =>
+    trace({
+      src: TRACE_SRC,
+      kind: 'exit',
+      msg: 'sidecar exited',
+      kv: { code: String(code ?? ''), signal: signal ?? '' },
+    }),
+  );
 
   const stop = () => {
     if (!child.killed) child.kill('SIGTERM');
@@ -100,6 +117,12 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
       if (served) {
         settled = true;
         clearTimeout(timer);
+        trace({
+          src: TRACE_SRC,
+          kind: 'ready',
+          msg: windowOrigin(served),
+          kv: { external: String(!!served.external) },
+        });
         resolve({
           origin: windowOrigin(served),
           auth: served.auth,

@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
 import { rendererLogLine } from './viewutil';
+import { logLine } from './trace';
 
 interface RootWindow {
   win: BrowserWindow;
@@ -47,7 +48,7 @@ export function createRootWindow(origin: string): RootWindow {
   // the strip.
   win.webContents.on('console-message', (_e, level, message) => {
     const line = rendererLogLine(level, message);
-    if (line) console.error(line);
+    if (line) logLine('error', line);
   });
 
   // A fullscreen window can keep its old bounds when the display geometry

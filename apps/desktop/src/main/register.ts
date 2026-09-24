@@ -19,6 +19,7 @@ import {
 import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
+import { logLine } from './trace';
 
 // safeSend is the one guard every main-to-renderer push goes through: the
 // window can close mid-flight, and .send on a destroyed WebContents throws.
@@ -115,7 +116,7 @@ export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, j
 // client/errsurface is the single place such a failure becomes visible.
 export function sendError(rootWC: WebContents, source: string, message: string): void {
   // The log too, because safeSend no-ops once the renderer is gone.
-  console.error(`[gridwell] ${source}: ${message}`);
+  logLine('error', `[gridwell] ${source}: ${message}`);
   const ev: ErrorEvent = { source, message };
   safeSend(rootWC, EV.error, ev);
 }
