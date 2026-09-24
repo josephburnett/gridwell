@@ -113,10 +113,12 @@ export class TraceClient {
     return pending >= TRACE_FLUSH_BATCH || this.now() - this.lastFlush >= TRACE_FLUSH_MS;
   }
 
-  // tick posts when one is due. One flush is in flight at a time, because two
-  // would send the same records twice and acknowledge each other's.
-  async tick(): Promise<void> {
-    if (this.inFlight || !this.post || !this.needFlush()) return;
+  // tick posts when one is due, or, forced, whatever is pending: quit is the
+  // one moment with no next window to wait for. One flush is in flight at a
+  // time, because two would send the same records twice and acknowledge each
+  // other's.
+  async tick(force = false): Promise<void> {
+    if (this.inFlight || !this.post || !(force || this.needFlush())) return;
     const batch = this.pendingBatch();
     if (!batch) return;
     this.inFlight = true;
@@ -204,6 +206,13 @@ export function logLine(level: 'log' | 'error', line: string): void {
   if (level === 'error') console.error(line);
   else console.log(line);
   trace({ src: 'main', kind: 'log', msg: line });
+}
+
+// flushTrace posts what is pending without waiting out the window. The quit
+// sequence calls it while the sidecar is still up, because the door goes with
+// it and the last records are the ones that say how the app ended.
+export function flushTrace(): Promise<void> {
+  return mainRing.tick(true);
 }
 
 // startTrace arms the door and keeps the clock half of the flush decision

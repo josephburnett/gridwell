@@ -10,7 +10,7 @@ import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
 import { AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE_S } from './authconst';
 import { QuitFlush } from './quit';
-import { logLine, startTrace, TRACE_PATH } from './trace';
+import { flushTrace, logLine, startTrace, TRACE_PATH } from './trace';
 
 // See userdata.ts. The e2e fixture also passes --user-data-dir as a Chromium
 // switch; this covers a launch that sets GRIDWELL_HOME without it.
@@ -179,6 +179,7 @@ const quitFlush = new QuitFlush({
     registry = null;
     return reg ? reg.removeAll() : Promise.resolve();
   },
+  flushTrace,
   stopSidecar: () => {
     if (sidecar) {
       sidecar.stop();

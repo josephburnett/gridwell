@@ -1,3 +1,5 @@
+import { trace } from './trace';
+
 // The quit sequence. Quit is two-phase, because the renderer's unload flush
 // needs the views and the sidecar still alive: close the windows, wait for
 // each beforeunload, then stop the sidecar. Tearing either down first loses the
@@ -17,6 +19,9 @@ interface QuitFlushDeps {
   removeAll: () => Promise<void>;
   stopSidecar: () => void;
   quit: () => void;
+  // Posts the pending trace while the door is still up: the sidecar serves it,
+  // so after stopSidecar there is nowhere to send how the app ended.
+  flushTrace: () => Promise<void>;
   // Seams, so a test can watch the watchdog instead of waiting it out.
   setTimer?: (fn: () => void, ms: number) => Timer;
   clearTimer?: (timer: Timer) => void;
@@ -32,11 +37,34 @@ export class QuitFlush {
 
   constructor(private readonly deps: QuitFlushDeps) {}
 
+  private set(fn: () => void, ms: number): Timer {
+    return (this.deps.setTimer ?? ((f: () => void, m: number) => setTimeout(f, m)))(fn, ms);
+  }
+
+  private clear(t: Timer): void {
+    (this.deps.clearTimer ?? ((x: Timer) => clearTimeout(x as NodeJS.Timeout)))(t);
+  }
+
+  // capped resolves when p settles or the bound elapses, whichever comes
+  // first. Everything the teardown waits on is best-effort: a view that will
+  // not detach, or a post the door never answers, must not leave the app with
+  // no window and the sidecar still running.
+  private capped(p: Promise<unknown>): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const t = this.set(resolve, QUIT_FLUSH_WATCHDOG_MS);
+      const settle = (): void => {
+        this.clear(t);
+        resolve();
+      };
+      void p.then(settle, settle);
+    });
+  }
+
   begin(): void {
     if (this.started) return;
     this.started = true;
-    const set = this.deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
-    this.timer = set(() => this.finish(), QUIT_FLUSH_WATCHDOG_MS);
+    trace({ src: 'quit', kind: 'begin', msg: 'closing the windows' });
+    this.timer = this.set(() => this.finish(), QUIT_FLUSH_WATCHDOG_MS);
     void this.deps.closeWindows().then(
       () => this.finish(),
       () => this.finish(),
@@ -46,15 +74,14 @@ export class QuitFlush {
   private finish(): void {
     if (this.flushed) return;
     this.flushed = true;
-    const clear = this.deps.clearTimer ?? ((t: Timer) => clearTimeout(t as NodeJS.Timeout));
-    clear(this.timer);
+    this.clear(this.timer);
     this.timer = null;
     this.deps.stopMirror();
+    trace({ src: 'quit', kind: 'done', msg: 'the views are detaching' });
     const done = (): void => {
       this.deps.stopSidecar();
       this.deps.quit();
     };
-    // A view that will not detach must not hold the sidecar open.
-    void this.deps.removeAll().then(done, done);
+    void this.capped(Promise.all([this.deps.removeAll(), this.deps.flushTrace()])).then(done, done);
   }
 }

@@ -115,6 +115,19 @@ test('a flush is due on a full batch or on the clock', async () => {
   assert.equal(records(bodies[0]).length, TRACE_FLUSH_BATCH);
 });
 
+// Quit has no next window to wait for: the sidecar serves the door and is
+// about to stop, so the last records go now or not at all.
+test('a forced flush posts inside the window', async () => {
+  const bodies: string[] = [];
+  const c = new TraceClient({ cid: 'cid7abc', now: clock().now, post: async (b) => (bodies.push(b), true) });
+  c.emit({ src: 'quit', kind: 'begin', msg: 'closing the windows' });
+  await c.tick();
+  assert.deepEqual(bodies, [], 'the window has not elapsed');
+  await c.tick(true);
+  assert.equal(records(bodies[0]).length, 1);
+  assert.equal(c.pendingCount(), 0);
+});
+
 // A post that never lands must not lose the records it carried: the door is
 // unreliable and the trace is what explains the failure.
 test('a failed post keeps its records for the next batch', async () => {
