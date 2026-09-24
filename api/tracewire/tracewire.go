@@ -30,6 +30,13 @@ const (
 	OriginPlugin   = "plugin"
 )
 
+// DumpResponse is what DumpPath answers: where the node wrote its ring and
+// how many records it held.
+type DumpResponse struct {
+	Path    string `json:"path"`
+	Records int    `json:"records"`
+}
+
 // MaxMsg caps Msg. Past it a message is truncated, never dropped: that
 // something happened is the part worth keeping.
 const MaxMsg = 1024

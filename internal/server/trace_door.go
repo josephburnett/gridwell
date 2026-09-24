@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -48,10 +49,7 @@ func (s *Server) traceDumpDoor() http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(struct {
-			Path    string `json:"path"`
-			Records int    `json:"records"`
-		}{path, n}); err != nil {
+		if err := json.NewEncoder(w).Encode(tracewire.DumpResponse{Path: path, Records: n}); err != nil {
 			// The dump is already on disk; the reply is what broke.
 			http.Error(w, "trace: "+err.Error(), http.StatusInternalServerError)
 		}

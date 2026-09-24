@@ -9,11 +9,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/cadence"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
@@ -47,7 +50,7 @@ func (a *App) flushTrace() {
 }
 
 func (a *App) postTraceBatch(batch []byte, done func(kept bool)) {
-	err := a.postTrace(tracewire.Path, batch)
+	_, err := a.postTrace(tracewire.Path, batch)
 	// The completion first: it is what tells the pump the next post waits for
 	// the clock, so the record below cannot start one.
 	done(err == nil)
@@ -57,19 +60,45 @@ func (a *App) postTraceBatch(batch []byte, done func(kept bool)) {
 	a.armTraceFlush()
 }
 
-// postTrace is the door hop. http.DefaultClient is fetch under wasm, on this
-// page's own origin and cookie, the same way every other call reaches the
-// node.
-func (a *App) postTrace(path string, body []byte) error {
+// dumpTrace hands the node what this client is still holding, waits for it to
+// be kept, and asks for the ring on disk. Where it landed is a notice: a
+// diagnostic the user cannot find is no diagnostic.
+func (a *App) dumpTrace() {
+	go func() {
+		if batch, done := a.pump.Force(a.tr, time.Now()); batch != nil {
+			_, err := a.postTrace(tracewire.Path, batch)
+			done(err == nil)
+		}
+		body, err := a.postTrace(tracewire.DumpPath, nil)
+		var dump tracewire.DumpResponse
+		if err == nil {
+			err = json.Unmarshal(body, &dump)
+		}
+		if err != nil {
+			a.reportErr(errsurface.Error, traceSource, "logs could not be dumped: "+err.Error())
+			return
+		}
+		a.reportErr(errsurface.Info, traceSource, "logs dumped to "+dump.Path)
+	}()
+}
+
+// traceSource is the notice strip's name for the trace itself, so a second
+// dump replaces the first notice instead of stacking one.
+const traceSource = "trace"
+
+// postTrace is the door hop, answering the reply body. http.DefaultClient is
+// fetch under wasm, on this page's own origin and cookie, the same way every
+// other call reaches the node.
+func (a *App) postTrace(path string, body []byte) ([]byte, error) {
 	resp, err := http.Post(a.origin+path, traceContentType, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return httpStatusError(resp.Status)
+		return nil, httpStatusError(resp.Status)
 	}
-	return nil
+	return io.ReadAll(resp.Body)
 }
 
 // httpStatusError names a door's refusal, which is not a transport error and

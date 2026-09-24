@@ -25,6 +25,8 @@ func (a *App) openCircleMenu(p *pane.Pane) {
 			switch v := circlemenu.Choose(id); v.Action {
 			case circlemenu.ActionTheme:
 				a.setTheme(v.Theme)
+			case circlemenu.ActionDump:
+				a.dumpTrace()
 			}
 		})
 	}

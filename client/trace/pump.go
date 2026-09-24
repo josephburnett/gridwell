@@ -27,6 +27,16 @@ func (p *Pump) Start(c *Client, now time.Time) (batch []byte, done func(kept boo
 	return p.force(c, now)
 }
 
+// Force posts what is pending whether or not it is due, for the dump, which
+// is a reading of the node's ring and must not miss what this client is still
+// holding. It yields to a post already out, which is carrying those records.
+func (p *Pump) Force(c *Client, now time.Time) (batch []byte, done func(kept bool)) {
+	if p.inFlight {
+		return nil, nil
+	}
+	return p.force(c, now)
+}
+
 // force takes the batch with no due check of its own.
 func (p *Pump) force(c *Client, now time.Time) ([]byte, func(bool)) {
 	b, ack := c.PendingBatch()

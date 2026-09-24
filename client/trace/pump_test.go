@@ -43,6 +43,9 @@ func TestOnlyOnePostIsInFlight(t *testing.T) {
 	if b, _ := p.Start(c, t0.Add(2*flushWindow)); b != nil {
 		t.Errorf("a second post started while one was out: %q", b)
 	}
+	if b, _ := p.Force(c, t0.Add(2*flushWindow)); b != nil {
+		t.Errorf("a forced post started while one was out: %q", b)
+	}
 	done(true)
 	if b, _ := p.Start(c, t0.Add(2*flushWindow)); b == nil {
 		t.Error("the records emitted in flight were never posted")
@@ -85,5 +88,23 @@ func TestAFailedPostWaitsForTheClockHoweverFullTheRingIs(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "post failed") {
 		t.Error("the retry dropped the records the failed post carried")
+	}
+}
+
+// The dump is a reading of the node's ring, so it posts what this client is
+// holding first, however recently the last batch went.
+func TestForcePostsInsideTheWindow(t *testing.T) {
+	c, p := New(4096, "cid7abc"), NewPump(t0)
+	pending(c, 1, t0)
+	if b, _ := p.Start(c, t0); b != nil {
+		t.Fatal("one record inside the window is not due")
+	}
+	b, done := p.Force(c, t0)
+	if b == nil {
+		t.Fatal("the forced post carried nothing")
+	}
+	done(true)
+	if b, _ := p.Force(c, t0); b != nil {
+		t.Errorf("a forced post with nothing owed still posted %q", b)
 	}
 }
