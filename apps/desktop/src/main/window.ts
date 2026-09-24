@@ -55,6 +55,9 @@ export function createRootWindow(origin: string): RootWindow {
   win.on('focus', () => trace(windowFocused(true)));
   win.on('blur', () => trace(windowFocused(false)));
   win.on('resize', () => {
+    // A read of a destroyed window throws uncaught, which hangs main behind an
+    // error dialog; see the display-metrics handler below.
+    if (win.isDestroyed()) return;
     const [w, h] = win.getSize();
     trace(windowResized(w, h));
   });

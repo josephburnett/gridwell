@@ -492,7 +492,14 @@ export class WebviewRegistry {
     });
     // zoomFactor resets across cross-origin navigations.
     e.view.webContents.on('did-finish-load', () => {
-      trace(viewNav(paneId, e.tileId, true, e.view.webContents.getURL()));
+      // The view can die between the load and this callback, and a read of a
+      // destroyed WebContents throws uncaught in main, which hangs it behind
+      // an error dialog.
+      try {
+        trace(viewNav(paneId, e.tileId, true, e.view.webContents.getURL()));
+      } catch {
+        return;
+      }
       this.applyMinWidthZoom(e);
     });
 

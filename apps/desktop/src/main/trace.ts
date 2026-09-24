@@ -186,7 +186,12 @@ export class TraceClient {
     }
     const origin = TRACE_ORIGIN;
     const { src, kind } = ev;
-    const msg = truncate(ev.msg);
+    // Coerced, not trusted. The emit sites are JavaScript reached from IPC and
+    // from Electron listeners, so a field can arrive as a number however it is
+    // typed here — and there a record must neither throw, which hangs main
+    // behind an error dialog, nor put a non-string on the line, which the node
+    // rejects and the batch is then owed forever.
+    const msg = truncate(String(ev.msg));
     // Two literals, because the line's bytes are the contract: kv sits between
     // msg and cid, and is absent when empty.
     const kv = sortedKV(ev.kv);
@@ -263,7 +268,7 @@ function sortedKV(kv: Record<string, string> | undefined): Record<string, string
   const keys = Object.keys(kv).sort();
   if (keys.length === 0) return null;
   const out: Record<string, string> = {};
-  for (const k of keys) out[k] = kv[k];
+  for (const k of keys) out[k] = String(kv[k]);
   return out;
 }
 

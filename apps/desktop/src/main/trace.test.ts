@@ -256,6 +256,21 @@ test('a long message is cut on a rune boundary', () => {
   assert.equal(got, 'é'.repeat(TRACE_MAX_MSG / 2), 'the cut split a rune');
 });
 
+// The emit sites are JavaScript reached from IPC and from Electron listeners,
+// so a tile id can arrive as a number whatever the types say. A record that
+// throws there takes the app down behind an uncaught-exception dialog, and a
+// number on the line is a 400 the batch never recovers from.
+test('a non-string message or kv value is still a string on the line', () => {
+  const c = new TraceClient({ cid: 'cid7abc', now: clock().now });
+  const n = 1 as unknown as string;
+  c.emit({ src: 'webviews', kind: 'hide', msg: n, kv: { tile: n } });
+  assert.equal(
+    c.pendingBatch()!.body,
+    '{"origin":"electron","src":"webviews","kind":"hide","msg":"1","kv":{"tile":"1"},' +
+      '"cid":"cid7abc","ct":1727000000123}\n',
+  );
+});
+
 // The caller's map is the caller's: a map reused for the next record cannot
 // rewrite the last one.
 test('emit copies the caller kv', () => {
