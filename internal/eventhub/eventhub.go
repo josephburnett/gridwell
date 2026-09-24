@@ -9,6 +9,8 @@ package eventhub
 import (
 	"strconv"
 	"sync"
+
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // streamBuffer is how many delivered events a stalled consumer can fall
@@ -60,7 +62,8 @@ func (h *Hub[T]) Subscribe() (<-chan T, func()) {
 	return sub.out, cancel
 }
 
-// Publish never blocks.
+// Publish never blocks. The key is what the consumer keys on, so it is what a
+// record carries: the entity, and the event's kind in its prefix.
 func (h *Hub[T]) Publish(ev T) {
 	key := h.key(ev)
 	h.mu.Lock()
@@ -69,6 +72,7 @@ func (h *Hub[T]) Publish(ev T) {
 		subs = append(subs, sub)
 	}
 	h.mu.Unlock()
+	trace.Emit("eventhub", "event", "publish", map[string]string{"key": key, "subs": strconv.Itoa(len(subs))})
 	for _, sub := range subs {
 		sub.enqueue(key, ev)
 	}
@@ -80,11 +84,17 @@ func (sub *subscriber[T]) enqueue(key string, ev T) {
 		sub.seq++
 		key = "u/" + strconv.Itoa(sub.seq)
 	}
-	if _, exists := sub.pending[key]; !exists {
+	_, exists := sub.pending[key]
+	if !exists {
 		sub.keys = append(sub.keys, key)
 	}
 	sub.pending[key] = ev
 	sub.mu.Unlock()
+	if exists {
+		// The older event for this entity is gone, undelivered. That is the
+		// policy, and it is also where a change the user made can look lost.
+		trace.Emit("eventhub", "event", "coalesce", map[string]string{"key": key})
+	}
 	select {
 	case sub.wake <- struct{}{}:
 	default:
@@ -97,12 +107,13 @@ func (sub *subscriber[T]) pump() {
 	for {
 		sub.mu.Lock()
 		var ev T
+		var delivered string
 		have := len(sub.keys) > 0
 		if have {
-			k := sub.keys[0]
+			delivered = sub.keys[0]
 			sub.keys = sub.keys[1:]
-			ev = sub.pending[k]
-			delete(sub.pending, k)
+			ev = sub.pending[delivered]
+			delete(sub.pending, delivered)
 		}
 		sub.mu.Unlock()
 		if !have {
@@ -115,6 +126,7 @@ func (sub *subscriber[T]) pump() {
 		}
 		select {
 		case sub.out <- ev:
+			trace.Emit("eventhub", "event", "deliver", map[string]string{"key": delivered})
 		case <-sub.done:
 			return
 		}
