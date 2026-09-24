@@ -128,6 +128,36 @@ test('a forced flush posts inside the window', async () => {
   assert.equal(c.pendingCount(), 0);
 });
 
+// The quit sequence ends the traffic once the windows are gone, because a post
+// Chromium is still carrying then keeps the app from exiting at all.
+test('stop abandons the post in flight and posts nothing after', async () => {
+  const k = clock();
+  let aborted = false;
+  let posts = 0;
+  const c = new TraceClient({
+    cid: 'cid7abc',
+    now: k.now,
+    post: (_body, signal) => {
+      posts++;
+      return new Promise<boolean>((resolve) => {
+        signal.addEventListener('abort', () => {
+          aborted = true;
+          resolve(false);
+        });
+      });
+    },
+  });
+  c.emit({ src: 'quit', kind: 'begin', msg: 'closing the windows' });
+  const inFlight = c.tick(true);
+  c.stop();
+  await inFlight;
+  assert.ok(aborted, 'the post in flight was not abandoned');
+
+  c.emit({ src: 'quit', kind: 'begin', msg: 'after the stop' });
+  await c.tick(true);
+  assert.equal(posts, 1, 'a stopped client posted again');
+});
+
 // A post that never lands must not lose the records it carried: the door is
 // unreliable and the trace is what explains the failure.
 test('a failed post keeps its records for the next batch', async () => {

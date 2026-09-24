@@ -51,8 +51,9 @@ interface TraceRecord {
 }
 
 // The door, injected so a test never reaches the network. True means the node
-// kept the batch; anything else leaves it pending for the next one.
-type TracePost = (body: string) => Promise<boolean>;
+// kept the batch; anything else leaves it pending for the next one. The signal
+// is how stop() abandons a post: see stopTrace.
+type TracePost = (body: string, signal: AbortSignal) => Promise<boolean>;
 
 interface TraceOptions {
   cid?: string;
@@ -80,6 +81,7 @@ export class TraceClient {
   private lastCT = 0;
   private lastFlush: number;
   private inFlight = false;
+  private aborter: AbortController | null = null;
 
   constructor(o: TraceOptions = {}) {
     this.cid = o.cid ?? newCID();
@@ -93,6 +95,14 @@ export class TraceClient {
   // before that stays pending, so boot rides the first batch.
   sendWith(post: TracePost): void {
     this.post = post;
+  }
+
+  // stop ends the traffic: nothing more is posted, and a post still in flight
+  // is abandoned. See stopTrace for why that is not optional.
+  stop(): void {
+    this.post = null;
+    this.aborter?.abort();
+    this.aborter = null;
   }
 
   emit(ev: TraceEvent): void {
@@ -121,14 +131,17 @@ export class TraceClient {
     if (!batch) return;
     this.inFlight = true;
     this.lastFlush = this.now();
+    const aborter = new AbortController();
+    this.aborter = aborter;
     let ok = false;
     try {
-      ok = await this.post(batch.body);
+      ok = await this.post(batch.body, aborter.signal);
     } catch {
-      // The door is unreachable; the records stay pending and the ring is the
-      // bound on that memory.
+      // The door is unreachable, or the post was abandoned; the records stay
+      // pending and the ring is the bound on that memory.
     } finally {
       this.inFlight = false;
+      if (this.aborter === aborter) this.aborter = null;
     }
     if (ok) batch.ack();
   }
@@ -205,11 +218,24 @@ export function logLine(level: 'log' | 'error', line: string): void {
   trace({ src: 'main', kind: 'log', msg: line });
 }
 
-// flushTrace posts what is pending without waiting out the window. The quit
-// sequence calls it while the sidecar is still up, because the door goes with
-// it and the last records are the ones that say how the app ended.
-export function flushTrace(): Promise<void> {
-  return mainRing.tick(true);
+// flushTrace posts what is pending without waiting out the window, and is
+// never awaited: the quit sequence calls it while the windows are still up,
+// because a request Chromium is still carrying when they go keeps the app from
+// exiting at all.
+export function flushTrace(): void {
+  void mainRing.tick(true);
+}
+
+let flushTimer: ReturnType<typeof setInterval> | null = null;
+
+// stopTrace ends the trace's traffic for good. The quit sequence calls it once
+// the windows have closed, so no request is in flight when the app exits.
+export function stopTrace(): void {
+  if (flushTimer !== null) {
+    clearInterval(flushTimer);
+    flushTimer = null;
+  }
+  mainRing.stop();
 }
 
 // startTrace arms the door and keeps the clock half of the flush decision
@@ -217,7 +243,7 @@ export function flushTrace(): Promise<void> {
 // company that never comes.
 export function startTrace(post: TracePost): void {
   mainRing.sendWith(post);
-  setInterval(() => void mainRing.tick(), TRACE_FLUSH_MS);
+  flushTimer = setInterval(() => void mainRing.tick(), TRACE_FLUSH_MS);
 }
 
 // The cut lands on a rune boundary, so a long message is still text.

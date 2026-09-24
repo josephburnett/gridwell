@@ -4,7 +4,7 @@ import { QuitFlush, QUIT_FLUSH_WATCHDOG_MS } from './quit';
 
 // A recorder of the teardown steps, with the windows and the timer held open so
 // each test decides which ends the wait.
-function harness(opts: { removeAllFails?: boolean; flushFails?: boolean; flushHangs?: boolean } = {}) {
+function harness(opts: { removeAllFails?: boolean } = {}) {
   const steps: string[] = [];
   let closeWindows!: () => void;
   const windows = new Promise<void>((res) => (closeWindows = res));
@@ -19,11 +19,8 @@ function harness(opts: { removeAllFails?: boolean; flushFails?: boolean; flushHa
       return opts.removeAllFails ? Promise.reject(new Error('view will not detach')) : Promise.resolve();
     },
     stopSidecar: () => steps.push('stopSidecar'),
-    flushTrace: () => {
-      steps.push('flushTrace');
-      if (opts.flushHangs) return new Promise<void>(() => {});
-      return opts.flushFails ? Promise.reject(new Error('the door is gone')) : Promise.resolve();
-    },
+    flushTrace: () => steps.push('flushTrace'),
+    stopTrace: () => steps.push('stopTrace'),
     quit: () => steps.push('quit'),
     setTimer: (fn, ms) => {
       scheduledMs = ms;
@@ -51,10 +48,10 @@ function harness(opts: { removeAllFails?: boolean; flushFails?: boolean; flushHa
 test('the windows closing ends the wait, and the teardown runs in order', async () => {
   const h = harness();
   h.flush.begin();
-  assert.deepEqual(h.steps, [], 'nothing tears down while the renderers are still flushing');
+  assert.deepEqual(h.steps, ['flushTrace'], 'nothing but the trace post, which needs the windows up');
   h.closeWindows();
   await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace', 'stopSidecar', 'quit']);
+  assert.deepEqual(h.steps, ['flushTrace', 'stopTrace', 'stopMirror', 'removeAll', 'stopSidecar', 'quit']);
   assert.ok(h.cleared(), 'the watchdog must be cleared, or it fires into a quit already done');
   assert.equal(h.flush.flushed, true);
 });
@@ -65,7 +62,7 @@ test('a window that never closes is capped by the watchdog', async () => {
   assert.equal(h.scheduledMs(), QUIT_FLUSH_WATCHDOG_MS, 'the wait is capped at the declared bound');
   h.watchdog();
   await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace', 'stopSidecar', 'quit']);
+  assert.deepEqual(h.steps, ['flushTrace', 'stopTrace', 'stopMirror', 'removeAll', 'stopSidecar', 'quit']);
 });
 
 test('the watchdog is real time, not an instant give-up nor a promise never kept', async () => {
@@ -78,10 +75,8 @@ test('the watchdog is real time, not an instant give-up nor a promise never kept
       stopMirror: () => steps.push('stopMirror'),
       removeAll: () => Promise.resolve(),
       stopSidecar: () => steps.push('stopSidecar'),
-      flushTrace: () => {
-        steps.push('flushTrace');
-        return Promise.resolve();
-      },
+      flushTrace: () => steps.push('flushTrace'),
+      stopTrace: () => steps.push('stopTrace'),
       quit: () => {
         steps.push('quit');
         res();
@@ -98,7 +93,7 @@ test('the watchdog is real time, not an instant give-up nor a promise never kept
   // Timers may fire a hair early; the point is that the flush got its wait and
   // was not abandoned at once.
   assert.ok(waited >= QUIT_FLUSH_WATCHDOG_MS - 50, `quit after ${waited}ms, before the ${QUIT_FLUSH_WATCHDOG_MS}ms bound`);
-  assert.deepEqual(steps, ['stopMirror', 'flushTrace', 'stopSidecar', 'quit']);
+  assert.deepEqual(steps, ['flushTrace', 'stopTrace', 'stopMirror', 'stopSidecar', 'quit']);
 });
 
 test('the windows closing after the watchdog fired tears nothing down twice', async () => {
@@ -108,7 +103,7 @@ test('the windows closing after the watchdog fired tears nothing down twice', as
   await h.settle();
   h.closeWindows();
   await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace', 'stopSidecar', 'quit']);
+  assert.deepEqual(h.steps, ['flushTrace', 'stopTrace', 'stopMirror', 'removeAll', 'stopSidecar', 'quit']);
 });
 
 test('a second before-quit neither restarts the sequence nor blocks the quit', async () => {
@@ -117,7 +112,7 @@ test('a second before-quit neither restarts the sequence nor blocks the quit', a
   h.flush.begin();
   h.closeWindows();
   await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace', 'stopSidecar', 'quit']);
+  assert.deepEqual(h.steps, ['flushTrace', 'stopTrace', 'stopMirror', 'removeAll', 'stopSidecar', 'quit']);
   assert.equal(h.flush.flushed, true, 'flushed is what tells before-quit to stop preventing the quit');
 });
 
@@ -126,30 +121,22 @@ test('a view that will not detach still stops the sidecar and quits', async () =
   h.flush.begin();
   h.closeWindows();
   await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace', 'stopSidecar', 'quit']);
+  assert.deepEqual(h.steps, ['flushTrace', 'stopTrace', 'stopMirror', 'removeAll', 'stopSidecar', 'quit']);
 });
 
-// The door goes down with the sidecar, so the last post is made while it is
-// still up — and a refused one must not strand the app with no window.
-test('a trace post that will not land still stops the sidecar and quits', async () => {
-  const h = harness({ flushFails: true });
+// A trace post Chromium is still carrying when the windows go keeps the app
+// from exiting at all — the e2e teardown saw a window-less app with a live
+// sidecar. So the last batch goes while they are up, and the traffic ends
+// before anything else is torn down.
+test('the trace posts while the windows are up and stops before the teardown', async () => {
+  const h = harness();
   h.flush.begin();
+  assert.deepEqual(h.steps, ['flushTrace'], 'the post needs the windows Chromium is about to close');
   h.closeWindows();
   await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace', 'stopSidecar', 'quit']);
-});
-
-// The trace door is served by the sidecar, over a network stack that is coming
-// down with the app: a post that never answers must not leave the user with no
-// window and a backend still running. The same bound caps it as caps the
-// renderers' unload.
-test('a trace post that never answers still stops the sidecar and quits', async () => {
-  const h = harness({ flushHangs: true });
-  h.flush.begin();
-  h.closeWindows();
-  await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace'], 'the teardown is waiting on the post');
-  h.watchdog();
-  await h.settle();
-  assert.deepEqual(h.steps, ['stopMirror', 'removeAll', 'flushTrace', 'stopSidecar', 'quit']);
+  assert.equal(h.steps[1], 'stopTrace', 'the traffic ends before the first teardown step');
+  assert.ok(
+    h.steps.indexOf('stopTrace') < h.steps.indexOf('stopSidecar'),
+    'nothing may be in flight when the door and the app go',
+  );
 });

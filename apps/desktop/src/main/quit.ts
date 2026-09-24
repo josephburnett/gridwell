@@ -19,9 +19,12 @@ interface QuitFlushDeps {
   removeAll: () => Promise<void>;
   stopSidecar: () => void;
   quit: () => void;
-  // Posts the pending trace while the door is still up: the sidecar serves it,
-  // so after stopSidecar there is nowhere to send how the app ended.
-  flushTrace: () => Promise<void>;
+  // Posts what the ring holds, and is never awaited; see stopTrace.
+  flushTrace: () => void;
+  // Ends the trace's traffic. A request Chromium is still carrying when the
+  // windows go keeps the app from exiting at all, so nothing may be in flight
+  // past this point.
+  stopTrace: () => void;
   // Seams, so a test can watch the watchdog instead of waiting it out.
   setTimer?: (fn: () => void, ms: number) => Timer;
   clearTimer?: (timer: Timer) => void;
@@ -37,34 +40,15 @@ export class QuitFlush {
 
   constructor(private readonly deps: QuitFlushDeps) {}
 
-  private set(fn: () => void, ms: number): Timer {
-    return (this.deps.setTimer ?? ((f: () => void, m: number) => setTimeout(f, m)))(fn, ms);
-  }
-
-  private clear(t: Timer): void {
-    (this.deps.clearTimer ?? ((x: Timer) => clearTimeout(x as NodeJS.Timeout)))(t);
-  }
-
-  // capped resolves when p settles or the bound elapses, whichever comes
-  // first. Everything the teardown waits on is best-effort: a view that will
-  // not detach, or a post the door never answers, must not leave the app with
-  // no window and the sidecar still running.
-  private capped(p: Promise<unknown>): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const t = this.set(resolve, QUIT_FLUSH_WATCHDOG_MS);
-      const settle = (): void => {
-        this.clear(t);
-        resolve();
-      };
-      void p.then(settle, settle);
-    });
-  }
-
   begin(): void {
     if (this.started) return;
     this.started = true;
     trace({ src: 'quit', kind: 'begin', msg: 'closing the windows' });
-    this.timer = this.set(() => this.finish(), QUIT_FLUSH_WATCHDOG_MS);
+    // While the windows are still up: the door dies with the sidecar, so this
+    // is the last batch that can land.
+    this.deps.flushTrace();
+    const set = this.deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+    this.timer = set(() => this.finish(), QUIT_FLUSH_WATCHDOG_MS);
     void this.deps.closeWindows().then(
       () => this.finish(),
       () => this.finish(),
@@ -74,14 +58,17 @@ export class QuitFlush {
   private finish(): void {
     if (this.flushed) return;
     this.flushed = true;
-    this.clear(this.timer);
+    const clear = this.deps.clearTimer ?? ((t: Timer) => clearTimeout(t as NodeJS.Timeout));
+    clear(this.timer);
     this.timer = null;
+    // The windows are gone, so no post may be in flight from here on.
+    this.deps.stopTrace();
     this.deps.stopMirror();
-    trace({ src: 'quit', kind: 'teardown', msg: 'the views are detaching and the last batch goes now' });
     const done = (): void => {
       this.deps.stopSidecar();
       this.deps.quit();
     };
-    void this.capped(Promise.all([this.deps.removeAll(), this.deps.flushTrace()])).then(done, done);
+    // A view that will not detach must not hold the sidecar open.
+    void this.deps.removeAll().then(done, done);
   }
 }
