@@ -45,6 +45,26 @@ func Log(tag, message string) Event {
 	return Event{Src: strings.Trim(tag, "[]"), Kind: "log", Msg: message}
 }
 
+// The reasons a frame is asked for, each naming the site that asks. A paint
+// that came from nowhere is the twitch, so the reason is the record.
+const (
+	WhyAnimation  = "ghost animation"
+	WhyTransition = "pane transition"
+	WhyGhost      = "ghost lerp"
+	WhyTraceFade  = "ascent trace fade"
+	WhyNotice     = "notice strip"
+	WhyGridLoaded = "grid loaded"
+	WhyContent    = "content loaded"
+	WhyPreview    = "preview decoded"
+	WhyDrag       = "drag snap"
+)
+
+// FrameScheduled and FrameDrawn bracket one animation frame, both under the
+// reason it was asked for.
+func FrameScheduled(why string) Event { return Event{Src: "frame", Kind: "schedule", Msg: why} }
+
+func FrameDrawn(why string) Event { return Event{Src: "frame", Kind: "draw", Msg: why} }
+
 // FlushFailed is a trace post the node did not keep. It is a record and never
 // a notice: a notice is itself a record, and the two would feed each other.
 func FlushFailed(reason string) Event {

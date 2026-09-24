@@ -20,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/tileface"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -332,7 +333,7 @@ func (a *App) draw() {
 		ts := a.ghost.targetCellSize
 		if ts > 0 && math.Abs(ts-ds) > 0.5 {
 			a.ghost.displayedCellSize = ds + (ts-ds)*ghostSizeLerpAlpha
-			a.scheduleFrame()
+			a.scheduleFrame(traceevent.WhyGhost)
 		} else if ts > 0 {
 			a.ghost.displayedCellSize = ts
 		}
@@ -342,7 +343,7 @@ func (a *App) draw() {
 		tf := a.ghost.targetFragmentation
 		if math.Abs(tf-df) > 0.01 {
 			a.ghost.displayedFragmentation = df + (tf-df)*ghostSizeLerpAlpha
-			a.scheduleFrame()
+			a.scheduleFrame(traceevent.WhyGhost)
 		} else {
 			a.ghost.displayedFragmentation = tf
 		}
@@ -924,7 +925,7 @@ func (a *App) fetchTileContent(tileID string) {
 		defer done()
 		// Coalesced repaint: body fetches land in bursts, and the failure is
 		// already on the strip.
-		_ = a.loadTileContent(ctx, tileID, a.scheduleFrame)
+		_ = a.loadTileContent(ctx, tileID, func() { a.scheduleFrame(traceevent.WhyContent) })
 	}()
 }
 

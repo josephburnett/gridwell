@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // A URL tile in the grid view always shows its cached preview JPEG, written
@@ -192,7 +193,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 			a.views.urlPreview.PutEmpty(tileID, blobID)
 		}
 		if r.Store {
-			a.views.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame() })
+			a.views.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame(traceevent.WhyPreview) })
 		}
 	}()
 }

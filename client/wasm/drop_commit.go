@@ -9,6 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // Commits a left-button drag and animates the ghost. finishLeftDrag is the
@@ -231,7 +232,7 @@ func (a *App) startSnap(toX, toY, duration float64) {
 		StartMs:    nowMs(),
 		DurationMs: duration,
 	}
-	a.scheduleFrame()
+	a.scheduleFrame(traceevent.WhyDrag)
 }
 
 // cancelDragSnapBack runs the snap-back when a drop is abandoned.
@@ -263,5 +264,5 @@ func (a *App) snapBackToOrigin(d *dragState) {
 		StartMs:    nowMs(),
 		DurationMs: snapBackMs,
 	}
-	a.scheduleFrame()
+	a.scheduleFrame(traceevent.WhyDrag)
 }

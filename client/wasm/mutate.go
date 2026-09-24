@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/textedit"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // Mutation dispatch. do and post carry no version claim; postWriteContent is
@@ -280,7 +281,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 				a.fetchGrid(gid)
 			}
 			a.refreshFileOverlay()
-			a.scheduleFrame()
+			a.scheduleFrame(traceevent.WhyContent)
 		} else {
 			// The server never spoke, so the entry stays dirty and the
 			// flush sweep re-posts it. It is the only copy of the user's

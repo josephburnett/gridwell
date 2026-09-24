@@ -430,7 +430,7 @@ func newScheduler(a *App) scheduler {
 		traceFlush:  debounce.New(setTimeoutMs, a.flushTrace),
 		errExpire: debounce.New(setTimeoutMs, func() {
 			if a.errs.Expire(time.Now()) {
-				a.scheduleFrame() // strip shrank; panes reclaim the height on redraw
+				a.scheduleFrame(traceevent.WhyNotice) // strip shrank; panes reclaim the height on redraw
 			}
 			a.scheduleErrExpiry()
 		}),
@@ -812,7 +812,7 @@ func (a *App) fetchGrid(id string) {
 		} else {
 			// Coalesced repaint: completions land in bursts, and one draw per
 			// child-grid read would be hundreds of repaints for a big directory.
-			a.scheduleFrame()
+			a.scheduleFrame(traceevent.WhyGridLoaded)
 		}
 		if owed {
 			a.fetchGrid(id)
@@ -876,14 +876,19 @@ func taggedLog(tag string) func(format string, args ...any) {
 	}
 }
 
-func (a *App) scheduleFrame() {
+// scheduleFrame asks for one paint. why is the fact the arm carries to the
+// frame it opens: asks coalesce, so the first reason inside a window is the
+// reason the frame that lands was asked for.
+func (a *App) scheduleFrame(why string) {
 	if a.persist.sched.rafScheduled {
 		return
 	}
 	a.persist.sched.rafScheduled = true
 	framesArmed++
+	a.emit(traceevent.FrameScheduled(why))
 	js.Global().Call("requestAnimationFrame", oneShot(func() {
 		a.persist.sched.rafScheduled = false
+		a.emit(traceevent.FrameDrawn(why))
 		a.frame()
 	}))
 }
@@ -900,7 +905,7 @@ func (a *App) frame() {
 		if done {
 			a.animationDone()
 		} else {
-			a.scheduleFrame()
+			a.scheduleFrame(traceevent.WhyAnimation)
 		}
 	}
 	// Panes are independent, so one landing never touches another's motion.
@@ -917,12 +922,12 @@ func (a *App) frame() {
 			a.trans.Advance(tr.PaneID, now)
 		}
 		if a.trans.Active(tr.PaneID) {
-			a.scheduleFrame()
+			a.scheduleFrame(traceevent.WhyTransition)
 		}
 	}
 	// Ascent-trace fades need frames until they run out.
 	if a.pruneTraces(now) {
-		a.scheduleFrame()
+		a.scheduleFrame(traceevent.WhyTraceFade)
 	}
 	a.draw()
 }
@@ -944,7 +949,7 @@ func (a *App) pruneTraces(now float64) bool {
 // was already animating.
 func (a *App) startTransition(t *transition.Transition) {
 	a.trans.Start(t, nowMs())
-	a.scheduleFrame()
+	a.scheduleFrame(traceevent.WhyTransition)
 }
 
 // enterSegment is the one writer of the scratch viewport an animation drives.
@@ -975,7 +980,7 @@ func (a *App) landTransition(tr *transition.Transition) {
 	if tr.TraceTileID != "" {
 		// Keep the frame loop alive for the fade.
 		a.traces[p.ID] = traceState{tileID: tr.TraceTileID, startMs: nowMs()}
-		a.scheduleFrame()
+		a.scheduleFrame(traceevent.WhyTraceFade)
 	}
 	if tr.OnComplete != nil {
 		tr.OnComplete()
@@ -1150,7 +1155,7 @@ func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 	a.emit(traceevent.Notice(sev, source, message))
 	a.errs.Report(sev, source, message, time.Now())
 	a.scheduleErrExpiry()
-	a.scheduleFrame()
+	a.scheduleFrame(traceevent.WhyNotice)
 }
 
 // scheduleErrExpiry arms one setTimeout for the soonest deadline; the callback
@@ -1174,7 +1179,7 @@ func (a *App) scheduleErrExpiry() {
 // resolveErr clears a source's notice when its condition heals.
 func (a *App) resolveErr(source string) {
 	a.errs.Resolve(source)
-	a.scheduleFrame()
+	a.scheduleFrame(traceevent.WhyNotice)
 }
 
 // reportPluginHealth runs events.ReactHealth's plan for a transition: a
