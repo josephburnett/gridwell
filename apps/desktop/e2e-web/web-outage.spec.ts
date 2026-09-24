@@ -323,6 +323,11 @@ test('a write the network swallows parks in the outbox and drains itself', async
   const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
   await gw.descendCell(cx, cy);
   const inside = await gw.focused();
+  // The descent arms the settle persister. Let that tick land before the hole
+  // opens: landing mid-drag it would write the pan's intermediate framing
+  // into the hole while the mouse is still down, and the drag's idle wait
+  // would then wait on the very write this test observes later.
+  await expect.poll(async () => (await gw.oneShots()).live, { timeout: 15_000 }).toBe(0);
 
   // Every SetFraming for this well hangs until the test opens the route, so the
   // only thing between the viewport and the server is the client's bookkeeping.
