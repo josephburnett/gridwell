@@ -19,11 +19,15 @@ const (
 	RequestHeader = "Gridwell-Request"
 )
 
-// Origin is the emitter's claim about which process it is. The node stamps no
-// origin: it is the one fact a record cannot be told from outside.
+// The origins. OriginClient and OriginElectron are the only two an emitter may
+// claim: the node forces anything else to OriginClient, because a record that
+// came through the door did not come from the node. OriginNode and
+// OriginPlugin are the node's own, written on records it makes itself.
 const (
 	OriginClient   = "client"
 	OriginElectron = "electron"
+	OriginNode     = "node"
+	OriginPlugin   = "plugin"
 )
 
 // MaxMsg caps Msg. Past it a message is truncated, never dropped: that
@@ -34,7 +38,9 @@ const MaxMsg = 1024
 // an emitter leaves them zero and they are absent from the line it sends.
 type Record struct {
 	Seq uint64 `json:"seq,omitempty"`
-	T   int64  `json:"t,omitempty"`
+	// T is unix milliseconds UTC, the same unit as CT, so the skew between an
+	// emitter's clock and the node's is a subtraction.
+	T int64 `json:"t,omitempty"`
 
 	Origin string            `json:"origin"`
 	Src    string            `json:"src"`

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // traceServer is a gated web door with a home to dump into.
@@ -27,7 +27,7 @@ func TestTraceDoorIngestsAndDumps(t *testing.T) {
 	cl, base, home := traceServer(t)
 	marker := "door-test-" + t.Name()
 	body := `{"origin":"client","src":"nav","kind":"nav","msg":"` + marker + `","kv":{"req":"k3f9x2a"},"cid":"c1","ct":7}` + "\n"
-	res, err := cl.Post(base+"/trace", "application/x-ndjson", strings.NewReader(body))
+	res, err := cl.Post(base+tracewire.Path, "application/x-ndjson", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestTraceDoorIngestsAndDumps(t *testing.T) {
 		t.Fatalf("POST /trace = %d, want 204", res.StatusCode)
 	}
 
-	res, err = cl.Post(base+"/trace/dump", "", nil)
+	res, err = cl.Post(base+tracewire.DumpPath, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestTraceDoorIngestsAndDumps(t *testing.T) {
 	}
 	for _, rec := range records {
 		if rec.Msg == marker {
-			if rec.Origin != trace.OriginClient || rec.Cid != "c1" || rec.Ct != 7 || rec.KV["req"] != "k3f9x2a" {
+			if rec.Origin != tracewire.OriginClient || rec.CID != "c1" || rec.CT != 7 || rec.KV["req"] != "k3f9x2a" {
 				t.Errorf("the client's record came back as %+v", rec)
 			}
 			return
@@ -80,7 +80,7 @@ func TestTraceDoorKeepsTheGoodLinesBeforeABadOne(t *testing.T) {
 	cl, base, _ := traceServer(t)
 	marker := "kept-" + t.Name()
 	body := `{"src":"nav","msg":"` + marker + `"}` + "\nnot json\n"
-	res, err := cl.Post(base+"/trace", "application/x-ndjson", strings.NewReader(body))
+	res, err := cl.Post(base+tracewire.Path, "application/x-ndjson", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestTraceDoorKeepsTheGoodLinesBeforeABadOne(t *testing.T) {
 	if !strings.Contains(string(blob), "line 2") {
 		t.Errorf("the 400 body %q does not name the line number", blob)
 	}
-	res2, err := cl.Post(base+"/trace/dump", "", nil)
+	res2, err := cl.Post(base+tracewire.DumpPath, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestTraceDoorKeepsTheGoodLinesBeforeABadOne(t *testing.T) {
 
 func TestTraceDoorsRefuseEverythingButPost(t *testing.T) {
 	cl, base, _ := traceServer(t)
-	for _, path := range []string{"/trace", "/trace/dump"} {
+	for _, path := range []string{tracewire.Path, tracewire.DumpPath} {
 		res, err := cl.Get(base + path)
 		if err != nil {
 			t.Fatal(err)
@@ -131,7 +131,7 @@ func TestTraceDoorsRefuseEverythingButPost(t *testing.T) {
 // A home the server does not know is a refusal, not a dump beside the binary.
 func TestTraceDumpRefusesWithoutAHome(t *testing.T) {
 	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{}))
-	res, err := hs.Client().Post(hs.URL+"/trace/dump", "", nil)
+	res, err := hs.Client().Post(hs.URL+tracewire.DumpPath, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,18 +141,18 @@ func TestTraceDumpRefusesWithoutAHome(t *testing.T) {
 	}
 }
 
-func readDump(t *testing.T, path string) []trace.Record {
+func readDump(t *testing.T, path string) []tracewire.Record {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	var out []trace.Record
+	var out []tracewire.Record
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for line := 1; sc.Scan(); line++ {
-		var rec trace.Record
+		var rec tracewire.Record
 		if err := json.Unmarshal(sc.Bytes(), &rec); err != nil {
 			t.Fatalf("%s line %d: %v", path, line, err)
 		}

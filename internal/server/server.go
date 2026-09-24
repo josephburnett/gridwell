@@ -21,6 +21,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -210,8 +211,8 @@ func (s *Server) routes() {
 	s.mux.Handle(contentPathPrefix, s.contentDoor())
 
 	// The diagnostic ring, gated like everything else here (trace_door.go).
-	s.mux.Handle(tracePath, s.traceDoor())
-	s.mux.Handle(traceDumpPath, s.traceDumpDoor())
+	s.mux.Handle(tracewire.Path, s.traceDoor())
+	s.mux.Handle(tracewire.DumpPath, s.traceDumpDoor())
 
 	if s.cfg.StaticFS != nil {
 		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticFS))

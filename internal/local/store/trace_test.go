@@ -6,17 +6,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // find is the newest record whose msg is exactly want.
-func find(records []trace.Record, want string) (trace.Record, bool) {
+func find(records []tracewire.Record, want string) (tracewire.Record, bool) {
 	for i := len(records) - 1; i >= 0; i-- {
 		if records[i].Msg == want {
 			return records[i], true
 		}
 	}
-	return trace.Record{}, false
+	return tracewire.Record{}, false
 }
 
 // Every store write says what it did, from the one funnel it already goes

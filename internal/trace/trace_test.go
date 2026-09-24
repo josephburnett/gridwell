@@ -7,12 +7,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
 func TestSeqIsTheOneTotalOrderAndTheRingWrapsOnTheOldest(t *testing.T) {
+	before := time.Now().UTC().UnixMilli()
 	r := New(3)
 	for i := 0; i < 5; i++ {
-		r.Emit(Record{Src: "store", Kind: "write", Msg: []string{"a", "b", "c", "d", "e"}[i]})
+		r.Emit(tracewire.Record{Src: "store", Kind: "write", Msg: []string{"a", "b", "c", "d", "e"}[i]})
 	}
 	got := r.Snapshot()
 	if len(got) != 3 {
@@ -21,14 +24,14 @@ func TestSeqIsTheOneTotalOrderAndTheRingWrapsOnTheOldest(t *testing.T) {
 	var msgs []string
 	for i, rec := range got {
 		msgs = append(msgs, rec.Msg)
-		if rec.Seq != int64(i+3) {
+		if rec.Seq != uint64(i+3) {
 			t.Errorf("record %d has seq %d, want %d: seq counts every emit, not every slot", i, rec.Seq, i+3)
 		}
-		if rec.Origin != OriginNode {
+		if rec.Origin != tracewire.OriginNode {
 			t.Errorf("record %d origin = %q, want the node's own", i, rec.Origin)
 		}
-		if _, err := time.Parse(time.RFC3339Nano, rec.T); err != nil {
-			t.Errorf("record %d time %q: %v", i, rec.T, err)
+		if rec.T < before {
+			t.Errorf("record %d is stamped %d, before the test started at %d", i, rec.T, before)
 		}
 	}
 	if strings.Join(msgs, "") != "cde" {
@@ -38,36 +41,36 @@ func TestSeqIsTheOneTotalOrderAndTheRingWrapsOnTheOldest(t *testing.T) {
 
 func TestAnOverlongMessageIsTruncatedNotDropped(t *testing.T) {
 	r := New(2)
-	r.Emit(Record{Src: "log", Kind: "log", Msg: strings.Repeat("x", MaxMsgBytes+500)})
+	r.Emit(tracewire.Record{Src: "log", Kind: "log", Msg: strings.Repeat("x", tracewire.MaxMsg+500)})
 	got := r.Snapshot()
 	if len(got) != 1 {
 		t.Fatalf("held %d records, want the overlong one kept", len(got))
 	}
-	if len(got[0].Msg) != MaxMsgBytes {
-		t.Errorf("msg is %d bytes, want it capped at %d", len(got[0].Msg), MaxMsgBytes)
+	if len(got[0].Msg) != tracewire.MaxMsg {
+		t.Errorf("msg is %d bytes, want it capped at %d", len(got[0].Msg), tracewire.MaxMsg)
 	}
 }
 
 // A cut through a multi-byte rune must not leave the line unencodable.
 func TestTruncationLeavesValidUTF8(t *testing.T) {
 	r := New(2)
-	r.Emit(Record{Msg: strings.Repeat("a", MaxMsgBytes-1) + "é" + "tail"})
+	r.Emit(tracewire.Record{Msg: strings.Repeat("a", tracewire.MaxMsg-1) + "é" + "tail"})
 	got := r.Snapshot()[0]
 	if !isValidJSONRoundTrip(t, got) {
 		t.Fatalf("truncated msg does not round-trip: %q", got.Msg)
 	}
-	if len(got.Msg) != MaxMsgBytes-1 {
+	if len(got.Msg) != tracewire.MaxMsg-1 {
 		t.Errorf("msg is %d bytes, want the split rune dropped", len(got.Msg))
 	}
 }
 
-func isValidJSONRoundTrip(t *testing.T, rec Record) bool {
+func isValidJSONRoundTrip(t *testing.T, rec tracewire.Record) bool {
 	t.Helper()
 	blob, err := json.Marshal(rec)
 	if err != nil {
 		return false
 	}
-	var back Record
+	var back tracewire.Record
 	return json.Unmarshal(blob, &back) == nil && back.Msg == rec.Msg
 }
 
@@ -83,7 +86,7 @@ func TestLogWriterMakesOneRecordPerLine(t *testing.T) {
 		t.Fatalf("held %d records, want one per line", len(got))
 	}
 	for i, want := range []string{"first line", "second line"} {
-		if got[i].Msg != want || got[i].Src != "log" || got[i].Kind != "log" || got[i].Origin != OriginNode {
+		if got[i].Msg != want || got[i].Src != "log" || got[i].Kind != "log" || got[i].Origin != tracewire.OriginNode {
 			t.Errorf("record %d = %+v, want the node's log line %q", i, got[i], want)
 		}
 	}
@@ -102,16 +105,16 @@ func TestIngestStampsTheNodesOrderAndForcesTheOrigin(t *testing.T) {
 		t.Fatalf("Ingest = %d, %v", n, err)
 	}
 	got := r.Snapshot()
-	wantOrigins := []string{OriginClient, OriginElectron, OriginClient, OriginClient}
+	wantOrigins := []string{tracewire.OriginClient, tracewire.OriginElectron, tracewire.OriginClient, tracewire.OriginClient}
 	for i, rec := range got {
 		if rec.Origin != wantOrigins[i] {
 			t.Errorf("record %d origin = %q, want %q: a record that came through the door is never the node's", i, rec.Origin, wantOrigins[i])
 		}
-		if rec.Seq != int64(i+1) || rec.T == "" {
-			t.Errorf("record %d = seq %d t %q, want the node's stamp", i, rec.Seq, rec.T)
+		if rec.Seq != uint64(i+1) || rec.T == 0 {
+			t.Errorf("record %d = seq %d t %d, want the node's stamp", i, rec.Seq, rec.T)
 		}
 	}
-	if got[0].Cid != "c1" || got[0].Ct != 42 || got[0].KV["req"] != "k3f9x2a" {
+	if got[0].CID != "c1" || got[0].CT != 42 || got[0].KV["req"] != "k3f9x2a" {
 		t.Errorf("the sender's cid, ct and kv were not kept: %+v", got[0])
 	}
 }
@@ -137,7 +140,7 @@ func TestABadLineKeepsTheGoodLinesBeforeItAndNamesItsNumber(t *testing.T) {
 func TestDumpWritesEveryRecordInSeqOrder(t *testing.T) {
 	r := New(4)
 	for _, m := range []string{"one", "two", "three"} {
-		r.Emit(Record{Src: "store", Kind: "write", Msg: m})
+		r.Emit(tracewire.Record{Src: "store", Kind: "write", Msg: m})
 	}
 	dir := filepath.Join(t.TempDir(), "dumps")
 	at := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
@@ -171,11 +174,11 @@ func TestDumpWritesEveryRecordInSeqOrder(t *testing.T) {
 		t.Fatalf("dump has %d lines, want 3", len(lines))
 	}
 	for i, line := range lines {
-		var rec Record
+		var rec tracewire.Record
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			t.Fatalf("line %d: %v", i+1, err)
 		}
-		if rec.Seq != int64(i+1) {
+		if rec.Seq != uint64(i+1) {
 			t.Errorf("line %d has seq %d, want %d", i+1, rec.Seq, i+1)
 		}
 	}

@@ -14,11 +14,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-const (
-	tracePath     = "/trace"
-	traceDumpPath = "/trace/dump"
-)
-
 // traceDoor ingests JSON lines from the client. A malformed line is a 400
 // naming its line number, and every good line before it is already in the
 // ring: a sender that garbles one record still gets the rest of its gesture.

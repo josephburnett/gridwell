@@ -1,9 +1,12 @@
 // Package trace is the node's always-on diagnostic sink: a fixed ring of
-// records in memory, one total order, written out on request. It holds no
-// node fact — nothing reads it back, deleting it loses nothing the user owns
-// — which is why Default is a package-level ring the way log's output is:
-// every layer of the node emits, and plumbing a handle through them all would
-// buy nothing but the plumbing. A test that needs its own order calls New.
+// records in memory, one total order, written out on request. The record and
+// the door's shape are api/tracewire, which both ends read.
+//
+// It holds no node fact — nothing reads it back, deleting it loses nothing the
+// user owns — which is why Default is a package-level ring the way log's
+// output is: every layer of the node emits, and plumbing a handle through them
+// all would buy nothing but the plumbing. A test that needs its own order
+// calls New.
 package trace
 
 import (
@@ -17,50 +20,20 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
-)
 
-// Origins. A record that came through the door is the sender's word for which
-// of the two it is; anything the node emits itself is OriginNode, and the door
-// never lets a sender claim it.
-const (
-	OriginNode     = "node"
-	OriginClient   = "client"
-	OriginElectron = "electron"
-	OriginPlugin   = "plugin"
+	"github.com/josephburnett/gridwell/api/tracewire"
 )
-
-// MaxMsgBytes caps Msg. Over it the message is truncated, never dropped: a
-// long line is still the record of something that happened.
-const MaxMsgBytes = 1024
 
 // NodeCapacity is the node ring's size.
 const NodeCapacity = 20000
 
-// RequestHeader carries the client's request id across the door, so a gesture
-// and the rpcs it caused join on kv["req"].
-const RequestHeader = "Gridwell-Request"
-
-// Record is one line of the trace. Seq and T are the ring's, stamped on
-// arrival; Cid and Ct are the sender's and stay zero on a node record.
-type Record struct {
-	Seq    int64             `json:"seq"`
-	T      string            `json:"t"`
-	Origin string            `json:"origin"`
-	Src    string            `json:"src"`
-	Kind   string            `json:"kind"`
-	Msg    string            `json:"msg"`
-	KV     map[string]string `json:"kv,omitempty"`
-	Cid    string            `json:"cid"`
-	Ct     int64             `json:"ct"`
-}
-
 // Ring is a fixed-size circular buffer of records. Emit overwrites the oldest.
 type Ring struct {
 	mu   sync.Mutex
-	buf  []Record
-	next int   // where the next record lands
-	n    int   // records held, up to len(buf)
-	seq  int64 // the one total order
+	buf  []tracewire.Record
+	next int    // where the next record lands
+	n    int    // records held, up to len(buf)
+	seq  uint64 // the one total order
 	now  func() time.Time
 }
 
@@ -69,7 +42,7 @@ func New(capacity int) *Ring {
 	if capacity < 1 {
 		capacity = 1
 	}
-	return &Ring{buf: make([]Record, capacity), now: time.Now}
+	return &Ring{buf: make([]tracewire.Record, capacity), now: time.Now}
 }
 
 // def is the node's ring; see the package comment.
@@ -77,24 +50,24 @@ var def = New(NodeCapacity)
 
 // Emit stamps a node record onto the default ring.
 func Emit(src, kind, msg string, kv map[string]string) {
-	def.Emit(Record{Origin: OriginNode, Src: src, Kind: kind, Msg: msg, KV: kv})
+	def.Emit(tracewire.Record{Origin: tracewire.OriginNode, Src: src, Kind: kind, Msg: msg, KV: kv})
 }
 
-// Default is the node's one ring: what the door dumps and every Emit below
+// Default is the node's one ring: what the door dumps and every Emit above
 // lands in.
 func Default() *Ring { return def }
 
 // Emit stamps seq and t onto rec and appends it. It takes a mutex and writes a
 // slot: nothing here may block a caller on the node's write path.
-func (r *Ring) Emit(rec Record) {
+func (r *Ring) Emit(rec tracewire.Record) {
 	if rec.Origin == "" {
-		rec.Origin = OriginNode
+		rec.Origin = tracewire.OriginNode
 	}
 	rec.Msg = capMsg(rec.Msg)
 	r.mu.Lock()
 	r.seq++
 	rec.Seq = r.seq
-	rec.T = r.now().UTC().Format(time.RFC3339Nano)
+	rec.T = r.now().UTC().UnixMilli()
 	r.buf[r.next] = rec
 	r.next = (r.next + 1) % len(r.buf)
 	if r.n < len(r.buf) {
@@ -104,10 +77,10 @@ func (r *Ring) Emit(rec Record) {
 }
 
 // Snapshot is every record the ring still holds, oldest seq first.
-func (r *Ring) Snapshot() []Record {
+func (r *Ring) Snapshot() []tracewire.Record {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]Record, 0, r.n)
+	out := make([]tracewire.Record, 0, r.n)
 	start := (r.next - r.n + len(r.buf)) % len(r.buf)
 	for i := 0; i < r.n; i++ {
 		out = append(out, r.buf[(start+i)%len(r.buf)])
@@ -129,7 +102,7 @@ func (r *Ring) Ingest(in io.Reader) (n int, err error) {
 		if text == "" {
 			continue
 		}
-		var rec Record
+		var rec tracewire.Record
 		if err := json.Unmarshal([]byte(text), &rec); err != nil {
 			return n, fmt.Errorf("line %d: %w", line, err)
 		}
@@ -147,10 +120,10 @@ func (r *Ring) Ingest(in io.Reader) (n int, err error) {
 // included, reads as the client: a record that came through the door did not
 // come from the node.
 func senderOrigin(origin string) string {
-	if origin == OriginElectron {
-		return OriginElectron
+	if origin == tracewire.OriginElectron {
+		return tracewire.OriginElectron
 	}
-	return OriginClient
+	return tracewire.OriginClient
 }
 
 // Dump writes the ring to <dir>/trace-<yyyymmdd-hhmmss>.jsonl in seq order and
@@ -192,13 +165,13 @@ func (r *Ring) Dump(dir string, now time.Time) (path string, n int, err error) {
 	return path, len(records), nil
 }
 
-// capMsg truncates to MaxMsgBytes, dropping a rune the cut split so the line
-// stays valid UTF-8.
+// capMsg truncates to tracewire.MaxMsg, dropping a rune the cut split so the
+// line stays valid UTF-8.
 func capMsg(msg string) string {
-	if len(msg) <= MaxMsgBytes {
+	if len(msg) <= tracewire.MaxMsg {
 		return msg
 	}
-	msg = msg[:MaxMsgBytes]
+	msg = msg[:tracewire.MaxMsg]
 	for len(msg) > 0 && !utf8.ValidString(msg) {
 		msg = msg[:len(msg)-1]
 	}
@@ -208,12 +181,12 @@ func capMsg(msg string) string {
 // LogWriter turns each line written to it into a node record, so every
 // log.Printf on the node lands in the ring without a second spelling at the
 // call site.
-func LogWriter(r *Ring) io.Writer { return lineWriter{r, OriginNode, "log"} }
+func LogWriter(r *Ring) io.Writer { return lineWriter{r, tracewire.OriginNode, "log"} }
 
 // PluginWriter is one plugin subprocess's stderr, under its own id: the
 // subprocess does not reach the node's log, so its lines arrive here instead.
 func PluginWriter(r *Ring, pluginID string) io.Writer {
-	return lineWriter{r, OriginPlugin, pluginID}
+	return lineWriter{r, tracewire.OriginPlugin, pluginID}
 }
 
 type lineWriter struct {
@@ -225,7 +198,7 @@ type lineWriter struct {
 func (w lineWriter) Write(p []byte) (int, error) {
 	for _, line := range strings.Split(string(p), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
-			w.r.Emit(Record{Origin: w.origin, Src: w.src, Kind: "log", Msg: line})
+			w.r.Emit(tracewire.Record{Origin: w.origin, Src: w.src, Kind: "log", Msg: line})
 		}
 	}
 	return len(p), nil

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
@@ -31,7 +32,7 @@ func TestAPluginSubprocessStderrReachesTheRing(t *testing.T) {
 		if !strings.Contains(rec.Msg, "noisy-plugin-said-this") {
 			continue
 		}
-		if rec.Origin != trace.OriginPlugin || rec.Src != "noisyuuid" {
+		if rec.Origin != tracewire.OriginPlugin || rec.Src != "noisyuuid" {
 			t.Fatalf("the plugin's line landed as %+v, want the plugin origin under its own id", rec)
 		}
 		return

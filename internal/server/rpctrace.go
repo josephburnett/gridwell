@@ -3,7 +3,7 @@ package server
 // Every rpc says it started and how it ended. The two doors are codecs over
 // one router, so the record is made in each codec, where the procedure name
 // and the error code are already spelled, and both call the one rpcSpan.
-// kv["req"] is the client's own request id off trace.RequestHeader: it is what
+// kv["req"] is the client's own request id off tracewire.RequestHeader: it is what
 // joins a gesture to the calls it caused, and it is empty when nobody sent one.
 
 import (
@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
@@ -43,7 +44,7 @@ type traceInterceptor struct{}
 
 func (traceInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		done := rpcSpan(req.Header().Get(trace.RequestHeader), req.Spec().Procedure)
+		done := rpcSpan(req.Header().Get(tracewire.RequestHeader), req.Spec().Procedure)
 		resp, err := next(ctx, req)
 		done(err, connectCode(err))
 		return resp, err
@@ -57,7 +58,7 @@ func (traceInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) co
 
 func (traceInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		done := rpcSpan(conn.RequestHeader().Get(trace.RequestHeader), conn.Spec().Procedure)
+		done := rpcSpan(conn.RequestHeader().Get(tracewire.RequestHeader), conn.Spec().Procedure)
 		err := next(ctx, conn)
 		done(err, connectCode(err))
 		return err
@@ -99,7 +100,7 @@ func requestIDOf(ctx context.Context) string {
 	if !ok {
 		return ""
 	}
-	if v := md.Get(trace.RequestHeader); len(v) > 0 {
+	if v := md.Get(tracewire.RequestHeader); len(v) > 0 {
 		return v[0]
 	}
 	return ""

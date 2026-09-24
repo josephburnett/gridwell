@@ -15,6 +15,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -31,7 +32,7 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 
 	body := `{"origin":"client","src":"nav","kind":"nav","msg":"` + marker +
 		`","kv":{"req":"` + reqID + `"},"cid":"c1","ct":11}` + "\n"
-	res, err := hs.Client().Post(hs.URL+"/trace", "application/x-ndjson", strings.NewReader(body))
+	res, err := hs.Client().Post(hs.URL+tracewire.Path, "application/x-ndjson", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +43,12 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
 	req := connect.NewRequest(&pb.HandshakeRequest{})
-	req.Header().Set(trace.RequestHeader, reqID)
+	req.Header().Set(tracewire.RequestHeader, reqID)
 	if _, err := cl.Handshake(context.Background(), req); err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
 
-	res, err = hs.Client().Post(hs.URL+"/trace/dump", "", nil)
+	res, err = hs.Client().Post(hs.URL+tracewire.DumpPath, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,8 +60,8 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var client, start, end trace.Record
-	var lastSeq int64
+	var client, start, end tracewire.Record
+	var lastSeq uint64
 	for _, rec := range readDump(t, out.Path) {
 		if rec.Seq <= lastSeq {
 			t.Fatalf("the dump is out of order: seq %d after %d", rec.Seq, lastSeq)
@@ -81,7 +82,7 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 	if start.Seq == 0 || end.Seq == 0 {
 		t.Fatalf("the router's rpc records are not both in the dump under req %q (start=%+v end=%+v)", reqID, start, end)
 	}
-	if client.Origin != trace.OriginClient || client.Cid != "c1" || client.Ct != 11 {
+	if client.Origin != tracewire.OriginClient || client.CID != "c1" || client.CT != 11 {
 		t.Errorf("the client's record came back as %+v", client)
 	}
 	if start.Kind != "rpc" || end.Kind != "rpc" {
@@ -94,7 +95,7 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 	if _, ok := end.KV["ms"]; !ok {
 		t.Errorf("the exit record carries no duration: %+v", end)
 	}
-	if end.Origin != trace.OriginNode || start.Origin != trace.OriginNode {
+	if end.Origin != tracewire.OriginNode || start.Origin != tracewire.OriginNode {
 		t.Errorf("an rpc record is not the node's: %+v %+v", start, end)
 	}
 }
@@ -123,7 +124,7 @@ func TestAStreamingRPCGetsBothRecords(t *testing.T) {
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
 	const reqID = "stream-req"
 	req := connect.NewRequest(&pb.ReadContentRequest{TileId: "nope/1"})
-	req.Header().Set(trace.RequestHeader, reqID)
+	req.Header().Set(tracewire.RequestHeader, reqID)
 	stream, err := cl.ReadContent(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +165,7 @@ func TestTheConnectionDoorTracesItsRPCs(t *testing.T) {
 	}
 	defer conn.Close()
 	const reqID = "conn-door-req"
-	ctx := metadata.AppendToOutgoingContext(context.Background(), trace.RequestHeader, reqID)
+	ctx := metadata.AppendToOutgoingContext(context.Background(), tracewire.RequestHeader, reqID)
 	if _, err := pb.NewGridwellClient(conn).Info(ctx, &pb.InfoRequest{}); err != nil {
 		t.Fatalf("Info on the connection door: %v", err)
 	}
