@@ -61,7 +61,7 @@ func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version i
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "WriteContent/url", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.claimContentVersion(ctx, tx, tileID, version)
 		if err != nil {
 			return err
@@ -118,7 +118,7 @@ func (s *Store) RenameTile(ctx context.Context, tileID string, version int64, al
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "RenameTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.claimContentVersion(ctx, tx, id, version)
 		if err != nil {
 			return err

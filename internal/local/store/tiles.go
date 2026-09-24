@@ -92,7 +92,7 @@ func (s *Store) createTile(
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "CreateTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		// grid_id is authoritative; no descent path is on the wire.
 		if _, err := s.loadGrid(ctx, tx, gridID); err != nil {
 			return fmt.Errorf("%w: grid %d: %v", ErrInvalidArgument, gridID, err)
@@ -252,7 +252,7 @@ func (s *Store) createScratch(
 		return nil, err
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "CreateScratch", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		tileID, err := insert(tx, gridID, s.now().Unix())
 		if err != nil {
 			return err
@@ -310,7 +310,7 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "SetTextView", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, rpc.KindText, ErrNotTextTile)
 		if err != nil {
 			return err
@@ -355,7 +355,7 @@ func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReques
 	if err != nil {
 		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	return s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	return s.withMutation(ctx, "DeleteTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		t, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err

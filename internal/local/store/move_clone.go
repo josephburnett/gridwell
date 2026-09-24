@@ -26,7 +26,7 @@ func (s *Store) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest)
 		return nil, fmt.Errorf("%w: invalid dest_grid_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "CloneTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
@@ -74,7 +74,7 @@ func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version 
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "WriteContent/text", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.claimContentVersion(ctx, tx, tileID, version)
 		if err != nil {
 			return err

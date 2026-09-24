@@ -33,7 +33,7 @@ func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest)
 		return nil, fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "PlaceTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err

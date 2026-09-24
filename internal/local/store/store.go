@@ -11,12 +11,14 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/eventhub"
+	"github.com/josephburnett/gridwell/internal/trace"
 
 	_ "modernc.org/sqlite"
 )
@@ -270,7 +272,7 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "SetFraming", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
@@ -294,7 +296,7 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 	if err != nil {
 		return fmt.Errorf("%w: invalid root_grid_id", ErrInvalidArgument)
 	}
-	err = s.withTx(ctx, func(tx *sql.Tx) error {
+	return s.withMutation(ctx, "SetFraming/root", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := updateFraming(ctx, tx, "", 0, gridID, rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}, s.now().Unix())
 		if err != nil {
 			return err
@@ -302,13 +304,9 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 		if n == 0 {
 			return ErrNotFound
 		}
+		*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: req.RootGridId}}})
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	s.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: req.RootGridId}}})
-	return nil
 }
 
 func rootGridID(ctx context.Context, q gridReader) (int64, error) {
@@ -357,15 +355,38 @@ func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 }
 
 // withMutation runs fn in a transaction and, on commit, publishes the events
-// fn appended, in order.
-func (s *Store) withMutation(ctx context.Context, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {
+// fn appended, in order. Every store write goes through it, so it is also
+// where a write says it happened: verb is the caller's, and what it touched
+// comes from the events it is about to publish rather than a second reading.
+func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {
 	var events []*gridwellv1.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error { return fn(tx, &events) })
 	if err != nil {
+		trace.Emit("store", "write", verb+" error: "+err.Error(), nil)
 		return err
 	}
+	trace.Emit("store", "write", verb, touched(events))
 	for _, ev := range events {
 		s.publish(ev)
 	}
 	return nil
+}
+
+// touched names the entities a mutation changed, and for a single-tile write
+// its kind and the version it left behind.
+func touched(events []*gridwellv1.Event) map[string]string {
+	if len(events) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(events))
+	for _, ev := range events {
+		keys = append(keys, rpc.EventKey(ev))
+	}
+	kv := map[string]string{"keys": strings.Join(keys, " ")}
+	if len(events) == 1 {
+		if t := events[0].GetTileChanged().GetTile(); t != nil {
+			kv["kind"], kv["v"] = t.Kind, strconv.FormatInt(t.Version, 10)
+		}
+	}
+	return kv
 }

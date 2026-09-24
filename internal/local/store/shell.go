@@ -39,7 +39,7 @@ func (s *Store) SetShellPreview(ctx context.Context, tileIDStr string, jpeg []by
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "SetShellPreview", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err

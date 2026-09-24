@@ -64,7 +64,7 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err := s.withMutation(ctx, "SetPaneLayout", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err

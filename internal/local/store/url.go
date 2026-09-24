@@ -21,7 +21,7 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "SetURLState", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		if _, err := s.loadForWrite(ctx, tx, tileID, rpc.KindURL, ErrNotURLTile); err != nil {
 			return err
 		}
@@ -78,7 +78,7 @@ func (s *Store) SetTileAlt(ctx context.Context, tileIDStr, alt string, user bool
 	if err != nil {
 		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	return s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	return s.withMutation(ctx, "SetTileAlt", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		if _, err := s.loadTile(ctx, tx, tileID); err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoo
 		return nil, fmt.Errorf("%w: content_zoom must be >= 0", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "SetContentZoom", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
