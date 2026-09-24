@@ -212,3 +212,17 @@ func TestTheClientAnswersForItsCID(t *testing.T) {
 		t.Errorf("a record carries cid %q, want %q", r.CID, c.CID())
 	}
 }
+
+// The ring says when it is owed something. Without it a record made by
+// anything but the shim's own emit — the rpc interceptor writes here
+// directly — would sit unposted until a later record armed the flush.
+func TestEveryEmitSaysARecordIsOwed(t *testing.T) {
+	c := New(4, "cid7abc")
+	owed := 0
+	c.OnEmit = func() { owed++ }
+	c.Emit("rpc", "rpc", "GetGrid start", nil, t0)
+	c.Emit("rpc", "rpc", "GetGrid ok", nil, t0)
+	if owed != 2 {
+		t.Errorf("%d arms for two records, want one each", owed)
+	}
+}

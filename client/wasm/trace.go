@@ -23,12 +23,12 @@ import (
 // traceContentType is the batch's wire form: one JSON record per line.
 const traceContentType = "application/x-ndjson"
 
-// emit is the one entry into the ring. It tries the post the batch rule may
-// have earned and arms the clock for the rest.
+// emit is the shim's entry into the ring. Arming is the ring's own, through
+// OnEmit, so a record made anywhere else arms too; what is added here is the
+// post a burst has already earned.
 func (a *App) emit(e traceevent.Event) {
 	a.tr.Emit(e.Src, e.Kind, e.Msg, e.KV, time.Now())
 	a.flushTrace()
-	a.armTraceFlush()
 }
 
 // armTraceFlush defers a flush by the trace's own window, coalescing with one

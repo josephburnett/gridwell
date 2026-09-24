@@ -25,6 +25,11 @@ const (
 
 // Client is not safe for concurrent use, the client being single-threaded.
 type Client struct {
+	// OnEmit says a record is owed, so the owner can arm its flush. Set once
+	// at boot: a record made anywhere but the shim's own emit — the rpc
+	// interceptor writes here directly — would otherwise wait for one that is.
+	OnEmit func()
+
 	cid  string
 	ring []tracewire.Record
 	// A serial counts every record ever emitted, so an acknowledgement
@@ -53,6 +58,9 @@ func New(capacity int, cid string) *Client {
 func (c *Client) Emit(src, kind, msg string, kv map[string]string, now time.Time) {
 	c.lastCT = now.UnixMilli()
 	emit(c, src, kind, msg, kv, c.lastCT)
+	if c.OnEmit != nil {
+		c.OnEmit()
+	}
 }
 
 // emit stamps a record with the client's identity and writes it into the

@@ -105,8 +105,8 @@ type App struct {
 	errs *errsurface.Surface
 
 	// tr is this client's ring of trace records and pump the one post in
-	// flight; a.emit is the only writer. The cid is minted at boot, so a
-	// dump says which page's records these are.
+	// flight. The cid is minted at boot, so a dump says which page's records
+	// these are.
 	tr   *trace.Client
 	pump *trace.Pump
 
@@ -603,7 +603,7 @@ const dragThreshold = 4.0
 func main() {
 	origin := js.Global().Get("location").Get("origin").String()
 	// Before the App, because the rpc client is built with the interceptor
-	// that records into it.
+	// that records into it directly.
 	tr := trace.New(trace.DefaultCapacity, trace.NewRequestID())
 	app = &App{
 		doc:                js.Global().Get("document"),
@@ -626,6 +626,9 @@ func main() {
 	}
 	// Before anything can draw: the settle timers close over the App.
 	app.persist = newPersistState(app)
+	// The flush timer exists now, so the ring can say when it is owed
+	// something; the interceptor's records reach it no other way.
+	tr.OnEmit = app.armTraceFlush
 	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed, app.paneLayoutUnreadable)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()
