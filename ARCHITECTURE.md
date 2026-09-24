@@ -345,6 +345,36 @@ so a right-click moves focus like every other press. One Chromium partition
 live url tile, local or mounted; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
 
+## The trace
+
+An always-on record of what the node did, for the errors nobody can
+reproduce. `internal/trace` holds one ring of 20000 records in memory; it is a
+package-level `Default`, like `log`'s output, because it holds no node fact —
+nothing reads it back, and deleting it loses nothing the user owns.
+
+A record is one JSON object on one line, `api/tracewire.Record`, which the
+node and the client both read: `seq` and `t` (unix milliseconds UTC) are the
+node's stamps and the one total order, then `origin` (node, client, electron,
+plugin), `src`, `kind`, `msg` capped at 1024 bytes, a small `kv`, and the
+emitter's `cid` and `ct`.
+
+The door is on the gated web mux beside `/shell`. `POST /trace` takes JSON
+lines and answers 204; a malformed line is a 400 naming its number, and the
+good lines before it stay. `POST /trace/dump` writes the ring in seq order to
+`<home>/dumps/trace-<UTC yyyymmdd-hhmmss>.jsonl`, 0600 in a 0700 directory,
+and answers the path and the count. A dump is a reading: it clears nothing.
+
+`kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a
+gesture makes, and both doors' interceptors emit a start and an end record
+carrying it, with the duration and, on a failure, the code. What emits: every
+store write (one record at `withMutation`, the transaction every mutation runs
+in), every publish, delivery and coalesce in `eventhub`, the plugin
+supervisor's spawns and liveness transitions, each dial and connection health
+transition, the shell door's refusals, opens and closes, and — through
+`log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
+subprocess's stderr does not pass through that log, so the spawn hands it a
+writer of its own.
+
 ## One fact, one owner
 
 Every fact is derived in one place and read everywhere else. The shapes to
@@ -378,6 +408,8 @@ copy:
 | who owns this qualified id | `Server.resolve` + `server.router` |
 | is this link dead | `deadref.DeadTile` over the handshake roster |
 | this event stream is established | `namespace.Follow` |
+| the trace line, its door and its header | `api/tracewire` |
+| what the node did | `trace.Default` (`internal/trace`) |
 
 Remaining seams with more than one writer, ranked by risk:
 
