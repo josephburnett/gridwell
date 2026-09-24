@@ -50,7 +50,11 @@ func (a *App) bridgeChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 		o := js.Global().Get("Object").New()
 		o.Set("id", it.ID)
 		o.Set("label", it.Label)
-		o.Set("checked", it.Checked)
+		// A row that names no state sends no checked, and the host draws
+		// it as an action; see circlemenu.State.
+		if it.State != circlemenu.StateNone {
+			o.Set("checked", it.State == circlemenu.StateOn)
+		}
 		rows.Call("push", o)
 	}
 	a.bridgeVerb("showChoiceMenu", map[string]any{"items": rows}, func(res js.Value) {
@@ -93,7 +97,7 @@ func (a *App) openDOMChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 		row := a.doc.Call("createElement", "div")
 		row.Call("setAttribute", "data-gw-choice", it.ID)
 		label := it.Label
-		if it.Checked {
+		if it.State == circlemenu.StateOn {
 			label = "✓ " + label
 		}
 		row.Set("textContent", label)
@@ -102,7 +106,7 @@ func (a *App) openDOMChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 		rs.Set("borderRadius", "4px")
 		rs.Set("cursor", "pointer")
 		rs.Set("whiteSpace", "nowrap")
-		if it.Checked {
+		if it.State == circlemenu.StateOn {
 			rs.Set("color", a.pal.MenuItemHi)
 		} else {
 			rs.Set("color", a.pal.SubtleText)

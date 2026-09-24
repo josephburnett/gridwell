@@ -38,8 +38,8 @@ func TestPlusItems(t *testing.T) {
 		if len(items) != len(theme.All())+1 {
 			t.Fatalf("PlusItems(%v) has %d rows, want the themes and the dump", cur, len(items))
 		}
-		if last := items[len(items)-1]; last.ID != DumpID || last.Label != "Dump logs" || last.Checked {
-			t.Errorf("PlusItems(%v) ends with %+v, want an unchecked dump row", cur, last)
+		if last := items[len(items)-1]; last.ID != DumpID || last.Label != "Dump logs" || last.State != StateNone {
+			t.Errorf("PlusItems(%v) ends with %+v, want a dump row that names no state", cur, last)
 		}
 		checked := 0
 		seen := map[string]bool{}
@@ -51,11 +51,14 @@ func TestPlusItems(t *testing.T) {
 				t.Errorf("PlusItems(%v) offers %q twice, so a pick is ambiguous", cur, it.ID)
 			}
 			seen[it.ID] = true
-			if it.Checked {
+			if it.State == StateOn {
 				checked++
 				if it.ID != cur.String() {
 					t.Errorf("PlusItems(%v) checks %q", cur, it.ID)
 				}
+			}
+			if it.ID != DumpID && it.State == StateNone {
+				t.Errorf("PlusItems(%v): theme row %q names no state, so it would draw as an action", cur, it.ID)
 			}
 		}
 		if checked != 1 {

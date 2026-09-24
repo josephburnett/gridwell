@@ -38,13 +38,30 @@ func For(m barslot.Mode) Menu {
 // Item is one row of a menu this package declares. Both renderers take the
 // list and hand an ID back, so neither knows what is being chosen.
 type Item struct {
-	ID      string
-	Label   string
-	Checked bool
+	ID    string
+	Label string
+	State State
 }
 
-// DumpID is the row that writes the trace to a file. It names no state, so it
-// is never checked.
+// State is what a row's check slot shows. A row that names no state has no
+// slot: the native menu would otherwise draw it as a setting that is off.
+type State int
+
+const (
+	StateNone State = iota
+	StateOff
+	StateOn
+)
+
+// stateOf is the two-state form for a row that names one.
+func stateOf(on bool) State {
+	if on {
+		return StateOn
+	}
+	return StateOff
+}
+
+// DumpID is the row that writes the trace to a file. It names no state.
 const DumpID = "dump"
 
 // PlusItems is the + menu: the palettes, the one on screen checked, then the
@@ -52,7 +69,7 @@ const DumpID = "dump"
 func PlusItems(cur theme.Theme) []Item {
 	out := make([]Item, 0, len(theme.All())+1)
 	for _, t := range theme.All() {
-		out = append(out, Item{ID: t.String(), Label: t.Label(), Checked: t == cur})
+		out = append(out, Item{ID: t.String(), Label: t.Label(), State: stateOf(t == cur)})
 	}
 	return append(out, Item{ID: DumpID, Label: "Dump logs"})
 }
