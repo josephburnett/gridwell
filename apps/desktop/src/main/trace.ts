@@ -31,7 +31,7 @@ const DROP_KIND = 'drop';
 
 // What an emitter says. The record's other fields are this process's to
 // stamp, so no caller can spell them differently.
-interface TraceEvent {
+export interface TraceEvent {
   src: string;
   kind: string;
   msg: string;

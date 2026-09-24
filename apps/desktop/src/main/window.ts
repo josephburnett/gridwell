@@ -1,7 +1,8 @@
 import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
 import { rendererLogLine } from './viewutil';
-import { logLine } from './trace';
+import { logLine, trace } from './trace';
+import { windowFocused, windowResized } from './viewtrace';
 
 interface RootWindow {
   win: BrowserWindow;
@@ -49,6 +50,13 @@ export function createRootWindow(origin: string): RootWindow {
   win.webContents.on('console-message', (_e, level, message) => {
     const line = rendererLogLine(level, message);
     if (line) logLine('error', line);
+  });
+
+  win.on('focus', () => trace(windowFocused(true)));
+  win.on('blur', () => trace(windowFocused(false)));
+  win.on('resize', () => {
+    const [w, h] = win.getSize();
+    trace(windowResized(w, h));
   });
 
   // A fullscreen window can keep its old bounds when the display geometry
