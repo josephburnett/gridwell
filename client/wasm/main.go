@@ -1038,7 +1038,9 @@ func (a *App) startSSE() {
 			if !ok {
 				break
 			}
+			a.emit(traceevent.EventRecv(ev))
 			if a.c.Apply(ev) {
+				a.emit(traceevent.EventApplied(ev))
 				a.draw()
 			}
 			// events.Route is the one table; this runs its arms.
@@ -1051,6 +1053,7 @@ func (a *App) startSSE() {
 				a.fetch.gridLoadFailed.Clear(plan.ClearLatch)
 			}
 			if plan.Fetch != "" {
+				a.emit(traceevent.EventRefetch(plan.Fetch))
 				a.fetchGrid(plan.Fetch)
 			}
 			if plan.Health != nil {

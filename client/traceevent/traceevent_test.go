@@ -169,3 +169,33 @@ func TestTheOutboxRecordsNameTheWriteAndTheCount(t *testing.T) {
 		t.Errorf("text save record is %+v", got)
 	}
 }
+
+// An event's kind and the entity it names are what a reader follows from the
+// server's write to the client's repaint.
+func TestEveryEventPayloadIsNamed(t *testing.T) {
+	cases := []struct {
+		ev   *pb.Event
+		name string
+		id   string
+	}{
+		{&pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{TileId: "t7abcde"}}}, "tile removed", "t7abcde"},
+		{&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "g7abcde"}}}, "grid changed", "g7abcde"},
+		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde"}}}, "namespace unhealthy", "n7abcde"},
+		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde", Healthy: true}}}, "namespace healthy", "n7abcde"},
+	}
+	for _, c := range cases {
+		r, a := EventRecv(c.ev), EventApplied(c.ev)
+		if r.Src != "events" || r.Kind != "recv" || r.Msg != c.name || r.KV["id"] != c.id {
+			t.Errorf("recv of %v is %+v", c.ev, r)
+		}
+		if a.Kind != "apply" || a.Msg != c.name {
+			t.Errorf("apply of %v is %+v", c.ev, a)
+		}
+	}
+	if got := EventRecv(&pb.Event{}).Msg; got != "unknown payload" {
+		t.Errorf("an unnamed payload reads %q", got)
+	}
+	if got := EventRefetch("g7abcde").KV["grid"]; got != "g7abcde" {
+		t.Errorf("the refetch names grid %q", got)
+	}
+}

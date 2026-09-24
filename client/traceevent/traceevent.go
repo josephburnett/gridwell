@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -77,6 +78,42 @@ func Framing(gridID, tileID string, cx, cy, zoom float64) Event {
 }
 
 func f(v float64) string { return strconv.FormatFloat(v, 'g', 6, 64) }
+
+// EventRecv and EventApplied bracket one Subscribe event: what arrived, and
+// whether folding it in changed anything on screen.
+func EventRecv(ev *pb.Event) Event {
+	name, id := payloadOf(ev)
+	return Event{Src: "events", Kind: "recv", Msg: name, KV: kv("id", id)}
+}
+
+func EventApplied(ev *pb.Event) Event {
+	name, id := payloadOf(ev)
+	return Event{Src: "events", Kind: "apply", Msg: name, KV: kv("id", id)}
+}
+
+// EventRefetch is the read an event asked for, which is where a stale view
+// and a storm both show up.
+func EventRefetch(gridID string) Event {
+	return Event{Src: "events", Kind: "refetch", Msg: "grid", KV: kv("grid", gridID)}
+}
+
+// payloadOf names an event and the entity it is about. An unnamed arm is a
+// payload the proto gained and this table did not.
+func payloadOf(ev *pb.Event) (name, id string) {
+	switch p := ev.GetPayload().(type) {
+	case *pb.Event_TileRemoved:
+		return "tile removed", p.TileRemoved.GetTileId()
+	case *pb.Event_GridChanged:
+		return "grid changed", p.GridChanged.GetGridId()
+	case *pb.Event_PluginHealth:
+		h := "namespace unhealthy"
+		if p.PluginHealth.GetHealthy() {
+			h = "namespace healthy"
+		}
+		return h, p.PluginHealth.GetPluginUuid()
+	}
+	return "unknown payload", ""
+}
 
 // OutboxPark is a write the server never answered, now owed; OutboxDrain is
 // the kick that re-posts what is owed. Between the two is where the user's
