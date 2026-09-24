@@ -14,6 +14,7 @@ client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
 # its tests land before that wiring, and the whole block comes out with it:
 # reaching New, Emit and PendingBatch from client/wasm reaches the rest.
 client/trace/trace.go New
+client/trace/flush.go NeedFlush
 client/trace/trace.go Marshal
 client/trace/trace.go emit
 client/trace/trace.go truncate
