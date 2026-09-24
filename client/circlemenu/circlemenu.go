@@ -17,19 +17,20 @@ const (
 	// MenuURL is the live url view's own context menu. Its rows are the page's
 	// and are built by the host, which is why this carries none.
 	MenuURL
-	// MenuTheme chooses the client's palette. Its rows are ThemeItems, drawn
-	// by whichever renderer caps.ChoiceMenu names.
-	MenuTheme
+	// MenuPlus is the + menu's own rows, PlusItems, drawn by whichever
+	// renderer caps.ChoiceMenu names.
+	MenuPlus
 )
 
 // For is the one verdict. A grid's slot is the + menu, so its right-click is
-// the one gesture available from every grid, and the theme lives there.
+// the one gesture available from every grid, and what belongs to the client
+// rather than to a tile lives there.
 func For(m barslot.Mode) Menu {
 	switch m {
 	case barslot.ModeURLBack:
 		return MenuURL
 	case barslot.ModePlus:
-		return MenuTheme
+		return MenuPlus
 	}
 	return MenuNone
 }
@@ -42,11 +43,47 @@ type Item struct {
 	Checked bool
 }
 
-// ThemeItems is the theme menu, the palette on screen checked.
-func ThemeItems(cur theme.Theme) []Item {
-	out := make([]Item, 0, len(theme.All()))
+// DumpID is the row that writes the trace to a file. It names no state, so it
+// is never checked.
+const DumpID = "dump"
+
+// PlusItems is the + menu: the palettes, the one on screen checked, then the
+// dump.
+func PlusItems(cur theme.Theme) []Item {
+	out := make([]Item, 0, len(theme.All())+1)
 	for _, t := range theme.All() {
 		out = append(out, Item{ID: t.String(), Label: t.Label(), Checked: t == cur})
 	}
-	return out
+	return append(out, Item{ID: DumpID, Label: "Dump logs"})
+}
+
+// Action is what picking a row does.
+type Action int
+
+const (
+	// ActionNone is an id from no row, which is a dismissal.
+	ActionNone Action = iota
+	// ActionTheme wears the verdict's Theme.
+	ActionTheme
+	// ActionDump writes the trace ring to a file.
+	ActionDump
+)
+
+// Verdict is what a picked id stands for. Theme means nothing unless the
+// action is ActionTheme.
+type Verdict struct {
+	Action Action
+	Theme  theme.Theme
+}
+
+// Choose reads a row id back, so a renderer hands over a string and the shim
+// acts on a verdict.
+func Choose(id string) Verdict {
+	if id == DumpID {
+		return Verdict{Action: ActionDump}
+	}
+	if t, ok := theme.Parse(id); ok {
+		return Verdict{Action: ActionTheme, Theme: t}
+	}
+	return Verdict{}
 }

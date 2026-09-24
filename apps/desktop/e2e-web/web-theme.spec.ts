@@ -32,7 +32,7 @@ test('the circle popover switches the theme and the browser remembers it', async
   await gw.rightClickCircle();
   const popover = window.locator('#gw-circle-menu');
   await popover.waitFor({ timeout: 5_000 });
-  await expect(popover.locator('[data-gw-choice]')).toHaveCount(2);
+  await expect(popover.locator('[data-gw-choice]')).toHaveCount(3); // both themes and the dump
   // The body's own background rides the same --gw- properties the canvas
   // reads, so the page chrome cannot stay dark behind a light grid.
   const darkBody = await window.evaluate(() =>
