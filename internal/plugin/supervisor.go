@@ -2,7 +2,9 @@ package plugin
 
 import (
 	"context"
+	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/josephburnett/gridwell/api/compose"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // A plugin's subprocess is spawned, watched and respawned here. While the
@@ -40,6 +43,10 @@ type Supervisor struct {
 	kind   string
 	binary string
 	cfg    map[string]string
+	// stderr is the subprocess's stderr: the terminal, unchanged, and the
+	// trace ring, which log.SetOutput cannot reach because a plugin's stderr
+	// never passes through the node's log.
+	stderr io.Writer
 
 	mu   sync.Mutex
 	proc *compose.Process
@@ -68,6 +75,7 @@ var _ grpc.ClientConnInterface = (*Supervisor)(nil)
 func Supervise(uuid, kind, binary string, cfg map[string]string) (*Supervisor, error) {
 	s := &Supervisor{
 		uuid: uuid, kind: kind, binary: binary, cfg: cfg,
+		stderr:    io.MultiWriter(os.Stderr, trace.PluginWriter(trace.Default(), uuid)),
 		listeners: map[int]func(bool, string){},
 		done:      make(chan struct{}),
 	}
@@ -146,7 +154,7 @@ func (s *Supervisor) Close() {
 }
 
 func (s *Supervisor) spawn() error {
-	proc, err := compose.LoadPlugin(s.binary, s.cfg)
+	proc, err := compose.LoadPlugin(s.binary, s.cfg, s.stderr)
 	if err != nil {
 		s.mu.Lock()
 		s.proc = nil

@@ -71,6 +71,24 @@ func isValidJSONRoundTrip(t *testing.T, rec Record) bool {
 	return json.Unmarshal(blob, &back) == nil && back.Msg == rec.Msg
 }
 
+func TestLogWriterMakesOneRecordPerLine(t *testing.T) {
+	r := New(10)
+	w := LogWriter(r)
+	n, err := w.Write([]byte("first line\nsecond line\n"))
+	if err != nil || n != len("first line\nsecond line\n") {
+		t.Fatalf("Write = %d, %v", n, err)
+	}
+	got := r.Snapshot()
+	if len(got) != 2 {
+		t.Fatalf("held %d records, want one per line", len(got))
+	}
+	for i, want := range []string{"first line", "second line"} {
+		if got[i].Msg != want || got[i].Src != "log" || got[i].Kind != "log" || got[i].Origin != OriginNode {
+			t.Errorf("record %d = %+v, want the node's log line %q", i, got[i], want)
+		}
+	}
+}
+
 func TestIngestStampsTheNodesOrderAndForcesTheOrigin(t *testing.T) {
 	r := New(10)
 	body := strings.Join([]string{

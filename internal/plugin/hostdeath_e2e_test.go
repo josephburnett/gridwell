@@ -37,7 +37,7 @@ func TestHelperPluginHost(t *testing.T) {
 		"root": os.Getenv("GRIDWELL_TEST_PLUGIN_ROOT"),
 		"uuid": "hostdeath",
 		"kind": "fs",
-	})
+	}, nil)
 	if err != nil {
 		fmt.Printf("HELPER-ERR %v\n", err)
 		os.Exit(1)

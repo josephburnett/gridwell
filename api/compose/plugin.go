@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 
@@ -67,11 +68,16 @@ func (p *Process) Exited() bool { return p.client.Exited() }
 func (p *Process) Kill() { p.client.Kill() }
 
 // LoadPlugin spawns a plugin binary. The config map and the host pid ride
-// the spawn environment.
-func LoadPlugin(binaryPath string, cfg map[string]string) (*Process, error) {
+// the spawn environment. stderr takes the subprocess's own stderr and
+// go-plugin's host-side errors, which reach no logger of the node's; nil is
+// os.Stderr.
+func LoadPlugin(binaryPath string, cfg map[string]string, stderr io.Writer) (*Process, error) {
+	if stderr == nil {
+		stderr = os.Stderr
+	}
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:   "plugin-host",
-		Output: hclog.DefaultOutput,
+		Output: stderr,
 		Level:  hclog.Error,
 	})
 
@@ -92,7 +98,7 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (*Process, error) {
 		Cmd:              cmd,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		Logger:           logger,
-		Stderr:           os.Stderr,
+		Stderr:           stderr,
 	})
 
 	rpcClient, err := client.Client()

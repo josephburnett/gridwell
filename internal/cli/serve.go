@@ -4,7 +4,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
+	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,6 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/trace"
 	"github.com/josephburnett/gridwell/web"
 )
 
@@ -178,6 +181,11 @@ func resolvePluginBinaries(cfg *config.ServerConfig) error {
 // Electron shell, so there is no browser driver here. The listen address
 // comes from resolveBind. SIGINT and SIGTERM shut down gracefully.
 func RunServe(args []string) int {
+	// Everything the node already says goes to the terminal unchanged and
+	// into the trace ring, so a dump carries the node's own log beside the
+	// structured records. Set before anything can log.
+	log.SetOutput(io.MultiWriter(os.Stderr, trace.LogWriter(trace.Default())))
+
 	home, err := config.Home()
 	if err != nil {
 		return die("serve", err)

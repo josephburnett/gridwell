@@ -104,7 +104,7 @@ func Spawn(t *testing.T, kind string, cfg map[string]string) pluginv1.PluginClie
 func SpawnCloser(t *testing.T, kind string, cfg map[string]string) (pluginv1.PluginClient, func()) {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	proc, err := compose.LoadPlugin(Binary(t, kind), withStateDir(t, cfg))
+	proc, err := compose.LoadPlugin(Binary(t, kind), withStateDir(t, cfg), nil)
 	if err != nil {
 		t.Fatalf("spawn gridwell-plugin-%s: %v", kind, err)
 	}

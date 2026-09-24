@@ -199,3 +199,29 @@ func capMsg(msg string) string {
 	}
 	return msg
 }
+
+// LogWriter turns each line written to it into a node record, so every
+// log.Printf on the node lands in the ring without a second spelling at the
+// call site.
+func LogWriter(r *Ring) io.Writer { return lineWriter{r, OriginNode, "log"} }
+
+// PluginWriter is one plugin subprocess's stderr, under its own id: the
+// subprocess does not reach the node's log, so its lines arrive here instead.
+func PluginWriter(r *Ring, pluginID string) io.Writer {
+	return lineWriter{r, OriginPlugin, pluginID}
+}
+
+type lineWriter struct {
+	r      *Ring
+	origin string
+	src    string
+}
+
+func (w lineWriter) Write(p []byte) (int, error) {
+	for _, line := range strings.Split(string(p), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			w.r.Emit(Record{Origin: w.origin, Src: w.src, Kind: "log", Msg: line})
+		}
+	}
+	return len(p), nil
+}
