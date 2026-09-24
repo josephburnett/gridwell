@@ -31,6 +31,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/local/tmux"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // shellDoorFixture stands up the real browser door over a home namespace
@@ -460,4 +461,49 @@ func TestShellWriteBoundsAreTheDeclaredOnes(t *testing.T) {
 	if srv.shellWriteTimeout != defaultShellWriteTimeout {
 		t.Errorf("New built a server bounding writes at %v, want defaultShellWriteTimeout (%v)", srv.shellWriteTimeout, defaultShellWriteTimeout)
 	}
+}
+
+// A shell attachment that opens and closes is a PTY's whole life on this
+// node, and the ring is where it is written down: the tile, the open, and how
+// the attachment ended.
+func TestTheShellDoorTracesAnAttachment(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	tile := f.createShell(t, 6, 6)
+	cs := f.clientStack()
+	cs.reg.Open("pane-trace", tile.Id, 20, 10)
+	waitSession(t, f.fake)
+	cs.reg.Close("pane-trace")
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		var opened, closed bool
+		for _, rec := range trace.Default().Snapshot() {
+			if rec.Src != "shelldoor" || rec.KV["tile"] != tile.Id {
+				continue
+			}
+			opened = opened || rec.Msg == "open"
+			closed = closed || strings.HasPrefix(rec.Msg, "close")
+		}
+		if opened && closed {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Error("the attachment left no open and close records")
+}
+
+// A refused attach never touches a PTY, and that refusal is the record.
+func TestTheShellDoorTracesARefusal(t *testing.T) {
+	f := newShellDoorFixture(t, Config{DisableShells: true})
+	res, err := f.hs.Client().Get(f.hs.URL + shellwire.Path + "?" + shellwire.QueryTileID + "=" + f.uuid + "/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	for _, rec := range trace.Default().Snapshot() {
+		if rec.Src == "shelldoor" && rec.KV["tile"] == f.uuid+"/1" && strings.HasPrefix(rec.Msg, "refused:") {
+			return
+		}
+	}
+	t.Error("a refused attach left no record")
 }

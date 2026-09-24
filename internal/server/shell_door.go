@@ -20,6 +20,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // defaultShellWriteTimeout bounds one PTY-output frame write, so a viewer
@@ -91,13 +92,16 @@ func (s *Server) shellDoor() http.Handler {
 		// the handshake, which the client sees as a failed dial rather than a
 		// socket that opens and dies.
 		ns, local, err := s.shellRoute(attach.TileID)
+		kv := map[string]string{"tile": attach.TileID}
 		if err != nil {
+			trace.Emit("shelldoor", "pty", "refused: "+err.Error(), kv)
 			httpStatusError(w, err)
 			return
 		}
 
 		conn, err := websocket.Accept(w, r, nil)
 		if err != nil {
+			trace.Emit("shelldoor", "pty", "upgrade failed: "+err.Error(), kv)
 			// Accept has already written the failure to w. Nothing has touched
 			// a PTY yet, and nothing will.
 			cancel()
@@ -107,11 +111,24 @@ func (s *Server) shellDoor() http.Handler {
 
 		// The PTY is acquired only now: an upgrade nobody completed must never
 		// leave a session behind.
+		trace.Emit("shelldoor", "pty", "open", kv)
 		msg, gone := pumpShell(ctx, cancel, conn, s.shellWriteTimeout, func(recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error {
 			return s.openShellBound(ctx, ns, local, bind, recv, send)
 		})
+		trace.Emit("shelldoor", "pty", closeVerdict(msg, gone), kv)
 		writeShellExit(conn, s.shellWriteTimeout, msg, gone)
 	})
+}
+
+// closeVerdict is the one spelling of how an attachment ended, for the record.
+func closeVerdict(message string, sessionGone bool) string {
+	switch {
+	case sessionGone:
+		return "close, session gone: " + message
+	case message != "":
+		return "close: " + message
+	}
+	return "close"
 }
 
 // writeShellExit carries the verdict a WebSocket close code cannot: why the
