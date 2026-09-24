@@ -44,7 +44,7 @@ func WebDoorServer(h http.Handler) *http.Server {
 // opens, with ssh as the authenticated transport. Serve it with
 // ConnectionDoorServer.
 func (s *Server) ConnectionHandler() http.Handler {
-	g := grpc.NewServer()
+	g := grpc.NewServer(grpc.UnaryInterceptor(traceUnary), grpc.StreamInterceptor(traceStream))
 	pb.RegisterGridwellServer(g, namespace.Server(newRouter(s)))
 	return g
 }

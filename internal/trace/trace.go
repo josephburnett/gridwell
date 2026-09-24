@@ -75,6 +75,11 @@ func New(capacity int) *Ring {
 // def is the node's ring; see the package comment.
 var def = New(NodeCapacity)
 
+// Emit stamps a node record onto the default ring.
+func Emit(src, kind, msg string, kv map[string]string) {
+	def.Emit(Record{Origin: OriginNode, Src: src, Kind: kind, Msg: msg, KV: kv})
+}
+
 // Default is the node's one ring: what the door dumps and every Emit below
 // lands in.
 func Default() *Ring { return def }

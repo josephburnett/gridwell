@@ -9,3 +9,7 @@
 api/compose/plugin.go pluginGRPCPlugin.GRPCServer
 api/compose/plugin.go pluginGRPCPlugin.GRPCClient
 client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
+# connectrpc calls an Interceptor's three wrappers through its own interface.
+internal/server/rpctrace.go traceInterceptor.WrapUnary
+internal/server/rpctrace.go traceInterceptor.WrapStreamingClient
+internal/server/rpctrace.go traceInterceptor.WrapStreamingHandler

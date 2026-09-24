@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -197,7 +199,8 @@ func (s *Server) invalidateInfoCache(uuid string) {
 
 func (s *Server) routes() {
 	// A thin codec over the one in-process router.
-	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(newRouter(s)))
+	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(newRouter(s)),
+		connect.WithInterceptors(traceInterceptor{}))
 	s.mux.Handle(path, handler)
 
 	// One live PTY per WebSocket, on the same gated mux (shell_door.go).
