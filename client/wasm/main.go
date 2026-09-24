@@ -38,6 +38,8 @@ import (
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/touchgest"
+	"github.com/josephburnett/gridwell/client/trace"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/transition"
 )
 
@@ -99,6 +101,12 @@ type App struct {
 	// errs is the single owner of user-visible failure notices; every failure
 	// reports through a.reportErr or a.resolveErr.
 	errs *errsurface.Surface
+
+	// tr is this client's ring of trace records and pump the one post in
+	// flight; a.emit is the only writer. The cid is minted at boot, so a
+	// dump says which page's records these are.
+	tr   *trace.Client
+	pump *trace.Pump
 
 	views viewCaches
 
@@ -402,6 +410,10 @@ type scheduler struct {
 
 	// errExpire lets one-shot notices leave the strip without polling.
 	errExpire *debounce.Debounce
+
+	// traceFlush posts the records owed. Every emit arms it; nothing owed
+	// arms nothing.
+	traceFlush *debounce.Debounce
 }
 
 // newScheduler binds every settle timer to what it runs, before the App can
@@ -413,6 +425,7 @@ func newScheduler(a *App) scheduler {
 		urlUpdate:   debounce.New(setTimeoutMs, a.writeURLNow),
 		framingSave: debounce.New(setTimeoutMs, a.flushFramingSave),
 		textSave:    debounce.New(setTimeoutMs, a.flushDirtyText),
+		traceFlush:  debounce.New(setTimeoutMs, a.flushTrace),
 		errExpire: debounce.New(setTimeoutMs, func() {
 			if a.errs.Expire(time.Now()) {
 				a.scheduleFrame() // strip shrank; panes reclaim the height on redraw
@@ -596,6 +609,8 @@ func main() {
 		locals:             map[string]*paneLocal{},
 		menu:               menu.New(),
 		errs:               errsurface.New(),
+		tr:                 trace.New(trace.DefaultCapacity, trace.NewRequestID()),
+		pump:               trace.NewPump(time.Now()),
 		caps:               caps.Derive(bridgeCaps(), false),
 		fetch:              newFetchState(),
 		shellAlive:         map[string]bool{},
@@ -850,7 +865,9 @@ func nowMs() float64 {
 // and the e2e suite grep for, so they are output, not decoration.
 func taggedLog(tag string) func(format string, args ...any) {
 	return func(format string, args ...any) {
-		js.Global().Get("console").Call("log", tag+" "+fmt.Sprintf(format, args...))
+		msg := fmt.Sprintf(format, args...)
+		js.Global().Get("console").Call("log", tag+" "+msg)
+		app.emit(traceevent.Log(tag, msg))
 	}
 }
 
@@ -1125,6 +1142,7 @@ func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 		method = "warn"
 	}
 	js.Global().Get("console").Call(method, "gridwell: ["+source+"] "+message)
+	a.emit(traceevent.Notice(sev, source, message))
 	a.errs.Report(sev, source, message, time.Now())
 	a.scheduleErrExpiry()
 	a.scheduleFrame()
