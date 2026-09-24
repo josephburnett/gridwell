@@ -15,6 +15,7 @@ client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
 # reaching New, Emit and PendingBatch from client/wasm reaches the rest.
 client/trace/trace.go New
 client/trace/flush.go NeedFlush
+client/trace/requestid.go NewRequestID
 client/trace/trace.go Marshal
 client/trace/trace.go emit
 client/trace/trace.go truncate
