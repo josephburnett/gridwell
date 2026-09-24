@@ -77,7 +77,7 @@ export class QuitFlush {
     this.clear(this.timer);
     this.timer = null;
     this.deps.stopMirror();
-    trace({ src: 'quit', kind: 'done', msg: 'the views are detaching' });
+    trace({ src: 'quit', kind: 'teardown', msg: 'the views are detaching and the last batch goes now' });
     const done = (): void => {
       this.deps.stopSidecar();
       this.deps.quit();
