@@ -24,8 +24,9 @@ func NewClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.Cl
 
 // NewDefaultClient uses http.DefaultClient, which rides fetch under WASM, and
 // the JSON-over-proto codec so dev-tools network panels show readable bodies.
-func NewDefaultClient(baseURL string) *Client {
-	return NewClient(http.DefaultClient, baseURL, connect.WithProtoJSON())
+// opts are the caller's own, such as the shim's trace interceptor.
+func NewDefaultClient(baseURL string, opts ...connect.ClientOption) *Client {
+	return NewClient(http.DefaultClient, baseURL, append([]connect.ClientOption{connect.WithProtoJSON()}, opts...)...)
 }
 
 func (c *Client) GetGrid(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {

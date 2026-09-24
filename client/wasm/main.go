@@ -9,11 +9,13 @@ package main
 import (
 	"context"
 	"fmt"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"strconv"
 	"syscall/js"
 	"time"
 
+	"connectrpc.com/connect"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
@@ -600,16 +602,19 @@ const dragThreshold = 4.0
 
 func main() {
 	origin := js.Global().Get("location").Get("origin").String()
+	// Before the App, because the rpc client is built with the interceptor
+	// that records into it.
+	tr := trace.New(trace.DefaultCapacity, trace.NewRequestID())
 	app = &App{
 		doc:                js.Global().Get("document"),
 		win:                js.Global().Get("window"),
 		origin:             origin,
-		cl:                 rpc.NewDefaultClient(origin),
+		cl:                 rpc.NewDefaultClient(origin, connect.WithInterceptors(trace.Interceptor(tr, time.Now))),
 		c:                  cache.New(),
 		locals:             map[string]*paneLocal{},
 		menu:               menu.New(),
 		errs:               errsurface.New(),
-		tr:                 trace.New(trace.DefaultCapacity, trace.NewRequestID()),
+		tr:                 tr,
 		pump:               trace.NewPump(time.Now()),
 		caps:               caps.Derive(bridgeCaps(), false),
 		fetch:              newFetchState(),

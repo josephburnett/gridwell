@@ -14,4 +14,7 @@ client/markdown/render.go taskCheckboxRenderer.RegisterFuncs
 internal/server/rpctrace.go traceInterceptor.WrapUnary
 internal/server/rpctrace.go traceInterceptor.WrapStreamingClient
 internal/server/rpctrace.go traceInterceptor.WrapStreamingHandler
+client/trace/interceptor.go interceptor.WrapUnary
+client/trace/interceptor.go interceptor.WrapStreamingClient
+client/trace/interceptor.go interceptor.WrapStreamingHandler
 
