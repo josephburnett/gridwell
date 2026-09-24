@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, session } from 'electron';
+import { app, BrowserWindow, dialog, net, session } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
@@ -10,6 +10,7 @@ import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
 import { AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE_S } from './authconst';
 import { QuitFlush } from './quit';
+import { flushTrace, logLine, startTrace, stopTrace, TRACE_PATH } from './trace';
 
 // See userdata.ts. The e2e fixture also passes --user-data-dir as a Chromium
 // switch; this covers a launch that sets GRIDWELL_HOME without it.
@@ -51,7 +52,7 @@ async function boot(): Promise<void> {
     // No renderer exists yet to draw a notice strip, and without a dialog the
     // app would vanish with no explanation.
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[gridwell] sidecar failed to start:', err);
+    logLine('error', `[gridwell] sidecar failed to start: ${message}`);
     dialog.showErrorBox('Gridwell failed to start', message);
     app.exit(1);
     return;
@@ -70,6 +71,21 @@ async function boot(): Promise<void> {
       sameSite: 'lax',
     });
   }
+  // Main's records ride the door and the cookie every other request uses:
+  // net.fetch issues from the default session, which is where the banner's
+  // token was just written, so there is no second auth path.
+  const origin = sidecar.origin;
+  startTrace(async (body, signal) => {
+    const res = await net.fetch(origin + TRACE_PATH, {
+      method: 'POST',
+      body,
+      signal,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-ndjson' },
+    });
+    return res.ok;
+  });
+
   const { win } = createRootWindow(sidecar.origin);
   const rootWC = win.webContents;
   const reg = new WebviewRegistry(win, {
@@ -164,6 +180,8 @@ const quitFlush = new QuitFlush({
     registry = null;
     return reg ? reg.removeAll() : Promise.resolve();
   },
+  flushTrace,
+  stopTrace,
   stopSidecar: () => {
     if (sidecar) {
       sidecar.stop();

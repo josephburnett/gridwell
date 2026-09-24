@@ -1,3 +1,5 @@
+import { trace } from './trace';
+
 // The quit sequence. Quit is two-phase, because the renderer's unload flush
 // needs the views and the sidecar still alive: close the windows, wait for
 // each beforeunload, then stop the sidecar. Tearing either down first loses the
@@ -17,6 +19,12 @@ interface QuitFlushDeps {
   removeAll: () => Promise<void>;
   stopSidecar: () => void;
   quit: () => void;
+  // Posts what the ring holds, and is never awaited; see stopTrace.
+  flushTrace: () => void;
+  // Ends the trace's traffic. A request Chromium is still carrying when the
+  // windows go keeps the app from exiting at all, so nothing may be in flight
+  // past this point.
+  stopTrace: () => void;
   // Seams, so a test can watch the watchdog instead of waiting it out.
   setTimer?: (fn: () => void, ms: number) => Timer;
   clearTimer?: (timer: Timer) => void;
@@ -35,6 +43,10 @@ export class QuitFlush {
   begin(): void {
     if (this.started) return;
     this.started = true;
+    trace({ src: 'quit', kind: 'begin', msg: 'closing the windows' });
+    // While the windows are still up: the door dies with the sidecar, so this
+    // is the last batch that can land.
+    this.deps.flushTrace();
     const set = this.deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
     this.timer = set(() => this.finish(), QUIT_FLUSH_WATCHDOG_MS);
     void this.deps.closeWindows().then(
@@ -49,6 +61,8 @@ export class QuitFlush {
     const clear = this.deps.clearTimer ?? ((t: Timer) => clearTimeout(t as NodeJS.Timeout));
     clear(this.timer);
     this.timer = null;
+    // The windows are gone, so no post may be in flight from here on.
+    this.deps.stopTrace();
     this.deps.stopMirror();
     const done = (): void => {
       this.deps.stopSidecar();

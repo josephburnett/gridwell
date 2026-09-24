@@ -24,6 +24,22 @@ import { urlContextMenuTemplate } from './contextmenu';
 import { captureAttempt, captureJpegBase64, describeAttempt } from './capture';
 import { decideStreak, FRESH, StreakState } from './capturestreak';
 import { decideFocus, isPressInput, GuardPhase } from './focusguard';
+import { trace } from './trace';
+import {
+  menuChose,
+  menuOpened,
+  viewBounds,
+  viewCreated,
+  viewDestroyed,
+  viewFailed,
+  viewFocused,
+  viewNav,
+  viewShown,
+} from './viewtrace';
+
+// The live view's page menu, as a trace record names it; register.ts names the
+// other one.
+const URL_MENU = 'url';
 
 // __dirname is dist/main at runtime, so the compiled preload sits one level up.
 const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js');
@@ -100,6 +116,7 @@ export class WebviewRegistry {
     // Before the pop, so this pane is focused by the time any item runs, and a
     // dismissed menu has still moved focus, as a left-click does.
     this.cb.onContextMenu?.({ paneId });
+    trace(menuOpened(URL_MENU, paneId));
     const wc = view.webContents;
     const nav = wc.navigationHistory;
     const template = urlContextMenuTemplate(
@@ -129,6 +146,7 @@ export class WebviewRegistry {
         },
         reload: () => wc.reload(),
         freeze: () => this.cb.onFreezeURL?.({ paneId }),
+        chose: (label) => trace(menuChose(URL_MENU, label, paneId)),
       },
     );
     const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
@@ -236,6 +254,7 @@ export class WebviewRegistry {
     const startHidden = hidden;
     const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH };
     this.entries.set(paneId, e);
+    trace(viewCreated(paneId, tileId, url));
     this.win.contentView.addChildView(view);
     view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
     this.wireNav(paneId, e);
@@ -265,6 +284,7 @@ export class WebviewRegistry {
     const rounded = roundBounds(bounds);
     if (boundsEqual(e.bounds, rounded)) return;
     e.bounds = rounded;
+    trace(viewBounds(paneId, e.tileId, rounded));
     if (!e.hidden) {
       e.view.setBounds(rounded);
     }
@@ -319,6 +339,7 @@ export class WebviewRegistry {
     e.hidden = hidden;
     e.focused = focused;
     if (viewChanged) {
+      trace(viewShown(paneId, e.tileId, hidden));
       if (hidden) {
         e.view.setBounds(parkedBounds(e.bounds.width, e.bounds.height));
       } else {
@@ -371,6 +392,7 @@ export class WebviewRegistry {
         this.reportErr('failed to detach live view — ascend may leave a blank overlay: ' + String(err));
       }
     }
+    trace(viewDestroyed(paneId, e.tileId, url));
     return { jpegBase64, url, title, history };
   }
 
@@ -458,15 +480,39 @@ export class WebviewRegistry {
         step('settle', pressesAtFocus, bounced);
       }, act.settleMs);
     };
-    e.view.webContents.on('focus', () => step('focus-event', e.presses, false));
+    e.view.webContents.on('focus', () => {
+      trace(viewFocused(paneId, e.tileId, true));
+      step('focus-event', e.presses, false);
+    });
+    e.view.webContents.on('blur', () => trace(viewFocused(paneId, e.tileId, false)));
+    // Both halves of a navigation, because the gap between them is where a
+    // page hangs with the pane sitting blank.
+    e.view.webContents.on('did-start-navigation', (details) => {
+      if (details.isMainFrame) trace(viewNav(paneId, e.tileId, false, details.url));
+    });
     // zoomFactor resets across cross-origin navigations.
-    e.view.webContents.on('did-finish-load', () => this.applyMinWidthZoom(e));
+    e.view.webContents.on('did-finish-load', () => {
+      // The view can die between the load and this callback, and a read of a
+      // destroyed WebContents throws uncaught in main, which hangs it behind
+      // an error dialog.
+      try {
+        trace(viewNav(paneId, e.tileId, true, e.view.webContents.getURL()));
+      } catch {
+        return;
+      }
+      this.applyMinWidthZoom(e);
+    });
 
     e.view.webContents.on(
       'did-fail-load',
       (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        if (!isMainFrame) return;
+        const message = failLoadMessage(validatedURL, errorDescription, errorCode);
+        // Traced even when it is not surfaced: an aborted navigation is noise
+        // on the strip and evidence in a dump.
+        trace(viewFailed(paneId, e.tileId, message));
         if (!shouldSurfaceFailLoad(errorCode, isMainFrame)) return;
-        this.reportErr(failLoadMessage(validatedURL, errorDescription, errorCode));
+        this.reportErr(message);
       },
     );
 

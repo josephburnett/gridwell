@@ -73,12 +73,14 @@ export interface PaneRef {
   paneId: string;
 }
 
-// One exclusive choice in a menu the renderer declared. client/circlemenu owns
-// the rows; nothing here reads id or label for a decision.
+// One choice in a menu the renderer declared. client/circlemenu owns the rows;
+// nothing here reads id or label for a decision. `checked` is the row's state,
+// and a row that names no state — an action, like the trace dump — declares
+// none, so the menu can draw it as an action instead of an unchecked radio.
 export interface ChoiceItem {
   id: string;
   label: string;
-  checked: boolean;
+  checked?: boolean;
 }
 
 export interface ChoiceMenuArgs {
