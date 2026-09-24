@@ -99,6 +99,11 @@ func (a *App) installTestHook() {
 		"textInnerBox":  js.FuncOf(a.thTextInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 		"errors":        js.FuncOf(a.thErrors),
+		// The trace's identity and backlog: the cid every record this client
+		// makes carries, and how many the node has not answered for.
+		"trace": js.FuncOf(func(js.Value, []js.Value) any {
+			return map[string]any{"cid": a.tr.CID(), "pending": a.tr.PendingCount()}
+		}),
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
 		"zoomKeyRelays": js.FuncOf(func(js.Value, []js.Value) any { return a.zoomKeyRelays }),

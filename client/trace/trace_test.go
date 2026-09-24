@@ -199,3 +199,16 @@ func decode(t *testing.T, b []byte) []tracewire.Record {
 	}
 	return out
 }
+
+// The cid is how a dump tells one page's records from another's, so the ring
+// answers for it rather than every caller carrying a second copy.
+func TestTheClientAnswersForItsCID(t *testing.T) {
+	c := New(4, "cid7abc")
+	if c.CID() != "cid7abc" {
+		t.Errorf("CID is %q", c.CID())
+	}
+	c.Emit("nav", "push", "x", nil, t0)
+	if r := decode(t, mustBatch(t, c))[0]; r.CID != c.CID() {
+		t.Errorf("a record carries cid %q, want %q", r.CID, c.CID())
+	}
+}

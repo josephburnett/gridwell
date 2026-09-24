@@ -81,6 +81,10 @@ func emit(c *Client, src, kind, msg string, kv map[string]string, ct int64) {
 	c.count++
 }
 
+// CID is the id this client stamps on every record it makes, so a dump says
+// which page's story a line belongs to.
+func (c *Client) CID() string { return c.cid }
+
 // PendingCount is how many records the node has not acknowledged.
 func (c *Client) PendingCount() int { return int(c.base + uint64(c.count) - c.acked) }
 
