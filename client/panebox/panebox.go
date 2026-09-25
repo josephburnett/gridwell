@@ -28,11 +28,11 @@ func PointInContent(r pane.Rect, borderPx, sx, sy float64) bool {
 
 // LiveViewOwnsPoint is asked by every canvas pointer handler before it hands
 // an event to the native surface. A WebContentsView swallows the mouse over
-// the content box, unless overlaysHidden (the shim parks every view during a
-// gesture, so the canvas keeps the release that ends it) or the pane has no
-// live view, a frozen preview being only a canvas drawing.
-func LiveViewOwnsPoint(overlaysHidden, hasLiveView bool, r pane.Rect, borderPx, x, y float64) bool {
-	if overlaysHidden || !hasLiveView {
+// the content box, unless canvasOwnsPointer (urlview.CanvasOwnsPointer: an
+// armed gesture must hear its own release) or the pane has no live view, a
+// frozen preview being only a canvas drawing.
+func LiveViewOwnsPoint(canvasOwnsPointer, hasLiveView bool, r pane.Rect, borderPx, x, y float64) bool {
+	if canvasOwnsPointer || !hasLiveView {
 		return false
 	}
 	return PointInContent(r, borderPx, x, y)

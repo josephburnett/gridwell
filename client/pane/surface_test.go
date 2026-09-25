@@ -48,3 +48,64 @@ func TestSurfaceOfAgreesWithStillDescended(t *testing.T) {
 		t.Error("a closed pane must never read as descended")
 	}
 }
+
+func TestParkSurfacePerPane(t *testing.T) {
+	const gridPane, livePane = "p-grid", "p-live"
+	cases := []struct {
+		name string
+		g    CanvasGesture
+		want bool // for livePane, a pane the gesture never names
+	}{
+		{"nothing armed", CanvasGesture{}, false},
+		// The bug: a pan in one pane blanked every other pane's live surface.
+		{"pan elsewhere", CanvasGesture{DragPane: gridPane}, false},
+		{"pan in this pane", CanvasGesture{DragPane: livePane}, true},
+		{"ghost drag", CanvasGesture{DragPane: gridPane, Ghost: true}, true},
+		{"tile resize", CanvasGesture{TileResize: true}, true},
+		{"pane swap or split", CanvasGesture{PaneGesture: true}, true},
+		{"divider resize", CanvasGesture{PaneResize: true}, true},
+		{"palette open", CanvasGesture{MenuOpen: true}, true},
+		{"url modal open", CanvasGesture{ModalOpen: true}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ParkSurface(c.g, livePane); got != c.want {
+				t.Errorf("ParkSurface(%+v, %q) = %v, want %v", c.g, livePane, got, c.want)
+			}
+		})
+	}
+}
+
+// A drag's own pane parks whatever the drag turns into, so a ghost crossing
+// back over it finds it already gone.
+func TestGhostDragParksItsOwnPane(t *testing.T) {
+	if !ParkSurface(CanvasGesture{DragPane: "p1", Ghost: true}, "p1") {
+		t.Error("the origin pane must park under a ghost drag")
+	}
+}
+
+func TestCanvasOwnsPointer(t *testing.T) {
+	cases := []struct {
+		name string
+		g    CanvasGesture
+		want bool
+	}{
+		{"nothing armed", CanvasGesture{}, false},
+		// The release that ends a pan must reach the canvas even though the
+		// pan parked no surface.
+		{"pan armed", CanvasGesture{DragPane: "p1"}, true},
+		{"ghost drag", CanvasGesture{Ghost: true}, true},
+		{"tile resize", CanvasGesture{TileResize: true}, true},
+		{"pane swap or split", CanvasGesture{PaneGesture: true}, true},
+		{"divider resize", CanvasGesture{PaneResize: true}, true},
+		{"palette open", CanvasGesture{MenuOpen: true}, true},
+		{"url modal open", CanvasGesture{ModalOpen: true}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := CanvasOwnsPointer(c.g); got != c.want {
+				t.Errorf("CanvasOwnsPointer(%+v) = %v, want %v", c.g, got, c.want)
+			}
+		})
+	}
+}
