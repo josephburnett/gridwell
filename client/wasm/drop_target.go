@@ -34,7 +34,7 @@ func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget) 
 	if t != nil {
 		gridID = t.gridID
 	}
-	a.emit(traceevent.Drop(v, d.tileID, gridID))
+	a.emit(traceevent.Drop(v, d.originPaneID, d.tileID, gridID))
 	return v
 }
 

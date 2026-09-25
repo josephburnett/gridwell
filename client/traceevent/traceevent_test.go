@@ -116,12 +116,17 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropLink)+1)
 	}
 	for v, name := range want {
-		e := Drop(v, "t7abcde", "g7abcde")
+		e := Drop(v, "p1", "t7abcde", "g7abcde")
 		if e.Src != "drag" || e.Kind != "drop" || e.Msg != name {
 			t.Errorf("verdict %d is %+v, want msg %q", v, e, name)
 		}
+		// The pane the gesture is in, so the frames and writes around the
+		// release join to it without reading the verdict back.
+		if e.KV["pane"] != "p1" || e.KV["tile"] != "t7abcde" || e.KV["grid"] != "g7abcde" {
+			t.Errorf("verdict %d names %v", v, e.KV)
+		}
 	}
-	if got := Drop(dragdrop.DropLink+1, "", "").Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
+	if got := Drop(dragdrop.DropLink+1, "", "", "").Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
 		t.Errorf("an unnamed verdict reads %q", got)
 	}
 }

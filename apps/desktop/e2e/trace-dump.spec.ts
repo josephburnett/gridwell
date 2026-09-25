@@ -118,6 +118,12 @@ test('Dump logs writes one file holding both halves of the trace', async ({
     `${noticeFrames.length} frames asked for by the notice strip, against ${notices.length} notices`,
   ).toBeLessThanOrEqual(notices.length);
 
+  // The pane is the shim's to supply, and it is what joins the release to the
+  // frames and writes around it.
+  const drop = mine.find((r) => r.src === 'drag' && r.kind === 'drop');
+  expect(drop?.kv?.pane, `the drop record names the pane it was made in: ${JSON.stringify(drop)}`)
+    .toBeTruthy();
+
   const joined = joinedRequests(lines);
   expect(
     joined.length,

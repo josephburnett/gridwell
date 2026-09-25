@@ -208,10 +208,13 @@ func Focus(from, to string) Event {
 	return Event{Src: "pane", Kind: "focus", Msg: "focus moves", KV: kv("from", from, "pane", to)}
 }
 
-// Drop is a committed release. The ghost's preview takes the same verdict and
-// records nothing: that one is per pointer move.
-func Drop(v dragdrop.DropAction, tileID, gridID string) Event {
-	return Event{Src: "drag", Kind: "drop", Msg: dropName(v), KV: kv("tile", tileID, "grid", gridID)}
+// Drop is a committed release, in the pane the gesture was made in and onto
+// the grid it landed on — a cross-pane drag names both ends. The ghost's
+// preview takes the same verdict and records nothing: that one is per pointer
+// move.
+func Drop(v dragdrop.DropAction, paneID, tileID, gridID string) Event {
+	return Event{Src: "drag", Kind: "drop", Msg: dropName(v),
+		KV: kv("pane", paneID, "tile", tileID, "grid", gridID)}
 }
 
 // dropName is the table over DecideDrop's verdicts.
