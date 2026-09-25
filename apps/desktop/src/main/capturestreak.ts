@@ -15,12 +15,13 @@ export interface StreakState {
   // answers capturePage with an empty image for the first frames after a view
   // is placed, and those empties say nothing.
   everCaptured: boolean;
-  // Consecutive failures; failing means failures > 0.
+  // Consecutive failed attempts; REPORT_AFTER_FAILURES of them is a frozen
+  // mirror. capture.capturable says which ticks are attempts at all.
   failures: number;
 }
 
-// Failing carries the reason that opened the streak; recovered carries how many
-// captures were lost.
+// Failing carries the kind of the attempt that crossed the threshold;
+// recovered carries how many captures were lost.
 export type StreakReport =
   | { kind: 'failing'; reason: AttemptKind }
   | { kind: 'recovered'; afterFailures: number };
@@ -34,27 +35,34 @@ export interface StreakDecision {
 // decideStreak only returns new ones.
 export const FRESH: StreakState = Object.freeze({ everCaptured: false, failures: 0 });
 
+// How many failures in a row make a frozen mirror. One lost frame is a
+// cadence of staleness, which nobody can see, and reporting it costs two
+// notices — the failure and its recovery — for a blank that was never on
+// screen.
+const REPORT_AFTER_FAILURES = 2;
+
 export function decideStreak(prev: StreakState, kind: AttemptKind): StreakDecision {
   if (kind === 'ok') {
     // A good frame ends the streak whatever opened it, since a reloaded
     // renderer captures again. Recovery is reported only where a failure was,
     // so the two always pair.
-    const reportable = prev.everCaptured && prev.failures > 0;
+    const reportable = prev.everCaptured && prev.failures >= REPORT_AFTER_FAILURES;
     return {
       state: { everCaptured: true, failures: 0 },
       report: reportable ? { kind: 'recovered', afterFailures: prev.failures } : null,
     };
   }
+  const failures = prev.failures + 1;
   return {
-    state: { everCaptured: prev.everCaptured, failures: prev.failures + 1 },
-    report: prev.everCaptured && prev.failures === 0 ? { kind: 'failing', reason: kind } : null,
+    state: { everCaptured: prev.everCaptured, failures },
+    report: prev.everCaptured && failures === REPORT_AFTER_FAILURES ? { kind: 'failing', reason: kind } : null,
   };
 }
 
 // What a report says and how loudly, so the wording and the severity are one
 // decision with a test rather than a string built at the call site. detail is
-// capture.describeAttempt for the attempt that opened the streak; only the
-// failing arm shows it.
+// capture.describeAttempt for the attempt being reported; only the failing arm
+// shows it.
 export function streakNotice(paneId: string, report: StreakReport, detail: string): { severity: NoticeSeverity; message: string } {
   if (report.kind === 'failing') {
     return { severity: 'error', message: `pane ${paneId}: mirror capture failing: ${detail}` };

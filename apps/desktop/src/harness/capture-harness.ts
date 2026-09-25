@@ -666,6 +666,7 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 300));
   if ((await regM.capture('paneM')) !== '') fail('a capture of a destroyed view returned a frame');
   if ((await regM.capture('paneM')) !== '') fail('the second capture of a destroyed view returned a frame');
+  if ((await regM.capture('paneM')) !== '') fail('the third capture of a destroyed view returned a frame');
   const failing = capErrs.filter((e) => e.message.includes('mirror capture failing'));
   if (failing.length !== 1) fail(`a failing capture streak reported ${failing.length} times, want 1`);
   // The severity rides the same event the message does, all the way from the
