@@ -334,8 +334,8 @@ over (`pane.TakeOver`).
 over the canvas for live url tiles. `WebviewRegistry` (`webviews.ts`) owns
 one entry per pane. `syncURLViews` runs every frame: the renderer sends CSS-px
 bounds, `roundBounds` snaps to DIP, `boundsEqual` skips churn, and
-`liveOverlaysHidden` parks views off-screen while a drag, resize, or menu
-needs the canvas. The focus guard keeps OS keyboard focus in the focused
+`pane.ParkSurface` says, per pane, whether this frame's gesture needs that
+view's pixels — a pan in one pane leaves the others alone. The focus guard keeps OS keyboard focus in the focused
 pane's view only. A view swallows the renderer's own mouse events, so the
 presses that must move pane focus are relayed back: the preload forwards a
 left press, and `showContextMenu` — the one funnel for both doors into the
@@ -399,6 +399,7 @@ copy:
 | what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
+| does a gesture park this pane's live surface | `pane.ParkSurface`; `pane.CanvasOwnsPointer` for its pointer |
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
 | is this pane animating, and where a displaced one lands | `transition.Set` |

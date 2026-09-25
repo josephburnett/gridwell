@@ -504,7 +504,7 @@ func (a *App) armLeftResize(r pane.Rect, sx, sy float64) bool {
 		return false
 	}
 	a.leftResize = &leftResizeState{axes: axes, curX: sx, curY: sy}
-	// Park live overlays now; liveOverlaysHidden consults leftResize. Half the
+	// Park live surfaces now; canvasGesture reads leftResize. Half the
 	// grab band can sit over a view that would eat the next mousemove.
 	a.draw()
 	return true

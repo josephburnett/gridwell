@@ -6,11 +6,11 @@ import { test, expect } from './fixtures';
 // same pixels the swatches are drawn on.
 //
 // panebox.LiveViewOwnsPoint owns that decision for the press and the release
-// alike, and it asks whether the view is parked: an armed gesture parks every
-// live view, so the release that ends one is never the view's to swallow. A
-// release swallowed there leaves the swatch's template drag armed forever, and
-// with it the park it holds (liveOverlaysHidden reads the same field), so no
-// url modal opens and waitIdle never returns.
+// alike, over pane.CanvasOwnsPointer: an armed gesture keeps its own release,
+// so the view never swallows it. And the open palette parks every live view
+// (pane.ParkSurface), so the real press reaches the canvas at all. A release
+// swallowed here leaves the swatch's template drag armed forever, so no url
+// modal opens and waitIdle never returns.
 test('the + menu over a stacked live url pane keeps its own release', async ({
   electronApp,
   window,

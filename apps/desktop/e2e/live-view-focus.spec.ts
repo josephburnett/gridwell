@@ -80,8 +80,8 @@ test('left-clicking a live URL pane closes the + menu on the previously-focused 
   const textPaneId = (await gw.focused()).id;
   expect(textPaneId).not.toBe(urlPaneId);
 
-  // While the palette is open liveOverlaysHidden parks the live url view, so
-  // clicks land on the canvas instead. The canvas path goes through the same
+  // An open palette parks every live url view (pane.ParkSurface), so clicks
+  // land on the canvas instead. The canvas path goes through the same
   // focusToPane.
   await gw.openPalette();
   expect((await gw.palette()).open, 'palette open on the text pane').toBe(true);

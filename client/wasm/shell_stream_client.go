@@ -552,9 +552,9 @@ func (a *App) installShellMirror() {
 
 // mirrorLiveShells snapshots every live shell terminal into the preview cache,
 // so a shell tile shown elsewhere tracks it instead of its last freeze. Skipped
-// while overlays are parked: the redraw would fight the in-flight gesture.
+// while a gesture is in flight: the redraw would fight it.
 func (a *App) mirrorLiveShells() {
-	if a.liveOverlaysHidden() {
+	if pane.CanvasOwnsPointer(a.canvasGesture()) {
 		return
 	}
 	a.shellMirrorPasses++
@@ -703,20 +703,17 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 // pane's screen rect. The fit addon runs once per size change.
 func (a *App) syncShellOverlayPosition() {
 	// The xterm host div paints above the canvas and swallows mouse input over
-	// its rect, so park every overlay during a canvas gesture: a boundary drag
-	// has to cross the shell.
-	if a.liveOverlaysHidden() {
-		for _, pl := range a.locals {
-			if pl.shellConn != nil {
-				pl.shellConn.container.Get("style").Set("display", "none")
-			}
-		}
-		return
-	}
+	// its rect, exactly as a native url view does, so it parks by the same
+	// per-pane verdict: a boundary drag has to cross the shell.
+	g := a.canvasGesture()
 	rects := a.layoutPanes()
 	for paneID, pl := range a.locals {
 		conn := pl.shellConn
 		if conn == nil {
+			continue
+		}
+		if pane.ParkSurface(g, paneID) {
+			conn.container.Get("style").Set("display", "none")
 			continue
 		}
 		r, ok := rects[paneID]

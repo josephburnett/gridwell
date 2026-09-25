@@ -144,7 +144,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	// gesture on the focused pane. The handle is set before main answers, so
 	// a refusal takes it back down.
 	a.bridgePlace(p.ID, t.Id, addr, b, contentzoom.Of(t.GetContentZoom()), t.UrlHistory, durable,
-		a.liveOverlaysHidden(), p.ID == a.tree.Focus,
+		pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
 		func() { a.dropFailedURLView(p.ID, v) })
 	a.draw()
 }
@@ -294,10 +294,10 @@ func (a *App) closeAllURLStreams() {
 }
 
 // syncURLViews tracks every live view to its pane's content box each frame,
-// parking it during gestures that paint canvas overlays on top.
+// parking the ones this frame's gesture is in the way of.
 func (a *App) syncURLViews() {
 	rects := a.layoutPanes()
-	hidden := a.liveOverlaysHidden()
+	g := a.canvasGesture()
 	for paneID, pl := range a.locals {
 		v := pl.urlView
 		if v == nil {
@@ -325,17 +325,37 @@ func (a *App) syncURLViews() {
 		a.bridgeSetBounds(paneID, contentViewBounds(r))
 		// focused feeds main's focus-steal guard in webviews.ts: only the
 		// focused pane's view may take keyboard focus back after a park.
-		a.bridgeSetHidden(paneID, hidden, paneID == a.tree.Focus)
+		a.bridgeSetHidden(paneID, pane.ParkSurface(g, paneID), paneID == a.tree.Focus)
 	}
 }
 
-// liveOverlaysHidden reports whether live overlays park this frame. They
-// swallow mouse input over their rect, so a gesture that previews on the
-// canvas must hide them first.
-func (a *App) liveOverlaysHidden() bool {
-	// The url modal is DOM and a live view would paint over it. The rename
-	// input opens in the bar, outside every live view's rect.
-	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.overlays.urlModalOpen
+// canvasGesture mirrors this frame's gesture and overlay state for
+// pane.ParkSurface and pane.CanvasOwnsPointer, which own what it reaches. The
+// rename input opens in the bar, outside every live surface's rect, so it is
+// not one of them.
+func (a *App) canvasGesture() pane.CanvasGesture {
+	g := pane.CanvasGesture{
+		Ghost:      a.ghost != nil,
+		PaneResize: a.leftResize != nil,
+		MenuOpen:   a.menu.IsOpen(),
+		ModalOpen:  a.overlays.urlModalOpen,
+	}
+	if d := a.dragging; d != nil {
+		g.DragPane = d.originPaneID
+	}
+	if rd := a.rightDrag; rd != nil {
+		switch rd.kind {
+		case rightDragSwap, rightDragSplit:
+			g.PaneGesture = true
+		case rightDragTileResize:
+			g.TileResize = true
+		case rightDragTileCenter:
+			// The clone drag it becomes is a.dragging; until the ghost, it has
+			// grabbed a handle in one pane.
+			g.DragPane = rd.tilePaneID
+		}
+	}
+	return g
 }
 
 // isURLDescent branches input between Gridwell's gestures and native URL

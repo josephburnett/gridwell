@@ -71,7 +71,8 @@ func (a *App) liveViewOwnsPoint(p *pane.Pane, r pane.Rect, sx, sy float64) bool 
 	if p == nil {
 		return false
 	}
-	return panebox.LiveViewOwnsPoint(a.liveOverlaysHidden(), a.urlViewFor(p.ID) != nil, r, paneBorderPx, sx, sy)
+	return panebox.LiveViewOwnsPoint(pane.CanvasOwnsPointer(a.canvasGesture()),
+		a.urlViewFor(p.ID) != nil, r, paneBorderPx, sx, sy)
 }
 
 // hasTextarea reports whether the singleton text-overlay element exists yet: a
