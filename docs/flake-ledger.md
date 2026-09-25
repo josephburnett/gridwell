@@ -68,6 +68,14 @@ Same columns, and a row leaves this section only by naming its mechanism.
   `make check-electron` is about half green on that box and a failure
   there is worth a second run before it is believed.
 
+  The error name is shared, the mechanism is not. `capturePage` also
+  rejects with `UnknownVizError` inside a main-frame navigation, where the
+  old document's surface is gone and the new one has not painted; that one
+  heals on the next frame and is fixed — a tick there is not an attempt
+  (`capture.capturable`). This row is only the permanent per-surface
+  collapse after `forcefullyCrashRenderer` + `reload`, which no navigation
+  gate can reach.
+
 ## Adding an entry
 
 When a spec gains a flake note, add its row here in the same commit:

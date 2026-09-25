@@ -41,6 +41,21 @@ export async function captureAttempt(
   return jpegBase64 ? { kind: 'ok', jpegBase64 } : { kind: 'empty' };
 }
 
+// What a mirror tick reads before it reads a frame. hidden is parked off the
+// canvas; navigating is a main frame between its start and its load.
+interface MirrorTarget {
+  hidden: boolean;
+  navigating: boolean;
+}
+
+// A pane with no surface to read is not an attempt at all. A parked view has
+// none, and in a navigation the old document's is gone before the new one
+// paints, where capturePage rejects: a page loading, not a frozen mirror, so
+// capturestreak must not see it.
+export function capturable(t: MirrorTarget): boolean {
+  return !t.hidden && !t.navigating;
+}
+
 // For callers that only want the bytes: '' means no frame, whatever went wrong.
 // The view-gone arm is rethrown so remove() reports "view crashed while
 // closing".

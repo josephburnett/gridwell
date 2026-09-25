@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { WebContentsView } from 'electron';
-import { captureAttempt, CAPTURE_TIMEOUT_MS, MirrorPump, MIRROR_INTERVAL_MS } from './capture';
+import { captureAttempt, capturable, CAPTURE_TIMEOUT_MS, MirrorPump, MIRROR_INTERVAL_MS } from './capture';
 
 // CAPTURE_TIMEOUT_MS is a promise about time — the freeze path detaches only
 // after capturePage settles — so these wait on it rather than on a number.
@@ -110,3 +110,17 @@ test('the default timer waits the declared cadence', async () => {
   assert.ok(at[0] >= MIRROR_INTERVAL_MS - slack, `first round at ${at[0]}ms, before the ${MIRROR_INTERVAL_MS}ms cadence`);
   assert.ok(at[1] >= MIRROR_INTERVAL_MS * 2 - slack, `second round at ${at[1]}ms, before two cadences`);
 });
+
+// A mirror tick reads a pane's surface before it reads a frame.
+const TARGETS: { name: string; target: { hidden: boolean; navigating: boolean }; want: boolean }[] = [
+  { name: 'a shown pane between navigations is the only attempt', target: { hidden: false, navigating: false }, want: true },
+  { name: 'a parked pane has no surface to read', target: { hidden: true, navigating: false }, want: false },
+  { name: 'a pane whose main frame is navigating has lost one', target: { hidden: false, navigating: true }, want: false },
+  { name: 'a pane that is both is still not an attempt', target: { hidden: true, navigating: true }, want: false },
+];
+
+for (const c of TARGETS) {
+  test(`capturable: ${c.name}`, () => {
+    assert.equal(capturable(c.target), c.want);
+  });
+}

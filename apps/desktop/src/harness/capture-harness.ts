@@ -95,16 +95,28 @@ async function waitForFirstFrame(
   fail(`${what}: loaded in ${loadMs}ms, then produced no frame within ${FRAME_BUDGET_MS}ms`);
 }
 
+// How long /slow holds its body open. Long enough that a mirror tick lands
+// inside the navigation on a loaded box, short enough not to pad the run.
+const SLOW_BODY_MS = 1500;
+
 // A data: url has an opaque origin, so it has no localStorage and no
 // same-document navigation; the scenarios that need either need a real one.
-async function startPage(): Promise<{ url: string; close: () => void }> {
-  const server = http.createServer((_req, res) => {
+// /slow commits and then keeps loading, which is the gap a mirror tick must
+// not read.
+async function startPage(): Promise<{ url: string; slowUrl: string; close: () => void }> {
+  const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end('<title>HarnessPage</title><body>page</body>');
+    const body = '<title>HarnessPage</title><body>page</body>';
+    if (req.url === '/slow') {
+      setTimeout(() => res.end(body), SLOW_BODY_MS);
+      return;
+    }
+    res.end(body);
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
   const port = (server.address() as { port: number }).port;
-  return { url: `http://127.0.0.1:${port}/`, close: () => server.close() };
+  const origin = `http://127.0.0.1:${port}`;
+  return { url: `${origin}/`, slowUrl: `${origin}/slow`, close: () => server.close() };
 }
 
 app.whenReady().then(async () => {
@@ -658,6 +670,43 @@ app.whenReady().then(async () => {
   if (failing.length !== 1) fail(`a failing capture streak reported ${failing.length} times, want 1`);
   await regM.remove('paneM');
   console.log('capture streak ok: the failure is reported once, not per frame');
+
+  // ── a tick inside a main-frame navigation is not an attempt ─────────────
+  // Between the old document's surface going away and the new one's first
+  // frame there is nothing to read, and capturePage rejects there
+  // (UnknownVizError on the Linux dev box). That is a page loading, not a
+  // frozen mirror, so the tick is skipped: the mirror keeps its last frame and
+  // nothing is reported.
+  const navPage2 = await startPage();
+  const gapErrs: string[] = [];
+  const regGap = new WebviewRegistry(win, { onError: (ev) => gapErrs.push(ev.message) });
+  await regGap.place('paneGap', 'u1/77', navPage2.url, { x: 0, y: 0, width: 400, height: 300 });
+  await waitForFirstFrame(regGap, 'paneGap', 'nav-gap scenario');
+  const wcGap = regGap.webContentsFor('paneGap')!;
+  const started = new Promise<void>((r) => {
+    wcGap.once('did-start-navigation', () => r());
+  });
+  const finished = loadFinished(wcGap, 'the slow page');
+  void wcGap.loadURL(navPage2.slowUrl);
+  await started;
+  // The old document still has a surface here, so a capture would succeed and
+  // land a frame the pane is no longer showing; later in the same gap it
+  // rejects. Neither is an attempt.
+  const during = await regGap.capture('paneGap');
+  if (during !== '') fail(`a mirror tick inside a navigation captured ${during.length} base64 chars`);
+  if (gapErrs.length !== 0) fail(`a skipped tick reported: ${JSON.stringify(gapErrs)}`);
+  await finished;
+  let after = '';
+  const afterDeadline = Date.now() + FRAME_BUDGET_MS;
+  while (Date.now() < afterDeadline && !after) {
+    after = await regGap.capture('paneGap');
+    if (!after) await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!after) fail(`the mirror never captured again after the navigation (errors: ${JSON.stringify(gapErrs)})`);
+  if (gapErrs.length !== 0) fail(`the navigation left a notice behind: ${JSON.stringify(gapErrs)}`);
+  await regGap.remove('paneGap');
+  navPage2.close();
+  console.log('nav-gap ok: a tick inside a navigation is skipped, and the mirror comes back after it');
 
   // ── a crashed renderer's frozen mirror is reported, and its recovery too ─
   // A crashed renderer is not a destroyed view: capturePage still answers, with

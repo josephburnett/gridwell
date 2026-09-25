@@ -21,7 +21,7 @@ import {
   toContentPoint,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
-import { captureAttempt, captureJpegBase64, describeAttempt } from './capture';
+import { capturable, captureAttempt, captureJpegBase64, describeAttempt } from './capture';
 import { decideStreak, FRESH, StreakState } from './capturestreak';
 import { decideFocus, isPressInput, GuardPhase } from './focusguard';
 import { trace } from './trace';
@@ -49,6 +49,9 @@ interface Entry {
   tileId: string;
   bounds: Bounds;
   hidden: boolean;
+  // Whether the main frame is between did-start-navigation and its load, which
+  // capture() reads through capture.capturable.
+  navigating: boolean;
   focused: boolean;
   // userZoom is the tile's persisted content zoom; 0 means 1.0.
   userZoom: number;
@@ -252,7 +255,7 @@ export class WebviewRegistry {
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.
     const startHidden = hidden;
-    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH };
+    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH };
     this.entries.set(paneId, e);
     trace(viewCreated(paneId, tileId, url));
     this.win.contentView.addChildView(view);
@@ -397,10 +400,10 @@ export class WebviewRegistry {
   }
 
   // A frame for mirroring, or '' when there is no live view or the attempt
-  // failed. A hidden pane is not an attempt at all.
+  // failed. capturable owns which panes are an attempt at all.
   async capture(paneId: string): Promise<string> {
     const e = this.entries.get(paneId);
-    if (!e || e.hidden) return '';
+    if (!e || !capturable(e)) return '';
     const attempt = await captureAttempt(e.view);
     const decision = decideStreak(e.captureStreak, attempt.kind);
     e.captureStreak = decision.state;
@@ -487,11 +490,16 @@ export class WebviewRegistry {
     e.view.webContents.on('blur', () => trace(viewFocused(paneId, e.tileId, false)));
     // Both halves of a navigation, because the gap between them is where a
     // page hangs with the pane sitting blank.
+    // A same-document navigation keeps the surface and fires no load, so
+    // counting one would strand the flag and stop the mirror for good.
     e.view.webContents.on('did-start-navigation', (details) => {
-      if (details.isMainFrame) trace(viewNav(paneId, e.tileId, false, details.url));
+      if (!details.isMainFrame || details.isSameDocument) return;
+      e.navigating = true;
+      trace(viewNav(paneId, e.tileId, false, details.url));
     });
     // zoomFactor resets across cross-origin navigations.
     e.view.webContents.on('did-finish-load', () => {
+      e.navigating = false;
       // The view can die between the load and this callback, and a read of a
       // destroyed WebContents throws uncaught in main, which hangs it behind
       // an error dialog.
@@ -507,6 +515,9 @@ export class WebviewRegistry {
       'did-fail-load',
       (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
         if (!isMainFrame) return;
+        // Every way a navigation ends clears the flag, an abort included, or
+        // the pane's mirror would never be read again.
+        e.navigating = false;
         const message = failLoadMessage(validatedURL, errorDescription, errorCode);
         // Traced even when it is not surfaced: an aborted navigation is noise
         // on the strip and evidence in a dump.
@@ -519,6 +530,8 @@ export class WebviewRegistry {
     // Unreported, a crashed renderer just sits blank. getURL() after a crash
     // may throw, which must not stop the notice.
     e.view.webContents.on('render-process-gone', (_event, details) => {
+      // A renderer that died mid-navigation ends it; the crash is the notice.
+      e.navigating = false;
       let url = '';
       try {
         url = e.view.webContents.getURL();
