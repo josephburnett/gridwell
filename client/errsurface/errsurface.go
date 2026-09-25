@@ -136,23 +136,27 @@ func (s *Surface) Notices() []Notice {
 
 func (s *Surface) Len() int { return len(s.notices) }
 
-func (s *Surface) Dismiss(id int) {
-	for i := range s.notices {
-		if s.notices[i].ID == id {
-			s.notices = append(s.notices[:i], s.notices[i+1:]...)
-			return
-		}
-	}
+// Dismiss reports whether it removed a notice, like every mutation here: the
+// render layer repaints on the verdict, not on the call.
+func (s *Surface) Dismiss(id int) bool {
+	return s.remove(func(n Notice) bool { return n.ID == id })
 }
 
-// Resolve is how a cleared condition takes its own notice down.
-func (s *Surface) Resolve(source string) {
+// Resolve is how a cleared condition takes its own notice down. Most calls
+// come from a call that simply worked and never raised one, so the verdict is
+// what keeps a healthy read from repainting the screen.
+func (s *Surface) Resolve(source string) bool {
+	return s.remove(func(n Notice) bool { return n.Source == source })
+}
+
+func (s *Surface) remove(match func(Notice) bool) bool {
 	for i := range s.notices {
-		if s.notices[i].Source == source {
+		if match(s.notices[i]) {
 			s.notices = append(s.notices[:i], s.notices[i+1:]...)
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // The strip is reserved layout, not an overlay: the pane tree is laid out into
@@ -214,8 +218,7 @@ func (s *Surface) DismissAt(y, stripTop float64) bool {
 	rows := Rows(s.notices, stripTop)
 	for _, r := range rows {
 		if y >= r.Y && y < r.Y+RowH {
-			s.Dismiss(r.Notice.ID)
-			return true
+			return s.Dismiss(r.Notice.ID)
 		}
 	}
 	return false

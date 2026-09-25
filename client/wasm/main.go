@@ -420,15 +420,19 @@ type scheduler struct {
 
 // newScheduler binds every settle timer to what it runs, before the App can
 // draw. draw() ends by arming two of these, so a timer bound any later would
-// take that arm with nothing to fire and never accept another.
+// take that arm with nothing to fire and never accept another. Every mode
+// comes from client/cadence, where the wait's own sentence asks for it.
 func newScheduler(a *App) scheduler {
 	return scheduler{
-		wsSave:      debounce.New(setTimeoutMs, a.flushWorkspaceSave),
-		urlUpdate:   debounce.New(setTimeoutMs, a.writeURLNow),
-		framingSave: debounce.New(setTimeoutMs, a.flushFramingSave),
-		textSave:    debounce.New(setTimeoutMs, a.flushDirtyText),
-		traceFlush:  debounce.New(setTimeoutMs, a.flushTrace),
-		errExpire: debounce.New(setTimeoutMs, func() {
+		wsSave:      debounce.New(setTimeoutMs, nowMs, cadence.WorkspaceSaveMode, a.flushWorkspaceSave),
+		urlUpdate:   debounce.New(setTimeoutMs, nowMs, cadence.URLUpdateMode, a.writeURLNow),
+		framingSave: debounce.New(setTimeoutMs, nowMs, cadence.FramingSaveMode, a.flushFramingSave),
+		textSave:    debounce.New(setTimeoutMs, nowMs, cadence.TextSaveMode, a.flushDirtyText),
+		traceFlush:  debounce.New(setTimeoutMs, nowMs, cadence.TraceFlushMode, a.flushTrace),
+		// The expiry's wait is a notice's own deadline rather than a cadence,
+		// and it is a throttle: a settle would push the window out every time
+		// a notice arrived, so the one already due would expire late.
+		errExpire: debounce.New(setTimeoutMs, nowMs, debounce.Throttle, func() {
 			if a.errs.Expire(time.Now()) {
 				a.scheduleFrame(traceevent.WhyNotice) // strip shrank; panes reclaim the height on redraw
 			}
@@ -1204,10 +1208,14 @@ func (a *App) scheduleErrExpiry() {
 	a.persist.sched.errExpire.Arm(ms)
 }
 
-// resolveErr clears a source's notice when its condition heals.
+// resolveErr clears a source's notice when its condition heals. Every read
+// and write that succeeds calls it, and almost none of them had a notice up,
+// so the repaint rides the surface's verdict: nothing was on screen to take
+// off it.
 func (a *App) resolveErr(source string) {
-	a.errs.Resolve(source)
-	a.scheduleFrame(traceevent.WhyNotice)
+	if a.errs.Resolve(source) {
+		a.scheduleFrame(traceevent.WhyNotice)
+	}
 }
 
 // reportPluginHealth runs events.ReactHealth's plan for a transition: a

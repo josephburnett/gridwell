@@ -282,3 +282,32 @@ func TestDismissAt(t *testing.T) {
 		t.Fatalf("queue not empty: %+v", s.Notices())
 	}
 }
+
+// Every read path that succeeds resolves its own source, and most of them
+// never raised a notice, so the verdict is the only thing that separates a
+// strip that changed from a healthy call saying so again. Without it the
+// caller repaints on every successful fetch and write.
+func TestResolveAndDismissReportWhetherTheStripChanged(t *testing.T) {
+	s := New()
+	if s.Resolve("grid:g7abcde") {
+		t.Error("resolving a source with no notice reports a change")
+	}
+	if s.Dismiss(1) {
+		t.Error("dismissing an id that is not there reports a change")
+	}
+	s.Report(Error, "grid:g7abcde", "grid unavailable", t0)
+	id := s.Notices()[0].ID
+	if !s.Resolve("grid:g7abcde") {
+		t.Error("resolving a notice reports no change")
+	}
+	if s.Resolve("grid:g7abcde") {
+		t.Error("the second resolve of one notice reports a change")
+	}
+	s.Report(Error, "events", "disconnected", t0)
+	if s.Dismiss(id) {
+		t.Error("dismissing a resolved notice's old id reports a change")
+	}
+	if !s.Dismiss(s.Notices()[0].ID) {
+		t.Error("dismissing a notice reports no change")
+	}
+}

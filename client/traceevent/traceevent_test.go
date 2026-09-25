@@ -116,12 +116,17 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropLink)+1)
 	}
 	for v, name := range want {
-		e := Drop(v, "t7abcde", "g7abcde")
+		e := Drop(v, "p1", "t7abcde", "g7abcde")
 		if e.Src != "drag" || e.Kind != "drop" || e.Msg != name {
 			t.Errorf("verdict %d is %+v, want msg %q", v, e, name)
 		}
+		// The pane the gesture is in, so the frames and writes around the
+		// release join to it without reading the verdict back.
+		if e.KV["pane"] != "p1" || e.KV["tile"] != "t7abcde" || e.KV["grid"] != "g7abcde" {
+			t.Errorf("verdict %d names %v", v, e.KV)
+		}
 	}
-	if got := Drop(dragdrop.DropLink+1, "", "").Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
+	if got := Drop(dragdrop.DropLink+1, "", "", "").Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
 		t.Errorf("an unnamed verdict reads %q", got)
 	}
 }
@@ -178,10 +183,22 @@ func TestEveryEventPayloadIsNamed(t *testing.T) {
 		name string
 		id   string
 	}{
+		{&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "t7abcde"}}}}, "tile changed", "t7abcde"},
 		{&pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{TileId: "t7abcde"}}}, "tile removed", "t7abcde"},
 		{&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "g7abcde"}}}, "grid changed", "g7abcde"},
 		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde"}}}, "namespace unhealthy", "n7abcde"},
 		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde", Healthy: true}}}, "namespace healthy", "n7abcde"},
+	}
+	// The closed set is the proto's, so a payload the wire gains and this
+	// table does not fails here instead of reaching a dump as "unknown
+	// payload" — which is what 346 TileChanged records in one dump read as.
+	oneof := (&pb.Event{}).ProtoReflect().Descriptor().Oneofs().ByName("payload")
+	named := map[string]bool{}
+	for _, c := range cases {
+		named[string(c.ev.ProtoReflect().WhichOneof(oneof).Name())] = true
+	}
+	if len(named) != oneof.Fields().Len() {
+		t.Fatalf("%d payloads named, %d declared", len(named), oneof.Fields().Len())
 	}
 	for _, c := range cases {
 		r, a := EventRecv(c.ev), EventApplied(c.ev)
