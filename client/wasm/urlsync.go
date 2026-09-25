@@ -18,18 +18,26 @@ import (
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
-// scheduleFramingSave arms the debounced framing persister from draw(). Every
-// state change redraws, so there is no per-gesture hook to forget. Writing
-// only at ascent would lose the viewport whenever a grid is left another
-// way.
-func (a *App) scheduleFramingSave() {
-	a.persist.sched.framingSave.Arm(cadence.FramingSaveMs)
+// scheduleFramingSave arms the debounced framing persister from draw(), keyed
+// on what it would write. Every state change redraws, so there is no
+// per-gesture hook to forget; writing only at ascent would lose the viewport
+// whenever a grid is left another way.
+func (a *App) scheduleFramingSave(fp pane.Fingerprint) {
+	// The hover-wheel's drift is the one thing this flush writes that the pane
+	// tree does not hold, so it joins the key here — unordered, because which
+	// order the map yields its wells in is not a fact about the drift.
+	for id, st := range a.persist.wellWheelPending {
+		fp = fp.MergeUnordered(pane.NewFingerprint().
+			Str(id).Num(st.cx).Num(st.cy).Num(st.ratio))
+	}
+	a.persist.sched.framingSave.ArmOnChange(cadence.FramingSaveMs, fp.Value())
 }
 
-// flushFramingSave persists every pane's settled grid framing. persistFraming
-// owns the mid-transition refusal, and draw() re-arms the debounce, so an
-// animating pane's flush lands after its animation while quiet siblings
-// persist on time.
+// flushFramingSave persists every pane's settled grid framing. The wait is a
+// settle re-armed by every change, so the flush comes once the view stops
+// moving: after the gesture, and after any animation it started, since an
+// animating pane's viewport changes on every frame of it. persistFraming still
+// owns the mid-transition refusal, for the frame an event lands in.
 func (a *App) flushFramingSave() {
 	a.persist.framingFlushes++
 	// One active surface per grid: among panes showing the same grid only

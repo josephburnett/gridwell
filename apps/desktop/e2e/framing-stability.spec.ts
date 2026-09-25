@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt, placeTile } from './oracle';
+import { settle } from './cadence';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -71,6 +72,47 @@ test('an fs root grid keeps its viewport across leave and re-entry', async ({ gw
   expect(back.gridID).toBe(grid);
   expect(back.zoom, 'fs root zoom restored').toBeCloseTo(left.zoom, 1);
   expect(Math.abs(back.cx - left.cx), 'fs root cx restored').toBeLessThan(0.51);
+});
+
+// One pan, one write. Every frame a drag draws arms the framing persister, so a
+// window fixed at the first of those arms writes the middle of the gesture
+// instead of its end: a 21-minute trace held four SetFraming writes on one grid
+// inside two seconds of a single pan, and each of those is a store write, an
+// event back to this client, and a repaint. What the user did was reframe a
+// grid, once.
+test('a pan longer than the settle window writes only where it came to rest', async ({
+  gw,
+  window,
+}) => {
+  const c = await gw.cadences();
+  await gw.enterPlugin('pics');
+  const p = await gw.focused();
+  const writes = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetFraming ?? 0));
+  // Nothing may be pending when the gesture starts, or the count would carry a
+  // window the spec never watched.
+  await settle(window, c.framingSaveMs);
+  const before = await writes();
+
+  const x = p.x + p.w / 2;
+  const y = p.y + p.h / 2;
+  await window.mouse.move(x, y);
+  await window.mouse.down();
+  // Three windows of drag, moving the whole way through: a throttle writes
+  // once per window crossed and a settle has nothing to say until the button
+  // comes up.
+  const steps = 24;
+  for (let i = 1; i <= steps; i++) {
+    await window.mouse.move(x + i * 3, y + i * 2);
+    await window.waitForTimeout((c.framingSaveMs * 3) / steps);
+  }
+  await window.mouse.up();
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+
+  const rested = await gw.focused();
+  expect(Math.abs(rested.cx - p.cx), 'the pan moved the view').toBeGreaterThan(0.1);
+  expect(await writes(), 'the pan was persisted before the user let go of it').toBe(before + 1);
 });
 
 // A reload fired inside the settle window still lands the save: the unload flush

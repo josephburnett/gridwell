@@ -416,13 +416,14 @@ func (a *App) draw() {
 		a.cctx.Set("lineWidth", 1.0)
 	}
 
-	// The layout blob is derived from the live tree, so there is no per-gesture
-	// persistence call site to forget.
-	a.scheduleWorkspaceSave()
-
-	// The same for framing: the writers no-op when nothing moved, so it reaches
-	// the server without waiting for an ascent.
-	a.scheduleFramingSave()
+	// Both persisters are derived from the live tree, so there is no
+	// per-gesture persistence call site to forget. What arms them is one
+	// fingerprint of what they would write, read once here: a frame is not a
+	// change, and a settle armed by the frame that noticed one could never
+	// come due while a live tile repainted on the mirror's cadence.
+	fp := pane.PersistedFingerprint(a.tree)
+	a.scheduleWorkspaceSave(fp)
+	a.scheduleFramingSave(fp)
 }
 
 // layoutPanes reserves the notice strip in layout, so a pending error owns

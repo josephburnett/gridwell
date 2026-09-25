@@ -273,3 +273,54 @@ func walkRepo(t *testing.T, root string, visit func(rel, path string, data []byt
 		t.Fatal(err)
 	}
 }
+
+// The bug this gate closes: FramingSaveMs said "a continuous pan or zoom
+// persists only its resting state" while the timer it armed ran on a window
+// fixed at the first arm, so one pan wrote four times. The mode now lives
+// beside the sentence, in client/cadence, and the sentence has to name it: a
+// comment and a value that spell the same word cannot drift apart in silence.
+func TestEveryWaitsModeIsNamedInItsComment(t *testing.T) {
+	root := repoRoot(t)
+	path := filepath.Join(root, "client", "cadence", "cadence.go")
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse client/cadence/cadence.go: %v", err)
+	}
+	found := 0
+	for _, decl := range f.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		// The sentence above the pair introduces the wait, so a mode declared
+		// under it reads from the nearest comment at or above it.
+		doc := ""
+		for _, s := range gen.Specs {
+			spec, ok := s.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			if spec.Doc != nil {
+				doc = spec.Doc.Text()
+			}
+			for i, name := range spec.Names {
+				if !strings.HasSuffix(name.Name, "Mode") || i >= len(spec.Values) {
+					continue
+				}
+				sel, ok := spec.Values[i].(*ast.SelectorExpr)
+				if !ok {
+					t.Errorf("%s is not a debounce mode", name.Name)
+					continue
+				}
+				found++
+				if !strings.Contains(doc, sel.Sel.Name) {
+					t.Errorf("%s is %s and the comment above it never says so:\n%s",
+						name.Name, sel.Sel.Name, doc)
+				}
+			}
+		}
+	}
+	if found == 0 {
+		t.Error("no wait declares a mode; the gate is reading the wrong file")
+	}
+}

@@ -162,14 +162,14 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 
 // ── the persister ──────────────────────────────────────────────────────────
 
-// scheduleWorkspaceSave arms the debounced layout persister from draw(). The
-// blob is derived from the live tree by encode and diff, so there is no
-// per-gesture persistence hook to forget.
-func (a *App) scheduleWorkspaceSave() {
+// scheduleWorkspaceSave arms the debounced layout persister from draw(), keyed
+// on the tree the blob is encoded from. The blob is derived by encode and
+// diff, so there is no per-gesture persistence hook to forget.
+func (a *App) scheduleWorkspaceSave(fp pane.Fingerprint) {
 	if a.ws.Depth() == 0 {
 		return
 	}
-	a.persist.sched.wsSave.Arm(cadence.WorkspaceSaveMs)
+	a.persist.sched.wsSave.ArmOnChange(cadence.WorkspaceSaveMs, fp.Value())
 }
 
 // flushWorkspaceSave persists the current layout if it changed: the
