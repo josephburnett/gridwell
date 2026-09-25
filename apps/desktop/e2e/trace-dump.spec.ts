@@ -104,6 +104,20 @@ test('Dump logs writes one file holding both halves of the trace', async ({
     expect([...kinds], `the dump holds a ${want} record`).toContain(want);
   }
 
+  // A paint has a reason, and the reason has to be something that happened.
+  // The notice strip changes only when a notice goes up or comes down, so the
+  // frames asked for under it cannot outnumber the notices in the same dump: a
+  // read or write that simply worked, resolving a source that had no notice,
+  // is not a reason to repaint.
+  const noticeFrames = mine.filter(
+    (r) => r.src === 'frame' && r.kind === 'schedule' && r.msg === 'notice strip',
+  );
+  const notices = mine.filter((r) => r.kind === 'notice');
+  expect(
+    noticeFrames.length,
+    `${noticeFrames.length} frames asked for by the notice strip, against ${notices.length} notices`,
+  ).toBeLessThanOrEqual(notices.length);
+
   const joined = joinedRequests(lines);
   expect(
     joined.length,

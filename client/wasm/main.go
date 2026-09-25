@@ -1204,10 +1204,14 @@ func (a *App) scheduleErrExpiry() {
 	a.persist.sched.errExpire.Arm(ms)
 }
 
-// resolveErr clears a source's notice when its condition heals.
+// resolveErr clears a source's notice when its condition heals. Every read
+// and write that succeeds calls it, and almost none of them had a notice up,
+// so the repaint rides the surface's verdict: nothing was on screen to take
+// off it.
 func (a *App) resolveErr(source string) {
-	a.errs.Resolve(source)
-	a.scheduleFrame(traceevent.WhyNotice)
+	if a.errs.Resolve(source) {
+		a.scheduleFrame(traceevent.WhyNotice)
+	}
 }
 
 // reportPluginHealth runs events.ReactHealth's plan for a transition: a
