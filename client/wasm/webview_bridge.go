@@ -290,7 +290,7 @@ func (a *App) installWebviewListeners() {
 		// one channel, into the same error surface every other failure path
 		// uses.
 		{"onError", func(ev js.Value) {
-			a.reportErr(errsurface.Error, jsString(ev.Get("source")), jsString(ev.Get("message")))
+			a.reportErr(noticeSeverity(ev.Get("severity")), jsString(ev.Get("source")), jsString(ev.Get("message")))
 		}},
 	} {
 		fn := l.fn
@@ -300,6 +300,16 @@ func (a *App) installWebviewListeners() {
 			return nil
 		}))
 	}
+}
+
+// noticeSeverity reads main's own verdict on a notice. ipc.ts NoticeSeverity
+// owns the spelling; anything else is an error, so no notice can be quieted by
+// a name this binary does not know.
+func noticeSeverity(v js.Value) errsurface.Severity {
+	if jsString(v) == "info" {
+		return errsurface.Info
+	}
+	return errsurface.Error
 }
 
 // decodeBase64 reads a bridge frame. ok is false only for bytes that are

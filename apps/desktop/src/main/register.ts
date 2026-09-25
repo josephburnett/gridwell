@@ -13,6 +13,7 @@ import {
   ViewRightdown,
   ViewTouchScroll,
   ErrorEvent,
+  NoticeSeverity,
   FrameEvent,
   ChoiceMenuArgs,
 } from './ipc';
@@ -122,10 +123,11 @@ export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, j
 }
 
 // sendError is the one main-process entry point onto EV.error, so
-// client/errsurface is the single place such a failure becomes visible.
-export function sendError(rootWC: WebContents, source: string, message: string): void {
+// client/errsurface is the single place such a notice becomes visible. The
+// caller says how loudly; nothing here reads the message to guess.
+export function sendError(rootWC: WebContents, source: string, message: string, severity: NoticeSeverity): void {
   // The log too, because safeSend no-ops once the renderer is gone.
-  logLine('error', `[gridwell] ${source}: ${message}`);
-  const ev: ErrorEvent = { source, message };
+  logLine(severity === 'info' ? 'log' : 'error', `[gridwell] ${source}: ${message}`);
+  const ev: ErrorEvent = { source, message, severity };
   safeSend(rootWC, EV.error, ev);
 }

@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent } from './ipc';
+import type { Bounds, FreezeResult, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -22,7 +22,7 @@ import {
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { capturable, captureAttempt, captureJpegBase64, describeAttempt } from './capture';
-import { decideStreak, FRESH, StreakState } from './capturestreak';
+import { decideStreak, streakNotice, FRESH, StreakState } from './capturestreak';
 import { decideFocus, isPressInput, GuardPhase } from './focusguard';
 import { trace } from './trace';
 import {
@@ -93,10 +93,11 @@ export class WebviewRegistry {
     this.cb = cb;
   }
 
-  // Every failure the registry notices carries this one source, which
-  // client/errsurface groups its notices by.
-  private reportErr(message: string): void {
-    this.cb.onError?.({ source: 'electron:webview', message });
+  // Every notice the registry raises carries this one source, which
+  // client/errsurface groups by. Everything here is a failure but the mirror's
+  // recovery, so the severity defaults and only that caller passes one.
+  private reportErr(message: string, severity: NoticeSeverity = 'error'): void {
+    this.cb.onError?.({ source: 'electron:webview', message, severity });
   }
 
   // The canvas's own F11 handler cannot see the key while a view has focus.
@@ -410,12 +411,8 @@ export class WebviewRegistry {
     const report = decision.report;
     if (report) {
       // A recovery is reported too, or the failing report reads as permanent.
-      const message =
-        report.kind === 'failing'
-          ? `pane ${paneId}: mirror capture failing: ${describeAttempt(attempt)}`
-          : `pane ${paneId}: mirror capture recovered after ${report.afterFailures} failed ` +
-            `${report.afterFailures === 1 ? 'capture' : 'captures'}`;
-      this.reportErr(message);
+      const notice = streakNotice(paneId, report, describeAttempt(attempt));
+      this.reportErr(notice.message, notice.severity);
     }
     return attempt.kind === 'ok' ? attempt.jpegBase64 : '';
   }

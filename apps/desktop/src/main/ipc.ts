@@ -178,9 +178,15 @@ export interface ZoomKeyEvent {
   key: string;
 }
 
-// The one wire every main-process failure reaches the user through. `source` is
+// How loudly a notice presents, decided where the report is made and read by
+// client/wasm/webview_bridge.go onto client/errsurface.Severity, which owns
+// what each one means. This is the wire spelling, and its one owner.
+export type NoticeSeverity = 'error' | 'info';
+
+// The one wire every main-process notice reaches the user through. `source` is
 // the key errsurface groups notices by; `message` is shown verbatim.
 export interface ErrorEvent {
   source: string;
   message: string;
+  severity: NoticeSeverity;
 }

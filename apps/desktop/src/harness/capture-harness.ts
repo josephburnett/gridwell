@@ -658,18 +658,21 @@ app.whenReady().then(async () => {
   // ── a mirror capture that fails leaves evidence, once per streak ────────
   // Otherwise the pane shows a stale frame and nothing says why. The pump
   // captures on a timer, so a per-frame report would bury the log.
-  const capErrs: string[] = [];
-  const regM = new WebviewRegistry(win, { onError: (ev) => capErrs.push(ev.message) });
+  const capErrs: ErrorEvent[] = [];
+  const regM = new WebviewRegistry(win, { onError: (ev) => capErrs.push(ev) });
   await regM.place('paneM', 'u1/72', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   await waitForFirstFrame(regM, 'paneM', 'mirror scenario');
   regM.webContentsFor('paneM')!.close(); // destroyed behind the registry's back
   await new Promise((r) => setTimeout(r, 300));
   if ((await regM.capture('paneM')) !== '') fail('a capture of a destroyed view returned a frame');
   if ((await regM.capture('paneM')) !== '') fail('the second capture of a destroyed view returned a frame');
-  const failing = capErrs.filter((m) => m.includes('mirror capture failing'));
+  const failing = capErrs.filter((e) => e.message.includes('mirror capture failing'));
   if (failing.length !== 1) fail(`a failing capture streak reported ${failing.length} times, want 1`);
+  // The severity rides the same event the message does, all the way from the
+  // report site: client/errsurface paints the row from it.
+  if (failing[0].severity !== 'error') fail(`a frozen mirror was reported as '${failing[0].severity}'`);
   await regM.remove('paneM');
-  console.log('capture streak ok: the failure is reported once, not per frame');
+  console.log('capture streak ok: the failure is reported once, not per frame, as an error');
 
   // ── a tick inside a main-frame navigation is not an attempt ─────────────
   // Between the old document's surface going away and the new one's first
@@ -712,8 +715,8 @@ app.whenReady().then(async () => {
   // A crashed renderer is not a destroyed view: capturePage still answers, with
   // an empty image, a rejection, or nothing before the time box. Each opens the
   // streak, and reloading closes it.
-  const streakErrs: string[] = [];
-  const regCrash = new WebviewRegistry(win, { onError: (ev) => streakErrs.push(ev.message) });
+  const streakErrs: ErrorEvent[] = [];
+  const regCrash = new WebviewRegistry(win, { onError: (ev) => streakErrs.push(ev) });
   await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   await waitForFirstFrame(regCrash, 'paneCrash', 'streak scenario');
   // A crash sometimes takes the viz process with it under xvfb, and then
@@ -730,7 +733,7 @@ app.whenReady().then(async () => {
   let sawFailing = false;
   const failDeadline = Date.now() + 8000;
   while (Date.now() < failDeadline) {
-    if ((await regCrash.capture('paneCrash')) === '' && streakErrs.some((m) => m.includes('mirror capture failing'))) {
+    if ((await regCrash.capture('paneCrash')) === '' && streakErrs.some((e) => e.message.includes('mirror capture failing'))) {
       sawFailing = true;
       break;
     }
@@ -739,7 +742,7 @@ app.whenReady().then(async () => {
   if (!sawFailing) {
     fail(`a crashed renderer's frozen mirror was never reported (errors: ${JSON.stringify(streakErrs)})`);
   }
-  const failMsg = streakErrs.find((m) => m.includes('mirror capture failing'))!;
+  const failMsg = streakErrs.find((e) => e.message.includes('mirror capture failing'))!.message;
   if (!failMsg.includes('paneCrash')) fail(`the failing report does not name the pane: ${failMsg}`);
 
   wcCrash.reload();
@@ -762,19 +765,22 @@ app.whenReady().then(async () => {
     );
   } else {
     if (!recoveredFrame) fail(`a reloaded renderer never captured again (errors: ${JSON.stringify(streakErrs)})`);
-    const recovered = streakErrs.filter((m) => m.includes('mirror capture recovered'));
+    const recovered = streakErrs.filter((e) => e.message.includes('mirror capture recovered'));
     if (recovered.length !== 1) {
       fail(`recovery was reported ${recovered.length} times, want 1 (errors: ${JSON.stringify(streakErrs)})`);
     }
+    // A mirror that is live again is information; an error row would say
+    // something failed just as it stopped failing.
+    if (recovered[0].severity !== 'info') fail(`a recovery was reported as '${recovered[0].severity}'`);
     // The streak is closed, so a further good capture says nothing more.
     if ((await regCrash.capture('paneCrash')).length === 0) fail('a recovered mirror stopped capturing');
-    if (streakErrs.filter((m) => m.includes('mirror capture recovered')).length !== 1) {
+    if (streakErrs.filter((e) => e.message.includes('mirror capture recovered')).length !== 1) {
       fail('a healthy capture re-reported recovery');
     }
-    if (streakErrs.filter((m) => m.includes('mirror capture failing')).length !== 1) {
+    if (streakErrs.filter((e) => e.message.includes('mirror capture failing')).length !== 1) {
       fail(`the failing report fired more than once per streak: ${JSON.stringify(streakErrs)}`);
     }
-    console.log('capture streak ok: a crashed renderer reports failing, and a reload reports recovered');
+    console.log('capture streak ok: a crashed renderer reports failing as an error, and a reload reports recovered as info');
   }
   await regCtl.remove('paneCtl');
   await regCrash.remove('paneCrash');

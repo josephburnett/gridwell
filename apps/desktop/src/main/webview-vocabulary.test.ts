@@ -15,6 +15,8 @@ import { dirname, join, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url)); // apps/desktop/src/main
 const repoRoot = resolve(here, '../../../..');
 const PRELOAD = 'apps/desktop/src/preload/preload.ts';
+const IPC = 'apps/desktop/src/main/ipc.ts';
+const BRIDGE = 'client/wasm/webview_bridge.go';
 
 function read(path: string): string {
   return readFileSync(resolve(repoRoot, path), 'utf8');
@@ -58,4 +60,21 @@ test('the wasm subscribes exactly the listeners the preload table declares', () 
     preload,
     'installWebviewListeners in client/wasm drifted from the LISTENERS table in preload.ts (the owner); the push would never be heard',
   );
+});
+
+test('the wasm reads the severity main stamps on an error event', () => {
+  const decl = read(IPC).match(/export type NoticeSeverity =([^;]+);/);
+  assert.ok(decl, `no NoticeSeverity declared in ${IPC}`);
+  const names = matches(decl![1], /'(\w+)'/g);
+  const bridge = read(BRIDGE);
+  assert.ok(bridge.includes('ev.Get("severity")'), `${BRIDGE} ignores the severity field ${IPC} sends, so every notice would surface as an error`);
+  for (const name of names) {
+    // Error is the fallback: an unknown spelling must stay loud, so only the
+    // quiet names have to be spelled again on the Go side.
+    if (name === 'error') continue;
+    assert.ok(
+      bridge.includes(`"${name}"`),
+      `${BRIDGE} does not name the '${name}' severity ${IPC} declares (the owner); a notice main marked '${name}' would paint as an error`,
+    );
+  }
 });

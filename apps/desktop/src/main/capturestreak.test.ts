@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decideStreak, FRESH, AttemptKind, StreakDecision, StreakState } from './capturestreak';
+import { decideStreak, streakNotice, FRESH, AttemptKind, StreakDecision, StreakState } from './capturestreak';
 
 // Every failure kind, so no arm can be added without a row here.
 const FAILURES: AttemptKind[] = ['empty', 'timeout', 'rejected', 'view-gone'];
@@ -123,4 +123,25 @@ test('decideStreak: a placed pane warms up quietly, then reports one freeze and 
   feed('ok');
   assert.deepEqual(reports, ['failing', 'recovered']);
   assert.deepEqual(state, { everCaptured: true, failures: 0 });
+});
+
+// What each report says and how loudly. The strip groups by source, so a
+// recovery reported as an error paints the same red row the failure did, at
+// the moment the mirror came back.
+
+test('streakNotice: a failing mirror is an error, and names the pane and the reason', () => {
+  const n = streakNotice('w3:p322', { kind: 'failing', reason: 'rejected' }, 'capturePage failed: Error: UnknownVizError');
+  assert.equal(n.severity, 'error');
+  assert.equal(n.message, 'pane w3:p322: mirror capture failing: capturePage failed: Error: UnknownVizError');
+});
+
+test('streakNotice: a recovery is information, not an error', () => {
+  const n = streakNotice('w3:p322', { kind: 'recovered', afterFailures: 2 }, 'ok');
+  assert.equal(n.severity, 'info');
+  assert.equal(n.message, 'pane w3:p322: mirror capture recovered after 2 failed captures');
+});
+
+test('streakNotice: one lost capture reads in the singular', () => {
+  const n = streakNotice('p1', { kind: 'recovered', afterFailures: 1 }, 'ok');
+  assert.equal(n.message, 'pane p1: mirror capture recovered after 1 failed capture');
 });

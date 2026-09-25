@@ -90,7 +90,7 @@ async function boot(): Promise<void> {
   const rootWC = win.webContents;
   const reg = new WebviewRegistry(win, {
     onNav: forwarder(rootWC, EV.nav),
-    onError: (ev) => sendError(rootWC, ev.source, ev.message),
+    onError: (ev) => sendError(rootWC, ev.source, ev.message, ev.severity),
     onOpenBelow: forwarder(rootWC, EV.openBelow),
     onFreezeURL: forwarder(rootWC, EV.freezeUrl),
     onContextMenu: forwarder(rootWC, EV.menuPane),
@@ -108,7 +108,7 @@ async function boot(): Promise<void> {
   if (!sidecar.external) {
     sidecar.child.on('exit', (code, signal) => {
       if (quitting) return;
-      sendError(rootWC, 'electron:backend', sidecarExitMessage(code, signal));
+      sendError(rootWC, 'electron:backend', sidecarExitMessage(code, signal), 'error');
     });
   }
 
