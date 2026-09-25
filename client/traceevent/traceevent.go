@@ -101,6 +101,8 @@ func EventRefetch(gridID string) Event {
 // payload the proto gained and this table did not.
 func payloadOf(ev *pb.Event) (name, id string) {
 	switch p := ev.GetPayload().(type) {
+	case *pb.Event_TileChanged:
+		return "tile changed", p.TileChanged.GetTile().GetId()
 	case *pb.Event_TileRemoved:
 		return "tile removed", p.TileRemoved.GetTileId()
 	case *pb.Event_GridChanged:

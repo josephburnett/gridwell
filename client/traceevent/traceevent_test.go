@@ -178,10 +178,22 @@ func TestEveryEventPayloadIsNamed(t *testing.T) {
 		name string
 		id   string
 	}{
+		{&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "t7abcde"}}}}, "tile changed", "t7abcde"},
 		{&pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{TileId: "t7abcde"}}}, "tile removed", "t7abcde"},
 		{&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "g7abcde"}}}, "grid changed", "g7abcde"},
 		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde"}}}, "namespace unhealthy", "n7abcde"},
 		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde", Healthy: true}}}, "namespace healthy", "n7abcde"},
+	}
+	// The closed set is the proto's, so a payload the wire gains and this
+	// table does not fails here instead of reaching a dump as "unknown
+	// payload" — which is what 346 TileChanged records in one dump read as.
+	oneof := (&pb.Event{}).ProtoReflect().Descriptor().Oneofs().ByName("payload")
+	named := map[string]bool{}
+	for _, c := range cases {
+		named[string(c.ev.ProtoReflect().WhichOneof(oneof).Name())] = true
+	}
+	if len(named) != oneof.Fields().Len() {
+		t.Fatalf("%d payloads named, %d declared", len(named), oneof.Fields().Len())
 	}
 	for _, c := range cases {
 		r, a := EventRecv(c.ev), EventApplied(c.ev)
