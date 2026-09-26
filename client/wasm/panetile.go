@@ -47,9 +47,8 @@ func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, select
 		drawPaneGlyph(c, x, y, w, h, a.pal.PaneTileBorder)
 	} else {
 		tileRect := pane.Rect{X: x, Y: y, W: w, H: h}
-		scale := panepreview.Scale(tileRect, a.rootLayoutRect())
 		withClip(c, x, y, w, h, func() {
-			for _, leaf := range panepreview.Leaves(tree, tileRect, scale) {
+			for _, leaf := range panepreview.Leaves(tree, tileRect, a.rootLayoutRect()) {
 				a.drawPaneLeafPreview(leaf)
 			}
 			// On top, so the split structure reads at any size.
@@ -63,27 +62,29 @@ func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, select
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
-// drawPaneLeafPreview paints one leaf: the grid its place resolves to,
-// centered on its stored viewport. A leaf whose place does not resolve stays
+// drawPaneLeafPreview paints one leaf: the grid its place resolves to, at the
+// view its owner row holds. A leaf whose place or row does not resolve stays
 // an empty region, and the dividers still show the arrangement.
 func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
-	if leaf.PreviewCell < 0.5 {
-		return
-	}
 	gid := a.gridIDForPathFrom(leaf.Pane.Anchor(), leaf.Pane.Path())
 	if gid == "" {
+		return
+	}
+	v, ok := a.ownerView(leaf.Pane, leaf.Live)
+	if !ok {
+		return
+	}
+	cell := leaf.Cell(v.Zoom)
+	if cell < 0.5 {
 		return
 	}
 	r := leaf.Rect
 	c := a.cctx
 	withClip(c, r.X, r.Y, r.W, r.H, func() {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2
-		originX := cx - leaf.Pane.Cx*leaf.PreviewCell
-		originY := cy - leaf.Pane.Cy*leaf.PreviewCell
-		drawGridLinesIn(c, a.pal.GridLineInterior, r.X, r.Y, r.W, r.H, leaf.PreviewCell, originX, originY)
+		drawGridLinesIn(c, a.pal.GridLineInterior, r.X, r.Y, r.W, r.H, cell, cx-v.Cx*cell, cy-v.Cy*cell)
 		if g, ok := a.c.Grid(gid); ok {
-			a.drawChildPreview(g, leaf.Pane.Cx, leaf.Pane.Cy, cx, cy, leaf.PreviewCell,
-				r.X, r.Y, r.W, r.H, "")
+			a.drawChildPreview(g, v.Cx, v.Cy, cx, cy, cell, r.X, r.Y, r.W, r.H, "")
 		}
 	})
 }

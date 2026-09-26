@@ -1,5 +1,5 @@
-import * as fs from 'node:fs';
 import { test, expect, homePassword, loginToken } from './fixtures';
+import { dumpViaDoor, TraceLine } from './trace';
 
 // The main process's trace crosses three seams the Electron gates cannot see
 // together: a WebContentsView event becomes a record, the record is posted to
@@ -7,33 +7,6 @@ import { test, expect, homePassword, loginToken } from './fixtures';
 // one origin a sender may claim. A unit test on either side would pass with the
 // door unreachable and the app none the wiser, because a trace that fails says
 // nothing by design.
-
-interface Line {
-  origin: string;
-  src: string;
-  kind: string;
-  msg: string;
-  cid?: string;
-  ct?: number;
-  seq?: number;
-  t?: number;
-}
-
-// The dump is a reading: it writes the ring to a file and clears nothing, so a
-// poll may take it as often as it likes.
-async function dumpLines(origin: string, token: string): Promise<Line[]> {
-  const res = await fetch(origin + '/trace/dump', {
-    method: 'POST',
-    headers: { Cookie: `gridwell_auth=${token}` },
-  });
-  if (!res.ok) throw new Error(`POST /trace/dump = ${res.status} ${await res.text()}`);
-  const { path } = (await res.json()) as { path: string; records: number };
-  return fs
-    .readFileSync(path, 'utf8')
-    .split('\n')
-    .filter((l) => l !== '')
-    .map((l) => JSON.parse(l) as Line);
-}
 
 test('a live url tile puts the main process into the node trace', async ({
   electronApp,
@@ -61,11 +34,11 @@ test('a live url tile puts the main process into the node trace', async ({
 
   // The batch waits out the flush window, so the dump is polled rather than
   // taken once.
-  let views: Line[] = [];
+  let views: TraceLine[] = [];
   await expect
     .poll(
       async () => {
-        views = (await dumpLines(origin, token)).filter(
+        views = (await dumpViaDoor(origin, token)).filter(
           (l) => l.origin === 'electron' && l.src === 'webviews',
         );
         return views.length;
@@ -84,7 +57,7 @@ test('a live url tile puts the main process into the node trace', async ({
   expect(create!.ct).toBeGreaterThan(0);
 
   // The sidecar's own lifecycle rides the same ring, under its own src.
-  const all = await dumpLines(origin, token);
+  const all = await dumpViaDoor(origin, token);
   expect(
     all.filter((l) => l.origin === 'electron' && l.src === 'sidecar' && l.kind === 'ready'),
   ).not.toHaveLength(0);

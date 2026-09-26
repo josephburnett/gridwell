@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -55,8 +56,29 @@ func TestFrameReasonsAreDistinct(t *testing.T) {
 		}
 		seen[why] = true
 	}
-	if s, d := FrameScheduled(WhyGhost), FrameDrawn(WhyGhost); s.Kind == d.Kind || s.Msg != d.Msg {
-		t.Errorf("the schedule %+v and the draw %+v are not one pair under one reason", s, d)
+}
+
+// One record per drawn frame, under the first reason asked: a later ask in the
+// same window is counted, not named, and an ask made during the draw belongs
+// to the next frame.
+func TestAFrameIsOneRecordUnderItsFirstReason(t *testing.T) {
+	var f FrameAsks
+	if !f.Ask(WhyGhost) {
+		t.Fatal("the first ask did not request a frame")
+	}
+	if f.Ask(WhyNotice) || f.Ask(WhyDrag) {
+		t.Fatal("a later ask requested a second frame")
+	}
+	asks := f.Take()
+	if !f.Ask(WhyTransition) {
+		t.Error("an ask after the take did not request the next frame")
+	}
+	e := asks.Drawn(3.25)
+	if e.Src != "frame" || e.Kind != "draw" || e.Msg != WhyGhost {
+		t.Errorf("the frame reads %+v, want frame/draw under %q", e, WhyGhost)
+	}
+	if e.KV["asks"] != "3" || e.KV["ms"] != "3.2" && e.KV["ms"] != "3.3" {
+		t.Errorf("the frame's kv is %v, want 3 asks and the draw's duration", e.KV)
 	}
 }
 
@@ -235,5 +257,46 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 	}
 	if e := ShellOpen("p1", "t7abcde"); e.Src != "shell" || e.Kind != "open" || e.KV["tile"] != "t7abcde" {
 		t.Errorf("a shell open is %+v", e)
+	}
+}
+
+// The client's first record names the build it runs and the browser running
+// it, so a dump from a stale tab or an odd browser says so on its own.
+func TestTheBootRecordNamesTheBuildAndTheBrowser(t *testing.T) {
+	e := Boot("8c779f0", "go1.26.6", "Mozilla/5.0 (X11)")
+	if e.Src != "client" || e.Kind != tracewire.KindBoot {
+		t.Errorf("the boot record is %s/%s", e.Src, e.Kind)
+	}
+	if e.KV["commit"] != "8c779f0" || e.KV["go"] != "go1.26.6" || e.KV["ua"] != "Mozilla/5.0 (X11)" {
+		t.Errorf("the boot record's kv is %v", e.KV)
+	}
+	if _, ok := Boot("", "go1.26.6", "ua").KV["commit"]; ok {
+		t.Error("an unstamped build claims a commit")
+	}
+}
+
+// A press names the pane, the button and the modifiers held, because the
+// modifier is read at the press and never again; a release names only the
+// pane and the button, its verdict being the drop record's.
+func TestPressAndReleaseNameThePaneAndTheButton(t *testing.T) {
+	p := Press("p1", 2, Mods{Ctrl: true, Shift: true}, false)
+	if p.Src != "gesture" || p.Kind != "press" || p.Msg != "right" {
+		t.Errorf("a right press reads %+v", p)
+	}
+	if p.KV["pane"] != "p1" || p.KV["mods"] != "ctrl+shift" {
+		t.Errorf("a right press's kv is %v", p.KV)
+	}
+	if _, ok := Press("p1", 0, Mods{}, false).KV["mods"]; ok {
+		t.Error("a bare press claims a modifier")
+	}
+	if got := Press("p1", 1, Mods{}, true).KV["via"]; got != "live view" {
+		t.Errorf("a press forwarded from a live view says via %q", got)
+	}
+	r := Release("p2", 0)
+	if r.Src != "gesture" || r.Kind != "release" || r.Msg != "left" || r.KV["pane"] != "p2" || len(r.KV) != 1 {
+		t.Errorf("a left release reads %+v", r)
+	}
+	if got := Release("", 7).Msg; got != "button 7" {
+		t.Errorf("an unnamed button reads %q", got)
 	}
 }

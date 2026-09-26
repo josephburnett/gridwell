@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, homePassword, loginToken } from './fixtures';
 import { envelope, tileAt, updateText } from './oracle';
 import { dumpNow } from './trace';
 
@@ -17,6 +17,7 @@ function endStream(code: string, message: string): Buffer {
 
 test('a body the server refuses is asked for once, reported once, and asked again on a change', async ({
   gw,
+  home,
   window,
 }) => {
   await gw.enterPlugin('home');
@@ -58,7 +59,7 @@ test('a body the server refuses is asked for once, reported once, and asked agai
   // Let reads through before the dump, because a client asking every frame
   // never drains its trace backlog.
   refuse = false;
-  const { cid, lines } = await dumpNow(window);
+  const { cid, lines } = await dumpNow(window, gw.origin, await loginToken(gw.origin, homePassword(home)));
 
   const mine = lines.filter((r) => r.origin === 'client' && r.cid === cid);
   const reads = mine.filter((r) => r.kind === 'rpc' && r.msg.startsWith('ReadContent error'));

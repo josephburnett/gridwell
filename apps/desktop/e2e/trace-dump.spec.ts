@@ -1,7 +1,7 @@
 import { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import * as path from 'node:path';
-import { readDump, joinedRequests, describe as describeDump } from './trace';
+import { readDump, joinedRequests, bootOrigins, describe as describeDump } from './trace';
 
 // The trace has two halves and only a dump puts them together: the node's own
 // ring, and the records the wasm client posts through /trace. This spec runs
@@ -97,10 +97,10 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   const mine = lines.filter((r) => r.origin === 'client' && r.cid === cid);
   expect(mine.length, `no record carries this client's cid; ${describeDump(lines)}`).toBeGreaterThan(0);
 
-  // The gesture is in the file, not only the plumbing: the frame the release
-  // asked for and the verdict it took.
+  // The gesture is in the file, not only the plumbing: the press, the frame
+  // the release asked for, and the verdict it took.
   const kinds = new Set(mine.map((r) => `${r.src}/${r.kind}`));
-  for (const want of ['frame/schedule', 'frame/draw', 'drag/drop']) {
+  for (const want of ['gesture/press', 'frame/draw', 'gesture/release', 'drag/drop']) {
     expect([...kinds], `the dump holds a ${want} record`).toContain(want);
   }
 
@@ -110,7 +110,7 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   // read or write that simply worked, resolving a source that had no notice,
   // is not a reason to repaint.
   const noticeFrames = mine.filter(
-    (r) => r.src === 'frame' && r.kind === 'schedule' && r.msg === 'notice strip',
+    (r) => r.src === 'frame' && r.kind === 'draw' && r.msg === 'notice strip',
   );
   const notices = mine.filter((r) => r.kind === 'notice');
   expect(
@@ -120,9 +120,20 @@ test('Dump logs writes one file holding both halves of the trace', async ({
 
   // The pane is the shim's to supply, and it is what joins the release to the
   // frames and writes around it.
+  // A drawn frame is one record, and it says how long the draw took.
+  const frame = mine.find((r) => r.src === 'frame' && r.kind === 'draw');
+  expect(Number(frame?.kv?.ms), `the frame record carries its duration: ${JSON.stringify(frame)}`)
+    .toBeGreaterThanOrEqual(0);
+  expect(mine.some((r) => r.src === 'frame' && r.kind === 'schedule'), 'no frame is recorded twice')
+    .toBe(false);
+
   const drop = mine.find((r) => r.src === 'drag' && r.kind === 'drop');
   expect(drop?.kv?.pane, `the drop record names the pane it was made in: ${JSON.stringify(drop)}`)
     .toBeTruthy();
+
+  // Every origin names its build once, at its start.
+  expect(bootOrigins(lines), `boot records; ${describeDump(lines)}`).toEqual(['client', 'electron', 'node']);
+  expect(mine.filter((r) => r.kind === 'boot').length, 'this client boots once').toBe(1);
 
   const joined = joinedRequests(lines);
   expect(

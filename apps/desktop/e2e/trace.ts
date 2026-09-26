@@ -39,6 +39,12 @@ export function joinedRequests(lines: TraceLine[]): string[] {
     .map(([id]) => id);
 }
 
+// The origins that wrote a boot record (api/tracewire.KindBoot), each naming
+// the build behind every record after it.
+export function bootOrigins(lines: TraceLine[]): string[] {
+  return [...new Set(lines.filter((r) => r.kind === 'boot').map((r) => r.origin))].sort();
+}
+
 // What the dump notice says, for a failure message that names the file the
 // spec could not use.
 export function describe(lines: TraceLine[]): string {
@@ -47,21 +53,31 @@ export function describe(lines: TraceLine[]): string {
   return [...byOrigin.entries()].map(([o, n]) => `${o}:${n}`).join(' ');
 }
 
-// dumpNow writes the node's ring once this client has posted every record it
-// holds, and reads the file back. The page asks the door itself, so the dump
-// is of the same session the spec drove; trace-dump.spec.ts owns the user's
-// gesture for the same thing.
-export async function dumpNow(window: any): Promise<{ cid: string; lines: TraceLine[] }> {
-  const pending = () => window.evaluate(() => (window as any).__gridwellTest.trace().pending);
+// dumpViaDoor takes a dump over the web door on the given cookie and reads the
+// file it names. A dump writes the ring to a file and clears nothing, so a
+// poll may take it as often as it likes.
+export async function dumpViaDoor(origin: string, token: string): Promise<TraceLine[]> {
+  const res = await fetch(origin + '/trace/dump', {
+    method: 'POST',
+    headers: { Cookie: `gridwell_auth=${token}` },
+  });
+  if (!res.ok) throw new Error(`POST /trace/dump = ${res.status} ${await res.text()}`);
+  const { path } = (await res.json()) as { path: string; records: number };
+  return readDump(path);
+}
+
+// dumpNow is dumpViaDoor once this client has posted every record it holds,
+// with the cid its own records carry.
+export async function dumpNow(
+  window: any,
+  origin: string,
+  token: string,
+): Promise<{ cid: string; lines: TraceLine[] }> {
+  const trace = () => window.evaluate(() => (window as any).__gridwellTest.trace());
   const deadline = Date.now() + 20_000;
-  while ((await pending()) > 0) {
+  while ((await trace()).pending > 0) {
     if (Date.now() > deadline) throw new Error('the client never posted its trace backlog');
     await window.waitForTimeout(100);
   }
-  const { cid, file } = await window.evaluate(async () => {
-    const r = await fetch('/trace/dump', { method: 'POST' });
-    if (!r.ok) throw new Error(`dump: ${r.status} ${await r.text()}`);
-    return { cid: (window as any).__gridwellTest.trace().cid, file: (await r.json()).path };
-  });
-  return { cid, lines: readDump(file) };
+  return { cid: (await trace()).cid, lines: await dumpViaDoor(origin, token) };
 }

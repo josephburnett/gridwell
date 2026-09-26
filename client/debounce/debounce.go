@@ -70,7 +70,7 @@ func (d *Debounce) Arm(ms int) bool {
 // url or shell tile repainting on the mirror's cadence never lets happen;
 // keyed on what the run would write, a repaint that changes nothing arms
 // nothing and the window a gesture opened closes on time. The signature is the
-// caller's fact: client/pane.PersistedFingerprint is the persisters'.
+// caller's fact; the persisters' are client/pane's fingerprints.
 func (d *Debounce) ArmOnChange(ms int, sig uint64) bool {
 	if d.hasSig && d.sig == sig {
 		return false

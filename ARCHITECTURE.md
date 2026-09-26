@@ -248,8 +248,11 @@ frame is the grid you are in, the tile you came through, and your viewport
 there. Every descent pushes a frame; every ascent pops one, restoring the
 viewport that frame holds. The URL (`url.go`) and the pane-tile
 layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
-project it. A pane tile swaps the whole pane tree instead — that is the one
-second axis (`levels.go`), and it is session-only.
+project it. The blob holds the arrangement and no view: a restored leaf
+shows its grid at the framing row and its text at the tile row, so a pan
+inside a pane tile writes `SetFraming` alone. A pane tile swaps the whole
+pane tree instead — that is the one second axis (`levels.go`), and it is
+session-only.
 
 There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
 descent lands is the tile's own declaration: a well or link pushes a frame
@@ -348,25 +351,32 @@ Nothing here touches shells. Nothing here is visible to `make check`.
 ## The trace
 
 An always-on record of what the node did, for the errors nobody can
-reproduce. `internal/trace` holds one ring of 20000 records in memory; it is a
+reproduce. `internal/trace` holds one ring of 50000 records in memory; it is a
 package-level `Default`, like `log`'s output, because it holds no node fact —
 nothing reads it back, and deleting it loses nothing the user owns.
 
 A record is one JSON object on one line, `api/tracewire.Record`, which the
-node and the client both read: `seq` and `t` (unix milliseconds UTC) are the
-node's stamps and the one total order, then `origin` (node, client, electron,
-plugin), `src`, `kind`, `msg` capped at 1024 bytes, a small `kv`, and the
-emitter's `cid` and `ct`.
+node and the client both read: `seq` and `t` are the node's stamps, then
+`origin` (node, client, electron, plugin), `src`, `kind`, `msg` capped at 1024
+bytes, a small `kv`, and the emitter's `cid` and `ct`. `seq` is receipt order.
+`t` (unix milliseconds UTC) is when the record happened on the node's clock:
+a node record's emit time, and a sent record's `ct` plus its batch's skew.
+Each batch names the sender's clock at the post in `Gridwell-Trace-Clock`
+(`tracewire.ClockHeader`), the node takes receipt minus that once per batch,
+and a record without a `ct` keeps receipt time. So a dump sorted by `t`
+interleaves the client's records with the node work they caused, where `seq`
+puts a batch after everything that happened while it waited to be sent.
 
 The door is on the gated web mux beside `/shell`. `POST /trace` takes JSON
-lines and answers 204; a malformed line is a 400 naming its number, and the
+lines and answers 204; a send clock it cannot read is a 400; a malformed line is a 400 naming its number, and the
 good lines before it stay. `POST /trace/dump` writes the ring in seq order to
 `<home>/dumps/trace-<UTC yyyymmdd-hhmmss>.jsonl`, 0600 in a 0700 directory,
 and answers the path and the count. A dump is a reading: it clears nothing.
 
 `kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a
 gesture makes, and both doors' interceptors emit a start and an end record
-carrying it, with the duration and, on a failure, the code. What emits: every
+carrying it and `kv.id`, the tile or grid the request names (a stream's
+rides the end record), with the duration and, on a failure, the code. What emits: every
 store write (one record at `withMutation`, the transaction every mutation runs
 in), every publish, delivery and coalesce in `eventhub`, the plugin
 supervisor's spawns and liveness transitions, each dial and connection health
@@ -374,6 +384,19 @@ transition, the shell door's refusals, opens and closes, and — through
 `log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
 subprocess's stderr does not pass through that log, so the spawn hands it a
 writer of its own.
+
+Each origin writes one `boot` record when it starts (`tracewire.KindBoot`):
+the node its version, commit, go version and home; the client its commit,
+go version and user agent; Electron main its app, Electron and Chrome
+versions. The commit is the go toolchain's stamp (`tracewire.BuildCommit`),
+absent from a build with none — a `go test`, or a build in a git worktree.
+
+On the client, a drawn frame is one record, `frame/draw`: its msg is the
+first reason asked (`traceevent.Why*`), `kv.asks` counts the asks it
+absorbed, and `kv.ms` is how long the draw took. Every mouse press and
+release is a `gesture/press` or `gesture/release` record naming the pane
+under the pointer and the button; a press adds the modifiers, and a
+release's verdict is the `drag/drop` record's.
 
 ## One fact, one owner
 

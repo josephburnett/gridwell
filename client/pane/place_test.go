@@ -163,3 +163,70 @@ func TestContentFrameCarriesTheTilesOwnViewport(t *testing.T) {
 		t.Fatalf("text state not carried: %+v", f)
 	}
 }
+
+// A restored leaf's view is its owner row's to give. Until the row is read the
+// frame holds a placeholder that is nobody's: it is not a view the pane was
+// left at, and adopting the row's replaces it exactly once. After that the
+// view is the user's, and a late answer from the row does not move it.
+func TestARestoredFrameAdoptsItsOwnersViewOnce(t *testing.T) {
+	tr, err := DecodeLayout([]byte(`{"v":1,"root":{"pane":{"id":"p1","anchor":"g1","path":["w1"]}}}`), nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := tr.FocusedPane()
+	if !p.ViewPending || p.HasView() {
+		t.Fatalf("a restored leaf reads as holding a view: %+v", p.Frame)
+	}
+	if p.Zoom <= 0 {
+		t.Fatalf("the placeholder must still draw: zoom %v", p.Zoom)
+	}
+
+	// Split before the row answers: the clone waits for the same row.
+	np, err := tr.Split(Vertical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !np.ViewPending {
+		t.Fatal("a split of a restored leaf took the placeholder as a view")
+	}
+
+	if !p.Adopt(Frame{Cx: 4, Cy: 5, Zoom: 2}) {
+		t.Fatal("a pending frame refused its owner's view")
+	}
+	if p.ViewPending || !p.HasView() || p.Cx != 4 || p.Cy != 5 || p.Zoom != 2 {
+		t.Fatalf("adopted frame = %+v", p.Frame)
+	}
+	p.Cx = 9
+	if p.Adopt(Frame{Cx: 4, Cy: 5, Zoom: 2}) || p.Cx != 9 {
+		t.Fatalf("a settled view was overwritten: %+v", p.Frame)
+	}
+
+	// Descending out of a still-pending frame leaves it with no view to come
+	// back to, so the ascent lands on the owner row's framing.
+	np.Push(Frame{Door: "w2", Zoom: 1})
+	np.Pop()
+	if np.HasView() {
+		t.Fatalf("the ascent would land on a placeholder: %+v", np.Frame)
+	}
+}
+
+// A content leaf's text mode and scroll are its tile row's, adopted the same
+// way the grid view is.
+func TestARestoredContentFrameAdoptsItsRowsTextState(t *testing.T) {
+	tr, err := DecodeLayout([]byte(`{"v":1,"root":{"pane":{"id":"p1","anchor":"g1","text_focus":"t1"}}}`), nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := tr.FocusedPane()
+	if !p.Content || !p.ViewPending {
+		t.Fatalf("restored content leaf = %+v", p.Frame)
+	}
+	cf := ContentFrame("t1", Footprint{X: 2, Y: 3, W: 2, H: 2}, 3, "rendered", 7, 70)
+	if !p.Adopt(cf) {
+		t.Fatal("refused")
+	}
+	if p.TextMode != "rendered" || p.TextScrollX != 7 || p.TextScrollY != 70 ||
+		p.Cx != 3 || p.Cy != 4 || p.Zoom != 3 || p.Door != "t1" || !p.Content {
+		t.Fatalf("adopted content frame = %+v", p.Frame)
+	}
+}

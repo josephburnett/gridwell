@@ -12,18 +12,16 @@ import (
 )
 
 // treesEqual compares two trees on everything the layout persists: structure,
-// split dir/ratio, every leaf's whole place and text state, Focus, Zoomed. The
-// outer frames' viewports and nextID are deliberately excluded — those
-// viewports are session-only by design (wire.go), and nextID is covered by the
-// mint-no-collision assertion instead.
+// split dir/ratio, every leaf's whole place, Focus, Zoomed. No view is
+// persisted (wire.go), and nextID is covered by the mint-no-collision
+// assertion instead.
 func treesEqual(a, b *Tree) bool {
 	return a.Focus == b.Focus && a.Zoomed == b.Zoomed && nodesEqual(a.Root, b.Root)
 }
 
 // placesEqual compares two panes' frame stacks level by level on the identity
 // the blob carries: which grid a frame opens, which doorway it came through,
-// and whether the door is the place. Outer viewports are excluded — see
-// treesEqual.
+// and whether the door is the place.
 func placesEqual(a, b *Pane) bool {
 	fa, fb := a.Frames(), b.Frames()
 	if len(fa) != len(fb) {
@@ -47,20 +45,17 @@ func nodesEqual(a, b TreeNode) bool {
 		if !placesEqual(pa, pb) {
 			return false
 		}
-		return pa.ID == pb.ID &&
-			pa.Cx == pb.Cx && pa.Cy == pb.Cy && pa.Zoom == pb.Zoom &&
-			pa.TextMode == pb.TextMode &&
-			pa.TextScrollX == pb.TextScrollX && pa.TextScrollY == pb.TextScrollY &&
-			pa.TextZoom == pb.TextZoom
+		return pa.ID == pb.ID
 	}
 	return a.Split.Dir == b.Split.Dir && a.Split.Ratio == b.Split.Ratio &&
 		nodesEqual(a.Split.A, b.Split.A) && nodesEqual(a.Split.B, b.Split.B)
 }
 
 // TestLayoutGoldenV1 pins the v1 wire format: these exact bytes were written
-// by the first shipping version of the codec and decode identically forever.
-// If this test breaks, the change is rewriting history in every user's pane
-// tiles — do not "fix" the fixture.
+// by the first shipping version of the codec and decode to the same
+// arrangement forever. Their views are retired keys the decoder skips. If this
+// test breaks, the change is rewriting history in every user's pane tiles — do
+// not "fix" the fixture.
 func TestLayoutGoldenV1(t *testing.T) {
 	golden := `{"v":1,"root":{"split":{"dir":"v","ratio":0.25,` +
 		`"a":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7","aaaa/9"],"cx":3.5,"cy":-2,"zoom":1.5}},` +
@@ -75,8 +70,8 @@ func TestLayoutGoldenV1(t *testing.T) {
 	want := &Tree{
 		Root: TreeNode{Split: &Split{
 			Dir: Vertical, Ratio: 0.25,
-			A: TreeNode{Pane: goldenLeaf("p1", "aaaa/1", []string{"aaaa/7", "aaaa/9"}, "", 3.5, -2, 1.5)},
-			B: TreeNode{Pane: goldenTextLeaf("p3", "bbbb/1", "bbbb/12")},
+			A: TreeNode{Pane: goldenLeaf("p1", "aaaa/1", []string{"aaaa/7", "aaaa/9"}, "")},
+			B: TreeNode{Pane: goldenLeaf("p3", "bbbb/1", nil, "bbbb/12")},
 		}},
 		Focus:  "p3",
 		Zoomed: "p3",
@@ -286,10 +281,10 @@ func TestLayoutLeafOutsidePrefix(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	gi, go_ := got.FindPane(inside.ID), got.FindPane(outside.ID)
-	if gi.Anchor() != inside.Anchor() || gi.Cx != 5 {
+	if gi.Anchor() != inside.Anchor() {
 		t.Fatalf("inside leaf damaged: %+v", gi)
 	}
-	if go_.Anchor() != "" || len(go_.Path()) != 0 || go_.Zoom != 1 {
+	if go_.Anchor() != "" || len(go_.Path()) != 0 {
 		t.Fatalf("outside leaf should be home: %+v", go_)
 	}
 }
@@ -321,10 +316,10 @@ func TestLayoutMalformed(t *testing.T) {
 	}
 }
 
-// TestLayoutLooseViewState: view-state fields are restored loosely — an
-// unknown Focus falls back to the first leaf, an unknown Zoomed clears, a
-// zero Zoom becomes 1, and an out-of-range ratio clamps.
-func TestLayoutLooseViewState(t *testing.T) {
+// TestLayoutLooseArrangementState: arrangement state is restored loosely — an
+// unknown Focus falls back to the first leaf, an unknown Zoomed clears, and an
+// out-of-range ratio clamps.
+func TestLayoutLooseArrangementState(t *testing.T) {
 	blob := `{"v":1,"root":{"split":{"dir":"h","ratio":1.7,` +
 		`"a":{"pane":{"id":"p1"}},"b":{"pane":{"id":"p2","zoom":2}}}},` +
 		`"focus":"p99","zoomed":"p98"}`
@@ -337,9 +332,6 @@ func TestLayoutLooseViewState(t *testing.T) {
 	}
 	if got.Zoomed != "" {
 		t.Errorf("unknown zoomed should clear, got %q", got.Zoomed)
-	}
-	if p := got.FindPane("p1"); p.Zoom != 1 {
-		t.Errorf("zero zoom should default to 1, got %v", p.Zoom)
 	}
 	if got.Root.Split.Ratio != 1 {
 		t.Errorf("ratio should clamp to 1, got %v", got.Root.Split.Ratio)
@@ -413,9 +405,8 @@ func TestLayoutRestoresTheWholePlace(t *testing.T) {
 }
 
 // TestLayoutOuterViewportsStaySessionOnly: the frames a pane would ascend
-// through keep their identity in the blob, never their viewports — those are
-// session-only, and a restored ascent falls back to each grid's persisted
-// framing (Frame.HasView).
+// through keep their identity in the blob, never their viewports, and a
+// restored ascent falls back to each grid's persisted framing (Frame.HasView).
 func TestLayoutOuterViewportsStaySessionOnly(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
@@ -549,18 +540,68 @@ func TestLayoutIDPrefixRoundTrip(t *testing.T) {
 	})
 }
 
-// goldenLeaf / goldenTextLeaf build the expected decode of the golden blob:
-// a place is constructed through StackAt, the one decoder, never by poking
-// fields.
-func goldenLeaf(id, anchor string, path []string, content string, cx, cy, zoom float64) *Pane {
-	p := &Pane{ID: id, Stack: StackAt(anchor, path, content)}
-	p.Cx, p.Cy, p.Zoom = cx, cy, zoom
-	return p
+// goldenLeaf builds the expected decode of the golden blob: a place is
+// constructed through StackAt, the one decoder, never by poking fields.
+func goldenLeaf(id, anchor string, path []string, content string) *Pane {
+	return &Pane{ID: id, Stack: StackAt(anchor, path, content)}
 }
 
-func goldenTextLeaf(id, anchor, content string) *Pane {
-	p := goldenLeaf(id, anchor, nil, content, 1, 2, 1)
-	p.TextMode = "rendered"
-	p.TextScrollX, p.TextScrollY, p.TextZoom = 10, 80, 1.25
-	return p
+// TestLayoutHoldsNoView: a grid's view is its framing row's and a text
+// descent's scroll and mode are its tile row's, so the blob holds neither.
+// Two trees that differ only in those encode to the same bytes, which is what
+// keeps a pan from writing the layout.
+func TestLayoutHoldsNoView(t *testing.T) {
+	build := func(cx, cy, zoom float64, mode string, sx, sy, tz float64) *Tree {
+		tr := NewTree()
+		g := tr.FocusedPane()
+		g.Stack = StackAt("plugin/1", []string{"plugin/4"}, "")
+		g.Cx, g.Cy, g.Zoom = cx, cy, zoom
+		c, err := tr.Split(Vertical)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Stack = StackAt("plugin/1", nil, "plugin/12")
+		c.Cx, c.Cy, c.Zoom = cx, cy, zoom
+		c.TextMode, c.TextScrollX, c.TextScrollY, c.TextZoom = mode, sx, sy, tz
+		return tr
+	}
+	a, _, err := EncodeLayout(build(3, 4, 1.5, "text", 0, 10, 1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _, err := EncodeLayout(build(-7, 9, 0.25, "rendered", 30, 400, 1.75), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(a, b) {
+		t.Fatalf("a view reached the blob:\n%s\n%s", a, b)
+	}
+}
+
+// TestLayoutOldViewsAreNotRead: every blob written before the view left the
+// layout carries one, and those bytes are forever. They still decode, place
+// and all, but a leaf comes back with no view of its own, so it shows what
+// its owner row holds rather than what the blob last said.
+func TestLayoutOldViewsAreNotRead(t *testing.T) {
+	old := `{"v":1,"root":{"split":{"dir":"v","ratio":0.5,` +
+		`"a":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7"],"cx":3.5,"cy":-2,"zoom":1.5}},` +
+		`"b":{"pane":{"id":"p2","anchor":"aaaa/1","cx":1,"cy":2,"zoom":1,` +
+		`"text_focus":"aaaa/12","text_mode":"rendered","text_scroll_x":10,"text_scroll_y":80,"text_zoom":1.25}}}},` +
+		`"focus":"p2"}`
+	got, err := DecodeLayout([]byte(old), nil, "")
+	if err != nil {
+		t.Fatalf("an old blob no longer decodes: %v", err)
+	}
+	g, c := got.FindPane("p1"), got.FindPane("p2")
+	if g.Anchor() != "aaaa/1" || len(g.Path()) != 1 || c.ContentID() != "aaaa/12" {
+		t.Fatalf("the arrangement did not survive: %+v %+v", g.Stack, c.Stack)
+	}
+	for _, p := range []*Pane{g, c} {
+		if p.HasView() {
+			t.Errorf("%s restored the blob's view as its own: %+v", p.ID, p.Frame)
+		}
+	}
+	if c.TextMode != "" || c.TextScrollX != 0 || c.TextScrollY != 0 || c.TextZoom != 0 {
+		t.Errorf("the blob's text state was read: %+v", c.Frame)
+	}
 }

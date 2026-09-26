@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strconv"
 	"syscall/js"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/cadence"
@@ -386,7 +388,7 @@ func newPersistState(a *App) persistState {
 }
 
 type scheduler struct {
-	rafScheduled bool
+	frameAsks traceevent.FrameAsks
 
 	// wsSave's body encodes, hash-diffs, and posts the layout on a change.
 	wsSave *debounce.Debounce
@@ -622,6 +624,8 @@ func main() {
 	// The flush timer exists now, so the ring can say when it is owed
 	// something; the interceptor's records reach it no other way.
 	tr.OnEmit = app.armTraceFlush
+	app.emit(traceevent.Boot(tracewire.BuildCommit(), runtime.Version(),
+		jsString(js.Global().Get("navigator").Get("userAgent"))))
 	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed, app.paneLayoutUnreadable)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()
@@ -878,20 +882,18 @@ func taggedLog(tag string) func(format string, args ...any) {
 	}
 }
 
-// scheduleFrame asks for one paint. why is the fact the arm carries to the
-// frame it opens: asks coalesce, so the first reason inside a window is the
-// reason the frame that lands was asked for.
+// scheduleFrame asks for one paint under why; see traceevent.FrameAsks.
 func (a *App) scheduleFrame(why string) {
-	if a.persist.sched.rafScheduled {
+	if !a.persist.sched.frameAsks.Ask(why) {
 		return
 	}
-	a.persist.sched.rafScheduled = true
 	framesArmed++
-	a.emit(traceevent.FrameScheduled(why))
 	js.Global().Call("requestAnimationFrame", oneShot(func() {
-		a.persist.sched.rafScheduled = false
-		a.emit(traceevent.FrameDrawn(why))
+		asks := a.persist.sched.frameAsks.Take()
+		perf := js.Global().Get("performance")
+		start := perf.Call("now").Float()
 		a.frame()
+		a.emit(asks.Drawn(perf.Call("now").Float() - start))
 	}))
 }
 

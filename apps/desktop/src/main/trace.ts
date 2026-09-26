@@ -8,6 +8,9 @@
 // See api/tracewire.Path.
 export const TRACE_PATH = '/trace';
 
+// See api/tracewire.ClockHeader.
+const TRACE_CLOCK_HEADER = 'Gridwell-Trace-Clock';
+
 // See api/tracewire.OriginElectron: the one origin the node lets this process
 // claim. Anything else it rewrites to "client".
 const TRACE_ORIGIN = 'electron';
@@ -52,8 +55,9 @@ interface TraceRecord {
 
 // The door, injected so a test never reaches the network. True means the node
 // kept the batch; anything else leaves it pending for the next one. The signal
-// is how stop() abandons a post: see stopTrace.
-type TracePost = (body: string, signal: AbortSignal) => Promise<boolean>;
+// is how stop() abandons a post: see stopTrace. headers are the post's to
+// send, the batch's send clock among them.
+type TracePost = (body: string, signal: AbortSignal, headers: Record<string, string>) => Promise<boolean>;
 
 interface TraceOptions {
   cid?: string;
@@ -133,9 +137,13 @@ export class TraceClient {
     this.lastFlush = this.now();
     const aborter = new AbortController();
     this.aborter = aborter;
+    const headers = {
+      'Content-Type': 'application/x-ndjson',
+      [TRACE_CLOCK_HEADER]: String(this.lastFlush),
+    };
     let ok = false;
     try {
-      ok = await this.post(batch.body, aborter.signal);
+      ok = await this.post(batch.body, aborter.signal, headers);
     } catch {
       // The door is unreachable, or the post was abandoned; the records stay
       // pending and the ring is the bound on that memory.
@@ -215,12 +223,43 @@ export function trace(ev: TraceEvent): void {
   void mainRing.tick();
 }
 
-// logLine is main's own console output: the sidecar's lines are already in the
-// node's ring through its log capture, and these are the ones it never saw.
-export function logLine(level: 'log' | 'error', line: string): void {
+// The versions main can name. It carries no commit: nothing stamps one into
+// the TypeScript build, and the node's boot record names the commit of the
+// binary this app launched.
+interface BootVersions {
+  app: string;
+  electron: string;
+  chrome: string;
+}
+
+// bootEvent is main's first record, under api/tracewire.KindBoot.
+export function bootEvent(v: BootVersions): TraceEvent {
+  return {
+    src: 'main',
+    kind: 'boot',
+    msg: `gridwell desktop ${v.app}`,
+    kv: { app: v.app, electron: v.electron, chrome: v.chrome },
+  };
+}
+
+// Whose console line: main's own, or one the renderer wrote and window.ts
+// forwards.
+type LineFrom = 'main' | 'renderer';
+
+// lineEvent is what logLine traces. The sidecar's lines are already in the
+// node's ring through its log capture, and the renderer's in the client's own
+// ring as notice and log records, so only main's own lines are new here.
+export function lineEvent(from: LineFrom, line: string): TraceEvent | null {
+  return from === 'main' ? { src: 'main', kind: 'log', msg: line } : null;
+}
+
+// logLine is console output from main: every line to the console, and main's
+// own to the trace.
+export function logLine(level: 'log' | 'error', line: string, from: LineFrom = 'main'): void {
   if (level === 'error') console.error(line);
   else console.log(line);
-  trace({ src: 'main', kind: 'log', msg: line });
+  const ev = lineEvent(from, line);
+  if (ev) trace(ev);
 }
 
 // flushTrace posts what is pending without waiting out the window, and is

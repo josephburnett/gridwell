@@ -43,7 +43,7 @@ type LayoutSplit struct {
 // LayoutFrame is one level of a leaf's place. Only a crossing into another
 // namespace carries GridID; a well frame carries Door alone and its grid is
 // derived from the row. Content marks a frame whose place is the door tile
-// itself. A frame holds no viewport: the outer ones are session-only.
+// itself.
 type LayoutFrame struct {
 	Door    string `json:"d,omitempty"`
 	GridID  string `json:"g,omitempty"`
@@ -51,23 +51,18 @@ type LayoutFrame struct {
 }
 
 // LayoutPane is a leaf's persisted place: the frame stack in Place, root
-// first, plus its viewport and content-descent state. Anchor, Path and
-// TextFocus are the same place projected onto its innermost namespace level.
-// Place wins where present and is written only where the projection would lose
-// a level, so what the projection holds in full still encodes byte-identically.
+// first. Anchor, Path and TextFocus are the same place projected onto its
+// innermost namespace level. Place wins where present and is written only
+// where the projection would lose a level, so what the projection holds in
+// full still encodes byte-identically.
+// A leaf holds no view; its rows own that. Retired keys, never reused: cx, cy,
+// zoom, text_mode, text_scroll_x, text_scroll_y, text_zoom.
 type LayoutPane struct {
-	ID          string        `json:"id"`
-	Anchor      string        `json:"anchor,omitempty"`
-	Path        []string      `json:"path,omitempty"`
-	Cx          float64       `json:"cx,omitempty"`
-	Cy          float64       `json:"cy,omitempty"`
-	Zoom        float64       `json:"zoom,omitempty"`
-	TextFocus   string        `json:"text_focus,omitempty"`
-	TextMode    string        `json:"text_mode,omitempty"`
-	TextScrollX float64       `json:"text_scroll_x,omitempty"`
-	TextScrollY float64       `json:"text_scroll_y,omitempty"`
-	TextZoom    float64       `json:"text_zoom,omitempty"`
-	Place       []LayoutFrame `json:"place,omitempty"`
+	ID        string        `json:"id"`
+	Anchor    string        `json:"anchor,omitempty"`
+	Path      []string      `json:"path,omitempty"`
+	TextFocus string        `json:"text_focus,omitempty"`
+	Place     []LayoutFrame `json:"place,omitempty"`
 }
 
 // Parse unmarshals a layout blob and rejects an unsupported Version.
