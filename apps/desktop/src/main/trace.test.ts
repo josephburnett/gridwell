@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { TraceClient, TRACE_FLUSH_BATCH, TRACE_FLUSH_MS, TRACE_MAX_MSG, TRACE_PATH } from './trace';
+import { bootEvent, lineEvent, TraceClient, TRACE_FLUSH_BATCH, TRACE_FLUSH_MS, TRACE_MAX_MSG, TRACE_PATH } from './trace';
 
 // The fields of one line, as the node reads them back.
 interface Row {
@@ -319,4 +319,56 @@ test('the flush window matches client/cadence', () => {
     Number(m![1]),
     'trace.ts TRACE_FLUSH_MS drifted from cadence.TraceFlushMs (the owner)',
   );
+});
+
+// Main's first record names the app and the Electron it runs on. Its kind is
+// the node's and the client's, so a dump finds every origin's build with one
+// filter.
+test('the boot record names the app and electron, under tracewire.KindBoot', () => {
+  const ev = bootEvent({ app: '0.1.0', electron: '43.0.0', chrome: '140.0.0.0' });
+  assert.deepEqual(ev, {
+    src: 'main',
+    kind: 'boot',
+    msg: 'gridwell desktop 0.1.0',
+    kv: { app: '0.1.0', electron: '43.0.0', chrome: '140.0.0.0' },
+  });
+  assert.ok(
+    goSource('api/tracewire/tracewire.go').includes(`KindBoot = "${ev.kind}"`),
+    'trace.ts boot kind drifted from tracewire.KindBoot (the owner)',
+  );
+});
+
+// A batch names the clock it was sent at, which the node subtracts from its
+// own to place each record at its ct; see api/tracewire.ClockHeader. It is
+// the ring's own clock, read at the post, so it is the same clock as ct.
+test('a batch carries its send clock under tracewire.ClockHeader', async () => {
+  const k = clock();
+  let headers: Record<string, string> = {};
+  const c = new TraceClient({
+    cid: 'cid7abc',
+    now: k.now,
+    post: async (_b, _s, h) => ((headers = h), true),
+  });
+  c.emit({ src: 'main', kind: 'log', msg: 'one' });
+  k.advance(TRACE_FLUSH_MS);
+  await c.tick();
+  assert.equal(headers['Content-Type'], 'application/x-ndjson');
+  const name = Object.keys(headers).find((k) => k !== 'Content-Type')!;
+  assert.equal(headers[name], String(k.now()), 'the clock is the ring clock at the post');
+  assert.ok(
+    goSource('api/tracewire/tracewire.go').includes(`ClockHeader = "${name}"`),
+    `trace.ts clock header ${name} drifted from tracewire.ClockHeader (the owner)`,
+  );
+});
+
+// Main's own console lines are records; a renderer line main forwards is not.
+// The client records its notices and logs in its own ring, so a forwarded copy
+// would be the same fact a third time.
+test('logLine traces main\'s own lines and not the renderer\'s', () => {
+  assert.deepEqual(lineEvent('main', '[gridwell] sidecar failed'), {
+    src: 'main',
+    kind: 'log',
+    msg: '[gridwell] sidecar failed',
+  });
+  assert.equal(lineEvent('renderer', '[renderer:error] grid unavailable'), null);
 });

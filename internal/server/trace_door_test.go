@@ -163,3 +163,23 @@ func readDump(t *testing.T, path string) []tracewire.Record {
 	}
 	return out
 }
+
+// A send clock the node cannot read is refused by name: a batch placed at a
+// guessed time would interleave with the node's records wrongly and say
+// nothing. See TestAClientBatchLandsAtItsEmitTimeOnTheNodesClock for the
+// clock read right.
+func TestTraceDoorRefusesAGarbledSendClock(t *testing.T) {
+	cl, base, _ := traceServer(t)
+	body := `{"src":"nav","kind":"nav","msg":"garbled clock","ct":7}` + "\n"
+	req, _ := http.NewRequest(http.MethodPost, base+tracewire.Path, strings.NewReader(body))
+	req.Header.Set(tracewire.ClockHeader, "noon")
+	res, err := cl.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest || !strings.Contains(string(msg), tracewire.ClockHeader) {
+		t.Errorf("a garbled clock answered %d %q, want a 400 naming the header", res.StatusCode, msg)
+	}
+}

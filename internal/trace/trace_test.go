@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
@@ -100,7 +101,7 @@ func TestIngestStampsTheNodesOrderAndForcesTheOrigin(t *testing.T) {
 		`{"origin":"node","src":"liar","kind":"log","msg":"not from the node"}`,
 		`{"origin":"","src":"unnamed","kind":"log","msg":"no origin"}`,
 	}, "\n")
-	n, err := r.Ingest(strings.NewReader(body))
+	n, err := r.Ingest(strings.NewReader(body), 0)
 	if err != nil || n != 4 {
 		t.Fatalf("Ingest = %d, %v", n, err)
 	}
@@ -122,7 +123,7 @@ func TestIngestStampsTheNodesOrderAndForcesTheOrigin(t *testing.T) {
 func TestABadLineKeepsTheGoodLinesBeforeItAndNamesItsNumber(t *testing.T) {
 	r := New(10)
 	body := "{\"src\":\"a\",\"msg\":\"one\"}\n{\"src\":\"b\",\"msg\":\"two\"}\nnot json\n{\"src\":\"c\",\"msg\":\"three\"}\n"
-	n, err := r.Ingest(strings.NewReader(body))
+	n, err := r.Ingest(strings.NewReader(body), 0)
 	if err == nil {
 		t.Fatal("a malformed line was accepted")
 	}
@@ -185,5 +186,47 @@ func TestDumpWritesEveryRecordInSeqOrder(t *testing.T) {
 	// A dump is a reading: the ring still holds what it held.
 	if len(r.Snapshot()) != 3 {
 		t.Errorf("the ring lost records to a dump: %d left", len(r.Snapshot()))
+	}
+}
+
+// A batch waits up to a flush window before it is sent, so a receipt stamp
+// times its records late and orders them after node records they preceded.
+// The batch's send clock gives the skew once, and each record is placed at
+// its own clock plus that skew.
+func TestAnIngestedRecordIsPlacedAtItsOwnClockPlusTheBatchSkew(t *testing.T) {
+	r := New(10)
+	r.now = func() time.Time { return time.UnixMilli(5000) }
+	body := `{"src":"a","kind":"k","msg":"early","ct":100}` + "\n" +
+		`{"src":"b","kind":"k","msg":"late","ct":900}` + "\n" +
+		`{"src":"c","kind":"k","msg":"no clock"}` + "\n"
+	if _, err := r.Ingest(strings.NewReader(body), 1000); err != nil {
+		t.Fatal(err)
+	}
+	got := r.Snapshot()
+	// Sent at 1000 on the sender's clock, received at 5000: skew 4000.
+	for i, want := range []int64{4100, 4900, 5000} {
+		if got[i].T != want {
+			t.Errorf("record %q is stamped t=%d, want %d", got[i].Msg, got[i].T, want)
+		}
+		if got[i].Seq != uint64(i+1) {
+			t.Errorf("record %q has seq %d, want receipt order %d", got[i].Msg, got[i].Seq, i+1)
+		}
+	}
+	// A batch that names no send clock keeps receipt time.
+	r.Ingest(strings.NewReader(`{"src":"d","kind":"k","msg":"unclocked batch","ct":100}`+"\n"), 0)
+	if last := r.Snapshot()[3]; last.T != 5000 {
+		t.Errorf("a record from an unclocked batch is stamped %d, want receipt 5000", last.T)
+	}
+}
+
+// The ring is allocated whole at boot, so its slots are a fixed cost every
+// node pays; this is the bound NodeCapacity's comment states.
+func TestTheNodeRingsSlotsFitTheirStatedBound(t *testing.T) {
+	const bound = 8 << 20
+	if got := int(unsafe.Sizeof(tracewire.Record{})) * NodeCapacity; got > bound {
+		t.Errorf("the node ring's slots are %d bytes, past the stated %d", got, bound)
+	}
+	if NodeCapacity < 50000 {
+		t.Errorf("NodeCapacity is %d; a busy session's 40 minutes need 50000", NodeCapacity)
 	}
 }

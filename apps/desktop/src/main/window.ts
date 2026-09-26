@@ -49,7 +49,7 @@ export function createRootWindow(origin: string): RootWindow {
   // the strip.
   win.webContents.on('console-message', (_e, level, message) => {
     const line = rendererLogLine(level, message);
-    if (line) logLine('error', line);
+    if (line) logLine('error', line, 'renderer');
   });
 
   win.on('focus', () => trace(windowFocused(true)));

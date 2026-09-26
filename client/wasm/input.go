@@ -97,6 +97,20 @@ func (a *App) recoverLostRelease(buttons int, sx, sy float64) bool {
 	return false
 }
 
+// paneIDAt is the pane a press or release record names: the one under the
+// pointer, or none over the bar and the strip.
+func (a *App) paneIDAt(sx, sy float64) string {
+	if p, _, ok := a.paneAtScreen(sx, sy); ok && p != nil {
+		return p.ID
+	}
+	return ""
+}
+
+func modsOf(ev js.Value) traceevent.Mods {
+	return traceevent.Mods{Ctrl: ev.Get("ctrlKey").Truthy(), Shift: ev.Get("shiftKey").Truthy(),
+		Alt: ev.Get("altKey").Truthy(), Meta: ev.Get("metaKey").Truthy()}
+}
+
 func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 	rects := a.layoutPanes()
 	for id, r := range rects {
@@ -280,6 +294,7 @@ func (d *dragState) grabTile(n *gridwellv1.Tile, cursorCellX, cursorCellY, tlX, 
 
 func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
+	a.emit(traceevent.Press(a.paneIDAt(sx, sy), args[0].Get("button").Int(), modsOf(args[0]), false))
 	// The tree and the viewport stay atomic across a transition.
 	if a.trans.Any() {
 		return nil
@@ -506,8 +521,9 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 }
 
 func (a *App) onMouseUp(this js.Value, args []js.Value) any {
+	sx, sy := mouseXY(args[0], a.canvas)
+	a.emit(traceevent.Release(a.paneIDAt(sx, sy), args[0].Get("button").Int()))
 	if a.rightDrag != nil && args[0].Get("button").Int() == 2 {
-		sx, sy := mouseXY(args[0], a.canvas)
 		a.finishRightDrag(sx, sy)
 		return nil
 	}
@@ -519,7 +535,6 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// A live view's content box is the native view's, so swallow a matching
 	// mouseup over it. An armed gesture parks every live view, so a release that
 	// ends one is never swallowed.
-	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && args[0].Get("button").Int() == 0 &&
 		a.liveViewOwnsPoint(p, r, sx, sy) {
 		return nil

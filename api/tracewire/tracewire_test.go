@@ -2,6 +2,7 @@ package tracewire
 
 import (
 	"encoding/json"
+	"runtime/debug"
 	"testing"
 )
 
@@ -51,5 +52,20 @@ func TestTheNodesStampsAreAbsentUntilStamped(t *testing.T) {
 	const wantStamped = `{"seq":4,"t":1727000000999,"origin":"electron","src":"main","kind":"view","msg":"x"}`
 	if string(stamped) != wantStamped {
 		t.Errorf("stamped record marshals to\n  %s\nwant\n  %s", stamped, wantStamped)
+	}
+}
+
+// The commit is the toolchain's stamp, and a tree built with edits says so:
+// a dump from a dirty build is not a dump from that commit.
+func TestTheBuildCommitIsTheToolchainsStamp(t *testing.T) {
+	rev := debug.BuildSetting{Key: "vcs.revision", Value: "8c779f0581979c9bb58139942837ff4af7c1c476"}
+	if got := commitOf([]debug.BuildSetting{rev, {Key: "vcs.modified", Value: "false"}}); got != rev.Value {
+		t.Errorf("a clean build's commit is %q", got)
+	}
+	if got := commitOf([]debug.BuildSetting{rev, {Key: "vcs.modified", Value: "true"}}); got != rev.Value+"+dirty" {
+		t.Errorf("a dirty build's commit is %q", got)
+	}
+	if got := commitOf(nil); got != "" {
+		t.Errorf("an unstamped build's commit is %q, want none", got)
 	}
 }

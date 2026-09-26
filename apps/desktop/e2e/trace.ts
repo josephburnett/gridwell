@@ -39,6 +39,12 @@ export function joinedRequests(lines: TraceLine[]): string[] {
     .map(([id]) => id);
 }
 
+// The origins that wrote a boot record (api/tracewire.KindBoot), each naming
+// the build behind every record after it.
+export function bootOrigins(lines: TraceLine[]): string[] {
+  return [...new Set(lines.filter((r) => r.kind === 'boot').map((r) => r.origin))].sort();
+}
+
 // What the dump notice says, for a failure message that names the file the
 // spec could not use.
 export function describe(lines: TraceLine[]): string {

@@ -126,6 +126,10 @@ func (c *Client) PendingBatch() ([]byte, func()) {
 	}
 }
 
+// SendClock is tracewire.ClockHeader's value for a batch posted at now: the
+// same clock, in the same unit, as the CT Emit stamps.
+func SendClock(now time.Time) string { return strconv.FormatInt(now.UnixMilli(), 10) }
+
 // Marshal is the wire body: one record per line, newline-terminated. HTML
 // escaping is off, so an address reads as the emitter wrote it.
 func Marshal(recs []tracewire.Record) []byte {

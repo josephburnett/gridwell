@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -32,6 +33,13 @@ func kv(pairs ...string) map[string]string {
 		return nil
 	}
 	return m
+}
+
+// Boot is the client's first record: the build it runs (see
+// tracewire.BuildCommit) and the browser running it.
+func Boot(commit, goVersion, userAgent string) Event {
+	return Event{Src: "client", Kind: tracewire.KindBoot, Msg: "client boots",
+		KV: kv("commit", commit, "go", goVersion, "ua", userAgent)}
 }
 
 // Notice is a user-visible notice, under the source that raised it, so every
@@ -63,11 +71,39 @@ const (
 	WhyDrag       = "drag snap"
 )
 
-// FrameScheduled and FrameDrawn bracket one animation frame, both under the
-// reason it was asked for.
-func FrameScheduled(why string) Event { return Event{Src: "frame", Kind: "schedule", Msg: why} }
+// FrameAsks is the paint asked for and not yet drawn. Asks coalesce into one
+// frame, so the first reason is the one that frame was asked for, and the
+// count says how many sites wanted it.
+type FrameAsks struct {
+	why string
+	n   int
+}
 
-func FrameDrawn(why string) Event { return Event{Src: "frame", Kind: "draw", Msg: why} }
+// Ask records one ask and reports whether it is the first, the one that must
+// request the frame.
+func (f *FrameAsks) Ask(why string) bool {
+	f.n++
+	if f.n > 1 {
+		return false
+	}
+	f.why = why
+	return true
+}
+
+// Take hands the asks to the frame about to draw and clears them, so an ask
+// made during the draw arms the next frame.
+func (f *FrameAsks) Take() FrameAsks {
+	t := *f
+	*f = FrameAsks{}
+	return t
+}
+
+// Drawn is the one record of a drawn frame: its reason, its asks, and how
+// long the draw took.
+func (f FrameAsks) Drawn(ms float64) Event {
+	return Event{Src: "frame", Kind: "draw", Msg: f.why,
+		KV: kv("asks", strconv.Itoa(f.n), "ms", strconv.FormatFloat(ms, 'f', 1, 64))}
+}
 
 // Framing is one settled viewport writeback. tileID is empty for a root grid,
 // whose own row owns the framing.
@@ -206,6 +242,51 @@ func Nav(g nav.Gesture) Event {
 // one and records nothing.
 func Focus(from, to string) Event {
 	return Event{Src: "pane", Kind: "focus", Msg: "focus moves", KV: kv("from", from, "pane", to)}
+}
+
+// Mods are the modifier keys held at a press.
+type Mods struct{ Ctrl, Shift, Alt, Meta bool }
+
+func (m Mods) String() string {
+	var held []string
+	for _, k := range []struct {
+		on   bool
+		name string
+	}{{m.Ctrl, "ctrl"}, {m.Shift, "shift"}, {m.Alt, "alt"}, {m.Meta, "meta"}} {
+		if k.on {
+			held = append(held, k.name)
+		}
+	}
+	return strings.Join(held, "+")
+}
+
+// Press is a mouse button going down, in the pane under it. forwarded says a
+// live view's native layer heard it and relayed it, without the modifiers.
+func Press(paneID string, button int, mods Mods, forwarded bool) Event {
+	via := ""
+	if forwarded {
+		via = "live view"
+	}
+	return Event{Src: "gesture", Kind: "press", Msg: buttonName(button),
+		KV: kv("pane", paneID, "mods", mods.String(), "via", via)}
+}
+
+// Release is a mouse button coming up. What it became is the drop record's.
+func Release(paneID string, button int) Event {
+	return Event{Src: "gesture", Kind: "release", Msg: buttonName(button), KV: kv("pane", paneID)}
+}
+
+// buttonName is the table over MouseEvent.button.
+func buttonName(b int) string {
+	switch b {
+	case 0:
+		return "left"
+	case 1:
+		return "middle"
+	case 2:
+		return "right"
+	}
+	return "button " + strconv.Itoa(b)
 }
 
 // Drop is a committed release, in the pane the gesture was made in and onto

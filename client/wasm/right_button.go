@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // resizeBandPx is the band near each pane edge where a drag grabs a divider.
@@ -129,6 +130,7 @@ func (a *App) forwardedPaneAt(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 // live URL view, whose native WebContentsView swallows the renderer's own mouse
 // events. The draw() parks the view, so the rest of the drag lands on canvas.
 func (a *App) onForwardedRightDown(sx, sy float64) {
+	a.emit(traceevent.Press(a.paneIDAt(sx, sy), 2, traceevent.Mods{}, true))
 	p, r, ok := a.forwardedPaneAt(sx, sy)
 	if !ok {
 		return
@@ -143,6 +145,7 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 // onForwardedMiddleDown is middle-click ascent's live-URL path, because the
 // WebContentsView swallows the renderer's own middle clicks.
 func (a *App) onForwardedMiddleDown(sx, sy float64) {
+	a.emit(traceevent.Press(a.paneIDAt(sx, sy), 1, traceevent.Mods{}, true))
 	p, _, ok := a.forwardedPaneAt(sx, sy)
 	if !ok {
 		return
@@ -156,6 +159,7 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 // in-page interaction still reaches the page. The grab band's inner half sits on
 // the live view, so such a drag could otherwise never start.
 func (a *App) onForwardedLeftDown(sx, sy float64) {
+	a.emit(traceevent.Press(a.paneIDAt(sx, sy), 0, traceevent.Mods{}, true))
 	p, r, ok := a.forwardedPaneAt(sx, sy)
 	if !ok {
 		return
