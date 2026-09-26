@@ -242,12 +242,24 @@ export function bootEvent(v: BootVersions): TraceEvent {
   };
 }
 
-// logLine is main's own console output: the sidecar's lines are already in the
-// node's ring through its log capture, and these are the ones it never saw.
-export function logLine(level: 'log' | 'error', line: string): void {
+// Whose console line: main's own, or one the renderer wrote and window.ts
+// forwards.
+type LineFrom = 'main' | 'renderer';
+
+// lineEvent is what logLine traces. The sidecar's lines are already in the
+// node's ring through its log capture, and the renderer's in the client's own
+// ring as notice and log records, so only main's own lines are new here.
+export function lineEvent(from: LineFrom, line: string): TraceEvent | null {
+  return from === 'main' ? { src: 'main', kind: 'log', msg: line } : null;
+}
+
+// logLine is console output from main: every line to the console, and main's
+// own to the trace.
+export function logLine(level: 'log' | 'error', line: string, from: LineFrom = 'main'): void {
   if (level === 'error') console.error(line);
   else console.log(line);
-  trace({ src: 'main', kind: 'log', msg: line });
+  const ev = lineEvent(from, line);
+  if (ev) trace(ev);
 }
 
 // flushTrace posts what is pending without waiting out the window, and is
