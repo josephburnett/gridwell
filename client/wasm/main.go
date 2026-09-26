@@ -397,7 +397,7 @@ func newPersistState(a *App) persistState {
 }
 
 type scheduler struct {
-	rafScheduled bool
+	frameAsks traceevent.FrameAsks
 
 	// wsSave's body encodes, hash-diffs, and posts the layout on a change.
 	wsSave *debounce.Debounce
@@ -893,20 +893,18 @@ func taggedLog(tag string) func(format string, args ...any) {
 	}
 }
 
-// scheduleFrame asks for one paint. why is the fact the arm carries to the
-// frame it opens: asks coalesce, so the first reason inside a window is the
-// reason the frame that lands was asked for.
+// scheduleFrame asks for one paint under why; see traceevent.FrameAsks.
 func (a *App) scheduleFrame(why string) {
-	if a.persist.sched.rafScheduled {
+	if !a.persist.sched.frameAsks.Ask(why) {
 		return
 	}
-	a.persist.sched.rafScheduled = true
 	framesArmed++
-	a.emit(traceevent.FrameScheduled(why))
 	js.Global().Call("requestAnimationFrame", oneShot(func() {
-		a.persist.sched.rafScheduled = false
-		a.emit(traceevent.FrameDrawn(why))
+		asks := a.persist.sched.frameAsks.Take()
+		perf := js.Global().Get("performance")
+		start := perf.Call("now").Float()
 		a.frame()
+		a.emit(asks.Drawn(perf.Call("now").Float() - start))
 	}))
 }
 

@@ -63,11 +63,39 @@ const (
 	WhyDrag       = "drag snap"
 )
 
-// FrameScheduled and FrameDrawn bracket one animation frame, both under the
-// reason it was asked for.
-func FrameScheduled(why string) Event { return Event{Src: "frame", Kind: "schedule", Msg: why} }
+// FrameAsks is the paint asked for and not yet drawn. Asks coalesce into one
+// frame, so the first reason is the one that frame was asked for, and the
+// count says how many sites wanted it.
+type FrameAsks struct {
+	why string
+	n   int
+}
 
-func FrameDrawn(why string) Event { return Event{Src: "frame", Kind: "draw", Msg: why} }
+// Ask records one ask and reports whether it is the first, the one that must
+// request the frame.
+func (f *FrameAsks) Ask(why string) bool {
+	f.n++
+	if f.n > 1 {
+		return false
+	}
+	f.why = why
+	return true
+}
+
+// Take hands the asks to the frame about to draw and clears them, so an ask
+// made during the draw arms the next frame.
+func (f *FrameAsks) Take() FrameAsks {
+	t := *f
+	*f = FrameAsks{}
+	return t
+}
+
+// Drawn is the one record of a drawn frame: its reason, its asks, and how
+// long the draw took.
+func (f FrameAsks) Drawn(ms float64) Event {
+	return Event{Src: "frame", Kind: "draw", Msg: f.why,
+		KV: kv("asks", strconv.Itoa(f.n), "ms", strconv.FormatFloat(ms, 'f', 1, 64))}
+}
 
 // Framing is one settled viewport writeback. tileID is empty for a root grid,
 // whose own row owns the framing.

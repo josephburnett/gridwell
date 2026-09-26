@@ -375,6 +375,10 @@ transition, the shell door's refusals, opens and closes, and — through
 subprocess's stderr does not pass through that log, so the spawn hands it a
 writer of its own.
 
+On the client, a drawn frame is one record, `frame/draw`: its msg is the
+first reason asked (`traceevent.Why*`), `kv.asks` counts the asks it
+absorbed, and `kv.ms` is how long the draw took.
+
 ## One fact, one owner
 
 Every fact is derived in one place and read everywhere else. The shapes to

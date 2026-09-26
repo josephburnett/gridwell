@@ -55,8 +55,29 @@ func TestFrameReasonsAreDistinct(t *testing.T) {
 		}
 		seen[why] = true
 	}
-	if s, d := FrameScheduled(WhyGhost), FrameDrawn(WhyGhost); s.Kind == d.Kind || s.Msg != d.Msg {
-		t.Errorf("the schedule %+v and the draw %+v are not one pair under one reason", s, d)
+}
+
+// One record per drawn frame, under the first reason asked: a later ask in the
+// same window is counted, not named, and an ask made during the draw belongs
+// to the next frame.
+func TestAFrameIsOneRecordUnderItsFirstReason(t *testing.T) {
+	var f FrameAsks
+	if !f.Ask(WhyGhost) {
+		t.Fatal("the first ask did not request a frame")
+	}
+	if f.Ask(WhyNotice) || f.Ask(WhyDrag) {
+		t.Fatal("a later ask requested a second frame")
+	}
+	asks := f.Take()
+	if !f.Ask(WhyTransition) {
+		t.Error("an ask after the take did not request the next frame")
+	}
+	e := asks.Drawn(3.25)
+	if e.Src != "frame" || e.Kind != "draw" || e.Msg != WhyGhost {
+		t.Errorf("the frame reads %+v, want frame/draw under %q", e, WhyGhost)
+	}
+	if e.KV["asks"] != "3" || e.KV["ms"] != "3.2" && e.KV["ms"] != "3.3" {
+		t.Errorf("the frame's kv is %v, want 3 asks and the draw's duration", e.KV)
 	}
 }
 
