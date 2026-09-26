@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import * as path from 'node:path';
-import { readDump, joinedRequests, describe as describeDump } from '../e2e/trace';
+import { readDump, joinedRequests, bootOrigins, describe as describeDump } from '../e2e/trace';
 
 // A phone has no native menu, so the circle's right-click draws its own DOM
 // popover: this is the other renderer's half of e2e/trace-dump.spec.ts. The
@@ -55,6 +55,8 @@ test('the circle popover dumps the trace and names the file', async ({ gw, serve
   const lines = readDump(file);
   const mine = lines.filter((r) => r.origin === 'client' && r.cid === cid);
   expect(mine.length, `no record carries this client's cid; ${describeDump(lines)}`).toBeGreaterThan(0);
+  // A browser has no main process, so two origins name their builds.
+  expect(bootOrigins(lines), `boot records; ${describeDump(lines)}`).toEqual(['client', 'node']);
   expect(
     joinedRequests(lines).length,
     `no request id names both a client and a node rpc record; ${describeDump(lines)}`,

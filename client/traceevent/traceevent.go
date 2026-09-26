@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -32,6 +33,13 @@ func kv(pairs ...string) map[string]string {
 		return nil
 	}
 	return m
+}
+
+// Boot is the client's first record: the build it runs (see
+// tracewire.BuildCommit) and the browser running it.
+func Boot(commit, goVersion, userAgent string) Event {
+	return Event{Src: "client", Kind: tracewire.KindBoot, Msg: "client boots",
+		KV: kv("commit", commit, "go", goVersion, "ua", userAgent)}
 }
 
 // Notice is a user-visible notice, under the source that raised it, so every

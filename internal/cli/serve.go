@@ -190,6 +190,7 @@ func RunServe(args []string) int {
 	if err != nil {
 		return die("serve", err)
 	}
+	trace.Default().Emit(bootRecord(home))
 	cfgPath, err := config.DefaultPath()
 	if err != nil {
 		return die("serve", err)

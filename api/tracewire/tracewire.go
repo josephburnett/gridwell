@@ -4,6 +4,8 @@
 // agree on the shape without importing each other.
 package tracewire
 
+import "runtime/debug"
+
 const (
 	// Path takes JSON lines of Record, one per line, and answers 204 once the
 	// node has kept them. It rides the web mux behind the same cookie as
@@ -56,4 +58,36 @@ type Record struct {
 	KV     map[string]string `json:"kv,omitempty"`
 	CID    string            `json:"cid,omitempty"`
 	CT     int64             `json:"ct,omitempty"`
+}
+
+// KindBoot is the one record each origin writes when it starts, naming the
+// build that wrote everything after it.
+const KindBoot = "boot"
+
+// BuildCommit is the vcs revision the go toolchain stamped into this binary,
+// "+dirty" when the tree had edits, and "" for a build with no stamp (go test,
+// go run).
+func BuildCommit() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	return commitOf(bi.Settings)
+}
+
+func commitOf(settings []debug.BuildSetting) string {
+	var rev string
+	var dirty bool
+	for _, s := range settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			dirty = s.Value == "true"
+		}
+	}
+	if rev != "" && dirty {
+		rev += "+dirty"
+	}
+	return rev
 }

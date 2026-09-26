@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -256,5 +257,20 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 	}
 	if e := ShellOpen("p1", "t7abcde"); e.Src != "shell" || e.Kind != "open" || e.KV["tile"] != "t7abcde" {
 		t.Errorf("a shell open is %+v", e)
+	}
+}
+
+// The client's first record names the build it runs and the browser running
+// it, so a dump from a stale tab or an odd browser says so on its own.
+func TestTheBootRecordNamesTheBuildAndTheBrowser(t *testing.T) {
+	e := Boot("8c779f0", "go1.26.6", "Mozilla/5.0 (X11)")
+	if e.Src != "client" || e.Kind != tracewire.KindBoot {
+		t.Errorf("the boot record is %s/%s", e.Src, e.Kind)
+	}
+	if e.KV["commit"] != "8c779f0" || e.KV["go"] != "go1.26.6" || e.KV["ua"] != "Mozilla/5.0 (X11)" {
+		t.Errorf("the boot record's kv is %v", e.KV)
+	}
+	if _, ok := Boot("", "go1.26.6", "ua").KV["commit"]; ok {
+		t.Error("an unstamped build claims a commit")
 	}
 }

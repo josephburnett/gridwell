@@ -1,7 +1,7 @@
 import { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import * as path from 'node:path';
-import { readDump, joinedRequests, describe as describeDump } from './trace';
+import { readDump, joinedRequests, bootOrigins, describe as describeDump } from './trace';
 
 // The trace has two halves and only a dump puts them together: the node's own
 // ring, and the records the wasm client posts through /trace. This spec runs
@@ -130,6 +130,10 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   const drop = mine.find((r) => r.src === 'drag' && r.kind === 'drop');
   expect(drop?.kv?.pane, `the drop record names the pane it was made in: ${JSON.stringify(drop)}`)
     .toBeTruthy();
+
+  // Every origin names its build once, at its start.
+  expect(bootOrigins(lines), `boot records; ${describeDump(lines)}`).toEqual(['client', 'electron', 'node']);
+  expect(mine.filter((r) => r.kind === 'boot').length, 'this client boots once').toBe(1);
 
   const joined = joinedRequests(lines);
   expect(

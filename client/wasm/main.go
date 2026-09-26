@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strconv"
 	"syscall/js"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/cadence"
@@ -633,6 +635,8 @@ func main() {
 	// The flush timer exists now, so the ring can say when it is owed
 	// something; the interceptor's records reach it no other way.
 	tr.OnEmit = app.armTraceFlush
+	app.emit(traceevent.Boot(tracewire.BuildCommit(), runtime.Version(),
+		jsString(js.Global().Get("navigator").Get("userAgent"))))
 	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed, app.paneLayoutUnreadable)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
 	app.nav = nav.New()

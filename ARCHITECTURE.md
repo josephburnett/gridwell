@@ -376,6 +376,12 @@ transition, the shell door's refusals, opens and closes, and — through
 subprocess's stderr does not pass through that log, so the spawn hands it a
 writer of its own.
 
+Each origin writes one `boot` record when it starts (`tracewire.KindBoot`):
+the node its version, commit, go version and home; the client its commit,
+go version and user agent; Electron main its app, Electron and Chrome
+versions. The commit is the go toolchain's stamp (`tracewire.BuildCommit`),
+absent from a build with none — a `go test`, or a build in a git worktree.
+
 On the client, a drawn frame is one record, `frame/draw`: its msg is the
 first reason asked (`traceevent.Why*`), `kv.asks` counts the asks it
 absorbed, and `kv.ms` is how long the draw took.

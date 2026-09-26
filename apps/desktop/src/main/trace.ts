@@ -215,6 +215,25 @@ export function trace(ev: TraceEvent): void {
   void mainRing.tick();
 }
 
+// The versions main can name. It carries no commit: nothing stamps one into
+// the TypeScript build, and the node's boot record names the commit of the
+// binary this app launched.
+interface BootVersions {
+  app: string;
+  electron: string;
+  chrome: string;
+}
+
+// bootEvent is main's first record, under api/tracewire.KindBoot.
+export function bootEvent(v: BootVersions): TraceEvent {
+  return {
+    src: 'main',
+    kind: 'boot',
+    msg: `gridwell desktop ${v.app}`,
+    kv: { app: v.app, electron: v.electron, chrome: v.chrome },
+  };
+}
+
 // logLine is main's own console output: the sidecar's lines are already in the
 // node's ring through its log capture, and these are the ones it never saw.
 export function logLine(level: 'log' | 'error', line: string): void {

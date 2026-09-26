@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { TraceClient, TRACE_FLUSH_BATCH, TRACE_FLUSH_MS, TRACE_MAX_MSG, TRACE_PATH } from './trace';
+import { bootEvent, TraceClient, TRACE_FLUSH_BATCH, TRACE_FLUSH_MS, TRACE_MAX_MSG, TRACE_PATH } from './trace';
 
 // The fields of one line, as the node reads them back.
 interface Row {
@@ -318,5 +318,22 @@ test('the flush window matches client/cadence', () => {
     TRACE_FLUSH_MS,
     Number(m![1]),
     'trace.ts TRACE_FLUSH_MS drifted from cadence.TraceFlushMs (the owner)',
+  );
+});
+
+// Main's first record names the app and the Electron it runs on. Its kind is
+// the node's and the client's, so a dump finds every origin's build with one
+// filter.
+test('the boot record names the app and electron, under tracewire.KindBoot', () => {
+  const ev = bootEvent({ app: '0.1.0', electron: '43.0.0', chrome: '140.0.0.0' });
+  assert.deepEqual(ev, {
+    src: 'main',
+    kind: 'boot',
+    msg: 'gridwell desktop 0.1.0',
+    kv: { app: '0.1.0', electron: '43.0.0', chrome: '140.0.0.0' },
+  });
+  assert.ok(
+    goSource('api/tracewire/tracewire.go').includes(`KindBoot = "${ev.kind}"`),
+    'trace.ts boot kind drifted from tracewire.KindBoot (the owner)',
   );
 });
