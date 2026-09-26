@@ -174,10 +174,10 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	if a.deadNamespace(tileID) {
 		return
 	}
-	// The dedupe claim is client/inflight's and bounded, so a request the
-	// network swallows cannot hold this tile's face for the life of the
-	// page.
-	ctx, done, ok := a.fetch.previewFetch.Begin(tileID)
+	// The claim is bounded and a failure latches, both inflight.Reads', so a
+	// swallowed request cannot hold this face for the life of the page and
+	// a refused one is not asked for every frame.
+	ctx, done, ok := a.fetch.previews.Ask(tileID)
 	if !ok {
 		return
 	}
@@ -186,6 +186,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 		jpeg, err := a.cl.GetTilePreview(ctx, tileID)
 		// clientsync.ReactPreview is the one table; this runs its arms.
 		r := clientsync.ReactPreview(err, len(jpeg) == 0)
+		a.fetch.previews.Settle(tileID, r.Latch)
 		if r.Surface {
 			a.surfaceRPCError("GetTilePreview", err)
 		}

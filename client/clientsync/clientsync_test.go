@@ -255,8 +255,8 @@ func TestReactPreviewTable(t *testing.T) {
 		{"bytes are the face", nil, false, PreviewReaction{Store: true}},
 		{"an empty answer settles the miss", nil, true, PreviewReaction{Settle: true}},
 		{"no previews served settles it too", unimpl, false, PreviewReaction{Settle: true}},
-		{"a dark source surfaces and retries", down, false, PreviewReaction{Surface: true}},
-		{"a verdict surfaces and retries", verdict, false, PreviewReaction{Surface: true}},
+		{"a dark source surfaces and latches until the backstop", down, false, PreviewReaction{Surface: true, Latch: inflight.Unreachable}},
+		{"a verdict surfaces and latches until a change", verdict, false, PreviewReaction{Surface: true, Latch: inflight.Refused}},
 	}
 	for _, c := range cases {
 		if got := ReactPreview(c.err, c.empty); got != c.want {

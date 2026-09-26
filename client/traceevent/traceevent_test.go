@@ -47,7 +47,7 @@ func TestAnEmptyValueIsNoKey(t *testing.T) {
 func TestFrameReasonsAreDistinct(t *testing.T) {
 	seen := map[string]bool{}
 	for _, why := range []string{WhyAnimation, WhyTransition, WhyGhost, WhyTraceFade,
-		WhyNotice, WhyGridLoaded, WhyContent, WhyPreview, WhyDrag} {
+		WhyNotice, WhyGridLoaded, WhyContent, WhyPreview, WhyDrag, WhyReask} {
 		if why == "" {
 			t.Fatal("a frame reason is empty")
 		}

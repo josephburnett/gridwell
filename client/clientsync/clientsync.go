@@ -201,9 +201,10 @@ type PreviewReaction struct {
 	// ask again: the server answered empty, or the namespace serves no
 	// previews at all, which is a capability and never a failure.
 	Settle bool
-	// Surface reports the failure. The miss stays unsettled, so the next draw
-	// retries: a transport failure or a verdict may not stand forever.
+	// Surface reports the failure; Latch is ReactRead's verdict on it, so the
+	// next draw does not ask again until the verdict's clearing signal.
 	Surface bool
+	Latch   inflight.Verdict
 }
 
 // ReactPreview is the one table for a preview fetch's outcome.
@@ -216,5 +217,5 @@ func ReactPreview(err error, empty bool) PreviewReaction {
 	case IsUnimplemented(err):
 		return PreviewReaction{Settle: true}
 	}
-	return PreviewReaction{Surface: true}
+	return PreviewReaction{Surface: true, Latch: ReactRead(Of(err))}
 }

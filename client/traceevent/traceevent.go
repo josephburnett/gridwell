@@ -69,6 +69,7 @@ const (
 	WhyContent    = "content loaded"
 	WhyPreview    = "preview decoded"
 	WhyDrag       = "drag snap"
+	WhyReask      = "latched read re-asked"
 )
 
 // FrameAsks is the paint asked for and not yet drawn. Asks coalesce into one
