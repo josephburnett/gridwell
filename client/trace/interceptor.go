@@ -2,6 +2,8 @@ package trace
 
 import (
 	"context"
+	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -81,16 +83,31 @@ func (i interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) con
 }
 
 // tracedConn ends its span when the read side closes, which is where a stream
-// that died and one the client let go both arrive.
+// that died and one the client let go both arrive. A server stream's verdict
+// arrives on Receive and the close then reports nothing, so the first
+// non-EOF Receive error is the span's; the close's error only if none.
 type tracedConn struct {
 	connect.StreamingClientConn
-	done func(err error)
+	done    func(err error)
+	recvErr error
+}
+
+func (t *tracedConn) Receive(msg any) error {
+	err := t.StreamingClientConn.Receive(msg)
+	if err != nil && t.recvErr == nil && !errors.Is(err, io.EOF) {
+		t.recvErr = err
+	}
+	return err
 }
 
 func (t *tracedConn) CloseResponse() error {
 	err := t.StreamingClientConn.CloseResponse()
 	if t.done != nil {
-		t.done(err)
+		if t.recvErr != nil {
+			t.done(t.recvErr)
+		} else {
+			t.done(err)
+		}
 		t.done = nil
 	}
 	return err
