@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { makeRunDir } from '../e2e/homes';
 
 // The web-content door on a browser host. With no Electron bridge a url tile
 // cannot go live in place, so the descent shows the frozen face and the bar
@@ -14,7 +14,7 @@ const PNG_1X1 = Buffer.from(
   'base64',
 );
 
-const picsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-web-page-'));
+const picsDir = makeRunDir();
 fs.writeFileSync(path.join(picsDir, 'cat.png'), PNG_1X1);
 
 test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: picsDir } }] });

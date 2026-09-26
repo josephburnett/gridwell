@@ -2,18 +2,18 @@ import { test, expect } from './fixtures';
 import { tileAt, placeTile } from './oracle';
 import { settle } from './cadence';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { makeRunDir } from './homes';
 
 // Framing saves survive races, unloads, and sibling panes, and every root grid
 // persists its viewport.
 
-const FS_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-framing-'));
+const FS_ROOT = makeRunDir();
 // A second fs root, with a document and a subdirectory in it: the read-only
 // scroll test needs a file to descend into and the mid-descent reframe needs a
 // doorway. FS_ROOT stays empty for the root-grid pan test, whose press would
 // otherwise land on a tile instead of the grid.
-const DOC_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-framing-doc-'));
+const DOC_ROOT = makeRunDir();
 fs.writeFileSync(path.join(DOC_ROOT, 'long.md'), '# long\n\n' + 'line\n\n'.repeat(200));
 fs.mkdirSync(path.join(DOC_ROOT, 'papers'));
 fs.writeFileSync(path.join(DOC_ROOT, 'papers', 'one.md'), '# one\n');

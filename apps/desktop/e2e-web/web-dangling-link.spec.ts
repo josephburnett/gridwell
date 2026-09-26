@@ -1,10 +1,9 @@
 import { test as base, expect } from '@playwright/test';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnServe, stopServe, authenticate, freePort } from './fixtures';
 import { seedHome } from '../e2e/fixtures';
-import { removeHome } from '../e2e/homes';
+import { makeRunDir, removeHome } from '../e2e/homes';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
@@ -19,7 +18,7 @@ import { tileAt } from '../e2e/oracle';
 // three seconds of rendering, both of which must be zero.
 
 base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) => {
-  const docs = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-docs-'));
+  const docs = makeRunDir();
   fs.writeFileSync(path.join(docs, 'note.md'), 'hello');
   const home = seedHome([{ kind: 'fs', name: 'files', config: { root: docs } }]);
 

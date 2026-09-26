@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { makeRunDir } from './homes';
 
 // The web-content door, desktop side: an fs image file is a url tile whose page
 // the plugin serves, and descending it goes live as a native WebContentsView at
@@ -16,7 +16,7 @@ const PNG_1X1 = Buffer.from(
   'base64',
 );
 
-const picsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-fs-page-'));
+const picsDir = makeRunDir();
 fs.writeFileSync(path.join(picsDir, 'cat.png'), PNG_1X1);
 
 test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: picsDir } }] });

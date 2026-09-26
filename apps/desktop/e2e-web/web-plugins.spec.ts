@@ -2,8 +2,8 @@ import { test, expect } from './fixtures';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as net from 'node:net';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { makeRunDir } from '../e2e/homes';
 
 // The proc and gitlab plugins, crawled through the browser client: proc walks a
 // live process tree, gitlab serves todos against a fake GitLab API. Each runs as
@@ -67,7 +67,7 @@ test.use({
   extraPlugins: async ({}, use) => {
     const api = await fakeGitLab();
     const port = (api.address() as net.AddressInfo).port;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-web-plugins-'));
+    const dir = makeRunDir();
     const tokenFile = path.join(dir, 'token');
     fs.writeFileSync(tokenFile, TOKEN + '\n', { mode: 0o600 });
     await use([

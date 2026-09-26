@@ -1,8 +1,6 @@
 import { test, expect } from './fixtures';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { createExitWell, tileAt } from './oracle';
+import { makeRunDir } from './homes';
 
 // A link into a namespace this node does not declare is DEAD. Removing a
 // plugin from server.yaml, retiring a connection name, or an id that never
@@ -93,7 +91,7 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
 // The boundary. A plugin the node DECLARES is alive whatever state it is in,
 // so its link tiles must never grey. Health covers a declared source that is
 // down, and greying it would hide one that is coming back.
-const FS_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-deadlink-'));
+const FS_ROOT = makeRunDir();
 
 test.describe('a declared namespace is never dead', () => {
   test.use({ extraPlugins: [{ kind: 'fs', name: 'files', config: { root: FS_ROOT } }] });

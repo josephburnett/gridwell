@@ -1,13 +1,13 @@
 import { test, expect } from './fixtures';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { makeRunDir } from './homes';
 
 // Plain-text files show verbatim, with no markdown mangling, because the plugin
 // declares text_presentation "plain". A read-only body refreshes on every
 // descent; caching it at version 0 would hide every later edit on disk.
 
-const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-fscontent-'));
+const ROOT = makeRunDir();
 test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
 
 test('the plugin fs declares no tool it cannot honor (#271)', async ({ gw, window }) => {

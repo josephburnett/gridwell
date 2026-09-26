@@ -1,8 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { makeRunDir } from './homes';
 
 // The bar's chain inside a workspace, across the layout-blob seam.
 //
@@ -13,7 +11,7 @@ import * as path from 'node:path';
 // the whole stack through the blob, so this spec asserts on what the bar shows
 // after the re-entry rather than on the encoder alone.
 
-const FS_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-crumbs-'));
+const FS_ROOT = makeRunDir();
 test.use({ extraPlugins: [{ kind: 'fs', name: 'files', config: { root: FS_ROOT } }] });
 
 // chainAfterBoundary returns the focused pane's own crumbs, everything after the

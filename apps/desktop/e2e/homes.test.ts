@@ -126,3 +126,18 @@ test('sweepLeakedHomes kills the tmux servers of an abandoned home, gone or not'
     assert.equal(fs.existsSync(live), false);
   });
 });
+
+// A scratch directory minted anywhere but makeRunDir carries no owner, so no
+// sweep can attribute it, and one minted at module scope leaks on every load
+// of its file, including loads that run none of its tests.
+test('every e2e scratch directory is minted by makeRunDir', () => {
+  const offenders: string[] = [];
+  for (const dir of ['e2e', 'e2e-web']) {
+    const abs = path.resolve(__dirname, '..', dir);
+    for (const f of fs.readdirSync(abs)) {
+      if (!f.endsWith('.ts') || f.endsWith('.test.ts') || f === 'homes.ts') continue;
+      if (/\bmkdtemp(Sync)?\(/.test(fs.readFileSync(path.join(abs, f), 'utf-8'))) offenders.push(`${dir}/${f}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
