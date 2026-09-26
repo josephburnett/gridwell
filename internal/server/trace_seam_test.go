@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
@@ -16,6 +18,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/tracewire"
+	clienttrace "github.com/josephburnett/gridwell/client/trace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -248,5 +251,40 @@ func TestTheEntityIsTheFirstIDFieldSet(t *testing.T) {
 		if got := entityOf(c.req); got != c.want {
 			t.Errorf("entityOf(%T %v) = %q, want %q", c.req, c.req, got, c.want)
 		}
+	}
+}
+
+// The client's half of the clock: the batch client/trace builds, posted under
+// the header it names, lands at the moment the client emitted each record on
+// the node's clock, however slow the client's clock and however long the
+// batch waited.
+func TestAClientBatchLandsAtItsEmitTimeOnTheNodesClock(t *testing.T) {
+	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Home: t.TempDir()}))
+	skew := -time.Hour // the client's clock runs an hour slow
+	c := clienttrace.New(8, "c7clock")
+	emitted := time.Now().Add(skew)
+	c.Emit("nav", "push", "clock-seam", nil, emitted)
+	batch, _ := c.PendingBatch()
+	sentAt := emitted.Add(900 * time.Millisecond) // the batch waited out its window
+	req, _ := http.NewRequest(http.MethodPost, hs.URL+tracewire.Path, bytes.NewReader(batch))
+	req.Header.Set(tracewire.ClockHeader, clienttrace.SendClock(sentAt))
+	before := time.Now().UnixMilli()
+	res, err := hs.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	after := time.Now().UnixMilli()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("POST /trace = %d, want 204", res.StatusCode)
+	}
+	var rec tracewire.Record
+	for _, r := range trace.Default().Snapshot() {
+		if r.CID == "c7clock" {
+			rec = r
+		}
+	}
+	if rec.T < before-900 || rec.T > after-900 {
+		t.Errorf("the record is stamped %d, want 900ms before receipt, in [%d, %d]", rec.T, before-900, after-900)
 	}
 }

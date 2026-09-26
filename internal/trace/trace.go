@@ -60,6 +60,12 @@ func Default() *Ring { return def }
 // Emit stamps seq and t onto rec and appends it. It takes a mutex and writes a
 // slot: nothing here may block a caller on the node's write path.
 func (r *Ring) Emit(rec tracewire.Record) {
+	rec.T = r.now().UTC().UnixMilli()
+	r.put(rec)
+}
+
+// put stamps seq onto rec, whose T is already set, and appends it.
+func (r *Ring) put(rec tracewire.Record) {
 	if rec.Origin == "" {
 		rec.Origin = tracewire.OriginNode
 	}
@@ -67,7 +73,6 @@ func (r *Ring) Emit(rec tracewire.Record) {
 	r.mu.Lock()
 	r.seq++
 	rec.Seq = r.seq
-	rec.T = r.now().UTC().UnixMilli()
 	r.buf[r.next] = rec
 	r.next = (r.next + 1) % len(r.buf)
 	if r.n < len(r.buf) {
@@ -88,11 +93,15 @@ func (r *Ring) Snapshot() []tracewire.Record {
 	return out
 }
 
-// Ingest reads JSON lines — records without seq or t — and emits each one. A
-// malformed line stops the read with its line number, and every good line
-// before it is already in the ring: a sender that garbles one record still
-// gets the rest of its gesture traced.
-func (r *Ring) Ingest(in io.Reader) (n int, err error) {
+// Ingest reads JSON lines — records without seq or t — and appends each one.
+// sent is the sender's clock at the post (tracewire.ClockHeader), zero when it
+// named none. A record's t is its CT moved by receipt minus sent; without a
+// sent or a CT, it is receipt time. A malformed line stops the read
+// with its line number, and every good line before it is already in the
+// ring: a sender that garbles one record still gets the rest of its gesture
+// traced.
+func (r *Ring) Ingest(in io.Reader, sent int64) (n int, err error) {
+	received := r.now().UTC().UnixMilli()
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	line := 0
@@ -107,7 +116,11 @@ func (r *Ring) Ingest(in io.Reader) (n int, err error) {
 			return n, fmt.Errorf("line %d: %w", line, err)
 		}
 		rec.Origin = senderOrigin(rec.Origin)
-		r.Emit(rec)
+		rec.T = received
+		if sent > 0 && rec.CT > 0 {
+			rec.T = rec.CT + received - sent
+		}
+		r.put(rec)
 		n++
 	}
 	if err := sc.Err(); err != nil {

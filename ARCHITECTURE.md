@@ -353,13 +353,19 @@ package-level `Default`, like `log`'s output, because it holds no node fact —
 nothing reads it back, and deleting it loses nothing the user owns.
 
 A record is one JSON object on one line, `api/tracewire.Record`, which the
-node and the client both read: `seq` and `t` (unix milliseconds UTC) are the
-node's stamps and the one total order, then `origin` (node, client, electron,
-plugin), `src`, `kind`, `msg` capped at 1024 bytes, a small `kv`, and the
-emitter's `cid` and `ct`.
+node and the client both read: `seq` and `t` are the node's stamps, then
+`origin` (node, client, electron, plugin), `src`, `kind`, `msg` capped at 1024
+bytes, a small `kv`, and the emitter's `cid` and `ct`. `seq` is receipt order.
+`t` (unix milliseconds UTC) is when the record happened on the node's clock:
+a node record's emit time, and a sent record's `ct` plus its batch's skew.
+Each batch names the sender's clock at the post in `Gridwell-Trace-Clock`
+(`tracewire.ClockHeader`), the node takes receipt minus that once per batch,
+and a record without a `ct` keeps receipt time. So a dump sorted by `t`
+interleaves the client's records with the node work they caused, where `seq`
+puts a batch after everything that happened while it waited to be sent.
 
 The door is on the gated web mux beside `/shell`. `POST /trace` takes JSON
-lines and answers 204; a malformed line is a 400 naming its number, and the
+lines and answers 204; a send clock it cannot read is a 400; a malformed line is a 400 naming its number, and the
 good lines before it stay. `POST /trace/dump` writes the ring in seq order to
 `<home>/dumps/trace-<UTC yyyymmdd-hhmmss>.jsonl`, 0600 in a 0700 directory,
 and answers the path and the count. A dump is a reading: it clears nothing.

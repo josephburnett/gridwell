@@ -8,6 +8,9 @@
 // See api/tracewire.Path.
 export const TRACE_PATH = '/trace';
 
+// See api/tracewire.ClockHeader.
+const TRACE_CLOCK_HEADER = 'Gridwell-Trace-Clock';
+
 // See api/tracewire.OriginElectron: the one origin the node lets this process
 // claim. Anything else it rewrites to "client".
 const TRACE_ORIGIN = 'electron';
@@ -52,8 +55,9 @@ interface TraceRecord {
 
 // The door, injected so a test never reaches the network. True means the node
 // kept the batch; anything else leaves it pending for the next one. The signal
-// is how stop() abandons a post: see stopTrace.
-type TracePost = (body: string, signal: AbortSignal) => Promise<boolean>;
+// is how stop() abandons a post: see stopTrace. headers are the post's to
+// send, the batch's send clock among them.
+type TracePost = (body: string, signal: AbortSignal, headers: Record<string, string>) => Promise<boolean>;
 
 interface TraceOptions {
   cid?: string;
@@ -133,9 +137,13 @@ export class TraceClient {
     this.lastFlush = this.now();
     const aborter = new AbortController();
     this.aborter = aborter;
+    const headers = {
+      'Content-Type': 'application/x-ndjson',
+      [TRACE_CLOCK_HEADER]: String(this.lastFlush),
+    };
     let ok = false;
     try {
-      ok = await this.post(batch.body, aborter.signal);
+      ok = await this.post(batch.body, aborter.signal, headers);
     } catch {
       // The door is unreachable, or the post was abandoned; the records stay
       // pending and the ring is the bound on that memory.

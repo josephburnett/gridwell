@@ -337,3 +337,26 @@ test('the boot record names the app and electron, under tracewire.KindBoot', () 
     'trace.ts boot kind drifted from tracewire.KindBoot (the owner)',
   );
 });
+
+// A batch names the clock it was sent at, which the node subtracts from its
+// own to place each record at its ct; see api/tracewire.ClockHeader. It is
+// the ring's own clock, read at the post, so it is the same clock as ct.
+test('a batch carries its send clock under tracewire.ClockHeader', async () => {
+  const k = clock();
+  let headers: Record<string, string> = {};
+  const c = new TraceClient({
+    cid: 'cid7abc',
+    now: k.now,
+    post: async (_b, _s, h) => ((headers = h), true),
+  });
+  c.emit({ src: 'main', kind: 'log', msg: 'one' });
+  k.advance(TRACE_FLUSH_MS);
+  await c.tick();
+  assert.equal(headers['Content-Type'], 'application/x-ndjson');
+  const name = Object.keys(headers).find((k) => k !== 'Content-Type')!;
+  assert.equal(headers[name], String(k.now()), 'the clock is the ring clock at the post');
+  assert.ok(
+    goSource('api/tracewire/tracewire.go').includes(`ClockHeader = "${name}"`),
+    `trace.ts clock header ${name} drifted from tracewire.ClockHeader (the owner)`,
+  );
+});

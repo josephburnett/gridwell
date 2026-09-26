@@ -8,6 +8,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/josephburnett/gridwell/api/tracewire"
@@ -24,7 +25,15 @@ func (s *Server) traceDoor() http.Handler {
 			http.Error(w, "trace: POST only", http.StatusMethodNotAllowed)
 			return
 		}
-		if _, err := trace.Default().Ingest(r.Body); err != nil {
+		var sent int64
+		if h := r.Header.Get(tracewire.ClockHeader); h != "" {
+			var err error
+			if sent, err = strconv.ParseInt(h, 10, 64); err != nil {
+				http.Error(w, "trace: "+tracewire.ClockHeader+": "+err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		if _, err := trace.Default().Ingest(r.Body, sent); err != nil {
 			http.Error(w, "trace: "+err.Error(), http.StatusBadRequest)
 			return
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/trace"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
@@ -90,7 +91,13 @@ const traceSource = "trace"
 // fetch under wasm, on this page's own origin and cookie, the same way every
 // other call reaches the node.
 func (a *App) postTrace(path string, body []byte) ([]byte, error) {
-	resp, err := http.Post(a.origin+path, traceContentType, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, a.origin+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", traceContentType)
+	req.Header.Set(tracewire.ClockHeader, trace.SendClock(time.Now()))
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

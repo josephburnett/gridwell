@@ -77,13 +77,13 @@ async function boot(): Promise<void> {
   // net.fetch issues from the default session, which is where the banner's
   // token was just written, so there is no second auth path.
   const origin = sidecar.origin;
-  startTrace(async (body, signal) => {
+  startTrace(async (body, signal, headers) => {
     const res = await net.fetch(origin + TRACE_PATH, {
       method: 'POST',
       body,
       signal,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/x-ndjson' },
+      headers,
     });
     return res.ok;
   });

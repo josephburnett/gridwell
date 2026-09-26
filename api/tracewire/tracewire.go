@@ -19,6 +19,11 @@ const (
 	// RequestHeader carries the emitter's request id on the calls a gesture
 	// makes, so the client's records and the server's name the same work.
 	RequestHeader = "Gridwell-Request"
+
+	// ClockHeader is the sender's clock when it posted a batch to Path, in
+	// unix milliseconds. The node reads the skew off it once per batch and
+	// places each record at its CT plus that skew.
+	ClockHeader = "Gridwell-Trace-Clock"
 )
 
 // The origins. OriginClient and OriginElectron are the only two an emitter may
@@ -46,9 +51,12 @@ const MaxMsg = 1024
 // Record is one line of the trace. The node stamps Seq and T on receipt, so
 // an emitter leaves them zero and they are absent from the line it sends.
 type Record struct {
+	// Seq is receipt order.
 	Seq uint64 `json:"seq,omitempty"`
-	// T is unix milliseconds UTC, the same unit as CT, so the skew between an
-	// emitter's clock and the node's is a subtraction.
+	// T is when the record happened on the node's clock, unix milliseconds
+	// UTC: a node record's emit time, and a sent record's CT moved by its
+	// batch's skew (see ClockHeader), so node and client records interleave
+	// by T where Seq would order a batch after the node work it preceded.
 	T int64 `json:"t,omitempty"`
 
 	Origin string            `json:"origin"`
