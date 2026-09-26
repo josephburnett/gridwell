@@ -181,3 +181,72 @@ func TestTheConnectionDoorTracesItsRPCs(t *testing.T) {
 		t.Errorf("the connection door left start=%v end=%v under req %q", started, ended, reqID)
 	}
 }
+
+// A span names the entity its request is about, so a dump joins the node's
+// work on a grid to the client's records about that grid without the request
+// id. Unary and streaming, on both doors.
+func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
+	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Home: t.TempDir()}))
+	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
+	const unaryReq, streamReq = "entity-unary", "entity-stream"
+	req := connect.NewRequest(&pb.GetGridRequest{GridId: "nope/g7abcde"})
+	req.Header().Set(tracewire.RequestHeader, unaryReq)
+	cl.GetGrid(context.Background(), req)
+	sreq := connect.NewRequest(&pb.ReadContentRequest{TileId: "nope/t7abcde"})
+	sreq.Header().Set(tracewire.RequestHeader, streamReq)
+	if stream, err := cl.ReadContent(context.Background(), sreq); err == nil {
+		for stream.Receive() {
+		}
+	}
+
+	srv := mustNew(t, plugin.NewRegistry(), Config{Home: t.TempDir()})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	door := ConnectionDoorServer(srv.ConnectionHandler())
+	go door.Serve(ln)
+	t.Cleanup(func() { door.Close() })
+	conn, err := grpc.NewClient(ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	const grpcReq = "entity-grpc"
+	ctx := metadata.AppendToOutgoingContext(context.Background(), tracewire.RequestHeader, grpcReq)
+	pb.NewGridwellClient(conn).GetTile(ctx, &pb.GetTileRequest{TileId: "nope/t1abcde"})
+
+	want := map[string]string{unaryReq: "nope/g7abcde", streamReq: "nope/t7abcde", grpcReq: "nope/t1abcde"}
+	ends := map[string]tracewire.Record{}
+	for _, rec := range trace.Default().Snapshot() {
+		if _, ok := want[rec.KV["req"]]; ok && rec.Src == "router" && !strings.HasSuffix(rec.Msg, " start") {
+			ends[rec.KV["req"]] = rec
+		}
+	}
+	for req, id := range want {
+		if got := ends[req].KV["id"]; got != id {
+			t.Errorf("the span under req %q names entity %q, want %q: %+v", req, got, id, ends[req])
+		}
+	}
+}
+
+// A request names its entity by its first id field set: SetFraming's doorway
+// tile, or the root grid when there is none.
+func TestTheEntityIsTheFirstIDFieldSet(t *testing.T) {
+	cases := []struct {
+		req  any
+		want string
+	}{
+		{&pb.SetFramingRequest{TileId: "a/t1", RootGridId: "a/g1"}, "a/t1"},
+		{&pb.SetFramingRequest{RootGridId: "a/g1"}, "a/g1"},
+		{&pb.PlaceTileRequest{TileId: "a/t1", GridId: "a/g1"}, "a/t1"},
+		{&pb.CreateTileRequest{GridId: "a/g1"}, "a/g1"},
+		{&pb.SubscribeRequest{}, ""},
+		{"not a message", ""},
+	}
+	for _, c := range cases {
+		if got := entityOf(c.req); got != c.want {
+			t.Errorf("entityOf(%T %v) = %q, want %q", c.req, c.req, got, c.want)
+		}
+	}
+}
