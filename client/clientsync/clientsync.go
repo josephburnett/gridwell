@@ -8,6 +8,8 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
+
+	"github.com/josephburnett/gridwell/client/inflight"
 )
 
 // Outcome is what an RPC's result meant.
@@ -153,17 +155,18 @@ func NoticesFor(r Reaction, o Outcome, ownWords bool) Notices {
 	return n
 }
 
-// ReactRead is what one read's outcome says about the asked id's failure
-// latch: an answer clears it, a verdict sets it, and a transport failure
-// says nothing, so it leaves the latch as it found it.
-func ReactRead(o Outcome) LatchVerdict {
+// ReactRead is the one table over a read's outcome for the asked key's
+// failure latch: an answer clears it, a transport failure latches it
+// Unreachable, which the backstop re-asks, and anything else is the server's
+// verdict, latched Refused until the entity changes.
+func ReactRead(o Outcome) inflight.Verdict {
 	switch o {
 	case OutcomeOK:
-		return LatchClear
+		return inflight.Answered
 	case OutcomeTransport:
-		return LatchKeep
+		return inflight.Unreachable
 	}
-	return LatchSet
+	return inflight.Refused
 }
 
 // GridRead is what one GetGrid answer calls for. The cache keys a grid by the
@@ -172,28 +175,18 @@ func ReactRead(o Outcome) LatchVerdict {
 // with a 200 behind it: that is a verdict on the asked id, latched and
 // reported, though the rows are still worth remembering under their own.
 type GridRead struct {
-	Latch LatchVerdict
+	Latch inflight.Verdict
 	// Store puts the answered rows in the cache.
 	Store bool
 	// Renamed is the answered-under-another-id case, which the notice names.
 	Renamed bool
 }
 
-// LatchVerdict is what an answer says about the asked id's failure latch. A
-// transport failure says nothing, so it leaves the latch as it found it.
-type LatchVerdict int
-
-const (
-	LatchKeep LatchVerdict = iota
-	LatchSet
-	LatchClear
-)
-
 // ReactGridRead is the one table for a grid read's outcome.
 func ReactGridRead(asked, answered string, o Outcome) GridRead {
 	r := GridRead{Latch: ReactRead(o), Store: o == OutcomeOK}
 	if o == OutcomeOK && answered != asked {
-		r.Latch, r.Renamed = LatchSet, true
+		r.Latch, r.Renamed = inflight.Refused, true
 	}
 	return r
 }

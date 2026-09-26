@@ -145,7 +145,8 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   // return; the shape that hurts is the black hole, where it neither answers
   // nor fails, and a claim never released means no refetch, no error, and
   // "loading …" for the life of the page. Nothing here restarts the server: a
-  // fetch is bounded, so the pane comes back off its own clock.
+  // fetch is bounded, and the bound's expiry latches the grid Unreachable, so
+  // the pane comes back on the next backstop tick.
   test.setTimeout(150_000);
   await gw.enterPlugin('home');
   const f = await gw.focused();
@@ -184,6 +185,9 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   // asks again, into the hole.
   await window.goto(outage.origin + '/?e2e=1');
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  // The backstop's own bound is 30s, the same as the fetch's; retuned so the
+  // tick after the expiry lands inside the wait below.
+  await window.evaluate(() => (window as any).__gridwellTest.setBackstopMs(5_000));
   const home = await gw.focused();
   const c = await gw.cellCenter(home.id, cx, cy);
   await window.mouse.click(c.x, c.y); // descend; no waitIdle, the fetch is hung by design
@@ -204,7 +208,8 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   );
   expect(stuck, 'the pane is showing a grid it does not have').toBe(0);
 
-  // No user action, no restart, no reconnect: only the bounded fetch giving up.
+  // No user action, no restart, no reconnect: only the bounded fetch giving up
+  // and the backstop asking again.
   await expect
     .poll(
       async () =>

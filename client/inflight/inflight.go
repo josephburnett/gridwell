@@ -1,5 +1,6 @@
 // Package inflight bounds every client RPC and owns, per key, whether a fetch
-// is outstanding (Set) or has failed (Latch). A claim ends when its fetch
+// is outstanding (Set) or has failed (Latch), and both at once for a read the
+// renderer re-asks every frame (Reads). A claim ends when its fetch
 // returns or CancelIf declares its link gone; a claim that outlived its
 // request would dedupe every retry away and leave a pane loading with no
 // error. Only the event Subscribe and the shell WebSocket are unbounded.
@@ -107,10 +108,4 @@ func (s *Set) Keys() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Sorted(maps.Keys(s.m))
-}
-
-func (s *Set) Len() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.m)
 }

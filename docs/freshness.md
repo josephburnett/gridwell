@@ -124,7 +124,11 @@ face it fed never loaded, never retried, and never said a word.
 fire `retryKick(true, cache.EverySource)` on the next successful subscribe: clear
 the failure latches, cancel every fetch set, refetch every named and
 known grid, then `syncContentOutbox` and drain. `retryBackstop` runs
-`retryKick(false, …)` every `retry.Backstop` while anything is parked.
+`retryKick(false, …)` every `retry.Backstop` while anything is parked, and
+re-asks every read latched Unreachable on the same tick: a grid, tile or body
+read the renderer re-asks every frame is an `inflight.Reads`, whose failure
+latches until a change (a verdict) or the next tick (an outage), never the
+next frame.
 `client/retry` owns that cadence, the two reconnect waits and the gap they
 pace, and the boot handshake's backoff.
 
@@ -184,8 +188,8 @@ correcting with no user gesture.
 9. `qualifyEvent` prepends the node id. The connection segment is already on
    the id, because the cache's own ids are `<conn>/<remote-id>`.
 10. `router.Subscribe`'s loop sends it. `App.startSSE` runs `events.Route`'s
-    plan for a `GridChanged`: it clears the grid's `fetch.gridLoadFailed`
-    latch — the event is the one per-grid signal that something changed, so
+    plan for a `GridChanged`: it clears the grid's `fetch.grids` latches
+    — the event is the one per-grid signal that something changed, so
     it is also what clears a verdict latch — and calls `App.fetchGrid(gridID)`. It does this
     unconditionally, for grids nobody is looking at too.
 11. The refetch re-enters `Layer.GetGrid`. The rows were re-stored moments
@@ -412,7 +416,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A verdict evicts and announces | `sourcecache_test.go:TestRevalidationVerdictEvicts` |
 | The event crosses layer stream → fan-in → qualification → client, and the next read serves the correction | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient` |
 | Refresh after a blind window replaces the whole tile set | `sourcecache_test.go:TestRefreshReconcilesWhatChangedWhileBlind` |
-| The client's own arm: `GridChanged` clears `gridLoadFailed` and calls `fetchGrid` | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient`, `client/events/events_test.go:TestRouteTable` |
+| The client's own arm: `GridChanged` clears `fetch.grids`' latches and calls `fetchGrid` | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient`, `client/events/events_test.go:TestRouteTable` |
 
 ### Trace (b)
 

@@ -908,7 +908,7 @@ func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 // fetchTileContent never doubles an in-flight fetch: concurrent fetches for one
 // tile are how a stale reply lands after a fresher one and repaints old bytes.
 func (a *App) fetchTileContent(tileID string) {
-	if tileID == "" || a.fetch.contentLoadFailed.Has(tileID) {
+	if tileID == "" {
 		return
 	}
 	if _, ok := a.c.TileContent(tileID); ok {
@@ -919,7 +919,7 @@ func (a *App) fetchTileContent(tileID string) {
 	if a.deadNamespace(tileID) {
 		return
 	}
-	ctx, done, ok := a.fetch.contentFetch.Begin(tileID)
+	ctx, done, ok := a.fetch.contents.Ask(tileID)
 	if !ok {
 		return
 	}
@@ -937,12 +937,7 @@ func (a *App) fetchTileContent(tileID string) {
 func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
 	data, _, version, err := a.cl.ReadContent(ctx, tileID)
 	// clientsync.ReactRead is the one table; this runs its arms.
-	switch clientsync.ReactRead(clientsync.Of(err)) {
-	case clientsync.LatchSet:
-		a.fetch.contentLoadFailed.Set(tileID)
-	case clientsync.LatchClear:
-		a.fetch.contentLoadFailed.Clear(tileID)
-	}
+	a.fetch.contents.Settle(tileID, clientsync.ReactRead(clientsync.Of(err)))
 	if err != nil {
 		// The tile body would otherwise never appear: say why.
 		a.surfaceRPCError("ReadContent", err)
@@ -1196,7 +1191,7 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if pl, ok := a.pluginByUUID(uuidOf(gid)); ok && pl.Label != "" {
 		name = pl.Label
 	}
-	label := pane.GridNotice(name, a.fetch.gridLoadFailed.Has(gid))
+	label := pane.GridNotice(name, a.fetch.grids.Failed(gid))
 	drawLabel(a.cctx, label, r.X+r.W/2, r.Y+r.H/2, labelOpts{
 		font: "13px system-ui, sans-serif", fill: a.pal.Muted,
 		align: "center", baseline: "middle", maxW: r.W - 16,

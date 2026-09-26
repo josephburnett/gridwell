@@ -279,14 +279,14 @@ func (a *App) navAwait(e nav.Effect) {
 		// Claim-free, because a background fetch for the same grid must not
 		// turn the walk into a no-op, but bounded: a boot that waits forever
 		// on a dead socket is a blank screen.
-		a.await(tok, a.fetch.gridFetch.Context, a.navWorldForRestore,
+		a.await(tok, a.fetch.grids.Context, a.navWorldForRestore,
 			func(ctx context.Context) nav.Result {
 				return nav.Result{OK: a.loadGrid(ctx, id) == nil}
 			})
 	case nav.RequestReadContent:
 		id := e.Request.ID
 		// Claim-free, like the walk above, and bounded the same way.
-		a.await(tok, a.fetch.contentFetch.Context, a.navWorldCommon,
+		a.await(tok, a.fetch.contents.Context, a.navWorldCommon,
 			func(ctx context.Context) nav.Result {
 				// loadTileContent seeds the textarea from the body, and the
 				// cursor this path adds goes after that.

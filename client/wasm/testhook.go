@@ -399,19 +399,18 @@ func (a *App) thIdle(js.Value, []js.Value) any {
 		!a.writes.Any() &&
 		!a.nav.LevelPending() &&
 		a.dragging == nil &&
-		a.fetch.gridFetch.Len() == 0 &&
-		a.fetch.tileFetch.Len() == 0
+		len(a.fetch.grids.InFlight()) == 0 &&
+		len(a.fetch.tiles.InFlight()) == 0
 }
 
 // thIdleDetail names each thIdle component so a stalled wait reports which
 // state is stuck instead of timing out bare.
 func (a *App) thIdleDetail(js.Value, []js.Value) any {
-	grids := make([]any, 0, a.fetch.gridFetch.Len())
-	for _, id := range a.fetch.gridFetch.Keys() {
+	var grids, tiles []any
+	for _, id := range a.fetch.grids.InFlight() {
 		grids = append(grids, id)
 	}
-	tiles := make([]any, 0, a.fetch.tileFetch.Len())
-	for _, id := range a.fetch.tileFetch.Keys() {
+	for _, id := range a.fetch.tiles.InFlight() {
 		tiles = append(tiles, id)
 	}
 	return map[string]any{

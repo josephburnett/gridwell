@@ -14,6 +14,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/client/inflight"
 )
 
 // Of's transport set is gwerr.IsTransport's, read across the one gRPC-to-Connect
@@ -176,11 +177,11 @@ func TestReactGridRead(t *testing.T) {
 		o               Outcome
 		want            GridRead
 	}{
-		{"answered as asked", "n1/7", "n1/7", OutcomeOK, GridRead{Latch: LatchClear, Store: true}},
-		{"answered under another id latches, reports, and still stores", "n1/7", "n1/8", OutcomeOK, GridRead{Latch: LatchSet, Store: true, Renamed: true}},
-		{"transport touches no latch", "n1/7", "", OutcomeTransport, GridRead{}},
-		{"a verdict latches", "n1/7", "", OutcomeRejected, GridRead{Latch: LatchSet}},
-		{"a conflict latches", "n1/7", "", OutcomeConflict, GridRead{Latch: LatchSet}},
+		{"answered as asked", "n1/7", "n1/7", OutcomeOK, GridRead{Latch: inflight.Answered, Store: true}},
+		{"answered under another id latches, reports, and still stores", "n1/7", "n1/8", OutcomeOK, GridRead{Latch: inflight.Refused, Store: true, Renamed: true}},
+		{"transport latches unreachable", "n1/7", "", OutcomeTransport, GridRead{Latch: inflight.Unreachable}},
+		{"a verdict latches", "n1/7", "", OutcomeRejected, GridRead{Latch: inflight.Refused}},
+		{"a conflict latches", "n1/7", "", OutcomeConflict, GridRead{Latch: inflight.Refused}},
 	}
 	for _, c := range cases {
 		if got := ReactGridRead(c.asked, c.answered, c.o); got != c.want {
@@ -215,27 +216,29 @@ func TestNoticesFor(t *testing.T) {
 	}
 }
 
+// A read the renderer re-asks every frame must latch on every failure, or the
+// failure's own notice draws the frame that asks again. Only a verdict
+// stands until a change; an unreachable source is re-asked by the backstop.
 func TestReactRead(t *testing.T) {
-	for o, want := range map[Outcome]LatchVerdict{
-		OutcomeOK: LatchClear, OutcomeTransport: LatchKeep, OutcomeRejected: LatchSet, OutcomeConflict: LatchSet,
+	for o, want := range map[Outcome]inflight.Verdict{
+		OutcomeOK:        inflight.Answered,
+		OutcomeTransport: inflight.Unreachable,
+		OutcomeRejected:  inflight.Refused,
+		OutcomeConflict:  inflight.Refused,
 	} {
 		if got := ReactRead(o); got != want {
 			t.Errorf("outcome %v: got %v, want %v", o, got, want)
 		}
 	}
-}
-
-// A body read is on the same table as grid and tile reads: the renderer asks
-// for a missing body every frame, so the plugin's not_found for a file gone
-// from disk must latch, and a dark plugin's unavailable must not.
-func TestABodyTheServerRefusesLatches(t *testing.T) {
+	// The two a body read meets: the plugin's not_found for a file gone from
+	// disk, and a dark plugin's unavailable.
 	gone := connect.NewError(connect.CodeNotFound, errors.New("plugin: no tile ~Zm9v"))
-	if got := ReactRead(Of(gone)); got != LatchSet {
-		t.Errorf("not_found: got %v, want LatchSet", got)
+	if got := ReactRead(Of(gone)); got != inflight.Refused {
+		t.Errorf("not_found: got %v, want Refused", got)
 	}
 	dark := connect.NewError(connect.CodeUnavailable, errors.New("plugin down"))
-	if got := ReactRead(Of(dark)); got != LatchKeep {
-		t.Errorf("unavailable: got %v, want LatchKeep", got)
+	if got := ReactRead(Of(dark)); got != inflight.Unreachable {
+		t.Errorf("unavailable: got %v, want Unreachable", got)
 	}
 }
 

@@ -65,8 +65,8 @@ func TestCancelIfOverEveryKeyCancelsAndNamesEveryFetch(t *testing.T) {
 	if !errors.Is(ctxA.Err(), context.Canceled) || !errors.Is(ctxB.Err(), context.Canceled) {
 		t.Errorf("both fetches must be cancelled: a=%v b=%v", ctxA.Err(), ctxB.Err())
 	}
-	if s.Len() != 0 {
-		t.Errorf("Len = %d, want no claim left standing", s.Len())
+	if len(s.Keys()) != 0 {
+		t.Errorf("Len = %d, want no claim left standing", len(s.Keys()))
 	}
 	if _, _, ok := s.Begin("a"); !ok {
 		t.Error("a cancelled key must be immediately claimable over the new link")
@@ -119,8 +119,8 @@ func TestZombieReleaseKeepsTheFreshClaim(t *testing.T) {
 		t.Error("the fresh claim must still dedupe")
 	}
 	freshDone()
-	if s.Len() != 0 {
-		t.Errorf("Len = %d, want the fresh claim released by its own done", s.Len())
+	if len(s.Keys()) != 0 {
+		t.Errorf("Len = %d, want the fresh claim released by its own done", len(s.Keys()))
 	}
 }
 
@@ -128,8 +128,8 @@ func TestContextIsBoundedAndClaimFree(t *testing.T) {
 	s := New(10 * time.Millisecond)
 	ctx, cancel := s.Context()
 	defer cancel()
-	if s.Len() != 0 {
-		t.Errorf("Len = %d, want an unclaimed fetch to hold no key", s.Len())
+	if len(s.Keys()) != 0 {
+		t.Errorf("Len = %d, want an unclaimed fetch to hold no key", len(s.Keys()))
 	}
 	select {
 	case <-ctx.Done():

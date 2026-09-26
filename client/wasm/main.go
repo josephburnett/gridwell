@@ -276,25 +276,13 @@ func newViewCaches(onPreviewDecodeErr, onRasterErr func(tileID string), onLayout
 // fetchState owns whether a read is outstanding or has failed. A claim kept
 // elsewhere is how a swallowed request holds a key for the life of the page.
 type fetchState struct {
-	// gridLoadFailed lets the renderer say so and stops the URL walk retrying
-	// in a tight loop. inflight.Latch owns what latching means.
-	gridLoadFailed *inflight.Latch
-
-	// gridFetch dedupes GetGrid, which every draw fires on a cache miss. A
-	// request lost with its link used to hold its id forever.
-	gridFetch *inflight.Set
-
-	// contentFetch: without the claim one absent body spawns a fetch per frame,
-	// and a reply older than one already landed would repaint stale bytes.
-	contentFetch *inflight.Set
-	// contentLoadFailed is keyed by rpc.ContentID: a refused body is refused
-	// every time, and its notice draws the frame that would ask again.
-	contentLoadFailed *inflight.Latch
-
-	// tileFetch: a routable id may name a tile whose grid was never visited.
-	tileFetch *inflight.Set
-	// tileLoadFailed stops a missing id re-firing GetTile every frame forever.
-	tileLoadFailed *inflight.Latch
+	// grids, tiles and contents are the reads every draw fires on a miss:
+	// GetGrid by grid id, GetTile by a routable id whose grid was never
+	// visited, ReadContent by rpc.ContentID. inflight.Reads owns why each
+	// failure latches and what clears it.
+	grids    *inflight.Reads
+	tiles    *inflight.Reads
+	contents *inflight.Reads
 
 	// previewFetch dedupes GetTilePreview, fired on every draw until decoded.
 	previewFetch *inflight.Set
@@ -306,14 +294,11 @@ type fetchState struct {
 // newFetchState is the one place the group is constructed.
 func newFetchState() fetchState {
 	return fetchState{
-		gridLoadFailed:    inflight.NewLatch(),
-		gridFetch:         inflight.New(inflight.Deadline),
-		contentFetch:      inflight.New(inflight.Deadline),
-		contentLoadFailed: inflight.NewLatch(),
-		tileFetch:         inflight.New(inflight.Deadline),
-		tileLoadFailed:    inflight.NewLatch(),
-		previewFetch:      inflight.New(inflight.Deadline),
-		menuFetch:         inflight.New(inflight.Deadline),
+		grids:        inflight.NewReads(),
+		tiles:        inflight.NewReads(),
+		contents:     inflight.NewReads(),
+		previewFetch: inflight.New(inflight.Deadline),
+		menuFetch:    inflight.New(inflight.Deadline),
 	}
 }
 
@@ -775,12 +760,7 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 	resp, err := a.cl.GetGrid(ctx, id)
 	// clientsync.ReactGridRead is the one table; this runs its arms.
 	r := clientsync.ReactGridRead(id, resp.GetGrid().GetId(), clientsync.Of(err))
-	switch r.Latch {
-	case clientsync.LatchSet:
-		a.fetch.gridLoadFailed.Set(id)
-	case clientsync.LatchClear:
-		a.fetch.gridLoadFailed.Clear(id)
-	}
+	a.fetch.grids.Settle(id, r.Latch)
 	switch {
 	case err != nil:
 		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
@@ -799,16 +779,16 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 // fetchGrid loads a grid in the background, deduped per id: the renderer fires
 // it on every cache miss every frame, which would otherwise dogpile the server.
 func (a *App) fetchGrid(id string) {
-	if id == "" || a.fetch.gridLoadFailed.Has(id) {
+	if id == "" {
 		return
 	}
 	// A grid in a namespace this node does not declare is never asked for: the
 	// latch stands in for the answer, and no verdict reaches the strip.
 	if a.deadNamespace(id) {
-		a.fetch.gridLoadFailed.Set(id)
+		a.fetch.grids.Settle(id, inflight.Refused)
 		return
 	}
-	ctx, done, ok := a.fetch.gridFetch.Begin(id)
+	ctx, done, ok := a.fetch.grids.Ask(id)
 	if !ok {
 		return
 	}
@@ -834,16 +814,16 @@ func (a *App) fetchGrid(id string) {
 // fetchTileByID resolves a routable tile id whose grid is not cached: GetTile
 // locates it, then fetchGrid pulls its grid in so findTileByID hits.
 func (a *App) fetchTileByID(tileID string) {
-	if tileID == "" || a.fetch.tileLoadFailed.Has(tileID) {
+	if tileID == "" {
 		return
 	}
 	// Same rule as fetchGrid: an undeclared namespace is not asked. A leaf link
 	// into a removed plugin stays its own dead face.
 	if a.deadNamespace(tileID) {
-		a.fetch.tileLoadFailed.Set(tileID)
+		a.fetch.tiles.Settle(tileID, inflight.Refused)
 		return
 	}
-	ctx, done, ok := a.fetch.tileFetch.Begin(tileID)
+	ctx, done, ok := a.fetch.tiles.Ask(tileID)
 	if !ok {
 		return
 	}
@@ -856,9 +836,10 @@ func (a *App) fetchTileByID(tileID string) {
 		}
 		// clientsync.ReactRead owns the latch; an outage is not named once per
 		// id, because the same read's grid says it once under "grid:".
-		switch clientsync.ReactRead(o) {
-		case clientsync.LatchSet:
-			a.fetch.tileLoadFailed.Set(tileID)
+		v := clientsync.ReactRead(o)
+		a.fetch.tiles.Settle(tileID, v)
+		switch v {
+		case inflight.Refused:
 			// The asker is a crumb or a descent, which would otherwise draw an
 			// empty content box named "unnamed" and say nothing.
 			detail := "the row is gone"
@@ -866,7 +847,7 @@ func (a *App) fetchTileByID(tileID string) {
 				detail = rpcErrText(err)
 			}
 			a.reportErr(errsurface.Error, "tile:"+tileID, "tile unavailable: "+detail)
-		case clientsync.LatchClear:
+		case inflight.Answered:
 			a.resolveErr("tile:" + tileID)
 			a.fetchGrid(tile.GridId)
 		}
@@ -996,8 +977,8 @@ func (a *App) landTransition(tr *transition.Transition) {
 		return
 	}
 	a.clearSelected(p.ID)
-	a.fetch.gridLoadFailed.Reset()
-	a.fetch.contentLoadFailed.Reset()
+	a.fetch.grids.Reset()
+	a.fetch.contents.Reset()
 	a.fetchGrid(a.gridIDForPane(p))
 	if tr.TraceTileID != "" {
 		// Keep the frame loop alive for the fade.
@@ -1072,10 +1053,10 @@ func (a *App) startSSE() {
 				a.views.renderedPrev.Drop(plan.DropPreviews)
 			}
 			if plan.ClearLatch != "" {
-				a.fetch.gridLoadFailed.Clear(plan.ClearLatch)
+				a.fetch.grids.Change(plan.ClearLatch)
 			}
 			if plan.ClearContent != "" {
-				a.fetch.contentLoadFailed.Clear(plan.ClearContent)
+				a.fetch.contents.Change(plan.ClearContent)
 			}
 			if plan.Fetch != "" {
 				a.emit(traceevent.EventRefetch(plan.Fetch))
@@ -1098,18 +1079,17 @@ func (a *App) startSSE() {
 func (a *App) retryKick(resync bool, source string) {
 	if resync {
 		served := func(id string) bool { return cache.ServedBy(id, source) }
-		// Failure latches are gap state: a grid that failed while the link was
-		// down deserves a fresh attempt.
-		a.fetch.tileLoadFailed.ClearIf(served)
-		a.fetch.gridLoadFailed.ClearIf(served)
-		a.fetch.contentLoadFailed.ClearIf(served)
+		// Failure latches are gap state: a read that failed while the link was
+		// down deserves a fresh attempt, asked by name because a pane waiting
+		// on one draws nothing new to ask for it.
+		a.reask(a.fetch.grids.ClearIf(served), a.fetch.tiles.ClearIf(served), a.fetch.contents.ClearIf(served))
 		// So is a fetch still in flight: a request that dies with its link never
 		// returns, and its claim would keep every retry away forever. Re-ask for
 		// the grids by name, since a pane waiting on one it never received is
 		// not in the cache for the sweep below to find.
-		stuck := a.fetch.gridFetch.CancelIf(served)
-		a.fetch.tileFetch.CancelIf(served)
-		a.fetch.contentFetch.CancelIf(served)
+		stuck := a.fetch.grids.CancelIf(served)
+		a.fetch.tiles.CancelIf(served)
+		a.fetch.contents.CancelIf(served)
 		a.fetch.previewFetch.CancelIf(served)
 		// The menu set is keyed by a source name, so its predicate is
 		// cache.Reaches: a connection's flap covers the nodes behind it.
@@ -1120,6 +1100,19 @@ func (a *App) retryKick(resync bool, source string) {
 	}
 	a.syncContentOutbox()
 	a.drainOutbox()
+}
+
+// reask asks again for reads whose latches were just cleared.
+func (a *App) reask(grids, tiles, contents []string) {
+	for _, id := range grids {
+		a.fetchGrid(id)
+	}
+	for _, id := range tiles {
+		a.fetchTileByID(id)
+	}
+	for _, id := range contents {
+		a.fetchTileContent(id)
+	}
 }
 
 // drainOutbox re-posts everything owed, in the order it was parked. It is the
@@ -1141,6 +1134,8 @@ func (a *App) drainOutbox() {
 func (a *App) retryBackstop() {
 	for {
 		a.backstop.Wait()
+		// An unreachable source is asked again once per tick, never per frame.
+		a.reask(a.fetch.grids.Backstop(), a.fetch.tiles.Backstop(), a.fetch.contents.Backstop())
 		a.syncContentOutbox()
 		if a.persist.out.Len() > 0 {
 			a.retryKick(false, cache.EverySource)

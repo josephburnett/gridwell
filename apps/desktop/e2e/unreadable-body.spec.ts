@@ -8,13 +8,11 @@ import { dumpNow } from './trace';
 // draw and a notice draws a frame, so without a failure latch each refusal
 // paints the frame that asks again.
 
-// notFound is a Connect server stream ending in a verdict before any message,
-// as the node answers for a link whose fs file is gone.
-function notFound(tileID: string): Buffer {
-  return envelope(
-    0x02,
-    Buffer.from(JSON.stringify({ error: { code: 'not_found', message: `plugin: no tile ${tileID}` } })),
-  );
+// endStream is a Connect server stream ending in an error before any message:
+// not_found as the node answers for a link whose fs file is gone, unavailable
+// as it answers for a plugin that is down.
+function endStream(code: string, message: string): Buffer {
+  return envelope(0x02, Buffer.from(JSON.stringify({ error: { code, message } })));
 }
 
 test('a body the server refuses is asked for once, reported once, and asked again on a change', async ({
@@ -43,7 +41,7 @@ test('a body the server refuses is asked for once, reported once, and asked agai
       return r.continue();
     }
     refused++;
-    return r.fulfill({ status: 200, contentType: 'application/connect+json', body: notFound(tile.id) });
+    return r.fulfill({ status: 200, contentType: 'application/connect+json', body: endStream('not_found', `plugin: no tile ${tile.id}`) });
   });
 
   // A reload empties the body cache, so the first draw of the tile asks.
@@ -81,6 +79,63 @@ test('a body the server refuses is asked for once, reported once, and asked agai
   await updateText(gw.origin, tile.id, Number(tile.version ?? 0), 'written elsewhere');
   await expect.poll(() => passed, { timeout: 10_000 }).toBe(1);
   await window.waitForTimeout(500);
+  expect(passed, 'the body that landed is not asked for again').toBe(1);
+  await window.unroute('**/gridwell.v1.Gridwell/ReadContent');
+});
+
+// An unreachable source is not a verdict, so its latch does not stand until a
+// change: the backstop re-asks once per interval. Without a latch at all the
+// renderer re-asks every frame.
+test('a body whose source is unreachable is asked for once per backstop, not per frame', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  const tile = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
+  expect(tile, 'markdown tile created').toBeTruthy();
+  await gw.waitIdle();
+
+  let down = true;
+  let unanswered = 0;
+  let passed = 0;
+  await window.route('**/gridwell.v1.Gridwell/ReadContent', (r: any) => {
+    if (!(r.request().postDataBuffer() ?? Buffer.alloc(0)).includes(tile.id)) {
+      return r.continue();
+    }
+    if (!down) {
+      passed++;
+      return r.continue();
+    }
+    unanswered++;
+    return r.fulfill({ status: 200, contentType: 'application/connect+json', body: endStream('unavailable', 'plugin down') });
+  });
+
+  await window.reload();
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  await expect.poll(async () => (await gw.focused()).gridID, { timeout: 30_000 }).toBe(f.gridID);
+  await expect.poll(() => unanswered, { timeout: 10_000 }).toBeGreaterThan(0);
+
+  // Retuning restarts the wait, so every re-ask from here is a tick of this
+  // interval: four seconds holds at most three.
+  const backstopMs = 1_500;
+  const start = unanswered;
+  expect(
+    await window.evaluate((ms: number) => (window as any).__gridwellTest.setBackstopMs(ms), backstopMs),
+  ).toBe(backstopMs);
+  await window.waitForTimeout(4_000);
+  const reasked = unanswered - start;
+  expect(reasked, `re-asks in 4s on a ${backstopMs}ms backstop`).toBeLessThanOrEqual(3);
+  expect(reasked, 'the backstop re-asks an unreachable body').toBeGreaterThanOrEqual(1);
+
+  // The source comes back, and the next tick's read lands and is the last.
+  down = false;
+  await expect.poll(() => passed, { timeout: 2 * backstopMs + 5_000 }).toBe(1);
+  await window.waitForTimeout(2 * backstopMs);
   expect(passed, 'the body that landed is not asked for again').toBe(1);
   await window.unroute('**/gridwell.v1.Gridwell/ReadContent');
 });

@@ -62,7 +62,7 @@ func (a *App) flushTileContent(tileID string) {
 // dirty in every arm but the post, so the sweep keeps them.
 func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
 	editable := t != nil && rpc.TextDocument(t) && !a.tileReadOnly(t)
-	switch textedit.DecideFlush(t != nil, editable, a.fetch.tileLoadFailed.Has(cid)) {
+	switch textedit.DecideFlush(t != nil, editable, a.fetch.tiles.Refused(cid)) {
 	case textedit.FlushFetchRow:
 		// The owner row is in no cached grid, which is not a dead end: a
 		// leaf link's target may live in a grid this client never fetched.
