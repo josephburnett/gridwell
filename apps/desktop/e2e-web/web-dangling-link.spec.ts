@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnServe, stopServe, authenticate, freePort } from './fixtures';
 import { seedHome } from '../e2e/fixtures';
+import { removeHome } from '../e2e/homes';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
@@ -108,7 +109,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
     expect(unavailable, 'and the delete is quiet too').toEqual([]);
   } finally {
     await stopServe(served2.child);
-    fs.rmSync(home, { recursive: true, force: true });
+    removeHome(home);
     fs.rmSync(docs, { recursive: true, force: true });
   }
 });

@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import { spawn, ChildProcess } from 'node:child_process';
 import { GridwellDriver } from './driver';
 import { setOracleAuth } from './oracle';
-import { makeHome, pluginUUIDs, killTmuxServers } from './homes';
+import { makeHome, homeEnv, removeHome } from './homes';
 import { serveBin, treeEnv } from './runtree';
 import { parseServingLine } from '../src/main/lines';
 import { freePort } from '../src/main/freeport';
@@ -58,7 +58,7 @@ async function spawnFarNode(label: string): Promise<FarNode> {
   fs.writeFileSync(path.join(home, 'server.yaml'), '');
   const port = await freePort();
   const child = spawn(serveBin(), ['serve', '--bind', `127.0.0.1:${port}`], {
-    env: { ...process.env, ...treeEnv(), GRIDWELL_HOME: home },
+    env: { ...process.env, ...treeEnv(), ...homeEnv(home) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
@@ -89,8 +89,7 @@ async function stopFarNode(n: FarNode): Promise<void> {
       n.child.kill('SIGTERM');
     });
   }
-  killTmuxServers(pluginUUIDs(n.home));
-  fs.rmSync(n.home, { recursive: true, force: true });
+  removeHome(n.home);
 }
 
 
@@ -203,7 +202,7 @@ export const test = base.extend<Fixtures>({
           ),
         ),
         GRIDWELL_E2E: '1',
-        GRIDWELL_HOME: home,
+        ...homeEnv(home),
         ...treeEnv(),
       },
     });
@@ -265,13 +264,11 @@ export const test = base.extend<Fixtures>({
       }
     }
 
-    // The tmux socket lives in the OS tmpdir, not under home, so rmSync would
-    // not clean it up.
-    killTmuxServers(pluginUUIDs(home));
-
+    // After the sidecar is gone, so no shell reconnect can start a server the
+    // kill would miss.
     await assertSidecarExited(sidecarPid);
 
-    fs.rmSync(home, { recursive: true, force: true });
+    removeHome(home);
   },
 
   window: async ({ electronApp }, use) => {

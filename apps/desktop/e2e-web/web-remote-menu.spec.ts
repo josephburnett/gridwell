@@ -1,8 +1,8 @@
 import { test as base, expect, Page } from '@playwright/test';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
+import { makeHome, removeHome } from '../e2e/homes';
 import { Served, spawnServe, stopServe, freePort, authHeaders, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { getGrid, tileAt } from '../e2e/oracle';
@@ -36,7 +36,7 @@ const test = base.extend<Fixtures>({
   // world is the local node and the far node, directly connected. The far
   // node's fresh home gets its id from its first serve.
   world: async ({}, use) => {
-    const farHome = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-far-'));
+    const farHome = makeHome();
     fs.writeFileSync(path.join(farHome, 'server.yaml'), '');
     const farPort = await freePort();
     let far = await spawnServe(farHome, farPort);
@@ -74,8 +74,8 @@ const test = base.extend<Fixtures>({
     for (const c of [local, far]) {
       await stopServe(c.child);
     }
-    fs.rmSync(localHome, { recursive: true, force: true });
-    fs.rmSync(farHome, { recursive: true, force: true });
+    removeHome(localHome);
+    removeHome(farHome);
   },
   window: async ({ world, page }, use) => {
     await authenticate(page, world.local);

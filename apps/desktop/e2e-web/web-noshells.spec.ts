@@ -2,6 +2,7 @@ import { test as base, expect, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
+import { removeHome } from '../e2e/homes';
 import { Served, spawnServe, stopServe, freePort, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 
@@ -27,7 +28,7 @@ const test = base.extend<Fixtures>({
     const served = await spawnServe(home, await freePort());
     await use(served);
     await stopServe(served.child);
-    fs.rmSync(home, { recursive: true, force: true });
+    removeHome(home);
   },
 
   window: async ({ serve, page }, use) => {

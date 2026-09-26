@@ -2,6 +2,7 @@ import { test as base, expect, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
+import { removeHome } from '../e2e/homes';
 import { spawnServe, stopServe, freePort } from './fixtures';
 
 // The web password gate, held in the minted <home>/web-password file, from a
@@ -26,7 +27,7 @@ const test = base.extend<Fixtures>({
     const served = await spawnServe(home, await freePort());
     await use({ origin: served.origin });
     await stopServe(served.child);
-    fs.rmSync(home, { recursive: true, force: true });
+    removeHome(home);
   },
 });
 

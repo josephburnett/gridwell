@@ -1,8 +1,8 @@
 import { test as base, Page } from '@playwright/test';
 import { spawn, ChildProcess } from 'node:child_process';
-import * as fs from 'node:fs';
 import { seedHome, PluginSpec } from '../e2e/fixtures';
 import { serveBin, staticDir, treeEnv } from '../e2e/runtree';
+import { homeEnv, removeHome } from '../e2e/homes';
 import { GridwellDriver } from '../e2e/driver';
 import { setOracleAuth } from '../e2e/oracle';
 import { parseServingLine } from '../src/main/lines';
@@ -42,7 +42,7 @@ export async function spawnServe(home: string, port: number, extraArgs: string[]
   const child = spawn(
     serveBin(),
     ['serve', '--bind', `127.0.0.1:${port}`, '--static', staticDir(), ...extraArgs],
-    { env: { ...process.env, ...treeEnv(), GRIDWELL_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] },
+    { env: { ...process.env, ...treeEnv(), ...homeEnv(home) }, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   let output = '';
   child.stdout!.on('data', (d) => (output += d));
@@ -100,7 +100,7 @@ export const test = base.extend<Fixtures>({
     const served = await spawnServe(home, await freePort());
     await use(served);
     await stopServe(served.child);
-    fs.rmSync(home, { recursive: true, force: true });
+    removeHome(home);
   },
 
   // A plain browser page with the ?e2e=1 hook installed, the same contract as

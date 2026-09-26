@@ -1,7 +1,7 @@
 import { test as base, expect, Page } from '@playwright/test';
 import { ChildProcess } from 'node:child_process';
-import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
+import { removeHome } from '../e2e/homes';
 import { Served, spawnServe, freePort, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
@@ -60,7 +60,7 @@ const test = base.extend<Fixtures>({
     await srv.start();
     await use(srv);
     await srv.kill();
-    fs.rmSync(home, { recursive: true, force: true });
+    removeHome(home);
   },
   window: async ({ outage, page }, use) => {
     await authenticate(page, outage.served);

@@ -1,8 +1,8 @@
 import { test as base, expect, _electron as electron } from '@playwright/test';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import { test, seedHome } from './fixtures';
 import { treeEnv } from './runtree';
+import { homeEnv, removeHome } from './homes';
 
 const DESKTOP_DIR = path.resolve(__dirname, '..');
 
@@ -24,7 +24,7 @@ base('hook is absent without the flag', async () => {
     env: {
       ...process.env,
       GRIDWELL_E2E: '', // explicitly off
-      GRIDWELL_HOME: home,
+      ...homeEnv(home),
       ...treeEnv(),
     },
   });
@@ -36,6 +36,6 @@ base('hook is absent without the flag', async () => {
     expect(await win.evaluate(() => (window as any).__gridwellTest)).toBeUndefined();
   } finally {
     await app.close().catch(() => {});
-    fs.rmSync(home, { recursive: true, force: true });
+    removeHome(home);
   }
 });
