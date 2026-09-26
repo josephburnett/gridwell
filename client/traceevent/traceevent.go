@@ -244,6 +244,51 @@ func Focus(from, to string) Event {
 	return Event{Src: "pane", Kind: "focus", Msg: "focus moves", KV: kv("from", from, "pane", to)}
 }
 
+// Mods are the modifier keys held at a press.
+type Mods struct{ Ctrl, Shift, Alt, Meta bool }
+
+func (m Mods) String() string {
+	var held []string
+	for _, k := range []struct {
+		on   bool
+		name string
+	}{{m.Ctrl, "ctrl"}, {m.Shift, "shift"}, {m.Alt, "alt"}, {m.Meta, "meta"}} {
+		if k.on {
+			held = append(held, k.name)
+		}
+	}
+	return strings.Join(held, "+")
+}
+
+// Press is a mouse button going down, in the pane under it. forwarded says a
+// live view's native layer heard it and relayed it, without the modifiers.
+func Press(paneID string, button int, mods Mods, forwarded bool) Event {
+	via := ""
+	if forwarded {
+		via = "live view"
+	}
+	return Event{Src: "gesture", Kind: "press", Msg: buttonName(button),
+		KV: kv("pane", paneID, "mods", mods.String(), "via", via)}
+}
+
+// Release is a mouse button coming up. What it became is the drop record's.
+func Release(paneID string, button int) Event {
+	return Event{Src: "gesture", Kind: "release", Msg: buttonName(button), KV: kv("pane", paneID)}
+}
+
+// buttonName is the table over MouseEvent.button.
+func buttonName(b int) string {
+	switch b {
+	case 0:
+		return "left"
+	case 1:
+		return "middle"
+	case 2:
+		return "right"
+	}
+	return "button " + strconv.Itoa(b)
+}
+
 // Drop is a committed release, in the pane the gesture was made in and onto
 // the grid it landed on — a cross-pane drag names both ends. The ghost's
 // preview takes the same verdict and records nothing: that one is per pointer

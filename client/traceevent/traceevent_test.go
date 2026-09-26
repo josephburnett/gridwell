@@ -274,3 +274,29 @@ func TestTheBootRecordNamesTheBuildAndTheBrowser(t *testing.T) {
 		t.Error("an unstamped build claims a commit")
 	}
 }
+
+// A press names the pane, the button and the modifiers held, because the
+// modifier is read at the press and never again; a release names only the
+// pane and the button, its verdict being the drop record's.
+func TestPressAndReleaseNameThePaneAndTheButton(t *testing.T) {
+	p := Press("p1", 2, Mods{Ctrl: true, Shift: true}, false)
+	if p.Src != "gesture" || p.Kind != "press" || p.Msg != "right" {
+		t.Errorf("a right press reads %+v", p)
+	}
+	if p.KV["pane"] != "p1" || p.KV["mods"] != "ctrl+shift" {
+		t.Errorf("a right press's kv is %v", p.KV)
+	}
+	if _, ok := Press("p1", 0, Mods{}, false).KV["mods"]; ok {
+		t.Error("a bare press claims a modifier")
+	}
+	if got := Press("p1", 1, Mods{}, true).KV["via"]; got != "live view" {
+		t.Errorf("a press forwarded from a live view says via %q", got)
+	}
+	r := Release("p2", 0)
+	if r.Src != "gesture" || r.Kind != "release" || r.Msg != "left" || r.KV["pane"] != "p2" || len(r.KV) != 1 {
+		t.Errorf("a left release reads %+v", r)
+	}
+	if got := Release("", 7).Msg; got != "button 7" {
+		t.Errorf("an unnamed button reads %q", got)
+	}
+}

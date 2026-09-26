@@ -384,7 +384,10 @@ absent from a build with none — a `go test`, or a build in a git worktree.
 
 On the client, a drawn frame is one record, `frame/draw`: its msg is the
 first reason asked (`traceevent.Why*`), `kv.asks` counts the asks it
-absorbed, and `kv.ms` is how long the draw took.
+absorbed, and `kv.ms` is how long the draw took. Every mouse press and
+release is a `gesture/press` or `gesture/release` record naming the pane
+under the pointer and the button; a press adds the modifiers, and a
+release's verdict is the `drag/drop` record's.
 
 ## One fact, one owner
 
