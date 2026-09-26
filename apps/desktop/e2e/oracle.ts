@@ -55,7 +55,7 @@ export async function getGrid(origin: string, gridId: string): Promise<GridSnaps
 // One flag byte plus a 4-byte big-endian length per message, with flag bit 0x02
 // marking the trailing EndStreamResponse.
 
-function envelope(flags: number, payload: Buffer): Buffer {
+export function envelope(flags: number, payload: Buffer): Buffer {
   const head = Buffer.alloc(5);
   head.writeUInt8(flags, 0);
   head.writeUInt32BE(payload.length, 1);

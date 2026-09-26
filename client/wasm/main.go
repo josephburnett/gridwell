@@ -287,6 +287,9 @@ type fetchState struct {
 	// contentFetch: without the claim one absent body spawns a fetch per frame,
 	// and a reply older than one already landed would repaint stale bytes.
 	contentFetch *inflight.Set
+	// contentLoadFailed is keyed by rpc.ContentID: a refused body is refused
+	// every time, and its notice draws the frame that would ask again.
+	contentLoadFailed *inflight.Latch
 
 	// tileFetch: a routable id may name a tile whose grid was never visited.
 	tileFetch *inflight.Set
@@ -303,13 +306,14 @@ type fetchState struct {
 // newFetchState is the one place the group is constructed.
 func newFetchState() fetchState {
 	return fetchState{
-		gridLoadFailed: inflight.NewLatch(),
-		gridFetch:      inflight.New(inflight.Deadline),
-		contentFetch:   inflight.New(inflight.Deadline),
-		tileFetch:      inflight.New(inflight.Deadline),
-		tileLoadFailed: inflight.NewLatch(),
-		previewFetch:   inflight.New(inflight.Deadline),
-		menuFetch:      inflight.New(inflight.Deadline),
+		gridLoadFailed:    inflight.NewLatch(),
+		gridFetch:         inflight.New(inflight.Deadline),
+		contentFetch:      inflight.New(inflight.Deadline),
+		contentLoadFailed: inflight.NewLatch(),
+		tileFetch:         inflight.New(inflight.Deadline),
+		tileLoadFailed:    inflight.NewLatch(),
+		previewFetch:      inflight.New(inflight.Deadline),
+		menuFetch:         inflight.New(inflight.Deadline),
 	}
 }
 
@@ -993,6 +997,7 @@ func (a *App) landTransition(tr *transition.Transition) {
 	}
 	a.clearSelected(p.ID)
 	a.fetch.gridLoadFailed.Reset()
+	a.fetch.contentLoadFailed.Reset()
 	a.fetchGrid(a.gridIDForPane(p))
 	if tr.TraceTileID != "" {
 		// Keep the frame loop alive for the fade.
@@ -1069,6 +1074,9 @@ func (a *App) startSSE() {
 			if plan.ClearLatch != "" {
 				a.fetch.gridLoadFailed.Clear(plan.ClearLatch)
 			}
+			if plan.ClearContent != "" {
+				a.fetch.contentLoadFailed.Clear(plan.ClearContent)
+			}
 			if plan.Fetch != "" {
 				a.emit(traceevent.EventRefetch(plan.Fetch))
 				a.fetchGrid(plan.Fetch)
@@ -1094,6 +1102,7 @@ func (a *App) retryKick(resync bool, source string) {
 		// down deserves a fresh attempt.
 		a.fetch.tileLoadFailed.ClearIf(served)
 		a.fetch.gridLoadFailed.ClearIf(served)
+		a.fetch.contentLoadFailed.ClearIf(served)
 		// So is a fetch still in flight: a request that dies with its link never
 		// returns, and its claim would keep every retry away forever. Re-ask for
 		// the grids by name, since a pane waiting on one it never received is

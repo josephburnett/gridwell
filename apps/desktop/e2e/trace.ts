@@ -46,3 +46,22 @@ export function describe(lines: TraceLine[]): string {
   for (const r of lines) byOrigin.set(r.origin, (byOrigin.get(r.origin) ?? 0) + 1);
   return [...byOrigin.entries()].map(([o, n]) => `${o}:${n}`).join(' ');
 }
+
+// dumpNow writes the node's ring once this client has posted every record it
+// holds, and reads the file back. The page asks the door itself, so the dump
+// is of the same session the spec drove; trace-dump.spec.ts owns the user's
+// gesture for the same thing.
+export async function dumpNow(window: any): Promise<{ cid: string; lines: TraceLine[] }> {
+  const pending = () => window.evaluate(() => (window as any).__gridwellTest.trace().pending);
+  const deadline = Date.now() + 20_000;
+  while ((await pending()) > 0) {
+    if (Date.now() > deadline) throw new Error('the client never posted its trace backlog');
+    await window.waitForTimeout(100);
+  }
+  const { cid, file } = await window.evaluate(async () => {
+    const r = await fetch('/trace/dump', { method: 'POST' });
+    if (!r.ok) throw new Error(`dump: ${r.status} ${await r.text()}`);
+    return { cid: (window as any).__gridwellTest.trace().cid, file: (await r.json()).path };
+  });
+  return { cid, lines: readDump(file) };
+}

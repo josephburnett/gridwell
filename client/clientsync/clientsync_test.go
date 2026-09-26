@@ -225,6 +225,20 @@ func TestReactRead(t *testing.T) {
 	}
 }
 
+// A body read is on the same table as grid and tile reads: the renderer asks
+// for a missing body every frame, so the plugin's not_found for a file gone
+// from disk must latch, and a dark plugin's unavailable must not.
+func TestABodyTheServerRefusesLatches(t *testing.T) {
+	gone := connect.NewError(connect.CodeNotFound, errors.New("plugin: no tile ~Zm9v"))
+	if got := ReactRead(Of(gone)); got != LatchSet {
+		t.Errorf("not_found: got %v, want LatchSet", got)
+	}
+	dark := connect.NewError(connect.CodeUnavailable, errors.New("plugin down"))
+	if got := ReactRead(Of(dark)); got != LatchKeep {
+		t.Errorf("unavailable: got %v, want LatchKeep", got)
+	}
+}
+
 func TestReactPreviewTable(t *testing.T) {
 	unimpl := connect.NewError(connect.CodeUnimplemented, errors.New("no previews"))
 	down := connect.NewError(connect.CodeUnavailable, errors.New("dark"))

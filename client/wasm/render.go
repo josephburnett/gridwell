@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/cadence"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/palette"
@@ -907,7 +908,7 @@ func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 // fetchTileContent never doubles an in-flight fetch: concurrent fetches for one
 // tile are how a stale reply lands after a fresher one and repaints old bytes.
 func (a *App) fetchTileContent(tileID string) {
-	if tileID == "" {
+	if tileID == "" || a.fetch.contentLoadFailed.Has(tileID) {
 		return
 	}
 	if _, ok := a.c.TileContent(tileID); ok {
@@ -935,6 +936,13 @@ func (a *App) fetchTileContent(tileID string) {
 // returned as well as surfaced, because a waiting caller has a continuation.
 func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
 	data, _, version, err := a.cl.ReadContent(ctx, tileID)
+	// clientsync.ReactRead is the one table; this runs its arms.
+	switch clientsync.ReactRead(clientsync.Of(err)) {
+	case clientsync.LatchSet:
+		a.fetch.contentLoadFailed.Set(tileID)
+	case clientsync.LatchClear:
+		a.fetch.contentLoadFailed.Clear(tileID)
+	}
 	if err != nil {
 		// The tile body would otherwise never appear: say why.
 		a.surfaceRPCError("ReadContent", err)

@@ -5,6 +5,7 @@ package events
 
 import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
 
@@ -19,6 +20,10 @@ type Plan struct {
 	// refetch is unconditional: the next descent would otherwise read stale.
 	ClearLatch string
 	Fetch      string
+	// ClearContent names the body a changed tile shows, by rpc.ContentID, so
+	// a read the server refused is asked once more: a target's bytes or a
+	// link's target changed.
+	ClearContent string
 	// Health is a namespace's stream going dark or recovering; ReactHealth
 	// says what to do about it.
 	Health *pb.EventPluginHealth
@@ -29,6 +34,10 @@ func Route(ev *pb.Event) Plan {
 	switch p := ev.GetPayload().(type) {
 	case *pb.Event_TileRemoved:
 		return Plan{DropPreviews: p.TileRemoved.GetTileId()}
+	case *pb.Event_TileChanged:
+		if t := p.TileChanged.GetTile(); t != nil {
+			return Plan{ClearContent: rpc.ContentID(t)}
+		}
 	case *pb.Event_GridChanged:
 		id := p.GridChanged.GetGridId()
 		return Plan{ClearLatch: id, Fetch: id}
