@@ -24,8 +24,11 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
-// NodeCapacity is the node ring's size.
-const NodeCapacity = 20000
+// NodeCapacity is about 40 minutes of a busy session, one record per frame.
+// The slots are 5.6 MB from boot; each points at a msg capped at MaxMsg and a
+// small kv, typically a few hundred bytes, so a full ring is tens of MB and
+// at most about 75 MB.
+const NodeCapacity = 50000
 
 // Ring is a fixed-size circular buffer of records. Emit overwrites the oldest.
 type Ring struct {

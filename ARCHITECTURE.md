@@ -348,7 +348,7 @@ Nothing here touches shells. Nothing here is visible to `make check`.
 ## The trace
 
 An always-on record of what the node did, for the errors nobody can
-reproduce. `internal/trace` holds one ring of 20000 records in memory; it is a
+reproduce. `internal/trace` holds one ring of 50000 records in memory; it is a
 package-level `Default`, like `log`'s output, because it holds no node fact —
 nothing reads it back, and deleting it loses nothing the user owns.
 

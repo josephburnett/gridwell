@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
@@ -215,5 +216,17 @@ func TestAnIngestedRecordIsPlacedAtItsOwnClockPlusTheBatchSkew(t *testing.T) {
 	r.Ingest(strings.NewReader(`{"src":"d","kind":"k","msg":"unclocked batch","ct":100}`+"\n"), 0)
 	if last := r.Snapshot()[3]; last.T != 5000 {
 		t.Errorf("a record from an unclocked batch is stamped %d, want receipt 5000", last.T)
+	}
+}
+
+// The ring is allocated whole at boot, so its slots are a fixed cost every
+// node pays; this is the bound NodeCapacity's comment states.
+func TestTheNodeRingsSlotsFitTheirStatedBound(t *testing.T) {
+	const bound = 8 << 20
+	if got := int(unsafe.Sizeof(tracewire.Record{})) * NodeCapacity; got > bound {
+		t.Errorf("the node ring's slots are %d bytes, past the stated %d", got, bound)
+	}
+	if NodeCapacity < 50000 {
+		t.Errorf("NodeCapacity is %d; a busy session's 40 minutes need 50000", NodeCapacity)
 	}
 }
