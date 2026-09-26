@@ -2,11 +2,13 @@ package pane
 
 import "testing"
 
-// The table the settle persisters are armed by: what moves the fingerprint is
-// a fact one of them writes, and what does not move it is a repaint. A fact
-// missing from the left column is a write that never happens; one wrongly in
-// the right column is a settle a live tile's mirror pass can postpone forever.
-func TestWhatMovesThePersistedFingerprint(t *testing.T) {
+// The table the two settle persisters are armed by. The layout persister
+// writes the arrangement and the framing persister writes the view, so each
+// row says which of them the change is a fact for. A fact missing from a
+// column is a write that never happens; one wrongly in it is a write of
+// something that did not change, and a pan wrongly in the layout column is a
+// layout write per pan.
+func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 	build := func() *Tree {
 		tr := NewTree()
 		p := tr.FocusedPane()
@@ -15,63 +17,70 @@ func TestWhatMovesThePersistedFingerprint(t *testing.T) {
 		return tr
 	}
 	moves := []struct {
-		name string
-		do   func(*Tree)
+		name            string
+		layout, framing bool
+		do              func(*Tree)
 	}{
-		{"a pan", func(tr *Tree) { tr.FocusedPane().Cx += 0.5 }},
-		{"a zoom", func(tr *Tree) { tr.FocusedPane().Zoom *= 2 }},
-		{"a descent", func(tr *Tree) { tr.FocusedPane().Push(Frame{Door: "t7abcde", Zoom: 1}) }},
-		{"a text scroll", func(tr *Tree) { tr.FocusedPane().TextScrollY = 40 }},
-		{"a text mode toggle", func(tr *Tree) { tr.FocusedPane().TextMode = "rendered" }},
-		{"a content zoom", func(tr *Tree) { tr.FocusedPane().TextZoom = 1.5 }},
-		{"a split", func(tr *Tree) {
+		{"a pan", false, true, func(tr *Tree) { tr.FocusedPane().Cx += 0.5 }},
+		{"a zoom", false, true, func(tr *Tree) { tr.FocusedPane().Zoom *= 2 }},
+		{"a descent", true, true, func(tr *Tree) { tr.FocusedPane().Push(Frame{Door: "t7abcde", Zoom: 1}) }},
+		{"a text scroll", false, true, func(tr *Tree) { tr.FocusedPane().TextScrollY = 40 }},
+		{"a text mode toggle", false, true, func(tr *Tree) { tr.FocusedPane().TextMode = "rendered" }},
+		{"a content zoom", false, true, func(tr *Tree) { tr.FocusedPane().TextZoom = 1.5 }},
+		{"a split", true, true, func(tr *Tree) {
 			if _, err := tr.Split(Vertical); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{"a divider drag", func(tr *Tree) {
+		{"a divider drag", true, true, func(tr *Tree) {
 			if _, err := tr.Split(Vertical); err != nil {
 				t.Fatal(err)
 			}
 			tr.Root.Split.Ratio = 0.7
 		}},
-		{"a focus move", func(tr *Tree) {
+		{"a focus move", true, true, func(tr *Tree) {
 			p, err := tr.Split(Vertical)
 			if err != nil {
 				t.Fatal(err)
 			}
 			tr.Focus = p.ID
 		}},
-		{"a zoom toggle", func(tr *Tree) { tr.ToggleZoom(tr.Focus) }},
-		{"entering a level", func(tr *Tree) { tr.IDPrefix = "w7abcde/" }},
+		{"a zoom toggle", true, true, func(tr *Tree) { tr.ToggleZoom(tr.Focus) }},
+		{"entering a level", true, true, func(tr *Tree) { tr.IDPrefix = "w7abcde/" }},
 	}
 	for _, c := range moves {
-		before := PersistedFingerprint(build()).Value()
 		tr := build()
 		c.do(tr)
-		if got := PersistedFingerprint(tr).Value(); got == before {
-			t.Errorf("%s left the fingerprint alone", c.name)
+		if got := LayoutFingerprint(tr).Value() != LayoutFingerprint(build()).Value(); got != c.layout {
+			t.Errorf("%s: moves the layout fingerprint = %v, want %v", c.name, got, c.layout)
+		}
+		if got := FramingFingerprint(tr).Value() != FramingFingerprint(build()).Value(); got != c.framing {
+			t.Errorf("%s: moves the framing fingerprint = %v, want %v", c.name, got, c.framing)
 		}
 	}
 
 	// A repaint is not a change. The same tree read twice is the same fact,
 	// and that is what keeps a live tile's 250ms mirror pass from pushing the
 	// settle out for as long as the tile is open.
-	tr := build()
-	first := PersistedFingerprint(tr).Value()
-	if second := PersistedFingerprint(tr).Value(); second != first {
-		t.Error("two looks at one tree disagree")
-	}
-	if other := PersistedFingerprint(build()).Value(); other != first {
-		t.Error("two equal trees have different fingerprints")
-	}
-	// A pan and back is the arrangement the user started with, and writing it
-	// is a no-op the flush already refuses.
-	moved := build()
-	moved.FocusedPane().Cx += 0.5
-	moved.FocusedPane().Cx -= 0.5
-	if PersistedFingerprint(moved).Value() != PersistedFingerprint(build()).Value() {
-		t.Error("a pan and back is not the place it started at")
+	for name, fp := range map[string]func(*Tree) Fingerprint{
+		"layout": LayoutFingerprint, "framing": FramingFingerprint,
+	} {
+		tr := build()
+		first := fp(tr).Value()
+		if second := fp(tr).Value(); second != first {
+			t.Errorf("%s: two looks at one tree disagree", name)
+		}
+		if other := fp(build()).Value(); other != first {
+			t.Errorf("%s: two equal trees have different fingerprints", name)
+		}
+		// A pan and back is the place the user started at, and writing it is
+		// a no-op the flush already refuses.
+		moved := build()
+		moved.FocusedPane().Cx += 0.5
+		moved.FocusedPane().Cx -= 0.5
+		if fp(moved).Value() != fp(build()).Value() {
+			t.Errorf("%s: a pan and back is not the place it started at", name)
+		}
 	}
 }
 

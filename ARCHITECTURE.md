@@ -248,8 +248,11 @@ frame is the grid you are in, the tile you came through, and your viewport
 there. Every descent pushes a frame; every ascent pops one, restoring the
 viewport that frame holds. The URL (`url.go`) and the pane-tile
 layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
-project it. A pane tile swaps the whole pane tree instead — that is the one
-second axis (`levels.go`), and it is session-only.
+project it. The blob holds the arrangement and no view: a restored leaf
+shows its grid at the framing row and its text at the tile row, so a pan
+inside a pane tile writes `SetFraming` alone. A pane tile swaps the whole
+pane tree instead — that is the one second axis (`levels.go`), and it is
+session-only.
 
 There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
 descent lands is the tile's own declaration: a well or link pushes a frame

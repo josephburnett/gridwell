@@ -29,6 +29,10 @@ type Frame struct {
 	// MenuOpen records that the + menu was open on this level, so ascending
 	// back restores it.
 	MenuOpen bool
+
+	// ViewPending marks a frame restored from a layout blob: until Adopt, its
+	// view is a placeholder that must never be written to its owner row.
+	ViewPending bool
 }
 
 // Footprint is a tile's cell rectangle in the grid it sits in.
@@ -55,7 +59,19 @@ func ContentFrame(tileID string, foot Footprint, zoom float64, textMode string, 
 // HasView reports whether the frame carries a viewport the pane was left at. A
 // frame restored from a URL or a layout blob has none, so the ascent onto it
 // falls back to the grid's persisted framing rather than an arbitrary origin.
-func (f Frame) HasView() bool { return f.Zoom > 0 }
+func (f Frame) HasView() bool { return f.Zoom > 0 && !f.ViewPending }
+
+// Adopt settles a pending top frame on v's view and text state. A frame that
+// is not pending keeps its own.
+func (s *Stack) Adopt(v Frame) bool {
+	if !s.ViewPending {
+		return false
+	}
+	s.Cx, s.Cy, s.Zoom = v.Cx, v.Cy, v.Zoom
+	s.TextMode, s.TextScrollX, s.TextScrollY = v.TextMode, v.TextScrollX, v.TextScrollY
+	s.ViewPending = false
+	return true
+}
 
 // Stack is a pane's place, bottom first. The top frame is unrolled as the
 // embedded Frame, so where the pane is now and where it was are one shape read

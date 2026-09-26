@@ -7,13 +7,13 @@ import "math"
 // as long as it is open, an ascent trace fades for two seconds, a transition
 // runs for its duration. A settle keyed on frames stopping never comes due
 // while any of those lasts. A Fingerprint is what the arm is keyed on instead:
-// the facts the layout blob and the framing writeback take from the tree,
-// folded into one comparable number, so two draws that would persist the same
-// thing arm nothing.
+// the facts a persister takes from the tree, folded into one comparable
+// number, so two draws that would persist the same thing arm nothing.
 //
 // Over-arming is cheap — both flushes diff against what they last wrote, so a
-// fingerprint that moves for something neither writes costs one no-op pass.
-// Under-arming is a lost write, so every fact either flush reads belongs here.
+// fingerprint that moves for something its flush does not write costs one
+// no-op pass. Under-arming is a lost write, so every fact a flush reads
+// belongs in its fingerprint.
 type Fingerprint struct{ h uint64 }
 
 // FNV-1a, for one number a comparison can be made on. Nothing here is a
@@ -64,11 +64,15 @@ func (f Fingerprint) MergeUnordered(other Fingerprint) Fingerprint {
 	return f
 }
 
-// PersistedFingerprint is everything the pane tree contributes to what the
-// persisters write: the shape and the focus the layout blob encodes, each
-// pane's whole chain of doorways, and the viewport of the frame it is standing
-// on, which is what both the blob and the framing writeback carry.
-func PersistedFingerprint(t *Tree) Fingerprint {
+// LayoutFingerprint is what the layout blob encodes: the shape, the focus and
+// each pane's chain of doorways, but no view.
+func LayoutFingerprint(t *Tree) Fingerprint { return treeFingerprint(t, false) }
+
+// FramingFingerprint is what the framing writeback reads: the arrangement,
+// which decides rects and writers, plus each pane's view.
+func FramingFingerprint(t *Tree) Fingerprint { return treeFingerprint(t, true) }
+
+func treeFingerprint(t *Tree, views bool) Fingerprint {
 	f := NewFingerprint()
 	if t == nil {
 		return f
@@ -76,26 +80,29 @@ func PersistedFingerprint(t *Tree) Fingerprint {
 	// The prefix is per level, so two levels whose trees are otherwise equal
 	// are two different blobs.
 	f = f.Str(t.IDPrefix).Str(t.Focus).Str(t.Zoomed)
-	return fingerprintNode(f, t.Root)
+	return fingerprintNode(f, t.Root, views)
 }
 
-func fingerprintNode(f Fingerprint, n TreeNode) Fingerprint {
+func fingerprintNode(f Fingerprint, n TreeNode, views bool) Fingerprint {
 	if n.IsLeaf() {
-		return fingerprintPane(f, n.Pane)
+		return fingerprintPane(f, n.Pane, views)
 	}
 	if n.Split == nil {
 		return f.Str("empty")
 	}
 	f = f.Str(string(n.Split.Dir)).Num(n.Split.Ratio)
-	f = fingerprintNode(f, n.Split.A)
-	return fingerprintNode(f, n.Split.B)
+	f = fingerprintNode(f, n.Split.A, views)
+	return fingerprintNode(f, n.Split.B, views)
 }
 
-func fingerprintPane(f Fingerprint, p *Pane) Fingerprint {
+func fingerprintPane(f Fingerprint, p *Pane, views bool) Fingerprint {
 	f = f.Str(p.ID)
 	for _, fr := range p.Frames() {
 		f = f.Str(fr.GridID).Str(fr.Door).Flag(fr.Content)
 	}
-	return f.Num(p.Cx).Num(p.Cy).Num(p.Zoom).
+	if !views {
+		return f
+	}
+	return f.Num(p.Cx).Num(p.Cy).Num(p.Zoom).Flag(p.ViewPending).
 		Str(p.TextMode).Num(p.TextScrollX).Num(p.TextScrollY).Num(p.TextZoom)
 }

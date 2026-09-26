@@ -29,7 +29,6 @@ func TestPreviewIsScaledDescentTarget(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		tr.Walk(func(p *pane.Pane) { p.Zoom = 0.25 * float64(r.Intn(8)+1) })
 
 		tile := pane.Rect{X: 100 + float64(r.Intn(400)), Y: 50 + float64(r.Intn(300)),
 			W: 40 + float64(r.Intn(300)), H: 40 + float64(r.Intn(300))}
@@ -39,7 +38,7 @@ func TestPreviewIsScaledDescentTarget(t *testing.T) {
 		}
 
 		liveRects := pane.Layout(tr, liveRoot)
-		for _, leaf := range Leaves(tr, tile, s) {
+		for _, leaf := range Leaves(tr, tile, liveRoot) {
 			live := liveRects[leaf.Pane.ID]
 			// pane.Layout distributes ratios linearly, so each axis scales
 			// independently and the live rect scaled per axis is the preview
@@ -53,9 +52,14 @@ func TestPreviewIsScaledDescentTarget(t *testing.T) {
 				t.Fatalf("case %d leaf %s: preview rect %+v, want affine image %v,%v %vx%v",
 					i, leaf.Pane.ID, leaf.Rect, wantX, wantY, wantW, wantH)
 			}
-			// Content continuity: previewCell is liveCell times s.
-			if !close(leaf.PreviewCell, leaf.Pane.Zoom*pane.CellPx*s) {
-				t.Fatalf("case %d leaf %s: previewCell %v, want liveCell×s", i, leaf.Pane.ID, leaf.PreviewCell)
+			// A view is read at the size descent will show the leaf at.
+			if leaf.Live != live {
+				t.Fatalf("case %d leaf %s: live rect %+v, want %+v", i, leaf.Pane.ID, leaf.Live, live)
+			}
+			// Content continuity: the preview cell is the live cell times s.
+			zoom := 0.25 * float64(r.Intn(8)+1)
+			if !close(leaf.Cell(zoom), zoom*pane.CellPx*s) {
+				t.Fatalf("case %d leaf %s: cell %v, want liveCell×s", i, leaf.Pane.ID, leaf.Cell(zoom))
 			}
 		}
 	}
@@ -72,7 +76,7 @@ func TestZoomedLeafOwnsThePreview(t *testing.T) {
 	tr.ToggleZoom(ids[1])
 
 	tile := pane.Rect{X: 10, Y: 10, W: 200, H: 100}
-	leaves := Leaves(tr, tile, 0.1)
+	leaves := Leaves(tr, tile, pane.Rect{W: 2000, H: 1000})
 	if len(leaves) != 1 {
 		t.Fatalf("zoomed preview has %d leaves, want 1", len(leaves))
 	}

@@ -46,3 +46,16 @@ export function describe(lines: TraceLine[]): string {
   for (const r of lines) byOrigin.set(r.origin, (byOrigin.get(r.origin) ?? 0) + 1);
   return [...byOrigin.entries()].map(([o, n]) => `${o}:${n}`).join(' ');
 }
+
+// dumpViaDoor takes a dump over the web door on the given cookie and reads the
+// file it names. A dump writes the ring to a file and clears nothing, so a
+// poll may take it as often as it likes.
+export async function dumpViaDoor(origin: string, token: string): Promise<TraceLine[]> {
+  const res = await fetch(origin + '/trace/dump', {
+    method: 'POST',
+    headers: { Cookie: `gridwell_auth=${token}` },
+  });
+  if (!res.ok) throw new Error(`POST /trace/dump = ${res.status} ${await res.text()}`);
+  const { path } = (await res.json()) as { path: string; records: number };
+  return readDump(path);
+}

@@ -84,29 +84,89 @@ func (a *App) flushWellWheelSaves() {
 // no-op when the place is unresolvable; the next settle retries.
 func (a *App) persistPaneFraming(p *pane.Pane) {
 	own := p.FramingTarget()
-	switch {
-	case own.Content:
+	if own.Content {
 		a.persistTextScroll(p)
-	case own.TileID == "":
+		return
+	}
+	door, ok := a.framingDoor(own)
+	switch {
+	case !ok:
+	case door == nil:
 		a.persistFraming(p, nil, "", nil)
 	default:
-		gid := a.gridIDForPathFrom(own.DoorAnchor, own.DoorPath)
-		if gid == "" {
-			return
-		}
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			return
-		}
-		w, ok := g.Tiles[own.TileID]
-		if !ok {
-			// No row for the doorway, as after a + menu descent, so the
-			// level's own root grid owns the framing.
-			a.persistFraming(p, nil, "", nil)
-			return
-		}
-		a.persistFraming(p, w, own.DoorAnchor, own.DoorPath)
+		a.persistFraming(p, door, own.DoorAnchor, own.DoorPath)
 	}
+}
+
+// framingDoor resolves the doorway row own names, nil when the root grid's
+// row owns the framing; false while the doorway's grid is not cached.
+func (a *App) framingDoor(own pane.FramingOwner) (door *gridwellv1.Tile, ok bool) {
+	if own.TileID == "" {
+		return nil, true
+	}
+	gid := a.gridIDForPathFrom(own.DoorAnchor, own.DoorPath)
+	if gid == "" {
+		return nil, false
+	}
+	g, ok := a.c.Grid(gid)
+	if !ok {
+		return nil, false
+	}
+	// No row for the doorway, as after a + menu descent, means the level's
+	// own root grid owns the framing.
+	return g.Tiles[own.TileID], true
+}
+
+// ownerView is the read side of persistPaneFraming: the view p's owner row
+// holds at pane size r, false while that row is not cached.
+func (a *App) ownerView(p *pane.Pane, r pane.Rect) (pane.Frame, bool) {
+	own := p.FramingTarget()
+	if own.Content {
+		file, ok := a.descendedTile(p)
+		if !ok {
+			return pane.Frame{}, false
+		}
+		mode := textedit.DescentMode(textedit.ModeInput{
+			TextDocument: rpc.TextDocument(file), ReadOnly: a.tileReadOnly(file),
+			Cached: true, Stored: file.TextMode,
+		})
+		return pane.ContentFrame(file.Id, pane.Footprint{X: file.X, Y: file.Y, W: file.W, H: file.H},
+			textFitZoom(r, file.W, file.H), mode, float64(file.TextX), float64(file.TextY)), true
+	}
+	door, ok := a.framingDoor(own)
+	if !ok {
+		return pane.Frame{}, false
+	}
+	var v pane.Frame
+	if door != nil {
+		v.Cx, v.Cy, v.Zoom = zoomtrans.StoredView(wellOf(door), r.W, r.H, cellPx)
+		return v, true
+	}
+	// An unvisited root sits at its origin at live zoom 1: see
+	// zoomtrans.ShownRootFraming.
+	v.Zoom = 1
+	if cx, cy, zoom, ok := a.storedRootView(own.RootGridID, r); ok {
+		v.Cx, v.Cy, v.Zoom = cx, cy, zoom
+	}
+	return v, true
+}
+
+// adoptPendingViews settles each restored leaf on its owner row's view once
+// that row is cached; see pane.Frame.ViewPending.
+func (a *App) adoptPendingViews() {
+	a.tree.Walk(func(p *pane.Pane) {
+		if !p.ViewPending {
+			return
+		}
+		v, ok := a.ownerView(p, paneRectFor(a, p))
+		if !ok || !p.Adopt(v) {
+			return
+		}
+		if p.ContentID() != "" {
+			p.TextZoom = a.textScaleFor(p)
+			a.refreshFileOverlay()
+		}
+	})
 }
 
 // persistFraming is the one framing writeback: a float center in the grid the
@@ -120,10 +180,11 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor string, doorPath []string) {
 	// Never a mid-animation viewport: a pane's centre and zoom are then the
 	// transition's scratch values, and storing one would make a frame of an
-	// animation the framing the user comes back to. Every writer asks here.
+	// animation the framing the user comes back to. Nor a pending
+	// placeholder. Every writer asks here.
 	// A cancelled transition retires before its landing runs, so a write from
 	// a landing is the destination.
-	if a.trans.Active(p.ID) {
+	if a.trans.Active(p.ID) || p.ViewPending {
 		return
 	}
 	r := paneRectFor(a, p)
@@ -189,7 +250,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 // when the body is the plugin's.
 func (a *App) persistTextScroll(p *pane.Pane) {
 	file, ok := a.descendedTile(p)
-	if !ok || !rpc.TextDocument(file) || a.possiblyEphemeral(p, file) {
+	if !ok || p.ViewPending || !rpc.TextDocument(file) || a.possiblyEphemeral(p, file) {
 		return
 	}
 	scrollX := int64(p.TextScrollX + 0.5)

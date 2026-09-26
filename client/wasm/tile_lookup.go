@@ -81,10 +81,12 @@ func (a *App) descendedTile(p *pane.Pane) (*gridwellv1.Tile, bool) {
 
 // focusedTextDescent is the one read behind every text overlay: the focused
 // pane, its descended row (nil until the row lands), the box the pane
-// occupies, and textedit.DecideDescent's verdict on what shows.
+// occupies, and textedit.DecideDescent's verdict on what shows. A pane whose
+// view is pending shows no overlay, since one would open on the placeholder's
+// mode and scroll.
 func (a *App) focusedTextDescent() (*pane.Pane, *gridwellv1.Tile, pane.Rect, textedit.Descent) {
 	p := a.tree.FocusedPane()
-	if p == nil || p.ContentID() == "" {
+	if p == nil || p.ContentID() == "" || p.ViewPending {
 		return nil, nil, pane.Rect{}, textedit.Descent{}
 	}
 	t, _ := a.descendedTile(p)

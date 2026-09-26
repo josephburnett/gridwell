@@ -7,9 +7,8 @@
 // Gridwell, and the golden fixture in wire_test.go pins it.
 //
 // A leaf persists its whole place, root first and namespace crossings
-// included, plus the viewport at the frame it is on. The outer frames'
-// viewports, the selection and the native handles stay out by design: a
-// restored pane falls back to each grid's persisted framing on the way out.
+// included, and no view: a grid's framing row and a content tile's row own
+// that, so a restored leaf shows what they hold (Frame.ViewPending).
 //
 // Every id in the layout is stored in the owning node's namespace frame. The
 // encoder strips the pane tile's transit-chain prefix through rel and the
@@ -123,7 +122,7 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 // byte-identical to what earlier versions wrote.
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)
-	home := &LayoutPane{ID: bareID, Zoom: 1}
+	home := &LayoutPane{ID: bareID}
 	var place []LayoutFrame
 	if !p.ProjectionHolds() {
 		frames := p.Frames()
@@ -176,21 +175,17 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 		textFocus = tf
 	}
 	return &LayoutPane{
-		ID: bareID, Anchor: anchor, Path: path,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom,
-		TextFocus: textFocus, TextMode: p.TextMode,
-		TextScrollX: p.TextScrollX, TextScrollY: p.TextScrollY, TextZoom: p.TextZoom,
-		Place: place,
+		ID: bareID, Anchor: anchor, Path: path, TextFocus: textFocus, Place: place,
 	}, true
 }
 
 // DecodeLayout parses a layout blob back into a Tree. abs prepends the
 // reader's transit-chain prefix onto every id, nil being the identity. A newer
 // Gridwell's blob fails with a wrapped ErrLayoutVersion. Decoding is strict on
-// structure, which Gridwell wrote, and loose on view state: an unknown Focus
-// falls back to the first leaf, an unknown Zoomed clears, a zero Zoom becomes
-// 1, ratios clamp. idPrefix namespaces the decoded pane ids, so stacked live
-// trees cannot collide in the pane-keyed maps.
+// structure, which Gridwell wrote, and loose on arrangement state: an unknown
+// Focus falls back to the first leaf, an unknown Zoomed clears, ratios clamp.
+// idPrefix namespaces the decoded pane ids, so stacked live trees cannot
+// collide in the pane-keyed maps.
 func DecodeLayout(data []byte, abs func(id string) string, idPrefix string) (*Tree, error) {
 	var l LayoutV1
 	if err := json.Unmarshal(data, &l); err != nil {
@@ -276,12 +271,8 @@ func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNod
 
 func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane {
 	p := &Pane{ID: idPrefix + lp.ID, Stack: decodePlace(lp, abs)}
-	p.Cx, p.Cy, p.Zoom = lp.Cx, lp.Cy, lp.Zoom
-	p.TextMode = lp.TextMode
-	p.TextScrollX, p.TextScrollY, p.TextZoom = lp.TextScrollX, lp.TextScrollY, lp.TextZoom
-	if p.Zoom == 0 {
-		p.Zoom = 1
-	}
+	p.Zoom = 1
+	p.ViewPending = true
 	return p
 }
 

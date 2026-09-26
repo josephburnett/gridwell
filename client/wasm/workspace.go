@@ -128,10 +128,7 @@ func (a *App) reportLayoutSkipped(tileID string, skipped []string) {
 func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	tree.Walk(func(p *pane.Pane) {
 		if p.Anchor() == "" {
-			p.Reset(pane.Frame{GridID: a.home, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
-		}
-		if p.Zoom == 0 {
-			p.Zoom = 1
+			p.Reset(pane.Frame{GridID: a.home, Zoom: 1, ViewPending: true})
 		}
 		a.fetchGrid(a.gridIDForPane(p))
 		if p.ContentID() != "" {

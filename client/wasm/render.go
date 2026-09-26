@@ -351,6 +351,7 @@ func (a *App) draw() {
 
 	fillRectC(a.cctx, 0, 0, a.width, a.height, a.pal.Bg)
 
+	a.adoptPendingViews()
 	rects := a.layoutPanes()
 	for paneID, r := range rects {
 		p := a.tree.FindPane(paneID)
@@ -417,13 +418,12 @@ func (a *App) draw() {
 	}
 
 	// Both persisters are derived from the live tree, so there is no
-	// per-gesture persistence call site to forget. What arms them is one
-	// fingerprint of what they would write, read once here: a frame is not a
-	// change, and a settle armed by the frame that noticed one could never
-	// come due while a live tile repainted on the mirror's cadence.
-	fp := pane.PersistedFingerprint(a.tree)
-	a.scheduleWorkspaceSave(fp)
-	a.scheduleFramingSave(fp)
+	// per-gesture persistence call site to forget. What arms each is a
+	// fingerprint of what it would write, read here: a frame is not a change,
+	// and a settle armed by the frame that noticed one could never come due
+	// while a live tile repainted on the mirror's cadence.
+	a.scheduleWorkspaceSave(pane.LayoutFingerprint(a.tree))
+	a.scheduleFramingSave(pane.FramingFingerprint(a.tree))
 }
 
 // layoutPanes reserves the notice strip in layout, so a pending error owns

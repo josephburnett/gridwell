@@ -611,19 +611,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 		return 0, 0, 0, false
 	}
 	if len(path) == 0 {
-		// The read side of persistFraming's root arm, the same 1x1 synthetic
-		// doorway inverted. A root's framing rides its PluginInfo.
-		var vcx, vcy, vzoom float64
-		if pl, found := a.pluginByRoot(anchor); found {
-			vcx, vcy, vzoom = pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom
-		}
-		if vzoom <= 0 {
-			return 0, 0, 0, false
-		}
-		w := zoomtrans.Well{W: 1, H: 1,
-			ViewCx: vcx, ViewCy: vcy, ViewZoom: vzoom}
-		cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
-		return cx, cy, zoom, true
+		return a.storedRootView(anchor, r)
 	}
 	g, found := a.c.Grid(a.gridIDForPathFrom(anchor, path[:len(path)-1]))
 	if !found {
@@ -634,6 +622,20 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 		return 0, 0, 0, false
 	}
 	w := wellOf(t)
+	cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
+	return cx, cy, zoom, true
+}
+
+// storedRootView is the read side of persistFraming's root arm, the same 1x1
+// synthetic doorway inverted, at pane size r. A root's framing rides its
+// PluginInfo; false when it has none.
+func (a *App) storedRootView(anchor string, r pane.Rect) (cx, cy, zoom float64, ok bool) {
+	pl, found := a.pluginByRoot(anchor)
+	if !found || pl.RootViewZoom <= 0 {
+		return 0, 0, 0, false
+	}
+	w := zoomtrans.Well{W: 1, H: 1,
+		ViewCx: pl.RootViewCx, ViewCy: pl.RootViewCy, ViewZoom: pl.RootViewZoom}
 	cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
 	return cx, cy, zoom, true
 }

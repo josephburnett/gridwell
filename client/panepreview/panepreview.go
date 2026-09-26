@@ -7,14 +7,17 @@ package panepreview
 
 import "github.com/josephburnett/gridwell/client/pane"
 
-// Leaf is one pane of the mini-render.
+// Leaf is one pane of the mini-render. Live is its rect when descended, the
+// size its owner row's view is read at.
 type Leaf struct {
-	Pane *pane.Pane
-	Rect pane.Rect
-	// PreviewCell is the live cell size (Zoom × CellPx) shrunk by the tile
-	// scale.
-	PreviewCell float64
+	Pane  *pane.Pane
+	Rect  pane.Rect
+	Live  pane.Rect
+	Scale float64
 }
+
+// Cell is the live cell size at zoom, shrunk by the tile scale.
+func (l Leaf) Cell(zoom float64) float64 { return zoom * pane.CellPx * l.Scale }
 
 // Scale is the smaller of the width and height ratios, so the layout fits
 // without distortion. A degenerate live rect returns zero.
@@ -32,19 +35,17 @@ func Scale(tileRect, liveRootRect pane.Rect) float64 {
 
 // Leaves pairs each leaf with its preview transform. pane.Layout honors
 // Zoomed, so the mini-render shows what descent would restore.
-func Leaves(t *pane.Tree, tileRect pane.Rect, scale float64) []Leaf {
+func Leaves(t *pane.Tree, tileRect, liveRootRect pane.Rect) []Leaf {
+	scale := Scale(tileRect, liveRootRect)
 	rects := pane.Layout(t, tileRect)
+	live := pane.Layout(t, liveRootRect)
 	var out []Leaf
 	t.Walk(func(p *pane.Pane) {
 		r, ok := rects[p.ID]
 		if !ok {
 			return // when a pane is zoomed only that leaf has a rect
 		}
-		out = append(out, Leaf{
-			Pane:        p,
-			Rect:        r,
-			PreviewCell: p.Zoom * pane.CellPx * scale,
-		})
+		out = append(out, Leaf{Pane: p, Rect: r, Live: live[p.ID], Scale: scale})
 	})
 	return out
 }
