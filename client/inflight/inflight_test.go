@@ -12,26 +12,26 @@ import (
 func everyKey(string) bool { return true }
 
 func TestBeginDedupesAndDoneReleases(t *testing.T) {
-	s := New(time.Minute)
-	_, done, ok := s.Begin("g1")
+	s := newClaimSet(time.Minute)
+	_, done, ok := s.begin("g1")
 	if !ok {
 		t.Fatal("the first claim on a free key must be granted")
 	}
-	if _, _, ok := s.Begin("g1"); ok {
+	if _, _, ok := s.begin("g1"); ok {
 		t.Error("a second fetch for a key already in flight must be refused")
 	}
-	if _, _, ok := s.Begin("g2"); !ok {
+	if _, _, ok := s.begin("g2"); !ok {
 		t.Error("a different key is a different claim")
 	}
 	done()
-	if _, _, ok := s.Begin("g1"); !ok {
+	if _, _, ok := s.begin("g1"); !ok {
 		t.Error("a released key must be claimable again")
 	}
 }
 
 func TestDoneCancelsItsContext(t *testing.T) {
-	s := New(time.Minute)
-	ctx, done, _ := s.Begin("g1")
+	s := newClaimSet(time.Minute)
+	ctx, done, _ := s.begin("g1")
 	done()
 	if !errors.Is(ctx.Err(), context.Canceled) {
 		t.Errorf("a released claim's context must be cancelled, not left holding a timer: %v", ctx.Err())
@@ -41,8 +41,8 @@ func TestDoneCancelsItsContext(t *testing.T) {
 func TestDeadlineBoundsAFetchThatNeverAnswers(t *testing.T) {
 	// A request lost to a dead socket, with no reconnect to cancel it,
 	// still ends, so the claim is not held forever.
-	s := New(10 * time.Millisecond)
-	ctx, _, _ := s.Begin("g1")
+	s := newClaimSet(10 * time.Millisecond)
+	ctx, _, _ := s.begin("g1")
 	select {
 	case <-ctx.Done():
 		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -54,21 +54,21 @@ func TestDeadlineBoundsAFetchThatNeverAnswers(t *testing.T) {
 }
 
 func TestCancelIfOverEveryKeyCancelsAndNamesEveryFetch(t *testing.T) {
-	s := New(time.Minute)
-	ctxA, _, _ := s.Begin("a")
-	ctxB, _, _ := s.Begin("b")
+	s := newClaimSet(time.Minute)
+	ctxA, _, _ := s.begin("a")
+	ctxB, _, _ := s.begin("b")
 
-	got := s.CancelIf(everyKey)
+	got := s.cancelIf(everyKey)
 	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Fatalf("CancelIf(everyKey) = %v, want the two keys sorted", got)
 	}
 	if !errors.Is(ctxA.Err(), context.Canceled) || !errors.Is(ctxB.Err(), context.Canceled) {
 		t.Errorf("both fetches must be cancelled: a=%v b=%v", ctxA.Err(), ctxB.Err())
 	}
-	if len(s.Keys()) != 0 {
-		t.Errorf("Len = %d, want no claim left standing", len(s.Keys()))
+	if len(s.keys()) != 0 {
+		t.Errorf("Len = %d, want no claim left standing", len(s.keys()))
 	}
-	if _, _, ok := s.Begin("a"); !ok {
+	if _, _, ok := s.begin("a"); !ok {
 		t.Error("a cancelled key must be immediately claimable over the new link")
 	}
 }
@@ -76,11 +76,11 @@ func TestCancelIfOverEveryKeyCancelsAndNamesEveryFetch(t *testing.T) {
 // One source going dark kills only the fetches that rode through it. The
 // others are still owed an answer over a link that never broke.
 func TestCancelIfLeavesTheFetchesThatKeptTheirLink(t *testing.T) {
-	s := New(time.Minute)
-	dark, _, _ := s.Begin("n1abcde/laptop/far9xyz/1")
-	alive, _, _ := s.Begin("fs9xyzw/1")
+	s := newClaimSet(time.Minute)
+	dark, _, _ := s.begin("n1abcde/laptop/far9xyz/1")
+	alive, _, _ := s.begin("fs9xyzw/1")
 
-	got := s.CancelIf(func(k string) bool { return strings.HasPrefix(k, "n1abcde/laptop/") })
+	got := s.cancelIf(func(k string) bool { return strings.HasPrefix(k, "n1abcde/laptop/") })
 	if len(got) != 1 || got[0] != "n1abcde/laptop/far9xyz/1" {
 		t.Fatalf("CancelIf = %v, want only the dark source's key", got)
 	}
@@ -90,7 +90,7 @@ func TestCancelIfLeavesTheFetchesThatKeptTheirLink(t *testing.T) {
 	if alive.Err() != nil {
 		t.Errorf("an unrelated source's fetch must still be alive: %v", alive.Err())
 	}
-	if keys := s.Keys(); len(keys) != 1 || keys[0] != "fs9xyzw/1" {
+	if keys := s.keys(); len(keys) != 1 || keys[0] != "fs9xyzw/1" {
 		t.Errorf("Keys = %v, want the surviving claim still held", keys)
 	}
 }
@@ -99,37 +99,37 @@ func TestZombieReleaseKeepsTheFreshClaim(t *testing.T) {
 	// The reconnect cancels the fetch, the caller re-asks at once, and
 	// only then does the cancelled fetch return and release. Freeing the
 	// key there would dogpile the fresh fetch on every frame that draws.
-	s := New(time.Minute)
-	_, zombieDone, _ := s.Begin("g1")
-	s.CancelIf(everyKey)
+	s := newClaimSet(time.Minute)
+	_, zombieDone, _ := s.begin("g1")
+	s.cancelIf(everyKey)
 
-	fresh, freshDone, ok := s.Begin("g1")
+	fresh, freshDone, ok := s.begin("g1")
 	if !ok {
 		t.Fatal("the re-ask must be granted")
 	}
 	zombieDone()
 
-	if got := s.Keys(); len(got) != 1 || got[0] != "g1" {
+	if got := s.keys(); len(got) != 1 || got[0] != "g1" {
 		t.Errorf("Keys = %v, want the fresh claim still held", got)
 	}
 	if fresh.Err() != nil {
 		t.Errorf("the fresh fetch must still be alive: %v", fresh.Err())
 	}
-	if _, _, ok := s.Begin("g1"); ok {
+	if _, _, ok := s.begin("g1"); ok {
 		t.Error("the fresh claim must still dedupe")
 	}
 	freshDone()
-	if len(s.Keys()) != 0 {
-		t.Errorf("Len = %d, want the fresh claim released by its own done", len(s.Keys()))
+	if len(s.keys()) != 0 {
+		t.Errorf("Len = %d, want the fresh claim released by its own done", len(s.keys()))
 	}
 }
 
 func TestContextIsBoundedAndClaimFree(t *testing.T) {
-	s := New(10 * time.Millisecond)
-	ctx, cancel := s.Context()
+	s := newClaimSet(10 * time.Millisecond)
+	ctx, cancel := s.bounded()
 	defer cancel()
-	if len(s.Keys()) != 0 {
-		t.Errorf("Len = %d, want an unclaimed fetch to hold no key", len(s.Keys()))
+	if len(s.keys()) != 0 {
+		t.Errorf("Len = %d, want an unclaimed fetch to hold no key", len(s.keys()))
 	}
 	select {
 	case <-ctx.Done():
@@ -162,11 +162,11 @@ func TestBoundedCarriesTheDeadline(t *testing.T) {
 // already on the wire was taken before the change, so without the owed flag
 // the cache keeps a snapshot older than the change that asked for it.
 func TestARefusedAskIsOwedToTheHolder(t *testing.T) {
-	s := New(time.Minute)
+	s := newClaimSet(time.Minute)
 	server, cache, changed := "v1", "", false
 	var fetch func()
 	fetch = func() {
-		_, done, ok := s.Begin("g1")
+		_, done, ok := s.begin("g1")
 		if !ok {
 			return
 		}
@@ -189,15 +189,15 @@ func TestARefusedAskIsOwedToTheHolder(t *testing.T) {
 }
 
 func TestOwedIsPerClaimAndClearsWithIt(t *testing.T) {
-	s := New(time.Minute)
-	_, done, _ := s.Begin("g1")
-	if _, _, ok := s.Begin("g1"); ok {
+	s := newClaimSet(time.Minute)
+	_, done, _ := s.begin("g1")
+	if _, _, ok := s.begin("g1"); ok {
 		t.Fatal("a second fetch for a key already in flight must be refused")
 	}
 	if !done() {
 		t.Error("the holder of a refused ask must be told it is owed a re-ask")
 	}
-	_, done2, ok := s.Begin("g1")
+	_, done2, ok := s.begin("g1")
 	if !ok {
 		t.Fatal("a released key must be claimable again")
 	}

@@ -11,6 +11,7 @@ import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -18,10 +19,11 @@ import (
 type menuContext struct {
 	plugins        []*gridwellv1.PluginInfo
 	shellsDisabled bool
-	// fetched marks a completed load. Concurrent opens are kept to one read
-	// by a.fetch.menuFetch, not by a flag here, so the read is bounded and a
-	// Handshake the network swallows does not leave the menu without its
-	// plugin section for the life of the page.
+	// fetched marks a completed load. Concurrent opens are kept to one read,
+	// and a failed one from being asked every frame, by a.fetch.menus, not by
+	// a flag here, so the read is bounded and a Handshake the network
+	// swallows does not leave the menu without its plugin section for the
+	// life of the page.
 	fetched bool
 }
 
@@ -56,7 +58,7 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 		a.views.menuCtxs[ns] = mc
 	}
 	if !mc.fetched {
-		if ctx, done, ok := a.fetch.menuFetch.Begin(ns); ok {
+		if ctx, done, ok := a.fetch.menus.Ask(ns); ok {
 			go a.fetchMenuCtx(ctx, done, ns)
 		}
 	}
@@ -64,14 +66,13 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 }
 
 // fetchMenuCtx loads one remote node's menu on the claim menuCtx opened for
-// it. A failure leaves the context unfetched and surfaces. Nothing else
-// retries: every draw of the open menu asks again, which is the retry.
+// it. A failure leaves the context unfetched, surfaces, and latches, so the
+// draw of the open menu asks again only when inflight.Reads clears it.
 func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 	defer done()
 	lp, err := a.cl.HandshakeNS(ctx, ns)
+	a.fetch.menus.Settle(ns, clientsync.ReactRead(clientsync.Of(err)))
 	if err != nil {
-		// reportErr schedules a frame, so the next draw finds no claim and
-		// no context and starts a fresh read.
 		a.surfaceRPCError("Handshake", err)
 		return
 	}

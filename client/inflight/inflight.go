@@ -1,9 +1,9 @@
-// Package inflight bounds every client RPC and owns, per key, whether a fetch
-// is outstanding (Set) or has failed (Latch), and both at once for a read the
-// renderer re-asks every frame (Reads). A claim ends when its fetch
-// returns or CancelIf declares its link gone; a claim that outlived its
-// request would dedupe every retry away and leave a pane loading with no
-// error. Only the event Subscribe and the shell WebSocket are unbounded.
+// Package inflight bounds every client RPC and owns, per key, whether a read
+// is outstanding or has failed. Reads is the only way to hold a claim: the
+// claim set and the failure latches are unexported, so no caller can take a
+// claim without the latch that stops a failure being asked every frame. A
+// claim ends when its fetch returns or CancelIf declares its link gone. Only
+// the event Subscribe and the shell WebSocket are unbounded.
 package inflight
 
 import (
@@ -25,8 +25,8 @@ func Bounded() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), Deadline)
 }
 
-// Set is the live claims for one kind of fetch, keyed by id.
-type Set struct {
+// claimSet is the live claims for one kind of fetch, keyed by id.
+type claimSet struct {
 	mu sync.Mutex
 	d  time.Duration
 	m  map[string]*claim
@@ -43,15 +43,15 @@ type claim struct {
 	owed bool
 }
 
-func New(d time.Duration) *Set {
-	return &Set{d: d, m: map[string]*claim{}}
+func newClaimSet(d time.Duration) *claimSet {
+	return &claimSet{d: d, m: map[string]*claim{}}
 }
 
-// Begin claims key for one fetch; ok is false when one already holds it, and
+// begin claims key for one fetch; ok is false when one already holds it, and
 // the holder is then owed a re-ask. The fetch must use the returned context,
 // which is what CancelIf cancels, and must call done when it returns; done
 // reports whether an ask was refused while the claim was held.
-func (s *Set) Begin(key string) (ctx context.Context, done func() bool, ok bool) {
+func (s *claimSet) begin(key string) (ctx context.Context, done func() bool, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if c, held := s.m[key]; held {
@@ -64,9 +64,9 @@ func (s *Set) Begin(key string) (ctx context.Context, done func() bool, ok bool)
 	return ctx, func() bool { return s.release(key, c) }, true
 }
 
-// Context is a bounded context with no claim. CancelIf cannot reach it, so
+// bounded is a bounded context with no claim. CancelIf cannot reach it, so
 // the caller must cancel it.
-func (s *Set) Context() (context.Context, context.CancelFunc) {
+func (s *claimSet) bounded() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), s.d)
 }
 
@@ -74,7 +74,7 @@ func (s *Set) Context() (context.Context, context.CancelFunc) {
 // ask was refused meanwhile. A cancelled fetch returns after a fresh one has
 // taken the key, and freeing the fresh claim would drop the dogpile guard for
 // as long as it runs; the successor carries its own owed flag.
-func (s *Set) release(key string, c *claim) bool {
+func (s *claimSet) release(key string, c *claim) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.m[key] == c {
@@ -84,10 +84,10 @@ func (s *Set) release(key string, c *claim) bool {
 	return c.owed
 }
 
-// CancelIf drops and cancels every claim whose key match reports, returning
+// cancelIf drops and cancels every claim whose key match reports, returning
 // those keys sorted. The caller chooses which keys lost a link, because one
 // source going dark leaves every other source's fetches still owed an answer.
-func (s *Set) CancelIf(match func(key string) bool) []string {
+func (s *claimSet) cancelIf(match func(key string) bool) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	keys := make([]string, 0, len(s.m))
@@ -103,8 +103,8 @@ func (s *Set) CancelIf(match func(key string) bool) []string {
 	return keys
 }
 
-// Keys lists the keys with a fetch in flight, sorted.
-func (s *Set) Keys() []string {
+// keys lists the keys with a fetch in flight, sorted.
+func (s *claimSet) keys() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Sorted(maps.Keys(s.m))

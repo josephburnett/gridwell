@@ -278,27 +278,26 @@ func newViewCaches(onPreviewDecodeErr, onRasterErr func(tileID string), onLayout
 // fetchState owns whether a read is outstanding or has failed. A claim kept
 // elsewhere is how a swallowed request holds a key for the life of the page.
 type fetchState struct {
-	// grids, tiles, contents and previews are the reads every draw fires on
-	// a miss: GetGrid by grid id, GetTile by a routable id whose grid was
-	// never visited, ReadContent and GetTilePreview by rpc.ContentID.
+	// grids, tiles, contents, previews and menus are the reads every draw
+	// fires on a miss: GetGrid by grid id, GetTile by a routable id whose
+	// grid was never visited, ReadContent and GetTilePreview by
+	// rpc.ContentID, and a remote pane's menu Handshake by node namespace.
 	// inflight.Reads owns why each failure latches and what clears it.
 	grids    *inflight.Reads
 	tiles    *inflight.Reads
 	contents *inflight.Reads
 	previews *inflight.Reads
-
-	// menuFetch is keyed by a source NAME, so cache.Reaches is what scopes it.
-	menuFetch *inflight.Set
+	menus    *inflight.Reads
 }
 
 // newFetchState is the one place the group is constructed.
 func newFetchState() fetchState {
 	return fetchState{
-		grids:     inflight.NewReads(),
-		tiles:     inflight.NewReads(),
-		contents:  inflight.NewReads(),
-		previews:  inflight.NewReads(),
-		menuFetch: inflight.New(inflight.Deadline),
+		grids:    inflight.NewReads(),
+		tiles:    inflight.NewReads(),
+		contents: inflight.NewReads(),
+		previews: inflight.NewReads(),
+		menus:    inflight.NewReads(),
 	}
 }
 
@@ -798,7 +797,7 @@ func (a *App) fetchGrid(id string) {
 		err := a.loadGrid(ctx, id)
 		// An ask refused while this one was on the wire describes a grid this
 		// answer was taken too early to hold, so it is re-asked rather than
-		// lost; see inflight.Set.Begin.
+		// lost; see inflight.Reads.Ask.
 		owed := done()
 		if err != nil {
 			a.draw()
@@ -980,6 +979,7 @@ func (a *App) landTransition(tr *transition.Transition) {
 	a.fetch.grids.Reset()
 	a.fetch.contents.Reset()
 	a.fetch.previews.Reset()
+	a.fetch.menus.Reset()
 	a.fetchGrid(a.gridIDForPane(p))
 	if tr.TraceTileID != "" {
 		// Keep the frame loop alive for the fade.
@@ -1084,8 +1084,12 @@ func (a *App) retryKick(resync bool, source string) {
 		// Failure latches are gap state: a read that failed while the link was
 		// down deserves a fresh attempt, asked by name because a pane waiting
 		// on one draws nothing new to ask for it.
+		// The menu set is keyed by a source name, so its predicate is
+		// cache.Reaches: a connection's flap covers the nodes behind it.
+		reaches := func(ns string) bool { return cache.Reaches(ns, source) }
 		a.reask(a.fetch.grids.ClearIf(served), a.fetch.tiles.ClearIf(served),
-			a.fetch.contents.ClearIf(served), a.fetch.previews.ClearIf(served))
+			a.fetch.contents.ClearIf(served), a.fetch.previews.ClearIf(served),
+			a.fetch.menus.ClearIf(reaches))
 		// So is a fetch still in flight: a request that dies with its link never
 		// returns, and its claim would keep every retry away forever. Re-ask for
 		// the grids by name, since a pane waiting on one it never received is
@@ -1094,9 +1098,7 @@ func (a *App) retryKick(resync bool, source string) {
 		a.fetch.tiles.CancelIf(served)
 		a.fetch.contents.CancelIf(served)
 		a.fetch.previews.CancelIf(served)
-		// The menu set is keyed by a source name, so its predicate is
-		// cache.Reaches: a connection's flap covers the nodes behind it.
-		a.fetch.menuFetch.CancelIf(func(ns string) bool { return cache.Reaches(ns, source) })
+		a.fetch.menus.CancelIf(reaches)
 		for _, gid := range append(stuck, a.c.ResyncSet(source)...) {
 			a.fetchGrid(gid)
 		}
@@ -1105,11 +1107,15 @@ func (a *App) retryKick(resync bool, source string) {
 	a.drainOutbox()
 }
 
-// reask asks again for reads whose latches were just cleared. A preview is
-// asked by the draw, the one site that knows which blob the face wants.
-func (a *App) reask(grids, tiles, contents, previews []string) {
-	if len(previews) > 0 {
-		a.scheduleFrame(traceevent.WhyReask)
+// reask asks again for reads whose latches were just cleared. A preview and
+// a menu are asked by the draw, the one site that knows which blob the face
+// wants and whether the menu is open.
+func (a *App) reask(grids, tiles, contents []string, drawn ...[]string) {
+	for _, keys := range drawn {
+		if len(keys) > 0 {
+			a.scheduleFrame(traceevent.WhyReask)
+			break
+		}
 	}
 	for _, id := range grids {
 		a.fetchGrid(id)
@@ -1143,7 +1149,7 @@ func (a *App) retryBackstop() {
 		a.backstop.Wait()
 		// An unreachable source is asked again once per tick, never per frame.
 		a.reask(a.fetch.grids.Backstop(), a.fetch.tiles.Backstop(),
-			a.fetch.contents.Backstop(), a.fetch.previews.Backstop())
+			a.fetch.contents.Backstop(), a.fetch.previews.Backstop(), a.fetch.menus.Backstop())
 		a.syncContentOutbox()
 		if a.persist.out.Len() > 0 {
 			a.retryKick(false, cache.EverySource)

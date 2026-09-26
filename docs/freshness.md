@@ -112,11 +112,13 @@ handshake. Only the two long-lived streams are unbounded. A call that never
 returns is what park-at-send survives and what the bound then ends: the
 answer is what acks the parked entry, so without it the entry would sit
 parked with no verdict for the life of the page.
-`inflight.Set` adds the claim: it bounds and
+`inflight.Reads` adds the claim: it bounds and
 cancels fetches so a request that died with its link cannot hold a dedupe
-claim forever. It is the client's ONE claim mechanism, and `App.fetchState`
-holds every set: grids, tiles, tile content, url previews, and the + menu's
-per-node context. A deduped read that kept a claim of its own — a bare bool
+claim forever, and it latches a failure so a read the renderer asks for every
+frame is not asked again until something clears it. It is the client's ONE
+claim mechanism — the bare claim set is unexported, so a claim cannot be
+taken without its latch — and `App.fetchState` holds every one: grids, tiles,
+tile content, url previews, and the + menu's per-node context. A deduped read that kept a claim of its own — a bare bool
 beside its own cache — was bounded by nothing and cancelled by nothing, so a
 request the network swallowed held its key for the life of the page and the
 face it fed never loaded, never retried, and never said a word.
@@ -155,7 +157,7 @@ A remembered grid past its window, the revalidation behind it, and the room
 correcting with no user gesture.
 
 1. `client/wasm/main.go:App.fetchGrid` misses in the cache, claims the id
-   through `inflight.Set.Begin`, and calls `App.loadGrid` → `rpc.Client.GetGrid`.
+   through `inflight.Reads.Ask`, and calls `App.loadGrid` → `rpc.Client.GetGrid`.
 2. `internal/server/router.go:router.GetGrid` peels the node id and the
    connection segment (`Server.resolve`) and lands on the cache layer, which
    is what the registry holds as the transport.

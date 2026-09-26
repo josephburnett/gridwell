@@ -369,8 +369,9 @@ test('a revived mount clears its chip and its notice with nobody touching anythi
 // aborted, would hold it for the life of the page, leaving the remote pane's +
 // menu with no plugin section at all and nothing on the error strip.
 //
-// The read is bounded, so the menu fills itself in off its own clock with the
-// link in exactly the state that broke it. Nothing here kills anything and
+// The read is bounded, and its expiry latches the namespace Unreachable, so
+// the menu fills itself in on the next backstop tick with the link in exactly
+// the state that broke it. Nothing here kills anything and
 // nothing restarts. A health flap on the node the claim names also cancels it,
 // which is faster when one happens; client/inflight and client/cache's unit
 // tests own that half.
@@ -386,6 +387,9 @@ test('a menu read the network swallows does not latch the remote menu empty', as
   // handshake (no namespace) and the retry both keep a live link, so the only
   // thing between the pane and the far node's menu is the client's own claim on
   // that namespace.
+  // The backstop's own bound is 30s, the same as the read's; retuned so the
+  // tick after the expiry lands inside the wait below.
+  await window.evaluate(() => (window as any).__gridwellTest.setBackstopMs(5_000));
   let blackhole = true;
   await window.route(`**/${SERVICE}/Handshake`, async (route) => {
     if (blackhole && (route.request().postData() ?? '').includes('farconn1')) {
@@ -401,8 +405,8 @@ test('a menu read the network swallows does not latch the remote menu empty', as
   expect(pal.toggle.present, 'the swallowed read leaves no plugin section to unfold').toBe(false);
 
   // No user action beyond keeping the menu open: the bounded read gives up,
-  // says so on the strip, and the next draw of the menu asks again over a link
-  // that works. Unfolding the section is part of reading it, and it cannot be
+  // says so on the strip, and the draw of the menu after the backstop tick
+  // asks again over a link that works. Unfolding the section is part of reading it, and it cannot be
   // unfolded until there is something to unfold.
   let sawNotice = false;
   await expect
@@ -426,4 +430,50 @@ test('a menu read the network swallows does not latch the remote menu empty', as
     // read rather than on the first try.
     .toBe('home,home · trash');
   expect(sawNotice, 'the swallowed read surfaced rather than disappearing').toBe(true);
+});
+
+// The remote menu is read on every draw of the open menu until it lands, so a
+// read that fails must latch like every other per-frame read, or its notice
+// paints the frame that asks again. A dark far node is Unreachable: asked
+// again on the backstop tick, not the next frame.
+test('a menu read that fails is not asked again every frame', async ({ gw, window, world }) => {
+  await enterFarRoom(gw, world);
+
+  let failed = 0;
+  await window.route(`**/${SERVICE}/Handshake`, async (route) => {
+    if ((route.request().postData() ?? '').includes('farconn1')) {
+      failed++;
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'unavailable', message: 'e2e: far node dark' }),
+      });
+    }
+    await route.continue();
+  });
+
+  // Reading the menu asks for it, and the failure's notice raises the strip
+  // and moves the + circle, so the menu is opened only once the strip is up.
+  const palette = () => window.evaluate(() => (window as any).__gridwellTest.palette());
+  await palette();
+  await expect
+    .poll(
+      async () =>
+        (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices.some(
+          (n: any) => n.source === 'rpc:Handshake',
+        ),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
+  await gw.openPalette();
+  const before = failed;
+
+  // Two seconds of the open menu is over a hundred frames if each failure
+  // draws the next; the backstop is 30s, so none of them is its tick.
+  await window.waitForTimeout(2_000);
+  expect(
+    { open: (await palette()).open, reasked: failed - before },
+    'the open menu, and Handshake reads for the dark far node while it was open',
+  ).toEqual({ open: true, reasked: 0 });
+  await window.unroute(`**/${SERVICE}/Handshake`);
 });

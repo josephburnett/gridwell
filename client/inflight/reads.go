@@ -26,27 +26,27 @@ const (
 // re-ask on the next frame. A read Settles what it heard; Ask refuses while
 // the key is in flight or latched.
 type Reads struct {
-	claims      *Set
+	claims      *claimSet
 	refused     *latch
 	unreachable *latch
 }
 
 func NewReads() *Reads {
-	return &Reads{claims: New(Deadline), refused: newLatch(), unreachable: newLatch()}
+	return &Reads{claims: newClaimSet(Deadline), refused: newLatch(), unreachable: newLatch()}
 }
 
-// Ask is Set.Begin, refused too while key is latched.
+// Ask is claimSet.begin, refused too while key is latched.
 func (r *Reads) Ask(key string) (ctx context.Context, done func() bool, ok bool) {
 	if r.Failed(key) {
 		return nil, nil, false
 	}
-	return r.claims.Begin(key)
+	return r.claims.begin(key)
 }
 
 // Context is a bounded context with no claim, for a read that must not be
-// deduped away; see Set.Context.
+// deduped away; see claimSet.bounded.
 func (r *Reads) Context() (context.Context, context.CancelFunc) {
-	return r.claims.Context()
+	return r.claims.bounded()
 }
 
 // Settle applies one read's verdict to key.
@@ -107,9 +107,9 @@ func (r *Reads) ClearIf(match func(key string) bool) []string {
 	return keys
 }
 
-// CancelIf is Set.CancelIf over the claims.
+// CancelIf is claimSet.cancelIf over the claims.
 func (r *Reads) CancelIf(match func(key string) bool) []string {
-	return r.claims.CancelIf(match)
+	return r.claims.cancelIf(match)
 }
 
 // Reset clears every latch, for arriving somewhere new. Claims stay: a read
@@ -121,7 +121,7 @@ func (r *Reads) Reset() {
 
 // InFlight lists the keys with a read in flight, sorted.
 func (r *Reads) InFlight() []string {
-	return r.claims.Keys()
+	return r.claims.keys()
 }
 
 func merged(a, b []string) []string {
