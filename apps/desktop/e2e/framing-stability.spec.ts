@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { tileAt, placeTile } from './oracle';
+import { tileAt, placeTile, setRootFraming } from './oracle';
 import { settle } from './cadence';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -113,6 +113,55 @@ test('a pan longer than the settle window writes only where it came to rest', as
   const rested = await gw.focused();
   expect(Math.abs(rested.cx - p.cx), 'the pan moved the view').toBeGreaterThan(0.1);
   expect(await writes(), 'the pan was persisted before the user let go of it').toBe(before + 1);
+});
+
+// A root grid's framing is three numbers, and the event that announces it
+// carries them. Refetching the listing to learn them cost a plugin List per
+// pan, and an ssh round trip per pan on a remote grid. Another writer's
+// framing reaches this client's doorway the same way, and moves no pane.
+test('reframing a root grid refetches nothing, and a foreign reframe arrives as the fact', async ({
+  gw,
+  window,
+}) => {
+  const c = await gw.cadences();
+  await gw.enterPlugin('pics');
+  const p = await gw.focused();
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+
+  const asked: string[] = [];
+  await window.route('**/gridwell.v1.Gridwell/GetGrid', async (r: any) => {
+    asked.push(r.request().postData() ?? '');
+    await r.continue();
+  });
+  const writes = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetFraming ?? 0));
+  const before = await writes();
+  await gw.panFocusedGrid(Math.round(p.cx), Math.round(p.cy), Math.round(p.cx) - 1, Math.round(p.cy) - 1);
+  await gw.waitIdle();
+  await expect.poll(writes, { message: 'the pan was persisted', timeout: 10_000 }).toBe(before + 1);
+  await settle(window, c.framingSaveMs);
+  const listings = () => asked.filter((body) => body.includes(p.gridID));
+  expect(listings(), "the pane's own framing write refetches no listing").toEqual([]);
+
+  const doorway = async () =>
+    (await gw.plugins()).flatMap((pl) => pl.menuEntries).find((e) => e.gridID === p.gridID)!;
+  const rested = await gw.focused();
+  await setRootFraming(gw.origin, p.gridID, 7, -3, 2.5);
+  await expect
+    .poll(async () => Number((await doorway()).viewZoom), {
+      message: "another writer's framing reaches the doorway",
+      timeout: 10_000,
+    })
+    .toBeCloseTo(2.5, 3);
+  expect(Number((await doorway()).viewCx)).toBeCloseTo(7, 3);
+  const after = await gw.focused();
+  expect(after.cx, 'an event moves no viewport').toBeCloseTo(rested.cx, 3);
+  expect(after.zoom, 'an event moves no viewport').toBeCloseTo(rested.zoom, 3);
+
+  await settle(window, c.framingSaveMs);
+  await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
+  expect(listings(), "another writer's framing refetches no listing").toEqual([]);
 });
 
 // A reload fired inside the settle window still lands the save: the unload flush
