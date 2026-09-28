@@ -79,10 +79,10 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		done,
 	)
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	// A refresh window of one nanosecond: every read starts a walk, so a todo
-	// that leaves shows up within a read or two instead of after the default
-	// window. Anything longer is a race against the test's own speed.
-	cfg := gl.Config(t, map[string]string{"refresh": "1ns"})
+	// A full-walk window of one nanosecond: every read starts a full walk, so
+	// a todo that leaves shows up within a read or two instead of after the
+	// default window. Anything longer is a race against the test's own speed.
+	cfg := gl.Config(t, map[string]string{"full_refresh": "1ns"})
 	client, _, closeStack := gitlabStackAt(t, memPath, cfg)
 
 	reg := plugin.NewRegistry()
@@ -198,10 +198,10 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 // to it, and then trashes it.
 func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 	gl := gitlabfake.New(t, gitlabTodo(1, "2026-08-18T10:00:00Z"))
-	// A one-nanosecond refresh window: every read starts a walk, so no listing
-	// here waits out the default window. The done state itself lands when
-	// GitLab accepts the write.
-	cfg := gl.Config(t, map[string]string{"refresh": "1ns"})
+	// A one-nanosecond full-walk window: every read starts a full walk, so no
+	// listing here waits out the default window. The done state itself lands
+	// when GitLab accepts the write.
+	cfg := gl.Config(t, map[string]string{"full_refresh": "1ns"})
 	client, _, _ := gitlabStackAt(t, filepath.Join(t.TempDir(), "mem.db"), cfg)
 
 	st, err := store.Open(":memory:")
