@@ -101,3 +101,39 @@ func TestALinkToAMovedFileIsDeadUntilItIsBack(t *testing.T) {
 		t.Fatalf("the file is back and its target reads %q", b)
 	}
 }
+
+// Home answers a destroyed target the same way: its id is never reassigned,
+// so the link's path ends in nothing for good.
+func TestALinkToADestroyedHomeTileIsDead(t *testing.T) {
+	cl, _, _, _ := lazyStack(t)
+	ctx := context.Background()
+	lp, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := rpc.HomeGrid(lp)
+	target, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: home,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: home,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 2, Y: 0, W: 1, H: 1, LinkTargetId: target.Id}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first delete moves the target to the trash, where links keep
+	// resolving; the second destroys it.
+	for range 2 {
+		if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: target.Id}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cl.GetTile(ctx, link.Id); err != nil {
+			t.Fatalf("the link itself = %v, want it still there to delete", err)
+		}
+	}
+	goneReads(ctx, t, cl, link, "the target was destroyed")
+	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: link.Id}); err != nil {
+		t.Fatalf("deleting the dead link: %v", err)
+	}
+}

@@ -181,9 +181,14 @@ func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 	return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
 }
 
-// GetTile reads a single tile's metadata.
+// GetTile reads a single tile's metadata. An id with no row is dead: home
+// never reassigns an id, so what it named is gone for good.
 func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.GetTile(ctx, req.TileId))
+	t, err := p.st.GetTile(ctx, req.TileId)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, gwerr.DeadRef("", "home: no tile %q", req.TileId)
+	}
+	return tileResp(t, err)
 }
 
 // Search is the one generic find verb; the store owns the semantics.
