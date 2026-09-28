@@ -288,6 +288,24 @@ func (n *Namespace) LookupContext(key string) (int64, bool, error) {
 	return id, true, nil
 }
 
+// Contexts lists every context key that has a grid row here.
+func (n *Namespace) Contexts() ([]string, error) {
+	rows, err := n.s.db.Query(`SELECT context_key FROM grids WHERE ns = ? ORDER BY id`, n.ns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		out = append(out, key)
+	}
+	return out, rows.Err()
+}
+
 // LiveTileID is TileKey's inverse: an entry with a row is named by that row's
 // id, never by its key.
 func (n *Namespace) LiveTileID(gridID int64, key string) (int64, bool, error) {

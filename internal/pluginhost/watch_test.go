@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -20,10 +21,12 @@ import (
 )
 
 // watchPlugin declares Watch, unless undeclared, and answers call n (from 1)
-// with serve.
+// with serve, first sending the header, which says the stream is open, when
+// accept says so.
 type watchPlugin struct {
 	oneEntryPlugin
 	undeclared bool
+	accept     func(n int32) bool
 	calls      atomic.Int32
 	serve      func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error
 }
@@ -38,7 +41,13 @@ func (p *watchPlugin) Info(ctx context.Context, req *pluginv1.InfoRequest) (*plu
 }
 
 func (p *watchPlugin) Watch(_ *pluginv1.WatchRequest, s grpc.ServerStreamingServer[pluginv1.Change]) error {
-	return p.serve(p.calls.Add(1), s.Context(), s.Send)
+	n := p.calls.Add(1)
+	if p.accept != nil && p.accept(n) {
+		if err := s.SendHeader(metadata.MD{}); err != nil {
+			return err
+		}
+	}
+	return p.serve(n, s.Context(), s.Send)
 }
 
 func contextChanged(c string) *pluginv1.Change {
@@ -165,42 +174,61 @@ func TestWatchDeclaredButUnimplementedIsHealthDown(t *testing.T) {
 	}
 }
 
-// A stream that ends is re-opened, quietly: a dropped stream is not an outage
-// the user can do anything about.
-func TestWatchReopensAStreamThatEnds(t *testing.T) {
-	p := &watchPlugin{serve: func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error {
-		if err := send(contextChanged("c" + string('0'+rune(n)))); err != nil {
-			return err
-		}
-		if n == 1 {
+// A stream that ends is re-opened, quietly, and the changes it missed are
+// caught up: once open again it announces every context the node knows of,
+// declared or with a row, so a client refetches what it shows. A first open
+// has missed nothing and announces nothing.
+func TestWatchReopenAnnouncesEveryKnownContext(t *testing.T) {
+	drop := make(chan struct{})
+	p := &watchPlugin{
+		accept: func(int32) bool { return true },
+		serve: func(n int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
+			if n == 1 {
+				select {
+				case <-drop:
+					return nil
+				case <-ctx.Done():
+					return nil
+				}
+			}
+			<-ctx.Done()
 			return nil
-		}
-		<-ctx.Done()
-		return nil
-	}}
-	_, seen := watching(t, p, nil)
-	for _, want := range []string{gridAddr("c1"), gridAddr("c2")} {
-		ev := await(t, seen)
-		if got := ev.GetGridChanged().GetGridId(); got != want {
-			t.Fatalf("event = %v, want GridChanged(%q)", ev, want)
-		}
+		},
+	}
+	a, seen := watching(t, p, nil)
+	if _, err := a.mem.ContextID("inner"); err != nil {
+		t.Fatal(err)
+	}
+	if evs := collect(seen); len(evs) != 0 {
+		t.Fatalf("the first open announced %v, want nothing", evs)
+	}
+	close(drop)
+	got := map[string]int{}
+	for range 2 {
+		got[await(t, seen).GetGridChanged().GetGridId()]++
+	}
+	if len(got) != 2 || got[gridAddr("all")] != 1 || got[gridAddr("inner")] != 1 {
+		t.Errorf("the re-open announced %v, want one GridChanged each for %q and %q", got, gridAddr("all"), gridAddr("inner"))
+	}
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("then %v, want nothing more", evs)
 	}
 }
 
 // A coded refusal is the source's health, told to a subscriber already there
-// and to one arriving during it, and cleared by the first change a re-opened
-// stream delivers.
+// and to one arriving during it, and cleared the moment a re-opened stream is
+// accepted, with no change needed.
 func TestWatchVerdictIsTheSourceHealth(t *testing.T) {
-	p := &watchPlugin{serve: func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error {
-		if n == 1 {
-			return status.Error(codes.PermissionDenied, "token lacks read_api")
-		}
-		if err := send(contextChanged("all")); err != nil {
-			return err
-		}
-		<-ctx.Done()
-		return nil
-	}}
+	p := &watchPlugin{
+		accept: func(n int32) bool { return n > 1 },
+		serve: func(n int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
+			if n == 1 {
+				return status.Error(codes.PermissionDenied, "token lacks read_api")
+			}
+			<-ctx.Done()
+			return nil
+		},
+	}
 	a, seen := watching(t, p, nil)
 	down := await(t, seen).GetPluginHealth()
 	if down == nil || down.Healthy || !strings.Contains(down.Detail, "token lacks read_api") {
@@ -212,8 +240,8 @@ func TestWatchVerdictIsTheSourceHealth(t *testing.T) {
 	if up := await(t, seen).GetPluginHealth(); up == nil || !up.Healthy {
 		t.Fatalf("second event = %v, want health up", up)
 	}
-	if got := await(t, seen).GetGridChanged().GetGridId(); got != gridAddr("all") {
-		t.Fatalf("third event names %q, want GridChanged(%q)", got, gridAddr("all"))
+	if dark, detail := a.sourceDark(); dark {
+		t.Errorf("source dark (%q) once accepted, want healthy", detail)
 	}
 }
 

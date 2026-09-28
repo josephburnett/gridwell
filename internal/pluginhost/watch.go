@@ -6,6 +6,7 @@ package pluginhost
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
@@ -87,8 +88,9 @@ func (a *Adapter) goListen(ctx context.Context, label string, fn func(context.Co
 // Only a process whose InfoResponse.watch declares it is asked; Unimplemented
 // from one that does is a broken declaration, held as the source's health for
 // the process's life. A transport failure re-opens quietly, the death being
-// the supervisor's news; any other code is health until a change arrives.
+// the supervisor's news; any other code is health until a stream is open.
 func (a *Adapter) listenProcess(ctx context.Context, label string) {
+	reopen := false
 	namespace.Refollow{
 		Label: label,
 		Down:  func(string) {},
@@ -102,7 +104,15 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 				<-ctx.Done()
 				return nil
 			}
-			err = a.follow(ctx, established)
+			catchUp := reopen
+			reopen = true
+			err = a.follow(ctx, func() error {
+				established()
+				if !catchUp {
+					return nil
+				}
+				return a.resync(ci)
+			})
 			switch {
 			case ctx.Err() != nil:
 				return err
@@ -118,12 +128,18 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 	}.Run(ctx)
 }
 
-// follow reads one Watch stream to its end. A stream counts as established on
-// its first change, the one moment the plugin has shown it is watching.
-func (a *Adapter) follow(ctx context.Context, established func()) error {
+// follow reads one Watch stream to its end. The stream is open once its header
+// arrives, which the plugin sends on accepting it, or with its first change at
+// the latest; a stream that ended unopened has no header, and Recv says how.
+func (a *Adapter) follow(ctx context.Context, opened func() error) error {
 	stream, err := a.cp.Watch(ctx, &pluginv1.WatchRequest{})
 	if err != nil {
 		return err
+	}
+	if md, _ := stream.Header(); md != nil {
+		if err := opened(); err != nil {
+			return err
+		}
 	}
 	for {
 		ch, err := stream.Recv()
@@ -133,9 +149,29 @@ func (a *Adapter) follow(ctx context.Context, established func()) error {
 		if err != nil {
 			return err
 		}
-		established()
 		a.applyChange(ch)
 	}
+}
+
+// resync announces every context the node knows of for this plugin, declared
+// or with a grid row. It runs when a stream re-opens, because nothing
+// announced what changed while none was open.
+func (a *Adapter) resync(ci *pluginv1.InfoResponse) error {
+	known, err := a.mem.Contexts()
+	if err != nil {
+		return fmt.Errorf("catching up after a dropped stream: %w", err)
+	}
+	for _, m := range declaredEntries(ci) {
+		known = append(known, m.Context)
+	}
+	said := map[string]bool{}
+	for _, c := range known {
+		if c != "" && !said[c] {
+			said[c] = true
+			a.emitGridChanged(gridAddr(c))
+		}
+	}
+	return nil
 }
 
 // applyChange announces what a Change names as a GridChanged on the context's
