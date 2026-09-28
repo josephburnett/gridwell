@@ -53,8 +53,9 @@ renderer calls `window.gridwell.placeWebview` and the main process floats a
 native `WebContentsView` over the pane's content box, on the one shared
 session partition (`persist:gridwell`). `syncURLViews` tracks the view to its
 content box every frame and parks it off-screen during drag and menu gestures
-so canvas overlays paint on top. A `MirrorPump` captures live views on a
-modest cadence so other panes showing the same tile mirror navigation. On
+so canvas overlays paint on top, capturing one frame first for the pane to
+show meanwhile. A `MirrorPump` captures the live views another pane shows, on
+a modest cadence, so those panes mirror navigation. On
 ascend the view is captured once more, the frame, URL, and title are persisted
 through `SetTile`, and the view is destroyed.
 
