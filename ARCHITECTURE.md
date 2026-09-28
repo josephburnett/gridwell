@@ -106,6 +106,13 @@ It holds no state. Two codecs stand on it and route nothing themselves:
 `connect_codec.go` for the browser and `namespace.Server` (`nodeexport.go`)
 for other nodes. They cannot drift because they are the same value.
 
+A clone names two ids and runs at the nearest node that sees both ends. Where
+they share an owner (`rpc.SharedOwner`), a connection included, the router
+forwards the whole clone and the node behind decides again; where they part,
+it deep-copies (`deepcopy.go`), reading through one chain and writing through
+the other. So bytes travel no further than the two ends are apart. Two
+connections are two owners even though one transport serves both.
+
 Two listeners. The web door (`web.bind`) serves Connect, the content door,
 and the shell door behind a password cookie; serve mints the 0600
 `web-password` file and prints it, delete it to rotate. The connection door
@@ -438,6 +445,7 @@ copy:
 | what error is this | `gwerr.ClassifyError` |
 | which namespace an id names | `rpc.OwnerNamespaceOf` |
 | who owns this qualified id | `Server.resolve` + `server.router` |
+| which node runs a clone | `rpc.SharedOwner` |
 | is this link dead | `deadref.DeadTile` over the handshake roster |
 | this event stream is established | `namespace.Follow` |
 | the trace line, its door and its header | `api/tracewire` |

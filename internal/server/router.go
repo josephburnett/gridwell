@@ -373,18 +373,20 @@ func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	return rpc.QualifyID(uuid, minted), nil
 }
 
-// CloneTile clones within a plugin, or across one: a leaf copies its bytes and
-// a solid well deep-copies (deepcopy.go), degrading to a link when the source
-// is unreachable. The link gesture arrives as a plain CreateTile carrying a
-// qualified reference, never as a clone, and the source plugin is never asked
-// to write into a grid it does not own.
+// CloneTile runs at the nearest node that sees both ends (rpc.SharedOwner): a
+// shared owner, a connection included, is forwarded the whole clone; where the
+// ends part, a leaf copies its bytes and a solid well deep-copies here
+// (deepcopy.go), degrading to a link when the source is unreachable. The link
+// gesture arrives as a plain CreateTile carrying a qualified reference, never
+// as a clone, and the source plugin is never asked to write into a grid it
+// does not own.
 func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)
 	if err != nil {
 		return nil, err
 	}
-	if dst, _, _, _, ok := rt.srv.resolve(m.DestGridId); ok && dst != c {
+	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" {
 		return rt.cloneAcrossPlugins(ctx, m, c, local, uuid, transit)
 	}
 	resp, err := c.CloneTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
