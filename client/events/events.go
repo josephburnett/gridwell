@@ -24,6 +24,10 @@ type Plan struct {
 	// a read the server refused is asked once more: a target's bytes or a
 	// link's target changed.
 	ClearContent string
+	// Revive names the namespace a changed grid belongs to. A key it answered
+	// dead may be listed again, and a link is never rewritten to say so, so
+	// its dead verdicts are asked once more.
+	Revive string
 	// Health is a namespace's stream going dark or recovering; ReactHealth
 	// says what to do about it.
 	Health *pb.EventPluginHealth
@@ -43,7 +47,7 @@ func Route(ev *pb.Event) Plan {
 		}
 	case *pb.Event_GridChanged:
 		id := p.GridChanged.GetGridId()
-		return Plan{ClearLatch: id, Fetch: id}
+		return Plan{ClearLatch: id, Fetch: id, Revive: rpc.NamespaceOf(id)}
 	case *pb.Event_GridFramingChanged:
 		return Plan{Reframe: p.GridFramingChanged}
 	case *pb.Event_PluginHealth:

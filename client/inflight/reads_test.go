@@ -20,11 +20,12 @@ func TestReadsLatchTable(t *testing.T) {
 		{"backstop", func(r *Reads, _ string) { r.Backstop() }},
 		{"clearIf", func(r *Reads, _ string) { r.ClearIf(func(string) bool { return true }) }},
 		{"reset", func(r *Reads, _ string) { r.Reset() }},
+		{"revive", func(r *Reads, _ string) { r.ReviveIf(func(string) bool { return true }) }},
 	}
 	clears := map[Verdict]map[string]bool{
-		Refused:     {"answer": true, "change": true, "backstop": false, "clearIf": true, "reset": true},
-		Dead:        {"answer": true, "change": true, "backstop": false, "clearIf": true, "reset": true},
-		Unreachable: {"answer": true, "change": true, "backstop": true, "clearIf": true, "reset": true},
+		Refused:     {"answer": true, "change": true, "backstop": false, "clearIf": true, "reset": true, "revive": false},
+		Dead:        {"answer": true, "change": true, "backstop": false, "clearIf": true, "reset": true, "revive": true},
+		Unreachable: {"answer": true, "change": true, "backstop": true, "clearIf": true, "reset": true, "revive": false},
 	}
 	for v, want := range clears {
 		for _, s := range signals {
@@ -115,5 +116,20 @@ func TestReadsNameWhatTheyClear(t *testing.T) {
 	}
 	if got := r.FailedKeys(); len(got) != 0 {
 		t.Errorf("left latched: %v", got)
+	}
+}
+
+// ReviveIf names the dead keys it cleared, scoped by match, because the
+// namespace that changed is the only one whose gone keys may be back.
+func TestReviveNamesTheDeadKeysItClears(t *testing.T) {
+	r := NewReads()
+	r.Settle("n/a", Dead)
+	r.Settle("n/b", Refused)
+	r.Settle("m/c", Dead)
+	if got := r.ReviveIf(func(k string) bool { return strings.HasPrefix(k, "n/") }); !slices.Equal(got, []string{"n/a"}) {
+		t.Errorf("revived %v, want only the dead key in n", got)
+	}
+	if r.Failed("n/a") || !r.Refused("n/b") || !r.Dead("m/c") {
+		t.Error("revive cleared outside the dead keys it matched")
 	}
 }

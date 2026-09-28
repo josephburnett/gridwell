@@ -19,9 +19,9 @@ const (
 	// Unreachable is the server never speaking. It stands until the same
 	// signals, or the next Backstop tick, whichever is first.
 	Unreachable
-	// Dead is a Refused whose verdict is that the key names a namespace some
-	// hop does not declare (gwerr.IsDeadRef). It stands and clears exactly as
-	// Refused does; Reads.Dead is what tells it apart.
+	// Dead is a Refused whose verdict is that the key's path ends in nothing
+	// (gwerr.IsDeadRef). It stands and clears as Refused does, and ReviveIf
+	// clears it alone; Reads.Dead is what tells it apart.
 	Dead
 )
 
@@ -121,6 +121,21 @@ func (r *Reads) ClearIf(match func(key string) bool) []string {
 	r.refused.clearIf(match)
 	r.dead.clearIf(match)
 	r.unreachable.clearIf(match)
+	return keys
+}
+
+// ReviveIf clears the dead verdict on every key match reports and returns
+// those keys, sorted: the namespace that gave it changed, and a gone key may
+// be back. Every other latch stands.
+func (r *Reads) ReviveIf(match func(key string) bool) []string {
+	var keys []string
+	for _, k := range r.dead.keys() {
+		if match(k) {
+			keys = append(keys, k)
+			r.refused.clear(k)
+			r.dead.clear(k)
+		}
+	}
 	return keys
 }
 

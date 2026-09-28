@@ -1063,6 +1063,11 @@ func (a *App) startSSE() {
 				a.fetch.contents.Change(plan.ClearContent)
 				a.fetch.previews.Change(plan.ClearContent)
 			}
+			if plan.Revive != "" {
+				served := func(id string) bool { return cache.ServedBy(id, plan.Revive) }
+				a.reask(nil, a.fetch.tiles.ReviveIf(served), a.fetch.contents.ReviveIf(served),
+					a.fetch.previews.ReviveIf(served))
+			}
 			if plan.Fetch != "" {
 				a.emit(traceevent.EventRefetch(plan.Fetch))
 				a.fetchGrid(plan.Fetch)
