@@ -22,9 +22,9 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	if _, _, ok := rpc.SplitID(qualifiedID); !ok {
 		return nil, "", status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
 	}
-	c, local, uuid, transit, found := s.resolve(qualifiedID)
+	c, local, _, transit, found := s.resolve(qualifiedID)
 	if !found {
-		return nil, "", status.Errorf(gcodes.NotFound, "no plugin %q", uuid)
+		return nil, "", undeclared(qualifiedID)
 	}
 	if transit {
 		return c, local, nil
@@ -44,9 +44,9 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	// perspective, so it routes like any other id, through resolve. Peeling
 	// the first segment by hand would answer home for a connection-chained
 	// target, which the transport owns.
-	tc, tlocal, tuuid, _, found := s.resolve(target)
+	tc, tlocal, _, _, found := s.resolve(target)
 	if !found {
-		return nil, "", status.Errorf(gcodes.NotFound, "no plugin %q for link target %q", tuuid, target)
+		return nil, "", undeclared(target)
 	}
 	return tc, tlocal, nil
 }

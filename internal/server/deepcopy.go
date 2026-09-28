@@ -40,14 +40,14 @@ import (
 // deepCopyWell reads the source child grid before anything is created, so an
 // unreachable room degrades to a link (sourceUnreachable with a nil out) rather
 // than to an empty solid well pretending to be a copy.
-func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst namespace.Namespace, dstHop rpc.Hop, dstGrid string, x, y int64) (*pb.TileResponse, error) {
+func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	srcChild := srcLocalTile.ChildGridId
 	g, err := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcChild})
 	if err != nil {
 		return nil, fmt.Errorf("read source grid %s: %w", srcChild, err)
 	}
 
-	created, err := rt.createCopy(ctx, dst, dstHop, dstGrid,
+	created, err := rt.createCopy(ctx, dst, dstGrid,
 		&pb.Tile{Kind: rpc.KindWell, X: x, Y: y, W: srcLocalTile.W, H: srcLocalTile.H,
 			AltText: srcLocalTile.AltText})
 	if err != nil {
@@ -69,7 +69,7 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 	for _, child := range g.Tiles {
 		// A child keeps the cell it sits in; only the top-level copy lands
 		// where the gesture dropped it.
-		if _, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, child, dst, dstHop, dstChild, child.X, child.Y); err != nil {
+		if _, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, child, dst, dstChild, child.X, child.Y); err != nil {
 			return created, fmt.Errorf("copy tile %s: %w", child.Id, err)
 		}
 	}
@@ -80,7 +80,7 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 // the row it created. A failure once a well's copy exists answers with that
 // partial, so the caller can say the partial remains; every other failure
 // answers nil.
-func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, t *pb.Tile, dst namespace.Namespace, dstHop rpc.Hop, dstGrid string, x, y int64) (*pb.TileResponse, error) {
+func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, t *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	// The qualification every wire response gets decides whether this tile is
 	// a reference, so the copy and a fresh read cannot disagree.
 	q := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{t})[0]
@@ -88,9 +88,9 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	switch {
 	case rpc.IsWellKind(q.Kind) && q.Reference:
 		// A reference copies as a reference: the shared child, qualified.
-		return rt.linkCopy(ctx, dst, dstHop, dstGrid, t, x, y, q.ChildGridId)
+		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 	case rpc.IsWellKind(q.Kind):
-		created, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstHop, dstGrid, x, y)
+		created, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
 		// Degrade only when nothing was created. Degrading with a partial in
 		// place would stack a link on the cell it occupies, and the user
 		// would get an overlap refusal on a grid they never touched.
@@ -98,14 +98,14 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 			// The room is dark, not gone, so degrade to a link: the dashed
 			// border already means "lives elsewhere", which beats failing the
 			// walk or leaving an empty well that lies about being a copy.
-			return rt.linkCopy(ctx, dst, dstHop, dstGrid, t, x, y, q.ChildGridId)
+			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 		}
 		return created, err
 	case q.LinkTargetId != "":
 		// The tile being copied is a reference, so the copy is one too.
-		return rt.linkCopy(ctx, dst, dstHop, dstGrid, t, x, y, q.LinkTargetId)
+		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
 	case rpc.IsBodyKind(t.Kind), t.Kind == rpc.KindURL, t.Kind == rpc.KindShell:
-		return rt.copyLeaf(ctx, src, t, q, dst, dstHop, dstGrid, x, y)
+		return rt.copyLeaf(ctx, src, t, q, dst, dstGrid, x, y)
 	}
 	return nil, status.Errorf(gcodes.InvalidArgument,
 		"cross-plugin clone: unsupported tile kind %q", t.Kind)
@@ -113,7 +113,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 
 // copyLeaf copies a tile that owns no grid: bytes for a body kind, the address
 // and frozen face for a url, a fresh session for a shell.
-func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *pb.Tile, dst namespace.Namespace, dstHop rpc.Hop, dstGrid string, x, y int64) (*pb.TileResponse, error) {
+func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	// Leaf bytes are read before the copy row is created, so an unreachable
 	// source degrades to a link instead of an empty copy that looks whole. A
 	// body kind is always asked: blob_id is the local store's own bookkeeping
@@ -124,14 +124,14 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 		var err error
 		body, err = readAllContent(ctx, src, t.Id)
 		if gwerr.IsTransport(err) {
-			return rt.linkCopy(ctx, dst, dstHop, dstGrid, t, x, y, q.Id)
+			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.Id)
 		}
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	created, err := rt.createCopy(ctx, dst, dstHop, dstGrid,
+	created, err := rt.createCopy(ctx, dst, dstGrid,
 		&pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H,
 			AltText: t.AltText, UrlString: t.UrlString})
 	if err != nil {
@@ -185,7 +185,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 // to: exactly the exit well or leaf link a left-drag would have made. A well
 // links by the grid it opens and carries the framing the source was left at; a
 // leaf links by its target.
-func (rt *router) linkCopy(ctx context.Context, dst namespace.Namespace, dstHop rpc.Hop, dstGrid string, t *pb.Tile, x, y int64, target string) (*pb.TileResponse, error) {
+func (rt *router) linkCopy(ctx context.Context, dst copyDst, dstGrid string, t *pb.Tile, x, y int64, target string) (*pb.TileResponse, error) {
 	tile := &pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H, AltText: t.AltText}
 	if rpc.IsWellKind(t.Kind) {
 		tile.ChildGridId = target
@@ -193,18 +193,30 @@ func (rt *router) linkCopy(ctx context.Context, dst namespace.Namespace, dstHop 
 	} else {
 		tile.LinkTargetId = target
 	}
-	return rt.createCopy(ctx, dst, dstHop, dstGrid, tile)
+	return rt.createCopy(ctx, dst, dstGrid, tile)
+}
+
+// copyDst is where a deep copy writes: the destination namespace, the peel into
+// its frame, and holder, the grid the gesture named in this node's frame, whose
+// node holds every reference the copy writes.
+type copyDst struct {
+	namespace.Namespace
+	hop    rpc.Hop
+	holder string
 }
 
 // createCopy stores one copy row. The create goes straight to the destination
 // namespace rather than back through CreateTile, so the reference it may carry
-// is canonicalized and peeled into dst's frame here instead; see
-// router.mintReferences.
-func (rt *router) createCopy(ctx context.Context, dst namespace.Namespace, dstHop rpc.Hop, dstGrid string, tile *pb.Tile) (*pb.TileResponse, error) {
+// is canonicalized, spelled for its holder and peeled into dst's frame here
+// instead; see router.CreateTile.
+func (rt *router) createCopy(ctx context.Context, dst copyDst, dstGrid string, tile *pb.Tile) (*pb.TileResponse, error) {
 	if err := rt.mintReferences(ctx, tile); err != nil {
 		return nil, err
 	}
-	return dst.CreateTile(ctx, &pb.CreateTileRequest{GridId: dstGrid, Tile: dstHop.PeelTile(tile)})
+	if err := rt.spellReferences(ctx, dst.holder, tile); err != nil {
+		return nil, err
+	}
+	return dst.CreateTile(ctx, &pb.CreateTileRequest{GridId: dstGrid, Tile: dst.hop.PeelTile(tile)})
 }
 
 // freshCopy re-reads the copy so the answer carries the version and the face

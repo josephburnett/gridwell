@@ -96,17 +96,42 @@ func TestTargetIDCoversBothLinkShapesAndOnlyLinks(t *testing.T) {
 	}
 }
 
+// A chain through a declared connection is the far node's to judge, and its
+// judgement is the dead verdict a read heard: the link is dead exactly while
+// that answer stands, whatever the roster says.
+func TestADeepBreakIsDeadByTheVerdictHeard(t *testing.T) {
+	deep := node + "/laptop/far9xyz/toc/near9xy/7"
+	link := &gridwellv1.Tile{Kind: rpc.KindText, Reference: true, LinkTargetId: deep}
+	heard := map[string]bool{}
+	answered := func(id string) bool { return heard[id] }
+	if DeadTile(link, roster(), node, answered) {
+		t.Fatal("a link through a declared connection is not dead before the far node says so")
+	}
+	heard[deep] = true
+	if !DeadTile(link, roster(), node, answered) {
+		t.Fatal("a link the node answered dead is dead")
+	}
+	owned := &gridwellv1.Tile{Kind: rpc.KindText, Id: deep}
+	if DeadTile(owned, roster(), node, answered) {
+		t.Fatal("only a link is dead; the verdict on an id is not the verdict on a tile that is not one")
+	}
+	heard[deep] = false
+	if DeadTile(link, roster(), node, answered) {
+		t.Fatal("a verdict no longer standing leaves the link live, unchanged")
+	}
+}
+
 func TestDeadTile(t *testing.T) {
 	dead := &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: gone + "/1"}
-	if !DeadTile(dead, roster(), node) {
+	if !DeadTile(dead, roster(), node, nil) {
 		t.Error("a link into an undeclared namespace is dead")
 	}
 	live := &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: fs + "/1"}
-	if DeadTile(live, roster(), node) {
+	if DeadTile(live, roster(), node, nil) {
 		t.Error("a link into a declared plugin is alive, whatever that plugin's health")
 	}
 	owned := &gridwellv1.Tile{Kind: rpc.KindWell, ChildGridId: gone + "/1"}
-	if DeadTile(owned, roster(), node) {
+	if DeadTile(owned, roster(), node, nil) {
 		t.Error("an owned well is not a link and has no dead verdict")
 	}
 }

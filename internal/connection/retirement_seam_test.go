@@ -97,7 +97,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	if r, _ := db.Get(ctx, "rtb"); r.RemoteRoot != "rnode1/7" {
 		t.Fatalf("boot 1 remote_root = %q, want the learned landing", r.RemoteRoot)
 	}
-	if deadref.DeadTile(ref, roster(s1), nodeID) {
+	if deadref.DeadTile(ref, roster(s1), nodeID, nil) {
 		t.Fatal("boot 1: a declared connection's reference must be live")
 	}
 	if _, err := s1.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {
@@ -137,7 +137,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	if err == nil && pr.GetPresence() == gridwellv1.ProbeResponse_PRESENCE_GONE {
 		t.Fatal("boot 2 Probe said GONE for a name that was never retired")
 	}
-	if !deadref.DeadTile(ref, roster(s2), nodeID) {
+	if !deadref.DeadTile(ref, roster(s2), nodeID, nil) {
 		t.Fatal("boot 2: a reference into a namespace the node no longer declares is dead")
 	}
 	if err := s2.Close(); err != nil {
@@ -155,7 +155,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	if len(rows) != 1 || rows[0].RootGridId != "rtb/rnode1/7" {
 		t.Fatalf("boot 3 rows = %+v, want rtb on its remembered landing", rows)
 	}
-	if deadref.DeadTile(ref, roster(s3), nodeID) {
+	if deadref.DeadTile(ref, roster(s3), nodeID, nil) {
 		t.Fatal("boot 3: the reference must resolve again")
 	}
 	if _, err := s3.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {

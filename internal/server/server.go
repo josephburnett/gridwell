@@ -20,6 +20,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
@@ -114,6 +115,14 @@ func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string,
 	}
 	c, found := s.pluginReg.Get(uuid)
 	return c, local, uuid, false, found
+}
+
+// undeclared is the answer for an id whose first namespace this node does not
+// declare: the dead verdict (gwerr.DeadRef), whichever hop of a chain this
+// node is.
+func undeclared(id string) error {
+	ns := rpc.UUIDOf(id)
+	return gwerr.DeadRef(ns, "no plugin %q for %q", ns, id)
 }
 
 // clientForID resolves the namespace that owns a qualified id, and the local

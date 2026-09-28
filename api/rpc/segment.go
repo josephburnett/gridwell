@@ -91,6 +91,17 @@ func OwnerNamespaceOf(id, nodeID string) string {
 	return first + "/" + second
 }
 
+// SharedOwner is the namespace both a and b route to at the node nodeID, or ""
+// where they part. A verb naming both is the shared owner's whole to answer,
+// so it runs at the nearest node that sees both ends.
+func SharedOwner(a, b, nodeID string) string {
+	ns := OwnerNamespaceOf(a, nodeID)
+	if ns == "" || ns != OwnerNamespaceOf(b, nodeID) {
+		return ""
+	}
+	return ns
+}
+
 // ChainedThrough reports whether a qualified id is served through the
 // namespace chain ns: a prefix on a segment boundary, so "n1/laptop" is
 // chained through neither "n1x" nor itself. Whoever asks which ids a source

@@ -937,10 +937,14 @@ func (a *App) fetchTileContent(tileID string) {
 func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
 	data, _, version, err := a.cl.ReadContent(ctx, tileID)
 	// clientsync.ReactRead is the one table; this runs its arms.
-	a.fetch.contents.Settle(tileID, clientsync.ReactRead(clientsync.Of(err)))
+	o := clientsync.Of(err)
+	a.fetch.contents.Settle(tileID, clientsync.ReactRead(o))
 	if err != nil {
-		// The tile body would otherwise never appear: say why.
-		a.surfaceRPCError("ReadContent", err)
+		// The tile body would otherwise never appear: say why, unless the
+		// dead face already does.
+		if clientsync.ReadSurfaces(o) {
+			a.surfaceRPCError("ReadContent", err)
+		}
 		return err
 	}
 	a.c.PutFetchedContent(tileID, data, version)

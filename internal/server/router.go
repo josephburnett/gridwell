@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/panelayout"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -37,7 +38,7 @@ func (rt *router) route(id string) (ns namespace.Namespace, local, uuid string, 
 	}
 	c, local, uuid, transit, found := rt.srv.resolve(id)
 	if !found {
-		return nil, "", "", false, status.Errorf(gcodes.NotFound, "no plugin %q", uuid)
+		return nil, "", "", false, undeclared(id)
 	}
 	return c, local, uuid, transit, nil
 }
@@ -161,7 +162,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			c, found = rt.srv.pluginReg.Transport()
 		}
 		if !found {
-			return nil, status.Errorf(gcodes.NotFound, "no plugin %q", hop)
+			return nil, gwerr.DeadRef(hop, "no plugin %q", hop)
 		}
 		resp, err := c.Handshake(ctx, &pb.HandshakeRequest{Namespace: rest})
 		if err != nil {
@@ -313,8 +314,9 @@ func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.Searc
 	})
 }
 
-// CreateTile resolves the owning plugin by destination grid and forwards; how
-// an exit well's child_grid_id crosses is rpc.Hop's.
+// CreateTile resolves the owning plugin by destination grid and forwards. A
+// reference is spelled for the node holding the grid (spellReferences), and
+// then crosses by rpc.Hop.
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
 	// The node-wide shell refusal lives at the router, before namespace
@@ -329,6 +331,9 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 		return nil, err
 	}
 	if err := rt.mintReferences(ctx, m.Tile); err != nil {
+		return nil, err
+	}
+	if err := rt.spellReferences(ctx, m.GridId, m.Tile); err != nil {
 		return nil, err
 	}
 	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
@@ -373,18 +378,20 @@ func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	return rpc.QualifyID(uuid, minted), nil
 }
 
-// CloneTile clones within a plugin, or across one: a leaf copies its bytes and
-// a solid well deep-copies (deepcopy.go), degrading to a link when the source
-// is unreachable. The link gesture arrives as a plain CreateTile carrying a
-// qualified reference, never as a clone, and the source plugin is never asked
-// to write into a grid it does not own.
+// CloneTile runs at the nearest node that sees both ends (rpc.SharedOwner): a
+// shared owner, a connection included, is forwarded the whole clone; where the
+// ends part, a leaf copies its bytes and a solid well deep-copies here
+// (deepcopy.go), degrading to a link when the source is unreachable. The link
+// gesture arrives as a plain CreateTile carrying a qualified reference, never
+// as a clone, and the source plugin is never asked to write into a grid it
+// does not own.
 func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)
 	if err != nil {
 		return nil, err
 	}
-	if dst, _, _, _, ok := rt.srv.resolve(m.DestGridId); ok && dst != c {
+	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" {
 		return rt.cloneAcrossPlugins(ctx, m, c, local, uuid, transit)
 	}
 	resp, err := c.CloneTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
@@ -418,7 +425,7 @@ func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest
 				"deep copy of a host-content well is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
 		}
 	}
-	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, dst, rt.hop(m.DestGridId, dstTransit), dstLocal, m.X, m.Y)
+	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, copyDst{Namespace: dst, hop: rt.hop(m.DestGridId, dstTransit), holder: m.DestGridId}, dstLocal, m.X, m.Y)
 	if err != nil && out != nil {
 		// The partial is visible, so say what stopped the walk.
 		return nil, status.Errorf(gcodes.Aborted,
@@ -719,7 +726,7 @@ func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse
 func (rt *router) Probe(ctx context.Context, req *pb.ProbeRequest) (*pb.ProbeResponse, error) {
 	c, local, ok := rt.srv.clientForID(req.TileId)
 	if !ok {
-		return nil, status.Errorf(gcodes.NotFound, "no plugin for %q", req.TileId)
+		return nil, undeclared(req.TileId)
 	}
 	return c.Probe(ctx, &pb.ProbeRequest{TileId: local})
 }

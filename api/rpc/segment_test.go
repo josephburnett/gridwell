@@ -246,6 +246,29 @@ func TestOwnerNamespaceOfIsTheRoutersPeel(t *testing.T) {
 	}
 }
 
+// Two connections are two owners even though one transport serves both, and
+// two ids deep behind one connection share it however they diverge beyond.
+func TestSharedOwnerPartsWhereTheOwnersDiffer(t *testing.T) {
+	const node = "n1abcde"
+	cases := []struct {
+		a, b, want string
+	}{
+		{node + "/toa/far1/1", node + "/tob/far2/1", ""},
+		{node + "/toa/far1/1", node + "/toa/far1/toc/far3/2", node + "/toa"},
+		{node + "/1", node + "/2", node},
+		{node + "/1", node + "/toa/far1/1", ""},
+		{"p9xyzab/1", "p9xyzab/2", "p9xyzab"},
+		{"p9xyzab/1", "q9xyzab/1", ""},
+		{"p9xyzab/1", node + "/1", ""},
+		{"1", "1", ""},
+	}
+	for _, c := range cases {
+		if got := SharedOwner(c.a, c.b, node); got != c.want {
+			t.Errorf("SharedOwner(%q, %q) = %q, want %q", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 // ChainedThrough is the peel's complement: not "which of my namespaces owns
 // this" but "is this behind that chain, at any depth". A health event names a
 // chain that can be deeper than one node's peel, and every id it answers for

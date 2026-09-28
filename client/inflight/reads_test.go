@@ -23,6 +23,7 @@ func TestReadsLatchTable(t *testing.T) {
 	}
 	clears := map[Verdict]map[string]bool{
 		Refused:     {"answer": true, "change": true, "backstop": false, "clearIf": true, "reset": true},
+		Dead:        {"answer": true, "change": true, "backstop": false, "clearIf": true, "reset": true},
 		Unreachable: {"answer": true, "change": true, "backstop": true, "clearIf": true, "reset": true},
 	}
 	for v, want := range clears {
@@ -41,6 +42,34 @@ func TestReadsLatchTable(t *testing.T) {
 				done()
 			}
 		}
+	}
+}
+
+// Dead is a Refused the renderer can tell apart, and it goes with the latch:
+// a key the node answered dead is asked again on the same signals, and a
+// different answer replaces it.
+func TestDeadIsARefusalThatSaysSo(t *testing.T) {
+	r := NewReads()
+	r.Settle("g", Dead)
+	if !r.Dead("g") || !r.Refused("g") {
+		t.Fatal("a dead verdict must read dead and latch as refused")
+	}
+	for _, v := range []Verdict{Answered, Refused, Unreachable} {
+		r.Settle("g", Dead)
+		r.Settle("g", v)
+		if r.Dead("g") {
+			t.Errorf("settling %v after Dead left the key dead", v)
+		}
+	}
+	r.Settle("g", Dead)
+	r.ClearIf(func(string) bool { return true })
+	if r.Dead("g") {
+		t.Error("ClearIf left the key dead")
+	}
+	r.Settle("g", Dead)
+	r.Reset()
+	if r.Dead("g") {
+		t.Error("Reset left the key dead")
 	}
 }
 

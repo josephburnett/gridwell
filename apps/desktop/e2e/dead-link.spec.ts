@@ -119,3 +119,55 @@ test.describe('a declared namespace is never dead', () => {
     expect(await deadLinks(window, f.gridID), 'a declared plugin is alive').toEqual([]);
   });
 });
+
+// A break deeper in the chain is the far node's to judge: the link names a
+// declared connection, so the client asks, and the far node answers the dead
+// verdict for the hop it does not declare. That answer draws the tile dead
+// exactly as an undeclared first hop does, says nothing, is asked no more, and
+// leaves the link deletable.
+test.describe('a link broken beyond a declared connection', () => {
+  test.use({ extraNodes: ['second'] });
+
+  test('renders dead, quietly, once the far node says so', async ({ gw, window }) => {
+    const second = (await gw.plugins()).find((p) => p.label === 'second')!;
+    expect(second?.rootGridID, 'the connection lands').toBeTruthy();
+    // "<node>/second/<far>/<root>" → "<node>/second/<far>/nope/1": the far node
+    // declares no connection "nope".
+    const deep = second.rootGridID.replace(/\/[^/]+$/, '/nope/1');
+
+    await gw.enterPlugin('home');
+    const f = await gw.focused();
+    const cx = Math.round(f.cx) + 1;
+    const cy = Math.round(f.cy) + 1;
+
+    const asked: string[] = [];
+    await window.route('**/gridwell.v1.Gridwell/GetGrid', async (r: any) => {
+      asked.push(r.request().postData() ?? '');
+      await r.continue();
+    });
+
+    await createExitWell(gw.origin, f.gridID, deep, 'far room', cx, cy);
+    await expect
+      .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
+      .toBe(1);
+
+    await window.waitForTimeout(1_500);
+    const e = await errors(window);
+    expect(e.notices, 'a dead link raises no notice, however deep the break').toEqual([]);
+    expect(
+      asked.filter((body) => body.includes('/nope/1')).length,
+      'asked once, and never again once the verdict stands',
+    ).toBe(1);
+
+    const before = await gw.focused();
+    await gw.descendCell(cx, cy);
+    expect((await gw.focused()).placeDepth, 'a dead link is not a doorway').toBe(before.placeDepth);
+
+    await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
+    await gw.deleteTileCell(cx, cy);
+    await expect
+      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', cx, cy))
+      .toBeUndefined();
+    expect((await errors(window)).notices, 'and the delete is quiet too').toEqual([]);
+  });
+});
