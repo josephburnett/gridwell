@@ -44,9 +44,17 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	// perspective, so it routes like any other id, through resolve. Peeling
 	// the first segment by hand would answer home for a connection-chained
 	// target, which the transport owns.
-	tc, tlocal, _, _, found := s.resolve(target)
+	tc, tlocal, _, ttransit, found := s.resolve(target)
 	if !found {
 		return nil, "", undeclared(target)
+	}
+	// The target is checked as a directly addressed id is, so its owner's
+	// verdict on a gone key is the answer whichever id the read named. A
+	// transit target is the far router's to check.
+	if !ttransit {
+		if _, err := tc.GetTile(ctx, &pb.GetTileRequest{TileId: tlocal}); err != nil {
+			return nil, "", err
+		}
 	}
 	return tc, tlocal, nil
 }
