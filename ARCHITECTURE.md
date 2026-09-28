@@ -322,8 +322,10 @@ NotFound carrying a `DeadReference` detail, which survives every hop and the
 Connect codec (`gwerr.IsDeadRef`). The client reads it as `OutcomeDead`,
 latches the read `inflight.Dead`, surfaces nothing, and `deadref.DeadTile`
 draws the link dead while that latch stands. A dead link is drawn grey and
-inert, is not fetched for again, raises no notice, and does not descend; it
-can still be selected, read, and deleted. Dead is not dark: a declared plugin
+inert, is not fetched for again until its latch clears, raises no notice, and
+does not descend; it can still be selected, read, and deleted. A pane already
+standing in a place that goes dead is not a link and has no dead face, so its
+by-id read says so (`clientsync.PlaceReadSurfaces`). Dead is not dark: a declared plugin
 that is down and a declared connection that will not answer are health, a
 transport-class answer, never the dead verdict. Dead is not always forever,
 either: a retired connection name never returns, but a namespace merely
