@@ -14,6 +14,14 @@ func HealthEvent(uuid string, healthy bool, detail string) *pb.Event {
 	}}}
 }
 
+// FramingEvent is the one shape a root grid's framing write takes on the
+// wire, from the store and the plugin adapter alike.
+func FramingEvent(gridID string, f Framing) *pb.Event {
+	return &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: &pb.GridFramingChanged{
+		GridId: gridID, ViewCx: f.Cx, ViewCy: f.Cy, ViewZoom: f.Zoom,
+	}}}
+}
+
 // EventKey names the entity a wire event is about, so internal/eventhub can
 // replace an older undelivered event for the same entity and drop no distinct
 // one. "" is unkeyable and never coalesces. It is one arm set for every hub:

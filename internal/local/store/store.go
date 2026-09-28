@@ -290,21 +290,23 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 }
 
 // setRootFraming is SetFraming's root arm: the write lands on the grid row and
-// announces a grid change, because a root has no tile to change.
+// announces the framing itself, because a root has no tile to change and its
+// listing did not change.
 func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) error {
 	gridID, err := parseID(req.RootGridId)
 	if err != nil {
 		return fmt.Errorf("%w: invalid root_grid_id", ErrInvalidArgument)
 	}
 	return s.withMutation(ctx, "SetFraming/root", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := updateFraming(ctx, tx, "", 0, gridID, rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}, s.now().Unix())
+		f := rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
+		n, err := updateFraming(ctx, tx, "", 0, gridID, f, s.now().Unix())
 		if err != nil {
 			return err
 		}
 		if n == 0 {
 			return ErrNotFound
 		}
-		*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: req.RootGridId}}})
+		*events = append(*events, rpc.FramingEvent(req.RootGridId, f))
 		return nil
 	})
 }

@@ -145,9 +145,9 @@ func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 }
 
 // Subscribe serves this namespace's event stream: the plugin's health, its
-// subprocess and its source alike, and a GridChanged for a grid the adapter's
-// own writes changed, so a second pane repaints instead of holding a
-// placement the user has moved. A subscriber arriving while the plugin or its
+// subprocess and its source alike, a GridChanged for a grid the adapter's own
+// writes changed, so a second pane repaints instead of holding a placement the
+// user has moved, and a GridFramingChanged for a collection's framing. A subscriber arriving while the plugin or its
 // source is down is told at once, since nothing else would tell it until
 // recovery; a healthy plugin announces nothing, because a health event costs
 // the client a full resync.
@@ -778,7 +778,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 		if err := a.mem.SetFraming(0, gid, f); err != nil {
 			return nil, err
 		}
-		a.emitGridChanged(gridAddr(ckey))
+		a.hub.Publish(rpc.FramingEvent(gridAddr(ckey), f))
 		return &gridwellv1.SetFramingResponse{}, nil
 	}
 	id, err := a.mint(ctx, req.TileId)

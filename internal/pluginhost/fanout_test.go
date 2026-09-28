@@ -11,8 +11,8 @@ import (
 
 // A subscriber that stalls must still learn about every grid that changed
 // while it was stalled: the fan-out coalesces per entity, it does not
-// discard. emitGridChanged is the one funnel every write of this adapter
-// reaches (see changed), so publishing through it and reading the exported
+// discard. emitGridChanged is the funnel every listing write of this adapter
+// reaches (see changedRow), so publishing through it and reading the exported
 // stream crosses the whole fan-out.
 func TestAStalledSubscriberLosesNoGrid(t *testing.T) {
 	const grids = 200
