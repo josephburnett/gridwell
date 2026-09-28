@@ -57,6 +57,19 @@ The leading byte separates all three, so a URL path and the router's peel
 both tell a namespace segment from a tile id with no lookup. Ids are never
 reassigned.
 
+A link is such a path stored on a tile (`link_target_id` for a leaf, a
+qualified `child_grid_id` for a well). The node holding it resolves only the
+first segment, one of its own plugins or connections, and forwards the rest,
+so a link reaches anything a chain of one-way connections from the HOLDING
+node reaches, at any depth, and never against an arrow. A reference written
+into another node's grid is therefore spelled from that node: behind the same
+connection it is forwarded as sent and the node there decides; where it parts
+(`rpc.HeldAcross`), the router walks the handshakes it can see into a
+connection graph (`rpc.Reach`) and rewrites it as the holder's own route to
+the target (`Reach.Respell`), or refuses the write, "<holder> has no
+connection to <target>", with nothing stored. A placement never changes the
+holding node, since a move across namespaces is a link gesture.
+
 ## The contract
 
 `api/gridwell/v1/data.proto` is the one description of the wire and the
@@ -446,6 +459,7 @@ copy:
 | which namespace an id names | `rpc.OwnerNamespaceOf` |
 | who owns this qualified id | `Server.resolve` + `server.router` |
 | which node runs a clone | `rpc.SharedOwner` |
+| how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellReferences` |
 | is this link dead | `deadref.DeadTile` over the handshake roster |
 | this event stream is established | `namespace.Follow` |
 | the trace line, its door and its header | `api/tracewire` |

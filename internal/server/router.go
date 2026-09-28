@@ -313,8 +313,9 @@ func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.Searc
 	})
 }
 
-// CreateTile resolves the owning plugin by destination grid and forwards; how
-// an exit well's child_grid_id crosses is rpc.Hop's.
+// CreateTile resolves the owning plugin by destination grid and forwards. A
+// reference is spelled for the node holding the grid (spellReferences), and
+// then crosses by rpc.Hop.
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
 	// The node-wide shell refusal lives at the router, before namespace
@@ -329,6 +330,9 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 		return nil, err
 	}
 	if err := rt.mintReferences(ctx, m.Tile); err != nil {
+		return nil, err
+	}
+	if err := rt.spellReferences(ctx, m.GridId, m.Tile); err != nil {
 		return nil, err
 	}
 	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
@@ -420,7 +424,7 @@ func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest
 				"deep copy of a host-content well is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
 		}
 	}
-	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, dst, rt.hop(m.DestGridId, dstTransit), dstLocal, m.X, m.Y)
+	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, copyDst{Namespace: dst, hop: rt.hop(m.DestGridId, dstTransit), holder: m.DestGridId}, dstLocal, m.X, m.Y)
 	if err != nil && out != nil {
 		// The partial is visible, so say what stopped the walk.
 		return nil, status.Errorf(gcodes.Aborted,
