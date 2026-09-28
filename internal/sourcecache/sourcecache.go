@@ -782,6 +782,9 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		c.upsertTile(ctx, p.TileChanged.GetTile())
 	case *pb.Event_TileRemoved:
 		c.deleteTile(ctx, p.TileRemoved.GetTileId())
+	case *pb.Event_GridFramingChanged:
+		fc := p.GridFramingChanged
+		c.reframe(ctx, fc.GetGridId(), rpc.Framing{Cx: fc.GetViewCx(), Cy: fc.GetViewCy(), Zoom: fc.GetViewZoom()})
 	case *pb.Event_PluginHealth:
 		// The source's own supervisor says whether it can be reached, so a
 		// room re-entered after a machine died says it is a memory without
@@ -854,10 +857,47 @@ func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.Til
 func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	resp, err := c.Namespace.SetFraming(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
-	if err == nil && resp.GetTile() != nil { // nil for a root-grid framing
+	switch {
+	case err != nil:
+	case in.RootGridId != "":
+		c.reframe(ctx, in.RootGridId, rpc.Framing{Cx: in.Cx, Cy: in.Cy, Zoom: in.Zoom})
+	default:
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
 	}
 	return resp, err
+}
+
+// reframe is the one writer of a root grid's remembered framing: it lands on
+// every remembered doorway rooted there (rpc.Reframe), from the source's event
+// and from a write the source accepted alike, which carry the same numbers.
+func (c *Layer) reframe(ctx context.Context, gridID string, f rpc.Framing) {
+	rows, err := c.db.QueryContext(ctx, `SELECT ns, proto FROM pluginlists`)
+	if err != nil {
+		c.noteCache("load pluginlists", err)
+		return
+	}
+	moved := map[string][]byte{}
+	for rows.Next() {
+		var ns string
+		var b []byte
+		if err := rows.Scan(&ns, &b); err != nil {
+			_ = rows.Close()
+			c.noteCache("load pluginlists", err)
+			return
+		}
+		l := &pb.HandshakeResponse{}
+		if proto.Unmarshal(b, l) != nil || !rpc.Reframe(gridID, f, l.Plugins) {
+			continue
+		}
+		if nb, merr := proto.Marshal(l); merr == nil {
+			moved[ns] = nb
+		}
+	}
+	_ = rows.Close()
+	for ns, b := range moved {
+		_, werr := c.db.ExecContext(ctx, `UPDATE pluginlists SET proto = ? WHERE ns = ?`, b, ns)
+		c.noteCache("reframe pluginlist", werr)
+	}
 }
 
 func (c *Layer) DeleteTile(ctx context.Context, in *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {

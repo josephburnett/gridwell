@@ -64,7 +64,13 @@ health on the stream this layer relays — and written through one door,
 `setDark`, whose transition back to light is also what re-warms that source.
 Every other read passes through and remembers, falling back to the remembered
 answer on a transport-class failure only. Writes always pass through and fold
-their responses into the remembered rows (`foldWrite`). `prefetch.go` warms
+their responses into the remembered rows (`foldWrite`). The relayed stream
+folds in the same way (`applyEvent`): `TileChanged` and `TileRemoved` into
+the tile rows, a well's framing riding its tile, and `GridFramingChanged` into
+every remembered handshake's doorways rooted at that grid (`Layer.reframe`,
+over `rpc.Reframe`), which is also where an accepted root `SetFraming` lands,
+so a far grid reopens dark where it was last left. A write the source did not
+accept is remembered nowhere. `prefetch.go` warms
 every source on Subscribe and one source when it comes back;
 `servecontent.go` gives the `/content/` door the same treatment under its own
 caps.
@@ -438,6 +444,8 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
+| A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |
+| Across the real transport: a far grid reopens dark at the last pan, whoever made it, and at its wells' last framing | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
 | Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
 | A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |
