@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -13,14 +14,15 @@ import (
 type mirrorState struct {
 	url     []string
 	urlSent bool
+	shell   []string
 }
 
 // syncMirrors runs every frame, because every change that can show or hide a
 // face draws one; a frame that changes no answer says nothing.
 func (a *App) syncMirrors(rects map[string]pane.Rect) {
-	urls := a.urlSurfaces()
+	urls, shells := a.urlSurfaces(), a.shellSurfaces()
 	var shown []pane.Face
-	if len(urls) > 0 {
+	if len(urls)+len(shells) > 0 {
 		shown = a.shownFaces(rects)
 	}
 	url := pane.Mirrored(urls, shown)
@@ -28,6 +30,15 @@ func (a *App) syncMirrors(rects map[string]pane.Rect) {
 		a.mirrors.url, a.mirrors.urlSent = url, true
 		a.bridgeSetMirrored(url)
 	}
+	// A shell snapshots on its own repaints while it is in this set, and one
+	// that just joined may not repaint for a while, so joining arms it too.
+	shell := pane.Mirrored(shells, shown)
+	for _, id := range shell {
+		if conn := a.shellConnFor(id); conn != nil && !slices.Contains(a.mirrors.shell, id) {
+			conn.mirror.Arm(cadence.ShellMirrorMs)
+		}
+	}
+	a.mirrors.shell = shell
 }
 
 // shownFaces is every content tile a laid-out pane draws the face of, in the

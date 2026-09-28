@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures';
 
 // A live surface refreshes the tile's shared face only while another pane
-// shows it: pane.Mirrored decides, and the url pump captures exactly that set.
-// A lone live pane costs no capture at all, and a second pane showing the
-// tile's grid tracks the page.
+// shows it, and once at a park, when its own pane draws the face: pane.Mirrored
+// decides the first. A lone live pane costs no capture at all, and a second
+// pane showing the tile's grid tracks it.
 
 // The canvas pixel at a screen point, as [r, g, b].
 async function pixelAt(window: any, x: number, y: number): Promise<number[]> {
@@ -91,4 +91,72 @@ test('a live url is captured only while another pane shows it', async ({ electro
   const after = await mirrorCalls();
   await window.waitForTimeout(c.shellMirrorMs * 8);
   expect(await mirrorCalls(), 'the pump ran on with nothing live').toBe(after);
+});
+
+
+test('a live shell snapshots only at a park and while another pane shows it', async ({ gw, window }) => {
+  const c = await gw.cadences();
+  await gw.enterPlugin('home');
+  await gw.splitFocusedPaneVertical();
+  const a = await gw.focused();
+  const b = (await gw.panes()).find((p) => p.id !== a.id)!;
+
+  // The other pane leaves the home grid first, into a well, so nothing but
+  // the shell's own pane draws the shell.
+  await gw.focusPane(b);
+  const bcx = Math.round(b.cx);
+  const bcy = Math.round(b.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', bcx, bcy);
+  await gw.descendCell(bcx, bcy);
+  const bIn = (await gw.panes()).find((p) => p.id === b.id)!;
+  expect(bIn.gridID, 'the other pane is in the well').not.toBe(a.gridID);
+
+  await gw.focusPane((await gw.panes()).find((p) => p.id === a.id)!);
+  const cx = Math.round(a.cx);
+  const cy = Math.round(a.cy) + 2;
+  await gw.openPalette();
+  await gw.dragCreate('shell', cx, cy);
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  await gw.shellAttached();
+
+  // Alone: the terminal repaints as it is typed into, and nothing else draws
+  // the tile, so nothing is snapshotted.
+  const alone = await gw.shellMirrors();
+  await window.keyboard.type('echo alone');
+  await window.keyboard.press('Enter');
+  await window.waitForTimeout(c.shellMirrorMs * 8);
+  expect(await gw.shellMirrors(), 'a lone live shell was snapshotted').toBe(alone);
+
+  // The + menu on the other pane parks the overlay, and the shell's own pane
+  // then draws the face: one snapshot, taken at the park.
+  await gw.focusPane((await gw.panes()).find((p) => p.id === b.id)!);
+  await gw.openPalette();
+  await expect.poll(() => gw.shellMirrors(), { message: 'the park took the face' }).toBe(alone + 1);
+  await window.waitForTimeout(c.shellMirrorMs * 4);
+  expect(await gw.shellMirrors(), 'and only that one').toBe(alone + 1);
+  const pal = await gw.palette();
+  await window.mouse.click(pal.plusX, pal.plusY);
+  await expect.poll(async () => (await gw.palette()).open).toBe(false);
+
+  // The other pane comes back to the home grid, where the shell's face is
+  // drawn: joining the mirrored set takes the face, and a repaint takes it
+  // again.
+  const joined = await gw.shellMirrors();
+  await gw.ascendViaCrumb();
+  await expect.poll(() => gw.shellMirrors(), { message: 'joining took the face' }).toBeGreaterThan(joined);
+  const aNow = (await gw.panes()).find((p) => p.id === a.id)!;
+  await window.mouse.click(aNow.x + aNow.w / 2, aNow.y + aNow.h / 2);
+  await expect.poll(async () => (await gw.focused()).id).toBe(a.id);
+  await gw.waitIdle();
+  const shown = await gw.shellMirrors();
+  await window.keyboard.type('echo mirrored');
+  await window.keyboard.press('Enter');
+  await expect.poll(() => gw.shellMirrors(), { message: 'the repaint was mirrored' }).toBeGreaterThan(shown);
+
+  // Delete the tile so its tmux session dies before teardown.
+  await gw.ascendViaCrumb();
+  await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
+  await gw.deleteTileCell(cx, cy);
 });

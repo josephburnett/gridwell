@@ -47,11 +47,16 @@ const (
 	// drag in flight and nothing else.
 	WorkspaceSaveMode = debounce.Settle
 
-	// ShellMirrorMs is how often a live surface is snapshotted into the shared
-	// preview cache; nothing arms it, it runs from boot for the app's life. It
-	// owns the mirror cadence: apps/desktop/src/main/capture.ts keeps a
-	// drift-linted copy.
+	// ShellMirrorMs is how often a live surface another pane shows is
+	// snapshotted into the shared preview cache (pane.Mirrored). It owns the
+	// mirror cadence: apps/desktop/src/main/capture.ts keeps a drift-linted
+	// copy for the url pump.
 	ShellMirrorMs = 250
+
+	// ShellMirrorMode is Throttle: a terminal that repaints without pause is
+	// still mirrored once per window, and the run at the window's end takes
+	// the last repaint in it.
+	ShellMirrorMode = debounce.Throttle
 
 	// TraceFadeMs is how long the ascent-trace outline takes to fade out.
 	TraceFadeMs = 2000

@@ -173,8 +173,8 @@ type App struct {
 	// mirrors is what each mirror was last told; see syncMirrors.
 	mirrors mirrorState
 
-	// shellMirrorPasses counts mirror ticks. e2e-only: the mirror writes into a
-	// cache and nothing else reports that it ran.
+	// shellMirrorPasses counts shell mirror snapshots. e2e-only: the mirror
+	// writes into a cache and nothing else reports that it ran.
 	shellMirrorPasses int
 
 	// traces holds the per-pane ascent-trace highlight, ephemeral like selection.
@@ -682,7 +682,6 @@ func main() {
 
 	app.installCanvasInput()
 	app.installWebviewListeners()
-	app.installShellMirror()
 	app.installTestHook() // read-only window.__gridwellTest, only under ?e2e=1
 
 	go app.bootstrap()

@@ -71,9 +71,8 @@ func (a *App) installTestHook() {
 				"traceFadeMs":     cadence.TraceFadeMs,
 			}
 		}),
-		// Mirror passes taken since boot. The interval is free-running, with no
-		// arming instant to time from, so its rate is the only thing a spec can
-		// bound; the snapshot itself lands in a cache nothing else reports.
+		// Shell mirror snapshots taken since boot; the snapshot itself lands in
+		// a cache nothing else reports.
 		"shellMirrors": js.FuncOf(func(js.Value, []js.Value) any { return a.shellMirrorPasses }),
 		"workspace":    js.FuncOf(a.thWorkspace),
 		"bar":          js.FuncOf(a.thBar),
@@ -151,6 +150,14 @@ func (a *App) installTestHook() {
 		// zero" is the assertion; see oneShot.
 		"oneShots": js.FuncOf(func(js.Value, []js.Value) any {
 			return map[string]any{"armed": oneShotsArmed, "live": oneShotsLive, "frames": framesArmed}
+		}),
+		// The two layout persisters' settle windows, pending or not. A live
+		// mirror arms timers of its own, so oneShots cannot single them out.
+		"settlesPending": js.FuncOf(func(js.Value, []js.Value) any {
+			return map[string]any{
+				"workspace": a.persist.sched.wsSave.Pending(),
+				"framing":   a.persist.sched.framingSave.Pending(),
+			}
 		}),
 		"shellStandin": js.FuncOf(a.thShellStandin),
 		"shellText":    js.FuncOf(a.thShellText),

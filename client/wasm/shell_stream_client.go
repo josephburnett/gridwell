@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/contentzoom"
+	"github.com/josephburnett/gridwell/client/debounce"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -62,6 +63,14 @@ type shellStreamConn struct {
 	pendingLink string
 
 	closed bool
+
+	// mirror throttles the snapshots a repaint arms while another pane shows
+	// this terminal; see syncMirrors.
+	mirror   *debounce.Debounce
+	onRender js.Func
+	// shown is whether the overlay was on screen last frame, so a park
+	// snapshots the face its own pane is about to draw.
+	shown bool
 
 	lastCols, lastRows uint16
 
@@ -426,6 +435,15 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	})
 	term.Call("onResize", conn.onResize)
 
+	conn.mirror = debounce.New(setTimeoutMs, nowMs, cadence.ShellMirrorMode, func() { a.mirrorShell(conn) })
+	conn.onRender = js.FuncOf(func(js.Value, []js.Value) any {
+		if slices.Contains(a.mirrors.shell, conn.paneID) {
+			conn.mirror.Arm(cadence.ShellMirrorMs)
+		}
+		return nil
+	})
+	term.Call("onRender", conn.onRender)
+
 	// The pane owns the conn before the dial: a socket that fails instantly
 	// reports through onShellExit, which needs the conn to find the pane.
 	a.local(p.ID).shellConn = conn
@@ -539,36 +557,26 @@ func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 	a.draw()
 }
 
-// installShellMirror starts the one mirror interval, alive for the app's life.
-// The URL mirror pump cannot do this job: it lives in the Electron main process
-// and cannot see the xterm canvas.
-func (a *App) installShellMirror() {
-	cb := js.FuncOf(func(js.Value, []js.Value) any {
-		a.mirrorLiveShells()
-		return nil
-	})
-	js.Global().Call("setInterval", cb, cadence.ShellMirrorMs)
-}
-
-// mirrorLiveShells snapshots every live shell terminal into the preview cache,
-// so a shell tile shown elsewhere tracks it instead of its last freeze. Skipped
-// while a gesture is in flight: the redraw would fight it.
-func (a *App) mirrorLiveShells() {
-	if pane.CanvasOwnsPointer(a.canvasGesture()) {
+// mirrorShell snapshots one live terminal into the tile's preview cache, where
+// every pane showing the tile reads it.
+func (a *App) mirrorShell(conn *shellStreamConn) {
+	if conn.closed {
 		return
 	}
 	a.shellMirrorPasses++
-	for _, pl := range a.locals {
-		conn := pl.shellConn
-		if conn == nil || conn.closed {
-			continue
-		}
-		jpeg := snapshotShellCanvas(conn.container)
-		if jpeg == nil {
-			continue
-		}
+	if jpeg := snapshotShellCanvas(conn.container); jpeg != nil {
 		a.views.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.draw() })
 	}
+}
+
+// parkShellOverlay takes the overlay off screen. Its own pane draws the tile's
+// face in its place, so the face is taken first, as a url view's is.
+func (a *App) parkShellOverlay(conn *shellStreamConn) {
+	if conn.shown {
+		a.mirrorShell(conn)
+	}
+	conn.shown = false
+	conn.container.Get("style").Set("display", "none")
 }
 
 // termTheme is xterm's palette, the same three roles the canvas paints with.
@@ -682,7 +690,8 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	// Dispose before removing the node, so xterm's own listeners do not fire
 	// against a removed element.
 	releaseAll(conn.onData, conn.onResize, conn.onMouse, conn.onLinkProvide,
-		conn.onLinkActivate, conn.onLinkHover, conn.onLinkLeave, conn.onOSCURL)
+		conn.onLinkActivate, conn.onLinkHover, conn.onLinkLeave, conn.onOSCURL,
+		conn.onRender)
 	releaseAll(conn.mouseFns...)
 	releaseAll(conn.touchFns...)
 	// The mouse-routing target must not outlive the container it names.
@@ -713,7 +722,7 @@ func (a *App) syncShellOverlayPosition() {
 			continue
 		}
 		if pane.ParkSurface(g, paneID) {
-			conn.container.Get("style").Set("display", "none")
+			a.parkShellOverlay(conn)
 			continue
 		}
 		r, ok := rects[paneID]
@@ -726,18 +735,19 @@ func (a *App) syncShellOverlayPosition() {
 		// screen but no longer in the descent this stream was opened for.
 		// Unlike the url side the stream stays alive and the session persists.
 		if pane.SurfaceOf(ok, contentID, conn.descentID) != pane.SurfaceShow {
-			conn.container.Get("style").Set("display", "none")
+			a.parkShellOverlay(conn)
 			continue
 		}
 		// The same rect the URL view and the canvas fallback use.
 		cx, cy, cw, ch := paneContentBox(r)
 		cb := pane.Rect{X: cx, Y: cy, W: cw, H: ch}
 		if cb.W < 1 || cb.H < 1 {
-			conn.container.Get("style").Set("display", "none")
+			a.parkShellOverlay(conn)
 			continue
 		}
 		style := conn.container.Get("style")
 		style.Set("display", "block")
+		conn.shown = true
 		setBoundsPx(style, cb.X, cb.Y, cb.W, cb.H)
 		// Re-fit only when an input the fit depends on changed; see lastFit*
 		// for why. The FitAddon emits onResize if the cell grid changed.
