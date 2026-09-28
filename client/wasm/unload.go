@@ -65,12 +65,12 @@ func (a *App) flushURLStateOnUnload() {
 		if ct := a.cachedTileByID(v.tileID); ct != nil {
 			cached = ct.UrlString
 		}
-		url, write := urlview.DecideUnloadURLState(v.page, v.durable, v.navDirty, v.lastURL, cached)
+		c, write := urlview.DecideUnloadURLState(v.page, v.durable, v.navDirty, v.lastURL, v.lastTitle, cached)
 		if !write {
 			continue
 		}
 		if path, body := rpc.SetTileBeacon(&gridwellv1.SetTileRequest{TileId: v.tileID,
-			Tile: &gridwellv1.Tile{Kind: rpc.KindURL, UrlString: url, AltText: v.lastTitle},
+			Tile: &gridwellv1.Tile{Kind: rpc.KindURL, UrlString: c.URL, AltText: c.Title},
 		}); body != nil {
 			a.sendBeacon(path, body, rpc.BeaconJSONType)
 		}

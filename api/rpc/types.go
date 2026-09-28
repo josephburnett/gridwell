@@ -210,9 +210,9 @@ func TextDocument(t *pb.Tile) bool {
 	return t.Kind == KindText
 }
 
-// PageContent is a url tile whose plugin serves the page. It carries no
-// address, zoom or freeze intent of its own, so its address is derived at use
-// time (PageURL).
+// PageContent is a url tile whose plugin serves the page. The address is the
+// plugin's, derived at use time (PageURL); everything else it holds is a url
+// tile's.
 func PageContent(t *pb.Tile) bool {
 	return t.Kind == KindURL && t.ServesPage
 }

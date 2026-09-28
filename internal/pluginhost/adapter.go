@@ -301,13 +301,27 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 		if listed {
 			pt.ServesPage = e.ServesPage
 			pt.TextPresentation = e.TextPresentation
-			pt.PreviewBlobId = e.PreviewStamp
+			pt.PreviewBlobId = faceKey(pt.PreviewBlobId, e.PreviewStamp)
 			pt.StatusDetail = e.StatusDetail
 			pt.UrlString = e.UrlString
 		}
 		out = append(out, pt)
 	}
 	return out, nil
+}
+
+// faceKey is a plugin tile's preview key, exactly an internet tile's rule: the
+// row's screenshot once one exists, until the next visit replaces it, and the
+// plugin's own picture only before the first. The plugin's stamp is negated so
+// the two number spaces never meet in the client's (tile, key) cache.
+func faceKey(blobID, stamp int64) int64 {
+	switch {
+	case blobID != 0:
+		return blobID
+	case stamp > 0:
+		return -stamp
+	}
+	return 0
 }
 
 // synthesized is one grid as the adapter derives it: the wire grid, the joined
@@ -719,11 +733,22 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	return a.changedRow(ctx, id)
 }
 
-// SetTile terminates the framing arms at the store. Rename is refused because
-// a plugin tile's name is its source name.
+// SetTile terminates the framing and capture arms at the store, the node's
+// memory of how the user left a tile. Rename is refused because a plugin
+// tile's name is its source name, and a url writeback carries its screenshot
+// alone because the address, title and history are the plugin's.
 func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	if req.Rename != "" {
 		return nil, status.Error(codes.InvalidArgument, "plugin: tiles derive their names from the source")
+	}
+	if t := req.GetTile(); t.GetKind() == rpc.KindURL && req.ContentZoom == nil && req.UrlFrozen == nil {
+		if t.UrlString != "" || t.AltText != "" || t.UrlHistory != "" {
+			return nil, status.Error(codes.InvalidArgument,
+				"plugin: a url tile's address, title and history are its plugin's; the writeback carries the screenshot alone")
+		}
+		if len(req.Preview) == 0 {
+			return nil, status.Error(codes.InvalidArgument, "plugin: a url writeback with no screenshot writes nothing")
+		}
 	}
 	id, err := a.mint(ctx, req.TileId)
 	if err != nil {
@@ -731,19 +756,22 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	}
 	switch {
 	case req.ContentZoom != nil:
-		if err := a.mem.SetContentZoom(id, *req.ContentZoom); err != nil {
-			return nil, err
-		}
+		err = a.mem.SetContentZoom(id, *req.ContentZoom)
+	case req.UrlFrozen != nil:
+		err = a.mem.SetFrozen(id, *req.UrlFrozen)
 	default:
 		t := req.GetTile()
 		switch t.GetKind() {
 		case rpc.KindText:
-			if err := a.mem.SetTextView(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode()); err != nil {
-				return nil, err
-			}
+			err = a.mem.SetTextView(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode())
+		case rpc.KindURL:
+			err = a.mem.SetURLPreview(id, req.Preview)
 		default:
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())
 		}
+	}
+	if err != nil {
+		return nil, gwerr.ToStatus(err)
 	}
 	return a.changedRow(ctx, id)
 }
@@ -842,12 +870,22 @@ func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContent
 	}
 }
 
+// GetTilePreview answers the face faceKey named.
 func (a *Adapter) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
-	key, err := a.contentKey(req.TileId)
+	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := a.cp.GetPreview(ctx, &pluginv1.GetPreviewRequest{Key: key})
+	if ref.id != 0 {
+		jpeg, err := a.mem.Preview(ref.id)
+		if err != nil {
+			return nil, gwerr.ToStatus(err)
+		}
+		if len(jpeg) > 0 {
+			return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
+		}
+	}
+	resp, err := a.cp.GetPreview(ctx, &pluginv1.GetPreviewRequest{Key: ref.key})
 	if err != nil {
 		return nil, err
 	}

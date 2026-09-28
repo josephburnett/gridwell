@@ -141,8 +141,18 @@ func (s *Store) GetTilePreview(ctx context.Context, tileID string) ([]byte, erro
 	if err != nil {
 		return nil, ErrNotFound
 	}
+	return s.tilePreview(ctx, "", id)
+}
+
+// Preview is a plugin tile's last-frozen JPEG, nil when it has none.
+func (n *Namespace) Preview(tileID int64) ([]byte, error) {
+	return n.s.tilePreview(context.Background(), n.ns, tileID)
+}
+
+// tilePreview is the one frozen-face read.
+func (s *Store) tilePreview(ctx context.Context, ns string, id int64) ([]byte, error) {
 	var previewBID sql.NullInt64
-	err = s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ?`, id).Scan(&previewBID)
+	err := s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ?`, id, ns).Scan(&previewBID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

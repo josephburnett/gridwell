@@ -6,9 +6,9 @@ import { makeRunDir } from './homes';
 // The web-content door, desktop side: an fs image file is a url tile whose page
 // the plugin serves, and descending it goes live as a native WebContentsView at
 // the derived /content/<token>/<tile-id>/ address — the url-tile semantics, on a
-// url tile. Ascending closes the view and persists nothing: the frozen face is
-// the plugin's own thumbnail derivation, so the tile row stays byte-for-byte as
-// it was.
+// url tile. Ascending closes the view and freezes it the way it freezes any url
+// tile: the screenshot becomes the face, replacing the plugin's thumbnail, and
+// nothing that means the tile's bytes or its address changes.
 
 // A real 1x1 PNG so the fs plugin classifies and serves an actual image.
 const PNG_1X1 = Buffer.from(
@@ -62,7 +62,17 @@ test('descending an fs image opens it live through the /content/ door', async ({
       { timeout: 15_000 },
     )
     .toBe(false);
+  // The plugin's picture keys below zero; the screenshot is a blob of the node's.
+  expect(Number(cat.previewBlobId ?? 0), 'before a visit the face is the plugin picture').toBeLessThan(0);
+  await expect
+    .poll(
+      async () =>
+        Number((await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'cat.png')?.previewBlobId ?? 0),
+      { message: 'the ascent freezes the page into its face', timeout: 15_000 },
+    )
+    .toBeGreaterThan(0);
   const after = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'cat.png')!;
-  expect(Number(after.version ?? 0), 'a page descent persists nothing').toBe(versionBefore);
-  expect(after.previewBlobId ?? 0, 'no preview blob is minted for a page tile').toBe(cat.previewBlobId ?? 0);
+  expect(Number(after.version ?? 0), 'a freeze claims no content bytes').toBe(versionBefore);
+  expect(after.urlString ?? '', 'the address stays the plugin\'s').toBe('');
+  expect(after.id, 'the tile keeps its name').toBe(cat.id);
 });

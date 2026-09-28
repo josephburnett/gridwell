@@ -26,12 +26,8 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 			return err
 		}
 
-		// An empty JPEG is skipped, so a partial capture cannot clobber a good
-		// frozen frame.
-		if len(jpeg) > 0 {
-			if _, _, err := s.swapTileBlob(ctx, tx, tileID, "preview_blob_id", jpeg, mediaJPEG); err != nil {
-				return err
-			}
+		if err := s.setURLPreviewTx(ctx, tx, tileID, jpeg); err != nil {
+			return err
 		}
 		if url != "" {
 			if _, err := tx.ExecContext(ctx,
@@ -67,6 +63,33 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 		return nil, err
 	}
 	return out, nil
+}
+
+// SetURLPreview is a plugin url tile's screenshot, the face half of home's
+// SetURLState: the address, title and history are the plugin's to say, so
+// only the picture is the node's to keep.
+func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) error {
+	ctx := context.Background()
+	return n.s.withMutation(ctx, "SetURLPreview", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+		kind, err := liveKind(ctx, tx, n.ns, tileID)
+		if err != nil {
+			return err
+		}
+		if kind != rpc.KindURL {
+			return ErrNotURLTile
+		}
+		return n.s.setURLPreviewTx(ctx, tx, tileID, jpeg)
+	})
+}
+
+// setURLPreviewTx is the one url screenshot write. An empty JPEG is skipped,
+// so a partial capture cannot clobber a good frozen frame.
+func (s *Store) setURLPreviewTx(ctx context.Context, tx *sql.Tx, tileID int64, jpeg []byte) error {
+	if len(jpeg) == 0 {
+		return nil
+	}
+	_, _, err := s.swapTileBlob(ctx, tx, tileID, "preview_blob_id", jpeg, mediaJPEG)
+	return err
 }
 
 // SetTileAlt updates a tile's stored alt-text. user=true is the rename

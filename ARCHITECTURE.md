@@ -88,7 +88,9 @@ Wire-only fields are derived in exactly one place each. `Tile.reference`
 (this tile is a link) comes from `server.qualifyTiles`. `Tile.serves_page`
 (this url tile opens at the /content/ door, and only a url entry may say so),
 `text_presentation`, and `status_detail` come from the plugin's `Entry`
-through `pluginhost/adapter.go`. `Grid.writable`, `scratch_grid_id`, and
+through `pluginhost/adapter.go`. A plugin tile's `preview_blob_id` is
+`pluginhost.faceKey`'s: the node's screenshot of the tile once one exists,
+else the plugin's picture keyed below zero. `Grid.writable`, `scratch_grid_id`, and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
 transit), which fails the read when the owner's handshake does not answer.
 `Grid.host_content` (these rows project host state) and
@@ -419,6 +421,8 @@ copy:
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | does this descent go live | `shellconn.DecideAutoLive` |
+| what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
+| which face a plugin tile wears | `pluginhost.faceKey` |
 | what a tile's banner reads | `tileface.BannerRuns` (name, then the plugin's status) |
 | does a tile draw as host state, and which hue its banner wears | `tileface.Outside`, `tileface.BannerHue` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
@@ -445,7 +449,8 @@ Remaining seams with more than one writer, ranked by risk:
    `syncURLViews`; the math is extracted to `viewutil.ts`.
 2. The drag threshold — `dragThreshold` in Go plus forced copies in
    `viewutil.ts` and the sandboxed `urlview-preload.ts`; drift-linted.
-3. The `SetTile` kind→operation mapping — the proto and the local switch.
+3. The `SetTile` kind→operation mapping — the proto, home's switch and the
+   plugin adapter's.
 4. Text scroll of a rendered descent — the canvas wheel handler and the
    overlay's scroll listener both write `TextScrollY`.
 

@@ -468,10 +468,10 @@ type Entry struct {
 	// calendar putting an event at its date. The user's arrangement wins from
 	// then on, and a hint never moves a placed tile.
 	PlacementHint *PlacementHint `protobuf:"bytes,9,opt,name=placement_hint,json=placementHint,proto3" json:"placement_hint,omitempty"`
-	// preview_stamp is a generation number for the entry's preview, such as an
-	// image file's mtime in fs. The client keys its thumbnail cache by it, so an
-	// edited image invalidates. 0 means no stamp. It becomes
-	// Tile.preview_blob_id on the node surface.
+	// preview_stamp is a positive generation number for the entry's GetPreview
+	// picture, such as an image file's mtime in fs, so an edited image
+	// invalidates. 0 or less means no picture. The picture is the tile's face
+	// until the node holds a screenshot of the tile, which wins from then on.
 	PreviewStamp  int64 `protobuf:"varint,10,opt,name=preview_stamp,json=previewStamp,proto3" json:"preview_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

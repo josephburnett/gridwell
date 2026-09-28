@@ -354,8 +354,11 @@ type Tile struct {
 	BlobId   int64  `protobuf:"varint,19,opt,name=blob_id,json=blobId,proto3" json:"blob_id,omitempty"`
 	// url-only: the http(s) URL plus a pointer at the last-frozen JPEG
 	// preview (in the blobs table; hash-deduped across clones).
-	UrlString     string `protobuf:"bytes,20,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
-	PreviewBlobId int64  `protobuf:"varint,21,opt,name=preview_blob_id,json=previewBlobId,proto3" json:"preview_blob_id,omitempty"`
+	UrlString string `protobuf:"bytes,20,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
+	// preview_blob_id is the face's cache key, 0 for none, and GetTilePreview
+	// answers it. A plugin tile with no screenshot yet keys its plugin's
+	// picture below zero; the client only compares keys.
+	PreviewBlobId int64 `protobuf:"varint,21,opt,name=preview_blob_id,json=previewBlobId,proto3" json:"preview_blob_id,omitempty"`
 	// alt_text is the canonical display label, rendered verbatim by the
 	// client. Stamped at insert time (for plugin-owned tiles, the entry name;
 	// for an exit well, the mounted plugin's label).

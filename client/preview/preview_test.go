@@ -155,6 +155,24 @@ func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 	}
 }
 
+// A plugin picture keys below zero (pluginhost.faceKey), and the first
+// screenshot replaces it with a blob id. Its entry must then miss, whatever
+// its stamp, or the picture would stand in for the screenshot forever.
+func TestAPluginPictureIsNotALocalCapture(t *testing.T) {
+	for _, stamp := range []int64{1, 1790562723} {
+		d := &fakeDecoder{}
+		c := NewCache(d, nil)
+		c.Put("42", -stamp, []byte("the plugin's picture"), nil)
+		d.resolveAll()
+		if _, ok := c.Get("42", -stamp); !ok {
+			t.Fatalf("stamp %d: the picture misses its own key", stamp)
+		}
+		if _, ok := c.Get("42", 9); ok {
+			t.Fatalf("stamp %d: the picture answered for screenshot blob 9", stamp)
+		}
+	}
+}
+
 // TestGetWithZeroBlobIDAlwaysMisses pins that a tile with PreviewBlobID 0 has
 // no server-side preview, so a caller does not see a cached image the server
 // says is not there.

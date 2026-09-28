@@ -90,7 +90,19 @@ address when the page is opened — and serve a document body from a `text` entr
 instead if you want one, which is a second entry, not a second face on this
 one. The page is served at a directory URL, so an ordinary relative URL inside
 it comes back as `ServeContent` on the same key with that name as the
-`subpath`.
+`subpath`. Past its address, a served page is a url tile like any other: the
+node keeps its screenshot, its standing freeze and its zoom, and you store
+none of them.
+
+## Previews
+
+A tile's face is the screenshot the node took when the user last left it
+live, exactly as for a page on the Internet. Before the first visit there is
+none, and `GetPreview` is how you supply one: set a positive `preview_stamp`
+on the entry, a generation number such as a file's mtime, and the node asks
+`GetPreview` for that key, and asks again when the stamp changes. Leave the
+stamp 0 and nothing asks. Once a screenshot exists it is the face, and your
+picture is not asked for again.
 
 ## Deletes
 

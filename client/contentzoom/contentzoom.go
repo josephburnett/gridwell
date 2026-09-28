@@ -51,17 +51,11 @@ type Verdict struct {
 
 // Decide answers one chord press on the tile a pane is descended into; cur is
 // that tile's current zoom, from Of.
-func Decide(kind string, pageContent, possiblyEphemeral bool, key string, cur float64) Verdict {
+func Decide(kind string, possiblyEphemeral bool, key string, cur float64) Verdict {
 	z, ok := next(key, cur)
 	// The content-descent kind set has one owner, rpc.IsContentDescentKind.
 	if !ok || !rpc.IsContentDescentKind(kind) {
 		return Verdict{}
-	}
-	if pageContent {
-		// A served page's descent has no persisted content_zoom, because the
-		// owning plugin stores no url state and a client-only zoom would
-		// break the no-client-state rule. The chord is still this tile's.
-		return Verdict{Consume: true}
 	}
 	// The zoom is live for the session either way; only the write is
 	// conditional. An ephemeral visit's row dies on ascent, so persisting its
