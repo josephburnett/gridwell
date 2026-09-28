@@ -198,9 +198,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   unlinks. Ctrl + left-click descends in a new pane split below — the
   same split a link out of a live tile opens; in an unfocused pane it
   still only moves focus.
-- A link into a namespace the node does not declare is DEAD: greyed, inert,
-  still labelled, still deletable. It is a state, not an error — nothing is
-  asked for it and nothing is said about it. Dead is not dark: a declared
+- A link is a path, and a link broken at ANY hop — a namespace this node
+  does not declare, or one a node further along the chain does not declare —
+  is DEAD: greyed, inert, still labelled, still deletable. It is a state, not
+  an error — nothing is asked for it and nothing is said about it
+  (`gwerr.DeadRef` is the far node's answer, `client/deadref` the verdict). Dead is not dark: a declared
   plugin that is down and a declared connection that will not answer are
   health, and they come back. Nor is dead always forever: a retired
   connection name never returns, but a namespace merely undeclared is live
