@@ -11,9 +11,11 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// DeadRef is the answer for an id naming a namespace this node does not
-// declare: NotFound, so every reader of the code is unchanged, carrying a
-// pb.DeadReference detail that survives every gRPC hop and the Connect codec.
+// DeadRef is the answer for an id whose path ends in nothing: a namespace this
+// node does not declare, or, with namespace empty, a key its declared
+// namespace says is gone. NotFound, so every reader of the code is unchanged,
+// carrying a pb.DeadReference detail that survives every gRPC hop and the
+// Connect codec.
 func DeadRef(namespace, format string, args ...any) error {
 	st, err := status.New(codes.NotFound, fmt.Sprintf(format, args...)).
 		WithDetails(&pb.DeadReference{Namespace: namespace})

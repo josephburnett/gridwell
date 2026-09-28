@@ -521,11 +521,12 @@ message TileResponse {
   Tile tile = 1;
 }
 
-// DeadReference is the detail on a NotFound that means the id names a
-// namespace the answering node does not declare, at whatever hop that node
-// sits: the link is dead, a state and not an error. gwerr.DeadRef writes it and
+// DeadReference is the detail on a NotFound that means the path an id names
+// ends in nothing: a namespace the answering node does not declare, at
+// whatever hop that node sits, or a key its declared namespace says is gone.
+// The link is dead, a state and not an error. gwerr.DeadRef writes it and
 // gwerr.IsDeadRef reads it; namespace is the undeclared segment in the
-// answering node's frame.
+// answering node's frame, empty when the namespace answered for a gone key.
 message DeadReference {
   string namespace = 1;
 }

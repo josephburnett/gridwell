@@ -366,6 +366,9 @@ type synthesized struct {
 	rows    []store.ExtTile
 	tiles   []*gridwellv1.Tile
 	entries []*pluginv1.Entry
+	// dark and authoritative are what the listing was, which absent reads to
+	// say whether a key missing from it is gone.
+	dark, authoritative bool
 }
 
 // resolveGrid reads a wire grid id as the context it names plus the grid row
@@ -488,7 +491,8 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	if err != nil {
 		return nil, err
 	}
-	return &synthesized{grid: g, context: ckey, gid: gid, rows: tiles, tiles: wire, entries: resp.Entries}, nil
+	return &synthesized{grid: g, context: ckey, gid: gid, rows: tiles, tiles: wire, entries: resp.Entries,
+		dark: dark, authoritative: resp.Authoritative}, nil
 }
 
 func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
@@ -518,8 +522,10 @@ func (a *Adapter) resolveTile(tileID string) (tileRef, error) {
 	case rpc.ShapeRow:
 		id, _ := strconv.ParseInt(tileID, 10, 64)
 		gid, key, tomb, err := a.mem.TileKey(id)
+		// A row retires only on the source's word that its key is gone, and
+		// its id is never reassigned, so a retired or unknown row is dead.
 		if errors.Is(err, store.ErrNotFound) || tomb {
-			return tileRef{}, status.Errorf(codes.NotFound, "plugin: no tile %d", id)
+			return tileRef{}, gwerr.DeadRef("", "plugin: no tile %d", id)
 		}
 		if err != nil {
 			return tileRef{}, err
@@ -647,7 +653,29 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 	if t := s.tileForKey(ref.key); t != nil {
 		return t, nil
 	}
-	return nil, status.Errorf(codes.NotFound, "plugin: no tile %q", tileID)
+	return nil, a.absent(ctx, s, ref.key, tileID)
+}
+
+// absent is the one answer for a key the listing does not carry, judged the
+// way synthesize retires a row: the dead verdict only when the source has said
+// the key is gone, by an authoritative listing or a definitive probe. A dark
+// source is not asked and a probe that cannot say is not a verdict, so neither
+// is ever dead.
+func (a *Adapter) absent(ctx context.Context, s *synthesized, key, tileID string) error {
+	if s.dark {
+		return status.Errorf(codes.Unavailable, "plugin: source dark and %q not remembered", tileID)
+	}
+	if s.authoritative {
+		return gwerr.DeadRef("", "plugin: %q is gone", tileID)
+	}
+	pr, err := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key})
+	if err != nil {
+		return err
+	}
+	if pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
+		return gwerr.DeadRef("", "plugin: %q is gone", tileID)
+	}
+	return status.Errorf(codes.NotFound, "plugin: %q is not listed", tileID)
 }
 
 // Search turns each hit into a place the way the store's Search does: the tile

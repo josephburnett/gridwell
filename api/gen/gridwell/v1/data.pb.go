@@ -2316,11 +2316,12 @@ func (x *TileResponse) GetTile() *Tile {
 	return nil
 }
 
-// DeadReference is the detail on a NotFound that means the id names a
-// namespace the answering node does not declare, at whatever hop that node
-// sits: the link is dead, a state and not an error. gwerr.DeadRef writes it and
+// DeadReference is the detail on a NotFound that means the path an id names
+// ends in nothing: a namespace the answering node does not declare, at
+// whatever hop that node sits, or a key its declared namespace says is gone.
+// The link is dead, a state and not an error. gwerr.DeadRef writes it and
 // gwerr.IsDeadRef reads it; namespace is the undeclared segment in the
-// answering node's frame.
+// answering node's frame, empty when the namespace answered for a gone key.
 type DeadReference struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
