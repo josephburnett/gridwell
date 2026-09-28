@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, net, session } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
-import { registerWebviewIpc, forwarder, sendFrame, sendError } from './register';
+import { registerWebviewIpc, forwarder, sendError } from './register';
 import { EV } from './ipc';
 import { MirrorPump } from './capture';
 import { sanitizeUserAgent, allowPermission, SESSION_PARTITION } from './viewutil';
@@ -92,6 +92,7 @@ async function boot(): Promise<void> {
   const rootWC = win.webContents;
   const reg = new WebviewRegistry(win, {
     onNav: forwarder(rootWC, EV.nav),
+    onFrame: forwarder(rootWC, EV.frame),
     onError: (ev) => sendError(rootWC, ev.source, ev.message, ev.severity),
     onOpenBelow: forwarder(rootWC, EV.openBelow),
     onFreezeURL: forwarder(rootWC, EV.freezeUrl),
@@ -122,15 +123,9 @@ async function boot(): Promise<void> {
     (globalThis as { __gwSidecarPid?: number }).__gwSidecarPid = sidecar.child.pid;
   }
 
-  // Each frame lands in the tile's preview cache, and so in every frozen pane
-  // showing it.
   pump = new MirrorPump(async () => {
     for (const paneId of reg.paneIds()) {
-      const jpeg = await reg.capture(paneId);
-      const tileId = reg.tileIdFor(paneId);
-      if (jpeg && tileId !== undefined) {
-        sendFrame(rootWC, paneId, tileId, jpeg);
-      }
+      await reg.mirror(paneId);
     }
   });
   pump.start();

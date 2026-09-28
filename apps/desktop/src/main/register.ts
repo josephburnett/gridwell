@@ -14,7 +14,6 @@ import {
   ViewTouchScroll,
   ErrorEvent,
   NoticeSeverity,
-  FrameEvent,
   ChoiceMenuArgs,
 } from './ipc';
 import { toContentPoint } from './viewutil';
@@ -116,10 +115,6 @@ export function registerWebviewIpc(
 // ipc.ts pairs each channel with the shape it carries.
 export function forwarder(rootWC: WebContents, channel: string): (ev: unknown) => void {
   return (ev) => safeSend(rootWC, channel, ev);
-}
-
-export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, jpegBase64: string): void {
-  if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 } satisfies FrameEvent);
 }
 
 // sendError is the one main-process entry point onto EV.error, so

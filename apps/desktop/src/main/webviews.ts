@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent } from './ipc';
+import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -62,10 +62,15 @@ interface Entry {
   // Tracked so remove() can cancel it before the closure reads a closed view.
   focusSettle: ReturnType<typeof setTimeout> | null;
   captureStreak: StreakState;
+  // Bumped by every show and hide, so a park still waiting on its frame can
+  // tell it was overtaken.
+  parkGen: number;
 }
 
 interface RegistryCallbacks {
   onNav?: (ev: NavEvent) => void;
+  // A mirror frame for the tile's preview cache; see mirror().
+  onFrame?: (ev: FrameEvent) => void;
   // index.ts wires this to sendError; the registry knows nothing of IPC.
   onError?: (ev: ErrorEvent) => void;
   onOpenBelow?: (ev: OpenBelowEvent) => void;
@@ -87,6 +92,8 @@ export class WebviewRegistry {
   // The e2e reads this through __gwRegistry to tell a synthetic sendInputEvent
   // lost in the input pipeline from a real relay bug.
   zoomChordRelays = 0;
+  // The e2e reads this to see that an unread face costs no capture.
+  mirrorCalls = 0;
 
   constructor(win: BaseWindow, cb: RegistryCallbacks = {}) {
     this.win = win;
@@ -256,7 +263,7 @@ export class WebviewRegistry {
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.
     const startHidden = hidden;
-    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH };
+    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     this.entries.set(paneId, e);
     trace(viewCreated(paneId, tileId, url));
     this.win.contentView.addChildView(view);
@@ -336,20 +343,28 @@ export class WebviewRegistry {
 
   // Parking rather than destroying is what lets a canvas overlay paint where
   // the native view sits. syncURLViews calls this every frame.
+  // A park is the one moment the pane reads its own face, and a parked view
+  // has nothing to capture, so the view stays up until the face is taken.
   setHidden(paneId: string, hidden: boolean, focused: boolean): void {
     const e = this.entries.get(paneId);
     if (!e || (e.hidden === hidden && e.focused === focused)) return;
     const viewChanged = e.hidden !== hidden;
+    // Before the flip, because capture reads hidden before its first await.
+    const face = viewChanged && hidden ? this.mirror(paneId) : null;
     e.hidden = hidden;
     e.focused = focused;
-    if (viewChanged) {
-      trace(viewShown(paneId, e.tileId, hidden));
-      if (hidden) {
-        e.view.setBounds(parkedBounds(e.bounds.width, e.bounds.height));
-      } else {
-        e.view.setBounds(e.bounds);
-      }
+    if (!viewChanged) return;
+    trace(viewShown(paneId, e.tileId, hidden));
+    const gen = ++e.parkGen;
+    if (!face) {
+      e.view.setBounds(e.bounds);
+      return;
     }
+    void face.then(() => {
+      if (this.entries.get(paneId) === e && e.parkGen === gen) {
+        e.view.setBounds(parkedBounds(e.bounds.width, e.bounds.height));
+      }
+    });
   }
 
   async remove(paneId: string): Promise<FreezeResult> {
@@ -415,6 +430,15 @@ export class WebviewRegistry {
       this.reportErr(notice.message, notice.severity);
     }
     return attempt.kind === 'ok' ? attempt.jpegBase64 : '';
+  }
+
+  // mirror captures one frame into the tile's preview cache, where every pane
+  // showing the tile reads it. It settles with no frame rather than rejecting.
+  async mirror(paneId: string): Promise<void> {
+    this.mirrorCalls++;
+    const jpegBase64 = await this.capture(paneId);
+    const tileId = this.entries.get(paneId)?.tileId;
+    if (jpegBase64 && tileId !== undefined) this.cb.onFrame?.({ paneId, tileId, jpegBase64 });
   }
 
   // The one back action: the bar's button and the menu's Back.

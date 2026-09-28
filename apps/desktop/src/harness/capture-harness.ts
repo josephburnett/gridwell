@@ -11,7 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
 import { registerWebviewIpc } from '../main/register';
-import type { ErrorEvent, NavEvent } from '../main/ipc';
+import type { ErrorEvent, FrameEvent, NavEvent } from '../main/ipc';
 import { PARK_COORD, SESSION_PARTITION } from '../main/viewutil';
 import { FOCUS_SETTLE_MS } from '../main/focusguard';
 
@@ -180,6 +180,36 @@ app.whenReady().then(async () => {
   }
   await registry.remove('pane1h');
   console.log('hidden place ok: parked at PARK_COORD, un-parked to its bounds');
+
+  // ── a park takes the pane's face before it goes ─────────────────────────
+  // A parked pane draws the tile's cached face, and a parked view has nothing
+  // to capture, so the view stays up until one frame is taken and sent.
+  const parkFrames: FrameEvent[] = [];
+  const regPark = new WebviewRegistry(win, { onFrame: (ev) => parkFrames.push(ev) });
+  const parkAt = { x: 10, y: 20, width: 300, height: 200 };
+  await regPark.place('paneP', 'u1/50', DATA_URL, parkAt);
+  await waitForFirstFrame(regPark, 'paneP', 'park scenario');
+  regPark.setHidden('paneP', true, false);
+  if (regPark.viewBoundsFor('paneP')?.x === PARK_COORD) fail('the view parked before its face was taken');
+  const parkDeadline = Date.now() + FRAME_BUDGET_MS;
+  while (regPark.viewBoundsFor('paneP')?.x !== PARK_COORD && Date.now() < parkDeadline) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  if (regPark.viewBoundsFor('paneP')?.x !== PARK_COORD) fail('the view never parked after its face was taken');
+  if (parkFrames.length !== 1 || parkFrames[0].tileId !== 'u1/50' || !parkFrames[0].jpegBase64.startsWith('/9j/')) {
+    fail(`a park sent ${parkFrames.length} frames, want one JPEG for u1/50`);
+  }
+  // A show that lands while the face is being taken wins: the view stays up.
+  regPark.setHidden('paneP', false, false);
+  regPark.setHidden('paneP', true, false);
+  regPark.setHidden('paneP', false, false);
+  await new Promise((r) => setTimeout(r, 1000));
+  const overtaken = regPark.viewBoundsFor('paneP');
+  if (overtaken?.x !== parkAt.x || overtaken?.y !== parkAt.y) {
+    fail(`a park overtaken by a show still moved the view to (${overtaken?.x},${overtaken?.y})`);
+  }
+  await regPark.remove('paneP');
+  console.log('park ok: the face is taken first, and a show overtakes the park');
 
   // ── a dead view yields an empty freeze, never a throw ──────────────────
   // Ascending out of a crashed tab: every view-bound read in remove() throws,
