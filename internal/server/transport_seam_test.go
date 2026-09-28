@@ -98,8 +98,9 @@ func (f *farLink) Subscribe(ctx context.Context, in *gridwellv1.SubscribeRequest
 
 // newTransportHarness builds the two nodes with the given connections
 // declared on the local one; the dialer lands every connection on the
-// remote export, or fails with dialErr when set.
-func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error) *transportHarness {
+// remote export, or fails with dialErr when set. Each remote func registers
+// more of the remote node beside its home.
+func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
 	t.Helper()
 	return newFrontedTransportHarness(t, conns, dialErr, nil)
 }
@@ -123,6 +124,9 @@ func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, d
 	remoteReg := plugin.NewRegistry()
 	remoteReg.Register("rnode1", "home", remoteClient, nil)
 	remoteReg.SetLabel("rnode1", "home")
+	for _, r := range remote {
+		r(remoteReg, remoteStore)
+	}
 	remoteSrv := servertest.New(t, remoteReg, server.Config{ID: "rnode1"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config = server.ConnectionDoorServer(remoteSrv.ConnectionHandler())

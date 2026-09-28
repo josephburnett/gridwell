@@ -35,7 +35,12 @@ no call of its own having to fail. Retirement needs a verdict — an
 authoritative listing sweeps by `mem.Sweep`, a live non-authoritative one
 sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
 itself gone — fails the read outright at `cp.Info`, because the declared
-face is the plugin's own fact and nothing can supply it.
+face is the plugin's own fact and nothing can supply it. A source that
+changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
+node holds one stream per subprocess and publishes each change as the
+`GridChanged` a write would, so a grid open on screen refetches; a coded
+refusal is the same health fact (`Adapter.noteWatch`), and Unimplemented is
+a plugin that does not watch.
 
 **3. The transport** — `internal/connection/connection.go`. Reachability is
 remembered, not only announced when it changes, and every way a connection
@@ -445,6 +450,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
+| A plugin's `Watch` change is a `GridChanged` at the door, locally and through a connection; a refusal is health, Unimplemented is silence, a dropped stream re-opens, a respawn gets a fresh one | `internal/server/plugin_watch_seam_test.go`, `internal/pluginhost/watch_test.go` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |

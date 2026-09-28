@@ -135,7 +135,9 @@ and pages plugins and anyone else's alike, on the same footing. Each runs as a
 supervised subprocess (`internal/plugin`, the one owner of whether a plugin
 is alive): one that dies is respawned with a backoff, the down and up reach
 the strip as that namespace's health event, and while it is down its calls
-fail honestly — nothing answers for it. A plugin holds no node fact. It answers in its own stable string keys and never sees ids, layout, or
+fail honestly — nothing answers for it. While it is up the node holds one
+`Watch` stream to it (`pluginhost.Start`) and publishes each change the
+plugin sends as the `GridChanged` a write would have. A plugin holds no node fact. It answers in its own stable string keys and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to
 it as `state_dir` at spawn: its own memory of its source, under cache.db's
 contract — disposable, safe to delete, rewarmed by use, and never deleted by

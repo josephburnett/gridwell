@@ -62,15 +62,18 @@ type Adapter struct {
 	sup Supervisor
 
 	// hub fans this namespace's stream out: the supervisor's health, the
-	// source's, and the grids the adapter's own writes changed.
+	// source's, and the grids the adapter's own writes or the plugin's Watch
+	// stream changed.
 	hub *eventhub.Hub[*gridwellv1.Event]
 
-	// srcDark is what the last listing found, held only to announce the
-	// transitions: every read would otherwise republish an outage the client
-	// already knows about. noteSource is the one writer.
-	srcMu     sync.Mutex
-	srcDark   bool
-	srcDetail string
+	// srcDark is what the last listing found and watchRefused what the Watch
+	// stream last answered, held only to announce the transitions of the one
+	// fact they make (sourceDark): every read would otherwise republish an
+	// outage the client already knows about. setSource is the one writer.
+	srcMu        sync.Mutex
+	srcDark      bool
+	srcDetail    string
+	watchRefused string
 }
 
 // A plugin reaches the router as a Go value; the compiler is what says so.
@@ -146,8 +149,10 @@ func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 
 // Subscribe serves this namespace's event stream: the plugin's health, its
 // subprocess and its source alike, a GridChanged for a grid the adapter's own
-// writes changed, so a second pane repaints instead of holding a placement the
-// user has moved, and a GridFramingChanged for a collection's framing. A subscriber arriving while the plugin or its
+// writes or the plugin's Watch stream changed, so a second pane repaints
+// instead of holding a placement the user has moved or a listing the source
+// has left, a GridFramingChanged for a collection's framing, and a
+// TileChanged for a well's. A subscriber arriving while the plugin or its
 // source is down is told at once, since nothing else would tell it until
 // recovery; a healthy plugin announces nothing, because a health event costs
 // the client a full resync.
@@ -193,18 +198,38 @@ func (a *Adapter) emitHealth(healthy bool, detail string) {
 // publish and is not news about the source, so it is neither announced nor
 // remembered here.
 func (a *Adapter) noteSource(dark bool, detail string) {
-	if a.sup != nil {
-		if healthy, _ := a.sup.Health(); !healthy {
-			return
-		}
+	if !a.processUp() {
+		return
 	}
+	a.setSource(func() { a.srcDark, a.srcDetail = dark, detail })
+}
+
+// noteWatch records the Watch stream's verdict, "" for none. It is recorded
+// while the process is down too, so clearing a dead process's verdict needs
+// no announcement of its own.
+func (a *Adapter) noteWatch(detail string) {
+	a.setSource(func() { a.watchRefused = detail })
+}
+
+// setSource applies one edit and announces the transition, never while the
+// process is down: that is the supervisor's news.
+func (a *Adapter) setSource(edit func()) {
 	a.srcMu.Lock()
-	changed := dark != a.srcDark
-	a.srcDark, a.srcDetail = dark, detail
+	was, _ := a.sourceDarkLocked()
+	edit()
+	dark, detail := a.sourceDarkLocked()
 	a.srcMu.Unlock()
-	if changed {
+	if dark != was && a.processUp() {
 		a.emitHealth(!dark, detail)
 	}
+}
+
+func (a *Adapter) processUp() bool {
+	if a.sup == nil {
+		return true
+	}
+	healthy, _ := a.sup.Health()
+	return healthy
 }
 
 // sourceDark is what a subscriber arriving mid-outage is owed: nothing else
@@ -212,7 +237,14 @@ func (a *Adapter) noteSource(dark bool, detail string) {
 func (a *Adapter) sourceDark() (bool, string) {
 	a.srcMu.Lock()
 	defer a.srcMu.Unlock()
-	return a.srcDark, a.srcDetail
+	return a.sourceDarkLocked()
+}
+
+func (a *Adapter) sourceDarkLocked() (bool, string) {
+	if a.srcDark {
+		return true, a.srcDetail
+	}
+	return a.watchRefused != "", a.watchRefused
 }
 
 // sourceDetail names which half of the plugin the outage is. The client's
@@ -776,7 +808,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	return a.changedRow(ctx, id)
 }
 
-// changedRow is every store write's way back out: it reads the minted row back
+// changedRow is every tile write's way back out but framing's: it reads the minted row back
 // as the write's own answer and announces the grid it landed in, so no write
 // can forget to say what it moved.
 func (a *Adapter) changedRow(ctx context.Context, id int64) (*gridwellv1.TileResponse, error) {
@@ -816,10 +848,16 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	if err := a.mem.SetFraming(id, 0, f); err != nil {
 		return nil, err
 	}
-	t, err := a.changedRow(ctx, id)
+	// A well's framing is on its tile row and changes no listing, so it is
+	// announced as that tile, as home does, never as its grid: a refetch per
+	// pan.
+	t, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
 	if err != nil {
 		return nil, err
 	}
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: t.GetTile()},
+	}})
 	return &gridwellv1.SetFramingResponse{Tile: t.GetTile()}, nil
 }
 

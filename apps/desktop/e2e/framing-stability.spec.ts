@@ -324,6 +324,38 @@ test('a directory reframed mid-descent is still there after a reload', async ({ 
   ).toBeGreaterThan(0);
 });
 
+// A plugin well's framing is its tile's fact and changes no listing, so zooming
+// inside a directory refetches nothing of the grid that holds its doorway.
+test('reframing inside a plugin well refetches nothing of its parent', async ({ gw, window }) => {
+  const c = await gw.cadences();
+  await gw.enterPlugin('docs');
+  const root = (await gw.focused()).gridID;
+  const dir = (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'papers');
+  expect(dir, 'papers listed').toBeTruthy();
+  await gw.descendCell(Number(dir!.x ?? 0), Number(dir!.y ?? 0));
+  await expect.poll(async () => (await gw.focused()).gridID).not.toBe(root);
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+
+  const asked: string[] = [];
+  await window.route('**/gridwell.v1.Gridwell/GetGrid', async (r: any) => {
+    asked.push(r.request().postData() ?? '');
+    await r.continue();
+  });
+  const writes = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetFraming ?? 0));
+  const before = await writes();
+  await gw.wheelAtFocusedCenter(-240);
+  await gw.waitIdle();
+  await expect.poll(writes, { message: 'the zoom was persisted', timeout: 10_000 }).toBe(before + 1);
+  await settle(window, c.framingSaveMs);
+  await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
+  expect(
+    asked.filter((body) => body.includes(root)),
+    "the well's framing write refetches its parent's listing",
+  ).toEqual([]);
+});
+
 // One active surface per grid: a passive sibling pane never overwrites the
 // focused pane's persisted framing.
 test('a split sibling never overwrites the focused pane framing', async ({ gw, window }) => {
