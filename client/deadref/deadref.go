@@ -1,7 +1,9 @@
-// Package deadref decides whether a link points into a namespace this node
-// does not declare. Such a link is dead: greyed, never fetched, nothing said
-// about it. A declared namespace that is down is not dead, but pluginhealth's
-// and cache.SourceDark's. The verdict is the handshake roster's, read fresh.
+// Package deadref decides whether a link is dead: its path breaks at some hop
+// that does not declare the next namespace. Such a link is greyed, never
+// fetched again, nothing said about it. The first hop is judged from the
+// handshake roster, read fresh; a deeper one only the far node can judge, and
+// its answer is the dead verdict a read heard. A declared namespace that is
+// down is not dead, but pluginhealth's and cache.SourceDark's.
 package deadref
 
 import (
@@ -43,6 +45,13 @@ func Dead(id string, rows []*gridwellv1.PluginInfo, nodeID string) bool {
 	return true
 }
 
-func DeadTile(t *gridwellv1.Tile, rows []*gridwellv1.PluginInfo, nodeID string) bool {
-	return Dead(TargetID(t), rows, nodeID)
+// DeadTile reports that a link is dead: its target's namespace is undeclared
+// here, or answered is true for its target, meaning a read heard the dead
+// verdict from whichever hop broke (gwerr.IsDeadRef). answered may be nil.
+func DeadTile(t *gridwellv1.Tile, rows []*gridwellv1.PluginInfo, nodeID string, answered func(id string) bool) bool {
+	id := TargetID(t)
+	if id != "" && answered != nil && answered(id) {
+		return true
+	}
+	return Dead(id, rows, nodeID)
 }

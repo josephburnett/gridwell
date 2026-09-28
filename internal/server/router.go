@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/panelayout"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -37,7 +38,7 @@ func (rt *router) route(id string) (ns namespace.Namespace, local, uuid string, 
 	}
 	c, local, uuid, transit, found := rt.srv.resolve(id)
 	if !found {
-		return nil, "", "", false, status.Errorf(gcodes.NotFound, "no plugin %q", uuid)
+		return nil, "", "", false, undeclared(id)
 	}
 	return c, local, uuid, transit, nil
 }
@@ -161,7 +162,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			c, found = rt.srv.pluginReg.Transport()
 		}
 		if !found {
-			return nil, status.Errorf(gcodes.NotFound, "no plugin %q", hop)
+			return nil, gwerr.DeadRef(hop, "no plugin %q", hop)
 		}
 		resp, err := c.Handshake(ctx, &pb.HandshakeRequest{Namespace: rest})
 		if err != nil {
@@ -725,7 +726,7 @@ func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse
 func (rt *router) Probe(ctx context.Context, req *pb.ProbeRequest) (*pb.ProbeResponse, error) {
 	c, local, ok := rt.srv.clientForID(req.TileId)
 	if !ok {
-		return nil, status.Errorf(gcodes.NotFound, "no plugin for %q", req.TileId)
+		return nil, undeclared(req.TileId)
 	}
 	return c.Probe(ctx, &pb.ProbeRequest{TileId: local})
 }

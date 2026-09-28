@@ -19,6 +19,10 @@ const (
 	// Unreachable is the server never speaking. It stands until the same
 	// signals, or the next Backstop tick, whichever is first.
 	Unreachable
+	// Dead is a Refused whose verdict is that the key names a namespace some
+	// hop does not declare (gwerr.IsDeadRef). It stands and clears exactly as
+	// Refused does; Reads.Dead is what tells it apart.
+	Dead
 )
 
 // Reads is one kind of read the renderer asks for on every draw: its claims
@@ -29,10 +33,13 @@ type Reads struct {
 	claims      *claimSet
 	refused     *latch
 	unreachable *latch
+	// dead marks the refused keys whose verdict was Dead; it is never set
+	// without refused and is cleared with it.
+	dead *latch
 }
 
 func NewReads() *Reads {
-	return &Reads{claims: newClaimSet(Deadline), refused: newLatch(), unreachable: newLatch()}
+	return &Reads{claims: newClaimSet(Deadline), refused: newLatch(), unreachable: newLatch(), dead: newLatch()}
 }
 
 // Ask is claimSet.begin, refused too while key is latched.
@@ -51,17 +58,26 @@ func (r *Reads) Context() (context.Context, context.CancelFunc) {
 
 // Settle applies one read's verdict to key.
 func (r *Reads) Settle(key string, v Verdict) {
+	r.dead.clear(key)
 	switch v {
 	case Answered:
 		r.refused.clear(key)
 		r.unreachable.clear(key)
-	case Refused:
+	case Refused, Dead:
 		r.unreachable.clear(key)
 		r.refused.set(key)
+		if v == Dead {
+			r.dead.set(key)
+		}
 	case Unreachable:
 		r.refused.clear(key)
 		r.unreachable.set(key)
 	}
+}
+
+// Dead reports whether the server's last word on key was the dead verdict.
+func (r *Reads) Dead(key string) bool {
+	return r.dead.has(key)
 }
 
 // Failed reports whether key is latched either way.
@@ -103,6 +119,7 @@ func (r *Reads) ClearIf(match func(key string) bool) []string {
 		}
 	}
 	r.refused.clearIf(match)
+	r.dead.clearIf(match)
 	r.unreachable.clearIf(match)
 	return keys
 }
@@ -116,6 +133,7 @@ func (r *Reads) CancelIf(match func(key string) bool) []string {
 // in flight still answers.
 func (r *Reads) Reset() {
 	r.refused.reset()
+	r.dead.reset()
 	r.unreachable.reset()
 }
 

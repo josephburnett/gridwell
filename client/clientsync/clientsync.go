@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/client/inflight"
 )
 
@@ -24,6 +25,10 @@ const (
 	// OutcomeTransport is the server never speaking, so the local state is
 	// still the only truth the user has.
 	OutcomeTransport
+	// OutcomeDead is the server saying the id names a namespace some hop does
+	// not declare (gwerr.IsDeadRef): a dead link, a state rather than an
+	// error. A write reads it as OutcomeRejected.
+	OutcomeDead
 )
 
 // Of reads a non-connect error as Transport, coming from below the protocol,
@@ -47,7 +52,16 @@ func Of(err error) Outcome {
 	case connect.CodeUnavailable, connect.CodeDeadlineExceeded, connect.CodeCanceled:
 		return OutcomeTransport
 	}
+	if gwerr.IsDeadRef(ce) {
+		return OutcomeDead
+	}
 	return OutcomeRejected
+}
+
+// ReadSurfaces reports whether a read's failure goes on the error strip: every
+// failure but the dead verdict, which the dead face carries alone.
+func ReadSurfaces(o Outcome) bool {
+	return o != OutcomeOK && o != OutcomeDead
 }
 
 // Reaction is what a mutation's outcome calls for; success is the zero value.
@@ -70,7 +84,7 @@ func React(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
 		return Reaction{Refetch: true}
-	case OutcomeRejected, OutcomeTransport:
+	case OutcomeRejected, OutcomeDead, OutcomeTransport:
 		return Reaction{Log: true}
 	}
 	return Reaction{}
@@ -83,7 +97,7 @@ func ReactOptimistic(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
 		return Reaction{Refetch: true, DropLocal: true}
-	case OutcomeRejected:
+	case OutcomeRejected, OutcomeDead:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
 	case OutcomeTransport:
 		return Reaction{Log: true, Retry: true}
@@ -99,7 +113,7 @@ func ReactSave(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
-	case OutcomeRejected:
+	case OutcomeRejected, OutcomeDead:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
 	case OutcomeTransport:
 		return Reaction{Log: true, Retry: true}
@@ -158,13 +172,15 @@ func NoticesFor(r Reaction, o Outcome, ownWords bool) Notices {
 // ReactRead is the one table over a read's outcome for the asked key's
 // failure latch: an answer clears it, a transport failure latches it
 // Unreachable, which the backstop re-asks, and anything else is the server's
-// verdict, latched Refused until the entity changes.
+// verdict, latched Refused until the entity changes, or Dead for the dead one.
 func ReactRead(o Outcome) inflight.Verdict {
 	switch o {
 	case OutcomeOK:
 		return inflight.Answered
 	case OutcomeTransport:
 		return inflight.Unreachable
+	case OutcomeDead:
+		return inflight.Dead
 	}
 	return inflight.Refused
 }
@@ -217,5 +233,6 @@ func ReactPreview(err error, empty bool) PreviewReaction {
 	case IsUnimplemented(err):
 		return PreviewReaction{Settle: true}
 	}
-	return PreviewReaction{Surface: true, Latch: ReactRead(Of(err))}
+	o := Of(err)
+	return PreviewReaction{Surface: ReadSurfaces(o), Latch: ReactRead(o)}
 }

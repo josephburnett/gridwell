@@ -760,10 +760,11 @@ func (a *App) resize() {
 func (a *App) loadGrid(ctx context.Context, id string) error {
 	resp, err := a.cl.GetGrid(ctx, id)
 	// clientsync.ReactGridRead is the one table; this runs its arms.
-	r := clientsync.ReactGridRead(id, resp.GetGrid().GetId(), clientsync.Of(err))
+	o := clientsync.Of(err)
+	r := clientsync.ReactGridRead(id, resp.GetGrid().GetId(), o)
 	a.fetch.grids.Settle(id, r.Latch)
 	switch {
-	case err != nil:
+	case clientsync.ReadSurfaces(o):
 		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
 	case r.Renamed:
 		a.reportErr(errsurface.Error, "grid:"+id,

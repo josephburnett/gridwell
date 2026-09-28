@@ -301,21 +301,26 @@ order and retry, never a copy of a value. `client/wasm/mutate.go` has two
 paths: `postWriteContent` (the one write that claims a version) and
 `write`/`do` (everything else).
 
-**Dead links.** A link stores a qualified id into another namespace. When the
-node stops declaring that namespace — a plugin dropped from `server.yaml`, a
-connection stanza removed, a connection name retired — the link is dead:
-`client/deadref`
-reads the handshake roster the + menu is built from, asks the router's own peel
+**Dead links.** A link is a path of hops. When any hop stops declaring the
+next namespace — a plugin dropped from `server.yaml`, a connection stanza
+removed, a connection name retired, here or on any node along the way — the
+link is dead. The first hop is judged here: `client/deadref` reads the
+handshake roster the + menu is built from, asks the router's own peel
 (`rpc.OwnerNamespaceOf`) which namespace the id names, and answers from the
-node's declaration rather than from a failed fetch. A dead link is drawn grey
-and inert, is never fetched for, raises no notice, and does not descend; it can
-still be selected, read, and deleted. Dead is not dark: a declared plugin that
-is down and a declared connection that will not answer are health, and a
-chain through a declared connection is the far node's to judge, so it is
-never judged here. Dead is not always forever, either: a
-retired connection name never returns, but a namespace merely undeclared is
-dead only while it is undeclared — declare it again and every link through it
-is live again, unchanged.
+node's declaration without asking. A deeper hop is the far node's to judge,
+and its router or transport answers the dead verdict, `gwerr.DeadRef`: a
+NotFound carrying a `DeadReference` detail, which survives every hop and the
+Connect codec (`gwerr.IsDeadRef`). The client reads it as `OutcomeDead`,
+latches the read `inflight.Dead`, surfaces nothing, and `deadref.DeadTile`
+draws the link dead while that latch stands. A dead link is drawn grey and
+inert, is not fetched for again, raises no notice, and does not descend; it
+can still be selected, read, and deleted. Dead is not dark: a declared plugin
+that is down and a declared connection that will not answer are health, a
+transport-class answer, never the dead verdict. Dead is not always forever,
+either: a retired connection name never returns, but a namespace merely
+undeclared is dead only while it is undeclared — declare it again and every
+link through it is live again, unchanged; the dead latch clears on the same
+health change and reconnect that clear every read latch.
 
 **Events** flow only into the cache, and a root grid's framing into the
 doorways rooted at it (`door.Reframe`). Viewport writes live only in gesture
@@ -460,7 +465,8 @@ copy:
 | who owns this qualified id | `Server.resolve` + `server.router` |
 | which node runs a clone | `rpc.SharedOwner` |
 | how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellReferences` |
-| is this link dead | `deadref.DeadTile` over the handshake roster |
+| is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
+| is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | this event stream is established | `namespace.Follow` |
 | the trace line, its door and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |

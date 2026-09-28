@@ -478,7 +478,7 @@ func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
 }
 
 // thDeadLinks reports which of a grid's tiles the client draws dead, links
-// into a namespace this node does not declare; see client/deadref. It is the
+// broken at any hop; see client/deadref. It is the
 // one observable of the state, because the face is canvas pixels and the
 // absence of an RPC is an absence.
 func (a *App) thDeadLinks(_ js.Value, args []js.Value) any {

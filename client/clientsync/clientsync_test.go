@@ -242,6 +242,42 @@ func TestReactRead(t *testing.T) {
 	}
 }
 
+// deadAnswer is what the browser receives for a link broken at any hop: the
+// node's gwerr.DeadRef through the Connect codec.
+func deadAnswer() error {
+	dead := gwerr.DeadRef("toc", "connection: no connection %q", "toc")
+	return gwerr.ConnectDetails(dead, connect.NewError(connect.CodeNotFound, errors.New(status.Convert(dead).Message())))
+}
+
+// A dead link is a state: a read of it latches dead and surfaces nothing. A
+// write that meets it is refused like any other verdict, and a plain NotFound
+// stays a verdict that surfaces.
+func TestTheDeadVerdict(t *testing.T) {
+	if got := Of(deadAnswer()); got != OutcomeDead {
+		t.Fatalf("Of(dead) = %v, want OutcomeDead", got)
+	}
+	if got := Of(connect.NewError(connect.CodeNotFound, errors.New("no tile"))); got != OutcomeRejected {
+		t.Fatalf("Of(plain not_found) = %v, want OutcomeRejected", got)
+	}
+	if got := ReactRead(OutcomeDead); got != inflight.Dead {
+		t.Errorf("ReactRead(dead) = %v, want inflight.Dead", got)
+	}
+	if ReadSurfaces(OutcomeDead) || ReadSurfaces(OutcomeOK) || !ReadSurfaces(OutcomeRejected) || !ReadSurfaces(OutcomeTransport) {
+		t.Error("a read surfaces every failure except the dead verdict")
+	}
+	if got, want := ReactPreview(deadAnswer(), false), (PreviewReaction{Latch: inflight.Dead}); got != want {
+		t.Errorf("ReactPreview(dead) = %+v, want %+v", got, want)
+	}
+	if g := ReactGridRead("a", "", OutcomeDead); g.Latch != inflight.Dead || g.Store {
+		t.Errorf("ReactGridRead(dead) = %+v", g)
+	}
+	for _, react := range []func(Outcome) Reaction{React, ReactOptimistic, ReactSave} {
+		if got, want := react(OutcomeDead), react(OutcomeRejected); got != want {
+			t.Errorf("a write meeting the dead verdict = %+v, want the rejection %+v", got, want)
+		}
+	}
+}
+
 func TestReactPreviewTable(t *testing.T) {
 	unimpl := connect.NewError(connect.CodeUnimplemented, errors.New("no previews"))
 	down := connect.NewError(connect.CodeUnavailable, errors.New("dark"))

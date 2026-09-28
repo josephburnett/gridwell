@@ -27,11 +27,17 @@ func (a *App) deadNamespace(id string) bool {
 	return deadref.Dead(id, a.plugins, a.nodeID())
 }
 
-// deadLink reports that a tile links into a namespace this node does not
-// declare: the one thing the renderer, the descent guard and the fetch doors
-// all read.
+// deadLink reports that a tile's link is dead at some hop (deadref.DeadTile):
+// the one thing the renderer, the descent guard and the fetch doors all read.
 func (a *App) deadLink(n *gridwellv1.Tile) bool {
-	return deadref.DeadTile(n, a.plugins, a.nodeID())
+	return deadref.DeadTile(n, a.plugins, a.nodeID(), a.answeredDead)
+}
+
+// answeredDead reports that a read of id heard the dead verdict and that it
+// still stands; the latch owns when it stops standing.
+func (a *App) answeredDead(id string) bool {
+	return a.fetch.grids.Dead(id) || a.fetch.tiles.Dead(id) ||
+		a.fetch.contents.Dead(id) || a.fetch.previews.Dead(id)
 }
 
 // gridWritable reports whether the grid accepts new or edited tiles, and

@@ -39,7 +39,7 @@ func (s *Server) shellRoute(tileID string) (ns namespace.Namespace, local string
 	}
 	c, local, ok := s.clientForID(tileID)
 	if !ok {
-		return nil, "", status.Errorf(gcodes.NotFound, "no plugin for shell tile %q", tileID)
+		return nil, "", undeclared(tileID)
 	}
 	return c, local, nil
 }

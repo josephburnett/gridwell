@@ -125,7 +125,7 @@ func asConnectError(err error) error {
 		return nil
 	}
 	if st, ok := status.FromError(err); ok {
-		return connect.NewError(gwerr.ConnectCode(st.Code()), errors.New(st.Message()))
+		return gwerr.ConnectDetails(err, connect.NewError(gwerr.ConnectCode(st.Code()), errors.New(st.Message())))
 	}
 	return connect.NewError(gwerr.ConnectCode(gwerr.StatusCode(gwerr.ClassifyError(err))), err)
 }

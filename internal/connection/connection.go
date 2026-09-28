@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -286,13 +287,13 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	}
 	c, ok := s.conns[first]
 	if !ok {
-		// The row's tombstone mirrors retired_names, so a name merely no
-		// longer declared falls through to plain not-found and comes back
-		// when its stanza does.
+		// Both are the dead verdict. The row's tombstone mirrors
+		// retired_names, so only its wording says forever; a name merely no
+		// longer declared comes back when its stanza does.
 		if row, err := s.db.Get(ctx, first); err == nil && row.Deleted {
-			return nil, "", status.Errorf(codes.NotFound, "connection: connection %q was retired", first)
+			return nil, "", gwerr.DeadRef(first, "connection: connection %q was retired", first)
 		}
-		return nil, "", status.Errorf(codes.NotFound, "connection: no connection %q", first)
+		return nil, "", gwerr.DeadRef(first, "connection: no connection %q", first)
 	}
 	// A connection whose landing contradicts the stored one serves nothing:
 	// these ids were written against the node that is no longer there.

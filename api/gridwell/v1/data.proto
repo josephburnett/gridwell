@@ -521,6 +521,15 @@ message TileResponse {
   Tile tile = 1;
 }
 
+// DeadReference is the detail on a NotFound that means the id names a
+// namespace the answering node does not declare, at whatever hop that node
+// sits: the link is dead, a state and not an error. gwerr.DeadRef writes it and
+// gwerr.IsDeadRef reads it; namespace is the undeclared segment in the
+// answering node's frame.
+message DeadReference {
+  string namespace = 1;
+}
+
 // CreateTileRequest creates one tile of any kind. There is no version: the
 // tile does not exist yet. tile.kind selects which fields are meaningful:
 //   well  → child_grid_id set makes an exit well pointing at a grid in
