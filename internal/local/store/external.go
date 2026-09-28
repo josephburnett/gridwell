@@ -385,9 +385,29 @@ func (n *Namespace) SetContentZoom(tileID int64, zoom float64) error {
 	return n.exec(contentZoomSet, tileID, zoom)
 }
 
-// Retire tombstones one tile row: the delete-gesture path.
+// Retire tombstones one tile row: the delete-gesture path. The row stays so a
+// stale reference stays interpretable, but nothing resolves it to a face
+// again, so the screenshot it held is released.
 func (n *Namespace) Retire(tileID int64) error {
-	return n.exec(`tombstoned = 1`, tileID)
+	ctx := context.Background()
+	return n.s.withMutation(ctx, "Retire", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+		var preview sql.NullInt64
+		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`,
+			tileID, n.ns).Scan(&preview)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET tombstoned = 1, preview_blob_id = NULL WHERE id = ?`, tileID); err != nil {
+			return err
+		}
+		if preview.Valid {
+			return n.s.decBlobRefcount(ctx, tx, preview.Int64)
+		}
+		return nil
+	})
 }
 
 // RootFraming reads a root grid's framing, the row that owns it when there is
