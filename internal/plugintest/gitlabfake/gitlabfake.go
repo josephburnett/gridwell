@@ -132,8 +132,8 @@ func (s *Server) markDone(w http.ResponseWriter, id int64) {
 }
 
 // list answers GET /api/v4/todos: the todos in the requested state, paged by
-// per_page/page with X-Next-Page while more remain, which is the shape the
-// real API has.
+// per_page/page with X-Next-Page while more remain and X-Total-Pages on every
+// page, which is the shape the real API has.
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.calls++
@@ -159,6 +159,11 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	if end < len(sel) {
 		w.Header().Set("X-Next-Page", strconv.Itoa(page+1))
 	}
+	pages := 1
+	if per > 0 {
+		pages = max(1, (len(sel)+per-1)/per)
+	}
+	w.Header().Set("X-Total-Pages", strconv.Itoa(pages))
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(sel[start:end])
 }
