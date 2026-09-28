@@ -102,7 +102,14 @@ async function boot(): Promise<void> {
     onFocusStolen: () => rootWC.focus(),
   });
   registry = reg;
-  registerWebviewIpc(reg, rootWC, win);
+  pump = new MirrorPump(async (paneIds) => {
+    for (const paneId of paneIds) {
+      await reg.mirror(paneId);
+    }
+  });
+  // Through the module slot, so a set arriving after the quit stopped the pump
+  // cannot restart it.
+  registerWebviewIpc(reg, rootWC, win, (paneIds) => pump?.setPanes(paneIds));
 
   // startSidecar's own exit listener stops at boot, so without this one a later
   // crash leaves the app a zombie: window open, backend gone. An external
@@ -122,13 +129,6 @@ async function boot(): Promise<void> {
     (globalThis as { __gwRegistry?: WebviewRegistry; __gwSidecarPid?: number }).__gwRegistry = reg;
     (globalThis as { __gwSidecarPid?: number }).__gwSidecarPid = sidecar.child.pid;
   }
-
-  pump = new MirrorPump(async () => {
-    for (const paneId of reg.paneIds()) {
-      await reg.mirror(paneId);
-    }
-  });
-  pump.start();
 }
 
 // One app instance per user, alongside the server's per-home flock: a second

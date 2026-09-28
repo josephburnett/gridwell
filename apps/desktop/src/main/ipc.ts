@@ -23,6 +23,7 @@ export const CH = {
   choiceMenu: 'gw:choiceMenu', // ChoiceMenuArgs → string | null (the chosen id,
                                // null if dismissed). The renderer declares the
                                // rows; main knows nothing of what they mean.
+  setMirrored: 'gw:setMirrored', // MirroredArgs → void
 } as const;
 
 // Live url view's preload → main (send, fire-and-forget). The view swallows the
@@ -106,6 +107,12 @@ export interface PlaceArgs {
   history?: string;
   // Whether the tile survives ascent, which gates Freeze Page.
   durable?: boolean;
+}
+
+// The live panes whose face another pane shows, pane.Mirrored's answer, which
+// replaces the last set. Empty stops the mirror pump.
+export interface MirroredArgs {
+  paneIds: string[];
 }
 
 export interface SetZoomArgs {

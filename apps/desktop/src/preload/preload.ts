@@ -10,6 +10,7 @@ import {
   SetHiddenArgs,
   SetZoomArgs,
   ChoiceMenuArgs,
+  MirroredArgs,
   RemoveArgs,
   PaneRef,
   FreezeResult,
@@ -81,6 +82,10 @@ const api = {
   // chosen id or null. The renderer owns what the rows mean.
   showChoiceMenu(args: ChoiceMenuArgs): Promise<string | null> {
     return ipcRenderer.invoke(CH.choiceMenu, args);
+  },
+  // Which live panes main's mirror pump captures; see MirroredArgs.
+  setMirrored(args: MirroredArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.setMirrored, args);
   },
 
   ...listeners,

@@ -39,42 +39,102 @@ test('a slow renderer that answers inside the bound still yields its frame', asy
   assert.equal(attempt.kind, 'ok');
 });
 
-// A pump whose timer is a seam, so a test can read the delay it scheduled.
-function pumpHarness(tick: () => Promise<void>) {
+// A pump whose timer is a seam, so a test can read the delay it scheduled and
+// fire the rounds itself. Each timer is its own handle.
+function pumpHarness(tick: (paneIds: readonly string[]) => Promise<void> = async () => {}) {
   const scheduled: number[] = [];
-  let fire: (() => void) | null = null;
-  let cleared = 0;
+  const pending = new Map<number, () => void>();
+  let next = 0;
   const pump = new MirrorPump(tick, {
     setTimer: (fn, ms) => {
       scheduled.push(ms);
-      fire = fn;
-      return 'pump';
+      const id = ++next;
+      pending.set(id, fn);
+      return id;
     },
     clearTimer: (t) => {
-      assert.equal(t, 'pump');
-      cleared += 1;
+      pending.delete(t as number);
     },
   });
-  // A tick's tail runs off its own promise.
+  // A round's tail runs off its own promise.
   const settle = () => new Promise<void>((r) => setImmediate(r));
-  return { pump, scheduled, cleared: () => cleared, fire: () => fire!(), settle };
+  // Fires every timer due now, as the event loop would.
+  const fire = async () => {
+    const due = [...pending.entries()];
+    pending.clear();
+    for (const [, fn] of due) fn();
+    await settle();
+  };
+  return { pump, scheduled, armed: () => pending.size, fire, settle };
 }
 
-test('every round is scheduled at the declared cadence', async () => {
-  const h = pumpHarness(async () => {});
-  h.pump.start();
+test('a pump nobody names a pane to arms no timer', () => {
+  const h = pumpHarness();
+  assert.equal(h.scheduled.length, 0);
+  h.pump.setPanes([]);
+  assert.equal(h.scheduled.length, 0, 'an empty set is not a reason to wake');
+});
+
+test('a named set is captured, exactly, at the declared cadence', async () => {
+  const rounds: string[][] = [];
+  const h = pumpHarness(async (ids) => {
+    rounds.push([...ids]);
+  });
+  h.pump.setPanes(['p1', 'p3']);
   assert.deepEqual(h.scheduled, [MIRROR_INTERVAL_MS], 'the first round waits the cadence');
-  h.fire();
-  await h.settle();
-  h.fire();
-  await h.settle();
+  await h.fire();
+  await h.fire();
+  assert.deepEqual(rounds, [['p1', 'p3'], ['p1', 'p3']]);
   assert.deepEqual(
     h.scheduled,
     [MIRROR_INTERVAL_MS, MIRROR_INTERVAL_MS, MIRROR_INTERVAL_MS],
     'a round that finished must not pull the next one in',
   );
-  h.pump.stop();
-  assert.equal(h.cleared(), 1);
+});
+
+test('a changed set lands on the next round without a second timer', async () => {
+  const rounds: string[][] = [];
+  const h = pumpHarness(async (ids) => {
+    rounds.push([...ids]);
+  });
+  h.pump.setPanes(['p1']);
+  h.pump.setPanes(['p1', 'p2']);
+  assert.equal(h.armed(), 1, 'one pump, one timer');
+  await h.fire();
+  assert.deepEqual(rounds, [['p1', 'p2']]);
+});
+
+test('an emptied set stops the pump', async () => {
+  let rounds = 0;
+  const h = pumpHarness(async () => {
+    rounds += 1;
+  });
+  h.pump.setPanes(['p1']);
+  await h.fire();
+  h.pump.setPanes([]);
+  assert.equal(h.armed(), 0, 'no timer is left armed');
+  await h.fire();
+  assert.equal(rounds, 1, 'nothing is captured once nobody reads a face');
+});
+
+test('a stop and a restart during a round leave one pump running', async () => {
+  let release: () => void = () => {};
+  let rounds = 0;
+  const h = pumpHarness(
+    () =>
+      new Promise<void>((r) => {
+        rounds += 1;
+        release = r;
+      }),
+  );
+  h.pump.setPanes(['p1']);
+  await h.fire(); // the round is now in flight
+  h.pump.setPanes([]);
+  h.pump.setPanes(['p2']);
+  release();
+  await h.settle();
+  assert.equal(h.armed(), 1, 'the finished round must not chain a second timer beside the restart');
+  assert.equal(rounds, 1);
 });
 
 test('a round that throws does not end the pump', async () => {
@@ -83,13 +143,11 @@ test('a round that throws does not end the pump', async () => {
     ticks += 1;
     throw new Error('capturePage blew up');
   });
-  h.pump.start();
-  h.fire();
-  await h.settle();
+  h.pump.setPanes(['p1']);
+  await h.fire();
   assert.equal(ticks, 1);
-  assert.equal(h.scheduled.length, 2, 'a failed round still schedules the next');
-  h.fire();
-  await h.settle();
+  assert.equal(h.armed(), 1, 'a failed round still schedules the next');
+  await h.fire();
   assert.equal(ticks, 2, 'the pump keeps capturing after a failure');
 });
 
@@ -99,7 +157,7 @@ test('the default timer waits the declared cadence', async () => {
   const pump = new MirrorPump(async () => {
     at.push(Date.now() - started);
   });
-  pump.start();
+  pump.setPanes(['p1']);
   await new Promise<void>((r) => setTimeout(r, MIRROR_INTERVAL_MS * 2 + MIRROR_INTERVAL_MS / 2));
   pump.stop();
   assert.ok(at.length >= 2, `expected two rounds in ${MIRROR_INTERVAL_MS * 2.5}ms, got ${at.length}`);

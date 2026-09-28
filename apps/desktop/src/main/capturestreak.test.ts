@@ -41,7 +41,7 @@ const TABLE: { name: string; prev: StreakState; kind: AttemptKind; want: StreakD
   })),
   {
     name: '11. a third failure counts but does not report again',
-    // The pump captures every live pane on a timer; reporting per frame would
+    // The pump captures a mirrored pane on a timer; reporting per frame would
     // bury the log.
     prev: live(2),
     kind: 'timeout',

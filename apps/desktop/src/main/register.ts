@@ -15,6 +15,7 @@ import {
   ErrorEvent,
   NoticeSeverity,
   ChoiceMenuArgs,
+  MirroredArgs,
 } from './ipc';
 import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
@@ -34,11 +35,12 @@ function safeSend(wc: WebContents, channel: string, payload: unknown): void {
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the registry,
 // once, after the root window is created. win is the window toContentPoint
-// re-aims a press against.
+// re-aims a press against; onMirrored takes the mirror pump's pane set.
 export function registerWebviewIpc(
   registry: WebviewRegistry,
   rootWC: WebContents,
   win: BaseWindow,
+  onMirrored: (paneIds: string[]) => void,
 ): void {
   // The live view swallows the renderer's own mouse events, so its preload
   // sends each press here to be re-aimed at the canvas. What the renderer then
@@ -85,6 +87,10 @@ export function registerWebviewIpc(
 
   ipcMain.handle(CH.showMenu, (_e, a: PaneRef): void => {
     registry.showMenu(a.paneId);
+  });
+
+  ipcMain.handle(CH.setMirrored, (_e, a: MirroredArgs): void => {
+    onMirrored(a.paneIds);
   });
 
   // A menu of choices the renderer declared. The answer is the chosen id, or

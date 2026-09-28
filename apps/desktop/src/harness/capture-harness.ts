@@ -235,7 +235,7 @@ app.whenReady().then(async () => {
   // It also pins the delta sign: drag the finger up, the offset must increase.
   const rootWin = new BrowserWindow({ show: false });
   const reg3 = new WebviewRegistry(win, {});
-  registerWebviewIpc(reg3, rootWin.webContents, win);
+  registerWebviewIpc(reg3, rootWin.webContents, win, () => {});
   const TALL_URL =
     'data:text/html,' + encodeURIComponent('<body style="margin:0;height:20000px">tall</body>');
   await reg3.place('pane3', 'u1/44', TALL_URL, { x: 0, y: 0, width: 800, height: 600 });

@@ -386,6 +386,7 @@ func (a *App) draw() {
 	a.refreshRenderedOverlay()
 	a.syncShellOverlayPosition()
 	a.syncURLViews()
+	a.syncMirrors(rects)
 	// The reserved bottom bands, drawn last so nothing paints over them.
 	a.drawBottomBar()
 	a.drawErrStrip()

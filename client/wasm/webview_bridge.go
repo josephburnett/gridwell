@@ -200,6 +200,16 @@ func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title,
 	}
 }
 
+// bridgeSetMirrored replaces the set of live panes main's mirror pump
+// captures; empty stops it.
+func (a *App) bridgeSetMirrored(paneIDs []string) {
+	ids := make([]any, len(paneIDs))
+	for i, id := range paneIDs {
+		ids[i] = id
+	}
+	a.bridgeVerb("setMirrored", map[string]any{"paneIds": js.ValueOf(ids)}, nil, nil)
+}
+
 // bridgeGoBack is the bar slot's back button.
 func (a *App) bridgeGoBack(paneID string) {
 	a.bridgeVerb("goBack", map[string]any{"paneId": paneID}, nil, nil)

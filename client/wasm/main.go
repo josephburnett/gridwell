@@ -170,6 +170,9 @@ type App struct {
 	// shells owns the PTY lifecycle rules; this file hands it a dialer.
 	shells *shellstream.Registry
 
+	// mirrors is what each mirror was last told; see syncMirrors.
+	mirrors mirrorState
+
 	// shellMirrorPasses counts mirror ticks. e2e-only: the mirror writes into a
 	// cache and nothing else reports that it ran.
 	shellMirrorPasses int
