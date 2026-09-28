@@ -1,5 +1,7 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { test, expect } from './fixtures';
-import { createExitWell, tileAt } from './oracle';
+import { createExitWell, createLeafLink, placeTile, tileAt } from './oracle';
 import { makeRunDir } from './homes';
 
 // A link into a namespace this node does not declare is DEAD. Removing a
@@ -117,6 +119,51 @@ test.describe('a declared namespace is never dead', () => {
       .toBe(true);
     await window.waitForTimeout(1_000);
     expect(await deadLinks(window, f.gridID), 'a declared plugin is alive').toEqual([]);
+  });
+
+  // The last hop answers, and the key is not there any more: the path ends in
+  // nothing just the same. Reading the link's body hears the dead verdict,
+  // draws it dead, and says nothing; the same id reads again once the file is
+  // back and the namespace says a listing changed.
+  test('a link to a file that is gone renders dead, quietly, until it is back', async ({ gw, window }) => {
+    const file = path.join(FS_ROOT, 'gone.md');
+    fs.writeFileSync(file, '# gone\nsoon\n');
+    const files = (await gw.plugins()).find((p) => p.label === 'files')!;
+    const collection = files.menuEntries[0]!.gridID;
+    const entry = ((await gw.getGrid(collection)).tiles ?? []).find((t) => t.altText === 'gone.md');
+    expect(entry, 'the file is listed').toBeTruthy();
+    fs.rmSync(file);
+
+    await gw.enterPlugin('home');
+    const f = await gw.focused();
+    const cx = Math.round(f.cx) + 1;
+    const cy = Math.round(f.cy) + 1;
+    await createLeafLink(gw.origin, f.gridID, entry!.id, 'gone.md', cx, cy);
+
+    await expect
+      .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
+      .toBe(1);
+    const row = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
+    expect(row.reference, 'still a link').toBe(true);
+    expect(row.altText, 'the label survives').toBe('gone.md');
+    await window.waitForTimeout(1_500);
+    const e = await errors(window);
+    expect(e.notices, 'a gone target raises no notice').toEqual([]);
+    expect(e.stripH, 'and reserves no strip height').toBe(0);
+
+    // The file comes back, and a write into its grid is the namespace saying
+    // its listing changed.
+    fs.writeFileSync(file, '# gone\nback\n');
+    await placeTile(gw.origin, entry!.id, 0, collection, 9, 9, 1, 1);
+    await expect
+      .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
+      .toBe(0);
+    expect((await errors(window)).notices, 'and coming back is quiet too').toEqual([]);
+
+    await gw.deleteTileCell(cx, cy);
+    await expect
+      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'text', cx, cy))
+      .toBeUndefined();
   });
 });
 

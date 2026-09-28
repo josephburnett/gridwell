@@ -202,6 +202,27 @@ export async function createExitWell(
   return ((await res.json()) as { tile: Tile }).tile;
 }
 
+// A leaf link: one content tile shown here by its id. The node stores the
+// target as given, so this is also how a spec seeds a link to a gone key.
+export async function createLeafLink(
+  origin: string,
+  gridId: string,
+  linkTargetId: string,
+  altText: string,
+  x: number,
+  y: number,
+): Promise<Tile> {
+  const res = await fetch(`${origin}/${SERVICE}/CreateTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ gridId, tile: { kind: 'text', x, y, w: 1, h: 1, linkTargetId, altText } }),
+  });
+  if (!res.ok) {
+    throw new Error(`CreateTile(link -> ${linkTargetId}) failed: ${res.status} ${await res.text()}`);
+  }
+  return ((await res.json()) as { tile: Tile }).tile;
+}
+
 // writeContent for a text body, the foreign-writer specs' shape.
 export async function updateText(
   origin: string,
