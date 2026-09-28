@@ -636,10 +636,10 @@ func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 // forwardVerb is the shape every non-streaming verb takes: route the id the
 // request names, build the far node's own request around the local half of it,
 // call it there, and qualify the answer back into this frame. A verb owns only
-// its build — which field carries the id, and which crossing ids to strip —
-// and its qualifier.
+// its build — which field carries the id, or peeled for a request carrying more
+// than one — and its qualifier.
 func forwardVerb[Req, Resp any](ctx context.Context, s *Server, ref string,
-	build func(local, ns string) Req,
+	build func(local string, hop rpc.Hop) Req,
 	call func(namespace.Namespace, context.Context, Req) (Resp, error),
 	qualify func(ns string, resp Resp) Resp,
 ) (Resp, error) {
@@ -648,11 +648,17 @@ func forwardVerb[Req, Resp any](ctx context.Context, s *Server, ref string,
 	if err != nil {
 		return zero, err
 	}
-	resp, err := call(fw.client, ctx, build(local, fw.ns))
+	resp, err := call(fw.client, ctx, build(local, rpc.InboundHop(ref, "", true)))
 	if err != nil {
 		return zero, err
 	}
 	return qualify(fw.ns, resp), nil
+}
+
+// peeled is the build for a request carrying more than one id: every one
+// crosses by rpc.PeelRequest, the far node being a transit namespace.
+func peeled[Req proto.Message](req Req) func(string, rpc.Hop) Req {
+	return func(_ string, hop rpc.Hop) Req { return rpc.PeelRequest(hop, req) }
 }
 
 // asIs is the qualifier for an answer carrying no id of the far node's.
@@ -665,84 +671,51 @@ func (s *Server) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReque
 	if ref == "" {
 		ref = req.RootGridId
 	}
-	return forwardVerb(ctx, s, ref, func(local, _ string) *gridwellv1.SetFramingRequest {
-		out := proto.Clone(req).(*gridwellv1.SetFramingRequest)
-		if out.TileId != "" {
-			out.TileId = local
-		} else {
-			out.RootGridId = local
-		}
-		return out
-	}, namespace.Namespace.SetFraming, asIs)
+	return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.SetFraming, asIs)
 }
 
 func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
-	return forwardVerb(ctx, s, req.GridId, func(local, _ string) *gridwellv1.GetGridRequest {
+	return forwardVerb(ctx, s, req.GridId, func(local string, _ rpc.Hop) *gridwellv1.GetGridRequest {
 		return &gridwellv1.GetGridRequest{GridId: local}
 	}, namespace.Namespace.GetGrid, prependGridResp)
 }
 
 func (s *Server) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local, _ string) *gridwellv1.GetTileRequest {
+	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.GetTileRequest {
 		return &gridwellv1.GetTileRequest{TileId: local}
 	}, namespace.Namespace.GetTile, prependTileResp)
 }
 
 func (s *Server) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local, _ string) *gridwellv1.GetTilePreviewRequest {
+	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.GetTilePreviewRequest {
 		return &gridwellv1.GetTilePreviewRequest{TileId: local}
 	}, namespace.Namespace.GetTilePreview, asIs)
 }
 
 func (s *Server) ShellSessionAlive(ctx context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local, _ string) *gridwellv1.ShellSessionAliveRequest {
+	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.ShellSessionAliveRequest {
 		return &gridwellv1.ShellSessionAliveRequest{TileId: local}
 	}, namespace.Namespace.ShellSessionAlive, asIs)
 }
 
 func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.GridId, func(local, ns string) *gridwellv1.CreateTileRequest {
-		out := proto.Clone(req).(*gridwellv1.CreateTileRequest)
-		out.GridId = local
-		if out.Tile != nil {
-			// A qualified child or target crossing into the connection was
-			// qualified from this side, so strip our segment and let the
-			// remote see its own frame.
-			out.Tile.ChildGridId = stripPrefix(out.Tile.ChildGridId, ns)
-			out.Tile.LinkTargetId = stripPrefix(out.Tile.LinkTargetId, ns)
-		}
-		return out
-	}, namespace.Namespace.CreateTile, prependTileResp)
+	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.CreateTile, prependTileResp)
 }
 
 func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local, _ string) *gridwellv1.SetTileRequest {
-		out := proto.Clone(req).(*gridwellv1.SetTileRequest)
-		out.TileId = local
-		return out
-	}, namespace.Namespace.SetTile, prependTileResp)
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.SetTile, prependTileResp)
 }
 
 func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local, ns string) *gridwellv1.PlaceTileRequest {
-		out := proto.Clone(req).(*gridwellv1.PlaceTileRequest)
-		out.TileId = local
-		out.GridId = stripPrefix(out.GridId, ns)
-		return out
-	}, namespace.Namespace.PlaceTile, prependTileResp)
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.PlaceTile, prependTileResp)
 }
 
 func (s *Server) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local, ns string) *gridwellv1.CloneTileRequest {
-		out := proto.Clone(req).(*gridwellv1.CloneTileRequest)
-		out.TileId = local
-		out.DestGridId = stripPrefix(out.DestGridId, ns)
-		return out
-	}, namespace.Namespace.CloneTile, prependTileResp)
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.CloneTile, prependTileResp)
 }
 
 func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local, _ string) *gridwellv1.DeleteTileRequest {
+	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.DeleteTileRequest {
 		out := proto.Clone(req).(*gridwellv1.DeleteTileRequest)
 		out.TileId = local
 		return out
@@ -855,7 +828,7 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 // world. A connection that errors or times out contributes nothing, loudly.
 func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
-		return forwardVerb(ctx, s, q.ID, func(local, _ string) *gridwellv1.SearchRequest {
+		return forwardVerb(ctx, s, q.ID, func(local string, _ rpc.Hop) *gridwellv1.SearchRequest {
 			return &gridwellv1.SearchRequest{Query: "id:" + local, Limit: req.Limit}
 		}, namespace.Namespace.Search, prependSearchResp)
 	}
@@ -902,13 +875,4 @@ func prependTileResp(ns string, resp *gridwellv1.TileResponse) *gridwellv1.TileR
 		return resp
 	}
 	return &gridwellv1.TileResponse{Tile: rpc.TransitQualifyTiles(ns, []*gridwellv1.Tile{t})[0]}
-}
-
-// stripPrefix removes "<ns>/" from an id qualified from this frame, leaving
-// other ids untouched. rpc.ChainedThrough is the one owner of the question.
-func stripPrefix(id, ns string) string {
-	if rpc.ChainedThrough(id, ns) {
-		return id[len(ns)+1:]
-	}
-	return id
 }

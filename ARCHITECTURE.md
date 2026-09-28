@@ -41,9 +41,12 @@ An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
 The remainder passes through untouched, so any depth of mounting routes the
 same way. Ids going out are re-qualified once (`qualifyTilesFor`): a leaf
 prefixes and derives `Tile.reference`; transit prepends one segment and
-trusts the wire bits (`rpc.TransitQualifyTiles`). Qualification clones, and
-that clone is what keeps a message shared by pointer from being changed
-under another reader.
+trusts the wire bits (`rpc.TransitQualifyTiles`). Ids coming in are peeled
+once per hop (`rpc.PeelRequest`), every one a request carries, but only
+when it chains through the routed id's namespace, and a reference only at a
+transit hop: at a leaf, arriving qualified is what makes it a link.
+Qualification clones, and that clone is what keeps a message shared by
+pointer from being changed under another reader.
 
 A segment has one of three shapes, and `rpc.ShapeOf` is the one classifier
 every reader shares. Plugin and node ids are 7-char lowercase base36 with a
@@ -459,6 +462,7 @@ pane is inside" and do not spread the word.
 | Blobs immutable, content-addressed, refcounted | the blob layer |
 | "Is a link" is one derived fact | `qualifyTiles` |
 | Two wire surfaces cannot drift | both are codecs over one `namespace.Namespace` |
+| A hop peels in exactly what it prepends out | one field list, `rpc.tileIDFields`; `TestPeelRequestPeelsEveryIDOfEveryMultiIDRequest`, `TestIdsWrittenIntoAFarGridComeBackAsSent` |
 | An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
 | Text preview never re-wraps | `PreviewWindowFrame` takes only the tile's facts |

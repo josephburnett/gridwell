@@ -42,14 +42,9 @@ func (rt *router) route(id string) (ns namespace.Namespace, local, uuid string, 
 	return c, local, uuid, transit, nil
 }
 
-// stripUUID leaves bare and foreign-prefixed ids untouched, so a cross-plugin
-// reference stays qualified and the target plugin rejects it rather than
-// misresolving it locally.
-func stripUUID(id, uuid string) string {
-	if u, l, ok := rpc.SplitID(id); ok && u == uuid {
-		return l
-	}
-	return id
+// hop is the inbound peel for a request routed on the qualified id routed.
+func (rt *router) hop(routed string, transit bool) rpc.Hop {
+	return rpc.InboundHop(routed, rt.srv.cfg.ID, transit)
 }
 
 // tileResp applies the transit rule when the owning plugin is a node mount.
@@ -287,7 +282,7 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.Search(ctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, uuid), Limit: m.Limit})
+		resp, err := c.Search(ctx, &pb.SearchRequest{Query: rt.hop(m.Scope, transit).PeelSearchQuery(m.Query), Limit: m.Limit})
 		if err != nil {
 			return nil, err
 		}
@@ -298,7 +293,9 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 	// connection, in chains this node re-qualifies under its own id.
 	for _, n := range rt.srv.namespaces() {
 		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := n.NS.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, n.UUID), Limit: m.Limit})
+		// No routed id narrows a fan-out, so the hop is the namespace's own.
+		hop := rpc.Hop{Seg: n.UUID, Via: n.UUID, Transit: n.Transit}
+		resp, err := n.NS.Search(pctx, &pb.SearchRequest{Query: hop.PeelSearchQuery(m.Query), Limit: m.Limit})
 		cancel()
 		if err != nil {
 			continue // Unimplemented, a timeout, a dead plugin: no answer here
@@ -306,16 +303,6 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		out.Results = append(out.Results, qualifySearch(n.Transit, n.UUID, resp).Results...)
 	}
 	return out, nil
-}
-
-// localizeSearchQuery strips this plugin's uuid off an id: selector, through
-// the one grammar parser, so a plugin never sees a foreign-qualified id.
-func localizeSearchQuery(query, uuid string) string {
-	q := rpc.ParseSearchQuery(query)
-	if q.ID == "" {
-		return query
-	}
-	return "id:" + stripUUID(q.ID, uuid)
 }
 
 // qualifySearch re-applies the owning namespace to every id in a search
@@ -326,8 +313,8 @@ func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.Searc
 	})
 }
 
-// CreateTile resolves the owning plugin by destination grid and forwards; an
-// exit well's child_grid_id stays qualified.
+// CreateTile resolves the owning plugin by destination grid and forwards; how
+// an exit well's child_grid_id crosses is rpc.Hop's.
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
 	// The node-wide shell refusal lives at the router, before namespace
@@ -337,15 +324,14 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 		return nil, status.Error(gcodes.PermissionDenied,
 			"shell tiles are disabled on this node (server.yaml disable_shells)")
 	}
-	c, local, uuid, transit, err := rt.route(m.GridId)
+	c, _, uuid, transit, err := rt.route(m.GridId)
 	if err != nil {
 		return nil, err
 	}
 	if err := rt.mintReferences(ctx, m.Tile); err != nil {
 		return nil, err
 	}
-	m.GridId = local
-	resp, err := c.CreateTile(ctx, m)
+	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
@@ -401,9 +387,7 @@ func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.
 	if dst, _, _, _, ok := rt.srv.resolve(m.DestGridId); ok && dst != c {
 		return rt.cloneAcrossPlugins(ctx, m, c, local, uuid, transit)
 	}
-	m.TileId = local
-	m.DestGridId = stripUUID(m.DestGridId, uuid)
-	resp, err := c.CloneTile(ctx, m)
+	resp, err := c.CloneTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
@@ -434,7 +418,7 @@ func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest
 				"deep copy of a host-content well is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
 		}
 	}
-	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, dst, dstLocal, m.X, m.Y)
+	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, dst, rt.hop(m.DestGridId, dstTransit), dstLocal, m.X, m.Y)
 	if err != nil && out != nil {
 		// The partial is visible, so say what stopped the walk.
 		return nil, status.Errorf(gcodes.Aborted,
@@ -472,13 +456,11 @@ func writeAllContent(ctx context.Context, c namespace.Namespace, tileID string, 
 // SetTile is the single framing and preview writeback router; the owning
 // namespace dispatches on the target tile's kind.
 func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error) {
-	m := req
-	c, local, uuid, transit, err := rt.route(m.TileId)
+	c, _, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	m.TileId = local
-	resp, err := c.SetTile(ctx, m)
+	resp, err := c.SetTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
@@ -588,17 +570,17 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	if root {
 		ref = m.RootGridId
 	}
-	c, local, uuid, transit, err := rt.route(ref)
+	c, _, uuid, transit, err := rt.route(ref)
 	if err != nil {
 		return nil, err
 	}
 	out := &pb.SetFramingRequest{Cx: m.Cx, Cy: m.Cy, Zoom: m.Zoom}
 	if root {
-		out.RootGridId = local
+		out.RootGridId = ref
 	} else {
-		out.TileId = local
+		out.TileId = ref
 	}
-	resp, err := c.SetFraming(ctx, out)
+	resp, err := c.SetFraming(ctx, rpc.PeelRequest(rt.hop(ref, transit), out))
 	if err != nil {
 		if isUnimplemented(err) {
 			return &pb.SetFramingResponse{}, nil

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // The router's content streams and the placement verb. Reads route through
@@ -64,13 +65,10 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 
 // PlaceTile is the single placement writeback.
 func (rt *router) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error) {
-	m := req
-	c, local, uuid, transit, err := rt.route(m.TileId)
+	c, _, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	m.TileId = local
-	m.GridId = stripUUID(m.GridId, uuid)
-	resp, err := c.PlaceTile(ctx, m)
+	resp, err := c.PlaceTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
 	return rt.tileResp(uuid, transit, resp, err)
 }

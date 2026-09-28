@@ -6,9 +6,24 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// The transit qualification rule: a hop that fronts a whole namespace prepends
-// one segment to ids already qualified from the far side. Two layers apply it,
-// so it lives here and the hops cannot disagree about a chain's shape.
+// The id codec of a hop: outbound, a hop that fronts a whole namespace prepends
+// one segment to ids already qualified from the far side; inbound, it peels
+// that segment off every id it forwards. Two layers apply both directions, so
+// they live here and the hops cannot disagree about a chain's shape.
+
+// tileIDFields is every id a Tile carries, the one list both directions walk.
+// A ref names something elsewhere, a well's child or a leaf link's target: it
+// is optional, and a leaf keeps it qualified, because arriving qualified is
+// what makes it a link.
+var tileIDFields = []struct {
+	field func(*pb.Tile) *string
+	ref   bool
+}{
+	{func(t *pb.Tile) *string { return &t.Id }, false},
+	{func(t *pb.Tile) *string { return &t.GridId }, false},
+	{func(t *pb.Tile) *string { return &t.ChildGridId }, true},
+	{func(t *pb.Tile) *string { return &t.LinkTargetId }, true},
+}
 
 // TransitQualifyTiles prepends prefix to every id in a tile, an
 // already-qualified child included. The wire Reference bit rides verbatim,
@@ -18,16 +33,88 @@ func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {
 		qt := proto.Clone(t).(*pb.Tile)
-		qt.Id = QualifyID(prefix, t.Id)
-		qt.GridId = QualifyID(prefix, t.GridId)
-		if t.ChildGridId != "" {
-			qt.ChildGridId = QualifyID(prefix, t.ChildGridId)
-		}
-		if t.LinkTargetId != "" {
-			// A leaf link's target chains exactly like a qualified child.
-			qt.LinkTargetId = QualifyID(prefix, t.LinkTargetId)
+		for _, f := range tileIDFields {
+			if id := f.field(qt); *id != "" || !f.ref {
+				*id = QualifyID(prefix, *id)
+			}
 		}
 		out[i] = qt
+	}
+	return out
+}
+
+// Hop is one inbound peel, the inverse of the prepend. Seg is the segment the
+// hop removes, and only from an id served through the namespace chain Via; any
+// other id crosses verbatim, to be refused behind the hop rather than
+// misresolved. Transit says the namespace behind the hop fronts other nodes'
+// chains, where a reference is peeled like every id.
+type Hop struct {
+	Seg, Via string
+	Transit  bool
+}
+
+// InboundHop is the peel for a request routed on the qualified id routed, at
+// the node nodeID. Via is OwnerNamespaceOf's answer, so behind a node a
+// reference is peeled only when it chains through the same connection as the
+// routed id. A connection passes nodeID "": its namespace is the first segment.
+func InboundHop(routed, nodeID string, transit bool) Hop {
+	return Hop{Seg: UUIDOf(routed), Via: OwnerNamespaceOf(routed, nodeID), Transit: transit}
+}
+
+// PeelID removes the hop's segment from an id served through Via.
+func (h Hop) PeelID(id string) string {
+	if h.Seg != "" && ChainedThrough(id, h.Via) {
+		return id[len(h.Seg)+1:]
+	}
+	return id
+}
+
+// PeelTile returns a copy of t with every id in tileIDFields peeled, a ref
+// only at a transit hop.
+func (h Hop) PeelTile(t *pb.Tile) *pb.Tile {
+	if t == nil {
+		return nil
+	}
+	out := proto.Clone(t).(*pb.Tile)
+	for _, f := range tileIDFields {
+		if !f.ref || h.Transit {
+			id := f.field(out)
+			*id = h.PeelID(*id)
+		}
+	}
+	return out
+}
+
+// PeelSearchQuery peels an id: selector through the one grammar parser.
+func (h Hop) PeelSearchQuery(query string) string {
+	q := ParseSearchQuery(query)
+	if q.ID == "" {
+		return query
+	}
+	return "id:" + h.PeelID(q.ID)
+}
+
+// PeelRequest returns a copy of a request with every id it carries peeled, the
+// routed one included. A request carrying one id is its route's alone and
+// comes back an unchanged copy.
+func PeelRequest[T proto.Message](h Hop, req T) T {
+	out := proto.Clone(req).(T)
+	switch r := any(out).(type) {
+	case *pb.CreateTileRequest:
+		r.GridId = h.PeelID(r.GridId)
+		r.Tile = h.PeelTile(r.Tile)
+	case *pb.PlaceTileRequest:
+		r.TileId = h.PeelID(r.TileId)
+		r.GridId = h.PeelID(r.GridId)
+	case *pb.CloneTileRequest:
+		r.TileId = h.PeelID(r.TileId)
+		r.DestGridId = h.PeelID(r.DestGridId)
+	case *pb.SetTileRequest:
+		r.TileId = h.PeelID(r.TileId)
+		r.Tile = h.PeelTile(r.Tile)
+	case *pb.SetFramingRequest:
+		r.TileId = h.PeelID(r.TileId)
+		r.RootGridId = h.PeelID(r.RootGridId)
 	}
 	return out
 }
