@@ -73,6 +73,10 @@ func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb
 		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
 			GridId: QualifyID(prefix, p.GridChanged.GridId),
 		}}}
+	case *pb.Event_GridFramingChanged:
+		f := proto.Clone(p.GridFramingChanged).(*pb.GridFramingChanged)
+		f.GridId = QualifyID(prefix, f.GridId)
+		return &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: f}}
 	case *pb.Event_TileChanged:
 		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
 			Tile: qualifyTile(p.TileChanged.Tile),

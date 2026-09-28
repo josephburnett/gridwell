@@ -23,6 +23,8 @@ func EventKey(ev *pb.Event) string {
 	switch p := ev.GetPayload().(type) {
 	case *pb.Event_GridChanged:
 		return "g/" + p.GridChanged.GetGridId()
+	case *pb.Event_GridFramingChanged:
+		return "f/" + p.GridFramingChanged.GetGridId()
 	case *pb.Event_TileChanged:
 		return "t/" + p.TileChanged.GetTile().GetId()
 	case *pb.Event_TileRemoved:

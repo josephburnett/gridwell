@@ -79,3 +79,42 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 		}
 	}
 }
+
+// Every id an event names gains the hop's segment, at a leaf and in transit
+// alike, and the framing a GridFramingChanged carries rides verbatim.
+func TestQualifyEventIDsPrefixesEveryGridID(t *testing.T) {
+	framed := &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: &pb.GridFramingChanged{
+		GridId: "1", ViewCx: 1.5, ViewCy: -2.5, ViewZoom: 3}}}
+	for _, ev := range []*pb.Event{
+		QualifyEventIDs("u", framed, func(t *pb.Tile) *pb.Tile { return t }),
+		TransitQualifyEvent("u", framed),
+	} {
+		got := ev.GetGridFramingChanged()
+		want := &pb.GridFramingChanged{GridId: "u/1", ViewCx: 1.5, ViewCy: -2.5, ViewZoom: 3}
+		if !proto.Equal(got, want) {
+			t.Errorf("framing event = %v, want %v", got, want)
+		}
+	}
+	if framed.GetGridFramingChanged().GridId != "1" {
+		t.Error("qualification mutated its input")
+	}
+	changed := TransitQualifyEvent("u", &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "1"}}})
+	if changed.GetGridChanged().GridId != "u/1" {
+		t.Errorf("GridChanged id = %q", changed.GetGridChanged().GridId)
+	}
+}
+
+// An arm QualifyEventIDs does not name falls through unqualified, so its ids
+// reach the client in the namespace's own spelling and name nothing there.
+func TestQualifyEventIDsNamesEveryPayloadArm(t *testing.T) {
+	arms := (&pb.Event{}).ProtoReflect().Descriptor().Oneofs().ByName("payload").Fields()
+	for i := 0; i < arms.Len(); i++ {
+		fd := arms.Get(i)
+		ev := &pb.Event{}
+		r := ev.ProtoReflect()
+		r.Set(fd, r.NewField(fd))
+		if QualifyEventIDs("u", ev, func(t *pb.Tile) *pb.Tile { return t }) == ev {
+			t.Errorf("payload arm %s passes through unqualified", fd.Name())
+		}
+	}
+}
