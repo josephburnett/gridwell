@@ -147,7 +147,8 @@ func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 // Subscribe serves this namespace's event stream: the plugin's health, its
 // subprocess and its source alike, a GridChanged for a grid the adapter's own
 // writes changed, so a second pane repaints instead of holding a placement the
-// user has moved, and a GridFramingChanged for a collection's framing. A subscriber arriving while the plugin or its
+// user has moved, a GridFramingChanged for a collection's framing, and a
+// TileChanged for a well's. A subscriber arriving while the plugin or its
 // source is down is told at once, since nothing else would tell it until
 // recovery; a healthy plugin announces nothing, because a health event costs
 // the client a full resync.
@@ -776,7 +777,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	return a.changedRow(ctx, id)
 }
 
-// changedRow is every store write's way back out: it reads the minted row back
+// changedRow is every tile write's way back out but framing's: it reads the minted row back
 // as the write's own answer and announces the grid it landed in, so no write
 // can forget to say what it moved.
 func (a *Adapter) changedRow(ctx context.Context, id int64) (*gridwellv1.TileResponse, error) {
@@ -816,10 +817,16 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	if err := a.mem.SetFraming(id, 0, f); err != nil {
 		return nil, err
 	}
-	t, err := a.changedRow(ctx, id)
+	// A well's framing is on its tile row and changes no listing, so it is
+	// announced as that tile, as home does, never as its grid: a refetch per
+	// pan.
+	t, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
 	if err != nil {
 		return nil, err
 	}
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: t.GetTile()},
+	}})
 	return &gridwellv1.SetFramingResponse{Tile: t.GetTile()}, nil
 }
 
