@@ -221,7 +221,8 @@ func (s *Server) ConnectAll(ctx context.Context) {
 // Rows lists the declared connections as the handshake answers them, in
 // config order, each the one row shape a connection has (rpc.ConnectionRow):
 // the uuid is the bare name, which the node qualifies with its own id. A dark
-// one contributes zero framing.
+// one contributes zero framing, which the source cache in front reads as
+// silence and answers with the framing it remembers (sourcecache.keepFraming).
 func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 	out := make([]*gridwellv1.PluginInfo, 0, len(s.order))
 	for _, name := range s.order {

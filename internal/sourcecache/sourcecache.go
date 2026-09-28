@@ -354,10 +354,17 @@ func now() int64 { return time.Now().Unix() }
 
 // Handshake forwards the routed plugin list and remembers the answer per
 // namespace, so a remote pane's + menu is readable while the source is dark.
+// An answer can succeed and still say nothing about a doorway's framing: the
+// transport's own row for a dark connection does. That silence keeps the
+// remembered framing (keepFraming), since a visited grid never becomes
+// unvisited.
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	resp, err := c.Namespace.Handshake(ctx, in)
 	c.noteReach(err, sourceOfNS(in.GetNamespace()), nil)
 	if err == nil {
+		if old, ok := c.loadPluginList(ctx, in.GetNamespace()); ok {
+			keepFraming(resp, old)
+		}
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
 				ON CONFLICT(ns) DO UPDATE SET proto=excluded.proto`, in.GetNamespace(), b)
@@ -368,15 +375,50 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
-	var b []byte
-	if serr := c.db.QueryRowContext(ctx, `SELECT proto FROM pluginlists WHERE ns = ?`, in.GetNamespace()).Scan(&b); serr != nil {
-		return nil, err
-	}
-	cached := &pb.HandshakeResponse{}
-	if uerr := proto.Unmarshal(b, cached); uerr != nil {
+	cached, ok := c.loadPluginList(ctx, in.GetNamespace())
+	if !ok {
 		return nil, err
 	}
 	return cached, nil
+}
+
+func (c *Layer) loadPluginList(ctx context.Context, ns string) (*pb.HandshakeResponse, bool) {
+	var b []byte
+	if err := c.db.QueryRowContext(ctx, `SELECT proto FROM pluginlists WHERE ns = ?`, ns).Scan(&b); err != nil {
+		return nil, false
+	}
+	l := &pb.HandshakeResponse{}
+	if err := proto.Unmarshal(b, l); err != nil {
+		return nil, false
+	}
+	return l, true
+}
+
+// keepFraming gives every doorway of fresh that answers no framing (zero
+// zoom, rpc.Framing's "never visited") the framing old remembers for the same
+// grid.
+func keepFraming(fresh, old *pb.HandshakeResponse) {
+	known := map[string]rpc.Framing{}
+	for _, pl := range old.GetPlugins() {
+		if pl.GetRootViewZoom() != 0 {
+			known[pl.GetRootGridId()] = rpc.Framing{Cx: pl.GetRootViewCx(), Cy: pl.GetRootViewCy(), Zoom: pl.GetRootViewZoom()}
+		}
+		for _, e := range pl.GetMenuEntries() {
+			if e.GetViewZoom() != 0 {
+				known[e.GetGridId()] = rpc.Framing{Cx: e.GetViewCx(), Cy: e.GetViewCy(), Zoom: e.GetViewZoom()}
+			}
+		}
+	}
+	for _, pl := range fresh.GetPlugins() {
+		if f, ok := known[pl.GetRootGridId()]; ok && pl.GetRootViewZoom() == 0 {
+			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.Cx, f.Cy, f.Zoom
+		}
+		for _, e := range pl.GetMenuEntries() {
+			if f, ok := known[e.GetGridId()]; ok && e.GetViewZoom() == 0 {
+				e.ViewCx, e.ViewCy, e.ViewZoom = f.Cx, f.Cy, f.Zoom
+			}
+		}
+	}
 }
 
 // GetGrid serves first and refreshes behind: the remembered answer returns as
@@ -782,6 +824,9 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		c.upsertTile(ctx, p.TileChanged.GetTile())
 	case *pb.Event_TileRemoved:
 		c.deleteTile(ctx, p.TileRemoved.GetTileId())
+	case *pb.Event_GridFramingChanged:
+		fc := p.GridFramingChanged
+		c.reframe(ctx, fc.GetGridId(), rpc.Framing{Cx: fc.GetViewCx(), Cy: fc.GetViewCy(), Zoom: fc.GetViewZoom()})
 	case *pb.Event_PluginHealth:
 		// The source's own supervisor says whether it can be reached, so a
 		// room re-entered after a machine died says it is a memory without
@@ -854,10 +899,47 @@ func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.Til
 func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	resp, err := c.Namespace.SetFraming(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
-	if err == nil && resp.GetTile() != nil { // nil for a root-grid framing
+	switch {
+	case err != nil:
+	case in.RootGridId != "":
+		c.reframe(ctx, in.RootGridId, rpc.Framing{Cx: in.Cx, Cy: in.Cy, Zoom: in.Zoom})
+	default:
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
 	}
 	return resp, err
+}
+
+// reframe is the one writer of a root grid's remembered framing: it lands on
+// every remembered doorway rooted there (rpc.Reframe), from the source's event
+// and from a write the source accepted alike, which carry the same numbers.
+func (c *Layer) reframe(ctx context.Context, gridID string, f rpc.Framing) {
+	rows, err := c.db.QueryContext(ctx, `SELECT ns, proto FROM pluginlists`)
+	if err != nil {
+		c.noteCache("load pluginlists", err)
+		return
+	}
+	moved := map[string][]byte{}
+	for rows.Next() {
+		var ns string
+		var b []byte
+		if err := rows.Scan(&ns, &b); err != nil {
+			_ = rows.Close()
+			c.noteCache("load pluginlists", err)
+			return
+		}
+		l := &pb.HandshakeResponse{}
+		if proto.Unmarshal(b, l) != nil || !rpc.Reframe(gridID, f, l.Plugins) {
+			continue
+		}
+		if nb, merr := proto.Marshal(l); merr == nil {
+			moved[ns] = nb
+		}
+	}
+	_ = rows.Close()
+	for ns, b := range moved {
+		_, werr := c.db.ExecContext(ctx, `UPDATE pluginlists SET proto = ? WHERE ns = ?`, b, ns)
+		c.noteCache("reframe pluginlist", werr)
+	}
 }
 
 func (c *Layer) DeleteTile(ctx context.Context, in *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {

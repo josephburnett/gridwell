@@ -293,3 +293,27 @@ func (f Framing) SameAs(g Framing) bool {
 		math.Abs(f.Cy-g.Cy) < framingEpsilon &&
 		math.Abs(f.Zoom-g.Zoom) < framingEpsilon
 }
+
+// Reframe writes a root grid's framing onto every doorway rooted at gridID, a
+// row's own and a declared entry's alike: the copies a handshake carries, the
+// client's and the source cache's. It reports whether any value moved, by
+// SameAs, so the echo of a pane's own write is a no-op.
+func Reframe(gridID string, f Framing, plugins []*pb.PluginInfo) bool {
+	if gridID == "" {
+		return false
+	}
+	changed := false
+	for _, pl := range plugins {
+		if pl.RootGridId == gridID && !f.SameAs(Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}) {
+			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.Cx, f.Cy, f.Zoom
+			changed = true
+		}
+		for _, e := range pl.MenuEntries {
+			if e.GridId == gridID && !f.SameAs(Framing{Cx: e.ViewCx, Cy: e.ViewCy, Zoom: e.ViewZoom}) {
+				e.ViewCx, e.ViewCy, e.ViewZoom = f.Cx, f.Cy, f.Zoom
+				changed = true
+			}
+		}
+	}
+	return changed
+}

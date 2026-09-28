@@ -56,6 +56,8 @@ type transportHarness struct {
 	// dialed namespace is otherwise untouched, so the reads keep working —
 	// darkness here is exactly a dropped stream, not a dead node.
 	cut chan struct{}
+	// farDoor is the remote node's connection door; stopFarNode takes it away.
+	farDoor *httptest.Server
 
 	mu      sync.Mutex
 	dialErr error
@@ -65,6 +67,14 @@ type transportHarness struct {
 // cutFarStream ends the far node's event stream once. The connection's
 // fanInRemote sees namespace.Follow return and publishes one health event.
 func (h *transportHarness) cutFarStream() { close(h.cut) }
+
+// stopFarNode is the far machine going away: its door refuses new
+// connections and drops the open ones, so every call and the event stream
+// through the connection fail as a dead tunnel's do.
+func (h *transportHarness) stopFarNode() {
+	_ = h.farDoor.Listener.Close()
+	h.farDoor.CloseClientConnections()
+}
 
 // farLink is the dialed far namespace with a cuttable event stream. Every
 // other verb passes straight through to the real remote export.
@@ -91,6 +101,15 @@ func (f *farLink) Subscribe(ctx context.Context, in *gridwellv1.SubscribeRequest
 // remote export, or fails with dialErr when set.
 func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error) *transportHarness {
 	t.Helper()
+	return newFrontedTransportHarness(t, conns, dialErr, nil)
+}
+
+// newFrontedTransportHarness is newTransportHarness with front, when set,
+// between the local router and the transport, as the node puts its source
+// cache there.
+func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
+	front func(namespace.Namespace) namespace.Namespace) *transportHarness {
+	t.Helper()
 	ctx := context.Background()
 
 	h := &transportHarness{dialErr: dialErr, remoteShell: shellsvctest.New(), cut: make(chan struct{})}
@@ -109,6 +128,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	remoteHTTP.Config = server.ConnectionDoorServer(remoteSrv.ConnectionHandler())
 	remoteHTTP.Start()
 	t.Cleanup(remoteHTTP.Close)
+	h.farDoor = remoteHTTP
 	grpcConn, err := grpc.NewClient(strings.TrimPrefix(remoteHTTP.URL, "http://"),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -141,7 +161,10 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 	}
 	t.Cleanup(func() { _ = transport.Close() })
 	transport.ConnectAll(ctx)
-	tClient := transport
+	tClient := namespace.Namespace(transport)
+	if front != nil {
+		tClient = front(transport)
+	}
 	h.tClient = tClient
 
 	localStore, err := store.Open(":memory:")
