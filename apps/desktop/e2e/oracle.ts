@@ -144,6 +144,25 @@ export async function placeTile(
   }
 }
 
+// A foreign writer reframing a root grid: another device looking at the same
+// place.
+export async function setRootFraming(
+  origin: string,
+  rootGridId: string,
+  cx: number,
+  cy: number,
+  zoom: number,
+): Promise<void> {
+  const res = await fetch(`${origin}/${SERVICE}/SetFraming`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ rootGridId, cx, cy, zoom }),
+  });
+  if (!res.ok) {
+    throw new Error(`SetFraming(${rootGridId}) failed: ${res.status} ${await res.text()}`);
+  }
+}
+
 // A foreign writer deleting a row out from under the app: another device, or
 // this one in a pane the spec is not driving.
 export async function deleteTile(origin: string, tileId: string): Promise<void> {

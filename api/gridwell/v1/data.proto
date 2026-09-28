@@ -647,8 +647,21 @@ message SetFramingResponse {
 
 message SubscribeRequest {}
 
+// GridChanged says a grid's listing changed: the client refetches it.
 message GridChanged {
   string grid_id = 1;
+}
+
+// GridFramingChanged carries a root grid's new framing, the three numbers
+// SetFraming wrote to its row, in MenuEntry's field names. It is apart from
+// GridChanged because a framing write changes no listing: the client applies
+// it to the doorways rooted at grid_id and fetches nothing. A well's framing
+// lives on its tile and rides TileChanged.
+message GridFramingChanged {
+  string grid_id   = 1;
+  double view_cx   = 2;
+  double view_cy   = 3;
+  double view_zoom = 4;
 }
 
 message TileChanged {
@@ -679,6 +692,7 @@ message Event {
     TileChanged tile_changed = 2;
     TileRemoved tile_removed = 3;
     EventPluginHealth plugin_health = 4;
+    GridFramingChanged grid_framing_changed = 5;
   }
 }
 

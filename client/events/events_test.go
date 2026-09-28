@@ -35,6 +35,12 @@ func TestRouteTable(t *testing.T) {
 			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
 		}
 	}
+	// A root's framing is the whole fact: applied where it lands, it clears
+	// no latch and fetches nothing, since the listing did not change.
+	f := &pb.GridFramingChanged{GridId: "n/1", ViewCx: 1, ViewCy: 2, ViewZoom: 3}
+	if got := Route(&pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: f}}); got != (Plan{Reframe: f}) {
+		t.Errorf("a framed grid: got %+v, want only the framing to apply", got)
+	}
 	h := &pb.EventPluginHealth{PluginUuid: "n/c", Healthy: false, Detail: "gone"}
 	if got := Route(&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: h}}); got.Health != h {
 		t.Errorf("health rides the plan by value: %+v", got)

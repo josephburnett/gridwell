@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
@@ -32,6 +34,8 @@ func eventName(ev *gridwellv1.Event) string {
 	switch ev.Payload.(type) {
 	case *gridwellv1.Event_GridChanged:
 		return "grid_changed"
+	case *gridwellv1.Event_GridFramingChanged:
+		return "grid_framing_changed"
 	case *gridwellv1.Event_TileChanged:
 		return "tile_changed"
 	case *gridwellv1.Event_TileRemoved:
@@ -151,7 +155,9 @@ func TestEventSetFramingEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "SetFraming(tile)", got, map[string]int{"tile_changed": 1})
 }
 
-func TestEventSetRootFramingEmitsGridChanged(t *testing.T) {
+// A root's framing changes no listing, so it announces the three numbers it
+// wrote and never GridChanged, which would cost every client a refetch.
+func TestEventSetRootFramingEmitsGridFramingChanged(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	ch, cancel := s.SubscribeEvents()
@@ -165,8 +171,12 @@ func TestEventSetRootFramingEmitsGridChanged(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "SetFraming(root)", got, map[string]int{"grid_changed": 1})
+	evs := drainEvents(t, ch)
+	assertCounts(t, "SetFraming(root)", countKinds(evs), map[string]int{"grid_framing_changed": 1})
+	want := &gridwellv1.GridFramingChanged{GridId: root, ViewCx: 1, ViewCy: 2, ViewZoom: 0.5}
+	if len(evs) == 1 && !proto.Equal(evs[0].GetGridFramingChanged(), want) {
+		t.Errorf("SetFraming(root) announced %v, want %v", evs[0].GetGridFramingChanged(), want)
+	}
 }
 
 func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {

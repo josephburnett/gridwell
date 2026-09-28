@@ -197,6 +197,29 @@ func ByRoot(gridID string, plugins []*gridwellv1.PluginInfo) (*gridwellv1.Plugin
 	return nil, false
 }
 
+// Reframe writes a root grid's framing onto every doorway rooted at gridID,
+// the copy ByRoot reads it back from. It reports whether any value moved, by
+// rpc.Framing.SameAs, so the echo of a pane's own write is a no-op.
+func Reframe(gridID string, f rpc.Framing, plugins []*gridwellv1.PluginInfo) bool {
+	if gridID == "" {
+		return false
+	}
+	changed := false
+	for _, pl := range plugins {
+		if pl.RootGridId == gridID && !f.SameAs(rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}) {
+			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.Cx, f.Cy, f.Zoom
+			changed = true
+		}
+		for _, e := range pl.MenuEntries {
+			if e.GridId == gridID && !f.SameAs(rpc.Framing{Cx: e.ViewCx, Cy: e.ViewCy, Zoom: e.ViewZoom}) {
+				e.ViewCx, e.ViewCy, e.ViewZoom = f.Cx, f.Cy, f.Zoom
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
 func byUUID(u string, plugins []*gridwellv1.PluginInfo) (*gridwellv1.PluginInfo, bool) {
 	for _, pl := range plugins {
 		if pl.Uuid == u {

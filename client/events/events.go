@@ -9,8 +9,8 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
 
-// Plan is what one event asks for after cache.Apply. Empty strings ask for
-// nothing.
+// Plan is what one event asks for after cache.Apply. Empty strings and nil
+// ask for nothing.
 type Plan struct {
 	// DropPreviews names a removed tile whose decoded preview and rendered
 	// raster must be released, or deleting tiles leaks browser images.
@@ -27,6 +27,9 @@ type Plan struct {
 	// Health is a namespace's stream going dark or recovering; ReactHealth
 	// says what to do about it.
 	Health *pb.EventPluginHealth
+	// Reframe is a root grid's new framing, applied to its doorways by
+	// door.Reframe. It asks for no fetch: the listing did not change.
+	Reframe *pb.GridFramingChanged
 }
 
 // Route is the one table over the event kinds.
@@ -41,6 +44,8 @@ func Route(ev *pb.Event) Plan {
 	case *pb.Event_GridChanged:
 		id := p.GridChanged.GetGridId()
 		return Plan{ClearLatch: id, Fetch: id}
+	case *pb.Event_GridFramingChanged:
+		return Plan{Reframe: p.GridFramingChanged}
 	case *pb.Event_PluginHealth:
 		return Plan{Health: p.PluginHealth}
 	}

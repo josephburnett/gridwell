@@ -57,24 +57,11 @@ func (a *App) pluginByRoot(gridID string) (*gridwellv1.PluginInfo, bool) {
 	return door.ByRoot(gridID, a.allPlugins())
 }
 
-// cacheDoorwayFraming reconciles the handshake's copy of a doorway's framing
-// after a root-grid reframe commits. Keyed by grid, the same key pluginByRoot
-// resolved it under, so a row's own grid and a declared entry's never land on
-// each other's field.
-func (a *App) cacheDoorwayFraming(gridID string, f rpc.Framing) {
-	if gridID == "" {
-		return
-	}
-	for i := range a.plugins {
-		if a.plugins[i].RootGridId == gridID {
-			a.plugins[i].RootViewCx, a.plugins[i].RootViewCy, a.plugins[i].RootViewZoom = f.Cx, f.Cy, f.Zoom
-		}
-		for _, e := range a.plugins[i].MenuEntries {
-			if e.GridId == gridID {
-				e.ViewCx, e.ViewCy, e.ViewZoom = f.Cx, f.Cy, f.Zoom
-			}
-		}
-	}
+// cacheDoorwayFraming reconciles the handshake's copy of a doorway's framing,
+// after this client's own root-grid reframe commits and when another's
+// arrives as an event; door.Reframe owns which rows that is.
+func (a *App) cacheDoorwayFraming(gridID string, f rpc.Framing) bool {
+	return door.Reframe(gridID, f, a.allPlugins())
 }
 
 // pluginByUUID returns the plugin with the given, possibly chain-qualified,

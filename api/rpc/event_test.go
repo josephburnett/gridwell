@@ -28,6 +28,10 @@ func TestEventKey(t *testing.T) {
 		ev:   &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "u1"}}},
 		want: "h/u1",
 	}, {
+		name: "grid_framing_changed",
+		ev:   &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: &pb.GridFramingChanged{GridId: "g1", ViewZoom: 2}}},
+		want: "f/g1",
+	}, {
 		name: "no payload is unkeyable",
 		ev:   &pb.Event{},
 		want: "",
