@@ -139,3 +139,33 @@ test('the registry closing a view itself is not a page that closed itself', asyn
   assert.deepEqual(r.gone, [], 'remove() announced its own close as a view gone');
   assert.deepEqual(r.errors, []);
 });
+
+// A back-stack two entries deep whose active entry is the address, so place()
+// restores it rather than loading.
+const SLACK = 'https://app.slack.com/client';
+const STACK = JSON.stringify({ index: 1, entries: [{ url: 'https://app.slack.com/', title: 'a' }, { url: SLACK, title: 'b' }] });
+const settle = () => new Promise((r) => setImmediate(r));
+
+test('a restore cut short by the view going away is not a refused back-stack', async () => {
+  const r = rig();
+  await r.reg.place('w1:p327', 'u1/9', SLACK, BOUNDS, 0, STACK);
+  const wc = r.views[0].webContents!;
+  assert.equal(wc.restoreRejects.length, 1, 'place did not restore the stack');
+
+  // The takeover shape: the view is removed while its restore is in flight.
+  await r.reg.remove('w1:p327');
+  wc.restoreRejects[0](new Error(`ERR_FAILED (-2) loading '${SLACK}'`));
+  await settle();
+
+  assert.deepEqual(r.errors, [], 'a restore the registry cut short was reported as refused');
+});
+
+test('a live view whose stack Chromium refuses is still reported', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, STACK);
+  r.views[0].webContents!.restoreRejects[0](new Error(`ERR_FAILED (-2) loading '${SLACK}'`));
+  await settle();
+
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0].message, /^pane p1: stored back-stack refused \(ERR_FAILED/);
+});

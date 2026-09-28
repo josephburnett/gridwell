@@ -13,6 +13,7 @@ import {
   serializeHistory,
   parseHistory,
   reviveNavigation,
+  restoreRefused,
   restoreRefusedMessage,
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
@@ -334,6 +335,21 @@ test('restoreRefusedMessage names the pane, the reason and the consequence', () 
   // A rejection need not be an Error, and a reasonless one still reads.
   assert.ok(restoreRefusedMessage('p3', 'refused').includes('refused'));
   assert.ok(restoreRefusedMessage('p3', new Error('')).includes('no reason given'));
+});
+
+test('restoreRefused: only a live view whose stack Chromium turned down is a refusal', () => {
+  const failed = new Error("ERR_FAILED (-2) loading 'https://app.slack.com/client'");
+  const aborted = new Error("ERR_ABORTED (-3) loading 'https://app.slack.com/client'");
+  const cases: [string, boolean, unknown, boolean][] = [
+    ['a live view refused the stack', true, failed, true],
+    ['a reason with no code, on a live view', true, 'refused', true],
+    ['the view was closed or superseded under the restore', false, failed, false],
+    ['closed under it, whatever the code', false, aborted, false],
+    ['a newer navigation on the same view aborted it', true, aborted, false],
+  ];
+  for (const [name, live, err, want] of cases) {
+    assert.equal(restoreRefused(live, err), want, name);
+  }
 });
 
 test('toContentPoint subtracts the window chrome, not the view or the zoom', () => {

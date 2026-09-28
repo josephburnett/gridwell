@@ -12,6 +12,7 @@ import {
   composeZoom,
   serializeHistory,
   reviveNavigation,
+  restoreRefused,
   restoreRefusedMessage,
   URL_MIN_LAYOUT_WIDTH,
   shouldSurfaceFailLoad,
@@ -294,7 +295,9 @@ export class WebviewRegistry {
       view.webContents.navigationHistory
         .restore({ entries: nav.history.entries, index: nav.history.index })
         .catch((err: unknown) => {
-          this.reportErr(restoreRefusedMessage(paneId, err));
+          if (restoreRefused(this.entries.get(paneId) === e, err)) {
+            this.reportErr(restoreRefusedMessage(paneId, err));
+          }
         });
     } else {
       void view.webContents.loadURL(url);
