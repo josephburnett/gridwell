@@ -15,8 +15,9 @@
 // re-minting ids would.
 //
 // Unimplemented is always polite: Search means no results, ServeContent a 404,
-// Watch no events, WriteContent read-only, GetPreview no thumbnail, and Delete
-// refused. A minimal plugin is Info, List and ReadContent.
+// an undeclared Watch no events, WriteContent read-only, GetPreview no
+// thumbnail, and Delete refused. A minimal plugin is Info, List and
+// ReadContent.
 //
 // docs/plugin-authoring.md is this contract from the plugin's side.
 
@@ -144,7 +145,9 @@ type InfoResponse struct {
 	// own name and face. Declare both and the entries win; there is no
 	// privileged collection.
 	RootContext string `protobuf:"bytes,4,opt,name=root_context,json=rootContext,proto3" json:"root_context,omitempty"`
-	// watch: the plugin implements Watch (live change events).
+	// watch: the plugin implements Watch (live change events). It is the one
+	// owner: the node opens Watch only when this is set, and a plugin that sets
+	// it and answers Unimplemented is shown as unhealthy.
 	Watch bool `protobuf:"varint,5,opt,name=watch,proto3" json:"watch,omitempty"`
 	// writable: the plugin accepts WriteContent on some of its entries.
 	// Presentation writes never reach a plugin, so this is a content capability

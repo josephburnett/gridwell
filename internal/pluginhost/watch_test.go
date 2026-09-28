@@ -19,11 +19,22 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// watchPlugin answers Watch call n (from 1) with serve.
+// watchPlugin declares Watch, unless undeclared, and answers call n (from 1)
+// with serve.
 type watchPlugin struct {
 	oneEntryPlugin
-	calls atomic.Int32
-	serve func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error
+	undeclared bool
+	calls      atomic.Int32
+	serve      func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error
+}
+
+func (p *watchPlugin) Info(ctx context.Context, req *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	resp, err := p.oneEntryPlugin.Info(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	resp.Watch = !p.undeclared
+	return resp, nil
 }
 
 func (p *watchPlugin) Watch(_ *pluginv1.WatchRequest, s grpc.ServerStreamingServer[pluginv1.Change]) error {
@@ -111,22 +122,46 @@ func TestWatchChangesArriveAsGridChanges(t *testing.T) {
 	}
 }
 
-// A plugin that does not watch is healthy: asked once per process, never
-// again, and nothing is said about it.
-func TestWatchUnimplementedIsHealthyAndNotRetried(t *testing.T) {
-	p := &watchPlugin{serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
+// A plugin that does not declare Watch is healthy and never asked: the
+// declaration is the owner, not an Unimplemented answer.
+func TestWatchUndeclaredIsNeverAsked(t *testing.T) {
+	p := &watchPlugin{undeclared: true, serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
 		return status.Error(codes.Unimplemented, "method Watch not implemented")
 	}}
 	a, seen := watching(t, p, nil)
 	time.Sleep(1500 * time.Millisecond) // past the first Refollow backoff
-	if n := p.calls.Load(); n != 1 {
-		t.Errorf("Watch was opened %d times, want once", n)
+	if n := p.calls.Load(); n != 0 {
+		t.Errorf("Watch was opened %d times, want never", n)
 	}
 	if evs := collect(seen); len(evs) != 0 {
 		t.Errorf("a plugin that does not watch announced %v", evs)
 	}
 	if dark, detail := a.sourceDark(); dark {
 		t.Errorf("source dark (%q), want healthy", detail)
+	}
+}
+
+// A plugin that declares Watch and answers Unimplemented contradicts its own
+// handshake: that is the source's health, said once and not retried, because
+// the process answers the same for its life.
+func TestWatchDeclaredButUnimplementedIsHealthDown(t *testing.T) {
+	p := &watchPlugin{serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
+		return status.Error(codes.Unimplemented, "method Watch not implemented")
+	}}
+	a, seen := watching(t, p, nil)
+	down := await(t, seen).GetPluginHealth()
+	if down == nil || down.Healthy || !strings.Contains(down.Detail, "declares live updates") {
+		t.Fatalf("first event = %v, want health down naming the broken declaration", down)
+	}
+	time.Sleep(1500 * time.Millisecond) // past the first Refollow backoff
+	if n := p.calls.Load(); n != 1 {
+		t.Errorf("Watch was opened %d times, want once", n)
+	}
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("then %v, want nothing more", evs)
+	}
+	if dark, _ := a.sourceDark(); !dark {
+		t.Error("source healthy, want the broken declaration held as its health")
 	}
 }
 

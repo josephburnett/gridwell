@@ -15,8 +15,9 @@
 // re-minting ids would.
 //
 // Unimplemented is always polite: Search means no results, ServeContent a 404,
-// Watch no events, WriteContent read-only, GetPreview no thumbnail, and Delete
-// refused. A minimal plugin is Info, List and ReadContent.
+// an undeclared Watch no events, WriteContent read-only, GetPreview no
+// thumbnail, and Delete refused. A minimal plugin is Info, List and
+// ReadContent.
 //
 // docs/plugin-authoring.md is this contract from the plugin's side.
 

@@ -84,21 +84,30 @@ func (a *Adapter) goListen(ctx context.Context, label string, fn func(context.Co
 }
 
 // listenProcess is one subprocess's stream, re-opened by namespace.Refollow.
-// Unimplemented answers for the process's life, so the attempt holds and
-// nothing is retried or said. A transport failure re-opens quietly, the
-// process's death being the supervisor's news; any other code is the
-// source's health until a change arrives.
+// Only a process whose InfoResponse.watch declares it is asked; Unimplemented
+// from one that does is a broken declaration, held as the source's health for
+// the process's life. A transport failure re-opens quietly, the death being
+// the supervisor's news; any other code is health until a change arrives.
 func (a *Adapter) listenProcess(ctx context.Context, label string) {
 	namespace.Refollow{
 		Label: label,
 		Down:  func(string) {},
 		Up:    func() { a.noteWatch("") },
 		Attempt: func(ctx context.Context, established func()) error {
-			err := a.follow(ctx, established)
+			ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
+			if err != nil {
+				return err
+			}
+			if !ci.Watch {
+				<-ctx.Done()
+				return nil
+			}
+			err = a.follow(ctx, established)
 			switch {
 			case ctx.Err() != nil:
 				return err
 			case status.Code(err) == codes.Unimplemented:
+				a.noteWatch("declares live updates but does not implement them: " + err.Error())
 				<-ctx.Done()
 				return nil
 			case err != nil && !gwerr.IsTransport(err):
