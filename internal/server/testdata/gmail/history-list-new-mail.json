@@ -1,0 +1,19 @@
+{
+  "history": [
+    {
+      "id": "9912400",
+      "messages": [{"id": "18c2a1b3f4d5e7a1", "threadId": "18c2a1b3f4d5e7a1"}],
+      "messagesAdded": [
+        {"message": {"id": "18c2a1b3f4d5e7a1", "threadId": "18c2a1b3f4d5e7a1", "labelIds": ["UNREAD", "CATEGORY_PERSONAL", "INBOX"]}}
+      ]
+    },
+    {
+      "id": "9912401",
+      "messages": [{"id": "18c2a1b3f4d5e7a2", "threadId": "18c2a1b3f4d5e7a2"}],
+      "messagesAdded": [
+        {"message": {"id": "18c2a1b3f4d5e7a2", "threadId": "18c2a1b3f4d5e7a2", "labelIds": ["SENT"]}}
+      ]
+    }
+  ],
+  "historyId": "9912420"
+}
