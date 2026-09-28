@@ -300,3 +300,18 @@ func TestReactPreviewTable(t *testing.T) {
 		}
 	}
 }
+
+// A pane standing in a tile that is gone has no dead face: the grid draws a
+// dead link, but a place draws an empty box, so there the verdict is said.
+func TestAPlaceReadSaysTheDeadVerdict(t *testing.T) {
+	for v, want := range map[inflight.Verdict]bool{
+		inflight.Answered:    false,
+		inflight.Unreachable: false,
+		inflight.Refused:     true,
+		inflight.Dead:        true,
+	} {
+		if got := PlaceReadSurfaces(v); got != want {
+			t.Errorf("PlaceReadSurfaces(%v) = %v, want %v", v, got, want)
+		}
+	}
+}

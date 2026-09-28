@@ -842,8 +842,8 @@ func (a *App) fetchTileByID(tileID string) {
 		// id, because the same read's grid says it once under "grid:".
 		v := clientsync.ReactRead(o)
 		a.fetch.tiles.Settle(tileID, v)
-		switch v {
-		case inflight.Refused:
+		switch {
+		case clientsync.PlaceReadSurfaces(v):
 			// The asker is a crumb or a descent, which would otherwise draw an
 			// empty content box named "unnamed" and say nothing.
 			detail := "the row is gone"
@@ -851,7 +851,7 @@ func (a *App) fetchTileByID(tileID string) {
 				detail = rpcErrText(err)
 			}
 			a.reportErr(errsurface.Error, "tile:"+tileID, "tile unavailable: "+detail)
-		case inflight.Answered:
+		case v == inflight.Answered:
 			a.resolveErr("tile:" + tileID)
 			a.fetchGrid(tile.GridId)
 		}

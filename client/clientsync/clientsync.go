@@ -64,6 +64,14 @@ func ReadSurfaces(o Outcome) bool {
 	return o != OutcomeOK && o != OutcomeDead
 }
 
+// PlaceReadSurfaces reports whether a by-id tile read's latch goes on the
+// strip. That read is for a place a pane stands in, which has no dead face to
+// carry the dead verdict, so it surfaces like any other refusal; an outage is
+// the grid read's to name.
+func PlaceReadSurfaces(v inflight.Verdict) bool {
+	return v == inflight.Refused || v == inflight.Dead
+}
+
 // Reaction is what a mutation's outcome calls for; success is the zero value.
 type Reaction struct {
 	// Refetch is never set on Transport, where against a flapping link it
