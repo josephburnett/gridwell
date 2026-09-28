@@ -68,7 +68,7 @@ func (a *App) contentZoomKeyFromView(paneID, key string) {
 }
 
 func (a *App) contentZoomVerdict(p *pane.Pane, t *gridwellv1.Tile, key string) contentzoom.Verdict {
-	return contentzoom.Decide(t.Kind, rpc.PageContent(t), a.possiblyEphemeral(p, t),
+	return contentzoom.Decide(t.Kind, a.possiblyEphemeral(p, t),
 		key, contentzoom.Of(t.GetContentZoom()))
 }
 

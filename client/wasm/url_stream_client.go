@@ -34,11 +34,11 @@ type urlView struct {
 	// to resolve this tile's leaf grid.
 	anchor string
 	path   []string
-	// page marks a view on a plugin-served page, whose close skips the freeze
-	// writeback: the owning plugin derives its frozen face and stores nothing.
+	// page marks a view on a plugin-served page, whose writeback is
+	// urlview.Writeback's page arm.
 	page bool
-	// durable mirrors placeURLView's freeze eligibility: false for a page
-	// view or an ephemeral visit, whose state a tab close must not persist.
+	// durable mirrors placeURLView's freeze eligibility: false for an
+	// ephemeral visit, whose state a tab close must not persist.
 	durable bool
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
@@ -135,7 +135,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	if tile, ok := a.descendedTile(p); ok {
 		possiblyEphemeral = a.possiblyEphemeral(p, tile)
 	}
-	durable := urlview.Durable(page, possiblyEphemeral)
+	durable := urlview.Durable(possiblyEphemeral)
 	v.durable = durable
 	addr := a.webAddress(t)
 	a.emit(traceevent.URLOpen(p.ID, t.Id))
@@ -169,7 +169,7 @@ type freezeTarget struct {
 }
 
 // closeURLStream tears the live view down and, when freeze is true, persists
-// the frozen preview, address and title. An ephemeral tile's ascent passes
+// the capture urlview.Writeback shapes. An ephemeral tile's ascent passes
 // false, since the row is about to be deleted.
 func (a *App) closeURLStream(paneID string, freeze bool) {
 	a.closeURLStreamTo(paneID, nil, freeze)
@@ -200,7 +200,8 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	a.emit(traceevent.URLClose(paneID, tileID, freeze))
 	urlConsole("close pane=%s tile=%s", paneID, tileID)
 	a.bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
-		if urlview.PersistFreeze(freeze, v.page, jpeg, url, title) {
+		if c, ok := urlview.Writeback(freeze, v.page,
+			urlview.Capture{JPEG: jpeg, URL: url, Title: title, History: history}); ok {
 			gid := a.gridIDForPathFrom(anchor, path)
 			if target != nil {
 				gid = target.gridID
@@ -210,8 +211,8 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 			// holds the only copy of the capture.
 			req := &gridwellv1.SetTileRequest{TileId: tileID,
 				Tile: &gridwellv1.Tile{Kind: rpc.KindURL,
-					UrlString: url, AltText: title, UrlHistory: history},
-				Preview: jpeg}
+					UrlString: c.URL, AltText: c.Title, UrlHistory: c.History},
+				Preview: c.JPEG}
 			a.post(write{
 				label: "SetURLState", gid: gid, id: tileID,
 				source: "urlfreeze", failText: "page preview save failed",

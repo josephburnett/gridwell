@@ -40,37 +40,34 @@ func TestDecide(t *testing.T) {
 	cases := []struct {
 		name              string
 		kind              string
-		pageContent       bool
 		possiblyEphemeral bool
 		key               string
 		cur               float64
 		want              Verdict
 	}{
-		{"text in", rpc.KindText, false, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"text in unshifted", rpc.KindText, false, false, KeyInAlt, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"text out", rpc.KindText, false, false, KeyOut, 1, Verdict{Next: 1 / Step, Consume: true, Apply: true, Persist: true}},
-		{"text reset", rpc.KindText, false, false, KeyReset, 2.5, Verdict{Next: 1, Consume: true, Apply: true, Persist: true}},
-		{"url in", rpc.KindURL, false, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"shell in", rpc.KindShell, false, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"zero reads as unzoomed by Of, not here", rpc.KindText, false, false, KeyIn, Of(0), Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"in stops at Max", rpc.KindText, false, false, KeyIn, Max, Verdict{Next: Max, Consume: true, Apply: true, Persist: true}},
-		{"out stops at Min", rpc.KindText, false, false, KeyOut, Min, Verdict{Next: Min, Consume: true, Apply: true, Persist: true}},
-		{"ephemeral applies without a write", rpc.KindURL, false, true, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: false}},
-		{"a served page consumes and does nothing", rpc.KindURL, true, false, KeyIn, 1, Verdict{Consume: true}},
-		{"a served page, ephemeral too", rpc.KindURL, true, true, KeyOut, 1, Verdict{Consume: true}},
-		{"a well is not zoomable", rpc.KindWell, false, false, KeyIn, 1, Verdict{}},
-		{"a pane tile is not zoomable", rpc.KindPane, false, false, KeyIn, 1, Verdict{}},
-		{"an unknown kind is not zoomable", "sprocket", false, false, KeyIn, 1, Verdict{}},
-		{"a key outside the chord is not ours", rpc.KindText, false, false, "z", 1, Verdict{}},
-		{"no key is not ours", rpc.KindText, false, false, "", 1, Verdict{}},
+		{"text in", rpc.KindText, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
+		{"text in unshifted", rpc.KindText, false, KeyInAlt, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
+		{"text out", rpc.KindText, false, KeyOut, 1, Verdict{Next: 1 / Step, Consume: true, Apply: true, Persist: true}},
+		{"text reset", rpc.KindText, false, KeyReset, 2.5, Verdict{Next: 1, Consume: true, Apply: true, Persist: true}},
+		{"url in", rpc.KindURL, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
+		{"shell in", rpc.KindShell, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
+		{"zero reads as unzoomed by Of, not here", rpc.KindText, false, KeyIn, Of(0), Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
+		{"in stops at Max", rpc.KindText, false, KeyIn, Max, Verdict{Next: Max, Consume: true, Apply: true, Persist: true}},
+		{"out stops at Min", rpc.KindText, false, KeyOut, Min, Verdict{Next: Min, Consume: true, Apply: true, Persist: true}},
+		{"ephemeral applies without a write", rpc.KindURL, true, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: false}},
+		{"a well is not zoomable", rpc.KindWell, false, KeyIn, 1, Verdict{}},
+		{"a pane tile is not zoomable", rpc.KindPane, false, KeyIn, 1, Verdict{}},
+		{"an unknown kind is not zoomable", "sprocket", false, KeyIn, 1, Verdict{}},
+		{"a key outside the chord is not ours", rpc.KindText, false, "z", 1, Verdict{}},
+		{"no key is not ours", rpc.KindText, false, "", 1, Verdict{}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := Decide(c.kind, c.pageContent, c.possiblyEphemeral, c.key, c.cur)
+			got := Decide(c.kind, c.possiblyEphemeral, c.key, c.cur)
 			if got.Consume != c.want.Consume || got.Apply != c.want.Apply || got.Persist != c.want.Persist ||
 				math.Abs(got.Next-c.want.Next) > 1e-9 {
-				t.Errorf("Decide(%q, page=%v, eph=%v, %q, %v) = %+v, want %+v",
-					c.kind, c.pageContent, c.possiblyEphemeral, c.key, c.cur, got, c.want)
+				t.Errorf("Decide(%q, eph=%v, %q, %v) = %+v, want %+v",
+					c.kind, c.possiblyEphemeral, c.key, c.cur, got, c.want)
 			}
 		})
 	}
@@ -79,12 +76,12 @@ func TestDecide(t *testing.T) {
 // Every chord key decides, and nothing else does.
 func TestKeysAreTheChord(t *testing.T) {
 	for _, k := range []string{KeyIn, KeyInAlt, KeyOut, KeyReset} {
-		if v := Decide(rpc.KindText, false, false, k, 1); !v.Consume {
+		if v := Decide(rpc.KindText, false, k, 1); !v.Consume {
 			t.Errorf("chord key %q is not consumed by Decide", k)
 		}
 	}
 	for _, k := range []string{"1", "+ ", "=+", "z", "Enter", ""} {
-		if v := Decide(rpc.KindText, false, false, k, 1); v.Consume {
+		if v := Decide(rpc.KindText, false, k, 1); v.Consume {
 			t.Errorf("Decide consumed %q, which is not a chord key", k)
 		}
 	}
