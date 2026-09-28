@@ -59,9 +59,9 @@ func (a *App) pluginByRoot(gridID string) (*gridwellv1.PluginInfo, bool) {
 
 // cacheDoorwayFraming reconciles the handshake's copy of a doorway's framing,
 // after this client's own root-grid reframe commits and when another's
-// arrives as an event; door.Reframe owns which rows that is.
+// arrives as an event; rpc.Reframe owns which rows that is.
 func (a *App) cacheDoorwayFraming(gridID string, f rpc.Framing) bool {
-	return door.Reframe(gridID, f, a.allPlugins())
+	return rpc.Reframe(gridID, f, a.allPlugins())
 }
 
 // pluginByUUID returns the plugin with the given, possibly chain-qualified,

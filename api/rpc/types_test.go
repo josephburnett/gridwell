@@ -327,3 +327,36 @@ func TestDescentOf(t *testing.T) {
 		}
 	}
 }
+
+// A root grid's framing lives on every doorway rooted at it, a row's own and a
+// declared entry's alike, and on nothing else. Writing what is already there
+// changes nothing, so the pane that made the write never sees its own echo.
+func TestReframeWritesEveryDoorwayRootedAtTheGrid(t *testing.T) {
+	menu := []*pb.PluginInfo{
+		{Uuid: "loc", RootGridId: "loc/1",
+			MenuEntries: []*pb.MenuEntry{{Id: "trash", GridId: "loc/9"}, {Id: "same", GridId: "loc/1"}}},
+		{Uuid: "p", MenuEntries: []*pb.MenuEntry{{Id: "feed", GridId: "p/~ZmVlZA"}}},
+	}
+	f := Framing{Cx: 1.5, Cy: -2, Zoom: 0.75}
+	if !Reframe("loc/1", f, menu) {
+		t.Fatal("a new framing reported no change")
+	}
+	if pl := menu[0]; pl.RootViewCx != 1.5 || pl.RootViewCy != -2 || pl.RootViewZoom != 0.75 {
+		t.Errorf("the row rooted at the grid = %+v", pl)
+	}
+	if e := menu[0].MenuEntries[1]; e.ViewCx != 1.5 || e.ViewCy != -2 || e.ViewZoom != 0.75 {
+		t.Errorf("the entry declaring the grid = %+v", e)
+	}
+	if e := menu[0].MenuEntries[0]; e.ViewZoom != 0 {
+		t.Errorf("another grid's entry moved: %+v", e)
+	}
+	if Reframe("loc/1", f, menu) {
+		t.Error("an equal framing reported a change")
+	}
+	if !Reframe("p/~ZmVlZA", f, menu) || menu[1].MenuEntries[0].ViewZoom != 0.75 {
+		t.Errorf("a plugin collection's entry = %+v", menu[1].MenuEntries[0])
+	}
+	if Reframe("x/1", f, menu) || Reframe("", f, menu) {
+		t.Error("a grid no doorway roots reported a change")
+	}
+}

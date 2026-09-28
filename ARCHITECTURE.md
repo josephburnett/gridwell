@@ -298,7 +298,7 @@ dead only while it is undeclared — declare it again and every link through it
 is live again, unchanged.
 
 **Events** flow only into the cache, and a root grid's framing into the
-doorways rooted at it (`door.Reframe`). Viewport writes live only in gesture
+doorways rooted at it (`rpc.Reframe`). Viewport writes live only in gesture
 and transition code. An event landing mid-animation updates data and redraws;
 it cannot move the viewport.
 

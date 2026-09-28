@@ -28,7 +28,7 @@ type Plan struct {
 	// says what to do about it.
 	Health *pb.EventPluginHealth
 	// Reframe is a root grid's new framing, applied to its doorways by
-	// door.Reframe. It asks for no fetch: the listing did not change.
+	// rpc.Reframe. It asks for no fetch: the listing did not change.
 	Reframe *pb.GridFramingChanged
 }
 
