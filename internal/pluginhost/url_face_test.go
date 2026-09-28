@@ -122,12 +122,18 @@ func TestAPluginPageKeepsTheScreenshotItWasLeftWith(t *testing.T) {
 	if n := cp.previews.Load() - before; n != 0 {
 		t.Fatalf("the plugin was asked for a face the node holds (%d calls)", n)
 	}
+	if k := faceOf(t, cl, grid, "page.html").PreviewBlobId; k <= 0 {
+		t.Fatalf("the listing does not key the screenshot: %d", k)
+	}
 }
 
 func TestAPluginPictureIsTheFaceOnlyUntilTheFirstScreenshot(t *testing.T) {
 	cl, grid, cp := faceNode(t)
 	ctx := context.Background()
 	pic := faceOf(t, cl, grid, "pic.png")
+	if pic.PreviewBlobId >= 0 {
+		t.Fatalf("a plugin picture keys %d, want the negated stamp", pic.PreviewBlobId)
+	}
 	before := cp.previews.Load()
 	thumb, err := cl.GetTilePreview(ctx, pic.Id)
 	if err != nil || len(thumb) == 0 {
@@ -145,6 +151,9 @@ func TestAPluginPictureIsTheFaceOnlyUntilTheFirstScreenshot(t *testing.T) {
 	got, err := cl.GetTilePreview(ctx, pic.Id)
 	if err != nil || !bytes.Equal(got, shot) {
 		t.Fatalf("GetTilePreview = %d bytes (%v), want the screenshot", len(got), err)
+	}
+	if k := faceOf(t, cl, grid, "pic.png").PreviewBlobId; k <= 0 {
+		t.Fatalf("the screenshot does not win the face key: %d", k)
 	}
 }
 

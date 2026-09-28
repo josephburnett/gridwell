@@ -134,6 +134,9 @@ message Tile {
   // url-only: the http(s) URL plus a pointer at the last-frozen JPEG
   // preview (in the blobs table; hash-deduped across clones).
   string url_string = 20;
+  // preview_blob_id is the face's cache key, 0 for none, and GetTilePreview
+  // answers it. A plugin tile with no screenshot yet keys its plugin's
+  // picture below zero; the client only compares keys.
   int64 preview_blob_id = 21;
 
   reserved 22, 23, 24; // fs_path, pid, source_key

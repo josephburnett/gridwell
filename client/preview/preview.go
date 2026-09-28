@@ -6,6 +6,7 @@
 package preview
 
 import (
+	"math"
 	"sync"
 
 	"github.com/josephburnett/gridwell/client/resload"
@@ -31,10 +32,10 @@ type Cache struct {
 	entries map[string]*resload.Entry[int64]
 }
 
-// ungeneratedBlobID keys a face the server minted no generation for: a page's,
-// and bytes captured locally before the server blob id was known. Get matches
-// it against any non-zero expected blob id.
-const ungeneratedBlobID int64 = -1
+// localCaptureID keys bytes captured locally before the server's key for them
+// was known. Get matches it against any non-zero expected key. It sits below
+// every key the node hands out, a plugin picture's negative ones included.
+const localCaptureID int64 = math.MinInt64
 
 // NewCache requires a non-nil dec. onDecErr fires once per failed decode with
 // the tile id, so bytes that never become a picture reach the user instead of
@@ -48,9 +49,9 @@ func NewCache(dec Decoder, onDecErr func(tileID string)) *Cache {
 }
 
 // Get hits when the entry's image is loaded and its blob id matches wantBlobID
-// or is ungenerated. A wantBlobID of 0 means the server says the tile is
-// blank, so an entry keyed to a real blob id misses; an ungenerated entry
-// hits, being a local capture parked ahead of the server.
+// or is a local capture. A wantBlobID of 0 means the server says the tile is
+// blank, so an entry keyed to a real blob id misses; a local capture hits,
+// being parked ahead of the server.
 func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -58,7 +59,7 @@ func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	if !ok || !e.Ready() {
 		return nil, false
 	}
-	if e.Ident != ungeneratedBlobID && (wantBlobID == 0 || e.Ident != wantBlobID) {
+	if e.Ident != localCaptureID && (wantBlobID == 0 || e.Ident != wantBlobID) {
 		return nil, false
 	}
 	return e.Res, true
@@ -95,7 +96,7 @@ func (c *Cache) KnownEmpty(tileID string, blobID int64) bool {
 // is known: the URL stream's frames and the shell freeze snapshot. The entry
 // matches any non-zero wantBlobID until a specific Put supersedes it.
 func (c *Cache) PutWildcard(tileID string, bytes []byte, onReady func()) {
-	c.put(tileID, ungeneratedBlobID, bytes, onReady)
+	c.put(tileID, localCaptureID, bytes, onReady)
 }
 
 func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {

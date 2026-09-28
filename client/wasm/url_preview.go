@@ -65,8 +65,8 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 	// The native view paints over this box, so the JPEG here shows while it
 	// is parked during a gesture. Bounds are syncURLViews'.
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, preview.BlobKey(n), func() {
-			a.fetchURLPreview(rpc.ContentID(n), preview.BlobKey(n))
+		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, n.PreviewBlobId, func() {
+			a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 			label := urlTileLabel(n)
 			drawLabel(a.cctx, label, x+16, y+32, labelOpts{
 				font: "16px monospace", fill: a.pal.Muted, maxW: w - 32,
@@ -119,15 +119,14 @@ func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, da
 	})
 }
 
-// drawURLTile renders a URL tile in the parent grid view. A tile whose plugin
-// serves its page has a face the plugin derives and no address to name; both
-// ride the same two owners, preview.BlobKey and urlTileLabel.
+// drawURLTile renders a URL tile in the parent grid view. Its face is keyed
+// by the node (see pluginhost.faceKey) and its label is urlTileLabel's,
+// whoever serves the page.
 func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		key := preview.BlobKey(n)
-		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, key, func() {
+		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, n.PreviewBlobId, func() {
 			a.drawPreviewPlaceholder(urlTileLabel(n), x, y, w, h)
-			a.fetchURLPreview(rpc.ContentID(n), key)
+			a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 		})
 
 		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.URLLine, dashed, selected)

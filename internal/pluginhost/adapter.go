@@ -301,13 +301,27 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 		if listed {
 			pt.ServesPage = e.ServesPage
 			pt.TextPresentation = e.TextPresentation
-			pt.PreviewBlobId = e.PreviewStamp
+			pt.PreviewBlobId = faceKey(pt.PreviewBlobId, e.PreviewStamp)
 			pt.StatusDetail = e.StatusDetail
 			pt.UrlString = e.UrlString
 		}
 		out = append(out, pt)
 	}
 	return out, nil
+}
+
+// faceKey is a plugin tile's preview key, exactly an internet tile's rule: the
+// row's screenshot once one exists, until the next visit replaces it, and the
+// plugin's own picture only before the first. The plugin's stamp is negated so
+// the two number spaces never meet in the client's (tile, key) cache.
+func faceKey(blobID, stamp int64) int64 {
+	switch {
+	case blobID != 0:
+		return blobID
+	case stamp > 0:
+		return -stamp
+	}
+	return 0
 }
 
 // synthesized is one grid as the adapter derives it: the wire grid, the joined
@@ -856,8 +870,7 @@ func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContent
 	}
 }
 
-// GetTilePreview answers the face buildTiles keyed: the node's screenshot once
-// the row holds one, else the plugin's own picture.
+// GetTilePreview answers the face faceKey named.
 func (a *Adapter) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
