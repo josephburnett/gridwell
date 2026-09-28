@@ -17,6 +17,29 @@ byte-for-byte the same, and does every reference still resolve to the thing
 it named? That is why ids are never reassigned, clone is a deep copy, framing
 never bumps `version`, and there is no cross-plugin move.
 
+## The promises
+
+The rule above is the first of these. Each is one sentence a user could
+check without reading code, and each has a lens in the holistic assessment
+that enumerates the cases rather than reading for them. A difference the
+code makes that no promise or decision here allows is a hole, whatever the
+comment beside it says.
+
+- Things stay as you left them.
+- A tile behaves the same wherever its content comes from: yours, a
+  plugin's, or a far node's. The only difference is where the bytes come
+  from and who owns the address.
+- The node learns of a change by being told, never by asking on a clock. A
+  clock is for a source that cannot tell, and then it is the source's.
+- An open grid shows what its source knows. A change the source has learned
+  reaches every open view without a gesture.
+- A link is a path. It resolves one hop at a time along one-way connections,
+  to any depth, and a break at any hop reads as dead, never as an error.
+- What you can see, you can clone. What the holding node can reach, you can
+  link. Anything else is refused with the reason, never stored broken.
+- Nothing is done for nobody: no capture, fetch or walk runs unless
+  something on screen or in the store needs its result.
+
 ## How to work
 
 1. **One fact, one owner.** Before adding a field, map, or piece of state,
@@ -239,6 +262,11 @@ and that is where the worst bugs live.
 | `make check-e2e` | the full app as a black box | any `apps/desktop` change, anything under `client/wasm` or `web/`, the native layer, cross-seam behavior |
 | `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, the browser-serving path and its shell door |
 | `make check-connections` | the real binaries through a real ssh tunnel | plugin spawn, the dialer, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
+
+A feature is not done when its gates are green. It is done when a trace of
+ordinary use (the Dump logs row) has been read and every refused call,
+repeated ask and odd id in it is either fixed or a decision written here.
+The 2026-09-27 trace found four defects nine assessments had missed.
 
 If a change touches the native layer or the shim, `make check` passing means
 nothing. Run the electron or e2e gate and add a spec. The gates rebuild at
