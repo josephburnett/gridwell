@@ -152,7 +152,7 @@ func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 // writes or the plugin's Watch stream changed, so a second pane repaints
 // instead of holding a placement the user has moved or a listing the source
 // has left, a GridFramingChanged for a collection's framing, and a
-// TileChanged for a well's. A subscriber arriving while the plugin or its
+// TileChanged for every other write to one tile (changedTile). A subscriber arriving while the plugin or its
 // source is down is told at once, since nothing else would tell it until
 // recovery; a healthy plugin announces nothing, because a health event costs
 // the client a full resync.
@@ -762,7 +762,13 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err := a.mem.Place(id, req.X, req.Y, req.W, req.H); err != nil {
 		return nil, err
 	}
-	return a.changedRow(ctx, id)
+	// A placement is part of the grid's answer, so it announces the grid.
+	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
+	if err != nil {
+		return nil, err
+	}
+	a.emitGridChanged(resp.GetTile().GetGridId())
+	return resp, nil
 }
 
 // SetTile terminates the framing and capture arms at the store, the node's
@@ -805,18 +811,26 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
-	return a.changedRow(ctx, id)
+	t, err := a.changedTile(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
-// changedRow is every tile write's way back out but framing's: it reads the minted row back
-// as the write's own answer and announces the grid it landed in, so no write
-// can forget to say what it moved.
-func (a *Adapter) changedRow(ctx context.Context, id int64) (*gridwellv1.TileResponse, error) {
+// changedTile is the way back out of every write that lands on one tile row
+// and changes no listing: it reads the row back as the write's own answer and
+// announces that tile, as home does, so a client applies it in place rather
+// than refetching the grid.
+func (a *Adapter) changedTile(ctx context.Context, id int64) (*gridwellv1.Tile, error) {
 	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
-	if err == nil {
-		a.emitGridChanged(resp.GetTile().GetGridId())
+	if err != nil {
+		return nil, err
 	}
-	return resp, err
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: resp.GetTile()},
+	}})
+	return resp.GetTile(), nil
 }
 
 // SetFraming persists framing into this plugin's namespace of the store,
@@ -848,17 +862,11 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	if err := a.mem.SetFraming(id, 0, f); err != nil {
 		return nil, err
 	}
-	// A well's framing is on its tile row and changes no listing, so it is
-	// announced as that tile, as home does, never as its grid: a refetch per
-	// pan.
-	t, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
+	t, err := a.changedTile(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: t.GetTile()},
-	}})
-	return &gridwellv1.SetFramingResponse{Tile: t.GetTile()}, nil
+	return &gridwellv1.SetFramingResponse{Tile: t}, nil
 }
 
 func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
