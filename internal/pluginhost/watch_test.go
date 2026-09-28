@@ -1,0 +1,266 @@
+package pluginhost
+
+import (
+	"context"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/plugintest"
+)
+
+// watchPlugin answers Watch call n (from 1) with serve.
+type watchPlugin struct {
+	oneEntryPlugin
+	calls atomic.Int32
+	serve func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error
+}
+
+func (p *watchPlugin) Watch(_ *pluginv1.WatchRequest, s grpc.ServerStreamingServer[pluginv1.Change]) error {
+	return p.serve(p.calls.Add(1), s.Context(), s.Send)
+}
+
+func contextChanged(c string) *pluginv1.Change {
+	return &pluginv1.Change{Payload: &pluginv1.Change_ContextChanged{ContextChanged: &pluginv1.ContextChanged{Context: c}}}
+}
+
+func entryRemoved(c, key string) *pluginv1.Change {
+	return &pluginv1.Change{Payload: &pluginv1.Change_EntryRemoved{EntryRemoved: &pluginv1.EntryRemoved{Context: c, Key: key}}}
+}
+
+// watching builds an adapter over p behind a real gRPC hop, attaches a
+// subscriber, and only then starts listening, as Start does, so nothing the
+// plugin sends is published to nobody.
+func watching(t *testing.T, p pluginv1.PluginServer, sup Supervisor) (*Adapter, <-chan *gridwellv1.Event) {
+	t.Helper()
+	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = memStore.Close() })
+	cp, closer, err := plugintest.Loopback(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(cp, memStore.Namespace("p1"), sup)
+	ctx, cancel := context.WithCancel(context.Background())
+	seen := make(chan *gridwellv1.Event, 64)
+	go func() {
+		_ = a.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+			seen <- ev
+			return nil
+		})
+	}()
+	awaitSubscriber(t, a, seen)
+	stop := a.goListen(ctx, "test watch", a.listen)
+	t.Cleanup(func() {
+		cancel()
+		stop()
+		closer()
+	})
+	return a, seen
+}
+
+// await returns the next event, failing after a bound generous enough for one
+// Refollow backoff.
+func await(t *testing.T, seen <-chan *gridwellv1.Event) *gridwellv1.Event {
+	t.Helper()
+	select {
+	case ev := <-seen:
+		return ev
+	case <-time.After(10 * time.Second):
+		t.Fatal("no event arrived")
+		return nil
+	}
+}
+
+// A Change is the event a write through the adapter would have published: the
+// context's grid, under its derived address, whether or not the node has ever
+// listed it. A removal is the same GridChanged DeleteTile publishes, whose
+// refetch runs the listing's sweep.
+func TestWatchChangesArriveAsGridChanges(t *testing.T) {
+	p := &watchPlugin{serve: func(_ int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+		if err := send(contextChanged("all")); err != nil {
+			return err
+		}
+		if err := send(entryRemoved("never-listed", "k")); err != nil {
+			return err
+		}
+		<-ctx.Done()
+		return nil
+	}}
+	_, seen := watching(t, p, nil)
+	for _, want := range []string{gridAddr("all"), gridAddr("never-listed")} {
+		ev := await(t, seen)
+		if got := ev.GetGridChanged().GetGridId(); got != want {
+			t.Fatalf("event = %v, want GridChanged(%q)", ev, want)
+		}
+	}
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("then %v, want nothing more", evs)
+	}
+}
+
+// A plugin that does not watch is healthy: asked once per process, never
+// again, and nothing is said about it.
+func TestWatchUnimplementedIsHealthyAndNotRetried(t *testing.T) {
+	p := &watchPlugin{serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
+		return status.Error(codes.Unimplemented, "method Watch not implemented")
+	}}
+	a, seen := watching(t, p, nil)
+	time.Sleep(1500 * time.Millisecond) // past the first Refollow backoff
+	if n := p.calls.Load(); n != 1 {
+		t.Errorf("Watch was opened %d times, want once", n)
+	}
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("a plugin that does not watch announced %v", evs)
+	}
+	if dark, detail := a.sourceDark(); dark {
+		t.Errorf("source dark (%q), want healthy", detail)
+	}
+}
+
+// A stream that ends is re-opened, quietly: a dropped stream is not an outage
+// the user can do anything about.
+func TestWatchReopensAStreamThatEnds(t *testing.T) {
+	p := &watchPlugin{serve: func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+		if err := send(contextChanged("c" + string('0'+rune(n)))); err != nil {
+			return err
+		}
+		if n == 1 {
+			return nil
+		}
+		<-ctx.Done()
+		return nil
+	}}
+	_, seen := watching(t, p, nil)
+	for _, want := range []string{gridAddr("c1"), gridAddr("c2")} {
+		ev := await(t, seen)
+		if got := ev.GetGridChanged().GetGridId(); got != want {
+			t.Fatalf("event = %v, want GridChanged(%q)", ev, want)
+		}
+	}
+}
+
+// A coded refusal is the source's health, told to a subscriber already there
+// and to one arriving during it, and cleared by the first change a re-opened
+// stream delivers.
+func TestWatchVerdictIsTheSourceHealth(t *testing.T) {
+	p := &watchPlugin{serve: func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+		if n == 1 {
+			return status.Error(codes.PermissionDenied, "token lacks read_api")
+		}
+		if err := send(contextChanged("all")); err != nil {
+			return err
+		}
+		<-ctx.Done()
+		return nil
+	}}
+	a, seen := watching(t, p, nil)
+	down := await(t, seen).GetPluginHealth()
+	if down == nil || down.Healthy || !strings.Contains(down.Detail, "token lacks read_api") {
+		t.Fatalf("first event = %v, want the refusal as health down", down)
+	}
+	if dark, detail := a.sourceDark(); !dark || detail != down.Detail {
+		t.Errorf("a subscriber arriving now is owed (%v, %q), want the refusal", dark, detail)
+	}
+	if up := await(t, seen).GetPluginHealth(); up == nil || !up.Healthy {
+		t.Fatalf("second event = %v, want health up", up)
+	}
+	if got := await(t, seen).GetGridChanged().GetGridId(); got != gridAddr("all") {
+		t.Fatalf("third event names %q, want GridChanged(%q)", got, gridAddr("all"))
+	}
+}
+
+// fakeSup is a Supervisor the test flips.
+type fakeSup struct {
+	mu      sync.Mutex
+	healthy bool
+	fns     map[int]func(bool, string)
+	seq     int
+}
+
+func (s *fakeSup) Health() (bool, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.healthy, ""
+}
+
+func (s *fakeSup) OnHealth(fn func(bool, string)) func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seq++
+	id := s.seq
+	s.fns[id] = fn
+	return func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.fns, id)
+	}
+}
+
+func (s *fakeSup) set(healthy bool) {
+	s.mu.Lock()
+	s.healthy = healthy
+	fns := make([]func(bool, string), 0, len(s.fns))
+	for _, fn := range s.fns {
+		fns = append(fns, fn)
+	}
+	s.mu.Unlock()
+	for _, fn := range fns {
+		fn(healthy, "")
+	}
+}
+
+// One stream per process: the process going down ends its stream, and the
+// next one gets a fresh stream the moment it is up, not after a backoff.
+func TestWatchFollowsTheProcess(t *testing.T) {
+	opened := make(chan int32, 4)
+	ended := make(chan int32, 4)
+	p := &watchPlugin{serve: func(n int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
+		opened <- n
+		<-ctx.Done()
+		ended <- n
+		return nil
+	}}
+	sup := &fakeSup{healthy: true, fns: map[int]func(bool, string){}}
+	watching(t, p, sup)
+	wait := func(ch <-chan int32, want int32, what string) {
+		t.Helper()
+		select {
+		case n := <-ch:
+			if n != want {
+				t.Fatalf("stream %d %s, want %d", n, what, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("stream %d never %s", want, what)
+		}
+	}
+	wait(opened, 1, "opened")
+	sup.set(false)
+	wait(ended, 1, "ended")
+	select {
+	case n := <-opened:
+		t.Fatalf("stream %d opened while the process is down", n)
+	case <-time.After(200 * time.Millisecond):
+	}
+	sup.set(true)
+	select {
+	case n := <-opened:
+		if n != 2 {
+			t.Fatalf("stream %d opened, want 2", n)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("the respawned process got no stream inside half a second")
+	}
+}

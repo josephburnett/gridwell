@@ -61,7 +61,8 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.St
 // loadPlugin materializes one entry: the supervised subprocess and the adapter
 // joining it with the plugin's namespace of the node's store. The client is
 // built over the supervisor, so a respawn swaps the process underneath it, and
-// the supervisor is also the adapter's source of health.
+// the supervisor is also the adapter's source of health and says when the
+// plugin's Watch stream is re-opened.
 func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespace.Namespace, func(), error) {
 	cfg, err := spawnConfig(pc, home)
 	if err != nil {
@@ -76,7 +77,8 @@ func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespac
 		return nil, nil, err
 	}
 
-	return pluginhost.New(pluginv1.NewPluginClient(sup), st.Namespace(pc.ID), sup), sup.Close, nil
+	a, stop := pluginhost.Start(pluginv1.NewPluginClient(sup), st.Namespace(pc.ID), sup, "plugin "+pc.ID+" watch")
+	return a, func() { stop(); sup.Close() }, nil
 }
 
 // spawnConfig carries the plugin's own keys, its identity, and state_dir, the

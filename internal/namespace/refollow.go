@@ -1,9 +1,9 @@
 package namespace
 
 // Refollow is the loop around Follow: the stream ended, wait, dial it again,
-// and say so. The node's plugin fan-in and a connection's fan-in are its two
-// callers, so what "waiting" and "saying so" mean is decided once here rather
-// than spelled out again on each side.
+// and say so. The node's plugin fan-in, a connection's fan-in and a plugin's
+// Watch stream are its callers, so what "waiting" and "saying so" mean is
+// decided once here rather than spelled out again on each side.
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type Backoff struct {
 	Max   time.Duration
 }
 
-// DefaultBackoff is the policy both fan-ins run on. Only tests give a
+// DefaultBackoff is the policy every caller runs on. Only tests give a
 // Refollow a different one.
 var DefaultBackoff = Backoff{First: time.Second, Max: 30 * time.Second}
 

@@ -41,9 +41,9 @@ content: no config, no state, and every page generated in the plugin.
 - **Keys are forever**: a key names the same thing for the life of the
   plugin. Changing your key scheme orphans every stored reference.
 - **Unimplemented is fine**: a minimal plugin is `Info` + `List` +
-  `ReadContent`. Search = no results, ServeContent = 404, Watch = no
-  events, WriteContent = read-only, GetPreview = no thumbnail, Delete =
-  refused.
+  `ReadContent`. Search = no results, ServeContent = 404, Watch = the
+  node learns of changes only when it next lists, WriteContent =
+  read-only, GetPreview = no thumbnail, Delete = refused.
 - **Errors**: transport-shaped failures (Unavailable, DeadlineExceeded)
   mean "not right now" and the node serves what it has.
   Coded answers mean what they say. Never answer NotFound for something
@@ -93,6 +93,34 @@ it comes back as `ServeContent` on the same key with that name as the
 `subpath`. Past its address, a served page is a url tile like any other: the
 node keeps its screenshot, its standing freeze and its zoom, and you store
 none of them.
+
+## Changes
+
+Implement `Watch` if your source changes without the user: a background
+sync, a new mail, a file edited elsewhere. The node opens one stream when
+your process starts and holds it for the process's life, so hold it open
+until its context ends. Send a change when a listing you would give now
+differs from the last one you could have given:
+
+- `ContextChanged{context}`: that context's `List` would answer
+  differently — an entry arrived, moved, or changed its label, status or
+  stamp.
+- `EntryRemoved{context, key}`: the entry left that context. The node
+  treats it as `ContextChanged` for the context; the listing that follows
+  retires the key by the usual rule, so list honestly.
+
+A change is a hint, not data: the node publishes it to the clients showing
+that context, and they list again. Send one when something changed, never
+one per poll, and collapse a burst into one per context. A change nobody is
+looking at costs no listing, and naming a context the node has never listed
+is harmless.
+
+Leaving `Watch` unimplemented is healthy: the node asks once per process
+and says nothing. That answer is the declaration; the node does not read
+`InfoResponse.watch`. A stream that ends or fails transport-shaped is re-opened
+with backoff while you are up, and a change sent into no stream reaches
+nobody, so do not end it on purpose. Any other coded error is shown to
+the user as your source's health until the stream delivers a change.
 
 ## Previews
 
