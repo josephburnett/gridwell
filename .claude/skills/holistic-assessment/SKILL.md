@@ -1,6 +1,6 @@
 ---
 name: holistic-assessment
-description: Read the entire production codebase and assess it holistically against Gridwell's guiding principles, lens by lens, with a CLEAN / NOT CLEAN verdict per lens and named evidence.
+description: Assess the whole of Gridwell against its promises and its code quality — expectations written first without the code, a real trace read, a parity matrix filled, then every file read against them — with a CLEAN / NOT CLEAN verdict per lens and named evidence.
 ---
 
 # Holistic assessment
@@ -11,13 +11,47 @@ plugins and remote nodes feel native, the data is long-term stable, and the
 code stays maintainable by one person plus an AI. The output is a verdict per
 lens with evidence, not a vibe.
 
+Two kinds of defect exist and they are found differently. A defect of shape
+(two copies of a fact, a swallowed error, a decision in the shim) is found by
+reading the code. A defect of absence (an arm never built, a promise the
+code keeps in one namespace and not another) cannot be found by reading,
+because there is nothing to read, and a confident comment beside the gap
+reads like a decision. Nine runs of this skill missed that plugin url tiles
+could not keep a screenshot, could not be frozen and could not save a zoom,
+while a comment said the plugin owned the face. Absences are found by
+enumeration against a written expectation, and by watching the product run.
+Lenses 1–10 find shape. Lenses 11–13 and steps 2–4 find absence.
+
 **Cost warning.** This reads the entire production tree into context —
 roughly 600k tokens. It needs a 1M-context model with most of the window
 free. Do not run it casually; the user initiates it deliberately.
 
 ## Procedure
 
-1. **Enumerate** the production sources. Tests, generated code, e2e,
+The order matters: expectations and the trace come BEFORE the code is read,
+so the code cannot argue for itself.
+
+1. **Write the expectations without the code.** Spawn one agent that is
+   given ONLY `CLAUDE.md` (the rule, the promises, the decisions),
+   `api/gridwell/v1/data.proto`, `api/plugin/v1/plugin.proto`,
+   `docs/concepts.md` and `docs/freshness.md`, and is forbidden to open any
+   other file. It writes `expectations.md` into the scratchpad: for every
+   promise, the concrete behaviours that must hold; the parity matrix of
+   lens 11 with every cell filled as "same" or "decided: <CLAUDE.md line>";
+   for every wire verb and event, who must produce and consume it; every
+   duration the design declares. A cell or row it cannot fill from those
+   sources is written as "unspecified" — that is a finding too. This
+   document is the bar the code is held to. The checker never edits it.
+
+2. **Read a trace of ordinary use.** Ask the user for a fresh trace dump
+   (the Dump logs row) of a few minutes of real use, or use one they
+   supplied. Tabulate it: every rpc by verb and outcome, every error code,
+   every repeated ask of one id, every id whose shape is wrong (a doubled
+   segment, an empty namespace), every event followed by a refetch, every
+   plugin log line. Each anomaly is a finding until a decision in CLAUDE.md
+   explains it. The 2026-09-27 trace found four defects in an hour.
+
+3. **Enumerate** the production sources. Tests, generated code, e2e,
    harnesses, and test infrastructure are excluded from the full read — but
    not from lens 2's re-spelling greps, which cross that boundary on
    purpose:
@@ -28,20 +62,24 @@ free. Do not run it casually; the user initiates it deliberately.
      | sort
    ```
 
-2. **Read all of it.** Every file, in full, with the Read tool — no skimming,
+4. **Read all of it.** Every file, in full, with the Read tool — no skimming,
    no sampling, no delegating the reading to subagents (the whole point is one
    context holding the whole system). Also read `CLAUDE.md`,
    `ARCHITECTURE.md`, `internal/local/store/CLAUDE.md`, `docs/concepts.md`,
-   `docs/freshness.md`, and `docs/flake-ledger.md`.
+   `docs/freshness.md`, and `docs/flake-ledger.md`. Hold `expectations.md`
+   beside the code: where they disagree, one of them is wrong, and it is a
+   finding either way. A comment that explains why something is NOT done is
+   a claim, not a decision; it is a decision only if `CLAUDE.md` says so.
+   Otherwise it names a hole.
 
-3. **Assess through the lenses below.** For each: CLEAN or NOT CLEAN, with
+5. **Assess through the lenses below.** For each: CLEAN or NOT CLEAN, with
    the evidence named (`file:line` or package). A lens is NOT CLEAN on one
    real counterexample; suspicion without evidence is a note, not a verdict.
 
-4. **Report**: the per-lens table first, then the narrative (verdict /
-   strong / strains / net), then — if any lens is NOT CLEAN — what would
-   make it clean, concretely. If the user supplies an earlier assessment,
-   compare against it and say what moved.
+6. **Report**: the per-lens table first, the filled parity matrix second,
+   then the narrative (verdict / strong / strains / net), then — if any lens
+   is NOT CLEAN — what would make it clean, concretely. If the user supplies
+   an earlier assessment, compare against it and say what moved.
 
 ## The lenses and their bars
 
@@ -138,7 +176,43 @@ file has grown past ~1.5k lines without a recorded reason; `docs/` matches
 the code it describes. CLEAN when a fresh reader could reconstruct the
 invariants from the tree alone — name anything that would mislead them.
 
+**11. Parity: a tile is a tile wherever it comes from.** Fill the matrix.
+Rows: every tile kind (text, url, shell, well, pane) and every doorway
+(home grid, plugin collection, far home). Columns: everything a user can do
+to one — create, place, clone, link, delete, rename, descend, freeze, keep a
+screenshot, save zoom, save a text window, save framing, read content, write
+content, serve a page, search, see it update when its source changes, see it
+dead when its path breaks. One cell per owner: home store, plugin adapter,
+connection transit. Each cell is "same", "decided: CLAUDE.md line N", or a
+hole. The promise allows exactly one class of difference: where the bytes
+come from and who owns the address. CLEAN when the matrix has no hole and
+the expectations agent's matrix agrees with the code's.
+
+**12. Told, not asked.** Enumerate every timer in production code (`grep
+-rn 'NewTicker\|time.Tick(\|time.After(\|setInterval\|setTimeout'` over
+node, client, desktop and every plugin). Each is one of: a debounce or
+throttle over a user gesture; a reconnect or respawn backoff; a poll of a
+source that has no way to tell (named, with the source and the reason); or a
+hole. A poll of a source that CAN tell — a CLI with a watch command, an API
+with a history call, a stream the door declares but nobody opens — is a
+hole. A capture, fetch or walk that runs when nothing needs its result is a
+hole ("nothing is done for nobody"). CLEAN when every timer is one of the
+first three and every declared stream has a producer and a consumer.
+
+**13. The trace agrees with the design.** From step 2: every rpc refused
+with a code the caller could have known in advance (an Unimplemented asked
+once per tile), every id of the wrong shape, every ask repeated for one id,
+every event answered with a refetch of what the event could have carried,
+every write the user did not make. CLEAN when every anomaly in the trace is
+explained by a decision in CLAUDE.md, and the trace was taken against the
+tree being assessed.
+
 ## Notes
+
+- The expectations agent must not read the code, and the checker must not
+  edit `expectations.md`. When they disagree, report both readings; the user
+  decides which is wrong, and the answer becomes a promise, a decision, or a
+  fix.
 
 - The bar for CLEAN is a *found counterexample*, not perfection-by-assertion:
   say what you looked for and did not find.
