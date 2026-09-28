@@ -1064,6 +1064,11 @@ func (a *App) startSSE() {
 				a.emit(traceevent.EventRefetch(plan.Fetch))
 				a.fetchGrid(plan.Fetch)
 			}
+			if f := plan.Reframe; f != nil && a.cacheDoorwayFraming(f.GetGridId(),
+				rpc.Framing{Cx: f.GetViewCx(), Cy: f.GetViewCy(), Zoom: f.GetViewZoom()}) {
+				a.emit(traceevent.EventApplied(ev))
+				a.draw()
+			}
 			if plan.Health != nil {
 				a.reportPluginHealth(plan.Health)
 			}

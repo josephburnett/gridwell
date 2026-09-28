@@ -92,6 +92,12 @@ event can advance the row without ever advancing what this client is allowed
 to claim. A dirty entry is never overwritten by a fetch, a save response, or
 a delete: it is the one copy of unsaved typing.
 
+A root grid's framing is not in the cache: it rides the handshake, on the
+doorways rooted at that grid. Its write announces `GridFramingChanged`, which
+carries the three numbers, and `events.Route` applies them through
+`door.Reframe` and fetches nothing. `GridChanged` means the listing changed
+and nothing else.
+
 **7. The outbox and the retry** — `client/outbox/`, `client/inflight/`,
 `client/wasm/main.go`. `outbox.Send` is the one order and `outbox.Record` the
 one fork: a write parks a retry thunk under `Key{Op, ID}` when it is SENT, and
