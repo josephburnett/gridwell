@@ -93,6 +93,14 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 
 	h.stopFarNode()
 
+	// The connection's own row is the doorway the + menu and a landing read.
+	lp, err = h.localCl.Handshake(ctx)
+	if err != nil {
+		t.Fatalf("the node's handshake while dark: %v", err)
+	}
+	if got := framingOf(connectionRows(lp)[0]); !got.SameAs(theirs) {
+		t.Errorf("the connection row while dark = %+v, want the last pan %+v", got, theirs)
+	}
 	menu, err := h.localCl.HandshakeNS(ctx, farNS)
 	if err != nil {
 		t.Fatalf("the far node's menu while dark: %v", err)

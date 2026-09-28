@@ -354,10 +354,17 @@ func now() int64 { return time.Now().Unix() }
 
 // Handshake forwards the routed plugin list and remembers the answer per
 // namespace, so a remote pane's + menu is readable while the source is dark.
+// An answer can succeed and still say nothing about a doorway's framing: the
+// transport's own row for a dark connection does. That silence keeps the
+// remembered framing (keepFraming), since a visited grid never becomes
+// unvisited.
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	resp, err := c.Namespace.Handshake(ctx, in)
 	c.noteReach(err, sourceOfNS(in.GetNamespace()), nil)
 	if err == nil {
+		if old, ok := c.loadPluginList(ctx, in.GetNamespace()); ok {
+			keepFraming(resp, old)
+		}
 		if b, merr := proto.Marshal(resp); merr == nil {
 			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
 				ON CONFLICT(ns) DO UPDATE SET proto=excluded.proto`, in.GetNamespace(), b)
@@ -368,15 +375,50 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
-	var b []byte
-	if serr := c.db.QueryRowContext(ctx, `SELECT proto FROM pluginlists WHERE ns = ?`, in.GetNamespace()).Scan(&b); serr != nil {
-		return nil, err
-	}
-	cached := &pb.HandshakeResponse{}
-	if uerr := proto.Unmarshal(b, cached); uerr != nil {
+	cached, ok := c.loadPluginList(ctx, in.GetNamespace())
+	if !ok {
 		return nil, err
 	}
 	return cached, nil
+}
+
+func (c *Layer) loadPluginList(ctx context.Context, ns string) (*pb.HandshakeResponse, bool) {
+	var b []byte
+	if err := c.db.QueryRowContext(ctx, `SELECT proto FROM pluginlists WHERE ns = ?`, ns).Scan(&b); err != nil {
+		return nil, false
+	}
+	l := &pb.HandshakeResponse{}
+	if err := proto.Unmarshal(b, l); err != nil {
+		return nil, false
+	}
+	return l, true
+}
+
+// keepFraming gives every doorway of fresh that answers no framing (zero
+// zoom, rpc.Framing's "never visited") the framing old remembers for the same
+// grid.
+func keepFraming(fresh, old *pb.HandshakeResponse) {
+	known := map[string]rpc.Framing{}
+	for _, pl := range old.GetPlugins() {
+		if pl.GetRootViewZoom() != 0 {
+			known[pl.GetRootGridId()] = rpc.Framing{Cx: pl.GetRootViewCx(), Cy: pl.GetRootViewCy(), Zoom: pl.GetRootViewZoom()}
+		}
+		for _, e := range pl.GetMenuEntries() {
+			if e.GetViewZoom() != 0 {
+				known[e.GetGridId()] = rpc.Framing{Cx: e.GetViewCx(), Cy: e.GetViewCy(), Zoom: e.GetViewZoom()}
+			}
+		}
+	}
+	for _, pl := range fresh.GetPlugins() {
+		if f, ok := known[pl.GetRootGridId()]; ok && pl.GetRootViewZoom() == 0 {
+			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.Cx, f.Cy, f.Zoom
+		}
+		for _, e := range pl.GetMenuEntries() {
+			if f, ok := known[e.GetGridId()]; ok && e.GetViewZoom() == 0 {
+				e.ViewCx, e.ViewCy, e.ViewZoom = f.Cx, f.Cy, f.Zoom
+			}
+		}
+	}
 }
 
 // GetGrid serves first and refreshes behind: the remembered answer returns as

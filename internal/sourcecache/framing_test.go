@@ -222,3 +222,37 @@ func TestATileEventReframesTheRememberedWell(t *testing.T) {
 		t.Errorf("the remembered well = %+v, want the event's framing", got)
 	}
 }
+
+// A live answer that says nothing about a doorway's framing — the transport's
+// row for a connection it cannot reach — keeps the remembered one, and a live
+// answer that says something replaces it: coming back is the source's word.
+func TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt(t *testing.T) {
+	cc, src := framingFixture(t)
+	ctx := context.Background()
+	f := rpc.Framing{Cx: 3, Cy: -4, Zoom: 0.5}
+	cc.applyEvent(ctx, rpc.FramingEvent(farHome, f))
+	resp, err := cc.Handshake(ctx, &pb.HandshakeRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(f) {
+		t.Errorf("a row answering no framing = %+v, want the remembered %+v", got, f)
+	}
+	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(f) {
+		t.Errorf("the silence was remembered over the framing: %+v", got)
+	}
+
+	g := rpc.Framing{Cx: 1, Cy: 1, Zoom: 2}
+	src.mu.Lock()
+	src.lists[""].Plugins[0].RootViewCx, src.lists[""].Plugins[0].RootViewCy, src.lists[""].Plugins[0].RootViewZoom = g.Cx, g.Cy, g.Zoom
+	src.mu.Unlock()
+	if resp, err = cc.Handshake(ctx, &pb.HandshakeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(g) {
+		t.Errorf("the source's answer = %+v, want %+v", got, g)
+	}
+	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(g) {
+		t.Errorf("remembered after the answer = %+v, want %+v", got, g)
+	}
+}

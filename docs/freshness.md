@@ -401,7 +401,10 @@ retires nothing without a definitive `PRESENCE_GONE`
 (`Adapter.synthesize`, `Adapter.DeleteTile`), and a connection that cannot
 be resolved answers NOT gone (`connection.Server.Probe`). A row kept on
 doubt costs nothing durable; a row retired on doubt loses a placement and
-every link to it.
+every link to it. Framing is the same: a doorway answered with no framing
+(the transport's row for a dark connection) keeps the one the cache
+remembers (`sourcecache.keepFraming`), because a visited grid never becomes
+unvisited.
 
 **The cache is disposable.** `cache.db` may be deleted at any moment. Every
 guarantee here degrades to "the first read pays the source's full latency",
@@ -445,7 +448,8 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |
-| Across the real transport: a far grid reopens dark at the last pan, whoever made it, and at its wells' last framing | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
+| A doorway answered with no framing keeps the remembered one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt` |
+| Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its wells | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
 | Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
 | A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |
