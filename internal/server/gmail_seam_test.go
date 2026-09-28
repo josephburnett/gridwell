@@ -47,14 +47,20 @@ const (
 	gmailClientSecret = "NOT-A-REAL-SECRET-example-only"
 )
 
-// fakeGmail is the recorded Gmail: the three calls the plugin makes, answered
+// fakeGmail is the recorded Gmail: the five calls the plugin makes, answered
 // from testdata/gmail. It remembers the last Authorization header, which is
-// how a test sees that the token file was read and sent.
+// how a test sees that the token file was read and sent, and counts the label
+// listings and metadata reads, which is how a test tells a full walk from a
+// history catch-up. history.list answers one recorded delta since the
+// profile's history id and nothing since the id that delta ends at.
 type fakeGmail struct {
 	URL string
 
-	mu   sync.Mutex
-	auth string
+	mu       sync.Mutex
+	auth     string
+	lists    int
+	metadata []string
+	history  int
 }
 
 // newFakeGmail starts the recorded Gmail, stopped at the end of the test.
@@ -67,10 +73,25 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 		g.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-		const base = "/gmail/v1/users/me/messages"
+		const me = "/gmail/v1/users/me"
+		const base = me + "/messages"
 		q := r.URL.Query()
 		switch {
+		case r.URL.Path == me+"/profile":
+			w.Write(gmailRecorded(t, "profile.json"))
+		case r.URL.Path == me+"/history":
+			g.mu.Lock()
+			g.history++
+			g.mu.Unlock()
+			if q.Get("startHistoryId") == "9912345" {
+				w.Write(gmailRecorded(t, "history-list-new-mail.json"))
+			} else {
+				w.Write(gmailRecorded(t, "history-list-quiet.json"))
+			}
 		case r.URL.Path == base:
+			g.mu.Lock()
+			g.lists++
+			g.mu.Unlock()
 			// Gmail ANDs the label ids, so INBOX+UNREAD is the unread part of
 			// the inbox — the listing the plugin's delta walk marks with.
 			switch strings.Join(q["labelIds"], "+") {
@@ -88,6 +109,9 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 			name := "message-" + id + "-full.json"
 			if q.Get("format") == "metadata" {
 				name = "message-" + id + "-metadata.json"
+				g.mu.Lock()
+				g.metadata = append(g.metadata, id)
+				g.mu.Unlock()
 			}
 			raw, err := os.ReadFile(filepath.Join("testdata", "gmail", name))
 			if err != nil {
@@ -104,6 +128,14 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 	t.Cleanup(hs.Close)
 	g.URL = hs.URL
 	return g
+}
+
+// reads is what the plugin has asked so far: label listings, the ids read for
+// metadata, and history requests.
+func (g *fakeGmail) reads() (lists int, metadata []string, history int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.lists, append([]string(nil), g.metadata...), g.history
 }
 
 // Authorization is the last credential the plugin presented.
@@ -145,9 +177,10 @@ func gmailTokenFile(t *testing.T) string {
 }
 
 // gmailStack spawns the plugin against the recorded Gmail and stands it up
-// behind the real browser door. stateDir is the private directory the node
-// hands the plugin, returned so a test can look at what landed in it.
-func gmailStack(t *testing.T) (hs *httptest.Server, cl namespace.Namespace, info *gridwellv1.InfoResponse, g *fakeGmail, stateDir string) {
+// behind the real browser door, refreshing no more often than refresh.
+// stateDir is the private directory the node hands the plugin, returned so a
+// test can look at what landed in it.
+func gmailStack(t *testing.T, refresh string) (hs *httptest.Server, cl namespace.Namespace, info *gridwellv1.InfoResponse, g *fakeGmail, stateDir string) {
 	t.Helper()
 	g = newFakeGmail(t)
 	stateDir = t.TempDir()
@@ -164,7 +197,7 @@ func gmailStack(t *testing.T) (hs *httptest.Server, cl namespace.Namespace, info
 		"token":        gmailTokenFile(t),
 		"endpoint":     g.URL,
 		"state_dir":    stateDir,
-		"refresh":      "1h",
+		"refresh":      refresh,
 		"max_messages": "50",
 	})
 	reg := plugin.NewRegistry()
@@ -183,7 +216,7 @@ func gmailStack(t *testing.T) (hs *httptest.Server, cl namespace.Namespace, info
 // servable grid id is the adapter's, so a plugin unit test cannot see it: it
 // would find both declared and never learn whether either opens anything.
 func TestGmailPluginDeclaresAndListsBothCollections(t *testing.T) {
-	_, cl, info, _, _ := gmailStack(t)
+	_, cl, info, _, _ := gmailStack(t, "1h")
 	ctx := t.Context()
 
 	if info.RootGridId != "" {
@@ -240,7 +273,7 @@ func TestGmailPluginDeclaresAndListsBothCollections(t *testing.T) {
 // the plugin answers a key and never sees the URL, and the door addresses a
 // tile and never sees the email.
 func TestGmailPluginServesAMessageThroughTheContentDoor(t *testing.T) {
-	hs, cl, info, _, _ := gmailStack(t)
+	hs, cl, info, _, _ := gmailStack(t, "1h")
 	inbox, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
 	if err != nil {
 		t.Fatal(err)
@@ -270,7 +303,7 @@ func TestGmailPluginServesAMessageThroughTheContentDoor(t *testing.T) {
 // Only the seam can check it: the config map and the state directory are the
 // node's, the reading and the caching are the plugin's.
 func TestGmailPluginReadsItsCredentialPathsAndCachesNoSecret(t *testing.T) {
-	_, cl, info, g, stateDir := gmailStack(t)
+	_, cl, info, g, stateDir := gmailStack(t, "1h")
 	if _, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId}); err != nil {
 		t.Fatal(err)
 	}
@@ -303,5 +336,50 @@ func TestGmailPluginReadsItsCredentialPathsAndCachesNoSecret(t *testing.T) {
 	// what was searched.
 	if files == 0 {
 		t.Fatal("the state directory is empty; nothing was searched for a secret")
+	}
+}
+
+// After the first refresh walks every collection, the next one reads Gmail's
+// history since the id the walk was current to and applies exactly what it
+// names: the new inbox message is read and listed, the message that arrived
+// with no watched label is not read, and no collection is listed again. The
+// history id is the plugin's and the listing the node's, so only the seam sees
+// the catch-up reach a grid.
+func TestGmailPluginCatchesUpFromHistoryWithoutAWalk(t *testing.T) {
+	_, cl, info, g, _ := gmailStack(t, "200ms")
+	inboxID := info.MenuEntries[0].GridId
+	inbox, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: inboxID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inbox.Tiles) != 2 {
+		t.Fatalf("the walked inbox = %v, want its two messages", inbox.Tiles)
+	}
+	walkLists, walkMeta, _ := g.reads()
+	if walkLists == 0 {
+		t.Fatal("the first refresh listed nothing; it was not a walk")
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for len(inbox.Tiles) != 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the history delta never reached the inbox: %v", inbox.Tiles)
+		}
+		time.Sleep(100 * time.Millisecond)
+		if inbox, err = cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: inboxID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tileWithLabel(t, inbox, "Quarterly numbers")
+
+	lists, meta, history := g.reads()
+	if history == 0 {
+		t.Error("the inbox caught up without asking history")
+	}
+	if lists != walkLists {
+		t.Errorf("the catch-up listed labels %d more times; it walked again", lists-walkLists)
+	}
+	if got := meta[len(walkMeta):]; len(got) != 1 || got[0] != "18c2a1b3f4d5e7a1" {
+		t.Errorf("the catch-up read metadata for %v, want only the new inbox message", got)
 	}
 }

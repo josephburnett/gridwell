@@ -27,15 +27,15 @@ import (
 
 const watchUUID = "pwatch1"
 
-// pokedWatch declares one collection and sends a ContextChanged for it on
-// every poke.
+// pokedWatch declares Watch and one collection, and sends a ContextChanged
+// for it on every poke.
 type pokedWatch struct {
 	pluginv1.UnimplementedPluginServer
 	poke chan struct{}
 }
 
 func (pokedWatch) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "feed", DisplayName: "feed",
+	return &pluginv1.InfoResponse{Kind: "feed", DisplayName: "feed", Watch: true,
 		MenuEntries: []*pluginv1.MenuEntry{{Id: "all", Label: "All", Context: "all"}}}, nil
 }
 

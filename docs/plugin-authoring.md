@@ -97,10 +97,13 @@ none of them.
 ## Changes
 
 Implement `Watch` if your source changes without the user: a background
-sync, a new mail, a file edited elsewhere. The node opens one stream when
-your process starts and holds it for the process's life, so hold it open
-until its context ends. Send a change when a listing you would give now
-differs from the last one you could have given:
+sync, a new mail, a file edited elsewhere, and set `InfoResponse.watch`. The
+node opens one stream when your process starts and holds it for the
+process's life, so hold it open until its context ends. Send the header
+(`stream.SendHeader`) as soon as you accept the stream: that is the moment
+the node counts it open, and without it the moment is your first change.
+Send a change when a listing you would give now differs from the last one
+you could have given:
 
 - `ContextChanged{context}`: that context's `List` would answer
   differently — an entry arrived, moved, or changed its label, status or
@@ -115,12 +118,15 @@ one per poll, and collapse a burst into one per context. A change nobody is
 looking at costs no listing, and naming a context the node has never listed
 is harmless.
 
-Leaving `Watch` unimplemented is healthy: the node asks once per process
-and says nothing. That answer is the declaration; the node does not read
-`InfoResponse.watch`. A stream that ends or fails transport-shaped is re-opened
-with backoff while you are up, and a change sent into no stream reaches
-nobody, so do not end it on purpose. Any other coded error is shown to
-the user as your source's health until the stream delivers a change.
+`InfoResponse.watch` is the declaration. Leave it unset and the node never
+asks, which is healthy. Set it and answer Unimplemented and the node shows
+your source as unhealthy for the process's life: the handshake said
+otherwise. A stream that ends or fails transport-shaped is re-opened
+with backoff while you are up. A change sent into no stream reaches nobody,
+so once a re-opened stream is open the node tells clients to list every
+context it knows of again; do not end a stream on purpose. Any other coded
+error is shown to the user as your source's health until a re-opened stream
+is open.
 
 ## Previews
 

@@ -1,0 +1,19 @@
+{
+  "id": "18c2a1b3f4d5e7a1",
+  "threadId": "18c2a1b3f4d5e7a1",
+  "labelIds": ["UNREAD", "CATEGORY_PERSONAL", "INBOX"],
+  "snippet": "the numbers for the quarter",
+  "sizeEstimate": 3120,
+  "historyId": "9912400",
+  "internalDate": "1767781200000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      {"name": "Subject", "value": "Quarterly numbers"},
+      {"name": "From", "value": "Carol Example <carol@example.com>"},
+      {"name": "Date", "value": "Wed, 7 Jan 2026 10:20:00 +0000"}
+    ]
+  }
+}

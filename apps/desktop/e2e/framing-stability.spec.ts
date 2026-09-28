@@ -356,6 +356,51 @@ test('reframing inside a plugin well refetches nothing of its parent', async ({ 
   ).toEqual([]);
 });
 
+// A plugin document's scroll is its tile's fact and changes no listing, so
+// scrolling it refetches nothing of the grid that lists it.
+test('scrolling a plugin document refetches nothing of its parent', async ({ gw, window }) => {
+  const c = await gw.cadences();
+  await gw.enterPlugin('docs');
+  const root = (await gw.focused()).gridID;
+  const doc = (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'long.md');
+  expect(doc, 'long.md listed').toBeTruthy();
+  await gw.descendCell(Number(doc!.x ?? 0), Number(doc!.y ?? 0));
+  await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
+  await expect
+    .poll(() => window.evaluate(() => document.getElementById('gw-rendered-view')?.textContent ?? ''))
+    .toContain('line');
+  await gw.waitIdle();
+
+  const asked: string[] = [];
+  await window.route('**/gridwell.v1.Gridwell/GetGrid', async (r: any) => {
+    asked.push(r.request().postData() ?? '');
+    await r.continue();
+  });
+  const scrolled = async () =>
+    Number(
+      ((await gw.getGrid(root)).tiles!.find((t) => t.altText === 'long.md') as { textY?: number | string })
+        ?.textY ?? 0,
+    );
+  await expect
+    .poll(() =>
+      window.evaluate(() => {
+        const el = document.getElementById('gw-rendered-view')!;
+        el.scrollTop = 400;
+        el.dispatchEvent(new Event('scroll'));
+        return el.scrollTop;
+      }),
+    )
+    .toBeGreaterThan(0);
+  await expect.poll(scrolled, { message: 'the scroll was persisted', timeout: 15_000 }).toBeGreaterThan(0);
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
+  expect(
+    asked.filter((body) => body.includes(root)),
+    "the document's scroll write refetches its parent's listing",
+  ).toEqual([]);
+});
+
 // One active surface per grid: a passive sibling pane never overwrites the
 // focused pane's persisted framing.
 test('a split sibling never overwrites the focused pane framing', async ({ gw, window }) => {
