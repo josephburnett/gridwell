@@ -38,6 +38,10 @@ const PAGE =
           bounds: { x: 0, y: 0, width: 400, height: 300 },
           focused: false,
         });
+        // The pump's pane set crosses the same seam, whole, and an empty set
+        // is a set, not a missing one.
+        await window.gridwell.setMirrored({ paneIds: ['p1', 'p2'] });
+        await window.gridwell.setMirrored({ paneIds: [] });
         console.log('BRIDGE_PLACED');
         await new Promise(r => setTimeout(r, 1500));
         const f = await window.gridwell.removeWebview({ paneId: 'p1' });
@@ -73,13 +77,19 @@ app.whenReady().then(() => {
   const registry = new WebviewRegistry(win, {
     onContextMenu: (ev) => order.push(`focus:${ev.paneId}`),
   });
-  registerWebviewIpc(registry, root.webContents, win);
+  const mirrored: string[][] = [];
+  registerWebviewIpc(registry, root.webContents, win, (paneIds) => mirrored.push(paneIds));
 
   root.webContents.on('console-message', (_e, _level, message) => {
     if (message === 'BRIDGE_PLACED') {
       // The entry must carry the renderer's verdict, because the steal guard
       // reads it from the first frame, before the next setHidden could correct
       // it and before addChildView and loadURL hand the widget OS focus.
+      if (JSON.stringify(mirrored) !== JSON.stringify([['p1', 'p2'], []])) {
+        fail(`setMirrored did not reach main as sent: ${JSON.stringify(mirrored)}`);
+      }
+      console.log('bridge ok: setMirrored carried both pane sets to main');
+
       const f = registry.focusedFor('p1');
       if (f !== false) fail(`PlaceArgs.focused did not reach the registry entry (focusedFor=${String(f)})`);
       console.log('bridge ok: PlaceArgs.focused=false reached the entry');

@@ -45,8 +45,13 @@ test('setBounds() while hidden keeps the view parked and un-parks at the new bou
     }
     if (!found) throw new Error('live view webContents not found after place()');
 
-    // An open palette or a running gesture parks the view.
+    // An open palette or a running gesture parks the view, once the face its
+    // pane shows meanwhile is taken.
     reg.setHidden(paneId, true, true);
+    const parkDeadline = Date.now() + 8_000;
+    while (reg.viewBoundsFor(paneId)?.x !== args.parkCoord && Date.now() < parkDeadline) {
+      await new Promise<void>((res) => setTimeout(res, 20));
+    }
     const boundsWhileHidden = reg.viewBoundsFor(paneId);
 
     // A new rect arrives while the view is still parked, because the pane split
@@ -62,7 +67,7 @@ test('setBounds() while hidden keeps the view parked and un-parks at the new bou
     await reg.remove(paneId);
 
     return { boundsWhileHidden, boundsAfterResize, boundsAfterUnpark, newBounds };
-  }, { dataURL: 'data:text/html,<meta charset=utf8>parktest', marker: 'parktest' });
+  }, { dataURL: 'data:text/html,<meta charset=utf8>parktest', marker: 'parktest', parkCoord: PARK_COORD });
 
   expect(result.boundsWhileHidden?.x, 'setHidden(true) parks the view at PARK_COORD').toBe(PARK_COORD);
 

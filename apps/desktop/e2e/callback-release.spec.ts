@@ -33,12 +33,12 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
   await expect.poll(async () => (await gw.oneShots()).live, { timeout: 15_000 }).toBe(0);
 });
 
-// The persisters are armed once per frame, and a workspace holding a live
-// shell draws them on the mirror's cadence with nobody touching it. Armed by
-// the frame, their settle window could never close, and the pane tile's layout
-// never reached the server at all. Armed by what they would write, an idle
-// live tile holds no timer — and a pending settle timer is exactly what a
-// non-zero live count means here.
+// The persisters are armed once per frame, and a workspace holding a busy
+// live shell that another of its panes shows draws them on the mirror's
+// cadence with nobody touching the canvas. Armed by the frame, their settle
+// window could never close, and the pane tile's layout never reached the
+// server at all. Armed by what they would write, a repainting live tile
+// leaves neither persister pending.
 test('a live tile repainting leaves no settle timer armed', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const home = await gw.focused();
@@ -47,18 +47,30 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
   await gw.openPalette();
   await gw.dragCreate('pane', cx, cy);
   await gw.descendCell(cx, cy);
-  await gw.clickPaletteSwatch('shell');
+  // Split, and the shell goes live in one half while the other half's grid
+  // shows its face.
+  await gw.splitFocusedPaneVertical();
+  const inner = await gw.focused();
+  const icx = Math.round(inner.cx);
+  const icy = Math.round(inner.cy) + 2; // the first descent captures the layout, pane tile and all
+  await gw.openPalette();
+  await gw.dragCreate('shell', icx, icy);
+  await gw.descendCell(icx, icy); // the drop lands bare; the descent creates the session
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellRenderer()), {
       timeout: 15_000,
     })
     .toBe('webgl');
-  await gw.waitIdle();
+  // Output keeps arriving with nobody at the keyboard. It is written straight
+  // into the terminal, so what repaints is the terminal alone.
+  await window.evaluate(() => {
+    (window as any).__busy = setInterval(() => (window as any).__gridwellTest.shellFeed('.'), 100);
+  });
 
-  // The premise: the mirror is still passing over an attached live surface,
-  // which is what repaints the canvas with nobody touching it. The repaint is
-  // a direct draw and not a scheduled frame, so the pass is what can be seen
-  // from here; without it the zero below would mean nothing.
+  // The premise: the mirror is passing over the busy terminal, which is what
+  // repaints the canvas with nobody touching it. The repaint is a direct draw
+  // and not a scheduled frame, so the pass is what can be seen from here;
+  // without it the check below would mean nothing.
   const passes = await gw.shellMirrors();
   await expect
     .poll(() => gw.shellMirrors(), {
@@ -68,9 +80,10 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
     .toBeGreaterThan(passes + 4);
 
   await expect
-    .poll(async () => (await gw.oneShots()).live, {
-      message: 'a settle timer is armed while nothing changes',
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.settlesPending()), {
+      message: 'a persister is pending while nothing it writes changes',
       timeout: 15_000,
     })
-    .toBe(0);
+    .toEqual({ workspace: false, framing: false });
+  await window.evaluate(() => clearInterval((window as any).__busy));
 });

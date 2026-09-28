@@ -364,6 +364,15 @@ resolves the id before accepting, so a refused upgrade never leaves a tmux
 session behind. One live surface per content tile: opening it elsewhere takes
 over (`pane.TakeOver`).
 
+**Mirrors.** Every pane that shows a live tile — its grid, a link to it, or a
+frozen descent into it — draws the tile's face from the shared preview cache.
+`pane.Mirrored` names the live surfaces another pane shows, counting a pane's
+whole grid, scrolled into view or not; only those refresh the face, at
+`cadence.ShellMirrorMs`. A url view is captured by main's `MirrorPump`, which
+the renderer hands that set (`setMirrored`); a shell is snapshotted on its own
+repaints. A lone live surface costs nothing. Its own pane reads the face only
+while the surface is parked, so a park takes one frame first.
+
 ## The desktop
 
 `apps/desktop/src/main` does one thing: it places native `WebContentsView`s
@@ -458,6 +467,7 @@ copy:
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | does a gesture park this pane's live surface | `pane.ParkSurface`; `pane.CanvasOwnsPointer` for its pointer |
+| does a live surface refresh its face in the cache | `pane.Mirrored`; a park takes one frame |
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
 | is this pane animating, and where a displaced one lands | `transition.Set` |

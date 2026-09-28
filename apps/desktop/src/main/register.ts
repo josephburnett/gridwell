@@ -14,8 +14,8 @@ import {
   ViewTouchScroll,
   ErrorEvent,
   NoticeSeverity,
-  FrameEvent,
   ChoiceMenuArgs,
+  MirroredArgs,
 } from './ipc';
 import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
@@ -35,11 +35,12 @@ function safeSend(wc: WebContents, channel: string, payload: unknown): void {
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the registry,
 // once, after the root window is created. win is the window toContentPoint
-// re-aims a press against.
+// re-aims a press against; onMirrored takes the mirror pump's pane set.
 export function registerWebviewIpc(
   registry: WebviewRegistry,
   rootWC: WebContents,
   win: BaseWindow,
+  onMirrored: (paneIds: string[]) => void,
 ): void {
   // The live view swallows the renderer's own mouse events, so its preload
   // sends each press here to be re-aimed at the canvas. What the renderer then
@@ -88,6 +89,10 @@ export function registerWebviewIpc(
     registry.showMenu(a.paneId);
   });
 
+  ipcMain.handle(CH.setMirrored, (_e, a: MirroredArgs): void => {
+    onMirrored(a.paneIds);
+  });
+
   // A menu of choices the renderer declared. The answer is the chosen id, or
   // null when the menu closes untouched, so the renderer changes nothing on a
   // dismissal. Both doors settle the same promise once, because a click and
@@ -116,10 +121,6 @@ export function registerWebviewIpc(
 // ipc.ts pairs each channel with the shape it carries.
 export function forwarder(rootWC: WebContents, channel: string): (ev: unknown) => void {
   return (ev) => safeSend(rootWC, channel, ev);
-}
-
-export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, jpegBase64: string): void {
-  if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 } satisfies FrameEvent);
 }
 
 // sendError is the one main-process entry point onto EV.error, so

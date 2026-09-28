@@ -106,10 +106,9 @@ function settleWithin<T>(p: Promise<T>, ms: number): Promise<Settled<T>> {
   });
 }
 
-// How often live views are captured so other panes showing the same tile
-// mirror them. A copy of cadence.ShellMirrorMs, the owner: the two mirror
-// pumps share one cadence, and Go and TypeScript share no source, so
-// gesture-threshold.test.ts pins this to it.
+// How often a mirrored view is captured. A copy of cadence.ShellMirrorMs, the
+// owner: the two mirrors share one cadence, and Go and TypeScript share no
+// source, so gesture-threshold.test.ts pins this to it.
 export const MIRROR_INTERVAL_MS = 250;
 
 type Timer = unknown;
@@ -120,31 +119,33 @@ interface PumpTimers {
   clearTimer?: (timer: Timer) => void;
 }
 
-// MirrorPump captures every live pane on a timer, so a tile mirrored in a
-// second pane stays fresh. It owns the cadence: a caller that picked its own
-// would be a second copy of a decision about how fresh a preview has to be.
+// MirrorPump captures the live panes whose face another pane shows, on a timer,
+// so those faces stay fresh. The renderer names them (pane.Mirrored), and the
+// pump runs only while it names any. It owns the cadence: a caller that picked
+// its own would be a second copy of a decision about how fresh a mirror is.
 export class MirrorPump {
   private timer: Timer = null;
+  private panes: readonly string[] = [];
   private readonly setTimer: (fn: () => void, ms: number) => Timer;
   private readonly clearTimer: (timer: Timer) => void;
 
   constructor(
-    private readonly tick: () => Promise<void>,
+    private readonly tick: (paneIds: readonly string[]) => Promise<void>,
     timers: PumpTimers = {},
   ) {
     this.setTimer = timers.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = timers.clearTimer ?? ((t) => clearTimeout(t as NodeJS.Timeout));
   }
 
-  start(): void {
-    if (this.timer) return;
-    const loop = async () => {
-      // One failed round must not end the pump: every mirrored preview would
-      // stay frozen until the app restarts.
-      await this.tick().catch(() => {});
-      if (this.timer) this.timer = this.setTimer(loop, MIRROR_INTERVAL_MS);
-    };
-    this.timer = this.setTimer(loop, MIRROR_INTERVAL_MS);
+  // setPanes replaces the set; the next round captures exactly it, and an
+  // empty one stops the pump.
+  setPanes(paneIds: readonly string[]): void {
+    this.panes = [...paneIds];
+    if (this.panes.length === 0) {
+      this.stop();
+    } else if (!this.timer) {
+      this.schedule();
+    }
   }
 
   stop(): void {
@@ -152,5 +153,16 @@ export class MirrorPump {
       this.clearTimer(this.timer);
       this.timer = null;
     }
+  }
+
+  private schedule(): void {
+    const handle = this.setTimer(async () => {
+      // One failed round must not end the pump: every mirrored preview would
+      // stay frozen until the app restarts.
+      await this.tick(this.panes).catch(() => {});
+      // A stop, or a stop and a restart, while the round ran owns the timer.
+      if (this.timer === handle) this.schedule();
+    }, MIRROR_INTERVAL_MS);
+    this.timer = handle;
   }
 }
