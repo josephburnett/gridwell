@@ -47,6 +47,7 @@ export const EV = {
   freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture
   menuPane: 'gw:menu-pane', // ContextMenuEvent — a live view's context menu is opening on this pane
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus
+  viewGone: 'gw:view-gone', // ViewGoneEvent — a live view ended outside a remove
 } as const;
 
 // Physical screen coordinates, independent of the page's zoomFactor.
@@ -183,6 +184,14 @@ export interface ContextMenuEvent {
 export interface ZoomKeyEvent {
   paneId: string;
   key: string;
+}
+
+// The live view on this pane ended on its own, a page that closed itself, so
+// the renderer drops its handle and the pane shows the tile's frozen face.
+// Nothing was captured: the view was gone before anything could be.
+export interface ViewGoneEvent {
+  paneId: string;
+  tileId: string;
 }
 
 // How loudly a notice presents, decided where the report is made and read by

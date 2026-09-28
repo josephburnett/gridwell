@@ -386,7 +386,11 @@ pane's view only. A view swallows the renderer's own mouse events, so the
 presses that must move pane focus are relayed back: the preload forwards a
 left press, and `showContextMenu` — the one funnel for both doors into the
 native menu — announces the pane it is opening on. Both land in `focusToPane`,
-so a right-click moves focus like every other press. One Chromium partition
+so a right-click moves focus like every other press. A view whose webContents
+ends outside `remove()` — a page that called `window.close()` — is retired at
+once (`retire`): its entry goes, every later call for the pane is a no-op, and
+the renderer hears `onViewGone` and drops its handle, so the pane shows the
+tile's frozen face. One Chromium partition
 (`persist:gridwell`) holds every
 live url tile, local or mounted; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.

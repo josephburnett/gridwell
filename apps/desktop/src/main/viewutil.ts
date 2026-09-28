@@ -210,6 +210,13 @@ export function renderProcessGoneMessage(url: string, reason: string): string {
   return url ? `page crashed (${reason}): ${url}` : `page crashed (${reason})`;
 }
 
+// A page that closed itself ended its view, which is not a crash: the pane
+// shows the tile's frozen face again. The url is unreadable once the view is
+// gone, and is then omitted.
+export function pageClosedMessage(url: string): string {
+  return url ? `the page closed itself: ${url}` : 'the page closed itself';
+}
+
 // null below warning (levels run 0 to 3). The wasm client's own console is
 // invisible outside devtools, so forwarding keeps the failure in the log.
 export function rendererLogLine(level: number, message: string): string | null {

@@ -26,6 +26,12 @@ export function viewDestroyed(paneId: string, tileId: string, url: string): Trac
   return view('destroy', paneId, url, { tile: tileId });
 }
 
+// A view whose webContents ended outside remove(), such as a page that closed
+// itself.
+export function viewGone(paneId: string, tileId: string, url: string): TraceEvent {
+  return view('gone', paneId, url, { tile: tileId });
+}
+
 export function viewBounds(paneId: string, tileId: string, b: Bounds): TraceEvent {
   return view('bounds', paneId, tileId, {
     x: String(b.x),

@@ -31,6 +31,7 @@ const LISTENERS = {
   onFreezeURL: EV.freezeUrl,
   onContextMenu: EV.menuPane,
   onZoomKey: EV.zoomKey,
+  onViewGone: EV.viewGone,
   onError: EV.error,
 } as const;
 

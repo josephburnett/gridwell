@@ -1,7 +1,8 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent } from './ipc';
+import type { WebContentsViewConstructorOptions } from 'electron';
+import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent, ViewGoneEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -16,6 +17,7 @@ import {
   shouldSurfaceFailLoad,
   failLoadMessage,
   renderProcessGoneMessage,
+  pageClosedMessage,
   zoomChordKey,
   openBelowUrl,
   toContentPoint,
@@ -33,6 +35,7 @@ import {
   viewDestroyed,
   viewFailed,
   viewFocused,
+  viewGone,
   viewNav,
   viewShown,
 } from './viewtrace';
@@ -80,7 +83,13 @@ interface RegistryCallbacks {
   onZoomKey?: (ev: ZoomKeyEvent) => void;
   // focusguard.ts owns the verdict that a focus grab was a steal.
   onFocusStolen?: (ev: { paneId: string }) => void;
+  // A view ended outside remove(); see retire().
+  onViewGone?: (ev: ViewGoneEvent) => void;
 }
+
+// How a view is made, injected so webviews.test.ts runs the registry under
+// node with a fake.
+type NewView = (opts: WebContentsViewConstructorOptions) => WebContentsView;
 
 // WebviewRegistry owns the live url-tile WebContentsViews parented to the root
 // window, one per paneId, all on SESSION_PARTITION. It knows nothing of IPC or
@@ -95,9 +104,12 @@ export class WebviewRegistry {
   // The e2e reads this to see that an unread face costs no capture.
   mirrorCalls = 0;
 
-  constructor(win: BaseWindow, cb: RegistryCallbacks = {}) {
+  private readonly newView: NewView;
+
+  constructor(win: BaseWindow, cb: RegistryCallbacks = {}, newView: NewView = (o) => new WebContentsView(o)) {
     this.win = win;
     this.cb = cb;
+    this.newView = newView;
   }
 
   // Every notice the registry raises carries this one source, which
@@ -219,7 +231,7 @@ export class WebviewRegistry {
       // the strip, so a rejection here must not stop the replacement view.
       await this.remove(paneId).catch(() => {});
     }
-    const view = new WebContentsView({
+    const view = this.newView({
       webPreferences: {
         partition,
         contextIsolation: true,
@@ -421,6 +433,8 @@ export class WebviewRegistry {
     const e = this.entries.get(paneId);
     if (!e || !capturable(e)) return '';
     const attempt = await captureAttempt(e.view);
+    // A view that ended while the frame was taken has already said so.
+    if (this.entries.get(paneId) !== e) return '';
     const decision = decideStreak(e.captureStreak, attempt.kind);
     e.captureStreak = decision.state;
     const report = decision.report;
@@ -560,6 +574,38 @@ export class WebviewRegistry {
       }
       this.reportErr(renderProcessGoneMessage(url, details.reason));
     });
+
+    // A page that calls window.close() destroys its webContents with no word
+    // to the renderer.
+    e.view.webContents.on('destroyed', () => this.retire(paneId, e));
+  }
+
+  // retire is the one owner of "the view is gone" for a webContents that ended
+  // outside remove(): the entry goes at once, so every later call for the pane
+  // is a no-op and remove() answers an empty freeze, and the renderer is told
+  // so the pane shows the tile's frozen face instead of a blank view.
+  private retire(paneId: string, e: Entry): void {
+    // remove() takes the entry before it closes the view.
+    if (this.entries.get(paneId) !== e) return;
+    this.entries.delete(paneId);
+    if (e.focusSettle) {
+      clearTimeout(e.focusSettle);
+      e.focusSettle = null;
+    }
+    let url = '';
+    try {
+      url = e.view.webContents.getURL();
+    } catch {
+      // Unreadable once destroyed; the notice goes without it.
+    }
+    try {
+      this.win.contentView.removeChildView(e.view);
+    } catch {
+      // A view whose webContents is gone may already be detached.
+    }
+    trace(viewGone(paneId, e.tileId, url));
+    this.cb.onViewGone?.({ paneId, tileId: e.tileId });
+    this.reportErr(pageClosedMessage(url), 'info');
   }
 }
 

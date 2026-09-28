@@ -95,6 +95,7 @@ func (a *App) installTestHook() {
 		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
+		"urlViews":      js.FuncOf(a.thURLViews),
 		"textInnerBox":  js.FuncOf(a.thTextInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 		"errors":        js.FuncOf(a.thErrors),
@@ -386,6 +387,16 @@ func (a *App) thLocalPaneIds(js.Value, []js.Value) any {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// thURLViews maps each pane holding a live url handle to its tile, the
+// renderer's half of what main's registry holds.
+func (a *App) thURLViews(js.Value, []js.Value) any {
+	out := map[string]any{}
+	for _, h := range a.urlSurfaces() {
+		out[h.PaneID] = h.TileID
+	}
+	return out
 }
 
 // thShellVisitURL fires the focused shell's url-click path, what xterm's link

@@ -145,14 +145,15 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	// a refusal takes it back down.
 	a.bridgePlace(p.ID, t.Id, addr, b, contentzoom.Of(t.GetContentZoom()), t.UrlHistory, durable,
 		pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
-		func() { a.dropFailedURLView(p.ID, v) })
+		func() { a.dropURLView(p.ID, v) })
 	a.draw()
 }
 
-// dropFailedURLView takes back the optimistic handle when the place was
-// refused, since one left standing keeps the pane looking live with no frozen
-// preview. Identity-checked, since a later place may own the pane.
-func (a *App) dropFailedURLView(paneID string, v *urlView) {
+// dropURLView takes down a handle main has no view behind, a refused place or
+// a page that closed itself, since one left standing keeps the pane looking
+// live over a blank instead of showing the tile's frozen face.
+// Identity-checked, since a later place may own the pane.
+func (a *App) dropURLView(paneID string, v *urlView) {
 	pl, ok := a.localIf(paneID)
 	if !ok || pl.urlView != v {
 		return

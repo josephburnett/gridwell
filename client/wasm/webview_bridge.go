@@ -296,6 +296,13 @@ func (a *App) installWebviewListeners() {
 			a.zoomKeyRelays++
 			a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
 		}},
+		// A view that ended in main with no remove, a page that closed
+		// itself. Nothing is left to capture; main's notice says why.
+		{"onViewGone", func(ev js.Value) {
+			if v := a.urlViewFor(jsString(ev.Get("paneId"))); v != nil && v.tileID == jsString(ev.Get("tileId")) {
+				a.dropURLView(v.paneID, v)
+			}
+		}},
 		// Main reports every webview, session and sidecar failure over this
 		// one channel, into the same error surface every other failure path
 		// uses.
