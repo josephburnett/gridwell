@@ -20,7 +20,7 @@ here.
 |---|---|
 | **exit well** | A doorway onto a grid in another namespace — a mount, a plugin, a file tree. Derived from the ids alone (`rpc.IsExitWell`), never stored. |
 | **leaf link** | One content tile shown in two places: `link_target_id` plus one owning row. The same document, over there, without a copy. |
-| **dead link** | A link into a namespace the node no longer declares: grey, inert, no RPC, no notice. Separates "gone from the config" from "not answering". |
+| **dead link** | A link whose path ends in nothing: a namespace some hop no longer declares, or a target its namespace says is gone. Grey, inert, no notice, still deletable. Separates "gone" from "not answering". |
 | **childless reference** | A link that names no namespace yet — the + menu row and the drag ghost, drawn before there is a grid to point at. |
 
 ## Places
@@ -44,7 +44,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **dead** (`client/deadref`) | The namespace is not declared. Nothing is asked and nothing is said, so an undeclared plugin cannot storm the strip. |
+| **dead** (`client/deadref`) | The namespace is not declared, or it answered that the key is gone (`gwerr.DeadRef`). Nothing is said, and nothing is asked again until the declaration or that namespace's listing changes, so neither can storm the strip. |
 | **dark** (`internal/sourcecache` and `internal/pluginhost`, health events) | Declared, not answering right now — a connection that will not dial, or a plugin whose directory or API stopped answering while its process still does. Fetched, reported, recovers on its own. It is one fact: a room served by a dark source is a memory rather than an answer, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
 | **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
 | **broken** (`pluginhealth.Broken`) | A doorway that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |

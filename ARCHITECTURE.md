@@ -307,7 +307,13 @@ paths: `postWriteContent` (the one write that claims a version) and
 **Dead links.** A link is a path of hops. When any hop stops declaring the
 next namespace — a plugin dropped from `server.yaml`, a connection stanza
 removed, a connection name retired, here or on any node along the way — the
-link is dead. The first hop is judged here: `client/deadref` reads the
+link is dead. So is a link whose last hop answers but whose target is gone: a
+plugin key its source says is gone (`pluginhost.Adapter.absent`: an
+authoritative listing that omits it, or a probe that says GONE, never a dark
+source or a probe that cannot say), or a home tile destroyed out of the
+trash. `contentRoute` checks a link's target with `GetTile` as it checks a
+directly read id, so the owner's verdict is the answer whichever id the read
+named. The first hop is judged here: `client/deadref` reads the
 handshake roster the + menu is built from, asks the router's own peel
 (`rpc.OwnerNamespaceOf`) which namespace the id names, and answers from the
 node's declaration without asking. A deeper hop is the far node's to judge,
@@ -323,7 +329,10 @@ transport-class answer, never the dead verdict. Dead is not always forever,
 either: a retired connection name never returns, but a namespace merely
 undeclared is dead only while it is undeclared — declare it again and every
 link through it is live again, unchanged; the dead latch clears on the same
-health change and reconnect that clear every read latch.
+health change and reconnect that clear every read latch. A gone key listed
+again is live again under the same id: a `GridChanged` in its namespace
+re-asks that namespace's dead verdicts (`events.Plan.Revive`,
+`inflight.Reads.ReviveIf`).
 
 **Events** flow only into the cache, and a root grid's framing into the
 doorways rooted at it (`rpc.Reframe`). Viewport writes live only in gesture

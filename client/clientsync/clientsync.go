@@ -25,9 +25,9 @@ const (
 	// OutcomeTransport is the server never speaking, so the local state is
 	// still the only truth the user has.
 	OutcomeTransport
-	// OutcomeDead is the server saying the id names a namespace some hop does
-	// not declare (gwerr.IsDeadRef): a dead link, a state rather than an
-	// error. A write reads it as OutcomeRejected.
+	// OutcomeDead is the server saying the id's path ends in nothing
+	// (gwerr.IsDeadRef): a dead link, a state rather than an error. A write
+	// reads it as OutcomeRejected.
 	OutcomeDead
 )
 

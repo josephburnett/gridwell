@@ -1,9 +1,10 @@
-// Package deadref decides whether a link is dead: its path breaks at some hop
-// that does not declare the next namespace. Such a link is greyed, never
-// fetched again, nothing said about it. The first hop is judged from the
-// handshake roster, read fresh; a deeper one only the far node can judge, and
-// its answer is the dead verdict a read heard. A declared namespace that is
-// down is not dead, but pluginhealth's and cache.SourceDark's.
+// Package deadref decides whether a link is dead: its path ends in nothing,
+// at a hop that does not declare the next namespace or at a target its
+// namespace says is gone. Such a link is greyed, nothing said about it. The
+// first hop's declaration is judged from the handshake roster, read fresh;
+// everything else only the owning node can judge, and its answer is the dead
+// verdict a read heard. A declared namespace that is down is not dead, but
+// pluginhealth's and cache.SourceDark's.
 package deadref
 
 import (
