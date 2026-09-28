@@ -102,14 +102,14 @@ func (f *farLink) Subscribe(ctx context.Context, in *gridwellv1.SubscribeRequest
 // more of the remote node beside its home.
 func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
 	t.Helper()
-	return newFrontedTransportHarness(t, conns, dialErr, nil)
+	return newFrontedTransportHarness(t, conns, dialErr, nil, remote...)
 }
 
 // newFrontedTransportHarness is newTransportHarness with front, when set,
 // between the local router and the transport, as the node puts its source
 // cache there.
 func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
-	front func(namespace.Namespace) namespace.Namespace) *transportHarness {
+	front func(namespace.Namespace) namespace.Namespace, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
 	t.Helper()
 	ctx := context.Background()
 
