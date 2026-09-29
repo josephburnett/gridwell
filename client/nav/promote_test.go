@@ -28,21 +28,19 @@ func TestPromote(t *testing.T) {
 	created := &gridwellv1.Tile{Id: "n1", Kind: rpc.KindURL, GridId: "g2", X: 4, Y: 5, W: 1, H: 1}
 	visit := &gridwellv1.Tile{Id: "v1", Kind: rpc.KindURL, GridId: "sg"}
 
-	t.Run("the visit freezes onto the new tile and the row dies", func(t *testing.T) {
+	// The row's delete is retire_test.go's.
+	t.Run("the visit freezes onto the new tile", func(t *testing.T) {
 		w := baseWorld(visitPane("pane1"), gridPane("pane2", "g2"))
 		w.Promote = &PromoteWorld{OldTile: visit}
 		plan := New().Do(promoteGesture(created), w)
-		if !sameKinds(kinds(plan), []EffectKind{EffCloseStream, EffDeleteEphemeral,
-			EffRelocatePane, EffScaleContent, EffPlaceURLView, EffRefreshOverlay,
+		if !sameKinds(kinds(plan), []EffectKind{EffCloseStream,
+			EffRelocatePane, EffScaleContent, EffPlaceURLView, EffAwait, EffRefreshOverlay,
 			EffScheduleURLUpdate}) {
 			t.Fatalf("effects = %v, want the promote", kinds(plan))
 		}
 		e := only(t, plan, EffCloseStream)
 		if !e.Freeze || e.FreezeOnto == nil || e.FreezeOnto.TileID != "n1" {
 			t.Fatalf("closed %+v, want the capture onto the tile it became", e)
-		}
-		if d := only(t, plan, EffDeleteEphemeral); d.TileID != "v1" || d.GridID != "sg" {
-			t.Fatalf("deleted %+v, want the ephemeral row", d)
 		}
 		r := only(t, plan, EffRelocatePane)
 		if r.DestPaneID != "pane2" || r.TileID != "n1" || r.Foot.X != 4 || r.Zoom <= 0 {
@@ -58,8 +56,8 @@ func TestPromote(t *testing.T) {
 		w.Promote = &PromoteWorld{OldTile: visit}
 		plan := New().Do(promoteGesture(created), w)
 		for _, k := range kinds(plan) {
-			if k == EffDeleteEphemeral {
-				t.Fatalf("deleted a row a sibling pane still shows: %v", kinds(plan))
+			if k == EffDeleteEphemeral || k == EffAwait {
+				t.Fatalf("retired a row a sibling pane still shows: %v", kinds(plan))
 			}
 		}
 	})
@@ -72,7 +70,7 @@ func TestPromote(t *testing.T) {
 		w := baseWorld(p, gridPane("pane2", "g2"))
 		w.Promote = &PromoteWorld{OldTile: visit}
 		for _, k := range kinds(New().Do(promoteGesture(created), w)) {
-			if k == EffDeleteEphemeral {
+			if k == EffDeleteEphemeral || k == EffAwait {
 				t.Fatalf("deleted a row before its grid was known to be scratch")
 			}
 		}

@@ -415,7 +415,7 @@ type scheduler struct {
 // comes from client/cadence, where the wait's own sentence asks for it.
 func newScheduler(a *App) scheduler {
 	return scheduler{
-		wsSave:      debounce.New(setTimeoutMs, nowMs, cadence.WorkspaceSaveMode, a.flushWorkspaceSave),
+		wsSave:      debounce.New(setTimeoutMs, nowMs, cadence.WorkspaceSaveMode, func() { a.flushWorkspaceSave(nil) }),
 		urlUpdate:   debounce.New(setTimeoutMs, nowMs, cadence.URLUpdateMode, a.writeURLNow),
 		framingSave: debounce.New(setTimeoutMs, nowMs, cadence.FramingSaveMode, a.flushFramingSave),
 		textSave:    debounce.New(setTimeoutMs, nowMs, cadence.TextSaveMode, a.flushDirtyText),

@@ -98,7 +98,7 @@ func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 	return eph || !known
 }
 
-// deleteEphemeralTile removes an ascended-from ephemeral tile, and for a
+// deleteEphemeralTile removes an ended ephemeral visit, and for a
 // shell the plugin kills its tmux session too. Unlike the trashcan delete it
 // parks, because an ephemeral row is off-grid and a lost cleanup is invisible
 // until the startup sweep.

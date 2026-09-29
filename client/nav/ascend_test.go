@@ -99,13 +99,14 @@ func TestAscendPlans(t *testing.T) {
 			EffInstallPlace, EffClearSelection, EffFetchGrid,
 			EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
-		name:    "leaving an ephemeral visit deletes it without freezing",
+		// The delete waits for the landing; see retire_test.go.
+		name:    "leaving an ephemeral visit does not freeze it",
 		pane:    contentPane("pane1", "r1"),
 		leave:   LeaveWorld{DescendedTile: urlRow},
 		scratch: scratch.Grid{Cached: true, ScratchGridID: "sg"},
 		animate: true,
 		want: []EffectKind{EffCancelTransition, EffSaveText, EffCloseStream,
-			EffDeleteEphemeral, EffStartTransition,
+			EffStartTransition,
 			EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
 		name:    "an unloaded grid cannot say ephemeral: freeze, do not delete",

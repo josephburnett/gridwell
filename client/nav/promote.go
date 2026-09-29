@@ -25,15 +25,6 @@ func (m *Machine) promote(g Gesture, w World) Plan {
 	// the row about to die.
 	pl.add(Effect{Kind: EffCloseStream, PaneID: op.ID, Streams: StreamURL, Freeze: true,
 		FreezeOnto: &FreezeTarget{TileID: created.Id, GridID: created.GridId}})
-	// The row dies only if known ephemeral and no sibling pane still shows
-	// the visit; a split clone deletes it on its own ascent. The same rule
-	// the ascent applies.
-	if old := w.Promote.old(); old != nil {
-		eph, known := scratch.Ephemeral(op.Scratch, old.GridId)
-		if eph && known && !w.otherPaneShows(op.ID, old.Id) {
-			pl.add(Effect{Kind: EffDeleteEphemeral, GridID: old.GridId, TileID: old.Id})
-		}
-	}
 	// The pane follows its content: the visit's frame is replaced by one on
 	// the destination's stack, minted by pane.ContentFrame at the zoom a
 	// descent would have landed on, so the promoted pane is a descended pane
@@ -46,6 +37,16 @@ func (m *Machine) promote(g Gesture, w World) Plan {
 	// The content scale follows the frame, as at every descent and landing.
 	pl.add(Effect{Kind: EffScaleContent, PaneID: op.ID})
 	pl.add(Effect{Kind: EffPlaceURLView, PaneID: op.ID, TileID: created.Id, Tile: created})
+	// The row dies only if known ephemeral and no sibling pane still shows
+	// the visit; a split clone deletes it on its own ascent. The same rule
+	// the ascent applies, retired after the relocate so the layout flushed
+	// first names the new tile.
+	if old := w.Promote.old(); old != nil {
+		eph, known := scratch.Ephemeral(op.Scratch, old.GridId)
+		if eph && known && !w.otherPaneShows(op.ID, old.Id) {
+			m.retireVisit(old, &pl)
+		}
+	}
 	pl.add(Effect{Kind: EffRefreshOverlay})
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 	return pl.plan()
