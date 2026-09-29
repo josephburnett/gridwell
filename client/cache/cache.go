@@ -27,19 +27,56 @@ type Cache struct {
 	// what it serves is ServedBy's, here. A handshake entry's InfoError is the
 	// handshake's separate record of a source that would not answer then.
 	dark map[string]bool
-	// content is the one text-body store, keyed by tile id because blob ids
-	// are not routable and editing one clone must leave a sibling alone. Each
-	// entry binds its bytes to the version they derive from, so a foreign
-	// writer's event cannot advance a version over stale bytes.
+	// content is the one body store, keyed by tile id because blob ids are
+	// not routable and editing one clone must leave a sibling alone. Each
+	// entry is bound to the row it derives from; contentEntry.behind is the
+	// rule.
 	content map[string]*contentEntry
 }
 
-// contentEntry is a body, the row version it derives from, and whether it
-// carries unsaved edits reconciliation must not discard.
+// contentEntry is a body, the row version and blob it derives from, and
+// whether it carries unsaved edits reconciliation must not discard. base is
+// also the version a save claims.
 type contentEntry struct {
 	data  []byte
 	base  int64
+	blob  BlobBasis
 	dirty bool
+}
+
+// BlobBasis is the blob id a body is filed under. A read answers bytes at
+// least as new as the row it was asked against, so a fetched body is filed
+// under that row's blob, taken before the read; a save is filed under the
+// blob its response row names. known is false when no cached row named the
+// tile at the ask.
+type BlobBasis struct {
+	id    int64
+	known bool
+}
+
+// differs reports that a row naming blob may hold other bytes. An unknown
+// basis vouches only for a row with no blob.
+func (b BlobBasis) differs(blob int64) bool {
+	if !b.known {
+		return blob != 0
+	}
+	return blob != b.id
+}
+
+// behind reports that row n names bytes the entry does not hold, the one
+// statement of the binding. Version orders content edits; a framing-class
+// write (a pane layout) mints a blob without a bump, so within one version
+// the blob decides. Neither alone names the bytes of every kind: a url's
+// address has no blob and a layout has no version. Dirty bytes are never
+// behind, because their save reconciles them.
+func (e *contentEntry) behind(n *gridwellv1.Tile) bool {
+	switch {
+	case e.dirty || n.Version < e.base:
+		return false
+	case n.Version > e.base:
+		return true
+	}
+	return e.blob.differs(n.BlobId)
 }
 
 // Grid is a cached grid plus its tiles indexed by id.
@@ -58,17 +95,35 @@ func New() *Cache {
 	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{}, dark: map[string]bool{}}
 }
 
+// AskContent is the basis a content read is filed under, taken before the
+// read is sent and handed back to PutFetchedContent.
+func (c *Cache) AskContent(tileID string) BlobBasis {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if n := c.rowLocked(tileID); n != nil {
+		return BlobBasis{id: n.BlobId, known: true}
+	}
+	return BlobBasis{}
+}
+
 // PutFetchedContent stores a body read from the server under the version it
-// was read at. A dirty entry is never replaced: the fetch raced unsaved edits
-// and its own save resolves them. A reply older than the entry's base is
-// dropped too, since a regressed basis manufactures a 409 on the next save.
-func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64) {
+// was read at and the blob it was asked against. A dirty entry is never
+// replaced: the fetch raced unsaved edits and its own save resolves them. A
+// reply older than the entry's base is dropped too, since a regressed basis
+// manufactures a 409 on the next save. A reply whose row moved to another
+// blob while it was in flight may predate the move, so it is not stored and
+// the next reader asks again; only the blob is compared, because a move
+// happens once and a version the read disagrees with would ask forever.
+func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64, asked BlobBasis) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if e, ok := c.content[tileID]; ok && (e.dirty || base < e.base) {
 		return
 	}
-	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
+	if n := c.rowLocked(tileID); n != nil && asked.differs(n.BlobId) {
+		return
+	}
+	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, blob: asked}
 }
 
 // PutEditedContent stores an optimistic, not-yet-saved edit. The entry keeps
@@ -87,18 +142,19 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 	e.dirty = true
 }
 
-// PutSavedContent stores the body a content write confirmed, with the
-// response version as the new base so the next queued save chains from it.
-// When newer edits landed mid-flight only the basis advances: the cache entry
-// is the one owner of unsaved typing.
-func (c *Cache) PutSavedContent(tileID string, data []byte, base int64) {
+// PutSavedContent stores the body a content write confirmed, filed under the
+// response row, so the next queued save chains from its version and no reader
+// refetches what this client just wrote. When newer edits landed mid-flight
+// only the basis advances: the cache entry is the one owner of unsaved typing.
+func (c *Cache) PutSavedContent(row *gridwellv1.Tile, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e, ok := c.content[tileID]; ok && e.dirty && !bytes.Equal(e.data, data) {
-		e.base = base
+	blob := BlobBasis{id: row.BlobId, known: true}
+	if e, ok := c.content[row.Id]; ok && e.dirty && !bytes.Equal(e.data, data) {
+		e.base, e.blob = row.Version, blob
 		return
 	}
-	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
+	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: row.Version, blob: blob}
 }
 
 // SaveBasis returns the version a content write must claim. Only fetches and
@@ -167,46 +223,40 @@ func (c *Cache) TileContent(tileID string) ([]byte, bool) {
 }
 
 // PutGrid replaces a grid's metadata and tile set after a fresh GetGrid. Each
-// replaced row runs reconcileContent, because a refetch and an event are the
-// same fact on two paths and must age cached bodies identically.
+// row ages its body, because a refetch and an event are the same fact on two
+// paths and must age cached bodies identically.
 func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	old := c.grids[g.Id]
 	gr := &Grid{Meta: g, Tiles: map[string]*gridwellv1.Tile{}}
 	for _, n := range tiles {
-		if old != nil {
-			if cur, ok := old.Tiles[n.Id]; ok {
-				c.reconcileContent(cur, n)
-			}
-		}
+		c.ageContentLocked(n)
 		gr.Tiles[n.Id] = n
 	}
 	c.grids[g.Id] = gr
 }
 
-// reconcileContent ages the cached body when a fresher row for the same tile
-// arrives on either path. Callers hold c.mu.
-//
-// For text, a version beyond the entry's base means a foreign writer: drop a
-// clean entry so the next render refetches, keep a dirty one so its save is
-// rejected and reconciles visibly. A same-version row never drops, since
-// framing writes do not bump version. For other kinds version is not the
-// content key, so a changed blob id is the staleness signal.
-func (c *Cache) reconcileContent(cur, n *gridwellv1.Tile) {
-	e, ok := c.content[n.Id]
-	if !ok {
-		return
-	}
-	if n.Kind == rpc.KindText {
-		if !e.dirty && n.Version > e.base {
-			delete(c.content, n.Id)
-		}
-		return
-	}
-	if n.BlobId != cur.BlobId {
+// ageContentLocked drops a clean body row n has moved past, whichever door
+// the row came through and whether or not its grid is cached: the body is
+// bound to its own basis, not to whatever row the cache last held. A dirty
+// one stays so its save is rejected and reconciles visibly. Callers hold
+// c.mu.
+func (c *Cache) ageContentLocked(n *gridwellv1.Tile) {
+	if e, ok := c.content[n.Id]; ok && e.behind(n) {
 		delete(c.content, n.Id)
 	}
+}
+
+// rowLocked is the cached row for a tile id, the newest when a move left it
+// in two grids. Callers hold c.mu.
+func (c *Cache) rowLocked(tileID string) *gridwellv1.Tile {
+	var out *gridwellv1.Tile
+	for _, g := range c.grids {
+		if n, ok := g.Tiles[tileID]; ok && (out == nil || n.Version > out.Version) {
+			out = n
+		}
+	}
+	return out
 }
 
 // Grid returns a snapshot: the map is a copy, the rows in it are the cached
@@ -295,7 +345,7 @@ func (c *Cache) ResyncSet(source string) []string {
 func (c *Cache) KnownGridIDs() []string { return c.ResyncSet(EverySource) }
 
 // putTileLocked is the one door into a grid's tile map, so the interlock and
-// reconcileContent belong to the map rather than to whichever caller
+// content aging belong to the map rather than to whichever caller
 // remembered them. A row strictly older than the cached one is refused,
 // whichever door it came from, since applying it would roll the tile back and
 // then forward. A same-version row still applies, because framing changes
@@ -305,9 +355,7 @@ func (c *Cache) putTileLocked(g *Grid, n *gridwellv1.Tile) bool {
 	if exists && n.Version < cur.Version {
 		return false
 	}
-	if exists {
-		c.reconcileContent(cur, n)
-	}
+	c.ageContentLocked(n)
 	g.Tiles[n.Id] = n
 	return true
 }
@@ -321,9 +369,11 @@ func (c *Cache) UpdateTile(gridID string, t *gridwellv1.Tile) {
 	defer c.mu.Unlock()
 	g, ok := c.grids[gridID]
 	if !ok {
+		c.ageContentLocked(t)
 		return
 	}
 	if _, ok := g.Tiles[t.Id]; !ok {
+		c.ageContentLocked(t)
 		return
 	}
 	c.putTileLocked(g, t)
@@ -357,6 +407,7 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		}
 		g, ok := c.grids[n.GridId]
 		if !ok {
+			c.ageContentLocked(n)
 			return false
 		}
 		// Unlike UpdateTile, an event may insert a tile the cache has not

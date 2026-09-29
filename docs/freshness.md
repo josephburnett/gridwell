@@ -98,13 +98,20 @@ The router holds no freshness state; it is a relay with a health contract.
 than the cached row (`n.Version < cur.Version`) is a stale echo that lost
 the race against the mutation response already applied, and is dropped;
 same-version events still apply, because framing never bumps `version` but
-does change the framing columns. `reconcileContent` ages the cached body on
-every path a fresher row arrives on — event or `PutGrid` refetch alike. A
-text body is bound to `Base`, the version its bytes derive from; `SaveBasis`
-is what a save claims, never the grid row version, so a foreign writer's
-event can advance the row without ever advancing what this client is allowed
-to claim. A dirty entry is never overwritten by a fetch, a save response, or
-a delete: it is the one copy of unsaved typing.
+does change the framing columns. A body is bound to the row it derives from:
+`Base`, the version of its bytes, and the blob id it was filed under — the
+row's blob as the cache held it when the read was asked
+(`Cache.AskContent`), or the save response's. `contentEntry.behind` is the
+one rule: a higher row version, or the same version with another blob (a
+pane layout write mints a blob without a bump), is a body the row has moved
+past. `ageContentLocked` applies it to every row the cache learns — event,
+`PutGrid` refetch, or write response, whether or not the row's grid is
+cached — and `PutFetchedContent` to a reply the cached row moved past while
+it was in flight. `SaveBasis` is what a save claims, never the grid row
+version, so a foreign writer's event can advance the row without ever
+advancing what this client is allowed to claim. A dirty entry is never
+overwritten by a fetch, a save response, or a delete: it is the one copy of
+unsaved typing.
 
 A root grid's framing is not in the cache: it rides the handshake, on the
 doorways rooted at that grid. Its write announces `GridFramingChanged`, which
@@ -189,8 +196,8 @@ correcting with no user gesture.
    `rpc.TransitQualifyGrid`). An age is not a fact about the grid, so the
    answer carries none: with the source still answering, a memory this fresh
    is what every serve is.
-5. `App.loadGrid` → `cache.Cache.PutGrid`, which runs `reconcileContent` per
-   replaced row. The bar draws no chip, because the source is not dark
+5. `App.loadGrid` → `cache.Cache.PutGrid`, which ages each row's cached
+   body. The bar draws no chip, because the source is not dark
    (`client/wasm/bottombar.go:App.drawMemoryChip` reads
    `cache.Cache.SourceDark`). Nothing else about the room changes: the chip
    is bar chrome, never tile styling.
@@ -331,10 +338,10 @@ The version interlock, the outbox park, and the drain.
    `finishContentEdit`, the one pair that may, and emits a `TileChanged`.
 4. On success the client advances immediately, not when the echo lands:
    `a.c.UpdateTile(tile.GridID, *tile)` and
-   `a.c.PutSavedContent(tile.ID, newContent, tile.Version)`. The tile is
-   cached under the RESPONSE row's grid, because a save routed through a leaf
-   link answers a row in the target's foreign grid. `recordContent` then finds
-   the entry clean and acks the outbox key.
+   `a.c.PutSavedContent(tile, newContent)`, filed under the response row.
+   The tile is cached under the RESPONSE row's grid, because a save routed
+   through a leaf link answers a row in the target's foreign grid.
+   `recordContent` then finds the entry clean and acks the outbox key.
 5. The echo arrives later on `startSSE`'s stream and goes to `cache.Apply`.
    If an earlier write's echo (version N-1) is still in flight, the interlock
    `n.Version < cur.Version` drops it: applying it would roll the tile back
@@ -342,14 +349,14 @@ The version interlock, the outbox park, and the drain.
    stands.
 
    There is one door into a grid's tile map, `Cache.putTileLocked`, and both
-   `Apply` and `UpdateTile` are it: the interlock and `reconcileContent`
+   `Apply` and `UpdateTile` are it: the interlock and content aging
    belong to the map, not to the path a row arrived on. So a write RESPONSE
    that is the older row is refused on the same rule as an older echo. (The
    one difference is insertion: an event may add a tile the cache has not
    seen; `UpdateTile` only updates a row already held.)
-6. `reconcileContent` runs on whichever row does apply, whichever door it
-   came in by. Clean text entry with
-   `n.Version > e.base` → drop the body, so the next render refetches and the
+6. Content aging runs on whichever row does apply, whichever door it
+   came in by. Clean entry the row has moved past (`contentEntry.behind`)
+   → drop the body, so the next render refetches and the
    foreign edit becomes visible. Dirty entry → keep it; its save claims the
    old base, conflicts at the server, and reconciles visibly.
 7. Failure, through `clientsync.Of` and `ReactSave`. Conflict and Rejected
@@ -487,6 +494,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The echo interlock drops an older `TileChanged` | `client/cache/cache_test.go:TestApplyStaleEchoDropped` (unit) |
 | A fetch never clobbers dirty bytes; a stale reply never regresses the basis | `cache_test.go:TestFetchNeverClobbersDirtyContent`, `TestStaleFetchNeverRegressesContent` |
 | A save response keeps mid-flight typing and only advances the basis | `cache_test.go:TestSavedContentKeepsMidFlightTyping` |
+| A body answers only for the blob it was filed under, whichever door the newer row came by; a save is filed under its response row | `client/cache/binding_test.go:TestABodyIsBoundToItsOwnBlob`, `TestASavedBodyAnswersForItsResponseRow`, `TestDirtyTextSurvivesAForeignRowAnywhere` |
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |
 | Live: typing survives a server outage and saves itself after restart; settled framing lands too; a swallowed grid read un-latches | `apps/desktop/e2e-web/web-outage.spec.ts` |

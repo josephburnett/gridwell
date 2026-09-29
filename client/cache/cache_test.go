@@ -41,8 +41,8 @@ func TestTileContentEditDoesNotLeakToClone(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText}})
 	c.PutGrid(&gridwellv1.Grid{Id: "2"}, []*gridwellv1.Tile{&gridwellv1.Tile{Id: "20", GridId: "2", Kind: rpc.KindText}})
-	c.PutFetchedContent("10", []byte("Hello World"), 1)
-	c.PutFetchedContent("20", []byte("Hello World"), 1)
+	c.PutFetchedContent("10", []byte("Hello World"), 1, c.AskContent("10"))
+	c.PutFetchedContent("20", []byte("Hello World"), 1, c.AskContent("20"))
 
 	c.PutEditedContent("10", []byte("Goodbye"))
 
@@ -59,7 +59,7 @@ func TestTileContentEditDoesNotLeakToClone(t *testing.T) {
 func TestRenderedEditVisibleThroughRenderAccessor(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText}})
-	c.PutFetchedContent("10", []byte("Hello"), 1) // what the renderer reads
+	c.PutFetchedContent("10", []byte("Hello"), 1, c.AskContent("10")) // what the renderer reads
 
 	c.PutEditedContent("10", []byte("Hello world")) // what an edit writes
 
@@ -133,7 +133,7 @@ func TestApplyTileRemoved(t *testing.T) {
 // a dirty entry, the only copy of the typing, must survive TileRemoved.
 func TestTileRemovedSparesDirtyBuffer(t *testing.T) {
 	c := seedCache(t)
-	c.PutFetchedContent("101", []byte("saved words"), 3)
+	c.PutFetchedContent("101", []byte("saved words"), 3, c.AskContent("101"))
 	c.PutEditedContent("101", []byte("saved words plus unsaved typing"))
 
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{TileRemoved: &gridwellv1.TileRemoved{GridId: "1", TileId: "101"}}})
@@ -150,7 +150,7 @@ func TestTileRemovedSparesDirtyBuffer(t *testing.T) {
 	}
 
 	// A clean entry is still dropped: a delete must not strand bodies.
-	c.PutFetchedContent("100", []byte("clean"), 1)
+	c.PutFetchedContent("100", []byte("clean"), 1, c.AskContent("100"))
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{TileRemoved: &gridwellv1.TileRemoved{GridId: "1", TileId: "100"}}})
 	if _, ok := c.TileContent("100"); ok {
 		t.Error("clean body survived TileRemoved — delete should sweep it")
@@ -170,7 +170,7 @@ func TestTileContentPutGet(t *testing.T) {
 	if _, ok := c.TileContent("7"); ok {
 		t.Fatal("empty cache should not have content for tile 7")
 	}
-	c.PutFetchedContent("7", []byte("hello"), 1)
+	c.PutFetchedContent("7", []byte("hello"), 1, c.AskContent("7"))
 	b, ok := c.TileContent("7")
 	if !ok {
 		t.Fatal("tile 7 content missing after put")
@@ -276,7 +276,7 @@ func TestUpdateTileAgesTheBodyToo(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "10"}, []*gridwellv1.Tile{
 		&gridwellv1.Tile{Id: "100", GridId: "10", Kind: rpc.KindText, Version: 5},
 	})
-	c.PutFetchedContent("100", []byte("body at 5"), 5)
+	c.PutFetchedContent("100", []byte("body at 5"), 5, c.AskContent("100"))
 
 	// A response row at 6 — a rename, say, which is a content edit and bumps.
 	c.UpdateTile("10", &gridwellv1.Tile{Id: "100", GridId: "10", Kind: rpc.KindText, Version: 6, AltText: "named"})
@@ -297,7 +297,7 @@ func TestUpdateTileAgesTheBodyToo(t *testing.T) {
 func TestRemoveTileFreesContent(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText}})
-	c.PutFetchedContent("10", []byte("Goodbye"), 2)
+	c.PutFetchedContent("10", []byte("Goodbye"), 2, c.AskContent("10"))
 	if _, ok := c.TileContent("10"); !ok {
 		t.Fatal("content not stored")
 	}
@@ -316,7 +316,7 @@ func TestApplyBlobChangeDropsContent(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 7},
 	})
-	c.PutFetchedContent("10", []byte(`{"v":1,"old":true}`), 3)
+	c.PutFetchedContent("10", []byte(`{"v":1,"old":true}`), 3, c.AskContent("10"))
 
 	changed := c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
 		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 8},
@@ -328,7 +328,7 @@ func TestApplyBlobChangeDropsContent(t *testing.T) {
 		t.Fatal("stale content bytes survived a blob change — the preview would never repaint")
 	}
 	// Same blob again: nothing to drop, content written after the event stays.
-	c.PutFetchedContent("10", []byte(`{"v":1,"new":true}`), 3)
+	c.PutFetchedContent("10", []byte(`{"v":1,"new":true}`), 3, c.AskContent("10"))
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
 		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 8},
 	}}})
@@ -345,7 +345,7 @@ func TestApplyTextEventSparesDirtyContent(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3, BlobId: 7},
 	})
-	c.PutFetchedContent("10", []byte("# saved state"), 3)
+	c.PutFetchedContent("10", []byte("# saved state"), 3, c.AskContent("10"))
 	c.PutEditedContent("10", []byte("# newer unsaved keystrokes"))
 
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
@@ -367,7 +367,7 @@ func TestApplyForeignTextEventDropsCleanContent(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3, BlobId: 7},
 	})
-	c.PutFetchedContent("10", []byte("# stale"), 3)
+	c.PutFetchedContent("10", []byte("# stale"), 3, c.AskContent("10"))
 
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
 		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 4, BlobId: 8},
@@ -378,7 +378,7 @@ func TestApplyForeignTextEventDropsCleanContent(t *testing.T) {
 
 	// Pans and scrolls never bump version, so a same-version event must not
 	// evict the body and refetch on every pan echo.
-	c.PutFetchedContent("10", []byte("# current"), 4)
+	c.PutFetchedContent("10", []byte("# current"), 4, c.AskContent("10"))
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
 		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 4, BlobId: 8},
 	}}})
@@ -396,7 +396,7 @@ func TestCaptureEventKeepsTheBodyAndStillRenders(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3, BlobId: 7, AltText: "old name"},
 	})
-	c.PutFetchedContent("10", []byte("# the body"), 3)
+	c.PutFetchedContent("10", []byte("# the body"), 3, c.AskContent("10"))
 
 	capture := &gridwellv1.Tile{
 		Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3, BlobId: 7,
@@ -421,7 +421,7 @@ func TestCaptureDuringAnEditKeepsTheKeystrokes(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3, BlobId: 7},
 	})
-	c.PutFetchedContent("10", []byte("# saved state"), 3)
+	c.PutFetchedContent("10", []byte("# saved state"), 3, c.AskContent("10"))
 	c.PutEditedContent("10", []byte("# words still being typed"))
 
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
@@ -446,8 +446,8 @@ func TestPutGridReconcilesContentLikeAnEvent(t *testing.T) {
 		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3},
 		&gridwellv1.Tile{Id: "11", GridId: "1", Kind: rpc.KindText, Version: 3},
 	})
-	c.PutFetchedContent("10", []byte("# clean stale"), 3)
-	c.PutFetchedContent("11", []byte("# saved"), 3)
+	c.PutFetchedContent("10", []byte("# clean stale"), 3, c.AskContent("10"))
+	c.PutFetchedContent("11", []byte("# saved"), 3, c.AskContent("11"))
 	c.PutEditedContent("11", []byte("# dirty typing"))
 
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
@@ -468,11 +468,11 @@ func TestPutGridReconcilesContentLikeAnEvent(t *testing.T) {
 func TestFetchNeverClobbersDirtyContent(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 1}})
-	c.PutFetchedContent("10", []byte("# v1 body"), 1)
+	c.PutFetchedContent("10", []byte("# v1 body"), 1, c.AskContent("10"))
 	c.PutEditedContent("10", []byte("# v1 body + local typing")) // save queued, bytes frozen
 
 	// A foreign edit's refetch completes mid-window with version-2 content.
-	c.PutFetchedContent("10", []byte("# foreign v2 body"), 2)
+	c.PutFetchedContent("10", []byte("# foreign v2 body"), 2, c.AskContent("10"))
 
 	if b, _ := c.TileContent("10"); string(b) != "# v1 body + local typing" {
 		t.Fatalf("fetch overwrote unsaved typing: %q", b)
@@ -484,8 +484,8 @@ func TestFetchNeverClobbersDirtyContent(t *testing.T) {
 	// Saves post DirtyContent, so a response differs only when newer typing
 	// landed mid-flight. A clean entry is replaced by a fetch, which is how
 	// foreign content becomes visible.
-	c.PutSavedContent("10", []byte("# v1 body + local typing"), 3)
-	c.PutFetchedContent("10", []byte("# fresher"), 4)
+	c.PutSavedContent(&gridwellv1.Tile{Id: "10", Version: 3}, []byte("# v1 body + local typing"))
+	c.PutFetchedContent("10", []byte("# fresher"), 4, c.AskContent("10"))
 	if b, _ := c.TileContent("10"); string(b) != "# fresher" {
 		t.Fatalf("clean entry not refreshed by fetch: %q", b)
 	}
@@ -498,10 +498,10 @@ func TestFetchNeverClobbersDirtyContent(t *testing.T) {
 func TestStaleFetchNeverRegressesContent(t *testing.T) {
 	c := New()
 	c.PutEditedContent("10", []byte("# draft"))
-	c.PutSavedContent("10", []byte("# draft"), 3)
+	c.PutSavedContent(&gridwellv1.Tile{Id: "10", Version: 3}, []byte("# draft"))
 
 	// The stale reply finally lands: pre-edit bytes, read under version 2.
-	c.PutFetchedContent("10", []byte("# pre-edit"), 2)
+	c.PutFetchedContent("10", []byte("# pre-edit"), 2, c.AskContent("10"))
 
 	if b, _ := c.TileContent("10"); string(b) != "# draft" {
 		t.Fatalf("stale fetch rolled content back: %q", b)
@@ -511,11 +511,11 @@ func TestStaleFetchNeverRegressesContent(t *testing.T) {
 	}
 
 	// Same-version and fresher replies still apply.
-	c.PutFetchedContent("10", []byte("# same version"), 3)
+	c.PutFetchedContent("10", []byte("# same version"), 3, c.AskContent("10"))
 	if b, _ := c.TileContent("10"); string(b) != "# same version" {
 		t.Fatalf("same-version fetch refused: %q", b)
 	}
-	c.PutFetchedContent("10", []byte("# fresher"), 4)
+	c.PutFetchedContent("10", []byte("# fresher"), 4, c.AskContent("10"))
 	if b, _ := c.TileContent("10"); string(b) != "# fresher" {
 		t.Fatalf("fresher fetch refused: %q", b)
 	}
@@ -532,7 +532,7 @@ func TestSaveBasisFollowsBytesNotRow(t *testing.T) {
 	if _, ok := c.SaveBasis("10"); ok {
 		t.Fatal("no content yet — there is no basis to claim")
 	}
-	c.PutFetchedContent("10", []byte("# body v3"), 3)
+	c.PutFetchedContent("10", []byte("# body v3"), 3, c.AskContent("10"))
 	if base, _ := c.SaveBasis("10"); base != 3 {
 		t.Fatalf("basis after fetch = %d, want 3", base)
 	}
@@ -550,7 +550,7 @@ func TestSaveBasisFollowsBytesNotRow(t *testing.T) {
 		t.Fatalf("basis after foreign event = %d, want 3 (claiming 7 would stomp the foreign edit)", base)
 	}
 	// A confirmed save advances it: the server accepted these bytes as v8.
-	c.PutSavedContent("10", []byte("# merged"), 8)
+	c.PutSavedContent(&gridwellv1.Tile{Id: "10", Version: 8}, []byte("# merged"))
 	if base, _ := c.SaveBasis("10"); base != 8 {
 		t.Fatalf("basis after save = %d, want 8", base)
 	}
@@ -560,12 +560,12 @@ func TestSaveBasisFollowsBytesNotRow(t *testing.T) {
 // after further keystrokes advances only the basis.
 func TestSavedContentKeepsMidFlightTyping(t *testing.T) {
 	c := New()
-	c.PutFetchedContent("10", []byte("draft"), 1)
+	c.PutFetchedContent("10", []byte("draft"), 1, c.AskContent("10"))
 	c.PutEditedContent("10", []byte("draft v2")) // save of "draft v2" goes out
 	c.PutEditedContent("10", []byte("draft v2 plus more typing"))
 
 	// The "draft v2" save's response lands: version 2 confirmed.
-	c.PutSavedContent("10", []byte("draft v2"), 2)
+	c.PutSavedContent(&gridwellv1.Tile{Id: "10", Version: 2}, []byte("draft v2"))
 
 	if b, _ := c.TileContent("10"); string(b) != "draft v2 plus more typing" {
 		t.Fatalf("save response destroyed mid-flight typing: %q", b)
@@ -578,7 +578,7 @@ func TestSavedContentKeepsMidFlightTyping(t *testing.T) {
 	}
 
 	// Response matching the entry's bytes settles it clean.
-	c.PutSavedContent("10", []byte("draft v2 plus more typing"), 3)
+	c.PutSavedContent(&gridwellv1.Tile{Id: "10", Version: 3}, []byte("draft v2 plus more typing"))
 	if _, ok := c.DirtyContent("10"); ok {
 		t.Fatal("entry must be clean once the server holds its exact bytes")
 	}
@@ -588,8 +588,8 @@ func TestSavedContentKeepsMidFlightTyping(t *testing.T) {
 // has focus.
 func TestDirtyAccessors(t *testing.T) {
 	c := New()
-	c.PutFetchedContent("10", []byte("clean"), 1)
-	c.PutFetchedContent("20", []byte("original"), 4)
+	c.PutFetchedContent("10", []byte("clean"), 1, c.AskContent("10"))
+	c.PutFetchedContent("20", []byte("original"), 4, c.AskContent("20"))
 	c.PutEditedContent("20", []byte("edited"))
 
 	if _, ok := c.DirtyContent("10"); ok {
@@ -612,7 +612,7 @@ func TestDirtyAccessors(t *testing.T) {
 	if len(ids) != 1 || ids[0] != "20" {
 		t.Fatalf("DirtyTileIDs = %v, want [20]", ids)
 	}
-	c.PutSavedContent("20", []byte("edited"), 5)
+	c.PutSavedContent(&gridwellv1.Tile{Id: "20", Version: 5}, []byte("edited"))
 	if ids := c.DirtyTileIDs(); len(ids) != 0 {
 		t.Fatalf("after save DirtyTileIDs = %v, want empty", ids)
 	}

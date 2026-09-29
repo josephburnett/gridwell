@@ -1,0 +1,112 @@
+package cache
+
+import (
+	"testing"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+
+	"github.com/josephburnett/gridwell/api/rpc"
+)
+
+func changedEvent(n *gridwellv1.Tile) *gridwellv1.Event {
+	return &gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: n}}}
+}
+
+// A body is bound to the blob it was filed under, not to whichever row the
+// cache last held: a pane layout write changes only the blob, and a row can
+// reach the cache through a grid that held no earlier row to compare with.
+func TestABodyIsBoundToItsOwnBlob(t *testing.T) {
+	pane := func(grid string, blob int64) *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "10", GridId: grid, Kind: rpc.KindPane, Version: 1, BlobId: blob}
+	}
+	fetchA := func(c *Cache) { c.PutFetchedContent("10", []byte("A"), 1, c.AskContent("10")) }
+	cases := []struct {
+		name string
+		// seed leaves layout A cached, filed under whatever the cache knew.
+		seed func(c *Cache)
+		// then brings a row naming blob 8 in.
+		then func(c *Cache)
+	}{
+		{"a grid first fetched after the write",
+			fetchA,
+			func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{pane("1", 8)}) }},
+		{"a grid that held no earlier row",
+			func(c *Cache) {
+				c.PutGrid(&gridwellv1.Grid{Id: "2"}, []*gridwellv1.Tile{pane("2", 7)})
+				fetchA(c)
+			},
+			func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{pane("1", 8)}) }},
+		{"an event for a grid not cached",
+			func(c *Cache) {
+				c.PutGrid(&gridwellv1.Grid{Id: "2"}, []*gridwellv1.Tile{pane("2", 7)})
+				fetchA(c)
+			},
+			func(c *Cache) { c.Apply(changedEvent(pane("9", 8))) }},
+		{"a response for a grid not cached",
+			func(c *Cache) {
+				c.PutGrid(&gridwellv1.Grid{Id: "2"}, []*gridwellv1.Tile{pane("2", 7)})
+				fetchA(c)
+			},
+			func(c *Cache) { c.UpdateTile("9", pane("9", 8)) }},
+		{"the row moved while the read was in flight",
+			func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{pane("1", 7)}) },
+			func(c *Cache) {
+				asked := c.AskContent("10")
+				c.Apply(changedEvent(pane("1", 8)))
+				c.PutFetchedContent("10", []byte("A"), 1, asked)
+			}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New()
+			tc.seed(c)
+			tc.then(c)
+			if b, ok := c.TileContent("10"); ok {
+				t.Fatalf("layout %q answered for a row naming blob 8", b)
+			}
+			c.PutFetchedContent("10", []byte("B"), 1, c.AskContent("10"))
+			if b, ok := c.TileContent("10"); !ok || string(b) != "B" {
+				t.Fatalf("a read filed under the current row = %q %v, want B", b, ok)
+			}
+		})
+	}
+}
+
+// A body this client just wrote is filed under the response row, so the
+// preview reads it at once and the echo of the same row keeps it.
+func TestASavedBodyAnswersForItsResponseRow(t *testing.T) {
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
+		{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 1, BlobId: 7},
+	})
+	c.PutFetchedContent("10", []byte("A"), 1, c.AskContent("10"))
+
+	row := &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 1, BlobId: 8}
+	c.PutSavedContent(row, []byte("B"))
+	c.Apply(changedEvent(row))
+	if b, ok := c.TileContent("10"); !ok || string(b) != "B" {
+		t.Fatalf("own save = %q %v, want B without a refetch", b, ok)
+	}
+}
+
+// Unsaved words survive a foreign row on every door, the grid-less ones
+// included.
+func TestDirtyTextSurvivesAForeignRowAnywhere(t *testing.T) {
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
+		{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3, BlobId: 7},
+	})
+	c.PutFetchedContent("10", []byte("# saved"), 3, c.AskContent("10"))
+	c.PutEditedContent("10", []byte("# typing"))
+
+	foreign := &gridwellv1.Tile{Id: "10", GridId: "9", Kind: rpc.KindText, Version: 4, BlobId: 8}
+	c.Apply(changedEvent(foreign))
+	c.UpdateTile("9", foreign)
+	c.PutGrid(&gridwellv1.Grid{Id: "5"}, []*gridwellv1.Tile{foreign})
+	if b, ok := c.DirtyContent("10"); !ok || string(b) != "# typing" {
+		t.Fatalf("a foreign row discarded unsaved typing: %q %v", b, ok)
+	}
+	if base, _ := c.SaveBasis("10"); base != 3 {
+		t.Errorf("save basis = %d, want 3 so the save conflicts visibly", base)
+	}
+}

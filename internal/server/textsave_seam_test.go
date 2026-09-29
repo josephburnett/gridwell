@@ -45,7 +45,7 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	// through the link: one content entry, keyed by the id that owns the
 	// bytes, dirty, based on the version it was fetched under.
 	c := cache.New()
-	c.PutFetchedContent(target.Id, []byte("v0"), target.Version)
+	c.PutFetchedContent(target.Id, []byte("v0"), target.Version, c.AskContent(target.Id))
 	c.PutEditedContent(target.Id, []byte("typed"))
 
 	// Both flushes reach for the head of the same chain at the same moment.
@@ -87,7 +87,7 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 				errs = append(errs, err)
 				return
 			}
-			c.PutSavedContent(tile.Id, data, tile.Version)
+			c.PutSavedContent(tile, data)
 		}
 	}
 

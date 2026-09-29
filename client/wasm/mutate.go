@@ -303,7 +303,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 	// row's own grid, so a save through a leaf link cannot plant a foreign
 	// row in the wrong grid map.
 	a.c.UpdateTile(tile.GridId, tile)
-	a.c.PutSavedContent(tile.Id, newContent, tile.Version)
+	a.c.PutSavedContent(tile, newContent)
 	a.recordContent(tile.Id)
 	return tile, true
 }
