@@ -3,10 +3,11 @@ package panepreview
 import "github.com/josephburnett/gridwell/client/pane"
 
 // Layouts memoizes each pane tile's decoded tree by blob generation: another
-// view's layout write invalidates through the tile row's blob id. Until the
-// new bytes land the last decoded arrangement keeps drawing, which beats a
-// blank flash, and a corrupt blob is reported once rather than per frame. It
-// is not safe for concurrent use, the wasm client being single-threaded.
+// view's layout write invalidates through the tile row's blob id. A tree
+// answers only for its own blob, because an older arrangement names panes
+// and tiles the row no longer does, and drawing one resolves them. A corrupt
+// blob is reported once rather than per frame. It is not safe for concurrent
+// use, the wasm client being single-threaded.
 type Layouts struct {
 	onErr   func(tileID string, err error)
 	entries map[string]*layoutEntry
@@ -27,7 +28,7 @@ func NewLayouts(onErr func(tileID string, err error)) *Layouts {
 // Tree answers a pane tile's decoded tree. blobID 0 is never arranged. body
 // answers the tile's bytes, false while they are still in flight, and is not
 // asked for a blob already decoded. ok is false for a never-arranged tile, a
-// not-yet-fetched layout with nothing older to show, or a corrupt blob.
+// layout whose bytes have not landed, or a corrupt blob.
 func (l *Layouts) Tree(tileID string, blobID int64, body func() ([]byte, bool)) (*pane.Tree, bool) {
 	if blobID == 0 {
 		return nil, false
@@ -38,9 +39,6 @@ func (l *Layouts) Tree(tileID string, blobID int64, body func() ([]byte, bool)) 
 	}
 	data, ok := body()
 	if !ok {
-		if e != nil && e.tree != nil {
-			return e.tree, true
-		}
 		return nil, false
 	}
 	prefix := pane.ChainPrefix(tileID)
