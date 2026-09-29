@@ -77,4 +77,9 @@ type Namespace interface {
 	OpenShell(ctx context.Context, recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error
 	// Subscribe streams this namespace's change events until ctx ends.
 	Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error
+	// SetInterest names the grids someone is showing. At the node's door it
+	// is one session's set (interest.Book); from the node to one of its
+	// namespaces it is that namespace's whole share of the union, with no
+	// session.
+	SetInterest(ctx context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error)
 }

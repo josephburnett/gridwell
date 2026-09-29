@@ -84,6 +84,8 @@ const (
 	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	// GridwellSubscribeProcedure is the fully-qualified name of the Gridwell's Subscribe RPC.
 	GridwellSubscribeProcedure = "/gridwell.v1.Gridwell/Subscribe"
+	// GridwellSetInterestProcedure is the fully-qualified name of the Gridwell's SetInterest RPC.
+	GridwellSetInterestProcedure = "/gridwell.v1.Gridwell/SetInterest"
 )
 
 // GridwellClient is a client for the gridwell.v1.Gridwell service.
@@ -121,6 +123,7 @@ type GridwellClient interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
+	SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error)
 }
 
 // NewGridwellClient constructs a client for the gridwell.v1.Gridwell service. By default, it uses
@@ -248,6 +251,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("Subscribe")),
 			connect.WithClientOptions(opts...),
 		),
+		setInterest: connect.NewClient[v1.SetInterestRequest, v1.SetInterestResponse](
+			httpClient,
+			baseURL+GridwellSetInterestProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetInterest")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -272,6 +281,7 @@ type gridwellClient struct {
 	setFraming        *connect.Client[v1.SetFramingRequest, v1.SetFramingResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
+	setInterest       *connect.Client[v1.SetInterestRequest, v1.SetInterestResponse]
 }
 
 // Info calls gridwell.v1.Gridwell.Info.
@@ -369,6 +379,11 @@ func (c *gridwellClient) Subscribe(ctx context.Context, req *connect.Request[v1.
 	return c.subscribe.CallServerStream(ctx, req)
 }
 
+// SetInterest calls gridwell.v1.Gridwell.SetInterest.
+func (c *gridwellClient) SetInterest(ctx context.Context, req *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error) {
+	return c.setInterest.CallUnary(ctx, req)
+}
+
 // GridwellHandler is an implementation of the gridwell.v1.Gridwell service.
 type GridwellHandler interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
@@ -404,6 +419,7 @@ type GridwellHandler interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
+	SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error)
 }
 
 // NewGridwellHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -527,6 +543,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("Subscribe")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellSetInterestHandler := connect.NewUnaryHandler(
+		GridwellSetInterestProcedure,
+		svc.SetInterest,
+		connect.WithSchema(gridwellMethods.ByName("SetInterest")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/gridwell.v1.Gridwell/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case GridwellInfoProcedure:
@@ -567,6 +589,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
 		case GridwellSubscribeProcedure:
 			gridwellSubscribeHandler.ServeHTTP(w, r)
+		case GridwellSetInterestProcedure:
+			gridwellSetInterestHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -650,4 +674,8 @@ func (UnimplementedGridwellHandler) ShellSessionAlive(context.Context, *connect.
 
 func (UnimplementedGridwellHandler) Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Subscribe is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetInterest is not implemented"))
 }

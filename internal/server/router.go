@@ -628,7 +628,13 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 // of the client stream: watchPlugin re-dials Info and the stream through
 // namespace.Refollow, and the client hears about the outage and the recovery
 // through an EventPluginHealth instead of tiles quietly going stale.
-func (rt *router) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+//
+// The stream is also what keeps its session's interest counted
+// (interest.Book.Open).
+func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	if s := req.GetSession(); s != "" {
+		defer rt.srv.interest.Open(s)()
+	}
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

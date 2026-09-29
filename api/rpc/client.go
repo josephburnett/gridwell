@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"crypto/rand"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -14,12 +15,15 @@ import (
 // streams assembled. Go callers use this rather than the raw connect client.
 type Client struct {
 	cl gridwellv1connect.GridwellClient
+	// session names this client to the node, minted here so its event
+	// stream and its interest cannot name two different clients.
+	session string
 }
 
 // NewClient wires a Client to a Connect-RPC server. baseURL is protocol and
 // host with no path.
 func NewClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) *Client {
-	return &Client{cl: gridwellv1connect.NewGridwellClient(httpClient, baseURL, opts...)}
+	return &Client{cl: gridwellv1connect.NewGridwellClient(httpClient, baseURL, opts...), session: rand.Text()}
 }
 
 // NewDefaultClient uses http.DefaultClient, which rides fetch under WASM, and
@@ -212,9 +216,17 @@ type EventStream struct {
 	s *connect.ServerStreamForClient[pb.Event]
 }
 
+// SetInterest tells the node every grid this client is showing. The node
+// forgets it when the client's last event stream closes, so a client says it
+// again after every re-open.
+func (c *Client) SetInterest(ctx context.Context, gridIDs []string) error {
+	_, err := c.cl.SetInterest(ctx, connect.NewRequest(&pb.SetInterestRequest{Session: c.session, GridIds: gridIDs}))
+	return err
+}
+
 // Subscribe opens the event stream, which closes when ctx is cancelled.
 func (c *Client) Subscribe(ctx context.Context) (*EventStream, error) {
-	s, err := c.cl.Subscribe(ctx, connect.NewRequest(&pb.SubscribeRequest{}))
+	s, err := c.cl.Subscribe(ctx, connect.NewRequest(&pb.SubscribeRequest{Session: c.session}))
 	if err != nil {
 		return nil, err
 	}

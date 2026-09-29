@@ -29,6 +29,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/events"
 	"github.com/josephburnett/gridwell/client/inflight"
+	"github.com/josephburnett/gridwell/client/interest"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/outbox"
@@ -172,6 +173,10 @@ type App struct {
 
 	// mirrors is what each mirror was last told; see syncMirrors.
 	mirrors mirrorState
+
+	// interest is what the node was told this client shows; see syncInterest.
+	interest     interest.Tracker
+	interestKick chan struct{}
 
 	// shellMirrorPasses counts shell mirror snapshots. e2e-only: the mirror
 	// writes into a cache and nothing else reports that it ran.
@@ -606,6 +611,7 @@ func main() {
 		origin:             origin,
 		cl:                 rpc.NewDefaultClient(origin, connect.WithInterceptors(trace.Interceptor(tr, time.Now))),
 		c:                  cache.New(),
+		interestKick:       make(chan struct{}, 1),
 		locals:             map[string]*paneLocal{},
 		menu:               menu.New(),
 		errs:               errsurface.New(),
@@ -734,6 +740,7 @@ func (a *App) afterBootstrap() {
 		a.fetchGrid(a.home)
 	}
 
+	go a.sendInterest()
 	go a.startSSE()
 	// The slow retry net behind the reconnect kick.
 	go a.retryBackstop()
@@ -1023,6 +1030,9 @@ func (a *App) ghostHiddenPane() string {
 func (a *App) startSSE() {
 	var pace retry.Reconnect
 	for {
+		// The node forgets this session's interest when its stream closes.
+		a.interest.Reopened()
+		a.kickInterest()
 		stream, err := a.cl.Subscribe(context.Background())
 		if err != nil {
 			// Until this reconnects, everything on screen is silently going

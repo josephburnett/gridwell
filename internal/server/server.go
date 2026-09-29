@@ -24,6 +24,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
+	"github.com/josephburnett/gridwell/internal/interest"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"strconv"
@@ -69,6 +70,8 @@ type Server struct {
 	// never cached.
 	infoMu    sync.Mutex
 	infoCache map[string]*pb.InfoResponse
+
+	interest *interest.Book
 }
 
 // New refuses an empty Config.Password: the browser door has no open mode.
@@ -83,6 +86,7 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 		shellWriteTimeout: defaultShellWriteTimeout,
 		infoCache:         map[string]*pb.InfoResponse{},
 	}
+	srv.interest = interest.New(srv.spreadInterest)
 	srv.routes()
 	return srv, nil
 }

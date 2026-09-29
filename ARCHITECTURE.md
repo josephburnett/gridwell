@@ -92,7 +92,7 @@ record shapes. Everything else derives from it:
 | Framing | `SetFraming` — the one framing write |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
-| Events | `Subscribe` |
+| Events | `Subscribe`, `SetInterest` — the grids a client shows, held while its stream is open |
 
 No request carries a descent path. The server derives location from rows it
 owns. Sessions and networks never cross the wire.
@@ -450,7 +450,8 @@ rides the end record), with the duration and, on a failure, the code. What emits
 store write (one record at `withMutation`, the transaction every mutation runs
 in), every publish, delivery and coalesce in `eventhub`, the plugin
 supervisor's spawns and liveness transitions, each dial and connection health
-transition, the shell door's refusals, opens and closes, and — through
+transition, the shell door's refusals, opens and closes, each new union of
+the grids the clients show (`interest/union`), and — through
 `log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
 subprocess's stderr does not pass through that log, so the spawn hands it a
 writer of its own.
@@ -509,6 +510,7 @@ copy:
 | is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | this event stream is established | `namespace.Follow` |
+| which grids the clients are showing | `interest.Book`, fed by `SetInterest`, counted by the `Subscribe` stream |
 | the trace line, its door and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |
 
