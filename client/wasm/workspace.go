@@ -210,6 +210,9 @@ func (a *App) postPaneLayout(tileID string, data []byte) {
 			if top := a.ws.Top(); top != nil && top.TileID == tileID {
 				pane.MarkSaved(top, data)
 			}
+			// Filed before the row lands, so no frame sees the new blob
+			// without its bytes and the preview never refetches this write.
+			a.c.PutSavedContent(tile, data)
 			a.c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 				TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
 			a.resolveErr("rpc:PaneLayout")

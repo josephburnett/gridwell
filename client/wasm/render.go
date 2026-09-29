@@ -936,6 +936,7 @@ func (a *App) fetchTileContent(tileID string) {
 // restore's cursor-placing read differ only in their guards. The error is
 // returned as well as surfaced, because a waiting caller has a continuation.
 func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
+	asked := a.c.AskContent(tileID)
 	data, _, version, err := a.cl.ReadContent(ctx, tileID)
 	// clientsync.ReactRead is the one table; this runs its arms.
 	o := clientsync.Of(err)
@@ -948,7 +949,7 @@ func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) e
 		}
 		return err
 	}
-	a.c.PutFetchedContent(tileID, data, version)
+	a.c.PutFetchedContent(tileID, data, version, asked)
 	a.refreshFileOverlay()
 	then()
 	return nil

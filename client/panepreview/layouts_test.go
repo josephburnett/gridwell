@@ -48,9 +48,10 @@ func TestLayoutsTree(t *testing.T) {
 		t.Fatal("the same blob answers from the memo without asking for bytes")
 	}
 
-	// A new blob whose bytes have not landed keeps the last arrangement.
-	if stale, ok := l.Tree("n1/7", 4, inflight.body); !ok || stale != tree {
-		t.Fatal("until new bytes land the last decoded arrangement keeps drawing")
+	// A new blob whose bytes have not landed draws no arrangement: the last
+	// one may name tiles the row no longer does.
+	if _, ok := l.Tree("n1/7", 4, inflight.body); ok {
+		t.Fatal("an older blob's arrangement answered for a newer blob")
 	}
 
 	bad := &bodyFake{data: []byte("{not a layout"), ok: true}
