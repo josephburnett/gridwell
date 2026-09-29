@@ -44,7 +44,7 @@ func (a *App) runNavEffect(e nav.Effect) {
 	case nav.EffPopLevel:
 		a.navPopLevel(e)
 	case nav.EffFlushLayout:
-		a.flushWorkspaceSave()
+		a.flushWorkspaceSave(nil)
 	case nav.EffHandBackSurfaces:
 		a.handBackURLViews()
 	case nav.EffFlushDroppedSubtree:
@@ -317,6 +317,10 @@ func (a *App) navAwait(e nav.Effect) {
 				return nav.Result{}
 			}
 			return nav.Result{OK: true, Wells: res[0].Path}
+		})
+	case nav.RequestFlushLayout:
+		a.flushWorkspaceSave(func(ok bool) {
+			a.runNav(a.nav.Resume(tok, nav.Result{OK: ok}, a.navWorldCommon()))
 		})
 	default:
 		a.reportErr(errsurface.Error, "nav", "no executor for this navigation request")

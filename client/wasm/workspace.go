@@ -170,10 +170,16 @@ func (a *App) scheduleWorkspaceSave(fp pane.Fingerprint) {
 }
 
 // flushWorkspaceSave persists the current layout if it changed: the
-// ascent-boundary flush, and the debounce callback's body.
-func (a *App) flushWorkspaceSave() {
+// ascent-boundary flush, the debounce callback's body, and
+// nav.RequestFlushLayout, whose held hears whether the node holds the tree as
+// it stands. held may be nil.
+func (a *App) flushWorkspaceSave(held func(ok bool)) {
+	if held == nil {
+		held = func(bool) {}
+	}
 	top := a.ws.Top()
 	if top == nil {
+		go held(true)
 		return
 	}
 	prefix := pane.ChainPrefix(top.TileID)
@@ -183,21 +189,25 @@ func (a *App) flushWorkspaceSave() {
 	})
 	if err != nil {
 		a.reportErr(errsurface.Error, "layout:"+top.TileID, "workspace layout encode failed: "+err.Error())
+		go held(false)
 		return
 	}
 	a.reportLayoutSkipped(top.TileID, skipped)
 	if !pane.ShouldPersist(top, data) {
+		go held(true)
 		return
 	}
-	go a.postPaneLayout(top.TileID, data)
+	go a.postPaneLayout(top.TileID, data, held)
 }
 
 // postPaneLayout sends one layout write through WriteContent. A pane layout
 // is framing-class: no version claim and no bump. A transport failure parks
 // the encoded layout, because the ascent-boundary flush fires once and then
-// pops the frame, leaving `data` the only copy.
-func (a *App) postPaneLayout(tileID string, data []byte) {
+// pops the frame, leaving `data` the only copy. held hears the first
+// attempt's verdict: a parked write is not held.
+func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 	var tile *gridwellv1.Tile
+	landed, answered := false, false
 	a.do(write{
 		label: "PaneLayout", gid: a.gridIDOfTile(tileID), id: tileID,
 		source: "layout:" + tileID, failText: "workspace layout unsaved",
@@ -216,6 +226,13 @@ func (a *App) postPaneLayout(tileID string, data []byte) {
 			a.c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 				TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
 			a.resolveErr("rpc:PaneLayout")
+			landed = true
+		},
+		done: func() {
+			if !answered {
+				answered = true
+				held(landed)
+			}
 		},
 		beacon: func() (string, []byte, string) {
 			path, body := rpc.WriteContentBeacon(tileID, 0, data)

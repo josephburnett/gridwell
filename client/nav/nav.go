@@ -112,6 +112,11 @@ const (
 	// it came out of, once that row has been read.
 	stepLevelRecentre
 	stepLinkTarget // places a live url view on a link's target row
+	// stepRetireVisit deletes an ended ephemeral visit once the node holds a
+	// layout that no longer names it, unless a pane shows it again. The delete
+	// and that layout are one gesture: deleted first, a pane-tile preview of
+	// the layout still naming it would resolve a gone tile.
+	stepRetireVisit
 )
 
 func (m *Machine) mint(c cont) Token {
@@ -279,6 +284,11 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		}
 		pl.add(Effect{Kind: EffPlaceURLView, PaneID: c.PaneID,
 			TileID: r.Tile.Id, Tile: r.Tile})
+	case stepRetireVisit:
+		// A layout the node did not take still names the visit, so it stays.
+		if r.OK && !w.otherPaneShows("", c.Tile.Id) {
+			pl.add(Effect{Kind: EffDeleteEphemeral, GridID: c.Tile.GridId, TileID: c.Tile.Id})
+		}
 	case stepRestoreCursor:
 		// The cursor goes after the seeding, or it lands in an empty document
 		// and is lost.
@@ -319,6 +329,7 @@ func (m *Machine) Land(tok Token, w World) Plan {
 			return Plan{}
 		}
 		m.landOnFrame(p.ID, p.Stack, &pl)
+		m.retireVisit(c.Tile, &pl)
 	case stepLevelAnimated:
 		// The animation arm reports and waits: the install needs the layout
 		// too.

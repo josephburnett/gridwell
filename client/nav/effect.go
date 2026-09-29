@@ -75,7 +75,7 @@ const (
 	EffWriteURLNow       // writes the history entry now
 	EffPlaceCursor       // puts the text cursor at a position: Col, Row
 
-	EffDeleteEphemeral // deletes an ascended-from visit: GridID, TileID
+	EffDeleteEphemeral // deletes an ended visit: GridID, TileID; see stepRetireVisit
 	EffReport          // surfaces a notice: Severity, Source, Message
 	// EffEnterLevel descends the window into a pane tile: PaneID, TileID, Tile
 	// (by value, as GestureDescend's Door is). It re-enters the machine
@@ -161,7 +161,7 @@ type Effect struct {
 	Col, Row int
 }
 
-// RequestKind is the closed set of async reads the machine starts.
+// RequestKind is the closed set of async asks the machine starts.
 type RequestKind int
 
 const (
@@ -182,9 +182,13 @@ const (
 	// RequestProbeShell asks whether a shell session is alive: ID is the
 	// content id the shell facts key by.
 	RequestProbeShell
+	// RequestFlushLayout writes the pane-tile layout as the tree stands now
+	// and answers OK once the node holds it, written or already held. A write
+	// the node did not take answers not OK.
+	RequestFlushLayout
 )
 
-// Request is one async read.
+// Request is one async ask.
 type Request struct {
 	Kind  RequestKind
 	ID    string

@@ -55,7 +55,7 @@ func (m *Machine) ascend(g Gesture, w World) Plan {
 // ascendOnce pops one frame: leaveFrame's writebacks, then the landing,
 // animated onto the doorway's footprint when that row is cached.
 func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
-	door, doorTile := m.leaveFrame(p, w, pl)
+	door, doorTile, visit := m.leaveFrame(p, w, pl)
 	landing := p.Stack.Popped(1)
 	saved, haveSaved := landingView(landing, w)
 	if !animate || doorTile == nil {
@@ -74,6 +74,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		pl.install(p.ID, landing, vp)
 		pl.add(Effect{Kind: EffClearSelection, PaneID: p.ID})
 		m.landOnFrame(p.ID, landing, pl)
+		m.retireVisit(visit, pl)
 		return
 	}
 	r := p.Rect
@@ -82,6 +83,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		Guard:  Guard{Kind: GuardPaneExists, PaneID: p.ID},
 		Step:   stepAscendLand,
 		PaneID: p.ID,
+		Tile:   visit,
 	})
 	if landing.Content || p.Stack.Content {
 		// One combined pan and zoom from the tile's footprint at overtake
@@ -143,8 +145,9 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 
 // leaveFrame plans every writeback the frame being left owes and resolves the
 // doorway row the ascent animates onto, nil when it is not cached. It is the
-// one place an ascent saves anything.
-func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, doorTile *gridwellv1.Tile) {
+// one place an ascent saves anything. visit is the ephemeral row the landing
+// retires, nil when there is none.
+func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, doorTile, visit *gridwellv1.Tile) {
 	lw := w.Leave
 	own := p.Stack.FramingTarget()
 	if own.Content {
@@ -153,10 +156,10 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 			// The row vanished or was never cached.
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,
 				Streams: StreamBoth, Freeze: true})
-			return own.TileID, nil
+			return own.TileID, nil, nil
 		}
 		pl.add(Effect{Kind: EffSaveText, PaneID: p.ID, TileID: file.Id})
-		// Ascending out of an ephemeral tile deletes it, with no freeze for a
+		// Ascending out of an ephemeral tile retires it, with no freeze for a
 		// row about to die. The answer must be a known yes, and no other pane
 		// may still show it, since a split clones the visit.
 		eph, known := scratch.Ephemeral(p.Scratch, file.GridId)
@@ -170,25 +173,25 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 				Streams: StreamShell, Freeze: !ephemeral})
 		}
 		if ephemeral {
-			pl.add(Effect{Kind: EffDeleteEphemeral, GridID: file.GridId, TileID: file.Id})
+			visit = file
 		}
-		return own.TileID, file
+		return own.TileID, file, visit
 	}
 	if own.TileID == "" {
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
-		return "", nil
+		return "", nil, nil
 	}
 	if !lw.DoorGridCached {
 		pl.add(Effect{Kind: EffFetchGrid, GridID: lw.DoorGridID})
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
-		return own.TileID, nil
+		return own.TileID, nil, nil
 	}
 	if lw.DoorTile == nil {
 		// A + menu descent, for which the origin grid holds no row: the root
 		// grid row carries the framing instead, through the same verb, so
 		// re-entering from the menu lands at the left-off view.
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
-		return own.TileID, nil
+		return own.TileID, nil, nil
 	}
 	// The executor writes the doorway's view region and patches the cache
 	// before the ascent is calibrated, so the frame swap matches where the
@@ -197,7 +200,7 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 	pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own, Door: true})
 	t := proto.CloneOf(lw.DoorTile)
 	settleFraming(t, p, w.CellPx)
-	return own.TileID, t
+	return own.TileID, t, nil
 }
 
 // settleFraming applies to a doorway row the framing PersistFraming is about
@@ -229,6 +232,18 @@ func landingView(landing pane.Stack, w World) (Viewport, bool) {
 		return *v, true
 	}
 	return Viewport{}, false
+}
+
+// retireVisit plans the end of an ephemeral visit once the pane's place no
+// longer names it: the layout flush, and the delete on its verdict (see
+// stepRetireVisit). The wait is keyed to no pane, so a pane closing before the
+// verdict still retires the row.
+func (m *Machine) retireVisit(visit *gridwellv1.Tile, pl *planner) {
+	if visit == nil {
+		return
+	}
+	tok := m.mint(cont{Guard: Guard{Kind: GuardAlways}, Step: stepRetireVisit, Tile: visit})
+	pl.add(Effect{Kind: EffAwait, Token: tok, Request: Request{Kind: RequestFlushLayout}})
 }
 
 // landOnFrame finishes an ascent on whatever frame the pane landed on. A
