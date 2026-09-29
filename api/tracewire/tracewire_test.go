@@ -69,3 +69,16 @@ func TestTheBuildCommitIsTheToolchainsStamp(t *testing.T) {
 		t.Errorf("an unstamped build's commit is %q, want none", got)
 	}
 }
+
+func TestShortCommitIsSevenCharactersAndKeepsDirty(t *testing.T) {
+	for in, want := range map[string]string{
+		"a300ed9495d0478851c88af9ee5113c7543a226a":       "a300ed9",
+		"a300ed9495d0478851c88af9ee5113c7543a226a+dirty": "a300ed9+dirty",
+		"abc": "abc",
+		"":    "",
+	} {
+		if got := ShortCommit(in); got != want {
+			t.Errorf("ShortCommit(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

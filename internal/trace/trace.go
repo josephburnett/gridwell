@@ -142,9 +142,19 @@ func senderOrigin(origin string) string {
 	return tracewire.OriginClient
 }
 
-// Dump writes the ring to <dir>/trace-<yyyymmdd-hhmmss>.jsonl in seq order and
-// returns the absolute path. The ring is not cleared: a dump is a reading, not
-// a handover.
+// DumpName is the file a dump lands in: the time, then the build that wrote
+// the ring, so a dump names its version before it is opened. No stamp, no
+// suffix.
+func DumpName(now time.Time, commit string) string {
+	name := "trace-" + now.UTC().Format("20060102-150405")
+	if short := tracewire.ShortCommit(commit); short != "" {
+		name += "-" + short
+	}
+	return name + ".jsonl"
+}
+
+// Dump writes the ring to <dir>/DumpName in seq order and returns the absolute
+// path. The ring is not cleared: a dump is a reading, not a handover.
 func (r *Ring) Dump(dir string, now time.Time) (path string, n int, err error) {
 	if dir == "" {
 		return "", 0, fmt.Errorf("trace: no dump directory")
@@ -152,7 +162,7 @@ func (r *Ring) Dump(dir string, now time.Time) (path string, n int, err error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", 0, err
 	}
-	path, err = filepath.Abs(filepath.Join(dir, "trace-"+now.UTC().Format("20060102-150405")+".jsonl"))
+	path, err = filepath.Abs(filepath.Join(dir, DumpName(now, tracewire.BuildCommit())))
 	if err != nil {
 		return "", 0, err
 	}

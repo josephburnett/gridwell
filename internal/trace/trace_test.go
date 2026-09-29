@@ -230,3 +230,13 @@ func TestTheNodeRingsSlotsFitTheirStatedBound(t *testing.T) {
 		t.Errorf("NodeCapacity is %d; a busy session's 40 minutes need 50000", NodeCapacity)
 	}
 }
+
+func TestDumpNameNamesTheBuild(t *testing.T) {
+	at := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	if got := DumpName(at, "a300ed9495d0478851c88af9ee5113c7543a226a+dirty"); got != "trace-20260923-100000-a300ed9+dirty.jsonl" {
+		t.Errorf("DumpName = %q", got)
+	}
+	if got := DumpName(at, ""); got != "trace-20260923-100000.jsonl" {
+		t.Errorf("DumpName with no stamp = %q", got)
+	}
+}

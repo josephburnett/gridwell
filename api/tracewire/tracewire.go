@@ -4,7 +4,10 @@
 // agree on the shape without importing each other.
 package tracewire
 
-import "runtime/debug"
+import (
+	"runtime/debug"
+	"strings"
+)
 
 const (
 	// Path takes JSON lines of Record, one per line, and answers 204 once the
@@ -81,6 +84,20 @@ func BuildCommit() string {
 		return ""
 	}
 	return commitOf(bi.Settings)
+}
+
+// ShortCommit is the commit as a person reads it: the first seven characters,
+// "+dirty" kept, "" for no stamp. It names a build in a file name or a
+// message where the full revision would only be scanned past.
+func ShortCommit(commit string) string {
+	rev, suffix := commit, ""
+	if i := strings.IndexByte(commit, '+'); i >= 0 {
+		rev, suffix = commit[:i], commit[i:]
+	}
+	if len(rev) > 7 {
+		rev = rev[:7]
+	}
+	return rev + suffix
 }
 
 func commitOf(settings []debug.BuildSetting) string {

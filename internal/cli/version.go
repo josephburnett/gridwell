@@ -22,9 +22,11 @@ func VersionString() string {
 // serves.
 func bootRecord(home string) tracewire.Record {
 	kv := map[string]string{"version": VersionString(), "go": runtime.Version(), "home": home}
+	msg := "gridwell " + VersionString()
 	if c := tracewire.BuildCommit(); c != "" {
 		kv["commit"] = c
+		msg += " " + tracewire.ShortCommit(c)
 	}
 	return tracewire.Record{Origin: tracewire.OriginNode, Src: "node", Kind: tracewire.KindBoot,
-		Msg: "gridwell " + VersionString(), KV: kv}
+		Msg: msg, KV: kv}
 }
