@@ -191,7 +191,10 @@ name, and the same transit rule applies at both hops. The fan-in remembers
 each connection's reachability rather than only publishing the transition:
 the transport's event stream opens with every connection that is dark right now, so a client that
 subscribes after the machine died is told, and the cache in front of it
-stamps what it remembers.
+stamps what it remembers. The transport is also one client of each far node:
+its share of the interest union (`SetInterest`) is cut by connection and
+told to that node under the session of the connection's own event stream
+(`connection.tellFar`), so a far plugin watches what is on screen here.
 
 The host-local half of a row is checked before the node serves: a missing
 `addr`, a `key` or `known_hosts` path that is not there or not readable fails

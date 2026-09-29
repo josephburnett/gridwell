@@ -15,6 +15,8 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -113,4 +115,23 @@ func TestInterestReachesEachNamespaceAsItsShare(t *testing.T) {
 	sinkB.await(t, nil)
 	closeTwo()
 	sinkA.await(t, nil)
+}
+
+// A grid behind a connection is the far node's to watch: the transport tells
+// it, peeled of the connection segment, under the connection's own session,
+// and takes it back when the client here stops showing it.
+func TestInterestCrossesAConnection(t *testing.T) {
+	const far = "pintf01"
+	sink := &interestSink{}
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
+		func(reg *plugin.Registry, _ *store.Store) { reg.Register(far, "feed", sink, nil) })
+	ctx := context.Background()
+
+	closeSub := subscribed(h.localCl)
+	if err := h.localCl.SetInterest(ctx, []string{localNodeID + "/geneva/" + far + "/5"}); err != nil {
+		t.Fatal(err)
+	}
+	sink.await(t, []string{"5"})
+	closeSub()
+	sink.await(t, nil)
 }
