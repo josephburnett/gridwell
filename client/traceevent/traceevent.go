@@ -177,6 +177,13 @@ func URLClose(paneID, tileID string, freeze bool) Event {
 	return Event{Src: "url", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
 }
 
+// URLMove is a live view handed to another pane with its page, the takeover
+// that neither closes nor opens one.
+func URLMove(fromPaneID, toPaneID, tileID string) Event {
+	return Event{Src: "url", Kind: "move", Msg: "live view moves",
+		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
+}
+
 func ShellOpen(paneID, tileID string) Event {
 	return Event{Src: "shell", Kind: "open", Msg: "stream opens", KV: kv("pane", paneID, "tile", tileID)}
 }

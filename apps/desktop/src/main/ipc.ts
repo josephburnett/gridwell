@@ -24,6 +24,7 @@ export const CH = {
                                // null if dismissed). The renderer declares the
                                // rows; main knows nothing of what they mean.
   setMirrored: 'gw:setMirrored', // MirroredArgs → void
+  move: 'gw:move', // MoveArgs → void; rejects when fromPaneId holds no view
 } as const;
 
 // Live url view's preload → main (send, fire-and-forget). The view swallows the
@@ -108,6 +109,20 @@ export interface PlaceArgs {
   history?: string;
   // Whether the tile survives ascent, which gates Freeze Page.
   durable?: boolean;
+}
+
+// A live view handed to another pane with its page: the takeover that neither
+// closes nor places one (pane.TakeOver).
+export interface MoveArgs {
+  fromPaneId: string;
+  toPaneId: string;
+  // Absent keeps the view's own bounds, for a pane not laid out yet.
+  bounds?: Bounds;
+  // The same three verdicts PlaceArgs carries, for the pane the view now
+  // serves.
+  durable: boolean;
+  hidden: boolean;
+  focused: boolean;
 }
 
 // The live panes whose face another pane shows, pane.Mirrored's answer, which

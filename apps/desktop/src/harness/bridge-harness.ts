@@ -44,7 +44,20 @@ const PAGE =
         await window.gridwell.setMirrored({ paneIds: [] });
         console.log('BRIDGE_PLACED');
         await new Promise(r => setTimeout(r, 1500));
-        const f = await window.gridwell.removeWebview({ paneId: 'p1' });
+        // A takeover hands the view to another pane, page and all, and a move
+        // from a pane with no view is refused rather than dropped.
+        await window.gridwell.moveWebview({
+          fromPaneId: 'p1', toPaneId: 'w1:p1',
+          bounds: { x: 20, y: 30, width: 300, height: 200 },
+          durable: true, hidden: false, focused: true,
+        });
+        let refused = '';
+        await window.gridwell.moveWebview({ fromPaneId: 'p9', toPaneId: 'p8', durable: true, hidden: false, focused: false })
+          .catch((e) => { refused = String(e); });
+        if (!refused.includes('no live view to move')) throw new Error('a move from an empty pane was not refused: ' + refused);
+        console.log('BRIDGE_MOVED');
+        await new Promise(r => setTimeout(r, 200));
+        const f = await window.gridwell.removeWebview({ paneId: 'w1:p1' });
         console.log('BRIDGE_RESULT ' + JSON.stringify({ hasJpeg: f.jpegBase64.length > 0, title: f.title }));
       } catch (e) {
         console.log('BRIDGE_RESULT ' + JSON.stringify({ err: String(e) }));
@@ -80,8 +93,22 @@ app.whenReady().then(() => {
   const mirrored: string[][] = [];
   registerWebviewIpc(registry, root.webContents, win, (paneIds) => mirrored.push(paneIds));
 
+  let placedWC = -1;
   root.webContents.on('console-message', (_e, _level, message) => {
+    if (message === 'BRIDGE_MOVED') {
+      const wc = registry.webContentsFor('w1:p1');
+      if (!wc || wc.id !== placedWC) fail(`the move did not carry the placed view (webContents ${wc?.id} vs ${placedWC})`);
+      if (registry.has('p1')) fail('the old pane still holds the moved view');
+      const b = registry.viewBoundsFor('w1:p1');
+      if (JSON.stringify(b) !== JSON.stringify({ x: 20, y: 30, width: 300, height: 200 })) {
+        fail(`MoveArgs.bounds did not reach the view: ${JSON.stringify(b)}`);
+      }
+      if (registry.focusedFor('w1:p1') !== true) fail('MoveArgs.focused did not reach the entry');
+      console.log('bridge ok: moveWebview carried the same view to w1:p1 with its bounds and focus');
+      return;
+    }
     if (message === 'BRIDGE_PLACED') {
+      placedWC = registry.webContentsFor('p1')?.id ?? -1;
       // The entry must carry the renderer's verdict, because the steal guard
       // reads it from the first frame, before the next setHidden could correct
       // it and before addChildView and loadURL hand the widget OS focus.

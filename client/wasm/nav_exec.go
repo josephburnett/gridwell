@@ -45,6 +45,8 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.navPopLevel(e)
 	case nav.EffFlushLayout:
 		a.flushWorkspaceSave()
+	case nav.EffHandBackSurfaces:
+		a.handBackURLViews()
 	case nav.EffFlushDroppedSubtree:
 		a.flushDroppedSubtree(a.tree.Root)
 	case nav.EffFlushFraming:

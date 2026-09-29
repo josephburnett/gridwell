@@ -158,6 +158,23 @@ func (a *App) bridgePlace(paneID string, tileID, url string, b viewBounds, conte
 	}, nil, onFail)
 }
 
+// bridgeMove hands the view on fromID to toID with its page: no reload. A nil
+// b keeps the view's own bounds, for a pane not laid out yet. onFail runs when
+// main has no view on fromID, so the caller's handle must go.
+func (a *App) bridgeMove(fromID, toID string, b *viewBounds, durable, hidden, focused bool, onFail func()) {
+	fields := map[string]any{
+		"fromPaneId": fromID,
+		"toPaneId":   toID,
+		"durable":    durable,
+		"hidden":     hidden,
+		"focused":    focused,
+	}
+	if b != nil {
+		fields["bounds"] = b.toJS()
+	}
+	a.bridgeVerb("moveWebview", fields, nil, onFail)
+}
+
 func (a *App) bridgeSetBounds(paneID string, b viewBounds) {
 	a.bridgeVerb("setBounds", map[string]any{"paneId": paneID, "bounds": b.toJS()}, nil, nil)
 }

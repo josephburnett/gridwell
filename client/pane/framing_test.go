@@ -65,21 +65,72 @@ func TestFramingWriters(t *testing.T) {
 	}
 }
 
-// One live surface per content tile: the opener takes over at any stack level,
-// and is never asked to close itself, so a keep-alive return is idempotent.
-func TestTakeOverFreezesEveryOtherHolder(t *testing.T) {
-	holders := []Holder{
-		{PaneID: "p1", TileID: "u/7"},
-		{PaneID: "w1:p1", TileID: "u/7"},
-		{PaneID: "p2", TileID: "u/9"},
+// One live surface per content tile: the opener takes the surface another pane
+// holds, at any stack level, and a pane that already holds it keeps it.
+func TestTakeOver(t *testing.T) {
+	cases := []struct {
+		name    string
+		holders []Holder
+		opener  string
+		tile    string
+		want    Engagement
+	}{
+		{"nobody holds it: place a fresh surface",
+			[]Holder{{"p2", "u/9"}}, "p1", "u/7", Engagement{}},
+		{"another pane holds it: move it here",
+			[]Holder{{"p1", "u/7"}, {"p2", "u/9"}}, "w1:p1", "u/7", Engagement{From: "p1"}},
+		{"a parked outer level holds it: the move crosses levels",
+			[]Holder{{"w1:p3", "u/7"}}, "p1", "u/7", Engagement{From: "w1:p3"}},
+		{"the opener holds it: keep",
+			[]Holder{{"p1", "u/7"}}, "p1", "u/7", Engagement{Keep: true}},
+		{"the opener holds another tile: not this tile's surface",
+			[]Holder{{"p1", "u/9"}}, "p1", "u/7", Engagement{}},
+		{"a broken rule: one moves, the rest close",
+			[]Holder{{"p1", "u/7"}, {"p2", "u/7"}}, "p3", "u/7", Engagement{From: "p1", Close: []string{"p2"}}},
+		{"a broken rule while keeping: every other closes",
+			[]Holder{{"p1", "u/7"}, {"p2", "u/7"}}, "p2", "u/7", Engagement{Keep: true, Close: []string{"p1"}}},
 	}
-	if got := TakeOver(holders, "p2", "u/7"); !reflect.DeepEqual(got, []string{"p1", "w1:p1"}) {
-		t.Fatalf("takeover = %v", got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := TakeOver(c.holders, c.opener, c.tile); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("TakeOver = %+v, want %+v", got, c.want)
+			}
+		})
 	}
-	if got := TakeOver(holders, "p1", "u/7"); !reflect.DeepEqual(got, []string{"w1:p1"}) {
-		t.Fatalf("opener must not close itself: %v", got)
+}
+
+// A surface that cannot move closes every other holder, the one that would
+// have moved included.
+func TestEngagementOthers(t *testing.T) {
+	e := TakeOver([]Holder{{"p1", "u/7"}, {"w1:p1", "u/7"}, {"p2", "u/9"}}, "p2", "u/7")
+	if got := e.Others(); !reflect.DeepEqual(got, []string{"p1", "w1:p1"}) {
+		t.Fatalf("others = %v", got)
 	}
-	if got := TakeOver(holders, "p9", "u/44"); got != nil {
+	if got := TakeOver(nil, "p9", "u/44").Others(); got != nil {
 		t.Fatalf("nobody holds it: %v", got)
+	}
+}
+
+// Leaving a level hands a surface back to the returning pane that shows its
+// tile, and closes it only when the tile leaves every pane.
+func TestHeir(t *testing.T) {
+	returning := []Holder{{"p1", "u/9"}, {"p2", "u/7"}, {"p3", "u/7"}}
+	cases := []struct {
+		name    string
+		tile    string
+		holders []Holder
+		want    string
+	}{
+		{"the first returning pane showing the tile", "u/7", nil, "p2"},
+		{"one already holding a surface is passed over", "u/7", []Holder{{"p2", "u/8"}}, "p3"},
+		{"no returning pane shows it: close", "u/44", nil, ""},
+		{"every one showing it holds a surface: close", "u/7", []Holder{{"p2", "u/7"}, {"p3", "u/1"}}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Heir(c.tile, returning, c.holders); got != c.want {
+				t.Fatalf("Heir = %q, want %q", got, c.want)
+			}
+		})
 	}
 }

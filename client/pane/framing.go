@@ -70,16 +70,60 @@ type Holder struct {
 	TileID string
 }
 
+// Engagement is what going live on a content tile in one pane does to the one
+// live surface that tile may have.
+type Engagement struct {
+	// Keep: the opener already holds the tile's surface, a keep-alive return.
+	Keep bool
+	// From is the pane whose surface moves to the opener, page and all. Empty
+	// with Keep false: nobody holds one, so a fresh surface is placed.
+	From string
+	// Close holds every surface on the tile beyond the one kept or moved. The
+	// rule allows one, so this is empty unless the rule was already broken.
+	Close []string
+}
+
+// Others is every pane that holds the tile besides the opener, for a surface
+// that cannot move and closes them instead.
+func (e Engagement) Others() []string {
+	if e.From == "" {
+		return e.Close
+	}
+	return append([]string{e.From}, e.Close...)
+}
+
 // TakeOver applies one live surface per content tile: opening tileID in
-// openerID freezes every other pane's surface on the same content, at any
-// stack level, and returns those panes. The opener is never in the list, so a
-// keep-alive return is idempotent.
-func TakeOver(holders []Holder, openerID, tileID string) []string {
-	var out []string
+// openerID takes the surface another pane holds on the same content, at any
+// stack level, rather than making a second one.
+func TakeOver(holders []Holder, openerID, tileID string) Engagement {
+	var e Engagement
 	for _, h := range holders {
-		if h.TileID == tileID && h.PaneID != openerID {
-			out = append(out, h.PaneID)
+		switch {
+		case h.TileID != tileID:
+		case h.PaneID == openerID:
+			e.Keep = true
+		case e.From == "":
+			e.From = h.PaneID
+		default:
+			e.Close = append(e.Close, h.PaneID)
 		}
 	}
-	return out
+	if e.Keep && e.From != "" {
+		e.Close, e.From = e.Others(), ""
+	}
+	return e
+}
+
+// Heir names the pane a closing pane's surface on tileID moves to instead of
+// closing: the first of returning, the panes coming back on screen each named
+// with the content tile it is descended into, that shows the tile and holds
+// no surface. "" means the tile leaves every pane, and the surface closes.
+func Heir(tileID string, returning, holders []Holder) string {
+	for _, r := range returning {
+		held := slices.ContainsFunc(holders, func(h Holder) bool { return h.PaneID == r.PaneID })
+		if r.TileID == tileID && !held {
+			return r.PaneID
+		}
+	}
+	return ""
 }

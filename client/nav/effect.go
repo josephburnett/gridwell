@@ -40,6 +40,10 @@ const (
 	EffFlushDirtyText      // flushes every unsaved edit now
 	EffFlushLayout         // persists the pane-tile layout blob now
 	EffFlushDroppedSubtree // flushes the writebacks a closing subtree owes
+	// EffHandBackSurfaces moves each live surface of the level being left to
+	// the pane of the parked tree that shows its tile (pane.Heir), so leaving
+	// does not close and reopen what entering moved.
+	EffHandBackSurfaces
 
 	EffCancelTransition // lands what a pane is animating: PaneID ("" = all)
 	// EffStartTransition animates a pane: PaneID, Segments, TraceTileID, Land
