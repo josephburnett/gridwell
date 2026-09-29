@@ -156,9 +156,13 @@ supervised subprocess (`internal/plugin`, the one owner of whether a plugin
 is alive): one that dies is respawned with a backoff, the down and up reach
 the strip as that namespace's health event, and while it is down its calls
 fail honestly — nothing answers for it. While it is up, and only if its
-`InfoResponse.watch` declares one, the node holds one `Watch` stream to it
-(`pluginhost.Start`) and publishes each change the plugin sends as the
-`GridChanged` a write would have. A plugin holds no node fact. It answers in its own stable string keys and never sees ids, layout, or
+`InfoResponse.watch` declares one and some client shows one of its grids, the
+node holds one `Watch` stream to it (`pluginhost.Start`), scoped to the
+contexts shown (`WatchRequest.contexts`, the plugin's share of
+`interest.Book`'s union, re-opened with the new set when it changes), and
+publishes each change the plugin sends as the `GridChanged` a write would
+have. A plugin holds no node fact. It answers in its own stable string keys
+and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to
 it as `state_dir` at spawn: its own memory of its source, under cache.db's
 contract — disposable, safe to delete, rewarmed by use, and never deleted by

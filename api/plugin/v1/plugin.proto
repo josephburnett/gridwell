@@ -228,7 +228,16 @@ message SearchResponse {
 
 // ─── Events ────────────────────────────────────────────────────────────────
 
-message WatchRequest {}
+// WatchRequest's contexts are your own context keys the node wants watched:
+// the ones some client shows, on this node or any node that reaches it. A
+// file shown in a pane counts through its context. When the set changes the
+// node ends the stream and opens one with the new set, and while nothing of
+// yours is shown it holds none open. Empty means the node names no scope (a
+// node from before scopes): watch what you judge cheap. A feed that is
+// account-wide rather than per context may ignore the set.
+message WatchRequest {
+  repeated string contexts = 1;
+}
 message ContextChanged {
   string context = 1;
 }

@@ -72,9 +72,9 @@ func registerWatching(t *testing.T, reg *plugin.Registry, st *store.Store) chan<
 	return p.poke
 }
 
-// awaitGridChanged subscribes at cl's door and pokes until a GridChanged for
-// want arrives. Poking again covers the subscription attaching after an
-// earlier poke, which is nobody's.
+// awaitGridChanged subscribes at cl's door, shows want, and pokes until a
+// GridChanged for want arrives. Poking again covers the subscription
+// attaching after an earlier poke, which is nobody's.
 func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, want string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -94,6 +94,10 @@ func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, want s
 			got <- ev
 		}
 	}()
+	// A plugin watches only what some client shows.
+	if err := cl.SetInterest(ctx, []string{want}); err != nil {
+		t.Fatal(err)
+	}
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
 	var seen []string
@@ -157,4 +161,63 @@ func TestPluginWatchCrossesAConnection(t *testing.T) {
 		func(reg *plugin.Registry, st *store.Store) { poke = registerWatching(t, reg, st) })
 	want := localNodeID + "/geneva/" + rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))
 	awaitGridChanged(t, h.localCl, poke, want)
+}
+
+// scopedWatch reports each Watch it is asked for: its contexts when opened,
+// and its end.
+type scopedWatch struct {
+	pokedWatch
+	opened chan []string
+	ended  chan struct{}
+}
+
+func (p scopedWatch) Watch(req *pluginv1.WatchRequest, s grpc.ServerStreamingServer[pluginv1.Change]) error {
+	p.opened <- req.Contexts
+	<-s.Context().Done()
+	p.ended <- struct{}{}
+	return nil
+}
+
+// What a client at the web door shows is what the plugin is asked to watch,
+// as its own context key, and the stream ends when that client goes away.
+func TestPluginWatchIsScopedToWhatAClientShows(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/gridwell.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	p := scopedWatch{opened: make(chan []string, 4), ended: make(chan struct{}, 4)}
+	cp, closer, err := plugintest.Loopback(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, stop := pluginhost.Start(cp, st.Namespace(watchUUID), nil, "plugin "+watchUUID+" watch")
+	reg := plugin.NewRegistry()
+	reg.Register(watchUUID, "feed", a, func() { stop(); closer() })
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	closeSub := subscribed(cl)
+	if err := cl.SetInterest(context.Background(), []string{rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-p.opened:
+		if len(got) != 1 || got[0] != "all" {
+			t.Fatalf("Watch opened with %v, want [all]", got)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("showing the collection opened no Watch")
+	}
+	closeSub()
+	select {
+	case <-p.ended:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the Watch outlived the only client showing its grid")
+	}
+	select {
+	case got := <-p.opened:
+		t.Errorf("a Watch was opened with %v while nothing is shown", got)
+	case <-time.After(1500 * time.Millisecond):
+	}
 }

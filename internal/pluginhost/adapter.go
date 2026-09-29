@@ -74,6 +74,13 @@ type Adapter struct {
 	srcDark      bool
 	srcDetail    string
 	watchRefused string
+
+	// scope is the contexts the Watch stream is opened with, this plugin's
+	// share of the node's interest; moved closes when it changes. SetInterest
+	// is the one writer.
+	scopeMu sync.Mutex
+	scope   []string
+	moved   chan struct{}
 }
 
 // A plugin reaches the router as a Go value; the compiler is what says so.
@@ -81,7 +88,7 @@ var _ namespace.Namespace = (*Adapter)(nil)
 
 // New builds the adapter; the caller owns both halves' lifecycles.
 func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapter {
-	return &Adapter{cp: cp, mem: mem, sup: sup, hub: eventhub.New(rpc.EventKey)}
+	return &Adapter{cp: cp, mem: mem, sup: sup, hub: eventhub.New(rpc.EventKey), moved: make(chan struct{})}
 }
 
 // Info translates the plugin handshake, resolving each declared collection's
