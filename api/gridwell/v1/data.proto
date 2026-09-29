@@ -658,7 +658,24 @@ message SetFramingResponse {
 
 // Event stream.
 
-message SubscribeRequest {}
+// SubscribeRequest's session names the client holding the stream, a string
+// the client mints once (rpc.Client). What SetInterest says under that session
+// counts while a stream carrying it is open, and no longer, so a client that
+// goes away cannot keep a source watched. Empty names no session.
+message SubscribeRequest {
+  string session = 1;
+}
+
+// SetInterest is the whole set of grids a client is showing, qualified, sent
+// whenever it changes and again whenever the client's stream re-opens. It is
+// unary rather than a Subscribe field because the set changes many times in
+// one stream's life. The node unions every open session's set, and each
+// plugin's share of the union is the scope of its Watch.
+message SetInterestRequest {
+  string          session  = 1;
+  repeated string grid_ids = 2;
+}
+message SetInterestResponse {}
 
 // GridChanged says a grid's listing changed: the client refetches it.
 message GridChanged {
@@ -754,4 +771,5 @@ service Gridwell {
   rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);
 
   rpc Subscribe(SubscribeRequest) returns (stream Event);
+  rpc SetInterest(SetInterestRequest) returns (SetInterestResponse);
 }

@@ -96,3 +96,7 @@ func (Unimplemented) OpenShell(context.Context, func() (*pb.OpenShellRequest, er
 func (Unimplemented) Subscribe(context.Context, *pb.SubscribeRequest, func(*pb.Event) error) error {
 	return unimp("Subscribe")
 }
+
+func (Unimplemented) SetInterest(context.Context, *pb.SetInterestRequest) (*pb.SetInterestResponse, error) {
+	return nil, unimp("SetInterest")
+}

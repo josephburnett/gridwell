@@ -47,12 +47,13 @@ func loopback(t *testing.T, ns namespace.Namespace) namespace.Namespace {
 // fake is a Namespace that answers from fields, so a test can pin exactly what
 // crosses the codec.
 type fake struct {
-	tile    *pb.Tile
-	err     error
-	chunks  []*pb.ContentChunk
-	written []*pb.WriteContentRequest
-	events  []*pb.Event
-	shellIn []*pb.OpenShellRequest
+	tile     *pb.Tile
+	err      error
+	chunks   []*pb.ContentChunk
+	written  []*pb.WriteContentRequest
+	events   []*pb.Event
+	shellIn  []*pb.OpenShellRequest
+	interest []*pb.SetInterestRequest
 }
 
 func (f *fake) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
@@ -96,6 +97,10 @@ func (f *fake) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.DeleteTil
 }
 func (f *fake) SetFraming(context.Context, *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	return &pb.SetFramingResponse{Tile: f.tile}, nil
+}
+func (f *fake) SetInterest(_ context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error) {
+	f.interest = append(f.interest, req)
+	return &pb.SetInterestResponse{}, nil
 }
 func (f *fake) ShellSessionAlive(context.Context, *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
 	return &pb.ShellSessionAliveResponse{Alive: true}, nil
@@ -283,6 +288,20 @@ func TestSubscribeStreamRoundTrips(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("no event crossed the codec")
+	}
+}
+
+// A session and its set cross the connection door whole, since the far node
+// books what it hears (interest.Book).
+func TestSetInterestRoundTrips(t *testing.T) {
+	f := &fake{}
+	ns := loopback(t, f)
+	want := &pb.SetInterestRequest{Session: "s1", GridIds: []string{"p1/4", "n1/7"}}
+	if _, err := ns.SetInterest(context.Background(), want); err != nil {
+		t.Fatalf("SetInterest: %v", err)
+	}
+	if len(f.interest) != 1 || !proto.Equal(f.interest[0], want) {
+		t.Fatalf("the far side saw %v, want %v", f.interest, want)
 	}
 }
 

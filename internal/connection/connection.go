@@ -77,6 +77,10 @@ type Server struct {
 	health map[string]connState
 
 	hub *eventhub.Hub[*gridwellv1.Event]
+
+	// far is each connection's share of the interest (interest.go, farOf),
+	// its grids guarded by mu.
+	far map[string]*farInterest
 }
 
 // connState is a connection's reachability as of the last answer.
@@ -412,6 +416,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	// Remote change events flow from the moment the connection is live,
 	// prefixed with its segment: the node's fan-in shape one level down.
 	go s.fanInRemote(ctx, name, client)
+	go s.tellFar(ctx, name, client)
 	return lc, nil
 }
 
@@ -580,7 +585,10 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 		Down:  func(detail string) { s.note(ns, connState{detail: detail}) },
 		Up:    func() { s.note(ns, connState{up: true}) },
 		Attempt: func(ctx context.Context, established func()) error {
-			return namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{},
+			// The far node forgot this session's interest when the last
+			// stream closed; see tellFar.
+			s.farOf(ns).poke()
+			return namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{Session: s.farOf(ns).session},
 				func(ev *gridwellv1.Event) error {
 					s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
 					return nil

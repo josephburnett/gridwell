@@ -98,8 +98,18 @@ none of them.
 
 Implement `Watch` if your source changes without the user: a background
 sync, a new mail, a file edited elsewhere, and set `InfoResponse.watch`. The
-node opens one stream when your process starts and holds it for the
-process's life, so hold it open until its context ends. Send the header
+node holds one stream open while some client shows one of your grids, on
+this node or on any node that reaches it, so hold it open until its context
+ends. `WatchRequest.contexts` is its scope: the context keys shown right
+now, a file shown in a pane counting through its context. Watch those. When
+the set changes the node ends the stream and opens one with the new set, and
+while nothing of yours is shown it holds none, so a source you watch by the
+path, such as a directory under OS change notifications, costs only what is
+on screen. Empty contexts means a node from before scopes: watch what you
+judge cheap. A feed that is account-wide rather than per context (a mailbox,
+a to-do list) may ignore the scope and watch as it always would. A context
+entering the scope was just listed by the client that opened it, and the
+node does not announce it again. Send the header
 (`stream.SendHeader`) as soon as you accept the stream: that is the moment
 the node counts it open, and without it the moment is your first change.
 Send a change when a listing you would give now differs from the last one

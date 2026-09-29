@@ -92,7 +92,7 @@ record shapes. Everything else derives from it:
 | Framing | `SetFraming` — the one framing write |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
-| Events | `Subscribe` |
+| Events | `Subscribe`, `SetInterest` — the grids a client shows, held while its stream is open |
 
 No request carries a descent path. The server derives location from rows it
 owns. Sessions and networks never cross the wire.
@@ -156,9 +156,13 @@ supervised subprocess (`internal/plugin`, the one owner of whether a plugin
 is alive): one that dies is respawned with a backoff, the down and up reach
 the strip as that namespace's health event, and while it is down its calls
 fail honestly — nothing answers for it. While it is up, and only if its
-`InfoResponse.watch` declares one, the node holds one `Watch` stream to it
-(`pluginhost.Start`) and publishes each change the plugin sends as the
-`GridChanged` a write would have. A plugin holds no node fact. It answers in its own stable string keys and never sees ids, layout, or
+`InfoResponse.watch` declares one and some client shows one of its grids, the
+node holds one `Watch` stream to it (`pluginhost.Start`), scoped to the
+contexts shown (`WatchRequest.contexts`, the plugin's share of
+`interest.Book`'s union, re-opened with the new set when it changes), and
+publishes each change the plugin sends as the `GridChanged` a write would
+have. A plugin holds no node fact. It answers in its own stable string keys
+and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to
 it as `state_dir` at spawn: its own memory of its source, under cache.db's
 contract — disposable, safe to delete, rewarmed by use, and never deleted by
@@ -191,7 +195,10 @@ name, and the same transit rule applies at both hops. The fan-in remembers
 each connection's reachability rather than only publishing the transition:
 the transport's event stream opens with every connection that is dark right now, so a client that
 subscribes after the machine died is told, and the cache in front of it
-stamps what it remembers.
+stamps what it remembers. The transport is also one client of each far node:
+its share of the interest union (`SetInterest`) is cut by connection and
+told to that node under the session of the connection's own event stream
+(`connection.tellFar`), so a far plugin watches what is on screen here.
 
 The host-local half of a row is checked before the node serves: a missing
 `addr`, a `key` or `known_hosts` path that is not there or not readable fails
@@ -450,7 +457,8 @@ rides the end record), with the duration and, on a failure, the code. What emits
 store write (one record at `withMutation`, the transaction every mutation runs
 in), every publish, delivery and coalesce in `eventhub`, the plugin
 supervisor's spawns and liveness transitions, each dial and connection health
-transition, the shell door's refusals, opens and closes, and — through
+transition, the shell door's refusals, opens and closes, each new union of
+the grids the clients show (`interest/union`), and — through
 `log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
 subprocess's stderr does not pass through that log, so the spawn hands it a
 writer of its own.
@@ -509,6 +517,7 @@ copy:
 | is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | this event stream is established | `namespace.Follow` |
+| which grids the clients are showing | `interest.Book`, fed by `SetInterest`, counted by the `Subscribe` stream |
 | the trace line, its door and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |
 

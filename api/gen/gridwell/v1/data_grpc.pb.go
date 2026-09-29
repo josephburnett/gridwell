@@ -50,6 +50,7 @@ const (
 	Gridwell_SetFraming_FullMethodName        = "/gridwell.v1.Gridwell/SetFraming"
 	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
+	Gridwell_SetInterest_FullMethodName       = "/gridwell.v1.Gridwell/SetInterest"
 )
 
 // GridwellClient is the client API for Gridwell service.
@@ -92,6 +93,7 @@ type GridwellClient interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
+	SetInterest(ctx context.Context, in *SetInterestRequest, opts ...grpc.CallOption) (*SetInterestResponse, error)
 }
 
 type gridwellClient struct {
@@ -325,6 +327,16 @@ func (c *gridwellClient) Subscribe(ctx context.Context, in *SubscribeRequest, op
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_SubscribeClient = grpc.ServerStreamingClient[Event]
 
+func (c *gridwellClient) SetInterest(ctx context.Context, in *SetInterestRequest, opts ...grpc.CallOption) (*SetInterestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetInterestResponse)
+	err := c.cc.Invoke(ctx, Gridwell_SetInterest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GridwellServer is the server API for Gridwell service.
 // All implementations must embed UnimplementedGridwellServer
 // for forward compatibility.
@@ -365,6 +377,7 @@ type GridwellServer interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
+	SetInterest(context.Context, *SetInterestRequest) (*SetInterestResponse, error)
 	mustEmbedUnimplementedGridwellServer()
 }
 
@@ -431,6 +444,9 @@ func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSess
 }
 func (UnimplementedGridwellServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
+}
+func (UnimplementedGridwellServer) SetInterest(context.Context, *SetInterestRequest) (*SetInterestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetInterest not implemented")
 }
 func (UnimplementedGridwellServer) mustEmbedUnimplementedGridwellServer() {}
 func (UnimplementedGridwellServer) testEmbeddedByValue()                  {}
@@ -752,6 +768,24 @@ func _Gridwell_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) erro
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_SubscribeServer = grpc.ServerStreamingServer[Event]
 
+func _Gridwell_SetInterest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetInterestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).SetInterest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_SetInterest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).SetInterest(ctx, req.(*SetInterestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Gridwell_ServiceDesc is the grpc.ServiceDesc for Gridwell service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -814,6 +848,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ShellSessionAlive",
 			Handler:    _Gridwell_ShellSessionAlive_Handler,
+		},
+		{
+			MethodName: "SetInterest",
+			Handler:    _Gridwell_SetInterest_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

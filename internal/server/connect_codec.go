@@ -112,8 +112,12 @@ func (h *connectHandler) WriteContent(ctx context.Context, stream *connect.Clien
 	return connect.NewResponse(resp), nil
 }
 
-func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
-	return asConnectError(h.rt.Subscribe(ctx, &pb.SubscribeRequest{}, stream.Send))
+func (h *connectHandler) SetInterest(ctx context.Context, req *connect.Request[pb.SetInterestRequest]) (*connect.Response[pb.SetInterestResponse], error) {
+	return unary(h.rt.SetInterest)(ctx, req)
+}
+
+func (h *connectHandler) Subscribe(ctx context.Context, req *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
+	return asConnectError(h.rt.Subscribe(ctx, req.Msg, stream.Send))
 }
 
 // asConnectError maps a namespace error, or a raw store sentinel, to a Connect

@@ -37,11 +37,13 @@ sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plu
 itself gone — fails the read outright at `cp.Info`, because the declared
 face is the plugin's own fact and nothing can supply it. A source that
 changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
-node holds one stream per subprocess and publishes each change as the
-`GridChanged` a write would, so a grid open on screen refetches; a coded
-refusal is the same health fact (`Adapter.noteWatch`), cleared when a
-re-opened stream is open, and a re-opened stream announces every context the
-node knows of (`Adapter.resync`), since the gap announced nothing. Only a
+node holds one stream per subprocess while some client shows one of its
+grids, scoped to the contexts shown and re-opened with the new set when that
+changes (a scope change is not a drop and announces nothing), and publishes
+each change as the `GridChanged` a write would, so a grid open on screen
+refetches; a coded refusal is the same health fact (`Adapter.noteWatch`),
+cleared when a re-opened stream is open, and a re-opened stream announces
+every context the node knows of (`Adapter.resync`), since the gap announced nothing. Only a
 plugin whose `InfoResponse.watch` declares it is asked; one that declares it
 and answers Unimplemented has a broken declaration, and that is health too.
 
@@ -460,7 +462,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
-| A plugin's `Watch` change is a `GridChanged` at the door, locally and through a connection; an undeclared plugin is never asked, a refusal or a declared Unimplemented is health, a dropped stream re-opens and catches up every known context, a refusal clears when a re-opened stream is open, a respawn gets a fresh one | `internal/server/plugin_watch_seam_test.go`, `internal/pluginhost/watch_test.go` |
+| A plugin's `Watch` change is a `GridChanged` at the door, locally and through a connection; an undeclared plugin is never asked, a refusal or a declared Unimplemented is health, a dropped stream re-opens and catches up every known context, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too | `internal/server/plugin_watch_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/interest_seam_test.go` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |

@@ -1380,8 +1380,16 @@ func (x *SearchResponse) GetResults() []*SearchResult {
 	return nil
 }
 
+// WatchRequest's contexts are your own context keys the node wants watched:
+// the ones some client shows, on this node or any node that reaches it. A
+// file shown in a pane counts through its context. When the set changes the
+// node ends the stream and opens one with the new set, and while nothing of
+// yours is shown it holds none open. Empty means the node names no scope (a
+// node from before scopes): watch what you judge cheap. A feed that is
+// account-wide rather than per context may ignore the set.
 type WatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Contexts      []string               `protobuf:"bytes,1,rep,name=contexts,proto3" json:"contexts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1414,6 +1422,13 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *WatchRequest) GetContexts() []string {
+	if x != nil {
+		return x.Contexts
+	}
+	return nil
 }
 
 type ContextChanged struct {
@@ -1681,8 +1696,9 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\asnippet\x18\x03 \x01(\tR\asnippet\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\"C\n" +
 	"\x0eSearchResponse\x121\n" +
-	"\aresults\x18\x01 \x03(\v2\x17.plugin.v1.SearchResultR\aresults\"\x0e\n" +
-	"\fWatchRequest\"*\n" +
+	"\aresults\x18\x01 \x03(\v2\x17.plugin.v1.SearchResultR\aresults\"*\n" +
+	"\fWatchRequest\x12\x1a\n" +
+	"\bcontexts\x18\x01 \x03(\tR\bcontexts\"*\n" +
 	"\x0eContextChanged\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\":\n" +
 	"\fEntryRemoved\x12\x18\n" +
