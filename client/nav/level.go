@@ -275,8 +275,11 @@ func (m *Machine) leaveLevels(g Gesture, w World) Plan {
 	// leaf's viewport, or a scratch viewport becomes durable framing.
 	pl.add(Effect{Kind: EffCancelTransition})
 	pl.add(Effect{Kind: EffCloseMenu})
-	pl.add(Effect{Kind: EffFlushDroppedSubtree})
 	outer := top.OuterTree != nil
+	if outer {
+		pl.add(Effect{Kind: EffHandBackSurfaces})
+	}
+	pl.add(Effect{Kind: EffFlushDroppedSubtree})
 	pop := Effect{Kind: EffPopLevel, TileID: top.TileID}
 	if !outer {
 		// A level with no parked tree falls back to a fresh pane at the pane

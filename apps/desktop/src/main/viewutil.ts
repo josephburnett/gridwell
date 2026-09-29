@@ -129,6 +129,16 @@ export function restoreRefusedMessage(paneId: string, err: unknown): string {
   return `pane ${paneId}: stored back-stack refused (${reason}); the page did not load`;
 }
 
+// Whether a rejected restore is Chromium refusing the stored back-stack, the
+// one case restoreRefusedMessage reports. A restore cut short is not: its view
+// was closed or superseded under it (viewLive false), which rejects with the
+// same ERR_FAILED a refusal does, or a newer navigation aborted it.
+export function restoreRefused(viewLive: boolean, err: unknown): boolean {
+  if (!viewLive) return false;
+  const code = /\((-\d+)\)/.exec(err instanceof Error ? err.message : String(err));
+  return !code || Number(code[1]) !== ERR_ABORTED;
+}
+
 // null for a corrupt blob, which then falls back to a plain loadURL.
 export function parseHistory(json: string | undefined): UrlHistory | null {
   if (!json) return null;
@@ -208,6 +218,13 @@ export function failLoadMessage(validatedURL: string, errorDescription: string, 
 // The url may be unreadable after a crash, and is then omitted.
 export function renderProcessGoneMessage(url: string, reason: string): string {
   return url ? `page crashed (${reason}): ${url}` : `page crashed (${reason})`;
+}
+
+// A page that closed itself ended its view, which is not a crash: the pane
+// shows the tile's frozen face again. The url is unreadable once the view is
+// gone, and is then omitted.
+export function pageClosedMessage(url: string): string {
+  return url ? `the page closed itself: ${url}` : 'the page closed itself';
 }
 
 // null below warning (levels run 0 to 3). The wasm client's own console is

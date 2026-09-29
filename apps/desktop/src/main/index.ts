@@ -98,6 +98,7 @@ async function boot(): Promise<void> {
     onFreezeURL: forwarder(rootWC, EV.freezeUrl),
     onContextMenu: forwarder(rootWC, EV.menuPane),
     onZoomKey: forwarder(rootWC, EV.zoomKey),
+    onViewGone: forwarder(rootWC, EV.viewGone),
     // Give focus back to the root renderer, where the user was typing.
     onFocusStolen: () => rootWC.focus(),
   });

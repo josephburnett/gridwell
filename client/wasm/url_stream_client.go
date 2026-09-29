@@ -103,56 +103,114 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	a.placeURLView(p.ID, t)
 }
 
-// placeURLView places the native WebContentsView for pane paneID showing
-// tile t, always the content-owning row: a link never reaches here.
+// placeURLView puts tile t live in pane paneID, always the content-owning
+// row: a link never reaches here. pane.TakeOver decides whether that keeps
+// the view the pane has, moves the one another pane holds, or places one.
 func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
 		return
 	}
-	// A different tile closes through the one path that persists its
-	// freeze.
-	if v := a.urlViewFor(paneID); v != nil {
-		if v.tileID == t.Id {
-			return
-		}
-		a.closeURLStream(paneID, true)
+	eng := pane.TakeOver(a.urlSurfaces(), paneID, t.Id)
+	// closeURLStream is the one path that persists a freeze, for a surface
+	// the rule never allowed and for a different tile in this pane alike.
+	for _, id := range eng.Close {
+		a.closeURLStream(id, true)
 	}
-	// One live surface per content tile: pane.TakeOver names every other
-	// pane to freeze, and the rule is shared with the shell side.
-	for _, otherID := range pane.TakeOver(a.urlSurfaces(), paneID, t.Id) {
-		a.closeURLStream(otherID, true)
+	if eng.Keep {
+		return
 	}
-	r := paneRectFor(a, p)
-	b := contentViewBounds(r)
-	page := rpc.PageContent(t)
-	// Every caller places into the descent the pane is already in, so the
-	// pane's frame is this view's descent.
-	v := &urlView{tileID: t.Id, paneID: p.ID, descentID: p.ContentID(), anchor: p.Anchor(), path: slices.Clone(p.Path()), page: page}
+	a.closeURLStream(paneID, true)
+	if eng.From != "" {
+		a.moveURLView(eng.From, p)
+		return
+	}
+	v := a.urlViewIn(p, t.Id, rpc.PageContent(t))
 	a.local(p.ID).urlView = v
-	// urlview.Durable says whether the descended row survives ascent.
-	possiblyEphemeral := false
-	if tile, ok := a.descendedTile(p); ok {
-		possiblyEphemeral = a.possiblyEphemeral(p, tile)
-	}
-	durable := urlview.Durable(possiblyEphemeral)
-	v.durable = durable
 	addr := a.webAddress(t)
 	a.emit(traceevent.URLOpen(p.ID, t.Id))
 	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
 	// The focus fact rides the placement, because going live is not always a
 	// gesture on the focused pane. The handle is set before main answers, so
 	// a refusal takes it back down.
-	a.bridgePlace(p.ID, t.Id, addr, b, contentzoom.Of(t.GetContentZoom()), t.UrlHistory, durable,
-		pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
-		func() { a.dropFailedURLView(p.ID, v) })
+	a.bridgePlace(p.ID, t.Id, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
+		t.UrlHistory, v.durable, pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
+		func() { a.dropURLView(p.ID, v) })
 	a.draw()
 }
 
-// dropFailedURLView takes back the optimistic handle when the place was
-// refused, since one left standing keeps the pane looking live with no frozen
-// preview. Identity-checked, since a later place may own the pane.
-func (a *App) dropFailedURLView(paneID string, v *urlView) {
+// urlViewIn is the handle for tileID live in pane p. Every caller goes live in
+// the descent the pane is already in, so the pane's frame is the view's.
+func (a *App) urlViewIn(p *pane.Pane, tileID string, page bool) *urlView {
+	v := &urlView{tileID: tileID, paneID: p.ID, descentID: p.ContentID(), anchor: p.Anchor(),
+		path: slices.Clone(p.Path()), page: page}
+	// urlview.Durable says whether the descended row survives ascent.
+	possiblyEphemeral := false
+	if tile, ok := a.descendedTile(p); ok {
+		possiblyEphemeral = a.possiblyEphemeral(p, tile)
+	}
+	v.durable = urlview.Durable(possiblyEphemeral)
+	return v
+}
+
+// moveURLView hands the view fromID holds to pane to, page and all: no close,
+// no freeze and no reload. The handle is rebuilt for the pane it now serves
+// and keeps what the unload beacon needs of the page's own history.
+func (a *App) moveURLView(fromID string, to *pane.Pane) {
+	from, ok := a.localIf(fromID)
+	if !ok || from.urlView == nil {
+		return
+	}
+	old := from.urlView
+	from.urlView = nil
+	v := a.urlViewIn(to, old.tileID, old.page)
+	v.navDirty, v.lastURL, v.lastTitle = old.navDirty, old.lastURL, old.lastTitle
+	a.local(to.ID).urlView = v
+	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
+	urlConsole("move pane=%s→%s tile=%s", fromID, to.ID, v.tileID)
+	// A pane not laid out, the parked tree a hand-back returns to, keeps the
+	// view's own bounds and stays parked until the frame that shows it.
+	var b *viewBounds
+	if r, ok := a.layoutPanes()[to.ID]; ok {
+		cb := contentViewBounds(r)
+		b = &cb
+	}
+	hidden := b == nil || pane.ParkSurface(a.canvasGesture(), to.ID)
+	a.bridgeMove(fromID, to.ID, b, v.durable, hidden, to.ID == a.tree.Focus,
+		func() { a.dropURLView(to.ID, v) })
+	a.draw()
+}
+
+// handBackURLViews runs nav.EffHandBackSurfaces: each live view in the level
+// being left moves to its pane.Heir in the parked tree, before the level's
+// panes are flushed away and would close it.
+func (a *App) handBackURLViews() {
+	top := a.ws.Top()
+	if top == nil || top.OuterTree == nil {
+		return
+	}
+	var returning []pane.Holder
+	top.OuterTree.Walk(func(p *pane.Pane) {
+		if t, ok := a.descendedTile(p); ok {
+			returning = append(returning, pane.Holder{PaneID: p.ID, TileID: rpc.ContentID(t)})
+		}
+	})
+	a.tree.Walk(func(p *pane.Pane) {
+		v := a.urlViewFor(p.ID)
+		if v == nil {
+			return
+		}
+		if heir := pane.Heir(v.tileID, returning, a.urlSurfaces()); heir != "" {
+			a.moveURLView(p.ID, top.OuterTree.FindPane(heir))
+		}
+	})
+}
+
+// dropURLView takes down a handle main has no view behind, a refused place or
+// a page that closed itself, since one left standing keeps the pane looking
+// live over a blank instead of showing the tile's frozen face.
+// Identity-checked, since a later place may own the pane.
+func (a *App) dropURLView(paneID string, v *urlView) {
 	pl, ok := a.localIf(paneID)
 	if !ok || pl.urlView != v {
 		return

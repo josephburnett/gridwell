@@ -211,23 +211,35 @@ app.whenReady().then(async () => {
   await regPark.remove('paneP');
   console.log('park ok: the face is taken first, and a show overtakes the park');
 
-  // ── a dead view yields an empty freeze, never a throw ──────────────────
-  // Ascending out of a crashed tab: every view-bound read in remove() throws,
-  // and remove() must still complete with an empty freeze, which the wasm side
-  // skips writing back. The crash is reported, so the user knows why.
-  const deadErrs: string[] = [];
-  const reg2 = new WebviewRegistry(win, { onError: (ev) => deadErrs.push(ev.message) });
+  // ── a page that closes itself ends its view, and says so once ─────────
+  // A sign-in flow's last page calls window.close(), which destroys the
+  // webContents under the registry. The entry goes at once, the renderer is
+  // told, and every later call for the pane is a no-op: the mirror pump's
+  // capture, the renderer's bounds, and the remove, which answers an empty
+  // freeze the wasm side skips writing back.
+  const deadErrs: ErrorEvent[] = [];
+  const gone: string[] = [];
+  const reg2 = new WebviewRegistry(win, {
+    onError: (ev) => deadErrs.push(ev),
+    onViewGone: (ev) => gone.push(`${ev.paneId} ${ev.tileId}`),
+  });
   await reg2.place('pane2', 'u1/43', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
-  await waitForFirstFrame(reg2, 'pane2', 'dead-view scenario');
-  // Destroy the renderer out from under the registry, the crashed-tab shape.
-  reg2.webContentsFor('pane2')!.close();
-  await new Promise((r) => setTimeout(r, 300));
+  await waitForFirstFrame(reg2, 'pane2', 'self-close scenario');
+  // Not awaited: the page is gone before the script's answer could return.
+  reg2.webContentsFor('pane2')!.executeJavaScript('window.close()').catch(() => {});
+  const goneBy = Date.now() + LOAD_BUDGET_MS;
+  while (gone.length === 0 && Date.now() < goneBy) await new Promise((r) => setTimeout(r, 50));
+  if (JSON.stringify(gone) !== JSON.stringify(['pane2 u1/43'])) fail(`the view's end was not announced once: ${JSON.stringify(gone)}`);
+  if (reg2.has('pane2')) fail('the entry outlived the view the page closed');
+  if ((await reg2.capture('pane2')) !== '') fail('a capture ran against the closed view');
+  reg2.setBounds('pane2', { x: 0, y: 0, width: 500, height: 300 });
   const deadFreeze = await reg2.remove('pane2');
-  if (deadFreeze.jpegBase64 !== '') fail('dead view yielded a non-empty freeze');
-  if (!deadErrs.some((m) => m.includes('view crashed while closing'))) {
-    fail(`a crash during remove was not reported (errors: ${JSON.stringify(deadErrs)})`);
+  if (deadFreeze.jpegBase64 !== '') fail('a closed view yielded a non-empty freeze');
+  const said = deadErrs.map((e) => `${e.severity}: ${e.message}`);
+  if (said.length !== 1 || !said[0].startsWith('info: the page closed itself')) {
+    fail(`want the one notice that the page closed itself, got ${JSON.stringify(said)}`);
   }
-  console.log('dead-view remove ok: empty freeze, no throw, the crash reported');
+  console.log('self-close ok: the entry retired, the renderer told, one notice, an empty freeze');
 
   // ── single-finger touch scroll over a live view ─────────────────────────
   // The whole seam: page TouchEvents, preload listener, IPC through the
@@ -685,25 +697,24 @@ app.whenReady().then(async () => {
   await regZ.remove('paneZ');
   console.log('zoom re-apply ok: the composed factor is back after a navigation');
 
-  // ── a mirror capture that fails leaves evidence, once per streak ────────
-  // Otherwise the pane shows a stale frame and nothing says why. The pump
-  // captures on a timer, so a per-frame report would bury the log.
+  // ── a view destroyed behind the registry is not a frozen mirror ────────
+  // Its end is the one notice; the pump's ticks that follow find no entry and
+  // say nothing, so the strip does not read "mirror capture failing" for a
+  // page that closed itself.
   const capErrs: ErrorEvent[] = [];
   const regM = new WebviewRegistry(win, { onError: (ev) => capErrs.push(ev) });
   await regM.place('paneM', 'u1/72', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   await waitForFirstFrame(regM, 'paneM', 'mirror scenario');
   regM.webContentsFor('paneM')!.close(); // destroyed behind the registry's back
   await new Promise((r) => setTimeout(r, 300));
-  if ((await regM.capture('paneM')) !== '') fail('a capture of a destroyed view returned a frame');
-  if ((await regM.capture('paneM')) !== '') fail('the second capture of a destroyed view returned a frame');
-  if ((await regM.capture('paneM')) !== '') fail('the third capture of a destroyed view returned a frame');
-  const failing = capErrs.filter((e) => e.message.includes('mirror capture failing'));
-  if (failing.length !== 1) fail(`a failing capture streak reported ${failing.length} times, want 1`);
-  // The severity rides the same event the message does, all the way from the
-  // report site: client/errsurface paints the row from it.
-  if (failing[0].severity !== 'error') fail(`a frozen mirror was reported as '${failing[0].severity}'`);
+  for (let i = 0; i < 3; i++) {
+    if ((await regM.capture('paneM')) !== '') fail('a capture of a destroyed view returned a frame');
+  }
+  if (capErrs.some((e) => e.message.includes('mirror capture'))) {
+    fail(`a destroyed view was reported as a frozen mirror: ${JSON.stringify(capErrs)}`);
+  }
   await regM.remove('paneM');
-  console.log('capture streak ok: the failure is reported once, not per frame, as an error');
+  console.log('destroyed mirror ok: no capture streak for a view that ended');
 
   // ── a tick inside a main-frame navigation is not an attempt ─────────────
   // Between the old document's surface going away and the new one's first
@@ -773,8 +784,11 @@ app.whenReady().then(async () => {
   if (!sawFailing) {
     fail(`a crashed renderer's frozen mirror was never reported (errors: ${JSON.stringify(streakErrs)})`);
   }
-  const failMsg = streakErrs.find((e) => e.message.includes('mirror capture failing'))!.message;
-  if (!failMsg.includes('paneCrash')) fail(`the failing report does not name the pane: ${failMsg}`);
+  const failEv = streakErrs.find((e) => e.message.includes('mirror capture failing'))!;
+  if (!failEv.message.includes('paneCrash')) fail(`the failing report does not name the pane: ${failEv.message}`);
+  // The severity rides the same event the message does, all the way from the
+  // report site: client/errsurface paints the row from it.
+  if (failEv.severity !== 'error') fail(`a frozen mirror was reported as '${failEv.severity}'`);
 
   wcCrash.reload();
   let recoveredFrame = '';
@@ -870,8 +884,10 @@ app.whenReady().then(async () => {
       fail(`removeAll left ${quitPanes[i]}'s view alive: its teardown never ran`);
     }
   }
-  if (!quitErrs.some((m) => m.includes('view crashed while closing'))) {
-    fail(`removeAll hid the dead view's report (errors: ${JSON.stringify(quitErrs)})`);
+  // The view ended before its turn, so its entry retired with the one notice
+  // and removeAll found nothing of it left to close.
+  if (quitErrs.filter((m) => m.includes('closed itself')).length !== 1) {
+    fail(`removeAll hid or repeated the dead view's report (errors: ${JSON.stringify(quitErrs)})`);
   }
   await regQ.removeAll(); // an empty registry resolves rather than throwing
   console.log('removeAll ok: every pane torn down, a dead view neither rejected nor silenced');

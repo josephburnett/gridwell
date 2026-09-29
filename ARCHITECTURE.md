@@ -373,8 +373,20 @@ shortcut.
 the lifecycle). Binary frames are PTY bytes, text frames are JSON control
 (resize up, one exit verdict down). The door (`internal/server/shell_door.go`)
 resolves the id before accepting, so a refused upgrade never leaves a tmux
-session behind. One live surface per content tile: opening it elsewhere takes
-over (`pane.TakeOver`).
+session behind.
+
+**Takeover.** One live surface per content tile: opening it elsewhere takes
+over, and `pane.TakeOver` says how — keep the surface the pane already has,
+move the one another pane holds, or place a fresh one. A url view moves: the
+bridge's `moveWebview` re-keys main's entry to the new pane with that pane's
+bounds, park and focus verdicts, and nothing navigates, so the page keeps its
+scroll, its script state and a half-typed field. Leaving a pane-tile level
+hands each of its live views back to the pane of the parked tree that shows
+the same tile (`pane.Heir`, run by `nav.EffHandBackSurfaces`) instead of
+closing it, so a round trip through a level that shows the outer level's
+tiles rebuilds nothing. A view closes, with its freeze, only when its tile
+leaves every pane. A shell does not move: the other pane detaches with a
+freeze, and the opener reattaches to the same tmux session.
 
 **Mirrors.** Every pane that shows a live tile — its grid, a link to it, or a
 frozen descent into it — draws the tile's face from the shared preview cache.
@@ -397,7 +409,11 @@ pane's view only. A view swallows the renderer's own mouse events, so the
 presses that must move pane focus are relayed back: the preload forwards a
 left press, and `showContextMenu` — the one funnel for both doors into the
 native menu — announces the pane it is opening on. Both land in `focusToPane`,
-so a right-click moves focus like every other press. One Chromium partition
+so a right-click moves focus like every other press. A view whose webContents
+ends outside `remove()` — a page that called `window.close()` — is retired at
+once (`retire`): its entry goes, every later call for the pane is a no-op, and
+the renderer hears `onViewGone` and drops its handle, so the pane shows the
+tile's frozen face. One Chromium partition
 (`persist:gridwell`) holds every
 live url tile, local or mounted; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
@@ -478,6 +494,7 @@ copy:
 | what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
+| does going live keep, move or place the tile's surface | `pane.TakeOver`; leaving a level, `pane.Heir` |
 | does a gesture park this pane's live surface | `pane.ParkSurface`; `pane.CanvasOwnsPointer` for its pointer |
 | does a live surface refresh its face in the cache | `pane.Mirrored`; a park takes one frame |
 | is the menu open, on which pane | `client/menu` |
@@ -524,7 +541,7 @@ pane is inside" and do not spread the word.
 | An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
 | Text preview never re-wraps | `PreviewWindowFrame` takes only the tile's facts |
-| Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place` and `setHidden`; `url-focus-steal.spec.ts`, the capture harness |
+| Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place`, `setHidden` and `move`; `url-focus-steal.spec.ts`, the capture harness |
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
 | User state survives an unreachable source | the rows the user TOUCHED answer (an untouched entry has no row and is absent until the source speaks); fs/proc sweep rules |

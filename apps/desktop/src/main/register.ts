@@ -16,6 +16,7 @@ import {
   NoticeSeverity,
   ChoiceMenuArgs,
   MirroredArgs,
+  MoveArgs,
 } from './ipc';
 import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
@@ -75,6 +76,10 @@ export function registerWebviewIpc(
 
   ipcMain.handle(CH.setHidden, (_e, a: SetHiddenArgs): void => {
     registry.setHidden(a.paneId, a.hidden, a.focused);
+  });
+
+  ipcMain.handle(CH.move, (_e, a: MoveArgs): void => {
+    registry.move(a.fromPaneId, a.toPaneId, a.bounds, a.durable, a.hidden, a.focused);
   });
 
   ipcMain.handle(CH.remove, async (_e, a: RemoveArgs): Promise<FreezeResult> => {

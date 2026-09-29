@@ -8,6 +8,8 @@ import {
   viewDestroyed,
   viewFailed,
   viewFocused,
+  viewGone,
+  viewMoved,
   viewNav,
   viewShown,
   windowFocused,
@@ -26,6 +28,8 @@ test('every webviews record carries the pane under one kv key', () => {
     viewFocused('p1', 'u1/7', true),
     viewNav('p1', 'u1/7', false, 'https://x.test/'),
     viewFailed('p1', 'u1/7', 'load failed'),
+    viewGone('p1', 'u1/7', 'https://x.test/'),
+    viewMoved('p0', 'p1', 'u1/7'),
   ];
   for (const r of recs) {
     assert.equal(r.src, 'webviews', `${r.kind} claims src ${r.src}`);

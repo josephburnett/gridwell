@@ -330,8 +330,11 @@ func TestLeaveLevels(t *testing.T) {
 	t.Run("a parked tree comes back and animates", func(t *testing.T) {
 		m := New()
 		plan := m.Do(leaveGesture(1), levelWorld(true))
+		// The closing level hands its live surfaces back before its panes are
+		// flushed away, so the ones the parked tree shows move rather than
+		// close and reopen.
 		if !sameKinds(kinds(plan), []EffectKind{EffFlushLayout, EffCancelTransition,
-			EffCloseMenu, EffFlushDroppedSubtree, EffPopLevel}) {
+			EffCloseMenu, EffHandBackSurfaces, EffFlushDroppedSubtree, EffPopLevel}) {
 			t.Fatalf("effects = %v, want the hop", kinds(plan))
 		}
 		if e := only(t, plan, EffPopLevel); e.GridID != "" {

@@ -11,6 +11,7 @@ import {
   SetZoomArgs,
   ChoiceMenuArgs,
   MirroredArgs,
+  MoveArgs,
   RemoveArgs,
   PaneRef,
   FreezeResult,
@@ -31,6 +32,7 @@ const LISTENERS = {
   onFreezeURL: EV.freezeUrl,
   onContextMenu: EV.menuPane,
   onZoomKey: EV.zoomKey,
+  onViewGone: EV.viewGone,
   onError: EV.error,
 } as const;
 
@@ -67,6 +69,10 @@ const api = {
   // The tile's persisted content_zoom; main composes it with the min-width zoom.
   setZoom(args: SetZoomArgs): Promise<void> {
     return ipcRenderer.invoke(CH.setZoom, args);
+  },
+  // Hands a live view to another pane without a reload.
+  moveWebview(args: MoveArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.move, args);
   },
   removeWebview(args: RemoveArgs): Promise<FreezeResult> {
     return ipcRenderer.invoke(CH.remove, args);

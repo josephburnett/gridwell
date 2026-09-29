@@ -1,7 +1,8 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent } from './ipc';
+import type { WebContentsViewConstructorOptions } from 'electron';
+import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent, ViewGoneEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -11,11 +12,13 @@ import {
   composeZoom,
   serializeHistory,
   reviveNavigation,
+  restoreRefused,
   restoreRefusedMessage,
   URL_MIN_LAYOUT_WIDTH,
   shouldSurfaceFailLoad,
   failLoadMessage,
   renderProcessGoneMessage,
+  pageClosedMessage,
   zoomChordKey,
   openBelowUrl,
   toContentPoint,
@@ -33,6 +36,8 @@ import {
   viewDestroyed,
   viewFailed,
   viewFocused,
+  viewGone,
+  viewMoved,
   viewNav,
   viewShown,
 } from './viewtrace';
@@ -46,6 +51,9 @@ const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js
 
 interface Entry {
   view: WebContentsView;
+  // The pane the view serves now. move() re-keys the entry, so every handler
+  // reads the pane here, never the one the view was placed on.
+  paneId: string;
   tileId: string;
   bounds: Bounds;
   hidden: boolean;
@@ -62,8 +70,8 @@ interface Entry {
   // Tracked so remove() can cancel it before the closure reads a closed view.
   focusSettle: ReturnType<typeof setTimeout> | null;
   captureStreak: StreakState;
-  // Bumped by every show and hide, so a park still waiting on its frame can
-  // tell it was overtaken.
+  // Bumped by every show, hide and move, so a park still waiting on its frame
+  // can tell it was overtaken.
   parkGen: number;
 }
 
@@ -80,7 +88,13 @@ interface RegistryCallbacks {
   onZoomKey?: (ev: ZoomKeyEvent) => void;
   // focusguard.ts owns the verdict that a focus grab was a steal.
   onFocusStolen?: (ev: { paneId: string }) => void;
+  // A view ended outside remove(); see retire().
+  onViewGone?: (ev: ViewGoneEvent) => void;
 }
+
+// How a view is made, injected so webviews.test.ts runs the registry under
+// node with a fake.
+type NewView = (opts: WebContentsViewConstructorOptions) => WebContentsView;
 
 // WebviewRegistry owns the live url-tile WebContentsViews parented to the root
 // window, one per paneId, all on SESSION_PARTITION. It knows nothing of IPC or
@@ -95,9 +109,12 @@ export class WebviewRegistry {
   // The e2e reads this to see that an unread face costs no capture.
   mirrorCalls = 0;
 
-  constructor(win: BaseWindow, cb: RegistryCallbacks = {}) {
+  private readonly newView: NewView;
+
+  constructor(win: BaseWindow, cb: RegistryCallbacks = {}, newView: NewView = (o) => new WebContentsView(o)) {
     this.win = win;
     this.cb = cb;
+    this.newView = newView;
   }
 
   // Every notice the registry raises carries this one source, which
@@ -219,7 +236,7 @@ export class WebviewRegistry {
       // the strip, so a rejection here must not stop the replacement view.
       await this.remove(paneId).catch(() => {});
     }
-    const view = new WebContentsView({
+    const view = this.newView({
       webPreferences: {
         partition,
         contextIsolation: true,
@@ -229,11 +246,17 @@ export class WebviewRegistry {
         preload: urlViewPreload,
       },
     });
+    // hidden and focused start from the renderer's verdict for this frame,
+    // because it owns both. hidden keeps a view placed under an open palette
+    // off the canvas overlay; focused feeds the steal guard from the first
+    // frame, because addChildView and loadURL hand the new widget OS focus even
+    // on an unfocused pane.
+    const e: Entry = { view, paneId, tileId, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = openBelowUrl(target);
       if (below) {
-        this.cb.onOpenBelow?.({ paneId, url: below });
+        this.cb.onOpenBelow?.({ paneId: e.paneId, url: below });
       }
       return { action: 'deny' };
     });
@@ -251,24 +274,17 @@ export class WebviewRegistry {
       const key = zoomChordKey(input);
       if (key) {
         this.zoomChordRelays++;
-        this.cb.onZoomKey?.({ paneId, key });
+        this.cb.onZoomKey?.({ paneId: e.paneId, key });
         event.preventDefault();
       }
     });
     // The preload suppresses this for a right-drag, so this is a real click.
-    view.webContents.on('context-menu', (_event, params) => this.showContextMenu(paneId, view, params));
-    // hidden and focused start from the renderer's verdict for this frame,
-    // because it owns both. hidden keeps a view placed under an open palette
-    // off the canvas overlay; focused feeds the steal guard from the first
-    // frame, because addChildView and loadURL hand the new widget OS focus even
-    // on an unfocused pane.
-    const startHidden = hidden;
-    const e: Entry = { view, tileId, bounds: rounded, hidden: startHidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
+    view.webContents.on('context-menu', (_event, params) => this.showContextMenu(e.paneId, view, params));
     this.entries.set(paneId, e);
     trace(viewCreated(paneId, tileId, url));
     this.win.contentView.addChildView(view);
-    view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
-    this.wireNav(paneId, e);
+    view.setBounds(hidden ? parkedBounds(rounded.width, rounded.height) : rounded);
+    this.wireNav(e);
     this.applyMinWidthZoom(e);
     // reviveNavigation owns the tie-break between the persisted back-stack and
     // the tile's user-editable address.
@@ -282,7 +298,9 @@ export class WebviewRegistry {
       view.webContents.navigationHistory
         .restore({ entries: nav.history.entries, index: nav.history.index })
         .catch((err: unknown) => {
-          this.reportErr(restoreRefusedMessage(paneId, err));
+          if (restoreRefused(this.entries.get(e.paneId) === e, err)) {
+            this.reportErr(restoreRefusedMessage(e.paneId, err));
+          }
         });
     } else {
       void view.webContents.loadURL(url);
@@ -361,10 +379,50 @@ export class WebviewRegistry {
       return;
     }
     void face.then(() => {
-      if (this.entries.get(paneId) === e && e.parkGen === gen) {
+      if (this.entries.get(e.paneId) === e && e.parkGen === gen) {
         e.view.setBounds(parkedBounds(e.bounds.width, e.bounds.height));
       }
     });
+  }
+
+  // move hands the view on fromPaneId to toPaneId with its page: the entry is
+  // re-keyed and takes the new pane's bounds and verdicts, and nothing
+  // navigates. It throws when fromPaneId holds no view, which the renderer
+  // hears as a refusal and drops the handle it moved. Absent bounds keep the
+  // view's own, for a pane not laid out yet.
+  move(fromPaneId: string, toPaneId: string, bounds: Bounds | undefined, durable: boolean, hidden: boolean, focused: boolean): void {
+    const e = this.entries.get(fromPaneId);
+    if (!e) throw new Error(`pane ${fromPaneId}: no live view to move`);
+    const stale = this.entries.get(toPaneId);
+    if (stale && stale !== e) {
+      // As in place(): the renderer closes a pane's own view before a move
+      // lands on it, so reaching here loses that view's final frame.
+      this.reportErr(`pane ${toPaneId}: live view replaced (${stale.tileId} → ${e.tileId}) without a close; its final frame is lost`);
+      void this.remove(toPaneId).catch(() => {});
+    }
+    this.entries.delete(fromPaneId);
+    e.paneId = toPaneId;
+    this.entries.set(toPaneId, e);
+    // The settle and a park waiting on its face were armed for the old pane.
+    if (e.focusSettle) {
+      clearTimeout(e.focusSettle);
+      e.focusSettle = null;
+    }
+    e.parkGen++;
+    if (bounds) e.bounds = roundBounds(bounds);
+    e.hidden = hidden;
+    e.focused = focused;
+    e.durable = durable;
+    e.view.setBounds(hidden ? parkedBounds(e.bounds.width, e.bounds.height) : e.bounds);
+    this.applyMinWidthZoom(e);
+    trace(viewMoved(fromPaneId, toPaneId, e.tileId));
+    // A view that keeps OS focus in a pane that lost it would take the next
+    // keystrokes, the steal the guard exists for.
+    try {
+      if (!focused && e.view.webContents.isFocused()) this.cb.onFocusStolen?.({ paneId: toPaneId });
+    } catch {
+      // A view gone under the move retires on its own event.
+    }
   }
 
   async remove(paneId: string): Promise<FreezeResult> {
@@ -421,6 +479,8 @@ export class WebviewRegistry {
     const e = this.entries.get(paneId);
     if (!e || !capturable(e)) return '';
     const attempt = await captureAttempt(e.view);
+    // A view that ended while the frame was taken has already said so.
+    if (this.entries.get(e.paneId) !== e) return '';
     const decision = decideStreak(e.captureStreak, attempt.kind);
     e.captureStreak = decision.state;
     const report = decision.report;
@@ -453,10 +513,10 @@ export class WebviewRegistry {
     await Promise.all(this.paneIds().map((id) => this.remove(id)));
   }
 
-  private wireNav(paneId: string, e: Entry): void {
+  private wireNav(e: Entry): void {
     const emit = () => {
       this.cb.onNav?.({
-        paneId,
+        paneId: e.paneId,
         tileId: e.tileId,
         url: e.view.webContents.getURL(),
         title: e.view.webContents.getTitle(),
@@ -494,21 +554,21 @@ export class WebviewRegistry {
         alreadyBounced,
       });
       if (act.kind === 'allow') return;
-      if (act.kind === 'bounce') this.cb.onFocusStolen?.({ paneId });
+      if (act.kind === 'bounce') this.cb.onFocusStolen?.({ paneId: e.paneId });
       if (act.settleMs === null) return;
       if (e.focusSettle) clearTimeout(e.focusSettle);
       const bounced = act.kind === 'bounce';
       e.focusSettle = setTimeout(() => {
         e.focusSettle = null;
-        if (this.entries.get(paneId) !== e) return; // removed meanwhile
+        if (this.entries.get(e.paneId) !== e) return; // removed or moved meanwhile
         step('settle', pressesAtFocus, bounced);
       }, act.settleMs);
     };
     e.view.webContents.on('focus', () => {
-      trace(viewFocused(paneId, e.tileId, true));
+      trace(viewFocused(e.paneId, e.tileId, true));
       step('focus-event', e.presses, false);
     });
-    e.view.webContents.on('blur', () => trace(viewFocused(paneId, e.tileId, false)));
+    e.view.webContents.on('blur', () => trace(viewFocused(e.paneId, e.tileId, false)));
     // Both halves of a navigation, because the gap between them is where a
     // page hangs with the pane sitting blank.
     // A same-document navigation keeps the surface and fires no load, so
@@ -516,7 +576,7 @@ export class WebviewRegistry {
     e.view.webContents.on('did-start-navigation', (details) => {
       if (!details.isMainFrame || details.isSameDocument) return;
       e.navigating = true;
-      trace(viewNav(paneId, e.tileId, false, details.url));
+      trace(viewNav(e.paneId, e.tileId, false, details.url));
     });
     // zoomFactor resets across cross-origin navigations.
     e.view.webContents.on('did-finish-load', () => {
@@ -525,7 +585,7 @@ export class WebviewRegistry {
       // destroyed WebContents throws uncaught in main, which hangs it behind
       // an error dialog.
       try {
-        trace(viewNav(paneId, e.tileId, true, e.view.webContents.getURL()));
+        trace(viewNav(e.paneId, e.tileId, true, e.view.webContents.getURL()));
       } catch {
         return;
       }
@@ -542,7 +602,7 @@ export class WebviewRegistry {
         const message = failLoadMessage(validatedURL, errorDescription, errorCode);
         // Traced even when it is not surfaced: an aborted navigation is noise
         // on the strip and evidence in a dump.
-        trace(viewFailed(paneId, e.tileId, message));
+        trace(viewFailed(e.paneId, e.tileId, message));
         if (!shouldSurfaceFailLoad(errorCode, isMainFrame)) return;
         this.reportErr(message);
       },
@@ -560,6 +620,39 @@ export class WebviewRegistry {
       }
       this.reportErr(renderProcessGoneMessage(url, details.reason));
     });
+
+    // A page that calls window.close() destroys its webContents with no word
+    // to the renderer.
+    e.view.webContents.on('destroyed', () => this.retire(e));
+  }
+
+  // retire is the one owner of "the view is gone" for a webContents that ended
+  // outside remove(): the entry goes at once, so every later call for the pane
+  // is a no-op and remove() answers an empty freeze, and the renderer is told
+  // so the pane shows the tile's frozen face instead of a blank view.
+  private retire(e: Entry): void {
+    const paneId = e.paneId;
+    // remove() takes the entry before it closes the view.
+    if (this.entries.get(paneId) !== e) return;
+    this.entries.delete(paneId);
+    if (e.focusSettle) {
+      clearTimeout(e.focusSettle);
+      e.focusSettle = null;
+    }
+    let url = '';
+    try {
+      url = e.view.webContents.getURL();
+    } catch {
+      // Unreadable once destroyed; the notice goes without it.
+    }
+    try {
+      this.win.contentView.removeChildView(e.view);
+    } catch {
+      // A view whose webContents is gone may already be detached.
+    }
+    trace(viewGone(paneId, e.tileId, url));
+    this.cb.onViewGone?.({ paneId, tileId: e.tileId });
+    this.reportErr(pageClosedMessage(url), 'info');
   }
 }
 

@@ -193,7 +193,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	}
 	// One live surface per content tile, pane.TakeOver: two attachments would
 	// fight over the terminal size, so another pane detaches, with a freeze.
-	for _, otherID := range pane.TakeOver(a.shellSurfaces(), p.ID, tileID) {
+	for _, otherID := range pane.TakeOver(a.shellSurfaces(), p.ID, tileID).Others() {
 		a.closeShellStream(otherID, true)
 	}
 	a.closeShellStream(p.ID, true)

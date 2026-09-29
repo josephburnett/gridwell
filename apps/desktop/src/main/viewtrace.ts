@@ -26,6 +26,18 @@ export function viewDestroyed(paneId: string, tileId: string, url: string): Trac
   return view('destroy', paneId, url, { tile: tileId });
 }
 
+// A view whose webContents ended outside remove(), such as a page that closed
+// itself.
+export function viewGone(paneId: string, tileId: string, url: string): TraceEvent {
+  return view('gone', paneId, url, { tile: tileId });
+}
+
+// A view handed to another pane with its page, which is neither a create nor
+// a destroy: a dump reading one pane follows it by kv.from.
+export function viewMoved(fromPaneId: string, toPaneId: string, tileId: string): TraceEvent {
+  return view('move', toPaneId, tileId, { from: fromPaneId });
+}
+
 export function viewBounds(paneId: string, tileId: string, b: Bounds): TraceEvent {
   return view('bounds', paneId, tileId, {
     x: String(b.x),

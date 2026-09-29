@@ -158,6 +158,23 @@ func (a *App) bridgePlace(paneID string, tileID, url string, b viewBounds, conte
 	}, nil, onFail)
 }
 
+// bridgeMove hands the view on fromID to toID with its page: no reload. A nil
+// b keeps the view's own bounds, for a pane not laid out yet. onFail runs when
+// main has no view on fromID, so the caller's handle must go.
+func (a *App) bridgeMove(fromID, toID string, b *viewBounds, durable, hidden, focused bool, onFail func()) {
+	fields := map[string]any{
+		"fromPaneId": fromID,
+		"toPaneId":   toID,
+		"durable":    durable,
+		"hidden":     hidden,
+		"focused":    focused,
+	}
+	if b != nil {
+		fields["bounds"] = b.toJS()
+	}
+	a.bridgeVerb("moveWebview", fields, nil, onFail)
+}
+
 func (a *App) bridgeSetBounds(paneID string, b viewBounds) {
 	a.bridgeVerb("setBounds", map[string]any{"paneId": paneID, "bounds": b.toJS()}, nil, nil)
 }
@@ -295,6 +312,13 @@ func (a *App) installWebviewListeners() {
 		{"onZoomKey", func(ev js.Value) {
 			a.zoomKeyRelays++
 			a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
+		}},
+		// A view that ended in main with no remove, a page that closed
+		// itself. Nothing is left to capture; main's notice says why.
+		{"onViewGone", func(ev js.Value) {
+			if v := a.urlViewFor(jsString(ev.Get("paneId"))); v != nil && v.tileID == jsString(ev.Get("tileId")) {
+				a.dropURLView(v.paneID, v)
+			}
 		}},
 		// Main reports every webview, session and sidecar failure over this
 		// one channel, into the same error surface every other failure path
