@@ -1085,3 +1085,81 @@ func TestRememberedStreamHasTheLiveChunkShape(t *testing.T) {
 		t.Errorf("remembered body differs from what was written")
 	}
 }
+
+// TestAFoldedTileChangedIsNotAChange: a write the source announced as a
+// TileChanged is already in the remembered rows, so a revalidation that reads
+// back the same tiles has nothing to announce. Announcing it costs every open
+// view a full grid read for a change it has already applied.
+func TestAFoldedTileChangedIsNotAChange(t *testing.T) {
+	cc, upstream, root, _ := fixture(t)
+	ctx := context.Background()
+
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
+	evs := make(chan *pb.Event, 64)
+	go func() {
+		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(ev *pb.Event) error {
+			select {
+			case evs <- ev:
+			case <-subCtx.Done():
+			}
+			return nil
+		})
+	}()
+	// The tee attaches to the source's stream asynchronously, so prime it
+	// with a write whose event must come back before the grid is remembered.
+	primed := false
+	for x := int64(0); x < 50 && !primed; x++ {
+		if _, err := upstream.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+			Tile: &pb.Tile{Kind: "text", X: x, Y: 9, W: 1, H: 1}}); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-evs:
+			primed = true
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if !primed {
+		t.Fatal("the source's stream never reached the subscriber")
+	}
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A write straight to the source: only its TileChanged reaches the layer.
+	made, err := upstream.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for folded := false; !folded; {
+		select {
+		case ev := <-evs:
+			folded = ev.GetTileChanged().GetTile().GetId() == made.GetTile().GetId()
+		case <-time.After(10 * time.Second):
+			t.Fatal("the write's TileChanged never arrived")
+		}
+	}
+
+	ageGrid(t, cc, root)
+	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
+		t.Fatal(err)
+	}
+	awaitFresh(t, cc, root)
+	cc.revalWG.Wait()
+	cc.emitGridChanged("revalidated")
+	for {
+		select {
+		case ev := <-evs:
+			switch ev.GetGridChanged().GetGridId() {
+			case root:
+				t.Fatal("revalidation announced a grid whose only change was already folded")
+			case "revalidated":
+				return
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("the sentinel never arrived")
+		}
+	}
+}
