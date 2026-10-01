@@ -174,7 +174,7 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 			v.Zoom = d.State.Zoom
 		}
 		pl.install(d.PaneID, st, &v)
-		return m.finishRestore(d, pl)
+		return m.finishRestore(d, path, w, pl)
 	}
 	// Mode follows textedit.DescentMode, the one descent decision; scroll
 	// restores from the tile's stored text_y.
@@ -203,13 +203,17 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 	// A reload lands back inside the descent, so it re-engages through the
 	// same one-owner decision every descent applies.
 	pl.add(Effect{Kind: EffReEngage, PaneID: d.PaneID, TileID: leaf})
-	return m.finishRestore(d, pl)
+	return m.finishRestore(d, path, w, pl)
 }
 
 // finishRestore is the tail every landed restore shares: the pane's own grid,
-// and the address rewritten in case the walk truncated it.
-func (m *Machine) finishRestore(d *restoreData, pl *planner) Plan {
-	pl.add(Effect{Kind: EffFetchGrid, PaneID: d.PaneID})
+// unless the walk's own read just answered it, and the address rewritten in
+// case the walk truncated it.
+func (m *Machine) finishRestore(d *restoreData, path []string, w World, pl *planner) Plan {
+	gid := leafGrid(d.State.Anchor, path, w.Restore)
+	if _, read := w.Restore.rows(gid); !read || !d.Asked[gid] {
+		pl.add(Effect{Kind: EffFetchGrid, PaneID: d.PaneID})
+	}
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 	return m.endRestore(d, pl)
 }
@@ -283,11 +287,21 @@ func walkURL(d *restoreData, rw *RestoreWorld) (path []string, leaf, need string
 	return path, leaf, need
 }
 
-// leafRow is the content leaf's cached row. pane.ResolveLeafGrid owns the
-// walk to its grid, the same one the shim resolves a pane's grid with, so the
-// two cannot land in different grids.
+// leafRow is the content leaf's cached row.
 func leafRow(anchor string, path []string, leaf string, rw *RestoreWorld) (RestoreTile, bool) {
-	gid := pane.ResolveLeafGrid(anchor, path,
+	rows, ok := rw.rows(leafGrid(anchor, path, rw))
+	if !ok {
+		return RestoreTile{}, false
+	}
+	row, ok := rows[leaf]
+	return row, ok
+}
+
+// leafGrid is the grid path lands in, resolved against the snapshot.
+// pane.ResolveLeafGrid owns the walk, the same one the shim resolves a pane's
+// grid with, so the two cannot land in different grids.
+func leafGrid(anchor string, path []string, rw *RestoreWorld) string {
+	return pane.ResolveLeafGrid(anchor, path,
 		func(gid, wellID string) (string, bool, bool) {
 			rows, ok := rw.rows(gid)
 			if !ok {
@@ -299,10 +313,4 @@ func leafRow(anchor string, path []string, leaf string, rw *RestoreWorld) (Resto
 			}
 			return t.ChildGridID, true, true
 		})
-	rows, ok := rw.rows(gid)
-	if !ok {
-		return RestoreTile{}, false
-	}
-	row, ok := rows[leaf]
-	return row, ok
 }

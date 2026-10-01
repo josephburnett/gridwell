@@ -21,7 +21,7 @@ function count(asked: string[], id: string): number {
   return asked.filter((a) => a === id).length;
 }
 
-test('a descent and an ascent read each grid they show once', async ({ gw, window }) => {
+test('a boot, a descent and an ascent read each grid they show once', async ({ gw, window }) => {
   const settleMs = (await gw.cadences()).framingSaveMs;
   await gw.enterPlugin('home');
   const home = await gw.focused();
@@ -48,14 +48,15 @@ test('a descent and an ascent read each grid they show once', async ({ gw, windo
   await gw.ascendViaCrumb();
   await settle(window, settleMs);
 
-  // A reload empties the grid cache, so B's and C's grids are first read
-  // inside A.
+  // A reload empties the grid cache, so the boot's restore walk and its first
+  // draw both want home, and B's and C's grids are first read inside A.
   const asked = await askedIDs(window, 'GetGrid', 'gridId');
   await window.reload();
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
   await expect.poll(async () => (await gw.focused()).gridID, { timeout: 30_000 }).toBe(home.gridID);
   await gw.waitIdle();
   await settle(window, settleMs);
+  expect(count(asked, home.gridID), 'the boot read home').toBe(1);
 
   asked.length = 0;
   await gw.descendCell(cx, cy);

@@ -181,3 +181,37 @@ func TestARepeatedAskOwesNothing(t *testing.T) {
 		t.Error("a frame's repeated ask owed a re-read: every grid in flight is read twice")
 	}
 }
+
+// A caller that must have the answer, the restore walk, waits on the read
+// already in flight instead of issuing a second one, and the end it waits on
+// is the one the read's done closes.
+func TestJoinSharesTheReadInFlight(t *testing.T) {
+	r := NewReads()
+	_, done, end, ok := r.Join("g1")
+	if !ok || end == nil {
+		t.Fatal("a fresh key must be claimed, with an end to wait on")
+	}
+	_, _, joined, again := r.Join("g1")
+	if again {
+		t.Fatal("a key in flight was read twice")
+	}
+	if joined != end {
+		t.Fatal("the joiner must wait on the read in flight")
+	}
+	select {
+	case <-joined:
+		t.Fatal("the read has not answered yet")
+	default:
+	}
+	done()
+	select {
+	case <-joined:
+	default:
+		t.Fatal("the read answered and the joiner is still waiting")
+	}
+
+	r.Settle("g2", Refused)
+	if _, _, end, ok := r.Join("g2"); ok || end != nil {
+		t.Error("a latched key is neither read nor waited on")
+	}
+}

@@ -186,7 +186,7 @@ A remembered grid past its window, the revalidation behind it, and the room
 correcting with no user gesture.
 
 1. `client/wasm/main.go:App.fetchGrid` misses in the cache, claims the id
-   through `inflight.Reads.Ask`, and calls `App.loadGrid` → `rpc.Client.GetGrid`.
+   through `inflight.Reads.Join`, and calls `App.loadGrid` → `rpc.Client.GetGrid`.
 2. `internal/server/router.go:router.GetGrid` peels the node id and the
    connection segment (`Server.resolve`) and lands on the cache layer, which
    is what the registry holds as the transport.

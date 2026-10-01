@@ -789,19 +789,21 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 
 // fetchGrid loads a grid in the background, deduped per id: the renderer fires
 // it on every cache miss every frame, which would otherwise dogpile the server.
-func (a *App) fetchGrid(id string) {
+// It returns the end of the read that answers id, this one or one already in
+// flight, and nil when id is not asked for.
+func (a *App) fetchGrid(id string) <-chan struct{} {
 	if id == "" {
-		return
+		return nil
 	}
 	// A grid in a namespace this node does not declare is never asked for: the
 	// latch stands in for the answer, and no verdict reaches the strip.
 	if a.deadNamespace(id) {
 		a.fetch.grids.Settle(id, inflight.Refused)
-		return
+		return nil
 	}
-	ctx, done, ok := a.fetch.grids.Ask(id)
+	ctx, done, end, ok := a.fetch.grids.Join(id)
 	if !ok {
-		return
+		return end
 	}
 	go func() {
 		err := a.loadGrid(ctx, id)
@@ -818,6 +820,7 @@ func (a *App) fetchGrid(id string) {
 			a.fetchGrid(id)
 		}
 	}()
+	return end
 }
 
 // refetchGrid is fetchGrid for a caller that knows id changed, so a read

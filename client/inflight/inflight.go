@@ -41,26 +41,29 @@ type claim struct {
 	// A refused ask owes nothing, because a draw asks every frame and its ask
 	// carries no news the read in flight does not already answer.
 	owed bool
+	// end closes when the fetch returns.
+	end chan struct{}
 }
 
 func newClaimSet(d time.Duration) *claimSet {
 	return &claimSet{d: d, m: map[string]*claim{}}
 }
 
-// begin claims key for one fetch; ok is false when one already holds it. The
+// join claims key for one fetch; ok is false when one already holds it. The
 // fetch must use the returned context, which is what CancelIf cancels, and
 // must call done when it returns; done reports whether the key was owed a
-// re-ask while the claim was held.
-func (s *claimSet) begin(key string) (ctx context.Context, done func() bool, ok bool) {
+// re-ask while the claim was held. end closes when the fetch holding key
+// returns, whether this call claimed it or another one already had.
+func (s *claimSet) join(key string) (ctx context.Context, done func() bool, end <-chan struct{}, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, held := s.m[key]; held {
-		return nil, nil, false
+	if c, held := s.m[key]; held {
+		return nil, nil, c.end, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.d)
-	c := &claim{cancel: cancel}
+	c := &claim{cancel: cancel, end: make(chan struct{})}
 	s.m[key] = c
-	return ctx, func() bool { return s.release(key, c) }, true
+	return ctx, func() bool { return s.release(key, c) }, c.end, true
 }
 
 // owe marks key's claim owed a re-ask, if one is held. With none held the
@@ -90,6 +93,11 @@ func (s *claimSet) release(key string, c *claim) bool {
 		delete(s.m, key)
 	}
 	c.cancel()
+	select {
+	case <-c.end:
+	default:
+		close(c.end)
+	}
 	return c.owed
 }
 

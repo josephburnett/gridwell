@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+// begin is join for a test that does not wait on the fetch's end.
+func (s *claimSet) begin(key string) (context.Context, func() bool, bool) {
+	ctx, done, _, ok := s.join(key)
+	return ctx, done, ok
+}
+
 // everyKey is the scope of a broken client-to-server link.
 func everyKey(string) bool { return true }
 

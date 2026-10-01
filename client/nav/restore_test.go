@@ -236,9 +236,11 @@ func TestRestoreWalkSuspendsOnAnUncachedGrid(t *testing.T) {
 		t.Fatalf("await = %+v, want the missing grid", e.Request)
 	}
 
+	// The walk's own read of p1/2 is the pane's grid read: asking again
+	// would read it twice.
 	plan := m.Resume(e.Token, Result{OK: true}, restoreWorld(warm))
 	want := []EffectKind{EffInstallPlace, EffScaleContent, EffAwait,
-		EffRefreshOverlay, EffReEngage, EffFetchGrid, EffScheduleURLUpdate}
+		EffRefreshOverlay, EffReEngage, EffScheduleURLUpdate}
 	if !sameKinds(kinds(plan), want) {
 		t.Fatalf("effects = %v, want %v", kinds(plan), want)
 	}
