@@ -260,7 +260,7 @@ func buildDBAtV1(t *testing.T, path string) (*sql.DB, string) {
 			t.Fatalf("apply v1 ddl: %v", err)
 		}
 	}
-	// Raw inserts against the v1 columns, not bootstrapRoot: the production
+	// Raw inserts against the v1 columns, not bootstrap: the production
 	// bootstrap writes the current grids shape, which does not carry the NOT
 	// NULL v1 object_id.
 	res, err := db.ExecContext(ctx,

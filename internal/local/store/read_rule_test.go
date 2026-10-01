@@ -15,11 +15,8 @@ import (
 // wrong row shows up as the wrong picture, while a read that stamps one shows
 // up as nothing at all until the user notices a thing they never touched has
 // moved. The two tests below are the whole rule at this layer: the table names
-// every read verb the store serves, and the snapshot is the file.
-//
-// The exception is stated, not hidden: the node's two singleton grids, scratch
-// and trash, are materialized by the first read that needs their id. Which
-// reads those are is pinned below, and so is the once-ness.
+// every read verb the store serves, and the snapshot is the file. There is no
+// exception: the node's singleton grids are minted when the store opens.
 
 // readSubject is a store with one of everything a read can reach.
 type readSubject struct {
@@ -256,32 +253,13 @@ func TestReadingNeverMutates(t *testing.T) {
 	}
 }
 
-// mintingReads are the reads that materialize one of the node's own singleton
-// grids, scratch or trash, because they answer with its id and it has none
-// until something asks. They are the whole exception to the rule above, and
-// they spend an id once: the second call finds the row.
-var mintingReads = map[string]bool{
-	"ScratchGridID": true,
-	"TrashGridID":   true,
-	// Search filters the scratch grid out of its results, so it needs that id
-	// before it can answer.
-	"Search/text":    true,
-	"Search/name":    true,
-	"Search/nothing": true,
-}
-
-// On a home nothing has read yet, a read still writes nothing of the user's: a
-// singleton grid appears with no tiles in it, once, and every other read leaves
-// even that alone. A read that started minting a user row, or minting the same
-// singleton twice, fails here.
-func TestAReadMintsOnlyTheNodesOwnSingletons(t *testing.T) {
-	minted := map[string]bool{}
+// On a home nothing has read yet, a read writes nothing at all — not a user
+// row and not one of the node's singleton grids, which Open has already made.
+// The ids the case names are empty, which a read answers as absent, and a read
+// that writes on its way to absent is the same defect.
+func TestAReadOnAFreshHomeWritesNothing(t *testing.T) {
 	for _, c := range readCases() {
 		t.Run(c.name, func(t *testing.T) {
-			// A home nobody has opened yet: the bootstrapped root and nothing
-			// else, so every row that appears was minted by this read. The ids
-			// the case names are empty, which a read answers as absent, and a
-			// read that writes on its way to absent is the same defect.
 			s := newTestStore(t)
 			ctx := context.Background()
 			sub := readSubject{
@@ -289,34 +267,11 @@ func TestAReadMintsOnlyTheNodesOwnSingletons(t *testing.T) {
 				ns:      s.Namespace("plug1"),
 				entries: []*pluginv1.Entry{{Key: "notes.md", Kind: "text", Label: "notes.md"}},
 			}
-
-			tiles, blobs := storetest.Table(t, s.SQL(), "tiles"), storetest.Table(t, s.SQL(), "blobs")
-			grids := storetest.Table(t, s.SQL(), "grids")
+			before := storetest.Snapshot(t, s.SQL())
 			c.run(ctx, s, sub)
-			if got := storetest.Table(t, s.SQL(), "tiles"); got != tiles {
-				t.Errorf("%s minted or changed a tile row", c.name)
-			}
-			if got := storetest.Table(t, s.SQL(), "blobs"); got != blobs {
-				t.Errorf("%s wrote a blob", c.name)
-			}
-			if got := storetest.Table(t, s.SQL(), "grids"); got != grids {
-				minted[c.name] = true
-			}
-			// Whatever it minted, it minted once.
-			again := storetest.Snapshot(t, s.SQL())
-			c.run(ctx, s, sub)
-			if after := storetest.Snapshot(t, s.SQL()); after != again {
-				t.Errorf("%s minted again on the second read:\n%s", c.name, storetest.Diff(again, after))
+			if after := storetest.Snapshot(t, s.SQL()); after != before {
+				t.Errorf("%s wrote to a fresh store:\n%s", c.name, storetest.Diff(before, after))
 			}
 		})
-	}
-	for name := range mintingReads {
-		if !minted[name] {
-			t.Errorf("%s no longer mints a singleton — the exception shrank; take it off the list", name)
-		}
-		delete(minted, name)
-	}
-	for name := range minted {
-		t.Errorf("%s mints a grid on a fresh home and is not one of the node's singleton readers", name)
 	}
 }

@@ -93,7 +93,7 @@ A rebuild always materializes the current shape, so a chain-built file at
 N-1 never has a retired column. A drop or conversion needs a genuine-old-file
 test (`TestMigrateV10OverAGenuineV9File`), not just a fixture. Fixtures find
 their rows by `alt_text`, which survives the whole chain. `Open` runs the
-chain before `bootstrapRoot`.
+chain before `bootstrap`.
 
 ## Tests that must stay green
 

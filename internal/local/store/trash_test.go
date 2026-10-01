@@ -37,7 +37,7 @@ func trashMonthGrid(t *testing.T, s *Store, month string) string {
 	return ""
 }
 
-// primeTrash mints the trash grid and the current month's subgrid (by
+// primeTrash mints the current month's trash subgrid (by
 // trashing and destroying a sacrificial tile) so count-based tests
 // measure their own operation, not the first-use minting.
 func primeTrash(t *testing.T, s *Store) {

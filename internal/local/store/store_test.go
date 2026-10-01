@@ -124,3 +124,66 @@ func TestRootFramingRoundTrip(t *testing.T) {
 		t.Errorf("RootFraming = %+v, want %+v", got, want)
 	}
 }
+
+// singletonIDs reads the node's singleton grid ids straight from the system
+// table, so the oracle cannot mint what it is checking for.
+func singletonIDs(t *testing.T, s *Store) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	for _, key := range singletonGridKeys {
+		v, ok, err := systemValue(context.Background(), s.db, key)
+		if err != nil {
+			t.Fatalf("system %s: %v", key, err)
+		}
+		if !ok {
+			t.Fatalf("store opened without its %s singleton", key)
+		}
+		out[key] = v
+	}
+	return out
+}
+
+func reopen(t *testing.T, path string) *Store {
+	t.Helper()
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
+
+// Open mints every singleton grid, and reopening a home keeps the ids it has:
+// a home that already holds some singletons gains only the absent ones.
+func TestOpenMintsEverySingletonOnce(t *testing.T) {
+	s, path := newTestStoreFile(t)
+	first := singletonIDs(t, s)
+	seen := map[string]bool{}
+	for key, id := range first {
+		if seen[id] {
+			t.Errorf("%s shares grid %s with another singleton", key, id)
+		}
+		seen[id] = true
+	}
+	_ = s.Close()
+	if got := singletonIDs(t, reopen(t, path)); fmt.Sprint(got) != fmt.Sprint(first) {
+		t.Errorf("reopen changed the singleton ids: %v, want %v", got, first)
+	}
+
+	// A home from before the trash existed: the row is absent, the rest stay.
+	older, olderPath := newTestStoreFile(t)
+	kept := singletonIDs(t, older)
+	if _, err := older.db.Exec(`DELETE FROM system WHERE key = ?`, systemKeyTrashGridID); err != nil {
+		t.Fatal(err)
+	}
+	_ = older.Close()
+	got := singletonIDs(t, reopen(t, olderPath))
+	for key, id := range kept {
+		if key != systemKeyTrashGridID && got[key] != id {
+			t.Errorf("%s = %s after reopen, want the existing %s", key, got[key], id)
+		}
+	}
+	if got[systemKeyTrashGridID] == kept[systemKeyTrashGridID] {
+		t.Errorf("trash grid not minted afresh on a home that lacked it")
+	}
+}

@@ -48,11 +48,13 @@ func seedBystanders(t *testing.T, s *Store, root string) {
 // writeScope is what one mutation may change. Columns are named on the row the
 // mutation was handed (tile) and on the grid that row sits in (grid);
 // updated_at is implicit on both, being "when this row was last written" and
-// nothing the user sees. mints allows rows to appear — a clone's copy, a
-// delete's trash grid — and the ids they spend.
+// nothing the user sees. trash names the columns a write may change on the
+// node's trash grid, which Open made. mints allows rows to appear — a clone's
+// copy, a delete's month well — and the ids they spend.
 type writeScope struct {
 	tile  []string
 	grid  []string
+	trash []string
 	mints bool
 }
 
@@ -87,8 +89,9 @@ var writeScopes = map[string]writeScope{
 	// source row is neither.
 	"CloneTile/source row": {grid: []string{"version"}, mints: true},
 	// A delete on an ordinary grid is a move into the trash: the same row, at
-	// a new address, under a grid the trash mints on first use.
-	"DeleteTile/move to trash": {tile: []string{"grid_id", "x", "y"}, grid: []string{"version"}, mints: true},
+	// a new address, under the month well the trash mints on first use, which
+	// the trash grid counts.
+	"DeleteTile/move to trash": {tile: []string{"grid_id", "x", "y"}, grid: []string{"version"}, trash: []string{"version"}, mints: true},
 }
 
 func TestAWriteTouchesOnlyWhatItOwns(t *testing.T) {
@@ -105,12 +108,16 @@ func TestAWriteTouchesOnlyWhatItOwns(t *testing.T) {
 			seedBystanders(t, s, root)
 			tile := c.subject(t, s, ctx, root)
 
+			trash, err := s.TrashGridID(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
 			before := storetest.DumpOf(t, s.SQL())
 			if err := c.mutate(t, s, ctx, tile); err != nil {
 				t.Fatalf("mutate: %v", err)
 			}
 			for _, ch := range storetest.Changed(before, storetest.DumpOf(t, s.SQL())) {
-				if why := scope.refuse(ch, tile.Id, tile.GridId); why != "" {
+				if why := scope.refuse(ch, tile.Id, tile.GridId, trash); why != "" {
 					t.Errorf("%s: %s", ch, why)
 				}
 			}
@@ -125,7 +132,7 @@ func TestAWriteTouchesOnlyWhatItOwns(t *testing.T) {
 
 // refuse says why one change is out of scope, or "" when it is allowed. Only
 // tiles and grids are judged; see the file header.
-func (w writeScope) refuse(change, tileID, gridID string) string {
+func (w writeScope) refuse(change, tileID, gridID, trashID string) string {
 	if strings.HasPrefix(change, "+") || strings.HasPrefix(change, "-") {
 		if !strings.HasPrefix(change[1:], "tiles[") && !strings.HasPrefix(change[1:], "grids[") {
 			return ""
@@ -142,6 +149,8 @@ func (w writeScope) refuse(change, tileID, gridID string) string {
 	case table == "tiles" && id == tileID:
 	case table == "grids" && id == gridID:
 		allowed = w.grid
+	case table == "grids" && id == trashID:
+		allowed = w.trash
 	case table == "tiles" || table == "grids":
 		return "a row this write was not handed"
 	default:
@@ -173,7 +182,7 @@ func TestRootFramingLeavesTheGridRowOtherwiseAlone(t *testing.T) {
 	}
 	scope := writeScope{grid: []string{"root_cx", "root_cy", "root_zoom"}}
 	for _, ch := range storetest.Changed(before, storetest.DumpOf(t, s.SQL())) {
-		if why := scope.refuse(ch, "", root); why != "" {
+		if why := scope.refuse(ch, "", root, ""); why != "" {
 			t.Errorf("%s: %s", ch, why)
 		}
 	}

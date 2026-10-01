@@ -113,6 +113,9 @@ These were decided deliberately. Do not reverse one without a new decision.
 - The node is its home. One id, one `server.yaml` (`id`, `web`,
   `federation`, `connections`, `plugins`), one `gridwell.db`. `cache.db` is
   disposable. Serve mints what is absent, and that is the only config write.
+- The store mints the node's singleton grids (root, scratch, trash) when it
+  opens, never on a read; reading never mutates has no exception
+  (2026-09-30).
 - `gridwell.db` holds node facts only: minted ids, layout, framing, the
   user's bytes, connections, tombstones. What a connection last answered is
   cache.

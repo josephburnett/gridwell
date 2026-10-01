@@ -21,10 +21,10 @@ import (
 
 const systemKeyTrashGridID = "trash_grid_id"
 
-// TrashGridID returns the trash grid, creating it on first use by the same
-// system-key pattern as ScratchGridID. Info declares it as a root menu entry.
+// TrashGridID returns the trash grid, a singleton like ScratchGridID. Info
+// declares it as a root menu entry.
 func (s *Store) TrashGridID(ctx context.Context) (string, error) {
-	id, err := s.singletonGrid(ctx, systemKeyTrashGridID)
+	id, err := singletonGrid(ctx, s.db, systemKeyTrashGridID)
 	if err != nil {
 		return "", err
 	}
@@ -32,36 +32,20 @@ func (s *Store) TrashGridID(ctx context.Context) (string, error) {
 }
 
 // deleteBypassesTrash reports a real delete: the tile is in the scratch grid,
-// or already inside the trash tree. It reads the system keys without minting,
-// because an absent trash grid means nothing can be inside it yet.
+// or already inside the trash tree.
 func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int64) (bool, error) {
-	for _, key := range []string{systemKeyScratchGridID, systemKeyTrashGridID} {
-		v, ok, err := systemValue(ctx, tx, key)
-		if err != nil {
-			return false, err
-		}
-		if !ok {
-			continue
-		}
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return false, err
-		}
-		if key == systemKeyScratchGridID {
-			if srcGrid == id {
-				return true, nil
-			}
-			continue
-		}
-		in, err := gridInSubtree(ctx, tx, srcGrid, id)
-		if err != nil {
-			return false, err
-		}
-		if in {
-			return true, nil
-		}
+	scratch, err := singletonGrid(ctx, tx, systemKeyScratchGridID)
+	if err != nil {
+		return false, err
 	}
-	return false, nil
+	if srcGrid == scratch {
+		return true, nil
+	}
+	trash, err := singletonGrid(ctx, tx, systemKeyTrashGridID)
+	if err != nil {
+		return false, err
+	}
+	return gridInSubtree(ctx, tx, srcGrid, trash)
 }
 
 // moveTileToTrash files t under the current month's subgrid, minting the month
@@ -77,7 +61,7 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 	if err != nil {
 		return fmt.Errorf("tile %s: bad grid_id %q: %w", t.Id, t.GridId, err)
 	}
-	trashID, err := s.singletonGridTx(ctx, tx, systemKeyTrashGridID)
+	trashID, err := singletonGrid(ctx, tx, systemKeyTrashGridID)
 	if err != nil {
 		return err
 	}

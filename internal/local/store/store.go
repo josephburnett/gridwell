@@ -55,8 +55,8 @@ const (
 	systemKeyScratchGridID = "scratch_grid_id"
 )
 
-// Open opens a SQLite database at path, applies the schema, and bootstraps the
-// root grid. ":memory:" is the in-test store.
+// Open opens a SQLite database at path, applies the schema, and mints the
+// singleton grids. ":memory:" is the in-test store.
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -84,7 +84,7 @@ func Open(path string) (*Store, error) {
 		newID: newUUID,
 		hub:   eventhub.New(rpc.EventKey),
 	}
-	// Migrate before bootstrapping: bootstrapRoot writes through the current
+	// Migrate before bootstrapping: bootstrap writes through the current
 	// column set, and a v1 file's grids still carries the NOT NULL object_id
 	// v10 removed, so a pre-migration insert fails its constraint.
 	if err := s.applyMigrations(context.Background()); err != nil {
@@ -95,9 +95,9 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply externals indexes: %w", err)
 	}
-	if err := s.bootstrapRoot(context.Background()); err != nil {
+	if err := s.bootstrap(context.Background()); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("bootstrap root: %w", err)
+		return nil, fmt.Errorf("bootstrap: %w", err)
 	}
 	// user_version alone cannot catch an unstamped DB the fast path stamped
 	// as v1 without checking columns. Fail here, not at a later insert.
@@ -122,64 +122,60 @@ func systemValue(ctx context.Context, q gridReader, key string) (string, bool, e
 	return v, true, nil
 }
 
-// singletonGrid returns the grid a system key names, minting it on first use.
-// The root, scratch and trash grids are all this one shape.
-func (s *Store) singletonGrid(ctx context.Context, key string) (int64, error) {
-	v, ok, err := systemValue(ctx, s.db, key)
+// singletonGridKeys names every grid the node holds exactly one of. Open mints
+// each absent one, so a read only ever finds them.
+var singletonGridKeys = []string{systemKeyRootGridID, systemKeyScratchGridID, systemKeyTrashGridID}
+
+// singletonGrid returns the grid a system key names. Absent is a store Open
+// did not bootstrap, never a cue to mint.
+func singletonGrid(ctx context.Context, q gridReader, key string) (int64, error) {
+	v, ok, err := systemValue(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}
-	if ok {
-		return strconv.ParseInt(v, 10, 64)
+	if !ok {
+		return 0, fmt.Errorf("store: no %s singleton: %w", key, sql.ErrNoRows)
 	}
-	var id int64
-	err = s.withTx(ctx, func(tx *sql.Tx) error {
-		id, err = s.singletonGridTx(ctx, tx, key)
-		return err
-	})
-	return id, err
+	return strconv.ParseInt(v, 10, 64)
 }
 
-// singletonGridTx reads or mints inside an existing transaction. The re-check
-// here is the whole idempotence story: the single writer connection serializes
-// transactions, so a caller that got there first is visible and its id is
-// returned rather than a second grid made.
-func (s *Store) singletonGridTx(ctx context.Context, tx *sql.Tx, key string) (int64, error) {
-	v, ok, err := systemValue(ctx, tx, key)
-	if err != nil {
-		return 0, err
-	}
-	if ok {
-		return strconv.ParseInt(v, 10, 64)
-	}
-	id, err := insertGrid(ctx, tx, s.now().Unix())
-	if err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
-		key, strconv.FormatInt(id, 10)); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
-// bootstrapRoot inserts the initial root grid if none exists. Framing is not
-// seeded: a NULL root_zoom already means never visited, and the client
-// substitutes the calibrated default until the user positions the view.
-func (s *Store) bootstrapRoot(ctx context.Context) error {
-	_, ok, err := systemValue(ctx, s.db, systemKeyRootGridID)
-	if err != nil || ok {
-		return err
-	}
-	return s.withTx(ctx, func(tx *sql.Tx) error {
-		if _, err := s.singletonGridTx(ctx, tx, systemKeyRootGridID); err != nil {
+// bootstrap mints, in one transaction, every singleton grid the file lacks,
+// keyed by the same system row a read finds it by, so an existing home keeps
+// its ids. The plugin_uuid mint rides with the root's, never alone: see
+// PluginUUID. Framing is not seeded: a NULL root_zoom already means never
+// visited, and the client substitutes the calibrated default.
+func (s *Store) bootstrap(ctx context.Context) error {
+	var absent []string
+	for _, key := range singletonGridKeys {
+		_, ok, err := systemValue(ctx, s.db, key)
+		if err != nil {
 			return err
 		}
-		// The mint's identity is seeded with the root, never alone: see
-		// PluginUUID.
-		_, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
-			systemKeyPluginUUID, s.newID())
-		return err
+		if !ok {
+			absent = append(absent, key)
+		}
+	}
+	if len(absent) == 0 {
+		return nil
+	}
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		for _, key := range absent {
+			id, err := insertGrid(ctx, tx, s.now().Unix())
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
+				key, strconv.FormatInt(id, 10)); err != nil {
+				return err
+			}
+			if key == systemKeyRootGridID {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
+					systemKeyPluginUUID, s.newID()); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 }
 
@@ -200,13 +196,12 @@ func (s *Store) RootGridID(ctx context.Context) (string, error) {
 	return strconv.FormatInt(id, 10), nil
 }
 
-// ScratchGridID returns the id of this store's scratch grid, creating it on
-// first use. It holds url tiles visited by descending into a url without
+// ScratchGridID returns the id of this store's scratch grid. It holds url tiles visited by descending into a url without
 // placing one on a visible grid. It never renders, yet it persists, so it
 // doubles as the visited-url history that feeds autocomplete and a deep link
 // into it still resolves. The id is stored once in system metadata.
 func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
-	id, err := s.singletonGrid(ctx, systemKeyScratchGridID)
+	id, err := singletonGrid(ctx, s.db, systemKeyScratchGridID)
 	if err != nil {
 		return "", err
 	}
