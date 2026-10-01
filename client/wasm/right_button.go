@@ -379,7 +379,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		Y:          dropY,
 	}
 	a.post(write{
-		label: "CloneTile", gid: srcGridID, alsoGID: dstGridID, refetchOnOK: true,
+		label: "CloneTile", gid: srcGridID,
 		call: func(ctx context.Context) error {
 			_, err := a.cl.CloneTile(ctx, req)
 			return err
@@ -408,7 +408,7 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 		}
 	}
 	a.post(write{
-		label: "DeleteTile", gid: src, alsoGID: dst, refetchOnOK: true,
+		label: "DeleteTile", gid: src,
 		call: func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
 		undo: refetch,
 	})

@@ -137,3 +137,32 @@ test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }
   const after = await gw.focused();
   expect(after.gridID, 'descent through the mount reaches the plugin').toBe(second.rootGridID);
 });
+
+// The far node announces the copy it made and the connection relays that
+// TileChanged, so the clone reads neither grid back. A remembered far grid
+// revalidated afterward finds nothing new either (see
+// sourcecache.TestAFoldedTileChangedIsNotAChange).
+test('a cross-node clone reads no listing back; the relayed event lands the copy', async ({ gw }) => {
+  const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
+
+  await gw.clickScreen(a.x + 20, a.y + 20);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  expect(tileAt(await gw.getGrid(a.gridID), 'text', cx, cy), 'source created').toBeTruthy();
+  await gw.waitIdle();
+
+  const reads = await gw.watchGridReads();
+  await gw.cloneDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
+  const copy = tileAt(await gw.getGrid(b.gridID), 'text', tx, ty)!;
+  expect(copy, 'the copy landed on the far node').toBeTruthy();
+  await expect
+    .poll(async () => (await gw.panes()).find((p) => p.id === b.id)!.tileIds.includes(copy.id), {
+      message: 'the relayed event put the copy in the far pane',
+      timeout: 10_000,
+    })
+    .toBe(true);
+  await gw.waitIdle();
+  await reads.stop();
+  expect(reads.of(b.gridID), 'the clone read the far grid back').toBe(0);
+  expect(reads.of(a.gridID), 'the clone read the source grid back').toBe(0);
+});
