@@ -1,8 +1,6 @@
-// Package preview holds the preview-image cache shared by URL and shell tiles.
-// It keys a decoded Image by tile id and remembers which preview_blob_id it
-// came from, so Get taking the caller's expected blob id invalidates a stale
-// entry with no explicit invalidation signal. Decoding is JS-only, so it sits
-// behind the Decoder interface and tests inject a synchronous fake.
+// Package preview holds the preview-image cache shared by URL and shell tiles,
+// keyed by tile id and remembering which preview_blob_id each image came
+// from, so the caller's expected blob id invalidates a stale entry.
 package preview
 
 import (
@@ -15,15 +13,13 @@ import (
 // Image is the decoded handle the renderer draws.
 type Image = resload.Resource
 
-// Decoder turns raw JPEG bytes into an Image. The wasm decoder is
-// asynchronous; the test fake resolves inside Decode so tests are
-// deterministic.
+// Decoder turns raw JPEG bytes into an Image, possibly asynchronously.
 type Decoder interface {
 	Decode(bytes []byte, onReady func(Image), onError func())
 }
 
-// Cache invalidates an entry when the server-side preview blob id changes. One
-// mutex protects the entry map, so every method is goroutine-safe.
+// Cache invalidates an entry when the server-side preview blob id changes.
+// Every method is goroutine-safe.
 type Cache struct {
 	dec      Decoder
 	onDecErr func(tileID string)
@@ -65,28 +61,24 @@ func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	return e.Res, true
 }
 
-// Put stores bytes belonging to a known server-side preview blob; locally
-// captured bytes go through PutWildcard. onReady may be nil and fires once the
-// entry is installed. A newer Put for the same tileID supersedes this one,
-// discarding the late result silently.
+// Put stores bytes belonging to a known server-side preview blob. onReady may
+// be nil. A newer Put for the same tileID supersedes this one.
 func (c *Cache) Put(tileID string, blobID int64, bytes []byte, onReady func()) {
 	c.put(tileID, blobID, bytes, onReady)
 }
 
-// PutEmpty records that the server answered with no preview. A completed fetch
-// settles the cache either way, an unsettled empty result re-firing on every
-// draw. A later Put, or a changed blob id, supersedes it. An image already
-// held for another blob id stays: it is what the tile looks like.
+// PutEmpty records that the server answered with no preview, so the fetch does
+// not re-fire every draw. An image held for another blob id stays: it is what
+// the tile looks like.
 func (c *Cache) PutEmpty(tileID string, blobID int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.at(tileID).Settle(blobID)
 }
 
-// Owed reports whether blobID's preview is still to be fetched. It is not
-// when an image for it is held, its bytes are decoding, or a completed fetch
-// or decode settled it as having no image. It is the one question a fetch
-// guard asks, so a decode that outlives its fetch is not fetched again.
+// Owed reports whether blobID's preview is still to be fetched: not when its
+// image is held, decoding, or settled as having none. It is the one question
+// a fetch guard asks, so a decode that outlives its fetch is not refetched.
 func (c *Cache) Owed(tileID string, blobID int64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -136,9 +128,7 @@ func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
 		},
 		func() {
 			c.mu.Lock()
-			// No image is installed, so Get keeps returning the prior image if
-			// there is one; the miss is what stops the caller re-fetching
-			// these bytes on every draw.
+			// The miss stops the caller re-fetching these bytes every draw.
 			missed := resload.Miss(c.entries[tileID], gen, blobID)
 			c.mu.Unlock()
 			if missed && c.onDecErr != nil {

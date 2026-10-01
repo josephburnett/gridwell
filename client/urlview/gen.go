@@ -15,8 +15,7 @@ func (g *Gens) Next() Gen {
 }
 
 // GoneEnds reports whether main's gone event for view gone ends the handle
-// held. Only the view it names: a later view of the same tile in the same pane
-// is main's live entry, and dropping its handle would orphan it.
+// held; a later view of the same tile in the same pane is not ended.
 func GoneEnds(held, gone Gen) bool {
 	return gone != 0 && held == gone
 }

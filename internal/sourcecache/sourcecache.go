@@ -1,12 +1,9 @@
 // Package sourcecache is the node's one memory of what a connection last
-// answered: a read-through layer over <home>/cache.db, in front of the
-// transport. Home is the durable store and a plugin is a subprocess a call
-// away, so neither is fronted. Only what a connection itself said lives here,
-// as marshaled protos keyed by the ids this layer sees, so there is no schema
-// to drift against the contract. A grid read serves first and refreshes behind
-// (GetGrid); every other read passes through and falls back to the remembered
-// answer on a transport failure only, since an answered "gone" is never
-// masked.
+// answered: a read-through layer over <home>/cache.db in front of the
+// transport, holding marshaled protos keyed by id. A grid read serves first
+// and refreshes behind (GetGrid); every other read falls back to the
+// remembered answer on a transport failure only, so an answered "gone" is
+// never masked.
 package sourcecache
 
 import (
@@ -91,9 +88,7 @@ const freshWindow = 30 * time.Second
 
 // Options is the per-seam policy over the one engine: how eagerly it warms.
 type Options struct {
-	// Prefetch warms grids, tiles, previews and bodies nobody has opened yet;
-	// prefetch.go owns both triggers. It belongs to a namespace whose absence
-	// is a machine going dark, and defaults off.
+	// Prefetch warms what nobody has opened yet (prefetch.go); off by default.
 	Prefetch bool
 	// FreshWindow overrides freshWindow. Zero takes the default.
 	FreshWindow time.Duration
@@ -130,10 +125,8 @@ type Layer struct {
 	healthMu  sync.Mutex
 	cacheDown bool
 
-	// dark is what this layer knows about reaching each source behind it, by
-	// connection segment ("" for an upstream whose ids are unchained). A
-	// remembered grid inside its window still stamps stale when its
-	// connection is dark. setDark is the one writer.
+	// dark is reachability per connection segment ("" for unchained ids).
+	// setDark is the one writer.
 	darkMu sync.Mutex
 	dark   map[string]bool
 }
@@ -156,13 +149,9 @@ func sourceOfNS(ns string) string {
 	return ns
 }
 
-// setDark is the one writer of c.dark. A failed call and the source's own
-// health are the same fact from two directions, so they take the same door.
-// What they do not share is whether the client has to be told, which is
-// announce, since only the caller knows whether anyone else saw this. The
-// transition back to light is shared, and it is the prefetch walk's second
-// trigger, because "this source is back" is one fact whichever direction
-// notices first.
+// setDark is the one writer of c.dark, for a failed call and the source's own
+// health alike; announce is whether the client must be told. The transition
+// back to light is the prefetch walk's second trigger.
 func (c *Layer) setDark(source string, dark bool, announce bool, grid func() string) {
 	c.darkMu.Lock()
 	changed := c.dark[source] != dark
@@ -226,11 +215,9 @@ type Store struct {
 	layers []*Layer
 }
 
-// Unavailable is the store for a node whose cache file could not be opened.
-// It fronts pass-through and reports the missing cache as the namespace's
-// health: losing serve-first and offline reading fails no read and shows
-// nowhere, so a node that only logged it would look healthy for hours. The
-// caller gets a Store either way, so the node has one cache path.
+// Unavailable is the store for a node whose cache file could not be opened: it
+// passes through and reports the missing cache as the namespace's health,
+// since a degradation that only logged would look healthy for hours.
 func Unavailable(detail string) *Store { return &Store{down: detail} }
 
 // Open opens (or creates) the node's cache DB at dbPath.
@@ -352,12 +339,8 @@ func (c *Layer) emitHealth(healthy bool, detail string) {
 
 func now() int64 { return time.Now().Unix() }
 
-// Handshake forwards the routed plugin list and remembers the answer per
-// namespace, so a remote pane's + menu is readable while the source is dark.
-// An answer can succeed and still say nothing about a doorway's framing: the
-// transport's own row for a dark connection does. That silence keeps the
-// remembered framing (keepFraming), since a visited grid never becomes
-// unvisited.
+// Handshake forwards the routed plugin list and remembers it per namespace. A
+// doorway answered with no framing keeps the remembered one (keepFraming).
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	resp, err := c.Namespace.Handshake(ctx, in)
 	c.noteReach(err, sourceOfNS(in.GetNamespace()), nil)
@@ -421,11 +404,9 @@ func keepFraming(fresh, old *pb.HandshakeResponse) {
 	}
 }
 
-// GetGrid serves first and refreshes behind: the remembered answer returns as
-// it was remembered, and past freshWindow or with the connection known dark
-// one background revalidation is kicked whose landing emits a GridChanged.
-// Only a miss waits on the source. Nothing on the answer says it is a memory:
-// that is the source's health, and the client derives it from there.
+// GetGrid serves first and refreshes behind: past freshWindow or with the
+// connection dark, one background revalidation runs and announces a change.
+// Only a miss waits on the source.
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if cached, fetchedAt, hit := c.loadGrid(ctx, in.GridId); hit {
 		if time.Since(time.Unix(fetchedAt, 0)) >= c.window() || c.isDark(sourceOf(in.GridId)) {
@@ -451,10 +432,8 @@ func (c *Layer) getGridLive(ctx context.Context, gridID string) (*pb.GetGridResp
 }
 
 // revalidateGrid refreshes one remembered grid in the background, single-flight
-// per grid id, on the layer's own context so a canceled click never kills a
-// refresh other readers want. A changed answer is stored and announced; a
-// transport failure changes nothing; a verdict evicts, so the next read
-// surfaces it instead of a remembered ghost.
+// per grid id on the layer's context. A change is stored and announced; a
+// transport failure changes nothing; a verdict evicts.
 func (c *Layer) revalidateGrid(gridID string) {
 	c.revalMu.Lock()
 	if c.revalInflight[gridID] {
@@ -489,10 +468,8 @@ func (c *Layer) revalidateGrid(gridID string) {
 	}()
 }
 
-// gridRespEqual compares two grid answers, tiles by id so row order never
-// fakes a change. The grid's version is left out: every write that moves it
-// also announces its tile, which the remembered rows already folded, and no
-// reader acts on the counter, so it alone is not a change worth a refetch.
+// gridRespEqual compares two grid answers, tiles by id. The grid's version is
+// left out: no reader acts on it alone.
 func gridRespEqual(a, b *pb.GetGridResponse) bool {
 	if !proto.Equal(unversioned(a.GetGrid()), unversioned(b.GetGrid())) || len(a.GetTiles()) != len(b.GetTiles()) {
 		return false
@@ -669,11 +646,8 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 	return &pb.GetTilePreviewResponse{Jpeg: jpeg}, nil
 }
 
-// ReadContent tees the live stream, storing only at a clean end, because a
-// partial body served later would be silent corruption. A transport failure
-// before any chunk falls back to the remembered body; after a chunk has
-// flowed the error passes through, since splicing cache into a half-live
-// stream would fabricate a body nobody ever had.
+// ReadContent tees the live stream, storing only at a clean end. A transport
+// failure falls back to the remembered body only before any chunk has flowed.
 func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	var mediaType string
 	var version int64
@@ -760,15 +734,11 @@ func blob(b []byte) []byte {
 	return b
 }
 
-// Subscribe serves two streams as one: the upstream's, teed so the cache
-// tracks the live session's mutations, and the layer's own. Both always: the
-// layer's stream closes the serve-first loop, which nothing upstream can know
-// about, and the tee is only an accelerator.
+// Subscribe serves the upstream's stream, teed into the cache, and the
+// layer's own, which closes the serve-first loop.
 func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
-	// Every subscription and resubscription is a moment to warm every source.
-	// One connection going dark and coming back does not land here, because
-	// the stream this relays is the transport's hub, which survives it; that
-	// source is warmed when setDark sees it come back.
+	// Every (re)subscription warms every source; one connection coming back
+	// is setDark's trigger instead.
 	c.kickPrefetch("")
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -838,12 +808,9 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		fc := p.GridFramingChanged
 		c.reframe(ctx, fc.GetGridId(), rpc.Framing{Cx: fc.GetViewCx(), Cy: fc.GetViewCy(), Zoom: fc.GetViewZoom()})
 	case *pb.Event_PluginHealth:
-		// The source's own supervisor says whether it can be reached, so a
-		// room re-entered after a machine died says it is a memory without
-		// waiting for a call of this layer's own to fail. A key deeper than a
-		// connection segment is its own, since a far plugin being down does
-		// not make the machine unreachable. It does not announce: the event is
-		// relayed onward to the very client that would be told.
+		// The source's supervisor says whether it can be reached. A key deeper
+		// than a connection segment is a far plugin, not the machine. No
+		// announce: the event itself is relayed onward.
 		c.setDark(p.PluginHealth.GetPluginUuid(), !p.PluginHealth.GetHealthy(), false, nil)
 	}
 }
@@ -859,10 +826,8 @@ func (l *Layer) MintRef(ctx context.Context, localID string) (string, error) {
 // truth, and a successful response updates the remembered rows by the same
 // fold the event tee applies, which keeps a moved tile from snapping back.
 
-// foldWrite folds one in-place write's answer into the remembered rows. A
-// write against a derived tile mints its row and the answer renames it, so the
-// row under the requested id must go or the listing reads a ghost twin. Only
-// for verbs that mutate the tile they name.
+// foldWrite folds one in-place write's answer into the remembered rows,
+// dropping the row under the requested id when the answer renamed it.
 func (c *Layer) foldWrite(ctx context.Context, reqTileID string, t *pb.Tile) {
 	if t.GetId() != "" && reqTileID != "" && reqTileID != t.GetId() {
 		c.deleteTile(ctx, reqTileID)

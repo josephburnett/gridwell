@@ -6,11 +6,6 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 )
 
-// The faces a text tile has, and which one it shows. Both rules read the
-// plugin's declared text_presentation and own it between them. They live here
-// rather than in client/wasm because `make check` executes this package and
-// only compiles that one.
-
 // ToggleVisible decides whether the rendered/raw toggle exists for a text
 // tile. A declared text_presentation is the authority. Undeclared, a writable
 // doc always toggles and a read-only tile toggles only when its name is
@@ -40,20 +35,16 @@ func PresentationHTML(t *gridwellv1.Tile, body []byte) string {
 type CheckboxClick int
 
 const (
-	// CheckboxRevert lets the native flip revert and says nothing: the row is
-	// not a document, its org source has no marker mapping, or its bytes have
-	// not landed yet, so nothing was ever going to change.
+	// CheckboxRevert lets the native flip revert and says nothing.
 	CheckboxRevert CheckboxClick = iota
-	// CheckboxReadOnly reverts and says so, because the user asked for an
-	// edit the document cannot take.
+	// CheckboxReadOnly reverts and says so.
 	CheckboxReadOnly
 	// CheckboxToggle flips the source marker through the edit path.
 	CheckboxToggle
 )
 
-// DecideCheckboxClick reads the refusals before the edit. Read-only is the
-// one refusal worth a word: the other three are states the face already
-// shows or a fetch about to land.
+// DecideCheckboxClick reads the refusals before the edit. Read-only is the one
+// refusal worth a word.
 func DecideCheckboxClick(textDocument, org, readOnly, bodyCached bool) CheckboxClick {
 	switch {
 	case !textDocument || org:
@@ -74,9 +65,8 @@ type Descent struct {
 }
 
 // DecideDescent is the one verdict behind the textarea, the rendered view and
-// the file toggle, so a row resolved off the pane's own grid cannot show one
-// of them and hide another. A nil tile is a row that has not landed: the mode
-// the descent chose stands until it does.
+// the file toggle. A nil tile is a row that has not landed: the descent's mode
+// stands until it does.
 func DecideDescent(tile *gridwellv1.Tile, readOnly bool, paneMode string) Descent {
 	if tile == nil {
 		return Descent{Mode: ShownMode(paneMode, false)}

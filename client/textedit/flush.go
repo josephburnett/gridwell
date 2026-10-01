@@ -11,11 +11,9 @@ const (
 	FlushUnwritable              // the row is known and will not take the bytes
 )
 
-// DecideFlush decides what the sweep does with one dirty entry. Every arm
-// leaves the bytes dirty except FlushPost, because the cache entry is the only
-// copy of the user's words. The two reporting arms exist because the sweep
-// repeats forever: an entry no arm can post is a silent no-op every sweep
-// until the tab closes, and the user is told instead.
+// DecideFlush decides what the sweep does with one dirty entry. Every arm but
+// FlushPost leaves the bytes dirty, the cache entry being the only copy of the
+// user's words; the reporting arms tell the user instead of looping silently.
 func DecideFlush(rowKnown, rowTakesBytes, rowLoadRefused bool) Flush {
 	if !rowKnown {
 		if rowLoadRefused {

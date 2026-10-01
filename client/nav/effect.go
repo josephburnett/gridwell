@@ -7,10 +7,8 @@ import (
 	"github.com/josephburnett/gridwell/client/transition"
 )
 
-// The effect vocabulary: everything navigation asks the shim to do. It is one
-// tagged struct rather than an interface per effect, so a plan is comparable
-// field by field in a table test. Each kind names the fields it reads. There
-// is no Redraw, because the executor draws once after every plan.
+// EffectKind is everything navigation asks the shim to do; each kind names the
+// fields it reads. There is no Redraw: the executor draws after every plan.
 type EffectKind int
 
 const (
@@ -22,16 +20,15 @@ const (
 	// PaneID, DestPaneID, TileID, Foot, Zoom.
 	EffRelocatePane
 	EffForgetPane // drops every session resource keyed to a pane: PaneID
-	// EffInstallLevel swaps the whole pane tree for a pane-tile level: Level,
-	// Tree (nil with Capture set: install the window layout as it stands at
-	// the swap), Baseline, KeepOuter, IDPrefix.
+	// EffInstallLevel swaps the pane tree for a pane-tile level: Level, Tree
+	// (nil with Capture: the window layout at the swap), Baseline, KeepOuter,
+	// IDPrefix.
 	EffInstallLevel
 	// EffPopLevel leaves one pane-tile level, restoring the tree it parked or
 	// a fresh pane at GridID: GridID.
 	EffPopLevel
 
-	// EffFlushFraming persists every pane's settled grid framing now; the
-	// pane.FramingWriters rule stays in the executor.
+	// EffFlushFraming persists every pane's settled grid framing now.
 	EffFlushFraming
 	// EffPersistFraming writes one pane's framing onto the row that owns it:
 	// PaneID, Owner, Door (true for the doorway arm).
@@ -41,15 +38,12 @@ const (
 	EffFlushLayout         // persists the pane-tile layout blob now
 	EffFlushDroppedSubtree // flushes the writebacks a closing subtree owes
 	// EffHandBackSurfaces moves each live surface of the level being left to
-	// the pane of the parked tree that shows its tile (pane.Heir), so leaving
-	// does not close and reopen what entering moved.
+	// its pane.Heir in the parked tree.
 	EffHandBackSurfaces
 
 	EffCancelTransition // lands what a pane is animating: PaneID ("" = all)
-	// EffStartTransition animates a pane: PaneID, Segments, TraceTileID, Land
-	// (resumed from OnComplete; a cancelled transition still lands). Expand,
-	// with Tile, asks for the pane-tile capture animation instead: the tile's
-	// face growing into the level outline, the content never moving.
+	// EffStartTransition animates a pane: PaneID, Segments, TraceTileID, Land.
+	// Expand, with Tile, grows the tile's face into the level outline instead.
 	EffStartTransition
 
 	EffCloseStream // PaneID, Streams, Freeze, FreezeOnto
@@ -58,8 +52,7 @@ const (
 	// Tile (by value: a just-created tile is in no cached grid).
 	EffPlaceURLView
 	EffRefreshOverlay // re-syncs the text and rendered overlays
-	// EffScaleContent re-derives a pane's content render scale from its rect
-	// and the tile's intrinsic zoom: PaneID.
+	// EffScaleContent re-derives a pane's content render scale: PaneID.
 	EffScaleContent
 
 	// EffFetchGrid warms a grid: GridID, or PaneID for the grid this pane's
@@ -77,9 +70,9 @@ const (
 
 	EffDeleteEphemeral // deletes an ended visit: GridID, TileID; see stepRetireVisit
 	EffReport          // surfaces a notice: Severity, Source, Message
-	// EffEnterLevel descends the window into a pane tile: PaneID, TileID, Tile
-	// (by value, as GestureDescend's Door is). It re-enters the machine
-	// against a world gathered after the effects above it.
+	// EffEnterLevel descends the window into a pane tile: PaneID, TileID, Tile.
+	// It re-enters the machine against a world gathered after the effects
+	// above it.
 	EffEnterLevel
 	EffLeaveLevels // leaves pane-tile levels: Count. Re-enters the same way.
 	EffReEngage    // PaneID, TileID. Re-enters the same way.
@@ -115,8 +108,7 @@ type Effect struct {
 	TileID     string
 	GridID     string
 	ContentID  string
-	// Tile is a row by value, for effects that must act on the row the
-	// gesture read: an ephemeral scratch tile is in no cached grid.
+	// Tile is by value: an ephemeral scratch tile is in no cached grid.
 	Tile *gridwellv1.Tile
 
 	// Place and tree.
@@ -167,24 +159,16 @@ type RequestKind int
 const (
 	// RequestGetTile reads one tile row: ID. The executor caches the answer
 	// before the resume, so the machine and the renderer act on one row.
-	RequestGetTile RequestKind = iota
-	// RequestGetGrid reads one grid: ID. The walk asks for a grid at most
-	// once, however it answered.
-	RequestGetGrid
-	// RequestReadContent reads a tile's body into the cache: ID.
-	RequestReadContent
-	// RequestReadLayout reads a pane tile's layout blob back as Data: ID. It
-	// is separate from RequestReadContent because a layout never seeds the
-	// text overlay and is decoded here rather than cached as a body.
+	RequestGetTile     RequestKind = iota
+	RequestGetGrid                 // ID
+	RequestReadContent             // reads a tile's body into the cache: ID
+	// RequestReadLayout reads a pane tile's layout blob back as Data, never
+	// into the cache: ID.
 	RequestReadLayout
-	// RequestSearch locates a tile: Query, Scope, Limit.
-	RequestSearch
-	// RequestProbeShell asks whether a shell session is alive: ID is the
-	// content id the shell facts key by.
-	RequestProbeShell
+	RequestSearch     // Query, Scope, Limit
+	RequestProbeShell // ID is the content id the shell facts key by
 	// RequestFlushLayout writes the pane-tile layout as the tree stands now
-	// and answers OK once the node holds it, written or already held. A write
-	// the node did not take answers not OK.
+	// and answers OK once the node holds it.
 	RequestFlushLayout
 )
 
@@ -202,20 +186,14 @@ type Request struct {
 type Result struct {
 	// OK is false when the read failed or answered nothing usable: a search
 	// with no hit is the same no as a search that could not run.
-	OK bool
-	// Alive answers RequestProbeShell.
+	OK    bool
 	Alive bool
-	// Tile answers RequestGetTile by value, so the step acts on the row that
-	// was read.
-	Tile *gridwellv1.Tile
-	// Wells answers RequestSearch: the hit's containing-well chain from its
-	// root, outermost first. Empty means the tile sits at a root.
+	Tile  *gridwellv1.Tile
+	// Wells is the search hit's containing-well chain, outermost first; empty
+	// means the tile sits at a root.
 	Wells []*gridwellv1.Tile
-	// Data answers RequestReadLayout: the bytes, which the machine decodes
-	// itself, since client/pane's codec is pure.
-	Data []byte
-	// Err is a failed read's text, stripped of the wire prefix. A step that
-	// surfaces its failure plans the notice with it.
+	Data  []byte
+	// Err is a failed read's text, stripped of the wire prefix.
 	Err string
 	// Dead is a failed read whose verdict was that the id's path ends in
 	// nothing (clientsync.OutcomeDead).

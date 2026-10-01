@@ -7,48 +7,36 @@ import (
 	"github.com/josephburnett/gridwell/client/urlwalk"
 )
 
-// The restore verbs: decode an address and go there. urlwalk.Walk resolves the
-// URL's ids against the user's grids loosely, so a bookmarked address degrades
-// as the canvas changes underneath it. It runs as a token loop: a grid the
-// snapshot does not hold suspends the restore on Await{GetGrid} and the walk
-// re-runs against the warmer snapshot, asking for at most one grid a round and
-// never twice, so it terminates.
+// The restore verbs: decode an address and go there. A grid the snapshot does
+// not hold suspends the walk on Await{GetGrid}; no grid is asked for twice, so
+// it terminates.
 
-// restoreData is what the walk still needs when the answer lands. It travels
-// on the continuation because the address it was decoded from is not
-// re-readable: the browser may already say something else.
+// restoreData travels on the continuation because the address it was decoded
+// from is not re-readable: the browser may already say something else.
 type restoreData struct {
 	PaneID string
 	State  pane.URLState
 	// IDs is the URL's path, qualified with the anchor's namespace.
 	IDs []string
-	// Asked is every grid this restore has requested. A transport failure
-	// latches nothing, so without it a grid that will not load would be asked
-	// forever.
-	Asked map[string]bool
-	// FromHistory marks a popstate restore, which owns the URL until it ends.
+	// Asked is every grid this restore has requested: a transport failure
+	// latches nothing.
+	Asked       map[string]bool
 	FromHistory bool
 }
 
 // restoreFromHistory applies a browser back or forward: a reload-equivalent
-// restore at the address the browser navigated to. The session scaffolding a
-// reload would lose resets too, deliberately, the place's truth being
-// server-owned.
+// restore at the address the browser navigated to, session scaffolding reset.
 func (m *Machine) restoreFromHistory(g Gesture, w World) Plan {
 	var pl planner
-	// The restore owns the URL until it ends. The flag goes up at plan time,
-	// which the shim reaches synchronously inside the popstate callback,
-	// before a pending debounced write could clobber the browser's entry.
+	// Up at plan time, synchronously inside the popstate callback, before a
+	// pending debounced write could clobber the browser's entry.
 	m.urlRestoring = true
-	// The same boundary flushes every other navigation performs.
 	pl.add(Effect{Kind: EffFlushDirtyText})
 	pl.add(Effect{Kind: EffFlushFraming})
-	// The popped URL names the whole place, and navigation inside a pane tile
-	// pushes no entries, so a popstate always crosses a place boundary: exit
-	// the level stack through its real exit path before restoring.
+	// Navigation inside a pane tile pushes no entries, so a popstate always
+	// crosses a place boundary.
 	pl.add(Effect{Kind: EffLeaveLevels, Count: w.LevelDepth})
-	// Leaving those levels swaps the whole pane tree, so which pane is focused
-	// can only be read from a world gathered after it.
+	// The focused pane can only be read after the levels swap the tree.
 	pl.then(Gesture{Kind: GestureRestore, Raw: g.Raw, Reset: true})
 	return pl.plan()
 }
@@ -69,13 +57,9 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 			return m.endRestore(d, &pl)
 		}
 		pl.add(Effect{Kind: EffCloseMenu})
-		// A restore replaces the place, and a transition dropped rather than
-		// landed here would leave its descent half done.
 		pl.add(Effect{Kind: EffCancelTransition})
 		pl.add(Effect{Kind: EffForgetPane, PaneID: paneID})
-		// Clear to one frame, or a deeper frame left standing would survive a
-		// restore to a shallower place. The viewport the pane has stands: a
-		// restore replaces where the pane is, not how it is framed.
+		// A restore replaces where the pane is, not how it is framed.
 		pl.install(paneID, oneFrame(w.Home, p.Cx, p.Cy, p.Zoom), nil)
 		pl.add(Effect{Kind: EffRefreshOverlay})
 	}
@@ -84,9 +68,8 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 		state = pane.URLState{} // bad address — drop to root
 	}
 	d.State = state
-	// A workspace place restores the innermost pane tile from its blob. The
-	// level stack stays empty above it, nesting being session-only, so a bar
-	// ascent falls back to the pane tile's containing grid.
+	// The level stack stays empty above a workspace place, nesting being
+	// session-only.
 	if state.Workspace != "" {
 		m.bootLevel(state.Workspace, &pl)
 		return m.endRestore(d, &pl)
@@ -95,8 +78,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 	if !ok {
 		return m.endRestore(d, &pl)
 	}
-	// No anchor means home. The walk still applies, so "/" plus a viewport
-	// restores.
+	// No anchor means home.
 	if d.State.Anchor == "" {
 		d.State.Anchor = w.Home
 		if d.State.Anchor == "" {
@@ -107,9 +89,8 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 	}
 	pl.install(paneID, oneFrame(d.State.Anchor, p.Cx, p.Cy, p.Zoom), nil)
 
-	// The URL's path segments are bare well ids, so they are qualified with
-	// the anchor's namespace, everything up to its last segment, to match the
-	// grid's keys. Through a mount that namespace is the whole chain prefix.
+	// The URL's path segments are bare well ids, qualified with the anchor's
+	// namespace to match the grid's keys.
 	prefix := rpc.NamespaceOf(d.State.Anchor)
 	d.IDs = make([]string, len(d.State.TileIDs))
 	for i, id := range d.State.TileIDs {
@@ -122,8 +103,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 }
 
 // restoreRoot sits the pane at the anchor's root grid, at its persisted root
-// view unless the address carries its own viewport. Landing at 0,0 zoom 1
-// would be a framing the user never set.
+// view unless the address carries its own viewport.
 func (m *Machine) restoreRoot(d *restoreData, w World, pl *planner) Plan {
 	if m.awaitGrid(d, d.State.Anchor, stepRestoreRoot, w, pl) {
 		return pl.plan()
@@ -145,9 +125,6 @@ func (m *Machine) restoreRoot(d *restoreData, w World, pl *planner) Plan {
 	return m.endRestore(d, pl)
 }
 
-// restoreWalk resolves the path against the snapshot's grids and installs what
-// it lands on: a grid leaf, or a content descent with its mode, scroll, body
-// and go-live.
 func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 	path, leaf, need := walkURL(d, w.Restore)
 	if need != "" {
@@ -157,12 +134,10 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 	}
 	p, ok := w.Pane(d.PaneID)
 	if !ok {
-		// The pane went away mid-walk; the address is still the browser's to
-		// get back.
 		return m.endRestore(d, pl)
 	}
-	// The decoded place. Its outer frames carry no viewport, because nothing
-	// encodes those, so the ascent out lands on each grid's persisted framing.
+	// Outer frames carry no viewport, so the ascent out lands on each grid's
+	// persisted framing.
 	st := pane.StackAt(d.State.Anchor, path, leaf)
 	v := Viewport{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
 	if v.Zoom <= 0 {
@@ -176,8 +151,6 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 		pl.install(d.PaneID, st, &v)
 		return m.finishRestore(d, path, w, pl)
 	}
-	// Mode follows textedit.DescentMode, the one descent decision; scroll
-	// restores from the tile's stored text_y.
 	row, cached := leafRow(d.State.Anchor, path, leaf, w.Restore)
 	in := textedit.ModeInput{TextDocument: true, CursorURL: d.State.CursorMode}
 	if cached {
@@ -189,8 +162,6 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 	pl.install(d.PaneID, st, &v)
 	pl.add(Effect{Kind: EffScaleContent, PaneID: d.PaneID})
 	if cached {
-		// The bytes, and the cursor the address encodes once they have seeded
-		// the textarea.
 		tok := m.mint(cont{
 			Guard:   Guard{Kind: GuardAlways},
 			Step:    stepRestoreCursor,
@@ -200,15 +171,11 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 			Request: Request{Kind: RequestReadContent, ID: leaf}})
 	}
 	pl.add(Effect{Kind: EffRefreshOverlay})
-	// A reload lands back inside the descent, so it re-engages through the
-	// same one-owner decision every descent applies.
 	pl.add(Effect{Kind: EffReEngage, PaneID: d.PaneID, TileID: leaf})
 	return m.finishRestore(d, path, w, pl)
 }
 
-// finishRestore is the tail every landed restore shares: the pane's own grid,
-// unless the walk's own read just answered it, and the address rewritten in
-// case the walk truncated it.
+// finishRestore rewrites the address in case the walk truncated it.
 func (m *Machine) finishRestore(d *restoreData, path []string, w World, pl *planner) Plan {
 	gid := leafGrid(d.State.Anchor, path, w.Restore)
 	if _, read := w.Restore.rows(gid); !read || !d.Asked[gid] {
@@ -218,10 +185,8 @@ func (m *Machine) finishRestore(d *restoreData, path []string, w World, pl *plan
 	return m.endRestore(d, pl)
 }
 
-// endRestore closes a popstate restore: the URL is the browser's again and the
-// restored place is re-encoded onto the entry it navigated to. The baseline is
-// re-seeded unseen, so that write replaces even if the walk truncated the
-// path; pushing would corrupt the stack being traversed.
+// endRestore closes a popstate restore. The baseline is re-seeded unseen so the
+// write replaces: pushing would corrupt the history stack being traversed.
 func (m *Machine) endRestore(d *restoreData, pl *planner) Plan {
 	if d.FromHistory {
 		m.urlRestoring = false
@@ -231,9 +196,7 @@ func (m *Machine) endRestore(d *restoreData, pl *planner) Plan {
 	return pl.plan()
 }
 
-// awaitGrid suspends the restore on one grid the snapshot does not hold. A
-// grid already asked for is never asked again, so a load that keeps failing
-// ends the walk instead of looping.
+// awaitGrid suspends the restore on one grid the snapshot does not hold.
 func (m *Machine) awaitGrid(d *restoreData, gridID string, s step, w World, pl *planner) bool {
 	if _, ok := w.Restore.rows(gridID); ok {
 		return false
@@ -242,17 +205,14 @@ func (m *Machine) awaitGrid(d *restoreData, gridID string, s step, w World, pl *
 		return false
 	}
 	d.Asked[gridID] = true
-	// The continuation is the restore's, not the pane's: forgetting the pane
-	// is a step the restore performs, so a pane-keyed retirement would cancel
-	// the restore mid-reset and leave the URL suppressed forever.
+	// Not pane-keyed: forgetting the pane is a step the restore performs.
 	tok := m.mint(cont{Guard: Guard{Kind: GuardAlways}, Step: s, Restore: d})
 	pl.add(Effect{Kind: EffAwait, Token: tok,
 		Request: Request{Kind: RequestGetGrid, ID: gridID}})
 	return true
 }
 
-// oneFrame is the place a jump clears a pane down to: one frame on gridID at
-// the viewport given, so nothing deeper survives it.
+// oneFrame is the place a jump clears a pane down to.
 func oneFrame(gridID string, cx, cy, zoom float64) pane.Stack {
 	var s pane.Stack
 	s.Reset(pane.Frame{GridID: gridID, Cx: cx, Cy: cy, Zoom: zoom})
@@ -260,7 +220,7 @@ func oneFrame(gridID string, cx, cy, zoom float64) pane.Stack {
 }
 
 // walkURL runs urlwalk.Walk against the snapshot. need names the first grid it
-// wanted and the snapshot does not hold; the caller suspends on it.
+// wanted and the snapshot does not hold.
 func walkURL(d *restoreData, rw *RestoreWorld) (path []string, leaf, need string) {
 	seen := map[string]map[string]urlwalk.Tile{}
 	path, leaf = urlwalk.Walk(d.State.Anchor, d.IDs,
@@ -287,7 +247,6 @@ func walkURL(d *restoreData, rw *RestoreWorld) (path []string, leaf, need string
 	return path, leaf, need
 }
 
-// leafRow is the content leaf's cached row.
 func leafRow(anchor string, path []string, leaf string, rw *RestoreWorld) (RestoreTile, bool) {
 	rows, ok := rw.rows(leafGrid(anchor, path, rw))
 	if !ok {
@@ -297,9 +256,7 @@ func leafRow(anchor string, path []string, leaf string, rw *RestoreWorld) (Resto
 	return row, ok
 }
 
-// leafGrid is the grid path lands in, resolved against the snapshot.
-// pane.ResolveLeafGrid owns the walk, the same one the shim resolves a pane's
-// grid with, so the two cannot land in different grids.
+// leafGrid is the grid path lands in; see pane.ResolveLeafGrid.
 func leafGrid(anchor string, path []string, rw *RestoreWorld) string {
 	return pane.ResolveLeafGrid(anchor, path,
 		func(gid, wellID string) (string, bool, bool) {

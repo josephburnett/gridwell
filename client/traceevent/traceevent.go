@@ -1,7 +1,6 @@
 // Package traceevent spells the client's trace records: one constructor per
 // thing the shim does, so what a dump can say is declared here rather than in
-// syscall/js glue, and a closed set that grows — a navigation verb, a drop
-// verdict, an event payload — cannot reach the trace unnamed.
+// syscall/js glue.
 package traceevent
 
 import (
@@ -42,8 +41,7 @@ func Boot(commit, goVersion, userAgent string) Event {
 		KV: kv("commit", commit, "go", goVersion, "ua", userAgent)}
 }
 
-// Notice is a user-visible notice, under the source that raised it, so every
-// notice the strip ever showed is in the trace by construction.
+// Notice is a user-visible notice, under the source that raised it.
 func Notice(sev errsurface.Severity, source, message string) Event {
 	s := "error"
 	if sev == errsurface.Info {
@@ -72,9 +70,8 @@ const (
 	WhyReask      = "latched read re-asked"
 )
 
-// FrameAsks is the paint asked for and not yet drawn. Asks coalesce into one
-// frame, so the first reason is the one that frame was asked for, and the
-// count says how many sites wanted it.
+// FrameAsks is the paint asked for and not yet drawn. Asks coalesce, so the
+// first reason is the frame's and the count says how many sites wanted it.
 type FrameAsks struct {
 	why string
 	n   int
@@ -91,16 +88,14 @@ func (f *FrameAsks) Ask(why string) bool {
 	return true
 }
 
-// Take hands the asks to the frame about to draw and clears them, so an ask
-// made during the draw arms the next frame.
+// Take clears the asks, so an ask made during the draw arms the next frame.
 func (f *FrameAsks) Take() FrameAsks {
 	t := *f
 	*f = FrameAsks{}
 	return t
 }
 
-// Drawn is the one record of a drawn frame: its reason, its asks, and how
-// long the draw took.
+// Drawn is the one record of a drawn frame.
 func (f FrameAsks) Drawn(ms float64) Event {
 	return Event{Src: "frame", Kind: "draw", Msg: f.why,
 		KV: kv("asks", strconv.Itoa(f.n), "ms", strconv.FormatFloat(ms, 'f', 1, 64))}
@@ -128,8 +123,7 @@ func EventApplied(ev *pb.Event) Event {
 	return Event{Src: "events", Kind: "apply", Msg: name, KV: kv("id", id)}
 }
 
-// EventRefetch is the read an event asked for, which is where a stale view
-// and a storm both show up.
+// EventRefetch is the read an event asked for.
 func EventRefetch(gridID string) Event {
 	return Event{Src: "events", Kind: "refetch", Msg: "grid", KV: kv("grid", gridID)}
 }
@@ -157,8 +151,7 @@ func payloadOf(ev *pb.Event) (name, id string) {
 }
 
 // OutboxPark is a write the server never answered, now owed; OutboxDrain is
-// the kick that re-posts what is owed. Between the two is where the user's
-// bytes wait out an outage.
+// the kick that re-posts what is owed.
 func OutboxPark(op, id string) Event {
 	return Event{Src: "outbox", Kind: "park", Msg: op, KV: kv("id", id)}
 }
@@ -177,15 +170,13 @@ func URLClose(paneID, tileID string, freeze bool) Event {
 	return Event{Src: "url", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
 }
 
-// URLMove is a live view handed to another pane with its page, the takeover
-// that neither closes nor opens one.
+// URLMove is a live view handed to another pane with its page.
 func URLMove(fromPaneID, toPaneID, tileID string) Event {
 	return Event{Src: "url", Kind: "move", Msg: "live view moves",
 		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
 }
 
-// ShellMove is a live terminal handed to another pane with its socket, the
-// takeover that neither closes nor opens one.
+// ShellMove is a live terminal handed to another pane with its socket.
 func ShellMove(fromPaneID, toPaneID, tileID string) Event {
 	return Event{Src: "shell", Kind: "move", Msg: "live terminal moves",
 		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
@@ -223,8 +214,7 @@ func TextSave(tileID, contentID string, n int) Event {
 		KV: kv("tile", tileID, "content", contentID)}
 }
 
-// Nav is one navigation verb. Kind is the direction the frame stack moves, so
-// a dump reads as descents and ascents whatever gesture asked for them.
+// Nav is one navigation verb; Kind is the direction the frame stack moves.
 func Nav(g nav.Gesture) Event {
 	e := Event{Src: "nav"}
 	door := g.Door.GetId()
@@ -306,10 +296,8 @@ func buttonName(b int) string {
 	return "button " + strconv.Itoa(b)
 }
 
-// Drop is a committed release, in the pane the gesture was made in and onto
-// the grid it landed on — a cross-pane drag names both ends. The ghost's
-// preview takes the same verdict and records nothing: that one is per pointer
-// move.
+// Drop is a committed release, naming the pane the gesture was made in and
+// the grid it landed on. The ghost's per-move preview records nothing.
 func Drop(v dragdrop.DropAction, paneID, tileID, gridID string) Event {
 	return Event{Src: "drag", Kind: "drop", Msg: dropName(v),
 		KV: kv("pane", paneID, "tile", tileID, "grid", gridID)}

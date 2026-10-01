@@ -68,11 +68,9 @@ type Palette struct {
 	InfoStripText string
 	PaneBorder    string
 	FocusBorder   string
-	// FocusBorderFaded outlines a descended but unfocused pane, so the focused
-	// one pops while the others stay visibly inside something.
+	// FocusBorderFaded outlines a descended but unfocused pane.
 	FocusBorderFaded string
-	// PluginBorder is the warm brown of plugin and host identity: an earth-tone
-	// ground reading as a boundary, not a grid you can place in.
+	// PluginBorder reads as a boundary, not a grid you can place in.
 	PluginBorder      string
 	PluginBorderFaded string
 	// PluginFill is host content's body, so it does not read as editable.
@@ -86,13 +84,11 @@ type Palette struct {
 	URLFill           string
 	URLLine           string
 	URLLineFaded      string
-	// URLLiveLine is a url tile with a native view attached: the same purple,
-	// stronger, and its faded variant stays stronger than the frozen one, so
-	// live against frozen reads across unfocused panes.
+	// URLLiveLine is a url tile with a native view attached; its faded
+	// variant stays stronger than the frozen one, so live reads in any pane.
 	URLLiveLine      string
 	URLLiveLineFaded string
-	// ShellBorder: bash runs outside Gridwell's data world, so it gets its own
-	// warm hue, not plugin brown.
+	// ShellBorder is its own hue: bash runs outside Gridwell's data world.
 	ShellBorder      string
 	ShellBorderFaded string
 	// ShellFill is the body behind a shell tile's preview or glyph.
@@ -129,8 +125,7 @@ type Palette struct {
 	SwapArrow     string
 	CloseWarn     string
 	SplitInactive string
-	// ScrimStroke casings a preview line against whatever it crosses, so the
-	// line stays visible over a tile body of any shade.
+	// ScrimStroke casings a preview line over a tile body of any shade.
 	ScrimStroke string
 	// Doorway tints for a non-enterable row (client/pluginhealth). Broken,
 	// every failure whatever the reason, takes the red alarm family; waiting
@@ -138,8 +133,7 @@ type Palette struct {
 	DoorwayBrokenTint  string
 	DoorwayWaitingTint string
 	// A dead link (client/deadref) is a state, not a failure, so it gets no
-	// alarm color: the veil fades the tile back toward the background, and the
-	// outline and label are redrawn muted, keeping the dash and the name.
+	// alarm color: the veil fades it and the outline and label go muted.
 	DeadLinkVeil string
 	DeadLink     string
 
@@ -151,12 +145,10 @@ type Palette struct {
 	BarEphemeralBand string
 	// BarInk is the bar's own lettering, over a band of any family.
 	BarInk string
-	// CircleRim lifts the circle button off the band it sits on. It is a
-	// casing and not lettering, so it stays lighter than the chip in both
-	// palettes.
+	// CircleRim is a casing, not lettering, so it stays lighter than the chip
+	// in both palettes.
 	CircleRim string
-	// CrumbHere is the wide pane-tile crumb for the level you are in, a band
-	// carrying BarInk, where PaneTileBorder is a line drawn on a tile body.
+	// CrumbHere is the wide pane-tile crumb for the level you are in.
 	CrumbHere string
 	// CrumbIdle is a crumb that is not where you are: a pane-tile level you
 	// are outside, and the outline of one whose row has not arrived yet.
@@ -165,8 +157,7 @@ type Palette struct {
 	CachedChipBg string
 	CachedChipFg string
 
-	// TextFg is the user's own bytes wherever they are painted raw: the canvas
-	// source painter, the editing textarea, and the terminal.
+	// TextFg is the user's own bytes wherever they are painted raw.
 	TextFg      string
 	ShellCursor string
 	// PreviewLetterbox fills what a frozen capture's aspect ratio leaves over.
@@ -288,10 +279,8 @@ var dark = Palette{
 	CardShadow: "rgba(0, 0, 0, 0.6)",
 }
 
-// light keeps every role's hue and inverts its lightness: grounds go near
-// white, ink near black, and each kind's identity hue darkens enough to carry
-// a 1px outline on a pale body. The accent blue is the one shade held across
-// both palettes, because it is the app's one constant.
+// light keeps every role's hue and inverts its lightness. The accent blue is
+// the one shade held across both palettes.
 var light = Palette{
 	Bg:          "#f6f7fa",
 	FileInnerBg: "#ffffff",
@@ -404,7 +393,7 @@ type CSSVar struct {
 }
 
 // CSSVars renders the whole palette, so a field added here reaches the DOM
-// without a second list to keep in step. --gw-file-inner-bg is FileInnerBg.
+// without a second list. --gw-file-inner-bg is FileInnerBg.
 func (p Palette) CSSVars() []CSSVar {
 	v := reflect.ValueOf(p)
 	t := v.Type()
