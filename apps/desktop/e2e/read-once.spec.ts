@@ -21,7 +21,7 @@ function count(asked: string[], id: string): number {
   return asked.filter((a) => a === id).length;
 }
 
-test('a grid first shown inside a descent is read once', async ({ gw, window }) => {
+test('a descent and an ascent read each grid they show once', async ({ gw, window }) => {
   const settleMs = (await gw.cadences()).framingSaveMs;
   await gw.enterPlugin('home');
   const home = await gw.focused();
@@ -61,8 +61,13 @@ test('a grid first shown inside a descent is read once', async ({ gw, window }) 
   await gw.descendCell(cx, cy);
   expect((await gw.focused()).gridID).toBe(a.childGridId);
   await settle(window, settleMs);
+  expect(count(asked, a.childGridId!), "the descent read A's grid").toBe(1);
   expect(count(asked, b.childGridId!), "B's grid, first shown inside A").toBe(1);
   expect(count(asked, c.childGridId!), "C's grid, first shown inside A").toBe(1);
 
+  asked.length = 0;
+  await gw.ascendViaCrumb();
+  await settle(window, settleMs);
+  expect(count(asked, home.gridID), 'the ascent read home').toBe(1);
   await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
 });

@@ -995,7 +995,12 @@ func (a *App) landTransition(tr *transition.Transition) {
 	a.fetch.contents.Reset()
 	a.fetch.previews.Reset()
 	a.fetch.menus.Reset()
-	a.fetchGrid(a.gridIDForPane(p))
+	// The navigation that started this already read its grid (nav.EffFetchGrid),
+	// so landing asks only for a miss, which the Reset may have just unlatched.
+	gid := a.gridIDForPane(p)
+	if _, ok := a.c.Grid(gid); !ok {
+		a.fetchGrid(gid)
+	}
 	if tr.TraceTileID != "" {
 		// Keep the frame loop alive for the fade.
 		a.traces[p.ID] = traceState{tileID: tr.TraceTileID, startMs: nowMs()}
