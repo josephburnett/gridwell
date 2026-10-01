@@ -372,7 +372,12 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	case rpc.KindShell:
 		return tileResp(p.st.SetShellPreview(ctx, req.TileId, req.Preview))
 	case rpc.KindURL:
-		return tileResp(p.st.SetURLState(ctx, req.TileId, req.Preview, t.UrlString, t.AltText, t.UrlHistory))
+		// Refused rather than dropped: the address is content, claimed and
+		// bumped, so it rides WriteContent.
+		if t.UrlString != "" {
+			return nil, status.Error(codes.InvalidArgument, "set: a url tile's address rides WriteContent")
+		}
+		return tileResp(p.st.SetURLState(ctx, req.TileId, req.Preview, t.AltText, t.UrlHistory))
 	case rpc.KindPane:
 		// Refused so the mapping stays total: the layout blob rides
 		// WriteContent, which is framing-class for layouts.

@@ -45,7 +45,7 @@ func TestUserRenameWinsOverCaptures(t *testing.T) {
 	}
 
 	// The url-title capture path (SetURLState) must respect the latch too.
-	if _, err := s.SetURLState(ctx, tile.Id, nil, "https://example.com/x", "page-title", ""); err != nil {
+	if _, err := s.SetURLState(ctx, tile.Id, nil, "page-title", ""); err != nil {
 		t.Fatalf("SetURLState: %v", err)
 	}
 	if got := altOf(t, s, tile.Id); got != "my-name" {
@@ -71,7 +71,7 @@ func TestURLTitleCaptureStillWorksUnnamed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}
-	if _, err := s.SetURLState(ctx, tile.Id, nil, "", "page-title", ""); err != nil {
+	if _, err := s.SetURLState(ctx, tile.Id, nil, "page-title", ""); err != nil {
 		t.Fatalf("SetURLState: %v", err)
 	}
 	if got := altOf(t, s, tile.Id); got != "page-title" {

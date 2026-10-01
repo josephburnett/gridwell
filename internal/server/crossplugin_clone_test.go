@@ -535,7 +535,7 @@ func TestCloneURLAcrossPluginsCarriesFace(t *testing.T) {
 	jpeg := []byte("\xff\xd8frozen-face")
 	frozen, err := cl.SetTile(ctx, &gridwellv1.SetTileRequest{
 		TileId:  u.Id,
-		Tile:    &gridwellv1.Tile{Kind: rpc.KindURL, UrlString: "https://example.com/album", AltText: "album", UrlHistory: `["https://example.com/"]`},
+		Tile:    &gridwellv1.Tile{Kind: rpc.KindURL, AltText: "album", UrlHistory: `["https://example.com/"]`},
 		Preview: jpeg,
 	})
 	if err != nil {

@@ -12,11 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/doctype"
 )
 
-// urlSchemeAllowed accepts only http and https.
-func urlSchemeAllowed(u string) bool {
-	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
-}
-
 // MaxBlobBytes caps a single uploaded text-tile blob size; see
 // rpc.MaxContentBytes.
 const MaxBlobBytes = rpc.MaxContentBytes
@@ -227,7 +222,7 @@ func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url
 // WriteContent's url arm.
 func (s *Store) CreateURL(ctx context.Context, gridID string, x, y, w, h int64, url string) (*gridwellv1.Tile, error) {
 	urlString := strings.TrimSpace(url)
-	if urlString != "" && !urlSchemeAllowed(urlString) {
+	if urlString != "" && !rpc.HTTPAddress(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
 	return s.createTile(ctx, gridID, x, y, w, h,
@@ -271,7 +266,7 @@ func (s *Store) createScratch(
 // See ScratchGridID.
 func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.Tile, error) {
 	urlString := strings.TrimSpace(url)
-	if !urlSchemeAllowed(urlString) {
+	if !rpc.HTTPAddress(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
 	return s.createScratch(ctx, func(tx *sql.Tx, gridID, now int64) (int64, error) {

@@ -16,14 +16,14 @@ const (
 // copy of the user's words. The two reporting arms exist because the sweep
 // repeats forever: an entry no arm can post is a silent no-op every sweep
 // until the tab closes, and the user is told instead.
-func DecideFlush(rowKnown, rowEditableText, rowLoadRefused bool) Flush {
+func DecideFlush(rowKnown, rowTakesBytes, rowLoadRefused bool) Flush {
 	if !rowKnown {
 		if rowLoadRefused {
 			return FlushNoRow
 		}
 		return FlushFetchRow
 	}
-	if !rowEditableText {
+	if !rowTakesBytes {
 		return FlushUnwritable
 	}
 	return FlushPost

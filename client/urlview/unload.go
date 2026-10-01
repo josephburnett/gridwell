@@ -3,45 +3,55 @@
 // check` executes this package and only compiles that one.
 package urlview
 
-// Capture is what a live view reports about its page: the last frame, the
-// address it ended on, its title and its navigation trail.
+import "github.com/josephburnett/gridwell/api/rpc"
+
+// Capture is what a closing view reports about its page besides the address:
+// the last frame, its title and its navigation trail. None of it is content.
 type Capture struct {
 	JPEG    []byte
-	URL     string
 	Title   string
 	History string
 }
 
-// Writeback is what a closing view writes to its row, false for nothing. It
-// is the one place a url tile's page and an internet url tile differ: a served
-// page's address, title and history are its plugin's, so a page writes its
-// frame alone. Only a freeze the caller asked for writes, and never an empty
-// capture, which would overwrite a good face with nothing.
-func Writeback(freeze, page bool, c Capture) (Capture, bool) {
-	if page {
-		c = Capture{JPEG: c.JPEG}
-	}
-	return c, freeze && (len(c.JPEG) > 0 || c.URL != "" || c.Title != "")
+// Owns reports that a url row's address, title and trail are the node's to
+// write. A served page's are its plugin's, and so are those of every row in a
+// grid that declares itself unwritable. A grid not yet read is attempted,
+// because the server's verdict is the authority and a link's target row often
+// lives in a grid this client never fetched.
+func Owns(page, gridWritable, gridKnown bool) bool {
+	return !page && (gridWritable || !gridKnown)
 }
 
-// DecideUnloadURLState decides what a dying page writes about one live url
-// view; textedit.DecideUnloadFlush is the text arm of the same unload. The
-// bridge's frame and trail are unreachable by then, so the address and title
-// ride alone, through Writeback. An ephemeral visit belongs to no row and a
-// page that never navigated has nothing new to write. The bridge's last
-// reported address is the claim; the cached row's stands in when the bridge
-// reported none.
-func DecideUnloadURLState(page, durable, navDirty bool, lastURL, lastTitle, cachedURL string) (Capture, bool) {
+// WriteAddress decides whether the address a live view landed on is written
+// to its row, as content that claims and bumps a version like a typed one.
+// Only a durable row the node owns writes, only an address the store takes,
+// and never the one already stored, so a visit that goes nowhere leaves the
+// row byte-identical.
+func WriteAddress(durable, owns bool, landed, stored string) bool {
+	return durable && owns && rpc.HTTPAddress(landed) && landed != stored
+}
+
+// Writeback is what a closing view writes to its row as captures, false for
+// nothing. A row the node does not own writes its frame alone. Only a freeze
+// the caller asked for writes, and never an empty capture, which would
+// overwrite a good face with nothing.
+func Writeback(freeze, owns bool, c Capture) (Capture, bool) {
+	if !owns {
+		c = Capture{JPEG: c.JPEG}
+	}
+	return c, freeze && (len(c.JPEG) > 0 || c.Title != "" || c.History != "")
+}
+
+// DecideUnloadURLState decides what captures a dying page writes about one
+// live view; the address it landed on is already a dirty content entry, which
+// the content flush beacons. The bridge's frame and trail are unreachable by
+// then, so the title rides alone, through Writeback. An ephemeral visit
+// belongs to no row and a page that never navigated has nothing new to write.
+func DecideUnloadURLState(owns, durable, navDirty bool, lastTitle string) (Capture, bool) {
 	if !durable || !navDirty {
 		return Capture{}, false
 	}
-	if lastURL == "" {
-		lastURL = cachedURL
-	}
-	if lastURL == "" {
-		return Capture{}, false
-	}
-	return Writeback(true, page, Capture{URL: lastURL, Title: lastTitle})
+	return Writeback(true, owns, Capture{Title: lastTitle})
 }
 
 // Durable is whether a live view's descended row survives ascent, which gates

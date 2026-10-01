@@ -21,6 +21,15 @@ const (
 	// silence: a paragraph reaches the server while it is still being typed.
 	TextSaveMode = debounce.Throttle
 
+	// URLAddressMs is how long a live page's address rests before it is
+	// written to its row, so a redirect chain or a burst of in-page hops
+	// writes where it lands.
+	URLAddressMs = 600
+
+	// URLAddressMode is Settle: an address in the middle of a redirect chain
+	// is not where the user went.
+	URLAddressMode = debounce.Settle
+
 	// URLUpdateMs coalesces wheel and keystroke bursts into one
 	// history.replaceState, while staying short enough for a quick bookmark.
 	URLUpdateMs = 150

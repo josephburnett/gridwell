@@ -253,7 +253,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	}
 	if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: urlT.GetTile().GetId(),
 		Version: urlT.GetTile().GetVersion(),
-		Tile:    &pb.Tile{Kind: "url", UrlString: "https://example.com"},
+		Tile:    &pb.Tile{Kind: "url"},
 		Preview: []byte("\xff\xd8jpegface")}); err != nil {
 		t.Fatal(err)
 	}

@@ -95,7 +95,7 @@ func TestScratchTileMutationsNeedNoPath(t *testing.T) {
 		t.Fatalf("create ephemeral url: %v", err)
 	}
 	// A content writeback with an EMPTY path succeeds.
-	if _, err := s.SetURLState(ctx, tile.Id, nil, "https://example.com/eph2", "", ""); err != nil {
+	if _, err := s.SetURLState(ctx, tile.Id, nil, "", ""); err != nil {
 		t.Fatalf("SetURLState on a scratch tile: %v", err)
 	}
 	// And so does delete.

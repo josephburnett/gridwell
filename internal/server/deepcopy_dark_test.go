@@ -161,7 +161,7 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlTile, err = cl.SetTile(ctx, &pb.SetTileRequest{TileId: urlTile.Id, Tile: &pb.Tile{Kind: rpc.KindURL, UrlString: "https://example.com/album", AltText: "album"}, Preview: []byte("\xff\xd8fakejpeg")})
+	urlTile, err = cl.SetTile(ctx, &pb.SetTileRequest{TileId: urlTile.Id, Tile: &pb.Tile{Kind: rpc.KindURL, AltText: "album"}, Preview: []byte("\xff\xd8fakejpeg")})
 	if err != nil {
 		t.Fatal(err)
 	}

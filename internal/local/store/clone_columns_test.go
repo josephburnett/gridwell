@@ -26,7 +26,7 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 
 	// A freeze that stored a navigation back-stack...
 	history := `[{"url":"https://example.com"},{"url":"https://example.com/page"}]`
-	if _, err := s.SetURLState(ctx, tile.Id, nil, "https://example.com/page", "", history); err != nil {
+	if _, err := s.SetURLState(ctx, tile.Id, nil, "", history); err != nil {
 		t.Fatal(err)
 	}
 	// ...a content zoom, which is framing and bumps no version...

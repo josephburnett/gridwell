@@ -408,6 +408,10 @@ type scheduler struct {
 
 	textSave *debounce.Debounce
 
+	// urlAddress posts a live page's landed address once it rests, through
+	// the content sweep that owns every content write.
+	urlAddress *debounce.Debounce
+
 	// errExpire lets one-shot notices leave the strip without polling.
 	errExpire *debounce.Debounce
 
@@ -426,6 +430,7 @@ func newScheduler(a *App) scheduler {
 		urlUpdate:   debounce.New(setTimeoutMs, nowMs, cadence.URLUpdateMode, a.writeURLNow),
 		framingSave: debounce.New(setTimeoutMs, nowMs, cadence.FramingSaveMode, a.flushFramingSave),
 		textSave:    debounce.New(setTimeoutMs, nowMs, cadence.TextSaveMode, a.flushDirtyText),
+		urlAddress:  debounce.New(setTimeoutMs, nowMs, cadence.URLAddressMode, a.flushDirtyText),
 		traceFlush:  debounce.New(setTimeoutMs, nowMs, cadence.TraceFlushMode, a.flushTrace),
 		// The expiry's wait is a notice's own deadline rather than a cadence,
 		// and it is a throttle: a settle would push the window out every time

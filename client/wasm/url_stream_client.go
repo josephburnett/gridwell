@@ -3,15 +3,12 @@
 package main
 
 import (
-	"google.golang.org/protobuf/proto"
-
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"slices"
 	"sync"
 
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -34,17 +31,18 @@ type urlView struct {
 	// to resolve this tile's leaf grid.
 	anchor string
 	path   []string
-	// page marks a view on a plugin-served page, whose writeback is
-	// urlview.Writeback's page arm.
-	page bool
+	// owns is urlview.Owns for the row: whether its address, title and
+	// trail are the node's to write.
+	owns bool
 	// durable mirrors placeURLView's freeze eligibility: false for an
 	// ephemeral visit, whose state a tab close must not persist.
 	durable bool
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
 	navDirty bool
-	// lastURL is what the unload beacon writes, since a url link's target row
-	// lives in a grid the cache never held.
+	// lastURL is where an ephemeral visit's page is now, which the promote
+	// gesture carries onto the row it creates; a durable row's landed address
+	// is a content entry instead.
 	lastURL string
 	// lastTitle is for the unload beacon, which cannot wait for the bridge
 	// reply the freeze path reads its title from.
@@ -114,9 +112,12 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	if p == nil || !a.engage(a.urlSurface(), p, t.Id) {
 		return
 	}
-	v := a.urlViewIn(p, t.Id, rpc.PageContent(t))
+	v := a.urlViewIn(p, t.Id, a.ownsURLRow(t))
 	v.gen = a.urlGens.Next()
 	a.local(p.ID).urlView = v
+	if v.owns {
+		a.seedURLAddress(t)
+	}
 	addr := a.webAddress(t)
 	a.emit(traceevent.URLOpen(p.ID, t.Id))
 	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
@@ -131,9 +132,9 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 
 // urlViewIn is the handle for tileID live in pane p. Every caller goes live in
 // the descent the pane is already in, so the pane's frame is the view's.
-func (a *App) urlViewIn(p *pane.Pane, tileID string, page bool) *urlView {
+func (a *App) urlViewIn(p *pane.Pane, tileID string, owns bool) *urlView {
 	v := &urlView{tileID: tileID, paneID: p.ID, descentID: p.ContentID(), anchor: p.Anchor(),
-		path: slices.Clone(p.Path()), page: page}
+		path: slices.Clone(p.Path()), owns: owns}
 	// urlview.Durable says whether the descended row survives ascent.
 	possiblyEphemeral := false
 	if tile, ok := a.descendedTile(p); ok {
@@ -141,6 +142,39 @@ func (a *App) urlViewIn(p *pane.Pane, tileID string, page bool) *urlView {
 	}
 	v.durable = urlview.Durable(possiblyEphemeral)
 	return v
+}
+
+// ownsURLRow is urlview.Owns for row t.
+func (a *App) ownsURLRow(t *gridwellv1.Tile) bool {
+	writable, known := a.gridWritable(t.GridId)
+	return urlview.Owns(rpc.PageContent(t), writable, known)
+}
+
+// seedURLAddress files row t's address as its content entry, the basis a
+// landed address is compared against and claims, unless one is already held.
+// The placed row is the one copy of it a link's uncached target has.
+func (a *App) seedURLAddress(t *gridwellv1.Tile) {
+	if _, ok := a.c.TileContent(t.Id); ok {
+		return
+	}
+	a.c.PutFetchedContent(t.Id, []byte(t.UrlString), t.Version, a.c.AskContent(t.Id))
+}
+
+// noteLandedAddress makes the address v's page landed on its row's pending
+// content when urlview.WriteAddress says so, for the content flush to post.
+func (a *App) noteLandedAddress(v *urlView, landed string) {
+	stored, ok := a.c.TileContent(v.tileID)
+	if !ok && v.owns {
+		// The entry aged out under a newer row; that row is the basis.
+		if t := a.cachedTileByID(v.tileID); t != nil {
+			a.seedURLAddress(t)
+			stored = []byte(t.UrlString)
+		}
+	}
+	if !urlview.WriteAddress(v.durable, v.owns, landed, string(stored)) {
+		return
+	}
+	a.putEditedContent(v.tileID, []byte(landed))
 }
 
 // moveURLView hands the view fromID holds to pane to, page and all: no close,
@@ -153,7 +187,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	}
 	old := from.urlView
 	from.urlView = nil
-	v := a.urlViewIn(to, old.tileID, old.page)
+	v := a.urlViewIn(to, old.tileID, old.owns)
 	v.navDirty, v.lastURL, v.lastTitle, v.gen = old.navDirty, old.lastURL, old.lastTitle, old.gen
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
@@ -192,8 +226,8 @@ type freezeTarget struct {
 }
 
 // closeURLStream tears the live view down and, when freeze is true, persists
-// the capture urlview.Writeback shapes. An ephemeral tile's ascent passes
-// false, since the row is about to be deleted.
+// the address the page landed on and the capture urlview.Writeback shapes. An
+// ephemeral tile's ascent passes false, since the row is about to be deleted.
 func (a *App) closeURLStream(paneID string, freeze bool) {
 	a.closeURLStreamTo(paneID, nil, freeze)
 }
@@ -223,8 +257,13 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	a.emit(traceevent.URLClose(paneID, tileID, freeze))
 	urlConsole("close pane=%s tile=%s", paneID, tileID)
 	a.bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
-		if c, ok := urlview.Writeback(freeze, v.page,
-			urlview.Capture{JPEG: jpeg, URL: url, Title: title, History: history}); ok {
+		// A promote's target was created carrying the visit's address.
+		if freeze && target == nil {
+			a.noteLandedAddress(v, url)
+			a.flushTileContent(v.tileID)
+		}
+		if c, ok := urlview.Writeback(freeze, v.owns,
+			urlview.Capture{JPEG: jpeg, Title: title, History: history}); ok {
 			gid := a.gridIDForPathFrom(anchor, path)
 			if target != nil {
 				gid = target.gridID
@@ -234,7 +273,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 			// holds the only copy of the capture.
 			req := &gridwellv1.SetTileRequest{TileId: tileID,
 				Tile: &gridwellv1.Tile{Kind: rpc.KindURL,
-					UrlString: c.URL, AltText: c.Title, UrlHistory: c.History},
+					AltText: c.Title, UrlHistory: c.History},
 				Preview: c.JPEG}
 			a.post(write{
 				label: "SetURLState", gid: gid, id: tileID,
@@ -387,22 +426,6 @@ func (a *App) canvasGesture() pane.CanvasGesture {
 // input handling works for it.
 func (a *App) isURLDescent(p *pane.Pane) bool {
 	return a.descentKind(p) == rpc.DescentURL
-}
-
-// updateCachedTileURL rewrites UrlString on a tile, driven by the bridge's
-// nav events. URL tiles only: a page row has no url_string fact to shadow.
-func (a *App) updateCachedTileURL(tileID string, newURL string) {
-	a.forEachCachedGrid(func(gid string, g *cache.Grid) bool {
-		t, ok := g.Tiles[tileID]
-		if ok && t.Kind == rpc.KindURL {
-			// cache.Grid hands out the cached rows themselves, so patch a
-			// clone through UpdateTile.
-			patched := proto.CloneOf(t)
-			patched.UrlString = newURL
-			a.c.UpdateTile(gid, patched)
-		}
-		return true
-	})
 }
 
 func (a *App) paneRectByID(paneID string) pane.Rect {

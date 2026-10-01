@@ -210,6 +210,11 @@ func TextDocument(t *pb.Tile) bool {
 	return t.Kind == KindText
 }
 
+// HTTPAddress is an address a url tile may hold: http or https, nothing else.
+func HTTPAddress(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
+
 // PageContent is a url tile whose plugin serves the page. The address is the
 // plugin's, derived at use time (PageURL); everything else it holds is a url
 // tile's.

@@ -111,10 +111,15 @@ func TestSetURLStateBeaconSeam(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The landed address is content, so it beacons as a claimed write; the
+	// title and trail are captures and beacon as SetTile.
+	apath, abody := rpc.WriteContentBeacon(tile.Id, tile.Version, []byte("https://deep.example/page/40"))
+	if res := postBeacon(t, hs, apath, rpc.BeaconStreamType, abody); res.StatusCode != http.StatusOK {
+		t.Fatalf("url-address beacon = %d, want 200", res.StatusCode)
+	}
 	path, body := rpc.SetTileBeacon(&gridwellv1.SetTileRequest{
 		TileId: tile.Id,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindURL,
-			UrlString:  "https://deep.example/page/40",
 			AltText:    "page 40",
 			UrlHistory: `["https://start.example","https://deep.example/page/40"]`,
 		},
@@ -131,5 +136,8 @@ func TestSetURLStateBeaconSeam(t *testing.T) {
 	if after.UrlString != "https://deep.example/page/40" || after.UrlHistory == "" {
 		t.Fatalf("url state after beacon = (%q, %q) — the trail did not land",
 			after.UrlString, after.UrlHistory)
+	}
+	if after.Version <= tile.Version {
+		t.Errorf("landed address left version at %d; an address is content and bumps", after.Version)
 	}
 }

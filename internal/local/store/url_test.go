@@ -27,7 +27,7 @@ func TestCloneURLTile(t *testing.T) {
 	ctx := context.Background()
 	src := createURLTileForTest(t, s, root, 0, "https://example.com/a")
 	// Seed a preview (via the freeze RPC) so we can verify it carries over.
-	src, err := s.SetURLState(ctx, src.Id, []byte("jpegbytes"), "", "", "")
+	src, err := s.SetURLState(ctx, src.Id, []byte("jpegbytes"), "", "")
 	if err != nil {
 		t.Fatalf("seed preview: %v", err)
 	}
@@ -103,14 +103,14 @@ func TestSetURLState(t *testing.T) {
 	ctx := context.Background()
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com/a")
 
-	out, err := s.SetURLState(ctx, tile.Id, []byte("frozenjpeg"), "https://example.com/b", "Example B", "")
+	out, err := s.SetURLState(ctx, tile.Id, []byte("frozenjpeg"), "Example B", "")
 	if err != nil {
 		t.Fatalf("SetURLState: %v", err)
 	}
-	// Returned tile reflects all three writes. The freeze is a capture, so
-	// the version stays put (version_rule_test.go).
-	if out.UrlString != "https://example.com/b" {
-		t.Errorf("URLString = %q, want https://example.com/b", out.UrlString)
+	// The freeze is a capture, so the version stays put (version_rule_test.go)
+	// and the address, which is content, is not its to move.
+	if out.UrlString != "https://example.com/a" {
+		t.Errorf("URLString = %q, want https://example.com/a", out.UrlString)
 	}
 	if out.AltText != "Example B" {
 		t.Errorf("AltText = %q, want %q", out.AltText, "Example B")
@@ -134,13 +134,13 @@ func TestSetURLStateSkipsEmptyFields(t *testing.T) {
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com/keep")
 	tileIDInt, _ := parseID(tile.Id)
 	// Seed preview + title we expect to survive an empty-field update.
-	if _, err := s.SetURLState(ctx, tile.Id, []byte("keepjpeg"), "", "Keep Title", ""); err != nil {
+	if _, err := s.SetURLState(ctx, tile.Id, []byte("keepjpeg"), "Keep Title", ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	// A capture that failed (empty jpeg) and reported no url/title must not
 	// clobber the good state.
-	if _, err := s.SetURLState(ctx, tile.Id, nil, "", "", ""); err != nil {
+	if _, err := s.SetURLState(ctx, tile.Id, nil, "", ""); err != nil {
 		t.Fatalf("empty update: %v", err)
 	}
 	got, err := s.loadTile(ctx, s.db, tileIDInt)
@@ -169,14 +169,14 @@ func TestSetURLStateRefusesNonURLTile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.SetURLState(context.Background(), w.Id, []byte("x"), "", "", "")
+	_, err = s.SetURLState(context.Background(), w.Id, []byte("x"), "", "")
 	if !errors.Is(err, ErrNotURLTile) {
 		t.Errorf("got %v, want ErrNotURLTile", err)
 	}
 }
 
-// Freezing a url tile in a cloned grid lands the new address and preview in
-// this clone's row only, never leaking navigation into every clone.
+// Navigating and freezing a url tile in a cloned grid lands the new address
+// and preview in this clone's row only, never leaking navigation into every clone.
 func TestSetURLStateForksSharedGrid(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -216,7 +216,10 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	if bURL == nil {
 		t.Fatalf("no URL tile in wellB's child grid %s", wellB.ChildGridId)
 	}
-	if _, err := s.SetURLState(ctx, bURL.Id, []byte("frozen-b"), "https://b.example", "B", ""); err != nil {
+	if _, err := s.SetURLState(ctx, bURL.Id, []byte("frozen-b"), "B", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.WriteContent(ctx, bURL.Id, bURL.Version, []byte("https://b.example")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -271,7 +274,7 @@ func TestURLHistoryRoundTrip(t *testing.T) {
 		t.Fatalf("CreateURL: %v", err)
 	}
 	hist := `{"index":1,"entries":[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"}]}`
-	out, err := s.SetURLState(ctx, tile.Id, nil, "https://b", "", hist)
+	out, err := s.SetURLState(ctx, tile.Id, nil, "", hist)
 	if err != nil {
 		t.Fatalf("SetURLState: %v", err)
 	}
@@ -279,7 +282,7 @@ func TestURLHistoryRoundTrip(t *testing.T) {
 		t.Errorf("url_history = %q, want the captured stack", out.UrlHistory)
 	}
 	// A later freeze with NO history (partial capture) keeps the stored one.
-	out2, err := s.SetURLState(ctx, tile.Id, nil, "https://b", "", "")
+	out2, err := s.SetURLState(ctx, tile.Id, nil, "", "")
 	if err != nil {
 		t.Fatalf("second SetURLState: %v", err)
 	}
