@@ -682,8 +682,8 @@ func main() {
 	// cookie that served it. The registry owns replace-on-open and exit-once.
 	app.shells = shellstream.New(
 		shellws.Dialer(shellws.Options{Origin: origin}),
-		func(paneID string, data []byte) { app.onShellData(paneID, data) },
-		func(e shellstream.Exit) { app.onShellExit(e.PaneID, e.Message, e.SessionGone) },
+		func(tileID string, data []byte) { app.onShellData(tileID, data) },
+		func(e shellstream.Exit) { app.onShellExit(e.TileID, e.Message, e.SessionGone) },
 	)
 
 	app.installCanvasInput()

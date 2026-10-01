@@ -260,6 +260,10 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 		e.KV["pane"] != "w1:p1" || e.KV["from"] != "p1" || e.KV["tile"] != "t7abcde" {
 		t.Errorf("a url move is %+v", e)
 	}
+	if e := ShellMove("p1", "w1:p1", "t7abcde"); e.Src != "shell" || e.Kind != "move" ||
+		e.KV["pane"] != "w1:p1" || e.KV["from"] != "p1" || e.KV["tile"] != "t7abcde" {
+		t.Errorf("a shell move is %+v", e)
+	}
 	if e := ShellOpen("p1", "t7abcde"); e.Src != "shell" || e.Kind != "open" || e.KV["tile"] != "t7abcde" {
 		t.Errorf("a shell open is %+v", e)
 	}

@@ -99,15 +99,34 @@ func TestTakeOver(t *testing.T) {
 	}
 }
 
-// A surface that cannot move closes every other holder, the one that would
-// have moved included.
-func TestEngagementOthers(t *testing.T) {
-	e := TakeOver([]Holder{{"p1", "u/7"}, {"w1:p1", "u/7"}, {"p2", "u/9"}}, "p2", "u/7")
-	if got := e.Others(); !reflect.DeepEqual(got, []string{"p1", "w1:p1"}) {
-		t.Fatalf("others = %v", got)
+// One surface makes the whole round trip by moves alone: a split pane takes it,
+// a pane-tile level's copy of the holder takes it, leaving hands it back, and
+// entering again takes it again. Nothing is ever closed or placed afresh.
+func TestTakeOverAndHeirOnlyMove(t *testing.T) {
+	holders := []Holder{{"p1", "u/7"}}
+	take := func(opener string) {
+		t.Helper()
+		e := TakeOver(holders, opener, "u/7")
+		if e.Keep || e.From == "" || len(e.Close) != 0 {
+			t.Fatalf("%s opening u/7 over %v: %+v, want a move", opener, holders, e)
+		}
+		holders = []Holder{{opener, "u/7"}}
 	}
-	if got := TakeOver(nil, "p9", "u/44").Others(); got != nil {
-		t.Fatalf("nobody holds it: %v", got)
+	handBack := func(returning []Holder, want string) {
+		t.Helper()
+		heir := Heir("u/7", returning, nil)
+		if heir != want {
+			t.Fatalf("leaving: heir %q, want %q", heir, want)
+		}
+		holders = []Holder{{heir, "u/7"}}
+	}
+	take("w1:p1")
+	handBack([]Holder{{"p1", "u/7"}, {"p2", ""}}, "p1")
+	take("w1:p1")
+	handBack([]Holder{{"p1", "u/7"}, {"p2", ""}}, "p1")
+	take("p2")
+	if e := TakeOver(holders, "p2", "u/7"); !e.Keep || e.From != "" || len(e.Close) != 0 {
+		t.Fatalf("the holder going live again: %+v, want keep", e)
 	}
 }
 

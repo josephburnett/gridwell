@@ -104,25 +104,11 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 }
 
 // placeURLView puts tile t live in pane paneID, always the content-owning
-// row: a link never reaches here. pane.TakeOver decides whether that keeps
-// the view the pane has, moves the one another pane holds, or places one.
+// row: a link never reaches here. engage decides whether that keeps the view
+// the pane has, moves the one another pane holds, or places one.
 func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	p := a.tree.FindPane(paneID)
-	if p == nil {
-		return
-	}
-	eng := pane.TakeOver(a.urlSurfaces(), paneID, t.Id)
-	// closeURLStream is the one path that persists a freeze, for a surface
-	// the rule never allowed and for a different tile in this pane alike.
-	for _, id := range eng.Close {
-		a.closeURLStream(id, true)
-	}
-	if eng.Keep {
-		return
-	}
-	a.closeURLStream(paneID, true)
-	if eng.From != "" {
-		a.moveURLView(eng.From, p)
+	if p == nil || !a.engage(a.urlSurface(), p, t.Id) {
 		return
 	}
 	v := a.urlViewIn(p, t.Id, rpc.PageContent(t))
@@ -179,31 +165,6 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	a.bridgeMove(fromID, to.ID, b, v.durable, hidden, to.ID == a.tree.Focus,
 		func() { a.dropURLView(to.ID, v) })
 	a.draw()
-}
-
-// handBackURLViews runs nav.EffHandBackSurfaces: each live view in the level
-// being left moves to its pane.Heir in the parked tree, before the level's
-// panes are flushed away and would close it.
-func (a *App) handBackURLViews() {
-	top := a.ws.Top()
-	if top == nil || top.OuterTree == nil {
-		return
-	}
-	var returning []pane.Holder
-	top.OuterTree.Walk(func(p *pane.Pane) {
-		if t, ok := a.descendedTile(p); ok {
-			returning = append(returning, pane.Holder{PaneID: p.ID, TileID: rpc.ContentID(t)})
-		}
-	})
-	a.tree.Walk(func(p *pane.Pane) {
-		v := a.urlViewFor(p.ID)
-		if v == nil {
-			return
-		}
-		if heir := pane.Heir(v.tileID, returning, a.urlSurfaces()); heir != "" {
-			a.moveURLView(p.ID, top.OuterTree.FindPane(heir))
-		}
-	})
 }
 
 // dropURLView takes down a handle main has no view behind, a refused place or

@@ -384,16 +384,18 @@ session behind.
 
 **Takeover.** One live surface per content tile: opening it elsewhere takes
 over, and `pane.TakeOver` says how — keep the surface the pane already has,
-move the one another pane holds, or place a fresh one. A url view moves: the
-bridge's `moveWebview` re-keys main's entry to the new pane with that pane's
-bounds, park and focus verdicts, and nothing navigates, so the page keeps its
-scroll, its script state and a half-typed field. Leaving a pane-tile level
-hands each of its live views back to the pane of the parked tree that shows
-the same tile (`pane.Heir`, run by `nav.EffHandBackSurfaces`) instead of
-closing it, so a round trip through a level that shows the outer level's
-tiles rebuilds nothing. A view closes, with its freeze, only when its tile
-leaves every pane. A shell does not move: the other pane detaches with a
-freeze, and the opener reattaches to the same tmux session.
+move the one another pane holds, or place a fresh one. Every kind of surface
+moves. A url view: the bridge's `moveWebview` re-keys main's entry to the new
+pane with that pane's bounds, park and focus verdicts, and nothing navigates,
+so the page keeps its scroll, its script state and a half-typed field. A
+shell: its xterm and its `/shell` socket go to the new pane, and the socket
+never knew the pane, because `client/shellstream` keys each attachment by its
+content tile; nothing reattaches and xterm keeps every row. Leaving a
+pane-tile level hands each of its live surfaces back to the pane of the
+parked tree that shows the same tile (`pane.Heir`, run by
+`nav.EffHandBackSurfaces`) instead of closing it, so a round trip through a
+level that shows the outer level's tiles rebuilds nothing. A surface closes,
+with its freeze, only when its tile leaves every pane.
 
 **Mirrors.** Every pane that shows a live tile — its grid, a link to it, or a
 frozen descent into it — draws the tile's face from the shared preview cache.

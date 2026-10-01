@@ -164,9 +164,10 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 	}
 }
 
-// openShellStream mounts an xterm.js terminal over the pane's content area and
-// opens the tile's PTY on the /shell WebSocket. A second call for the same pane
-// closes the previous attachment first. disable_shells refuses, preview stays.
+// openShellStream puts the tile's shell live in pane p: engage decides whether
+// that keeps the terminal the pane has, moves the one another pane holds, or
+// mounts an xterm.js terminal and opens the tile's PTY on the /shell
+// WebSocket. disable_shells refuses, preview stays.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	frozen := false
 	if t := a.findTileByID(tileID); t != nil {
@@ -187,16 +188,9 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// The PTY session, the alive cache and the freeze writeback all key by the
 	// id that owns the session.
 	tileID = a.contentKey(tileID)
-	// Already attached to this session: a keep-alive return.
-	if conn := a.shellConnFor(p.ID); conn != nil && conn.tileID == tileID {
+	if !a.engage(a.shellSurface(), p, tileID) {
 		return
 	}
-	// One live surface per content tile, pane.TakeOver: two attachments would
-	// fight over the terminal size, so another pane detaches, with a freeze.
-	for _, otherID := range pane.TakeOver(a.shellSurfaces(), p.ID, tileID).Others() {
-		a.closeShellStream(otherID, true)
-	}
-	a.closeShellStream(p.ID, true)
 
 	doc := js.Global().Get("document")
 	container := doc.Call("createElement", "div")
@@ -215,8 +209,9 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	style.Set("height", "200px")
 	doc.Get("body").Call("appendChild", container)
 
-	// Assigned below; the handlers read it only when an event arrives.
-	var conn *shellStreamConn
+	// The handlers read the pane off conn, since a takeover moves it.
+	conn := &shellStreamConn{tileID: tileID}
+	conn.placeIn(p)
 
 	// installOverlayMouse hands back the presses this overlay would otherwise
 	// swallow. Every other press stays the terminal's — the left selects, and
@@ -226,18 +221,16 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		// A press on a link is Gridwell's alone: xterm would both activate
 		// it and report the press, and the application would then open the
 		// same url again through its own opener.
-		if conn != nil {
-			conn.pendingLink = ""
-			if ev.Get("button").Int() == 0 && shellconn.DecideLinkPress(
-				conn.hoveredURL, mouseTrackingMode(conn.term), modifierHeld(ev)) {
-				conn.pendingLink = conn.hoveredURL
-				ev.Call("preventDefault")
-				ev.Call("stopPropagation")
-			}
+		conn.pendingLink = ""
+		if ev.Get("button").Int() == 0 && shellconn.DecideLinkPress(
+			conn.hoveredURL, mouseTrackingMode(conn.term), modifierHeld(ev)) {
+			conn.pendingLink = conn.hoveredURL
+			ev.Call("preventDefault")
+			ev.Call("stopPropagation")
 		}
 		// Pane focus still follows the click, because the overlay swallows
 		// the mousedown and the canvas path never runs.
-		if cur := a.tree.FindPane(p.ID); cur != nil {
+		if cur := a.tree.FindPane(conn.paneID); cur != nil {
 			a.focusToPane(cur)
 		}
 		return true
@@ -247,7 +240,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// report the release nor activate the link itself.
 	onMouse := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
-		if conn == nil || conn.pendingLink == "" {
+		if conn.pendingLink == "" {
 			return nil
 		}
 		ev.Call("preventDefault")
@@ -255,7 +248,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		if ev.Get("type").String() == "click" {
 			url := conn.pendingLink
 			conn.pendingLink = ""
-			a.shellURLActivate(p.ID, url)
+			a.shellURLActivate(conn.paneID, url)
 		}
 		return nil
 	})
@@ -313,28 +306,15 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	a.emit(traceevent.ShellOpen(p.ID, tileID))
 	shellConsole("open pane=%s tile=%s cols=%d rows=%d", p.ID, tileID, cols, rows)
 
-	conn = &shellStreamConn{
-		term:         term,
-		fitAddon:     fitAddon,
-		renderAddon:  renderAddon,
-		rendererKind: rendererKind,
-		container:    container,
-		tileID:       tileID,
-		paneID:       p.ID,
-		descentID:    p.ContentID(),
-		anchor:       p.Anchor(),
-		path:         slices.Clone(p.Path()),
-		onMouse:      onMouse,
-		mouseFns:     mouseFns,
-		touchFns:     touchFns,
-		lastCols:     uint16(cols),
-		lastRows:     uint16(rows),
-	}
+	conn.term, conn.fitAddon, conn.container = term, fitAddon, container
+	conn.renderAddon, conn.rendererKind = renderAddon, rendererKind
+	conn.onMouse, conn.mouseFns, conn.touchFns = onMouse, mouseFns, touchFns
+	conn.lastCols, conn.lastRows = uint16(cols), uint16(rows)
 
 	// One shared activate func, so no per-link js.Func allocations leak.
 	conn.onLinkActivate = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) >= 2 && args[1].Type() == js.TypeString {
-			a.shellURLActivate(p.ID, args[1].String())
+			a.shellURLActivate(conn.paneID, args[1].String())
 		}
 		return nil
 	})
@@ -407,7 +387,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// stream, so remote shells work unchanged.
 	conn.onOSCURL = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) >= 1 && args[0].Type() == js.TypeString {
-			a.shellURLActivate(p.ID, args[0].String())
+			a.shellURLActivate(conn.paneID, args[0].String())
 		}
 		return true // consumed
 	})
@@ -417,7 +397,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// is needed here.
 	conn.onData = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		// The Go form of the JS string is the UTF-8 encoding the PTY wants.
-		a.shells.Write(conn.paneID, []byte(args[0].String()))
+		a.shells.Write(conn.tileID, []byte(args[0].String()))
 		return nil
 	})
 	term.Call("onData", conn.onData)
@@ -430,7 +410,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 			return nil
 		}
 		conn.lastCols, conn.lastRows = cols, rows
-		a.shells.Resize(conn.paneID, int(cols), int(rows))
+		a.shells.Resize(conn.tileID, int(cols), int(rows))
 		return nil
 	})
 	term.Call("onResize", conn.onResize)
@@ -445,10 +425,10 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	term.Call("onRender", conn.onRender)
 
 	// The pane owns the conn before the dial: a socket that fails instantly
-	// reports through onShellExit, which needs the conn to find the pane.
+	// reports through onShellExit, which finds the conn among the panes'.
 	a.local(p.ID).shellConn = conn
 	// Output arrives at onShellData, an unexpected end at onShellExit.
-	a.shells.Open(p.ID, tileID, int(cols), int(rows))
+	a.shells.Open(tileID, int(cols), int(rows))
 	a.syncShellOverlayPosition()
 	term.Call("focus")
 }
@@ -522,10 +502,46 @@ func shellContentCanvas(container js.Value) js.Value {
 	return js.Value{}
 }
 
-// onShellData routes PTY output to the pane's terminal, dropping a push for a
-// pane with no live conn. A Uint8Array leaves control bytes untouched.
-func (a *App) onShellData(paneID string, data []byte) {
-	conn := a.shellConnFor(paneID)
+// moveShellStream hands the terminal fromID holds to pane to, socket and all:
+// no close, no freeze and no reattach, so xterm keeps every row it holds.
+func (a *App) moveShellStream(fromID string, to *pane.Pane) {
+	from, ok := a.localIf(fromID)
+	if !ok || from.shellConn == nil {
+		return
+	}
+	conn := from.shellConn
+	from.shellConn = nil
+	conn.placeIn(to)
+	a.local(to.ID).shellConn = conn
+	a.emit(traceevent.ShellMove(fromID, to.ID, conn.tileID))
+	shellConsole("move pane=%s→%s tile=%s", fromID, to.ID, conn.tileID)
+	a.syncShellOverlayPosition()
+	if to.ID == a.tree.Focus {
+		conn.term.Call("focus")
+	}
+	a.draw()
+}
+
+// placeIn names p as the pane conn serves, in the descent p is in.
+func (conn *shellStreamConn) placeIn(p *pane.Pane) {
+	conn.paneID, conn.descentID = p.ID, p.ContentID()
+	conn.anchor, conn.path = p.Anchor(), slices.Clone(p.Path())
+}
+
+// shellConnOfTile is the live terminal on tileID's session, nil for none.
+func (a *App) shellConnOfTile(tileID string) *shellStreamConn {
+	for _, pl := range a.locals {
+		if pl.shellConn != nil && pl.shellConn.tileID == tileID {
+			return pl.shellConn
+		}
+	}
+	return nil
+}
+
+// onShellData routes PTY output to the tile's terminal, dropping a push for a
+// tile with no live conn. A Uint8Array leaves control bytes untouched.
+func (a *App) onShellData(tileID string, data []byte) {
+	conn := a.shellConnOfTile(tileID)
 	if conn == nil || conn.closed {
 		return
 	}
@@ -536,13 +552,13 @@ func (a *App) onShellData(paneID string, data []byte) {
 
 // onShellExit handles an unexpected stream end; a local close is suppressed by
 // the registry. What the end says about the session is shellconn.ExitAlive's.
-func (a *App) onShellExit(paneID, message string, sessionGone bool) {
-	conn := a.shellConnFor(paneID)
+func (a *App) onShellExit(tileID, message string, sessionGone bool) {
+	conn := a.shellConnOfTile(tileID)
 	if conn == nil {
 		return
 	}
-	a.emit(traceevent.ShellExit(paneID, conn.tileID, message, sessionGone))
-	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", paneID, conn.tileID, sessionGone, message)
+	a.emit(traceevent.ShellExit(conn.paneID, tileID, message, sessionGone))
+	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", conn.paneID, tileID, sessionGone, message)
 	if alive, known := shellconn.ExitAlive(sessionGone); known {
 		a.setShellAlive(conn.tileID, alive)
 	} else {
@@ -553,7 +569,7 @@ func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+message)
 	}
 	conn.closed = true
-	a.releaseShellStream(paneID, conn)
+	a.releaseShellStream(conn.paneID, conn)
 	a.draw()
 }
 
@@ -613,7 +629,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 		a.views.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
 		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
-	a.shells.Close(paneID)
+	a.shells.Close(conn.tileID)
 	// The registry suppresses the exit report for a local close.
 	a.releaseShellStream(paneID, conn)
 }

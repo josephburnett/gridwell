@@ -442,10 +442,10 @@ func TestShellDoorThroughAConnection(t *testing.T) {
 		func(_ string, b []byte) { out <- append([]byte(nil), b...) },
 		func(e shellstream.Exit) { exits <- e },
 	)
-	reg.Open("pane-1", tile.Id, 90, 30)
-	t.Cleanup(func() { reg.Close("pane-1") })
+	reg.Open(tile.Id, 90, 30)
+	t.Cleanup(func() { reg.Close(tile.Id) })
 
-	reg.Write("pane-1", []byte("across the wire"))
+	reg.Write(tile.Id, []byte("across the wire"))
 	select {
 	case got := <-out:
 		if string(got) != "across the wire" {
