@@ -283,6 +283,16 @@ func Release(paneID string, button int) Event {
 	return Event{Src: "gesture", Kind: "release", Msg: buttonName(button), KV: kv("pane", paneID)}
 }
 
+// Cancel is Esc letting go of the drag armed in paneID; what it put back is
+// gesture.Escape's.
+func Cancel(paneID string, relayed bool) Event {
+	via := ""
+	if relayed {
+		via = "live view"
+	}
+	return Event{Src: "gesture", Kind: "cancel", Msg: "escape", KV: kv("pane", paneID, "via", via)}
+}
+
 // buttonName is the table over MouseEvent.button.
 func buttonName(b int) string {
 	switch b {

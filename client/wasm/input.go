@@ -51,11 +51,21 @@ func (a *App) installCanvasInput() {
 	}))
 	// Window-level so the content-zoom chord is caught wherever focus sits.
 	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
+	// In the capture phase, ahead of every overlay's own Esc: a drag in flight
+	// owns the key wherever DOM focus sits. With none, Esc goes on as before.
+	a.win.Call("addEventListener", "keydown", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if args[0].Get("key").String() == "Escape" && a.cancelGesture(false) {
+			args[0].Call("preventDefault")
+			args[0].Call("stopPropagation")
+		}
+		return nil
+	}), captureOpts)
 	// Single-finger touch becomes the same mouse gestures; see touch.go.
 	a.installTouchInput()
 }
 
-// onKeyDown owns the one window-level chord; overlays own every other key.
+// onKeyDown owns the content-zoom chord. Esc on a drag in flight is
+// cancelGesture's; overlays own every other key.
 func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -70,15 +80,44 @@ func (a *App) gestureInFlight() bool {
 	return a.leftResize != nil || a.rightDrag != nil || a.dragging != nil
 }
 
-// armed reports the three gesture states to the verdict; see
-// gesture.RecoverRelease.
+// armed reports the three gesture states to the verdicts in client/gesture.
 func (a *App) armed() gesture.Armed {
+	d := a.dragging
 	return gesture.Armed{
 		LeftResize:  a.leftResize != nil,
 		RightDrag:   a.rightDrag != nil,
-		Drag:        a.dragging != nil,
-		DragCreates: a.dragging != nil && a.dragging.intent.Creates(),
+		Drag:        d != nil,
+		DragCreates: d != nil && d.intent.Creates(),
+		Pan:         d != nil && d.tileID == "" && !d.isTemplate,
 	}
+}
+
+// cancelGesture lets go of every armed gesture and puts back what
+// gesture.Escape names; false when nothing is armed. relayed is a key a parked
+// live view handed on.
+func (a *App) cancelGesture(relayed bool) bool {
+	u, ok := gesture.Escape(a.armed())
+	if !ok {
+		return false
+	}
+	lr, d := a.leftResize, a.dragging
+	a.leftResize, a.rightDrag, a.dragging = nil, nil, nil
+	// Every press focuses its pane before it arms anything.
+	a.emit(traceevent.Cancel(a.tree.Focus, relayed))
+	if u.Dividers {
+		lr.press.Restore()
+	}
+	if u.View {
+		if p := a.tree.FindPane(d.originPaneID); p != nil {
+			p.Cx, p.Cy, p.Zoom = d.pressCx, d.pressCy, d.pressZoom
+		}
+	}
+	a.canvas.Get("style").Set("cursor", "")
+	if u.Ghost {
+		a.cancelDragSnapBack(d)
+	}
+	a.draw()
+	return true
 }
 
 // recoverLostRelease runs the commit path gesture.RecoverRelease names.
@@ -396,6 +435,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		srcGridID:    a.gridIDForPane(p),
 		srcCellSize:  parentCell,
 		snapshotTile: &gridwellv1.Tile{},
+		pressCx:      p.Cx,
+		pressCy:      p.Cy,
+		pressZoom:    p.Zoom,
 	}
 	if n != nil {
 		// Pull out of well: when a child preview tile sits at the cursor, that
@@ -526,23 +568,15 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	a.emit(traceevent.Release(a.paneIDAt(sx, sy), args[0].Get("button").Int()))
-	if a.rightDrag != nil && args[0].Get("button").Int() == 2 {
+	switch gesture.Release(args[0].Get("button").Int(), a.armed()) {
+	case gesture.FinishRightDrag:
 		a.finishRightDrag(sx, sy)
-		return nil
-	}
-	// The move applied the ratio live; the release decides the collapse.
-	if a.leftResize != nil && args[0].Get("button").Int() == 0 {
+	case gesture.FinishLeftResize:
+		// The move applied the ratio live; the release decides the collapse.
 		a.finishLeftResize()
-		return nil
+	case gesture.FinishLeftDrag:
+		a.finishLeftDrag(sx, sy)
 	}
-	// A live view's content box is the native view's, so swallow a matching
-	// mouseup over it. An armed gesture parks every live view, so a release that
-	// ends one is never swallowed.
-	if p, r, ok := a.paneAtScreen(sx, sy); ok && args[0].Get("button").Int() == 0 &&
-		a.liveViewOwnsPoint(p, r, sx, sy) {
-		return nil
-	}
-	a.finishLeftDrag(sx, sy)
 	return nil
 }
 

@@ -309,3 +309,15 @@ func TestPressAndReleaseNameThePaneAndTheButton(t *testing.T) {
 		t.Errorf("an unnamed button reads %q", got)
 	}
 }
+
+// A cancel names the pane the drag was armed in, and says when the key came
+// from a parked live view rather than the canvas.
+func TestCancelNamesThePane(t *testing.T) {
+	c := Cancel("p3", false)
+	if c.Src != "gesture" || c.Kind != "cancel" || c.KV["pane"] != "p3" || len(c.KV) != 1 {
+		t.Errorf("a cancel reads %+v", c)
+	}
+	if got := Cancel("p3", true).KV["via"]; got != "live view" {
+		t.Errorf("a cancel relayed from a live view says via %q", got)
+	}
+}

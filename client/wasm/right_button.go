@@ -480,6 +480,8 @@ type leftResizeState struct {
 	// cannot mark a side the release does not collapse. At zero a bare click
 	// would read (0,0), past the wall, and close a pane, so it arms to the press.
 	curX, curY float64
+	// press is the tree's ratios at the press, which a cancel restores.
+	press pane.Ratios
 }
 
 // armLeftResize arms one resize per axis grabbed, true when anything armed.
@@ -507,7 +509,7 @@ func (a *App) armLeftResize(r pane.Rect, sx, sy float64) bool {
 	if len(axes) == 0 {
 		return false
 	}
-	a.leftResize = &leftResizeState{axes: axes, curX: sx, curY: sy}
+	a.leftResize = &leftResizeState{axes: axes, curX: sx, curY: sy, press: pane.RatiosOf(a.tree.Root)}
 	// Park live surfaces now; canvasGesture reads leftResize. Half the
 	// grab band can sit over a view that would eat the next mousemove.
 	a.draw()

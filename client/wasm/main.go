@@ -543,6 +543,9 @@ type dragState struct {
 	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string
 	srcCellSize float64
+
+	// The origin pane's viewport at the press, which a cancelled pan restores.
+	pressCx, pressCy, pressZoom float64
 }
 
 // dragThreshold is the single owner of the drag threshold. The native layer
