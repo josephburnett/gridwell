@@ -171,7 +171,7 @@ func TestRenameTileVersionedAndLatches(t *testing.T) {
 	}
 
 	// A later automatic title capture must defer to the user-owned name.
-	after, err := s.SetURLState(ctx, url.Id, nil, "", "Captured Page Title", "")
+	after, err := s.SetURLState(ctx, url.Id, nil, "Captured Page Title", "")
 	if err != nil {
 		t.Fatalf("freeze: %v", err)
 	}

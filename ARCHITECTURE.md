@@ -250,11 +250,14 @@ on the row that owns the doorway — `tiles.view_cx/cy/zoom` for a well,
 `grids.root_cx/cy/zoom` for a root with no doorway. Zoom 0 means never
 visited. One store writer, one wire verb, one client function.
 
-**`version`** means the user's content bytes changed: a text body, a typed
-url, a typed name. It is the optimistic-concurrency claim for those three
-writes and nothing else. `claimContentVersion` + `finishContentEdit` claim
-and bump; `loadForWrite` + `emitTileChanged` do neither. Captures (title,
-preview, url trail, shell title), framing, and layout ride the second pair.
+**`version`** means the user's content bytes changed: a text body, a url's
+address, a typed name. It is the optimistic-concurrency claim for those three
+writes and nothing else. A url's address is the user's whether typed or
+landed on by navigating a live view, so both ride `WriteContent`'s url arm
+and `urlview.WriteAddress` decides when a landing writes. `claimContentVersion`
++ `finishContentEdit` claim and bump; `loadForWrite` + `emitTileChanged` do
+neither. Captures (title, preview, url trail, shell title), framing, and
+layout ride the second pair.
 Those three words name three origins of one enforced class — a user gesture,
 a machine observation, an arrangement — and the store has exactly two pairs,
 so a reader looking for a third will not find one.

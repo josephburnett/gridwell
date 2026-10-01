@@ -62,16 +62,14 @@ var writeScopes = map[string]writeScope{
 	// ── Content: the bytes, and the claim that guards them. ────────────
 	"WriteContent/text body": {tile: []string{"version", "blob_id", "alt_text"}, mints: true},
 	// A no-op write never mutates, so it may not even stamp updated_at.
-	"WriteContent/text body unchanged": {},
-	"WriteContent/url address":         {tile: []string{"version", "url_string"}},
-	"RenameTile/user rename":           {tile: []string{"version", "alt_text", "alt_user"}},
+	"WriteContent/text body unchanged":   {},
+	"WriteContent/url address":           {tile: []string{"version", "url_string"}},
+	"WriteContent/url address unchanged": {},
+	"RenameTile/user rename":             {tile: []string{"version", "alt_text", "alt_user"}},
 
 	// ── Captures: what the server observed, on top of the user's row. ──
 	"SetTileAlt/automatic capture": {tile: []string{"alt_text"}},
-	// url_string carries two origins in one column: the address the user typed,
-	// which WriteContent claims a version for, and the address the live page
-	// ended on, which the freeze writes here with no claim and no bump.
-	"SetURLState/freeze capture":   {tile: []string{"preview_blob_id", "url_string", "alt_text", "url_history"}, mints: true},
+	"SetURLState/freeze capture":   {tile: []string{"preview_blob_id", "alt_text", "url_history"}, mints: true},
 	"SetShellPreview/frozen frame": {tile: []string{"preview_blob_id"}, mints: true},
 
 	// ── Framing: how it looked. ────────────────────────────────────────

@@ -169,7 +169,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 		}
 		if _, err := dst.SetTile(ctx, &pb.SetTileRequest{
 			TileId: id, Version: version,
-			Tile:    &pb.Tile{Kind: t.Kind, UrlString: t.UrlString, UrlHistory: t.UrlHistory},
+			Tile:    &pb.Tile{Kind: t.Kind, UrlHistory: t.UrlHistory},
 			Preview: pv.GetJpeg(),
 		}); err != nil {
 			return nil, err

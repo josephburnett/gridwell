@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/local"
 )
@@ -71,11 +74,19 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 		t.Errorf("text framing bumped version %d -> %d", text.Version, v)
 	}
 
-	// url freeze: an automatic capture, no bump.
+	// url freeze: an automatic capture, no bump. The address is content and
+	// is refused here, never dropped.
 	url := createTile(t, p, root, &gridwellv1.Tile{Kind: "url", X: 4, Y: 0, W: 2, H: 2, UrlString: "https://a"}, nil)
+	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: url.Id,
+		Tile: &gridwellv1.Tile{Kind: "url", UrlString: "https://b"}}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("SetTile url address = %v, want InvalidArgument: the address rides WriteContent", err)
+	}
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: url.Id, Version: url.Version,
-		Tile: &gridwellv1.Tile{Kind: "url", UrlString: "https://b", AltText: "B"}, Preview: []byte("jpg")}); err != nil {
+		Tile: &gridwellv1.Tile{Kind: "url", AltText: "B"}, Preview: []byte("jpg")}); err != nil {
 		t.Fatalf("SetTile url: %v", err)
+	}
+	if got := getTile(t, p, url.Id).UrlString; got != "https://a" {
+		t.Errorf("url address after a refused SetTile = %q, want https://a", got)
 	}
 	if v := getTile(t, p, url.Id).Version; v != url.Version {
 		t.Errorf("url freeze bumped version %d -> %d; a capture is not an edit", url.Version, v)

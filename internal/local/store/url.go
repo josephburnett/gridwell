@@ -9,13 +9,12 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// SetURLState freezes a live url tile in one mutation: the preview JPEG, the
-// address the page ended on, the title and the navigation history, then one
-// tile_changed event. Empty arguments are skipped so a partial capture never
-// clobbers good state. Every field is a capture, not something the user typed,
-// so no claim and no version bump; a url the user types is WriteContent's url
-// arm, which claims and bumps.
-func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, url, title, history string) (*gridwellv1.Tile, error) {
+// SetURLState writes a closing url view's captures in one mutation: the
+// preview JPEG, the title and the navigation trail, then one tile_changed
+// event. Empty arguments are skipped so a partial capture never clobbers good
+// state. Captures carry no claim and no bump; the address the page landed on
+// is content, WriteContent's url arm.
+func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, title, history string) (*gridwellv1.Tile, error) {
 	tileID, err := parseID(tileIDStr)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
@@ -28,13 +27,6 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 
 		if err := s.setURLPreviewTx(ctx, tx, tileID, jpeg); err != nil {
 			return err
-		}
-		if url != "" {
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE tiles SET url_string = ?, updated_at = ? WHERE id = ?`,
-				url, s.now().Unix(), tileID); err != nil {
-				return err
-			}
 		}
 		if title != "" {
 			// The page-title capture defers to a user-set name, the alt_user

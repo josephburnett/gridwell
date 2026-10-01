@@ -62,7 +62,7 @@ func TestBlobSelfDescribing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frozen, err := s.SetURLState(ctx, url.Id, []byte{0xFF, 0xD8, 0xFF}, "", "", "")
+	frozen, err := s.SetURLState(ctx, url.Id, []byte{0xFF, 0xD8, 0xFF}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

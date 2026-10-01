@@ -136,6 +136,18 @@ var versionCases = []versionCase{
 		},
 	},
 	{
+		// A navigation that lands where the row already points writes nothing.
+		name: "WriteContent/url address unchanged", subject: urlSubject, bumps: false, claims: true,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
+			_, err := s.WriteContent(ctx, tile.Id, tile.Version, []byte("https://example.com"))
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
+			_, err := s.WriteContent(ctx, tile.Id, tile.Version+7, []byte("https://example.com"))
+			return err
+		},
+	},
+	{
 		// alt_text is content when the user types it, and the rename latches
 		// alt_user.
 		name: "RenameTile/user rename", subject: urlSubject, bumps: true, claims: true,
@@ -160,7 +172,7 @@ var versionCases = []versionCase{
 	{
 		name: "SetURLState/freeze capture", subject: urlSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.SetURLState(ctx, tile.Id, []byte("jpegbytes"), "https://example.com/deep", "Example", `["https://example.com"]`)
+			_, err := s.SetURLState(ctx, tile.Id, []byte("jpegbytes"), "Example", `["https://example.com"]`)
 			return err
 		},
 	},
@@ -301,10 +313,10 @@ func TestVersionRuleClaim(t *testing.T) {
 			}
 		})
 	}
-	// The four content arms plus the pane arm that must ignore its version. A
+	// The five content arms plus the pane arm that must ignore its version. A
 	// change to this number is a change to the rule.
-	if claimable != 5 {
-		t.Errorf("%d writes can be handed a version, want 5 — a new one appeared, or one lost its claim", claimable)
+	if claimable != 6 {
+		t.Errorf("%d writes can be handed a version, want 6 — a new one appeared, or one lost its claim", claimable)
 	}
 }
 

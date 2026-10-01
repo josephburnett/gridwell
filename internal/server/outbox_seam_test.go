@@ -128,7 +128,7 @@ func TestCaptureDuringAnEditDoesNotConflict(t *testing.T) {
 	}
 
 	// The live view is torn down mid-edit and freezes everything it saw.
-	if _, err := cl.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: tile.Id, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, UrlString: "https://start.example/deep", AltText: "a title nobody typed", UrlHistory: `["https://start.example"]`}, Preview: []byte("frozen frame")}); err != nil {
+	if _, err := cl.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: tile.Id, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, AltText: "a title nobody typed", UrlHistory: `["https://start.example"]`}, Preview: []byte("frozen frame")}); err != nil {
 		t.Fatalf("capture: %v", err)
 	}
 	// A shell-style automatic name capture on the same row, for good measure.
