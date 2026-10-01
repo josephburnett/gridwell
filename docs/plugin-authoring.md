@@ -102,16 +102,17 @@ node holds one stream open while some client shows one of your grids, on
 this node or on any node that reaches it, so hold it open until its context
 ends. `WatchRequest.contexts` is its scope: the context keys shown right
 now, a file shown in a pane counting through its context. Watch those. When
-the set changes the node ends the stream and opens one with the new set, and
-while nothing of yours is shown it holds none, so a source you watch by the
+the set changes the node opens a stream with the new set and ends the old one
+once the new one is open, so two may overlap; while nothing of yours is shown
+it holds none, so a source you watch by the
 path, such as a directory under OS change notifications, costs only what is
 on screen. Empty contexts means a node from before scopes: watch what you
 judge cheap. A feed that is account-wide rather than per context (a mailbox,
-a to-do list) may ignore the scope and watch as it always would. A context
-entering the scope was just listed by the client that opened it, and the
-node does not announce it again. Send the header
+a to-do list) may ignore the scope and watch as it always would. Send the header
 (`stream.SendHeader`) as soon as you accept the stream: that is the moment
 the node counts it open, and without it the moment is your first change.
+Once a stream is open the node tells the clients to list each context of
+its scope again, because a change sent into no stream reaches nobody.
 Send a change when a listing you would give now differs from the last one
 you could have given:
 
@@ -132,9 +133,7 @@ is harmless.
 asks, which is healthy. Set it and answer Unimplemented and the node shows
 your source as unhealthy for the process's life: the handshake said
 otherwise. A stream that ends or fails transport-shaped is re-opened
-with backoff while you are up. A change sent into no stream reaches nobody,
-so once a re-opened stream is open the node tells clients to list every
-context it knows of again; do not end a stream on purpose. Any other coded
+with backoff while you are up; do not end a stream on purpose. Any other coded
 error is shown to the user as your source's health until a re-opened stream
 is open.
 

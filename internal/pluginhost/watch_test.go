@@ -23,11 +23,12 @@ import (
 
 // watchPlugin declares Watch, unless undeclared, and answers call n (from 1)
 // with serve, first sending the header, which says the stream is open, when
-// accept says so.
+// accept says so. opening, when set, runs before the header.
 type watchPlugin struct {
 	oneEntryPlugin
 	undeclared bool
 	accept     func(n int32) bool
+	opening    func(n int32)
 	calls      atomic.Int32
 	serve      func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error
 	// scopes, when set, hears each opened stream's contexts.
@@ -47,6 +48,9 @@ func (p *watchPlugin) Watch(req *pluginv1.WatchRequest, s grpc.ServerStreamingSe
 	n := p.calls.Add(1)
 	if p.scopes != nil {
 		p.scopes <- req.Contexts
+	}
+	if p.opening != nil {
+		p.opening(n)
 	}
 	if p.accept != nil && p.accept(n) {
 		if err := s.SendHeader(metadata.MD{}); err != nil {
@@ -133,7 +137,8 @@ func await(t *testing.T, seen <-chan *gridwellv1.Event) *gridwellv1.Event {
 // A Change is the event a write through the adapter would have published: the
 // context's grid, under its derived address, whether or not the node has ever
 // listed it. A removal is the same GridChanged DeleteTile publishes, whose
-// refetch runs the listing's sweep.
+// refetch runs the listing's sweep. The open's own announcement of its scope
+// comes first.
 func TestWatchChangesArriveAsGridChanges(t *testing.T) {
 	p := &watchPlugin{serve: func(_ int32, ctx context.Context, send func(*pluginv1.Change) error) error {
 		if err := send(contextChanged("all")); err != nil {
@@ -146,11 +151,13 @@ func TestWatchChangesArriveAsGridChanges(t *testing.T) {
 		return nil
 	}}
 	_, seen := watching(t, p, nil)
-	for _, want := range []string{gridAddr("all"), gridAddr("never-listed")} {
-		ev := await(t, seen)
-		if got := ev.GetGridChanged().GetGridId(); got != want {
-			t.Fatalf("event = %v, want GridChanged(%q)", ev, want)
-		}
+	// The open's announcement and the change to "all" may coalesce in the hub.
+	var ids []string
+	for len(ids) == 0 || ids[len(ids)-1] != gridAddr("never-listed") {
+		ids = append(ids, await(t, seen).GetGridChanged().GetGridId())
+	}
+	if all := ids[:len(ids)-1]; len(all) == 0 || len(all) > 2 || slices.ContainsFunc(all, func(id string) bool { return id != gridAddr("all") }) {
+		t.Fatalf("events = %v, want GridChanged(%q) once or twice, then GridChanged(%q)", ids, gridAddr("all"), gridAddr("never-listed"))
 	}
 	if evs := collect(seen); len(evs) != 0 {
 		t.Errorf("then %v, want nothing more", evs)
@@ -200,11 +207,11 @@ func TestWatchDeclaredButUnimplementedIsHealthDown(t *testing.T) {
 	}
 }
 
-// A stream that ends is re-opened, quietly, and the changes it missed are
-// caught up: once open again it announces every context the node knows of,
-// declared or with a row, so a client refetches what it shows. A first open
-// has missed nothing and announces nothing.
-func TestWatchReopenAnnouncesEveryKnownContext(t *testing.T) {
+// A stream that ends is re-opened, quietly, and every open, the first
+// included, announces each context of its scope, so a client refetches what it
+// shows and nothing sent while no stream was open is lost. A context with a row
+// that no one shows is not announced.
+func TestWatchEveryOpenAnnouncesItsScope(t *testing.T) {
 	drop := make(chan struct{})
 	p := &watchPlugin{
 		accept: func(int32) bool { return true },
@@ -225,16 +232,16 @@ func TestWatchReopenAnnouncesEveryKnownContext(t *testing.T) {
 	if _, err := a.mem.ContextID("inner"); err != nil {
 		t.Fatal(err)
 	}
-	if evs := collect(seen); len(evs) != 0 {
-		t.Fatalf("the first open announced %v, want nothing", evs)
-	}
-	close(drop)
-	got := map[string]int{}
-	for range 2 {
-		got[await(t, seen).GetGridChanged().GetGridId()]++
-	}
-	if len(got) != 2 || got[gridAddr("all")] != 1 || got[gridAddr("inner")] != 1 {
-		t.Errorf("the re-open announced %v, want one GridChanged each for %q and %q", got, gridAddr("all"), gridAddr("inner"))
+	for _, what := range []string{"the first open", "the re-open"} {
+		if ev := await(t, seen); ev.GetGridChanged().GetGridId() != gridAddr("all") {
+			t.Fatalf("%s announced %v, want GridChanged(%q)", what, ev, gridAddr("all"))
+		}
+		if evs := collect(seen); len(evs) != 0 {
+			t.Fatalf("then %v, want nothing more", evs)
+		}
+		if what == "the first open" {
+			close(drop)
+		}
 	}
 	if evs := collect(seen); len(evs) != 0 {
 		t.Errorf("then %v, want nothing more", evs)
@@ -253,31 +260,55 @@ func awaitScope(t *testing.T, scopes <-chan []string) []string {
 	}
 }
 
-// A scope change is not a drop: the stream re-opens with the new contexts at
-// once and announces nothing, though a resync would have had a known context
-// to announce.
-func TestWatchScopeChangeReopensWithoutResync(t *testing.T) {
+// A scope change loses no change: the old stream closes only once the new one
+// is open, and then each context of the new scope is announced, so a change
+// during the swap reaches the client whether its context was shown before and
+// after or only now. A context no longer shown is not announced.
+func TestWatchScopeChangeLosesNoChange(t *testing.T) {
+	sends := make(chan func(*pluginv1.Change) error, 1)
 	p := &watchPlugin{
 		scopes: make(chan []string, 4),
 		accept: func(int32) bool { return true },
-		serve: func(_ int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
+		opening: func(n int32) {
+			if n == 2 {
+				// The source changes while the new stream is being opened.
+				_ = (<-sends)(contextChanged("all"))
+			}
+		},
+		serve: func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+			if n == 1 {
+				sends <- send
+			}
 			<-ctx.Done()
 			return nil
 		},
 	}
-	a, seen := watching(t, p, nil)
-	if got := awaitScope(t, p.scopes); !slices.Equal(got, []string{"all"}) {
-		t.Fatalf("first stream's scope = %v, want [all]", got)
+	a, seen := watchingNothing(t, p, nil)
+	for _, c := range []string{"inner", "gone"} {
+		if _, err := a.mem.ContextID(c); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := a.mem.ContextID("inner"); err != nil {
-		t.Fatal(err)
+	show(t, a, "all", "gone")
+	if got := awaitScope(t, p.scopes); !slices.Equal(got, []string{"all", "gone"}) {
+		t.Fatalf("first stream's scope = %v, want [all gone]", got)
+	}
+	for range 2 { // the first open's announcement, so the swap starts from an open stream
+		await(t, seen)
 	}
 	show(t, a, "inner", "all")
 	if got := awaitScope(t, p.scopes); !slices.Equal(got, []string{"all", "inner"}) {
 		t.Fatalf("re-opened stream's scope = %v, want [all inner]", got)
 	}
-	if evs := collect(seen); len(evs) != 0 {
-		t.Errorf("a scope change announced %v, want nothing", evs)
+	got := map[string]int{}
+	for got[gridAddr("all")] == 0 || got[gridAddr("inner")] == 0 {
+		got[await(t, seen).GetGridChanged().GetGridId()]++
+	}
+	for _, ev := range collect(seen) {
+		got[ev.GetGridChanged().GetGridId()]++
+	}
+	if got[gridAddr("gone")] != 0 {
+		t.Errorf("a scope change announced %v, want nothing for %q, which it dropped", got, gridAddr("gone"))
 	}
 }
 
@@ -303,6 +334,9 @@ func TestWatchNothingShownHoldsNoStream(t *testing.T) {
 	if got := awaitScope(t, p.scopes); !slices.Equal(got, []string{"all"}) {
 		t.Fatalf("scope = %v, want [all]", got)
 	}
+	if ev := await(t, seen); ev.GetGridChanged().GetGridId() != gridAddr("all") {
+		t.Fatalf("the open announced %v, want GridChanged(%q)", ev, gridAddr("all"))
+	}
 	show(t, a)
 	select {
 	case <-ended:
@@ -314,7 +348,7 @@ func TestWatchNothingShownHoldsNoStream(t *testing.T) {
 		t.Errorf("Watch was opened %d times, want once", n)
 	}
 	if evs := collect(seen); len(evs) != 0 {
-		t.Errorf("announced %v, want nothing", evs)
+		t.Errorf("then announced %v, want nothing more", evs)
 	}
 }
 
