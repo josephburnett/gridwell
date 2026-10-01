@@ -5,7 +5,7 @@ import { settle } from './cadence';
 // A write whose answer and event carry the change reads nothing back. Its
 // TileChanged lands the row in every open view, this one included, so a GetGrid
 // behind it is a listing read for a fact the client already holds. The
-// cross-node clone is federation.spec.ts's, which has the second node.
+// cross-node clone lives in the two-node spec, which has the second node.
 
 test('a clone reads no listing back; its event lands the copy', async ({ gw }) => {
   await gw.enterPlugin('home');
