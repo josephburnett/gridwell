@@ -9,6 +9,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
@@ -74,8 +75,8 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	wg.Add(2)
 	// One flush, spelled as the client spells it: claim at send time through
 	// textedit.SaveClaim, write, then advance the basis from the response.
-	save := func(rowID string, rowVersion int64, data []byte) func() {
-		return func() {
+	save := func(rowID string, rowVersion int64, data []byte) func() bool {
+		return func() bool {
 			defer wg.Done()
 			rendezvous()
 			basis, haveBasis := c.SaveBasis(target.Id)
@@ -85,13 +86,14 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 			defer mu.Unlock()
 			if err != nil {
 				errs = append(errs, err)
-				return
+				return false
 			}
 			c.PutSavedContent(tile, data)
+			return true
 		}
 	}
 
-	q := textedit.NewSaveQueue()
+	q := outbox.NewSaveQueue()
 	// The ascent flush: it holds the link row it was descended through.
 	q.Enqueue(textedit.SaveQueueKey(link.Id, rpc.ContentID(link)),
 		save(link.Id, link.Version, []byte("typed")))

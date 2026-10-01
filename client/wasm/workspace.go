@@ -194,22 +194,26 @@ func (a *App) flushWorkspaceSave(held func(ok bool)) {
 	}
 	a.reportLayoutSkipped(top.TileID, skipped)
 	if !pane.ShouldPersist(top, data) {
-		go held(true)
+		// Nothing new, but the node holds the tree only once the write
+		// still on the chain has landed.
+		a.persist.contentSaves.After(top.TileID, held)
 		return
 	}
-	go a.postPaneLayout(top.TileID, data, held)
+	pane.MarkSaved(top, data)
+	a.postPaneLayout(top.TileID, data, held)
 }
 
-// postPaneLayout sends one layout write through WriteContent. A pane layout
-// is framing-class: no version claim and no bump. A transport failure parks
-// the encoded layout, because the ascent-boundary flush fires once and then
-// pops the frame, leaving `data` the only copy. held hears the first
-// attempt's verdict: a parked write is not held.
+// postPaneLayout sends one layout write through WriteContent on the tile's
+// save chain, so no older layout lands after it (see outbox.SaveQueue). A
+// pane layout is framing-class: no version claim and no bump. A transport
+// failure parks the encoded layout, because the ascent-boundary flush fires
+// once and then pops the frame, leaving `data` the only copy. held hears the
+// first attempt's verdict: a parked write is not held.
 func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 	var tile *gridwellv1.Tile
 	landed, answered := false, false
-	a.do(write{
-		label: "PaneLayout", gid: a.gridIDOfTile(tileID), id: tileID,
+	a.post(write{
+		label: "PaneLayout", gid: a.gridIDOfTile(tileID), id: tileID, chain: tileID,
 		source: "layout:" + tileID, failText: "workspace layout unsaved",
 		call: func(ctx context.Context) error {
 			var err error
@@ -217,9 +221,6 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 			return err
 		},
 		then: func() {
-			if top := a.ws.Top(); top != nil && top.TileID == tileID {
-				pane.MarkSaved(top, data)
-			}
 			// Filed before the row lands, so no frame sees the new blob
 			// without its bytes and the preview never refetches this write.
 			a.c.PutSavedContent(tile, data)
@@ -229,10 +230,16 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 			landed = true
 		},
 		done: func() {
-			if !answered {
-				answered = true
-				held(landed)
+			if answered {
+				return
 			}
+			answered = true
+			if !landed {
+				if top := a.ws.Top(); top != nil && top.TileID == tileID {
+					pane.ForgetSaved(top, data)
+				}
+			}
+			held(landed)
 		},
 		beacon: func() (string, []byte, string) {
 			path, body := rpc.WriteContentBeacon(tileID, 0, data)

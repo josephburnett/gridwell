@@ -115,3 +115,22 @@ func TestPopEphemeralContent(t *testing.T) {
 	PopEphemeralContent(nil, func(*Pane, string) bool { return true })
 	PopEphemeralContent(tree, nil)
 }
+
+// A write that did not land is sent again by the next flush, unless newer
+// bytes were sent after it.
+func TestForgetSavedOnlyUndoesItsOwnMark(t *testing.T) {
+	f := &Level{}
+	a := []byte(`{"v":1,"a":1}`)
+	b := []byte(`{"v":1,"a":2}`)
+	MarkSaved(f, a)
+	ForgetSaved(f, a)
+	if !ShouldPersist(f, a) {
+		t.Fatal("a layout whose write failed must be sent again")
+	}
+	MarkSaved(f, a)
+	MarkSaved(f, b)
+	ForgetSaved(f, a)
+	if ShouldPersist(f, b) {
+		t.Fatal("an older write failing must not undo the newer mark")
+	}
+}
