@@ -1,6 +1,6 @@
 module github.com/josephburnett/gridwell/apps/gridwell
 
-go 1.26.6
+go 1.27.1
 
 // A LEAF COMPOSER (ARCHITECTURE.md, Module boundaries): replaces every in-repo
 // sibling — replace directives only apply in the main module, so each leaf

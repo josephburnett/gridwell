@@ -1,6 +1,6 @@
 module github.com/josephburnett/gridwell
 
-go 1.26.6
+go 1.27.1
 
 // The api module lives in this repo (ARCHITECTURE.md, Module boundaries): the
 // contract every plugin builds against, carved out so the arrows are
