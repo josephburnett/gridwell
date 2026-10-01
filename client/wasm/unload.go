@@ -49,8 +49,9 @@ func (a *App) flushOnUnload() {
 	a.flushURLStateOnUnload()
 }
 
-// flushURLStateOnUnload beacons the address and title a live page navigated
-// to, for every view urlview.DecideUnloadURLState says owns one. Persisting it
+// flushURLStateOnUnload beacons the title a live page navigated to, for every
+// view urlview.DecideUnloadURLState says owns one; the address it landed on is
+// a content entry, which the content flush has beaconed already. Persisting it
 // only at teardown would lose it, since the bridge's IPC reply never arrives
 // during unload. No jpeg and no history rides the beacon, because the bridge
 // holds both and is unreachable now; the store skips empty fields, so the
@@ -61,16 +62,12 @@ func (a *App) flushURLStateOnUnload() {
 		if v == nil {
 			continue
 		}
-		cached := ""
-		if ct := a.cachedTileByID(v.tileID); ct != nil {
-			cached = ct.UrlString
-		}
-		c, write := urlview.DecideUnloadURLState(v.page, v.durable, v.navDirty, v.lastURL, v.lastTitle, cached)
+		c, write := urlview.DecideUnloadURLState(v.owns, v.durable, v.navDirty, v.lastTitle)
 		if !write {
 			continue
 		}
 		if path, body := rpc.SetTileBeacon(&gridwellv1.SetTileRequest{TileId: v.tileID,
-			Tile: &gridwellv1.Tile{Kind: rpc.KindURL, UrlString: c.URL, AltText: c.Title},
+			Tile: &gridwellv1.Tile{Kind: rpc.KindURL, AltText: c.Title},
 		}); body != nil {
 			a.sendBeacon(path, body, rpc.BeaconJSONType)
 		}

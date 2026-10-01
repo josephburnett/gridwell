@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
@@ -265,7 +266,6 @@ func (a *App) installWebviewListeners() {
 			if url == "" {
 				return
 			}
-			a.updateCachedTileURL(tileID, url)
 			// The unload beacon reads navDirty and lastTitle, because it
 			// cannot wait for the bridge's freeze reply.
 			for _, pl := range a.locals {
@@ -273,8 +273,12 @@ func (a *App) installWebviewListeners() {
 					pl.urlView.navDirty = true
 					pl.urlView.lastURL = url
 					pl.urlView.lastTitle = title
+					a.noteLandedAddress(pl.urlView, url)
 				}
 			}
+			// A redirect chain or a burst of in-page hops writes where it
+			// settles, once.
+			a.persist.sched.urlAddress.Arm(cadence.URLAddressMs)
 			a.draw()
 		}},
 		// The native view owns the press, so the preload forwards it in

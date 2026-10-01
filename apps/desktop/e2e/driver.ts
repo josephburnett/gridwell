@@ -37,6 +37,7 @@ export interface PaneInfo {
 // The waits client/cadence declares, in ms.
 export interface Cadences {
   textSaveMs: number;
+  urlAddressMs: number;
   urlUpdateMs: number;
   framingSaveMs: number;
   workspaceSaveMs: number;

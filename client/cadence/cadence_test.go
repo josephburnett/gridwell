@@ -21,6 +21,7 @@ func TestEveryCadenceIsAWait(t *testing.T) {
 		ms   int
 	}{
 		{"TextSaveMs", TextSaveMs},
+		{"URLAddressMs", URLAddressMs},
 		{"URLUpdateMs", URLUpdateMs},
 		{"FramingSaveMs", FramingSaveMs},
 		{"WorkspaceSaveMs", WorkspaceSaveMs},

@@ -9,19 +9,20 @@ import (
 type UnloadFlush int
 
 const (
-	UnloadSkip   UnloadFlush = iota // a non-text or read-only row must not write
+	UnloadSkip   UnloadFlush = iota // a row that takes no content write must not write
 	UnloadBeacon                    // beacon now with the returned claim
 	// UnloadAsync: no claim exists to beacon with, so the async path, which
 	// resolves the owner row, is the only door left.
 	UnloadAsync
 )
 
-// DecideUnloadFlush decides whether a dying page writes a dirty text body;
-// what it claims is SaveClaim's. An unknown row still writes, because the
-// SaveBasis alone is the claim and only editable text becomes dirty, and
-// unload is the one flush with no next sweep behind it.
-func DecideUnloadFlush(rowKnown, rowEditableText, rowOwnsContent bool, rowVersion, basis int64, haveBasis bool) (claim int64, do UnloadFlush) {
-	if rowKnown && !rowEditableText {
+// DecideUnloadFlush decides whether a dying page writes a dirty content entry,
+// a text body or a url's landed address; what it claims is SaveClaim's. An
+// unknown row still writes, because the SaveBasis alone is the claim and only
+// a row that takes the bytes becomes dirty, and unload is the one flush with
+// no next sweep behind it.
+func DecideUnloadFlush(rowKnown, rowTakesBytes, rowOwnsContent bool, rowVersion, basis int64, haveBasis bool) (claim int64, do UnloadFlush) {
+	if rowKnown && !rowTakesBytes {
 		return 0, UnloadSkip
 	}
 	if !haveBasis && !rowKnown {

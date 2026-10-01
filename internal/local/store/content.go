@@ -47,13 +47,14 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 	}
 }
 
-// writeURLContent sets a url tile's address. It claims and bumps, because
-// changing where a tile points is a content edit. The address must be a real
+// writeURLContent sets a url tile's address, typed or landed on by a live
+// view's navigation. It claims and bumps, because changing where a tile points
+// is a content edit. The address must be a real
 // http or https url, an unconfigured tile being made by CreateURL, and a
 // refused write leaves the old address byte-for-byte intact.
 func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version int64, data []byte) (*gridwellv1.Tile, error) {
 	urlString := strings.TrimSpace(string(data))
-	if !urlSchemeAllowed(urlString) {
+	if !rpc.HTTPAddress(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
 	tileID, err := parseID(tileIDStr)

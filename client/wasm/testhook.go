@@ -64,6 +64,7 @@ func (a *App) installTestHook() {
 		"cadences": js.FuncOf(func(js.Value, []js.Value) any {
 			return map[string]any{
 				"textSaveMs":      cadence.TextSaveMs,
+				"urlAddressMs":    cadence.URLAddressMs,
 				"urlUpdateMs":     cadence.URLUpdateMs,
 				"framingSaveMs":   cadence.FramingSaveMs,
 				"workspaceSaveMs": cadence.WorkspaceSaveMs,

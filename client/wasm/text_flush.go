@@ -12,14 +12,14 @@ import (
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
-// The one way text content reaches the server: the debounced sweep, the
-// outbox drain, the beforeunload beacon, and the ascent flush. Every flush
+// The one way content reaches the server, a text body and a url's landed
+// address alike: the debounced sweep, the outbox drain, the beforeunload
+// beacon, and the ascent flush. Every flush
 // reads bytes out of the cache entry by tile id and never from the DOM, so
 // bytes can only be posted under the id they were edited under. Reading the
 // singleton <textarea> would save one document's content as another's.
 
-// flushDirtyText posts every text tile whose cache entry carries an unsaved
-// edit. Edits are found by tile id, not by which pane holds focus, so focus
+// flushDirtyText posts every tile whose cache entry carries an unsaved edit. Edits are found by tile id, not by which pane holds focus, so focus
 // moving on cannot strand one. This is the debounce, not the retry: the
 // outbox re-posts an unanswered write through the same flushTileContent.
 func (a *App) flushDirtyText() {
@@ -61,7 +61,7 @@ func (a *App) flushTileContent(tileID string) {
 // owner row does with the bytes is textedit.DecideFlush's; the bytes stay
 // dirty in every arm but the post, so the sweep keeps them.
 func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
-	editable := t != nil && rpc.TextDocument(t) && !a.tileReadOnly(t)
+	editable := t != nil && a.takesContent(t)
 	switch textedit.DecideFlush(t != nil, editable, a.fetch.tiles.Refused(cid)) {
 	case textedit.FlushFetchRow:
 		// The owner row is in no cached grid, which is not a dead end: a
@@ -69,10 +69,10 @@ func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
 		a.fetchTileByID(cid)
 	case textedit.FlushNoRow:
 		a.reportErr(errsurface.Error, "textedit",
-			"unsaved text edit has no destination — its tile is no longer known")
+			"unsaved edit has no destination — its tile is no longer known")
 	case textedit.FlushUnwritable:
 		a.reportErr(errsurface.Error, "textedit",
-			"unsaved text edit is not being saved — its tile no longer accepts edits")
+			"unsaved edit is not being saved — its tile no longer accepts edits")
 	case textedit.FlushPost:
 		a.enqueueTextSave(t.GridId, t.Id, cid, t.Version, data)
 	}
@@ -87,7 +87,7 @@ func (a *App) beaconTileContent(cid string, t *gridwellv1.Tile, data []byte) boo
 	editable, owner := false, false
 	if t != nil {
 		rowVersion = t.Version
-		editable = rpc.TextDocument(t) && !a.tileReadOnly(t)
+		editable = a.takesContent(t)
 		owner = t.Id == cid
 	}
 	version, do := textedit.DecideUnloadFlush(t != nil, editable, owner, rowVersion, basis, haveBasis)
@@ -99,6 +99,18 @@ func (a *App) beaconTileContent(cid string, t *gridwellv1.Tile, data []byte) boo
 	}
 	path, body := rpc.WriteContentBeacon(cid, version, data)
 	return body != nil && a.sendBeacon(path, body, rpc.BeaconStreamType)
+}
+
+// takesContent reports that row t accepts this client's content write: an
+// editable text body, or an address urlview.Owns.
+func (a *App) takesContent(t *gridwellv1.Tile) bool {
+	switch {
+	case rpc.TextDocument(t):
+		return !a.tileReadOnly(t)
+	case rpc.WebContent(t):
+		return a.ownsURLRow(t)
+	}
+	return false
 }
 
 // contentKey is rpc.ContentID for call sites that hold only an id. An
