@@ -19,7 +19,7 @@
     "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.0",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.20.1",
     "electron": "^43.0.0",
     "electron-builder": "^26.15.3",
