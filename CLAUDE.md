@@ -170,7 +170,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   onto it, so an old binary keeps presenting. Declare both and the entries
   win; there is no privileged collection. A plugin that declares none
   contributes nothing and is healthy, not broken: `pluginhealth` gives its row
-  no status at all.
+  no status at all. A plugin that cannot serve the source its config declares
+  refuses `Info` with the reason, and is broken with that sentence and no
+  entries until the fix lands, which needs no restart (2026-09-30).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections
