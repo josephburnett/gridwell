@@ -93,7 +93,7 @@ export interface PluginDescriptor {
 }
 
 // One declared menu entry: a grid the row is a doorway onto. label is instance
-// and collection joined (door.EntryName).
+// and collection joined (door.EntryName), as "Feed (hey)".
 export interface PluginCollection {
   id: string;
   label: string;

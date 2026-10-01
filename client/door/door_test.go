@@ -41,15 +41,15 @@ func TestFindResolvesConnectionRows(t *testing.T) {
 // the provenance.
 func TestFindResolvesRootEntries(t *testing.T) {
 	got, kind := Find("loc/9", nil, plugins)
-	if kind != Entry || got.AltText != "home · trash" || got.ChildGridId != "loc/9" {
+	if kind != Entry || got.AltText != "trash (home)" || got.ChildGridId != "loc/9" {
 		t.Fatalf("door = %+v (%v), want the trash entry swatch", got, kind)
 	}
 }
 
 func TestEntryName(t *testing.T) {
 	cases := []struct{ row, entry, want string }{
-		{"hey", "Feed", "hey · Feed"},
-		{"home", "trash", "home · trash"},
+		{"hey", "Feed", "Feed (hey)"},
+		{"home", "trash", "trash (home)"},
 		{"files", "", "files"},
 		{"", "Feed", "Feed"},
 		{"", "", ""},
@@ -205,7 +205,7 @@ func TestPlacesOf(t *testing.T) {
 // through, so ByRoot must resolve an entry's grid as well as a row's own.
 func TestByRootResolvesADeclaredEntry(t *testing.T) {
 	got, ok := ByRoot("loc/9", plugins)
-	if !ok || got.Label != "home · trash" || got.RootGridId != "loc/9" {
+	if !ok || got.Label != "trash (home)" || got.RootGridId != "loc/9" {
 		t.Fatalf("ByRoot = %+v (%v), want the trash entry's doorway", got, ok)
 	}
 	if _, ok := ByRoot("", plugins); ok {

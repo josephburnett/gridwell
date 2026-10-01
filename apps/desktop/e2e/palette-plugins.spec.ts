@@ -85,7 +85,7 @@ test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
   expect(
     plugins.map((i) => i.label),
     'each declared entry rides after its row, named for it',
-  ).toEqual(['home', 'home · trash', 'second']);
+  ).toEqual(['home', 'trash (home)', 'second']);
   expect(primitives.length, 'the primitive swatches are still there').toBeGreaterThanOrEqual(5);
 
   expect(pal.items.slice(0, plugins.length).every((i) => i.isPlugin)).toBe(true);

@@ -176,8 +176,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   a connection's far home are places and get a row; a plugin's collections
   are the swatches, one each, and the plugin has none of its own
   (`client/door.PlacesOf` enumerates, `client/palette.Doorways` composes). An
-  entry is named for its instance — "hey · Feed", `door.EntryName`,
-  uniformly, with no privileged one — and it carries its grid's framing, so a
+  entry is named most specific first, then its instance — "Feed (hey)",
+  `door.EntryName`, uniformly, with no privileged one, because a clipped
+  swatch must still tell entries apart (2026-09-30) — and it carries its grid's framing, so a
   collection reopens where it was left. That row is an open set, so it is
   folded: a menu opens on the primitives with a chevron strip for the section
   above it, and every opening starts folded — the fold is the menu's live

@@ -28,13 +28,13 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   const pal = await gw.palette();
   const trash = pal.items.find((i) => i.isPlugin && i.entry === 'trash');
   expect(trash, 'the + menu offers the declared trashcan').toBeTruthy();
-  await gw.clickPluginSwatch('home · trash');
+  await gw.clickPluginSwatch('trash (home)');
   const troot = await gw.focused();
 
   // The title is the entry's name, the instance and the collection, the same
   // name its swatch wears. That name is config-owned, so it is not renamable,
   // and the level's crumb wears the entry's declared glyph.
-  await expect.poll(async () => (await gw.barName()).label).toBe('home · trash');
+  await expect.poll(async () => (await gw.barName()).label).toBe('trash (home)');
   expect((await gw.barName()).editable, 'a declared entry is not renamable').toBe(false);
   const bar = await gw.bar();
   const rootCrumb = bar.segments.filter((s) => s.kind === 'chain' && s.anchor).pop();
