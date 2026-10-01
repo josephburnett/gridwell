@@ -838,7 +838,7 @@ func (a *App) thBar(js.Value, []js.Value) any {
 	}
 	// The centered title: the rect drawBarTitle renders and bottomBarClick
 	// hit-tests.
-	if x, w, label, editable, muted, ok := a.barTitleGeom(); ok {
+	if x, w, _, label, editable, muted, ok := a.barTitleGeom(); ok {
 		res["title"] = map[string]any{
 			"x": x, "w": w, "label": label, "editable": editable, "muted": muted,
 		}
