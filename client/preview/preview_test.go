@@ -86,8 +86,8 @@ func TestGetEmptyReturnsNotOK(t *testing.T) {
 	}
 }
 
-// TestPutEmptySettlesTheMiss pins that a completed no-preview answer becomes
-// KnownEmpty for that blob id, so the caller stops re-asking every frame. A
+// TestPutEmptySettlesTheMiss pins that a completed no-preview answer is no
+// longer Owed for that blob id, so the caller stops re-asking every frame. A
 // changed blob id invalidates it, and a real image is never downgraded to a
 // miss.
 func TestPutEmptySettlesTheMiss(t *testing.T) {
@@ -95,13 +95,13 @@ func TestPutEmptySettlesTheMiss(t *testing.T) {
 	c := NewCache(d, nil)
 
 	c.PutEmpty("42", 7)
-	if !c.KnownEmpty("42", 7) {
-		t.Error("a settled empty answer must be known")
+	if c.Owed("42", 7) {
+		t.Error("a settled empty answer is not asked for again")
 	}
 	if _, ok := c.Get("42", 7); ok {
 		t.Error("an empty answer is not an image")
 	}
-	if c.KnownEmpty("42", 8) {
+	if !c.Owed("42", 8) {
 		t.Error("a NEW blob id must invalidate the recorded miss (refetch)")
 	}
 
@@ -291,7 +291,7 @@ func TestPutDecodeErrorLeavesEntryUntouched(t *testing.T) {
 	// And blob 2 is settled, so the caller stops asking for bytes that will
 	// not decode. A prior image does not exempt the tile from the loop: Get
 	// misses for blob 2 whatever is held for blob 1.
-	if !c.KnownEmpty("42", 2) {
+	if c.Owed("42", 2) {
 		t.Errorf("decode failure left blob 2 unsettled; the caller re-fetches every draw")
 	}
 }
@@ -344,7 +344,7 @@ func TestRevokedImageReportsNotTruthyAndGetMisses(t *testing.T) {
 
 // TestPutDecodeErrorSettlesTheMiss pins that a decode failure on a tile with
 // no prior image is a settled answer for that blob id, reported once. Left
-// unsettled, Get misses and KnownEmpty is false forever, so the caller's fetch
+// unsettled, the blob is Owed forever, so the caller's fetch
 // guard re-asks the server on every draw, one RPC per frame, silently.
 func TestPutDecodeErrorSettlesTheMiss(t *testing.T) {
 	d := &fakeDecoder{}
@@ -356,7 +356,7 @@ func TestPutDecodeErrorSettlesTheMiss(t *testing.T) {
 	if _, ok := c.Get("42", 7); ok {
 		t.Error("a failed decode is not an image")
 	}
-	if !c.KnownEmpty("42", 7) {
+	if c.Owed("42", 7) {
 		t.Error("a failed decode must settle the miss for its blob id")
 	}
 	if len(reported) != 1 || reported[0] != "42" {
@@ -364,7 +364,7 @@ func TestPutDecodeErrorSettlesTheMiss(t *testing.T) {
 	}
 
 	// A new blob id is a new question, and a Put that decodes answers it.
-	if c.KnownEmpty("42", 8) {
+	if !c.Owed("42", 8) {
 		t.Error("a NEW blob id must not inherit the failed blob's miss")
 	}
 	c.Put("42", 8, []byte("good"), nil)
@@ -372,8 +372,8 @@ func TestPutDecodeErrorSettlesTheMiss(t *testing.T) {
 	if _, ok := c.Get("42", 8); !ok {
 		t.Fatal("a decoding Put after a failed one must install")
 	}
-	if c.KnownEmpty("42", 8) {
-		t.Error("an installed image is not a miss")
+	if c.Owed("42", 8) {
+		t.Error("an installed image is not asked for again")
 	}
 }
 
@@ -392,10 +392,41 @@ func TestPutDecodeErrorFromSupersededPutIsIgnored(t *testing.T) {
 	if !ok || got != img {
 		t.Error("a superseded decode failure displaced the winner")
 	}
-	if c.KnownEmpty("42", 1) {
+	if !c.Owed("42", 1) {
 		t.Error("a superseded decode failure recorded a miss")
 	}
 	if len(reported) != 0 {
 		t.Errorf("a superseded decode failure reported %v; want nothing", reported)
+	}
+}
+
+// A decode runs after the fetch that brought its bytes has returned, so a
+// blob whose bytes are decoding is answered: asking again on the next frame
+// fetches the same bytes twice.
+func TestADecodingBlobIsNotOwed(t *testing.T) {
+	d := &fakeDecoder{}
+	c := NewCache(d, nil)
+	if !c.Owed("42", 7) {
+		t.Fatal("a blob nothing answered is owed")
+	}
+	c.Put("42", 7, []byte("jpeg"), nil)
+	if c.Owed("42", 7) {
+		t.Error("a blob whose bytes are decoding was owed a second fetch")
+	}
+	if !c.Owed("42", 8) {
+		t.Error("another blob id is a new question, whatever is decoding")
+	}
+	d.resolveAll()
+	if c.Owed("42", 7) {
+		t.Error("a decoded blob is not owed")
+	}
+
+	c.PutWildcard("43", []byte("frame"), nil)
+	if c.Owed("43", 9) {
+		t.Error("a local capture decoding answers any blob id, as Get will")
+	}
+	d.failNext(0)
+	if !c.Owed("43", 9) {
+		t.Error("a local capture that failed to decode answers nothing")
 	}
 }

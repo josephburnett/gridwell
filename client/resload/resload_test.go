@@ -15,13 +15,13 @@ func TestTakeInstallsAndRevokesWhatItReplaces(t *testing.T) {
 	e := &Entry[int]{}
 	first, second := &fakeRes{}, &fakeRes{}
 
-	if !Take(e, e.Begin(), 1, first) {
+	if !Take(e, e.Begin(1), 1, first) {
 		t.Fatal("the current load must install")
 	}
 	if !e.Ready() || e.Res != first || e.Ident != 1 {
 		t.Fatalf("entry = %+v; want the first resource under ident 1", e)
 	}
-	if !Take(e, e.Begin(), 2, second) {
+	if !Take(e, e.Begin(2), 2, second) {
 		t.Fatal("a later load must install")
 	}
 	if !first.revoked {
@@ -39,8 +39,8 @@ func TestSupersededResultsInstallNothing(t *testing.T) {
 	e := &Entry[int]{}
 	stale, fresh := &fakeRes{}, &fakeRes{}
 
-	staleGen := e.Begin()
-	Take(e, e.Begin(), 2, fresh)
+	staleGen := e.Begin(1)
+	Take(e, e.Begin(2), 2, fresh)
 
 	if Take(e, staleGen, 1, stale) {
 		t.Error("a superseded load installed")
@@ -77,10 +77,10 @@ func TestResultOfADroppedEntryIsRevoked(t *testing.T) {
 // new entry the generation the old load is carrying.
 func TestGenerationsAreNeverReused(t *testing.T) {
 	old := &Entry[int]{}
-	inFlight := old.Begin()
+	inFlight := old.Begin(1)
 
 	remade := &Entry[int]{} // the key was dropped and asked for again
-	remade.Begin()
+	remade.Begin(1)
 
 	res := &fakeRes{}
 	if Take(remade, inFlight, 1, res) {
@@ -99,9 +99,9 @@ func TestGenerationsAreNeverReused(t *testing.T) {
 func TestMissLatchesBesideALoadedResource(t *testing.T) {
 	e := &Entry[int]{}
 	held := &fakeRes{}
-	Take(e, e.Begin(), 1, held)
+	Take(e, e.Begin(1), 1, held)
 
-	if !Miss(e, e.Begin(), 2) {
+	if !Miss(e, e.Begin(2), 2) {
 		t.Fatal("the current load's failure must settle")
 	}
 	if !e.Failed || e.FailIdent != 2 {
@@ -112,7 +112,7 @@ func TestMissLatchesBesideALoadedResource(t *testing.T) {
 	}
 
 	// An installed resource is the fresher answer, so the latch lifts.
-	Take(e, e.Begin(), 2, &fakeRes{})
+	Take(e, e.Begin(2), 2, &fakeRes{})
 	if e.Failed {
 		t.Error("an install left the miss latched; the caller never re-asks")
 	}
@@ -123,7 +123,7 @@ func TestMissLatchesBesideALoadedResource(t *testing.T) {
 func TestSettleNeedsNoGeneration(t *testing.T) {
 	e := &Entry[int]{}
 	held := &fakeRes{}
-	Take(e, e.Begin(), 1, held)
+	Take(e, e.Begin(1), 1, held)
 
 	e.Settle(9)
 	if !e.Failed || e.FailIdent != 9 {
@@ -140,8 +140,8 @@ func TestSettleNeedsNoGeneration(t *testing.T) {
 func TestAdoptDropsWhatItHeld(t *testing.T) {
 	e := &Entry[int]{}
 	held := &fakeRes{}
-	Take(e, e.Begin(), 1, held)
-	Miss(e, e.Begin(), 1)
+	Take(e, e.Begin(1), 1, held)
+	Miss(e, e.Begin(1), 1)
 
 	e.Adopt(2)
 	if !held.revoked {
@@ -157,10 +157,37 @@ func TestAdoptDropsWhatItHeld(t *testing.T) {
 func TestReleaseIsIdempotent(t *testing.T) {
 	e := &Entry[int]{}
 	e.Release()
-	Take(e, e.Begin(), 1, &fakeRes{})
+	Take(e, e.Begin(1), 1, &fakeRes{})
 	e.Release()
 	if e.Ready() {
 		t.Error("a released entry still reports ready")
 	}
 	e.Release()
+}
+
+// A load is in flight from Begin until its result installs or misses, and
+// only for the identity it began for; a superseded load's result ends
+// nothing.
+func TestLoadingSpansBeginToResult(t *testing.T) {
+	e := &Entry[int]{}
+	if e.Loading(1) {
+		t.Fatal("an entry nothing began is loading nothing")
+	}
+	stale := e.Begin(1)
+	fresh := e.Begin(2)
+	if e.Loading(1) || !e.Loading(2) {
+		t.Fatal("the entry is loading what its latest Begin named")
+	}
+	Miss(e, stale, 1)
+	if !e.Loading(2) {
+		t.Error("a superseded load's miss ended the load that superseded it")
+	}
+	Take(e, fresh, 2, &fakeRes{})
+	if e.Loading(2) {
+		t.Error("an installed load is still loading")
+	}
+	Miss(e, e.Begin(3), 3)
+	if e.Loading(3) {
+		t.Error("a missed load is still loading")
+	}
 }
