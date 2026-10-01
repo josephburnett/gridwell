@@ -10,8 +10,18 @@ func TestDecideTileClick(t *testing.T) {
 	}{
 		{
 			name: "address-less url tile prompts",
-			in:   ClickInput{ContentDescent: true, URL: true, URLEmpty: true},
+			in:   ClickInput{ContentDescent: true, URL: true, URLEmpty: true, Writable: true},
 			want: ClickConfigureURL,
+		},
+		{
+			name: "a grid that takes no write is never asked for an address",
+			in:   ClickInput{ContentDescent: true, URL: true, URLEmpty: true},
+			want: ClickNone,
+		},
+		{
+			name: "nor is it with ctrl",
+			in:   ClickInput{ContentDescent: true, URL: true, URLEmpty: true, SplitNav: true},
+			want: ClickNone,
 		},
 		{
 			name: "address-less url link resolves through its target",
@@ -22,7 +32,7 @@ func TestDecideTileClick(t *testing.T) {
 		{
 			name: "the prompt outranks ctrl, so it stays in place",
 			in: ClickInput{ContentDescent: true, URL: true, URLEmpty: true,
-				SplitNav: true},
+				Writable: true, SplitNav: true},
 			want: ClickConfigureURL,
 		},
 		{
