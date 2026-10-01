@@ -217,4 +217,7 @@ type Result struct {
 	// Err is a failed read's text, stripped of the wire prefix. A step that
 	// surfaces its failure plans the notice with it.
 	Err string
+	// Dead is a failed read whose verdict was that the id's path ends in
+	// nothing (clientsync.OutcomeDead).
+	Dead bool
 }

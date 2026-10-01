@@ -581,6 +581,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 	if hit == nil {
 		return false
 	}
+	writable, _ := a.gridWritable(hit.GridId)
 	switch gesture.DecideTileClick(gesture.ClickInput{
 		Well:           rpc.IsWellKind(hit.Kind),
 		ContentDescent: rpc.IsContentDescentKind(hit.Kind),
@@ -588,6 +589,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 		URL:            hit.Kind == rpc.KindURL,
 		URLEmpty:       hit.UrlString == "",
 		Page:           rpc.PageContent(hit),
+		Writable:       writable,
 		LeafLink:       rpc.LeafLink(hit),
 		DeadLink:       a.deadLink(hit),
 		SplitNav:       inNewPane,

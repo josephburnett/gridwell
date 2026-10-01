@@ -22,7 +22,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 13
+const schemaVersion = 14
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -97,6 +97,23 @@ var migrations = []migration{
 	// so an existing table is taken as it stands and every row keeps its
 	// meaning. A home that never dialled anything gets one.
 	{to: 13, run: migrateV13},
+	// v14: serves_page, the page snapshot beside url_string. Additive. A
+	// plugin url row minted before it with no address of its own can only be
+	// a page, the one url entry whose address the node derives, so it is
+	// converted to say so rather than wait for its source to be listed again.
+	{to: 14, run: migrateV14},
+}
+
+// migrateV14 adds serves_page and marks the existing page rows; see the chain
+// entry.
+func migrateV14(ctx context.Context, tx *sql.Tx) error {
+	if err := addColumnIfMissingDDL("tiles", "serves_page",
+		`ALTER TABLE tiles ADD COLUMN serves_page INTEGER NOT NULL DEFAULT 0`)(ctx, tx); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE tiles SET serves_page = 1
+		WHERE ns != '' AND kind = 'url' AND link_target_id IS NULL AND url_string = ''`)
+	return err
 }
 
 // migrateV12 drops the retired `listings` table. IfExists because v9's

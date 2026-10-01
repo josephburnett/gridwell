@@ -5,7 +5,8 @@ package gesture
 type ClickVerdict int
 
 const (
-	// ClickNone: the kind is not a doorway, so the click does nothing. It is
+	// ClickNone: there is nothing to open, a kind that is not a doorway or an
+	// address-less url tile its grid cannot be given an address for. It is
 	// the zero value, so a fact the caller failed to resolve descends nowhere.
 	ClickNone ClickVerdict = iota
 	// ClickConfigureURL opens the address prompt instead of descending.
@@ -31,6 +32,10 @@ type ClickInput struct {
 	// Page is rpc.PageContent: the owning plugin serves this url tile's page,
 	// so the node derives the address and there is none for the user to type.
 	Page bool
+	// Writable is the tile's grid's writable bit, unknown reading as false.
+	// A typed address is a content write, so a grid that refuses one, a
+	// plugin's among them, is never asked for it.
+	Writable bool
 	// LeafLink is rpc.LeafLink: the address lives on the target, so a link
 	// never prompts for one.
 	LeafLink bool
@@ -40,13 +45,16 @@ type ClickInput struct {
 	SplitNav bool
 }
 
-// DecideTileClick reads the prompt arm before the kind partition, because an
-// address-less url tile is a content-descent kind and would otherwise descend
-// onto nothing.
+// DecideTileClick reads the address-less arm before the kind partition,
+// because an address-less url tile is a content-descent kind and would
+// otherwise descend onto nothing.
 func DecideTileClick(in ClickInput) ClickVerdict {
 	switch {
 	case in.URL && in.URLEmpty && !in.LeafLink && !in.Page:
-		return ClickConfigureURL
+		if in.Writable {
+			return ClickConfigureURL
+		}
+		return ClickNone
 	case !in.Well && !in.ContentDescent && !in.Workspace:
 		return ClickNone
 	case in.SplitNav && !in.DeadLink:

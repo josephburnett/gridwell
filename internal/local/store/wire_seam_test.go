@@ -31,7 +31,7 @@ func TestStoreRowSurvivesTheWire(t *testing.T) {
 }
 
 // The fixtures above are total over what the store can put on the wire: every
-// pb.Tile field is non-zero in at least one, except the four the store never
+// pb.Tile field is non-zero in at least one, except the three the store never
 // sets. Without this a new column could be wired through the store and
 // silently left out of the seam fixture.
 func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
@@ -39,7 +39,6 @@ func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
 	// stored column, so no store row can exercise them here.
 	derived := map[string]string{
 		"Reference":        "derived by the router from child_grid_id's shape",
-		"ServesPage":       "declared by the owning plugin from its content",
 		"TextPresentation": "declared by the owning plugin from its content",
 		"StatusDetail":     "the owning plugin's current trouble with the tile",
 	}
@@ -124,7 +123,21 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 		t.Fatal(err)
 	}
 
-	return map[string]*pb.Tile{"well": well, "url": url, "text": text, "link": link}
+	// serves_page is stored only on a plugin's row.
+	ns := s.Namespace("p1")
+	pgid, err := ns.ContextID("root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ns.Mint(pgid, pageEntry("a.html"), 0, 0, 0, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	pageRows, err := ns.tiles(pgid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return map[string]*pb.Tile{"well": well, "url": url, "text": text, "link": link, "page": pageRows[0].Tile}
 }
 
 // tileThroughJSON encodes a tile the way the Connect JSON codec does

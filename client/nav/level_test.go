@@ -468,4 +468,27 @@ func TestFollowLinkTarget(t *testing.T) {
 			t.Fatalf("placed a view over a pane that moved on: %v", kinds(plan))
 		}
 	})
+
+	// A gone target is a dead link, a state the tile now draws, so the read
+	// that heard it says nothing and the pane leaves the descent that had
+	// nothing to open.
+	t.Run("a gone target says nothing and the pane leaves", func(t *testing.T) {
+		m := New()
+		aw := only(t, m.Do(Gesture{Kind: GestureFollowLink, PaneID: "pane1", Door: link},
+			descended), EffAwait)
+		plan := m.Resume(aw.Token, Result{Dead: true, Err: "gone"}, descended)
+		if len(plan.Effects) != 0 {
+			t.Fatalf("a dead target planned %v, want nothing said", kinds(plan))
+		}
+		if plan.Next == nil || plan.Next.Kind != GestureAscend || plan.Next.PaneID != "pane1" || plan.Next.N != 1 {
+			t.Fatalf("next = %+v, want the pane to ascend out of the link", plan.Next)
+		}
+	})
+
+	t.Run("any other failure still surfaces", func(t *testing.T) {
+		m := New()
+		aw := only(t, m.Do(Gesture{Kind: GestureFollowLink, PaneID: "pane1", Door: link},
+			descended), EffAwait)
+		only(t, m.Resume(aw.Token, Result{Err: "refused"}, descended), EffReport)
+	})
 }

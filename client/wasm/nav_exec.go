@@ -9,15 +9,25 @@ package main
 import (
 	"context"
 
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/transition"
 )
 
-// runNav executes a plan in order and draws. There is no redraw effect: the
-// executor always draws once after a plan.
+// runNav executes a plan and then the continuation gesture it hands back, so
+// a resumed or landed step may ask for one exactly as a gesture does.
 func (a *App) runNav(plan nav.Plan) {
+	a.runNavEffects(plan)
+	if plan.Next != nil {
+		a.runGesture(*plan.Next)
+	}
+}
+
+// runNavEffects executes a plan's effects in order and draws. There is no
+// redraw effect: the executor always draws once after a plan.
+func (a *App) runNavEffects(plan nav.Plan) {
 	for _, e := range plan.Effects {
 		a.runNavEffect(e)
 	}
@@ -268,8 +278,14 @@ func (a *App) navAwait(e nav.Effect) {
 			tile, err := a.cl.GetTile(ctx, id)
 			if err != nil {
 				// Whether the failure is worth a notice is the step's call,
-				// so the text rides the answer rather than surfacing here.
-				return nav.Result{Err: rpcErrText(err)}
+				// so the text rides the answer rather than surfacing here. A
+				// dead verdict is latched where deadLink reads it, so the
+				// link draws dead whichever read heard it first.
+				dead := clientsync.Of(err) == clientsync.OutcomeDead
+				if dead {
+					a.fetch.tiles.Settle(id, inflight.Dead)
+				}
+				return nav.Result{Err: rpcErrText(err), Dead: dead}
 			}
 			// The row lands in the cache first, so the place it heals to and
 			// the row the renderer draws are the same answer.

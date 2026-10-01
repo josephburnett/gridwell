@@ -120,3 +120,41 @@ func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
 		t.Fatalf("SetFrozen on a retired row = %v, want ErrNotFound", err)
 	}
 }
+
+// A row answers a source that no longer lists it from its snapshot, so the
+// snapshot holds every fact the row presents with. A page row without its
+// serves_page would answer as a url tile with no address, which the client
+// can only ask the user to fill in.
+func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.ContextID("root")
+	mintOne(t, d, pageEntry("a.html"))
+	other := &pluginv1.Entry{Key: "b.md", Kind: rpc.KindText, Label: "b.md"}
+	if err := d.Refresh(gid, []*pluginv1.Entry{other}); err != nil {
+		t.Fatal(err)
+	}
+	tiles, err := d.Overlay(gid, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extByKey(t, tiles, "a.html"); !rpc.PageContent(got.Tile) || got.UrlString != "" {
+		t.Fatalf("an absent page row answers %+v, want a page at the plugin's address", got.Tile)
+	}
+
+	// The snapshot follows what the source last said, both ways.
+	addressed := &pluginv1.Entry{Key: "a.html", Kind: rpc.KindURL, Label: "a.html", UrlString: "https://a"}
+	if err := d.Refresh(gid, []*pluginv1.Entry{addressed}); err != nil {
+		t.Fatal(err)
+	}
+	tiles, _ = d.Overlay(gid, nil)
+	if got := extByKey(t, tiles, "a.html"); got.ServesPage || got.UrlString != "https://a" {
+		t.Fatalf("the snapshot kept a page the source stopped serving: %+v", got.Tile)
+	}
+	if err := d.Refresh(gid, []*pluginv1.Entry{pageEntry("a.html")}); err != nil {
+		t.Fatal(err)
+	}
+	tiles, _ = d.Overlay(gid, nil)
+	if got := extByKey(t, tiles, "a.html"); !rpc.PageContent(got.Tile) || got.UrlString != "" {
+		t.Fatalf("the snapshot missed the page the source serves again: %+v", got.Tile)
+	}
+}

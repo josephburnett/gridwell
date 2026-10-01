@@ -1107,6 +1107,41 @@ func init() {
 			}
 		},
 	})
+
+	// v14: serves_page. A plugin url row with no address is a page and is
+	// marked so; an addressed one, a home one and a link are not.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 14,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			for _, q := range []string{
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, ns, key)
+					VALUES (` + rootID + `, 'url', 91, 9, 1, 1, '', 'v13 page', 100, 100, 'p1', 'a.html')`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, ns, key)
+					VALUES (` + rootID + `, 'url', 92, 9, 1, 1, 'https://v13.example', 'v13 addressed', 100, 100, 'p1', 'b')`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
+					VALUES (` + rootID + `, 'url', 93, 9, 1, 1, '', 'v13 home url', 100, 100)`,
+			} {
+				if _, err := db.Exec(q); err != nil {
+					t.Fatalf("seed v13 url row: %v", err)
+				}
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			for alt, want := range map[string]int{"v13 page": 1, "v13 addressed": 0, "v13 home url": 0} {
+				var page int
+				var url string
+				if err := db.QueryRow(`SELECT serves_page, url_string FROM tiles WHERE alt_text = ?`, alt).
+					Scan(&page, &url); err != nil {
+					t.Fatalf("read %s: %v", alt, err)
+				}
+				if page != want {
+					t.Errorf("%s: serves_page = %d, want %d", alt, page, want)
+				}
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.

@@ -171,6 +171,25 @@ func entryKind(e *pluginv1.Entry) string {
 	return e.Kind
 }
 
+// entrySnapshot is what a row keeps of its entry's content facts, beside the
+// label: every fact the row presents with when its source does not list it.
+// Mint writes it and Refresh keeps it current, so the two cannot disagree on
+// what the snapshot is.
+type entrySnapshot struct {
+	kind string
+	url  sql.NullString // a url row's address, NULL on every other kind
+	page bool
+}
+
+func snapshotOf(e *pluginv1.Entry) entrySnapshot {
+	s := entrySnapshot{kind: entryKind(e)}
+	if s.kind == "url" {
+		s.url = sql.NullString{String: e.UrlString, Valid: true}
+		s.page = e.ServesPage
+	}
+	return s
+}
+
 // derivePlacement seeds a first placement from the hint, else takes the next
 // free cell by the one auto-place rule (autoplace.go). Overlay derives with it
 // and Mint stores what Overlay derived, so touching a tile never moves it.
@@ -199,19 +218,16 @@ func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, 
 	if id, ok, err := n.LiveTileID(gridID, e.Key); err != nil || ok {
 		return id, err
 	}
-	kind := entryKind(e)
-	var child, url any
+	s := snapshotOf(e)
+	var child any
 	if childGridID != 0 {
 		child = childGridID
 	}
-	if kind == "url" {
-		url = e.UrlString
-	}
 	now := n.s.now().UnixNano()
 	res, err := n.s.db.Exec(`INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
-		child_grid_id, url_string, alt_text, created_at, updated_at, ns, key)
-		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		gridID, kind, x, y, w, h, child, url, e.Label, now, now, n.ns, e.Key)
+		child_grid_id, url_string, alt_text, serves_page, created_at, updated_at, ns, key)
+		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, now, now, n.ns, e.Key)
 	if err != nil {
 		return 0, fmt.Errorf("store: mint %q: %w", e.Key, err)
 	}
@@ -243,12 +259,12 @@ func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 		if !ok {
 			continue
 		}
-		kind := entryKind(e)
-		if r.Kind == kind && r.AltText == e.Label {
+		s := snapshotOf(e)
+		if r.Kind == s.kind && r.AltText == e.Label && r.UrlString == s.url.String && r.ServesPage == s.page {
 			continue
 		}
-		if _, err := n.s.db.Exec(`UPDATE tiles SET kind = ?, alt_text = ?, updated_at = ?
-			WHERE id = ? AND ns = ? AND tombstoned = 0`, kind, e.Label, now, r.ID, n.ns); err != nil {
+		if _, err := n.s.db.Exec(`UPDATE tiles SET kind = ?, alt_text = ?, url_string = ?, serves_page = ?, updated_at = ?
+			WHERE id = ? AND ns = ? AND tombstoned = 0`, s.kind, e.Label, s.url, s.page, now, r.ID, n.ns); err != nil {
 			return fmt.Errorf("store: refresh %q: %w", e.Key, err)
 		}
 	}
