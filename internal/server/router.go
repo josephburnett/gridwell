@@ -240,7 +240,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		rootViewCy = info.RootViewCy
 		rootViewZoom = info.RootViewZoom
 	} else if infoErr != nil {
-		infoError = "plugin not responding: " + infoErr.Error()
+		infoError = infoRefusal(infoErr)
 	}
 	// An error alongside a live Info still rides the row.
 	if infoError == "" && infoErr != nil {
@@ -261,6 +261,17 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		Glyph:        glyph,
 		MenuEntries:  menuEntries,
 	}
+}
+
+// infoRefusal is the sentence a broken row carries: the plugin's own words
+// when it answered with a refusal, and "not responding" only when it never
+// spoke.
+func infoRefusal(err error) string {
+	msg := status.Convert(err).Message()
+	if gwerr.IsTransport(err) {
+		return "plugin not responding: " + msg
+	}
+	return msg
 }
 
 func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error) {

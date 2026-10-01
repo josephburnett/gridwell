@@ -13,6 +13,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -23,15 +24,18 @@ import (
 // see bootinfo_test.go.
 var bootInfoWait = 5 * time.Second
 
-// bootInfo is the launch gate: a plugin that cannot answer Info inside
-// bootInfoWait does not come up, because a plugin without the config it needs
-// must not present as an empty grid, and one that never answers must not hold
-// the boot. The answer itself is discarded: the router reads declarations per
-// request.
+// bootInfo is the launch gate: a plugin that does not answer Info inside
+// bootInfoWait does not come up, because one that never answers must not hold
+// the boot. A refusal is an answer: that plugin comes up, its row broken with
+// the reason, and the node asks again until it serves. The answer itself is
+// discarded: the router reads declarations per request.
 func bootInfo(ns namespace.Namespace) error {
 	ctx, cancel := context.WithTimeout(context.Background(), bootInfoWait)
 	defer cancel()
 	_, err := ns.Info(ctx, &gridwellv1.InfoRequest{})
+	if !gwerr.IsTransport(err) {
+		return nil
+	}
 	return err
 }
 

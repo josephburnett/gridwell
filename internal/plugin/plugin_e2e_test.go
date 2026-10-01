@@ -13,6 +13,9 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -108,10 +111,10 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 
 // The refusal path in the shape that ships: a real gridwell-plugin-proc spawned
 // with a pid the plugin's FromConfig refuses. guest.Main serves the refusal as
-// an Info that answers FailedPrecondition, and LoadInto must stop the launch
-// carrying that reason and naming the plugin, rather than coming up as an empty
-// grid.
-func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
+// an Info that answers FailedPrecondition, and LoadInto must bring the plugin
+// up with that refusal as its answer, rather than stopping the node or coming
+// up as an empty grid.
+func TestLoadIntoKeepsAPluginThatRefuses(t *testing.T) {
 	bin := plugintest.Binary(t, "proc")
 
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
@@ -124,8 +127,17 @@ func TestLoadIntoFailsOnARefusedHandshake(t *testing.T) {
 		ID: "pr1234a", Label: "procs", Kind: "proc", Binary: bin,
 		Config: map[string]string{"pid": "abc"},
 	}}}
-	err = plugin.LoadInto(plugin.NewRegistry(), cfg, t.TempDir(), st)
-	if err == nil || !strings.Contains(err.Error(), `pid "abc"`) || !strings.Contains(err.Error(), "pr1234a") {
-		t.Fatalf("LoadInto = %v, want the plugin's own reason, naming it", err)
+	reg := plugin.NewRegistry()
+	if err := plugin.LoadInto(reg, cfg, t.TempDir(), st); err != nil {
+		t.Fatalf("LoadInto = %v, want the refusing plugin registered", err)
+	}
+	defer reg.Close()
+	ns, ok := reg.Get("pr1234a")
+	if !ok {
+		t.Fatal("the refusing plugin is not registered")
+	}
+	_, err = ns.Info(context.Background(), &gridwellv1.InfoRequest{})
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), `pid "abc"`) {
+		t.Fatalf("Info = %v, want FailedPrecondition with the plugin's own reason", err)
 	}
 }

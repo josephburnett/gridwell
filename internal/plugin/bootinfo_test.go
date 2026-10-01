@@ -2,13 +2,16 @@ package plugin
 
 // The launch gate's bound, from both sides, over the real plugin.v1 wire: a
 // plugin whose Info never answers fails the gate when bootInfoWait elapses and
-// not before, and one that answers passes it. LoadInto's only gate on a live
+// not before, and one that answers, even with a refusal, passes it. LoadInto's only gate on a live
 // plugin is this call, so waiting it out here is waiting out the boot.
 
 import (
 	"context"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -103,5 +106,22 @@ func TestBootInfoPassesAPluginThatAnswers(t *testing.T) {
 	}
 	if took := time.Since(start); took >= bootInfoWait {
 		t.Fatalf("the gate took %v against a plugin that answered at once", took)
+	}
+}
+
+type refusingPlugin struct {
+	pluginv1.UnimplementedPluginServer
+}
+
+func (refusingPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	return nil, status.Error(codes.FailedPrecondition, `root "/x" does not exist`)
+}
+
+// A refusal is an answer: the plugin comes up broken with the reason rather
+// than its config stopping the node.
+func TestBootInfoPassesAPluginThatRefuses(t *testing.T) {
+	shortBootInfoWait(t)
+	if err := bootInfo(loopbackPlugin(t, refusingPlugin{})); err != nil {
+		t.Fatalf("bootInfo = %v, want a refusal to pass the gate", err)
 	}
 }
