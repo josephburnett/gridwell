@@ -237,7 +237,7 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 }
 
 func inTileCenter(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	ps := paneToDragdrop(p, r)
+	ps := p.Screen(r)
 	cx, cy := ps.ScreenToCell(sx, sy)
 	return dragdrop.InTileCenter(n.X, n.Y, n.W, n.H, cx, cy)
 }
@@ -245,14 +245,14 @@ func inTileCenter(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect, sx, sy float64)
 func tileResizeAnchors(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect, sx, sy float64) (
 	pinX, pinY, origMovingX, origMovingY, clickCellX, clickCellY int64,
 ) {
-	ps := paneToDragdrop(p, r)
+	ps := p.Screen(r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	a := dragdrop.ResizeAnchorsFor(n.X, n.Y, n.W, n.H, cxF, cyF)
 	return a.PinX, a.PinY, a.OrigMovingX, a.OrigMovingY, a.ClickCellX, a.ClickCellY
 }
 
 func tileResizeFromPin(rd *rightDragState, sx, sy float64) (int64, int64, int64, int64) {
-	ps := paneToDragdrop(rd.tilePane, rd.tilePaneR)
+	ps := rd.tilePane.Screen(rd.tilePaneR)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	curCellX := int64(math.Round(cxF))
 	curCellY := int64(math.Round(cyF))
@@ -311,7 +311,7 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 // ghost materializes only past dragThreshold, and the original stays visible,
 // because both intents create.
 func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
-	ps := paneToDragdrop(p, r)
+	ps := p.Screen(r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
 	a.dragging = &dragState{
@@ -621,12 +621,4 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 func (a *App) dividerGrab(r pane.Rect, sx, sy float64) (pane.DividerGrab, []pane.Divider) {
 	divs := pane.Dividers(a.tree, a.rootLayoutRect(), resizeBandPx)
 	return pane.GrabDividers(divs, r, resizeBandPx, sx, sy), divs
-}
-
-// paneToDragdrop is where the five fields are gathered, once.
-func paneToDragdrop(p *pane.Pane, r pane.Rect) dragdrop.Pane {
-	return dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
 }

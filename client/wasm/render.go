@@ -494,7 +494,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// always frames the content cleanly.
 	const inset = paneBorderPx
 	withClip(a.cctx, r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset, func() {
-		pscreen := paneToDragdrop(p, r)
+		pscreen := p.Screen(r)
 
 		// Grid lines render whether or not the grid loaded: they communicate
 		// the coordinate system. A focused text tile has none, so it gets a
@@ -544,12 +544,12 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.Id) {
 						continue
 					}
+					if !pscreen.Shows(float64(n.X), float64(n.Y), float64(n.W), float64(n.H)) {
+						continue
+					}
 					left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
 					w := float64(n.W) * cellSize
 					h := float64(n.H) * cellSize
-					if left+w < r.X || top+h < r.Y || left > r.X+r.W || top > r.Y+r.H {
-						continue
-					}
 					nn := n
 					outside := tileface.Outside(nn, inHost)
 					dashed := isLinkTile(nn)

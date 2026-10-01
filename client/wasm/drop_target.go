@@ -132,7 +132,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	}
 	parentCell := cellPx * p.Zoom
 
-	ps := paneToDragdrop(p, r)
+	ps := p.Screen(r)
 	parentOriginX, parentOriginY := ps.CellToScreen(0, 0)
 
 	// An open well under the cursor promotes the target to its child grid.
@@ -213,7 +213,7 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *gridwellv1.Tile
 	if !ok {
 		return nil
 	}
-	cp := wellPreviewFor(paneToDragdrop(p, r), well)
+	cp := wellPreviewFor(p.Screen(r), well)
 	// FloorCellAt floors toward -inf, the correct hit-test answer in a
 	// well's negative quadrant, where int64() truncation would mis-target.
 	cellX, cellY := dragdrop.FloorCellAt(cp.OriginX, cp.OriginY, cp.CellPx, sx, sy)

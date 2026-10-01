@@ -3,6 +3,7 @@
 package main
 
 import (
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/inflight"
@@ -12,9 +13,16 @@ import (
 // syncInterest runs every frame, like syncMirrors: every change to what the
 // panes show draws one. interest.Tracker decides when a set is owed.
 func (a *App) syncInterest(rects map[string]pane.Rect) {
-	if a.interest.Show(pane.Showing(a.tree, rects, a.gridIDForPathFrom)) {
+	if a.interest.Show(pane.Showing(a.tree, rects, a.gridIDForPathFrom, a.cachedTiles)) {
 		a.kickInterest()
 	}
+}
+
+func (a *App) cachedTiles(gridID string) map[string]*gridwellv1.Tile {
+	if g, ok := a.c.Grid(gridID); ok {
+		return g.Tiles
+	}
+	return nil
 }
 
 func (a *App) kickInterest() {

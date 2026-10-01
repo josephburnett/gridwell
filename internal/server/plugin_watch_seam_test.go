@@ -72,10 +72,10 @@ func registerWatching(t *testing.T, reg *plugin.Registry, st *store.Store) chan<
 	return p.poke
 }
 
-// awaitGridChanged subscribes at cl's door, shows want, and pokes until a
+// awaitGridChanged subscribes at cl's door, shows shown, and pokes until a
 // GridChanged for want arrives. Poking again covers the subscription
 // attaching after an earlier poke, which is nobody's.
-func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, want string) {
+func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, shown []string, want string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -95,7 +95,7 @@ func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, want s
 		}
 	}()
 	// A plugin watches only what some client shows.
-	if err := cl.SetInterest(ctx, []string{want}); err != nil {
+	if err := cl.SetInterest(ctx, shown); err != nil {
 		t.Fatal(err)
 	}
 	tick := time.NewTicker(100 * time.Millisecond)
@@ -150,7 +150,7 @@ func TestPluginWatchReachesTheDoor(t *testing.T) {
 	if want := rpc.QualifyID(watchUUID, rpc.KeyTileID("all")); grid != want {
 		t.Fatalf("the collection's doorway is %q, want %q", grid, want)
 	}
-	awaitGridChanged(t, cl, poke, grid)
+	awaitGridChanged(t, cl, poke, []string{grid}, grid)
 }
 
 // The same change crosses a connection: a client of the node that mounts the
@@ -160,7 +160,49 @@ func TestPluginWatchCrossesAConnection(t *testing.T) {
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
 		func(reg *plugin.Registry, st *store.Store) { poke = registerWatching(t, reg, st) })
 	want := localNodeID + "/geneva/" + rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))
-	awaitGridChanged(t, h.localCl, poke, want)
+	awaitGridChanged(t, h.localCl, poke, []string{want}, want)
+}
+
+// A collection seen only as a well's preview in home is shown by the child
+// grid id the client reads off that well (pane.Showing), and a change in it
+// reaches the client under that same id.
+func TestPluginWatchReachesAWellPreview(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/gridwell.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	reg := plugin.NewRegistry()
+	reg.Register(localNodeID, "home", local.New(st, nil), nil)
+	reg.SetLabel(localNodeID, "home")
+	poke := registerWatching(t, reg, st)
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	ctx := context.Background()
+
+	lp, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := lp.HomeGridId
+	if _, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: home, Tile: &gridwellv1.Tile{
+		Kind: rpc.KindWell, X: 0, Y: 0, W: 2, H: 2, ChildGridId: rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))}}); err != nil {
+		t.Fatal(err)
+	}
+	g, err := cl.GetGrid(ctx, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var preview string
+	for _, tl := range g.Tiles {
+		if tl.Kind == rpc.KindWell {
+			preview = tl.ChildGridId
+		}
+	}
+	if preview == "" {
+		t.Fatal("home holds no well onto the collection")
+	}
+	awaitGridChanged(t, cl, poke, []string{home, preview}, preview)
 }
 
 // scopedWatch reports each Watch it is asked for: its contexts when opened,
