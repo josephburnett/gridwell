@@ -334,7 +334,15 @@ func (a *App) refreshFileOverlay() {
 	// lives in its own cache entry, and the dirty sweep posts it.
 	dec := textedit.DecideTextareaSync(in)
 	if dec.SetValue {
+		start, end, top := ta.Get("selectionStart"), ta.Get("selectionEnd"), ta.Get("scrollTop")
 		ta.Set("value", dec.Value)
+		if dec.KeepView {
+			ta.Call("setSelectionRange", start, end)
+			ta.Set("scrollTop", top)
+		} else {
+			ta.Call("setSelectionRange", 0, 0)
+			ta.Set("scrollTop", 0)
+		}
 		// For textedit.CanvasHiddenByOverlay: false means the textarea was
 		// cleared on a tile switch, or the blob has not arrived, and the
 		// canvas keeps painting through the loading race.

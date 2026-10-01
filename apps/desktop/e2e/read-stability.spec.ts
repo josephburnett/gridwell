@@ -170,3 +170,45 @@ for (const kind of ['well', 'markdown'] as const) {
     await expect.poll(() => framingWrites(window), { timeout: 10_000 }).toBeGreaterThan(0);
   });
 }
+
+// A document longer than its window: the editor's bytes are written into the
+// textarea on the descent, and a browser leaves the caret of written bytes at
+// their end and scrolls to it. That is a scroll no one made, so the trip must
+// land at the top and write nothing.
+test('looking inside a long document and coming back writes nothing', async ({ gw, window }) => {
+  const settleMs = (await gw.cadences()).framingSaveMs;
+  await gw.enterPlugin('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
+  const { updateText } = await import('./oracle');
+  await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));
+  await gw.waitIdle();
+  await settle(window, settleMs);
+
+  const before = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
+  const writes = await framingWrites(window);
+  await gw.descendCell(cx, cy);
+  await expect
+    .poll(() =>
+      window.evaluate(() => (document.getElementById('gw-text-editor') as HTMLTextAreaElement).value.length),
+    )
+    .toBeGreaterThan(1000);
+  await settle(window, settleMs);
+  expect(
+    await window.evaluate(() => document.getElementById('gw-text-editor')!.scrollTop),
+    'the descent scrolled a document nobody scrolled',
+  ).toBe(0);
+  await gw.ascendViaCrumb();
+  await gw.waitIdle();
+  await settle(window, settleMs);
+
+  const after = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
+  expect(stable(after), 'the long document round trip changed the stored row').toBe(stable(before));
+  expect(await framingWrites(window), 'the long document round trip dispatched a framing write').toBe(
+    writes,
+  );
+});

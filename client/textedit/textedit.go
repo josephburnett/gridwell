@@ -27,9 +27,15 @@ type TextareaSyncInput struct {
 // caller writes Value when SetValue, and stores NewLastTileID always, even
 // when SetValue is false, so a delayed blob fetch's second pass sees the same
 // tile.
+//
+// A browser leaves the caret of written bytes at their end and scrolls to it,
+// a scroll nobody made. So a write never moves the view: KeepView puts back the
+// caret and scroll a same-tile rewrite found, and any other write puts the
+// caret at the top, where the pane's own scroll applies.
 type TextareaSyncDecision struct {
 	SetValue      bool
 	Value         string
+	KeepView      bool
 	NewLastTileID string
 }
 
@@ -56,6 +62,7 @@ func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
 		return TextareaSyncDecision{
 			SetValue:      true,
 			Value:         in.BlobContent,
+			KeepView:      true,
 			NewLastTileID: in.FocusedTileID,
 		}
 	}
