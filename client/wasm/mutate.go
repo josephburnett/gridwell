@@ -62,6 +62,9 @@ type write struct {
 	// beforeunload. A write with none is fired and hoped for, never waited
 	// on.
 	beacon func() (path string, body []byte, contentType string)
+	// chain is the outbox.SaveQueue key a content write rides through post,
+	// its retry included. Empty runs it on its own goroutine.
+	chain string
 }
 
 // isUnimplemented reports a plugin's "I don't serve this" answer: a
@@ -166,13 +169,18 @@ func (a *App) dispatch(w write) error {
 	return nil
 }
 
-// post runs the write in a goroutine, except during beforeunload, where a
-// goroutine would never be scheduled before the page dies. The count rises
-// before the goroutine, so the gesture's own turn cannot read as idle.
+// post runs the write in a goroutine, or on its chain, except during
+// beforeunload, where a goroutine would never be scheduled before the page
+// dies. The count rises before the goroutine, so the gesture's own turn
+// cannot read as idle.
 func (a *App) post(w write) {
 	a.writes.Start()
 	if a.unloading {
 		a.dispatch(w)
+		return
+	}
+	if w.chain != "" {
+		a.persist.contentSaves.Enqueue(w.chain, func() bool { return a.dispatch(w) == nil })
 		return
 	}
 	go a.dispatch(w)
@@ -314,8 +322,9 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 // rowVersion is the fallback for an entry gone by send time.
 func (a *App) enqueueTextSave(gid, tileID, cid string, rowVersion int64, data []byte) {
 	a.emit(traceevent.TextSave(tileID, cid, len(data)))
-	a.persist.textSaves.Enqueue(textedit.SaveQueueKey(tileID, cid), func() {
-		a.saveClaimedContent(gid, cid, tileID == cid, rowVersion, data)
+	a.persist.contentSaves.Enqueue(textedit.SaveQueueKey(tileID, cid), func() bool {
+		_, ok := a.saveClaimedContent(gid, cid, tileID == cid, rowVersion, data)
+		return ok
 	})
 }
 

@@ -40,7 +40,6 @@ import (
 	"github.com/josephburnett/gridwell/client/retry"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
-	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/touchgest"
 	"github.com/josephburnett/gridwell/client/trace"
@@ -362,9 +361,9 @@ func setTimeoutMs(ms int, fire func()) {
 type persistState struct {
 	sched scheduler
 
-	// textSaves chains pipelined saves per document instead of racing them. The
-	// key is textedit.SaveQueueKey's, so a link and its target share a chain.
-	textSaves *textedit.SaveQueue
+	// contentSaves chains content writes per key instead of racing them: see
+	// outbox.SaveQueue.
+	contentSaves *outbox.SaveQueue
 
 	// wellWheelPending: the cache is patched per notch and the settle flush
 	// posts one SetFraming per tile, so a scroll burst is one write.
@@ -385,7 +384,7 @@ type persistState struct {
 func newPersistState(a *App) persistState {
 	return persistState{
 		sched:            newScheduler(a),
-		textSaves:        textedit.NewSaveQueue(),
+		contentSaves:     outbox.NewSaveQueue(),
 		wellWheelPending: map[string]wellWheelDrift{},
 		persistPosts:     map[string]int{},
 		out:              outbox.New(),

@@ -332,8 +332,9 @@ The version interlock, the outbox park, and the drain.
    thunk. Storing the bytes and recording the debt are one door, so an edit
    typed during an outage cannot stay out of the outbox.
 2. The debounce sweep or an ascent flush calls `App.enqueueTextSave`, which
-   goes through `textSaves`, the per-tile serial queue. The version is
-   claimed AT SEND TIME, after any earlier write for the same tile has
+   goes through `contentSaves` (`outbox.SaveQueue`), the per-key serial
+   queue a pane layout shares. The version is claimed AT SEND TIME, after
+   any earlier write for the same tile has
    advanced the basis: `a.c.SaveBasis(tileID)`, never the grid row version.
    The row advances when a foreign writer's event or a refetch lands without
    this client seeing the new bytes; claiming it would carry the current

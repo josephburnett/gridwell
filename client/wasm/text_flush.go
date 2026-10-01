@@ -161,18 +161,18 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	// may still be in flight and this claims a version too. The chain is
 	// textedit.SaveQueueKey's, so a leaf link's ascent flush cannot race the
 	// sweep for the one basis they share.
-	a.persist.textSaves.Enqueue(textedit.SaveQueueKey(file.Id, rpc.ContentID(file)), func() {
+	a.persist.contentSaves.Enqueue(textedit.SaveQueueKey(file.Id, rpc.ContentID(file)), func() bool {
 		// The fallback row is this snapshot, read above with the bytes.
 		// Re-reading it here would claim a version a foreign writer may have
 		// advanced since.
 		if hasBuf {
 			cid := rpc.ContentID(file)
 			if _, ok := a.saveClaimedContent(gid, cid, file.Id == cid, file.Version, buf); !ok {
-				return
+				return false
 			}
 		}
 		if !reframed {
-			return
+			return true
 		}
 		req := &gridwellv1.SetTileRequest{TileId: file.Id,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText,
@@ -185,5 +185,6 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 			},
 			beacon: jsonBeacon(func() (string, []byte) { return rpc.SetTileBeacon(req) }),
 		})
+		return true
 	})
 }

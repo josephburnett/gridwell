@@ -25,7 +25,7 @@ type Level struct {
 	// ReadOnly latches when the layout blob could not be decoded, so the
 	// session shows a default and never persists over what it could not read.
 	ReadOnly  bool
-	savedHash string // the persister's diff key over the last-written bytes
+	savedHash string // the persister's diff key over the bytes last sent
 }
 
 // TreeAtPlace is the single-pane tree a level falls back to. It is the one
@@ -137,13 +137,24 @@ func ShouldPersist(top *Level, encoded []byte) bool {
 	return LayoutHash(encoded) != top.savedHash
 }
 
-// MarkSaved records that encoded was written, or was the descent-time
-// baseline, so the next identical encode is a no-op.
+// MarkSaved records that encoded was sent, or was the descent-time baseline,
+// so the next identical encode is a no-op. It is marked at send, not on the
+// answer, because the layout's save chain lands its writes in order: the last
+// one sent is the one the node will hold (see outbox.SaveQueue).
 func MarkSaved(top *Level, encoded []byte) {
 	if top == nil {
 		return
 	}
 	top.savedHash = LayoutHash(encoded)
+}
+
+// ForgetSaved undoes MarkSaved for encoded once its write did not land, so the
+// next flush sends it again. A mark for newer bytes stands.
+func ForgetSaved(top *Level, encoded []byte) {
+	if top == nil || top.savedHash != LayoutHash(encoded) {
+		return
+	}
+	top.savedHash = ""
 }
 
 // NavCrumb is one link of the complete nav chain: the window's levels and the
