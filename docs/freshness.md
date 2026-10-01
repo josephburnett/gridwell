@@ -39,11 +39,14 @@ face is the plugin's own fact and nothing can supply it. A source that
 changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
 node holds one stream per subprocess while some client shows one of its
 grids, scoped to the contexts shown and re-opened with the new set when that
-changes (a scope change is not a drop and announces nothing), and publishes
-each change as the `GridChanged` a write would, so a grid open on screen
-refetches; a coded refusal is the same health fact (`Adapter.noteWatch`),
-cleared when a re-opened stream is open, and a re-opened stream announces
-every context the node knows of (`Adapter.resync`), since the gap announced nothing. Only a
+changes, and publishes each change as the `GridChanged` a write would, so a
+grid open on screen refetches; a coded refusal is the same health fact
+(`Adapter.noteWatch`), cleared when a re-opened stream is open. Every open,
+first, after a drop, or for a moved scope, is one path
+(`Adapter.followScope`): the new stream replaces the old only once it is
+open, so a context in both is watched throughout, and then each context it
+adds is announced (the whole scope after a drop), since nothing announced a
+change sent while no stream watched it. Only a
 plugin whose `InfoResponse.watch` declares it is asked; one that declares it
 and answers Unimplemented has a broken declaration, and that is health too.
 

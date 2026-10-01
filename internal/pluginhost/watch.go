@@ -7,7 +7,6 @@ package pluginhost
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"slices"
 	"sync"
@@ -93,12 +92,10 @@ func (a *Adapter) goListen(ctx context.Context, label string, fn func(context.Co
 // the process's life. A transport failure re-opens quietly, the death being
 // the supervisor's news; any other code is health until a stream is open.
 //
-// The stream is opened with the scope and only while it is not empty. A scope
-// change ends it and opens the next within the same attempt, so it is not a
-// drop: the dropped-stream resync runs only on Refollow's re-open, and a
-// change sent while the scope moved concerns a context no client was showing.
+// The stream is opened with the scope and only while it is not empty. Every
+// open, first, after a drop, or for a moved scope, is the one path in
+// followScope.
 func (a *Adapter) listenProcess(ctx context.Context, label string) {
-	reopen := false
 	namespace.Refollow{
 		Label: label,
 		Down:  func(string) {},
@@ -112,41 +109,7 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 				<-ctx.Done()
 				return nil
 			}
-			catchUp := reopen
-			opened := func() error {
-				established()
-				if !catchUp {
-					return nil
-				}
-				return a.resync(ci)
-			}
-			for {
-				scope, moved := a.scopeNow()
-				if len(scope) == 0 {
-					select {
-					case <-ctx.Done():
-						return nil
-					case <-moved:
-						continue
-					}
-				}
-				reopen = true
-				sctx, cancel := context.WithCancel(ctx)
-				go func() {
-					select {
-					case <-moved:
-						cancel()
-					case <-sctx.Done():
-					}
-				}()
-				err = a.follow(sctx, scope, opened)
-				cancel()
-				if ctx.Err() == nil && isClosed(moved) {
-					opened = func() error { established(); return nil }
-					continue
-				}
-				break
-			}
+			err = a.followScope(ctx, established)
 			switch {
 			case ctx.Err() != nil:
 				return err
@@ -160,6 +123,96 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 			return err
 		},
 	}.Run(ctx)
+}
+
+// followScope follows the scope until a stream ends, re-opening as it moves.
+// A stream replaces the one before only once it is open, so a context in both
+// scopes is watched throughout; each context the open adds is then announced,
+// since a change between the client's listing and the open is otherwise
+// announced by nothing. An attempt's first open adds its whole scope, which
+// is what catches up after a drop. A context the scope dropped is shown by no
+// one, so it is not announced.
+func (a *Adapter) followScope(ctx context.Context, established func()) error {
+	var cur *watchStream
+	var watched []string
+	defer func() { cur.stop() }()
+	for {
+		scope, moved := a.scopeNow()
+		if len(scope) == 0 {
+			cur.stop()
+			cur, watched = nil, nil
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-moved:
+				continue
+			}
+		}
+		next := a.openWatch(ctx, scope)
+		select {
+		case <-next.opened:
+		case <-next.done:
+			return next.err
+		case <-moved:
+			next.stop()
+			continue
+		case <-ctx.Done():
+			next.stop()
+			return nil
+		}
+		cur.stop()
+		cur = next
+		established()
+		for _, c := range scope {
+			if !slices.Contains(watched, c) {
+				a.emitGridChanged(gridAddr(c))
+			}
+		}
+		watched = scope
+		close(cur.ack)
+		select {
+		case <-cur.done:
+			return cur.err
+		case <-moved:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+// watchStream is one Watch stream followed on its own goroutine. Once open it
+// waits for ack before reading, so what the open announces precedes its
+// changes.
+type watchStream struct {
+	opened, ack, done chan struct{}
+	err               error
+	cancel            func()
+}
+
+func (a *Adapter) openWatch(ctx context.Context, scope []string) *watchStream {
+	ctx, cancel := context.WithCancel(ctx)
+	s := &watchStream{opened: make(chan struct{}), ack: make(chan struct{}), done: make(chan struct{}), cancel: cancel}
+	go func() {
+		defer close(s.done)
+		s.err = a.follow(ctx, scope, func() error {
+			close(s.opened)
+			select {
+			case <-s.ack:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	return s
+}
+
+// stop ends the stream and waits for its goroutine; nil is no stream.
+func (s *watchStream) stop() {
+	if s != nil {
+		s.cancel()
+		<-s.done
+	}
 }
 
 // follow reads one Watch stream to its end. The stream is open once its header
@@ -222,36 +275,6 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 	a.scopeMu.Lock()
 	defer a.scopeMu.Unlock()
 	return slices.Clone(a.scope), a.moved
-}
-
-func isClosed(ch <-chan struct{}) bool {
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
-	}
-}
-
-// resync announces every context the node knows of for this plugin, declared
-// or with a grid row. It runs when a stream re-opens, because nothing
-// announced what changed while none was open.
-func (a *Adapter) resync(ci *pluginv1.InfoResponse) error {
-	known, err := a.mem.Contexts()
-	if err != nil {
-		return fmt.Errorf("catching up after a dropped stream: %w", err)
-	}
-	for _, m := range declaredEntries(ci) {
-		known = append(known, m.Context)
-	}
-	said := map[string]bool{}
-	for _, c := range known {
-		if c != "" && !said[c] {
-			said[c] = true
-			a.emitGridChanged(gridAddr(c))
-		}
-	}
-	return nil
 }
 
 // applyChange announces what a Change names as a GridChanged on the context's
