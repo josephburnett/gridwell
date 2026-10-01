@@ -49,6 +49,9 @@ type urlView struct {
 	// lastTitle is for the unload beacon, which cannot wait for the bridge
 	// reply the freeze path reads its title from.
 	lastTitle string
+	// gen is main's view behind this handle, minted at place and kept by a
+	// move; see urlview.GoneEnds.
+	gen urlview.Gen
 }
 
 var (
@@ -126,6 +129,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 		return
 	}
 	v := a.urlViewIn(p, t.Id, rpc.PageContent(t))
+	v.gen = a.urlGens.Next()
 	a.local(p.ID).urlView = v
 	addr := a.webAddress(t)
 	a.emit(traceevent.URLOpen(p.ID, t.Id))
@@ -133,7 +137,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	// The focus fact rides the placement, because going live is not always a
 	// gesture on the focused pane. The handle is set before main answers, so
 	// a refusal takes it back down.
-	a.bridgePlace(p.ID, t.Id, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
+	a.bridgePlace(p.ID, t.Id, v.gen, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
 		t.UrlHistory, v.durable, pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
 		func() { a.dropURLView(p.ID, v) })
 	a.draw()
@@ -164,7 +168,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	old := from.urlView
 	from.urlView = nil
 	v := a.urlViewIn(to, old.tileID, old.page)
-	v.navDirty, v.lastURL, v.lastTitle = old.navDirty, old.lastURL, old.lastTitle
+	v.navDirty, v.lastURL, v.lastTitle, v.gen = old.navDirty, old.lastURL, old.lastTitle, old.gen
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
 	urlConsole("move pane=%s→%s tile=%s", fromID, to.ID, v.tileID)

@@ -109,6 +109,8 @@ export interface PlaceArgs {
   history?: string;
   // Whether the tile survives ascent, which gates Freeze Page.
   durable?: boolean;
+  // client/urlview.Gen, which ViewGoneEvent echoes.
+  gen?: number;
 }
 
 // A live view handed to another pane with its page: the takeover that neither
@@ -207,6 +209,9 @@ export interface ZoomKeyEvent {
 export interface ViewGoneEvent {
   paneId: string;
   tileId: string;
+  // The gen the view was placed with: the renderer drops only that handle,
+  // never a later view of the same tile in the same pane.
+  gen: number;
 }
 
 // How loudly a notice presents, decided where the report is made and read by

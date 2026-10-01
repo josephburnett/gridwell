@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/urlview"
 )
 
 // The wasm-side door to the Electron main process's native URL-tile
@@ -136,7 +137,7 @@ func rejectionText(v js.Value) string {
 // bridgePlace asks main to create or attach a WebContentsView for paneID, on
 // the one host-local session. onFail runs when main refuses: no view exists,
 // so the caller's live handle must go.
-func (a *App) bridgePlace(paneID string, tileID, url string, b viewBounds, contentZoom float64, history string, durable, hidden, focused bool, onFail func()) {
+func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b viewBounds, contentZoom float64, history string, durable, hidden, focused bool, onFail func()) {
 	a.bridgeVerb("placeWebview", map[string]any{
 		"paneId":      paneID,
 		"tileId":      tileID,
@@ -144,6 +145,7 @@ func (a *App) bridgePlace(paneID string, tileID, url string, b viewBounds, conte
 		"bounds":      b.toJS(),
 		"contentZoom": contentZoom,
 		"history":     history,
+		"gen":         float64(gen),
 		// This frame's gesture-hide verdict, so a view placed mid-drag or
 		// under the palette starts parked. The registry never guesses.
 		"hidden": hidden,
@@ -313,10 +315,11 @@ func (a *App) installWebviewListeners() {
 			a.zoomKeyRelays++
 			a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
 		}},
-		// A view that ended in main with no remove, a page that closed
-		// itself. Nothing is left to capture; main's notice says why.
+		// A view that ended in main with no remove: a page that closed
+		// itself or a renderer that died. Nothing is left to capture; main's
+		// notice says why.
 		{"onViewGone", func(ev js.Value) {
-			if v := a.urlViewFor(jsString(ev.Get("paneId"))); v != nil && v.tileID == jsString(ev.Get("tileId")) {
+			if v := a.urlViewFor(jsString(ev.Get("paneId"))); v != nil && urlview.GoneEnds(v.gen, jsGen(ev.Get("gen"))) {
 				a.dropURLView(v.paneID, v)
 			}
 		}},
@@ -359,6 +362,15 @@ func decodeBase64(v js.Value) ([]byte, bool) {
 		return nil, false
 	}
 	return b, true
+}
+
+// jsGen reads a urlview.Gen off the bridge; anything but a number is the zero
+// Gen, which names no view.
+func jsGen(v js.Value) urlview.Gen {
+	if v.Type() != js.TypeNumber {
+		return 0
+	}
+	return urlview.Gen(v.Float())
 }
 
 func jsString(v js.Value) string {

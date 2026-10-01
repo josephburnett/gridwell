@@ -115,13 +115,13 @@ const BOUNDS = { x: 10, y: 20, width: 400, height: 300 };
 
 test('a page that closes itself retires its entry: one notice, the renderer told, nothing throws', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/7', 'https://accounts.example/signinclose', BOUNDS);
+  await r.reg.place('p1', 'u1/7', 'https://accounts.example/signinclose', BOUNDS, 0, '', false, false, false, 3);
   const view = r.views[0];
 
   view.destroy();
 
   assert.equal(r.reg.has('p1'), false, 'the entry outlived its view');
-  assert.deepEqual(r.gone, [{ paneId: 'p1', tileId: 'u1/7' }], 'the renderer was not told the view ended');
+  assert.deepEqual(r.gone, [{ paneId: 'p1', tileId: 'u1/7', gen: 3 }], 'the renderer was not told the view ended');
   assert.equal(r.children.has(view), false, 'the dead view is still attached over the pane');
   assert.equal(r.errors.length, 1, `want one notice, got ${JSON.stringify(r.errors)}`);
   assert.match(r.errors[0].message, /closed itself/);
@@ -260,4 +260,20 @@ test('a restore on a moved view belongs to the view: a refusal reports under the
   await settle();
   assert.equal(r.errors.length, 1);
   assert.match(r.errors[0].message, /^pane w1:p1: stored back-stack refused/);
+});
+
+test('a gone event names the view by the gen it was placed with, which a move keeps', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true, 1);
+  const first = r.views[0];
+  await r.reg.remove('p1');
+  // The same tile live again in the same pane: only the gen tells the views apart.
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true, 2);
+  r.reg.move('p1', 'w1:p1', BOUNDS, true, false, true);
+
+  first.webContents!.emit('destroyed');
+  assert.deepEqual(r.gone, [], 'the removed view announced an end');
+
+  r.views[1].destroy();
+  assert.deepEqual(r.gone, [{ paneId: 'w1:p1', tileId: 'u1/9', gen: 2 }]);
 });

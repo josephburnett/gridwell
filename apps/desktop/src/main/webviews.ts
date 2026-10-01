@@ -55,6 +55,9 @@ interface Entry {
   // reads the pane here, never the one the view was placed on.
   paneId: string;
   tileId: string;
+  // The renderer's name for this view (client/urlview.Gen), echoed on its
+  // gone event.
+  gen: number;
   bounds: Bounds;
   hidden: boolean;
   // Whether the main frame is between did-start-navigation and its load, which
@@ -224,7 +227,7 @@ export class WebviewRegistry {
 
   // The view is a child of the window's contentView, so it paints above the
   // root canvas renderer. Later bounds arrive through setBounds.
-  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false, focused = false): Promise<void> {
+  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false, focused = false, gen = 0): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = SESSION_PARTITION;
     const stale = this.entries.get(paneId);
@@ -251,7 +254,7 @@ export class WebviewRegistry {
     // off the canvas overlay; focused feeds the steal guard from the first
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.
-    const e: Entry = { view, paneId, tileId, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
+    const e: Entry = { view, paneId, tileId, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = openBelowUrl(target);
@@ -651,7 +654,7 @@ export class WebviewRegistry {
       // A view whose webContents is gone may already be detached.
     }
     trace(viewGone(paneId, e.tileId, url));
-    this.cb.onViewGone?.({ paneId, tileId: e.tileId });
+    this.cb.onViewGone?.({ paneId, tileId: e.tileId, gen: e.gen });
     this.reportErr(pageClosedMessage(url), 'info');
   }
 }
