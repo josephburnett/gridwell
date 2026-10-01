@@ -66,3 +66,25 @@ func TestReactHealthBothDirectionsResync(t *testing.T) {
 		t.Errorf("%q must be a sticky source", down.Source)
 	}
 }
+
+// A tile event names the grid whose read in flight may predate it, folded or
+// not: an answer taken before the event would install over the fold.
+func TestOweNamesTheGridOfATileEvent(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   *pb.Event
+		want string
+	}{
+		{"a TileChanged owes its grid",
+			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "n/4", GridId: "n/1"}}}}, "n/1"},
+		{"a TileRemoved owes its grid",
+			&pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "n/1", TileId: "n/4"}}}, "n/1"},
+		{"a GridChanged owes nothing here; Route fetches it",
+			&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "n/1"}}}, ""},
+	}
+	for _, c := range cases {
+		if got := Owe(c.ev); got != c.want {
+			t.Errorf("%s: Owe = %q, want %q", c.name, got, c.want)
+		}
+	}
+}

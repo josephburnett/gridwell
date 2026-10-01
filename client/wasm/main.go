@@ -1080,7 +1080,10 @@ func (a *App) startSSE() {
 				a.emit(traceevent.EventApplied(ev))
 				a.draw()
 			}
-			// events.Route is the one table; this runs its arms.
+			// events.Route and events.Owe are the tables; this runs their arms.
+			if g := events.Owe(ev); g != "" {
+				a.fetch.grids.Change(g)
+			}
 			plan := events.Route(ev)
 			if plan.DropPreviews != "" {
 				a.views.urlPreview.Drop(plan.DropPreviews)
