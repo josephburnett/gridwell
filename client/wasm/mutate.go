@@ -135,7 +135,7 @@ func (a *App) dispatch(w write) error {
 	if n.Reloaded {
 		a.refetchGridOnConflict(w.gid, w.label)
 	} else if r.Refetch {
-		a.fetchGrid(w.gid)
+		a.refetchGrid(w.gid)
 	}
 	if n.Generic {
 		a.surfaceRPCError(w.label, err)
@@ -155,9 +155,9 @@ func (a *App) dispatch(w write) error {
 	// Before `then`: a hook that relocates a pane wants the fetch already in
 	// flight.
 	if w.refetchOnOK {
-		a.fetchGrid(w.gid)
+		a.refetchGrid(w.gid)
 		if w.alsoGID != "" && w.alsoGID != w.gid {
-			a.fetchGrid(w.alsoGID)
+			a.refetchGrid(w.alsoGID)
 		}
 	}
 	if w.then != nil {
@@ -284,7 +284,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 			if clientsync.NoticesFor(r, o, false).Reloaded {
 				a.refetchGridOnConflict(gid, "WriteContent")
 			} else {
-				a.fetchGrid(gid)
+				a.refetchGrid(gid)
 			}
 			a.refreshFileOverlay()
 			a.scheduleFrame(traceevent.WhyContent)

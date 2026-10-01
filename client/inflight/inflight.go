@@ -36,10 +36,10 @@ type claimSet struct {
 // release is told from its successor's.
 type claim struct {
 	cancel context.CancelFunc
-	// owed records an ask this claim refused. The refused caller asked
-	// because something changed, and a request already in flight answers
-	// from before that change, so dropping the ask would leave the cache
-	// older than the change that asked for it.
+	// owed records that the key changed while this claim was held: the
+	// answer in flight was taken before the change, so it is not the answer.
+	// A refused ask owes nothing, because a draw asks every frame and its ask
+	// carries no news the read in flight does not already answer.
 	owed bool
 }
 
@@ -47,15 +47,14 @@ func newClaimSet(d time.Duration) *claimSet {
 	return &claimSet{d: d, m: map[string]*claim{}}
 }
 
-// begin claims key for one fetch; ok is false when one already holds it, and
-// the holder is then owed a re-ask. The fetch must use the returned context,
-// which is what CancelIf cancels, and must call done when it returns; done
-// reports whether an ask was refused while the claim was held.
+// begin claims key for one fetch; ok is false when one already holds it. The
+// fetch must use the returned context, which is what CancelIf cancels, and
+// must call done when it returns; done reports whether the key was owed a
+// re-ask while the claim was held.
 func (s *claimSet) begin(key string) (ctx context.Context, done func() bool, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if c, held := s.m[key]; held {
-		c.owed = true
+	if _, held := s.m[key]; held {
 		return nil, nil, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.d)
@@ -64,14 +63,24 @@ func (s *claimSet) begin(key string) (ctx context.Context, done func() bool, ok 
 	return ctx, func() bool { return s.release(key, c) }, true
 }
 
+// owe marks key's claim owed a re-ask, if one is held. With none held the
+// next read already answers after the change.
+func (s *claimSet) owe(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c, held := s.m[key]; held {
+		c.owed = true
+	}
+}
+
 // bounded is a bounded context with no claim. CancelIf cannot reach it, so
 // the caller must cancel it.
 func (s *claimSet) bounded() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), s.d)
 }
 
-// release drops c's claim on key if c still holds it and reports whether an
-// ask was refused meanwhile. A cancelled fetch returns after a fresh one has
+// release drops c's claim on key if c still holds it and reports whether it
+// was owed a re-ask. A cancelled fetch returns after a fresh one has
 // taken the key, and freeing the fresh claim would drop the dogpile guard for
 // as long as it runs; the successor carries its own owed flag.
 func (s *claimSet) release(key string, c *claim) bool {

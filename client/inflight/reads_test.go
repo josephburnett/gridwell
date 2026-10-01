@@ -133,3 +133,51 @@ func TestReviveNamesTheDeadKeysItClears(t *testing.T) {
 		t.Error("revive cleared outside the dead keys it matched")
 	}
 }
+
+// The sequence a dropped refetch loses: a read is in flight, the thing it
+// asks about changes, and the ask that change makes is refused. The answer
+// already on the wire was taken before the change, so it is owed a re-ask.
+func TestAChangeInFlightIsOwedToTheHolder(t *testing.T) {
+	r := NewReads()
+	server, cache, changed := "v1", "", false
+	var fetch func()
+	fetch = func() {
+		_, done, ok := r.Ask("g1")
+		if !ok {
+			return
+		}
+		read := server // the answer leaves the server now
+		if !changed {
+			// The change lands while this read is on the wire.
+			changed, server = true, "v2"
+			r.Change("g1")
+			fetch()
+		}
+		cache = read
+		if done() {
+			fetch()
+		}
+	}
+	fetch()
+	if cache != "v2" {
+		t.Errorf("cache = %q, want %q: the change that landed mid-flight was dropped", cache, "v2")
+	}
+}
+
+// A draw asks every frame while a read is in flight. Its ask carries nothing
+// the read in flight does not already answer, so it owes no second read.
+func TestARepeatedAskOwesNothing(t *testing.T) {
+	r := NewReads()
+	_, done, ok := r.Ask("g1")
+	if !ok {
+		t.Fatal("a fresh key was refused")
+	}
+	for range 3 {
+		if _, _, again := r.Ask("g1"); again {
+			t.Fatal("a key in flight was asked twice")
+		}
+	}
+	if done() {
+		t.Error("a frame's repeated ask owed a re-read: every grid in flight is read twice")
+	}
+}

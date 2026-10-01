@@ -95,9 +95,11 @@ func (r *Reads) FailedKeys() []string {
 	return merged(r.refused.keys(), r.unreachable.keys())
 }
 
-// Change clears key's latches: the entity changed, so the last answer is no
-// longer the answer.
+// Change clears key's latches and owes a read in flight a re-ask: the entity
+// changed, so neither the last answer nor the one on the wire is the answer.
+// It is the only thing that owes one.
 func (r *Reads) Change(key string) {
+	r.claims.owe(key)
 	r.Settle(key, Answered)
 }
 

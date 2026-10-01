@@ -805,9 +805,7 @@ func (a *App) fetchGrid(id string) {
 	}
 	go func() {
 		err := a.loadGrid(ctx, id)
-		// An ask refused while this one was on the wire describes a grid this
-		// answer was taken too early to hold, so it is re-asked rather than
-		// lost; see inflight.Reads.Ask.
+		// see inflight.Reads.Change
 		owed := done()
 		if err != nil {
 			a.draw()
@@ -820,6 +818,13 @@ func (a *App) fetchGrid(id string) {
 			a.fetchGrid(id)
 		}
 	}()
+}
+
+// refetchGrid is fetchGrid for a caller that knows id changed, so a read
+// already in flight is owed a re-ask rather than refused.
+func (a *App) refetchGrid(id string) {
+	a.fetch.grids.Change(id)
+	a.fetchGrid(id)
 }
 
 // fetchTileByID resolves a routable tile id whose grid is not cached: GetTile
@@ -1214,7 +1219,7 @@ func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 // optimistic change is about to be replaced, and that must be visible.
 func (a *App) refetchGridOnConflict(gridID string, where string) {
 	a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
-	a.fetchGrid(gridID)
+	a.refetchGrid(gridID)
 }
 
 // reportErr is the one wasm entry into the error surface. It also logs to the
