@@ -19,8 +19,10 @@ interface ContextParams {
 
 // webviews.ts wires these to the clipboard and the view's webContents.
 interface ContextActions {
-  copyText(text: string): void;
-  copyLink(url: string): void;
+  // Electron's clipboard is asynchronous, so a copy can fail after the menu is
+  // gone; the row reports that through failed.
+  copyText(text: string): Promise<void>;
+  copyLink(url: string): Promise<void>;
   openLink(url: string): void;
   cut(): void;
   paste(): void;
@@ -33,6 +35,7 @@ interface ContextActions {
   // Every row reports the label it ran under, so one caller can say what the
   // user picked without the builder knowing what any item means.
   chose(label: string): void;
+  failed(message: string): void;
 }
 
 // The subset of MenuItemConstructorOptions this builder emits, declared here so
@@ -49,13 +52,15 @@ interface MenuTemplateItem {
 // not apply are omitted, except the navigation block, which disables instead.
 export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): MenuTemplateItem[] {
   const items: MenuTemplateItem[] = [];
-  // One wrapper, so no row can be added that runs without being reported.
-  const row = (label: string, run: () => void, enabled?: boolean): MenuTemplateItem => ({
+  // One wrapper, so no row can be added that runs without being reported, or
+  // whose asynchronous action can fail without being reported.
+  const row = (label: string, run: () => void | Promise<void>, enabled?: boolean): MenuTemplateItem => ({
     label,
     ...(enabled === undefined ? {} : { enabled }),
     click: () => {
       a.chose(label);
-      run();
+      const done = run();
+      if (done instanceof Promise) done.catch((err: unknown) => a.failed(`${label} failed: ${String(err)}`));
     },
   });
 

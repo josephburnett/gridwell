@@ -72,12 +72,19 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
           .map((i: any) => i.label)
           .filter((l: string) => l);
 
-        // Run the real copy action and read it back off the clipboard.
-        clipboard.writeText('');
+        // Run the real copy action and read it back off the clipboard. The
+        // write is asynchronous and the click cannot be awaited, so poll.
+        await clipboard.writeText('');
         const copyItem = captured.items.find((i: any) => i.label === 'Copy Link Address');
         if (copyItem && typeof copyItem.click === 'function') copyItem.click();
+        let copied = '';
+        const copyDeadline = Date.now() + 2000;
+        while (!copied && Date.now() < copyDeadline) {
+          copied = await clipboard.readText();
+          if (!copied) await new Promise<void>((res) => setTimeout(res, 50));
+        }
 
-        return { labels, clipboard: clipboard.readText() };
+        return { labels, clipboard: copied };
       } finally {
         (Menu.prototype as any).popup = origPopup;
         await reg.remove('e2e-ctx');
@@ -157,11 +164,17 @@ test('a jittery right-click (5px movement, fast release) still produces the cont
 
         const labels: string[] = captured.items.map((i: any) => i.label).filter((l: string) => l);
 
-        clipboard.writeText('');
+        await clipboard.writeText('');
         const copyItem = captured.items.find((i: any) => i.label === 'Copy Link Address');
         if (copyItem && typeof copyItem.click === 'function') copyItem.click();
+        let copied = '';
+        const copyDeadline = Date.now() + 2000;
+        while (!copied && Date.now() < copyDeadline) {
+          copied = await clipboard.readText();
+          if (!copied) await new Promise<void>((res) => setTimeout(res, 50));
+        }
 
-        return { labels, clipboard: clipboard.readText() };
+        return { labels, clipboard: copied };
       } finally {
         (Menu.prototype as any).popup = origPopup;
         await reg.remove('e2e-jitter');
