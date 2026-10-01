@@ -5,7 +5,8 @@ package main
 // The + menu belongs to the node a pane is inside. A context is one node's
 // plugin list plus its shells flag, keyed by the pane's grid's node_ns ("" is
 // this node, the boot handshake). Remote contexts are fetched through the
-// routed Handshake and cached for the session.
+// routed Handshake, and every context is asked again on a health transition
+// (refetchMenus).
 
 import (
 	"context"
@@ -45,8 +46,7 @@ func (a *App) gridNodeNS(gridID string) string {
 }
 
 // menuCtx returns the context for pane p, kicking a background fetch for a
-// remote context not yet loaded. The "" context is the boot handshake, always
-// present.
+// remote context not yet loaded. The "" context is a.plugins, always present.
 func (a *App) menuCtx(p *pane.Pane) *menuContext {
 	ns := a.paneNodeNS(p)
 	if ns == "" {
@@ -81,4 +81,43 @@ func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 	mc.shellsDisabled = lp.ShellsDisabled
 	mc.fetched = true
 	a.draw()
+}
+
+// refetchMenus asks every node's plugin list again after a health transition
+// or a stream gap. A transition changes a row of the menu that lists the
+// source, which is the node above it rather than one the source reaches, so
+// no menu is left out: a plugin whose refusal ended gets its entries back,
+// and one that began refusing loses them. The local list is asked now, since
+// dead-link verdicts read it; a remote one on its next draw.
+func (a *App) refetchMenus() {
+	for _, mc := range a.views.menuCtxs {
+		mc.fetched = false
+	}
+	a.fetch.menus.Change("")
+	a.askLocalMenu()
+}
+
+func (a *App) askLocalMenu() {
+	if ctx, done, ok := a.fetch.menus.Ask(""); ok {
+		go a.fetchLocalMenu(ctx, done)
+	}
+}
+
+// fetchLocalMenu re-reads this node's plugin list. The rest of the boot
+// handshake (caps, the content token, home) is immutable and stays. An ask
+// refused while this one was in flight came from a newer transition, so it is
+// asked again.
+func (a *App) fetchLocalMenu(ctx context.Context, done func() bool) {
+	lp, err := a.cl.Handshake(ctx)
+	owed := done()
+	a.fetch.menus.Settle("", clientsync.ReactRead(clientsync.Of(err)))
+	if err != nil {
+		a.surfaceRPCError("Handshake", err)
+	} else {
+		a.plugins = lp.Plugins
+		a.draw()
+	}
+	if owed {
+		a.askLocalMenu()
+	}
 }

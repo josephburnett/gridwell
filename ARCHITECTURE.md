@@ -158,9 +158,14 @@ and pages plugins and anyone else's alike, on the same footing. Each runs as a
 supervised subprocess (`internal/plugin`, the one owner of whether a plugin
 is alive): one that dies is respawned with a backoff, the down and up reach
 the strip as that namespace's health event, and while it is down its calls
-fail honestly — nothing answers for it. While it is up, and only if its
+fail honestly — nothing answers for it. One that is up but cannot serve what
+its config declares refuses `Info` with the reason: it is listed broken with
+that sentence and none of its entries, each subscriber's fan-in asks again on
+its backoff, and the up that ends the refusal reaches the strip like any
+other. While it is up, and only if its
 `InfoResponse.watch` declares one and some client shows one of its grids (a
-pane's grid, or a well's preview on screen: `pane.Showing`), the node holds one `Watch` stream to it (`pluginhost.Start`), scoped to the
+pane's grid, or a well's preview on screen: `pane.Showing`), the node holds
+one `Watch` stream to it (`pluginhost.Start`), scoped to the
 contexts shown (`WatchRequest.contexts`, the plugin's share of
 `interest.Book`'s union, re-opened with the new set when it changes), and
 publishes each change the plugin sends as the `GridChanged` a write would

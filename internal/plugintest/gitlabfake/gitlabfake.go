@@ -169,8 +169,8 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 }
 
 // Config is the plugin config map pointing gridwell-plugin-gitlab at this fake:
-// the url, and a token_file holding a token, since the plugin refuses to launch
-// without one. Keys in extra are merged in.
+// the url, and a token_file holding a token, since the plugin refuses its
+// handshake without one. Keys in extra are merged in.
 func (s *Server) Config(t *testing.T, extra map[string]string) map[string]string {
 	t.Helper()
 	tokenFile := filepath.Join(t.TempDir(), "token")
