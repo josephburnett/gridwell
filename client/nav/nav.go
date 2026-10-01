@@ -277,6 +277,12 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 	case stepLevelRecentre:
 		m.levelRecentre(c, r, w, &pl)
 	case stepLinkTarget:
+		if r.Dead {
+			// The link now draws dead, which says it all, and the descent has
+			// nothing to open.
+			pl.then(Gesture{Kind: GestureAscend, PaneID: c.PaneID, N: 1})
+			break
+		}
 		if !r.OK || r.Tile == nil {
 			pl.add(Effect{Kind: EffReport, Severity: errsurface.Error,
 				Source: "rpc:GetTile", Message: "GetTile failed: " + r.Err})

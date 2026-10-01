@@ -33,7 +33,7 @@ func (a *App) runGesture(g nav.Gesture) {
 		// read by what it asked for next.
 		a.emit(traceevent.Nav(g))
 		plan := a.nav.Do(g, a.navWorld(g))
-		a.runNav(plan)
+		a.runNavEffects(plan)
 		if plan.Next == nil {
 			return
 		}

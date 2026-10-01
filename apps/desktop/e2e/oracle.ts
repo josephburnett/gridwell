@@ -211,11 +211,12 @@ export async function createLeafLink(
   altText: string,
   x: number,
   y: number,
+  kind = 'text',
 ): Promise<Tile> {
   const res = await fetch(`${origin}/${SERVICE}/CreateTile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
-    body: JSON.stringify({ gridId, tile: { kind: 'text', x, y, w: 1, h: 1, linkTargetId, altText } }),
+    body: JSON.stringify({ gridId, tile: { kind, x, y, w: 1, h: 1, linkTargetId, altText } }),
   });
   if (!res.ok) {
     throw new Error(`CreateTile(link -> ${linkTargetId}) failed: ${res.status} ${await res.text()}`);
