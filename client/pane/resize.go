@@ -403,3 +403,30 @@ func axisSpan(r Rect, dir Direction) (float64, float64) {
 	}
 	return r.X, r.W
 }
+
+// Ratios is every split's ratio under one node at one moment. A resize moves
+// ratios as it goes, so one let go of mid-drag restores the press's.
+type Ratios map[*Split]float64
+
+// RatiosOf reads the ratios under n.
+func RatiosOf(n TreeNode) Ratios {
+	r := Ratios{}
+	var walk func(TreeNode)
+	walk = func(n TreeNode) {
+		if n.Split == nil {
+			return
+		}
+		r[n.Split] = n.Split.Ratio
+		walk(n.Split.A)
+		walk(n.Split.B)
+	}
+	walk(n)
+	return r
+}
+
+// Restore puts every ratio back.
+func (r Ratios) Restore() {
+	for s, v := range r {
+		s.Ratio = v
+	}
+}

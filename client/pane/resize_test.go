@@ -374,3 +374,24 @@ func TestLocateSplit(t *testing.T) {
 		t.Fatalf("after cascade: inner rect = %+v (ok=%v), want y=32 (top crushed to min)", r, ok)
 	}
 }
+
+// A resize let go of mid-drag puts back every ratio the cascade moved, not
+// only the grabbed divider's, so the layout is the one the press found.
+func TestRatiosRestoreUndoesACascade(t *testing.T) {
+	outer, inner := stack3()
+	root := TreeNode{Split: outer}
+	container := Rect{X: 0, Y: 0, W: 300, H: 900}
+	before := paneHeights(root, container)
+	press := RatiosOf(root)
+	ResizeThrough(root, container, outer, 880, MinPanePx)
+	if inner.Ratio == 0.5 {
+		t.Fatalf("the drag should have cascaded into the inner split")
+	}
+	press.Restore()
+	after := paneHeights(root, container)
+	for id, h := range before {
+		if after[id] != h {
+			t.Errorf("pane %s: height %v after restore, want %v", id, after[id], h)
+		}
+	}
+}

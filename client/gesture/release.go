@@ -27,12 +27,28 @@ type Armed struct {
 	// DragCreates is dragdrop.Intent.Creates: a copy or a link, armed by the
 	// right button, so the left button's release is not its release.
 	DragCreates bool
+	// Pan is a drag that grabbed no tile and no swatch: it moves the viewport.
+	Pan bool
+}
+
+// Release is the commit path a mouseup of button finishes. A left drag ends on
+// any button's release; a creating drag ends only through the right drag it
+// is.
+func Release(button int, armed Armed) Recovery {
+	switch {
+	case armed.RightDrag && button == 2:
+		return FinishRightDrag
+	case armed.LeftResize && button == 0:
+		return FinishLeftResize
+	case armed.Drag && !armed.DragCreates:
+		return FinishLeftDrag
+	}
+	return FinishNothing
 }
 
 // RecoverRelease reads a move that reports a gesture's own button already up as
 // that release arriving late, so the gesture finishes through its own commit
-// path rather than being cleared. The order is onMouseUp's, and is the only
-// place it is written down.
+// path rather than being cleared.
 func RecoverRelease(buttons int, armed Armed) Recovery {
 	switch {
 	case armed.LeftResize && buttons&ButtonsLeft == 0:
