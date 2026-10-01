@@ -11,27 +11,23 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// Tile kinds. A tile is exactly one of these. A shell's contents reflect state
-// the host owns, not Gridwell, and the red-outline grammar follows.
+// Tile kinds. A tile is exactly one of these.
 const (
 	KindWell  = "well"
 	KindText  = "text"
 	KindURL   = "url"
 	KindShell = "shell"
-	// KindPane is a durable layout: a tile whose content blob is a
-	// serialized split-pane layout (api/panelayout). The string is frozen
-	// into the store's CHECK.
+	// KindPane is a durable layout: its content blob is a serialized
+	// split-pane layout (api/panelayout).
 	KindPane = "pane"
 )
 
-// ContentChunkBytes is the size of every content chunk but the last. Every
-// producer of a content stream uses it, so no reader can tell one producer
-// from another by the framing.
+// ContentChunkBytes is the size of every content chunk but the last, for
+// every producer of a content stream.
 const ContentChunkBytes = 256 * 1024
 
-// MaxContentBytes is the largest content body the door carries, whichever way
-// it flows: what a write is refused above, what a cache declines to remember,
-// what the store's blob column holds (store.MaxBlobBytes).
+// MaxContentBytes is the largest content body the door carries, either way;
+// store.MaxBlobBytes matches it.
 const MaxContentBytes = 16 * 1024 * 1024
 
 // IsWellKind: an exit well is still a well, said by its child_grid_id and not
@@ -102,14 +98,10 @@ func PluginWellTile(pl *pb.PluginInfo) *pb.Tile {
 		H:           1,
 		AltText:     pl.Label,
 		ChildGridId: pl.RootGridId,
-		// A menu swatch is a link by nature, so it renders dashed like a
-		// mounted plugin well.
-		Reference: true,
-		// The plugin's persisted root framing carries across, so the
-		// swatch lands at the left-off view.
-		ViewCx:   pl.RootViewCx,
-		ViewCy:   pl.RootViewCy,
-		ViewZoom: pl.RootViewZoom,
+		Reference:   true,
+		ViewCx:      pl.RootViewCx,
+		ViewCy:      pl.RootViewCy,
+		ViewZoom:    pl.RootViewZoom,
 	}
 }
 
@@ -118,11 +110,9 @@ func PluginWellTile(pl *pb.PluginInfo) *pb.Tile {
 const PluginKindConnection = "connection"
 
 // ConnectionRow is the one shape a connection takes in the + menu: a plugins
-// row of kind connection wearing the globe, its landing as the root and the
-// last dial or learn failure as InfoError. A pending connection is rootless,
-// so health reads it as waiting, not broken. The transport mints one per
-// declared connection and the transit fold one per retired ConnectionInfo;
-// nothing else spells the row.
+// row of kind connection, its landing as the root and the last dial failure
+// as InfoError. A pending connection is rootless, so health reads it as
+// waiting, not broken.
 func ConnectionRow(uuid, label, rootGridID, statusDetail string, view Framing) *pb.PluginInfo {
 	return &pb.PluginInfo{
 		Uuid: uuid, Kind: PluginKindConnection, Label: label, Glyph: GlyphGlobe,
@@ -158,22 +148,18 @@ func HomeRow(l *pb.HandshakeResponse) *pb.PluginInfo {
 }
 
 // IsContentDescentKind: descending one of these sets pane.TextFocus rather
-// than pushing a grid. Click-to-descend and the URL-restore walk share it, or
-// a descent encoded into the URL would be dropped on reload.
+// than pushing a grid.
 func IsContentDescentKind(kind string) bool {
 	return kind == KindText || kind == KindURL || kind == KindShell
 }
 
 // IsWorkspaceKind: a pane tile's descent swaps the whole pane tree and pushes
-// a level. With IsWellKind and IsContentDescentKind it partitions the
-// descendable kinds, pinned so a new kind cannot fall through a dispatch.
+// a level.
 func IsWorkspaceKind(kind string) bool {
 	return kind == KindPane
 }
 
-// IsBodyKind: these kinds hold a content blob of their own. The deep copy
-// carries it, the prefetch walk warms it and the store refcounts it, so no
-// walker decides for itself what has bytes.
+// IsBodyKind: these kinds hold a content blob of their own.
 func IsBodyKind(kind string) bool {
 	return kind == KindText || kind == KindPane
 }
@@ -197,8 +183,7 @@ const (
 )
 
 // WebContent is a url tile: at the address it carries, or at the /content/
-// door when its plugin serves the page. Every url-tile semantic keys off it,
-// so the two cannot diverge.
+// door when its plugin serves the page.
 func WebContent(t *pb.Tile) bool {
 	return t.Kind == KindURL
 }
@@ -215,9 +200,7 @@ func HTTPAddress(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }
 
-// PageContent is a url tile whose plugin serves the page. The address is the
-// plugin's, derived at use time (PageURL); everything else it holds is a url
-// tile's.
+// PageContent is a url tile whose plugin serves the page, at PageURL.
 func PageContent(t *pb.Tile) bool {
 	return t.Kind == KindURL && t.ServesPage
 }
@@ -232,8 +215,7 @@ const (
 	DescentShell
 )
 
-// DescentOf classifies the tile a pane is descended into. A nil tile — one the
-// client has not resolved — is DescentNone.
+// DescentOf classifies the tile a pane is descended into; nil is DescentNone.
 func DescentOf(t *pb.Tile) Descent {
 	switch {
 	case t == nil:
@@ -267,8 +249,7 @@ const (
 )
 
 // ContentID is the tile id that owns a tile's content: a leaf link's target, or
-// the tile's own id. Every client content operation keys by it, so a link and
-// its target share one content fact and no write lands on a link row.
+// the tile's own id.
 func ContentID(t *pb.Tile) string {
 	if t.LinkTargetId != "" {
 		return t.LinkTargetId
@@ -286,9 +267,7 @@ type Framing struct {
 	Zoom float64
 }
 
-// framingEpsilon is how close two framings count as the same picture. Below
-// it a write is float jitter in a re-derived viewport, not a place the user
-// chose.
+// framingEpsilon is how close two framings count as the same picture.
 const framingEpsilon = 0.001
 
 // SameAs is the same-framing test, within framingEpsilon. Every persister
@@ -300,9 +279,8 @@ func (f Framing) SameAs(g Framing) bool {
 }
 
 // Reframe writes a root grid's framing onto every doorway rooted at gridID, a
-// row's own and a declared entry's alike: the copies a handshake carries, the
-// client's and the source cache's. It reports whether any value moved, by
-// SameAs, so the echo of a pane's own write is a no-op.
+// row's own and a declared entry's alike, and reports whether any value moved
+// by SameAs.
 func Reframe(gridID string, f Framing, plugins []*pb.PluginInfo) bool {
 	if gridID == "" {
 		return false

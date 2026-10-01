@@ -1,10 +1,7 @@
 // Package resload owns what an asynchronously loaded, revocable resource is:
-// the generation guard that discards a superseded result, what the load in
-// flight is for, the revoke that
+// the generation guard that discards a superseded result, the revoke that
 // keeps one live resource per entry, and the latch that settles an answer
-// which never becomes a picture, so it is reported once rather than once per
-// frame. The map, the key, the lock and what a new load does to the resource
-// an entry already holds stay with each cache.
+// which never becomes a picture. The map, key and lock stay with each cache.
 package resload
 
 import "sync/atomic"
@@ -15,10 +12,9 @@ type Resource interface {
 	Revoke()
 }
 
-// Entry is one key's resource. Ident is what Res was loaded for, so a cache
-// invalidates by identity with no invalidation signal; Failed latches
-// FailIdent as answered without a resource, separate from Ident so an entry
-// can hold one identity's resource and another's settled miss at once.
+// Entry is one key's resource. Ident is what Res was loaded for; FailIdent is
+// separate so an entry can hold one identity's resource and another's settled
+// miss at once.
 type Entry[I comparable] struct {
 	Res       Resource
 	Ident     I
@@ -47,8 +43,7 @@ func (e *Entry[I]) Begin(ident I) int64 {
 }
 
 // Loading reports whether the entry's current load is for ident. A load
-// outlives the fetch that brought its bytes, so this is what tells a caller
-// the answer is on its way rather than still to be asked for.
+// outlives the fetch that brought its bytes.
 func (e *Entry[I]) Loading(ident I) bool {
 	return e.inFlight && e.loading == ident
 }
@@ -72,10 +67,9 @@ func (e *Entry[I]) Release() {
 	e.Res = nil
 }
 
-// Take installs res under ident, revoking what it replaces. A nil e, which is
-// a key dropped while the load ran, or a generation a later Begin superseded
-// revokes res instead and reports false: one of the two always happens, so no
-// loaded resource leaks.
+// Take installs res under ident, revoking what it replaces. A nil e (a key
+// dropped while the load ran) or a superseded generation revokes res instead
+// and reports false, so no loaded resource leaks.
 func Take[I comparable](e *Entry[I], gen int64, ident I, res Resource) bool {
 	if e == nil || e.gen != gen {
 		revoke(res)

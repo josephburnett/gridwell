@@ -1,9 +1,7 @@
 //go:build js && wasm
 
-// Package main is the WASM entry point for the Gridwell client: canvas, DOM,
-// and the RPC calls. The code here reaches into syscall/js and is exercised
-// only in a browser, so every decision belongs in one of the pure, tested
-// client/* packages instead — ARCHITECTURE.md, "The client".
+// Package main is the WASM entry point for the Gridwell client: glue over
+// syscall/js. Every decision belongs in a pure, tested client/* package.
 package main
 
 import (
@@ -50,22 +48,19 @@ import (
 
 const (
 	cellPx = pane.CellPx
-	// zoomMin is the grid zoom floor, one value for every gesture and every
-	// client. 1/32 puts cells at 2px, below the 4px line where drawGridLinesIn
-	// stops painting, so the deep end is a line-less overview of color blocks.
+	// zoomMin is the grid zoom floor for every gesture and client: cells at 2px,
+	// below the line where drawGridLinesIn stops painting.
 	zoomMin    = 0.03125
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
-	// wellZoomRatio* clamp the hover-wheel well zoom in the intrinsic ratio's
-	// units, where previewCell = parentCell times ratio. The min keeps the
-	// preview above the renderer's 0.5px floor.
+	// wellZoomRatio* clamp the hover-wheel well zoom in intrinsic-ratio units;
+	// the min keeps the preview above the renderer's 0.5px floor.
 	wellZoomRatioMin = 1.0 / 64.0
 	wellZoomRatioMax = 1.0
 
-	// textFixedScale is the constant render scale for text, descended and
-	// previewed alike, so grid zoom reveals more lines instead of magnifying
-	// the type.
+	// textFixedScale renders text at one scale, so grid zoom reveals more lines
+	// instead of magnifying the type.
 	textFixedScale = 1.0
 )
 
@@ -95,8 +90,7 @@ type App struct {
 
 	dragging *dragState
 
-	// locals is the per-pane session-local state. The pane's place lives on the
-	// pane itself; a.forgetPane removes an entry atomically.
+	// locals is the per-pane session-local state; a.forgetPane removes an entry.
 	locals map[string]*paneLocal
 
 	// menu is the single owner of the + menu's open state, pane and hover; never
@@ -107,9 +101,7 @@ type App struct {
 	// reports through a.reportErr or a.resolveErr.
 	errs *errsurface.Surface
 
-	// tr is this client's ring of trace records and pump the one post in
-	// flight. The cid is minted at boot, so a dump says which page's records
-	// these are.
+	// tr is this client's trace ring and pump the one post in flight.
 	tr   *trace.Client
 	pump *trace.Pump
 
@@ -129,16 +121,14 @@ type App struct {
 	themeName theme.Theme
 
 	// origin is the serving origin and contentToken the /content/ door's path
-	// capability. A served page's address is derived at use time, never
-	// persisted.
+	// capability; a served page's address is derived at use, never persisted.
 	origin       string
 	contentToken string
 
 	// unloading switches framing writes to sendBeacon; see unload.go.
 	unloading bool
 
-	// touchDownTarget is the element the gesture started on, where synthetic
-	// MouseDowns route. Owned by touch.go.
+	// touchDownTarget is where synthetic MouseDowns route; owned by touch.go.
 	touch           *touchgest.Machine
 	touchTimerCb    js.Func
 	touchDownTarget js.Value
@@ -163,12 +153,11 @@ type App struct {
 	// leftResize clamps to the pane minimum; the release decides a close.
 	leftResize *leftResizeState
 
-	// shellAlive caches the ShellSessionAlive probe; a missing key is unknown.
-	// shellAliveProbing single-flights it, dropping no caller's callback.
+	// shellAlive caches the ShellSessionAlive probe (missing key: unknown);
+	// shellAliveProbing single-flights it.
 	shellAlive        map[string]bool
 	shellAliveProbing map[string][]func(alive bool)
 
-	// shells owns the PTY lifecycle rules; this file hands it a dialer.
 	shells *shellstream.Registry
 
 	// mirrors is what each mirror was last told; see syncMirrors.
@@ -178,8 +167,7 @@ type App struct {
 	interest     interest.Tracker
 	interestKick chan struct{}
 
-	// shellMirrorPasses counts shell mirror snapshots. e2e-only: the mirror
-	// writes into a cache and nothing else reports that it ran.
+	// shellMirrorPasses counts shell mirror snapshots, for e2e.
 	shellMirrorPasses int
 
 	// traces holds the per-pane ascent-trace highlight, ephemeral like selection.
@@ -187,15 +175,12 @@ type App struct {
 
 	overlays overlayState
 
-	// zoomKeyRelays counts zoom chords from the main-process relay. e2e-only:
-	// with the registry's counter it brackets the IPC hop.
+	// zoomKeyRelays counts relayed zoom chords, for e2e: it brackets the IPC hop.
 	zoomKeyRelays int
 
 	urlGens urlview.Gens
 
-	// writes counts dispatched mutations that have not settled, so the
-	// descent or placement that follows one has not happened yet. `post` and
-	// `do` are its only callers.
+	// writes counts dispatched mutations that have not settled.
 	writes inflight.Writes
 
 	// renderedPanePaints is e2e attribution: an unfocused pane paints raster.
@@ -206,17 +191,14 @@ type App struct {
 	backstop *retry.Interval
 }
 
-// overlayState holds the DOM singletons layered over the canvas. Each is
-// created lazily and reused for the life of the page, so a descent allocates no
-// fresh DOM.
+// overlayState holds the DOM singletons layered over the canvas, created
+// lazily and reused for the life of the page.
 type overlayState struct {
 	// textTextarea shows only over a focused pane in TextMode "text".
-	textTextarea js.Value
-	// Held so they can be released cleanly if the App is torn down (never).
+	textTextarea         js.Value
 	textTextareaInputCb  js.Func
 	textTextareaScrollCb js.Func
 
-	// renameEditing marks the shared inline rename input open.
 	renameEditing bool
 
 	// renderedReady mirrors textareaReady for rendered mode; lastRenderedKey
@@ -233,7 +215,6 @@ type overlayState struct {
 	choiceMenu    js.Value
 	choiceMenuCbs []func()
 
-	// wsExpand is the in-flight first-descent capture animation, nil when none.
 	wsExpand *wsExpandState
 
 	// textToggleBtn is a DOM element, not a canvas button, so it can sit above
@@ -241,40 +222,34 @@ type overlayState struct {
 	textToggleBtn js.Value
 	textToggleCb  js.Func
 
-	// urlModalOpen makes a second openURLModal call a no-op.
 	urlModalOpen bool
 
-	// lastTextareaTileID is what the singleton textarea is bound to: on a
-	// refresh the same tile preserves typing, a different one is re-seeded.
+	// lastTextareaTileID is what the textarea is bound to: the same tile on a
+	// refresh preserves typing, a different one is re-seeded.
 	lastTextareaTileID string
 
 	// textareaReady says the textarea holds the focused tile's content, so the
-	// canvas keeps painting through the loading race instead of blanking.
+	// canvas paints through the loading race.
 	textareaReady bool
 }
 
 // viewCaches holds derived views, never facts: every one is recomputable, so
 // the group may be dropped wholesale without losing anything the user made.
 type viewCaches struct {
-	// urlPreview invalidates itself when a tile's PreviewBlobID changes.
 	urlPreview *preview.Cache
 
-	// wrapCache memoizes raw-text soft-wrap results, reset wholesale when full.
 	wrapCache map[string][]string
 
-	// renderedPrev caches rasterized rendered-mode previews, invalidating
-	// itself when a tile's version or its layout width moves.
+	// renderedPrev caches rasterized rendered-mode previews by version and width.
 	renderedPrev *rasterprev.Cache
 
-	// paneLayouts memoizes the decode, invalidated by blob generation; the
-	// truth is the tile row plus its content bytes.
+	// paneLayouts memoizes the decode, invalidated by blob generation.
 	paneLayouts *panepreview.Layouts
 
 	// menuCtxs is keyed by the grid-stamped node_ns; "" is a.plugins, a.caps.
 	menuCtxs map[string]*menuContext
 }
 
-// newViewCaches is the one place the group is constructed.
 func newViewCaches(onPreviewDecodeErr, onRasterErr func(tileID string), onLayoutErr func(tileID string, err error)) viewCaches {
 	return viewCaches{
 		urlPreview:   preview.NewCache(preview.NewJSDecoder(), onPreviewDecodeErr),
@@ -288,11 +263,8 @@ func newViewCaches(onPreviewDecodeErr, onRasterErr func(tileID string), onLayout
 // fetchState owns whether a read is outstanding or has failed. A claim kept
 // elsewhere is how a swallowed request holds a key for the life of the page.
 type fetchState struct {
-	// grids, tiles, contents, previews and menus are the reads every draw
-	// fires on a miss: GetGrid by grid id, GetTile by a routable id whose
-	// grid was never visited, ReadContent and GetTilePreview by
-	// rpc.ContentID, and a remote pane's menu Handshake by node namespace.
-	// inflight.Reads owns why each failure latches and what clears it.
+	// grids, tiles, contents, previews and menus are the reads every draw fires
+	// on a miss; inflight.Reads owns why each failure latches and what clears it.
 	grids    *inflight.Reads
 	tiles    *inflight.Reads
 	contents *inflight.Reads
@@ -300,7 +272,6 @@ type fetchState struct {
 	menus    *inflight.Reads
 }
 
-// newFetchState is the one place the group is constructed.
 func newFetchState() fetchState {
 	return fetchState{
 		grids:    inflight.NewReads(),
@@ -311,10 +282,8 @@ func newFetchState() fetchState {
 	}
 }
 
-// oneShot is the only way the shim hands the host a callback it will be
-// called back on once. An unreleased js.Func stays in syscall/js's funcs map
-// for the life of the page, and an armed-per-frame callback makes that a leak
-// the size of the animation.
+// oneShot hands the host a callback it calls once. An unreleased js.Func
+// stays in syscall/js's funcs map for the life of the page.
 func oneShot(fn func()) js.Func {
 	oneShotsArmed++
 	oneShotsLive++
@@ -328,11 +297,9 @@ func oneShot(fn func()) js.Func {
 	return cb
 }
 
-// oneShotsArmed, oneShotsLive and framesArmed are what the e2e hook asserts
-// on: a js.Func that outlives its call is invisible from both sides of the
-// boundary, so the count is the only evidence. framesArmed says how many of
-// the armed ones were frames, because how many frames a gesture draws is the
-// host's to decide, not the spec's.
+// oneShotsArmed, oneShotsLive and framesArmed are the e2e evidence that no
+// js.Func outlives its call; framesArmed separates frames, whose count is
+// the host's to decide.
 var oneShotsArmed, oneShotsLive, framesArmed int
 
 // listen adds a DOM listener and returns the remover, which also releases the
@@ -359,8 +326,7 @@ func setTimeoutMs(ms int, fire func()) {
 	js.Global().Call("setTimeout", oneShot(fire), ms)
 }
 
-// persistState is the write-out side of the client. The navigation machine
-// emits the Flush* effects; this group is what executes them.
+// persistState executes the navigation machine's Flush* effects.
 type persistState struct {
 	sched scheduler
 
@@ -368,12 +334,10 @@ type persistState struct {
 	// outbox.SaveQueue.
 	contentSaves *outbox.SaveQueue
 
-	// wellWheelPending: the cache is patched per notch and the settle flush
-	// posts one SetFraming per tile, so a scroll burst is one write.
+	// wellWheelPending batches a scroll burst into one SetFraming per tile.
 	wellWheelPending map[string]wellWheelDrift
 
-	// persistPosts and framingFlushes are e2e-only: the settle chain is
-	// otherwise silent at every stage.
+	// persistPosts and framingFlushes are e2e-only.
 	persistPosts   map[string]int
 	framingFlushes int
 
@@ -381,9 +345,8 @@ type persistState struct {
 	out *outbox.Outbox
 }
 
-// newPersistState is the one place the group is built. It takes the App
-// because a debounce holds its body from construction, and the first draw
-// arms two of them: see client/debounce.
+// newPersistState takes the App because a debounce holds its body from
+// construction; see client/debounce.
 func newPersistState(a *App) persistState {
 	return persistState{
 		sched:            newScheduler(a),
@@ -397,33 +360,27 @@ func newPersistState(a *App) persistState {
 type scheduler struct {
 	frameAsks traceevent.FrameAsks
 
-	// wsSave's body encodes, hash-diffs, and posts the layout on a change.
 	wsSave *debounce.Debounce
 
 	urlUpdate *debounce.Debounce
 
-	// framingSave's body flushes settled framing through the no-op-guarded
-	// writers.
 	framingSave *debounce.Debounce
 
 	textSave *debounce.Debounce
 
-	// urlAddress posts a live page's landed address once it rests, through
-	// the content sweep that owns every content write.
+	// urlAddress posts a live page's landed address once it rests, through the
+	// content sweep.
 	urlAddress *debounce.Debounce
 
-	// errExpire lets one-shot notices leave the strip without polling.
 	errExpire *debounce.Debounce
 
-	// traceFlush posts the records owed. Every emit arms it; nothing owed
-	// arms nothing.
+	// traceFlush posts the records owed; nothing owed arms nothing.
 	traceFlush *debounce.Debounce
 }
 
-// newScheduler binds every settle timer to what it runs, before the App can
-// draw. draw() ends by arming two of these, so a timer bound any later would
-// take that arm with nothing to fire and never accept another. Every mode
-// comes from client/cadence, where the wait's own sentence asks for it.
+// newScheduler binds every settle timer before the App can draw: draw() arms
+// two of them, and a timer bound later would never fire. Modes come from
+// client/cadence.
 func newScheduler(a *App) scheduler {
 	return scheduler{
 		wsSave:      debounce.New(setTimeoutMs, nowMs, cadence.WorkspaceSaveMode, func() { a.flushWorkspaceSave(nil) }),
@@ -432,9 +389,8 @@ func newScheduler(a *App) scheduler {
 		textSave:    debounce.New(setTimeoutMs, nowMs, cadence.TextSaveMode, a.flushDirtyText),
 		urlAddress:  debounce.New(setTimeoutMs, nowMs, cadence.URLAddressMode, a.flushDirtyText),
 		traceFlush:  debounce.New(setTimeoutMs, nowMs, cadence.TraceFlushMode, a.flushTrace),
-		// The expiry's wait is a notice's own deadline rather than a cadence,
-		// and it is a throttle: a settle would push the window out every time
-		// a notice arrived, so the one already due would expire late.
+		// A notice's own deadline, and a throttle: a settle would push the window
+		// out on every new notice.
 		errExpire: debounce.New(setTimeoutMs, nowMs, debounce.Throttle, func() {
 			if a.errs.Expire(time.Now()) {
 				a.scheduleFrame(traceevent.WhyNotice) // strip shrank; panes reclaim the height on redraw
@@ -444,9 +400,8 @@ func newScheduler(a *App) scheduler {
 	}
 }
 
-// wellWheelDrift is one well's not-yet-persisted hover-wheel view. The center
-// is float all the way to the store, so nothing rounds the drift away, and the
-// flush never re-reads the cache row, which a refetch would have replaced.
+// wellWheelDrift is one well's not-yet-persisted hover-wheel view. The flush
+// never re-reads the cache row, which a refetch would have replaced.
 type wellWheelDrift struct {
 	gridID  string
 	cx, cy  float64
@@ -454,8 +409,7 @@ type wellWheelDrift struct {
 	version int64
 }
 
-// paneLocal is the single owner of one pane's session-local state. App.local
-// creates it and App.forgetPane removes it, so none of it outlives its pane.
+// paneLocal is the single owner of one pane's session-local state.
 type paneLocal struct {
 	pane.SessionState
 	urlView   *urlView
@@ -469,7 +423,6 @@ func (a *App) shellConnFor(paneID string) *shellStreamConn {
 	return nil
 }
 
-// urlViewFor is the liveness check the input and render paths use.
 func (a *App) urlViewFor(paneID string) *urlView {
 	if pl, ok := a.localIf(paneID); ok {
 		return pl.urlView
@@ -492,17 +445,16 @@ func (a *App) localIf(paneID string) (*paneLocal, bool) {
 	return pl, ok
 }
 
-// forgetPane is the single atomic cleanup point on pane drop, so no per-pane
-// state outlives its pane.
+// forgetPane is the single cleanup point on pane drop.
 func (a *App) forgetPane(paneID string) {
 	a.closeURLStream(paneID, true)
 	a.closeShellStream(paneID, true)
 	delete(a.locals, paneID)
 	// Level-scoped pane ids recur across descents, so every pane-keyed map
-	// clears here, or a stale entry greets the next pane of the same id.
+	// clears here.
 	delete(a.traces, paneID)
-	// A pane going away is the one case a transition is dropped rather than
-	// landed: there is no pane left to install a place on. Cancel lands.
+	// A dropped pane is the one case a transition is cancelled, not landed: no
+	// pane is left to install a place on.
 	a.trans.Drop(paneID)
 	// The drop means no landing will ever retire its continuations.
 	a.nav.Forget(paneID)
@@ -522,9 +474,7 @@ func (a *App) clearSelected(paneID string) {
 	}
 }
 
-// The transition's shape and per-pane bookkeeping live in client/transition.
-// Descent is two segments, a parent zoom-in then a zero-duration install on the
-// calibrated child state; ascent is the mirror. zoomtrans calibrates both.
+// The transition's shape lives in client/transition; zoomtrans calibrates it.
 
 // traceState is one armed ascent-trace highlight, held per pane in App.traces.
 type traceState struct {
@@ -533,8 +483,7 @@ type traceState struct {
 }
 
 // ghost is a transient floating render of a tile within one pane.
-// displayedCellSize lerps toward targetCellSize each frame, so the ghost
-// resizes when the cursor crosses a pane or enters a well.
+// displayedCellSize lerps toward targetCellSize each frame.
 type ghost struct {
 	tile              *gridwellv1.Tile
 	paneID            string
@@ -543,12 +492,11 @@ type ghost struct {
 	displayedCellSize float64
 	targetCellSize    float64
 
-	// hiddenTileID and hiddenPaneID suppress the source tile's render while this
-	// ghost stands in for it, and live here because the hide outlasts a.dragging.
+	// hiddenTileID and hiddenPaneID hide the source tile while the ghost stands in;
+	// the hide outlasts a.dragging.
 	hiddenTileID string
 	hiddenPaneID string
 
-	// fragmentation lerps like cell size, so dragging back out reassembles.
 	displayedFragmentation float64
 	targetFragmentation    float64
 
@@ -557,21 +505,19 @@ type ghost struct {
 	forbidden bool
 
 	// link is set while a left-drag hovers a different id namespace: the drop
-	// creates a link and the source stays, so the ghost draws dashed.
+	// links and the source stays.
 	link bool
 }
 
-// dragState tracks an in-progress drag. started is false until the cursor
-// leaves dragThreshold, so a bare click is a select rather than a move.
+// dragState tracks an in-progress drag; started is false until the cursor
+// leaves dragThreshold.
 type dragState struct {
 	// menuNS is the node whose menu offered a template: primitives create there.
 	menuNS       string
 	originPaneID string
-	// originFocused makes a bare click on an unfocused pane focus-only: without
-	// it a click meant to focus descends whenever it happens to hit a tile.
+	// originFocused makes a bare click on an unfocused pane focus-only.
 	originFocused bool
-	// splitNav records ctrl at left-press: a bare click then asks for its
-	// descent in a new split pane. Fixed at press; a started drag ignores it.
+	// splitNav records ctrl at left-press: a bare click descends in a new split.
 	splitNav     bool
 	tileID       string
 	cellOffsetX  float64
@@ -581,22 +527,20 @@ type dragState struct {
 	curScreenX   float64
 	curScreenY   float64
 	started      bool
-	// intent is fixed by the press, and the one owner of that fact. A creating
-	// drag commits only through the right-button release.
+	// intent is fixed by the press. A creating drag commits only through the
+	// right-button release.
 	intent dragdrop.Intent
-	// snapshotTile is never nil: a press that grabbed no tile carries an empty
-	// row, so the drop rules read a zero footprint instead of dereferencing nil.
+	// snapshotTile is never nil: a press that grabbed no tile carries an empty row.
 	snapshotTile  *gridwellv1.Tile
 	originScreenX float64
 	originScreenY float64
 
-	// A palette drag has no tile yet: item carries the grabbed entry, a
-	// primitive the drop creates or a plugin it mounts as an exit-well link.
+	// item is a palette drag's grabbed entry: a primitive to create or a plugin
+	// to mount as an exit-well link.
 	isTemplate bool
 	item       paletteItem
 
-	// The source grid, set at mousedown, carried separately so the commit names
-	// the right one when source and dest differ inside a single pane.
+	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string
 	srcCellSize float64
 }
@@ -609,8 +553,7 @@ const dragThreshold = 4.0
 
 func main() {
 	origin := js.Global().Get("location").Get("origin").String()
-	// Before the App, because the rpc client is built with the interceptor
-	// that records into it directly.
+	// Before the App: the rpc client's interceptor records into it.
 	tr := trace.New(trace.DefaultCapacity, trace.NewRequestID())
 	app = &App{
 		doc:                js.Global().Get("document"),
@@ -634,8 +577,8 @@ func main() {
 	}
 	// Before anything can draw: the settle timers close over the App.
 	app.persist = newPersistState(app)
-	// The flush timer exists now, so the ring can say when it is owed
-	// something; the interceptor's records reach it no other way.
+	// The flush timer exists now; the interceptor's records reach the ring no
+	// other way.
 	tr.OnEmit = app.armTraceFlush
 	app.emit(traceevent.Boot(tracewire.BuildCommit(), runtime.Version(),
 		jsString(js.Global().Get("navigator").Get("userAgent"))))
@@ -656,8 +599,7 @@ func main() {
 		return nil
 	}))
 
-	// Mobile browsers resize the visual viewport without a layout resize,
-	// leaving the textarea under the keyboard. resize() is idempotent.
+	// Mobile browsers resize the visual viewport without a layout resize.
 	if vv := app.win.Get("visualViewport"); vv.Truthy() {
 		vvCb := js.FuncOf(func(this js.Value, args []js.Value) any {
 			app.resize()
@@ -667,8 +609,7 @@ func main() {
 		vv.Call("addEventListener", "resize", vvCb)
 	}
 
-	// Close every URL stream cleanly, so the server's save-and-destroy fires
-	// before the connection dies and the final preview write is not missed.
+	// Close every URL stream so the server's final preview write is not missed.
 	app.win.Call("addEventListener", "beforeunload", js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Everything durable rides beacons (unload.go), so it survives the
 		// dying page. An animating transition lands on its destination first.
@@ -678,15 +619,14 @@ func main() {
 		return nil
 	}))
 
-	// The restore marks the URL its own, so a pending debounced write finds the
-	// writer suppressed instead of clobbering the entry just navigated to.
+	// The restore marks the URL its own, so a pending debounced write does not
+	// clobber it.
 	app.win.Call("addEventListener", "popstate", js.FuncOf(func(this js.Value, args []js.Value) any {
 		app.runGesture(nav.Gesture{Kind: nav.GestureRestoreFromHistory, Raw: locationPath()})
 		return nil
 	}))
 
-	// PTY bytes ride the /shell WebSocket on this page's own origin, on the
-	// cookie that served it. The registry owns replace-on-open and exit-once.
+	// PTY bytes ride the /shell WebSocket on this page's origin and cookie.
 	app.shells = shellstream.New(
 		shellws.Dialer(shellws.Options{Origin: origin}),
 		func(tileID string, data []byte) { app.onShellData(tileID, data) },
@@ -702,16 +642,13 @@ func main() {
 	select {}
 }
 
-// bootstrap loads the plugin list, then starts the rest of the client. The
-// landing page is home, so panes anchor there and plugins ride the + menu.
+// bootstrap loads the plugin list, then starts the rest of the client.
 func (a *App) bootstrap() {
-	// The handshake retries until it lands: firing it once would leave one blip
-	// at boot as a permanently empty shell until a manual reload.
+	// The handshake retries until it lands, or one blip empties the page.
 	backoff := retry.Backoff{First: retry.HandshakeFirst, Max: retry.HandshakeMax}
 	var plugins *gridwellv1.HandshakeResponse
 	for {
-		// Bounded, so the backoff loop is what it says: an unbounded handshake
-		// the network swallows never returns, and no next attempt is made.
+		// Bounded: an unbounded handshake the network swallows never returns.
 		err := func() error {
 			ctx, cancel := inflight.Bounded()
 			defer cancel()
@@ -729,8 +666,8 @@ func (a *App) bootstrap() {
 		time.Sleep(backoff.Next())
 	}
 	a.plugins = plugins.Plugins
-	// The node's shells_disabled folds into the capability set at boot and is
-	// immutable after, so caps stays the one owner of what this client can do.
+	// shells_disabled folds into caps at boot, the one owner of what this client
+	// can do.
 	a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)
 	// Boot-time, immutable, read only by webAddress.
 	a.contentToken = plugins.ContentToken
@@ -751,7 +688,6 @@ func (a *App) afterBootstrap() {
 	go a.startSSE()
 	// The slow retry net behind the reconnect kick.
 	go a.retryBackstop()
-	// On a fresh page load of `/` this only fetches the home grid.
 	go a.applyURLOnBoot()
 }
 
@@ -794,16 +730,14 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 	return err
 }
 
-// fetchGrid loads a grid in the background, deduped per id: the renderer fires
-// it on every cache miss every frame, which would otherwise dogpile the server.
-// It returns the end of the read that answers id, this one or one already in
-// flight, and nil when id is not asked for.
+// fetchGrid loads a grid in the background, deduped per id, since the
+// renderer fires it every frame on a miss. It returns the end of the read
+// that answers id, or nil when id is not asked for.
 func (a *App) fetchGrid(id string) <-chan struct{} {
 	if id == "" {
 		return nil
 	}
-	// A grid in a namespace this node does not declare is never asked for: the
-	// latch stands in for the answer, and no verdict reaches the strip.
+	// An undeclared namespace is never asked: the latch stands in for the answer.
 	if a.deadNamespace(id) {
 		a.fetch.grids.Settle(id, inflight.Refused)
 		return nil
@@ -819,8 +753,7 @@ func (a *App) fetchGrid(id string) <-chan struct{} {
 		if err != nil {
 			a.draw()
 		} else {
-			// Coalesced repaint: completions land in bursts, and one draw per
-			// child-grid read would be hundreds of repaints for a big directory.
+			// Coalesced: completions land in bursts.
 			a.scheduleFrame(traceevent.WhyGridLoaded)
 		}
 		if owed {
@@ -837,14 +770,12 @@ func (a *App) refetchGrid(id string) {
 	a.fetchGrid(id)
 }
 
-// fetchTileByID resolves a routable tile id whose grid is not cached: GetTile
-// locates it, then fetchGrid pulls its grid in so findTileByID hits.
+// fetchTileByID resolves a routable tile id whose grid is not cached.
 func (a *App) fetchTileByID(tileID string) {
 	if tileID == "" {
 		return
 	}
-	// Same rule as fetchGrid: an undeclared namespace is not asked. A leaf link
-	// into a removed plugin stays its own dead face.
+	// An undeclared namespace is not asked; see fetchGrid.
 	if a.deadNamespace(tileID) {
 		a.fetch.tiles.Settle(tileID, inflight.Refused)
 		return
@@ -860,14 +791,12 @@ func (a *App) fetchTileByID(tileID string) {
 		if err == nil && tile == nil {
 			o = clientsync.OutcomeRejected // an empty answer is the server's no
 		}
-		// clientsync.ReactRead owns the latch; an outage is not named once per
-		// id, because the same read's grid says it once under "grid:".
+		// clientsync.ReactRead owns the latch; an outage is said once, under "grid:".
 		v := clientsync.ReactRead(o)
 		a.fetch.tiles.Settle(tileID, v)
 		switch {
 		case clientsync.PlaceReadSurfaces(v):
-			// The asker is a crumb or a descent, which would otherwise draw an
-			// empty content box named "unnamed" and say nothing.
+			// The asker is a crumb or a descent, which would otherwise say nothing.
 			detail := "the row is gone"
 			if err != nil {
 				detail = rpcErrText(err)
@@ -884,17 +813,16 @@ func nowMs() float64 {
 	return js.Global().Get("Date").Call("now").Float()
 }
 
-// consoleLog prefixes every message with tag. The prefixes are what a log
-// reader and the e2e suite grep for, so they are output, not decoration.
+// consoleLog prefixes every message with tag, which log readers and the e2e
+// suite grep for.
 func consoleLog(tag string) func(format string, args ...any) {
 	return func(format string, args ...any) {
 		js.Global().Get("console").Call("log", tag+" "+fmt.Sprintf(format, args...))
 	}
 }
 
-// taggedLog is consoleLog and a record of the same line: a diagnostic worth
-// writing is worth keeping. A site with a record of its own writes through
-// consoleLog instead, so one operation leaves one record.
+// taggedLog is consoleLog plus a record. A site with its own record uses
+// consoleLog, so one operation leaves one record.
 func taggedLog(tag string) func(format string, args ...any) {
 	console := consoleLog(tag)
 	return func(format string, args ...any) {
@@ -919,7 +847,6 @@ func (a *App) scheduleFrame(why string) {
 	}))
 }
 
-// frame advances the animations, repaints, and re-arms while motion remains.
 func (a *App) frame() {
 	now := nowMs()
 	if a.animation != nil {
@@ -934,7 +861,6 @@ func (a *App) frame() {
 			a.scheduleFrame(traceevent.WhyAnimation)
 		}
 	}
-	// Panes are independent, so one landing never touches another's motion.
 	for _, tr := range a.trans.List() {
 		seg := tr.Segment()
 		t := anim.Progress(now, tr.StartMs(), seg.DurationMs)
@@ -951,14 +877,12 @@ func (a *App) frame() {
 			a.scheduleFrame(traceevent.WhyTransition)
 		}
 	}
-	// Ascent-trace fades need frames until they run out.
 	if a.pruneTraces(now) {
 		a.scheduleFrame(traceevent.WhyTraceFade)
 	}
 	a.draw()
 }
 
-// pruneTraces reports whether any trace is still fading.
 func (a *App) pruneTraces(now float64) bool {
 	alive := false
 	for paneID, tr := range a.traces {
@@ -971,15 +895,13 @@ func (a *App) pruneTraces(now float64) bool {
 	return alive
 }
 
-// startTransition displaces, landing rather than voiding, whatever that pane
-// was already animating.
+// startTransition lands, rather than voids, whatever that pane was animating.
 func (a *App) startTransition(t *transition.Transition) {
 	a.trans.Start(t, nowMs())
 	a.scheduleFrame(traceevent.WhyTransition)
 }
 
 // enterSegment is the one writer of the scratch viewport an animation drives.
-// client/transition calls it per segment, and once more when one is cut short.
 func (a *App) enterSegment(paneID string, seg transition.Segment) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
@@ -993,8 +915,8 @@ func (a *App) enterSegment(paneID string, seg transition.Segment) {
 	p.Zoom = seg.FromZoom
 }
 
-// landTransition is what arriving means, animated the whole way or cut short.
-// A content descent pushes its frame there, so it is not optional.
+// landTransition is what arriving means; a content descent pushes its frame
+// there.
 func (a *App) landTransition(tr *transition.Transition) {
 	p := a.tree.FindPane(tr.PaneID)
 	if p == nil {
@@ -1005,14 +927,12 @@ func (a *App) landTransition(tr *transition.Transition) {
 	a.fetch.contents.Reset()
 	a.fetch.previews.Reset()
 	a.fetch.menus.Reset()
-	// The navigation that started this already read its grid (nav.EffFetchGrid),
-	// so landing asks only for a miss, which the Reset may have just unlatched.
+	// The navigation already read its grid, so landing asks only on a miss.
 	gid := a.gridIDForPane(p)
 	if _, ok := a.c.Grid(gid); !ok {
 		a.fetchGrid(gid)
 	}
 	if tr.TraceTileID != "" {
-		// Keep the frame loop alive for the fade.
 		a.traces[p.ID] = traceState{tileID: tr.TraceTileID, startMs: nowMs()}
 		a.scheduleFrame(traceevent.WhyTraceFade)
 	}
@@ -1044,9 +964,8 @@ func (a *App) ghostHiddenPane() string {
 	return a.ghost.hiddenPaneID
 }
 
-// startSSE keeps one event stream open for the life of the page. retry.Reconnect
-// decides the waits and which stream owes a resync kick; this loop sleeps and
-// kicks what it is told to.
+// startSSE keeps one event stream open for the life of the page;
+// retry.Reconnect decides the waits and kicks.
 func (a *App) startSSE() {
 	var pace retry.Reconnect
 	for {
@@ -1055,8 +974,7 @@ func (a *App) startSSE() {
 		a.kickInterest()
 		stream, err := a.cl.Subscribe(context.Background())
 		if err != nil {
-			// Until this reconnects, everything on screen is silently going
-			// stale. It coalesces, and resolves itself on reconnect below.
+			// Until this reconnects, everything on screen is silently going stale.
 			a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
 			time.Sleep(pace.SubscribeFailed())
 			continue
@@ -1116,27 +1034,20 @@ func (a *App) startSSE() {
 	}
 }
 
-// retryKick drains everything a transport gap left behind: a stream reconnect
-// resyncs every source, a health transition resyncs the one it names, and the
-// backstop timer resyncs nothing, because only the outbox says anything is
-// owed. cache.ServedBy owns what a scope covers; the outbox drain is never
-// scoped, because a parked write is the user's bytes.
+// retryKick drains what a transport gap left behind. cache.ServedBy owns what
+// a scope covers; the outbox drain is never scoped, because a parked write is
+// the user's bytes.
 func (a *App) retryKick(resync bool, source string) {
 	if resync {
 		served := func(id string) bool { return cache.ServedBy(id, source) }
-		// Failure latches are gap state: a read that failed while the link was
-		// down deserves a fresh attempt, asked by name because a pane waiting
-		// on one draws nothing new to ask for it.
-		// The menu set is keyed by a source name, so its predicate is
-		// cache.Reaches: a connection's flap covers the nodes behind it.
+		// Failure latches are gap state, asked again by name. The menu set's
+		// predicate is cache.Reaches: a connection's flap covers the nodes behind it.
 		reaches := func(ns string) bool { return cache.Reaches(ns, source) }
 		a.reask(a.fetch.grids.ClearIf(served), a.fetch.tiles.ClearIf(served),
 			a.fetch.contents.ClearIf(served), a.fetch.previews.ClearIf(served),
 			a.fetch.menus.ClearIf(reaches))
-		// So is a fetch still in flight: a request that dies with its link never
-		// returns, and its claim would keep every retry away forever. Re-ask for
-		// the grids by name, since a pane waiting on one it never received is
-		// not in the cache for the sweep below to find.
+		// A request that dies with its link never returns, and its claim would block
+		// every retry; re-ask the grids by name.
 		stuck := a.fetch.grids.CancelIf(served)
 		a.fetch.tiles.CancelIf(served)
 		a.fetch.contents.CancelIf(served)
@@ -1151,9 +1062,8 @@ func (a *App) retryKick(resync bool, source string) {
 	a.drainOutbox()
 }
 
-// reask asks again for reads whose latches were just cleared. A preview and
-// a menu are asked by the draw, the one site that knows which blob the face
-// wants and whether the menu is open.
+// reask asks again for reads whose latches were just cleared; previews and
+// menus are asked by the draw.
 func (a *App) reask(grids, tiles, contents []string, drawn ...[]string) {
 	for _, keys := range drawn {
 		if len(keys) > 0 {
@@ -1172,9 +1082,8 @@ func (a *App) reask(grids, tiles, contents []string, drawn ...[]string) {
 	}
 }
 
-// drainOutbox re-posts everything owed, in the order it was parked. It is the
-// one drain: the unload path takes it too, so a quit and a reconnect cannot
-// treat what is owed differently.
+// drainOutbox re-posts everything owed, in parked order. Unload takes it too,
+// so quit and reconnect treat what is owed the same.
 func (a *App) drainOutbox() {
 	owed := a.persist.out.Drain()
 	if len(owed) == 0 {
@@ -1186,8 +1095,8 @@ func (a *App) drainOutbox() {
 	}
 }
 
-// retryBackstop re-posts what the outbox holds without waiting for a reconnect
-// that may never come: the stream survives blips a unary write does not.
+// retryBackstop re-posts the outbox without waiting for a reconnect: the
+// stream survives blips a unary write does not.
 func (a *App) retryBackstop() {
 	for {
 		a.backstop.Wait()
@@ -1201,21 +1110,17 @@ func (a *App) retryBackstop() {
 	}
 }
 
-// Session-local state: the whole UI rebuilds from the URL, which captures only
-// the focused pane's place. Its outer frames are session-only, so a restored
-// pane ascends onto persisted framing instead.
+// Session-local state: the URL captures only the focused pane's place, so a
+// restored pane ascends onto persisted framing.
 
-// gridIDForPane walks the pane's anchor down its doorway path, both
-// projections of the frame stack. "" when the pane is boot-blank.
+// gridIDForPane walks the pane's anchor down its doorway path; "" when blank.
 func (a *App) gridIDForPane(p *pane.Pane) string {
 	return a.gridIDForPathFrom(p.Anchor(), p.Path())
 }
 
-// gridIDForPathFrom walks path, of well row ids, from anchor to the leaf grid
-// id. It returns anchor for an empty or stale path, and "" when anchor is "".
+// gridIDForPathFrom walks path from anchor to the leaf grid id: anchor for an
+// empty or stale path.
 func (a *App) gridIDForPathFrom(anchor string, p []string) string {
-	// The walk is the pure pane.ResolveLeafGrid; the closure does the cache
-	// read and kicks a background fetch on a miss.
 	return pane.ResolveLeafGrid(anchor, p,
 		func(gid, wellID string) (string, bool, bool) {
 			g, ok := a.c.Grid(gid)
@@ -1231,15 +1136,14 @@ func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 		})
 }
 
-// refetchGridOnConflict posts an Info notice as well as refetching: the user's
-// optimistic change is about to be replaced, and that must be visible.
+// refetchGridOnConflict also posts an Info notice: the user's optimistic
+// change is being replaced.
 func (a *App) refetchGridOnConflict(gridID string, where string) {
 	a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
 	a.refetchGrid(gridID)
 }
 
-// reportErr is the one wasm entry into the error surface. It also logs to the
-// console, which window.ts forwards, so a notice stays greppable afterward.
+// reportErr is the one wasm entry into the error surface; it also logs.
 func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 	method := "error"
 	if sev == errsurface.Info {
@@ -1252,8 +1156,7 @@ func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 	a.scheduleFrame(traceevent.WhyNotice)
 }
 
-// scheduleErrExpiry arms one setTimeout for the soonest deadline; the callback
-// prunes and re-arms, so a pushed-out deadline fires early, never late.
+// scheduleErrExpiry arms one timer for the soonest deadline.
 func (a *App) scheduleErrExpiry() {
 	if a.persist.sched.errExpire.Pending() {
 		return
@@ -1262,7 +1165,6 @@ func (a *App) scheduleErrExpiry() {
 	if !ok {
 		return
 	}
-	// +1 so the timer lands just past the deadline, not a hair before it.
 	ms := int(d/time.Millisecond) + 1
 	if ms < 1 {
 		ms = 1
@@ -1270,23 +1172,18 @@ func (a *App) scheduleErrExpiry() {
 	a.persist.sched.errExpire.Arm(ms)
 }
 
-// resolveErr clears a source's notice when its condition heals. Every read
-// and write that succeeds calls it, and almost none of them had a notice up,
-// so the repaint rides the surface's verdict: nothing was on screen to take
-// off it.
+// resolveErr clears a source's notice when its condition heals; the repaint
+// rides the surface's verdict.
 func (a *App) resolveErr(source string) {
 	if a.errs.Resolve(source) {
 		a.scheduleFrame(traceevent.WhyNotice)
 	}
 }
 
-// reportPluginHealth runs events.ReactHealth's plan for a transition: a
-// plugin's stream being down means its tiles stopped updating with no other
-// signal, and its recovery is a healed gap.
+// reportPluginHealth runs events.ReactHealth's plan for a transition.
 func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
 	r := events.ReactHealth(h)
-	// The client's one copy of which sources are not answering; every room
-	// one serves is a memory, which is what the bar draws.
+	// The client's one copy of which sources are not answering.
 	a.c.NoteHealth(h.PluginUuid, h.Healthy)
 	if r.Resolve {
 		a.resolveErr(r.Source)

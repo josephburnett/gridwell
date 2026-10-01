@@ -1,6 +1,5 @@
 // Package retry owns the client's retry cadences: how long the shim waits
-// before asking again. A duration written into a sleep is a guarantee no test
-// can hold, so the values live here with the types that produce them.
+// before asking again.
 package retry
 
 import (
@@ -13,18 +12,15 @@ import (
 const Backstop = 30 * time.Second
 
 const (
-	// SubscribeRetry is the wait after a failed Subscribe, StreamEndPause the
-	// wait after a stream ends. Flat, because everything on screen is going
-	// stale while the client is off the stream, and a backoff would make the
-	// gap grow with itself.
+	// SubscribeRetry and StreamEndPause are flat: everything on screen goes
+	// stale while the client is off the stream, so a backoff would grow the gap.
 	SubscribeRetry = time.Second
 	StreamEndPause = 500 * time.Millisecond
 )
 
 const (
-	// HandshakeFirst and HandshakeMax bound the boot handshake's wait. Boot
-	// has nothing on screen to go stale, so it backs off; the ceiling is what
-	// keeps a node that answers late from leaving the page empty for minutes.
+	// HandshakeFirst and HandshakeMax bound the boot handshake's backoff; boot
+	// has nothing on screen to go stale.
 	HandshakeFirst = time.Second
 	HandshakeMax   = 15 * time.Second
 )
@@ -49,10 +45,8 @@ func (b *Backoff) Next() time.Duration {
 	return d
 }
 
-// Interval is a wait whose length can change while it is running: a Set
-// restarts the wait in flight on the new value instead of serving out the old
-// one, which is what lets a test lower a cadence it is about to bound (see
-// client/wasm/testhook.go, setBackstopMs).
+// Interval is a wait a Set restarts on the new value, so a test can lower a
+// cadence it is about to bound (client/wasm/testhook.go, setBackstopMs).
 type Interval struct {
 	mu  sync.Mutex
 	d   time.Duration
@@ -95,10 +89,8 @@ func (i *Interval) Wait() {
 }
 
 // Reconnect paces the client's event stream and remembers whether a gap
-// swallowed events. Subscribe carries no cursor, so every way a stream breaks
-// — a failed dial, a read error, a clean EOF — loses whatever arrived while
-// the client was off it, and the next stream that opens owes one resync kick.
-// See docs/freshness.md layer 7.
+// swallowed events: Subscribe carries no cursor, so the next stream after any
+// break owes one resync kick. See docs/freshness.md layer 7.
 type Reconnect struct {
 	gap bool
 }

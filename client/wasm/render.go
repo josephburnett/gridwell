@@ -27,17 +27,14 @@ import (
 )
 
 const (
-	// paneBorderPx is the inset around a pane's live content view. It is
-	// load-bearing: the strip between two live-tile panes is the only surface
-	// that can grab the divider, since a WebContentsView eats input over its own.
+	// paneBorderPx is load-bearing: the strip between two live-tile panes is the
+	// only surface that can grab the divider, since a WebContentsView eats input.
 	paneBorderPx = panebox.LiveViewInsetPx
-	// tileBorderPx sits entirely inside the tile rect, so the banner label and
-	// the neighbouring cell cannot overlap it.
+	// tileBorderPx sits inside the tile rect, clear of the banner and neighbour.
 	tileBorderPx = 2.0
 )
 
-// withClip writes the save/clip/restore sequence once, so a paint that returns
-// early can never leave an unbalanced save behind.
+// withClip balances save/restore even for a paint that returns early.
 func withClip(c js.Value, x, y, w, h float64, paint func()) {
 	c.Call("save")
 	c.Call("beginPath")
@@ -47,15 +44,12 @@ func withClip(c js.Value, x, y, w, h float64, paint func()) {
 	c.Call("restore")
 }
 
-// fillRectC fills one rect in color. It leaves fillStyle set, as the two calls
-// it replaces did.
 func fillRectC(c js.Value, x, y, w, h float64, color string) {
 	c.Set("fillStyle", color)
 	c.Call("fillRect", x, y, w, h)
 }
 
-// labelOpts is the face drawLabel wears. An empty align or baseline is the
-// canvas default, and maxW 0 is unconstrained.
+// labelOpts is the face drawLabel wears; zero values are canvas defaults.
 type labelOpts struct {
 	font     string
 	fill     string
@@ -65,8 +59,7 @@ type labelOpts struct {
 }
 
 // drawLabel paints one label and leaves the canvas as it found it. Every
-// fillText goes through here except the raw-text painter, which sets one face
-// for a whole document; see drawMarkdownText.
+// fillText goes through here except drawMarkdownText.
 func drawLabel(c js.Value, text string, x, y float64, o labelOpts) {
 	c.Call("save")
 	c.Set("font", o.font)
@@ -81,8 +74,7 @@ func drawLabel(c js.Value, text string, x, y float64, o labelOpts) {
 	c.Call("restore")
 }
 
-// strokeTileBorder keeps the outline entirely inside (x, y, w, h): canvas
-// centers a stroke, so the rect is inset by half the line width.
+// strokeTileBorder keeps the outline inside (x, y, w, h).
 func strokeTileBorder(c js.Value, x, y, w, h float64, color string, borderPx float64) {
 	c.Set("strokeStyle", color)
 	c.Set("lineWidth", borderPx)
@@ -90,8 +82,7 @@ func strokeTileBorder(c js.Value, x, y, w, h float64, color string, borderPx flo
 	c.Call("strokeRect", x+half, y+half, w-borderPx, h-borderPx)
 }
 
-// previewBorderPxFor keeps a child-grid preview's borders proportional at a
-// distance. previewCell is one child cell in px.
+// previewBorderPxFor keeps a child-grid preview's borders proportional.
 func previewBorderPxFor(previewCell float64) float64 {
 	const ref = cellPx // full-zoom parent-cell reference
 	bp := tileBorderPx * previewCell / ref
@@ -104,8 +95,6 @@ func previewBorderPxFor(previewCell float64) float64 {
 	return bp
 }
 
-// drawSelectedTileOutline sits just outside the cell, so it is independent of
-// the kind-specific border.
 func (a *App) drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
 	c.Set("strokeStyle", a.pal.Selected)
 	c.Set("lineWidth", 2.0)
@@ -113,8 +102,7 @@ func (a *App) drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
 	c.Set("lineWidth", 1.0)
 }
 
-// strokeTileFrame is the coda every full-size tile renderer ends with, in one
-// order for all of them, so no renderer can drift into a different one.
+// strokeTileFrame is the coda every full-size tile renderer ends with.
 func (a *App) strokeTileFrame(c js.Value, x, y, w, h float64, color string, dashed, selected bool) {
 	if dashed {
 		setTileDash(c)
@@ -128,8 +116,8 @@ func (a *App) strokeTileFrame(c js.Value, x, y, w, h float64, color string, dash
 	}
 }
 
-// drawDeadLinkFace paints over the tile already drawn: nothing is asked for a
-// dead link and nothing is said about it, so the tile carries the news alone.
+// drawDeadLinkFace paints over the tile already drawn: a dead link carries the
+// news alone.
 func (a *App) drawDeadLinkFace(n *gridwellv1.Tile, x, y, w, h float64) {
 	if !a.deadLink(n) {
 		return
@@ -139,7 +127,6 @@ func (a *App) drawDeadLinkFace(n *gridwellv1.Tile, x, y, w, h float64) {
 	a.drawTileBannerLabelIn(n, x, y, w, h, a.pal.DeadLink)
 }
 
-// drawTraceOutline is the selection outline's geometry, thicker and faded.
 func (a *App) drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
 	if alpha <= 0 {
 		return
@@ -152,44 +139,37 @@ func (a *App) drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
 	c.Call("restore")
 }
 
-// plusButtonRadius is read once from its owner, palette.Default(), so the
-// canvas draws and the DOM toggle cannot disagree about the button's size.
+// plusButtonRadius comes from palette.Default(), so canvas and DOM agree.
 var plusButtonRadius = palette.Default().PlusRadius
 
-// templateKind identifies one built-in tile primitive. Order matters:
-// primitiveKinds sets the popover layout and the hit-test indices.
+// templateKind identifies one built-in tile primitive. Order matters: it is
+// the popover layout and the hit-test index.
 type templateKind int
 
 const (
 	tplWell templateKind = iota
 	tplMarkdown
 	tplURL
-	// tplShell starts frozen; the user refreshes to spawn the PTY.
 	tplShell
-	// tplPane is a stored split-pane layout you descend into, created
-	// never-arranged, so the first descent installs the default single pane.
+	// tplPane is a stored split-pane layout, created never-arranged.
 	tplPane
 )
 
-// primitive is one row per built-in kind, so a kind cannot be half-added and
-// every reader derives from the same order.
+// primitive is one row per built-in kind, so a kind cannot be half-added.
 type primitive struct {
 	kind  templateKind
 	name  string
 	ghost *gridwellv1.Tile
 	glyph func(a *App, x, y, w, h float64)
-	// create fires into gridID, the drop target's grid, which is an open well's
-	// child grid when the cursor promoted into one, never re-derived here.
+	// create fires into gridID, the drop target's grid, never re-derived here.
 	create func(a *App, gridID string, cellX, cellY int64)
-	// click is what a bare click on the swatch does, with no destination cell.
-	// It is a column rather than an arm per kind, because a kind with no arm
-	// let the click fall through to the canvas behind the popover.
+	// click is what a bare click on the swatch does. A column, not an arm per
+	// kind, so no kind falls through to the canvas behind the popover.
 	click func(a *App, p *pane.Pane)
 }
 
-// primitives is the palette layout order, left to right; primitiveKinds is its
-// order, derived, never a second list. Both fill in init because the create and
-// glyph rows close over App methods, and that reference graph is a cycle.
+// primitives is the palette layout order and primitiveKinds its derived
+// order. Both fill in init, because the rows close over App methods.
 var (
 	primitives     []primitive
 	primitiveKinds []templateKind
@@ -236,7 +216,6 @@ func init() {
 	}
 }
 
-// primitiveFor's not-ok is an unknown kind; every caller does nothing for it.
 func primitiveFor(k templateKind) (primitive, bool) {
 	for _, pr := range primitives {
 		if pr.kind == k {
@@ -246,30 +225,24 @@ func primitiveFor(k templateKind) (primitive, bool) {
 	return primitive{}, false
 }
 
-// paletteItem is a configured plugin or a built-in primitive; isPlugin says
-// which of the two fields carries meaning.
+// paletteItem is a configured plugin or a built-in primitive.
 type paletteItem struct {
 	isPlugin  bool
 	plugin    *gridwellv1.PluginInfo // when isPlugin (also set for a root ENTRY's owner)
 	primitive templateKind           // when !isPlugin
-	// entry is the declared menu entry this pseudo-plugin swatch came from.
-	entry *gridwellv1.MenuEntry
-	// promotePane marks a promote drag: the ephemeral url visit shown in that
-	// pane, dragged off the bar's crumb, whose drop creates a persistent tile.
+	entry     *gridwellv1.MenuEntry
+	// promotePane marks a promote drag of the ephemeral url crumb in that pane.
 	promotePane string
 }
 
-// paletteItems returns pane p's palette entries in display order: the doorway
-// section, then the tile primitives where the grid is writable. A folded
-// section contributes no items, and every consumer reads this one list, so a
-// swatch that is not shown cannot be clicked either.
+// paletteItems returns pane p's palette entries in display order. Every
+// consumer reads this one list, so a swatch not shown cannot be clicked.
 func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 	items, _ := a.paletteView(p)
 	return items
 }
 
-// paletteView returns the palette's items and the section decision they were
-// composed under. palette.Show is the one owner of that decision.
+// paletteView returns the items and the section decision; see palette.Show.
 func (a *App) paletteView(p *pane.Pane) ([]paletteItem, palette.Shown) {
 	plugins, primitives := a.paletteGroups(p)
 	show := palette.Show(palette.Section{
@@ -283,22 +256,19 @@ func (a *App) paletteView(p *pane.Pane) ([]paletteItem, palette.Shown) {
 	return append(plugins, primitives...), show
 }
 
-// paletteGroups builds the two groups unfiltered by the fold, so the counts
-// palette.Show sees are what the node declares.
+// paletteGroups is unfiltered by the fold, so palette.Show counts what the
+// node declares.
 func (a *App) paletteGroups(p *pane.Pane) (plugins, primitives []paletteItem) {
-	// The menu belongs to the pane's node: a remote pane's top row is what a
-	// direct client of that node sees. "", local or uncached, is the handshake.
+	// The menu belongs to the pane's node; "", local or uncached, is the handshake.
 	ctx := a.menuCtx(p)
-	// palette.Doorways is the one owner of the composition: a home is a place
-	// and gets a row; a plugin is not, and gets a swatch per collection. Every
-	// swatch is a pseudo-plugin, so every downstream flow is one path.
+	// palette.Doorways owns the composition. Every swatch is a pseudo-plugin, so
+	// every downstream flow is one path.
 	sw := palette.Doorways(ctx.plugins)
 	items := make([]paletteItem, 0, len(sw))
 	for _, s := range sw {
 		items = append(items, paletteItem{isPlugin: true, plugin: s.Plugin, entry: s.Entry})
 	}
 	prims := make([]paletteItem, 0, len(primitiveKinds))
-	// palette.Offer decides which primitives this grid and its node offer.
 	writable, _ := a.gridWritable(a.gridIDForPane(p))
 	offer := palette.Offer{Writable: writable, ShellsDisabled: ctx.shellsDisabled}
 	if offer.Primitives() {
@@ -312,7 +282,6 @@ func (a *App) paletteGroups(p *pane.Pane) (plugins, primitives []paletteItem) {
 	return items, prims
 }
 
-// paletteTopRow is the layout's row split, derived from the one item list.
 func paletteTopRow(items []paletteItem) int {
 	n := 0
 	for _, it := range items {
@@ -323,13 +292,10 @@ func paletteTopRow(items []paletteItem) int {
 	return n
 }
 
-// ghostSizeLerpAlpha gives about a 120 ms time constant at 60 fps.
 const ghostSizeLerpAlpha = 0.20
 
-// draw clears and redraws every pane fully, so it is cheap to call repeatedly.
 func (a *App) draw() {
 	if a.ghost != nil {
-		// Snap when close enough, so the ghost does not jitter at the target.
 		ds := a.ghost.displayedCellSize
 		ts := a.ghost.targetCellSize
 		if ts > 0 && math.Abs(ts-ds) > 0.5 {
@@ -338,8 +304,6 @@ func (a *App) draw() {
 		} else if ts > 0 {
 			a.ghost.displayedCellSize = ts
 		}
-		// Drag onto a black hole and the ghost shatters in; drag out and it
-		// reassembles.
 		df := a.ghost.displayedFragmentation
 		tf := a.ghost.targetFragmentation
 		if math.Abs(tf-df) > 0.01 {
@@ -362,7 +326,6 @@ func (a *App) draw() {
 		a.drawPane(p, r)
 	}
 
-	// Last, so a neighbour it overflows into cannot paint over it.
 	if a.menu.IsOpen() {
 		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
 			if _, ok := rects[mp.ID]; ok {
@@ -371,30 +334,24 @@ func (a *App) draw() {
 		}
 	}
 
-	// Above every pane, below the DOM overlays.
 	if a.rightDrag != nil {
 		a.drawRightDragPreview()
 	}
-	// The layout crushes live; this adds the release-closes-this-side warning.
 	if a.leftResize != nil {
 		a.drawLeftResizePreview(a.leftResize)
 	}
 
-	// Every overlay tracks its pane's rect per frame; native views also park
-	// off-screen during a canvas gesture.
+	// Native views park off-screen during a canvas gesture.
 	a.syncTextOverlayPosition()
 	a.refreshRenderedOverlay()
 	a.syncShellOverlayPosition()
 	a.syncURLViews()
 	a.syncMirrors(rects)
 	a.syncInterest(rects)
-	// The reserved bottom bands, drawn last so nothing paints over them.
 	a.drawBottomBar()
 	a.drawErrStrip()
-	// Inside a pane tile, a teal line wraps the window. It owns a reserved
-	// gutter, since rootLayoutRect insets the panes by wsOutlinePx.
+	// Inside a pane tile, a teal line wraps the window in a reserved gutter.
 	if a.ws.Depth() > 0 {
-		// The same height the layout used, so the outline stays off the bands.
 		h := a.paneAreaH()
 		a.cctx.Set("strokeStyle", a.pal.PaneTileBorder)
 		a.cctx.Set("lineWidth", wsOutlinePx)
@@ -402,8 +359,7 @@ func (a *App) draw() {
 			a.width-wsOutlinePx, h-wsOutlinePx)
 		a.cctx.Set("lineWidth", 1.0)
 	}
-	// The first-descent capture: the pane tile's face growing into the level
-	// outline. Its end rect is that outline, so the handoff is seamless.
+	// The first-descent capture: the pane tile's face growing into the outline.
 	if e := a.overlays.wsExpand; e != nil {
 		t := (nowMs() - e.startMs) / totalTransitionMs
 		if t > 1 {
@@ -420,34 +376,28 @@ func (a *App) draw() {
 		a.cctx.Set("lineWidth", 1.0)
 	}
 
-	// Both persisters are derived from the live tree, so there is no
-	// per-gesture persistence call site to forget. What arms each is a
-	// fingerprint of what it would write, read here: a frame is not a change,
-	// and a settle armed by the frame that noticed one could never come due
-	// while a live tile repainted on the mirror's cadence.
+	// Both persisters derive from the live tree, armed by a fingerprint of what
+	// each would write: a frame is not a change, and a live tile repaints on the
+	// mirror's cadence.
 	a.scheduleWorkspaceSave(pane.LayoutFingerprint(a.tree))
 	a.scheduleFramingSave(pane.FramingFingerprint(a.tree))
 }
 
-// layoutPanes reserves the notice strip in layout, so a pending error owns
-// pixels nothing can paint over. Input hit-testing shares it.
+// layoutPanes reserves the notice strip, shared with input hit-testing.
 func (a *App) layoutPanes() map[string]pane.Rect {
 	return pane.Layout(a.tree, a.rootLayoutRect())
 }
 
-// wsOutlinePx is the teal pane-tile outline's width, and the gutter panes inset
-// by inside one, so the line and the pane borders never overlap.
+// wsOutlinePx is the pane-tile outline's width and the gutter panes inset by.
 const wsOutlinePx = 3.0
 
-// paneAreaH is the height the pane tree occupies, and the bar band's top edge.
-// One number, so the panes, the outline and the bar cannot disagree.
+// paneAreaH is the pane tree's height and the bar band's top edge.
 func (a *App) paneAreaH() float64 {
 	h, _ := wsbar.Band(a.height, errsurface.StripHeight(a.errs.Len()))
 	return h
 }
 
-// rootLayoutRect is one owner, because the cascading divider resize
-// (pane.ResizeThrough) must see the exact rect the layout used.
+// rootLayoutRect is one owner: pane.ResizeThrough must see the layout's rect.
 func (a *App) rootLayoutRect() pane.Rect {
 	r := pane.Rect{X: 0, Y: 0, W: a.width, H: a.paneAreaH()}
 	if a.ws.Depth() > 0 {
@@ -459,8 +409,7 @@ func (a *App) rootLayoutRect() pane.Rect {
 	return r
 }
 
-// drawErrStrip takes its geometry from errsurface, so the click-to-dismiss hit
-// test reads the identical layout.
+// drawErrStrip takes its geometry from errsurface, shared with the hit test.
 func (a *App) drawErrStrip() {
 	notices := a.errs.Notices()
 	stripH := errsurface.StripHeight(len(notices))
@@ -484,21 +433,18 @@ func (a *App) drawErrStrip() {
 	}
 }
 
-// drawPane draws the chrome even when the target grid has not loaded, so the
-// user can see the pane is live and recover from a stale descent path.
+// drawPane draws the chrome even when the grid has not loaded, so a stale
+// descent path is visible and recoverable.
 func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	gid := a.gridIDForPane(p)
 	g, gridOK := a.c.Grid(gid)
 
-	// Clip content inside the border, which is painted on top at the end, so it
-	// always frames the content cleanly.
 	const inset = paneBorderPx
 	withClip(a.cctx, r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset, func() {
 		pscreen := p.Screen(r)
 
-		// Grid lines render whether or not the grid loaded: they communicate
-		// the coordinate system. A focused text tile has none, so it gets a
-		// plain background.
+		// Grid lines render whether or not the grid loaded; a focused text tile has
+		// none.
 		if p.ContentID() != "" {
 			fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.Bg)
 		} else {
@@ -506,19 +452,14 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		}
 
 		if !gridOK && gid != "" && p.ContentID() == "" {
-			// Not cached yet, or the last fetch failed. Say which, instead of
-			// showing an empty room.
 			a.drawGridNotice(r, gid)
 		}
 		if gridOK {
 			cellSize := pscreen.CellPx * pscreen.Zoom
 			selected := a.selectedFor(p.ID)
-			// In a content descent the pane is inside the tile: render it in
-			// the inner box, whose bounds match the textarea exactly, so
-			// outside it the grid rules apply.
+			// In a content descent, render in the inner box that matches the textarea.
 			if p.ContentID() != "" {
-				// descendedTile, not g.Tiles, so an ephemeral url visit,
-				// focused off the pane's grid, renders too.
+				// descendedTile, not g.Tiles, so an ephemeral url visit renders too.
 				if file, ok := a.descendedTile(p); ok {
 					switch {
 					case rpc.TextDocument(file):
@@ -526,8 +467,6 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						fillRectC(a.cctx, ix, iy, iw, ih, a.pal.FileInnerBg)
 						a.drawMarkdownInPane(p, file, ix, iy, iw, ih)
 					case rpc.WebContent(file):
-						// One descent for both url shapes, its own address or
-						// the door's: frozen preview, or live native view.
 						ix, iy, iw, ih := paneContentBox(r)
 						a.drawURLTileInPane(file, ix, iy, iw, ih)
 					case file.Kind == rpc.KindShell:
@@ -557,8 +496,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					a.drawPluginHealthTint(nn, left, top, w, h)
 					a.drawDeadLinkFace(nn, left, top, w, h)
 				}
-				// The fading outline on the tile this pane most recently
-				// ascended out of. The alpha decays through the frame loop.
+				// The fading outline on the tile this pane most recently ascended out of.
 				if tr, ok := a.traces[p.ID]; ok {
 					if n, ok := g.Tiles[tr.tileID]; ok {
 						left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
@@ -583,20 +521,15 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		}
 	})
 
-	// Border on top, so content can paint to the pane edge without bleeding into
-	// the chrome. The hue follows what we descended into, saturated on the
-	// focused pane and desaturated on the others.
+	// Border on top, hued by what the pane descended into, saturated on focus.
 	focused := p.ID == a.tree.Focus
 	urlLive := a.urlViewFor(p.ID) != nil
 	border := a.paneBorderColorFor(p, g, gridOK, focused, urlLive)
 	strokeTileBorder(a.cctx, r.X, r.Y, r.W, r.H, border, paneBorderPx)
 
-	// The per-mode circle button lives in the bottom bar's right-end slot; see
-	// drawBarSlot. Panes carry no corner chrome.
+	// The per-mode circle button lives in the bar; see drawBarSlot.
 }
 
-// drawCircleButtonChrome is shared by the bar-slot buttons, so their position
-// and look match the + button.
 func (a *App) drawCircleButtonChrome(cx, cy float64) {
 	_, button := a.barTheme()
 	a.cctx.Set("fillStyle", button)
@@ -608,13 +541,11 @@ func (a *App) drawCircleButtonChrome(cx, cy float64) {
 	a.cctx.Call("stroke")
 }
 
-// drawURLBackButton is the bar-slot button on a url descent: a click runs
-// history.back() on the descended Chromium tab.
+// drawURLBackButton runs history.back() on the descended Chromium tab.
 func (a *App) drawURLBackButton() {
 	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
-	// A horizontal stem with a chevron at its left end.
 	band, _ := a.barTheme()
 	beginSlotGlyph(a.cctx, band)
 	a.cctx.Call("beginPath")
@@ -627,8 +558,7 @@ func (a *App) drawURLBackButton() {
 	endGlyph(a.cctx)
 }
 
-// drawURLRefreshButton is the bar-slot button on a frozen url descent: a click
-// opens the URL stream, the same action as the right-drag-down gesture.
+// drawURLRefreshButton opens the URL stream on a frozen url descent.
 func (a *App) drawURLRefreshButton() {
 	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
@@ -637,9 +567,8 @@ func (a *App) drawURLRefreshButton() {
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
 }
 
-// drawFreezeButton is the bar-slot button on a live shell descent: a click
-// takes the screenshot and detaches. Once frozen the same circle carries the
-// reconnect arrow, so one button is the freeze and the thaw in turn.
+// drawFreezeButton freezes a live shell descent; once frozen the same circle
+// carries the reconnect arrow.
 func (a *App) drawFreezeButton() {
 	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
@@ -656,9 +585,8 @@ func (a *App) drawFreezeButton() {
 	endGlyph(a.cctx)
 }
 
-// drawURLOpenTabButton replaces the refresh button where the host cannot go
-// live (caps.LiveURL false): a click opens the address in a browser tab, the
-// next-best descent, and the tile stays frozen.
+// drawURLOpenTabButton replaces refresh where caps.LiveURL is false: it opens
+// the address in a browser tab and the tile stays frozen.
 func (a *App) drawURLOpenTabButton() {
 	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
@@ -668,9 +596,7 @@ func (a *App) drawURLOpenTabButton() {
 	c.Set("strokeStyle", band)
 	c.Set("lineWidth", 2.0)
 	c.Set("lineCap", "round")
-	// The tab: a box toward the lower left.
 	c.Call("strokeRect", cx-7, cy-1, 8.0, 8.0)
-	// The arrow, leaving through the box's upper-right corner.
 	c.Call("beginPath")
 	c.Call("moveTo", cx+0, cy+0)
 	c.Call("lineTo", cx+7, cy-7)
@@ -682,17 +608,15 @@ func (a *App) drawURLOpenTabButton() {
 	c.Set("lineCap", "butt")
 }
 
-// drawGridLines fades to invisible when cells are tiny, so extreme zoom-out
-// does not paint a solid wash.
+// drawGridLines fades out when cells are tiny, so zoom-out paints no wash.
 func (a *App) drawGridLines(color string, ps dragdrop.Pane, r pane.Rect) {
 	cellSize := ps.CellPx * ps.Zoom
 	originX, originY := ps.CellToScreen(0, 0)
 	drawGridLinesIn(a.cctx, color, r.X, r.Y, r.W, r.H, cellSize, originX, originY)
 }
 
-// drawGridLinesIn spaces lines at cellSize, aligned so cell (0, 0) lands at
-// (originX, originY). A well's interior uses it too, so a preview is the same
-// kind of grid the user already sees. Under 4px cells it draws nothing.
+// drawGridLinesIn spaces lines at cellSize with cell (0, 0) at (originX,
+// originY). Under 4px cells it draws nothing.
 func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellSize, originX, originY float64) {
 	if cellSize < 4 {
 		return
@@ -708,7 +632,6 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 	c.Set("lineWidth", 1.0)
 	c.Set("globalAlpha", alpha)
 
-	// The integer cell indices whose line falls inside the clip.
 	kStartX := int64(math.Ceil((clipX - originX) / cellSize))
 	kEndX := int64(math.Floor((clipX + clipW - originX) / cellSize))
 	kStartY := int64(math.Ceil((clipY - originY) / cellSize))
@@ -729,9 +652,8 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 	c.Set("globalAlpha", 1.0)
 }
 
-// drawNodeWithPreview is the parent-grid renderer: a well gets a one-level
-// preview of its child grid at the child's cell scale, so the descent zoom
-// crosses no discontinuity. paintPaneID scopes the child-preview hide.
+// drawNodeWithPreview previews a well's child grid at the child's cell scale,
+// so the descent zoom crosses no discontinuity.
 func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
 	case rpc.KindText:
@@ -754,30 +676,25 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		a.drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
 		return
 	}
-	// Recursion stops at one level, because drawChildPreview paints its children
-	// through the flat drawNode.
+	// One level: drawChildPreview paints its children through the flat drawNode.
 	child, haveChild := a.c.Grid(n.ChildGridId)
 	if !haveChild {
 		a.fetchGrid(n.ChildGridId)
 	}
-	// Matching the pane, so the outline crossing the screen edge has no jump.
 	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 
-	// previewCell is parentCell times the well's intrinsic ViewZoom. At
-	// parent = Overtake_now it matches the just-after-swap live cell, so the
-	// path swap is continuous.
+	// previewCell is parentCell times the well's intrinsic ViewZoom, so the path
+	// swap at Overtake_now is continuous.
 	ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
 	previewCell := parentCellSize * ratio
 	showPreview := haveChild && previewCell >= 0.5
 
 	if isExitWell(n) && !showPreview {
-		// The plugin's identity glyph, the same drawing as its swatch and ghost.
 		a.drawPluginGlyph(a.pluginGlyph(n.ChildGridId), x, y, w, h)
 	} else {
 		withClip(a.cctx, x, y, w, h, func() {
-			// Aligned so the child point the well's framing centers on lands at
-			// the well's center, where the just-after-descent viewport puts it,
-			// so the lines glide across the path swap.
+			// Aligned so the child point the well's framing centers on lands at the
+			// well's center, where the descent viewport puts it.
 			viewCenterX, viewCenterY := zoomtrans.EffectiveCenter(wellOf(n))
 			wellCenterX := x + w/2
 			wellCenterY := y + h/2
@@ -786,7 +703,6 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 			drawGridLinesIn(a.cctx, a.pal.GridLineInterior, x, y, w, h, previewCell, originX, originY)
 
 			if showPreview {
-				// The hide scopes to the pane being painted (paintPaneID).
 				var hide string
 				if a.ghost != nil && a.ghost.hiddenPaneID == paintPaneID {
 					hide = a.ghost.hiddenTileID
@@ -797,37 +713,31 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		})
 	}
 
-	// Every well is blue; a cross-plugin well differs by the dash, which always
-	// means a link, a reference you can unlink.
+	// Every well is blue; the dash means a link.
 	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, dashed, selected)
-	// A plain well gets no banner: it has no alt text, and tileface.BannerRuns
-	// returns "" for it.
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
-// tileReadOnly holds for a text tile owned by a plugin, which has no
-// write-back, and for an unknown grid: the alternative is a caret over content
-// the server would then refuse.
+// tileReadOnly holds for a plugin's text tile, which has no write-back, and
+// for an unknown grid.
 func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
 	writable, _ := a.gridWritable(n.GridId)
 	return n.Kind == rpc.KindText && !writable
 }
 
-// isLinkTile reports a reference rather than owned content: dropping one on the
-// trashcan unlinks it, where an owned well deletes for real. Reference is the
-// one signal, and a uuid comparison would miss a same-plugin mount.
+// isLinkTile reports a reference: trashing one unlinks it. Reference is the
+// one signal; a uuid comparison would miss a same-plugin mount.
 func isLinkTile(n *gridwellv1.Tile) bool {
 	return n.Reference
 }
 
-// Short on and off, so a 1 to 2px outline still reads as dashed.
 func setTileDash(c js.Value)   { c.Call("setLineDash", jsArray(5, 3)) }
 func clearTileDash(c js.Value) { c.Call("setLineDash", jsArray()) }
 
 const bannerFontFamily = `ui-sans-serif, system-ui, -apple-system, sans-serif`
 
-// bannerGeom clamps the banner's font to 9 to 16 screen px, so the label reads
-// at a constant size across zoom. The text preview reads the same formula.
+// bannerGeom clamps the banner font to 9 to 16 screen px; the text preview
+// reads the same formula.
 func bannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
 	const minFontPx = 9.0
 	const maxFontPx = 16.0
@@ -844,20 +754,17 @@ func bannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
 	return fontPx, fontPx + 4, true
 }
 
-// drawTileBannerLabel paints the label at the top of the tile in its own kind
-// color, clipped to the tile rect.
 func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outside bool) {
 	a.drawTileBannerLabelIn(n, x, y, w, h, a.bannerTextColor(n, outside))
 }
 
-// drawTileBannerLabelIn names the text color rather than deriving it: one
-// banner geometry, so a dead link's grey label lands in the same place.
+// drawTileBannerLabelIn takes the text color, so a dead link's grey label
+// shares the one banner geometry.
 func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, textColor string) {
 	label, status := tileface.BannerRuns(n)
 	if label == "" {
 		return
 	}
-	// Inset by the tile border, so band and outline do not overlap by a pixel.
 	ix := x + tileBorderPx
 	iy := y + tileBorderPx
 	iw := w - 2*tileBorderPx
@@ -867,7 +774,6 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	}
 	fontPx, bannerH, shown := bannerGeom(h, ih)
 	if !shown {
-		// Too small for a label: the outline alone carries the signal.
 		return
 	}
 	withClip(a.cctx, ix, iy, iw, ih, func() {
@@ -877,9 +783,7 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 			font: bold, fill: textColor, baseline: "middle",
 		})
 		if status != "" {
-			// The status is the plugin's word, so it is drawn in the one muted
-			// color and never in the tile's own: it reads as a note on the
-			// name, not as part of it.
+			// The status is the plugin's word, drawn muted as a note on the name.
 			a.cctx.Set("font", bold)
 			labelW := a.cctx.Call("measureText", label).Get("width").Float()
 			drawLabel(a.cctx, status, ix+4+labelW+fontPx/2, iy+bannerH/2, labelOpts{
@@ -890,7 +794,6 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	})
 }
 
-// bannerTextColor is the pixels half of tileface.BannerHue.
 func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 	switch tileface.BannerHue(n, outside) {
 	case tileface.HueShell:
@@ -907,8 +810,8 @@ func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 	return a.pal.Muted
 }
 
-// fetchTileContent never doubles an in-flight fetch: concurrent fetches for one
-// tile are how a stale reply lands after a fresher one and repaints old bytes.
+// fetchTileContent never doubles an in-flight fetch, or a stale reply could
+// land after a fresher one.
 func (a *App) fetchTileContent(tileID string) {
 	if tileID == "" {
 		return
@@ -916,8 +819,7 @@ func (a *App) fetchTileContent(tileID string) {
 	if _, ok := a.c.TileContent(tileID); ok {
 		return
 	}
-	// A leaf link resolves through its target id, so a target in an undeclared
-	// namespace is not asked for. Same rule as fetchGrid.
+	// A leaf link in an undeclared namespace is not asked; see fetchGrid.
 	if a.deadNamespace(tileID) {
 		return
 	}
@@ -927,15 +829,13 @@ func (a *App) fetchTileContent(tileID string) {
 	}
 	go func() {
 		defer done()
-		// Coalesced repaint: body fetches land in bursts, and the failure is
-		// already on the strip.
+		// Coalesced: body fetches land in bursts.
 		_ = a.loadTileContent(ctx, tileID, func() { a.scheduleFrame(traceevent.WhyContent) })
 	}()
 }
 
-// loadTileContent is the one content-fetch body; the lazy render fetch and the
-// restore's cursor-placing read differ only in their guards. The error is
-// returned as well as surfaced, because a waiting caller has a continuation.
+// loadTileContent is the one content-fetch body. It returns the error as well
+// as surfacing it, because a waiting caller has a continuation.
 func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
 	asked := a.c.AskContent(tileID)
 	data, _, version, err := a.cl.ReadContent(ctx, tileID)
@@ -943,8 +843,7 @@ func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) e
 	o := clientsync.Of(err)
 	a.fetch.contents.Settle(tileID, clientsync.ReactRead(o))
 	if err != nil {
-		// The tile body would otherwise never appear: say why, unless the
-		// dead face already does.
+		// Say why, unless the dead face already does.
 		if clientsync.ReadSurfaces(o) {
 			a.surfaceRPCError("ReadContent", err)
 		}
@@ -956,9 +855,8 @@ func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) e
 	return nil
 }
 
-// tileBody fetches lazily through ReadContent, which is routable by tile id
-// where a blob id is not, and keys by ContentID, so a leaf link renders the
-// one shared copy of its target's bytes.
+// tileBody reads through ReadContent, keyed by ContentID, so a leaf link
+// renders the one shared copy of its target's bytes.
 func (a *App) tileBody(n *gridwellv1.Tile) ([]byte, bool) {
 	if b, ok := a.c.TileContent(rpc.ContentID(n)); ok {
 		return b, true
@@ -967,9 +865,8 @@ func (a *App) tileBody(n *gridwellv1.Tile) ([]byte, bool) {
 	return nil, false
 }
 
-// drawChildPreview paints the cached child grid at previewCell px, with
-// (centerCellX, centerCellY) landing at (centerScreenX, centerScreenY). Child
-// wells render flat: the one-level rule. hiddenTileID hides one row by id.
+// drawChildPreview paints the cached child grid at previewCell px. Child
+// wells render flat: the one-level rule.
 func (a *App) drawChildPreview(child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
@@ -977,7 +874,6 @@ func (a *App) drawChildPreview(child *cache.Grid,
 ) {
 	c := a.cctx
 	childInHost := child.HostContent()
-	// Scaled, so a distant child grid keeps borders proportionate to its cells.
 	borderPx := previewBorderPxFor(previewCell)
 	for _, n := range child.Tiles {
 		if hiddenTileID != "" && n.Id == hiddenTileID {
@@ -987,27 +883,22 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		nodeScreenY := centerScreenY + (float64(n.Y)-centerCellY)*previewCell
 		nodeScreenW := float64(n.W) * previewCell
 		nodeScreenH := float64(n.H) * previewCell
-		// Cull entries fully outside the clip.
 		if nodeScreenX+nodeScreenW < clipX || nodeScreenY+nodeScreenH < clipY ||
 			nodeScreenX > clipX+clipW || nodeScreenY > clipY+clipH {
 			continue
 		}
 		nn := n
-		// url and shell children do not overlay their JPEGs, so a well's
-		// interior reads uniformly.
+		// url and shell children skip their JPEGs, so a well's interior reads uniformly.
 		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileface.Outside(nn, childInHost), borderPx, false)
 	}
 }
 
-// drawNode is the flat renderer, used for nested previews and for non-well
-// tiles; the parent-grid renderer is drawNodeWithPreview.
+// drawNode is the flat renderer, for nested previews and non-well tiles.
 func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64, dashed bool) {
-	// dashed marks a link, and every kind honors it or lies about ownership.
 	if dashed {
 		setTileDash(c)
 		defer clearTileDash(c)
 	}
-	// An unknown kind keeps the locked grey body and gets no outline.
 	fill, line := a.pal.Locked, ""
 	switch n.Kind {
 	case rpc.KindWell:
@@ -1022,7 +913,6 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 			fill, line = a.pal.PluginFill, a.pal.PluginBorder
 		}
 	case rpc.KindPane:
-		// The flat face a pane tile shows one level down, and in a ghost.
 		fill, line = a.pal.PaneTileFill, a.pal.PaneTileBorder
 	}
 	fillRectC(c, x, y, w, h, fill)
@@ -1034,14 +924,12 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 	}
 }
 
-// drawGhostTile is drawNodeWithPreview at near-zero fragmentation; over a black
-// hole it animates toward 1 and cross-fades into a trashcan, reversibly.
+// drawGhostTile is drawNodeWithPreview at near-zero fragmentation; over a
+// black hole it cross-fades into a trashcan.
 func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
-	// No parent grid is in play, so the ghost's own kind is the outside signal.
 	outside := tileface.Outside(n, false)
-	// A dragged link shows dashed, and so does a drop that will create one:
-	// dashed always means this is, or becomes, a reference. It is how the user
-	// learns mid-drag which right-button mode is armed.
+	// Dashed means this is, or becomes, a reference: it shows mid-drag which
+	// right-button mode is armed.
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
 	if frag < 0.02 {
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")
@@ -1057,7 +945,6 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float
 	if frag > 1 {
 		frag = 1
 	}
-	// The tile fades out as frag grows; the trashcan fades in.
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")
@@ -1068,15 +955,12 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float
 	a.cctx.Set("globalAlpha", 1.0)
 }
 
-// paneBorderColorFor picks the border from what the pane is descended into. An
-// uncached grid falls back to the generic blue, so the user still sees that
-// they descended into something.
+// paneBorderColorFor picks the border from what the pane descended into.
 func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
 	return pane.BorderColor(a.borderInputFor(p, g, gridOK, focused, urlLive), a.paneBorderColors())
 }
 
-// borderInputFor resolves the facts pane.FamilyOf classifies on, shared with
-// the bottom bar theme, so the frame and the band cannot disagree.
+// borderInputFor is shared with the bottom bar, so frame and band agree.
 func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) pane.BorderInput {
 	in := pane.BorderInput{
 		HasTextFocus: p.ContentID() != "",
@@ -1085,8 +969,8 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 		URLLive:      urlLive,
 	}
 	if p.ContentID() != "" {
-		// descendedTile, not g.Tiles, so an ephemeral descent resolves too.
-		// Its border goes gray, because ascent deletes it.
+		// descendedTile, so an ephemeral descent resolves too, gray because ascent
+		// deletes it.
 		if tile, ok := a.descendedTile(p); ok {
 			in.TileKnown = true
 			in.TileKind = tile.Kind
@@ -1099,7 +983,6 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 	return in
 }
 
-// paneBorderColors bundles the active palette for pane.BorderColor.
 func (a *App) paneBorderColors() pane.BorderColors {
 	return pane.BorderColors{
 		Focused:        a.pal.FocusBorder,
@@ -1119,8 +1002,8 @@ func (a *App) paneBorderColors() pane.BorderColors {
 	}
 }
 
-// drawEdgeIndicators marks every tile entirely outside the viewport, where the
-// ray from the viewport center to the tile's center crosses the inset rect.
+// drawEdgeIndicators marks every tile outside the viewport on the ray from
+// the viewport center.
 func (a *App) drawEdgeIndicators(nodes map[string]*gridwellv1.Tile, ps dragdrop.Pane, r pane.Rect) {
 	cellSize := ps.CellPx * ps.Zoom
 	const inset = 12.0
@@ -1136,7 +1019,6 @@ func (a *App) drawEdgeIndicators(nodes map[string]*gridwellv1.Tile, ps dragdrop.
 		sx, sy := ps.CellToScreen(float64(n.X), float64(n.Y))
 		w := float64(n.W) * cellSize
 		h := float64(n.H) * cellSize
-		// Visible iff the rect intersects the pane.
 		if sx+w > r.X && sx < r.X+r.W && sy+h > r.Y && sy < r.Y+r.H {
 			continue
 		}
@@ -1147,7 +1029,6 @@ func (a *App) drawEdgeIndicators(nodes map[string]*gridwellv1.Tile, ps dragdrop.
 		if dx == 0 && dy == 0 {
 			continue
 		}
-		// Find the smallest t > 0 where (cx+t*dx, cy+t*dy) hits an inner edge.
 		tMax := math.MaxFloat64
 		if dx > 0 {
 			tMax = math.Min(tMax, (innerR-cx)/dx)
@@ -1164,14 +1045,12 @@ func (a *App) drawEdgeIndicators(nodes map[string]*gridwellv1.Tile, ps dragdrop.
 		}
 		mx := cx + tMax*dx
 		my := cy + tMax*dy
-		// Triangle pointing away from center.
 		ang := math.Atan2(dy, dx)
 		drawTriangle(a.cctx, mx, my, ang, 6)
 	}
 }
 
-// drawTriangle is every arrowhead in the renderer: the off-screen edge
-// indicators and the swap preview's two heads. size is center to tip.
+// drawTriangle is every arrowhead in the renderer; size is center to tip.
 func drawTriangle(c js.Value, cx, cy, angle, size float64) {
 	tipX := cx + math.Cos(angle)*size
 	tipY := cy + math.Sin(angle)*size
@@ -1187,9 +1066,9 @@ func drawTriangle(c js.Value, cx, cy, angle, size float64) {
 	c.Call("fill")
 }
 
-// drawGridNotice paints a muted status line in a pane whose grid is not cached;
-// pane.GridNotice words it. A mounted node's grid falls back to the id, because
-// a mounted id's first segment is the local node; see client/scratch.
+// drawGridNotice paints a status line in a pane whose grid is not cached;
+// pane.GridNotice words it. A mounted grid falls back to the id; see
+// client/scratch.
 func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if r.W < 80 || r.H < 40 {
 		return

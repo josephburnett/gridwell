@@ -41,18 +41,15 @@ type Action struct {
 const (
 	// HoldMs: a press held this long within SlopPx becomes the right button.
 	HoldMs = 400.0
-	// SlopPx is the jitter allowance: movement beyond it before HoldMs makes
-	// the press a left drag, and separates a two-finger tap from a pinch.
+	// SlopPx is the jitter allowance before a press becomes a drag.
 	SlopPx = 8.0
-	// TwoTapMs: both fingers down and up within this time, and within slop,
-	// is a two-finger tap.
+	// TwoTapMs bounds a two-finger tap, down to up.
 	TwoTapMs = 250.0
 	// lockPx is the dominant-axis travel that locks a two-finger gesture as
 	// pinch or scroll. It locks once, so a wandering pinch never flips.
 	lockPx = 12.0
-	// pinchGain and scrollGain convert finger px into wheel deltaY.
-	// zoomtrans.WheelZoom clamps its step, so only the order of magnitude of a
-	// physical wheel notch matters.
+	// pinchGain and scrollGain convert finger px into wheel deltaY; only the
+	// order of magnitude matters, since zoomtrans.WheelZoom clamps its step.
 	pinchGain  = 1.5
 	scrollGain = 1.0
 )
@@ -78,7 +75,6 @@ type Machine struct {
 	last   Point   // most recent single-finger position
 	t0     float64 // time the current classification window opened
 
-	// two-finger tracking
 	mid     Point   // current midpoint
 	dist    float64 // current inter-finger distance
 	twoT0   float64
@@ -117,7 +113,6 @@ func (m *Machine) Start(pts []Point, t float64) []Action {
 			m.accDist, m.accTrav = 0, 0
 			return nil
 		case dragLeft, dragRight:
-			// A stray extra finger mid-drag ends the drag cleanly.
 			as := []Action{{Kind: MouseUp, Pos: m.last, Button: m.dragButton()}}
 			m.st = dead
 			return as
@@ -126,7 +121,6 @@ func (m *Machine) Start(pts []Point, t float64) []Action {
 			return nil
 		}
 	default:
-		// 3+ fingers is not our vocabulary.
 		if m.st == dragLeft || m.st == dragRight {
 			as := []Action{{Kind: MouseUp, Pos: m.last, Button: m.dragButton()}}
 			m.st = dead
@@ -147,8 +141,7 @@ func (m *Machine) Move(pts []Point, t float64) []Action {
 		if dist(m.origin, pts[0]) <= SlopPx {
 			return nil
 		}
-		// Pressed at the origin, so the gesture engine sees the same press
-		// point a mouse would.
+		// Pressed at the origin, as a mouse would be.
 		m.st = dragLeft
 		return []Action{
 			{Kind: MouseDown, Pos: m.origin, Button: 0},
@@ -224,7 +217,6 @@ func (m *Machine) End(remaining []Point, t float64) []Action {
 			return nil
 		}
 	}
-	// All fingers lifted.
 	st := m.st
 	m.st = idle
 	switch st {
@@ -252,9 +244,8 @@ func (m *Machine) End(remaining []Point, t float64) []Action {
 	}
 }
 
-// Timer takes a long-press timer firing. The shell arms one per press and
-// never cancels, so a firing from the wrong state or an earlier press is
-// ignored.
+// Timer takes a long-press timer firing. The shell never cancels one, so a
+// stale firing is ignored.
 func (m *Machine) Timer(t float64) []Action {
 	if m.st != pending1 || t-m.t0 < HoldMs {
 		return nil

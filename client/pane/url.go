@@ -8,16 +8,11 @@
 //	/3/4/5?x=12.5&y=-3&z=1.5         grid leaf, viewport center + zoom
 //	/3/4/5/9?c=24&r=10               content leaf in text mode, cursor
 //
-// The grammar has one rule: leading namespace segments are the anchor's
-// chain, the first tile segment is the anchor grid id, and the rest are tile
-// ids in descent order. rpc.IsTileSegment decides which is which, shared with
-// the router so the two cannot disagree, and no leading namespace segment
-// means the home anchor. Whether the trailing id is a well or a content tile
-// is resolved by walking the cache, not here. The `?a=<anchor>` form is still
-// decoded for old bookmarks and never emitted.
-//
-// c and r mean text mode with the cursor there, and their absence means
-// rendered mode, so `?c=0&r=0` is emitted rather than stripped as a default.
+// Leading namespace segments are the anchor's chain, the first tile segment
+// is the anchor grid id, and the rest are tile ids in descent order.
+// rpc.IsTileSegment decides which is which, shared with the router so the two
+// cannot disagree. c and r mean text mode with the cursor there; their absence
+// means rendered mode, so `?c=0&r=0` is emitted rather than stripped.
 package pane
 
 import (
@@ -33,9 +28,8 @@ import (
 type URLState struct {
 	// Anchor is the qualified grid id the pane sits inside; "" means home.
 	Anchor string
-	// TileIDs is the descent path as bare segments the client qualifies with
-	// the anchor's namespace. Its last id may be a content tile, resolved
-	// after DecodeURL.
+	// TileIDs is the descent path as bare segments. Its last id may be a
+	// content tile, resolved after DecodeURL.
 	TileIDs []string
 	// Viewport, when the leaf is a grid. Only non-defaults are emitted.
 	X, Y, Zoom float64
@@ -43,19 +37,16 @@ type URLState struct {
 	CursorMode bool
 	Col, Row   int
 
-	// Workspace is the pane tile the user is inside. When set it is the whole
-	// place, the interior being server-owned in the layout blob, so no path,
-	// anchor or viewport rides alongside it. Nesting is session-only, so only
-	// the innermost pane tile is encoded.
+	// Workspace is the innermost pane tile the user is inside. When set it is
+	// the whole place: the interior is the layout blob's.
 	Workspace string
 }
 
 // URLDefaultZoom is the implicit zoom when z is absent.
 const URLDefaultZoom = 1.0
 
-// URLBootView is URLBootViewport's answer. Apply false keeps the bootstrap
-// default, and SetZoom separates writing a zoom from leaving the pane's own,
-// since a URL can carry a pan without a zoom.
+// URLBootView is URLBootViewport's answer. SetZoom is separate because a URL
+// can carry a pan without a zoom.
 type URLBootView struct {
 	Apply   bool
 	Cx, Cy  float64
@@ -65,8 +56,6 @@ type URLBootView struct {
 
 // URLBootViewport resolves the root pane's framing when the app opens with no
 // descent path: the URL's viewport, else the stored root view, else nothing.
-// Getting the precedence wrong silently re-frames a pane the user did not
-// touch.
 func URLBootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) URLBootView {
 	if urlX != 0 || urlY != 0 || urlZoom != 0 {
 		v := URLBootView{Apply: true, Cx: urlX, Cy: urlY}
@@ -112,8 +101,6 @@ func EncodeURL(s URLState) string {
 		return "/?" + q.Encode()
 	}
 	var path strings.Builder
-	// The anchor is already a slash-joined qualified grid id, so writing it
-	// verbatim yields the prefix DecodeURL's grammar reads back.
 	if s.Anchor != "" {
 		path.WriteByte('/')
 		path.WriteString(s.Anchor)
@@ -125,7 +112,6 @@ func EncodeURL(s URLState) string {
 	} else {
 		for _, id := range s.TileIDs {
 			path.WriteByte('/')
-			// Bare ids for readability; the client re-qualifies on decode.
 			path.WriteString(rpc.LocalOf(id))
 		}
 	}
@@ -153,9 +139,8 @@ func EncodeURL(s URLState) string {
 	return path.String() + "?" + encoded
 }
 
-// DecodeURL parses a path and query back into a URLState. The leaf type is not
-// resolved here, since that needs the cache, and c and r are set whenever the
-// URL carries them, whatever the leaf turns out to be.
+// DecodeURL parses a path and query back into a URLState. The leaf type needs
+// the cache, so it is not resolved here.
 func DecodeURL(raw string) (URLState, error) {
 	pathPart := raw
 	queryPart := ""
@@ -176,8 +161,6 @@ func DecodeURL(raw string) (URLState, error) {
 				segs = append(segs, seg)
 			}
 		}
-		// The anchor/path boundary. rpc.IsTileSegment is the one classifier,
-		// so a key-form id is a tile here and everywhere else too.
 		first := 0
 		for first < len(segs) && !rpc.IsTileSegment(segs[first]) {
 			first++
@@ -185,10 +168,8 @@ func DecodeURL(raw string) (URLState, error) {
 		var tileSegs []string
 		switch {
 		case first == 0:
-			// A bare tile path under the home anchor.
 			tileSegs = segs
 		case first == len(segs):
-			// Not a Gridwell place, which also catches external paths.
 			return URLState{}, errors.New("namespace segments with no grid id")
 		default:
 			s.Anchor = strings.Join(segs[:first+1], "/")
@@ -271,9 +252,8 @@ func SameURLPlace(a, b URLPlace) bool {
 
 // URLPushesEntry is the one owner of whether a navigation deserves a browser
 // history entry, so back and forward traverse descents and ascents, never
-// pans. A framing-only change, a focus switch and the first write after boot
-// all replace, none of them having gone anywhere. A pane-tile boundary pushes
-// whatever the pane ids, since entering or leaving one swaps the whole tree.
+// pans or focus switches. A pane-tile boundary pushes whatever the pane ids,
+// since it swaps the whole tree.
 func URLPushesEntry(prev, next URLPlace, seen bool) bool {
 	if !seen || SameURLPlace(prev, next) {
 		return false

@@ -13,8 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
-// DefaultCapacity is many gestures' worth of history, at a cost fixed from
-// boot.
+// DefaultCapacity is many gestures' worth of history.
 const DefaultCapacity = 2000
 
 // A loss is itself a record, under the trace's own name.
@@ -25,9 +24,8 @@ const (
 
 // Client is not safe for concurrent use, the client being single-threaded.
 type Client struct {
-	// OnEmit says a record is owed, so the owner can arm its flush. Set once
-	// at boot: a record made anywhere but the shim's own emit — the rpc
-	// interceptor writes here directly — would otherwise wait for one that is.
+	// OnEmit says a record is owed, so the owner can arm its flush; the rpc
+	// interceptor emits here directly, not through the shim.
 	OnEmit func()
 
 	cid  string
@@ -63,12 +61,9 @@ func (c *Client) Emit(src, kind, msg string, kv map[string]string, now time.Time
 	}
 }
 
-// emit stamps a record with the client's identity and writes it into the
-// ring, evicting the oldest when the ring is full.
 func emit(c *Client, src, kind, msg string, kv map[string]string, ct int64) {
 	if c.count == len(c.ring) {
-		// An evicted record the node never kept is a hole the next batch
-		// tells.
+		// An evicted record the node never kept is a hole the next batch tells.
 		if c.acked <= c.base {
 			c.dropped++
 			c.acked = c.base + 1
@@ -97,14 +92,12 @@ func (c *Client) CID() string { return c.cid }
 func (c *Client) PendingCount() int { return int(c.base + uint64(c.count) - c.acked) }
 
 // PendingBatch is every unacknowledged record as JSON lines, and the ack to
-// call once the door has answered. Without that ack the records stay pending
-// and ride the next batch, so a post that fails loses nothing; the ring is
-// the bound on that memory.
+// call once the door has answered. Unacked records ride the next batch, so a
+// failed post loses nothing.
 func (c *Client) PendingBatch() ([]byte, func()) {
 	if n := c.dropped; n > 0 {
 		// The evictions since the last batch are one record, which can itself
-		// evict another; that loss rides the next batch. It carries the clock
-		// of the emit that discovered it.
+		// evict another; that loss rides the next batch.
 		c.dropped = 0
 		emit(c, dropSrc, dropKind, "records dropped before the node saw them",
 			map[string]string{"n": strconv.Itoa(n)}, c.lastCT)
@@ -144,7 +137,6 @@ func Marshal(recs []tracewire.Record) []byte {
 	return buf.Bytes()
 }
 
-// truncate cuts on a rune boundary, so a long message is still text.
 func truncate(msg string) string {
 	if len(msg) <= tracewire.MaxMsg {
 		return msg
@@ -156,8 +148,7 @@ func truncate(msg string) string {
 	return msg[:cut]
 }
 
-// copyKV keeps the caller's map out of the ring: a record is what was true
-// when it was emitted.
+// copyKV keeps the caller's map out of the ring.
 func copyKV(kv map[string]string) map[string]string {
 	if len(kv) == 0 {
 		return nil

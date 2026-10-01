@@ -1,8 +1,7 @@
 // Package transition owns the viewport animation a pane runs through a
-// doorway. A transition belongs to a pane, not the app, so two may animate at
-// once, and one that is displaced or cleared lands rather than being dropped,
-// which would strand the pane on the animation's scratch viewport with the
-// place it left already gone. The shim drives the clock.
+// doorway. A transition belongs to a pane, so two may animate at once, and one
+// that is displaced or cleared lands rather than being dropped, which would
+// strand the pane on a scratch viewport.
 package transition
 
 import "github.com/josephburnett/gridwell/client/pane"
@@ -41,9 +40,8 @@ func (t *Transition) Segment() Segment { return t.Segments[t.current] }
 
 func (t *Transition) StartMs() float64 { return t.startMs }
 
-// Set is every live transition, at most one per pane. enter installs a
-// segment's place and viewport; land is everything arrival means. Both belong
-// to the shim, and the sequencing lives here so no caller performs half of one.
+// Set is every live transition, at most one per pane. enter and land are the
+// shim's; the sequencing lives here so no caller performs half of one.
 type Set struct {
 	enter func(paneID string, seg Segment)
 	land  func(t *Transition)
@@ -79,9 +77,8 @@ func (s *Set) List() []*Transition {
 }
 
 // Start cancels whatever the pane was animating onto its destination. A caller
-// that computes segments from the pane's current place must cancel before it
-// reads that place, or it builds on the outgoing scratch state; this is the
-// backstop.
+// that computes segments from the pane's place must cancel before reading it;
+// this is the backstop.
 func (s *Set) Start(t *Transition, now float64) {
 	if len(t.Segments) == 0 {
 		return
@@ -111,8 +108,7 @@ func (s *Set) Advance(paneID string, now float64) bool {
 }
 
 // Cancel installs the final segment's place and end viewport and runs the
-// landing, so a cancelled descent is a completed descent that skipped the
-// animation.
+// landing: a cancelled descent is a completed one.
 func (s *Set) Cancel(paneID string) bool {
 	t := s.Get(paneID)
 	if t == nil {

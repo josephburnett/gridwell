@@ -176,11 +176,9 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 	return moving, pin - moving
 }
 
-// MoveForbidden reports whether the server would reject a left-drag between
-// grids when either end declares host_content. crossPlugin exempts the host
-// arms, a drag across an id namespace being a link. What stays forbidden is a
-// same-namespace cross-grid move: host content cannot migrate into Gridwell
-// and host-side mv is not implemented.
+// MoveForbidden reports whether the server would reject a same-namespace
+// cross-grid left-drag because either end declares host_content: host content
+// cannot migrate into Gridwell and host-side mv is not implemented.
 func MoveForbidden(sameGrid, crossPlugin, srcHost, dstHost bool) bool {
 	if sameGrid || crossPlugin {
 		return false
@@ -193,14 +191,11 @@ func MoveForbidden(sameGrid, crossPlugin, srcHost, dstHost bool) bool {
 type Intent int
 
 const (
-	// IntentMove is a left-drag; across an id namespace it verdicts a link.
-	// It is the zero value a palette template drag leaves unset.
+	// IntentMove is a left-drag, and the zero value a palette template drag
+	// leaves unset.
 	IntentMove Intent = iota
-	// IntentCopy is a right-drag, an independent copy in any namespace.
-	IntentCopy
-	// IntentLink is ctrl with a right-drag: ctrl flips the right button from
-	// copy to link, in whatever namespace the drop lands in.
-	IntentLink
+	IntentCopy        // a right-drag
+	IntentLink        // ctrl with a right-drag
 )
 
 // Creates: a copy and a link both do, so the source stays put and is a
@@ -214,24 +209,17 @@ type DropAction int
 const (
 	// DropNavigate is a bare click on a focused pane: descend, ascend or
 	// select, placing nothing.
-	DropNavigate DropAction = iota
-	// DropNavigateSplit is that click with ctrl held at press, so a descent
-	// lands in a new split pane.
-	DropNavigateSplit
+	DropNavigate      DropAction = iota
+	DropNavigateSplit            // that click with ctrl held at press
 	DropFocusOnly
 	DropCreateTemplate
-	// DropPanEnd is an empty-space drag, which persists the viewport.
-	DropPanEnd
-	// DropDelete is a release over the source pane's trashcan button.
-	DropDelete
-	// DropRejected snaps back.
-	DropRejected
+	DropPanEnd   // an empty-space drag, which persists the viewport
+	DropDelete   // a release over the source pane's trashcan button
+	DropRejected // snaps back
 	DropMove
 	DropClone
 	// DropLink creates a reference, an exit well for a grid and a leaf link
-	// otherwise. Two gestures verdict it: ctrl with a right-drag, and a
-	// left-drag across id namespaces, where there is no cross-plugin move.
-	// Either way the source is untouched and identity never migrates.
+	// otherwise. The source is untouched and identity never migrates.
 	DropLink
 )
 
@@ -240,12 +228,10 @@ const (
 // so a cleared field can never be read late. Occupied excludes the moving tile
 // on a move, mirroring the server's PlaceTile.
 type DropInput struct {
-	Started bool
-	// OriginFocused. The + button and the corner circle follow the same
-	// focus-only rule as a bare click.
+	Started       bool
 	OriginFocused bool
 	// SplitNav is ctrl at left-press time, fixed there so releasing it
-	// mid-click cannot change the verdict. Touch synthesizes no ctrlKey.
+	// mid-click cannot change the verdict.
 	SplitNav   bool
 	IsTemplate bool
 	Intent     Intent
@@ -256,10 +242,9 @@ type DropInput struct {
 	// TargetReadOnly rejects an arrival before the RPC. A same-grid
 	// left-drag is placement, not creation, and is exempt.
 	TargetReadOnly bool
-	// SameGrid is a rearrangement, arriving nowhere.
-	SameGrid bool
-	SameCell bool
-	Occupied bool
+	SameGrid       bool
+	SameCell       bool
+	Occupied       bool
 	// CrossPlugin: the grids are in different id namespaces, so a left-drag
 	// verdicts DropLink and a right-drag stays DropClone.
 	CrossPlugin bool
@@ -288,8 +273,6 @@ func DecideDrop(in DropInput) DropAction {
 	case in.Forbidden:
 		return DropRejected
 	case in.TargetReadOnly && !(in.SameGrid && !in.Intent.Creates()):
-		// Read-only gates arrivals; a same-grid left-drag is placement,
-		// which a read-only projection accepts.
 		return DropRejected
 	case in.SameCell:
 		return DropRejected
@@ -298,8 +281,6 @@ func DecideDrop(in DropInput) DropAction {
 	case in.Intent == IntentCopy:
 		return DropClone
 	case in.Intent == IntentLink || in.CrossPlugin:
-		// Both land on the one link commit, so they cannot produce two
-		// different kinds of reference.
 		return DropLink
 	default:
 		return DropMove

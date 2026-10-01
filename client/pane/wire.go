@@ -1,19 +1,11 @@
 // The pane-layout codec: the persisted wire form of a pane tree, stored as a
 // pane tile's content blob.
 //
-// It is a versioned DTO rather than json.Marshal(Tree), because the in-memory
-// Tree carries unexported state and changes shape when the model does, while
-// LayoutV1's bytes are forever: decoding a v1 blob must work in every future
-// Gridwell, and the golden fixture in wire_test.go pins it.
-//
-// A leaf persists its whole place, root first and namespace crossings
-// included, and no view: a grid's framing row and a content tile's row own
-// that, so a restored leaf shows what they hold (Frame.ViewPending).
-//
-// Every id in the layout is stored in the owning node's namespace frame. The
-// encoder strips the pane tile's transit-chain prefix through rel and the
-// decoder prepends it through abs, so a pane tile mounted over ssh restores
-// against the chain the reader used to reach it.
+// It is a versioned DTO rather than json.Marshal(Tree) because LayoutV1's
+// bytes are forever (the golden fixture in wire_test.go pins them). A leaf
+// persists its whole place and no view: the framing rows own that
+// (Frame.ViewPending). Ids are stored in the owning node's namespace frame, so
+// a pane tile mounted over ssh restores against the reader's chain.
 package pane
 
 import (
@@ -28,9 +20,7 @@ import (
 )
 
 // ChainPrefix is the transit chain through which a pane tile's owning node is
-// reached: "" for a local tile, "<ssh>/" for one hop. It is the abs a
-// DecodeLayout passes and the rel an EncodeLayout strips. Built from
-// rpc.NamespaceOf, never a local split.
+// reached: "" for a local tile, "<ssh>/" for one hop.
 func ChainPrefix(tileID string) string {
 	ns := rpc.NamespaceOf(rpc.NamespaceOf(tileID))
 	if ns == "" {
@@ -39,10 +29,8 @@ func ChainPrefix(tileID string) string {
 	return ns + "/"
 }
 
-// The persisted format, and the server's one reading of it, are
-// api/panelayout. This file is the client half, Tree to LayoutV1 and back, and
-// derives nothing the server also derives, so there is no second decoder to
-// drift.
+// The persisted format and the server's reading of it are api/panelayout's;
+// this is the client half, and derives nothing the server also derives.
 const LayoutMediaType = panelayout.LayoutMediaType
 
 const layoutVersion = panelayout.Version
@@ -62,8 +50,7 @@ type (
 // id into the owning node's frame, answering false for a leaf looking outside
 // that node's reach; such a leaf serializes as home and its pane id comes back
 // in skipped, so the caller can surface one notice. A nil rel is the identity.
-// Encoding never mutates the tree and identical trees produce identical bytes,
-// which is what lets the persister hash-diff and never write for a pure visit.
+// Identical trees produce identical bytes, so a pure visit never writes.
 func EncodeLayout(t *Tree, rel func(id string) (string, bool)) (data []byte, skipped []string, err error) {
 	if t == nil {
 		return nil, nil, errors.New("pane layout: nil tree")
@@ -112,14 +99,10 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 }
 
 // encodeLeaf maps one pane's place into the owning node's frame; false means
-// an id was outside it and the leaf was serialized as home.
-//
-// The place is written twice by design. Anchor, Path and TextFocus are the
-// projection onto the innermost namespace level, which is all an older
-// Gridwell can read and all panelayout.TextFocusIDs scans, so TextFocus is
-// written whenever the leaf is in content, Place or no Place. Place, the whole
-// frame stack, is omitted wherever ProjectionHolds, so the common blob stays
-// byte-identical to what earlier versions wrote.
+// an id was outside it and the leaf was serialized as home. The place is
+// written twice by design: Anchor, Path and TextFocus are what an older
+// Gridwell and panelayout.TextFocusIDs read, and Place is omitted wherever
+// ProjectionHolds, so the common blob stays byte-identical to older ones.
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)
 	home := &LayoutPane{ID: bareID}
@@ -184,8 +167,7 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 // Gridwell's blob fails with a wrapped ErrLayoutVersion. Decoding is strict on
 // structure, which Gridwell wrote, and loose on arrangement state: an unknown
 // Focus falls back to the first leaf, an unknown Zoomed clears, ratios clamp.
-// idPrefix namespaces the decoded pane ids, so stacked live trees cannot
-// collide in the pane-keyed maps.
+// idPrefix keeps stacked live trees' pane ids from colliding.
 func DecodeLayout(data []byte, abs func(id string) string, idPrefix string) (*Tree, error) {
 	var l LayoutV1
 	if err := json.Unmarshal(data, &l); err != nil {
@@ -276,9 +258,8 @@ func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane 
 	return p
 }
 
-// decodePlace rebuilds a leaf's frame stack from Place, or from the
-// Anchor/Path/TextFocus projection, which is all older blobs carry and what is
-// written whenever it holds the whole place.
+// decodePlace rebuilds a leaf's frame stack from Place, or else from the
+// Anchor/Path/TextFocus projection.
 func decodePlace(lp *LayoutPane, abs func(string) string) Stack {
 	if len(lp.Place) > 0 {
 		frames := make([]Frame, len(lp.Place))

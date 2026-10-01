@@ -22,8 +22,7 @@ import (
 )
 
 // shellStreamConn is one live shell attachment: the pane's slot on the /shell
-// WebSocket plus its xterm.js host. Its js.Func handlers are Released on
-// close, because FuncOf-allocated callbacks pin Go memory until released.
+// WebSocket plus its xterm.js host. Its js.Func handlers are Released on close.
 type shellStreamConn struct {
 	term         js.Value // xterm.Terminal
 	fitAddon     js.Value // FitAddon — proposeDimensions + fit
@@ -33,13 +32,10 @@ type shellStreamConn struct {
 
 	tileID string
 	paneID string
-	// descentID is the pane frame this stream was opened for; for a shell link
-	// that is the link row, not tileID. The per-frame sweep compares it through
-	// pane.SurfaceOf; the content id instead parks a link's overlay forever.
+	// descentID is the pane frame this stream was opened for: for a shell link,
+	// the link row, not tileID, or a link's overlay parks forever.
 	descentID string
-	// anchor and path locate the grid holding this shell tile: SetShellPreview
-	// would otherwise resolve against the plugin root grid and fail inside a
-	// sub-grid. Same contract as urlView's.
+	// anchor and path locate the grid holding this shell tile, as urlView's do.
 	anchor string
 	path   []string
 
@@ -54,12 +50,11 @@ type shellStreamConn struct {
 	onOSCURL       js.Func   // OSC 5522 from the gridwell-open shim
 	touchFns       []js.Func // from installOverlayTouch
 
-	// hoveredURL is the link the pointer is on, "" for none. xterm's linkifier
-	// owns the hit test and publishes it through the hover and leave callbacks,
-	// which fire exactly when a click would activate that link.
+	// hoveredURL is the link under the pointer, "" for none, published by xterm's
+	// linkifier exactly when a click would activate it.
 	hoveredURL string
-	// pendingLink is the url of a press this overlay took from xterm, held
-	// until the click that completes it. "" when the press was the terminal's.
+	// pendingLink is the url of a press this overlay took from xterm, held until
+	// its click.
 	pendingLink string
 
 	closed bool
@@ -68,15 +63,14 @@ type shellStreamConn struct {
 	// this terminal; see syncMirrors.
 	mirror   *debounce.Debounce
 	onRender js.Func
-	// shown is whether the overlay was on screen last frame, so a park
-	// snapshots the face its own pane is about to draw.
+	// shown is whether the overlay was on screen last frame, so a park snapshots
+	// the face its pane is about to draw.
 	shown bool
 
 	lastCols, lastRows uint16
 
-	// lastFit* are the inputs the last fit() derived from: the container box and
-	// the font size, since content zoom moves the font without the box. Fitting
-	// every frame lets box wobble churn resizes, each a SIGWINCH and a redraw.
+	// lastFit* are the last fit()'s inputs, box and font size: fitting every frame
+	// lets box wobble churn resizes, each a SIGWINCH.
 	lastFitW, lastFitH float64
 	lastFitFont        int
 }
@@ -87,9 +81,8 @@ var (
 	shellConsole = consoleLog("[shellstream]")
 )
 
-// isShellDescent reads descentKind, the same resolver as isURLDescent, so an
-// ephemeral shell visit is a shell descent here too; what the bar slot then
-// offers for one is descendedGridTile's business.
+// isShellDescent reads descentKind, as isURLDescent does, so an ephemeral
+// shell visit counts.
 func (a *App) isShellDescent(p *pane.Pane) bool {
 	return a.descentKind(p) == rpc.DescentShell
 }
@@ -98,9 +91,8 @@ func (a *App) hasShellStream(paneID string) bool {
 	return a.shellConnFor(paneID) != nil
 }
 
-// shellRefreshButtonVisible decides whether the refresh button paints on a
-// frozen shell descent, per shellconn.DecideShellRefreshVisible, and starts a
-// ShellSessionAlive probe when the answer is not cached.
+// shellRefreshButtonVisible runs shellconn.DecideShellRefreshVisible, probing
+// ShellSessionAlive when the answer is not cached.
 func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	if tile == nil {
 		return false
@@ -115,11 +107,11 @@ func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	return v.Show
 }
 
-// probeShellSessionAlive caches the ShellSessionAlive verdict for tileID and
-// redraws. then, if non-nil, receives it; a failed probe calls nothing.
+// probeShellSessionAlive caches the verdict for tileID and calls then, unless
+// the probe failed.
 func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
-	// Single-flight coalesces callers and never drops a callback: dropping the
-	// later one loses a restore's attach whenever the badge probe fired first.
+	// Single-flight never drops a callback, or a restore's attach is lost when the
+	// badge probe fired first.
 	if waiters, inflight := a.shellAliveProbing[tileID]; inflight {
 		if then != nil {
 			a.shellAliveProbing[tileID] = append(waiters, then)
@@ -132,17 +124,14 @@ func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 	}
 	a.shellAliveProbing[tileID] = waiters
 	go func() {
-		// Bounded, because the waiters are released when this returns: a probe
-		// the network swallowed would dedupe every later probe away forever.
+		// Bounded: a probe the network swallowed would dedupe every later one away.
 		ctx, cancel := inflight.Bounded()
 		defer cancel()
 		alive, err := a.cl.ShellSessionAlive(ctx, tileID)
-		// Clear the flight so a future probe can retry.
 		done := a.shellAliveProbing[tileID]
 		delete(a.shellAliveProbing, tileID)
 		if err != nil {
 			shellLog("ShellSessionAlive tile=%s err=%v", tileID, err)
-			// Without a verdict the refresh control does not appear.
 			a.reportErr(errsurface.Error, "shell", "shell session probe failed: "+rpcErrText(err))
 			return
 		}
@@ -154,8 +143,7 @@ func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 	}()
 }
 
-// setShellAlive overrides the cached probe with firsthand knowledge, today
-// onShellExit's sessionGone verdict.
+// setShellAlive overrides the cached probe with onShellExit's firsthand verdict.
 func (a *App) setShellAlive(tileID string, alive bool) {
 	cur, ok := a.shellAlive[tileID]
 	a.shellAlive[tileID] = alive
@@ -164,19 +152,15 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 	}
 }
 
-// openShellStream puts the tile's shell live in pane p: engage decides whether
-// that keeps the terminal the pane has, moves the one another pane holds, or
-// mounts an xterm.js terminal and opens the tile's PTY on the /shell
-// WebSocket. disable_shells refuses, preview stays.
+// openShellStream puts the tile's shell live in pane p: keep, move another
+// pane's terminal, or mount xterm.js on a new PTY. disable_shells refuses.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	frozen := false
 	if t := a.findTileByID(tileID); t != nil {
 		frozen = t.UrlFrozen
 	}
-	// Attaching is the shell's reconnect gesture, so it clears the standing
-	// freeze by the rule the url side runs. A shell link never follows its
-	// target: the session keys by the owner id below, so the link row is both
-	// where the freeze lives and where it is cleared.
+	// Attaching clears the standing freeze, as the url side does. A shell link
+	// never follows its target, so the link row holds and clears the freeze.
 	plan, ok := shellconn.DecideGoLive(a.caps.Shells, frozen, false)
 	if !ok {
 		a.reportErr(caps.ShellNotice())
@@ -185,8 +169,6 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	if plan.Unfreeze {
 		a.postFrozen(tileID, false, nil)
 	}
-	// The PTY session, the alive cache and the freeze writeback all key by the
-	// id that owns the session.
 	tileID = a.contentKey(tileID)
 	if !a.engage(a.shellSurface(), p, tileID) {
 		return
@@ -201,8 +183,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	style.Set("background", a.pal.Bg)
 	style.Set("zIndex", "5")
 	style.Set("overflow", "hidden")
-	// Off-screen until syncShellOverlayPosition places it, so no 0x0 terminal
-	// flashes during the descent transition.
+	// Off-screen until placed, so no 0x0 terminal flashes during the transition.
 	style.Set("left", "-9999px")
 	style.Set("top", "-9999px")
 	style.Set("width", "300px")
@@ -213,14 +194,12 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	conn := &shellStreamConn{tileID: tileID}
 	conn.placeIn(p)
 
-	// installOverlayMouse hands back the presses this overlay would otherwise
-	// swallow. Every other press stays the terminal's — the left selects, and
-	// on Linux the middle one pastes the primary selection, so it cannot be
-	// the canvas's ascent — save for pane focus and a press on a link.
+	// installOverlayMouse hands back pane focus and link presses. Every other
+	// press stays the terminal's: on Linux the middle one pastes the primary
+	// selection, so it cannot be the canvas's ascent.
 	mouseFns := a.installOverlayMouse(container, func(ev js.Value, _, _ float64) bool {
-		// A press on a link is Gridwell's alone: xterm would both activate
-		// it and report the press, and the application would then open the
-		// same url again through its own opener.
+		// A press on a link is Gridwell's alone, or xterm and the application would
+		// both open it.
 		conn.pendingLink = ""
 		if ev.Get("button").Int() == 0 && shellconn.DecideLinkPress(
 			conn.hoveredURL, mouseTrackingMode(conn.term), modifierHeld(ev)) {
@@ -228,16 +207,13 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 			ev.Call("preventDefault")
 			ev.Call("stopPropagation")
 		}
-		// Pane focus still follows the click, because the overlay swallows
-		// the mousedown and the canvas path never runs.
+		// Pane focus still follows: the overlay swallows the mousedown.
 		if cur := a.tree.FindPane(conn.paneID); cur != nil {
 			a.focusToPane(cur)
 		}
 		return true
 	})
 
-	// The tail of a press this overlay took from xterm: xterm must neither
-	// report the release nor activate the link itself.
 	onMouse := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
 		if conn.pendingLink == "" {
@@ -252,55 +228,46 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		}
 		return nil
 	})
-	// Capture phase so we win over xterm's own inner listeners.
 	container.Call("addEventListener", "mouseup", onMouse, true)
 	container.Call("addEventListener", "click", onMouse, true)
 
 	Terminal := js.Global().Get("Terminal")
 	if !Terminal.Truthy() {
 		shellLog("xterm.Terminal not loaded; index.html missing script tag?")
-		// A console line alone presents as an empty pane that just vanished.
 		a.reportErr(errsurface.Error, "shell", "terminal engine unavailable on this host (xterm not loaded)")
 		doc.Get("body").Call("removeChild", container)
 		return
 	}
 	opts := js.Global().Get("Object").New()
-	// xterm 6 gates parser.registerOscHandler and term.unicode.activeVersion
-	// behind this flag; both are used below, and without it they panic the wasm.
+	// xterm 6 gates registerOscHandler and unicode.activeVersion behind this
+	// flag; without it they panic the wasm.
 	opts.Set("allowProposedApi", true)
 	opts.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
-	// Scaled by the tile's persisted content zoom, so a zoomed terminal comes
-	// back at your size on every descent.
+	// Scaled by the tile's persisted content zoom.
 	zoom := 1.0
 	if t := a.findTileByID(tileID); t != nil {
 		zoom = contentzoom.Of(t.GetContentZoom())
 	}
 	opts.Set("fontSize", contentzoom.ShellFontPx(zoom))
-	// No convertEol: the PTY's ONLCR already delivers CRLF, and with it set
-	// xterm snaps to column 0 on every bare LF, scattering scroll-region output.
+	// No convertEol: the PTY's ONLCR already delivers CRLF, and a bare LF would
+	// snap to column 0.
 	opts.Set("cursorBlink", true)
 	opts.Set("theme", a.termTheme())
 	term := Terminal.New(opts)
 
-	// Unicode 11 widths: the default Unicode 6 table gives modern emoji the
-	// wrong cell width. Loaded before open, so the first paint measures right.
+	// Unicode 11 widths, loaded before open so the first paint measures right.
 	if u11 := js.Global().Get("Unicode11Addon"); u11.Truthy() {
 		term.Call("loadAddon", u11.Get("Unicode11Addon").New())
 		term.Get("unicode").Set("activeVersion", "11")
 	}
 
-	// The renderer addon attaches after open, because the WebGL addon requires
-	// an opened terminal.
 	fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
 	term.Call("loadAddon", fitAddon)
 	term.Call("open", container)
 	renderAddon, rendererKind := attachShellRenderer(term)
 
-	// Multi-finger gestures feed the shared translation; single fingers stay
-	// native.
 	touchFns := a.installOverlayTouch(container, shellTouchClaim())
 
-	// The fit addon overwrites this, but the bind message starts the PTY.
 	cols := term.Get("cols").Int()
 	rows := term.Get("rows").Int()
 	a.emit(traceevent.ShellOpen(p.ID, tileID))
@@ -311,15 +278,13 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	conn.onMouse, conn.mouseFns, conn.touchFns = onMouse, mouseFns, touchFns
 	conn.lastCols, conn.lastRows = uint16(cols), uint16(rows)
 
-	// One shared activate func, so no per-link js.Func allocations leak.
 	conn.onLinkActivate = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) >= 2 && args[1].Type() == js.TypeString {
 			a.shellURLActivate(conn.paneID, args[1].String())
 		}
 		return nil
 	})
-	// xterm's linkifier owns which link the pointer is on, and nothing else
-	// derives it, so no second hit test can disagree.
+	// xterm's linkifier is the one owner of which link the pointer is on.
 	conn.onLinkHover = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) >= 2 && args[1].Type() == js.TypeString {
 			conn.hoveredURL = args[1].String()
@@ -330,17 +295,14 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		conn.hoveredURL = ""
 		return nil
 	})
-	// A program's own OSC 8 hyperlink never reaches the link provider, and xterm
-	// would open it itself through a confirm() and a window.open the desktop
-	// denies. linkHandler gives those the same owner as every other link, and
-	// xterm keeps its http(s) filter on them.
+	// A program's OSC 8 hyperlink bypasses the link provider; linkHandler routes
+	// it to the same owner instead of xterm's confirm() and window.open.
 	linkHandler := js.Global().Get("Object").New()
 	linkHandler.Set("activate", conn.onLinkActivate)
 	linkHandler.Set("hover", conn.onLinkHover)
 	linkHandler.Set("leave", conn.onLinkLeave)
 	term.Get("options").Set("linkHandler", linkHandler)
 	conn.onLinkProvide = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		// args are (1-based line number, callback); ranges are 1-based inclusive.
 		if len(args) < 2 {
 			return nil
 		}
@@ -381,10 +343,9 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	links.Set("provideLinks", conn.onLinkProvide)
 	term.Call("registerLinkProvider", links)
 
-	// OSC 5522: the gridwell-open shim, $BROWSER in every session from
-	// internal/local/tmux, hands back a url a terminal app tried to open, so it
-	// descends here instead of spawning a host browser. It rides the PTY byte
-	// stream, so remote shells work unchanged.
+	// OSC 5522: the gridwell-open shim ($BROWSER, see internal/local/tmux) hands
+	// back a url a terminal app opened, to descend here. It rides the PTY stream,
+	// so remote shells work unchanged.
 	conn.onOSCURL = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) >= 1 && args[0].Type() == js.TypeString {
 			a.shellURLActivate(conn.paneID, args[0].String())
@@ -393,10 +354,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	})
 	term.Get("parser").Call("registerOscHandler", 5522, conn.onOSCURL)
 
-	// client/shellws queues frames typed before the socket opens, so no queue
-	// is needed here.
 	conn.onData = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		// The Go form of the JS string is the UTF-8 encoding the PTY wants.
 		a.shells.Write(conn.tileID, []byte(args[0].String()))
 		return nil
 	})
@@ -424,29 +382,27 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	})
 	term.Call("onRender", conn.onRender)
 
-	// The pane owns the conn before the dial: a socket that fails instantly
-	// reports through onShellExit, which finds the conn among the panes'.
+	// The pane owns the conn before the dial: an instant failure reports through
+	// onShellExit, which finds it among the panes'.
 	a.local(p.ID).shellConn = conn
-	// Output arrives at onShellData, an unexpected end at onShellExit.
 	a.shells.Open(tileID, int(cols), int(rows))
 	a.syncShellOverlayPosition()
 	term.Call("focus")
 }
 
-// attachShellRenderer gives the opened terminal the WebGL addon, falling back
-// to xterm's DOM renderer when WebGL2 is unavailable or later lost. Both redraw
-// whole rows, so neither leaves stale-region artifacts. The caller pins it.
+// attachShellRenderer gives the terminal the WebGL addon, falling back to
+// xterm's DOM renderer.
 func attachShellRenderer(term js.Value) (js.Value, string) {
 	if addon, ok := tryWebglAddon(term); ok {
 		return addon, "webgl"
 	}
-	// The kind is e2e-asserted, so a downgrade can never be silent.
+	// The kind is e2e-asserted, so a downgrade is never silent.
 	shellLog("shell renderer: DOM FALLBACK (webgl unavailable)")
 	return js.Value{}, "dom"
 }
 
 // tryWebglAddon reports ok=false when the addon is missing or throws.
-// preserveDrawingBuffer so the freeze capture's toDataURL reads real pixels.
+// preserveDrawingBuffer so the freeze capture reads real pixels.
 func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
 	defer func() {
 		if recover() != nil { // loadAddon throws when WebGL2 is unavailable
@@ -460,8 +416,7 @@ func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
 	}
 	a := ns.Get("WebglAddon").New(true) // preserveDrawingBuffer
 	term.Call("loadAddon", a)
-	// A lost GPU context would freeze the terminal mid-session: dispose the
-	// addon and xterm continues on its DOM renderer. One-shot.
+	// A lost GPU context disposes the addon; xterm continues on DOM.
 	var lossCb js.Func
 	lossCb = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		shellLog("webgl context lost; falling back to the DOM renderer")
@@ -474,8 +429,7 @@ func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
 }
 
 // shellContentCanvas returns the canvas terminal content is painted on: the
-// WebGL main canvas is class-less while its transparent link layer comes first,
-// so the first canvas captures all black. The DOM fallback has none.
+// WebGL link layer comes first and captures all black.
 func shellContentCanvas(container js.Value) js.Value {
 	list := container.Call("querySelectorAll", "canvas")
 	n := list.Get("length").Int()
@@ -502,8 +456,8 @@ func shellContentCanvas(container js.Value) js.Value {
 	return js.Value{}
 }
 
-// moveShellStream hands the terminal fromID holds to pane to, socket and all:
-// no close, no freeze and no reattach, so xterm keeps every row it holds.
+// moveShellStream hands the terminal to pane to, socket and all: no close, no
+// freeze, no reattach.
 func (a *App) moveShellStream(fromID string, to *pane.Pane) {
 	from, ok := a.localIf(fromID)
 	if !ok || from.shellConn == nil {
@@ -522,13 +476,11 @@ func (a *App) moveShellStream(fromID string, to *pane.Pane) {
 	a.draw()
 }
 
-// placeIn names p as the pane conn serves, in the descent p is in.
 func (conn *shellStreamConn) placeIn(p *pane.Pane) {
 	conn.paneID, conn.descentID = p.ID, p.ContentID()
 	conn.anchor, conn.path = p.Anchor(), slices.Clone(p.Path())
 }
 
-// shellConnOfTile is the live terminal on tileID's session, nil for none.
 func (a *App) shellConnOfTile(tileID string) *shellStreamConn {
 	for _, pl := range a.locals {
 		if pl.shellConn != nil && pl.shellConn.tileID == tileID {
@@ -538,8 +490,7 @@ func (a *App) shellConnOfTile(tileID string) *shellStreamConn {
 	return nil
 }
 
-// onShellData routes PTY output to the tile's terminal, dropping a push for a
-// tile with no live conn. A Uint8Array leaves control bytes untouched.
+// onShellData routes PTY output to the tile's terminal as a Uint8Array.
 func (a *App) onShellData(tileID string, data []byte) {
 	conn := a.shellConnOfTile(tileID)
 	if conn == nil || conn.closed {
@@ -550,8 +501,7 @@ func (a *App) onShellData(tileID string, data []byte) {
 	conn.term.Call("write", u8)
 }
 
-// onShellExit handles an unexpected stream end; a local close is suppressed by
-// the registry. What the end says about the session is shellconn.ExitAlive's.
+// onShellExit handles an unexpected stream end; see shellconn.ExitAlive.
 func (a *App) onShellExit(tileID, message string, sessionGone bool) {
 	conn := a.shellConnOfTile(tileID)
 	if conn == nil {
@@ -565,7 +515,6 @@ func (a *App) onShellExit(tileID, message string, sessionGone bool) {
 		delete(a.shellAlive, conn.tileID)
 	}
 	if message != "" {
-		// The terminal just broke under the user's prompt: say why.
 		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+message)
 	}
 	conn.closed = true
@@ -573,8 +522,7 @@ func (a *App) onShellExit(tileID, message string, sessionGone bool) {
 	a.draw()
 }
 
-// mirrorShell snapshots one live terminal into the tile's preview cache, where
-// every pane showing the tile reads it.
+// mirrorShell snapshots a live terminal into the tile's preview cache.
 func (a *App) mirrorShell(conn *shellStreamConn) {
 	if conn.closed {
 		return
@@ -585,8 +533,7 @@ func (a *App) mirrorShell(conn *shellStreamConn) {
 	}
 }
 
-// parkShellOverlay takes the overlay off screen. Its own pane draws the tile's
-// face in its place, so the face is taken first, as a url view's is.
+// parkShellOverlay takes the overlay off screen, snapshotting the face first.
 func (a *App) parkShellOverlay(conn *shellStreamConn) {
 	if conn.shown {
 		a.mirrorShell(conn)
@@ -595,14 +542,9 @@ func (a *App) parkShellOverlay(conn *shellStreamConn) {
 	conn.container.Get("style").Set("display", "none")
 }
 
-// termTheme is xterm's palette, the same three roles the canvas paints with.
-// A live terminal is restyled by assigning this to term.options.theme.
-//
-// A freeze photographs that terminal, so the stored preview blob is in the
-// theme the shell was live in and stays that way until the tile is reopened
-// and frozen again. That is deliberate: a capture is what the tile looked
-// like, and rewriting a stored blob to follow a view preference would change
-// bytes the user did not touch.
+// termTheme is xterm's palette, the canvas's three roles. A frozen preview
+// keeps the theme it was captured in: rewriting a stored blob for a view
+// preference would change bytes the user did not touch.
 func (a *App) termTheme() js.Value {
 	th := js.Global().Get("Object").New()
 	th.Set("background", a.pal.Bg)
@@ -611,9 +553,8 @@ func (a *App) termTheme() js.Value {
 	return th
 }
 
-// closeShellStream is the freeze path: capture a JPEG, post it, end the stream.
-// The close only detaches the tmux client, so a refresh reattaches. An
-// ephemeral ascent passes freeze=false: the session is about to be deleted.
+// closeShellStream is the freeze path: capture, post, detach the tmux client.
+// An ephemeral ascent passes freeze=false: the session is about to be deleted.
 func (a *App) closeShellStream(paneID string, freeze bool) {
 	conn := a.shellConnFor(paneID)
 	if conn == nil {
@@ -621,49 +562,40 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 	}
 	conn.closed = true
 	a.emit(traceevent.ShellClose(paneID, conn.tileID, freeze))
-	// Best-effort: the cwd still persists through the server's close handler.
 	if jpegBytes := snapshotShellCanvas(conn.container); freeze && jpegBytes != nil {
 		tileID := conn.tileID
-		// A wildcard because the blob id is unknown until SetShellPreview
-		// returns: Get answers any expected id until a specific Put lands.
+		// A wildcard: the blob id is unknown until SetShellPreview returns.
 		a.views.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
 		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
 	a.shells.Close(conn.tileID)
-	// The registry suppresses the exit report for a local close.
 	a.releaseShellStream(paneID, conn)
 }
 
-// freezeShellPaneByIntent runs the bar circle's freeze on a live shell: the standing
-// intent lands on the descended row, the terminal's current face becomes the
-// tile's preview through the ordinary close capture, and the attachment ends.
-// The tmux session keeps running, the way a frozen url keeps its address: a
-// freeze is a screenshot, not a kill, so the reconnect finds the session where
-// it left it. An ephemeral visit resolves to no row and freezes nothing.
+// freezeShellPaneByIntent runs the bar circle's freeze on a live shell. The
+// tmux session keeps running: a freeze is a screenshot, not a kill.
 func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
 	t, ok := a.descendedGridTile(p)
 	if !ok || t.Kind != rpc.KindShell {
 		return
 	}
 	a.postFrozen(t.Id, true, func() {
-		// A freeze still owed to the server is the outbox's business, so the
-		// teardown runs whatever the write did.
+		// A freeze still owed is the outbox's business.
 		a.closeShellStream(p.ID, true)
 		a.draw()
 	})
 }
 
-// closeAllShellStreams runs on beforeunload so the server's freeze-and-destroy
-// happens before the tab goes away. shellSurfaces is a snapshot.
+// closeAllShellStreams runs on beforeunload, ahead of the server's
+// freeze-and-destroy.
 func (a *App) closeAllShellStreams() {
 	for _, h := range a.shellSurfaces() {
 		a.closeShellStream(h.PaneID, true)
 	}
 }
 
-// mouseTrackingMode reads xterm's modes.mouseTrackingMode: "none" for no
-// tracking application, "" when the terminal cannot answer, which
-// shellconn.DecideLinkPress also reads as not tracking.
+// mouseTrackingMode reads xterm's mouse tracking mode: "none" for none, ""
+// when the terminal cannot answer.
 func mouseTrackingMode(term js.Value) string {
 	if !term.Truthy() {
 		return ""
@@ -679,17 +611,15 @@ func mouseTrackingMode(term js.Value) string {
 	return m.String()
 }
 
-// modifierHeld reports whether a mouse event carries any modifier: the
-// terminal's escape hatch from a mouse-tracking application, so the overlay
-// leaves those presses alone.
+// modifierHeld reports a modifier on a mouse event: the escape hatch from a
+// mouse-tracking application.
 func modifierHeld(ev js.Value) bool {
 	return ev.Get("altKey").Truthy() || ev.Get("shiftKey").Truthy() ||
 		ev.Get("ctrlKey").Truthy() || ev.Get("metaKey").Truthy()
 }
 
-// releaseAll releases the handlers that were installed. A handler an xterm
-// build or a host never gave us is the zero js.Func, which is not Truthy and
-// must not be released.
+// releaseAll releases installed handlers; one never given is the zero
+// js.Func and must not be released.
 func releaseAll(fns ...js.Func) {
 	for _, f := range fns {
 		if f.Truthy() {
@@ -698,19 +628,16 @@ func releaseAll(fns ...js.Func) {
 	}
 }
 
-// releaseShellStream tears down the DOM and the js.Func handlers.
 func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	if pl, ok := a.localIf(paneID); ok && pl.shellConn == conn {
 		pl.shellConn = nil
 	}
-	// Dispose before removing the node, so xterm's own listeners do not fire
-	// against a removed element.
+	// Dispose first, so xterm's listeners do not fire on a removed element.
 	releaseAll(conn.onData, conn.onResize, conn.onMouse, conn.onLinkProvide,
 		conn.onLinkActivate, conn.onLinkHover, conn.onLinkLeave, conn.onOSCURL,
 		conn.onRender)
 	releaseAll(conn.mouseFns...)
 	releaseAll(conn.touchFns...)
-	// The mouse-routing target must not outlive the container it names.
 	if a.touchDownTarget.Truthy() && a.touchDownTarget.Equal(conn.container) {
 		a.touchDownTarget = js.Value{}
 	}
@@ -724,12 +651,10 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	}
 }
 
-// syncShellOverlayPosition repositions every live shell overlay to track its
-// pane's screen rect. The fit addon runs once per size change.
+// syncShellOverlayPosition tracks every live shell overlay to its pane rect.
 func (a *App) syncShellOverlayPosition() {
-	// The xterm host div paints above the canvas and swallows mouse input over
-	// its rect, exactly as a native url view does, so it parks by the same
-	// per-pane verdict: a boundary drag has to cross the shell.
+	// The xterm div swallows input over its rect like a native url view, so it
+	// parks by the same per-pane verdict.
 	g := a.canvasGesture()
 	rects := a.layoutPanes()
 	for paneID, pl := range a.locals {
@@ -747,14 +672,12 @@ func (a *App) syncShellOverlayPosition() {
 		if p != nil {
 			contentID = p.ContentID()
 		}
-		// Park when the pane is not laid out this frame, and when it is on
-		// screen but no longer in the descent this stream was opened for.
-		// Unlike the url side the stream stays alive and the session persists.
+		// Park when the pane is not laid out, or is out of this stream's descent;
+		// the stream stays alive.
 		if pane.SurfaceOf(ok, contentID, conn.descentID) != pane.SurfaceShow {
 			a.parkShellOverlay(conn)
 			continue
 		}
-		// The same rect the URL view and the canvas fallback use.
 		cx, cy, cw, ch := paneContentBox(r)
 		cb := pane.Rect{X: cx, Y: cy, W: cw, H: ch}
 		if cb.W < 1 || cb.H < 1 {
@@ -765,8 +688,7 @@ func (a *App) syncShellOverlayPosition() {
 		style.Set("display", "block")
 		conn.shown = true
 		setBoundsPx(style, cb.X, cb.Y, cb.W, cb.H)
-		// Re-fit only when an input the fit depends on changed; see lastFit*
-		// for why. The FitAddon emits onResize if the cell grid changed.
+		// Re-fit only when an input changed; see lastFit*.
 		fontPx := 0
 		if fs := conn.term.Get("options").Get("fontSize"); fs.Truthy() {
 			fontPx = fs.Int()
@@ -779,8 +701,6 @@ func (a *App) syncShellOverlayPosition() {
 	}
 }
 
-// snapshotShellCanvas returns the content canvas as JPEG, nil when there is
-// none.
 func snapshotShellCanvas(container js.Value) []byte {
 	if !container.Truthy() {
 		return nil
@@ -793,8 +713,7 @@ func snapshotShellCanvas(container js.Value) []byte {
 	if !dataURL.Truthy() {
 		return nil
 	}
-	// Decoded in Go, not through JS atob; see shellconn.DecodeJPEGDataURL for
-	// why atob corrupts the bytes.
+	// Decoded in Go; see shellconn.DecodeJPEGDataURL.
 	out, ok := shellconn.DecodeJPEGDataURL(dataURL.String())
 	if !ok {
 		return nil
@@ -802,11 +721,10 @@ func snapshotShellCanvas(container js.Value) []byte {
 	return out
 }
 
-// postSetShellPreview sends the captured JPEG. anchor and path locate the
-// tile's leaf grid, which the server validates the tile against.
+// postSetShellPreview sends the captured JPEG to the tile's leaf grid.
 func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
-	// The frozen frame is a capture, no claim and no version bump, so the stream
-	// close racing this freeze cannot refuse it.
+	// A capture is no claim and bumps no version, so a racing close cannot
+	// refuse it.
 	req := &gridwellv1.SetTileRequest{TileId: tileID,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindShell}, Preview: jpeg}
 	a.do(write{

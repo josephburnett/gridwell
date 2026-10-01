@@ -18,17 +18,14 @@ import (
 )
 
 // urlView is the renderer-side handle for one live URL tile, a native
-// WebContentsView hosted by the Electron main process. nil means no live URL
-// descent.
+// WebContentsView hosted by the Electron main process.
 type urlView struct {
 	tileID string
 	paneID string
-	// descentID is the row the pane is descended into, the link row for a url
-	// link and not tileID. The per-frame sweep compares it against the pane's
-	// descent to spot one that moved on.
+	// descentID is the row the pane is descended into: the link row for a
+	// url link, not tileID.
 	descentID string
-	// anchor and path are captured at go-live, because the freeze needs them
-	// to resolve this tile's leaf grid.
+	// anchor and path are captured at go-live for the freeze.
 	anchor string
 	path   []string
 	// owns is urlview.Owns for the row: whether its address, title and
@@ -40,12 +37,10 @@ type urlView struct {
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
 	navDirty bool
-	// lastURL is where an ephemeral visit's page is now, which the promote
-	// gesture carries onto the row it creates; a durable row's landed address
-	// is a content entry instead.
+	// lastURL is where an ephemeral visit's page is now, for the promote
+	// gesture.
 	lastURL string
-	// lastTitle is for the unload beacon, which cannot wait for the bridge
-	// reply the freeze path reads its title from.
+	// lastTitle is for the unload beacon, which cannot wait for the bridge.
 	lastTitle string
 	// gen is main's view behind this handle, minted at place and kept by a
 	// move; see urlview.GoneEnds.
@@ -58,17 +53,14 @@ var (
 	urlConsole = consoleLog("[urlview]")
 )
 
-// contentViewBounds is the content-box rectangle a hosted webview occupies,
-// in CSS px.
 func contentViewBounds(r pane.Rect) viewBounds {
 	x, y, w, h := paneContentBox(r)
 	return viewBounds{X: x, Y: y, W: w, H: h}
 }
 
-// webAddress resolves the address a url tile presents at, through
-// urlview.Address. A served page's door address is derived at use time, never
-// persisted, because the desktop origin is an ephemeral port; every content op
-// keys by the owner.
+// webAddress resolves the address a url tile presents at (urlview.Address). A
+// served page's door address is never persisted, because the desktop origin is
+// an ephemeral port.
 func (a *App) webAddress(t *gridwellv1.Tile) string {
 	if !rpc.WebContent(t) {
 		return ""
@@ -77,12 +69,9 @@ func (a *App) webAddress(t *gridwellv1.Tile) string {
 		rpc.PageURL(a.origin, a.contentToken, rpc.ContentID(t)), t.UrlString)
 }
 
-// openURLStream goes live: main places a native WebContentsView for (pane,
-// tile). What that does to the row is shellconn.DecideGoLive's; this resolves
-// the row and runs the plan.
+// openURLStream goes live; what that does to the row is
+// shellconn.DecideGoLive's.
 func (a *App) openURLStream(p *pane.Pane, tileID string) {
-	// A tile at its own address and one whose plugin serves its page share
-	// the one view.
 	t, ok := a.tileForPane(p, tileID)
 	if !ok || !rpc.WebContent(t) {
 		return
@@ -96,17 +85,15 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 		a.postFrozen(t.Id, false, nil)
 	}
 	if plan.FollowLink {
-		// The target's row is read first, since its grid is likely never
-		// loaded.
+		// The target's grid is likely never loaded, so read its row first.
 		a.runGesture(nav.Gesture{Kind: nav.GestureFollowLink, PaneID: p.ID, Door: t})
 		return
 	}
 	a.placeURLView(p.ID, t)
 }
 
-// placeURLView puts tile t live in pane paneID, always the content-owning
-// row: a link never reaches here. engage decides whether that keeps the view
-// the pane has, moves the one another pane holds, or places one.
+// placeURLView puts the content-owning row t live in pane paneID; engage
+// decides whether to keep, move or place the view.
 func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	p := a.tree.FindPane(paneID)
 	if p == nil || !a.engage(a.urlSurface(), p, t.Id) {
@@ -122,20 +109,17 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	a.emit(traceevent.URLOpen(p.ID, t.Id))
 	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
 	// The focus fact rides the placement, because going live is not always a
-	// gesture on the focused pane. The handle is set before main answers, so
-	// a refusal takes it back down.
+	// gesture on the focused pane.
 	a.bridgePlace(p.ID, t.Id, v.gen, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
 		t.UrlHistory, v.durable, pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
 		func() { a.dropURLView(p.ID, v) })
 	a.draw()
 }
 
-// urlViewIn is the handle for tileID live in pane p. Every caller goes live in
-// the descent the pane is already in, so the pane's frame is the view's.
+// urlViewIn is the handle for tileID live in pane p.
 func (a *App) urlViewIn(p *pane.Pane, tileID string, owns bool) *urlView {
 	v := &urlView{tileID: tileID, paneID: p.ID, descentID: p.ContentID(), anchor: p.Anchor(),
 		path: slices.Clone(p.Path()), owns: owns}
-	// urlview.Durable says whether the descended row survives ascent.
 	possiblyEphemeral := false
 	if tile, ok := a.descendedTile(p); ok {
 		possiblyEphemeral = a.possiblyEphemeral(p, tile)
@@ -151,8 +135,7 @@ func (a *App) ownsURLRow(t *gridwellv1.Tile) bool {
 }
 
 // seedURLAddress files row t's address as its content entry, the basis a
-// landed address is compared against and claims, unless one is already held.
-// The placed row is the one copy of it a link's uncached target has.
+// landed address is compared against, unless one is already held.
 func (a *App) seedURLAddress(t *gridwellv1.Tile) {
 	if _, ok := a.c.TileContent(t.Id); ok {
 		return
@@ -178,8 +161,7 @@ func (a *App) noteLandedAddress(v *urlView, landed string) {
 }
 
 // moveURLView hands the view fromID holds to pane to, page and all: no close,
-// no freeze and no reload. The handle is rebuilt for the pane it now serves
-// and keeps what the unload beacon needs of the page's own history.
+// no freeze and no reload.
 func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	from, ok := a.localIf(fromID)
 	if !ok || from.urlView == nil {
@@ -192,8 +174,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
 	urlConsole("move pane=%s→%s tile=%s", fromID, to.ID, v.tileID)
-	// A pane not laid out, the parked tree a hand-back returns to, keeps the
-	// view's own bounds and stays parked until the frame that shows it.
+	// A pane not laid out keeps the view's own bounds and stays parked.
 	var b *viewBounds
 	if r, ok := a.layoutPanes()[to.ID]; ok {
 		cb := contentViewBounds(r)
@@ -205,9 +186,8 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	a.draw()
 }
 
-// dropURLView takes down a handle main has no view behind, a refused place or
-// a view main retired, since one left standing keeps the pane looking
-// live over a blank instead of showing the tile's frozen face.
+// dropURLView takes down a handle main has no view behind, so the pane shows
+// the tile's frozen face rather than looking live over a blank.
 // Identity-checked, since a later place may own the pane.
 func (a *App) dropURLView(paneID string, v *urlView) {
 	pl, ok := a.localIf(paneID)
@@ -226,8 +206,7 @@ type freezeTarget struct {
 }
 
 // closeURLStream tears the live view down and, when freeze is true, persists
-// the address the page landed on and the capture urlview.Writeback shapes. An
-// ephemeral tile's ascent passes false, since the row is about to be deleted.
+// the landed address and the capture urlview.Writeback shapes.
 func (a *App) closeURLStream(paneID string, freeze bool) {
 	a.closeURLStreamTo(paneID, nil, freeze)
 }
@@ -242,8 +221,8 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	v := pl.urlView
 	pl.urlView = nil
 	tileID := v.tileID
-	// The freeze-frame cache is read by ContentID, since a link and its
-	// target share one face.
+	// The freeze-frame cache keys by ContentID: a link and its target share
+	// one face.
 	previewKey := tileID
 	if ct := a.cachedTileByID(tileID); ct != nil {
 		previewKey = rpc.ContentID(ct)
@@ -268,9 +247,8 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 			if target != nil {
 				gid = target.gridID
 			}
-			// No claim and no version bump, so a foreign writer racing the
-			// close cannot refuse it. Once the surface is gone this closure
-			// holds the only copy of the capture.
+			// No claim and no version bump, so a racing foreign writer cannot
+			// refuse it.
 			req := &gridwellv1.SetTileRequest{TileId: tileID,
 				Tile: &gridwellv1.Tile{Kind: rpc.KindURL,
 					AltText: c.Title, UrlHistory: c.History},
@@ -289,17 +267,14 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 			})
 		}
 		if len(jpeg) > 0 {
-			// Show the final state without waiting for the round trip.
 			a.views.urlPreview.PutWildcard(previewKey, jpeg, func() { a.draw() })
 		}
 		a.draw()
 	})
 }
 
-// freezeURLPaneByIntent runs the context menu's "Freeze Page". The intent
-// lands on the descended row, the link row for a url link, because the freeze
-// is that reference's presentation and it is the row DecideAutoLive reads.
-// Ephemeral visits carry no durable intent.
+// freezeURLPaneByIntent runs the context menu's "Freeze Page". The intent lands
+// on the descended row, the one DecideAutoLive reads.
 func (a *App) freezeURLPaneByIntent(paneID string) {
 	p := a.tree.FindPane(paneID)
 	pl, ok := a.localIf(paneID)
@@ -311,17 +286,14 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 		return
 	}
 	a.postFrozen(tile.Id, true, func() {
-		// A freeze still owed to the server is the outbox's business, so the
-		// teardown runs whatever the write did.
 		a.closeURLStream(paneID, true)
 		a.draw()
 	})
 }
 
-// postFrozen is the one dispatcher for the standing freeze intent, for every
-// kind and both directions, keying the same outbox entry so the last gesture
-// wins. after runs once the first attempt finishes, because the teardown must
-// happen exactly once however often the write is retried.
+// postFrozen is the one dispatcher for the standing freeze intent, keying one
+// outbox entry so the last gesture wins. after runs once, after the first
+// attempt, because the teardown must happen exactly once.
 func (a *App) postFrozen(tileID string, frozen bool, after func()) {
 	var tile *gridwellv1.Tile
 	var once sync.Once
@@ -348,8 +320,7 @@ func (a *App) postFrozen(tileID string, frozen bool, after func()) {
 	})
 }
 
-// closeAllURLStreams tears down every live view on beforeunload, so the
-// freeze writes fire before the page goes.
+// closeAllURLStreams tears down every live view on beforeunload.
 func (a *App) closeAllURLStreams() {
 	for _, h := range a.urlSurfaces() {
 		a.closeURLStream(h.PaneID, true)
@@ -378,13 +349,11 @@ func (a *App) syncURLViews() {
 			a.bridgeSetHidden(paneID, true, false)
 			continue
 		case pane.SurfaceOrphan:
-			// The pane moved on without this view's teardown. Hiding it, as
-			// the shell twin does, would keep a Chromium page alive for a
-			// descent that ended.
+			// The pane moved on without this view's teardown; hiding it would
+			// keep a Chromium page alive for a descent that ended.
 			a.closeURLStream(paneID, true)
 			continue
 		}
-		// The canvas draws the parked frame into the very same box.
 		a.bridgeSetBounds(paneID, contentViewBounds(r))
 		// focused feeds main's focus-steal guard in webviews.ts: only the
 		// focused pane's view may take keyboard focus back after a park.
@@ -393,9 +362,7 @@ func (a *App) syncURLViews() {
 }
 
 // canvasGesture mirrors this frame's gesture and overlay state for
-// pane.ParkSurface and pane.CanvasOwnsPointer, which own what it reaches. The
-// rename input opens in the bar, outside every live surface's rect, so it is
-// not one of them.
+// pane.ParkSurface and pane.CanvasOwnsPointer.
 func (a *App) canvasGesture() pane.CanvasGesture {
 	g := pane.CanvasGesture{
 		Ghost:      a.ghost != nil,
@@ -422,8 +389,7 @@ func (a *App) canvasGesture() pane.CanvasGesture {
 }
 
 // isURLDescent branches input between Gridwell's gestures and native URL
-// interaction. descentKind resolves an ephemeral url visit too, so live-url
-// input handling works for it.
+// interaction, ephemeral visits included.
 func (a *App) isURLDescent(p *pane.Pane) bool {
 	return a.descentKind(p) == rpc.DescentURL
 }

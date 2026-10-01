@@ -22,19 +22,17 @@ const (
 	OutcomeConflict
 	// OutcomeRejected is the server saying no.
 	OutcomeRejected
-	// OutcomeTransport is the server never speaking, so the local state is
-	// still the only truth the user has.
+	// OutcomeTransport is the server never speaking.
 	OutcomeTransport
-	// OutcomeDead is the server saying the id's path ends in nothing
-	// (gwerr.IsDeadRef): a dead link, a state rather than an error. A write
-	// reads it as OutcomeRejected.
+	// OutcomeDead is a dead link (gwerr.IsDeadRef), a state rather than an
+	// error.
 	OutcomeDead
 )
 
-// Of reads a non-connect error as Transport, coming from below the protocol,
-// and every other coded error as a server that answered. A context deadline is
-// checked first and by identity, because the bound is inflight.Deadline, the
-// client's own timer, and reading its expiry as a verdict would drop bytes.
+// Of reads a non-connect error as Transport and every coded error as a server
+// that answered. A context deadline is the client's own timer
+// (inflight.Deadline), so it is Transport: read as a verdict it would drop
+// bytes.
 func Of(err error) Outcome {
 	if err == nil {
 		return OutcomeOK
@@ -65,17 +63,16 @@ func ReadSurfaces(o Outcome) bool {
 }
 
 // PlaceReadSurfaces reports whether a by-id tile read's latch goes on the
-// strip. That read is for a place a pane stands in, which has no dead face to
-// carry the dead verdict, so it surfaces like any other refusal; an outage is
-// the grid read's to name.
+// strip. A place has no dead face, so dead surfaces like any refusal; an
+// outage is the grid read's to name.
 func PlaceReadSurfaces(v inflight.Verdict) bool {
 	return v == inflight.Refused || v == inflight.Dead
 }
 
 // Reaction is what a mutation's outcome calls for; success is the zero value.
 type Reaction struct {
-	// Refetch is never set on Transport, where against a flapping link it
-	// could succeed and revert a patch whose write never landed.
+	// Refetch is never set on Transport: it could revert a patch whose write
+	// never landed.
 	Refetch bool
 	// Log surfaces the failure through errsurface.
 	Log bool
@@ -113,10 +110,9 @@ func ReactOptimistic(o Outcome) Reaction {
 	return Reaction{}
 }
 
-// ReactSave is for a content save, the one write that claims a version. On
-// Transport the entry stays dirty, being the only copy of the user's unsaved
-// words. A conflict surfaces here where the other tables leave it silent:
-// someone else changed these bytes and the screen is about to show theirs.
+// ReactSave is for a content save, the one write that claims a version. A
+// conflict surfaces here where the other tables leave it silent: the screen
+// is about to show someone else's bytes.
 func ReactSave(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
@@ -148,12 +144,9 @@ const (
 	OwnFailed
 )
 
-// Notices is which notices a finished write posts: the generic rpc: line, and
-// the write's own. On a transport blip "will retry" is the whole story, so a
-// write with its own words does not also get the generic line. Reloaded is
-// the "changed elsewhere — reloaded" line beside a refetch: only a conflict
-// means someone else's bytes are about to replace the user's; a rejected
-// write refetches too, but nothing changed elsewhere.
+// Notices is which notices a finished write posts: the generic rpc: line, the
+// write's own, and the "changed elsewhere — reloaded" line, which only a
+// conflict earns.
 type Notices struct {
 	Generic  bool
 	Own      OwnNotice
@@ -178,9 +171,7 @@ func NoticesFor(r Reaction, o Outcome, ownWords bool) Notices {
 }
 
 // ReactRead is the one table over a read's outcome for the asked key's
-// failure latch: an answer clears it, a transport failure latches it
-// Unreachable, which the backstop re-asks, and anything else is the server's
-// verdict, latched Refused until the entity changes, or Dead for the dead one.
+// failure latch.
 func ReactRead(o Outcome) inflight.Verdict {
 	switch o {
 	case OutcomeOK:
@@ -193,11 +184,9 @@ func ReactRead(o Outcome) inflight.Verdict {
 	return inflight.Refused
 }
 
-// GridRead is what one GetGrid answer calls for. The cache keys a grid by the
-// id it was answered under and every frame resolves by the id it was asked
-// for, so an answer under another name would strand the pane loading forever
-// with a 200 behind it: that is a verdict on the asked id, latched and
-// reported, though the rows are still worth remembering under their own.
+// GridRead is what one GetGrid answer calls for. An answer under another id
+// would strand the pane loading forever, so it is a verdict on the asked id,
+// though its rows are still stored.
 type GridRead struct {
 	Latch inflight.Verdict
 	// Store puts the answered rows in the cache.
@@ -215,18 +204,15 @@ func ReactGridRead(asked, answered string, o Outcome) GridRead {
 	return r
 }
 
-// PreviewReaction is what one preview fetch's outcome calls for. A preview
-// face is asked for on every draw until something settles it, so a fetch
-// that ends without an image must say whether the tile has one.
+// PreviewReaction is what one preview fetch's outcome calls for. A face is
+// asked for on every draw until something settles it.
 type PreviewReaction struct {
 	// Store keeps the bytes as the face.
 	Store bool
 	// Settle records that this blob has no image, so the next draw does not
-	// ask again: the server answered empty, or the namespace serves no
-	// previews at all, which is a capability and never a failure.
+	// ask again.
 	Settle bool
-	// Surface reports the failure; Latch is ReactRead's verdict on it, so the
-	// next draw does not ask again until the verdict's clearing signal.
+	// Surface reports the failure; Latch is ReactRead's verdict on it.
 	Surface bool
 	Latch   inflight.Verdict
 }

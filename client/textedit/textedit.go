@@ -3,9 +3,7 @@
 package textedit
 
 // CanvasHiddenByOverlay is the one owner of whether the canvas paints or the
-// DOM overlay covers it. The overlay is a singleton over the focused
-// descended pane, so a preview is never covered, and it is cleared during a
-// pane switch, so the canvas paints until the new blob lands.
+// DOM overlay, a singleton over the focused descended pane, covers it.
 func CanvasHiddenByOverlay(isDescended, isFocused, overlayReady bool) bool {
 	return isDescended && isFocused && overlayReady
 }
@@ -17,21 +15,15 @@ type TextareaSyncInput struct {
 	CurrentValue  string
 	BlobCached    bool
 	BlobContent   string
-	// PendingEdit reports typing in flight on LastTileID. It only decides
-	// whether a same-tile sync may rewrite the DOM value, since rewriting
-	// mid-typing would jump the cursor.
+	// PendingEdit reports typing in flight on LastTileID, which a same-tile
+	// sync must not rewrite.
 	PendingEdit bool
 }
 
 // TextareaSyncDecision keeps the textarea coherent with the focused tile. The
-// caller writes Value when SetValue, and stores NewLastTileID always, even
-// when SetValue is false, so a delayed blob fetch's second pass sees the same
-// tile.
-//
-// A browser leaves the caret of written bytes at their end and scrolls to it,
-// a scroll nobody made. So a write never moves the view: KeepView puts back the
-// caret and scroll a same-tile rewrite found, and any other write puts the
-// caret at the top, where the pane's own scroll applies.
+// caller stores NewLastTileID always, even when SetValue is false. A write
+// never moves the view: KeepView restores a same-tile rewrite's caret and
+// scroll, and any other write puts the caret at the top.
 type TextareaSyncDecision struct {
 	SetValue      bool
 	Value         string
@@ -40,10 +32,9 @@ type TextareaSyncDecision struct {
 }
 
 // DecideTextareaSync drives the textarea singleton across focus shifts and
-// async blob fetches. A different tile clears, seeded from the cache, so the
-// previous buffer cannot leak. On the same tile a pending edit is the
-// authority for unsaved keystrokes; without one the buffer follows the cached
-// body, which is how a foreign writer's edit reaches an open editor.
+// async blob fetches. On the same tile a pending edit is the authority;
+// without one the buffer follows the cached body, which is how a foreign
+// writer's edit reaches an open editor.
 func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
 	if in.LastTileID != in.FocusedTileID {
 		// Rebinding destroys nothing: every keystroke was mirrored into

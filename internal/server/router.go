@@ -17,15 +17,12 @@ import (
 )
 
 // router is a namespace.Namespace of qualified ids: every verb resolves one
-// segment and forwards to the namespace that owns the rest, with the uuid
-// stripped on the way in and re-applied on the way out. It holds no Gridwell
-// state. Two codecs stand over it, the browser's Connect door and the
-// connection socket's gRPC export, and neither routes anything of its own.
+// segment, strips it, forwards, and re-applies it on the way out. It holds no
+// state; both doors (Connect and the connection export) are codecs over it.
 type router struct {
 	srv *Server
 }
 
-// The router is a namespace of qualified ids; the compiler is what says so.
 var _ namespace.Namespace = (*router)(nil)
 
 func newRouter(srv *Server) *router { return &router{srv: srv} }
@@ -60,9 +57,8 @@ func (rt *router) tileResp(uuid string, transit bool, resp *pb.TileResponse, err
 	return &pb.TileResponse{Tile: t}, nil
 }
 
-// qualifyEvent re-applies a plugin's uuid to a change event's ids. The walk is
-// rpc.QualifyEventIDs, shared with the transport's prepend; only the tile rule
-// is chosen here.
+// qualifyEvent re-applies a plugin's uuid to a change event's ids; the walk is
+// rpc.QualifyEventIDs.
 func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
 	return rpc.QualifyEventIDs(uuid, ev, func(t *pb.Tile) *pb.Tile {
 		return qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
@@ -78,9 +74,8 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	if err != nil {
 		return nil, err
 	}
-	// Grid.writable and scratch_grid_id are the owning plugin's facts: a leaf
-	// plugin's Info declares them once, a transit namespace carries the remote
-	// node's stamp through rpc.TransitQualifyGrid.
+	// Grid.writable and scratch_grid_id are the owning plugin's facts, from
+	// its Info or, in transit, the remote node's stamp.
 	var g *pb.Grid
 	if transit {
 		g = rpc.TransitQualifyGrid(uuid, resp.Grid)
@@ -88,10 +83,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 		g = qualifyGrid(uuid, resp.Grid)
 		if g != nil {
 			// The declared face has no other source, so a handshake that does
-			// not answer fails the read rather than presenting a read-only
-			// room with no primitives and no ephemeral visits — one that
-			// flips back on the next read, since Info is not negatively
-			// cached. pluginhost.Adapter.synthesize applies the same rule.
+			// not answer fails the read rather than present a wrong face.
 			info, ierr := rt.srv.pluginInfo(ctx, uuid)
 			if ierr != nil {
 				return nil, infoFaceError(req.GridId, uuid, ierr)
@@ -100,10 +92,8 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			if info.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			} else if hu := rt.srv.homeUUID(); hu != "" && hu != uuid {
-				// A plugin with no scratch grid still serves grids whose
-				// links open as ephemeral visits, and those land in the
-				// node's home scratch grid. Stamped on the grid, which is
-				// what chains through mounts.
+				// Ephemeral visits from a plugin with no scratch grid land in
+				// home's, stamped on the grid so it chains through mounts.
 				hinfo, herr := rt.srv.pluginInfo(ctx, hu)
 				if herr != nil {
 					return nil, infoFaceError(req.GridId, hu, herr)
@@ -112,7 +102,6 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 					g.ScratchGridId = rpc.QualifyID(hu, hinfo.ScratchGridId)
 				}
 			}
-			// The plugin's declared (+) menu additions.
 			g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		}
 	}
@@ -122,10 +111,8 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	}, nil
 }
 
-// infoFaceError says which grid could not be answered and why. A plugin that
-// never answered its handshake is an outage, so the code is transport-class
-// unless the plugin gave one of its own, and the client re-asks rather than
-// latching the grid as a verdict.
+// infoFaceError says which grid could not be answered and why, transport-class
+// unless the plugin gave a code, so the client re-asks rather than latching.
 func infoFaceError(gridID, uuid string, err error) error {
 	code := status.Code(err)
 	if code == gcodes.Unknown {
@@ -144,8 +131,7 @@ func (rt *router) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequ
 }
 
 // pluginInfoTimeout bounds each plugin's Info handshake so one hung plugin
-// cannot stall the menu; on timeout it is still listed from its config,
-// without a clickable root.
+// cannot stall the menu.
 const pluginInfoTimeout = 3 * time.Second
 
 // Handshake enumerates the configured plugins in config order for the + menu.
@@ -173,12 +159,8 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 	var out []*pb.PluginInfo
 	for _, n := range rt.srv.namespaces() {
 		if n.Transit {
-			// One row per connection, under the node's own id, after the
-			// content plugins. What a connection is, its landing and its
-			// status, is the transport's own handshake
-			// (connection.Server.Rows), asked here as every namespace is asked
-			// and re-qualified one hop, so no second row shape can drift from
-			// it.
+			// One row per connection, from the transport's own handshake
+			// (connection.Server.Rows), re-qualified one hop.
 			tr, err := n.NS.Handshake(ctx, &pb.HandshakeRequest{})
 			if err != nil {
 				return nil, err
@@ -189,10 +171,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		// The server.yaml display name is authoritative, since the menu and a
 		// mounted well must agree; buildPluginInfo owns the fallbacks.
 		label := rt.srv.pluginReg.Label(n.UUID)
-		// Bounded and cached per uuid, so a hung plugin degrades to a
-		// config-only entry. A failed Info leaves info nil and the error rides
-		// along, or broken and healthy-but-rootless would be identical on the
-		// wire.
+		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.pluginInfo(ctx, n.UUID)
 		out = append(out, buildPluginInfo(n.UUID, n.Kind, label, info, err))
 	}
@@ -203,8 +182,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
 		Plugins:      out,
 	}
-	// Home is the node's own store, where "/" lands; homeUUID names its row, so
-	// a registry wired without an id still lands somewhere.
+	// Home is the node's own store, where "/" lands.
 	for _, p := range out {
 		if p.Uuid == rt.srv.homeUUID() {
 			resp.HomeGridId = p.RootGridId
@@ -214,11 +192,8 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 }
 
 // buildPluginInfo assembles a menu PluginInfo from the config and the plugin's
-// Info handshake. info is nil when Info failed, with infoErr the reason: the
-// plugin is still listed, so the menu never blanks a configured plugin, but
-// without a clickable root. Broken and healthy-but-rootless both leave
-// RootGridId == "", so InfoError is what distinguishes them. It is pure, so
-// the fallbacks are unit-tested without standing up a plugin.
+// Info, nil when Info failed with infoErr the reason: the plugin is still
+// listed, and InfoError tells broken from healthy-but-rootless.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
 	label := configLabel
 	var rootGridID, infoError string
@@ -234,8 +209,6 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		}
 		glyph = info.Glyph
 		menuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
-		// Forwarded verbatim from Info; the client seeds its doorway framing
-		// from it.
 		rootViewCx = info.RootViewCx
 		rootViewCy = info.RootViewCy
 		rootViewZoom = info.RootViewZoom
@@ -263,9 +236,8 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 	}
 }
 
-// infoRefusal is the sentence a broken row carries: the plugin's own words
-// when it answered with a refusal, and "not responding" only when it never
-// spoke.
+// infoRefusal is the sentence a broken row carries: the plugin's own words, or
+// "not responding" when it never spoke.
 func infoRefusal(err error) string {
 	msg := status.Convert(err).Message()
 	if gwerr.IsTransport(err) {
@@ -283,10 +255,8 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// Search is the one generic find verb. scope routes to the namespace owning
-// that id; an empty scope fans out to every plugin, each bounded by
-// rpc.SearchHopTimeout and errors skipped, because a search answers with what
-// answered. Results come back qualified, so a hit is addressable.
+// Search routes a scope to its owner; an empty scope fans out to every
+// namespace, each bounded by rpc.SearchHopTimeout with errors skipped.
 func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
 	m := req
 	if m.Scope != "" {
@@ -301,8 +271,6 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		return qualifySearch(transit, uuid, resp), nil
 	}
 	out := &pb.SearchResponse{}
-	// The transport is one of these namespaces, and it fans out again to every
-	// connection, in chains this node re-qualifies under its own id.
 	for _, n := range rt.srv.namespaces() {
 		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
 		// No routed id narrows a fan-out, so the hop is the namespace's own.
@@ -317,22 +285,17 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 	return out, nil
 }
 
-// qualifySearch re-applies the owning namespace to every id in a search
-// response, by the same leaf and transit rule as every other read.
 func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.SearchResponse {
 	return rpc.QualifySearchResponse(resp, func(ts []*pb.Tile) []*pb.Tile {
 		return qualifyTilesFor(transit, uuid, ts)
 	})
 }
 
-// CreateTile resolves the owning plugin by destination grid and forwards. A
-// reference is spelled for the node holding the grid (spellReferences), and
-// then crosses by rpc.Hop.
+// CreateTile forwards to the destination grid's owner, references spelled for
+// that node (spellReferences).
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
-	// The node-wide shell refusal lives at the router, before namespace
-	// resolution, so nothing can serve one. The palette hides the swatch; this
-	// is the authority.
+	// The node-wide shell refusal is the authority; the palette only hides.
 	if rt.srv.cfg.DisableShells && m.Tile.GetKind() == rpc.KindShell {
 		return nil, status.Error(gcodes.PermissionDenied,
 			"shell tiles are disabled on this node (server.yaml disable_shells)")
@@ -351,10 +314,8 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// mintReferences canonicalizes the ids a tile is about to store. A namespace
-// may accept more than one shape for the same thing, and a reference at rest
-// must hold the shape that namespace answers under, or the document reached
-// through the link would wear a second name.
+// mintReferences canonicalizes the ids a tile is about to store, so a document
+// reached through a link never wears a second name.
 func (rt *router) mintReferences(ctx context.Context, t *pb.Tile) error {
 	if t == nil {
 		return nil
@@ -371,8 +332,7 @@ func (rt *router) mintReferences(ctx context.Context, t *pb.Tile) error {
 	return nil
 }
 
-// mintRef canonicalizes one qualified reference through its owning namespace.
-// An id that names nothing here, or a namespace that does not derive ids,
+// mintRef canonicalizes one qualified reference; an id nothing derives
 // answers itself.
 func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	if id == "" {
@@ -389,13 +349,9 @@ func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	return rpc.QualifyID(uuid, minted), nil
 }
 
-// CloneTile runs at the nearest node that sees both ends (rpc.SharedOwner): a
-// shared owner, a connection included, is forwarded the whole clone; where the
-// ends part, a leaf copies its bytes and a solid well deep-copies here
-// (deepcopy.go), degrading to a link when the source is unreachable. The link
-// gesture arrives as a plain CreateTile carrying a qualified reference, never
-// as a clone, and the source plugin is never asked to write into a grid it
-// does not own.
+// CloneTile runs at the nearest node that sees both ends (rpc.SharedOwner);
+// where the ends part, the copy is made here (deepcopy.go). The link gesture
+// is a plain CreateTile, never a clone.
 func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)
@@ -409,18 +365,15 @@ func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// cloneAcrossPlugins reads the source tile and lands the copy at the dropped
-// cell. What a copy of a tile is, per kind, is deepCopyTile's (deepcopy.go);
-// this level owns only what a top-level gesture must answer for: the
-// host-content refusal and the partial-copy wording.
+// cloneAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
+// deepCopyTile's, and this level owns the host-content refusal and the
+// partial-copy wording.
 func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
 	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
 	if err != nil {
 		return nil, err
 	}
 	srcLocalTile := resp.GetTile()
-	// Qualify to the server-global view, so what decides below is what the
-	// client would see.
 	st := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{srcLocalTile})[0]
 	// No version claim: a clone is layout and the source row is untouched.
 	dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
@@ -429,8 +382,7 @@ func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest
 	}
 	if rpc.IsWellKind(st.Kind) && !st.Reference {
 		// Host content is refused before anything is created: its rows are
-		// metadata stubs, so the copy would be a forest of summaries rather
-		// than the files. Read off the grid, so this never learns a kind.
+		// metadata stubs, not the files.
 		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetHostContent() {
 			return nil, status.Error(gcodes.Unimplemented,
 				"deep copy of a host-content well is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
@@ -458,8 +410,6 @@ func readAllContent(ctx context.Context, c namespace.Namespace, tileID string) (
 	return data, nil
 }
 
-// writeAllContent sends one complete value up a namespace's WriteContent
-// stream, committing at close.
 func writeAllContent(ctx context.Context, c namespace.Namespace, tileID string, version int64, data []byte) (*pb.TileResponse, error) {
 	sent := false
 	return c.WriteContent(ctx, func() (*pb.WriteContentRequest, error) {
@@ -471,8 +421,6 @@ func writeAllContent(ctx context.Context, c namespace.Namespace, tileID string, 
 	})
 }
 
-// SetTile is the single framing and preview writeback router; the owning
-// namespace dispatches on the target tile's kind.
 func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error) {
 	c, _, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
@@ -489,26 +437,20 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 	if err != nil {
 		return nil, err
 	}
-	// The layout blob is the only record of a pane tile's ephemeral leaves, so
-	// the delete must terminate what the arrangement owns. Capture before,
-	// because the blob dies with the row, and reap after only if the row is
-	// really gone, since a trashed pane tile keeps its ephemerals for a
-	// restore. A transit tile skips this hop: the forwarded delete reaches the
-	// owning node's router.
+	// The layout blob is the only record of a pane tile's ephemerals: capture
+	// before the row dies, reap after only if it is really gone (trash keeps
+	// them for a restore). Transit skips this; the owning node's router reaps.
 	var candidates []string
 	if !transit {
 		candidates = rt.workspaceEphemeralCandidates(ctx, c, local, qualifiedID)
 	}
 	m.TileId = local
-	// The owning namespace reaps the tile's shell session as part of
-	// DeleteTile: the PTY lives behind the interface.
 	if _, err := c.DeleteTile(ctx, m); err != nil {
 		return nil, err
 	}
 	if len(candidates) > 0 {
-		// Reap only on an explicit NotFound: unreadable now is not destroyed,
-		// and a missed reap is reclaimed by the boot sweep, a wrong one by
-		// nothing.
+		// Reap only on an explicit NotFound: a missed reap is reclaimed by the
+		// boot sweep, a wrong one by nothing.
 		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); status.Code(err) == gcodes.NotFound {
 			rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)
 		}
@@ -516,12 +458,9 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 	return &pb.DeleteTileResponse{}, nil
 }
 
-// workspaceEphemeralCandidates reads a pane tile's layout blob for the leaf ids
-// that might be its own ephemerals; an unreadable blob yields nothing rather
-// than a guess. "Which content tiles does this blob reference" has one owner,
-// panelayout.TextFocusIDs, which the boot sweep reads for its protection set,
-// and this reap is the other side of that question, so it must be the same
-// derivation or an ephemeral is reaped or kept wrongly.
+// workspaceEphemeralCandidates reads a pane tile's layout blob for leaf ids
+// that might be its ephemerals, nothing when unreadable. The derivation is
+// panelayout.TextFocusIDs, the same one the boot sweep protects by.
 func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namespace.Namespace, localID, qualifiedID string) []string {
 	tr, err := owner.GetTile(ctx, &pb.GetTileRequest{TileId: localID})
 	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindPane || tr.GetTile().BlobId == 0 {
@@ -542,8 +481,7 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 }
 
 // reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed pane
-// tile's captured leaves. A non-scratch tile is content the arrangement merely
-// viewed. Best-effort: a failure must not block the user's delete.
+// tile's captured leaves, best-effort: it must not block the user's delete.
 func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) {
 	for _, id := range candidates {
 		ec, elocal, euuid, transit, err := rt.route(id)
@@ -556,8 +494,7 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 			log.Printf("gridwell: delete %s: not reaping remote ephemeral candidate %s (transit)", qualifiedID, id)
 			continue
 		}
-		// Ephemeral means the tile's grid is the owning namespace's scratch
-		// grid, the fact GetGrid stamps from Info.
+		// Ephemeral means on the owning namespace's scratch grid.
 		info, err := rt.srv.pluginInfo(ctx, euuid)
 		if err != nil {
 			log.Printf("gridwell: delete %s: not reaping candidate %s: plugin %s handshake failed: %v", qualifiedID, id, euuid, err)
@@ -576,11 +513,9 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 	}
 }
 
-// SetFraming is the one framing write, routed on whichever target the request
-// names. A plugin that keeps no framing answers Unimplemented, which is not an
-// error here, since a read-only plugin's ascent must not surface one. After a
-// root write the per-plugin Info cache is invalidated, because the root_view_*
-// fields travel in Info.
+// SetFraming is the one framing write. Unimplemented (a plugin that keeps no
+// framing) is not an error; a root write invalidates the Info cache, which
+// carries the framing.
 func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	m := req
 	root := m.RootGridId != ""
@@ -609,7 +544,6 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 		rt.srv.invalidateInfoCache(uuid)
 		return &pb.SetFramingResponse{}, nil
 	}
-	// A doorway tile comes back qualified like every other tile response.
 	t := resp.GetTile()
 	if t != nil {
 		t = qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
@@ -631,17 +565,10 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 	return c.ShellSessionAlive(ctx, &pb.ShellSessionAliveRequest{TileId: local})
 }
 
-// Subscribe fans every watching namespace's change-event stream into the
-// client's, re-qualifying each event's ids. A namespace declares that it emits
-// events through Info.watch, a capability and never the kind string.
-//
-// Failures heal rather than silently ending a namespace's events for the life
-// of the client stream: watchPlugin re-dials Info and the stream through
-// namespace.Refollow, and the client hears about the outage and the recovery
-// through an EventPluginHealth instead of tiles quietly going stale.
-//
-// The stream is also what keeps its session's interest counted
-// (interest.Book.Open).
+// Subscribe fans every watching namespace's events (Info.watch) into the
+// client's, re-qualified. Failures heal through namespace.Refollow and are
+// told as EventPluginHealth. The stream also keeps its session's interest
+// counted (interest.Book.Open).
 func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	if s := req.GetSession(); s != "" {
 		defer rt.srv.interest.Open(s)()
@@ -652,8 +579,7 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 	events := make(chan *pb.Event, 64)
 	for _, n := range rt.srv.namespaces() {
 		if n.Transit {
-			// The transport is ready as soon as it exists: it fans in every
-			// connection's events, and there is no handshake to ask.
+			// The transport has no handshake to ask.
 			go watchPlugin(subCtx, n.UUID, true, n.NS,
 				func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events)
 			continue
@@ -675,10 +601,8 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 }
 
 // watchPlugin fans plugin uuid's events into the client's stream until ctx
-// ends. namespace.Refollow owns the re-dial and the health transitions, and
-// the Info fetch rides that same loop rather than deciding once: giving up
-// after one failure would permanently exclude a plugin that was merely slow
-// to start.
+// ends. The Info fetch rides namespace.Refollow's loop, so a plugin slow to
+// start is not excluded for good.
 func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event) {
 	namespace.Refollow{
 		Label: "subscribe: plugin " + uuid,
@@ -722,12 +646,9 @@ func isUnimplemented(err error) bool {
 	return false
 }
 
-// Info describes this node to a mounter, on the connection door only; the
-// browser learns the same from Handshake. Watch is true because Subscribe fans
-// in every namespace's events.
+// Info describes this node to a mounter, on the connection door only.
 func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, error) {
-	// A mount lands where a direct client lands, by rpc.HomeGrid's derivation
-	// over the same handshake. A node has no grid of its own.
+	// A mount lands where a direct client lands (rpc.HomeGrid).
 	lp, err := rt.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		return nil, err

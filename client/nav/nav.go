@@ -21,8 +21,7 @@ type BarrierID uint64
 
 // barrier is one join. Failed is recorded rather than acted on, so a descent
 // whose fetch died still waits for the animation to land before putting the
-// origin viewport back. An arm retired by a guard takes the barrier with it,
-// so nothing waits on an answer that will never come.
+// origin viewport back.
 type barrier struct {
 	PaneID string
 	Arms   int
@@ -49,14 +48,10 @@ type Machine struct {
 	nextBarrier BarrierID
 	barriers    map[BarrierID]*barrier
 
-	// The history writer's push-against-replace baseline. Whether the user
-	// went somewhere or only panned is a navigation fact, so it lives with the
-	// verbs that move the pane rather than beside the DOM call.
+	// The history writer's push-against-replace baseline.
 	urlPrevPlace pane.URLPlace
 	urlPlaceSeen bool
-	// urlRestoring marks a popstate restore in flight, which owns the URL: it
-	// re-encodes the place the browser already navigated to, and any other
-	// write would clobber that entry.
+	// urlRestoring marks a popstate restore in flight, which owns the URL.
 	urlRestoring bool
 }
 
@@ -76,11 +71,9 @@ type cont struct {
 	TileID string
 	Tile   *gridwellv1.Tile
 	Stack  pane.Stack
-	// Restore is set on the restore paths' continuations, whose data is a
-	// decoded address mid-walk. They leave PaneID empty; see awaitGrid.
+	// Restore continuations leave PaneID empty; see awaitGrid.
 	Restore *restoreData
-	// Level is the level being opened, filled in arm by arm.
-	Level *levelData
+	Level   *levelData
 }
 
 // step is the closed set of things the machine does when an answer lands.
@@ -88,34 +81,22 @@ type step int
 
 const (
 	stepNone step = iota
-	// stepDescendContentLand installs the content place a descent animated
-	// towards, and engages it.
 	stepDescendContentLand
 	stepAscendLand  // finishes an animated ascent on the frame it landed on
 	stepProbedShell // re-decides a shell descent once its probe answers
-	// stepReEngage applies the go-live verdict to a restored content frame
-	// once its row has been read, healing a stale path first.
-	stepReEngage
+	stepReEngage    // heals a restored content frame's stale path, then goes live
 	stepHealed      // re-anchors a restored pane once the locate answers
 	stepRestoreRoot // frames a pathless restore once its anchor was asked for
 	stepRestoreWalk // re-runs the URL walk against the warmer snapshot
-	// stepRestoreCursor places the cursor the address encodes, once the body
-	// has seeded the textarea.
 	stepRestoreCursor
 	stepLevelAnimated // reports the pane-tile descent's animation arm
-	// stepLevelTile classifies a level's row: a pane link redirects to its
-	// target, a never-arranged tile captures, and anything else reads its
-	// blob.
 	stepLevelTile
 	stepLevelBody // decodes a level's layout blob
-	// stepLevelRecentre centres a post-reload ascent landing on the pane tile
-	// it came out of, once that row has been read.
 	stepLevelRecentre
 	stepLinkTarget // places a live url view on a link's target row
 	// stepRetireVisit deletes an ended ephemeral visit once the node holds a
-	// layout that no longer names it, unless a pane shows it again. The delete
-	// and that layout are one gesture: deleted first, a pane-tile preview of
-	// the layout still naming it would resolve a gone tile.
+	// layout that no longer names it: deleted first, a pane-tile preview of
+	// the layout would resolve a gone tile.
 	stepRetireVisit
 )
 
@@ -253,8 +234,6 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		if !r.OK || r.Tile == nil {
 			break
 		}
-		// The heal moves the place the surface is opened into, so it comes
-		// first.
 		if m.healStale(c.PaneID, r.Tile, w, &pl) {
 			break
 		}
@@ -318,18 +297,12 @@ func (m *Machine) Land(tok Token, w World) Plan {
 	case stepDescendContentLand:
 		pl.install(c.PaneID, c.Stack, nil)
 		pl.add(Effect{Kind: EffScaleContent, PaneID: c.PaneID})
-		// Unsaved edits are untouched: they live tile-scoped in the cache, so
-		// descending this pane elsewhere strands no typing.
 		pl.add(Effect{Kind: EffRefreshOverlay})
-		// Descending is the engagement gesture, and one owner decides it.
 		m.autoLiveOnDescent(c.PaneID, c.Tile, w, &pl)
-		// Not at gesture time: that runs mid-transition with the content
-		// frame not yet pushed, and a read-only file has no textarea whose
-		// cursor events would paper over it.
+		// Not at gesture time: the content frame is not yet pushed then.
 		pl.add(Effect{Kind: EffScheduleURLUpdate})
 	case stepAscendLand:
-		// The pane may have closed mid-flight, and its place is now the
-		// landing the segments installed, so read it fresh.
+		// The pane may have closed mid-flight; its place is read fresh.
 		p, ok := w.Pane(c.PaneID)
 		if !ok {
 			return Plan{}
@@ -337,8 +310,6 @@ func (m *Machine) Land(tok Token, w World) Plan {
 		m.landOnFrame(p.ID, p.Stack, &pl)
 		m.retireVisit(c.Tile, &pl)
 	case stepLevelAnimated:
-		// The animation arm reports and waits: the install needs the layout
-		// too.
 		if b, done := m.arrive(c.Barrier, false); done {
 			m.installLevel(b, &pl)
 		}

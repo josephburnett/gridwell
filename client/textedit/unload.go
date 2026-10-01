@@ -16,11 +16,9 @@ const (
 	UnloadAsync
 )
 
-// DecideUnloadFlush decides whether a dying page writes a dirty content entry,
-// a text body or a url's landed address; what it claims is SaveClaim's. An
-// unknown row still writes, because the SaveBasis alone is the claim and only
-// a row that takes the bytes becomes dirty, and unload is the one flush with
-// no next sweep behind it.
+// DecideUnloadFlush decides whether a dying page writes a dirty content entry;
+// what it claims is SaveClaim's. An unknown row still writes, because unload
+// is the one flush with no next sweep behind it.
 func DecideUnloadFlush(rowKnown, rowTakesBytes, rowOwnsContent bool, rowVersion, basis int64, haveBasis bool) (claim int64, do UnloadFlush) {
 	if rowKnown && !rowTakesBytes {
 		return 0, UnloadSkip
@@ -52,11 +50,8 @@ func FramingChanged(cur, next Framing) bool { return cur != next }
 type Box struct{ W, H int64 }
 
 // ShownFraming is the framing a text row is already showing: the stored one,
-// or, when the row is all zeros and so has never been framed, what its readers
-// put in its place — the top of the doc in the box it is open in, at the mode
-// DescentMode picks with nothing stored. Both framing writers diff against
-// this rather than against the zero row, which is not a framing at all, so a
-// document the user only looked at is never stamped with one.
+// or for a never-framed row the top of the doc in its box at DescentMode's
+// mode. Both framing writers diff against this, so a look stamps nothing.
 func ShownFraming(stored Framing, box Box, readOnly bool) Framing {
 	if stored != (Framing{}) {
 		return stored
@@ -65,10 +60,8 @@ func ShownFraming(stored Framing, box Box, readOnly bool) Framing {
 		Mode: DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})}
 }
 
-// Reframes is the one test both text framing writers make, the settle
-// persister's and the ascent flush's: whether next differs from what the row is
-// shown at. A row nobody framed diffs against ShownFraming, never against its
-// zeros, so a look stamps nothing.
+// Reframes is the one test both text framing writers make: whether next
+// differs from ShownFraming.
 func Reframes(stored, next Framing, readOnly bool) bool {
 	return FramingChanged(ShownFraming(stored, Box{W: next.W, H: next.H}, readOnly), next)
 }
@@ -99,10 +92,9 @@ func DescentMode(in ModeInput) string {
 	return in.Stored
 }
 
-// ShownMode is the face a descended pane shows now, DescentMode's rule read at
-// display time: a read-only row renders whatever mode a restored session left
-// on the pane, and no mode at all is rendered. Every display path reads it, so
-// a stale "text" cannot open a textarea over content the user cannot change.
+// ShownMode is DescentMode's rule read at display time: a read-only row or no
+// mode renders, so a restored "text" cannot open a textarea over content the
+// user cannot change.
 func ShownMode(paneMode string, readOnly bool) string {
 	if readOnly || paneMode == "" {
 		return rpc.TextModeRendered

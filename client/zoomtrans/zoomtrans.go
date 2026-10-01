@@ -1,7 +1,6 @@
 // Package zoomtrans computes the (Cx, Cy, Zoom) endpoints of the zoom into and
-// out of a well. At the path swap a child cell drawn as a preview and the same
-// cell drawn natively are the same pixel size, so the zoom is continuous.
-// PreviewFactor is the one tunable, for descent and ascent alike.
+// out of a well, calibrated so a child cell drawn as a preview and drawn
+// natively are the same size at the path swap.
 package zoomtrans
 
 import (
@@ -21,9 +20,8 @@ type Endpoints struct {
 }
 
 // Well is a doorway's footprint plus the framing it was left at. ViewZoom is
-// dimensionless, liveScale over the overtake at the last ascent, so a descent
-// reconstructs the live zoom for the current pane size. ViewZoom 0 is the one
-// "never visited" sentinel for the whole framing.
+// dimensionless (liveScale over the overtake), so a descent reconstructs the
+// live zoom for the current pane size; 0 is the one "never visited" sentinel.
 type Well struct {
 	ID       string
 	X, Y     int64
@@ -33,8 +31,8 @@ type Well struct {
 	ViewZoom float64
 }
 
-// WellOf reads a tile row as a Well. One derivation, so preview, descent and
-// ascent cannot disagree about what a row says.
+// WellOf reads a tile row as a Well, the one derivation preview, descent and
+// ascent share.
 func WellOf(t *gridwellv1.Tile) Well {
 	return Well{
 		ID: t.Id, X: t.X, Y: t.Y, W: t.W, H: t.H,
@@ -51,8 +49,7 @@ const PreviewFactor = 8.0
 const DefaultWellViewZoom = 1.0 / PreviewFactor
 
 // EffectiveViewZoom returns stored if positive, else fallback: the one place
-// the unvisited branch lives. A text tile passes its own fallback, the initial
-// reading scale being pane-dependent.
+// the unvisited branch lives.
 func EffectiveViewZoom(stored, fallback float64) float64 {
 	if stored > 0 {
 		return stored
@@ -61,9 +58,7 @@ func EffectiveViewZoom(stored, fallback float64) float64 {
 }
 
 // EffectiveCenter returns the child-grid point a doorway's framing centers
-// on: the stored center, or the footprint's own center when unvisited, since
-// the stored zeros would frame the child grid's top-left corner. It reads the
-// same ViewZoom 0 sentinel as EffectiveViewZoom.
+// on: the stored center, or the footprint's own center when unvisited.
 func EffectiveCenter(w Well) (cx, cy float64) {
 	if w.ViewZoom > 0 {
 		return w.ViewCx, w.ViewCy
@@ -72,9 +67,7 @@ func EffectiveCenter(w Well) (cx, cy float64) {
 }
 
 // WheelZoom zooms about the cursor, keeping the world point under it fixed.
-// The step is capped at ±0.5 so a fast scroll covers more range without
-// jumping, and a clamped zoom leaves the center alone, so there is no drift at
-// the limits.
+// The step is capped at ±0.5, and a clamped zoom leaves the center alone.
 func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax float64) (zoom, newCx, newCy float64) {
 	step := min(max(deltaY/200.0, -0.5), 0.5)
 	z := min(max(oldZoom*math.Pow(factorBase, -step*4), zMin), zMax)
@@ -86,10 +79,9 @@ func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax flo
 }
 
 // WellWheelView advances a hover-wheel zoom of a well's stored preview
-// framing by one notch, anchored on the cursor. The center stays float all
-// the way to the store, so a wheel burst's sub-cell drift survives the save.
-// Pass the stored center for the first notch; there is no sentinel. changed
-// is false when nothing moved, so a no-op wheel never mutates.
+// framing by one notch, anchored on the cursor. The center stays float to the
+// store so sub-cell drift survives. changed is false when nothing moved, so a
+// no-op wheel never mutates.
 func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, cx0, cy0, factorBase, rMin, rMax float64) (cx1, cy1, ratio float64, changed bool) {
 	r0 := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	previewCell := parentCell * r0
@@ -106,8 +98,7 @@ func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, c
 }
 
 // Overtake is the zoom at which the footprint exceeds both dimensions of the
-// reference rect. Wells use it, their descent target being to fill the pane;
-// text tiles use Fit. Returns 1 on degenerate input.
+// reference rect, a well's descent target. Returns 1 on degenerate input.
 func Overtake(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
 	if footprintW <= 0 || footprintH <= 0 || cellPx <= 0 {
 		return 1
@@ -118,9 +109,7 @@ func Overtake(footprintW, footprintH int64, refW, refH, cellPx float64) float64 
 }
 
 // Fit is the zoom at which the footprint exactly fits inside the reference
-// rect. Text tiles use it, so the saved ViewZoom is calibrated against
-// whichever dimension was binding the user's editing. Returns 1 on degenerate
-// input.
+// rect, a text tile's calibration. Returns 1 on degenerate input.
 func Fit(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
 	if footprintW <= 0 || footprintH <= 0 || cellPx <= 0 {
 		return 1
@@ -137,8 +126,7 @@ func OvertakeZoom(w Well, paneW, paneH, cellPx float64) float64 {
 }
 
 // LiveFromIntrinsic reconstructs a live zoom from an intrinsic ratio and the
-// current overtake. It and IntrinsicFromLive own the stored-ratio to live-zoom
-// mapping. Returns 0 when viewZoom is 0, so a caller can detect never-visited.
+// current overtake. Returns 0 when viewZoom is 0 (never visited).
 func LiveFromIntrinsic(viewZoom, overtake float64) float64 {
 	return viewZoom * overtake
 }
@@ -154,9 +142,7 @@ func IntrinsicFromLive(liveZoom, overtake float64) float64 {
 
 // Descent computes the three endpoints of a descent through w: mid pans and
 // zooms to the well at Overtake, swap is the child-grid state right after the
-// path swap, final eases out to the well's saved ratio. final is returned
-// rather than reconstructed at the call site, so the ratio-to-zoom formula
-// stays in one place.
+// path swap, final eases out to the well's saved ratio.
 func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, final Endpoints) {
 	wellCx := float64(w.X) + float64(w.W)/2
 	wellCy := float64(w.Y) + float64(w.H)/2
@@ -190,8 +176,7 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 }
 
 // StoredView is the live framing a well's persisted view describes, the same
-// numbers Descent's final lands on. Boot and the no-session-state ascent
-// fallbacks read it, so a reload never lands on a framing the user did not set.
+// numbers Descent's final lands on.
 func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	cx, cy = EffectiveCenter(w)
@@ -199,10 +184,8 @@ func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
 }
 
 // ShownWellFraming is the framing a doorway row is already showing: the stored
-// one, or what StoredView puts in its place when the row is the never-visited
-// sentinel. The framing writeback diffs against this rather than against the
-// zero row, which is not a framing at all, so a grid the user only looked at
-// is never stamped with one.
+// one, or StoredView's for the never-visited sentinel. The writeback diffs
+// against this, so a grid the user only looked at is never stamped.
 func ShownWellFraming(w Well) rpc.Framing {
 	cx, cy := EffectiveCenter(w)
 	return rpc.Framing{Cx: cx, Cy: cy, Zoom: EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)}
@@ -219,9 +202,8 @@ func ShownRootFraming(stored rpc.Framing, overtake float64) rpc.Framing {
 	return rpc.Framing{Zoom: IntrinsicFromLive(1, overtake)}
 }
 
-// Ascent computes the endpoints of an ascent back through w: from to mid in
-// child coords, then a swap to to in parent coords. Same calibration as
-// Descent, reversed.
+// Ascent computes the endpoints of an ascent back through w, Descent's
+// calibration reversed.
 func Ascent(from Endpoints, w Well, parentPath []string, paneW, paneH, cellPx float64) (mid, to Endpoints) {
 	zPTarget := OvertakeZoom(w, paneW, paneH, cellPx)
 	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
@@ -254,8 +236,7 @@ func PanDist(dx, dy, zoom, cellPx float64) float64 {
 }
 
 // ZoomDist is log-zoom distance in PanDist's units, so the two add into one
-// animation duration. factor weights zoom against pixels; the renderer uses 4
-// so zoom phases take the bulk of the time.
+// animation duration; factor weights zoom against pixels.
 func ZoomDist(z1, z2, cellPx, factor float64) float64 {
 	if z1 <= 0 || z2 <= 0 {
 		return 0
