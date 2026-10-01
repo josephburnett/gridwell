@@ -487,7 +487,8 @@ first reason asked (`traceevent.Why*`), `kv.asks` counts the asks it
 absorbed, and `kv.ms` is how long the draw took. Every mouse press and
 release is a `gesture/press` or `gesture/release` record naming the pane
 under the pointer and the button; a press adds the modifiers, and a
-release's verdict is the `drag/drop` record's.
+release's verdict is the `drag/drop` record's. Esc letting go of a drag is a
+`gesture/cancel` record naming the pane.
 
 ## One fact, one owner
 
@@ -505,6 +506,7 @@ copy:
 | is this write still owed | `outbox.Record` |
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
+| what Esc lets go of, and what it puts back | `gesture.Escape` over the three arms; a parked live view relays the key |
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | which face a plugin tile wears | `pluginhost.faceKey` |

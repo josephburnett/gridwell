@@ -232,7 +232,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   same split a link out of a live tile opens; in an unfocused pane it
   still only moves focus. A press that crosses the drag threshold is a
   drag, even if it drops on its own cell: it snaps back and is not a click
-  (2026-09-30, `dragdrop.DropRejected`).
+  (2026-09-30, `dragdrop.DropRejected`). Esc cancels any drag in flight:
+  everything returns to where it was at the press, and the release is a
+  no-op (2026-10-01, `gesture.Escape`).
 - A link is a path, and a link broken at ANY hop — a namespace this node
   does not declare, one a node further along the chain does not declare, or
   a target its namespace says is gone — is DEAD: greyed, inert, still
