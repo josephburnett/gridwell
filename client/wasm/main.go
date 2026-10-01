@@ -1125,6 +1125,7 @@ func (a *App) retryKick(resync bool, source string) {
 		for _, gid := range append(stuck, a.c.ResyncSet(source)...) {
 			a.fetchGrid(gid)
 		}
+		a.refetchMenus()
 	}
 	a.syncContentOutbox()
 	a.drainOutbox()
