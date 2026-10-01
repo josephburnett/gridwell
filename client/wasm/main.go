@@ -45,6 +45,7 @@ import (
 	"github.com/josephburnett/gridwell/client/trace"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/transition"
+	"github.com/josephburnett/gridwell/client/urlview"
 )
 
 const (
@@ -189,6 +190,8 @@ type App struct {
 	// zoomKeyRelays counts zoom chords from the main-process relay. e2e-only:
 	// with the registry's counter it brackets the IPC hop.
 	zoomKeyRelays int
+
+	urlGens urlview.Gens
 
 	// writes counts dispatched mutations that have not settled, so the
 	// descent or placement that follows one has not happened yet. `post` and

@@ -64,8 +64,9 @@ comment beside it says.
    `client/wasm` has no unit tests and `make check` executes none of it.
    Put decisions in a js-free `client/*` package with tests; the shim is
    glue. Same for `apps/desktop/src/main`: pure modules with unit tests, and
-   e2e coverage. `webviews.ts` has no direct test; anything you touch there
-   gets one.
+   e2e coverage. `webviews.ts` is tested against a fake view in
+   `webviews.test.ts` and against the real one in the capture harness; any
+   arm you touch there gets a case in one of them.
 6. **Errors surface.** A failure that logs and returns looks to the user
    like "it just disappeared." Route through `client/errsurface` or
    `sendError`. A rejected optimistic mutation reconciles visibly.

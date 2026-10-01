@@ -55,6 +55,9 @@ interface Entry {
   // reads the pane here, never the one the view was placed on.
   paneId: string;
   tileId: string;
+  // The renderer's name for this view (client/urlview.Gen), echoed on its
+  // gone event.
+  gen: number;
   bounds: Bounds;
   hidden: boolean;
   // Whether the main frame is between did-start-navigation and its load, which
@@ -73,6 +76,14 @@ interface Entry {
   // Bumped by every show, hide and move, so a park still waiting on its frame
   // can tell it was overtaken.
   parkGen: number;
+}
+
+// How a view ended outside remove(). close is whether its webContents is still
+// open, as a crashed renderer's is.
+interface Ending {
+  message: (url: string) => string;
+  severity: NoticeSeverity;
+  close: boolean;
 }
 
 interface RegistryCallbacks {
@@ -224,7 +235,7 @@ export class WebviewRegistry {
 
   // The view is a child of the window's contentView, so it paints above the
   // root canvas renderer. Later bounds arrive through setBounds.
-  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false, focused = false): Promise<void> {
+  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false, focused = false, gen = 0): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = SESSION_PARTITION;
     const stale = this.entries.get(paneId);
@@ -251,7 +262,7 @@ export class WebviewRegistry {
     // off the canvas overlay; focused feeds the steal guard from the first
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.
-    const e: Entry = { view, paneId, tileId, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
+    const e: Entry = { view, paneId, tileId, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = openBelowUrl(target);
@@ -608,29 +619,22 @@ export class WebviewRegistry {
       },
     );
 
-    // Unreported, a crashed renderer just sits blank. getURL() after a crash
-    // may throw, which must not stop the notice.
-    e.view.webContents.on('render-process-gone', (_event, details) => {
-      // A renderer that died mid-navigation ends it; the crash is the notice.
-      e.navigating = false;
-      let url = '';
-      try {
-        url = e.view.webContents.getURL();
-      } catch {
-      }
-      this.reportErr(renderProcessGoneMessage(url, details.reason));
-    });
-
+    // A dead renderer leaves a blank view whose only Reload is a context menu
+    // it can no longer raise, so the view is gone and the next descent places
+    // a new one.
+    e.view.webContents.on('render-process-gone', (_event, details) =>
+      this.retire(e, { message: (url) => renderProcessGoneMessage(url, details.reason), severity: 'error', close: true }),
+    );
     // A page that calls window.close() destroys its webContents with no word
     // to the renderer.
-    e.view.webContents.on('destroyed', () => this.retire(e));
+    e.view.webContents.on('destroyed', () => this.retire(e, { message: pageClosedMessage, severity: 'info', close: false }));
   }
 
   // retire is the one owner of "the view is gone" for a webContents that ended
   // outside remove(): the entry goes at once, so every later call for the pane
   // is a no-op and remove() answers an empty freeze, and the renderer is told
   // so the pane shows the tile's frozen face instead of a blank view.
-  private retire(e: Entry): void {
+  private retire(e: Entry, end: Ending): void {
     const paneId = e.paneId;
     // remove() takes the entry before it closes the view.
     if (this.entries.get(paneId) !== e) return;
@@ -643,16 +647,23 @@ export class WebviewRegistry {
     try {
       url = e.view.webContents.getURL();
     } catch {
-      // Unreadable once destroyed; the notice goes without it.
+      // Unreadable once destroyed or crashed; the notice goes without it.
     }
     try {
       this.win.contentView.removeChildView(e.view);
     } catch {
       // A view whose webContents is gone may already be detached.
     }
+    if (end.close) {
+      try {
+        e.view.webContents.close();
+      } catch (err) {
+        this.reportErr(`pane ${paneId}: failed to close a dead view: ${String(err)}`);
+      }
+    }
     trace(viewGone(paneId, e.tileId, url));
-    this.cb.onViewGone?.({ paneId, tileId: e.tileId });
-    this.reportErr(pageClosedMessage(url), 'info');
+    this.cb.onViewGone?.({ paneId, tileId: e.tileId, gen: e.gen });
+    this.reportErr(end.message(url), end.severity);
   }
 }
 
