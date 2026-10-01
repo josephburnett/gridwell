@@ -490,9 +490,11 @@ func (c *Layer) revalidateGrid(gridID string) {
 }
 
 // gridRespEqual compares two grid answers, tiles by id so row order never
-// fakes a change.
+// fakes a change. The grid's version is left out: every write that moves it
+// also announces its tile, which the remembered rows already folded, and no
+// reader acts on the counter, so it alone is not a change worth a refetch.
 func gridRespEqual(a, b *pb.GetGridResponse) bool {
-	if !proto.Equal(a.GetGrid(), b.GetGrid()) || len(a.GetTiles()) != len(b.GetTiles()) {
+	if !proto.Equal(unversioned(a.GetGrid()), unversioned(b.GetGrid())) || len(a.GetTiles()) != len(b.GetTiles()) {
 		return false
 	}
 	byID := make(map[string]*pb.Tile, len(a.GetTiles()))
@@ -505,6 +507,14 @@ func gridRespEqual(a, b *pb.GetGridResponse) bool {
 		}
 	}
 	return true
+}
+
+func unversioned(g *pb.Grid) *pb.Grid {
+	g = proto.CloneOf(g)
+	if g != nil {
+		g.Version = 0
+	}
+	return g
 }
 
 // evictGrid forgets a grid and its tile rows. Content and preview rows linger

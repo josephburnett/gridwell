@@ -21,7 +21,9 @@ import (
 // Mutation dispatch. do and post carry no version claim; postWriteContent is
 // the one write that claims one, because content bytes are what version
 // means. Local state is dropped only on a server verdict, never on a
-// transport failure.
+// transport failure. A landed write reads nothing back: the event it caused
+// (TileChanged, TileRemoved, or GridChanged where a listing changed)
+// reconciles every open view, this one included.
 
 // tileCall is the closure shape a tile-producing mutation takes, so the
 // dispatcher does not need to know the request type.
@@ -34,19 +36,15 @@ type write struct {
 	label string
 	// gid is the grid whose cache reconciles on a server verdict.
 	gid string
-	// alsoGID is a second grid the write touched. Empty, or equal to gid, is
-	// one grid.
-	alsoGID string
 	// id keys the outbox entry: a tile id, or a grid id for a root framing
 	// write. Empty parks nothing, allowed only when the failure notice is the
 	// reconcile.
 	id string
 	// optimistic marks a caller that patched the cache before the RPC, so a
 	// verdict rolls it back.
-	optimistic  bool
-	refetchOnOK bool
-	call        func(ctx context.Context) error
-	// then runs after a successful call, once the refetch is scheduled.
+	optimistic bool
+	call       func(ctx context.Context) error
+	// then runs after a successful call.
 	then func()
 	// done runs once the write has finished, landed, failed or parked,
 	// whatever then or undo did.
@@ -155,14 +153,6 @@ func (a *App) dispatch(w write) error {
 		}
 		return err
 	}
-	// Before `then`: a hook that relocates a pane wants the fetch already in
-	// flight.
-	if w.refetchOnOK {
-		a.fetchGrid(w.gid)
-		if w.alsoGID != "" && w.alsoGID != w.gid {
-			a.fetchGrid(w.alsoGID)
-		}
-	}
 	if w.then != nil {
 		w.then()
 	}
@@ -208,20 +198,27 @@ func (a *App) doOnUnload(w write) error {
 }
 
 // postTileMutate is the adapter for the plain single-grid tile mutations: no
-// claim, no parked value, a refetch on success.
+// claim and no parked value.
 func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess func(*gridwellv1.Tile)) {
 	var tile *gridwellv1.Tile
 	a.post(write{
-		label: label, gid: gid, refetchOnOK: true,
+		label: label, gid: gid,
 		call: func(ctx context.Context) error {
 			var err error
 			tile, err = call(ctx)
 			return err
 		},
 		then: func() {
-			if onSuccess != nil && tile != nil {
-				onSuccess(tile)
+			if onSuccess == nil || tile == nil {
+				return
 			}
+			// The continuation shows the row, and an event for a grid this
+			// client holds nothing of lands nowhere: an ephemeral visit's
+			// scratch grid is read once, before the descent needs it.
+			if _, held := a.c.Grid(tile.GridId); !held {
+				a.fetchGrid(tile.GridId)
+			}
+			onSuccess(tile)
 		},
 	})
 }

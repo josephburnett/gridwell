@@ -147,7 +147,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// A drag carries no parked value: snapping the ghost back to its origin
 	// is the reconcile the user can see.
 	a.post(write{
-		label: "PlaceTile", gid: srcGridID, alsoGID: dstGridID, refetchOnOK: true,
+		label: "PlaceTile", gid: srcGridID,
 		call: func(ctx context.Context) error {
 			_, err := a.cl.PlaceTile(ctx, req)
 			return err

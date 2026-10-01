@@ -287,6 +287,22 @@ export class GridwellDriver {
     return pt;
   }
 
+  // Counts the GetGrid calls this client makes from now on, per grid id, so a
+  // spec can require that a write's own answer and event reconciled the view
+  // with no listing read behind them.
+  async watchGridReads(): Promise<{ of: (gridID: string) => number; stop: () => Promise<void> }> {
+    const bodies: string[] = [];
+    const pattern = '**/gridwell.v1.Gridwell/GetGrid';
+    await this.win.route(pattern, async (r) => {
+      bodies.push(r.request().postData() ?? '');
+      await r.continue();
+    });
+    return {
+      of: (gridID) => bodies.filter((b) => b.includes(gridID)).length,
+      stop: () => this.win.unroute(pattern),
+    };
+  }
+
   // Blocks until the renderer reports no transition, drag or in-flight fetch.
   // window.mouse dispatches synchronously into the wasm handlers, so by the
   // time mouse.up() resolves the handler has armed whatever this waits on.

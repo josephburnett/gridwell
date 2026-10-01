@@ -178,7 +178,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText,
 				TextX: next.X, TextY: next.Y, TextW: next.W, TextH: next.H, TextMode: next.Mode}}
 		a.do(write{
-			label: "SetTextView", gid: gid, id: file.Id, refetchOnOK: true,
+			label: "SetTextView", gid: gid, id: file.Id,
 			call: func(ctx context.Context) error {
 				_, err := a.cl.SetTile(ctx, req)
 				return err
