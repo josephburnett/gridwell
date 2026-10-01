@@ -223,12 +223,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	case gesture.WheelScrollDoc:
 		// A text tile has a fixed scale, so the wheel scrolls the rendered
 		// window. In text mode the textarea scrolls itself.
-		p.TextScrollY += dy
-		if p.TextScrollY < 0 {
-			p.TextScrollY = 0
-		}
-		a.draw()
-		a.scheduleURLUpdate()
+		a.scrollText(p, p.TextScrollX, p.TextScrollY+dy)
 		return nil
 	case gesture.WheelIgnore:
 		return nil
@@ -268,6 +263,14 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// WheelZoomPane — smooth zoom centered on the cursor.
 	a.wheelZoomPaneAt(p, r, dy, sx, sy)
 	return nil
+}
+
+// scrollText is every scroll of a text descent: the wheel's and either
+// overlay's own. See pane.Frame.ScrollText.
+func (a *App) scrollText(p *pane.Pane, x, y float64) {
+	if p.ScrollText(x, y) {
+		a.draw()
+	}
 }
 
 // wheelZoomPaneAt keeps the world point under (sx, sy) under it after the zoom,

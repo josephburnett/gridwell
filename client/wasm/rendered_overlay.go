@@ -72,16 +72,13 @@ func (a *App) ensureRenderedView() {
 	})
 	div.Call("addEventListener", "click", clickCb)
 
-	// Scroll writes back to the pane's TextScrollX/Y, the same fact the
-	// textarea mirrors.
 	scrollCb := js.FuncOf(func(js.Value, []js.Value) any {
 		p := a.tree.FocusedPane()
 		if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeRendered {
 			return nil
 		}
-		p.TextScrollY = a.overlays.renderedView.Get("scrollTop").Float()
-		p.TextScrollX = a.overlays.renderedView.Get("scrollLeft").Float()
-		a.scheduleFileSave()
+		a.scrollText(p, a.overlays.renderedView.Get("scrollLeft").Float(),
+			a.overlays.renderedView.Get("scrollTop").Float())
 		return nil
 	})
 	div.Call("addEventListener", "scroll", scrollCb)
