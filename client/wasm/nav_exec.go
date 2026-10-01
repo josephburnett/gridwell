@@ -294,16 +294,23 @@ func (a *App) navAwait(e nav.Effect) {
 		})
 	case nav.RequestGetGrid:
 		id := e.Request.ID
-		// Claim-free, because a background fetch for the same grid must not
-		// turn the walk into a no-op, but bounded: a boot that waits forever
-		// on a dead socket is a blank screen.
-		a.await(tok, a.fetch.grids.Context, a.navWorldForRestore,
+		// The walk waits on the renderer's read of the grid, in flight or
+		// started here, rather than issuing a second one. The wait is bounded
+		// too: a boot that waits forever on a dead socket is a blank screen.
+		a.await(tok, inflight.Bounded, a.navWorldForRestore,
 			func(ctx context.Context) nav.Result {
-				return nav.Result{OK: a.loadGrid(ctx, id) == nil}
+				if end := a.fetchGrid(id); end != nil {
+					select {
+					case <-end:
+					case <-ctx.Done():
+					}
+				}
+				_, ok := a.c.Grid(id)
+				return nav.Result{OK: ok}
 			})
 	case nav.RequestReadContent:
 		id := e.Request.ID
-		// Claim-free, like the walk above, and bounded the same way.
+		// Claim-free, and bounded so a dead socket cannot hang the restore.
 		a.await(tok, a.fetch.contents.Context, a.navWorldCommon,
 			func(ctx context.Context) nav.Result {
 				// loadTileContent seeds the textarea from the body, and the

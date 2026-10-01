@@ -67,9 +67,14 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
   expect(landed.cy, 'landing cy unchanged by the mid-flight event').toBeCloseTo(control.cy, 6);
   expect(landed.zoom, 'landing zoom unchanged by the mid-flight event').toBeCloseTo(control.zoom, 6);
 
-  expect(landed.tileIds, 'the injected tile reached the animating pane').toContainEqual(
-    expect.stringMatching(/\/(\d+|~[A-Za-z0-9_-]+)$/),
-  );
+  // The tile arrives by its event, which waitIdle cannot wait for: landing
+  // reads nothing the descent already read.
+  await expect
+    .poll(async () => (await gw.focused()).tileIds, {
+      message: 'the injected tile reached the animating pane',
+      timeout: 10_000,
+    })
+    .toContainEqual(expect.stringMatching(/\/(\d+|~[A-Za-z0-9_-]+)$/));
   const inChild = await gw.getGrid(child);
   expect((inChild.tiles ?? []).length, 'the injected tile exists in the child grid').toBe(1);
 });

@@ -402,9 +402,9 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	// row back on screen is the reconcile.
 	src, dst := d.srcGridID, dstGridID
 	refetch := func() {
-		a.fetchGrid(src)
+		a.refetchGrid(src)
 		if dst != "" && dst != src {
-			a.fetchGrid(dst)
+			a.refetchGrid(dst)
 		}
 	}
 	a.post(write{

@@ -59,7 +59,7 @@ func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	if !ok || !e.Ready() {
 		return nil, false
 	}
-	if e.Ident != localCaptureID && (wantBlobID == 0 || e.Ident != wantBlobID) {
+	if !holds(e.Ident, wantBlobID) {
 		return nil, false
 	}
 	return e.Res, true
@@ -83,13 +83,29 @@ func (c *Cache) PutEmpty(tileID string, blobID int64) {
 	c.at(tileID).Settle(blobID)
 }
 
-// KnownEmpty answers whether a completed fetch or decode already settled this
-// blob id as having no image, which is how a caller stops re-fetching.
-func (c *Cache) KnownEmpty(tileID string, blobID int64) bool {
+// Owed reports whether blobID's preview is still to be fetched. It is not
+// when an image for it is held, its bytes are decoding, or a completed fetch
+// or decode settled it as having no image. It is the one question a fetch
+// guard asks, so a decode that outlives its fetch is not fetched again.
+func (c *Cache) Owed(tileID string, blobID int64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[tileID]
-	return ok && e.Failed && e.FailIdent == blobID
+	if !ok {
+		return true
+	}
+	if e.Ready() && holds(e.Ident, blobID) {
+		return false
+	}
+	if e.Loading(blobID) || e.Loading(localCaptureID) {
+		return false
+	}
+	return !(e.Failed && e.FailIdent == blobID)
+}
+
+// holds reports whether an image loaded for ident answers wantBlobID.
+func holds(ident, wantBlobID int64) bool {
+	return ident == localCaptureID || (wantBlobID != 0 && ident == wantBlobID)
 }
 
 // PutWildcard serves the flows that hold JPEG bytes before the server blob id
@@ -106,7 +122,7 @@ func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
 	c.mu.Lock()
 	// The entry keeps its image and its blob id until the new one lands, so a
 	// tile goes on showing the face it had while the next decode runs.
-	gen := c.at(tileID).Begin()
+	gen := c.at(tileID).Begin(blobID)
 	c.mu.Unlock()
 
 	c.dec.Decode(bytes,

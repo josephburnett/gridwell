@@ -133,3 +133,85 @@ func TestReviveNamesTheDeadKeysItClears(t *testing.T) {
 		t.Error("revive cleared outside the dead keys it matched")
 	}
 }
+
+// The sequence a dropped refetch loses: a read is in flight, the thing it
+// asks about changes, and the ask that change makes is refused. The answer
+// already on the wire was taken before the change, so it is owed a re-ask.
+func TestAChangeInFlightIsOwedToTheHolder(t *testing.T) {
+	r := NewReads()
+	server, cache, changed := "v1", "", false
+	var fetch func()
+	fetch = func() {
+		_, done, ok := r.Ask("g1")
+		if !ok {
+			return
+		}
+		read := server // the answer leaves the server now
+		if !changed {
+			// The change lands while this read is on the wire.
+			changed, server = true, "v2"
+			r.Change("g1")
+			fetch()
+		}
+		cache = read
+		if done() {
+			fetch()
+		}
+	}
+	fetch()
+	if cache != "v2" {
+		t.Errorf("cache = %q, want %q: the change that landed mid-flight was dropped", cache, "v2")
+	}
+}
+
+// A draw asks every frame while a read is in flight. Its ask carries nothing
+// the read in flight does not already answer, so it owes no second read.
+func TestARepeatedAskOwesNothing(t *testing.T) {
+	r := NewReads()
+	_, done, ok := r.Ask("g1")
+	if !ok {
+		t.Fatal("a fresh key was refused")
+	}
+	for range 3 {
+		if _, _, again := r.Ask("g1"); again {
+			t.Fatal("a key in flight was asked twice")
+		}
+	}
+	if done() {
+		t.Error("a frame's repeated ask owed a re-read: every grid in flight is read twice")
+	}
+}
+
+// A caller that must have the answer, the restore walk, waits on the read
+// already in flight instead of issuing a second one, and the end it waits on
+// is the one the read's done closes.
+func TestJoinSharesTheReadInFlight(t *testing.T) {
+	r := NewReads()
+	_, done, end, ok := r.Join("g1")
+	if !ok || end == nil {
+		t.Fatal("a fresh key must be claimed, with an end to wait on")
+	}
+	_, _, joined, again := r.Join("g1")
+	if again {
+		t.Fatal("a key in flight was read twice")
+	}
+	if joined != end {
+		t.Fatal("the joiner must wait on the read in flight")
+	}
+	select {
+	case <-joined:
+		t.Fatal("the read has not answered yet")
+	default:
+	}
+	done()
+	select {
+	case <-joined:
+	default:
+		t.Fatal("the read answered and the joiner is still waiting")
+	}
+
+	r.Settle("g2", Refused)
+	if _, _, end, ok := r.Join("g2"); ok || end != nil {
+		t.Error("a latched key is neither read nor waited on")
+	}
+}

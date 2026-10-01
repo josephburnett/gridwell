@@ -42,12 +42,21 @@ func NewReads() *Reads {
 	return &Reads{claims: newClaimSet(Deadline), refused: newLatch(), unreachable: newLatch(), dead: newLatch()}
 }
 
-// Ask is claimSet.begin, refused too while key is latched.
+// Ask claims key for one read (see claimSet.join), refused too while key is
+// latched.
 func (r *Reads) Ask(key string) (ctx context.Context, done func() bool, ok bool) {
+	ctx, done, _, ok = r.Join(key)
+	return ctx, done, ok
+}
+
+// Join is Ask for a caller that must have the answer: end closes when the
+// read that answers key returns, whether Join claimed it or one was already
+// in flight. A latched key is neither read nor waited on, and end is nil.
+func (r *Reads) Join(key string) (ctx context.Context, done func() bool, end <-chan struct{}, ok bool) {
 	if r.Failed(key) {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
-	return r.claims.begin(key)
+	return r.claims.join(key)
 }
 
 // Context is a bounded context with no claim, for a read that must not be
@@ -95,9 +104,11 @@ func (r *Reads) FailedKeys() []string {
 	return merged(r.refused.keys(), r.unreachable.keys())
 }
 
-// Change clears key's latches: the entity changed, so the last answer is no
-// longer the answer.
+// Change clears key's latches and owes a read in flight a re-ask: the entity
+// changed, so neither the last answer nor the one on the wire is the answer.
+// It is the only thing that owes one.
 func (r *Reads) Change(key string) {
+	r.claims.owe(key)
 	r.Settle(key, Answered)
 }
 

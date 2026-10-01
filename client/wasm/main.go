@@ -791,25 +791,25 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 
 // fetchGrid loads a grid in the background, deduped per id: the renderer fires
 // it on every cache miss every frame, which would otherwise dogpile the server.
-func (a *App) fetchGrid(id string) {
+// It returns the end of the read that answers id, this one or one already in
+// flight, and nil when id is not asked for.
+func (a *App) fetchGrid(id string) <-chan struct{} {
 	if id == "" {
-		return
+		return nil
 	}
 	// A grid in a namespace this node does not declare is never asked for: the
 	// latch stands in for the answer, and no verdict reaches the strip.
 	if a.deadNamespace(id) {
 		a.fetch.grids.Settle(id, inflight.Refused)
-		return
+		return nil
 	}
-	ctx, done, ok := a.fetch.grids.Ask(id)
+	ctx, done, end, ok := a.fetch.grids.Join(id)
 	if !ok {
-		return
+		return end
 	}
 	go func() {
 		err := a.loadGrid(ctx, id)
-		// An ask refused while this one was on the wire describes a grid this
-		// answer was taken too early to hold, so it is re-asked rather than
-		// lost; see inflight.Reads.Ask.
+		// see inflight.Reads.Change
 		owed := done()
 		if err != nil {
 			a.draw()
@@ -822,6 +822,14 @@ func (a *App) fetchGrid(id string) {
 			a.fetchGrid(id)
 		}
 	}()
+	return end
+}
+
+// refetchGrid is fetchGrid for a caller that knows id changed, so a read
+// already in flight is owed a re-ask rather than refused.
+func (a *App) refetchGrid(id string) {
+	a.fetch.grids.Change(id)
+	a.fetchGrid(id)
 }
 
 // fetchTileByID resolves a routable tile id whose grid is not cached: GetTile
@@ -992,7 +1000,12 @@ func (a *App) landTransition(tr *transition.Transition) {
 	a.fetch.contents.Reset()
 	a.fetch.previews.Reset()
 	a.fetch.menus.Reset()
-	a.fetchGrid(a.gridIDForPane(p))
+	// The navigation that started this already read its grid (nav.EffFetchGrid),
+	// so landing asks only for a miss, which the Reset may have just unlatched.
+	gid := a.gridIDForPane(p)
+	if _, ok := a.c.Grid(gid); !ok {
+		a.fetchGrid(gid)
+	}
 	if tr.TraceTileID != "" {
 		// Keep the frame loop alive for the fade.
 		a.traces[p.ID] = traceState{tileID: tr.TraceTileID, startMs: nowMs()}
@@ -1216,7 +1229,7 @@ func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 // optimistic change is about to be replaced, and that must be visible.
 func (a *App) refetchGridOnConflict(gridID string, where string) {
 	a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
-	a.fetchGrid(gridID)
+	a.refetchGrid(gridID)
 }
 
 // reportErr is the one wasm entry into the error surface. It also logs to the

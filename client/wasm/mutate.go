@@ -136,7 +136,7 @@ func (a *App) dispatch(w write) error {
 	if n.Reloaded {
 		a.refetchGridOnConflict(w.gid, w.label)
 	} else if r.Refetch {
-		a.fetchGrid(w.gid)
+		a.refetchGrid(w.gid)
 	}
 	if n.Generic {
 		a.surfaceRPCError(w.label, err)
@@ -289,7 +289,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 			if clientsync.NoticesFor(r, o, false).Reloaded {
 				a.refetchGridOnConflict(gid, "WriteContent")
 			} else {
-				a.fetchGrid(gid)
+				a.refetchGrid(gid)
 			}
 			a.refreshFileOverlay()
 			a.scheduleFrame(traceevent.WhyContent)

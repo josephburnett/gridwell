@@ -95,7 +95,7 @@ func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Rast
 	// paints raw source instead of the previous version's picture, and asks
 	// for no second rasterization of the same document.
 	e.Adopt(k)
-	gen := e.Begin()
+	gen := e.Begin(k)
 
 	c.ras.Rasterize(svg,
 		func(r Raster) {

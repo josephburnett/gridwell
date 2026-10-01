@@ -161,11 +161,8 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	if blobID == 0 {
 		return
 	}
-	if _, ok := a.views.urlPreview.Get(tileID, blobID); ok {
+	if !a.views.urlPreview.Owed(tileID, blobID) {
 		return
-	}
-	if a.views.urlPreview.KnownEmpty(tileID, blobID) {
-		return // the server already answered "no preview" for this blob
 	}
 	// tileID is the content id, a leaf link's target, which may live in a
 	// namespace this node no longer declares. Asking would put its verdict

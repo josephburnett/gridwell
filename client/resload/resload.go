@@ -1,5 +1,6 @@
 // Package resload owns what an asynchronously loaded, revocable resource is:
-// the generation guard that discards a superseded result, the revoke that
+// the generation guard that discards a superseded result, what the load in
+// flight is for, the revoke that
 // keeps one live resource per entry, and the latch that settles an answer
 // which never becomes a picture, so it is reported once rather than once per
 // frame. The map, the key, the lock and what a new load does to the resource
@@ -25,6 +26,9 @@ type Entry[I comparable] struct {
 	FailIdent I
 
 	gen int64
+	// loading is what the load gen names is for, until it installs or misses.
+	loading  I
+	inFlight bool
 }
 
 // nextGen is process-wide, so a generation is never reused: an entry dropped
@@ -34,11 +38,19 @@ var nextGen atomic.Int64
 // Ready says the entry holds a usable resource.
 func (e *Entry[I]) Ready() bool { return e.Res != nil && e.Res.Truthy() }
 
-// Begin claims the entry for a new load and returns the generation that
-// load's result must carry to install.
-func (e *Entry[I]) Begin() int64 {
+// Begin claims the entry for a new load of ident and returns the generation
+// that load's result must carry to install.
+func (e *Entry[I]) Begin(ident I) int64 {
 	e.gen = nextGen.Add(1)
+	e.loading, e.inFlight = ident, true
 	return e.gen
+}
+
+// Loading reports whether the entry's current load is for ident. A load
+// outlives the fetch that brought its bytes, so this is what tells a caller
+// the answer is on its way rather than still to be asked for.
+func (e *Entry[I]) Loading(ident I) bool {
+	return e.inFlight && e.loading == ident
 }
 
 // Adopt points the entry at ident and releases what it holds, for a cache
@@ -70,7 +82,7 @@ func Take[I comparable](e *Entry[I], gen int64, ident I, res Resource) bool {
 		return false
 	}
 	e.Release()
-	e.Res, e.Ident, e.Failed = res, ident, false
+	e.Res, e.Ident, e.Failed, e.inFlight = res, ident, false, false
 	return true
 }
 
@@ -81,6 +93,7 @@ func Miss[I comparable](e *Entry[I], gen int64, ident I) bool {
 		return false
 	}
 	e.Settle(ident)
+	e.inFlight = false
 	return true
 }
 
