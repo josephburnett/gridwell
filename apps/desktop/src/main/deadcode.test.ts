@@ -3,14 +3,16 @@ import assert from 'node:assert/strict';
 import { readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, resolve } from 'node:path';
-import ts from 'typescript';
+import { API, SymbolFlags, type Symbol } from 'typescript/unstable/sync';
+import type { Node } from 'typescript/unstable/ast';
+import { isIdentifier } from 'typescript/unstable/ast/is';
 
 // Unused-export check for the Electron main process and its preloads.
 //
 // tsc's noUnusedLocals catches a dead local but says nothing about a dead
 // export: a function, constant, or type that nothing imports compiles clean
-// forever. This walks the real program with the vendored TypeScript compiler,
-// so it adds no dependency. For every export of src/main/*.ts and
+// forever. This walks the real program through the TypeScript compiler's own
+// API, so it adds no dependency. For every export of src/main/*.ts and
 // src/preload/*.ts it counts references from other non-test files under src/:
 // main, preload, and the harnesses (src/harness ships as the check-electron
 // gate, so an export only it uses is live). Zero references fails, naming the
@@ -73,57 +75,59 @@ function isChecked(file: string): boolean {
   return rel.startsWith('main/') || rel.startsWith('preload/');
 }
 
-function resolveAlias(checker: ts.TypeChecker, sym: ts.Symbol): ts.Symbol {
-  return sym.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(sym) : sym;
-}
-
 test('every export of src/main and src/preload has a reader outside its own file', () => {
   const files = walkTs(srcDir);
-  const cfg = ts.readConfigFile(join(desktop, 'tsconfig.json'), ts.sys.readFile);
-  assert.ok(!cfg.error, 'tsconfig.json must parse');
-  const parsed = ts.parseJsonConfigFileContent(cfg.config, ts.sys, desktop);
-  const program = ts.createProgram(files, parsed.options);
-  const checker = program.getTypeChecker();
+  const config = join(desktop, 'tsconfig.json');
+  const api = new API({ cwd: desktop });
+  try {
+    const project = api.updateSnapshot({ openProjects: [config] }).getProject(config);
+    assert.ok(project, 'tsconfig.json must load as a project');
+    const { program, checker } = project;
+    const resolveAlias = (sym: Symbol): Symbol =>
+      sym.flags & SymbolFlags.Alias ? checker.getAliasedSymbol(sym) : sym;
 
-  // One pass over every non-test file: which files reference which symbol.
-  const readers = new Map<ts.Symbol, Set<string>>();
-  for (const file of files) {
-    const sf = program.getSourceFile(file);
-    assert.ok(sf, `program is missing ${file}`);
-    const visit = (node: ts.Node) => {
-      if (ts.isIdentifier(node)) {
-        const sym = checker.getSymbolAtLocation(node);
-        if (sym) {
-          const target = resolveAlias(checker, sym);
-          let set = readers.get(target);
-          if (!set) readers.set(target, (set = new Set()));
-          set.add(file);
-        }
+    // One pass over every non-test file: which files reference which symbol.
+    const readers = new Map<Symbol, Set<string>>();
+    for (const file of files) {
+      const sf = program.getSourceFile(file);
+      assert.ok(sf, `program is missing ${file}`);
+      const ids: Node[] = [];
+      const visit = (node: Node): undefined => {
+        if (isIdentifier(node)) ids.push(node);
+        node.forEachChild(visit);
+        return undefined;
+      };
+      visit(sf);
+      for (const sym of checker.getSymbolAtLocation(ids)) {
+        if (!sym) continue;
+        const target = resolveAlias(sym);
+        let set = readers.get(target);
+        if (!set) readers.set(target, (set = new Set()));
+        set.add(file);
       }
-      ts.forEachChild(node, visit);
-    };
-    visit(sf);
-  }
-
-  const dead: string[] = [];
-  const staleAllow = new Set(Object.keys(ALLOWED));
-  for (const file of files.filter(isChecked)) {
-    const sf = program.getSourceFile(file)!;
-    const moduleSym = checker.getSymbolAtLocation(sf);
-    if (!moduleSym) continue; // a script with no exports
-    for (const exp of checker.getExportsOfModule(moduleSym)) {
-      const key = `${relative(srcDir, file)}:${exp.name}`;
-      const target = resolveAlias(checker, exp);
-      const from = readers.get(target) ?? new Set<string>();
-      const used = [...from].some((f) => f !== file);
-      if (key in ALLOWED) {
-        staleAllow.delete(key);
-        if (used) dead.push(`${key} is in ALLOWED but has a reader now — drop the entry`);
-        continue;
-      }
-      if (!used) dead.push(`${key} has no reader outside its file — delete it, drop the export, or add it to ALLOWED with a reason`);
     }
+
+    const dead: string[] = [];
+    const staleAllow = new Set(Object.keys(ALLOWED));
+    for (const file of files.filter(isChecked)) {
+      const sf = program.getSourceFile(file)!;
+      const moduleSym = checker.getSymbolAtLocation(sf);
+      if (!moduleSym) continue; // a script with no exports
+      for (const exp of checker.getExportsOfModule(moduleSym)) {
+        const key = `${relative(srcDir, file)}:${exp.name}`;
+        const from = readers.get(resolveAlias(exp)) ?? new Set<string>();
+        const used = [...from].some((f) => f !== file);
+        if (key in ALLOWED) {
+          staleAllow.delete(key);
+          if (used) dead.push(`${key} is in ALLOWED but has a reader now — drop the entry`);
+          continue;
+        }
+        if (!used) dead.push(`${key} has no reader outside its file — delete it, drop the export, or add it to ALLOWED with a reason`);
+      }
+    }
+    for (const key of staleAllow) dead.push(`ALLOWED names ${key}, which is not an export any more — drop the entry`);
+    assert.equal(dead.length, 0, 'dead exports:\n  ' + dead.join('\n  '));
+  } finally {
+    api.close();
   }
-  for (const key of staleAllow) dead.push(`ALLOWED names ${key}, which is not an export any more — drop the entry`);
-  assert.equal(dead.length, 0, 'dead exports:\n  ' + dead.join('\n  '));
 });
