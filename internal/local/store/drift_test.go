@@ -40,8 +40,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 			onWire:  wireNames(tilesColumns),
 			wireOnly: map[string]string{
 				"reference":         `derived by the router from a qualified child_grid_id — the one authoritative "is a link" signal`,
-				"serves_page":       "declared by the owning plugin from its own content (fs: the filename's media type)",
-				"text_presentation": "likewise — how the owning plugin says a text body presents",
+				"text_presentation": "declared by the owning plugin: how its text body presents",
 				"status_detail":     "the owning plugin's current trouble with this tile (an ssh well's last dial error)",
 			},
 		},

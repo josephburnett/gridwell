@@ -98,10 +98,13 @@ No request carries a descent path. The server derives location from rows it
 owns. Sessions and networks never cross the wire.
 
 Wire-only fields are derived in exactly one place each. `Tile.reference`
-(this tile is a link) comes from `server.qualifyTiles`. `Tile.serves_page`
-(this url tile opens at the /content/ door, and only a url entry may say so),
-`text_presentation`, and `status_detail` come from the plugin's `Entry`
-through `pluginhost/adapter.go`. A plugin tile's `preview_blob_id` is
+(this tile is a link) comes from `server.qualifyTiles`. `text_presentation`
+and `status_detail` come from the plugin's `Entry` through
+`pluginhost/adapter.go`. `Tile.serves_page` (this url tile opens at the
+/content/ door, and only a url entry may say so) comes from the `Entry` too,
+and a plugin row also keeps it in its snapshot beside kind, label and
+`url_string` (`store.snapshotOf`), so a row its source does not list right
+now still presents as the page it was. A plugin tile's `preview_blob_id` is
 `pluginhost.faceKey`'s: the node's screenshot of the tile once one exists,
 else the plugin's picture keyed below zero. `Grid.writable`, `scratch_grid_id`, and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for

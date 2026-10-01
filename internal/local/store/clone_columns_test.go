@@ -83,7 +83,7 @@ func TestEveryTileColumnIsCopiedOrExcused(t *testing.T) {
 	}
 	// Named exclusions only — a new column defaults to being copied, which is
 	// the safe direction.
-	want := map[string]bool{"id": true, "ns": true, "key": true, "tombstoned": true}
+	want := map[string]bool{"id": true, "ns": true, "key": true, "tombstoned": true, "serves_page": true}
 	if !reflect.DeepEqual(excused, want) {
 		t.Errorf("clone exclusions = %v, want %v — a column left out of a clone needs a reason on its descriptor entry", excused, want)
 	}

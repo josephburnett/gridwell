@@ -181,6 +181,16 @@ schema v9, additive.`,
 	},
 	{name: "created_at", ddl: "INTEGER NOT NULL", since: 1},
 	{name: "updated_at", ddl: "INTEGER NOT NULL", since: 1},
+	{
+		name: "serves_page", ddl: "INTEGER NOT NULL DEFAULT 0", since: 14,
+		comment: `serves_page=1 is a plugin url row whose page the plugin serves, the
+address derived at the /content/ door. Like kind and alt_text it is a
+snapshot of the listing, so a row its source does not list right now
+still presents as a page rather than as a url tile with no address.
+Added at schema v14, additive.`,
+		bind:   func(t *gridwellv1.Tile) any { return intBool{&t.ServesPage} },
+		noCopy: "a clone lands in home, where nothing serves a page",
+	},
 }
 
 // gridsColumns is the grids table, in DDL order.

@@ -24,11 +24,13 @@ import (
 
 // goneSource lists "doc" until it is told the key is gone, and says so the
 // way the case under test says: an authoritative listing that omits it, a
-// probe, or a directory that cannot be read at all.
+// probe, or a directory that cannot be read at all. page lists "doc" as a
+// page the source serves rather than a text body.
 type goneSource struct {
 	pluginv1.UnimplementedPluginServer
 
 	mu            sync.Mutex
+	page          bool
 	listed        bool
 	authoritative bool
 	dark          bool
@@ -55,7 +57,11 @@ func (p *goneSource) List(context.Context, *pluginv1.ListRequest) (*pluginv1.Lis
 	resp := &pluginv1.ListResponse{Authoritative: p.authoritative,
 		Entries: []*pluginv1.Entry{{Key: "other", Kind: "text", Label: "other"}}}
 	if p.listed {
-		resp.Entries = append(resp.Entries, &pluginv1.Entry{Key: "doc", Kind: "text", Label: "doc"})
+		doc := &pluginv1.Entry{Key: "doc", Kind: "text", Label: "doc"}
+		if p.page {
+			doc.Kind, doc.ServesPage = "url", true
+		}
+		resp.Entries = append(resp.Entries, doc)
 	}
 	return resp, nil
 }
