@@ -230,3 +230,24 @@ func TestARestoredContentFrameAdoptsItsRowsTextState(t *testing.T) {
 		t.Fatalf("adopted content frame = %+v", p.Frame)
 	}
 }
+
+// A scroll is clamped at the top and reports whether it moved, because the
+// caller redraws on a move and the redraw is what arms the persister.
+func TestScrollTextReportsAMove(t *testing.T) {
+	f := ContentFrame("7", Footprint{W: 1, H: 1}, 1, "text", 0, 0)
+	if f.ScrollText(0, -30) {
+		t.Error("a scroll above the top moved the frame")
+	}
+	if !f.ScrollText(5, 120) || f.TextScrollX != 5 || f.TextScrollY != 120 {
+		t.Errorf("a scroll did not move the frame: %+v", f)
+	}
+	if f.ScrollText(5, 120) {
+		t.Error("a scroll to where the frame is reported a move")
+	}
+	before := FramingFingerprint(&Tree{Root: TreeNode{Pane: &Pane{ID: "p", Stack: Stack{Frame: f}}}}).Value()
+	f.ScrollText(5, 121)
+	after := FramingFingerprint(&Tree{Root: TreeNode{Pane: &Pane{ID: "p", Stack: Stack{Frame: f}}}}).Value()
+	if before == after {
+		t.Error("a scroll left the framing fingerprint unchanged, so the persister would not arm")
+	}
+}

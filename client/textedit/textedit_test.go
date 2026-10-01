@@ -88,6 +88,7 @@ func TestDecideTextareaSync(t *testing.T) {
 			want: TextareaSyncDecision{
 				SetValue:      true,
 				Value:         "tile 5 body",
+				KeepView:      true,
 				NewLastTileID: "5",
 			},
 		},
@@ -106,6 +107,7 @@ func TestDecideTextareaSync(t *testing.T) {
 			want: TextareaSyncDecision{
 				SetValue:      true,
 				Value:         "foreign edit, refetched",
+				KeepView:      true,
 				NewLastTileID: "5",
 			},
 		},

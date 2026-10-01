@@ -150,15 +150,13 @@ func (a *App) ensureFileTextarea() {
 	ta.Call("addEventListener", "select", cursorCb)
 
 	a.overlays.textTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		// Mirror the browser scroll onto the focused pane so SetTextView on
-		// ascent persists the right value, but only while the textarea is
-		// bound to that pane's tile: a stale binding would land tile A's
-		// scroll offset on tile B's text_y.
+		// Only while the textarea is bound to the focused pane's tile: a stale
+		// binding would land tile A's scroll offset on tile B's text_y.
 		p := a.tree.FocusedPane()
 		if p == nil || p.ContentID() == "" || p.ContentID() != a.overlays.lastTextareaTileID {
 			return nil
 		}
-		p.TextScrollY = a.overlays.textTextarea.Get("scrollTop").Float()
+		a.scrollText(p, p.TextScrollX, a.overlays.textTextarea.Get("scrollTop").Float())
 		return nil
 	})
 	ta.Call("addEventListener", "scroll", a.overlays.textTextareaScrollCb)
@@ -334,7 +332,15 @@ func (a *App) refreshFileOverlay() {
 	// lives in its own cache entry, and the dirty sweep posts it.
 	dec := textedit.DecideTextareaSync(in)
 	if dec.SetValue {
+		start, end, top := ta.Get("selectionStart"), ta.Get("selectionEnd"), ta.Get("scrollTop")
 		ta.Set("value", dec.Value)
+		if dec.KeepView {
+			ta.Call("setSelectionRange", start, end)
+			ta.Set("scrollTop", top)
+		} else {
+			ta.Call("setSelectionRange", 0, 0)
+			ta.Set("scrollTop", 0)
+		}
 		// For textedit.CanvasHiddenByOverlay: false means the textarea was
 		// cleared on a tile switch, or the blob has not arrived, and the
 		// canvas keeps painting through the loading race.

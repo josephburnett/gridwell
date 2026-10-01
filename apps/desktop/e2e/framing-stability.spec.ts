@@ -218,6 +218,60 @@ test('text scroll persists without an ascent', async ({ gw, window }) => {
     .toBeGreaterThan(0);
 });
 
+// A scroll in either DOM overlay is a framing change like a pan: it reaches the
+// server on the settle with no other gesture after it, so a kill after the
+// settle loses nothing. The browser scrolls the overlay; nothing repaints
+// unless the scroll asks.
+for (const face of ['text', 'rendered'] as const) {
+  test(`a ${face} overlay scroll persists on the settle alone`, async ({ gw, window }) => {
+    const c = await gw.cadences();
+    await gw.enterPlugin('home');
+    const home = await gw.focused();
+    const cx = Math.round(home.cx);
+    const cy = Math.round(home.cy);
+    await gw.openPalette();
+    await gw.dragCreate('markdown', cx, cy);
+    const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
+    const { updateText } = await import('./oracle');
+    await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));
+    await gw.descendCell(cx, cy);
+    await expect.poll(async () => (await gw.focused()).textFocus).toBe(doc.id);
+    const el = face === 'text' ? 'gw-text-editor' : 'gw-rendered-view';
+    if (face === 'rendered') await window.locator('#gw-text-toggle').click();
+    await expect
+      .poll(() => window.evaluate((id) => document.getElementById(id)!.scrollHeight, el))
+      .toBeGreaterThan(2000);
+    await gw.waitIdle();
+    await settle(window, c.framingSaveMs);
+    const textY = async () =>
+      Number((tileAt(await gw.getGrid(home.gridID), 'text', cx, cy) as { textY?: number | string })?.textY ?? 0);
+    expect(await textY(), 'the document was scrolled before the spec scrolled it').toBe(0);
+
+    const left = await window.evaluate((id) => {
+      const e = document.getElementById(id)!;
+      e.scrollTop = 400;
+      return e.scrollTop;
+    }, el);
+    expect(left, 'the overlay scrolled').toBe(400);
+    await expect
+      .poll(textY, {
+        message: 'the scroll reached the server with no gesture after it',
+        timeout: c.framingSaveMs * 10,
+      })
+      .toBe(left);
+
+    await window.reload();
+    await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+    await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 30_000 }).toBe(doc.id);
+    await expect
+      .poll(() => window.evaluate((id) => document.getElementById(id)?.scrollTop ?? 0, el), {
+        message: 'the reload lands on the scroll the user left',
+        timeout: 15_000,
+      })
+      .toBe(left);
+  });
+}
+
 // A read-only host file scrolls like any other text tile. The body is the
 // plugin's; where the user left the window is the node's, held in the plugin's
 // namespace of the store (#236, #270).

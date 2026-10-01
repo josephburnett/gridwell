@@ -35,6 +35,19 @@ type Frame struct {
 	ViewPending bool
 }
 
+// ScrollText is the one writer of a content descent's scroll, from the wheel
+// and from either overlay's own scroll, clamped at the top. It reports whether
+// the scroll moved, which is a framing change like a pan: the caller redraws,
+// and the redraw arms the settle persister on FramingFingerprint.
+func (f *Frame) ScrollText(x, y float64) bool {
+	x, y = max(x, 0), max(y, 0)
+	if x == f.TextScrollX && y == f.TextScrollY {
+		return false
+	}
+	f.TextScrollX, f.TextScrollY = x, y
+	return true
+}
+
 // Footprint is a tile's cell rectangle in the grid it sits in.
 type Footprint struct{ X, Y, W, H int64 }
 

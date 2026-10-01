@@ -31,7 +31,7 @@ func DecideUnloadFlush(rowKnown, rowEditableText, rowOwnsContent bool, rowVersio
 }
 
 // Framing is a text tile's persisted window, the SetTextView payload. Both
-// framing writers gate on FramingChanged, because writing unconditionally
+// framing writers gate on Reframes, because writing unconditionally
 // would mutate updated_at and broadcast an event for a read.
 type Framing struct {
 	X, Y, W, H int64
@@ -62,6 +62,14 @@ func ShownFraming(stored Framing, box Box, readOnly bool) Framing {
 	}
 	return Framing{W: box.W, H: box.H,
 		Mode: DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})}
+}
+
+// Reframes is the one test both text framing writers make, the settle
+// persister's and the ascent flush's: whether next differs from what the row is
+// shown at. A row nobody framed diffs against ShownFraming, never against its
+// zeros, so a look stamps nothing.
+func Reframes(stored, next Framing, readOnly bool) bool {
+	return FramingChanged(ShownFraming(stored, Box{W: next.W, H: next.H}, readOnly), next)
 }
 
 // ModeInput is everything the descent-mode decision reads.
