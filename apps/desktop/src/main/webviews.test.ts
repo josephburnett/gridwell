@@ -167,6 +167,21 @@ test('a view whose renderer died is retired like one that closed: one notice, th
   assert.equal(r.errors.length, 1);
 });
 
+test('a crash notice names the page from the address main holds, not the dead renderer', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS);
+  const wc = r.views[0].webContents!;
+  wc.url = 'https://example.com/second';
+  wc.emit('did-navigate');
+  // A crashed renderer answers getURL() with nothing (seen on CI).
+  wc.url = '';
+  wc.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 133 });
+  assert.deepEqual(
+    r.errors.map((e) => `${e.severity}: ${e.message}`),
+    ['error: page crashed (crashed): https://example.com/second'],
+  );
+});
+
 test('a renderer that dies under remove() is remove()\'s to report', async () => {
   const r = rig();
   await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS);

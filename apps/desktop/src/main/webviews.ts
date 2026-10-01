@@ -55,6 +55,9 @@ interface Entry {
   // reads the pane here, never the one the view was placed on.
   paneId: string;
   tileId: string;
+  // The address main placed the view on, or last saw it reach. A dead
+  // renderer answers getURL() with nothing, so a notice reads this.
+  url: string;
   // The renderer's name for this view (client/urlview.Gen), echoed on its
   // gone event.
   gen: number;
@@ -263,7 +266,7 @@ export class WebviewRegistry {
     // off the canvas overlay; focused feeds the steal guard from the first
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.
-    const e: Entry = { view, paneId, tileId, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
+    const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = openBelowUrl(target);
@@ -527,12 +530,9 @@ export class WebviewRegistry {
 
   private wireNav(e: Entry): void {
     const emit = () => {
-      this.cb.onNav?.({
-        paneId: e.paneId,
-        tileId: e.tileId,
-        url: e.view.webContents.getURL(),
-        title: e.view.webContents.getTitle(),
-      });
+      const url = e.view.webContents.getURL();
+      if (url) e.url = url;
+      this.cb.onNav?.({ paneId: e.paneId, tileId: e.tileId, url, title: e.view.webContents.getTitle() });
     };
     e.view.webContents.on('did-navigate', emit);
     e.view.webContents.on('did-navigate-in-page', emit);
@@ -644,12 +644,7 @@ export class WebviewRegistry {
       clearTimeout(e.focusSettle);
       e.focusSettle = null;
     }
-    let url = '';
-    try {
-      url = e.view.webContents.getURL();
-    } catch {
-      // Unreadable once destroyed or crashed; the notice goes without it.
-    }
+    const url = e.url;
     try {
       this.win.contentView.removeChildView(e.view);
     } catch {
