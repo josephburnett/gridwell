@@ -43,8 +43,7 @@ const REPORT_AFTER_FAILURES = 2;
 
 export function decideStreak(prev: StreakState, kind: AttemptKind): StreakDecision {
   if (kind === 'ok') {
-    // A good frame ends the streak whatever opened it, since a reloaded
-    // renderer captures again. Recovery is reported only where a failure was,
+    // A good frame ends the streak whatever opened it. Recovery is reported only where a failure was,
     // so the two always pair.
     const reportable = prev.everCaptured && prev.failures >= REPORT_AFTER_FAILURES;
     return {

@@ -665,23 +665,6 @@ app.whenReady().then(async () => {
   navPage.close();
   console.log('in-page nav ok: a hash change and a pushState both report the new address');
 
-  // ── a crashed renderer says so ──────────────────────────────────────────
-  // Unreported, the view just sits blank. The message names the page, so
-  // getURL() is read on a webContents whose renderer has just died, inside a
-  // try/catch so a throw cannot swallow the notice.
-  const crashErrs: string[] = [];
-  const regP = new WebviewRegistry(win, { onError: (ev) => crashErrs.push(ev.message) });
-  await regP.place('paneP', 'u1/70', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
-  await waitForFirstFrame(regP, 'paneP', 'crash scenario');
-  regP.webContentsFor('paneP')!.forcefullyCrashRenderer();
-  if (!(await waitFor(() => crashErrs.some((m) => m.startsWith('page crashed')), 6000))) {
-    fail(`a crashed renderer was not reported (errors: ${JSON.stringify(crashErrs)})`);
-  }
-  const crashMsg = crashErrs.find((m) => m.startsWith('page crashed'))!;
-  if (!crashMsg.includes('data:text/html')) fail(`the crash report does not name the page: ${crashMsg}`);
-  await regP.remove('paneP');
-  console.log('render-process-gone ok: the crash is reported and names the page');
-
   // ── the min-width zoom survives a navigation ────────────────────────────
   // Chromium resets zoomFactor across a navigation, so a narrow pane would
   // reflow to a cramped mobile layout unless did-finish-load re-applies it.
@@ -753,82 +736,41 @@ app.whenReady().then(async () => {
   navPage2.close();
   console.log('nav-gap ok: a tick inside a navigation is skipped, and the mirror comes back after it');
 
-  // ── a crashed renderer's frozen mirror is reported, and its recovery too ─
-  // A crashed renderer is not a destroyed view: capturePage still answers, with
-  // an empty image, a rejection, or nothing before the time box. Each opens the
-  // streak, and reloading closes it.
-  const streakErrs: ErrorEvent[] = [];
-  const regCrash = new WebviewRegistry(win, { onError: (ev) => streakErrs.push(ev) });
-  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
-  await waitForFirstFrame(regCrash, 'paneCrash', 'streak scenario');
-  // A crash sometimes takes the viz process with it under xvfb, and then
-  // capturePage rejects for every view forever. A control pane that never
-  // crashed tells that environment collapse from the product bug.
-  const ctlErrs: string[] = [];
-  const regCtl = new WebviewRegistry(win, { onError: (ev) => ctlErrs.push(ev.message) });
-  await regCtl.place('paneCtl', 'u1/76', DATA_URL, { x: 400, y: 0, width: 400, height: 300 });
-  await waitForFirstFrame(regCtl, 'paneCtl', 'control pane');
+  // ── a crashed renderer retires its view, and the pane can go live again ─
+  // A dead renderer leaves a blank view no context menu can reload, so it is
+  // gone by the same path as a page that closed itself: the entry goes, the
+  // renderer is told by the gen it placed, the webContents is closed, and one
+  // notice, naming the page, says why. A new place on the pane is a live view
+  // again.
+  // webviews.test.ts owns the registry's capture-streak wiring.
+  const crashErrs: ErrorEvent[] = [];
+  const crashGone: string[] = [];
+  const regCrash = new WebviewRegistry(win, {
+    onError: (ev) => crashErrs.push(ev),
+    onViewGone: (ev) => crashGone.push(`${ev.paneId} ${ev.tileId} ${ev.gen}`),
+  });
+  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false, 5);
+  await waitForFirstFrame(regCrash, 'paneCrash', 'crash scenario');
   const wcCrash = regCrash.webContentsFor('paneCrash')!;
   wcCrash.forcefullyCrashRenderer();
-  // Capture until the report lands, so a crash that takes a moment to reach
-  // capturePage is not read as a missing report.
-  let sawFailing = false;
-  const failDeadline = Date.now() + 8000;
-  while (Date.now() < failDeadline) {
-    if ((await regCrash.capture('paneCrash')) === '' && streakErrs.some((e) => e.message.includes('mirror capture failing'))) {
-      sawFailing = true;
-      break;
-    }
-    await new Promise((r) => setTimeout(r, 100));
+  const crashBy = Date.now() + LOAD_BUDGET_MS;
+  while (crashGone.length === 0 && Date.now() < crashBy) await new Promise((r) => setTimeout(r, 50));
+  if (JSON.stringify(crashGone) !== JSON.stringify(['paneCrash u1/75 5'])) {
+    fail(`a crashed view's end was not announced once with its gen: ${JSON.stringify(crashGone)}`);
   }
-  if (!sawFailing) {
-    fail(`a crashed renderer's frozen mirror was never reported (errors: ${JSON.stringify(streakErrs)})`);
+  if (regCrash.has('paneCrash')) fail('the entry outlived its crashed renderer');
+  if (!(await waitFor(() => wcCrash.isDestroyed(), 3000))) fail('the crashed webContents was left open');
+  const crashSaid = crashErrs.map((e) => `${e.severity}: ${e.message}`);
+  if (crashSaid.length !== 1 || !crashSaid[0].startsWith('error: page crashed')) {
+    fail(`want the one notice that the page crashed, got ${JSON.stringify(crashSaid)}`);
   }
-  const failEv = streakErrs.find((e) => e.message.includes('mirror capture failing'))!;
-  if (!failEv.message.includes('paneCrash')) fail(`the failing report does not name the pane: ${failEv.message}`);
-  // The severity rides the same event the message does, all the way from the
-  // report site: client/errsurface paints the row from it.
-  if (failEv.severity !== 'error') fail(`a frozen mirror was reported as '${failEv.severity}'`);
-
-  wcCrash.reload();
-  let recoveredFrame = '';
-  let ctlMisses = 0;
-  const recDeadline = Date.now() + 10000;
-  while (Date.now() < recDeadline) {
-    recoveredFrame = await regCrash.capture('paneCrash');
-    if (recoveredFrame) break;
-    ctlMisses = (await regCtl.capture('paneCtl')) ? 0 : ctlMisses + 1;
-    if (ctlMisses >= 3) break; // the compositor, not this pane
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (!recoveredFrame && ctlMisses >= 3) {
-    // Nothing in this process can capture, so there is no recovery to observe;
-    // capturestreak.test.ts owns the transition.
-    console.log(
-      'capture streak SKIPPED the recovery half: the crash took the compositor with it, ' +
-        `so the untouched control pane stopped capturing too (xvfb artifact) — control said ${JSON.stringify(ctlErrs)}`,
-    );
-  } else {
-    if (!recoveredFrame) fail(`a reloaded renderer never captured again (errors: ${JSON.stringify(streakErrs)})`);
-    const recovered = streakErrs.filter((e) => e.message.includes('mirror capture recovered'));
-    if (recovered.length !== 1) {
-      fail(`recovery was reported ${recovered.length} times, want 1 (errors: ${JSON.stringify(streakErrs)})`);
-    }
-    // A mirror that is live again is information; an error row would say
-    // something failed just as it stopped failing.
-    if (recovered[0].severity !== 'info') fail(`a recovery was reported as '${recovered[0].severity}'`);
-    // The streak is closed, so a further good capture says nothing more.
-    if ((await regCrash.capture('paneCrash')).length === 0) fail('a recovered mirror stopped capturing');
-    if (streakErrs.filter((e) => e.message.includes('mirror capture recovered')).length !== 1) {
-      fail('a healthy capture re-reported recovery');
-    }
-    if (streakErrs.filter((e) => e.message.includes('mirror capture failing')).length !== 1) {
-      fail(`the failing report fired more than once per streak: ${JSON.stringify(streakErrs)}`);
-    }
-    console.log('capture streak ok: a crashed renderer reports failing as an error, and a reload reports recovered as info');
-  }
-  await regCtl.remove('paneCtl');
+  // getURL() is read on a webContents whose renderer just died.
+  if (!crashSaid[0].includes('data:text/html')) fail(`the crash notice does not name the page: ${crashSaid[0]}`);
+  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false, 6);
+  await waitForFirstFrame(regCrash, 'paneCrash', 'crash recovery');
+  if (crashErrs.length !== 1) fail(`the new view raised notices: ${JSON.stringify(crashErrs)}`);
   await regCrash.remove('paneCrash');
+  console.log('crash ok: the view retired with its gen, the webContents closed, one notice, and a new place is live');
 
   // ── Freeze Page appears only where there is something to freeze ─────────
   // canFreeze is the registry's half of the gating; contextmenu.test.ts owns

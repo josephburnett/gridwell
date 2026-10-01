@@ -203,9 +203,10 @@ export interface ZoomKeyEvent {
   key: string;
 }
 
-// The live view on this pane ended on its own, a page that closed itself, so
-// the renderer drops its handle and the pane shows the tile's frozen face.
-// Nothing was captured: the view was gone before anything could be.
+// The live view on this pane ended on its own, a page that closed itself or a
+// renderer that died, so the renderer drops its handle and the pane shows the
+// tile's frozen face. Nothing was captured: the view was gone before anything
+// could be.
 export interface ViewGoneEvent {
   paneId: string;
   tileId: string;

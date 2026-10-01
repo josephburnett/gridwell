@@ -140,6 +140,45 @@ test('a page that closes itself retires its entry: one notice, the renderer told
   assert.equal(r.gone.length, 1);
 });
 
+test('a view whose renderer died is retired like one that closed: one notice, the renderer told, the page closed', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS, 0, '', true, false, true, 4);
+  const view = r.views[0];
+  const wc = view.webContents!;
+  // Closing a crashed webContents destroys it, which must not announce twice.
+  wc.close = () => {
+    wc.closed++;
+    view.destroy();
+  };
+
+  wc.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 133 });
+
+  assert.equal(r.reg.has('p1'), false, 'the entry outlived its renderer');
+  assert.deepEqual(r.gone, [{ paneId: 'p1', tileId: 'u1/7', gen: 4 }], 'the renderer was not told the view ended');
+  assert.equal(r.children.has(view), false, 'the dead view is still attached over the pane');
+  assert.equal(wc.closed, 1, 'the crashed webContents was left open');
+  assert.deepEqual(
+    r.errors.map((e) => `${e.severity}: ${e.message}`),
+    ['error: page crashed (crashed): https://example.com/'],
+  );
+  const freeze = await r.reg.remove('p1');
+  assert.deepEqual(freeze, { jpegBase64: '', url: '', title: '', history: '' });
+  assert.equal(r.gone.length, 1);
+  assert.equal(r.errors.length, 1);
+});
+
+test('a renderer that dies under remove() is remove()\'s to report', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS);
+  const wc = r.views[0].webContents!;
+  wc.close = () => {
+    wc.emit('render-process-gone', {}, { reason: 'killed', exitCode: 9 });
+  };
+  await r.reg.remove('p1');
+  assert.deepEqual(r.gone, []);
+  assert.deepEqual(r.errors, []);
+});
+
 test('the registry closing a view itself is not a page that closed itself', async () => {
   const r = rig();
   await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS);
@@ -276,4 +315,27 @@ test('a gone event names the view by the gen it was placed with, which a move ke
 
   r.views[1].destroy();
   assert.deepEqual(r.gone, [{ paneId: 'w1:p1', tileId: 'u1/9', gen: 2 }]);
+});
+
+test('a mirror that stops capturing is reported once, and its recovery once', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  const wc = r.views[0].webContents!;
+  const frame = { isEmpty: () => false, toJPEG: () => Buffer.from('jpeg') };
+  wc.capturePage = () => Promise.resolve(frame);
+  assert.notEqual(await r.reg.capture('p1'), '');
+
+  wc.capturePage = () => Promise.reject(new Error('GPU process gone'));
+  for (let i = 0; i < 3; i++) assert.equal(await r.reg.capture('p1'), '');
+  wc.capturePage = () => Promise.resolve(frame);
+  assert.notEqual(await r.reg.capture('p1'), '');
+  assert.notEqual(await r.reg.capture('p1'), '');
+
+  assert.deepEqual(
+    r.errors.map((e) => `${e.severity}: ${e.message}`),
+    [
+      'error: pane p1: mirror capture failing: capturePage failed: Error: GPU process gone',
+      'info: pane p1: mirror capture recovered after 3 failed captures',
+    ],
+  );
 });

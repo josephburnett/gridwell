@@ -211,7 +211,7 @@ func (a *App) handBackURLViews() {
 }
 
 // dropURLView takes down a handle main has no view behind, a refused place or
-// a page that closed itself, since one left standing keeps the pane looking
+// a view main retired, since one left standing keeps the pane looking
 // live over a blank instead of showing the tile's frozen face.
 // Identity-checked, since a later place may own the pane.
 func (a *App) dropURLView(paneID string, v *urlView) {
