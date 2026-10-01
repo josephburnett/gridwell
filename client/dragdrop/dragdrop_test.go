@@ -574,3 +574,23 @@ func TestRectsOverlap(t *testing.T) {
 		}
 	}
 }
+
+func TestPaneShows(t *testing.T) {
+	p := Pane{ScreenW: 640, ScreenH: 640, Zoom: 1, CellPx: 64}
+	cases := []struct {
+		name       string
+		x, y, w, h float64
+		want       bool
+	}{
+		{"at the center", 0, 0, 1, 1, true},
+		{"straddling the left edge", -6, 0, 2, 1, true},
+		{"touching the left edge", -6, 0, 1, 1, true},
+		{"past the left edge", -8, 0, 1, 1, false},
+		{"past the bottom edge", 0, 6, 1, 1, false},
+	}
+	for _, c := range cases {
+		if got := p.Shows(c.x, c.y, c.w, c.h); got != c.want {
+			t.Errorf("%s: Shows = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

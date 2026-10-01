@@ -755,7 +755,7 @@ func (a *App) thCellCenter(_ js.Value, args []js.Value) any {
 		return nil
 	}
 	cx, cy := args[1].Float(), args[2].Float()
-	sx, sy := paneToDragdrop(p, r).CellToScreen(cx+0.5, cy+0.5)
+	sx, sy := p.Screen(r).CellToScreen(cx+0.5, cy+0.5)
 	return map[string]any{"x": sx, "y": sy}
 }
 

@@ -213,7 +213,7 @@ func drawHotspotArrow(c js.Value, cx, cy, dx, dy float64) {
 
 // tileScreenRect is the on-screen rectangle of tile n as pane p draws it.
 func tileScreenRect(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect) (left, top, w, h float64) {
-	ps := paneToDragdrop(p, r)
+	ps := p.Screen(r)
 	left, top = ps.CellToScreen(float64(n.X), float64(n.Y))
 	cellSize := cellPx * p.Zoom
 	w = float64(n.W) * cellSize
@@ -224,7 +224,7 @@ func tileScreenRect(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect) (left, top, w
 // drawTileResizePreview outlines the proposed new footprint. The original
 // tile keeps painting in place, so this is a dashed stroke on top.
 func (a *App) drawTileResizePreview(rd *rightDragState) {
-	ps := paneToDragdrop(rd.tilePane, rd.tilePaneR)
+	ps := rd.tilePane.Screen(rd.tilePaneR)
 	left, top := ps.CellToScreen(float64(rd.tileNewX), float64(rd.tileNewY))
 	cellSize := cellPx * rd.tilePane.Zoom
 	w := float64(rd.tileNewW) * cellSize

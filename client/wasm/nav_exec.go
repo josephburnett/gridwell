@@ -180,7 +180,7 @@ func (a *App) navStartTransition(e nav.Effect) {
 		// beside it. render.go draws it; the machine's pending level decides
 		// how long.
 		if p := a.tree.FindPane(e.PaneID); p != nil {
-			dd := paneToDragdrop(p, paneRectFor(a, p))
+			dd := p.Screen(paneRectFor(a, p))
 			x0, y0 := dd.CellToScreen(float64(e.Tile.X), float64(e.Tile.Y))
 			x1, y1 := dd.CellToScreen(float64(e.Tile.X+e.Tile.W), float64(e.Tile.Y+e.Tile.H))
 			a.overlays.wsExpand = &wsExpandState{x: x0, y: y0, w: x1 - x0, h: y1 - y0, startMs: nowMs()}

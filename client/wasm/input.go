@@ -134,7 +134,7 @@ func (a *App) menuPaneForPointer() (*pane.Pane, pane.Rect, bool) {
 
 // cellAtScreen floors: round-half makes clicks in a tile's lower-right miss.
 func cellAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) (int64, int64) {
-	return paneToDragdrop(p, r).CellAt(sx, sy)
+	return p.Screen(r).CellAt(sx, sy)
 }
 
 func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *gridwellv1.Tile {
@@ -197,7 +197,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if p.ContentID() == "" {
 		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsWellKind(t.Kind) && t.ChildGridId != "" {
 			hoverWell = t
-			ps := paneToDragdrop(p, r)
+			ps := p.Screen(r)
 			x0, y0 := ps.CellToScreen(float64(t.X), float64(t.Y))
 			x1, _ := ps.CellToScreen(float64(t.X)+1, float64(t.Y))
 			cell := x1 - x0
@@ -236,7 +236,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// The wheel zooms the grid inside the hovered well, its stored preview
 		// framing, not the grid the pane shows. The settle persister posts one
 		// framing write per tile at flush.
-		ps := paneToDragdrop(p, r)
+		ps := p.Screen(r)
 		x0, y0 := ps.CellToScreen(float64(hoverWell.X), float64(hoverWell.Y))
 		x1, _ := ps.CellToScreen(float64(hoverWell.X)+1, float64(hoverWell.Y))
 		parentCell := x1 - x0
@@ -273,7 +273,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 // wheelZoomPaneAt keeps the world point under (sx, sy) under it after the zoom,
 // map-style. The bar-band wheel passes the pane's center.
 func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
-	ps := paneToDragdrop(p, r)
+	ps := p.Screen(r)
 	cellX, cellY := ps.ScreenToCell(sx, sy)
 	p.Zoom, p.Cx, p.Cy = zoomtrans.WheelZoom(dy, p.Zoom, p.Cx, p.Cy, cellX, cellY, zoomFactor, zoomMin, zoomMax)
 	a.draw()
@@ -379,7 +379,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	n := a.tileAtCell(p, cellX, cellY)
 	parentCell := cellPx * p.Zoom
-	ps := paneToDragdrop(p, r)
+	ps := p.Screen(r)
 	a.dragging = &dragState{
 		originPaneID:  p.ID,
 		originFocused: prevFocus == p.ID,

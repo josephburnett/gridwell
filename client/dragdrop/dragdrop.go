@@ -30,6 +30,15 @@ func (p Pane) CellToScreen(cx, cy float64) (float64, float64) {
 	return sx, sy
 }
 
+// Shows reports whether the cell box at (x, y), w by h, reaches into the pane:
+// the one cull, so what is drawn and what is said to be shown agree.
+func (p Pane) Shows(x, y, w, h float64) bool {
+	left, top := p.CellToScreen(x, y)
+	cellSize := p.CellPx * p.Zoom
+	return left+w*cellSize >= p.ScreenX && top+h*cellSize >= p.ScreenY &&
+		left <= p.ScreenX+p.ScreenW && top <= p.ScreenY+p.ScreenH
+}
+
 // CellAt floors; see FloorCellAt.
 func (p Pane) CellAt(sx, sy float64) (int64, int64) {
 	cx, cy := p.ScreenToCell(sx, sy)

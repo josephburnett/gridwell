@@ -14,7 +14,7 @@ function lastUnion(lines: TraceLine[]): string[] | null {
   return msg === '' ? [] : msg.split(' ');
 }
 
-test('the node hears which grids the panes show, and hears them leave', async ({ gw, home }) => {
+test('the node hears which grids the panes and their previews show, and hears them leave', async ({ gw, home }) => {
   const token = await loginToken(gw.origin, homePassword(home));
   const union = async () => lastUnion(await dumpViaDoor(gw.origin, token));
 
@@ -30,15 +30,19 @@ test('the node hears which grids the panes show, and hears them leave', async ({
   const well = tileAt(await gw.getGrid(rootGrid), 'well', wx, wy);
   expect(well, 'the well persisted').toBeTruthy();
 
+  const child = well!.childGridId!;
+  await expect
+    .poll(union, { message: "the well's preview shows its grid too", timeout: 10_000 })
+    .toEqual([child, rootGrid].sort());
+
   await gw.descendCell(wx, wy);
-  const child = (await gw.focused()).gridID;
-  expect(child).not.toBe(rootGrid);
+  expect((await gw.focused()).gridID).toBe(child);
   await expect
     .poll(union, { message: 'descending swaps the grid shown', timeout: 10_000 })
     .toEqual([child]);
 
   await gw.ascendViaCrumb();
   await expect
-    .poll(union, { message: 'ascending takes the child out again', timeout: 10_000 })
-    .toEqual([rootGrid]);
+    .poll(union, { message: 'ascending shows the landing grid and the preview again', timeout: 10_000 })
+    .toEqual([child, rootGrid].sort());
 });
