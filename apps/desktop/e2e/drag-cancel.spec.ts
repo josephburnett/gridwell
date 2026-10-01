@@ -3,6 +3,7 @@ import { test, expect } from './fixtures';
 import { tileAt, GridSnapshot } from './oracle';
 import { settle } from './cadence';
 import type { GridwellDriver } from './driver';
+import { EV } from '../src/main/ipc';
 
 // Esc lets go of any drag in flight with nothing changed: everything returns
 // to where the press found it, and the release that follows is neither a drop
@@ -303,4 +304,96 @@ test('a drag after a cancelled one moves the tile', async ({ gw, window }) => {
   await gw.dragTileCell(cx, cy, cx - 2, cy);
   const snap = await gw.getGrid(f.gridID);
   expect(tileAt(snap, 'text', cx - 2, cy), 'the fresh drag moved the tile').toBeTruthy();
+});
+
+// A press over a live url view goes to the native view, which keeps OS
+// keyboard focus through the drag it forwards, so the window's keydown never
+// hears Esc. The drag parks the view, and a parked view hands Esc to the
+// renderer. The forwarded press is fired from main as in
+// live-border-drag.spec.ts, and the key goes to the view's own webContents,
+// which is where the OS delivers it.
+test('Esc reaches a drag forwarded from a live view that holds keyboard focus', async ({
+  electronApp,
+  window,
+  gw,
+}) => {
+  await gw.enterPlugin('home');
+  const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
+  await gw.clickPaletteSwatch('url');
+  await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+  await window.fill('#gw-url-input', `${gw.origin}/?esc=1`);
+  await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
+  await gw.waitIdle();
+  await expect
+    .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(wcBefore);
+  const urlPaneId = (await gw.focused()).id;
+  await gw.splitFocusedPaneVertical();
+  const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(before[0].id, 'live url pane is the left pane').toBe(urlPaneId);
+  const gx = before[0].x + before[0].w;
+  const gy = before[0].y + before[0].h / 2;
+
+  await electronApp.evaluate(
+    ({ BrowserWindow, webContents }, { ch, pt }) => {
+      const view = webContents.getAllWebContents().find((w) => w.getURL().includes('esc=1'));
+      if (!view) throw new Error('live view not found');
+      view.focus();
+      BrowserWindow.getAllWindows()[0].webContents.send(ch, pt);
+    },
+    { ch: EV.leftForward, pt: { x: gx - 8, y: gy } },
+  );
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.leftResizeArmed()), { timeout: 5_000 })
+    .toBe(true);
+  await window.evaluate(
+    ([tx, ty]: number[]) => {
+      document.querySelector('canvas')!.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: tx, clientY: ty, buttons: 1, bubbles: true }),
+      );
+    },
+    [gx - 200, gy],
+  );
+  const during = (await gw.panes()).find((p) => p.id === urlPaneId)!;
+  expect(before[0].w - during.w, 'the drag resized live').toBeGreaterThan(100);
+
+  const relays = () =>
+    electronApp.evaluate(() => ((globalThis as any).__gwRegistry?.escapeRelays as number) ?? 0);
+  // sendInputEvent is fire-and-forget and xvfb can drop it before the input
+  // pipeline, so resend until main acks; see content-zoom.spec.ts.
+  let acked = false;
+  for (let attempt = 0; attempt < 5 && !acked; attempt++) {
+    const n = await relays();
+    await electronApp.evaluate(({ webContents }) => {
+      const view = webContents.getAllWebContents().find((w) => w.getURL().includes('esc=1'))!;
+      view.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+      view.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    });
+    acked = await expect
+      .poll(relays, { timeout: 2_000 })
+      .toBeGreaterThan(n)
+      .then(
+        () => true,
+        () => false,
+      );
+  }
+  expect(acked, 'Esc in the parked view reached main').toBe(true);
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.leftResizeArmed()), { timeout: 5_000 })
+    .toBe(false);
+  await window.evaluate(
+    ([tx, ty]: number[]) => {
+      document.querySelector('canvas')!.dispatchEvent(
+        new MouseEvent('mouseup', { clientX: tx, clientY: ty, button: 0, bubbles: true }),
+      );
+    },
+    [gx - 200, gy],
+  );
+  await gw.waitIdle();
+  const after = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(after.map((p) => [p.id, p.x, p.w]), 'the panes are where the press found them').toEqual(
+    before.map((p) => [p.id, p.x, p.w]),
+  );
 });

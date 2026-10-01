@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 // Drift lint for the bridge method vocabulary: the ten verbs the renderer
-// invokes and the eleven listeners it subscribes through. preload.ts owns the
+// invokes and the twelve listeners it subscribes through. preload.ts owns the
 // names; client/wasm spells every one again as a string literal, because Go
 // reaches JavaScript by name through js.Value and the two languages share no
 // source. A rename on either side compiles clean and the wasm calls a
@@ -54,7 +54,7 @@ test('the wasm subscribes exactly the listeners the preload table declares', () 
   const preload = matches(table![1], /^\s*(\w+):/gm);
   const wasm = matches(wasmSource(), /\{"(\w+)", func\(ev js\.Value\)/g);
 
-  assert.equal(preload.length, 11, `expected 11 listeners in ${PRELOAD}, got ${JSON.stringify(preload)}`);
+  assert.equal(preload.length, 12, `expected 12 listeners in ${PRELOAD}, got ${JSON.stringify(preload)}`);
   assert.deepEqual(
     wasm,
     preload,

@@ -75,6 +75,7 @@ interface Rig {
   gone: ViewGoneEvent[];
   navs: NavEvent[];
   steals: string[];
+  escapes: string[];
   children: Set<FakeView>;
 }
 
@@ -84,6 +85,7 @@ function rig(): Rig {
   const gone: ViewGoneEvent[] = [];
   const navs: NavEvent[] = [];
   const steals: string[] = [];
+  const escapes: string[] = [];
   const children = new Set<FakeView>();
   const win = {
     contentView: {
@@ -101,6 +103,7 @@ function rig(): Rig {
       onViewGone: (ev) => gone.push(ev),
       onNav: (ev) => navs.push(ev),
       onFocusStolen: (ev) => steals.push(ev.paneId),
+      onEscapeKey: (ev) => escapes.push(ev.paneId),
     },
     () => {
       const v = new FakeView();
@@ -108,7 +111,7 @@ function rig(): Rig {
       return v as unknown as WebContentsView;
     },
   );
-  return { reg, views, errors, gone, navs, steals, children };
+  return { reg, views, errors, gone, navs, steals, escapes, children };
 }
 
 const BOUNDS = { x: 10, y: 20, width: 400, height: 300 };
@@ -299,6 +302,29 @@ test('a view that holds OS focus and moves to an unfocused pane gives the focus 
   r.views[0].webContents!.focused = true;
   r.reg.move('p1', 'w1:p1', BOUNDS, true, false, false);
   assert.deepEqual(r.steals, ['w1:p1']);
+});
+
+// A key event as before-input-event hands it, with the prevented flag a
+// relay sets.
+function keyDown(wc: FakeWC, key: string): boolean {
+  let prevented = false;
+  wc.emit('before-input-event', { preventDefault: () => (prevented = true) }, { type: 'keyDown', key });
+  return prevented;
+}
+
+test('a parked view hands Esc to the renderer; a shown one keeps it for its page', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true);
+  const wc = r.views[0].webContents!;
+
+  assert.equal(keyDown(wc, 'Escape'), false, 'a shown view gave its page\'s Esc away');
+  assert.deepEqual(r.escapes, []);
+
+  r.reg.setHidden('p1', true, true);
+  assert.equal(keyDown(wc, 'Escape'), true, 'a parked view let its offscreen page take Esc');
+  assert.equal(keyDown(wc, 'a'), false, 'a parked view took a key that is not Esc');
+  assert.deepEqual(r.escapes, ['p1']);
+  assert.equal(r.reg.escapeRelays, 1);
 });
 
 test('a move from a pane that holds no view is refused', async () => {

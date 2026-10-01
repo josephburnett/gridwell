@@ -319,6 +319,10 @@ func (a *App) installWebviewListeners() {
 			a.zoomKeyRelays++
 			a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
 		}},
+		// Esc while a parked view holds OS keyboard focus; see cancelGesture.
+		{"onEscapeKey", func(ev js.Value) {
+			a.cancelGesture(true)
+		}},
 		// A view that ended in main with no remove: a page that closed
 		// itself or a renderer that died. Nothing is left to capture; main's
 		// notice says why.

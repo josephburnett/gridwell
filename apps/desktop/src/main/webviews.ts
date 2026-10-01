@@ -2,7 +2,7 @@ import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } fr
 import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
 import type { WebContentsViewConstructorOptions } from 'electron';
-import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent, ViewGoneEvent } from './ipc';
+import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -100,6 +100,7 @@ interface RegistryCallbacks {
   // Both doors into the menu announce through here.
   onContextMenu?: (ev: ContextMenuEvent) => void;
   onZoomKey?: (ev: ZoomKeyEvent) => void;
+  onEscapeKey?: (ev: EscapeKeyEvent) => void;
   // focusguard.ts owns the verdict that a focus grab was a steal.
   onFocusStolen?: (ev: { paneId: string }) => void;
   // A view ended outside remove(); see retire().
@@ -117,9 +118,10 @@ export class WebviewRegistry {
   private readonly win: BaseWindow;
   private readonly cb: RegistryCallbacks;
   private readonly entries = new Map<string, Entry>();
-  // The e2e reads this through __gwRegistry to tell a synthetic sendInputEvent
-  // lost in the input pipeline from a real relay bug.
+  // The e2e reads these through __gwRegistry to tell a synthetic
+  // sendInputEvent lost in the input pipeline from a real relay bug.
   zoomChordRelays = 0;
+  escapeRelays = 0;
   // The e2e reads this to see that an unread face costs no capture.
   mirrorCalls = 0;
 
@@ -278,11 +280,19 @@ export class WebviewRegistry {
     // window.ts handles F11 on the canvas, but a focused live view owns OS
     // keyboard focus, so that handler never sees the key. The zoom chord is
     // relayed, not applied, because setZoom from main would skip the
-    // renderer's cache and its write.
+    // renderer's cache and its write. A parked view is off screen, so the Esc
+    // it hears is the canvas's: a press the view forwarded keeps OS focus here
+    // through the drag it became, and that drag owns Esc.
     view.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return;
       if (input.key === 'F11') {
         this.toggleFullScreen();
+        event.preventDefault();
+        return;
+      }
+      if (input.key === 'Escape' && e.hidden) {
+        this.escapeRelays++;
+        this.cb.onEscapeKey?.({ paneId: e.paneId });
         event.preventDefault();
         return;
       }

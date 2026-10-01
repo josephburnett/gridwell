@@ -48,6 +48,7 @@ export const EV = {
   freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture
   menuPane: 'gw:menu-pane', // ContextMenuEvent — a live view's context menu is opening on this pane
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus
+  escapeKey: 'gw:escape-key', // EscapeKeyEvent — Esc pressed while a parked live view owns focus
   viewGone: 'gw:view-gone', // ViewGoneEvent — a live view ended outside a remove
 } as const;
 
@@ -201,6 +202,12 @@ export interface ContextMenuEvent {
 export interface ZoomKeyEvent {
   paneId: string;
   key: string;
+}
+
+// Esc pressed while a parked live view owns OS keyboard focus, relayed so a
+// drag in flight can let go (gesture.Escape).
+export interface EscapeKeyEvent {
+  paneId: string;
 }
 
 // The live view on this pane ended on its own, a page that closed itself or a
