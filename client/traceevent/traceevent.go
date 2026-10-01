@@ -184,6 +184,13 @@ func URLMove(fromPaneID, toPaneID, tileID string) Event {
 		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
 }
 
+// ShellMove is a live terminal handed to another pane with its socket, the
+// takeover that neither closes nor opens one.
+func ShellMove(fromPaneID, toPaneID, tileID string) Event {
+	return Event{Src: "shell", Kind: "move", Msg: "live terminal moves",
+		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
+}
+
 func ShellOpen(paneID, tileID string) Event {
 	return Event{Src: "shell", Kind: "open", Msg: "stream opens", KV: kv("pane", paneID, "tile", tileID)}
 }

@@ -96,6 +96,7 @@ func (a *App) installTestHook() {
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
 		"urlViews":      js.FuncOf(a.thURLViews),
+		"shellViews":    js.FuncOf(a.thShellViews),
 		"textInnerBox":  js.FuncOf(a.thTextInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 		"errors":        js.FuncOf(a.thErrors),
@@ -394,6 +395,15 @@ func (a *App) thLocalPaneIds(js.Value, []js.Value) any {
 func (a *App) thURLViews(js.Value, []js.Value) any {
 	out := map[string]any{}
 	for _, h := range a.urlSurfaces() {
+		out[h.PaneID] = h.TileID
+	}
+	return out
+}
+
+// thShellViews maps each pane holding a live terminal to its session's tile.
+func (a *App) thShellViews(js.Value, []js.Value) any {
+	out := map[string]any{}
+	for _, h := range a.shellSurfaces() {
 		out[h.PaneID] = h.TileID
 	}
 	return out

@@ -75,21 +75,13 @@ type Holder struct {
 type Engagement struct {
 	// Keep: the opener already holds the tile's surface, a keep-alive return.
 	Keep bool
-	// From is the pane whose surface moves to the opener, page and all. Empty
-	// with Keep false: nobody holds one, so a fresh surface is placed.
+	// From is the pane whose surface moves to the opener whole: a url view with
+	// its page, a terminal with its socket. Empty with Keep false: nobody
+	// holds one, so a fresh surface is placed.
 	From string
 	// Close holds every surface on the tile beyond the one kept or moved. The
 	// rule allows one, so this is empty unless the rule was already broken.
 	Close []string
-}
-
-// Others is every pane that holds the tile besides the opener, for a surface
-// that cannot move and closes them instead.
-func (e Engagement) Others() []string {
-	if e.From == "" {
-		return e.Close
-	}
-	return append([]string{e.From}, e.Close...)
 }
 
 // TakeOver applies one live surface per content tile: opening tileID in
@@ -109,7 +101,7 @@ func TakeOver(holders []Holder, openerID, tileID string) Engagement {
 		}
 	}
 	if e.Keep && e.From != "" {
-		e.Close, e.From = e.Others(), ""
+		e.Close, e.From = append([]string{e.From}, e.Close...), ""
 	}
 	return e
 }

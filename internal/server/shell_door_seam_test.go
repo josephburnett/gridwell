@@ -127,8 +127,8 @@ func TestShellDoorRoundTripsBytes(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
-	cs.reg.Open("pane-1", tile.Id, 100, 40)
-	t.Cleanup(func() { cs.reg.Close("pane-1") })
+	cs.reg.Open(tile.Id, 100, 40)
+	t.Cleanup(func() { cs.reg.Close(tile.Id) })
 
 	sess := waitSession(t, f.fake)
 	if sess.OpenMode != tmux.ModeCreate {
@@ -139,7 +139,7 @@ func TestShellDoorRoundTripsBytes(t *testing.T) {
 		t.Errorf("PTY opened at %dx%d, want 100x40", sess.InitialCols, sess.InitialRows)
 	}
 
-	cs.reg.Write("pane-1", []byte("echo me"))
+	cs.reg.Write(tile.Id, []byte("echo me"))
 	select {
 	case got := <-cs.out:
 		if string(got) != "echo me" {
@@ -156,11 +156,11 @@ func TestShellDoorForwardsResize(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
-	cs.reg.Open("pane-1", tile.Id, 80, 24)
-	t.Cleanup(func() { cs.reg.Close("pane-1") })
+	cs.reg.Open(tile.Id, 80, 24)
+	t.Cleanup(func() { cs.reg.Close(tile.Id) })
 	sess := waitSession(t, f.fake)
 
-	cs.reg.Resize("pane-1", 120, 50)
+	cs.reg.Resize(tile.Id, 120, 50)
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if rs := sess.Resizes(); len(rs) > 0 {
@@ -187,14 +187,14 @@ func TestShellDoorReportsSessionGone(t *testing.T) {
 		t.Fatalf("SetShellPreview: %v", err)
 	}
 	cs := f.clientStack()
-	cs.reg.Open("pane-1", tile.Id, 80, 24)
+	cs.reg.Open(tile.Id, 80, 24)
 	select {
 	case e := <-cs.exit:
 		if !e.SessionGone {
 			t.Fatalf("exit = %+v, want SessionGone", e)
 		}
-		if e.PaneID != "pane-1" || e.Message == "" {
-			t.Fatalf("exit = %+v, want the pane and a reason", e)
+		if e.TileID != tile.Id || e.Message == "" {
+			t.Fatalf("exit = %+v, want the tile and a reason", e)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("no exit reported within 3s")
@@ -215,11 +215,11 @@ func TestShellDoorSurfacesADriverThatCannotOpen(t *testing.T) {
 	f.fake.OpenErr = shelldriver.ErrShellsUnavailable
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
-	cs.reg.Open("pane-1", tile.Id, 80, 24)
+	cs.reg.Open(tile.Id, 80, 24)
 	select {
 	case e := <-cs.exit:
-		if e.PaneID != "pane-1" {
-			t.Fatalf("exit = %+v, want it addressed to the opening pane", e)
+		if e.TileID != tile.Id {
+			t.Fatalf("exit = %+v, want it addressed to the opened tile", e)
 		}
 		if !strings.Contains(e.Message, "unavailable") {
 			t.Fatalf("exit message = %q; want the driver's reason carried to the user", e.Message)
@@ -237,7 +237,7 @@ func TestShellDoorSurfacesADriverThatCannotOpen(t *testing.T) {
 func TestShellDoorRefusesUnknownTile(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	cs := f.clientStack()
-	cs.reg.Open("pane-1", "nosuch1/9", 80, 24)
+	cs.reg.Open("nosuch1/9", 80, 24)
 	select {
 	case e := <-cs.exit:
 		if e.SessionGone || e.Message == "" {
@@ -423,14 +423,14 @@ func TestShellClientSurfacesAWedgedSocket(t *testing.T) {
 	exit := make(chan shellstream.Exit, 4)
 	reg := shellstream.New(shellws.Dialer(shellws.Options{Origin: deaf.URL, HTTPClient: deaf.Client(), WriteTimeout: bound}),
 		func(string, []byte) {}, func(e shellstream.Exit) { exit <- e })
-	reg.Open("pane-1", "wedged1/9", 80, 24)
-	t.Cleanup(func() { reg.Close("pane-1") })
+	reg.Open("wedged1/9", 80, 24)
+	t.Cleanup(func() { reg.Close("wedged1/9") })
 
 	// More keystrokes than any socket buffer holds, at a far end that reads
 	// none of them.
 	blob := bytes.Repeat([]byte("x"), 1<<20)
 	for i := 0; i < 4; i++ {
-		reg.Write("pane-1", blob)
+		reg.Write("wedged1/9", blob)
 	}
 
 	select {
@@ -470,9 +470,9 @@ func TestTheShellDoorTracesAnAttachment(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 6, 6)
 	cs := f.clientStack()
-	cs.reg.Open("pane-trace", tile.Id, 20, 10)
+	cs.reg.Open(tile.Id, 20, 10)
 	waitSession(t, f.fake)
-	cs.reg.Close("pane-trace")
+	cs.reg.Close(tile.Id)
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
