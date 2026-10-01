@@ -17,8 +17,14 @@ function spyActions() {
       (calls[name] ??= []).push(args[0]);
     };
   const actions: ContextActions = {
-    copyText: rec('copyText'),
-    copyLink: rec('copyLink'),
+    copyText: (t: string) => {
+      rec('copyText')(t);
+      return Promise.resolve();
+    },
+    copyLink: (u: string) => {
+      rec('copyLink')(u);
+      return Promise.resolve();
+    },
     openLink: rec('openLink'),
     cut: rec('cut'),
     paste: rec('paste'),
@@ -27,6 +33,7 @@ function spyActions() {
     reload: rec('reload'),
     freeze: rec('freeze'),
     chose: rec('chose'),
+    failed: rec('failed'),
   };
   return { actions, calls };
 }
@@ -72,6 +79,17 @@ test('a link yields Open Link + Copy Link Address that copy the href', () => {
   const open = t.find((i) => i.label === 'Open Link');
   open!.click!();
   assert.deepEqual(calls.openLink, [url]);
+});
+
+// The clipboard write settles after the menu has closed, so a refused copy
+// has nowhere to go but the failed action.
+test('a copy the clipboard refuses is reported with its row', async () => {
+  const { actions, calls } = spyActions();
+  actions.copyLink = () => Promise.reject(new Error('clipboard busy'));
+  const t = urlContextMenuTemplate(baseParams({ linkURL: 'https://example.com/' }), actions);
+  t.find((i) => i.label === 'Copy Link Address')!.click!();
+  await new Promise<void>((res) => setImmediate(res));
+  assert.deepEqual(calls.failed, ['Copy Link Address failed: Error: clipboard busy']);
 });
 
 // No link means no link items, so the menu never shows a dead "Copy Link

@@ -186,6 +186,7 @@ export class WebviewRegistry {
         reload: () => wc.reload(),
         freeze: () => this.cb.onFreezeURL?.({ paneId }),
         chose: (label) => trace(menuChose(URL_MENU, label, paneId)),
+        failed: (message) => this.reportErr(`pane ${paneId}: ${message}`),
       },
     );
     const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
