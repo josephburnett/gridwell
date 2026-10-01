@@ -62,8 +62,8 @@ func TestDecide(t *testing.T) {
 		},
 		{
 			"a declared menu entry is config-owned, so it is read-only",
-			Input{AtAnchor: true, Door: door.Entry, DoorName: "hey · Feed"},
-			Verdict{Label: "hey · Feed", Muted: true},
+			Input{AtAnchor: true, Door: door.Entry, DoorName: "Feed (hey)"},
+			Verdict{Label: "Feed (hey)", Muted: true},
 		},
 		{
 			"a declared root is config-owned too",
@@ -126,9 +126,9 @@ func TestDecideDescentBeatsLevel(t *testing.T) {
 // A pane standing on the level's own grid has no path tail, so the door
 // answers even where a stale parent fact is set.
 func TestDecideAnchorBeatsParent(t *testing.T) {
-	in := Input{AtAnchor: true, Door: door.Entry, DoorName: "hey · Feed",
+	in := Input{AtAnchor: true, Door: door.Entry, DoorName: "Feed (hey)",
 		Parent: true, ParentName: "projects"}
-	if got := Decide(in); got != (Verdict{Label: "hey · Feed", Muted: true}) {
+	if got := Decide(in); got != (Verdict{Label: "Feed (hey)", Muted: true}) {
 		t.Fatalf("Decide(anchor over parent) = %+v, want the door's label", got)
 	}
 }

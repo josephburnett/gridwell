@@ -164,8 +164,8 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 }
 
 // barTitleGeom is the centered current-pane title. Render, hit-test and the
-// rename input all read this one rect.
-func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bool) {
+// rename input all read this one rect; textX is where render starts the text.
+func (a *App) barTitleGeom() (x, w, textX float64, label string, editable, muted, ok bool) {
 	p := a.tree.FocusedPane()
 	if p == nil {
 		return
@@ -180,17 +180,17 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 		return
 	}
 	a.cctx.Set("font", barFont)
-	textW := a.cctx.Call("measureText", label).Get("width").Float() + 24
+	textW := a.cctx.Call("measureText", label).Get("width").Float()
 	segs := a.bottomBarSegments(a.navChain())
 	crumbsEnd := 0.0
 	if n := len(segs); n > 0 {
 		crumbsEnd = segs[n-1].X + segs[n-1].W
 	}
-	tx, tw, spanOK := wsbar.TitleSpan(crumbsEnd, bw, textW)
+	tx, tw, ttx, spanOK := wsbar.TitleSpan(crumbsEnd, bw, textW)
 	if !spanOK {
 		return
 	}
-	x, w, ok = bx+tx, tw, true
+	x, w, textX, ok = bx+tx, tw, bx+ttx, true
 	return
 }
 
@@ -200,7 +200,7 @@ func (a *App) drawBarTitle(top float64) {
 	if a.overlays.renameEditing {
 		return
 	}
-	x, w, label, _, muted, ok := a.barTitleGeom()
+	x, w, textX, label, _, muted, ok := a.barTitleGeom()
 	if !ok {
 		return
 	}
@@ -210,8 +210,8 @@ func (a *App) drawBarTitle(top float64) {
 		color = a.pal.Muted
 	}
 	withClip(c, x, top, w, wsbar.RowH, func() {
-		drawLabel(c, label, x+w/2, top+wsbar.RowH/2, labelOpts{
-			font: barFont, fill: color, align: "center", baseline: "middle",
+		drawLabel(c, label, textX, top+wsbar.RowH/2, labelOpts{
+			font: barFont, fill: color, baseline: "middle",
 		})
 	})
 }
@@ -408,7 +408,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	if in.Zone == wsbar.ZoneBar {
 		in.Chain = a.navChain()
 		in.Segments = a.bottomBarSegments(in.Chain)
-		if tx, tw, _, _, _, tOK := a.barTitleGeom(); tOK {
+		if tx, tw, _, _, _, _, tOK := a.barTitleGeom(); tOK {
 			in.TitleX, in.TitleW, in.TitleOK = tx-bx, tw, true
 		}
 		if p != nil {
@@ -524,7 +524,7 @@ func (a *App) openRenameInput() {
 	if v.Rename == bartitle.RenameNone {
 		return
 	}
-	x, w, _, _, _, geomOK := a.barTitleGeom()
+	x, w, _, _, _, _, geomOK := a.barTitleGeom()
 	if !geomOK {
 		return
 	}

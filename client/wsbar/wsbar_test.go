@@ -202,3 +202,30 @@ func TestBandRefusesAWindowTooShortToHoldIt(t *testing.T) {
 		t.Fatalf("Band(10, 40) = %v, %v; want 0, false", paneH, ok)
 	}
 }
+
+// A title too wide for its span is clipped from the right, so the start of
+// the name, the most specific part (door.EntryName), stays on screen.
+func TestTitleSpanClipsFromTheRight(t *testing.T) {
+	x, w, textX, ok := TitleSpan(100, 400, 1000)
+	if !ok {
+		t.Fatal("span refused with room for one")
+	}
+	if textX != x+TitleInset {
+		t.Errorf("clipped title starts at %v, want the span's start %v + inset", textX, x)
+	}
+	if x+w > 400-SlotW {
+		t.Errorf("span ends at %v, past the circle slot at %v", x+w, 400-SlotW)
+	}
+}
+
+// A title that fits is centered in its span.
+func TestTitleSpanCentersAFit(t *testing.T) {
+	const textW = 60.0
+	x, w, textX, ok := TitleSpan(100, 900, textW)
+	if !ok {
+		t.Fatal("span refused with room for one")
+	}
+	if left, right := textX-x, x+w-(textX+textW); left != right {
+		t.Errorf("fitted title margins %v / %v, want equal", left, right)
+	}
+}

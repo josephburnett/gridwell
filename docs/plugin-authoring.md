@@ -66,7 +66,7 @@ cannot arrange.
 
 An entry's `label` is optional. Leave it empty when you serve one collection
 and the swatch reads as the configured instance; set it and the swatch reads
-"<instance> · <label>". Declaring no entries at all is legal: your plugin is
+"<label> (<instance>)". Declaring no entries at all is legal: your plugin is
 listed, contributes nothing to the menu, and is healthy — not an error.
 
 `root_context` is RETIRED. Leave it empty. The node reads it in one case, so

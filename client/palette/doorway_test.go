@@ -32,7 +32,7 @@ func TestDoorwaysTable(t *testing.T) {
 		name: "a node's home is a place: its own swatch, then its entries",
 		rows: []*gridwellv1.PluginInfo{{Uuid: "n1", Label: "home", RootGridId: "n1/1",
 			MenuEntries: []*gridwellv1.MenuEntry{entry("trash", "trash", "n1/9")}}},
-		want: []string{"home", "home · trash"},
+		want: []string{"home", "trash (home)"},
 	}, {
 		name: "a plugin with three collections is three swatches and no row",
 		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Kind: "mail", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{
@@ -40,7 +40,7 @@ func TestDoorwaysTable(t *testing.T) {
 			entry("feed", "Feed", "hey/2"),
 			entry("paper_trail", "Paper Trail", "hey/3"),
 		}}},
-		want: []string{"hey · Imbox", "hey · Feed", "hey · Paper Trail"},
+		want: []string{"Imbox (hey)", "Feed (hey)", "Paper Trail (hey)"},
 	}, {
 		name: "a single-collection plugin declares no entry label and reads as itself",
 		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Kind: "fs", Label: "files",
@@ -67,7 +67,7 @@ func TestDoorwaysTable(t *testing.T) {
 		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{
 			entry("imbox", "Imbox", "hey/1"), entry("feed", "Feed", ""),
 		}}},
-		want: []string{"hey · Imbox"},
+		want: []string{"Imbox (hey)"},
 	}, {
 		name: "rows keep handshake order, each row's entries directly after it",
 		rows: []*gridwellv1.PluginInfo{
@@ -76,7 +76,7 @@ func TestDoorwaysTable(t *testing.T) {
 			{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{entry("feed", "Feed", "hey/2")}},
 			rpc.ConnectionRow("n1/rtb", "rtb", "n1/rtb/1", "", rpc.Framing{}),
 		},
-		want: []string{"home", "home · trash", "hey · Feed", "rtb"},
+		want: []string{"home", "trash (home)", "Feed (hey)", "rtb"},
 	}}
 	for _, c := range cases {
 		got := names(Doorways(c.rows))

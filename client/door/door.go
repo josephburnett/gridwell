@@ -10,12 +10,10 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// EntrySeparator joins a menu row's name to one of its entries'.
-const EntrySeparator = " · "
-
 // EntryName is what a row's menu entry is called everywhere it is shown. An
-// entry stands alone with no plugin row above it, so it says whose it is:
-// "hey · Feed". Every entry of every row is named this way.
+// entry stands alone with no plugin row above it, so it says whose it is,
+// most specific first so a clipped name still tells entries apart:
+// "Feed (hey)". Every entry of every row is named this way.
 func EntryName(row, entry string) string {
 	switch {
 	case entry == "":
@@ -23,7 +21,7 @@ func EntryName(row, entry string) string {
 	case row == "":
 		return entry
 	}
-	return row + EntrySeparator + entry
+	return entry + " (" + row + ")"
 }
 
 // EntryPlugin shapes one of a row's MenuEntries as a pseudo-row, so every

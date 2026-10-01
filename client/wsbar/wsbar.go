@@ -118,20 +118,23 @@ const titlePad = 8.0
 
 const minTitleW = 24.0
 
+// TitleInset is the room on each side of the title's text inside its span.
+const TitleInset = 12.0
+
 // TitleSpan centers the title between the crumbs' end and the circle slot, so
-// growing crumbs cannot crowd it one-sidedly. x is relative to the band's left
-// edge and ok=false when less than minTitleW remains.
-func TitleSpan(crumbsEnd, width, textW float64) (x, w float64, ok bool) {
+// growing crumbs cannot crowd it one-sidedly. textW is the text's own width;
+// textX is where the text starts, so one too wide is clipped from the right
+// and keeps its most specific part. x and textX are relative to the band's
+// left edge and ok=false when less than minTitleW remains.
+func TitleSpan(crumbsEnd, width, textW float64) (x, w, textX float64, ok bool) {
 	left := crumbsEnd + titlePad
 	right := width - SlotW - titlePad
 	if right-left < minTitleW {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
-	w = textW
-	if w > right-left {
-		w = right - left
-	}
-	return left + (right-left-w)/2, w, true
+	w = min(textW+2*TitleInset, right-left)
+	x = left + (right-left-w)/2
+	return x, w, x + TitleInset, true
 }
 
 // At takes x relative to the bar's left edge.

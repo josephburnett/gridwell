@@ -221,7 +221,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     )
     // The far node's own menu, declared entries included: its home brings its
     // own trashcan, so a delete over there files over there.
-    .toBe('home,home · trash');
+    .toBe('home,trash (home)');
 
   // ── A primitive from the remote menu creates on the remote node ──
   const inside = await gw.focused();
@@ -428,7 +428,7 @@ test('a menu read the network swallows does not latch the remote menu empty', as
     )
     // The same roster the spec above pins, asked for here after a swallowed
     // read rather than on the first try.
-    .toBe('home,home · trash');
+    .toBe('home,trash (home)');
   expect(sawNotice, 'the swallowed read surfaced rather than disappearing').toBe(true);
 });
 
