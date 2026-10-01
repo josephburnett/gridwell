@@ -126,19 +126,21 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 }
 
 // followScope follows the scope until a stream ends, re-opening as it moves.
-// A stream replaces the one before only once it is open, and then each context
-// of its scope is announced: a change the plugin sent between the client's
-// listing and the open, or on the old stream as it closed, is otherwise
-// announced by nothing. A context the scope dropped is shown by no one, so it
-// is not announced.
+// A stream replaces the one before only once it is open, so a context in both
+// scopes is watched throughout; each context the open adds is then announced,
+// since a change between the client's listing and the open is otherwise
+// announced by nothing. An attempt's first open adds its whole scope, which
+// is what catches up after a drop. A context the scope dropped is shown by no
+// one, so it is not announced.
 func (a *Adapter) followScope(ctx context.Context, established func()) error {
 	var cur *watchStream
+	var watched []string
 	defer func() { cur.stop() }()
 	for {
 		scope, moved := a.scopeNow()
 		if len(scope) == 0 {
 			cur.stop()
-			cur = nil
+			cur, watched = nil, nil
 			select {
 			case <-ctx.Done():
 				return nil
@@ -162,8 +164,11 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 		cur = next
 		established()
 		for _, c := range scope {
-			a.emitGridChanged(gridAddr(c))
+			if !slices.Contains(watched, c) {
+				a.emitGridChanged(gridAddr(c))
+			}
 		}
+		watched = scope
 		close(cur.ack)
 		select {
 		case <-cur.done:

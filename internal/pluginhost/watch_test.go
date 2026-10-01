@@ -2,6 +2,7 @@ package pluginhost
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -207,8 +208,8 @@ func TestWatchDeclaredButUnimplementedIsHealthDown(t *testing.T) {
 	}
 }
 
-// A stream that ends is re-opened, quietly, and every open, the first
-// included, announces each context of its scope, so a client refetches what it
+// A stream that ends is re-opened, quietly, and the re-open, like the first
+// open, announces each context of its scope, so a client refetches what it
 // shows and nothing sent while no stream was open is lost. A context with a row
 // that no one shows is not announced.
 func TestWatchEveryOpenAnnouncesItsScope(t *testing.T) {
@@ -261,9 +262,9 @@ func awaitScope(t *testing.T, scopes <-chan []string) []string {
 }
 
 // A scope change loses no change: the old stream closes only once the new one
-// is open, and then each context of the new scope is announced, so a change
-// during the swap reaches the client whether its context was shown before and
-// after or only now. A context no longer shown is not announced.
+// is open, so a change to a context in both scopes during the swap arrives on
+// a stream and the node announces nothing for it; a context the new scope adds
+// is announced once, and one it drops not at all.
 func TestWatchScopeChangeLosesNoChange(t *testing.T) {
 	sends := make(chan func(*pluginv1.Change) error, 1)
 	p := &watchPlugin{
@@ -284,7 +285,7 @@ func TestWatchScopeChangeLosesNoChange(t *testing.T) {
 		},
 	}
 	a, seen := watchingNothing(t, p, nil)
-	for _, c := range []string{"inner", "gone"} {
+	for _, c := range []string{"inner", "gone", "more"} {
 		if _, err := a.mem.ContextID(c); err != nil {
 			t.Fatal(err)
 		}
@@ -296,20 +297,27 @@ func TestWatchScopeChangeLosesNoChange(t *testing.T) {
 	for range 2 { // the first open's announcement, so the swap starts from an open stream
 		await(t, seen)
 	}
-	show(t, a, "inner", "all")
-	if got := awaitScope(t, p.scopes); !slices.Equal(got, []string{"all", "inner"}) {
-		t.Fatalf("re-opened stream's scope = %v, want [all inner]", got)
+	swap := func(want map[string]int, contexts ...string) {
+		t.Helper()
+		show(t, a, contexts...)
+		if got := awaitScope(t, p.scopes); !slices.Equal(got, contexts) {
+			t.Fatalf("re-opened stream's scope = %v, want %v", got, contexts)
+		}
+		got := map[string]int{}
+		for range want {
+			got[await(t, seen).GetGridChanged().GetGridId()]++
+		}
+		for _, ev := range collect(seen) {
+			got[ev.GetGridChanged().GetGridId()]++
+		}
+		if !maps.Equal(got, want) {
+			t.Errorf("showing %v told the client %v, want %v", contexts, got, want)
+		}
 	}
-	got := map[string]int{}
-	for got[gridAddr("all")] == 0 || got[gridAddr("inner")] == 0 {
-		got[await(t, seen).GetGridChanged().GetGridId()]++
-	}
-	for _, ev := range collect(seen) {
-		got[ev.GetGridChanged().GetGridId()]++
-	}
-	if got[gridAddr("gone")] != 0 {
-		t.Errorf("a scope change announced %v, want nothing for %q, which it dropped", got, gridAddr("gone"))
-	}
+	// The plugin's change to "all" during the swap, and "inner" added.
+	swap(map[string]int{gridAddr("all"): 1, gridAddr("inner"): 1}, "all", "inner")
+	// No change at all: only "more", which is added.
+	swap(map[string]int{gridAddr("more"): 1}, "all", "inner", "more")
 }
 
 // While nothing of the plugin's is shown no stream is open: none before the

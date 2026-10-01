@@ -111,8 +111,9 @@ judge cheap. A feed that is account-wide rather than per context (a mailbox,
 a to-do list) may ignore the scope and watch as it always would. Send the header
 (`stream.SendHeader`) as soon as you accept the stream: that is the moment
 the node counts it open, and without it the moment is your first change.
-Once a stream is open the node tells the clients to list each context of
-its scope again, because a change sent into no stream reaches nobody.
+Once a stream is open the node tells the clients to list again each context
+it adds, the whole scope after a drop, because a change sent into no stream
+reaches nobody.
 Send a change when a listing you would give now differs from the last one
 you could have given:
 

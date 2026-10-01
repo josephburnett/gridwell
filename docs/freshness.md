@@ -44,8 +44,9 @@ grid open on screen refetches; a coded refusal is the same health fact
 (`Adapter.noteWatch`), cleared when a re-opened stream is open. Every open,
 first, after a drop, or for a moved scope, is one path
 (`Adapter.followScope`): the new stream replaces the old only once it is
-open, and then each context of its scope is announced, since nothing
-announced a change sent between streams. Only a
+open, so a context in both is watched throughout, and then each context it
+adds is announced (the whole scope after a drop), since nothing announced a
+change sent while no stream watched it. Only a
 plugin whose `InfoResponse.watch` declares it is asked; one that declares it
 and answers Unimplemented has a broken declaration, and that is health too.
 
