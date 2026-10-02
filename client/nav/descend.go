@@ -256,27 +256,42 @@ func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, 
 }
 
 // autoLiveOnDescent applies shellconn.DecideAutoLive to the just-descended
-// tile.
-func (m *Machine) autoLiveOnDescent(paneID string, tile *gridwellv1.Tile, w World, pl *planner) {
-	// The shell facts key by session, so a clone reads its source's verdict
-	// and a link its target's.
-	key := rpc.ShellSession(tile)
-	switch shellconn.DecideAutoLive(
+// tile; target is a link's target row once read, nil before.
+func (m *Machine) autoLiveOnDescent(paneID string, tile, target *gridwellv1.Tile, w World, pl *planner) {
+	// The shell facts key by session (shellconn.SessionKey).
+	key, resolved := shellconn.SessionKey(tile, target)
+	verdict := shellconn.DecideAutoLive(
 		rpc.DescentOf(tile), w.Caps.LiveURL, w.Caps.Shells,
 		tile.PreviewBlobId != 0, w.ShellAliveKnown[key], w.ShellAlive[key],
-		tile.UrlFrozen) {
+		tile.UrlFrozen)
+	if !resolved && (verdict == shellconn.AutoLiveShell || verdict == shellconn.AutoLiveProbeShell) {
+		// A link's session is its target's, read by the path a url link's
+		// target is, and only when a shell would open.
+		tok := m.mint(cont{
+			Guard:  Guard{Kind: GuardDescendedIn, PaneID: paneID, TileID: tile.Id},
+			Step:   stepShellLinkTarget,
+			PaneID: paneID,
+			TileID: tile.Id,
+			Tile:   tile,
+		})
+		pl.add(Effect{Kind: EffAwait, Token: tok,
+			Request: Request{Kind: RequestGetTile, ID: rpc.ContentID(tile)}})
+		return
+	}
+	switch verdict {
 	case shellconn.AutoLiveURL:
 		pl.add(Effect{Kind: EffOpenStream, PaneID: paneID, TileID: tile.Id,
 			Stream: StreamURL})
 	case shellconn.AutoLiveShell:
 		pl.add(Effect{Kind: EffOpenStream, PaneID: paneID, TileID: tile.Id,
-			Stream: StreamShell})
+			Stream: StreamShell, Key: key})
 	case shellconn.AutoLiveProbeShell:
 		tok := m.mint(cont{
 			Guard:  Guard{Kind: GuardDescendedIn, PaneID: paneID, TileID: tile.Id},
 			Step:   stepProbedShell,
 			PaneID: paneID,
 			TileID: tile.Id,
+			Key:    key,
 		})
 		pl.add(Effect{Kind: EffAwait, Token: tok,
 			Request: Request{Kind: RequestProbeShell, ID: rpc.ContentID(tile), Key: key}})

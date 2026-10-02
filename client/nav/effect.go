@@ -47,7 +47,7 @@ const (
 	EffStartTransition
 
 	EffCloseStream // PaneID, Streams, Freeze, FreezeOnto
-	EffOpenStream  // PaneID, TileID, Stream
+	EffOpenStream  // PaneID, TileID, Stream, and for a shell Key
 	// EffPlaceURLView re-parents a live url view onto a pane: PaneID, TileID,
 	// Tile (by value: a just-created tile is in no cached grid).
 	EffPlaceURLView
@@ -135,8 +135,10 @@ type Effect struct {
 	Expand      bool
 
 	// Surface.
-	Streams    StreamKind
-	Stream     StreamKind
+	Streams StreamKind
+	Stream  StreamKind
+	// Key is the session an opened shell attaches (shellconn.SessionKey).
+	Key        string
 	Freeze     bool
 	FreezeOnto *FreezeTarget
 

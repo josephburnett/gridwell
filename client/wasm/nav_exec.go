@@ -242,7 +242,7 @@ func (a *App) navOpenStream(e nav.Effect) {
 	case nav.StreamURL:
 		a.openURLStream(p, e.TileID)
 	case nav.StreamShell:
-		a.openShellStream(p, e.TileID)
+		a.openShellStream(p, e.TileID, e.Key)
 	}
 }
 

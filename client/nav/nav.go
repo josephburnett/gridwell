@@ -70,6 +70,7 @@ type cont struct {
 	PaneID string
 	TileID string
 	Tile   *gridwellv1.Tile
+	Key    string // the shell session a probe answers for
 	Stack  pane.Stack
 	// Restore continuations leave PaneID empty; see awaitGrid.
 	Restore *restoreData
@@ -94,6 +95,9 @@ const (
 	stepLevelBody // decodes a level's layout blob
 	stepLevelRecentre
 	stepLinkTarget // places a live url view on a link's target row
+	// stepShellLinkTarget re-decides a shell link's descent keyed on its
+	// target's session.
+	stepShellLinkTarget
 	// stepRetireVisit deletes an ended ephemeral visit once the node holds a
 	// layout that no longer names it: deleted first, a pane-tile preview of
 	// the layout would resolve a gone tile.
@@ -227,8 +231,19 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		// A dead shell stays frozen; the refresh affordance is the retry.
 		if r.Alive {
 			pl.add(Effect{Kind: EffOpenStream, PaneID: c.PaneID, TileID: c.TileID,
-				Stream: StreamShell})
+				Stream: StreamShell, Key: c.Key})
 		}
+	case stepShellLinkTarget:
+		// A dead link draws dead and opens nothing, frozen where it stands.
+		if r.Dead {
+			break
+		}
+		if !r.OK || r.Tile == nil {
+			pl.add(Effect{Kind: EffReport, Severity: errsurface.Error,
+				Source: "rpc:GetTile", Message: "GetTile failed: " + r.Err})
+			break
+		}
+		m.autoLiveOnDescent(c.PaneID, c.Tile, r.Tile, w, &pl)
 	case stepReEngage:
 		// A leaf whose reference no longer resolves stays frozen.
 		if !r.OK || r.Tile == nil {
@@ -237,14 +252,14 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		if m.healStale(c.PaneID, r.Tile, w, &pl) {
 			break
 		}
-		m.autoLiveOnDescent(c.PaneID, r.Tile, w, &pl)
+		m.autoLiveOnDescent(c.PaneID, r.Tile, nil, w, &pl)
 	case stepHealed:
 		// A tile from a plugin without Search keeps the place it was restored
 		// with; the engagement happens either way.
 		if r.OK {
 			landHealed(c.PaneID, c.Tile, r.Wells, &pl)
 		}
-		m.autoLiveOnDescent(c.PaneID, c.Tile, w, &pl)
+		m.autoLiveOnDescent(c.PaneID, c.Tile, nil, w, &pl)
 	case stepRestoreRoot:
 		return m.restoreRoot(c.Restore, w, &pl)
 	case stepRestoreWalk:
@@ -298,7 +313,7 @@ func (m *Machine) Land(tok Token, w World) Plan {
 		pl.install(c.PaneID, c.Stack, nil)
 		pl.add(Effect{Kind: EffScaleContent, PaneID: c.PaneID})
 		pl.add(Effect{Kind: EffRefreshOverlay})
-		m.autoLiveOnDescent(c.PaneID, c.Tile, w, &pl)
+		m.autoLiveOnDescent(c.PaneID, c.Tile, nil, w, &pl)
 		// Not at gesture time: the content frame is not yet pushed then.
 		pl.add(Effect{Kind: EffScheduleURLUpdate})
 	case stepAscendLand:

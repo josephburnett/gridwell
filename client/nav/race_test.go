@@ -207,3 +207,57 @@ func TestShellProbeOfACloneKeysItsSession(t *testing.T) {
 		t.Fatalf("await = %+v, want a probe of s2 cached under the session s1", a.Request)
 	}
 }
+
+// A link keys on the session its target names, so a link to a clone shares
+// the clone's source's session: the target row is read first, and the probe
+// and the open both carry that session.
+func TestShellLinkKeysItsTargetSession(t *testing.T) {
+	link := &gridwellv1.Tile{Id: "l1", Kind: rpc.KindShell, GridId: "g1", W: 3, H: 2,
+		PreviewBlobId: 7, LinkTargetId: "s2"}
+	clone := &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 3, H: 2,
+		PreviewBlobId: 7, ShellSession: "s1"}
+	land := func(t *testing.T, m *Machine) Effect {
+		t.Helper()
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Door = &DoorWorld{IsLink: true}
+		tr := only(t, m.Do(descendGesture("pane1", link), w), EffStartTransition)
+		a := only(t, m.Land(tr.Land, w), EffAwait)
+		if a.Request.Kind != RequestGetTile || a.Request.ID != "s2" {
+			t.Fatalf("await = %+v, want the link's target s2 read first", a.Request)
+		}
+		return a
+	}
+	in := baseWorld(contentPane("pane1", "l1"))
+
+	t.Run("probe then open", func(t *testing.T) {
+		m := New()
+		a := land(t, m)
+		p := only(t, m.Resume(a.Token, Result{OK: true, Tile: clone}, in), EffAwait)
+		if p.Request.Kind != RequestProbeShell || p.Request.ID != "s2" || p.Request.Key != "s1" {
+			t.Fatalf("await = %+v, want a probe of s2 cached under the session s1", p.Request)
+		}
+		o := only(t, m.Resume(p.Token, Result{OK: true, Alive: true}, in), EffOpenStream)
+		if o.TileID != "l1" || o.Key != "s1" {
+			t.Fatalf("open = %+v, want l1 attached under the session s1", o)
+		}
+	})
+
+	t.Run("known alive opens at once", func(t *testing.T) {
+		m := New()
+		a := land(t, m)
+		alive := baseWorld(contentPane("pane1", "l1"))
+		alive.ShellAlive["s1"], alive.ShellAliveKnown["s1"] = true, true
+		o := only(t, m.Resume(a.Token, Result{OK: true, Tile: clone}, alive), EffOpenStream)
+		if o.Key != "s1" {
+			t.Fatalf("open = %+v, want the session s1", o)
+		}
+	})
+
+	t.Run("a dead target opens nothing", func(t *testing.T) {
+		m := New()
+		a := land(t, m)
+		if plan := m.Resume(a.Token, Result{Dead: true}, in); len(plan.Effects) != 0 {
+			t.Fatalf("a dead link planned %v", kinds(plan))
+		}
+	})
+}

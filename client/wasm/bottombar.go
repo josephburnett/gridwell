@@ -292,7 +292,10 @@ func (a *App) barSlotClick(button int) {
 		// tile's kind, which the pane already knows.
 		if t, ok := a.descendedGridTile(p); ok {
 			if a.isShellDescent(p) {
-				a.openShellStream(p, t.Id)
+				// The verdict that drew this glyph resolved the key.
+				if key, ok := a.shellKey(t, a.findTileByID); ok {
+					a.openShellStream(p, t.Id, key)
+				}
 			} else {
 				a.openURLStream(p, t.Id)
 			}

@@ -401,7 +401,9 @@ holds one attached client per session, so a second tile going live evicts the
 first exactly as a second pane does. A session no row naming it has a face of
 was never started and is created by whichever tile opens it first; a started
 one that is gone is refused, never recreated behind a face. It dies with the
-last row naming it, a trashed one included. Sessions live on the node that
+last row naming it, a trashed one included. A link names its target's
+session, so the client keys every shell fact by `shellconn.SessionKey`, which
+reads the target row first. Sessions live on the node that
 started them, so a shell cloned across namespaces copies as a link.
 
 **Takeover.** One live surface per key: a content tile, or for a shell the

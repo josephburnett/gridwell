@@ -99,9 +99,12 @@ func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	if tile == nil {
 		return false
 	}
-	// The verdict keys by session: a clone, its source and a link to either
-	// are one shell seen from several grids.
-	key := rpc.ShellSession(tile)
+	// Until a link's target is read there is no session to ask about, and the
+	// read findTileByID kicks redraws.
+	key, ok := a.shellKey(tile, a.findTileByID)
+	if !ok {
+		return false
+	}
 	alive, known := a.shellAlive[key]
 	v := shellconn.DecideShellRefreshVisible(
 		tile.Kind == rpc.KindShell, tile.PreviewBlobId != 0, known, alive)
@@ -156,12 +159,23 @@ func (a *App) setShellAlive(key string, alive bool) {
 	}
 }
 
+// shellKey is shellconn.SessionKey with a link's target read through lookup.
+func (a *App) shellKey(row *gridwellv1.Tile, lookup func(string) *gridwellv1.Tile) (string, bool) {
+	var target *gridwellv1.Tile
+	if row.LinkTargetId != "" {
+		target = lookup(row.LinkTargetId)
+	}
+	return shellconn.SessionKey(row, target)
+}
+
 // forgetShellAlive drops the cached verdict for the session tileID names, so
 // whatever still names it probes again.
 func (a *App) forgetShellAlive(tileID string) {
 	key := tileID
 	if t := a.cachedTileByID(tileID); t != nil {
-		key = rpc.ShellSession(t)
+		if k, ok := a.shellKey(t, a.cachedTileByID); ok {
+			key = k
+		}
 	}
 	delete(a.shellAlive, key)
 	delete(a.shellAliveProbing, key)
@@ -169,13 +183,12 @@ func (a *App) forgetShellAlive(tileID string) {
 
 // openShellStream puts the tile's shell live in pane p: keep, move another
 // pane's terminal, or mount xterm.js on a new PTY, closing any other tile's
-// terminal on the same session first. disable_shells refuses.
-func (a *App) openShellStream(p *pane.Pane, tileID string) {
+// terminal on the same session first. key is the session tileID resolves to
+// (shellconn.SessionKey). disable_shells refuses.
+func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 	frozen := false
-	key := a.contentKey(tileID)
 	if t := a.findTileByID(tileID); t != nil {
 		frozen = t.UrlFrozen
-		key = rpc.ShellSession(t)
 	}
 	// Attaching clears the standing freeze, as the url side does. A shell link
 	// never follows its target, so the link row holds and clears the freeze.
