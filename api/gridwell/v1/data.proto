@@ -719,6 +719,10 @@ message EventPluginHealth {
   string plugin_uuid = 1;
   bool healthy       = 2;
   string detail       = 3;
+  // Why the source cannot tell the node of its changes, empty while it can.
+  // It is not health: the listings still answer live, so it rides a healthy
+  // event too, and a change of it alone is a transition.
+  string live_updates_off = 4;
 }
 
 // Event carries one of the change kinds. The variant tag is the discriminator.

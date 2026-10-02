@@ -5,6 +5,7 @@
 package gwerr
 
 import (
+	"context"
 	"errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -106,8 +107,9 @@ func ClassifyError(err error) ErrorClass {
 }
 
 // IsTransport reports that the far side of a gRPC hop never spoke. Every
-// server-side hop that degrades to a remembered answer keys on this alone,
-// so a coded answer such as NotFound is never served from a cache.
+// server-side hop that degrades to a remembered answer keys on this alone, once
+// IsAbandoned has set aside its own caller's cancel, so a coded answer such as
+// NotFound is never served from a cache.
 // clientsync.Of is the client twin on the same three codes, pinned to this one
 // by TestOfAgreesWithGwerrIsTransport.
 func IsTransport(err error) bool {
@@ -116,4 +118,12 @@ func IsTransport(err error) bool {
 		return true
 	}
 	return false
+}
+
+// IsAbandoned reports that a call failed because its own caller gave up. That
+// says nothing about the far side, neither dark nor answering, so no layer
+// records reachability or evicts on it. Check it before IsTransport, which
+// also counts the Canceled such a call surfaces as.
+func IsAbandoned(ctx context.Context, err error) bool {
+	return err != nil && ctx.Err() != nil
 }

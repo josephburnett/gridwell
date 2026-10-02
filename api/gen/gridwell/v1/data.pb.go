@@ -3309,12 +3309,16 @@ func (x *TileRemoved) GetTileId() string {
 // it, and again on recovery with healthy=true and detail="". Only on a change
 // of state, so a flapping plugin does not spam the client.
 type EventPluginHealth struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginUuid    string                 `protobuf:"bytes,1,opt,name=plugin_uuid,json=pluginUuid,proto3" json:"plugin_uuid,omitempty"`
-	Healthy       bool                   `protobuf:"varint,2,opt,name=healthy,proto3" json:"healthy,omitempty"`
-	Detail        string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PluginUuid string                 `protobuf:"bytes,1,opt,name=plugin_uuid,json=pluginUuid,proto3" json:"plugin_uuid,omitempty"`
+	Healthy    bool                   `protobuf:"varint,2,opt,name=healthy,proto3" json:"healthy,omitempty"`
+	Detail     string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	// Why the source cannot tell the node of its changes, empty while it can.
+	// It is not health: the listings still answer live, so it rides a healthy
+	// event too, and a change of it alone is a transition.
+	LiveUpdatesOff string `protobuf:"bytes,4,opt,name=live_updates_off,json=liveUpdatesOff,proto3" json:"live_updates_off,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *EventPluginHealth) Reset() {
@@ -3364,6 +3368,13 @@ func (x *EventPluginHealth) GetHealthy() bool {
 func (x *EventPluginHealth) GetDetail() string {
 	if x != nil {
 		return x.Detail
+	}
+	return ""
+}
+
+func (x *EventPluginHealth) GetLiveUpdatesOff() string {
+	if x != nil {
+		return x.LiveUpdatesOff
 	}
 	return ""
 }
@@ -3736,12 +3747,13 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"?\n" +
 	"\vTileRemoved\x12\x17\n" +
 	"\agrid_id\x18\x01 \x01(\tR\x06gridId\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\tR\x06tileId\"f\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\"\x90\x01\n" +
 	"\x11EventPluginHealth\x12\x1f\n" +
 	"\vplugin_uuid\x18\x01 \x01(\tR\n" +
 	"pluginUuid\x12\x18\n" +
 	"\ahealthy\x18\x02 \x01(\bR\ahealthy\x12\x16\n" +
-	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xeb\x02\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12(\n" +
+	"\x10live_updates_off\x18\x04 \x01(\tR\x0eliveUpdatesOff\"\xeb\x02\n" +
 	"\x05Event\x12=\n" +
 	"\fgrid_changed\x18\x01 \x01(\v2\x18.gridwell.v1.GridChangedH\x00R\vgridChanged\x12=\n" +
 	"\ftile_changed\x18\x02 \x01(\v2\x18.gridwell.v1.TileChangedH\x00R\vtileChanged\x12=\n" +

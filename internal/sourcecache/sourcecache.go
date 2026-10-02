@@ -179,19 +179,23 @@ func (c *Layer) isDark(source string) bool {
 
 // noteReach records one pass-through outcome as this layer's reachability of
 // the source the call named. A coded refusal is an answer, so only a transport
-// failure is darkness. It announces, because nobody else watched the call.
-func (c *Layer) noteReach(err error, source string, grid func() string) {
+// failure is darkness, and an abandoned call is nothing. It announces, because
+// nobody else watched the call.
+func (c *Layer) noteReach(ctx context.Context, err error, source string, grid func() string) {
+	if gwerr.IsAbandoned(ctx, err) {
+		return
+	}
 	c.setDark(source, err != nil && gwerr.IsTransport(err), true, grid)
 }
 
 // noteReachGrid and noteReachTile are noteReach for the two shapes of call.
 // The tile's grid is looked up only on the transition, hence the closure.
-func (c *Layer) noteReachGrid(err error, gridID string) {
-	c.noteReach(err, sourceOf(gridID), func() string { return gridID })
+func (c *Layer) noteReachGrid(ctx context.Context, err error, gridID string) {
+	c.noteReach(ctx, err, sourceOf(gridID), func() string { return gridID })
 }
 
 func (c *Layer) noteReachTile(ctx context.Context, err error, tileID string) {
-	c.noteReach(err, sourceOf(tileID), func() string {
+	c.noteReach(ctx, err, sourceOf(tileID), func() string {
 		var gridID string
 		if qerr := c.db.QueryRowContext(ctx, `SELECT grid_id FROM tiles WHERE id = ?`, tileID).Scan(&gridID); qerr != nil {
 			return "" // nothing remembered names this tile: no grid to re-read
@@ -343,7 +347,7 @@ func now() int64 { return time.Now().Unix() }
 // doorway answered with no framing keeps the remembered one (keepFraming).
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	resp, err := c.Namespace.Handshake(ctx, in)
-	c.noteReach(err, sourceOfNS(in.GetNamespace()), nil)
+	c.noteReach(ctx, err, sourceOfNS(in.GetNamespace()), nil)
 	if err == nil {
 		if old, ok := c.loadPluginList(ctx, in.GetNamespace()); ok {
 			keepFraming(resp, old)
@@ -423,7 +427,7 @@ func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 // answered by the rows it is warming.
 func (c *Layer) getGridLive(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {
 	resp, err := c.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: gridID})
-	c.noteReachGrid(err, gridID)
+	c.noteReachGrid(ctx, err, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -458,10 +462,9 @@ func (c *Layer) revalidateGrid(gridID string) {
 			if !hit || !gridRespEqual(old, resp) {
 				c.emitGridChanged(gridID)
 			}
-		case err != nil && !gwerr.IsTransport(err):
+		case !gwerr.IsAbandoned(ctx, err) && !gwerr.IsTransport(err):
 			// An answered error is an answer: the remembered grid must not
-			// outlive the source's verdict. A canceled ctx reads as transport
-			// and evicts nothing.
+			// outlive the source's verdict.
 			c.evictGrid(ctx, gridID)
 			c.emitGridChanged(gridID)
 		}
@@ -837,7 +840,7 @@ func (c *Layer) foldWrite(ctx context.Context, reqTileID string, t *pb.Tile) {
 
 func (c *Layer) CreateTile(ctx context.Context, in *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.CreateTile(ctx, in)
-	c.noteReachGrid(err, in.GridId)
+	c.noteReachGrid(ctx, err, in.GridId)
 	if err == nil {
 		c.upsertTile(ctx, resp.GetTile())
 	}
