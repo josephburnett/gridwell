@@ -352,18 +352,39 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	}
 }
 
-// ShellSessionAlive is the per-descent liveness probe. A host with no shells
-// answers dead, which is a verdict; a tmux that cannot be asked is not, and
-// answering dead for it would hide the refresh affordance with nothing said.
-func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
+// ShellSessionAlive is the per-descent liveness probe of the session the tile
+// names. A host with no shells, or a row that is gone, answers dead, which is a
+// verdict; a tmux that cannot be asked is not, and answering dead for it would
+// hide the refresh affordance with nothing said.
+func (p *Plugin) ShellSessionAlive(ctx context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
 	if p.shell == nil {
 		return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
 	}
-	alive, err := p.shell.HasSession(req.TileId)
+	key, err := p.sessionOf(ctx, req.TileId)
+	if status.Code(err) == codes.NotFound {
+		return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	alive, err := p.shell.HasSession(key)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &gridwellv1.ShellSessionAliveResponse{Alive: alive}, nil
+}
+
+// sessionOf is the session a shell tile names (rpc.ShellSession), refusing a
+// row that is not there or is not an owned shell.
+func (p *Plugin) sessionOf(ctx context.Context, tileID string) (string, error) {
+	t, err := p.st.GetTile(ctx, tileID)
+	if err != nil {
+		return "", errToStatus(err)
+	}
+	if t.Kind != rpc.KindShell || t.LinkTargetId != "" {
+		return "", status.Errorf(codes.InvalidArgument, "tile %s is not a shell of this namespace", tileID)
+	}
+	return rpc.ShellSession(t), nil
 }
 
 // OpenShell streams a tile's live PTY both ways: the first request binds the
@@ -386,14 +407,18 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 	}
 	cols, rows = shellsvc.ClampSize(cols, rows)
 
-	// A tile with no frozen snapshot may spawn a new shell; a snapshotted
-	// tile must not, because that would fabricate state behind the JPEG.
-	allowCreate := true
-	if tile, gerr := p.st.GetTile(sctx, tileID); gerr == nil {
-		allowCreate = tile.PreviewBlobId == 0
+	key, err := p.sessionOf(sctx, tileID)
+	if err != nil {
+		return err
 	}
-
-	session, stopOld, err := p.shell.Acquire(tileID, allowCreate, cols, rows)
+	// A session no tile has a face of was never started, so whichever tile
+	// opens it first creates it; a started one that is gone must not be
+	// fabricated behind the faces that show what was running.
+	namers, err := p.st.ShellSessionNamers(sctx, key)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	session, stopOld, err := p.shell.Acquire(key, namers.Faced == 0, cols, rows)
 	if err != nil {
 		if errors.Is(err, shellsvc.ErrSessionGone) {
 			return status.Error(codes.FailedPrecondition, err.Error())
@@ -402,8 +427,8 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 	}
 	// Detach fires after the stream is ending, so the log is the surface; a
 	// capture that does not land leaves the tile under its current name.
-	defer p.shell.Release(tileID, session, stopOld, func() {
-		if err := p.captureShellTitle(tileID); err != nil {
+	defer p.shell.Release(key, session, stopOld, func() {
+		if err := p.captureShellTitle(key, tileID); err != nil {
 			log.Printf("gridwell: home: shell title capture for tile %s: %v", tileID, err)
 		}
 	})
@@ -451,10 +476,11 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 	}
 }
 
-// captureShellTitle stamps the tile's label with its tmux session's foreground
-// command on detach, as a url tile captures the page title.
-func (p *Plugin) captureShellTitle(tileID string) error {
-	cmd, err := p.shell.PaneCommand(tileID)
+// captureShellTitle stamps the label of the tile the session was opened from
+// with the session's foreground command on detach, as a url tile captures the
+// page title.
+func (p *Plugin) captureShellTitle(key, tileID string) error {
+	cmd, err := p.shell.PaneCommand(key)
 	if err != nil {
 		return fmt.Errorf("read the foreground command: %w", err)
 	}
@@ -465,15 +491,19 @@ func (p *Plugin) captureShellTitle(tileID string) error {
 }
 
 func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
-	tileID := req.TileId
+	// The key is read first: a destroy takes the row that names it.
+	key := ""
+	if p.shell != nil {
+		key, _ = p.sessionOf(ctx, req.TileId)
+	}
 	if err := p.st.DeleteTile(ctx, req); err != nil {
 		return nil, errToStatus(err)
 	}
-	// The session dies with the last row naming it. The startup orphan sweep
-	// is the net.
-	if p.shell != nil {
-		if n, err := p.st.ShellSessionNamers(ctx, tileID); err == nil && n.Rows == 0 {
-			_ = p.shell.Kill(tileID)
+	// The session dies with the last row naming it, a trashed row included.
+	// The startup orphan sweep is the net.
+	if key != "" {
+		if n, err := p.st.ShellSessionNamers(ctx, key); err == nil && n.Rows == 0 {
+			_ = p.shell.Kill(key)
 		}
 	}
 	return &gridwellv1.DeleteTileResponse{}, nil

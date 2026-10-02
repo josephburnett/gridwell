@@ -13,7 +13,7 @@ import (
 )
 
 // FakeStreamer is a programmable shellsvc.Streamer. HasSession is driven per
-// tile so a test can pick the create, attach, or reject path, and every
+// session so a test can pick the create, attach, or reject path, and every
 // OpenSession is recorded with its mode and size.
 type FakeStreamer struct {
 	mu       sync.Mutex
@@ -30,43 +30,43 @@ type FakeStreamer struct {
 
 func New() *FakeStreamer { return &FakeStreamer{alive: map[string]bool{}} }
 
-// SetAlive programs HasSession's answer for tileID.
-func (f *FakeStreamer) SetAlive(tileID string, alive bool) {
+// SetAlive programs HasSession's answer for key.
+func (f *FakeStreamer) SetAlive(key string, alive bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.alive[tileID] = alive
+	f.alive[key] = alive
 }
 
-func (f *FakeStreamer) OpenSession(tid string, mode tmux.Mode, cols, rows uint16) (shellsvc.Session, error) {
+func (f *FakeStreamer) OpenSession(key string, mode tmux.Mode, cols, rows uint16) (shellsvc.Session, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.OpenErr != nil {
 		return nil, f.OpenErr
 	}
 	s := &FakeSession{
-		TileID: tid, OpenMode: mode, InitialCols: cols, InitialRows: rows,
+		Key: key, OpenMode: mode, InitialCols: cols, InitialRows: rows,
 		outCh: make(chan []byte, 64), done: make(chan struct{}),
 	}
 	f.sessions = append(f.sessions, s)
-	f.alive[tid] = true // a successful open leaves the session alive
+	f.alive[key] = true // a successful open leaves the session alive
 	return s, nil
 }
 
-func (f *FakeStreamer) HasSession(tileID string) (bool, error) {
+func (f *FakeStreamer) HasSession(key string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.alive[tileID], nil
+	return f.alive[key], nil
 }
 
-func (f *FakeStreamer) Kill(tileID string) error {
+func (f *FakeStreamer) Kill(key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.killed = append(f.killed, tileID)
-	delete(f.alive, tileID)
+	f.killed = append(f.killed, key)
+	delete(f.alive, key)
 	return nil
 }
 
-func (f *FakeStreamer) ListLiveTileIDs() ([]string, error) {
+func (f *FakeStreamer) ListLiveSessions() ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var ids []string
@@ -104,7 +104,7 @@ func (f *FakeStreamer) SessionCount() int {
 	return len(f.sessions)
 }
 
-// Killed returns the tile ids passed to Kill, in order.
+// Killed returns the session keys passed to Kill, in order.
 func (f *FakeStreamer) Killed() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -114,7 +114,7 @@ func (f *FakeStreamer) Killed() []string {
 // FakeSession is an echoing PTY. Bytes written are pushed to Output, so a
 // round trip through the manager, the namespace, and the bridge returns them.
 type FakeSession struct {
-	TileID      string
+	Key         string
 	OpenMode    tmux.Mode
 	InitialCols uint16
 	InitialRows uint16

@@ -198,21 +198,31 @@ type fakeStreamer struct {
 func (f *fakeStreamer) OpenSession(string, tmux.Mode, uint16, uint16) (shellsvc.Session, error) {
 	return nil, nil
 }
-func (f *fakeStreamer) HasSession(string) (bool, error)    { return f.alive, f.probeErr }
-func (f *fakeStreamer) Kill(string) error                  { return nil }
-func (f *fakeStreamer) ListLiveTileIDs() ([]string, error) { return nil, nil }
-func (f *fakeStreamer) PaneCommand(string) (string, error) { return "", nil }
+func (f *fakeStreamer) HasSession(string) (bool, error)     { return f.alive, f.probeErr }
+func (f *fakeStreamer) Kill(string) error                   { return nil }
+func (f *fakeStreamer) ListLiveSessions() ([]string, error) { return nil, nil }
+func (f *fakeStreamer) PaneCommand(string) (string, error)  { return "", nil }
 
-func TestShellSessionAlive_WithShellHost(t *testing.T) {
+// probedShell is a home hosting s, plus the id of one shell tile to probe.
+func probedShell(t *testing.T, s shellsvc.Streamer) (*local.Plugin, string) {
+	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
+	p := local.New(st, shellsvc.NewManager(s))
+	sh, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
+		GridId: rootGrid(t, p), Tile: &gridwellv1.Tile{Kind: "shell", W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p, sh.Tile.Id
+}
 
-	p := local.New(st, shellsvc.NewManager(&fakeStreamer{alive: true}))
-
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
+func TestShellSessionAlive_WithShellHost(t *testing.T) {
+	p, id := probedShell(t, &fakeStreamer{alive: true})
+	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: id})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,13 +235,8 @@ func TestShellSessionAlive_WithShellHost(t *testing.T) {
 // hide the refresh affordance and say nothing; the error is the answer, and
 // the client's probe-failure notice is what reads it.
 func TestShellSessionAlive_InfrastructureErrorSurfaces(t *testing.T) {
-	st, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
-	p := local.New(st, shellsvc.NewManager(&fakeStreamer{alive: true, probeErr: errors.New("tmux: socket refused")}))
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
+	p, id := probedShell(t, &fakeStreamer{alive: true, probeErr: errors.New("tmux: socket refused")})
+	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: id})
 	if err == nil || !strings.Contains(err.Error(), "socket refused") {
 		t.Fatalf("resp=%v err=%v; an infrastructure failure must surface, not read as dead", resp, err)
 	}
