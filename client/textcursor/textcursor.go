@@ -1,5 +1,6 @@
 // Package textcursor converts between a character offset into a text buffer
-// and a 0-indexed (row, col), and back. A '\n' ends a line and '\r' is an
+// and a 0-indexed (row, col), and back, and finds the offset a press on
+// painted text lands on. A '\n' ends a line and '\r' is an
 // ordinary character, so CRLF leaves the '\r' as the line's last column,
 // matching the browser textarea's own counting.
 package textcursor

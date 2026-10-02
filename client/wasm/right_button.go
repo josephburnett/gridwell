@@ -150,6 +150,7 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 	if !ok {
 		return
 	}
+	a.focusToPane(p)
 	a.menu.Close()
 	a.ascendPane(p)
 }

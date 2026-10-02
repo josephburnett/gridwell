@@ -408,9 +408,20 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// In a content descent every interactive surface owns its own clicks, so a
-	// canvas left-click reaching here is chrome or margin and is swallowed.
+	// A surface that was not there to take the press gets it from here.
 	if p.ContentID() != "" {
+		// Held off so the canvas does not take the keyboard from the
+		// surface the press lands on. An open rename is committed here, as
+		// the canvas taking focus would have.
+		args[0].Call("preventDefault")
+		if in := a.doc.Call("getElementById", "gw-rename-input"); in.Truthy() {
+			in.Call("blur")
+		}
+		if a.menu.OpenOn(p.ID) {
+			a.menu.Close()
+		}
+		a.draw() // un-parks the surface the press lands on
+		a.landPress(p, r, sx, sy, args[0])
 		return nil
 	}
 

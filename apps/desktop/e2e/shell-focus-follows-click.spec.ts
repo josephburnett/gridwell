@@ -73,6 +73,30 @@ async function teardownShell(gw: any, shell: string, cx: number, cy: number) {
   await gw.deleteTileCell(cx, cy);
 }
 
+test('one click into an unfocused live shell takes the next keystroke', async ({ window, gw }) => {
+  const { shell, cx, cy } = await shellBesideGrid(gw);
+  const s = await paneOf(gw, shell);
+  await window.mouse.click(s.x + s.w / 2, s.y + s.h / 2);
+  await expect.poll(async () => (await gw.focused()).id).toBe(shell);
+  await window.keyboard.type("printf '%s\\n' ONE-CLICK\n");
+  await gw.waitShellLine('ONE-CLICK');
+  await teardownShell(gw, shell, cx, cy);
+});
+
+test('one click on a shell parked under an open menu closes the menu and takes keys', async ({ window, gw }) => {
+  const { shell, cx, cy } = await shellBesideGrid(gw);
+  await gw.openPalette();
+  expect((await gw.palette()).open, 'the menu is open on the other pane').toBe(true);
+  const s = await paneOf(gw, shell);
+  await window.mouse.click(s.x + s.w / 2, s.y + s.h / 2);
+  await gw.waitIdle();
+  expect((await gw.palette()).open, 'the click closed the menu').toBe(false);
+  expect((await gw.focused()).id, 'and focused the shell pane').toBe(shell);
+  await window.keyboard.type("printf '%s\\n' PARKED-CLICK\n");
+  await gw.waitShellLine('PARKED-CLICK');
+  await teardownShell(gw, shell, cx, cy);
+});
+
 // Keyboard focus is set once, by the surface that took the press. A content
 // fetch and the draws it causes arrive after the press and must not move it.
 test('nothing deferred moves keyboard focus off a clicked shell', async ({ window, gw, home }) => {
