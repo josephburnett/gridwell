@@ -83,6 +83,8 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.placeURLView(e.PaneID, e.Tile)
 	case nav.EffRefreshOverlay:
 		a.refreshFileOverlay()
+		// Every plan is a user's descent or ascent.
+		a.takeKeyboard()
 	case nav.EffScaleContent:
 		if p := a.tree.FindPane(e.PaneID); p != nil {
 			p.TextZoom = a.textScaleFor(p) // base times content zoom

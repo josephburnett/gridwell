@@ -497,12 +497,17 @@ export class GridwellDriver {
     const marker = `gw-attached-${Math.random().toString(36).slice(2, 8)}`;
     await this.win.keyboard.type(`printf '%s\\n' ${marker}`);
     await this.win.keyboard.press('Enter');
+    await this.waitShellLine(marker, timeout);
+  }
+
+  // Blocks until a row of the focused pane's terminal reads exactly line.
+  async waitShellLine(line: string, timeout = 10_000): Promise<void> {
     await this.win.waitForFunction(
       (m) =>
         ((window as any).__gridwellTest.shellText() as string)
           .split('\n')
           .some((l) => l.trim() === m),
-      marker,
+      line,
       { timeout },
     );
   }

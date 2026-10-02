@@ -63,6 +63,7 @@ func (a *App) installCanvasInput() {
 	}), captureOpts)
 	// Single-finger touch becomes the same mouse gestures; see touch.go.
 	a.installTouchInput()
+	a.installFocusTrace()
 }
 
 // onKeyDown owns the content-zoom chord. Esc on a drag in flight is
@@ -377,6 +378,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 	a.focusToPane(p)
+	// Last, once the press has shown, un-parked or left what it acts on.
+	defer a.takeKeyboard()
 	button := args[0].Get("button").Int()
 	if button == 2 {
 		args[0].Call("preventDefault")

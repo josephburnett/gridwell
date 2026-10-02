@@ -285,7 +285,8 @@ func (a *App) refreshFileToggle() {
 }
 
 // refreshFileOverlay shows or hides the textarea for the focused pane,
-// whenever pane state changes: a descent, a mode toggle, an ascent.
+// whenever pane state changes: a descent, a mode toggle, an ascent, a fetch.
+// It never moves the keyboard; see takeKeyboard.
 func (a *App) refreshFileOverlay() {
 	a.refreshFileToggle()
 	a.refreshRenderedOverlay()
@@ -295,8 +296,6 @@ func (a *App) refreshFileOverlay() {
 	p, file, r, d := a.focusedTextDescent()
 	if d.Mode != rpc.TextModeText {
 		ta.Get("style").Set("display", "none")
-		// Back to the canvas so ascent and other gestures keep working.
-		a.focusCanvas()
 		return
 	}
 	if r.W <= 0 || r.H <= 0 {
@@ -351,17 +350,6 @@ func (a *App) refreshFileOverlay() {
 	if ta.Get("scrollTop").Float() == 0 && p.TextScrollY > 0 {
 		ta.Set("scrollTop", p.TextScrollY)
 	}
-	ta.Call("focus")
-}
-
-// focusCanvas returns keyboard focus to the canvas unless the inline rename
-// input is open. It runs on every async overlay refresh, and would otherwise
-// yank focus out of a just-opened rename input, which blur would then commit.
-func (a *App) focusCanvas() {
-	if a.overlays.renameEditing {
-		return
-	}
-	a.canvas.Call("focus")
 }
 
 // syncTextOverlayPosition repositions an already-shown textarea every draw so
@@ -424,6 +412,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	// The mode persists to the tile on ascent, in saveTextBeforeAscent; while
 	// descended the focused pane's live TextMode drives the preview.
 	a.refreshFileOverlay()
+	a.takeKeyboard() // the toggle's press
 	a.draw()
 	a.scheduleURLUpdate()
 }

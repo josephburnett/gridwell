@@ -161,6 +161,15 @@ func TestFocusNamesBothEnds(t *testing.T) {
 	}
 }
 
+// A spec asserts silence by this kind, so the kind is the contract; the
+// element is prose and the pane an id.
+func TestDOMFocusIsItsOwnKind(t *testing.T) {
+	e := DOMFocus("terminal", "p1")
+	if e.Kind != "dom-focus" || e.Msg != "terminal" || e.KV["pane"] != "p1" {
+		t.Errorf("dom-focus record is %+v", e)
+	}
+}
+
 // A record is read by a person and joined on by a machine, so the two halves
 // stay apart: prose in Msg, ids in KV under the names a dump is grepped by.
 func TestFramingSplitsProseFromIds(t *testing.T) {
