@@ -257,7 +257,10 @@ fails transport-shaped: `Layer.GetTile`, `GetTilePreview`, `ReadContent`,
 layer discovered the transition alone and nobody else watched the call fail:
 on the transition only, `emitGridChanged` names the grid at hand, so a client
 already holding that room re-reads rather than sitting on rows nothing is
-revalidating.
+revalidating. A call its own caller gave up on (`gwerr.IsAbandoned`) is no
+news either way, here and in the plugin adapter's listing: the refetch an
+announcement causes is cancelled by the next resync, and that cancel would be
+news again.
 
 **Down, discovered by the cache — direction two.** The transport's health event
 arrives on the stream this layer relays and lands in `Layer.applyEvent`'s
@@ -463,6 +466,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The transport learns darkness from its own stream and publishes once | `internal/connection/fanin_health_test.go:TestFanInRemotePublishesHealthOnStreamDeath` |
 | A subscriber arriving after the outage is told (`darkNow`) | `fanin_health_test.go:TestASubscriberArrivingAfterTheOutageIsToldOfIt` |
 | Direction one: a failed pass-through is darkness, the remembered room still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
+| A call its caller abandoned is neither dark nor light, in the cache and the plugin adapter alike | `dark_test.go:TestAnAbandonedCallLearnsNothing`, `internal/server/abandoned_read_seam_test.go` |
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |

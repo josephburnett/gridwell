@@ -51,7 +51,7 @@ func TestBothDirectionsLearnTheSameDarkness(t *testing.T) {
 			if tc.to {
 				callErr = status.Error(codes.Unavailable, "tunnel down")
 			}
-			byCall.noteReachGrid(callErr, "conn/g1")
+			byCall.noteReachGrid(context.Background(), callErr, "conn/g1")
 
 			// Direction two: the source's own health, on the stream this layer
 			// relays. Never announces.
@@ -87,6 +87,25 @@ func TestBothDirectionsLearnTheSameDarkness(t *testing.T) {
 					"the client is receiving this same event on this same stream", got)
 			}
 		})
+	}
+}
+
+// A call its own caller gave up on says nothing about the source: darkness
+// stays where it was and nothing is announced, since an announcement costs the
+// client a refetch whose cancel would be news again.
+func TestAnAbandonedCallLearnsNothing(t *testing.T) {
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, was := range []bool{false, true} {
+		c, ch := darkFixture(t)
+		seedDark(c, was)
+		c.noteReachGrid(gone, status.Error(codes.Canceled, "context canceled"), "conn/g1")
+		if got := c.isDark("conn"); got != was {
+			t.Errorf("from dark=%v, an abandoned call left dark=%v", was, got)
+		}
+		if got := len(announced(t, c, ch)); got != 0 {
+			t.Errorf("from dark=%v, an abandoned call announced %d times, want 0", was, got)
+		}
 	}
 }
 

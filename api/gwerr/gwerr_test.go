@@ -1,6 +1,7 @@
 package gwerr
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -162,5 +163,28 @@ func TestStatusCodeIsTotal(t *testing.T) {
 	}
 	if plain := errors.New("boom"); ToStatus(plain) != plain {
 		t.Error("an unclassified error must pass through as itself")
+	}
+}
+
+// A call is abandoned only when it failed and its own ctx is done: a Canceled
+// under a live ctx is the far side's word, and an answer is never abandoned.
+func TestIsAbandoned(t *testing.T) {
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceled := status.Error(codes.Canceled, "context canceled")
+	for _, c := range []struct {
+		name string
+		ctx  context.Context
+		err  error
+		want bool
+	}{
+		{"failed after the caller gave up", gone, canceled, true},
+		{"any failure after the caller gave up", gone, errors.New("eof"), true},
+		{"canceled with the caller still waiting", context.Background(), canceled, false},
+		{"answered after the caller gave up", gone, nil, false},
+	} {
+		if got := IsAbandoned(c.ctx, c.err); got != c.want {
+			t.Errorf("%s: IsAbandoned = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

@@ -368,7 +368,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	dark := false
 	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Context: ckey})
 	if err != nil {
-		if !gwerr.IsTransport(err) {
+		if gwerr.IsAbandoned(ctx, err) || !gwerr.IsTransport(err) {
 			return nil, err
 		}
 		dark, resp = true, &pluginv1.ListResponse{}
