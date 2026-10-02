@@ -180,6 +180,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   no status at all. A plugin that cannot serve the source its config declares
   refuses `Info` with the reason, and is broken with that sentence and no
   entries until the fix lands, which needs no restart (2026-09-30).
+- A source that lists but cannot watch is not dark: its listings stay live
+  and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
+  comes only from a listing the source did not answer, and a read the caller
+  abandoned says nothing about it (`gwerr.IsAbandoned`) (2026-10-02).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections
