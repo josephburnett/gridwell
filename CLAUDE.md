@@ -222,6 +222,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
   shells off is the node (`disable_shells`).
+- A shell tile names a session: its own id, or for a clone the session its
+  source named (`rpc.ShellSession`). Any number of tiles may name one
+  session; at most one is live, and going live on another takes over
+  (close and reopen; within one tile the terminal moves). A session no tile
+  has a face of was never started, and whichever tile opens it first starts
+  it; a started one that is gone is never recreated behind a face. The
+  session dies when the last row naming it is destroyed. A shell cloned
+  across nodes lands as a link (2026-10-01).
 - Session-ephemeral: the pane tree, the selection, the level stack, and the
   outer frames' viewports. The durable home for a layout is the pane tile.
 - Left-drag moves, right-drag clones, ctrl + right-drag links — the

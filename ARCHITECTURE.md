@@ -393,15 +393,30 @@ the lifecycle). Binary frames are PTY bytes, text frames are JSON control
 resolves the id before accepting, so a refused upgrade never leaves a tmux
 session behind.
 
-**Takeover.** One live surface per content tile: opening it elsewhere takes
-over, and `pane.TakeOver` says how — keep the surface the pane already has,
-move the one another pane holds, or place a fresh one. Every kind of surface
-moves. A url view: the bridge's `moveWebview` re-keys main's entry to the new
-pane with that pane's bounds, park and focus verdicts, and nothing navigates,
-so the page keeps its scroll, its script state and a half-typed field. A
-shell: its xterm and its `/shell` socket go to the new pane, and the socket
-never knew the pane, because `client/shellstream` keys each attachment by its
-content tile; nothing reattaches and xterm keeps every row. Leaving a
+A shell tile names a tmux session (`rpc.ShellSession`): its own id, or, for a
+clone, the session its source named, which the store writes on every copy
+(`tiles.shell_session`) and the id codec qualifies like the tile's own id. The
+home resolves a tile to its session before it touches tmux, and `shellsvc`
+holds one attached client per session, so a second tile going live evicts the
+first exactly as a second pane does. A session no row naming it has a face of
+was never started and is created by whichever tile opens it first; a started
+one that is gone is refused, never recreated behind a face. It dies with the
+last row naming it, a trashed one included. Sessions live on the node that
+started them, so a shell cloned across namespaces copies as a link.
+
+**Takeover.** One live surface per key: a content tile, or for a shell the
+session it names. Opening it elsewhere takes over, and `pane.TakeOver` says
+how — keep the surface the pane already has, move the one another pane holds
+on the same tile, close one another tile holds on the same session, or place
+a fresh one. Every kind of surface moves within its tile. A url view: the
+bridge's `moveWebview` re-keys main's entry to the new pane with that pane's
+bounds, park and focus verdicts, and nothing navigates, so the page keeps its
+scroll, its script state and a half-typed field. A shell: its xterm and its
+`/shell` socket go to the new pane, and the socket never knew the pane,
+because `client/shellstream` keys each attachment by its session; nothing
+reattaches and xterm keeps every row. Another tile on the session is closed,
+freezing onto its own tile, rather than moved, because the socket is bound to
+the tile whose face and title the server writes. Leaving a
 pane-tile level hands each of its live surfaces back to the pane of the
 parked tree that shows the same tile (`pane.Heir`, run by
 `nav.EffHandBackSurfaces`) instead of closing it, so a round trip through a
