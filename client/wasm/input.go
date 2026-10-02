@@ -343,6 +343,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if a.trans.Any() {
 		return nil
 	}
+	// A landing ghost parks every live surface, and its drop has already
+	// committed, so a press ends the landing rather than missing a surface.
+	if a.ghost != nil && a.dragging == nil && a.rightDrag == nil {
+		a.ghost = nil
+	}
 	// The notice strip occupies the band layoutPanes reserved below every pane,
 	// so a click there cannot be meant for a pane; errsurface owns the geometry.
 	if stripH := errsurface.StripHeight(a.errs.Len()); stripH > 0 && sy >= a.height-stripH {

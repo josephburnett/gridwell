@@ -146,3 +146,20 @@ test('nothing deferred moves keyboard focus off a clicked shell', async ({ windo
   await gw.waitShellLine('STILL-HERE');
   await teardownShell(gw, shell, cx, cy);
 });
+
+// A drop's landing animation parks every live surface, and the drop has
+// already committed, so a press during it ends the landing and lands.
+test('a click on a shell while a drop is still landing takes the keyboard', async ({ window, gw }) => {
+  const { shell, cx, cy } = await shellBesideGrid(gw);
+  const o = await gw.focused();
+  await window.evaluate(() => (window as any).__gridwellTest.setSnapMs(60_000));
+  await gw.openPalette();
+  await gw.dragCreate('markdown', Math.round(o.cx), Math.round(o.cy) + 1);
+  const s = await paneOf(gw, shell);
+  expect(await window.evaluate(() => (window as any).__gridwellTest.ghost().active), 'the drop is landing').toBe(true);
+  await window.mouse.click(s.x + s.w / 2, s.y + s.h / 2);
+  await expect.poll(async () => (await gw.focused()).id).toBe(shell);
+  await window.keyboard.type("printf '%s\\n' MID-LANDING\n");
+  await gw.waitShellLine('MID-LANDING');
+  await teardownShell(gw, shell, cx, cy);
+});

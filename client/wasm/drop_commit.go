@@ -17,11 +17,11 @@ import (
 // dragdrop.DecideDrop's; commitRightClone is the right button's twin and
 // shares the landing and snap-back below.
 
-// Animation durations in milliseconds.
-const (
-	snapMs     = 110.0
-	snapBackMs = 220.0
-)
+// Animation durations in milliseconds. snapMs is a var so a spec can hold a
+// drop's landing open (setSnapMs).
+var snapMs = 110.0
+
+const snapBackMs = 220.0
 
 // finishLeftDrag commits the armed left-button drag at the release point.
 // Reports whether it consumed the drag.
