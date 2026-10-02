@@ -72,3 +72,26 @@ func TestLearnRootLandsAConnectionThatAnswersInsideTheBound(t *testing.T) {
 		t.Fatalf("learnRoot = %q, %v; want the far node's landing", root, err)
 	}
 }
+
+// Close ends the learn it started and waits for it: a far node that never
+// answers Info cannot keep a goroutine alive past the server, which is how a
+// test's knob was read by the test before it.
+func TestCloseWaitsForTheRootFetch(t *testing.T) {
+	s := gatedTransport(t, make(chan struct{})) // a gate that never opens
+	s.kickRootFetch(s.conns["rtb"])
+	done := make(chan error, 1)
+	go func() { done <- s.Close() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close waited on a learn its cancel should have ended")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.live) != 0 {
+		t.Fatal("a live connection survived Close")
+	}
+}

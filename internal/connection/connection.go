@@ -62,6 +62,10 @@ type Server struct {
 
 	mu   sync.Mutex
 	live map[string]*liveConn // by name
+	// bg is every goroutine a live connection runs; Close waits on it, and
+	// closed refuses a dial that would add to it afterwards.
+	bg     sync.WaitGroup
+	closed bool
 	// health holds every connection the transport cannot reach, by name;
 	// absent is reachable. Every kind of failure is this one fact, written
 	// only by note. Never persisted.
@@ -94,7 +98,10 @@ type Conn struct {
 type liveConn struct {
 	client namespace.Namespace
 	closer func()
-	cancel context.CancelFunc // stops the root-fetch/fan-in goroutines
+	// ctx bounds every goroutine and learn this transport runs; cancel ends
+	// them, and Server.bg is what Close waits on.
+	ctx    context.Context
+	cancel context.CancelFunc
 	// rootFetching single-flights the remote-root learn.
 	rootFetching bool
 	// verified means this transport has said where it lands and it matches the
@@ -159,15 +166,19 @@ func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, re
 	return s, nil
 }
 
-// Close tears down every live connection and closes the store.
+// Close tears down every live connection, waits for the goroutines they ran
+// (a learn or a fan-in must not outlive the server that started it), and
+// closes the store.
 func (s *Server) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.closed = true
 	for name, lc := range s.live {
 		lc.cancel()
 		lc.closer()
 		delete(s.live, name)
 	}
+	s.mu.Unlock()
+	s.bg.Wait()
 	return s.db.Close()
 }
 
@@ -185,7 +196,10 @@ func (s *Server) ConnectAll(ctx context.Context) {
 			if err != nil {
 				log.Printf("gridwell: connection %q (%s): %v", c.Cfg.Label, name, err)
 			} else {
-				log.Printf("gridwell: connection %q (%s): connected — root %s", c.Cfg.Label, name, c.RemoteRoot)
+				s.mu.Lock()
+				root := c.RemoteRoot
+				s.mu.Unlock()
+				log.Printf("gridwell: connection %q (%s): connected — root %s", c.Cfg.Label, name, root)
 			}
 		case <-time.After(bootDialWait):
 			log.Printf("gridwell: connection %q (%s): no answer after %v — still trying in the background", c.Cfg.Label, name, bootDialWait)
@@ -350,6 +364,10 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 		s.mu.Unlock()
 		return lc, nil
 	}
+	if s.closed {
+		s.mu.Unlock()
+		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: the node is shutting down", name)
+	}
 	kv := map[string]string{"conn": name}
 	trace.Emit("connection", "dial", "dial", kv)
 	cfg, err := s.dialConfig(c.Cfg)
@@ -371,12 +389,15 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	}
 	trace.Emit("connection", "dial", "dial ok", kv)
 	ctx, cancel := context.WithCancel(context.Background())
-	lc := &liveConn{client: client, closer: closer, cancel: cancel}
+	lc := &liveConn{client: client, closer: closer, ctx: ctx, cancel: cancel}
 	s.live[name] = lc
+	// Counted under the lock, so a Close that found the map empty cannot miss
+	// a goroutine, and one that found lc has cancelled it.
+	s.bg.Add(2)
 	s.mu.Unlock()
 	// Remote change events flow, prefixed, from the moment the connection is live.
-	go s.fanInRemote(ctx, name, client)
-	go s.tellFar(ctx, name, client)
+	go func() { defer s.bg.Done(); s.fanInRemote(ctx, name, client) }()
+	go func() { defer s.bg.Done(); s.tellFar(ctx, name, client) }()
 	return lc, nil
 }
 
@@ -396,7 +417,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 	if verified {
 		return root, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), learnRootWait)
+	ctx, cancel := context.WithTimeout(lc.ctx, learnRootWait)
 	defer cancel()
 	info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
@@ -456,8 +477,10 @@ func (s *Server) kickRootFetch(c *Conn) {
 		return
 	}
 	lc.rootFetching = true
+	s.bg.Add(1)
 	s.mu.Unlock()
 	go func() {
+		defer s.bg.Done()
 		defer func() {
 			s.mu.Lock()
 			if l, ok := s.live[c.Cfg.Name]; ok {
