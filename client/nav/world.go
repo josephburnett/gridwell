@@ -151,8 +151,8 @@ type World struct {
 	LevelDepth int
 	LevelTop   *pane.Level
 
-	// The cached liveness probe results, keyed by content id. Known is
-	// separate because not probed yet is not dead.
+	// The cached liveness probe results, keyed by session (rpc.ShellSession).
+	// Known is separate because not probed yet is not dead.
 	ShellAlive      map[string]bool
 	ShellAliveKnown map[string]bool
 

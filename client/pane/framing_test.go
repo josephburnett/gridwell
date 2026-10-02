@@ -76,23 +76,52 @@ func TestTakeOver(t *testing.T) {
 		want    Engagement
 	}{
 		{"nobody holds it: place a fresh surface",
-			[]Holder{{"p2", "u/9"}}, "p1", "u/7", Engagement{}},
+			[]Holder{{"p2", "u/9", "u/9"}}, "p1", "u/7", Engagement{}},
 		{"another pane holds it: move it here",
-			[]Holder{{"p1", "u/7"}, {"p2", "u/9"}}, "w1:p1", "u/7", Engagement{From: "p1"}},
+			[]Holder{{"p1", "u/7", "u/7"}, {"p2", "u/9", "u/9"}}, "w1:p1", "u/7", Engagement{From: "p1"}},
 		{"a parked outer level holds it: the move crosses levels",
-			[]Holder{{"w1:p3", "u/7"}}, "p1", "u/7", Engagement{From: "w1:p3"}},
+			[]Holder{{"w1:p3", "u/7", "u/7"}}, "p1", "u/7", Engagement{From: "w1:p3"}},
 		{"the opener holds it: keep",
-			[]Holder{{"p1", "u/7"}}, "p1", "u/7", Engagement{Keep: true}},
+			[]Holder{{"p1", "u/7", "u/7"}}, "p1", "u/7", Engagement{Keep: true}},
 		{"the opener holds another tile: not this tile's surface",
-			[]Holder{{"p1", "u/9"}}, "p1", "u/7", Engagement{}},
+			[]Holder{{"p1", "u/9", "u/9"}}, "p1", "u/7", Engagement{}},
 		{"a broken rule: one moves, the rest close",
-			[]Holder{{"p1", "u/7"}, {"p2", "u/7"}}, "p3", "u/7", Engagement{From: "p1", Close: []string{"p2"}}},
+			[]Holder{{"p1", "u/7", "u/7"}, {"p2", "u/7", "u/7"}}, "p3", "u/7", Engagement{From: "p1", Close: []string{"p2"}}},
 		{"a broken rule while keeping: every other closes",
-			[]Holder{{"p1", "u/7"}, {"p2", "u/7"}}, "p2", "u/7", Engagement{Keep: true, Close: []string{"p1"}}},
+			[]Holder{{"p1", "u/7", "u/7"}, {"p2", "u/7", "u/7"}}, "p2", "u/7", Engagement{Keep: true, Close: []string{"p1"}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := TakeOver(c.holders, c.opener, c.tile); !reflect.DeepEqual(got, c.want) {
+			if got := TakeOver(c.holders, c.opener, c.tile, c.tile); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("TakeOver = %+v, want %+v", got, c.want)
+			}
+		})
+	}
+}
+
+// Tiles sharing a session share its one live surface: going live on a clone
+// closes the source's surface, so it freezes onto its own tile, and places a
+// fresh one bound to the clone. A move would carry a socket bound to the
+// source, whose face and title the server would keep writing.
+func TestTakeOverAcrossTilesOnOneSession(t *testing.T) {
+	cases := []struct {
+		name    string
+		holders []Holder
+		opener  string
+		want    Engagement
+	}{
+		{"another pane holds the source: close it, place fresh",
+			[]Holder{{"p1", "u/7", "u/7"}}, "p2", Engagement{Close: []string{"p1"}}},
+		{"the opener holds the source: close it here, place fresh",
+			[]Holder{{"p1", "u/7", "u/7"}}, "p1", Engagement{Close: []string{"p1"}}},
+		{"another pane holds the clone itself: move it",
+			[]Holder{{"p1", "u/8", "u/7"}}, "p2", Engagement{From: "p1"}},
+		{"another session entirely: untouched",
+			[]Holder{{"p1", "u/9", "u/9"}}, "p2", Engagement{}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := TakeOver(c.holders, c.opener, "u/7", "u/8"); !reflect.DeepEqual(got, c.want) {
 				t.Fatalf("TakeOver = %+v, want %+v", got, c.want)
 			}
 		})
@@ -103,14 +132,14 @@ func TestTakeOver(t *testing.T) {
 // a pane-tile level's copy of the holder takes it, leaving hands it back, and
 // entering again takes it again. Nothing is ever closed or placed afresh.
 func TestTakeOverAndHeirOnlyMove(t *testing.T) {
-	holders := []Holder{{"p1", "u/7"}}
+	holders := []Holder{{"p1", "u/7", "u/7"}}
 	take := func(opener string) {
 		t.Helper()
-		e := TakeOver(holders, opener, "u/7")
+		e := TakeOver(holders, opener, "u/7", "u/7")
 		if e.Keep || e.From == "" || len(e.Close) != 0 {
 			t.Fatalf("%s opening u/7 over %v: %+v, want a move", opener, holders, e)
 		}
-		holders = []Holder{{opener, "u/7"}}
+		holders = []Holder{{opener, "u/7", "u/7"}}
 	}
 	handBack := func(returning []Holder, want string) {
 		t.Helper()
@@ -118,14 +147,14 @@ func TestTakeOverAndHeirOnlyMove(t *testing.T) {
 		if heir != want {
 			t.Fatalf("leaving: heir %q, want %q", heir, want)
 		}
-		holders = []Holder{{heir, "u/7"}}
+		holders = []Holder{{heir, "u/7", "u/7"}}
 	}
 	take("w1:p1")
-	handBack([]Holder{{"p1", "u/7"}, {"p2", ""}}, "p1")
+	handBack([]Holder{{"p1", "u/7", "u/7"}, {"p2", "", ""}}, "p1")
 	take("w1:p1")
-	handBack([]Holder{{"p1", "u/7"}, {"p2", ""}}, "p1")
+	handBack([]Holder{{"p1", "u/7", "u/7"}, {"p2", "", ""}}, "p1")
 	take("p2")
-	if e := TakeOver(holders, "p2", "u/7"); !e.Keep || e.From != "" || len(e.Close) != 0 {
+	if e := TakeOver(holders, "p2", "u/7", "u/7"); !e.Keep || e.From != "" || len(e.Close) != 0 {
 		t.Fatalf("the holder going live again: %+v, want keep", e)
 	}
 }
@@ -133,7 +162,7 @@ func TestTakeOverAndHeirOnlyMove(t *testing.T) {
 // Leaving a level hands a surface back to the returning pane that shows its
 // tile, and closes it only when the tile leaves every pane.
 func TestHeir(t *testing.T) {
-	returning := []Holder{{"p1", "u/9"}, {"p2", "u/7"}, {"p3", "u/7"}}
+	returning := []Holder{{"p1", "u/9", "u/9"}, {"p2", "u/7", "u/7"}, {"p3", "u/7", "u/7"}}
 	cases := []struct {
 		name    string
 		tile    string
@@ -141,9 +170,9 @@ func TestHeir(t *testing.T) {
 		want    string
 	}{
 		{"the first returning pane showing the tile", "u/7", nil, "p2"},
-		{"one already holding a surface is passed over", "u/7", []Holder{{"p2", "u/8"}}, "p3"},
+		{"one already holding a surface is passed over", "u/7", []Holder{{"p2", "u/8", "u/8"}}, "p3"},
 		{"no returning pane shows it: close", "u/44", nil, ""},
-		{"every one showing it holds a surface: close", "u/7", []Holder{{"p2", "u/7"}, {"p3", "u/1"}}, ""},
+		{"every one showing it holds a surface: close", "u/7", []Holder{{"p2", "u/7", "u/7"}, {"p3", "u/1", "u/1"}}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

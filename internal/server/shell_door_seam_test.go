@@ -127,7 +127,7 @@ func TestShellDoorRoundTripsBytes(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
-	cs.reg.Open(tile.Id, 100, 40)
+	cs.reg.Open(tile.Id, tile.Id, 100, 40)
 	t.Cleanup(func() { cs.reg.Close(tile.Id) })
 
 	sess := waitSession(t, f.fake)
@@ -156,7 +156,7 @@ func TestShellDoorForwardsResize(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
-	cs.reg.Open(tile.Id, 80, 24)
+	cs.reg.Open(tile.Id, tile.Id, 80, 24)
 	t.Cleanup(func() { cs.reg.Close(tile.Id) })
 	sess := waitSession(t, f.fake)
 
@@ -189,11 +189,11 @@ func TestShellDoorAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
 		t.Fatalf("the clone names session %q, want %q", rpc.ShellSession(b), a.Id)
 	}
 	first, second := f.clientStack(), f.clientStack()
-	first.reg.Open(a.Id, 80, 24)
+	first.reg.Open(a.Id, a.Id, 80, 24)
 	t.Cleanup(func() { first.reg.Close(a.Id) })
 	waitSession(t, f.fake)
-	second.reg.Open(b.Id, 100, 40)
-	t.Cleanup(func() { second.reg.Close(b.Id) })
+	second.reg.Open(a.Id, b.Id, 100, 40)
+	t.Cleanup(func() { second.reg.Close(a.Id) })
 
 	select {
 	case e := <-first.exit:
@@ -203,7 +203,7 @@ func TestShellDoorAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("the first viewer was never evicted")
 	}
-	second.reg.Write(b.Id, []byte("one session"))
+	second.reg.Write(a.Id, []byte("one session"))
 	select {
 	case got := <-second.out:
 		if string(got) != "one session" {
@@ -230,7 +230,7 @@ func TestShellDoorReportsSessionGone(t *testing.T) {
 		t.Fatalf("SetShellPreview: %v", err)
 	}
 	cs := f.clientStack()
-	cs.reg.Open(tile.Id, 80, 24)
+	cs.reg.Open(tile.Id, tile.Id, 80, 24)
 	select {
 	case e := <-cs.exit:
 		if !e.SessionGone {
@@ -258,7 +258,7 @@ func TestShellDoorSurfacesADriverThatCannotOpen(t *testing.T) {
 	f.fake.OpenErr = shelldriver.ErrShellsUnavailable
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
-	cs.reg.Open(tile.Id, 80, 24)
+	cs.reg.Open(tile.Id, tile.Id, 80, 24)
 	select {
 	case e := <-cs.exit:
 		if e.TileID != tile.Id {
@@ -280,7 +280,7 @@ func TestShellDoorSurfacesADriverThatCannotOpen(t *testing.T) {
 func TestShellDoorRefusesUnknownTile(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	cs := f.clientStack()
-	cs.reg.Open("nosuch1/9", 80, 24)
+	cs.reg.Open("nosuch1/9", "nosuch1/9", 80, 24)
 	select {
 	case e := <-cs.exit:
 		if e.SessionGone || e.Message == "" {
@@ -466,7 +466,7 @@ func TestShellClientSurfacesAWedgedSocket(t *testing.T) {
 	exit := make(chan shellstream.Exit, 4)
 	reg := shellstream.New(shellws.Dialer(shellws.Options{Origin: deaf.URL, HTTPClient: deaf.Client(), WriteTimeout: bound}),
 		func(string, []byte) {}, func(e shellstream.Exit) { exit <- e })
-	reg.Open("wedged1/9", 80, 24)
+	reg.Open("wedged1/9", "wedged1/9", 80, 24)
 	t.Cleanup(func() { reg.Close("wedged1/9") })
 
 	// More keystrokes than any socket buffer holds, at a far end that reads
@@ -513,7 +513,7 @@ func TestTheShellDoorTracesAnAttachment(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 6, 6)
 	cs := f.clientStack()
-	cs.reg.Open(tile.Id, 20, 10)
+	cs.reg.Open(tile.Id, tile.Id, 20, 10)
 	waitSession(t, f.fake)
 	cs.reg.Close(tile.Id)
 

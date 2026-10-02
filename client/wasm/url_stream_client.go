@@ -96,7 +96,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 // decides whether to keep, move or place the view.
 func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	p := a.tree.FindPane(paneID)
-	if p == nil || !a.engage(a.urlSurface(), p, t.Id) {
+	if p == nil || !a.engage(a.urlSurface(), p, t.Id, t.Id) {
 		return
 	}
 	v := a.urlViewIn(p, t.Id, a.ownsURLRow(t))

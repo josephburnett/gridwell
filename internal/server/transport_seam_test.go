@@ -442,7 +442,7 @@ func TestShellDoorThroughAConnection(t *testing.T) {
 		func(_ string, b []byte) { out <- append([]byte(nil), b...) },
 		func(e shellstream.Exit) { exits <- e },
 	)
-	reg.Open(tile.Id, 90, 30)
+	reg.Open(tile.Id, tile.Id, 90, 30)
 	t.Cleanup(func() { reg.Close(tile.Id) })
 
 	reg.Write(tile.Id, []byte("across the wire"))

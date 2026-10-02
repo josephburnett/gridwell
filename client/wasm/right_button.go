@@ -395,9 +395,9 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 		dstGridID = t.gridID
 	}
 	req := &gridwellv1.DeleteTileRequest{TileId: d.tileID}
-	// The row, and the tmux session the server kills behind it, are going.
-	delete(a.shellAlive, d.tileID)
-	delete(a.shellAliveProbing, d.tileID)
+	// The row is moving to the trash or going for good, and its session goes
+	// with the last row naming it, so its cached verdict is stale either way.
+	a.forgetShellAlive(d.tileID)
 	// No snapback: the tile vanishes either way, so a failed delete putting the
 	// row back on screen is the reconcile.
 	src, dst := d.srcGridID, dstGridID

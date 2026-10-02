@@ -166,7 +166,7 @@ const (
 	// into the cache: ID.
 	RequestReadLayout
 	RequestSearch     // Query, Scope, Limit
-	RequestProbeShell // ID is the content id the shell facts key by
+	RequestProbeShell // ID is the content id asked, Key the session the answer caches under
 	// RequestFlushLayout writes the pane-tile layout as the tree stands now
 	// and answers OK once the node holds it.
 	RequestFlushLayout
@@ -176,6 +176,7 @@ const (
 type Request struct {
 	Kind  RequestKind
 	ID    string
+	Key   string
 	Query string
 	Scope string
 	Limit int

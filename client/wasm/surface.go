@@ -24,10 +24,10 @@ func (a *App) shellSurface() surfaceKind {
 	return surfaceKind{a.shellSurfaces, func(id string) { a.closeShellStream(id, true) }, a.moveShellStream}
 }
 
-// engage applies pane.TakeOver to tileID going live in p and reports whether
-// a fresh surface is still to be placed there.
-func (a *App) engage(k surfaceKind, p *pane.Pane, tileID string) bool {
-	eng := pane.TakeOver(k.holders(), p.ID, tileID)
+// engage applies pane.TakeOver to tileID, whose live resource is key, going
+// live in p and reports whether a fresh surface is still to be placed there.
+func (a *App) engage(k surfaceKind, p *pane.Pane, key, tileID string) bool {
+	eng := pane.TakeOver(k.holders(), p.ID, key, tileID)
 	// close is the one path that persists a freeze, for a surface the rule
 	// never allowed and for a different tile in this pane alike.
 	for _, id := range eng.Close {
