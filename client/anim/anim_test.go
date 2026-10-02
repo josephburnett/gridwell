@@ -168,3 +168,29 @@ func TestFadeAlpha(t *testing.T) {
 		prev = a
 	}
 }
+
+func TestFlightLandsAndEnds(t *testing.T) {
+	var f Flight
+	f.Land(10, 20, 100, 50)
+	if landing, done := f.Step(125); !landing || done {
+		t.Fatalf("mid-landing: landing=%v done=%v", landing, done)
+	}
+	if landing, done := f.Step(150); !landing || !done || !near(f.X, 10) || !near(f.Y, 20) {
+		t.Fatalf("at the end: landing=%v done=%v at (%v,%v)", landing, done, f.X, f.Y)
+	}
+}
+
+// A press during an older drop's landing makes a new flight; the older
+// landing, stepped to its end, neither moves nor ends the new one.
+func TestALandingEndsOnlyItsOwnFlight(t *testing.T) {
+	var old Flight
+	old.Land(10, 20, 100, 50)
+	held := Flight{X: 300, Y: 400}
+	for _, now := range []float64{110, 150, 1000} {
+		old.Step(now)
+		if landing, done := held.Step(now); landing || done || held.X != 300 || held.Y != 400 {
+			t.Fatalf("at %v the held flight moved or ended: landing=%v done=%v at (%v,%v)",
+				now, landing, done, held.X, held.Y)
+		}
+	}
+}

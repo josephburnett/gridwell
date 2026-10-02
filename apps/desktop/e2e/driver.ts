@@ -43,6 +43,7 @@ export interface Cadences {
   workspaceSaveMs: number;
   shellMirrorMs: number;
   traceFadeMs: number;
+  snapBackMs: number;
 }
 
 export interface PaletteItem {

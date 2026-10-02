@@ -514,7 +514,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 					w := float64(gn.W) * gcs
 					h := float64(gn.H) * gcs
-					a.drawGhostTile(gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, r,
+					a.drawGhostTile(gn, a.ghost.X, a.ghost.Y, w, h, gcs, r,
 						a.ghost.displayedFragmentation)
 				}
 			}

@@ -49,6 +49,34 @@ func (a Animation) At(nowMs float64) (x, y float64, done bool) {
 	return
 }
 
+// Flight is a drag ghost's screen position and the landing that moves it.
+// The landing lives on the flight it started on, so it can move and end only
+// that flight: a newer press's ghost is a new Flight no older drop can touch.
+type Flight struct {
+	X, Y    float64
+	landing *Animation
+}
+
+// Land starts a landing from the current position to (toX, toY), replacing
+// any landing already under way.
+func (f *Flight) Land(toX, toY, startMs, durationMs float64) {
+	f.landing = &Animation{
+		FromX: f.X, FromY: f.Y,
+		ToX: toX, ToY: toY,
+		StartMs: startMs, DurationMs: durationMs,
+	}
+}
+
+// Step moves the flight along its landing to nowMs and reports whether a
+// landing is under way and whether it has ended, which ends the flight.
+func (f *Flight) Step(nowMs float64) (landing, done bool) {
+	if f.landing == nil {
+		return false, false
+	}
+	f.X, f.Y, done = f.landing.At(nowMs)
+	return true, done
+}
+
 // SplitN apportions totalMs across phases by relative distance. A phase under
 // the epsilon gets zero time; if every phase is, the time divides equally so
 // the transition does not complete instantly. The last phase with distance

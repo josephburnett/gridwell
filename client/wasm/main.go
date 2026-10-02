@@ -138,8 +138,6 @@ type App struct {
 	// ghost renders a dragged tile at sub-cell screen precision.
 	ghost *ghost
 
-	animation *anim.Animation
-
 	// trans holds at most one zoom animation per pane. One displaced or cleared
 	// lands on its destination, so a descent is never voided after animating.
 	trans *transition.Set
@@ -482,13 +480,13 @@ type traceState struct {
 	startMs float64
 }
 
-// ghost is a transient floating render of a tile within one pane.
-// displayedCellSize lerps toward targetCellSize each frame.
+// ghost is a transient floating render of a tile within one pane; its Flight
+// is its screen position and its landing. displayedCellSize lerps toward
+// targetCellSize each frame.
 type ghost struct {
+	anim.Flight
 	tile              *gridwellv1.Tile
 	paneID            string
-	screenX           float64
-	screenY           float64
 	displayedCellSize float64
 	targetCellSize    float64
 
@@ -852,15 +850,12 @@ func (a *App) scheduleFrame(why string) {
 
 func (a *App) frame() {
 	now := nowMs()
-	if a.animation != nil {
-		x, y, done := a.animation.At(now)
-		if a.ghost != nil {
-			a.ghost.screenX = x
-			a.ghost.screenY = y
-		}
-		if done {
-			a.animationDone()
-		} else {
+	if a.ghost != nil {
+		if landing, done := a.ghost.Step(now); done {
+			// The render hides live on the ghost and die with it, so the cache
+			// is the source of truth again.
+			a.ghost = nil
+		} else if landing {
 			a.scheduleFrame(traceevent.WhyAnimation)
 		}
 	}
@@ -944,12 +939,6 @@ func (a *App) landTransition(tr *transition.Transition) {
 	}
 	a.scheduleURLUpdate()
 	a.draw()
-}
-
-// animationDone drops the ghost, so the cache is the source of truth again.
-func (a *App) animationDone() {
-	a.animation = nil
-	a.ghost = nil // the render hides live on the ghost and die with it
 }
 
 // The render hide lives on the ghost: one owner, one lifecycle.

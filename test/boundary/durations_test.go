@@ -19,8 +19,7 @@ import (
 // could go green on the branch that added it. Delete the entry as the test
 // lands; never add a new one with that reason.
 var allowedUntested = map[string]string{
-	"snapMs":     "the drag ghost's flight to its landing cell: pixels only, gating nothing a test could observe",
-	"snapBackMs": "the drag ghost's flight home after a refused drop: pixels only, gating nothing a test could observe",
+	"snapMs": "the drag ghost's flight to its landing cell: too short for a spec to press inside it reliably, so ghost-landing.spec.ts presses inside snapBackMs",
 }
 
 // A declared duration is a promise about timing, and lens 8 of the holistic

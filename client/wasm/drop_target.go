@@ -114,8 +114,8 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 	a.canvas.Get("style").Set("cursor", plan.Cursor)
 
 	size := a.ghost.displayedCellSize
-	a.ghost.screenX = sx - d.cellOffsetX*size
-	a.ghost.screenY = sy - d.cellOffsetY*size
+	a.ghost.X = sx - d.cellOffsetX*size
+	a.ghost.Y = sy - d.cellOffsetY*size
 }
 
 // dropTargetAt resolves the cursor to a drop target, false over a content

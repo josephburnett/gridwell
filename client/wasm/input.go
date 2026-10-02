@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
@@ -552,9 +553,8 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 	}
 	a.ghost = &ghost{
 		tile:              d.snapshotTile,
+		Flight:            anim.Flight{X: d.originScreenX, Y: d.originScreenY},
 		paneID:            d.originPaneID,
-		screenX:           d.originScreenX,
-		screenY:           d.originScreenY,
 		displayedCellSize: size,
 		targetCellSize:    size,
 	}

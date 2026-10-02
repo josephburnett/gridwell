@@ -7,7 +7,6 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
@@ -218,20 +217,12 @@ func (a *App) landGhost(paneID string, cellSize, toX, toY float64) {
 	a.startSnap(toX, toY, snapMs)
 }
 
-// startSnap animates the active ghost to (toX, toY), replacing any prior
-// animation.
+// startSnap lands the active ghost at (toX, toY).
 func (a *App) startSnap(toX, toY, duration float64) {
 	if a.ghost == nil {
 		return
 	}
-	a.animation = &anim.Animation{
-		FromX:      a.ghost.screenX,
-		FromY:      a.ghost.screenY,
-		ToX:        toX,
-		ToY:        toY,
-		StartMs:    nowMs(),
-		DurationMs: duration,
-	}
+	a.ghost.Land(toX, toY, nowMs(), duration)
 	a.scheduleFrame(traceevent.WhyDrag)
 }
 
@@ -256,13 +247,6 @@ func (a *App) snapBackToOrigin(d *dragState) {
 	if d.srcCellSize > 0 {
 		a.ghost.targetCellSize = d.srcCellSize
 	}
-	a.animation = &anim.Animation{
-		FromX:      a.ghost.screenX,
-		FromY:      a.ghost.screenY,
-		ToX:        d.originScreenX,
-		ToY:        d.originScreenY,
-		StartMs:    nowMs(),
-		DurationMs: snapBackMs,
-	}
+	a.ghost.Land(d.originScreenX, d.originScreenY, nowMs(), snapBackMs)
 	a.scheduleFrame(traceevent.WhyDrag)
 }

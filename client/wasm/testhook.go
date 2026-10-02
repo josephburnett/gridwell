@@ -70,6 +70,7 @@ func (a *App) installTestHook() {
 				"workspaceSaveMs": cadence.WorkspaceSaveMs,
 				"shellMirrorMs":   cadence.ShellMirrorMs,
 				"traceFadeMs":     cadence.TraceFadeMs,
+				"snapBackMs":      snapBackMs,
 			}
 		}),
 		// Shell mirror snapshots taken since boot; the snapshot itself lands in
