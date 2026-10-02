@@ -277,20 +277,22 @@ func Reaches(ns, source string) bool {
 	return source == EverySource || ns == source || rpc.ChainedThrough(ns, source)
 }
 
-// NoteHealth folds one health transition in. The empty uuid names no source
-// and is dropped rather than read as EverySource, which would call every room
-// in the client a memory.
-func (c *Cache) NoteHealth(uuid string, healthy bool) {
+// NoteHealth folds one health event in and reports whether the source was dark
+// before it. The empty uuid names no source and is dropped rather than read as
+// EverySource, which would call every room in the client a memory.
+func (c *Cache) NoteHealth(uuid string, healthy bool) (wasDark bool) {
 	if uuid == EverySource {
-		return
+		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	wasDark = c.dark[uuid]
 	if healthy {
 		delete(c.dark, uuid)
-		return
+		return wasDark
 	}
 	c.dark[uuid] = true
+	return wasDark
 }
 
 // SourceDark reports that the source serving gridID is not answering, so this

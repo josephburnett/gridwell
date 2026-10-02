@@ -1181,21 +1181,24 @@ func (a *App) resolveErr(source string) {
 	}
 }
 
-// reportPluginHealth runs events.ReactHealth's plan for a transition: the
-// notice at once, the resync once the health holds.
+// reportPluginHealth runs events.ReactHealth's plan for a health event: the
+// notices at once, the resync once the health holds.
 func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
-	r := events.ReactHealth(h)
+	label := h.PluginUuid
+	if pl, ok := a.pluginByUUID(h.PluginUuid); ok && pl.Label != "" {
+		label = pl.Label
+	}
 	// The client's one copy of which sources are not answering.
-	a.c.NoteHealth(h.PluginUuid, h.Healthy)
-	if r.Resolve {
-		a.resolveErr(r.Source)
-	}
-	if r.Report {
-		label := h.PluginUuid
-		if pl, ok := a.pluginByUUID(h.PluginUuid); ok && pl.Label != "" {
-			label = pl.Label
+	wasDark := a.c.NoteHealth(h.PluginUuid, h.Healthy)
+	r := events.ReactHealth(h, label, wasDark)
+	for _, n := range []events.StickyNotice{r.Dark, r.LiveOff} {
+		if n.Message == "" {
+			a.resolveErr(n.Source)
+		} else {
+			a.reportErr(errsurface.Error, n.Source, n.Message)
 		}
-		a.reportErr(errsurface.Error, r.Source, label+": live updates stopped — "+h.Detail)
 	}
-	a.persist.sched.healthResync.Transition(r.Resync)
+	if r.Resync != "" {
+		a.persist.sched.healthResync.Transition(r.Resync)
+	}
 }

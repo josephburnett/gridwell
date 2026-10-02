@@ -8,11 +8,6 @@ import (
 // An empty uuid means "the namespace this rode in from", which the fan-in
 // fills (QualifyEventIDs), so a layer that does not know the uuid the registry
 // gave it still reports.
-//
-// TODO(client): events.ReactHealth does not read live_updates_off yet. A
-// healthy event carrying it should put up one sticky "live updates off:
-// <reason>" notice for the source, and one carrying "" take it down; a change
-// of that field alone darkens nothing, so it should cost no resync.
 func HealthEvent(uuid string, healthy bool, detail string) *pb.Event {
 	return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
 		PluginUuid: uuid, Healthy: healthy, Detail: detail,
