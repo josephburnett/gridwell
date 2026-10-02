@@ -719,12 +719,12 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 	r := clientsync.ReactGridRead(id, resp.GetGrid().GetId(), o)
 	a.fetch.grids.Settle(id, r.Latch)
 	switch {
-	case clientsync.ReadSurfaces(o):
+	case r.Surface:
 		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
 	case r.Renamed:
 		a.reportErr(errsurface.Error, "grid:"+id,
 			"asked for grid "+id+", was answered "+resp.Grid.Id+" — the view of "+id+" cannot load")
-	default:
+	case r.Resolve:
 		a.resolveErr("grid:" + id)
 	}
 	if r.Store {

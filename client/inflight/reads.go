@@ -23,6 +23,9 @@ const (
 	// (gwerr.IsDeadRef). It stands and clears as Refused does, and ReviveIf
 	// clears it alone; Reads.Dead is what tells it apart.
 	Dead
+	// Abandoned is a read the client cancelled itself (CancelIf). Nothing
+	// was heard, so it moves no latch; the canceller owns the re-ask.
+	Abandoned
 )
 
 // Reads is one kind of read the renderer asks for on every draw: its claims
@@ -67,6 +70,9 @@ func (r *Reads) Context() (context.Context, context.CancelFunc) {
 
 // Settle applies one read's verdict to key.
 func (r *Reads) Settle(key string, v Verdict) {
+	if v == Abandoned {
+		return
+	}
 	r.dead.clear(key)
 	switch v {
 	case Answered:

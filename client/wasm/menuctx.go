@@ -67,13 +67,17 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 
 // fetchMenuCtx loads one remote node's menu on the claim menuCtx opened for
 // it. A failure leaves the context unfetched, surfaces, and latches, so the
-// draw of the open menu asks again only when inflight.Reads clears it.
+// draw of the open menu asks again only when inflight.Reads clears it. A menu
+// has no dead face, so only the client's own cancel goes unsaid.
 func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 	defer done()
 	lp, err := a.cl.HandshakeNS(ctx, ns)
-	a.fetch.menus.Settle(ns, clientsync.ReactRead(clientsync.Of(err)))
+	o := clientsync.Of(err)
+	a.fetch.menus.Settle(ns, clientsync.ReactRead(o))
 	if err != nil {
-		a.surfaceRPCError("Handshake", err)
+		if o != clientsync.OutcomeAbandoned {
+			a.surfaceRPCError("Handshake", err)
+		}
 		return
 	}
 	mc := a.views.menuCtxs[ns]
@@ -110,10 +114,13 @@ func (a *App) askLocalMenu() {
 func (a *App) fetchLocalMenu(ctx context.Context, done func() bool) {
 	lp, err := a.cl.Handshake(ctx)
 	owed := done()
-	a.fetch.menus.Settle("", clientsync.ReactRead(clientsync.Of(err)))
-	if err != nil {
+	o := clientsync.Of(err)
+	a.fetch.menus.Settle("", clientsync.ReactRead(o))
+	switch {
+	case o == clientsync.OutcomeAbandoned:
+	case err != nil:
 		a.surfaceRPCError("Handshake", err)
-	} else {
+	default:
 		a.plugins = lp.Plugins
 		a.draw()
 	}

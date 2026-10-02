@@ -215,3 +215,19 @@ func TestJoinSharesTheReadInFlight(t *testing.T) {
 		t.Error("a latched key is neither read nor waited on")
 	}
 }
+
+// An abandoned read heard nothing, so it leaves every latch as it found it:
+// it neither clears a standing verdict nor latches a key the canceller is
+// about to ask again.
+func TestAnAbandonedReadSettlesNothing(t *testing.T) {
+	for _, before := range []Verdict{Answered, Refused, Dead, Unreachable} {
+		r := NewReads()
+		r.Settle("g", before)
+		failed, dead := r.Failed("g"), r.Dead("g")
+		r.Settle("g", Abandoned)
+		if r.Failed("g") != failed || r.Dead("g") != dead {
+			t.Errorf("after %v, Abandoned moved the latch: failed %v→%v dead %v→%v",
+				before, failed, r.Failed("g"), dead, r.Dead("g"))
+		}
+	}
+}

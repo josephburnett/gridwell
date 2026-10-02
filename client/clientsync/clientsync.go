@@ -27,17 +27,25 @@ const (
 	// OutcomeDead is a dead link (gwerr.IsDeadRef), a state rather than an
 	// error.
 	OutcomeDead
+	// OutcomeAbandoned is a call whose context the client cancelled itself,
+	// so nothing was heard and nothing is said; only reads are cancelled
+	// (inflight.Reads.CancelIf), by a caller that asks again.
+	OutcomeAbandoned
 )
 
 // Of reads a non-connect error as Transport and every coded error as a server
 // that answered. A context deadline is the client's own timer
 // (inflight.Deadline), so it is Transport: read as a verdict it would drop
-// bytes.
+// bytes. A Canceled the far side sent wraps no context.Canceled, so it stays
+// Transport.
 func Of(err error) Outcome {
 	if err == nil {
 		return OutcomeOK
 	}
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) {
+		return OutcomeAbandoned
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
 		return OutcomeTransport
 	}
 	var ce *connect.Error
@@ -56,10 +64,17 @@ func Of(err error) Outcome {
 	return OutcomeRejected
 }
 
+// Unheard reports a call the server never answered. A write treats both alike:
+// its bytes are still owed.
+func Unheard(o Outcome) bool {
+	return o == OutcomeTransport || o == OutcomeAbandoned
+}
+
 // ReadSurfaces reports whether a read's failure goes on the error strip: every
-// failure but the dead verdict, which the dead face carries alone.
+// failure but the dead verdict, which the dead face carries alone, and the
+// client's own cancel, which is no failure.
 func ReadSurfaces(o Outcome) bool {
-	return o != OutcomeOK && o != OutcomeDead
+	return o != OutcomeOK && o != OutcomeDead && o != OutcomeAbandoned
 }
 
 // PlaceReadSurfaces reports whether a by-id tile read's latch goes on the
@@ -89,7 +104,7 @@ func React(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
 		return Reaction{Refetch: true}
-	case OutcomeRejected, OutcomeDead, OutcomeTransport:
+	case OutcomeRejected, OutcomeDead, OutcomeTransport, OutcomeAbandoned:
 		return Reaction{Log: true}
 	}
 	return Reaction{}
@@ -104,7 +119,7 @@ func ReactOptimistic(o Outcome) Reaction {
 		return Reaction{Refetch: true, DropLocal: true}
 	case OutcomeRejected, OutcomeDead:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
-	case OutcomeTransport:
+	case OutcomeTransport, OutcomeAbandoned:
 		return Reaction{Log: true, Retry: true}
 	}
 	return Reaction{}
@@ -119,7 +134,7 @@ func ReactSave(o Outcome) Reaction {
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
 	case OutcomeRejected, OutcomeDead:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
-	case OutcomeTransport:
+	case OutcomeTransport, OutcomeAbandoned:
 		return Reaction{Log: true, Retry: true}
 	}
 	return Reaction{}
@@ -161,7 +176,7 @@ func NoticesFor(r Reaction, o Outcome, ownWords bool) Notices {
 	}
 	switch o {
 	case OutcomeOK:
-	case OutcomeTransport:
+	case OutcomeTransport, OutcomeAbandoned:
 		n.Generic = false
 		n.Own = OwnRetry
 	default:
@@ -180,6 +195,8 @@ func ReactRead(o Outcome) inflight.Verdict {
 		return inflight.Unreachable
 	case OutcomeDead:
 		return inflight.Dead
+	case OutcomeAbandoned:
+		return inflight.Abandoned
 	}
 	return inflight.Refused
 }
@@ -193,14 +210,19 @@ type GridRead struct {
 	Store bool
 	// Renamed is the answered-under-another-id case, which the notice names.
 	Renamed bool
+	// Surface puts the failure on the strip (ReadSurfaces); Resolve takes the
+	// grid's notice down. An abandoned read does neither.
+	Surface bool
+	Resolve bool
 }
 
 // ReactGridRead is the one table for a grid read's outcome.
 func ReactGridRead(asked, answered string, o Outcome) GridRead {
-	r := GridRead{Latch: ReactRead(o), Store: o == OutcomeOK}
+	r := GridRead{Latch: ReactRead(o), Store: o == OutcomeOK, Surface: ReadSurfaces(o)}
 	if o == OutcomeOK && answered != asked {
 		r.Latch, r.Renamed = inflight.Refused, true
 	}
+	r.Resolve = !r.Surface && !r.Renamed && o != OutcomeAbandoned
 	return r
 }
 

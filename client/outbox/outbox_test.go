@@ -89,7 +89,7 @@ func TestReparkDuringDrain(t *testing.T) {
 	}
 }
 
-// TestRecordIsTheOneRule pins the reconcile table: only a transport failure
+// TestRecordIsTheOneRule pins the reconcile table: only an unheard call
 // parks. A parked retry after a verdict would replay a write the server has
 // already answered.
 func TestRecordIsTheOneRule(t *testing.T) {
@@ -101,6 +101,7 @@ func TestRecordIsTheOneRule(t *testing.T) {
 		{clientsync.OutcomeConflict, false},
 		{clientsync.OutcomeRejected, false},
 		{clientsync.OutcomeTransport, true},
+		{clientsync.OutcomeAbandoned, true},
 	}
 	for _, c := range cases {
 		o := New()

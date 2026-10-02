@@ -47,10 +47,10 @@ func (o *Outbox) Send(k Key, retry func(), call func() clientsync.Outcome) clien
 	return out
 }
 
-// Record parks a transport failure for the retry kick; any other outcome acks
+// Record parks an unheard call for the retry kick; any other outcome acks
 // the key, the server having spoken and the caller's reaction resolving it.
 func (o *Outbox) Record(out clientsync.Outcome, k Key, retry func()) {
-	if out == clientsync.OutcomeTransport && retry != nil {
+	if clientsync.Unheard(out) && retry != nil {
 		o.Park(k, retry)
 		return
 	}

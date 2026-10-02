@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -21,13 +22,18 @@ import (
 // table: for every code the server can answer, the client says Transport
 // exactly when the server side would degrade to a memory. The two spellings
 // cannot share a value, since the client sees Connect codes and the node gRPC
-// ones, so this is the pin.
+// ones, so this is the pin. Abandoned is no wire code: a Canceled the far side
+// sent is a hop that never spoke, on both sides; only the client's own
+// context.Canceled is a call it withdrew.
 func TestOfAgreesWithGwerrIsTransport(t *testing.T) {
 	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {
 		want := gwerr.IsTransport(status.Error(c, "x"))
-		got := Of(connect.NewError(gwerr.ConnectCode(c), errors.New("x"))) == OutcomeTransport
-		if got != want {
+		o := Of(connect.NewError(gwerr.ConnectCode(c), errors.New("x")))
+		if got := o == OutcomeTransport; got != want {
 			t.Errorf("code %v: client Transport=%v, server IsTransport=%v", c, got, want)
+		}
+		if o == OutcomeAbandoned {
+			t.Errorf("code %v from the wire reads as the client's own cancel", c)
 		}
 	}
 }
@@ -44,7 +50,10 @@ func TestOf(t *testing.T) {
 		{"failed precondition is conflict", connect.NewError(connect.CodeFailedPrecondition, errors.New("version")), OutcomeConflict},
 		{"unavailable is transport", connect.NewError(connect.CodeUnavailable, errors.New("refused")), OutcomeTransport},
 		{"deadline is transport", connect.NewError(connect.CodeDeadlineExceeded, errors.New("timeout")), OutcomeTransport},
-		{"canceled is transport", connect.NewError(connect.CodeCanceled, errors.New("canceled")), OutcomeTransport},
+		{"canceled from the far side is transport", connect.NewError(connect.CodeCanceled, errors.New("canceled")), OutcomeTransport},
+		{"our own cancel is abandoned", context.Canceled, OutcomeAbandoned},
+		{"our own cancel through connect is abandoned", connect.NewError(connect.CodeCanceled, context.Canceled), OutcomeAbandoned},
+		{"our own cancel wrapped by the transport is abandoned", fmt.Errorf("Post \"/x\": %w", context.Canceled), OutcomeAbandoned},
 		{"bare error is transport", errors.New("tcp reset by peer"), OutcomeTransport},
 		{"invalid argument is rejected", connect.NewError(connect.CodeInvalidArgument, errors.New("bad")), OutcomeRejected},
 		{"not found is rejected", connect.NewError(connect.CodeNotFound, errors.New("gone")), OutcomeRejected},
@@ -62,8 +71,8 @@ func TestOf(t *testing.T) {
 }
 
 // TestOfPinsWireCodes crosses the seam Of's transport set depends on: a real
-// connect-go client against a dead port, and with a canceled context, is
-// Transport. A connect-go upgrade that recodes transport failures fails here
+// connect-go client against a dead port is Transport, and with a canceled
+// context is Abandoned. A connect-go upgrade that recodes transport failures fails here
 // instead of dropping user data on a blip.
 func TestOfPinsWireCodes(t *testing.T) {
 	// Nothing listens on port 1.
@@ -77,8 +86,71 @@ func TestOfPinsWireCodes(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = cl.GetGrid(ctx, connect.NewRequest(&pb.GetGridRequest{GridId: "x"}))
-	if got := Of(err); got != OutcomeTransport {
-		t.Errorf("canceled: Of(%v) = %v, want OutcomeTransport", err, got)
+	if got := Of(err); got != OutcomeAbandoned {
+		t.Errorf("canceled: Of(%v) = %v, want OutcomeAbandoned", err, got)
+	}
+}
+
+// heldGrid answers GetGrid only once its caller gives up.
+type heldGrid struct {
+	gridwellv1connect.UnimplementedGridwellHandler
+	asked chan struct{}
+}
+
+func (h heldGrid) GetGrid(ctx context.Context, _ *connect.Request[pb.GetGridRequest]) (*connect.Response[pb.GetGridResponse], error) {
+	close(h.asked)
+	<-ctx.Done()
+	return nil, connect.NewError(connect.CodeCanceled, ctx.Err())
+}
+
+// A health transition cancels every read in flight for its source and asks
+// again (inflight.Reads.CancelIf). The cancelled read is the client's own
+// doing, so across a real connect call it latches nothing, says nothing and
+// resolves nothing: the storm of 2026-10-02 was each one posting "grid
+// unavailable: context canceled".
+func TestACancelledReadLeavesNoTrace(t *testing.T) {
+	h := heldGrid{asked: make(chan struct{})}
+	mux := http.NewServeMux()
+	mux.Handle(gridwellv1connect.NewGridwellHandler(h))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cl := gridwellv1connect.NewGridwellClient(srv.Client(), srv.URL, connect.WithProtoJSON())
+
+	reads := inflight.NewReads()
+	const key = "n1/g"
+	ctx, done, ok := reads.Ask(key)
+	if !ok {
+		t.Fatal("first ask refused")
+	}
+	errc := make(chan error, 1)
+	go func() {
+		_, err := cl.GetGrid(ctx, connect.NewRequest(&pb.GetGridRequest{GridId: key}))
+		errc <- err
+	}()
+	<-h.asked
+	reads.CancelIf(func(string) bool { return true })
+	err := <-errc
+	done()
+
+	o := Of(err)
+	if o != OutcomeAbandoned {
+		t.Fatalf("Of(%v) = %v, want OutcomeAbandoned", err, o)
+	}
+	reads.Settle(key, ReactRead(o))
+	if reads.Failed(key) {
+		t.Error("a withdrawn read latched its key")
+	}
+	if ReadSurfaces(o) {
+		t.Error("a withdrawn read surfaces")
+	}
+	if g := ReactGridRead(key, "", o); g.Surface || g.Resolve || g.Store || g.Renamed {
+		t.Errorf("ReactGridRead(abandoned) = %+v, want nothing", g)
+	}
+	if p := ReactPreview(err, true); p.Surface || p.Settle || p.Store {
+		t.Errorf("ReactPreview(abandoned) = %+v, want nothing", p)
+	}
+	if _, _, ok := reads.Ask(key); !ok {
+		t.Error("the canceller's re-ask was refused")
 	}
 }
 
@@ -97,12 +169,14 @@ func TestReactTables(t *testing.T) {
 			OutcomeConflict:  {Refetch: true},
 			OutcomeRejected:  {Log: true},
 			OutcomeTransport: {Log: true},
+			OutcomeAbandoned: {Log: true},
 		}},
 		{"ReactOptimistic", ReactOptimistic, map[Outcome]Reaction{
 			OutcomeOK:        {},
 			OutcomeConflict:  {Refetch: true, DropLocal: true},
 			OutcomeRejected:  {Refetch: true, Log: true, DropLocal: true},
 			OutcomeTransport: {Log: true, Retry: true},
+			OutcomeAbandoned: {Log: true, Retry: true},
 		}},
 		// ReactSave differs from the other two on Conflict alone: a
 		// concurrent edit is about to replace the user's words, so it
@@ -112,6 +186,7 @@ func TestReactTables(t *testing.T) {
 			OutcomeConflict:  {Refetch: true, Log: true, DropLocal: true},
 			OutcomeRejected:  {Refetch: true, Log: true, DropLocal: true},
 			OutcomeTransport: {Log: true, Retry: true},
+			OutcomeAbandoned: {Log: true, Retry: true},
 		}},
 	}
 	for _, tb := range tables {
@@ -124,15 +199,20 @@ func TestReactTables(t *testing.T) {
 }
 
 // TestNoDropWithoutVerdict sweeps every table and outcome: DropLocal implies
-// the server spoke, and Transport implies no Refetch.
+// the server spoke, and an unheard call implies no Refetch.
 func TestNoDropWithoutVerdict(t *testing.T) {
 	for _, react := range []func(Outcome) Reaction{React, ReactOptimistic, ReactSave} {
-		r := react(OutcomeTransport)
-		if r.DropLocal {
-			t.Errorf("a policy table drops local state on Transport: %+v", r)
-		}
-		if r.Refetch {
-			t.Errorf("a policy table refetches on Transport: %+v", r)
+		for _, o := range []Outcome{OutcomeTransport, OutcomeAbandoned} {
+			if !Unheard(o) {
+				t.Errorf("%v is not unheard", o)
+			}
+			r := react(o)
+			if r.DropLocal {
+				t.Errorf("a policy table drops local state on %v: %+v", o, r)
+			}
+			if r.Refetch {
+				t.Errorf("a policy table refetches on %v: %+v", o, r)
+			}
 		}
 	}
 }
@@ -155,7 +235,6 @@ func TestOfReadsOurOwnDeadlineAsTransport(t *testing.T) {
 		err  error
 	}{
 		{"bare deadline", context.DeadlineExceeded},
-		{"bare cancel", context.Canceled},
 		{"wrapped by the transport", fmt.Errorf("Post \"/x\": %w", context.DeadlineExceeded)},
 		// A transport that hands the expiry back wearing a coded error
 		// outside the transport set.
@@ -177,11 +256,12 @@ func TestReactGridRead(t *testing.T) {
 		o               Outcome
 		want            GridRead
 	}{
-		{"answered as asked", "n1/7", "n1/7", OutcomeOK, GridRead{Latch: inflight.Answered, Store: true}},
+		{"answered as asked", "n1/7", "n1/7", OutcomeOK, GridRead{Latch: inflight.Answered, Store: true, Resolve: true}},
 		{"answered under another id latches, reports, and still stores", "n1/7", "n1/8", OutcomeOK, GridRead{Latch: inflight.Refused, Store: true, Renamed: true}},
-		{"transport latches unreachable", "n1/7", "", OutcomeTransport, GridRead{Latch: inflight.Unreachable}},
-		{"a verdict latches", "n1/7", "", OutcomeRejected, GridRead{Latch: inflight.Refused}},
-		{"a conflict latches", "n1/7", "", OutcomeConflict, GridRead{Latch: inflight.Refused}},
+		{"transport latches unreachable", "n1/7", "", OutcomeTransport, GridRead{Latch: inflight.Unreachable, Surface: true}},
+		{"a verdict latches", "n1/7", "", OutcomeRejected, GridRead{Latch: inflight.Refused, Surface: true}},
+		{"a conflict latches", "n1/7", "", OutcomeConflict, GridRead{Latch: inflight.Refused, Surface: true}},
+		{"a withdrawn read does nothing", "n1/7", "", OutcomeAbandoned, GridRead{Latch: inflight.Abandoned}},
 	}
 	for _, c := range cases {
 		if got := ReactGridRead(c.asked, c.answered, c.o); got != c.want {
@@ -203,6 +283,7 @@ func TestNoticesFor(t *testing.T) {
 		{"a verdict with words gets both", React(OutcomeRejected), OutcomeRejected, true, Notices{Generic: true, Own: OwnFailed}},
 		{"transport with no words gets the generic line", React(OutcomeTransport), OutcomeTransport, false, Notices{Generic: true}},
 		{"transport with words says will-retry alone", React(OutcomeTransport), OutcomeTransport, true, Notices{Own: OwnRetry}},
+		{"a withdrawn write says will-retry alone", React(OutcomeAbandoned), OutcomeAbandoned, true, Notices{Own: OwnRetry}},
 		{"a conflict is silent generically and spoken in its own words", React(OutcomeConflict), OutcomeConflict, true, Notices{Own: OwnFailed, Reloaded: true}},
 		{"an optimistic conflict says it reloaded", ReactOptimistic(OutcomeConflict), OutcomeConflict, false, Notices{Reloaded: true}},
 		{"an optimistic rejection refetches without claiming a change elsewhere", ReactOptimistic(OutcomeRejected), OutcomeRejected, false, Notices{Generic: true}},
@@ -225,6 +306,7 @@ func TestReactRead(t *testing.T) {
 		OutcomeTransport: inflight.Unreachable,
 		OutcomeRejected:  inflight.Refused,
 		OutcomeConflict:  inflight.Refused,
+		OutcomeAbandoned: inflight.Abandoned,
 	} {
 		if got := ReactRead(o); got != want {
 			t.Errorf("outcome %v: got %v, want %v", o, got, want)

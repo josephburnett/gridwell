@@ -49,7 +49,7 @@ func (a *App) sendInterest() {
 				a.resolveErr("interest")
 				continue
 			}
-			if clientsync.Of(err) != clientsync.OutcomeTransport {
+			if !clientsync.Unheard(clientsync.Of(err)) {
 				a.reportErr(errsurface.Error, "interest", "the node was not told what is on screen: "+err.Error())
 			}
 			break
