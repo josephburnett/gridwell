@@ -476,3 +476,38 @@ func TestWatchFollowsTheProcess(t *testing.T) {
 		t.Fatal("the respawned process got no stream inside half a second")
 	}
 }
+
+// A refusal is the process's: a respawned process that refuses again, in the
+// same words, is announced again, because the restart cleared what the old
+// process said.
+func TestARespawnedProcessRefusingAgainIsAnnouncedAgain(t *testing.T) {
+	p := &watchPlugin{
+		accept: func(int32) bool { return false },
+		serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
+			return status.Error(codes.ResourceExhausted, "the OS refused another change watch")
+		},
+	}
+	sup := &fakeSup{healthy: true, fns: map[int]func(bool, string){}}
+	a, seen := watching(t, p, sup)
+	first := await(t, seen).GetPluginHealth()
+	if first == nil || !strings.Contains(first.LiveUpdatesOff, "refused") {
+		t.Fatalf("first event = %v, want live updates off", first)
+	}
+	sup.set(false)
+	time.Sleep(200 * time.Millisecond)
+	if got := a.source().liveOff; got != "" {
+		t.Fatalf("the old process's refusal (%q) outlived it", got)
+	}
+	sup.set(true)
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case ev := <-seen:
+			if hv := ev.GetPluginHealth(); hv != nil && strings.Contains(hv.LiveUpdatesOff, "refused") {
+				return
+			}
+		case <-deadline:
+			t.Fatal("the respawned process refused again and nobody was told")
+		}
+	}
+}
