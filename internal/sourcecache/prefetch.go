@@ -158,7 +158,7 @@ func (w *walker) walkGrid(gridID string) bool {
 	}
 	// The live read, never the serve-first door: a remembered answer would
 	// warm nothing.
-	resp, err := w.c.getGridLive(w.ctx, gridID)
+	resp, _, err := w.c.getGridLive(w.ctx, gridID)
 	if err != nil {
 		return !gwerr.IsTransport(err) // dark aborts; a refusal skips this branch
 	}

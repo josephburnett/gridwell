@@ -129,6 +129,8 @@ type Layer struct {
 	// setDark is the one writer.
 	darkMu sync.Mutex
 	dark   map[string]bool
+
+	order foldOrder
 }
 
 // sourceOf names the source an id belongs to: the connection segment of a
@@ -346,17 +348,21 @@ func now() int64 { return time.Now().Unix() }
 // Handshake forwards the routed plugin list and remembers it per namespace. A
 // doorway answered with no framing keeps the remembered one (keepFraming).
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+	r := c.order.begin()
+	defer r.end()
 	resp, err := c.Namespace.Handshake(ctx, in)
 	c.noteReach(ctx, err, sourceOfNS(in.GetNamespace()), nil)
 	if err == nil {
-		if old, ok := c.loadPluginList(ctx, in.GetNamespace()); ok {
-			keepFraming(resp, old)
-		}
-		if b, merr := proto.Marshal(resp); merr == nil {
-			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
-				ON CONFLICT(ns) DO UPDATE SET proto=excluded.proto`, in.GetNamespace(), b)
-			c.noteCache("store pluginlist", werr)
-		}
+		r.install(doorwayGrids(resp), func() {
+			if old, ok := c.loadPluginList(ctx, in.GetNamespace()); ok {
+				keepFraming(resp, old)
+			}
+			if b, merr := proto.Marshal(resp); merr == nil {
+				_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
+					ON CONFLICT(ns) DO UPDATE SET proto=excluded.proto`, in.GetNamespace(), b)
+				c.noteCache("store pluginlist", werr)
+			}
+		})
 		return resp, nil
 	}
 	if !gwerr.IsTransport(err) {
@@ -379,6 +385,19 @@ func (c *Layer) loadPluginList(ctx context.Context, ns string) (*pb.HandshakeRes
 		return nil, false
 	}
 	return l, true
+}
+
+// doorwayGrids names every grid a plugin list frames, the keys reframe folds
+// under.
+func doorwayGrids(l *pb.HandshakeResponse) []string {
+	var ids []string
+	for _, pl := range l.GetPlugins() {
+		ids = append(ids, pl.GetRootGridId())
+		for _, e := range pl.GetMenuEntries() {
+			ids = append(ids, e.GetGridId())
+		}
+	}
+	return ids
 }
 
 // keepFraming gives every doorway of fresh that answers no framing (zero
@@ -419,25 +438,34 @@ func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 		return cached, nil
 	}
 	// A miss has nothing better than the source's word.
-	return c.getGridLive(ctx, in.GridId)
+	resp, _, err := c.getGridLive(ctx, in.GridId)
+	return resp, err
 }
 
-// getGridLive reads one grid from the source and remembers the answer: the
-// miss path, the revalidation, and the prefetch walk, which must never be
-// answered by the rows it is warming.
-func (c *Layer) getGridLive(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {
-	resp, err := c.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: gridID})
+// getGridLive reads one grid from the source and remembers the answer unless a
+// fold overtook it (foldOrder); installed says which. It is the miss path, the
+// revalidation, and the prefetch walk, which must never be answered by the
+// rows it is warming.
+func (c *Layer) getGridLive(ctx context.Context, gridID string) (resp *pb.GetGridResponse, installed bool, err error) {
+	r := c.order.begin()
+	defer r.end()
+	resp, err = c.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: gridID})
 	c.noteReachGrid(ctx, err, gridID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	c.storeGrid(ctx, gridID, resp)
-	return resp, nil
+	keys := []string{gridID}
+	for _, t := range resp.GetTiles() {
+		keys = append(keys, t.GetId())
+	}
+	installed = r.install(keys, func() { c.storeGrid(ctx, gridID, resp) })
+	return resp, installed, nil
 }
 
 // revalidateGrid refreshes one remembered grid in the background, single-flight
-// per grid id on the layer's context. A change is stored and announced; a
-// transport failure changes nothing; a verdict evicts.
+// per grid id on the layer's context. A change is stored and announced; an
+// answer a fold overtook, or a transport failure, changes nothing; a verdict
+// evicts.
 func (c *Layer) revalidateGrid(gridID string) {
 	c.revalMu.Lock()
 	if c.revalInflight[gridID] {
@@ -456,10 +484,10 @@ func (c *Layer) revalidateGrid(gridID string) {
 		}()
 		ctx := c.pf.ctx
 		old, _, hit := c.loadGrid(ctx, gridID)
-		resp, err := c.getGridLive(ctx, gridID)
+		resp, installed, err := c.getGridLive(ctx, gridID)
 		switch {
 		case err == nil:
-			if !hit || !gridRespEqual(old, resp) {
+			if installed && (!hit || !gridRespEqual(old, resp)) {
 				c.emitGridChanged(gridID)
 			}
 		case !gwerr.IsAbandoned(ctx, err) && !gwerr.IsTransport(err):
@@ -583,10 +611,13 @@ func (c *Layer) loadGrid(ctx context.Context, gridID string) (resp *pb.GetGridRe
 }
 
 func (c *Layer) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileResponse, error) {
+	r := c.order.begin()
+	defer r.end()
 	resp, err := c.Namespace.GetTile(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
-		c.upsertTile(ctx, resp.GetTile())
+		t := resp.GetTile()
+		r.install([]string{in.TileId, t.GetId()}, func() { c.upsertTile(ctx, t) })
 		return resp, nil
 	}
 	if !gwerr.IsTransport(err) {
@@ -618,24 +649,36 @@ func (c *Layer) upsertTile(ctx context.Context, t *pb.Tile) {
 	c.noteCache("upsert tile", werr)
 }
 
+// foldTile is the fold of one tile the source vouched for, by event or by a
+// write's answer; upsertTile is the bare row write.
+func (c *Layer) foldTile(ctx context.Context, t *pb.Tile) {
+	c.order.fold([]string{t.GetId(), t.GetGridId()}, func() { c.upsertTile(ctx, t) })
+}
+
 func (c *Layer) deleteTile(ctx context.Context, tileID string) {
-	_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID)
-	c.noteCache("delete tile", err)
-	_, err = c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
-	c.noteCache("delete content", err)
-	_, err = c.db.ExecContext(ctx, `DELETE FROM previews WHERE tile_id = ?`, tileID)
-	c.noteCache("delete preview", err)
+	c.order.fold([]string{tileID}, func() {
+		_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID)
+		c.noteCache("delete tile", err)
+		_, err = c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
+		c.noteCache("delete content", err)
+		_, err = c.db.ExecContext(ctx, `DELETE FROM previews WHERE tile_id = ?`, tileID)
+		c.noteCache("delete preview", err)
+	})
 }
 
 func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
+	r := c.order.begin()
+	defer r.end()
 	resp, err := c.Namespace.GetTilePreview(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		if jpeg := resp.GetJpeg(); len(jpeg) > 0 {
-			_, werr := c.db.ExecContext(ctx, `INSERT INTO previews (tile_id, jpeg, fetched_at) VALUES (?, ?, ?)
-				ON CONFLICT(tile_id) DO UPDATE SET jpeg=excluded.jpeg, fetched_at=excluded.fetched_at`,
-				in.TileId, jpeg, now())
-			c.noteCache("store preview", werr)
+			r.install([]string{in.TileId}, func() {
+				_, werr := c.db.ExecContext(ctx, `INSERT INTO previews (tile_id, jpeg, fetched_at) VALUES (?, ?, ?)
+					ON CONFLICT(tile_id) DO UPDATE SET jpeg=excluded.jpeg, fetched_at=excluded.fetched_at`,
+					in.TileId, jpeg, now())
+				c.noteCache("store preview", werr)
+			})
 		}
 		return resp, nil
 	}
@@ -656,6 +699,8 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 	var version int64
 	var data []byte
 	var gotChunk, oversized bool
+	r := c.order.begin()
+	defer r.end()
 	err := c.Namespace.ReadContent(ctx, in, func(ch *pb.ContentChunk) error {
 		gotChunk = true
 		// Chunk 1 carries media_type and version, sent even for empty content.
@@ -677,7 +722,7 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		if !oversized {
-			c.storeContent(ctx, in.TileId, mediaType, version, data)
+			r.install([]string{in.TileId}, func() { c.storeContent(ctx, in.TileId, mediaType, version, data) })
 		}
 		return nil
 	}
@@ -804,7 +849,7 @@ func (c *Layer) emitGridChanged(gridID string) {
 func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 	switch p := ev.GetPayload().(type) {
 	case *pb.Event_TileChanged:
-		c.upsertTile(ctx, p.TileChanged.GetTile())
+		c.foldTile(ctx, p.TileChanged.GetTile())
 	case *pb.Event_TileRemoved:
 		c.deleteTile(ctx, p.TileRemoved.GetTileId())
 	case *pb.Event_GridFramingChanged:
@@ -835,14 +880,14 @@ func (c *Layer) foldWrite(ctx context.Context, reqTileID string, t *pb.Tile) {
 	if t.GetId() != "" && reqTileID != "" && reqTileID != t.GetId() {
 		c.deleteTile(ctx, reqTileID)
 	}
-	c.upsertTile(ctx, t)
+	c.foldTile(ctx, t)
 }
 
 func (c *Layer) CreateTile(ctx context.Context, in *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	resp, err := c.Namespace.CreateTile(ctx, in)
 	c.noteReachGrid(ctx, err, in.GridId)
 	if err == nil {
-		c.upsertTile(ctx, resp.GetTile())
+		c.foldTile(ctx, resp.GetTile())
 	}
 	return resp, err
 }
@@ -869,7 +914,7 @@ func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.Til
 	resp, err := c.Namespace.CloneTile(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
-		c.upsertTile(ctx, resp.GetTile()) // the request names the source, which stays
+		c.foldTile(ctx, resp.GetTile()) // the request names the source, which stays
 	}
 	return resp, err
 }
@@ -891,6 +936,10 @@ func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.S
 // every remembered doorway rooted there (rpc.Reframe), from the source's event
 // and from a write the source accepted alike, which carry the same numbers.
 func (c *Layer) reframe(ctx context.Context, gridID string, f rpc.Framing) {
+	c.order.fold([]string{gridID}, func() { c.reframeRows(ctx, gridID, f) })
+}
+
+func (c *Layer) reframeRows(ctx context.Context, gridID string, f rpc.Framing) {
 	rows, err := c.db.QueryContext(ctx, `SELECT ns, proto FROM pluginlists`)
 	if err != nil {
 		c.noteCache("load pluginlists", err)
@@ -944,8 +993,10 @@ func (c *Layer) WriteContent(ctx context.Context, recv func() (*pb.WriteContentR
 	c.noteReachTile(ctx, err, tileID)
 	if err == nil {
 		if tileID != "" {
-			_, derr := c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
-			c.noteCache("drop written content", derr)
+			c.order.fold([]string{tileID}, func() {
+				_, derr := c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
+				c.noteCache("drop written content", derr)
+			})
 		}
 		c.foldWrite(ctx, tileID, resp.GetTile())
 	}
