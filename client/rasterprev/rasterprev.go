@@ -77,22 +77,27 @@ func NewCache(ras Rasterizer, onErr func(tileID string)) *Cache {
 	return &Cache{ras: ras, onErr: onErr, entries: map[slot]*resload.Entry[Key]{}}
 }
 
-// Ensure returns k's raster, starting a rasterization on a miss. ok is false
-// while one is in flight and stays false once one failed, so the caller paints
-// raw source. build supplies the SVG and reports false when the tile's bytes
-// have not loaded yet, which caches nothing. onReady may be nil and fires when
-// a raster lands.
-func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Raster, bool) {
+// Ensure returns k's raster and the width it was made at, starting a
+// rasterization on a miss. While k's is in flight it answers with the nearest
+// ready bucket of the same tile, version, renderer and theme, so a zoom that
+// crosses a bucket keeps showing the document; with none, and once k failed,
+// ok is false and the caller paints raw source. build supplies the SVG and
+// reports false when the tile's bytes have not loaded yet, which caches
+// nothing. onReady may be nil and fires when a raster lands.
+func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Raster, float64, bool) {
 	s := slot{tileID: k.TileID, bucket: k.Bucket}
 	if e, ok := c.entries[s]; ok && e.Ident == k {
 		if e.Ready() {
-			return e.Res, true
+			return e.Res, k.Bucket, true
 		}
-		return nil, false
+		if e.Failed && e.FailIdent == k {
+			return nil, 0, false
+		}
+		return c.standIn(k)
 	}
 	svg, ok := build()
 	if !ok {
-		return nil, false
+		return c.standIn(k)
 	}
 	// Other buckets whose version moved on re-rasterize on next use; keeping
 	// one would draw the previous bytes at the next zoom step.
@@ -125,7 +130,32 @@ func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Rast
 			}
 		},
 	)
-	return nil, false
+	return c.standIn(k)
+}
+
+// standIn is the ready raster nearest k's bucket among those identical to k
+// in all else, the narrower winning a tie because it cannot clip.
+func (c *Cache) standIn(k Key) (Raster, float64, bool) {
+	var best *resload.Entry[Key]
+	for _, e := range c.entries {
+		id := e.Ident
+		id.Bucket = k.Bucket
+		if id != k || !e.Ready() {
+			continue
+		}
+		if best == nil || closer(e.Ident.Bucket, best.Ident.Bucket, k.Bucket) {
+			best = e
+		}
+	}
+	if best == nil {
+		return nil, 0, false
+	}
+	return best.Res, best.Ident.Bucket, true
+}
+
+func closer(a, b, want float64) bool {
+	da, db := math.Abs(a-want), math.Abs(b-want)
+	return da < db || (da == db && a < b)
 }
 
 // Drop releases a tile's rasters. It is idempotent and runs on tile delete.

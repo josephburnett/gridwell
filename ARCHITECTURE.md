@@ -373,7 +373,9 @@ other view paints soft-wrapped source on canvas at the same columns as the
 textarea, so nothing reflows on focus. Previews render at constant scale from
 the tile's own facts alone. A rendered preview is a raster made at a width
 bucket and drawn at that scale, never stretched to the box: the box is a
-window that clips it or leaves a margin (`markdown.PreviewRasterDraw`).
+window that clips it or leaves a margin (`markdown.PreviewRasterDraw`), and
+while a new bucket rasterizes, the nearest ready one of the same version
+stands in (`rasterprev.Cache`).
 
 **The bar.** One bar at the bottom of the window (`client/wsbar`,
 `bottombar.go`), always there, riding the focused pane: one crumb per frame,

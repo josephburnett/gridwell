@@ -77,7 +77,7 @@ func TestFailureReportsOncePerKeyAndNeverRetries(t *testing.T) {
 	var reports []string
 	c := NewCache(ras, func(id string) { reports = append(reports, id) })
 
-	if _, ok := c.Ensure(key(1, 64), svgOK("<svg/>"), nil); ok {
+	if _, _, ok := c.Ensure(key(1, 64), svgOK("<svg/>"), nil); ok {
 		t.Fatal("a pending raster must not report ready")
 	}
 	ras.fail(0)
@@ -86,7 +86,7 @@ func TestFailureReportsOncePerKeyAndNeverRetries(t *testing.T) {
 	}
 	// Later frames re-ask for the same key.
 	for i := 0; i < 5; i++ {
-		if _, ok := c.Ensure(key(1, 64), svgOK("<svg/>"), nil); ok {
+		if _, _, ok := c.Ensure(key(1, 64), svgOK("<svg/>"), nil); ok {
 			t.Fatal("a failed key must stay not-ready")
 		}
 	}
@@ -110,7 +110,7 @@ func TestNewVersionClearsFailedState(t *testing.T) {
 	ras.fail(0)
 
 	var readies int
-	if _, ok := c.Ensure(key(2, 64), svgOK("v2"), func() { readies++ }); ok {
+	if _, _, ok := c.Ensure(key(2, 64), svgOK("v2"), func() { readies++ }); ok {
 		t.Fatal("the new version's raster is not loaded yet")
 	}
 	if ras.calls != 2 {
@@ -120,7 +120,7 @@ func TestNewVersionClearsFailedState(t *testing.T) {
 	if readies != 1 {
 		t.Errorf("onReady fired %d times, want 1", readies)
 	}
-	r, ok := c.Ensure(key(2, 64), svgOK("v2"), nil)
+	r, _, ok := c.Ensure(key(2, 64), svgOK("v2"), nil)
 	if !ok || r.(*fakeRaster).svg != "v2" {
 		t.Fatalf("Ensure after resolve = %v, %v; want the v2 raster", r, ok)
 	}
@@ -156,7 +156,7 @@ func TestOtherBucketsSurviveTheSameVersionAndSweepOnANewOne(t *testing.T) {
 	c.Ensure(key(1, 128), svgOK("b"), nil)
 	wide := ras.resolve(1)
 	narrow := ras.resolve(0)
-	if _, ok := c.Ensure(key(1, 64), svgOK("a"), nil); !ok {
+	if _, _, ok := c.Ensure(key(1, 64), svgOK("a"), nil); !ok {
 		t.Fatal("the 64 bucket must survive a draw at 128")
 	}
 	if narrow.revoked || wide.revoked {
@@ -179,7 +179,7 @@ func TestOtherBucketsSurviveTheSameVersionAndSweepOnANewOne(t *testing.T) {
 func TestBuildMissCachesNothing(t *testing.T) {
 	ras := &fakeRasterizer{}
 	c := NewCache(ras, nil)
-	if _, ok := c.Ensure(key(1, 64), func() (string, bool) { return "", false }, nil); ok {
+	if _, _, ok := c.Ensure(key(1, 64), func() (string, bool) { return "", false }, nil); ok {
 		t.Fatal("a tile whose bytes are not loaded has no raster")
 	}
 	if ras.calls != 0 {
@@ -224,5 +224,74 @@ func TestLateResultAfterDropIsRevoked(t *testing.T) {
 	}
 	if len(c.States()) != 0 {
 		t.Errorf("States() = %v, want empty", c.States())
+	}
+}
+
+// A zoom that crosses into a bucket with no raster yet keeps drawing the
+// document from the nearest ready bucket of the same version, never raw
+// source and never another version's picture.
+func TestStandInAcrossBucketsNeverAcrossVersions(t *testing.T) {
+	ras := &fakeRasterizer{}
+	c := NewCache(ras, nil)
+	c.Ensure(key(1, 128), svgOK("v1@128"), nil)
+	c.Ensure(key(1, 320), svgOK("v1@320"), nil)
+	ras.resolve(0)
+	ras.resolve(0)
+
+	r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil)
+	if !ok || r.(*fakeRaster).svg != "v1@128" || w != 128 {
+		t.Fatalf("in flight at 192: %v %v %v, want the nearest ready bucket, 128", r, w, ok)
+	}
+	if r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil); !ok || w != 128 || r.(*fakeRaster).svg != "v1@128" {
+		t.Fatalf("second frame in flight: %v %v %v, want the stand-in again", r, w, ok)
+	}
+	if ras.calls != 3 {
+		t.Errorf("Rasterize calls = %d, want 3: a stand-in does not re-ask", ras.calls)
+	}
+	ras.resolve(0)
+	if r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil); !ok || w != 192 || r.(*fakeRaster).svg != "v1@192" {
+		t.Fatalf("landed: %v %v %v, want 192's own raster", r, w, ok)
+	}
+
+	// New bytes: the old version's buckets are no stand-in.
+	if r, _, ok := c.Ensure(key(2, 256), svgOK("v2@256"), nil); ok {
+		t.Fatalf("v2 in flight served %v: a stand-in must never cross versions", r.(*fakeRaster).svg)
+	}
+	ras.resolve(0)
+	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2@128"), nil); !ok || w != 256 || r.(*fakeRaster).svg != "v2@256" {
+		t.Fatalf("v2 at 128 in flight: %v %v %v, want v2's 256", r, w, ok)
+	}
+
+	// A theme change is a different picture too.
+	other := key(2, 128)
+	other.Theme = "light"
+	if _, _, ok := c.Ensure(other, svgOK("light"), nil); ok {
+		t.Error("a stand-in must never cross themes")
+	}
+}
+
+// A failed key paints raw source and says so; it does not hide behind a
+// neighbouring bucket.
+func TestFailedKeyGetsNoStandIn(t *testing.T) {
+	ras := &fakeRasterizer{}
+	c := NewCache(ras, nil)
+	c.Ensure(key(1, 128), svgOK("a"), nil)
+	ras.resolve(0)
+	c.Ensure(key(1, 192), svgOK("b"), nil)
+	ras.fail(0)
+	if _, _, ok := c.Ensure(key(1, 192), svgOK("b"), nil); ok {
+		t.Error("a failed key answered with a stand-in")
+	}
+}
+
+func TestStandInTieGoesToTheNarrower(t *testing.T) {
+	ras := &fakeRasterizer{}
+	c := NewCache(ras, nil)
+	c.Ensure(key(1, 128), svgOK("128"), nil)
+	c.Ensure(key(1, 256), svgOK("256"), nil)
+	ras.resolve(0)
+	ras.resolve(0)
+	if _, w, ok := c.Ensure(key(1, 192), svgOK("192"), nil); !ok || w != 128 {
+		t.Errorf("tie: width %v ok %v, want 128, which cannot clip", w, ok)
 	}
 }

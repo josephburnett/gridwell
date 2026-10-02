@@ -16,7 +16,8 @@ import (
 // previews as the rendered document, so how you leave a tile is how it
 // presents from outside. markdown.RenderHTML stays the one renderer, and this
 // rasterizes its output through an SVG foreignObject image. Rasterization is
-// async, so raw source paints until the image decodes. rasterprev.Cache owns
+// async, so raw source paints until the tile's first image decodes.
+// rasterprev.Cache owns
 // every caching decision; this file is the blob-and-Image glue.
 
 // renderedPreviewMaxH caps the rasterized document height in CSS px. Beyond
@@ -71,10 +72,10 @@ func (r *svgRaster) Revoke() {
 	js.Global().Get("URL").Call("revokeObjectURL", r.url)
 }
 
-// renderedRasterFor returns the loaded raster for tile n at roughly logical
-// width contentW and the width it was made at, kicking an async
-// rasterization on a miss. ok stays false until the image decodes, so the
-// caller paints raw source.
+// renderedRasterFor returns a loaded raster for tile n near logical width
+// contentW and the width it was made at, kicking an async rasterization on a
+// miss. While that runs, rasterprev.Cache answers with a neighbouring width's
+// raster; ok is false only when it has none, and the caller paints raw source.
 func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value, float64, bool) {
 	bucket := rasterprev.Bucket(contentW)
 	k := rasterprev.Key{
@@ -84,7 +85,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 		Org:     markdown.IsOrg(n.AltText),
 		Theme:   a.themeName.String(),
 	}
-	r, ok := a.views.renderedPrev.Ensure(k, func() (string, bool) {
+	r, madeAt, ok := a.views.renderedPrev.Ensure(k, func() (string, bool) {
 		body, ok := a.tileBody(n)
 		if !ok {
 			return "", false // blob fetch in flight; the raw path warms it too
@@ -103,7 +104,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 	if !ok {
 		return js.Value{}, 0, false
 	}
-	return sr.img, bucket, true
+	return sr.img, madeAt, true
 }
 
 // drawRenderedPreview windows the tile's raster into the box; see

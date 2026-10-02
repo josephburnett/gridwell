@@ -6,7 +6,8 @@ import { tileAt } from './oracle';
 // A rendered preview is a raster made at a width bucket, so the spec zooms
 // until the box crosses into a second bucket and reads, through the textFaces
 // hook, the drawImage rects of each painted face: the drawn scale is the
-// same at every zoom, and the tile's own row was never written.
+// same at every zoom, no frame fell back to raw source on the way, and the
+// tile's own row was never written.
 
 const WRITES = ['PlaceTile', 'CloneTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
@@ -78,6 +79,7 @@ test('a rendered preview keeps its letter height across a grid zoom that crosses
   for (const s of scales) {
     expect(s, `drawn scale at every zoom: ${JSON.stringify(samples)}`).toBeCloseTo(scales[0], 6);
   }
+  expect((await face())!.rawAfterRaster, 'a frame mid-zoom painted raw source').toBe(0);
 
   await window.waitForTimeout(c.framingSaveMs * 2);
   await window.unroute('**/gridwell.v1.Gridwell/*');
