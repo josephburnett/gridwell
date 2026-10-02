@@ -191,6 +191,24 @@ func (a *App) installTestHook() {
 				"y": r.Get("top").Float() + (args[1].Float()+0.5)*ch,
 			}
 		}),
+		// The last face each text tile painted: kind "raster" with the
+		// drawImage rects, or "raw" source, plus the raw paints that followed
+		// a raster.
+		"textFaces": js.FuncOf(func(js.Value, []js.Value) any {
+			out := map[string]any{}
+			for id, f := range a.textFaces {
+				face := map[string]any{"kind": "raw", "rawAfterRaster": f.rawAfterRaster}
+				if d := f.draw; d != nil {
+					face["kind"] = "raster"
+					face["scale"] = d.DH / d.SH
+					face["rasterW"] = f.rasterW
+					face["src"] = []any{d.SX, d.SY, d.SW, d.SH}
+					face["dest"] = []any{d.DX, d.DY, d.DW, d.DH}
+				}
+				out[id] = face
+			}
+			return out
+		}),
 		"renderedPreviews": js.FuncOf(func(js.Value, []js.Value) any {
 			// The rendered-raster cache: tile id to decode state.
 			out := map[string]any{}

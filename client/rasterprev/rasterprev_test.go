@@ -51,11 +51,24 @@ func key(version int64, bucket float64) Key {
 	return Key{TileID: "t1", Version: version, Bucket: bucket}
 }
 
+// A bucket rounds down, so a raster drawn at the text's scale is never wider
+// than the box that asked for it, and never narrower by a step or more.
 func TestBucketQuantizes(t *testing.T) {
-	for _, c := range []struct{ in, want float64 }{{0, 64}, {10, 64}, {100, 128}, {200, 192}} {
+	for _, c := range []struct{ in, want float64 }{{0, 64}, {10, 64}, {64, 64}, {71.9, 64}, {72, 72}, {100, 91}, {1e9, 72277}} {
 		if got := Bucket(c.in); got != c.want {
 			t.Errorf("Bucket(%v) = %v, want %v", c.in, got, c.want)
 		}
+	}
+	steps := map[float64]bool{}
+	for w := 64.0; w < 4000; w += 0.5 {
+		b := Bucket(w)
+		if b > w || b*9/8 <= w {
+			t.Fatalf("Bucket(%v) = %v: outside (w*8/9, w]", w, b)
+		}
+		steps[b] = true
+	}
+	if len(steps) > 40 {
+		t.Errorf("%d buckets between 64 and 4000 px: a zoom would re-rasterize too often", len(steps))
 	}
 }
 

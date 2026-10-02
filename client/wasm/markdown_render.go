@@ -58,6 +58,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 			if mode == rpc.TextModeRendered {
 				frame := markdown.PreviewFrame{
 					Scale:    scale,
+					ScrollX:  p.TextScrollX,
 					ScrollY:  p.TextScrollY,
 					ContentW: a.textContentWidth(p),
 				}
@@ -70,6 +71,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 			if body, ok := a.tileBody(n); ok {
 				a.drawMarkdownText(a.cctx, string(body), originX, originY,
 					a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
+				a.noteTextFace(n.Id, nil, 0)
 			}
 		} else {
 			a.tileBody(n) // warm the cache so the overlay has content when shown
@@ -80,8 +82,8 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 // drawMarkdownNode renders a text tile as a grid preview: a constant-scale
 // window, so the type size never follows grid zoom, the doc wraps to the
 // tile's width, and the stored TextX/TextY place the window. The preview
-// follows the tile's stored text_mode, and raw source covers the async raster
-// gap.
+// follows the tile's stored text_mode, and raw source covers the async gap
+// before its first raster.
 func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	frame := markdown.PreviewWindowFrame(w, textFixedScale, contentzoom.Of(n.GetContentZoom()), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
@@ -107,6 +109,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 					a.drawMarkdownText(a.cctx, string(body),
 						x-scrollX*scale, y+topInset-scrollY*scale,
 						frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
+					a.noteTextFace(n.Id, nil, 0)
 				}
 			}
 		}

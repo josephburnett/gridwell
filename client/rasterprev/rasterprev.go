@@ -6,17 +6,33 @@ package rasterprev
 
 import (
 	"math"
+	"sort"
 
 	"github.com/josephburnett/gridwell/client/resload"
 )
 
-// bucketPx quantizes the layout width so continuous grid zoom re-rasterizes at
-// steps, not per frame.
-const bucketPx = 64.0
+// buckets quantize the layout width so continuous grid zoom re-rasterizes at
+// steps, not per frame. They are geometric, each 1/8 wider than the last, so
+// the margin a bucket leaves is under a ninth of the box at every width.
+var buckets = func() []float64 {
+	out := []float64{64}
+	for b := 64.0; b < 1<<16; {
+		b = math.Floor(b * 9 / 8)
+		out = append(out, b)
+	}
+	return out
+}()
 
-// Bucket rounds a logical content width to the width a raster is made at.
+// Bucket rounds a logical content width down to the width a raster is made
+// at. The raster is drawn at the text's scale, not stretched to the box, so
+// rounding down leaves a margin in the tile's own background where rounding
+// up would clip the ends of lines.
 func Bucket(contentW float64) float64 {
-	return math.Max(bucketPx, math.Round(contentW/bucketPx)*bucketPx)
+	i := sort.SearchFloat64s(buckets, contentW)
+	if i < len(buckets) && buckets[i] == contentW {
+		return contentW
+	}
+	return buckets[max(i-1, 0)]
 }
 
 // Key identifies one raster. Version is the tile's, so new bytes never draw

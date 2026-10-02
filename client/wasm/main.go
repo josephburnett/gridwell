@@ -183,6 +183,7 @@ type App struct {
 
 	// renderedPanePaints is e2e attribution: an unfocused pane paints raster.
 	renderedPanePaints map[string]int
+	textFaces          map[string]textFace
 
 	// backstop is the outbox re-post cadence, retry.Backstop until the e2e
 	// lowers it to bound one.
@@ -574,6 +575,7 @@ func main() {
 		shellAliveProbing:  map[string][]func(bool){},
 		traces:             map[string]traceState{},
 		renderedPanePaints: map[string]int{},
+		textFaces:          map[string]textFace{},
 		backstop:           retry.NewInterval(retry.Backstop),
 	}
 	// Before anything can draw: the settle timers close over the App.

@@ -4,6 +4,8 @@ package markdown
 // raw-text mode. It is outside the canvas painter so go test executes it, and
 // so preview, descent and the editing <textarea> place lines identically.
 
+import "math"
+
 // PreviewFrame is a markdown preview's scale and scroll offset.
 type PreviewFrame struct {
 	Scale            float64
@@ -30,6 +32,35 @@ func PreviewWindowFrame(innerW, fixedScale, contentZoom float64, storedX, stored
 		ScrollY:  float64(storedY),
 		ContentW: innerW / s,
 	}
+}
+
+// RasterDraw is one drawImage call: a source rect in the raster's logical px
+// and the dest rect on canvas.
+type RasterDraw struct {
+	SX, SY, SW, SH float64
+	DX, DY, DW, DH float64
+}
+
+// PreviewRasterDraw windows a raster rasterW by rasterH logical px into the
+// box below topInset, at frame.Scale and never at the box's width over the
+// raster's, so the letters keep their size whatever width the raster was made
+// at: the box clips a wider raster and leaves a margin beside a narrower one.
+// False means the window has scrolled off the raster.
+func PreviewRasterDraw(frame PreviewFrame, rasterW, rasterH, x, y, w, h, topInset float64) (RasterDraw, bool) {
+	s := frame.Scale
+	sx, sy := frame.ScrollX, frame.ScrollY
+	if s <= 0 || sx < 0 || sy < 0 || sx >= rasterW || sy >= rasterH {
+		return RasterDraw{}, false
+	}
+	sw := math.Min(w/s, rasterW-sx)
+	sh := math.Min((h-topInset)/s, rasterH-sy)
+	if sw <= 0 || sh <= 0 {
+		return RasterDraw{}, false
+	}
+	return RasterDraw{
+		SX: sx, SY: sy, SW: sw, SH: sh,
+		DX: x, DY: y + topInset, DW: sw * s, DH: sh * s,
+	}, true
 }
 
 // PreviewContentVisible drops to the alt-text banner alone below one body line

@@ -371,7 +371,9 @@ goldmark, go-org, bluemonday). Task-list checkboxes are the one interactive
 control; a click flips the source marker through the normal edit path. Every
 other view paints soft-wrapped source on canvas at the same columns as the
 textarea, so nothing reflows on focus. Previews render at constant scale from
-the tile's own facts alone.
+the tile's own facts alone. A rendered preview is a raster made at a width
+bucket and drawn at that scale, never stretched to the box: the box is a
+window that clips it or leaves a margin (`markdown.PreviewRasterDraw`).
 
 **The bar.** One bar at the bottom of the window (`client/wsbar`,
 `bottombar.go`), always there, riding the focused pane: one crumb per frame,
@@ -582,6 +584,7 @@ pane is inside" and do not spread the word.
 | An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
 | Text preview never re-wraps | `PreviewWindowFrame` takes only the tile's facts |
+| Text letters never follow grid zoom | `PreviewRasterDraw` draws at the frame's scale; `preview-letter-height.spec.ts` |
 | Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place`, `setHidden` and `move`; `url-focus-steal.spec.ts`, the capture harness |
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |

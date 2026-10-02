@@ -97,39 +97,50 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 		return markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, a.pal), true
 	}, func() { a.draw() })
 	if !ok {
-		return js.Value{}, bucket, false
+		return js.Value{}, 0, false
 	}
 	sr, ok := r.(*svgRaster)
 	if !ok {
-		return js.Value{}, bucket, false
+		return js.Value{}, 0, false
 	}
 	return sr.img, bucket, true
 }
 
-// drawRenderedPreview windows the tile's raster at the preview frame's
-// scroll, reporting whether it drew. False means the caller paints the raw
-// fallback.
+// drawRenderedPreview windows the tile's raster into the box; see
+// markdown.PreviewRasterDraw. False means the caller paints the raw fallback.
 func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFrame,
 	x, y, w, h, topInset float64) bool {
 	img, rasterW, ok := a.renderedRasterFor(n, frame.ContentW)
 	if !ok {
 		return false
 	}
-	s := w / rasterW
-	if s <= 0 {
+	d, ok := markdown.PreviewRasterDraw(frame, rasterW, renderedPreviewMaxH, x, y, w, h, topInset)
+	if !ok {
 		return false
 	}
-	sy := frame.ScrollY
-	sh := (h - topInset) / s
-	if sy < 0 || sy >= renderedPreviewMaxH {
-		return false
-	}
-	if sy+sh > renderedPreviewMaxH {
-		sh = renderedPreviewMaxH - sy
-	}
-	a.cctx.Call("drawImage", img, 0, sy, rasterW, sh,
-		x, y+topInset, w, sh*s)
+	a.cctx.Call("drawImage", img, d.SX, d.SY, d.SW, d.SH, d.DX, d.DY, d.DW, d.DH)
+	a.noteTextFace(n.Id, &d, rasterW)
 	return true
+}
+
+// textFace is e2e attribution, read by the textFaces testhook: the last face
+// a text tile painted, and how often raw source painted after a raster had.
+type textFace struct {
+	draw           *markdown.RasterDraw // nil for raw source
+	rasterW        float64
+	sawRaster      bool
+	rawAfterRaster int
+}
+
+func (a *App) noteTextFace(tileID string, d *markdown.RasterDraw, rasterW float64) {
+	f := a.textFaces[tileID]
+	f.draw, f.rasterW = d, rasterW
+	if d != nil {
+		f.sawRaster = true
+	} else if f.sawRaster {
+		f.rawAfterRaster++
+	}
+	a.textFaces[tileID] = f
 }
 
 // renderedRasterFailed is rasterprev.Cache's verdict on a document that never
