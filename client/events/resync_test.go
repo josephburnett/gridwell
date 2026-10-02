@@ -60,8 +60,8 @@ func flaps(source string, n int, gap float64, last bool) []flip {
 
 // A health transition resyncs its source once the health has held for
 // cadence.HealthSettleMs, so a burst of flips costs one resync of the final
-// state rather than one per flip; the notice is ReactHealth's, per flip, and
-// ends on the last one.
+// state rather than one per flip; only a move of the healthy bit arms it. The
+// notice is ReactHealth's, per flip, and ends on the last one.
 func TestAHealthBurstResyncsOnceItSettles(t *testing.T) {
 	const settle = cadence.HealthSettleMs
 	cases := []struct {
@@ -71,8 +71,10 @@ func TestAHealthBurstResyncsOnceItSettles(t *testing.T) {
 		// notice is whether each source ends with its sticky notice up.
 		notice map[string]bool
 	}{
-		{"a source that comes up resyncs once",
-			[]flip{{0, "n/c", true}}, map[string]int{"n/c": 1}, map[string]bool{"n/c": false}},
+		{"a source that comes back within the window resyncs once",
+			[]flip{{0, "n/c", false}, {settle / 2, "n/c", true}}, map[string]int{"n/c": 1}, map[string]bool{"n/c": false}},
+		{"an up to a source already light is no move",
+			[]flip{{0, "n/c", true}}, map[string]int{"n/c": 0}, map[string]bool{"n/c": false}},
 		{"a source that goes down resyncs once and says so",
 			[]flip{{0, "n/c", false}}, map[string]int{"n/c": 1}, map[string]bool{"n/c": true}},
 		{"twenty flips in a second ending down resync once",
@@ -91,20 +93,24 @@ func TestAHealthBurstResyncsOnceItSettles(t *testing.T) {
 			got := map[string]int{}
 			r := NewResyncs(clk.schedule, clk.read, func(source string) { got[source]++ })
 			notice := map[string]bool{}
+			dark := map[string]bool{}
 			lastFlip := map[string]float64{}
 			last := 0.0
 			slices.SortStableFunc(c.flips, func(a, b flip) int { return cmp.Compare(a.at, b.at) })
 			for _, f := range c.flips {
 				clk.to(f.at)
-				h := ReactHealth(&pb.EventPluginHealth{PluginUuid: f.source, Healthy: f.healthy})
-				notice[f.source] = h.Report
-				r.Transition(h.Resync)
+				h := ReactHealth(&pb.EventPluginHealth{PluginUuid: f.source, Healthy: f.healthy}, f.source, dark[f.source])
+				dark[f.source] = !f.healthy
+				notice[f.source] = h.Dark.Message != ""
+				if h.Resync != "" {
+					r.Transition(h.Resync)
+				}
 				lastFlip[f.source] = f.at
 				last = max(last, f.at)
 			}
 			clk.to(last + settle - 1)
 			for src, at := range lastFlip {
-				if at == last && got[src] >= c.resyncs[src] {
+				if at == last && c.resyncs[src] > 0 && got[src] >= c.resyncs[src] {
 					t.Errorf("%s resynced %d times before its health held for %dms", src, got[src], settle)
 				}
 			}

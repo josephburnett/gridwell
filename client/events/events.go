@@ -28,8 +28,8 @@ type Plan struct {
 	// dead may be listed again, and a link is never rewritten to say so, so
 	// its dead verdicts are asked once more.
 	Revive string
-	// Health is a namespace's stream going dark or recovering; ReactHealth
-	// says what to do about it.
+	// Health is a namespace's health event; ReactHealth says what to do about
+	// it.
 	Health *pb.EventPluginHealth
 	// Reframe is a root grid's new framing, applied to its doorways by
 	// rpc.Reframe. It asks for no fetch: the listing did not change.
@@ -56,28 +56,41 @@ func Route(ev *pb.Event) Plan {
 	return Plan{}
 }
 
-// HealthReaction is what a health transition costs the user. Both directions
-// resync the source's grids: down changes what they are, and up means the
-// fan-in resumed with no backlog, so this client missed that source's events
-// too. The notice moves at once; the resync waits for the health to hold
-// (Resyncs).
+// HealthReaction is what one health event costs the user. Its two notices
+// follow their own fields at once. A move of the healthy bit, either way,
+// resyncs the source's grids once the health holds (Resyncs): down changes
+// what they are, and up means the fan-in resumed with no backlog. A refused
+// Watch alone resyncs nothing, because the listings still answer.
 type HealthReaction struct {
-	// Source is the errsurface key, one sticky notice per namespace.
-	Source string
-	// Resolve takes the notice down; Report puts it up with Detail.
-	Resolve bool
-	Report  bool
-	// Resync names the source whose grids refetch, the health uuid itself.
+	Dark    StickyNotice
+	LiveOff StickyNotice
+	// Resync names the source whose grids refetch, "" for none.
 	Resync string
 }
 
-// ReactHealth is the one table over a transition's direction.
-func ReactHealth(h *pb.EventPluginHealth) HealthReaction {
-	r := HealthReaction{Source: errsurface.PluginHealthSource(h.GetPluginUuid()), Resync: h.GetPluginUuid()}
-	if h.GetHealthy() {
-		r.Resolve = true
-	} else {
-		r.Report = true
+// StickyNotice is one errsurface.Sticky notice: up with Message, or down when
+// Message is empty.
+type StickyNotice struct {
+	Source  string
+	Message string
+}
+
+// ReactHealth is the one table over a health event, given the source's label
+// and whether the client held it dark before (cache.NoteHealth).
+func ReactHealth(h *pb.EventPluginHealth, label string, wasDark bool) HealthReaction {
+	uuid := h.GetPluginUuid()
+	r := HealthReaction{
+		Dark:    StickyNotice{Source: errsurface.PluginHealthSource(uuid)},
+		LiveOff: StickyNotice{Source: errsurface.LiveUpdatesSource(uuid)},
+	}
+	if !h.GetHealthy() {
+		r.Dark.Message = label + ": live updates stopped — " + h.GetDetail()
+	}
+	if off := h.GetLiveUpdatesOff(); off != "" {
+		r.LiveOff.Message = label + ": live updates off — " + off
+	}
+	if wasDark == h.GetHealthy() {
+		r.Resync = uuid
 	}
 	return r
 }

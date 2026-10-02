@@ -161,6 +161,7 @@ func TestSticky(t *testing.T) {
 	}{
 		// Ongoing conditions with a heal signal stay until resolved.
 		{"plugin:0b6f3a", true},
+		{"live:0b6f3a", true},
 		{"electron:backend", true},
 		// One-shot events fade once they stop recurring.
 		{"rpc:MoveTile", false},

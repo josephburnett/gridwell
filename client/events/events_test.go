@@ -50,20 +50,67 @@ func TestRouteTable(t *testing.T) {
 	}
 }
 
-// Both directions resync exactly the source named, and the notice key is one
-// errsurface.Sticky recognizes, so a down notice stays up until the recovery
-// takes it down rather than expiring while still true.
-func TestReactHealthBothDirectionsResync(t *testing.T) {
-	down := ReactHealth(&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: false, Detail: "gone"})
-	if !down.Report || down.Resolve || down.Resync != "n/c" || down.Source != "plugin:n/c" {
-		t.Errorf("down: %+v", down)
+// A health event carries two facts with two notices: the source's darkness and
+// whether it can tell the node of its changes (live_updates_off). Each notice
+// follows its own field, so they come and go independently, and only a move of
+// the healthy bit resyncs: a source that lists but cannot watch still answers.
+func TestReactHealthTable(t *testing.T) {
+	const (
+		dark = "plugin:n/c"
+		live = "live:n/c"
+	)
+	cases := []struct {
+		name    string
+		wasDark bool
+		h       *pb.EventPluginHealth
+		want    HealthReaction
+	}{
+		{"going dark says so and resyncs", false,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "gone"},
+			HealthReaction{
+				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone"},
+				LiveOff: StickyNotice{Source: live},
+				Resync:  "n/c"}},
+		{"coming back takes the notice down and resyncs", true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true},
+			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}, Resync: "n/c"}},
+		{"a refused watch on a light source is its own notice and no resync", false,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true, LiveUpdatesOff: "too many watches"},
+			HealthReaction{
+				Dark:    StickyNotice{Source: dark},
+				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"}}},
+		{"the watch opening takes that notice down and resyncs nothing", false,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true},
+			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}}},
+		{"coming back with the watch still refused keeps that notice and resyncs", true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true, LiveUpdatesOff: "too many watches"},
+			HealthReaction{
+				Dark:    StickyNotice{Source: dark},
+				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"},
+				Resync:  "n/c"}},
+		{"a dark source with its watch refused shows both", false,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "gone", LiveUpdatesOff: "too many watches"},
+			HealthReaction{
+				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone"},
+				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"},
+				Resync:  "n/c"}},
+		{"a down repeated while dark is not a move", true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "still gone"},
+			HealthReaction{
+				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — still gone"},
+				LiveOff: StickyNotice{Source: live}}},
 	}
-	up := ReactHealth(&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true})
-	if !up.Resolve || up.Report || up.Resync != "n/c" || up.Source != down.Source {
-		t.Errorf("up: %+v", up)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ReactHealth(c.h, "fs", c.wasDark); got != c.want {
+				t.Errorf("got  %+v\nwant %+v", got, c.want)
+			}
+		})
 	}
-	if !errsurface.Sticky(down.Source) {
-		t.Errorf("%q must be a sticky source", down.Source)
+	for _, src := range []string{dark, live} {
+		if !errsurface.Sticky(src) {
+			t.Errorf("%q must be sticky: the condition holds until an event says otherwise", src)
+		}
 	}
 }
 

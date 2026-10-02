@@ -72,3 +72,17 @@ func TestAnUnnamedSourceDarkensNothing(t *testing.T) {
 		t.Error("no id is no room")
 	}
 }
+
+// NoteHealth answers what the source was before, so the caller can tell a
+// move of the healthy bit from an event that repeats it (events.ReactHealth).
+func TestNoteHealthAnswersWhatItWas(t *testing.T) {
+	c := seedSources(t)
+	steps := []struct {
+		healthy, wasDark bool
+	}{{true, false}, {false, false}, {false, true}, {true, true}, {true, false}}
+	for i, s := range steps {
+		if got := c.NoteHealth(fsPl, s.healthy); got != s.wasDark {
+			t.Errorf("step %d: wasDark = %v, want %v", i, got, s.wasDark)
+		}
+	}
+}
