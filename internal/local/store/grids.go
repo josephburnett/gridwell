@@ -165,19 +165,26 @@ func (s *Store) tilePreview(ctx context.Context, ns string, id int64) ([]byte, e
 	return s.GetBlob(ctx, previewBID.Int64)
 }
 
-// ShellTileExists reports whether a shell tile with that row id is still
-// present, which is how DeleteTile decides a tmux session is orphaned: the
-// session dies only when this exact id is gone. A cloned shell has its own id
-// and no session, so deleting it never affects the original.
-func (s *Store) ShellTileExists(ctx context.Context, id string) (bool, error) {
-	idInt, err := parseID(id)
+// SessionNamers is how many shell rows name one tmux session, and how many of
+// those carry a frozen face.
+type SessionNamers struct {
+	Rows, Faced int64
+}
+
+// ShellSessionNamers counts the shell rows naming the session key, a trashed
+// row included: a session with no rows is an orphan, and one whose rows have
+// no face was never started.
+func (s *Store) ShellSessionNamers(ctx context.Context, key string) (SessionNamers, error) {
+	var n SessionNamers
+	keyInt, err := parseID(key)
 	if err != nil {
-		return false, nil
+		return n, nil
 	}
-	var n int64
-	err = s.db.QueryRowContext(ctx,
-		`SELECT COUNT(1) FROM tiles WHERE id = ? AND kind = 'shell'`, idInt).Scan(&n)
-	return n > 0, err
+	err = s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1), COUNT(preview_blob_id) FROM tiles
+		WHERE kind = 'shell' AND link_target_id IS NULL
+		  AND COALESCE(shell_session, id) = ?`, keyInt).Scan(&n.Rows, &n.Faced)
+	return n, err
 }
 
 // bumpTileVersion increments a tile row's version by 1.

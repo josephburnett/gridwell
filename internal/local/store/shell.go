@@ -11,8 +11,8 @@ import (
 
 // CreateShell creates a shell tile frozen with an empty preview. An explicit
 // refresh from the client starts the PTY; from then on the session lives in a
-// gridwell-private tmux session keyed by the tile id and survives ascents
-// until the tile is deleted or the machine reboots.
+// gridwell-private tmux session named by the tile id and survives ascents
+// until the last row naming it is destroyed or the machine reboots.
 func (s *Store) CreateShell(ctx context.Context, gridID string, x, y, w, h int64) (*gridwellv1.Tile, error) {
 	return s.createTile(ctx, gridID, x, y, w, h,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {

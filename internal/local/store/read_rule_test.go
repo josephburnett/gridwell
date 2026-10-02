@@ -202,7 +202,7 @@ func readCases() []readCase {
 		{"Search/name", func(ctx context.Context, s *Store, _ readSubject) { ignore2(s.Search(ctx, "a room", 20)) }},
 		{"Search/id", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.Search(ctx, "id:"+sub.text, 20)) }},
 		{"Search/nothing", func(ctx context.Context, s *Store, _ readSubject) { ignore2(s.Search(ctx, "zzzznomatch", 20)) }},
-		{"ShellTileExists", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.ShellTileExists(ctx, sub.shell)) }},
+		{"ShellSessionNamers", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.ShellSessionNamers(ctx, sub.shell)) }},
 		{"WorkspaceEphemeralRefs", func(ctx context.Context, s *Store, _ readSubject) {
 			s.WorkspaceEphemeralRefs(ctx)
 		}},

@@ -217,6 +217,12 @@ message Tile {
   // instead of it. Plugin-declared through the Entry, wire-only: never a
   // stored column, never set by clients.
   string status_detail = 35;
+
+  // shell_session names the tmux session a shell tile attaches: the id of the
+  // tile that started it, set on a clone so every copy shares its source's
+  // session. Empty means the tile's own id; rpc.ShellSession reads it. Stored,
+  // qualified and peeled like the tile's own id, and never set by clients.
+  string shell_session = 38;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────

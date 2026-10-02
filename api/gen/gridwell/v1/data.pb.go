@@ -422,7 +422,12 @@ type Tile struct {
 	// client draws it muted after the name (tileface.BannerRuns) and never
 	// instead of it. Plugin-declared through the Entry, wire-only: never a
 	// stored column, never set by clients.
-	StatusDetail  string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
+	StatusDetail string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
+	// shell_session names the tmux session a shell tile attaches: the id of the
+	// tile that started it, set on a clone so every copy shares its source's
+	// session. Empty means the tile's own id; rpc.ShellSession reads it. Stored,
+	// qualified and peeled like the tile's own id, and never set by clients.
+	ShellSession  string `protobuf:"bytes,38,opt,name=shell_session,json=shellSession,proto3" json:"shell_session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -656,6 +661,13 @@ func (x *Tile) GetTextPresentation() string {
 func (x *Tile) GetStatusDetail() string {
 	if x != nil {
 		return x.StatusDetail
+	}
+	return ""
+}
+
+func (x *Tile) GetShellSession() string {
+	if x != nil {
+		return x.ShellSession
 	}
 	return ""
 }
@@ -3511,7 +3523,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xc6\x06\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xeb\x06\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -3545,7 +3557,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
-	"\rstatus_detail\x18# \x01(\tR\fstatusDetailJ\x04\b\x02\x10\x03J\x04\b\n" +
+	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\x12#\n" +
+	"\rshell_session\x18& \x01(\tR\fshellSessionJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
 	"\vInfoRequest\"\x82\x03\n" +
 	"\fInfoResponse\x12!\n" +

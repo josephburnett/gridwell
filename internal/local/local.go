@@ -35,14 +35,15 @@ func New(st *store.Store, shell *shellsvc.Manager) *Plugin {
 	return &Plugin{st: st, shell: shell}
 }
 
-// CleanupOrphanedShells kills tmux sessions whose tile rows no longer exist:
-// the bounded leak from a delete that raced a crash. Called once at startup.
+// CleanupOrphanedShells kills tmux sessions no shell row names any more: the
+// bounded leak from a delete that raced a crash. Called once at startup.
 func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
 	if p.shell == nil {
 		return 0, nil
 	}
-	return p.shell.CleanupOrphans(ctx, func(tileID string) (bool, error) {
-		return p.st.ShellTileExists(ctx, tileID)
+	return p.shell.CleanupOrphans(ctx, func(key string) (bool, error) {
+		n, err := p.st.ShellSessionNamers(ctx, key)
+		return n.Rows > 0, err
 	})
 }
 
@@ -468,10 +469,10 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	if err := p.st.DeleteTile(ctx, req); err != nil {
 		return nil, errToStatus(err)
 	}
-	// A cloned shell has its own id, so deleting a copy never touches the
-	// original's PTY. The startup orphan sweep is the net.
+	// The session dies with the last row naming it. The startup orphan sweep
+	// is the net.
 	if p.shell != nil {
-		if exists, err := p.st.ShellTileExists(ctx, tileID); err == nil && !exists {
+		if n, err := p.st.ShellSessionNamers(ctx, tileID); err == nil && n.Rows == 0 {
 			_ = p.shell.Kill(tileID)
 		}
 	}

@@ -92,6 +92,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		urlStr, textMode  sql.NullString
 		urlHist           sql.NullString
 		linkTarget        sql.NullString
+		shellSession      sql.NullString
 	)
 	if n.LinkTargetId != "" {
 		// A copy of a link is another link to the same target, and the CHECK's
@@ -109,8 +110,9 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 			urlHist = sql.NullString{String: n.UrlHistory, Valid: true}
 		}
 	case n.Kind == rpc.KindShell:
-		// A PTY cannot be copied, so a cloned shell carries the frozen preview
-		// blob but not the live session, which is keyed by tile id.
+		// The copy names its source's session, started or not, and shows the
+		// source's face until it is live itself.
+		shellSession = sql.NullString{String: rpc.ShellSession(n), Valid: true}
 		if n.PreviewBlobId != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobId, Valid: true}
 		}
@@ -154,7 +156,8 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		"alt_text": n.AltText, "alt_user": altUser,
 		"content_zoom": n.ContentZoom, "url_history": urlHist,
 		"link_target_id": linkTarget, "url_frozen": boolToInt(n.UrlFrozen),
-		"created_at": now, "updated_at": now,
+		"shell_session": shellSession,
+		"created_at":    now, "updated_at": now,
 	})
 	if err != nil {
 		return 0, err

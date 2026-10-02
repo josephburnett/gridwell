@@ -1142,6 +1142,30 @@ func init() {
 			}
 		},
 	})
+
+	// v15: shell_session. An existing shell, and an existing clone of one
+	// that never shared, keep naming their own sessions: NULL.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 15,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'shell', 94, 9, 1, 1, 'v14 shell', 100, 100)`); err != nil {
+				t.Fatalf("seed v14 shell row: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var session sql.NullInt64
+			if err := db.QueryRow(`SELECT shell_session FROM tiles WHERE alt_text = 'v14 shell'`).
+				Scan(&session); err != nil {
+				t.Fatalf("read v14 shell: %v", err)
+			}
+			if session.Valid {
+				t.Errorf("v14 shell: shell_session = %d, want NULL (its own id)", session.Int64)
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.
