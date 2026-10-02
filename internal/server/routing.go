@@ -28,8 +28,7 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {
 		qt := proto.Clone(t).(*pb.Tile)
-		qt.Id = rpc.QualifyID(uuid, t.Id)
-		qt.GridId = rpc.QualifyID(uuid, t.GridId)
+		rpc.QualifyOwnIDs(uuid, qt)
 		if t.ChildGridId != "" {
 			if _, _, already := rpc.SplitID(t.ChildGridId); already {
 				qt.Reference = true

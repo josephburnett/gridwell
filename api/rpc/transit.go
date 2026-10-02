@@ -12,17 +12,24 @@ import (
 // they live here and the hops cannot disagree about a chain's shape.
 
 // tileIDFields is every id a Tile carries, the one list both directions walk.
-// A ref names something elsewhere, a well's child or a leaf link's target: it
-// is optional, and a leaf keeps it qualified, because arriving qualified is
-// what makes it a link.
+// An optional id stays empty rather than qualifying to a bare prefix. A ref
+// names something elsewhere, a well's child or a leaf link's target: a leaf
+// keeps it qualified, because arriving qualified is what makes it a link.
 var tileIDFields = []struct {
-	field func(*pb.Tile) *string
-	ref   bool
+	field         func(*pb.Tile) *string
+	optional, ref bool
 }{
-	{func(t *pb.Tile) *string { return &t.Id }, false},
-	{func(t *pb.Tile) *string { return &t.GridId }, false},
-	{func(t *pb.Tile) *string { return &t.ChildGridId }, true},
-	{func(t *pb.Tile) *string { return &t.LinkTargetId }, true},
+	{func(t *pb.Tile) *string { return &t.Id }, false, false},
+	{func(t *pb.Tile) *string { return &t.GridId }, false, false},
+	{func(t *pb.Tile) *string { return &t.ChildGridId }, true, true},
+	{func(t *pb.Tile) *string { return &t.LinkTargetId }, true, true},
+	{func(t *pb.Tile) *string { return &t.ShellSession }, true, false},
+}
+
+func qualifyField(prefix string, id *string, optional bool) {
+	if *id != "" || !optional {
+		*id = QualifyID(prefix, *id)
+	}
 }
 
 // TransitQualifyTiles prepends prefix to every id in a tile, an
@@ -34,13 +41,22 @@ func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 	for i, t := range tiles {
 		qt := proto.Clone(t).(*pb.Tile)
 		for _, f := range tileIDFields {
-			if id := f.field(qt); *id != "" || !f.ref {
-				*id = QualifyID(prefix, *id)
-			}
+			qualifyField(prefix, f.field(qt), f.optional)
 		}
 		out[i] = qt
 	}
 	return out
+}
+
+// QualifyOwnIDs qualifies, in place, every id in t that names something in
+// t's own namespace. The refs are the leaf's to judge, since one that arrives
+// qualified is a link.
+func QualifyOwnIDs(uuid string, t *pb.Tile) {
+	for _, f := range tileIDFields {
+		if !f.ref {
+			qualifyField(uuid, f.field(t), f.optional)
+		}
+	}
 }
 
 // Hop is one inbound peel, the inverse of the prepend. Seg is the segment the
