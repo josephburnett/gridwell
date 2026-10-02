@@ -209,9 +209,22 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	gr := &Grid{Meta: g, Tiles: map[string]*gridwellv1.Tile{}}
 	for _, n := range tiles {
 		c.ageContentLocked(n)
+		c.evictElsewhereLocked(n.Id, g.Id)
 		gr.Tiles[n.Id] = n
 	}
 	c.grids[g.Id] = gr
+}
+
+// evictElsewhereLocked gives a row one home: the grid that last answered for
+// it. A move leaves the old grid's copy behind until that grid is read
+// again, and a version cannot order the two, because a move claims none.
+// Callers hold c.mu.
+func (c *Cache) evictElsewhereLocked(tileID, home string) {
+	for id, g := range c.grids {
+		if id != home {
+			delete(g.Tiles, tileID)
+		}
+	}
 }
 
 // ageContentLocked drops a clean body row n has moved past, whether or not
@@ -222,16 +235,15 @@ func (c *Cache) ageContentLocked(n *gridwellv1.Tile) {
 	}
 }
 
-// rowLocked is the cached row for a tile id, the newest when a move left it
-// in two grids. Callers hold c.mu.
+// rowLocked is the cached row for a tile id; evictElsewhereLocked keeps it
+// in one grid. Callers hold c.mu.
 func (c *Cache) rowLocked(tileID string) *gridwellv1.Tile {
-	var out *gridwellv1.Tile
 	for _, g := range c.grids {
-		if n, ok := g.Tiles[tileID]; ok && (out == nil || n.Version > out.Version) {
-			out = n
+		if n, ok := g.Tiles[tileID]; ok {
+			return n
 		}
 	}
-	return out
+	return nil
 }
 
 // Grid returns a snapshot: the map is a copy, the rows are the cached rows.
@@ -321,6 +333,7 @@ func (c *Cache) putTileLocked(g *Grid, n *gridwellv1.Tile) bool {
 		return false
 	}
 	c.ageContentLocked(n)
+	c.evictElsewhereLocked(n.Id, g.Meta.GetId())
 	g.Tiles[n.Id] = n
 	return true
 }
@@ -369,6 +382,7 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		g, ok := c.grids[n.GridId]
 		if !ok {
 			c.ageContentLocked(n)
+			c.evictElsewhereLocked(n.Id, n.GridId)
 			return false
 		}
 		return c.putTileLocked(g, n)

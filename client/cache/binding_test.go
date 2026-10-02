@@ -110,3 +110,27 @@ func TestDirtyTextSurvivesAForeignRowAnywhere(t *testing.T) {
 		t.Errorf("save basis = %d, want 3 so the save conflicts visibly", base)
 	}
 }
+
+// A tile row has one home: the grid that last answered for it. A move leaves
+// its old grid's copy behind until that grid is read again, and a copy left
+// behind must not answer for the row, however the grid map iterates.
+func TestARowHasOneHomeInTheCache(t *testing.T) {
+	row := func(grid string, blob int64) *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "10", GridId: grid, Kind: rpc.KindPane, Version: 1, BlobId: blob}
+	}
+	for i := 0; i < 50; i++ {
+		c := New()
+		c.PutGrid(&gridwellv1.Grid{Id: "2"}, []*gridwellv1.Tile{row("2", 7)})
+		c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{row("1", 8)})
+		if g, _ := c.Grid("2"); len(g.Tiles) != 0 {
+			t.Fatalf("the copy a move left in grid 2 is still there")
+		}
+		if r := c.rowLocked("10"); r == nil || r.BlobId != 8 {
+			t.Fatalf("the row answers from %v, want the grid that last answered (blob 8)", r)
+		}
+		c.Apply(changedEvent(row("3", 9)))
+		if g, _ := c.Grid("1"); len(g.Tiles) != 0 {
+			t.Fatalf("an event moving the row to an uncached grid left the copy in grid 1")
+		}
+	}
+}
