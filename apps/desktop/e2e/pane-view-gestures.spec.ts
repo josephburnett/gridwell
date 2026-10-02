@@ -157,12 +157,10 @@ test('middle-click ascends out of a descended well', async ({ gw }) => {
   expect(out.gridID, 'middle-click returned to the root grid').toBe(root);
 });
 
-// Clicking a pane that was not focused at press time only moves focus, even
-// when the click lands on a tile. A descent requires the pane to have been
-// focused before the press, the same rule the bar slot follows. Otherwise
-// clicking the other pane to focus it descends into whatever tile sat under the
-// cursor.
-test('clicking an unfocused pane focuses without descending; the second click descends', async ({ gw }) => {
+// A click lands on what it hits, in any pane, and pane focus follows in the
+// same press: one click on a tile in an unfocused pane descends into it, and
+// with ctrl held it descends in a split below.
+test('one click on a tile in an unfocused pane focuses it and descends', async ({ gw }) => {
   await gw.enterPlugin('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
@@ -170,24 +168,37 @@ test('clicking an unfocused pane focuses without descending; the second click de
   await gw.openPalette();
   await gw.dragCreate('markdown', cx, cy);
 
-  // Pane B: split, which lands at home, then focus it with a corner click.
   await gw.splitFocusedPaneVertical();
   const b = (await gw.panes()).find((p) => p.id !== a.id)!;
   await gw.clickScreen(b.x + 20, b.y + 20);
   expect((await gw.panes()).find((p) => p.id === b.id)!.focused, 'pane B focused').toBe(true);
 
-  // First click on pane A's tile: focus moves, with no descent.
   const c = await gw.cellCenter(a.id, cx, cy);
   await gw.clickScreen(c.x, c.y);
-  let aNow = (await gw.panes()).find((p) => p.id === a.id)!;
-  expect(aNow.focused, 'first click focused pane A').toBe(true);
-  expect(aNow.textFocus, 'first click did NOT descend into the tile').toBe('');
+  const aNow = (await gw.panes()).find((p) => p.id === a.id)!;
+  expect(aNow.focused, 'the click focused pane A').toBe(true);
+  expect(aNow.textFocus, 'the same click descended into the tile').not.toBe('');
+});
 
-  // Second click, with the pane now focused: it descends into the markdown tile.
-  await gw.clickScreen(c.x, c.y);
-  await gw.waitIdle();
-  aNow = (await gw.panes()).find((p) => p.id === a.id)!;
-  expect(aNow.textFocus, 'second click descended').not.toBe('');
+test('one ctrl+click on a tile in an unfocused pane descends in a split below', async ({ gw }) => {
+  await gw.enterPlugin('home');
+  const a = await gw.focused();
+  const cx = Math.round(a.cx);
+  const cy = Math.round(a.cy) - 1;
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+
+  await gw.splitFocusedPaneVertical();
+  const b = (await gw.panes()).find((p) => p.id !== a.id)!;
+  await gw.clickScreen(b.x + 20, b.y + 20);
+  const before = (await gw.panes()).length;
+
+  await gw.ctrlDescendCell(cx, cy, a.id);
+  const after = await gw.panes();
+  expect(after.length, 'the ctrl+click opened a split').toBe(before + 1);
+  const opened = after.find((p) => p.focused)!;
+  expect(opened.textFocus, 'the split descended into the tile').not.toBe('');
+  expect(after.find((p) => p.id === a.id)!.textFocus, 'pane A kept its grid').toBe('');
 });
 
 // A balanced excursion, a namespace crossing plus a well descent, must return

@@ -320,8 +320,6 @@ func dropName(v dragdrop.DropAction) string {
 		return "navigate"
 	case dragdrop.DropNavigateSplit:
 		return "navigate in a split"
-	case dragdrop.DropFocusOnly:
-		return "focus only"
 	case dragdrop.DropCreateTemplate:
 		return "create"
 	case dragdrop.DropPanEnd:

@@ -376,7 +376,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	prevFocus := a.tree.Focus
 	a.focusToPane(p)
 	button := args[0].Get("button").Int()
 	if button == 2 {
@@ -424,14 +423,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	parentCell := cellPx * p.Zoom
 	ps := p.Screen(r)
 	a.dragging = &dragState{
-		originPaneID:  p.ID,
-		originFocused: prevFocus == p.ID,
-		splitNav:      args[0].Get("ctrlKey").Truthy(),
-		tileID:        "",
-		startScreenX:  sx,
-		startScreenY:  sy,
-		curScreenX:    sx,
-		curScreenY:    sy,
+		originPaneID: p.ID,
+		splitNav:     args[0].Get("ctrlKey").Truthy(),
+		tileID:       "",
+		startScreenX: sx,
+		startScreenY: sy,
+		curScreenX:   sx,
+		curScreenY:   sy,
 		// Overridden below if the drag lands on a child preview tile.
 		srcGridID:    a.gridIDForPane(p),
 		srcCellSize:  parentCell,

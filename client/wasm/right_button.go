@@ -315,15 +315,14 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, s
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
 	a.dragging = &dragState{
-		originPaneID:  p.ID,
-		originFocused: true, // right-down focused the pane before arming
-		intent:        intent,
-		startScreenX:  sx,
-		startScreenY:  sy,
-		curScreenX:    sx,
-		curScreenY:    sy,
-		srcGridID:     a.gridIDForPane(p),
-		srcCellSize:   cellPx * p.Zoom,
+		originPaneID: p.ID,
+		intent:       intent,
+		startScreenX: sx,
+		startScreenY: sy,
+		curScreenX:   sx,
+		curScreenY:   sy,
+		srcGridID:    a.gridIDForPane(p),
+		srcCellSize:  cellPx * p.Zoom,
 	}
 	a.dragging.grabTile(n, cxF, cyF, tlX, tlY)
 }

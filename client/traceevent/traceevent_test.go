@@ -125,7 +125,6 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 	want := map[dragdrop.DropAction]string{
 		dragdrop.DropNavigate:       "navigate",
 		dragdrop.DropNavigateSplit:  "navigate in a split",
-		dragdrop.DropFocusOnly:      "focus only",
 		dragdrop.DropCreateTemplate: "create",
 		dragdrop.DropPanEnd:         "pan end",
 		dragdrop.DropDelete:         "delete",

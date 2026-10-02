@@ -33,10 +33,9 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 	item := items[idx]
 	tx, ty, tw, _ := a.paletteTileRect(p, idx)
 	a.dragging = &dragState{
-		originPaneID:  p.ID,
-		originFocused: true, // the palette only opens on the focused pane
-		isTemplate:    true,
-		item:          item,
+		originPaneID: p.ID,
+		isTemplate:   true,
+		item:         item,
 		// The menu belongs to the pane's node, and the drop rules compare
 		// this against the destination's.
 		menuNS:        a.paneNodeNS(p),

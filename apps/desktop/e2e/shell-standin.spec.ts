@@ -51,7 +51,7 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
-  // Focus the other pane with a focus-only click, leaving the shell overlay
+  // Focus the other pane with a click on its empty center, leaving the shell overlay
   // visible on its now-unfocused pane, and record the live canvas's screen rect.
   const other = (await gw.panes()).find((p) => p.id !== shellPaneId)!;
   await gw.clickScreen(other.x + other.w / 2, other.y + other.h / 2);

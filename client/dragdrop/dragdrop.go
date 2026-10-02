@@ -207,11 +207,10 @@ func (i Intent) Creates() bool { return i != IntentMove }
 type DropAction int
 
 const (
-	// DropNavigate is a bare click on a focused pane: descend, ascend or
-	// select, placing nothing.
+	// DropNavigate is a bare click in any pane: descend, ascend or select,
+	// placing nothing.
 	DropNavigate      DropAction = iota
 	DropNavigateSplit            // that click with ctrl held at press
-	DropFocusOnly
 	DropCreateTemplate
 	DropPanEnd   // an empty-space drag, which persists the viewport
 	DropDelete   // a release over the source pane's trashcan button
@@ -228,8 +227,7 @@ const (
 // so a cleared field can never be read late. Occupied excludes the moving tile
 // on a move, mirroring the server's PlaceTile.
 type DropInput struct {
-	Started       bool
-	OriginFocused bool
+	Started bool
 	// SplitNav is ctrl at left-press time, fixed there so releasing it
 	// mid-click cannot change the verdict.
 	SplitNav   bool
@@ -256,8 +254,6 @@ type DropInput struct {
 // which land in no grid, stand above it.
 func DecideDrop(in DropInput) DropAction {
 	switch {
-	case !in.Started && !in.OriginFocused:
-		return DropFocusOnly
 	case !in.Started && in.SplitNav:
 		return DropNavigateSplit
 	case !in.Started:

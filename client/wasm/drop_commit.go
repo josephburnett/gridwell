@@ -56,14 +56,9 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 
 	verdict := a.commitVerdict(in, d, t)
 	switch verdict {
-	case dragdrop.DropFocusOnly:
-		// Focus already moved at mousedown.
-		a.draw()
-		return true
-
 	case dragdrop.DropNavigate, dragdrop.DropNavigateSplit:
-		// Bare click on an already-focused pane. The split flavor is the
-		// same click with ctrl held at press.
+		// The split flavor is the same click with ctrl held at press; focus
+		// already followed the press.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused == nil {
 			a.draw()
