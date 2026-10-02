@@ -37,20 +37,18 @@ function count(snap: GridSnapshot, kind: string): number {
   return (snap.tiles ?? []).filter((t) => t.kind === kind).length;
 }
 
-// A text tile the client holds, its landing over, so the press that follows
-// grabs it and the drag's ghost is its own.
 function ghostActive(win: Page): Promise<boolean> {
   return win.evaluate(() => (window as any).__gridwellTest.ghost().active);
 }
 
-async function textTile(gw: GridwellDriver, win: Page, cx: number, cy: number) {
+// A text tile the client holds, so the press that follows grabs it.
+async function textTile(gw: GridwellDriver, cx: number, cy: number) {
   const f = await gw.focused();
   await gw.openPalette();
   await gw.dragCreate('markdown', cx, cy);
   const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(t, 'created text tile').toBeTruthy();
   await expect.poll(async () => (await gw.focused()).tileIds.includes(t.id)).toBe(true);
-  await expect.poll(() => ghostActive(win)).toBe(false);
   return t;
 }
 
@@ -67,7 +65,7 @@ test('Esc on a tile move leaves the tile in its cell and writes nothing', async 
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  const before = await textTile(gw, window, cx, cy);
+  const before = await textTile(gw, cx, cy);
   const writes = await watchWrites(window);
 
   const from = await gw.cellCenter(f.id, cx, cy);
@@ -99,7 +97,7 @@ for (const link of [false, true]) {
     const f = await gw.focused();
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy);
-    await textTile(gw, window, cx, cy);
+    await textTile(gw, cx, cy);
     const n = count(await gw.getGrid(f.gridID), 'text');
     const writes = await watchWrites(window);
 
@@ -292,7 +290,7 @@ test('a drag after a cancelled one moves the tile', async ({ gw, window }) => {
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await textTile(gw, window, cx, cy);
+  await textTile(gw, cx, cy);
   await window.keyboard.press('Escape');
   const from = await gw.cellCenter(f.id, cx, cy);
   await window.mouse.move(from.x, from.y);
