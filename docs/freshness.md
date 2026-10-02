@@ -40,15 +40,18 @@ changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
 node holds one stream per subprocess while some client shows one of its
 grids, scoped to the contexts shown and re-opened with the new set when that
 changes, and publishes each change as the `GridChanged` a write would, so a
-grid open on screen refetches; a coded refusal is the same health fact
-(`Adapter.noteWatch`), cleared when a re-opened stream is open. Every open,
+grid open on screen refetches. A coded refusal is not darkness: the listings
+still answer, so it rides a healthy `EventPluginHealth` as
+`live_updates_off` (`Adapter.noteWatch`), told once and cleared when a
+re-opened stream is open. Every open,
 first, after a drop, or for a moved scope, is one path
 (`Adapter.followScope`): the new stream replaces the old only once it is
 open, so a context in both is watched throughout, and then each context it
 adds is announced (the whole scope after a drop), since nothing announced a
 change sent while no stream watched it. Only a
 plugin whose `InfoResponse.watch` declares it is asked; one that declares it
-and answers Unimplemented has a broken declaration, and that is health too.
+and answers Unimplemented has a broken declaration, and that turns live
+updates off too.
 
 **3. The transport** — `internal/connection/connection.go`. Reachability is
 remembered, not only announced when it changes, and every way a connection
@@ -470,7 +473,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
-| A plugin's `Watch` change is a `GridChanged` at the door, locally and through a connection; an undeclared plugin is never asked, a refusal or a declared Unimplemented is health, a dropped stream re-opens and catches up every known context, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a well's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/interest_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/well-preview-watch.spec.ts` |
+| A plugin's `Watch` change is a `GridChanged` at the door, locally and through a connection; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every known context, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a well's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/live_updates_off_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/interest_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/well-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |

@@ -179,22 +179,23 @@ func TestWatchUndeclaredIsNeverAsked(t *testing.T) {
 	if evs := collect(seen); len(evs) != 0 {
 		t.Errorf("a plugin that does not watch announced %v", evs)
 	}
-	if dark, detail := a.sourceDark(); dark {
-		t.Errorf("source dark (%q), want healthy", detail)
+	if s := a.source(); s.dark {
+		t.Errorf("source dark (%q), want healthy", s.detail)
 	}
 }
 
 // A plugin that declares Watch and answers Unimplemented contradicts its own
-// handshake: that is the source's health, said once and not retried, because
-// the process answers the same for its life.
-func TestWatchDeclaredButUnimplementedIsHealthDown(t *testing.T) {
+// handshake: its live updates are off, said once and not retried, because the
+// process answers the same for its life. Its listings still answer, so the
+// source is not dark.
+func TestWatchDeclaredButUnimplementedTurnsLiveUpdatesOff(t *testing.T) {
 	p := &watchPlugin{serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
 		return status.Error(codes.Unimplemented, "method Watch not implemented")
 	}}
 	a, seen := watching(t, p, nil)
-	down := await(t, seen).GetPluginHealth()
-	if down == nil || down.Healthy || !strings.Contains(down.Detail, "declares live updates") {
-		t.Fatalf("first event = %v, want health down naming the broken declaration", down)
+	off := await(t, seen).GetPluginHealth()
+	if off == nil || !off.Healthy || !strings.Contains(off.LiveUpdatesOff, "does not implement") {
+		t.Fatalf("first event = %v, want healthy with live updates off naming the broken declaration", off)
 	}
 	time.Sleep(1500 * time.Millisecond) // past the first Refollow backoff
 	if n := p.calls.Load(); n != 1 {
@@ -203,8 +204,8 @@ func TestWatchDeclaredButUnimplementedIsHealthDown(t *testing.T) {
 	if evs := collect(seen); len(evs) != 0 {
 		t.Errorf("then %v, want nothing more", evs)
 	}
-	if dark, _ := a.sourceDark(); !dark {
-		t.Error("source healthy, want the broken declaration held as its health")
+	if s := a.source(); s.dark {
+		t.Errorf("source dark (%q), want a source that lists to stay light", s.detail)
 	}
 }
 
@@ -360,33 +361,36 @@ func TestWatchNothingShownHoldsNoStream(t *testing.T) {
 	}
 }
 
-// A coded refusal is the source's health, told to a subscriber already there
-// and to one arriving during it, and cleared the moment a re-opened stream is
-// accepted, with no change needed.
-func TestWatchVerdictIsTheSourceHealth(t *testing.T) {
+// A coded refusal turns live updates off and leaves the source light: told to
+// a subscriber already there and to one arriving during it, and cleared the
+// moment a re-opened stream is accepted, with no change needed.
+func TestWatchVerdictTurnsLiveUpdatesOff(t *testing.T) {
 	p := &watchPlugin{
 		accept: func(n int32) bool { return n > 1 },
 		serve: func(n int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
 			if n == 1 {
-				return status.Error(codes.PermissionDenied, "token lacks read_api")
+				return status.Error(codes.ResourceExhausted, "the OS refused another change watch")
 			}
 			<-ctx.Done()
 			return nil
 		},
 	}
 	a, seen := watching(t, p, nil)
-	down := await(t, seen).GetPluginHealth()
-	if down == nil || down.Healthy || !strings.Contains(down.Detail, "token lacks read_api") {
-		t.Fatalf("first event = %v, want the refusal as health down", down)
+	off := await(t, seen).GetPluginHealth()
+	if off == nil || !off.Healthy || !strings.Contains(off.LiveUpdatesOff, "refused another change watch") {
+		t.Fatalf("first event = %v, want healthy with the refusal as live updates off", off)
 	}
-	if dark, detail := a.sourceDark(); !dark || detail != down.Detail {
-		t.Errorf("a subscriber arriving now is owed (%v, %q), want the refusal", dark, detail)
+	if s := a.source(); s.dark {
+		t.Errorf("source dark (%q), want a refused watch to leave it light", s.detail)
 	}
-	if up := await(t, seen).GetPluginHealth(); up == nil || !up.Healthy {
-		t.Fatalf("second event = %v, want health up", up)
+	if got := a.source().liveOff; got != off.LiveUpdatesOff {
+		t.Errorf("a subscriber arriving now is owed %q, want the refusal", got)
 	}
-	if dark, detail := a.sourceDark(); dark {
-		t.Errorf("source dark (%q) once accepted, want healthy", detail)
+	if on := await(t, seen).GetPluginHealth(); on == nil || !on.Healthy || on.LiveUpdatesOff != "" {
+		t.Fatalf("second event = %v, want live updates back on", on)
+	}
+	if got := a.source().liveOff; got != "" {
+		t.Errorf("live updates off (%q) once accepted, want on", got)
 	}
 }
 

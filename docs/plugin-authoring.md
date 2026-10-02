@@ -131,12 +131,14 @@ looking at costs no listing, and naming a context the node has never listed
 is harmless.
 
 `InfoResponse.watch` is the declaration. Leave it unset and the node never
-asks, which is healthy. Set it and answer Unimplemented and the node shows
-your source as unhealthy for the process's life: the handshake said
+asks, which is healthy. Set it and answer Unimplemented and the node tells
+the user your live updates are off for the process's life: the handshake said
 otherwise. A stream that ends or fails transport-shaped is re-opened
 with backoff while you are up; do not end a stream on purpose. Any other coded
-error is shown to the user as your source's health until a re-opened stream
-is open.
+error is shown to the user as live updates off, in your words, until a
+re-opened stream is open. Neither makes your source dark: your listings still
+answer, so a limit you hit (`ResourceExhausted`) costs live updates, not the
+source.
 
 ## Previews
 

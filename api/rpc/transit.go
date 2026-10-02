@@ -193,11 +193,12 @@ func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb
 		// An empty uuid means the namespace this event rode in from: the
 		// cache layer reports its own store health without knowing the uuid
 		// the registry gave it, and the prefix is exactly that uuid.
-		uuid := prefix
+		h := proto.Clone(p.PluginHealth).(*pb.EventPluginHealth)
+		h.PluginUuid = prefix
 		if p.PluginHealth.PluginUuid != "" {
-			uuid = QualifyID(prefix, p.PluginHealth.PluginUuid)
+			h.PluginUuid = QualifyID(prefix, p.PluginHealth.PluginUuid)
 		}
-		return HealthEvent(uuid, p.PluginHealth.Healthy, p.PluginHealth.Detail)
+		return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: h}}
 	}
 	return ev
 }

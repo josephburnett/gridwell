@@ -258,6 +258,21 @@ func TestQualifyEventIDsPrefixesEveryGridID(t *testing.T) {
 	}
 }
 
+// A health event gains the hop's segment on its uuid and carries every other
+// field verbatim, so a far source's state reads here as it did there.
+func TestQualifyEventIDsKeepsTheWholeHealth(t *testing.T) {
+	h := &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+		PluginUuid: "p1", Healthy: true, Detail: "d", LiveUpdatesOff: "too many watches"}}}
+	got := TransitQualifyEvent("u", h).GetPluginHealth()
+	want := &pb.EventPluginHealth{PluginUuid: "u/p1", Healthy: true, Detail: "d", LiveUpdatesOff: "too many watches"}
+	if !proto.Equal(got, want) {
+		t.Errorf("health event = %v, want %v", got, want)
+	}
+	if h.GetPluginHealth().PluginUuid != "p1" {
+		t.Error("qualification mutated its input")
+	}
+}
+
 // An arm QualifyEventIDs does not name falls through unqualified, so its ids
 // reach the client in the namespace's own spelling and name nothing there.
 func TestQualifyEventIDsNamesEveryPayloadArm(t *testing.T) {

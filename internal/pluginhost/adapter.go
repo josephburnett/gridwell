@@ -51,12 +51,14 @@ type Adapter struct {
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 
-	// srcDark and watchRefused are held only to announce transitions of the
-	// one fact they make (sourceDark); setSource is the one writer.
-	srcMu        sync.Mutex
-	srcDark      bool
-	srcDetail    string
-	watchRefused string
+	// The source's state as the listings and the Watch stream found it, held
+	// only to announce its transitions; setSource is the one writer. liveOff
+	// is the Watch stream's verdict, which is not darkness: a source that
+	// lists but cannot watch still answers live.
+	srcMu     sync.Mutex
+	srcDark   bool
+	srcDetail string
+	liveOff   string
 
 	// scope is this plugin's share of the node's interest, the Watch stream's
 	// contexts; moved closes when it changes. SetInterest is the one writer.
@@ -128,22 +130,25 @@ func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
 
 // Subscribe serves this namespace's event stream: health of the subprocess and
 // the source, GridChanged, GridFramingChanged and TileChanged. A subscriber
-// arriving mid-outage is told at once; a healthy plugin announces nothing,
-// because a health event costs the client a full resync.
+// arriving mid-outage, or while live updates are off, is told at once; a
+// healthy plugin announces nothing, because a health event costs the client a
+// full resync.
 func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, detach := a.hub.Subscribe()
 	defer detach()
+	up := true
 	if a.sup != nil {
 		cancel := a.sup.OnHealth(func(healthy bool, detail string) { a.emitHealth(healthy, detail) })
 		defer cancel()
-		if healthy, detail := a.sup.Health(); !healthy {
-			if err := send(rpc.HealthEvent("", healthy, detail)); err != nil {
+		var detail string
+		if up, detail = a.sup.Health(); !up {
+			if err := send(rpc.HealthEvent("", false, detail)); err != nil {
 				return err
 			}
 		}
 	}
-	if dark, detail := a.sourceDark(); dark {
-		if err := send(rpc.HealthEvent("", false, detail)); err != nil {
+	if s := a.source(); up && s != (sourceState{}) {
+		if err := send(s.event()); err != nil {
 			return err
 		}
 	}
@@ -177,20 +182,20 @@ func (a *Adapter) noteSource(dark bool, detail string) {
 
 // noteWatch records the Watch stream's verdict, "" for none, even while the
 // process is down.
-func (a *Adapter) noteWatch(detail string) {
-	a.setSource(func() { a.watchRefused = detail })
+func (a *Adapter) noteWatch(liveOff string) {
+	a.setSource(func() { a.liveOff = liveOff })
 }
 
 // setSource applies one edit and announces the transition, never while the
 // process is down: that is the supervisor's news.
 func (a *Adapter) setSource(edit func()) {
 	a.srcMu.Lock()
-	was, _ := a.sourceDarkLocked()
+	was := a.sourceLocked()
 	edit()
-	dark, detail := a.sourceDarkLocked()
+	now := a.sourceLocked()
 	a.srcMu.Unlock()
-	if dark != was && a.processUp() {
-		a.emitHealth(!dark, detail)
+	if (now.dark != was.dark || now.liveOff != was.liveOff) && a.processUp() {
+		a.hub.Publish(now.event())
 	}
 }
 
@@ -202,17 +207,31 @@ func (a *Adapter) processUp() bool {
 	return healthy
 }
 
-func (a *Adapter) sourceDark() (bool, string) {
-	a.srcMu.Lock()
-	defer a.srcMu.Unlock()
-	return a.sourceDarkLocked()
+// sourceState is the source as one health event tells it; the zero value is a
+// light source with live updates on.
+type sourceState struct {
+	dark            bool
+	detail, liveOff string
 }
 
-func (a *Adapter) sourceDarkLocked() (bool, string) {
-	if a.srcDark {
-		return true, a.srcDetail
+func (s sourceState) event() *gridwellv1.Event {
+	ev := rpc.HealthEvent("", !s.dark, s.detail)
+	ev.GetPluginHealth().LiveUpdatesOff = s.liveOff
+	return ev
+}
+
+func (a *Adapter) source() sourceState {
+	a.srcMu.Lock()
+	defer a.srcMu.Unlock()
+	return a.sourceLocked()
+}
+
+func (a *Adapter) sourceLocked() sourceState {
+	s := sourceState{dark: a.srcDark, liveOff: a.liveOff}
+	if s.dark {
+		s.detail = a.srcDetail
 	}
-	return a.watchRefused != "", a.watchRefused
+	return s
 }
 
 // sourceDetail is where the user is told the source, not the process, is out.
