@@ -174,6 +174,49 @@ func TestShellDoorForwardsResize(t *testing.T) {
 	t.Fatal("resize never reached the PTY")
 }
 
+// Two tiles naming one session, a shell and its clone, attached from two
+// clients: the second takes the session over, so the first viewer's stream
+// ends clean, and the one PTY is reused rather than a second tmux client
+// attached.
+func TestShellDoorAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	a := f.createShell(t, 0, 0)
+	b, err := f.cl.CloneTile(context.Background(), &gridwellv1.CloneTileRequest{TileId: a.Id, DestGridId: f.root, X: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rpc.ShellSession(b) != a.Id {
+		t.Fatalf("the clone names session %q, want %q", rpc.ShellSession(b), a.Id)
+	}
+	first, second := f.clientStack(), f.clientStack()
+	first.reg.Open(a.Id, 80, 24)
+	t.Cleanup(func() { first.reg.Close(a.Id) })
+	waitSession(t, f.fake)
+	second.reg.Open(b.Id, 100, 40)
+	t.Cleanup(func() { second.reg.Close(b.Id) })
+
+	select {
+	case e := <-first.exit:
+		if e.SessionGone || e.Message != "" {
+			t.Errorf("the evicted viewer ended with %+v, want a clean end", e)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the first viewer was never evicted")
+	}
+	second.reg.Write(b.Id, []byte("one session"))
+	select {
+	case got := <-second.out:
+		if string(got) != "one session" {
+			t.Errorf("round trip = %q", got)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no output on the second tile within 3s")
+	}
+	if n := f.fake.SessionCount(); n != 1 {
+		t.Errorf("opened %d PTYs, want 1: one attached client per session", n)
+	}
+}
+
 // The verdict crosses the seam: a snapshotted tile whose tmux session is gone
 // must reach the client as sessionGone, the fact the refresh affordance reads
 // through shellconn.DecideShellRefreshVisible. It rides the door's exit frame,
