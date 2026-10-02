@@ -286,18 +286,22 @@ deadness.
 through one is a memory, and that is what the bar's chip says
 (`Cache.SourceDark`, joined by `ServedBy`, the rule a resync is scoped by).
 Unhealthy then posts a sticky notice keyed
-`plugin:<node>/<conn>` ("live updates stopped — …") and calls
-`retryKick(true, h.PluginUUID)`. The down direction resyncs exactly as the up
-one does, and at exactly the same scope: a source going down changes what its
-grids ARE, and which grids those are is the join `cache.ServedBy` makes of
-the health uuid and the ids the client already holds.
+`plugin:<node>/<conn>` ("live updates stopped — …") and arms
+`events.Resyncs`, which calls `retryKick(true, h.PluginUUID)` once the
+source's health has held for `cadence.HealthSettleMs`: a flapping source
+resyncs once, on the state it rests in. The notice moves at once. The down
+direction resyncs exactly as the up one does, and at exactly the same scope:
+a source going down changes what its grids ARE, and which grids those are is
+the join `cache.ServedBy` makes of the health uuid and the ids the client
+already holds. The reads a resync cancels are the client's own doing, so they
+say nothing (`clientsync.OutcomeAbandoned`).
 
 **Up.** The next `namespace.Follow` establishes; `noteHealth(ns, true, "")`
 publishes the recovery, and `learnRoot` publishes one too on a first or
 healed landing. `Layer.applyEvent` clears `dark[conn]`; the next successful
 pass-through call would have cleared it anyway through `noteReach`.
 `App.reportPluginHealth` clears the darkness, so the chip goes, resolves the
-notice, and fires `retryKick(true, h.PluginUUID)`, which cancels this source's
+notice, and arms the same settled `retryKick(true, h.PluginUUID)`, which cancels this source's
 in-flight fetches, clears its latches, and refetches `Cache.ResyncSet` of it —
 every cached grid chained through it, and nobody else's. Those reads hit the
 cache inside their windows with the source no longer dark, so they serve what

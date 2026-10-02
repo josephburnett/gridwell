@@ -69,6 +69,7 @@ func (a *App) installTestHook() {
 				"framingSaveMs":   cadence.FramingSaveMs,
 				"workspaceSaveMs": cadence.WorkspaceSaveMs,
 				"shellMirrorMs":   cadence.ShellMirrorMs,
+				"healthSettleMs":  cadence.HealthSettleMs,
 				"traceFadeMs":     cadence.TraceFadeMs,
 				"snapBackMs":      snapBackMs,
 			}

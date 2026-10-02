@@ -26,6 +26,7 @@ func TestEveryCadenceIsAWait(t *testing.T) {
 		{"FramingSaveMs", FramingSaveMs},
 		{"WorkspaceSaveMs", WorkspaceSaveMs},
 		{"ShellMirrorMs", ShellMirrorMs},
+		{"HealthSettleMs", HealthSettleMs},
 		{"TraceFadeMs", TraceFadeMs},
 		{"TraceFlushMs", TraceFlushMs},
 	} {

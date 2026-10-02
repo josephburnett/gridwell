@@ -375,6 +375,8 @@ type scheduler struct {
 
 	// traceFlush posts the records owed; nothing owed arms nothing.
 	traceFlush *debounce.Debounce
+
+	healthResync *events.Resyncs
 }
 
 // newScheduler binds every settle timer before the App can draw: draw() arms
@@ -382,12 +384,13 @@ type scheduler struct {
 // client/cadence.
 func newScheduler(a *App) scheduler {
 	return scheduler{
-		wsSave:      debounce.New(setTimeoutMs, nowMs, cadence.WorkspaceSaveMode, func() { a.flushWorkspaceSave(nil) }),
-		urlUpdate:   debounce.New(setTimeoutMs, nowMs, cadence.URLUpdateMode, a.writeURLNow),
-		framingSave: debounce.New(setTimeoutMs, nowMs, cadence.FramingSaveMode, a.flushFramingSave),
-		textSave:    debounce.New(setTimeoutMs, nowMs, cadence.TextSaveMode, a.flushDirtyText),
-		urlAddress:  debounce.New(setTimeoutMs, nowMs, cadence.URLAddressMode, a.flushDirtyText),
-		traceFlush:  debounce.New(setTimeoutMs, nowMs, cadence.TraceFlushMode, a.flushTrace),
+		wsSave:       debounce.New(setTimeoutMs, nowMs, cadence.WorkspaceSaveMode, func() { a.flushWorkspaceSave(nil) }),
+		urlUpdate:    debounce.New(setTimeoutMs, nowMs, cadence.URLUpdateMode, a.writeURLNow),
+		framingSave:  debounce.New(setTimeoutMs, nowMs, cadence.FramingSaveMode, a.flushFramingSave),
+		textSave:     debounce.New(setTimeoutMs, nowMs, cadence.TextSaveMode, a.flushDirtyText),
+		urlAddress:   debounce.New(setTimeoutMs, nowMs, cadence.URLAddressMode, a.flushDirtyText),
+		traceFlush:   debounce.New(setTimeoutMs, nowMs, cadence.TraceFlushMode, a.flushTrace),
+		healthResync: events.NewResyncs(setTimeoutMs, nowMs, func(source string) { a.retryKick(true, source) }),
 		// A notice's own deadline, and a throttle: a settle would push the window
 		// out on every new notice.
 		errExpire: debounce.New(setTimeoutMs, nowMs, debounce.Throttle, func() {
@@ -1031,9 +1034,9 @@ func (a *App) startSSE() {
 	}
 }
 
-// retryKick drains what a transport gap left behind. cache.ServedBy owns what
-// a scope covers; the outbox drain is never scoped, because a parked write is
-// the user's bytes.
+// retryKick drains what a transport gap or a settled health transition
+// (events.Resyncs) left behind. cache.ServedBy owns what a scope covers; the
+// outbox drain is never scoped, because a parked write is the user's bytes.
 func (a *App) retryKick(resync bool, source string) {
 	if resync {
 		served := func(id string) bool { return cache.ServedBy(id, source) }
@@ -1044,7 +1047,8 @@ func (a *App) retryKick(resync bool, source string) {
 			a.fetch.contents.ClearIf(served), a.fetch.previews.ClearIf(served),
 			a.fetch.menus.ClearIf(reaches))
 		// A request that dies with its link never returns, and its claim would block
-		// every retry; re-ask the grids by name.
+		// every retry; re-ask the grids by name. A cancelled read says nothing
+		// (clientsync.OutcomeAbandoned).
 		stuck := a.fetch.grids.CancelIf(served)
 		a.fetch.tiles.CancelIf(served)
 		a.fetch.contents.CancelIf(served)
@@ -1177,7 +1181,8 @@ func (a *App) resolveErr(source string) {
 	}
 }
 
-// reportPluginHealth runs events.ReactHealth's plan for a transition.
+// reportPluginHealth runs events.ReactHealth's plan for a transition: the
+// notice at once, the resync once the health holds.
 func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
 	r := events.ReactHealth(h)
 	// The client's one copy of which sources are not answering.
@@ -1192,5 +1197,5 @@ func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
 		}
 		a.reportErr(errsurface.Error, r.Source, label+": live updates stopped — "+h.Detail)
 	}
-	a.retryKick(true, r.Resync)
+	a.persist.sched.healthResync.Transition(r.Resync)
 }

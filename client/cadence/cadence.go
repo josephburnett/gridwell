@@ -52,6 +52,14 @@ const (
 	// still mirrored once per window.
 	ShellMirrorMode = debounce.Throttle
 
+	// HealthSettleMs is how long a source's health must hold before the
+	// client cancels and re-reads that source's grids (events.Resyncs).
+	HealthSettleMs = 1000
+
+	// HealthSettleMode is Settle: a flapping source resyncs once, on the state
+	// it rests in.
+	HealthSettleMode = debounce.Settle
+
 	// TraceFadeMs is how long the ascent-trace outline takes to fade out.
 	TraceFadeMs = 2000
 

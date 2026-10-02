@@ -42,6 +42,7 @@ export interface Cadences {
   framingSaveMs: number;
   workspaceSaveMs: number;
   shellMirrorMs: number;
+  healthSettleMs: number;
   traceFadeMs: number;
   snapBackMs: number;
 }

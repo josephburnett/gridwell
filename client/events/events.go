@@ -59,7 +59,8 @@ func Route(ev *pb.Event) Plan {
 // HealthReaction is what a health transition costs the user. Both directions
 // resync the source's grids: down changes what they are, and up means the
 // fan-in resumed with no backlog, so this client missed that source's events
-// too.
+// too. The notice moves at once; the resync waits for the health to hold
+// (Resyncs).
 type HealthReaction struct {
 	// Source is the errsurface key, one sticky notice per namespace.
 	Source string
