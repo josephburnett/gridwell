@@ -137,7 +137,17 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 		t.Fatal(err)
 	}
 
-	return map[string]*pb.Tile{"well": well, "url": url, "text": text, "link": link, "page": pageRows[0].Tile}
+	shell, err := s.CreateShell(ctx, root, 12, 0, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shellClone, err := s.CloneTile(ctx, &pb.CloneTileRequest{TileId: shell.Id, DestGridId: root, X: 14})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return map[string]*pb.Tile{"well": well, "url": url, "text": text, "link": link, "page": pageRows[0].Tile,
+		"shell clone": shellClone}
 }
 
 // tileThroughJSON encodes a tile the way the Connect JSON codec does

@@ -257,6 +257,15 @@ func ContentID(t *pb.Tile) string {
 	return t.Id
 }
 
+// ShellSession names the tmux session a shell tile attaches: the session its
+// row names, which a clone shares with its source, or else its content tile's.
+func ShellSession(t *pb.Tile) string {
+	if t.ShellSession != "" {
+		return t.ShellSession
+	}
+	return ContentID(t)
+}
+
 // Framing is how a grid looked when it was last left through a doorway: a
 // float center in the grid's own coordinates plus a pane-size-independent
 // zoom, so a window resize never moves a saved view. Zoom == 0 means never

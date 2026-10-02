@@ -64,10 +64,13 @@ func FramingWriters(panes []PaneGrid, focusedID string) map[string]bool {
 	return out
 }
 
-// Holder names a pane and the content tile it is descended into.
+// Holder names a pane, the content tile it is descended into, and the key of
+// the live resource behind it: a shell's session (rpc.ShellSession), which
+// several tiles may name, or else the tile itself.
 type Holder struct {
 	PaneID string
 	TileID string
+	Key    string
 }
 
 // Engagement is what going live on a content tile in one pane does to the one
@@ -79,19 +82,23 @@ type Engagement struct {
 	// its page, a terminal with its socket. Empty with Keep false: nobody
 	// holds one, so a fresh surface is placed.
 	From string
-	// Close holds every surface on the tile beyond the one kept or moved. The
-	// rule allows one, so this is empty unless the rule was already broken.
+	// Close holds every surface on the key beyond the one kept or moved: one
+	// another tile holds on the same key, or, with the rule already broken, a
+	// second one on this tile.
 	Close []string
 }
 
-// TakeOver applies one live surface per content tile: opening tileID in
-// openerID takes the surface another pane holds on the same content, at any
-// stack level, rather than making a second one.
-func TakeOver(holders []Holder, openerID, tileID string) Engagement {
+// TakeOver applies one live surface per key: opening tileID, whose resource is
+// key, in openerID takes the surface another pane holds on the same tile, at
+// any stack level, rather than making a second one. A surface another tile
+// holds on the key closes instead, because it is bound to that tile.
+func TakeOver(holders []Holder, openerID, key, tileID string) Engagement {
 	var e Engagement
 	for _, h := range holders {
 		switch {
+		case h.Key != key:
 		case h.TileID != tileID:
+			e.Close = append(e.Close, h.PaneID)
 		case h.PaneID == openerID:
 			e.Keep = true
 		case e.From == "":

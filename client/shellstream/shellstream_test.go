@@ -50,8 +50,8 @@ func newHarness() *harness {
 
 func TestOpenReplacesTheStreamForTheTile(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	if len(h.dialed) != 2 {
 		t.Fatalf("dialed %d streams, want 2", len(h.dialed))
 	}
@@ -66,9 +66,9 @@ func TestOpenReplacesTheStreamForTheTile(t *testing.T) {
 
 func TestLateBytesFromAReplacedStreamNeverReachTheRenderer(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	old := h.dialed[0]
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	old.onData([]byte{1, 2, 3}) // straggler from the torn-down PTY
 	h.dialed[1].onData([]byte{9})
 	if len(h.data) != 1 || !reflect.DeepEqual(h.data[0].bytes, []byte{9}) {
@@ -78,7 +78,7 @@ func TestLateBytesFromAReplacedStreamNeverReachTheRenderer(t *testing.T) {
 
 func TestExitFiresExactlyOnce(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	h.dialed[0].onEnd("boom", false)
 	h.dialed[0].onEnd("", false) // a failure and a close can both arrive
 	if len(h.exits) != 1 || h.exits[0].Message != "boom" {
@@ -92,7 +92,7 @@ func TestExitFiresExactlyOnce(t *testing.T) {
 
 func TestLocalCloseSuppressesTheExitReport(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	h.reg.Close("u/1")
 	if !h.dialed[0].closed {
 		t.Fatal("close must reach the stream")
@@ -105,10 +105,10 @@ func TestLocalCloseSuppressesTheExitReport(t *testing.T) {
 
 func TestReplacedStreamsLateEndNeverFreezesTheNewStream(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	old := h.dialed[0]
-	h.reg.Open("u/1", 80, 24) // re-attach (the refresh gesture)
-	old.onEnd("", false)      // the torn-down stream's end arrives late
+	h.reg.Open("u/1", "u/1", 80, 24) // re-attach (the refresh gesture)
+	old.onEnd("", false)             // the torn-down stream's end arrives late
 	if len(h.exits) != 0 {
 		t.Fatalf("a replaced stream's end must not freeze the tile: %+v", h.exits)
 	}
@@ -120,7 +120,7 @@ func TestReplacedStreamsLateEndNeverFreezesTheNewStream(t *testing.T) {
 
 func TestWriteAndResizeAfterCloseAreNoOps(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	h.reg.Close("u/1")
 	h.reg.Write("u/1", []byte{1})
 	h.reg.Resize("u/1", 100, 30)
@@ -134,7 +134,7 @@ func TestWriteAndResizeAfterCloseAreNoOps(t *testing.T) {
 
 func TestSessionGoneRidesTheExit(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
 	h.dialed[0].onEnd("session gone", true)
 	if len(h.exits) != 1 || !h.exits[0].SessionGone {
 		t.Fatalf("the gone verdict must ride the exit: %+v", h.exits)
@@ -143,8 +143,8 @@ func TestSessionGoneRidesTheExit(t *testing.T) {
 
 func TestTwoTilesHoldIndependentStreams(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 80, 24)
-	h.reg.Open("u/2", 80, 24)
+	h.reg.Open("u/1", "u/1", 80, 24)
+	h.reg.Open("u/2", "u/2", 80, 24)
 	h.reg.Write("u/2", []byte{5})
 	if len(h.dialed[0].writes) != 0 || len(h.dialed[1].writes) != 1 {
 		t.Fatal("tiles must not share a stream")
@@ -168,7 +168,7 @@ func TestASynchronousDialFailureIsReported(t *testing.T) {
 		func(string, []byte) {},
 		func(e Exit) { closed = true; _ = e },
 	)
-	reg.Open("u/1", 80, 24)
+	reg.Open("u/1", "u/1", 80, 24)
 	if !closed {
 		t.Fatal("an instant dial failure must surface as an exit")
 	}
@@ -179,7 +179,7 @@ func TestASynchronousDialFailureIsReported(t *testing.T) {
 // The initial size rides the dial, which is what binds it.
 func TestOpenCarriesTheInitialSize(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/1", 132, 43)
+	h.reg.Open("u/1", "u/1", 132, 43)
 	if h.dialed[0].cols != 132 || h.dialed[0].rows != 43 {
 		t.Fatalf("dial got %dx%d, want 132x43", h.dialed[0].cols, h.dialed[0].rows)
 	}
@@ -189,7 +189,7 @@ func TestOpenCarriesTheInitialSize(t *testing.T) {
 // terminal now receives them, so a takeover moves it without a redial.
 func TestOutputAndExitNameTheTile(t *testing.T) {
 	h := newHarness()
-	h.reg.Open("u/7", 80, 24)
+	h.reg.Open("u/7", "u/7", 80, 24)
 	h.dialed[0].onData([]byte{1})
 	h.dialed[0].onEnd("boom", false)
 	if len(h.data) != 1 || h.data[0].tileID != "u/7" {
@@ -197,5 +197,28 @@ func TestOutputAndExitNameTheTile(t *testing.T) {
 	}
 	if len(h.exits) != 1 || h.exits[0].TileID != "u/7" {
 		t.Fatalf("exits = %+v, want one for u/7", h.exits)
+	}
+}
+
+// A session holds one stream whichever tile opened it: opening a clone on the
+// session its source holds replaces the source's stream, and the new one is
+// bound to the clone, the tile whose face and title the server writes.
+func TestOpenOnASessionReplacesAnotherTilesStream(t *testing.T) {
+	h := newHarness()
+	h.reg.Open("u/7", "u/7", 80, 24)
+	h.reg.Open("u/7", "u/8", 80, 24)
+	if !h.dialed[0].closed {
+		t.Fatal("the source's stream must close when its clone opens the session")
+	}
+	if h.dialed[1].tileID != "u/8" {
+		t.Fatalf("dialed %q, want the clone u/8 bound", h.dialed[1].tileID)
+	}
+	h.dialed[1].onData([]byte{1})
+	h.dialed[1].onEnd("", false)
+	if len(h.data) != 1 || h.data[0].tileID != "u/7" {
+		t.Fatalf("data = %+v, want one chunk keyed by the session u/7", h.data)
+	}
+	if len(h.exits) != 1 || h.exits[0].Key != "u/7" || h.exits[0].TileID != "u/8" {
+		t.Fatalf("exits = %+v, want the session u/7 and the bound tile u/8", h.exits)
 	}
 }

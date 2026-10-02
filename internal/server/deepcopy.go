@@ -34,7 +34,8 @@ import (
 //   - text and pane bytes go ReadContent to WriteContent; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
 //   - a url copies its url_string plus the frozen preview and history;
-//   - a shell becomes a fresh shell, since a PTY session is namespace-local;
+//   - a shell copies as a link to its source, since a clone shares its
+//     source's session and a session is namespace-local;
 //   - a source that never answered degrades to a link.
 
 // deepCopyWell reads the source child grid before anything is created, so an
@@ -104,7 +105,11 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	case q.LinkTargetId != "":
 		// The tile being copied is a reference, so the copy is one too.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
-	case rpc.IsBodyKind(t.Kind), t.Kind == rpc.KindURL, t.Kind == rpc.KindShell:
+	case t.Kind == rpc.KindShell:
+		// A clone shares its source's session, and a session lives on the
+		// node that started it, so across namespaces the copy is a link.
+		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.Id)
+	case rpc.IsBodyKind(t.Kind), t.Kind == rpc.KindURL:
 		return rt.copyLeaf(ctx, src, t, q, dst, dstGrid, x, y)
 	}
 	return nil, status.Errorf(gcodes.InvalidArgument,
@@ -112,7 +117,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 }
 
 // copyLeaf copies a tile that owns no grid: bytes for a body kind, the address
-// and frozen face for a url, a fresh session for a shell.
+// and frozen face for a url.
 func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	// Leaf bytes are read before the copy row is created, so an unreachable
 	// source degrades to a link instead of an empty copy that looks whole. A
@@ -150,7 +155,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 		if _, err := writeAllContent(ctx, dst, id, version, body); err != nil {
 			return nil, err
 		}
-	case t.Kind == rpc.KindURL || t.Kind == rpc.KindShell:
+	case t.Kind == rpc.KindURL:
 		// The frozen face travels with the copy. An unreachable preview skips:
 		// the copy's own facts are present and the face re-freezes on the next
 		// live visit, so a link here would deny the copy content the walk has.

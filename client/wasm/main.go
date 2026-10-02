@@ -151,7 +151,7 @@ type App struct {
 	// leftResize clamps to the pane minimum; the release decides a close.
 	leftResize *leftResizeState
 
-	// shellAlive caches the ShellSessionAlive probe (missing key: unknown);
+	// shellAlive caches the ShellSessionAlive probe by session (missing: unknown);
 	// shellAliveProbing single-flights it.
 	shellAlive        map[string]bool
 	shellAliveProbing map[string][]func(alive bool)
@@ -630,8 +630,8 @@ func main() {
 	// PTY bytes ride the /shell WebSocket on this page's origin and cookie.
 	app.shells = shellstream.New(
 		shellws.Dialer(shellws.Options{Origin: origin}),
-		func(tileID string, data []byte) { app.onShellData(tileID, data) },
-		func(e shellstream.Exit) { app.onShellExit(e.TileID, e.Message, e.SessionGone) },
+		func(key string, data []byte) { app.onShellData(key, data) },
+		func(e shellstream.Exit) { app.onShellExit(e.Key, e.Message, e.SessionGone) },
 	)
 
 	app.installCanvasInput()

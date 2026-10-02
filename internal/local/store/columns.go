@@ -191,6 +191,15 @@ Added at schema v14, additive.`,
 		bind:   func(t *gridwellv1.Tile) any { return intBool{&t.ServesPage} },
 		noCopy: "a clone lands in home, where nothing serves a page",
 	},
+	{
+		name: "shell_session", ddl: "INTEGER", since: 15,
+		comment: `shell_session is the id of the tile whose tmux session a shell row
+attaches, written on a clone so every copy shares its source's
+session. NULL is the row's own id. It names a session, not a row: the
+tile that started it may be gone while a copy still names it. Added
+at schema v15, additive.`,
+		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ShellSession} },
+	},
 }
 
 // gridsColumns is the grids table, in DDL order.

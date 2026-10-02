@@ -22,7 +22,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 14
+const schemaVersion = 15
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -102,6 +102,10 @@ var migrations = []migration{
 	// a page, the one url entry whose address the node derives, so it is
 	// converted to say so rather than wait for its source to be listed again.
 	{to: 14, run: migrateV14},
+	// v15: shell_session, the session a cloned shell shares with its source.
+	// Additive: NULL is every existing row's meaning, its own id.
+	{to: 15, run: addColumnIfMissingDDL("tiles", "shell_session",
+		`ALTER TABLE tiles ADD COLUMN shell_session INTEGER`)},
 }
 
 // migrateV14 adds serves_page and marks the existing page rows; see the chain

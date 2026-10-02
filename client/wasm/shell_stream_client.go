@@ -30,8 +30,10 @@ type shellStreamConn struct {
 	rendererKind string   // "webgl" or "dom", whichever attached
 	container    js.Value // host <div> in the DOM
 
-	tileID string
-	paneID string
+	// tileID is the content tile the socket is bound to, whose face and title
+	// the server writes; key is the session it attaches (rpc.ShellSession).
+	tileID, key string
+	paneID      string
 	// descentID is the pane frame this stream was opened for: for a shell link,
 	// the link row, not tileID, or a link's overlay parks forever.
 	descentID string
@@ -97,24 +99,26 @@ func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	if tile == nil {
 		return false
 	}
-	// A shell link keys by the owner tile's id: one shell, seen from two grids.
-	alive, known := a.shellAlive[rpc.ContentID(tile)]
+	// The verdict keys by session: a clone, its source and a link to either
+	// are one shell seen from several grids.
+	key := rpc.ShellSession(tile)
+	alive, known := a.shellAlive[key]
 	v := shellconn.DecideShellRefreshVisible(
 		tile.Kind == rpc.KindShell, tile.PreviewBlobId != 0, known, alive)
 	if v.Probe {
-		a.probeShellSessionAlive(rpc.ContentID(tile), nil)
+		a.probeShellSessionAlive(key, rpc.ContentID(tile), nil)
 	}
 	return v.Show
 }
 
-// probeShellSessionAlive caches the verdict for tileID and calls then, unless
-// the probe failed.
-func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
+// probeShellSessionAlive asks the node about tileID and caches the verdict
+// under its session key, then calls then, unless the probe failed.
+func (a *App) probeShellSessionAlive(key, tileID string, then func(alive bool)) {
 	// Single-flight never drops a callback, or a restore's attach is lost when the
 	// badge probe fired first.
-	if waiters, inflight := a.shellAliveProbing[tileID]; inflight {
+	if waiters, inflight := a.shellAliveProbing[key]; inflight {
 		if then != nil {
-			a.shellAliveProbing[tileID] = append(waiters, then)
+			a.shellAliveProbing[key] = append(waiters, then)
 		}
 		return
 	}
@@ -122,20 +126,20 @@ func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 	if then != nil {
 		waiters = append(waiters, then)
 	}
-	a.shellAliveProbing[tileID] = waiters
+	a.shellAliveProbing[key] = waiters
 	go func() {
 		// Bounded: a probe the network swallowed would dedupe every later one away.
 		ctx, cancel := inflight.Bounded()
 		defer cancel()
 		alive, err := a.cl.ShellSessionAlive(ctx, tileID)
-		done := a.shellAliveProbing[tileID]
-		delete(a.shellAliveProbing, tileID)
+		done := a.shellAliveProbing[key]
+		delete(a.shellAliveProbing, key)
 		if err != nil {
 			shellLog("ShellSessionAlive tile=%s err=%v", tileID, err)
 			a.reportErr(errsurface.Error, "shell", "shell session probe failed: "+rpcErrText(err))
 			return
 		}
-		a.shellAlive[tileID] = alive
+		a.shellAlive[key] = alive
 		for _, fn := range done {
 			fn(alive)
 		}
@@ -144,20 +148,34 @@ func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 }
 
 // setShellAlive overrides the cached probe with onShellExit's firsthand verdict.
-func (a *App) setShellAlive(tileID string, alive bool) {
-	cur, ok := a.shellAlive[tileID]
-	a.shellAlive[tileID] = alive
+func (a *App) setShellAlive(key string, alive bool) {
+	cur, ok := a.shellAlive[key]
+	a.shellAlive[key] = alive
 	if !ok || cur != alive {
 		a.draw()
 	}
 }
 
+// forgetShellAlive drops the cached verdict for the session tileID names, so
+// whatever still names it probes again.
+func (a *App) forgetShellAlive(tileID string) {
+	key := tileID
+	if t := a.cachedTileByID(tileID); t != nil {
+		key = rpc.ShellSession(t)
+	}
+	delete(a.shellAlive, key)
+	delete(a.shellAliveProbing, key)
+}
+
 // openShellStream puts the tile's shell live in pane p: keep, move another
-// pane's terminal, or mount xterm.js on a new PTY. disable_shells refuses.
+// pane's terminal, or mount xterm.js on a new PTY, closing any other tile's
+// terminal on the same session first. disable_shells refuses.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	frozen := false
+	key := a.contentKey(tileID)
 	if t := a.findTileByID(tileID); t != nil {
 		frozen = t.UrlFrozen
+		key = rpc.ShellSession(t)
 	}
 	// Attaching clears the standing freeze, as the url side does. A shell link
 	// never follows its target, so the link row holds and clears the freeze.
@@ -170,7 +188,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		a.postFrozen(tileID, false, nil)
 	}
 	tileID = a.contentKey(tileID)
-	if !a.engage(a.shellSurface(), p, tileID) {
+	if !a.engage(a.shellSurface(), p, key, tileID) {
 		return
 	}
 
@@ -191,7 +209,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	doc.Get("body").Call("appendChild", container)
 
 	// The handlers read the pane off conn, since a takeover moves it.
-	conn := &shellStreamConn{tileID: tileID}
+	conn := &shellStreamConn{tileID: tileID, key: key}
 	conn.placeIn(p)
 
 	// installOverlayMouse hands back pane focus and link presses. Every other
@@ -355,7 +373,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	term.Get("parser").Call("registerOscHandler", 5522, conn.onOSCURL)
 
 	conn.onData = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		a.shells.Write(conn.tileID, []byte(args[0].String()))
+		a.shells.Write(conn.key, []byte(args[0].String()))
 		return nil
 	})
 	term.Call("onData", conn.onData)
@@ -368,7 +386,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 			return nil
 		}
 		conn.lastCols, conn.lastRows = cols, rows
-		a.shells.Resize(conn.tileID, int(cols), int(rows))
+		a.shells.Resize(conn.key, int(cols), int(rows))
 		return nil
 	})
 	term.Call("onResize", conn.onResize)
@@ -385,7 +403,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// The pane owns the conn before the dial: an instant failure reports through
 	// onShellExit, which finds it among the panes'.
 	a.local(p.ID).shellConn = conn
-	a.shells.Open(tileID, int(cols), int(rows))
+	a.shells.Open(key, tileID, int(cols), int(rows))
 	a.syncShellOverlayPosition()
 	term.Call("focus")
 }
@@ -481,18 +499,18 @@ func (conn *shellStreamConn) placeIn(p *pane.Pane) {
 	conn.anchor, conn.path = p.Anchor(), slices.Clone(p.Path())
 }
 
-func (a *App) shellConnOfTile(tileID string) *shellStreamConn {
+func (a *App) shellConnOfSession(key string) *shellStreamConn {
 	for _, pl := range a.locals {
-		if pl.shellConn != nil && pl.shellConn.tileID == tileID {
+		if pl.shellConn != nil && pl.shellConn.key == key {
 			return pl.shellConn
 		}
 	}
 	return nil
 }
 
-// onShellData routes PTY output to the tile's terminal as a Uint8Array.
-func (a *App) onShellData(tileID string, data []byte) {
-	conn := a.shellConnOfTile(tileID)
+// onShellData routes PTY output to the session's terminal as a Uint8Array.
+func (a *App) onShellData(key string, data []byte) {
+	conn := a.shellConnOfSession(key)
 	if conn == nil || conn.closed {
 		return
 	}
@@ -501,18 +519,19 @@ func (a *App) onShellData(tileID string, data []byte) {
 	conn.term.Call("write", u8)
 }
 
-// onShellExit handles an unexpected stream end; see shellconn.ExitAlive.
-func (a *App) onShellExit(tileID, message string, sessionGone bool) {
-	conn := a.shellConnOfTile(tileID)
+// onShellExit handles an unexpected stream end; see shellconn.ExitAlive. The
+// verdict keys by session, so one exit reaches every tile naming it.
+func (a *App) onShellExit(key, message string, sessionGone bool) {
+	conn := a.shellConnOfSession(key)
 	if conn == nil {
 		return
 	}
-	a.emit(traceevent.ShellExit(conn.paneID, tileID, message, sessionGone))
-	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", conn.paneID, tileID, sessionGone, message)
+	a.emit(traceevent.ShellExit(conn.paneID, conn.tileID, message, sessionGone))
+	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", conn.paneID, conn.tileID, sessionGone, message)
 	if alive, known := shellconn.ExitAlive(sessionGone); known {
-		a.setShellAlive(conn.tileID, alive)
+		a.setShellAlive(key, alive)
 	} else {
-		delete(a.shellAlive, conn.tileID)
+		delete(a.shellAlive, key)
 	}
 	if message != "" {
 		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+message)
@@ -568,7 +587,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 		a.views.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
 		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
-	a.shells.Close(conn.tileID)
+	a.shells.Close(conn.key)
 	a.releaseShellStream(paneID, conn)
 }
 

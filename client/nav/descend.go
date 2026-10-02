@@ -258,12 +258,12 @@ func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, 
 // autoLiveOnDescent applies shellconn.DecideAutoLive to the just-descended
 // tile.
 func (m *Machine) autoLiveOnDescent(paneID string, tile *gridwellv1.Tile, w World, pl *planner) {
-	// The shell facts key by content id, so a link attaches its target's
-	// session.
-	cid := rpc.ContentID(tile)
+	// The shell facts key by session, so a clone reads its source's verdict
+	// and a link its target's.
+	key := rpc.ShellSession(tile)
 	switch shellconn.DecideAutoLive(
 		rpc.DescentOf(tile), w.Caps.LiveURL, w.Caps.Shells,
-		tile.PreviewBlobId != 0, w.ShellAliveKnown[cid], w.ShellAlive[cid],
+		tile.PreviewBlobId != 0, w.ShellAliveKnown[key], w.ShellAlive[key],
 		tile.UrlFrozen) {
 	case shellconn.AutoLiveURL:
 		pl.add(Effect{Kind: EffOpenStream, PaneID: paneID, TileID: tile.Id,
@@ -279,6 +279,6 @@ func (m *Machine) autoLiveOnDescent(paneID string, tile *gridwellv1.Tile, w Worl
 			TileID: tile.Id,
 		})
 		pl.add(Effect{Kind: EffAwait, Token: tok,
-			Request: Request{Kind: RequestProbeShell, ID: cid}})
+			Request: Request{Kind: RequestProbeShell, ID: rpc.ContentID(tile), Key: key}})
 	}
 }

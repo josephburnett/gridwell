@@ -165,8 +165,8 @@ func writeShadowLaunchers(dir, shimPath string) error {
 // session is gone, so that surfaces to the wasm and the refresh button can
 // hide. startDir is ignored on attach and "" defaults to $HOME; later resizes
 // ride SIGWINCH through the PTY.
-func (c *Controller) Args(tileID string, mode Mode, cols, rows uint16, startDir string) []string {
-	name := SessionName(tileID)
+func (c *Controller) Args(key string, mode Mode, cols, rows uint16, startDir string) []string {
+	name := SessionName(key)
 	args := []string{c.binary, "-L", c.socketName, "-f", c.configPath}
 	switch mode {
 	case ModeCreate:
@@ -213,23 +213,23 @@ func (c *Controller) Env() []string {
 }
 
 // Mode is owned by internal/local's shell stream, which derives allowCreate
-// from the tile's PreviewBlobID.
+// from whether any tile naming the session has a face.
 type Mode int
 
 const (
-	// ModeCreate is for fresh tiles with no snapshot, the only case where
+	// ModeCreate is for a session never started, the only case where
 	// silently spawning a new shell is right.
 	ModeCreate Mode = iota
-	// ModeAttach fails if the session is gone. A snapshotted tile silently
+	// ModeAttach fails if the session is gone. A started session silently
 	// spawning fresh state would discard what the user thought was running.
 	ModeAttach
 )
 
-// SessionName takes a qualified id, so shells in different namespaces never
-// collide, and base64url-encodes it because a tmux session name cannot contain
-// "/", "." or ":". It is stable across restarts.
-func SessionName(tileID string) string {
-	return "gridwell-" + base64.RawURLEncoding.EncodeToString([]byte(tileID))
+// SessionName takes a session key, the namespace-local id of the tile that
+// started the session, and base64url-encodes it because a tmux session name
+// cannot contain "/", "." or ":". It is stable across restarts.
+func SessionName(key string) string {
+	return "gridwell-" + base64.RawURLEncoding.EncodeToString([]byte(key))
 }
 
 // ParseSessionName is the inverse of SessionName, for the orphan cleanup.
@@ -248,8 +248,8 @@ func ParseSessionName(name string) (string, bool) {
 // HasSession errors only on infrastructure failures. Both "session does not
 // exist" and the first-launch "no server running yet" yield (false, nil). It
 // is safe to call concurrently; tmux's IPC serializes on the socket.
-func (c *Controller) HasSession(tileID string) (bool, error) {
-	name := SessionName(tileID)
+func (c *Controller) HasSession(key string) (bool, error) {
+	name := SessionName(key)
 	out, err := c.run("has-session", "-t", name)
 	if err == nil {
 		return true, nil
@@ -261,8 +261,8 @@ func (c *Controller) HasSession(tileID string) (bool, error) {
 }
 
 // KillSession is a no-op if the session or the server is already gone.
-func (c *Controller) KillSession(tileID string) error {
-	name := SessionName(tileID)
+func (c *Controller) KillSession(key string) error {
+	name := SessionName(key)
 	out, err := c.run("kill-session", "-t", name)
 	if err == nil {
 		return nil
@@ -298,8 +298,8 @@ func (c *Controller) ListSessions() ([]string, error) {
 
 // PaneCommand is tmux's automatic window name, "" with no error when the
 // session is gone so callers skip relabeling.
-func (c *Controller) PaneCommand(tileID string) (string, error) {
-	name := SessionName(tileID)
+func (c *Controller) PaneCommand(key string) (string, error) {
+	name := SessionName(key)
 	out, err := c.run("display-message", "-t", name, "-p", "#{pane_current_command}")
 	if err != nil {
 		if isMissingSessionErr(out, err) || isNoServerErr(out, err) {

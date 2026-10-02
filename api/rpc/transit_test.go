@@ -84,10 +84,36 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 }
 
 // isIDField is the wire's naming for a qualified id within a request or a
-// Tile. MenuEntry's "id" is not one, so the rule is not read wire-wide.
+// Tile, plus shell_session, a tile id by another name. MenuEntry's "id" is not
+// one, so the rule is not read wire-wide.
 func isIDField(fd protoreflect.FieldDescriptor) bool {
 	name := string(fd.Name())
-	return fd.Kind() == protoreflect.StringKind && (name == "id" || strings.HasSuffix(name, "_id"))
+	return fd.Kind() == protoreflect.StringKind &&
+		(name == "id" || strings.HasSuffix(name, "_id") || name == "shell_session")
+}
+
+// shell_session is optional like a reference, empty meaning the tile's own id,
+// but names a tile in the tile's own namespace: it qualifies only when set and
+// peels at every hop, as Id does.
+func TestShellSessionQualifiesOnlyWhenSet(t *testing.T) {
+	unset := &pb.Tile{Id: "far/7", GridId: "far/1"}
+	if got := TransitQualifyTiles("hop", []*pb.Tile{unset})[0].ShellSession; got != "" {
+		t.Errorf("an unset session qualified to %q", got)
+	}
+	leafOwn := &pb.Tile{Id: "7", GridId: "1"}
+	QualifyOwnIDs("n1", leafOwn)
+	if leafOwn.ShellSession != "" || leafOwn.Id != "n1/7" || leafOwn.GridId != "n1/1" {
+		t.Errorf("QualifyOwnIDs = %+v, want ids qualified and no session", leafOwn)
+	}
+	clone := &pb.Tile{Id: "8", GridId: "1", ShellSession: "7"}
+	QualifyOwnIDs("n1", clone)
+	if clone.ShellSession != "n1/7" {
+		t.Errorf("a clone's session qualified to %q, want n1/7", clone.ShellSession)
+	}
+	leaf := InboundHop("n1/1", "n1", false)
+	if got := leaf.PeelTile(clone).ShellSession; got != "7" {
+		t.Errorf("a leaf hop peeled the session to %q, want 7", got)
+	}
 }
 
 // Every id field a Tile declares is in tileIDFields, so the prepend and the

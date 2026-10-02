@@ -108,8 +108,7 @@ func (a *App) deleteEphemeralTile(gridID, tileID string) {
 	// cannot race.
 	req := &gridwellv1.DeleteTileRequest{TileId: tileID}
 	// The row is going, and so is the tmux session behind it.
-	delete(a.shellAlive, tileID)
-	delete(a.shellAliveProbing, tileID)
+	a.forgetShellAlive(tileID)
 	// No refetch: nothing renders the scratch grid, and the event stream
 	// carries the removal into the cache.
 	a.post(write{

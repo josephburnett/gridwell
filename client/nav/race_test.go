@@ -192,3 +192,18 @@ func TestForgetRetiresAPaneContinuations(t *testing.T) {
 		t.Fatalf("forgetting one pane retired another's continuation")
 	}
 }
+
+// A clone's probe asks the node about the clone it descended into, and the
+// answer caches under the session it shares with its source.
+func TestShellProbeOfACloneKeysItsSession(t *testing.T) {
+	clone := &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 3, H: 2,
+		PreviewBlobId: 7, ShellSession: "s1"}
+	m := New()
+	w := baseWorld(gridPane("pane1", "g1"))
+	w.Door = &DoorWorld{}
+	tr := only(t, m.Do(descendGesture("pane1", clone), w), EffStartTransition)
+	a := only(t, m.Land(tr.Land, w), EffAwait)
+	if a.Request.Kind != RequestProbeShell || a.Request.ID != "s2" || a.Request.Key != "s1" {
+		t.Fatalf("await = %+v, want a probe of s2 cached under the session s1", a.Request)
+	}
+}

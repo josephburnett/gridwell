@@ -180,6 +180,24 @@ export async function deleteTile(origin: string, tileId: string): Promise<void> 
   }
 }
 
+// The node's verdict on the session a shell tile names, asked the way the
+// client's descent probe asks it.
+export async function shellSessionAlive(origin: string, tileId: string): Promise<boolean> {
+  const res = await fetch(`${origin}/${SERVICE}/ShellSessionAlive`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Connect-Protocol-Version': '1',
+      ...authHeaders(origin),
+    },
+    body: JSON.stringify({ tileId }),
+  });
+  if (!res.ok) {
+    throw new Error(`ShellSessionAlive(${tileId}) failed: ${res.status} ${await res.text()}`);
+  }
+  return Boolean(((await res.json()) as { alive?: boolean }).alive);
+}
+
 // A well whose child grid is a qualified id in another namespace. The node
 // stores the reference verbatim and cannot check the namespace exists, so this
 // is also how a spec seeds a dangling link.

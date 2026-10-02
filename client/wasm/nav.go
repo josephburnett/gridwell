@@ -259,7 +259,7 @@ func (a *App) urlSurfaces() []pane.Holder {
 	var out []pane.Holder
 	for id, pl := range a.locals {
 		if pl.urlView != nil {
-			out = append(out, pane.Holder{PaneID: id, TileID: pl.urlView.tileID})
+			out = append(out, pane.Holder{PaneID: id, TileID: pl.urlView.tileID, Key: pl.urlView.tileID})
 		}
 	}
 	return out
@@ -269,7 +269,7 @@ func (a *App) shellSurfaces() []pane.Holder {
 	var out []pane.Holder
 	for id, pl := range a.locals {
 		if pl.shellConn != nil {
-			out = append(out, pane.Holder{PaneID: id, TileID: pl.shellConn.tileID})
+			out = append(out, pane.Holder{PaneID: id, TileID: pl.shellConn.tileID, Key: pl.shellConn.key})
 		}
 	}
 	return out

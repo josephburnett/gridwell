@@ -381,6 +381,16 @@ func TestDescendLandGoesLive(t *testing.T) {
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}, {
+		// The liveness facts key by session, so one exit marks every tile
+		// on it: a clone reads its source's verdict, not its own id's.
+		name:  "a clone whose source's session is known dead stays frozen",
+		tile:  &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9, ShellSession: "s1"},
+		caps:  caps.Caps{LiveURL: true, Shells: true},
+		alive: map[string]bool{"s1": false},
+		known: map[string]bool{"s1": true},
+		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
+			EffScheduleURLUpdate},
+	}, {
 		name: "text stays frozen",
 		tile: &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", W: 2, H: 2},
 		caps: caps.Caps{LiveURL: true, Shells: true},
