@@ -120,10 +120,16 @@ func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile,
 	matched := map[string]bool{}
 	out := make([]ExtTile, 0, len(entries)+len(stored))
 	for _, e := range entries {
-		// Every entry takes a slot in the flow, minted or not, so dragging
-		// one tile never shifts the rest by a cell.
+		// Every entry takes a slot in the flow, minted or not, so touching
+		// or dragging one tile never shifts the rest by a cell. An entry's
+		// own row is its slot, not an obstacle to it.
+		r, ok := rows[e.Key]
+		if ok {
+			vacateRect(occupied, r.X, r.Y, r.W, r.H)
+		}
 		x, y, w, h := derivePlacement(occupied, &cur, e.PlacementHint)
-		if r, ok := rows[e.Key]; ok {
+		if ok {
+			occupyRect(occupied, r.X, r.Y, r.W, r.H)
 			matched[e.Key] = true
 			r.Kind, r.AltText = entryKind(e), e.Label
 			out = append(out, r)

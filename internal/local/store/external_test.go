@@ -431,3 +431,31 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 		t.Fatalf("the dragged tile is at (%d,%d), want (3,4)", got.X, got.Y)
 	}
 }
+
+// A touch mints the row where the entry already stood, so the entries after
+// it in the flow must not step past it: an entry's own row is its slot, not
+// an obstacle.
+func TestMintingInPlaceLeavesItsNeighboursWhereTheyWere(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.ContextID("root")
+	entries := textEntries("a", "b", "c", "d", "e")
+	before, err := d.Overlay(gid, entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := extByKey(t, before, "b")
+	if _, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
+		t.Fatal(err)
+	}
+	after, err := d.Overlay(gid, entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"a", "b", "c", "d", "e"} {
+		was, now := extByKey(t, before, key), extByKey(t, after, key)
+		if was.X != now.X || was.Y != now.Y {
+			t.Fatalf("%q moved because a neighbour was touched in place: (%d,%d) → (%d,%d)",
+				key, was.X, was.Y, now.X, now.Y)
+		}
+	}
+}

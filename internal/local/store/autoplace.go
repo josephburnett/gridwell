@@ -63,3 +63,11 @@ func occupyRect(occupied map[[2]int64]bool, x, y, w, h int64) {
 		}
 	}
 }
+
+func vacateRect(occupied map[[2]int64]bool, x, y, w, h int64) {
+	for dx := int64(0); dx < max(w, 1); dx++ {
+		for dy := int64(0); dy < max(h, 1); dy++ {
+			delete(occupied, [2]int64{x + dx, y + dy})
+		}
+	}
+}
