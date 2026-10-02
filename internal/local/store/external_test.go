@@ -459,3 +459,101 @@ func TestMintingInPlaceLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 		}
 	}
 }
+
+func hinted(key string, x, y, w, h int64) *pluginv1.Entry {
+	return &pluginv1.Entry{Key: key, Kind: "text", Label: key, PlacementHint: &pluginv1.PlacementHint{X: x, Y: y, W: w, H: h}}
+}
+
+// overlapping names the first two tiles that share a cell, or "".
+func overlapping(tiles []ExtTile) string {
+	owner := map[[2]int64]string{}
+	for _, tl := range tiles {
+		for dx := range max(tl.W, 1) {
+			for dy := range max(tl.H, 1) {
+				c := [2]int64{tl.X + dx, tl.Y + dy}
+				if o, ok := owner[c]; ok {
+					return o + " and " + tl.Key
+				}
+				owner[c] = tl.Key
+			}
+		}
+	}
+	return ""
+}
+
+// A hint is a preference: a hinted rect that meets a stored row moves to the
+// first free rect of its size below the hint, instead of landing on the row.
+func TestHintOntoAStoredRowStacksBelowIt(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.ContextID("week")
+	mintAll(t, d, gid, []*pluginv1.Entry{hinted("old", 0, 0, 2, 1)}, false)
+	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("new", 0, 0, 2, 1), hinted("old", 0, 1, 2, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := overlapping(tiles); o != "" {
+		t.Fatalf("%s overlap: %+v", o, tiles)
+	}
+	if n := extByKey(t, tiles, "new"); n.X != 0 || n.Y != 1 || n.W != 2 {
+		t.Fatalf("new = %+v, want the first free 2×1 below the hint, (0,1)", n)
+	}
+	if o := extByKey(t, tiles, "old"); o.X != 0 || o.Y != 0 {
+		t.Fatalf("the stored row moved: %+v", o)
+	}
+}
+
+func TestTwoEntriesWithOneHintGetTwoRects(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.ContextID("week")
+	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("a", 3, 2, 1, 1), hinted("b", 3, 2, 1, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := overlapping(tiles); o != "" {
+		t.Fatalf("%s overlap: %+v", o, tiles)
+	}
+	if a := extByKey(t, tiles, "a"); a.X != 3 || a.Y != 2 {
+		t.Fatalf("a = %+v, want its hint", a)
+	}
+	if b := extByKey(t, tiles, "b"); b.X != 3 || b.Y != 3 {
+		t.Fatalf("b = %+v, want (3,3), below a", b)
+	}
+}
+
+// The reported shape: rows minted one cell wide, then hints two cells wide. A
+// 2-wide hint whose second cell is a stored row stacks below it.
+func TestTwoWideHintBesideAOneWideRowStacksBelowIt(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.ContextID("week")
+	mintAll(t, d, gid, []*pluginv1.Entry{hinted("tue", 1, 0, 1, 1)}, false)
+	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("mon", 0, 0, 2, 1), hinted("tue", 2, 0, 2, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := overlapping(tiles); o != "" {
+		t.Fatalf("%s overlap: %+v", o, tiles)
+	}
+	if m := extByKey(t, tiles, "mon"); m.X != 0 || m.Y != 1 || m.W != 2 {
+		t.Fatalf("mon = %+v, want (0,1) 2 wide", m)
+	}
+}
+
+func TestUnhintedEntriesStillFlowFromTheCursor(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.ContextID("mixed")
+	entries := append(textEntries("a"), hinted("h", 0, 0, 1, 1), hinted("h2", 0, 0, 1, 1))
+	entries = append(entries, textEntries("b")...)
+	tiles, err := d.Overlay(gid, entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := overlapping(tiles); o != "" {
+		t.Fatalf("%s overlap: %+v", o, tiles)
+	}
+	want := map[string][2]int64{"a": {0, 0}, "h": {0, 1}, "h2": {0, 2}, "b": {1, 0}}
+	for k, xy := range want {
+		if tl := extByKey(t, tiles, k); tl.X != xy[0] || tl.Y != xy[1] {
+			t.Fatalf("%s = (%d,%d), want %v", k, tl.X, tl.Y, xy)
+		}
+	}
+}

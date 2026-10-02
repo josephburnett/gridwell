@@ -124,9 +124,11 @@ message Entry {
   string status_detail     = 7;
   // url entries: the address itself.
   string url_string = 8;
-  // placement_hint, when set, seeds the entry's first placement, such as a
-  // calendar putting an event at its date. The user's arrangement wins from
-  // then on, and a hint never moves a placed tile.
+  // placement_hint, when set, is where the entry prefers to land first, such
+  // as a calendar putting an event at its date. A hint that meets an occupied
+  // cell takes the first free rect of its size below it in the same column,
+  // so it never lands on another tile. The user's arrangement wins from then on, and a hint never moves a
+  // placed tile.
   PlacementHint placement_hint = 9;
   // preview_stamp is a positive generation number for the entry's GetPreview
   // picture, such as an image file's mtime in fs, so an edited image

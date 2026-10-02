@@ -467,9 +467,11 @@ type Entry struct {
 	StatusDetail     string `protobuf:"bytes,7,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	// url entries: the address itself.
 	UrlString string `protobuf:"bytes,8,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
-	// placement_hint, when set, seeds the entry's first placement, such as a
-	// calendar putting an event at its date. The user's arrangement wins from
-	// then on, and a hint never moves a placed tile.
+	// placement_hint, when set, is where the entry prefers to land first, such
+	// as a calendar putting an event at its date. A hint that meets an occupied
+	// cell takes the first free rect of its size below it in the same column,
+	// so it never lands on another tile. The user's arrangement wins from then on, and a hint never moves a
+	// placed tile.
 	PlacementHint *PlacementHint `protobuf:"bytes,9,opt,name=placement_hint,json=placementHint,proto3" json:"placement_hint,omitempty"`
 	// preview_stamp is a positive generation number for the entry's GetPreview
 	// picture, such as an image file's mtime in fs, so an edited image

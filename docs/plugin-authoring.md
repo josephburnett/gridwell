@@ -79,7 +79,9 @@ it, wearing your own name and face. Declare both and the entries win.
 `List` enumerates one context. Say whether it is `authoritative`: a key
 absent from an authoritative listing is gone; absent from a non-authoritative
 one means "not seen this pass", and the node keeps the entry until `Probe`
-answers GONE. A `placement_hint` seeds an entry's first placement only. An
+answers GONE. A `placement_hint` is a preference for an entry's first
+placement only: a hint onto an occupied cell takes the first free rect of its
+size below it in the same column. An
 entry's `status_detail` is one word about its state — "unread", "done" — which
 the client draws muted after the tile's name: a note on the name, never a
 second name. An entry with `serves_page` presents its `ServeContent` HTML on
