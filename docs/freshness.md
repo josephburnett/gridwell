@@ -31,7 +31,11 @@ outage as this namespace's health (`Adapter.noteSource`) — the transition
 only, on the same event and uuid the supervisor uses for the subprocess,
 because "a declared source is not answering" is one fact whichever half of
 the plugin it is — so the client marks the rooms it serves as memories with
-no call of its own having to fail. Retirement needs a verdict — an
+no call of its own having to fail. A listing the plugin answered from its
+own memory carries `ListResponse.unreachable`, the reason: its entries serve
+and refresh rows as a live listing's do, the reason is published as the
+source's health by the same `noteSource`, and it retires nothing, since a
+memory is not a verdict even when it claims `authoritative`. Retirement needs a verdict — an
 authoritative listing sweeps by `mem.Sweep`, a live non-authoritative one
 sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
 itself gone — fails the read outright at `cp.Info`, because the declared

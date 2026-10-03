@@ -223,8 +223,8 @@ source's health" (`docs/freshness.md`, layer 4, `internal/sourcecache/`).
 A failed `List` costs the user every entry the node has not minted a row for,
 which is most of a mailbox. Decided for plugins 2026-10-02 (CLAUDE.md, Node).
 
-**Example.** A sketch; no plugin does this yet, and the field does not exist
-yet. The shape is hey's `List` with the warm arm changed:
+**Example.** A sketch; no plugin does this yet. The shape is hey's `List`
+with the warm arm changed:
 
 ```go
 threads := p.mem.Collection(c.Key)
@@ -235,18 +235,18 @@ if err != nil && warm {
 }
 ```
 
-**Test.** First the field: `ListResponse.unreachable`, to add to
-`api/plugin/v1/plugin.proto` (additive), with a node seam test that a listing
-carrying it keeps its rows and marks the source's health as a failed read
-does. Then, per plugin: warm the memory with one walk, make the next walk
+**Test.** The field is `ListResponse.unreachable`, in the api tag after v0.4.0; the node
+side is pinned by
+`internal/server/memory_answer_seam_test.go:TestAMemoryAnswerKeepsEveryRowAndReportsTheReason`.
+Per plugin: warm the memory with one walk, make the next walk
 fail, and assert `List` answers the remembered entries with no error and
 `unreachable` set, and empty again once a walk lands. It inverts
 `hey/plugin/plugin_test.go:TestAWarmReadAnswersTheLastFailedWalk` and
 `gitlab/plugin/plugin_test.go:TestAWarmReadAnswersTheLastWalksFailure`, which
 pin today's behavior.
 
-**Today.** Nobody: the field is part of the conformance program. gitlab,
-gmail and hey answer a warm read with the last walk's error.
+**Today.** Nobody: the node reads the field, and no plugin sets it yet.
+gitlab, gmail and hey answer a warm read with the last walk's error.
 
 ## 8. Work only while watched
 
@@ -561,7 +561,7 @@ proc has no README.
 - [ ] 4. A definitive listing (whole read, feed connected) is authoritative; a capped read or a down feed is not.
 - [ ] 5. Each key lives in one context; other contexts list links to it.
 - [ ] 6. `Probe` answers for the context it names.
-- [ ] 7. A failed refresh answers from memory with `ListResponse.unreachable` set (field to add to `api/plugin/v1/plugin.proto`).
+- [ ] 7. A failed refresh answers from memory with `ListResponse.unreachable` set.
 - [ ] 8. No walk, glance or feed runs except for a call or a `Watch` in scope.
 - [ ] 9. `Watch` sends its header on accept, collapses bursts, re-announces the scope on overflow.
 - [ ] 10. Placement hints depend on the key, not on list position.
