@@ -45,6 +45,16 @@ JSON
 ]},"summary":"1 thread in Set Aside"}
 JSON
         ;;
+      feedbox)
+        cat <<'JSON'
+{"ok":true,"data":{"id":4,"kind":"feedbox","name":"The Feed","postings":[
+ {"id":930,"topic_id":401,"kind":"topic","name":"Weekly digest","summary":"this week","seen":true,"created_at":"2026-01-09T07:00:00Z","creator":{"name":"News","email_address":"news@example.com"}}
+]},"summary":"1 thread in The Feed"}
+JSON
+        ;;
+      trailbox|bubblebox)
+        printf '{"ok":true,"data":{"id":5,"kind":"%s","name":"%s","postings":[]},"summary":"0 threads"}\n' "$3" "$3"
+        ;;
       *)
         echo '{"ok":false,"error":"no box of kind","code":"not_found"}' >&2
         exit 2
