@@ -38,8 +38,8 @@ itself gone — fails the read outright at `cp.Info`, because the declared
 face is the plugin's own fact and nothing can supply it. A source that
 changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
 node holds one stream per subprocess while some client shows one of its
-grids, scoped to the contexts shown and re-opened with the new set when that
-changes, and publishes each change as the `GridChanged` a write would, so a
+grids, scoped to the contexts shown and those their link entries point into,
+and re-opened with the new set when that changes, and publishes each change as the `GridChanged` a write would, so a
 grid open on screen refetches. A coded refusal is not darkness: the listings
 still answer, so it rides a healthy `EventPluginHealth` as
 `live_updates_off` (`Adapter.noteWatch`), told once and cleared when a
