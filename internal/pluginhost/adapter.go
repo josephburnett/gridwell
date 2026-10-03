@@ -65,6 +65,12 @@ type Adapter struct {
 	scopeMu sync.Mutex
 	scope   []string
 	moved   chan struct{}
+
+	// served is, per grid address, each distinct listing GetGrid has answered
+	// since the grid was last announced: what a client may hold. See
+	// checkAdded; emitGridChanged clears an entry.
+	servedMu sync.Mutex
+	served   map[string][]listingSum
 }
 
 var _ namespace.Namespace = (*Adapter)(nil)
@@ -247,6 +253,9 @@ func (a *Adapter) emitGridChanged(gridID string) {
 	if gridID == "" {
 		return
 	}
+	a.servedMu.Lock()
+	delete(a.served, gridID)
+	a.servedMu.Unlock()
 	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{
 		GridChanged: &gridwellv1.GridChanged{GridId: gridID},
 	}})
@@ -367,17 +376,8 @@ func (a *Adapter) resolveGrid(gridID string) (gid int64, context string, err err
 	}
 }
 
-// grid is GetGrid's core, shared with GetTile so the two cannot disagree.
-func (a *Adapter) grid(ctx context.Context, gridID string) (*gridwellv1.Grid, []*gridwellv1.Tile, error) {
-	s, err := a.synthesize(ctx, gridID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return s.grid, s.tiles, nil
-}
-
-// synthesize is grid() keeping the join, so Search's key lookup and the mint's
-// derived placement read the same tile GetGrid answers.
+// synthesize is one grid with its join kept, so GetGrid, Search's key lookup
+// and the mint's derived placement read the same tiles.
 func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, error) {
 	gid, ckey, err := a.resolveGrid(gridID)
 	if err != nil {
@@ -461,11 +461,12 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 }
 
 func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
-	g, tiles, err := a.grid(ctx, req.GridId)
+	s, err := a.synthesize(ctx, req.GridId)
 	if err != nil {
 		return nil, err
 	}
-	return &gridwellv1.GetGridResponse{Grid: g, Tiles: tiles}, nil
+	a.noteServed(s)
+	return &gridwellv1.GetGridResponse{Grid: s.grid, Tiles: s.tiles}, nil
 }
 
 // tileRef is a resolved tile; id is 0 when untouched.

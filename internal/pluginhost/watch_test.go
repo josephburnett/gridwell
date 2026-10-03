@@ -210,9 +210,9 @@ func TestWatchDeclaredButUnimplementedTurnsLiveUpdatesOff(t *testing.T) {
 }
 
 // A stream that ends is re-opened, quietly, and the re-open, like the first
-// open, announces each context of its scope, so a client refetches what it
-// shows and nothing sent while no stream was open is lost. A context with a row
-// that no one shows is not announced.
+// open, announces each context of its scope that no client read, so a client
+// refetches what it shows and nothing sent while no stream was open is lost.
+// A context with a row that no one shows is not announced.
 func TestWatchEveryOpenAnnouncesItsScope(t *testing.T) {
 	drop := make(chan struct{})
 	p := &watchPlugin{
@@ -265,7 +265,8 @@ func awaitScope(t *testing.T, scopes <-chan []string) []string {
 // A scope change loses no change: the old stream closes only once the new one
 // is open, so a change to a context in both scopes during the swap arrives on
 // a stream and the node announces nothing for it; a context the new scope adds
-// is announced once, and one it drops not at all.
+// is announced once unless the client read it and it has not changed since,
+// and one it drops not at all.
 func TestWatchScopeChangeLosesNoChange(t *testing.T) {
 	sends := make(chan func(*pluginv1.Change) error, 1)
 	p := &watchPlugin{
@@ -317,8 +318,10 @@ func TestWatchScopeChangeLosesNoChange(t *testing.T) {
 	}
 	// The plugin's change to "all" during the swap, and "inner" added.
 	swap(map[string]int{gridAddr("all"): 1, gridAddr("inner"): 1}, "all", "inner")
-	// No change at all: only "more", which is added.
+	// "more" added unread is announced; read and unchanged, nothing is.
 	swap(map[string]int{gridAddr("more"): 1}, "all", "inner", "more")
+	read(t, a, "gone")
+	swap(map[string]int{}, "all", "gone", "inner", "more")
 }
 
 // While nothing of the plugin's is shown no stream is open: none before the
@@ -509,5 +512,135 @@ func TestARespawnedProcessRefusingAgainIsAnnouncedAgain(t *testing.T) {
 		case <-deadline:
 			t.Fatal("the respawned process refused again and nobody was told")
 		}
+	}
+}
+
+// listingPlugin is a watchPlugin whose listings the test edits: context c
+// lists one text entry per name in files[c]; a context in down fails as a
+// transport would.
+type listingPlugin struct {
+	watchPlugin
+	mu    sync.Mutex
+	files map[string][]string
+	down  map[string]bool
+}
+
+func (p *listingPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.down[req.Context] {
+		return nil, status.Error(codes.Unavailable, "the source is unreachable")
+	}
+	resp := &pluginv1.ListResponse{Authoritative: true}
+	for _, f := range p.files[req.Context] {
+		resp.Entries = append(resp.Entries, &pluginv1.Entry{Key: f, Kind: "text", Label: f})
+	}
+	return resp, nil
+}
+
+func (p *listingPlugin) edit(fn func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	fn()
+}
+
+func newListingPlugin(files map[string][]string, serve func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error) *listingPlugin {
+	return &listingPlugin{
+		watchPlugin: watchPlugin{scopes: make(chan []string, 8), accept: func(int32) bool { return true }, serve: serve},
+		files:       files,
+		down:        map[string]bool{},
+	}
+}
+
+func idle(_ int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
+	<-ctx.Done()
+	return nil
+}
+
+// read is a client's GetGrid of context c.
+func read(t *testing.T, a *Adapter, c string) {
+	t.Helper()
+	if _, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridAddr(c)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// awaitAnnounced waits for a stream to open on scope, then returns every
+// GridChanged that follows within a quiet period.
+func awaitAnnounced(t *testing.T, p *listingPlugin, seen <-chan *gridwellv1.Event, scope ...string) map[string]int {
+	t.Helper()
+	if got := awaitScope(t, p.scopes); !slices.Equal(got, scope) {
+		t.Fatalf("stream opened on %v, want %v", got, scope)
+	}
+	time.Sleep(300 * time.Millisecond) // the open lists what it adds before it announces
+	got := map[string]int{}
+	for _, ev := range collect(seen) {
+		if id := ev.GetGridChanged().GetGridId(); id != "" {
+			got[id]++
+		}
+	}
+	return got
+}
+
+// A context a scope adds is checked, not announced: the node lists it once
+// and tells clients only when the listing differs from what it served. An
+// unchanged listing announces nothing; one that changed between the client's
+// read and the open announces its grid once; one nobody read, or one the
+// source cannot list right now, is announced, since what a client holds is
+// unknown.
+func TestWatchScopeAddAnnouncesOnlyWhatChanged(t *testing.T) {
+	p := newListingPlugin(map[string][]string{"all": {"a"}, "d1": {"x"}, "d2": {"y"}, "d3": {"z"}, "d4": {"w"}}, idle)
+	a, seen := watchingNothing(t, p, nil)
+	for _, c := range []string{"all", "d1", "d2"} {
+		read(t, a, c)
+	}
+	show(t, a, "all", "d1", "d2")
+	if got := awaitAnnounced(t, p, seen, "all", "d1", "d2"); len(got) != 0 {
+		t.Errorf("showing three unchanged grids announced %v, want nothing", got)
+	}
+
+	read(t, a, "d3")
+	p.edit(func() { p.files["d3"] = append(p.files["d3"], "new") })
+	show(t, a, "all", "d1", "d2", "d3")
+	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2", "d3"), map[string]int{gridAddr("d3"): 1}; !maps.Equal(got, want) {
+		t.Errorf("adding a grid that changed in the gap announced %v, want %v", got, want)
+	}
+
+	read(t, a, "d4")
+	p.edit(func() { p.down["d4"] = true })
+	show(t, a, "all", "d1", "d2", "d3", "d4", "d5")
+	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2", "d3", "d4", "d5"), map[string]int{gridAddr("d4"): 1, gridAddr("d5"): 1}; !maps.Equal(got, want) {
+		t.Errorf("adding an unlistable and an unread grid announced %v, want %v", got, want)
+	}
+}
+
+// A re-open after a dropped stream checks its whole scope the same way: only
+// a context whose listing moved while no stream was open is announced.
+func TestWatchReopenAnnouncesOnlyWhatChanged(t *testing.T) {
+	drop := make(chan struct{})
+	p := newListingPlugin(map[string][]string{"all": {"a"}, "d1": {"x"}, "d2": {"y"}},
+		func(n int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
+			if n == 1 {
+				select {
+				case <-drop:
+				case <-ctx.Done():
+				}
+				return nil
+			}
+			<-ctx.Done()
+			return nil
+		})
+	a, seen := watchingNothing(t, p, nil)
+	for _, c := range []string{"all", "d1", "d2"} {
+		read(t, a, c)
+	}
+	show(t, a, "all", "d1", "d2")
+	if got := awaitAnnounced(t, p, seen, "all", "d1", "d2"); len(got) != 0 {
+		t.Fatalf("the first open announced %v, want nothing", got)
+	}
+	p.edit(func() { p.files["d2"] = nil })
+	close(drop)
+	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2"), map[string]int{gridAddr("d2"): 1}; !maps.Equal(got, want) {
+		t.Errorf("the re-open announced %v, want %v", got, want)
 	}
 }

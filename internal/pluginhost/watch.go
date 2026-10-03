@@ -7,12 +7,14 @@ package pluginhost
 
 import (
 	"context"
+	"crypto/sha256"
 	"io"
 	"slices"
 	"sync"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
@@ -128,11 +130,11 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 
 // followScope follows the scope until a stream ends, re-opening as it moves.
 // A stream replaces the one before only once it is open, so a context in both
-// scopes is watched throughout; each context the open adds is then announced,
-// since a change between the client's listing and the open is otherwise
-// announced by nothing. An attempt's first open adds its whole scope, which
-// is what catches up after a drop. A context the scope dropped is shown by no
-// one, so it is not announced.
+// scopes is watched throughout; each context the open adds is then checked
+// (checkAdded), since a change between the client's listing and the open is
+// otherwise announced by nothing. An attempt's first open adds its whole
+// scope, which is what catches up after a drop. A context the scope dropped
+// is shown by no one, so it is not checked.
 func (a *Adapter) followScope(ctx context.Context, established func()) error {
 	var cur *watchStream
 	var watched []string
@@ -164,11 +166,13 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 		cur.stop()
 		cur = next
 		established()
+		var added []string
 		for _, c := range scope {
 			if !slices.Contains(watched, c) {
-				a.emitGridChanged(gridAddr(c))
+				added = append(added, c)
 			}
 		}
+		a.checkAdded(ctx, added)
 		watched = scope
 		close(cur.ack)
 		select {
@@ -179,6 +183,75 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 			return nil
 		}
 	}
+}
+
+// checkAdded lists each context once and announces its grid only when what
+// the source answers now is not exactly what GetGrid served since the grid was
+// last announced: the node checks, so a client refetches only what moved. A
+// context the source cannot list right now, or that nobody read, is
+// announced, because what a client holds is unknown. The listings run
+// together and through synthesize, so they write rows as any read does.
+func (a *Adapter) checkAdded(ctx context.Context, contexts []string) {
+	var wg sync.WaitGroup
+	for _, c := range contexts {
+		wg.Go(func() {
+			s, err := a.synthesize(ctx, gridAddr(c))
+			if ctx.Err() != nil {
+				return
+			}
+			if err == nil && a.servedOnly(s) {
+				return
+			}
+			a.emitGridChanged(gridAddr(c))
+		})
+	}
+	wg.Wait()
+}
+
+// listingSum is a listing as a client holds it: every entry the source
+// answered, and whether the answer was authoritative.
+type listingSum [sha256.Size]byte
+
+// sumOf is the listing's sum, false for a dark listing, which holds nothing
+// to compare, or one that does not marshal, which is then never recorded and
+// always announced.
+func sumOf(s *synthesized) (listingSum, bool) {
+	if s.dark {
+		return listingSum{}, false
+	}
+	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(
+		&pluginv1.ListResponse{Entries: s.entries, Authoritative: s.authoritative})
+	if err != nil {
+		return listingSum{}, false
+	}
+	return sha256.Sum256(b), true
+}
+
+// noteServed records a listing GetGrid answered.
+func (a *Adapter) noteServed(s *synthesized) {
+	sum, ok := sumOf(s)
+	if !ok {
+		return
+	}
+	a.servedMu.Lock()
+	defer a.servedMu.Unlock()
+	if a.served == nil {
+		a.served = map[string][]listingSum{}
+	}
+	if !slices.Contains(a.served[s.grid.Id], sum) {
+		a.served[s.grid.Id] = append(a.served[s.grid.Id], sum)
+	}
+}
+
+// servedOnly reports whether s is the one listing served for its grid.
+func (a *Adapter) servedOnly(s *synthesized) bool {
+	sum, ok := sumOf(s)
+	if !ok {
+		return false
+	}
+	a.servedMu.Lock()
+	defer a.servedMu.Unlock()
+	return slices.Equal(a.served[s.grid.Id], []listingSum{sum})
 }
 
 // watchStream is one Watch stream followed on its own goroutine. Once open it
