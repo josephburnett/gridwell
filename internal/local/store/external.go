@@ -10,7 +10,9 @@ package store
 // A row exists only once the user has made a durable fact about an entry.
 // Listing mints nothing: Overlay is a read-only join that derives an
 // untouched entry's placement by the algorithm Mint stores, and Refresh and
-// Sweep write only to rows that exist.
+// Sweep write only to rows that exist. An entry with a link_target is a link
+// row, its link_target_id the target's namespace-relative address
+// (rpc.EntryTileID), which the router qualifies on the way out.
 
 import (
 	"context"
@@ -42,7 +44,7 @@ func (s *Store) SQL() *sql.DB { return s.db }
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
 // a well's minted child grid, 0 for a leaf. The caller names every such tile
-// by its key either way; see pluginhost.tileAddr.
+// by its key either way; see rpc.EntryTileID.
 type ExtTile struct {
 	ID          int64
 	Key         string
@@ -131,12 +133,15 @@ func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile,
 		if ok {
 			occupyRect(occupied, r.X, r.Y, r.W, r.H)
 			matched[e.Key] = true
-			r.Kind, r.AltText = entryKind(e), e.Label
+			r.Kind, r.AltText, r.LinkTargetId = entryKind(e), e.Label, linkTargetOf(e)
+			if r.LinkTargetId != "" {
+				r.UrlString, r.ServesPage, r.PreviewBlobId = "", false, 0
+			}
 			out = append(out, r)
 			continue
 		}
 		out = append(out, ExtTile{Key: e.Key, Tile: &gridwellv1.Tile{
-			Kind: entryKind(e), AltText: e.Label, X: x, Y: y, W: w, H: h}})
+			Kind: entryKind(e), AltText: e.Label, LinkTargetId: linkTargetOf(e), X: x, Y: y, W: w, H: h}})
 	}
 	for _, r := range stored {
 		if !matched[r.Key] {
@@ -155,16 +160,31 @@ func entryKind(e *pluginv1.Entry) string {
 	return e.Kind
 }
 
+// linkTargetOf is the address of the entry e links to, "" when e owns its
+// content.
+func linkTargetOf(e *pluginv1.Entry) string {
+	if lt := e.GetLinkTarget(); lt != nil {
+		return rpc.EntryTileID(lt.Context, lt.Key)
+	}
+	return ""
+}
+
 // entrySnapshot is what a row keeps of its entry's content facts, presented
-// when its source does not list it. Mint writes it and Refresh keeps it.
+// when its source does not list it. Mint writes it and Refresh keeps it. A
+// link holds only its target: the rest are the target's.
 type entrySnapshot struct {
 	kind string
-	url  sql.NullString // a url row's address, NULL on every other kind
+	url  sql.NullString // a url row's address, NULL on every other kind and on a link
 	page bool
+	link sql.NullString
 }
 
 func snapshotOf(e *pluginv1.Entry) entrySnapshot {
 	s := entrySnapshot{kind: entryKind(e)}
+	if t := linkTargetOf(e); t != "" {
+		s.link = sql.NullString{String: t, Valid: true}
+		return s
+	}
 	if s.kind == "url" {
 		s.url = sql.NullString{String: e.UrlString, Valid: true}
 		s.page = e.ServesPage
@@ -206,9 +226,9 @@ func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, 
 	}
 	now := n.s.now().UnixNano()
 	res, err := n.s.db.Exec(`INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
-		child_grid_id, url_string, alt_text, serves_page, created_at, updated_at, ns, key)
-		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, now, now, n.ns, e.Key)
+		child_grid_id, url_string, alt_text, serves_page, link_target_id, created_at, updated_at, ns, key)
+		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, s.link, now, now, n.ns, e.Key)
 	if err != nil {
 		return 0, fmt.Errorf("store: mint %q: %w", e.Key, err)
 	}
@@ -218,7 +238,10 @@ func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, 
 // Refresh updates a row's content snapshot to what the listing just said,
 // writing only where a value differs. child_grid_id is deliberately not
 // refreshed: re-pointing a stored reference because a listing changed is how
-// a link starts naming something the user never linked.
+// a link starts naming something the user never linked. A link target is
+// different, being the source's own content fact rather than the user's, and
+// an entry that becomes a link converts its row in place, keeping its id,
+// placement and framing (convert).
 func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 	if gridID == 0 || len(entries) == 0 {
 		return nil
@@ -231,22 +254,45 @@ func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 	for _, r := range stored {
 		byKey[r.Key] = r
 	}
-	now := n.s.now().UnixNano()
 	for _, e := range entries {
 		r, ok := byKey[e.Key]
 		if !ok {
 			continue
 		}
 		s := snapshotOf(e)
-		if r.Kind == s.kind && r.AltText == e.Label && r.UrlString == s.url.String && r.ServesPage == s.page {
+		if r.Kind == s.kind && r.AltText == e.Label && r.UrlString == s.url.String && r.ServesPage == s.page &&
+			r.LinkTargetId == s.link.String {
 			continue
 		}
-		if _, err := n.s.db.Exec(`UPDATE tiles SET kind = ?, alt_text = ?, url_string = ?, serves_page = ?, updated_at = ?
-			WHERE id = ? AND ns = ? AND tombstoned = 0`, s.kind, e.Label, s.url, s.page, now, r.ID, n.ns); err != nil {
+		if err := n.convert(r, e.Label, s); err != nil {
 			return fmt.Errorf("store: refresh %q: %w", e.Key, err)
 		}
 	}
 	return nil
+}
+
+// convert writes a row's new snapshot. A row that becomes a link gives up
+// what the tiles CHECK lets only an owner hold, its screenshot and its text
+// mode, since a link's face is its target's.
+func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
+	ctx := context.Background()
+	return n.s.withMutation(ctx, "Refresh", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+		if s.link.Valid {
+			if _, err := tx.ExecContext(ctx, `UPDATE tiles SET preview_blob_id = NULL, text_mode = NULL
+				WHERE id = ? AND ns = ? AND tombstoned = 0`, r.ID, n.ns); err != nil {
+				return err
+			}
+			if r.PreviewBlobId != 0 {
+				if err := n.s.decBlobRefcount(ctx, tx, r.PreviewBlobId); err != nil {
+					return err
+				}
+			}
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE tiles SET kind = ?, alt_text = ?, url_string = ?, serves_page = ?,
+			link_target_id = ?, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`,
+			s.kind, label, s.url, s.page, s.link, n.s.now().UnixNano(), r.ID, n.ns)
+		return err
+	})
 }
 
 // Sweep retires the rows of a grid whose keys an authoritative listing did not

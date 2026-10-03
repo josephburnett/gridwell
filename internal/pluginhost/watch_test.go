@@ -18,6 +18,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
@@ -84,7 +85,7 @@ func show(t *testing.T, a *Adapter, contexts ...string) {
 	t.Helper()
 	var grids []string
 	for _, c := range contexts {
-		grids = append(grids, gridAddr(c))
+		grids = append(grids, rpc.EntryGridID(c))
 	}
 	if _, err := a.SetInterest(context.Background(), &gridwellv1.SetInterestRequest{GridIds: grids}); err != nil {
 		t.Fatal(err)
@@ -154,11 +155,11 @@ func TestWatchChangesArriveAsGridChanges(t *testing.T) {
 	_, seen := watching(t, p, nil)
 	// The open's announcement and the change to "all" may coalesce in the hub.
 	var ids []string
-	for len(ids) == 0 || ids[len(ids)-1] != gridAddr("never-listed") {
+	for len(ids) == 0 || ids[len(ids)-1] != rpc.EntryGridID("never-listed") {
 		ids = append(ids, await(t, seen).GetGridChanged().GetGridId())
 	}
-	if all := ids[:len(ids)-1]; len(all) == 0 || len(all) > 2 || slices.ContainsFunc(all, func(id string) bool { return id != gridAddr("all") }) {
-		t.Fatalf("events = %v, want GridChanged(%q) once or twice, then GridChanged(%q)", ids, gridAddr("all"), gridAddr("never-listed"))
+	if all := ids[:len(ids)-1]; len(all) == 0 || len(all) > 2 || slices.ContainsFunc(all, func(id string) bool { return id != rpc.EntryGridID("all") }) {
+		t.Fatalf("events = %v, want GridChanged(%q) once or twice, then GridChanged(%q)", ids, rpc.EntryGridID("all"), rpc.EntryGridID("never-listed"))
 	}
 	if evs := collect(seen); len(evs) != 0 {
 		t.Errorf("then %v, want nothing more", evs)
@@ -235,8 +236,8 @@ func TestWatchEveryOpenAnnouncesItsScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, what := range []string{"the first open", "the re-open"} {
-		if ev := await(t, seen); ev.GetGridChanged().GetGridId() != gridAddr("all") {
-			t.Fatalf("%s announced %v, want GridChanged(%q)", what, ev, gridAddr("all"))
+		if ev := await(t, seen); ev.GetGridChanged().GetGridId() != rpc.EntryGridID("all") {
+			t.Fatalf("%s announced %v, want GridChanged(%q)", what, ev, rpc.EntryGridID("all"))
 		}
 		if evs := collect(seen); len(evs) != 0 {
 			t.Fatalf("then %v, want nothing more", evs)
@@ -317,9 +318,9 @@ func TestWatchScopeChangeLosesNoChange(t *testing.T) {
 		}
 	}
 	// The plugin's change to "all" during the swap, and "inner" added.
-	swap(map[string]int{gridAddr("all"): 1, gridAddr("inner"): 1}, "all", "inner")
+	swap(map[string]int{rpc.EntryGridID("all"): 1, rpc.EntryGridID("inner"): 1}, "all", "inner")
 	// "more" added unread is announced; read and unchanged, nothing is.
-	swap(map[string]int{gridAddr("more"): 1}, "all", "inner", "more")
+	swap(map[string]int{rpc.EntryGridID("more"): 1}, "all", "inner", "more")
 	read(t, a, "gone")
 	swap(map[string]int{}, "all", "gone", "inner", "more")
 }
@@ -346,8 +347,8 @@ func TestWatchNothingShownHoldsNoStream(t *testing.T) {
 	if got := awaitScope(t, p.scopes); !slices.Equal(got, []string{"all"}) {
 		t.Fatalf("scope = %v, want [all]", got)
 	}
-	if ev := await(t, seen); ev.GetGridChanged().GetGridId() != gridAddr("all") {
-		t.Fatalf("the open announced %v, want GridChanged(%q)", ev, gridAddr("all"))
+	if ev := await(t, seen); ev.GetGridChanged().GetGridId() != rpc.EntryGridID("all") {
+		t.Fatalf("the open announced %v, want GridChanged(%q)", ev, rpc.EntryGridID("all"))
 	}
 	show(t, a)
 	select {
@@ -560,7 +561,7 @@ func idle(_ int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
 // read is a client's GetGrid of context c.
 func read(t *testing.T, a *Adapter, c string) {
 	t.Helper()
-	if _, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridAddr(c)}); err != nil {
+	if _, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID(c)}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -602,14 +603,14 @@ func TestWatchScopeAddAnnouncesOnlyWhatChanged(t *testing.T) {
 	read(t, a, "d3")
 	p.edit(func() { p.files["d3"] = append(p.files["d3"], "new") })
 	show(t, a, "all", "d1", "d2", "d3")
-	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2", "d3"), map[string]int{gridAddr("d3"): 1}; !maps.Equal(got, want) {
+	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2", "d3"), map[string]int{rpc.EntryGridID("d3"): 1}; !maps.Equal(got, want) {
 		t.Errorf("adding a grid that changed in the gap announced %v, want %v", got, want)
 	}
 
 	read(t, a, "d4")
 	p.edit(func() { p.down["d4"] = true })
 	show(t, a, "all", "d1", "d2", "d3", "d4", "d5")
-	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2", "d3", "d4", "d5"), map[string]int{gridAddr("d4"): 1, gridAddr("d5"): 1}; !maps.Equal(got, want) {
+	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2", "d3", "d4", "d5"), map[string]int{rpc.EntryGridID("d4"): 1, rpc.EntryGridID("d5"): 1}; !maps.Equal(got, want) {
 		t.Errorf("adding an unlistable and an unread grid announced %v, want %v", got, want)
 	}
 }
@@ -640,7 +641,7 @@ func TestWatchReopenAnnouncesOnlyWhatChanged(t *testing.T) {
 	}
 	p.edit(func() { p.files["d2"] = nil })
 	close(drop)
-	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2"), map[string]int{gridAddr("d2"): 1}; !maps.Equal(got, want) {
+	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2"), map[string]int{rpc.EntryGridID("d2"): 1}; !maps.Equal(got, want) {
 		t.Errorf("the re-open announced %v, want %v", got, want)
 	}
 }

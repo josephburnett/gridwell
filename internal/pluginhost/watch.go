@@ -3,7 +3,8 @@ package pluginhost
 // The plugin's Watch stream is how a source that changes on its own reaches a
 // grid open on screen: each Change becomes the event a write through this
 // adapter would have published, so a client reacts to it exactly as to one.
-// Its scope is the contexts some client shows (SetInterest).
+// Its scope is the contexts some client shows (SetInterest) and the contexts
+// their link entries point into (noteLinks).
 
 import (
 	"context"
@@ -19,6 +20,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
@@ -195,14 +197,14 @@ func (a *Adapter) checkAdded(ctx context.Context, contexts []string) {
 	var wg sync.WaitGroup
 	for _, c := range contexts {
 		wg.Go(func() {
-			s, err := a.synthesize(ctx, gridAddr(c))
+			s, err := a.synthesize(ctx, rpc.EntryGridID(c))
 			if ctx.Err() != nil {
 				return
 			}
 			if err == nil && a.servedOnly(s) {
 				return
 			}
-			a.emitGridChanged(gridAddr(c))
+			a.emitGridChanged(rpc.EntryGridID(c))
 		})
 	}
 	wg.Wait()
@@ -315,10 +317,10 @@ func (a *Adapter) follow(ctx context.Context, scope []string, opened func() erro
 }
 
 // SetInterest takes this plugin's share of the node's interest, grids the
-// node serves for it, and makes their contexts the Watch stream's scope. A
-// grid that no longer resolves is not watched.
+// node serves for it, as the contexts shown. A grid that no longer resolves
+// is not watched.
 func (a *Adapter) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequest) (*gridwellv1.SetInterestResponse, error) {
-	var scope []string
+	var shown []string
 	for _, gid := range req.GetGridIds() {
 		_, c, err := a.resolveGrid(gid)
 		switch status.Code(err) {
@@ -329,19 +331,72 @@ func (a *Adapter) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequ
 			return nil, err
 		}
 		if c != "" {
-			scope = append(scope, c)
+			shown = append(shown, c)
 		}
+	}
+	a.scopeMu.Lock()
+	defer a.scopeMu.Unlock()
+	a.shown = shown
+	a.rescopeLocked()
+	return &gridwellv1.SetInterestResponse{}, nil
+}
+
+// noteLinks records the contexts one live listing's link entries point into.
+// A shown grid's links read their targets' content, so a change there is a
+// change to what it shows: the targets' contexts join the scope.
+func (a *Adapter) noteLinks(context string, entries []*pluginv1.Entry) {
+	var into []string
+	for _, e := range entries {
+		if lt := e.GetLinkTarget(); lt != nil && lt.Context != context {
+			into = append(into, lt.Context)
+		}
+	}
+	slices.Sort(into)
+	into = slices.Compact(into)
+	a.scopeMu.Lock()
+	defer a.scopeMu.Unlock()
+	if slices.Equal(into, a.links[context]) {
+		return
+	}
+	if a.links == nil {
+		a.links = map[string][]string{}
+	}
+	if len(into) == 0 {
+		delete(a.links, context)
+	} else {
+		a.links[context] = into
+	}
+	a.rescopeLocked()
+}
+
+// rescopeLocked derives the Watch scope, the contexts shown and those they
+// link into, and closes moved when it changes. The caller holds scopeMu.
+func (a *Adapter) rescopeLocked() {
+	scope := slices.Clone(a.shown)
+	for _, c := range a.shown {
+		scope = append(scope, a.links[c]...)
 	}
 	slices.Sort(scope)
 	scope = slices.Compact(scope)
-	a.scopeMu.Lock()
-	defer a.scopeMu.Unlock()
 	if !slices.Equal(scope, a.scope) {
 		a.scope = scope
 		close(a.moved)
 		a.moved = make(chan struct{})
 	}
-	return &gridwellv1.SetInterestResponse{}, nil
+}
+
+// linkedFrom lists the contexts whose last live listing links into context.
+func (a *Adapter) linkedFrom(context string) []string {
+	a.scopeMu.Lock()
+	defer a.scopeMu.Unlock()
+	var out []string
+	for holder, into := range a.links {
+		if slices.Contains(into, context) {
+			out = append(out, holder)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // scopeNow is the scope and the channel that closes when it next moves.
@@ -352,14 +407,22 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 }
 
 // applyChange announces what a Change names as a GridChanged on the context's
-// derived address, row or no row. A removal is announced the way DeleteTile
+// derived address, row or no row, and on every context that links into it,
+// whose links read what changed. A removal is announced the way DeleteTile
 // announces one: the refetch it causes runs the listing's own sweep, so the
 // row retires by the one path that retires rows.
 func (a *Adapter) applyChange(ch *pluginv1.Change) {
+	var c string
 	switch p := ch.GetPayload().(type) {
 	case *pluginv1.Change_ContextChanged:
-		a.emitGridChanged(gridAddr(p.ContextChanged.GetContext()))
+		c = p.ContextChanged.GetContext()
 	case *pluginv1.Change_EntryRemoved:
-		a.emitGridChanged(gridAddr(p.EntryRemoved.GetContext()))
+		c = p.EntryRemoved.GetContext()
+	default:
+		return
+	}
+	a.emitGridChanged(rpc.EntryGridID(c))
+	for _, holder := range a.linkedFrom(c) {
+		a.emitGridChanged(rpc.EntryGridID(holder))
 	}
 }

@@ -15,7 +15,10 @@ outage snapshot at what the source last said, and `Sweep` tombstones a row
 whose key an authoritative listing no longer names.
 The consequence for an outage: the rows the user touched answer an
 unreachable source, unchanged; an untouched entry has no row and is simply
-absent until the source speaks again.
+absent until the source speaks again. An entry with a `link_target` is a
+link row (`link_target_id` holds the target's entry address), and a content
+row whose entry becomes a link is converted in place by `Refresh`, keeping
+its id and placement.
 
 ## The promise
 

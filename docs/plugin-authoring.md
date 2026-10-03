@@ -79,7 +79,11 @@ it, wearing your own name and face. Declare both and the entries win.
 `List` enumerates one context. Say whether it is `authoritative`: a key
 absent from an authoritative listing is gone; absent from a non-authoritative
 one means "not seen this pass", and the node keeps the entry until `Probe`
-answers GONE. A `placement_hint` is a preference for an entry's first
+answers GONE. `ProbeRequest.context` names the context the node is asking
+about: answer whether the key is still in THAT context, since a key listed in
+several (a mail thread in a box and in everything) can leave one and stay in
+another. An empty context is a node from before contexts: answer for the
+plugin as a whole. A `placement_hint` is a preference for an entry's first
 placement only: a hint onto an occupied cell takes the first free rect of its
 size below it in the same column. An
 entry's `status_detail` is one word about its state — "unread", "done" — which
@@ -95,6 +99,27 @@ it comes back as `ServeContent` on the same key with that name as the
 `subpath`. Past its address, a served page is a url tile like any other: the
 node keeps its screenshot, its standing freeze and its zoom, and you store
 none of them.
+
+## Links
+
+One thing listed in several of your collections — a mail thread in a box and
+in a list of everything — should be one tile, with the others pointing at it.
+Give it one home entry, and in every other collection list an entry with
+`link_target` naming that home by your own words: its context and key. The
+node draws such an entry as a link: dashed, with its own key, label,
+`status_detail` and placement, and its content, face and page read through
+the target, so it reads dead once the target's context says the target is
+gone. A copy of it, or a drag out of your grid, is another link to the
+target, so a reference survives the entry moving between collections. Keep
+`kind` the target's kind, and keep the content facts too if a node older than
+the field must still present it; a new node reads none of them on a link. The
+node mints nothing for the target until the user touches it. A well has no
+link variant (its `child_context` already says where it opens), and an entry
+may not link to itself.
+
+When the target changes, announce the target's context on `Watch`: the node
+passes the change on to every context whose listing links into it, and it
+adds those target contexts to your watch scope while a linking grid is shown.
 
 ## Changes
 

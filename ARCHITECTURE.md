@@ -176,7 +176,16 @@ it as `state_dir` at spawn: its own memory of its source, under cache.db's
 contract — disposable, safe to delete, rewarmed by use, and never deleted by
 the node. The node mints ids against those keys and
 keeps the arrangement as a namespace of its own store
-(`internal/pluginhost/adapter.go`). A plugin is not a place: it declares its
+(`internal/pluginhost/adapter.go`). An entry may be a link to another of the
+plugin's entries (`Entry.link_target`, the target's context and key): the
+store keeps it as a link row whose `link_target_id` is the target's bare
+entry address (`rpc.EntryTileID`), the leaf spells that in its own namespace
+on the way out (`rpc.QualifyLinkTarget`), and every read through it resolves
+the target as any link does, with nothing minted for the target until it is
+touched. A content row whose entry becomes a link is converted in place. The
+Watch scope also holds the contexts a shown grid's links point into, and a
+change to one is announced on every context linking into it. `Probe` names
+the context it asks about. A plugin is not a place: it declares its
 collections as `menu_entries`, one per collection, and each becomes a + menu
 swatch onto that grid. It has no landing of its own — `root_context` is
 retired, read only to derive the single entry an older binary implies. The
@@ -564,6 +573,7 @@ copy:
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | this event stream is established | `namespace.Follow` |
 | which grids the clients are showing | `interest.Book`, fed by `SetInterest`, counted by the `Subscribe` stream |
+| how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
 | the trace line, its door and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |
 

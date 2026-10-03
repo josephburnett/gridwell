@@ -180,6 +180,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   no status at all. A plugin that cannot serve the source its config declares
   refuses `Info` with the reason, and is broken with that sentence and no
   entries until the fix lands, which needs no restart (2026-09-30).
+- A plugin entry may be a link to another of its entries (2026-10-02):
+  `Entry.link_target` names the target by context and key, and the node
+  draws the entry as a link to the target's key-form address, reads through
+  it, and mints nothing for the target until it is touched. Listings stay
+  non-authoritative, and `Probe` answers for the context it names, so leaving
+  one collection is not being gone. One thing listed in many collections is
+  one tile (hey: a thread in everything, its boxes holding links).
 - A source that lists but cannot watch is not dark: its listings stay live
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
   comes only from a listing the source did not answer, and a read the caller

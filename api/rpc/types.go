@@ -234,6 +234,17 @@ func LeafLink(t *pb.Tile) bool {
 	return t.LinkTargetId != ""
 }
 
+// QualifyLinkTarget is a leaf link's target as the node holding the link
+// spells it. A target with no namespace segment is an entry of the holder's
+// own namespace, the way a plugin links one of its entries to another
+// (Entry.link_target); any other target is already the holder's spelling.
+func QualifyLinkTarget(holder, target string) string {
+	if _, _, qualified := SplitID(target); qualified || target == "" {
+		return target
+	}
+	return QualifyID(holder, target)
+}
+
 // PageURL mirrors the server's parseContentPath. The trailing slash is
 // load-bearing: relative subresource URLs resolve against the directory.
 func PageURL(origin, contentToken, tileID string) string {
