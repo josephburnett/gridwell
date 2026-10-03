@@ -145,7 +145,8 @@ writeback and never bumps version. Added at schema v4, additive.`,
 		name: "link_target_id", ddl: "TEXT", since: 6,
 		comment: `link_target_id makes a leaf tile (text, url, shell, pane) a link: a
 qualified "<uuid>/<tile-id>" reference to the tile that owns the
-content. NULL is an ordinary owned tile. A link row stores no content
+content, or on a plugin's row a bare entry address in that same plugin
+(rpc.EntryTileID). NULL is an ordinary owned tile. A link row stores no content
 of its own, which the CHECK's link branch enforces, and readers
 resolve bytes, preview, and session through the target id. The well
 kind's link variant is a qualified child_grid_id, the exit well, so
