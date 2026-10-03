@@ -5,8 +5,9 @@ package server
 // door as a browser reaches it.
 //
 // What the seam has to hold: the adapter turns each declared context into a
-// grid id the node can serve, both grids list through that mapping, and a
-// message is a url tile carrying serves_page whose page the door serves. The
+// grid id the node can serve, every grid lists through that mapping, a
+// message is one url tile in all mail carrying serves_page whose page the
+// door serves, and a label's row is a link to that tile. The
 // config crosses it too — the node hands over paths to the user's credential
 // and token, never their contents, plus a private state directory, and nothing
 // cached there carries a secret.
@@ -235,60 +236,64 @@ func gmailStack(t *testing.T, refresh string) (hs *httptest.Server, cl namespace
 	return hs, cl, info, g, stateDir
 }
 
-// The plugin's two collections are two (+) menu entries — no landing grid, no
-// privileged one — and both list. The mapping from a declared context to a
-// servable grid id is the adapter's, so a plugin unit test cannot see it: it
-// would find both declared and never learn whether either opens anything.
-func TestGmailPluginDeclaresAndListsBothCollections(t *testing.T) {
+// The plugin's contexts are three (+) menu entries — no landing grid, no
+// privileged one — and each lists: all mail holds each message once, and a
+// label holds a link to it. The mapping from a declared context to a servable
+// grid id, and from a link_target to a tile id, are the adapter's, so a plugin
+// unit test cannot see them: it would find the entries declared and never
+// learn whether a link resolves to the tile all mail lists.
+func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 	_, cl, info, _, _ := gmailStack(t, "1h")
 	ctx := t.Context()
 
 	if info.RootGridId != "" {
 		t.Fatalf("a plugin is not a place; it named a grid of its own: %q", info.RootGridId)
 	}
-	if len(info.MenuEntries) != 2 || info.MenuEntries[0].Label != "inbox" ||
-		info.MenuEntries[1].Label != "starred" {
-		t.Fatalf("menu entries = %v, want inbox and starred", info.MenuEntries)
+	if len(info.MenuEntries) != 3 || info.MenuEntries[0].Label != "inbox" ||
+		info.MenuEntries[1].Label != "starred" || info.MenuEntries[2].Label != "all mail" {
+		t.Fatalf("menu entries = %v, want inbox, starred and all mail", info.MenuEntries)
 	}
-	starred := info.MenuEntries[1]
-	if starred.GridId == "" || starred.GridId == info.MenuEntries[0].GridId {
-		t.Fatalf("the two collections must open two grids: %v", info.MenuEntries)
+	grids := map[string]bool{}
+	for _, m := range info.MenuEntries {
+		grids[m.GridId] = true
+	}
+	if len(grids) != 3 || grids[""] {
+		t.Fatalf("the three contexts must open three grids: %v", info.MenuEntries)
 	}
 
-	inbox, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
+	all, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[2].GridId})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(inbox.Tiles) != 2 {
-		t.Fatalf("the inbox = %v, want its two messages", inbox.Tiles)
+	if len(all.Tiles) != 2 {
+		t.Fatalf("all mail = %v, want each of the two messages once", all.Tiles)
 	}
 	// Every message arrives as a url tile whose page the plugin serves. That
 	// is the shape the whole client rests on: the address is the node's to
 	// derive at its /content/ door, so the message declares none of its own,
 	// and a text tile could not serve one at all.
-	for _, tl := range inbox.Tiles {
-		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" {
-			t.Errorf("%s = kind %q serves_page %v url %q", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString)
+	for _, tl := range all.Tiles {
+		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" || tl.Reference {
+			t.Errorf("%s = kind %q serves_page %v url %q reference %v", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString, tl.Reference)
 		}
 	}
-	lunch := tileWithLabel(t, inbox, "Lunch plans")
-	tileWithLabel(t, inbox, "Invoice 41")
 
-	// The starred grid is its own listing, not a copy of the inbox: the one
-	// starred message and nothing else.
-	star, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: starred.GridId})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(star.Tiles) != 1 {
-		t.Fatalf("the starred grid = %v, want the one starred message", star.Tiles)
-	}
-	tileWithLabel(t, star, "Invoice 41")
-
-	// The second listing — the label intersected with UNREAD — is what marks a
-	// message, and it named one of the two.
-	if lunch.StatusDetail != "unread" {
-		t.Errorf("the unread listing did not mark it: status = %q", lunch.StatusDetail)
+	// A label lists links, each to the tile all mail lists for the message:
+	// the inbox's two, and the starred grid's one, not a copy of the inbox.
+	for i, want := range [][]string{{"Lunch plans", "Invoice 41"}, {"Invoice 41"}} {
+		label, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[i].GridId})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(label.Tiles) != len(want) {
+			t.Fatalf("%s = %v, want %v", info.MenuEntries[i].Label, label.Tiles, want)
+		}
+		for _, subject := range want {
+			link := tileWithLabel(t, label, subject)
+			if link.LinkTargetId != tileWithLabel(t, all, subject).Id {
+				t.Errorf("%s's %q links to %q, want all mail's tile", info.MenuEntries[i].Label, subject, link.LinkTargetId)
+			}
+		}
 	}
 }
 
