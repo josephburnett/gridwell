@@ -98,13 +98,14 @@ if readErr != nil {
 (remove the CLI, stop the fake server, deny the directory) and assert `List`
 answers `codes.Unavailable`, not an empty listing and not `FailedPrecondition`.
 
-**Today.** Meet: fs, pages; gitlab and gmail map a network failure to
+**Today.** Meet: fs; gitlab and gmail map a network failure to
 `Unavailable` (`gitlab/gitlabapi/client.go`, `gmail/gmailapi/client.go`) and
 keep `PermissionDenied` for a refused token. Fail: hey answers a CLI it
 cannot run with `FailedPrecondition` (`hey/heycli/heycli.go:349`), so a CLI
 that goes missing after `Info` passed reads as a verdict. proc swallows a
 failed children read and answers an empty listing
-(`proc/plugin/plugin.go:168-176`).
+(`proc/plugin/plugin.go:168-176`). N/A: pages, whose site is its own code
+and is never unreachable.
 
 ## 4. Authoritative when definitive
 
@@ -205,7 +206,7 @@ default:
 `internal/server/link_entry_seam_test.go:TestTheSweepProbesTheContextItSweeps`
 across the seam.
 
-**Today.** Meet: hey; fs, pages and proc, whose keys live in one context, so
+**Today.** Meet: hey, pages; fs and proc, whose keys live in one context, so
 the plugin-wide answer is the context's. Fail: gmail answers for the plugin
 as a whole while one message is listed in two contexts.
 
@@ -378,8 +379,9 @@ func (t *Thread) StatusDetail() string {
 open todo) have the same label, and only the one worth noticing carries a
 `status_detail`.
 
-**Today.** Nobody fully. fs, pages and proc send no state, which is quiet but
-untested. hey and gitlab put state in the label (`UnseenMark`, `DoneMark`,
+**Today.** Nobody fully. pages sends no state and tests it
+(`pages/plugin/plugin_test.go:TestEntriesAreQuietAndHintedByTheirDoc`); fs
+and proc send none, which is quiet but untested. hey and gitlab put state in the label (`UnseenMark`, `DoneMark`,
 week counts in `todos.WeekLabel`); gmail, gitlab and hey send the normal
 state ("read", "pending", "seen") on every tile.
 
@@ -433,7 +435,8 @@ request and assert the source's context is done.
 **Today.** Fail: gmail (`gmail/plugin/plugin.go:552`) and hey
 (`hey/plugin/plugin.go:533`) fetch `ServeContent` under
 `context.Background()`; their detached walks also use it instead of the
-lifetime context. fs, pages and proc make no cancellable calls.
+lifetime context. fs and proc make no cancellable calls. N/A: pages, which
+has no source to call.
 
 ## 14. Log once per episode
 
