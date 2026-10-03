@@ -278,6 +278,21 @@ func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 		}
 	}
 
+	// A tile is named by its subject, and its state is one emoji the client
+	// draws beside the name, only when there is something to notice: Lunch
+	// plans is unread, Invoice 41 is read and starred, which the starred
+	// grid already says.
+	status := map[string]map[string]string{
+		"all mail": {"Lunch plans": "●", "Invoice 41": "★"},
+		"inbox":    {"Lunch plans": "●", "Invoice 41": "★"},
+		"starred":  {"Invoice 41": ""},
+	}
+	for subject, want := range status["all mail"] {
+		if tl := tileWithLabel(t, all, subject); tl.AltText != subject || tl.StatusDetail != want {
+			t.Errorf("all mail's %q = label %q status %q, want status %q", subject, tl.AltText, tl.StatusDetail, want)
+		}
+	}
+
 	// A label lists links, each to the tile all mail lists for the message:
 	// the inbox's two, and the starred grid's one, not a copy of the inbox.
 	for i, want := range [][]string{{"Lunch plans", "Invoice 41"}, {"Invoice 41"}} {
@@ -292,6 +307,9 @@ func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 			link := tileWithLabel(t, label, subject)
 			if link.LinkTargetId != tileWithLabel(t, all, subject).Id {
 				t.Errorf("%s's %q links to %q, want all mail's tile", info.MenuEntries[i].Label, subject, link.LinkTargetId)
+			}
+			if want := status[info.MenuEntries[i].Label][subject]; link.AltText != subject || link.StatusDetail != want {
+				t.Errorf("%s's %q = label %q status %q, want status %q", info.MenuEntries[i].Label, subject, link.AltText, link.StatusDetail, want)
 			}
 		}
 	}
