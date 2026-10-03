@@ -32,10 +32,13 @@ import (
 // the second walk happen, and weeks derive from each todo's created_at.
 
 // todoTileW mirrors the plugin's hinted todo width — two cells, so the label
-// reads. It is the plugin's own arrangement fact, read back off the wire
+// reads — and doneMark its one status, the done mark. It is the plugin's own arrangement fact, read back off the wire
 // here rather than shared: the two repositories share the contract, not a
 // package.
-const todoTileW = 2
+const (
+	todoTileW = 2
+	doneMark  = "✅"
+)
 
 // gitlabTodo is one merge-request todo as GitLab serves it, from Ada.
 func gitlabTodo(id int64, created string) gitlabfake.Todo {
@@ -113,17 +116,26 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatalf("week well = %+v", week)
 	}
 
-	// Descent: the week's todos, calendar-hinted (Tue = column 1).
+	// Descent: the week's todos, calendar-hinted: a column per day, a row
+	// per local creation hour. Each is named by its title alone; only the
+	// done one carries a status.
 	wk, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
 	if err != nil {
 		t.Fatal(err)
 	}
 	one := tileByLabelPrefix(wk.Tiles, "Ada: !1 ")
-	three := tileByLabelPrefix(wk.Tiles, "✅ Ada: !3 ")
+	three := tileByLabelPrefix(wk.Tiles, "Ada: !3 ")
 	if len(wk.Tiles) != 2 || one == nil || three == nil {
 		t.Fatalf("week grid = %v", wk.Tiles)
 	}
-	if one.ServesPage || one.Kind != "text" || one.X != 1*todoTileW || one.Y != 0 || one.W != todoTileW || three.X != 2*todoTileW {
+	if one.StatusDetail != "" || three.StatusDetail != doneMark {
+		t.Errorf("status: open %q, done %q", one.StatusDetail, three.StatusDetail)
+	}
+	if one.TextPresentation != "both" || three.TextPresentation != "both" {
+		t.Errorf("text_presentation: %q %q, want both", one.TextPresentation, three.TextPresentation)
+	}
+	hour := int64(time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC).Local().Hour())
+	if one.ServesPage || one.Kind != "text" || one.Y != hour || three.Y != hour || one.W != todoTileW || three.X-one.X != todoTileW {
 		t.Errorf("hints not honored: one=%+v three=%+v", one, three)
 	}
 
@@ -152,17 +164,17 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if flipped = tileByLabelPrefix(wk.Tiles, "✅ Ada: !1 "); flipped != nil || time.Now().After(deadline) {
+		if flipped = tileByLabelPrefix(wk.Tiles, "Ada: !1 "); flipped.GetStatusDetail() == doneMark || time.Now().After(deadline) {
 			break
 		}
 	}
-	if len(wk.Tiles) != 2 || flipped == nil || flipped.Id != one.Id || flipped.X != 5 || flipped.Y != 5 || flipped.W != 3 {
+	if len(wk.Tiles) != 2 || flipped.GetStatusDetail() != doneMark || flipped.Id != one.Id || flipped.X != 5 || flipped.Y != 5 || flipped.W != 3 {
 		t.Fatalf("after deletion in GitLab: %v", wk.Tiles)
 	}
 
 	// Plugin restart: a fresh process has never seen todo 1, and GitLab does
 	// not list it. The node remembers — same tile, same id, same placement,
-	// last-seen label — and its content says it is not in memory.
+	// label — and its content says it is not in memory.
 	closeStack()
 	client2, _, closeStack2 := gitlabStackAt(t, memPath, cfg)
 	t.Cleanup(closeStack2)
@@ -172,7 +184,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept := tileByLabelPrefix(wk.Tiles, "✅ Ada: !1 ")
+	kept := tileByLabelPrefix(wk.Tiles, "Ada: !1 ")
 	if len(wk.Tiles) != 2 || kept == nil || kept.Id != one.Id || kept.X != 5 || kept.Y != 5 {
 		t.Fatalf("restart lost the todo: %v", wk.Tiles)
 	}
@@ -180,7 +192,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Errorf("gone content = %q", body)
 	}
 	// And a live todo still reads after the restart.
-	three = tileByLabelPrefix(wk.Tiles, "✅ Ada: !3 ")
+	three = tileByLabelPrefix(wk.Tiles, "Ada: !3 ")
 	if body := readContent(t, client2, three.Id); !strings.Contains(body, "[Open !3 in GitLab](") {
 		t.Errorf("live content after restart = %q", body)
 	}
@@ -288,9 +300,10 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 	if kept.X != 5 || kept.Y != 5 || kept.W != 3 || kept.H != 2 {
 		t.Errorf("the todo snapped back to its hint: %+v, want the 5,5 3x2 the user left", kept)
 	}
-	// The gesture's whole visible effect: the same tile, repainted done.
-	if !strings.HasPrefix(kept.AltText, "✅ ") {
-		t.Errorf("label after the trash = %q, want the done mark", kept.AltText)
+	// The gesture's whole visible effect: the same tile, the same name, now
+	// carrying the done status.
+	if kept.StatusDetail != doneMark || kept.AltText != todo.AltText {
+		t.Errorf("after the trash: label %q status %q, want %q with the done mark", kept.AltText, kept.StatusDetail, todo.AltText)
 	}
 
 	// And the link still names something that reads.

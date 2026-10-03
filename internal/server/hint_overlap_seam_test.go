@@ -16,13 +16,13 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest/gitlabfake"
 )
 
-// A plugin's hints shift between listings: the gitlab plugin hints a todo by
-// its index among its day's todos, so a todo created earlier that day pushes
-// every later one down a row. The node keeps the rows the user touched where
-// they were, and the newcomer's hint, which now names a touched row's cell,
-// must stack below instead of landing on it. Only the seam sees this: the plugin's
-// hints are each correct, and the store's rows are each where they were left.
-func TestShiftedHintsNeverLandOnAStoredRow(t *testing.T) {
+// Two things can share a hinted cell: the gitlab plugin hints a todo by its
+// creation day and hour, so a todo created later in a touched todo's hour names
+// that touched row's cell. The node keeps the rows the user touched where they
+// were, and the newcomer must stack below instead of landing on one. Only the
+// seam sees this: the plugin's hints are each correct, and the store's rows are
+// each where they were left.
+func TestACollidingHintNeverLandsOnAStoredRow(t *testing.T) {
 	gl := gitlabfake.New(t,
 		gitlabTodo(1, "2026-08-17T10:00:00Z"),
 		gitlabTodo(2, "2026-08-17T12:00:00Z"),
@@ -60,7 +60,7 @@ func TestShiftedHintsNeverLandOnAStoredRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The user touches both Monday todos where they stand, which mints their
-	// rows at the hinted cells: (0,0) and (0,1).
+	// rows at the hinted cells: Monday's column, the 10:00 and 12:00 rows.
 	kept := map[string]*gridwellv1.Tile{}
 	for _, prefix := range []string{"Ada: !1 ", "Ada: !2 "} {
 		tl := tileByLabelPrefix(wk.Tiles, prefix)
@@ -71,13 +71,14 @@ func TestShiftedHintsNeverLandOnAStoredRow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if a, b := kept["Ada: !1 "], kept["Ada: !2 "]; a.X != 0 || a.Y != 0 || b.X != 0 || b.Y != 1 {
-		t.Fatalf("first listing = %+v, %+v, want Monday rows 0 and 1", a, b)
+	a, b := kept["Ada: !1 "], kept["Ada: !2 "]
+	if a.X != b.X || b.Y-a.Y != 2 {
+		t.Fatalf("first listing = %+v, %+v, want one column, two hours apart", a, b)
 	}
 
-	// A todo created earlier on Monday: the plugin now hints it at (0,0) and
-	// shifts the touched ones to rows 1 and 2.
-	gl.Set(gitlabTodo(3, "2026-08-17T08:00:00Z"), gitlabTodo(1, "2026-08-17T10:00:00Z"), gitlabTodo(2, "2026-08-17T12:00:00Z"))
+	// A todo created later in todo 1's hour: the plugin hints it at todo 1's
+	// cell.
+	gl.Set(gitlabTodo(1, "2026-08-17T10:00:00Z"), gitlabTodo(3, "2026-08-17T10:30:00Z"), gitlabTodo(2, "2026-08-17T12:00:00Z"))
 	var newcomer *gridwellv1.Tile
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
 		if wk, err = cl.GetGrid(ctx, week.ChildGridId); err != nil {
@@ -90,8 +91,8 @@ func TestShiftedHintsNeverLandOnAStoredRow(t *testing.T) {
 	if newcomer == nil {
 		t.Fatalf("the new todo never listed: %+v", wk.Tiles)
 	}
-	if newcomer.X != 0 || newcomer.Y != 2 {
-		t.Fatalf("new Monday todo at (%d,%d), want (0,2): Monday's column, below the touched ones", newcomer.X, newcomer.Y)
+	if newcomer.X != a.X || newcomer.Y == a.Y {
+		t.Fatalf("new Monday todo at (%d,%d), want Monday's column off todo 1's row (%d,%d)", newcomer.X, newcomer.Y, a.X, a.Y)
 	}
 	owner := map[[2]int64]string{}
 	for _, tl := range wk.Tiles {
