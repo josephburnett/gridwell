@@ -184,17 +184,20 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A plugin entry may be a link to another of its entries (2026-10-02):
   `Entry.link_target` names the target by context and key, and the node
   draws the entry as a link to the target's key-form address, reads through
-  it, and mints nothing for the target until it is touched. Listings stay
-  non-authoritative, and `Probe` answers for the context it names, so leaving
-  one collection is not being gone. One thing listed in many collections is
+  it, and mints nothing for the target until it is touched. A listing is
+  authoritative only when it enumerates the context definitively (a whole
+  read, or a whole box walk while the live feed is connected), and `Probe`
+  answers for the context it names, so leaving one collection is not being
+  gone. One thing listed in many collections is
   one tile (hey: a thread in everything, its boxes holding links).
 - A source that lists but cannot watch is not dark: its listings stay live
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
   comes only from a listing the source did not answer, and a read the caller
   abandoned says nothing about it (`gwerr.IsAbandoned`) (2026-10-02).
 - A plugin's memory answers when a refresh fails: the read succeeds from
-  what it remembers and the failure is the plugin's health, never a failed
-  read the memory could answer. It is the node's own rule — a remembered grid
+  what it remembers and says so in `ListResponse.unreachable` (the reason,
+  empty when live), which the node reports as the source's health while it
+  keeps serving the rows, never a failed read the memory could answer. It is the node's own rule — a remembered grid
   serves first, and that it is a memory is the source's health — one hop
   further (2026-10-02, `docs/plugin-standard.md` rule 7).
 - A plugin does work only to answer a call or for a `Watch` the node holds
