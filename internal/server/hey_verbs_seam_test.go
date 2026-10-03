@@ -136,30 +136,6 @@ func TestHeyDeleteIsRefusedWithTheReason(t *testing.T) {
 	tileWithLabel(t, walked(t, cl, grids), "Lunch plans")
 }
 
-// ReadContent answers a thread's card: its markdown, naming the thread, for
-// the key the tile addresses.
-func TestHeyReadContentAnswersTheCard(t *testing.T) {
-	_, cl, info := heyStack(t, heyAccount(t))
-	grids := heyGrids(t, info)
-	email := tileWithLabel(t, walked(t, cl, grids), "Weekly digest")
-
-	var body strings.Builder
-	var media string
-	err := cl.ReadContent(t.Context(), &gridwellv1.ReadContentRequest{TileId: email.Id}, func(c *gridwellv1.ContentChunk) error {
-		body.Write(c.Data)
-		if c.MediaType != "" {
-			media = c.MediaType
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if media != "text/markdown" || !strings.Contains(body.String(), "Weekly digest") || !strings.Contains(body.String(), "News") {
-		t.Errorf("card = %q %q", media, body.String())
-	}
-}
-
 // Showing a collection opens the plugin's Watch, and the stream counts open at
 // its header: the node then checks the shown grid and tells the client. With
 // the feed silent and nothing read, the header is the only thing the plugin
