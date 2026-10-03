@@ -106,10 +106,13 @@ that goes missing after `Info` passed reads as a verdict. proc swallows a
 failed children read and answers an empty listing
 (`proc/plugin/plugin.go:168-176`).
 
-## 4. Authoritative when complete
+## 4. Authoritative when definitive
 
-**Rule.** Mark a listing authoritative whenever it enumerates the context
-completely, and only then.
+**Rule.** A listing is authoritative when it enumerates the context
+definitively: a whole directory read, or a whole walk of a box while its live
+feed is connected. It is not authoritative when the read was capped or the
+feed is down or resyncing, because absence is never inferred from silence,
+and a feed that is down is silence.
 
 **Why.** "Absence is never inferred from silence" (`docs/freshness.md`). An
 authoritative listing lets the node retire a gone key in one pass; a
@@ -130,15 +133,16 @@ func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.L
 ```
 
 **Test.** `pages/plugin/plugin_test.go:TestAnyOtherContextIsEmptyAndAuthoritative`.
-For a source that is sometimes complete, the test shape is a pair: a whole
-read answers authoritative, a capped or partial read does not.
+For a source that is sometimes definitive, the test shape is a table: a whole
+read with the feed connected answers authoritative; a capped read, and a whole
+read while the feed is down or resyncing, do not.
 
-**Today.** Meet: fs, pages; proc and gitlab are never complete by design.
+**Today.** Meet: fs, pages; proc and gitlab are never definitive by design.
 Fail: gmail answers non-authoritative even when a read stayed under
-`max_messages`. Open for hey: a whole box walk is complete, and the
-2026-10-02 link decision says "listings stay non-authoritative". The outcome
-is the same either way, since `Probe` answers GONE for the box; Joe decides
-which wording stands.
+`max_messages`; hey answers non-authoritative after a whole box walk with its
+feed connected. This rule supersedes the 2026-10-02 remark that hey's
+listings stay non-authoritative: with link entries and a `Probe` per context,
+a whole-box walk may say so, and leaving a box is not being gone.
 
 ## 5. One home per thing
 
@@ -207,8 +211,10 @@ as a whole while one message is listed in two contexts.
 
 ## 7. Memory answers when a refresh fails
 
-**Rule.** When a refresh fails, serve the warm memory and report the failure
-as health; never fail a read the memory can answer.
+**Rule.** When a refresh fails but memory can answer, answer from memory and
+say so: `ListResponse.unreachable` (an additive string, empty when live, the
+reason when served from memory); the node reports it as the source's health,
+as it does a failed read, and keeps serving the rows.
 
 **Why.** "Nothing is done for nobody" has a twin at the node: "A remembered
 grid serves FIRST … Nothing on the answer says it is a memory — that is the
@@ -216,29 +222,30 @@ source's health" (`docs/freshness.md`, layer 4, `internal/sourcecache/`).
 A failed `List` costs the user every entry the node has not minted a row for,
 which is most of a mailbox. Decided for plugins 2026-10-02 (CLAUDE.md, Node).
 
-**Example.** A sketch; no plugin does this yet. The shape is hey's `sync`
-with the warm arm changed:
+**Example.** A sketch; no plugin does this yet, and the field does not exist
+yet. The shape is hey's `List` with the warm arm changed:
 
 ```go
-if warm {
-	p.reportHealth(c.Key, last) // see below; nil clears it
-	return nil                  // memory answers; the failure is not this read's
+threads := p.mem.Collection(c.Key)
+resp := listing(c.Label, threads, mail.BoxEntries(threads))
+if err != nil && warm {
+	resp.Unreachable = err.Error() // memory answers; the node shows the reason
+	return resp, nil
 }
 ```
 
-**Test.** To write, per plugin: warm the memory with one walk, make the next
-walk fail, and assert `List` answers the remembered entries with no error,
-and that the failure reached the health channel. It inverts
+**Test.** First the field: `ListResponse.unreachable`, to add to
+`api/plugin/v1/plugin.proto` (additive), with a node seam test that a listing
+carrying it keeps its rows and marks the source's health as a failed read
+does. Then, per plugin: warm the memory with one walk, make the next walk
+fail, and assert `List` answers the remembered entries with no error and
+`unreachable` set, and empty again once a walk lands. It inverts
 `hey/plugin/plugin_test.go:TestAWarmReadAnswersTheLastFailedWalk` and
 `gitlab/plugin/plugin_test.go:TestAWarmReadAnswersTheLastWalksFailure`, which
 pin today's behavior.
 
-**Today.** Nobody. gitlab and hey answer a warm read with the last walk's
-error; gmail likewise. Open: the wire has no health field on an answered
-`List`. The one health a plugin speaks while its listings answer is a `Watch`
-stream ending with a coded error, which the node shows as "live updates
-off" in the plugin's words. Either that is the channel, or the wire gains
-one; that needs a decision before this rule can be met.
+**Today.** Nobody: the field is part of the conformance program. gitlab,
+gmail and hey answer a warm read with the last walk's error.
 
 ## 8. Work only while watched
 
@@ -548,10 +555,10 @@ proc has no README.
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
 - [ ] 2. `Info` refuses a config it cannot serve with a sentence, and latches.
 - [ ] 3. After `Info` passed, an unreachable source answers `Unavailable`.
-- [ ] 4. A complete listing is authoritative; an incomplete one is not.
+- [ ] 4. A definitive listing (whole read, feed connected) is authoritative; a capped read or a down feed is not.
 - [ ] 5. Each key lives in one context; other contexts list links to it.
 - [ ] 6. `Probe` answers for the context it names.
-- [ ] 7. A failed refresh serves memory and reports health; no read fails that memory answers.
+- [ ] 7. A failed refresh answers from memory with `ListResponse.unreachable` set (field to add to `api/plugin/v1/plugin.proto`).
 - [ ] 8. No walk, glance or feed runs except for a call or a `Watch` in scope.
 - [ ] 9. `Watch` sends its header on accept, collapses bursts, re-announces the scope on overflow.
 - [ ] 10. Placement hints depend on the key, not on list position.
