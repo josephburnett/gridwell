@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"sync"
 	"time"
 
 	gcodes "google.golang.org/grpc/codes"
@@ -568,24 +569,38 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 // Subscribe fans every watching namespace's events (Info.watch) into the
 // client's, re-qualified. Failures heal through namespace.Refollow and are
 // told as EventPluginHealth. The stream also keeps its session's interest
-// counted (interest.Book.Open).
+// counted (interest.Book.Open), but only once every namespace's stream has
+// settled: interest is what starts a source watching, and a change it reports
+// before this stream hears it would reach no one.
 func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error {
-	if s := req.GetSession(); s != "" {
-		defer rt.srv.interest.Open(s)()
-	}
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	events := make(chan *pb.Event, 64)
+	var settling sync.WaitGroup
 	for _, n := range rt.srv.namespaces() {
+		settling.Add(1)
+		settled := sync.OnceFunc(settling.Done)
 		if n.Transit {
 			// The transport has no handshake to ask.
 			go watchPlugin(subCtx, n.UUID, true, n.NS,
-				func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events)
+				func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events, settled)
 			continue
 		}
 		go watchPlugin(subCtx, n.UUID, false, n.NS,
-			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, n.UUID) }, events)
+			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, n.UUID) }, events, settled)
+	}
+	if s := req.GetSession(); s != "" {
+		counted := make(chan func(), 1)
+		go func() {
+			settling.Wait()
+			if subCtx.Err() != nil {
+				counted <- func() {}
+				return
+			}
+			counted <- rt.srv.interest.Open(s)
+		}()
+		defer func() { cancel(); (<-counted)() }()
 	}
 
 	for {
@@ -602,11 +617,13 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 
 // watchPlugin fans plugin uuid's events into the client's stream until ctx
 // ends. The Info fetch rides namespace.Refollow's loop, so a plugin slow to
-// start is not excluded for good.
-func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event) {
+// start is not excluded for good. settled is called once the first attempt is
+// established or has failed, or ctx has ended.
+func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
+	defer settled()
 	namespace.Refollow{
 		Label: "subscribe: plugin " + uuid,
-		Down:  func(detail string) { reportHealth(ctx, events, uuid, false, detail) },
+		Down:  func(detail string) { reportHealth(ctx, events, uuid, false, detail); settled() },
 		Up:    func() { reportHealth(ctx, events, uuid, true, "") },
 		Attempt: func(ctx context.Context, established func()) error {
 			if _, err := infoOf(ctx); err != nil {
@@ -620,7 +637,7 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 					case <-ctx.Done():
 						return ctx.Err()
 					}
-				}, established)
+				}, func() { established(); settled() })
 		},
 	}.Run(ctx)
 }

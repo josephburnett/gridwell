@@ -22,6 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
@@ -133,6 +134,12 @@ func (m *mailSource) Watch(req *pluginv1.WatchRequest, s pluginv1.Plugin_WatchSe
 
 func linkStack(t *testing.T, src *mailSource) (*rpc.Client, *store.Store, string) {
 	t.Helper()
+	return linkStackOf(t, src, func(ns namespace.Namespace) namespace.Namespace { return ns })
+}
+
+// linkStackOf is linkStack with the plugin's namespace as wrap makes it.
+func linkStackOf(t *testing.T, src *mailSource, wrap func(namespace.Namespace) namespace.Namespace) (*rpc.Client, *store.Store, string) {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +154,7 @@ func linkStack(t *testing.T, src *mailSource) (*rpc.Client, *store.Store, string
 	t.Cleanup(closer)
 	a, stop := pluginhost.Start(cp, st.Namespace(linkPluginUUID), nil, "mail watch")
 	t.Cleanup(stop)
-	reg.Register(linkPluginUUID, "mailish", a, nil)
+	reg.Register(linkPluginUUID, "mailish", wrap(a), nil)
 	h := serveWeb(t, mustNew(t, reg, Config{}))
 	cl := rpc.NewClient(h.Client(), h.URL, connect.WithProtoJSON())
 	lp, err := cl.Handshake(context.Background())
@@ -323,13 +330,24 @@ func (o *oneEntrySource) List(context.Context, *pluginv1.ListRequest) (*pluginv1
 	return &pluginv1.ListResponse{Entries: []*pluginv1.Entry{o.entry}}, nil
 }
 
+// lateAttach is a namespace whose event streams attach a while after they are
+// asked for, as a loaded node's do.
+type lateAttach struct{ namespace.Namespace }
+
+func (l lateAttach) Subscribe(ctx context.Context, req *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	time.Sleep(namespace.SettleTime / 2)
+	return l.Namespace.Subscribe(ctx, req, send)
+}
+
 // A client showing only the box is told when a thread its links point at
 // changes, though nobody shows everything: the node watches the contexts a
 // shown grid links into, and announces the holder when one changes. Its next
-// read through the link is the new card.
+// read through the link is the new card. The source is watched for the
+// client's stream only once that stream hears the source, so a change told
+// the moment the Watch opens is not lost to a stream still attaching.
 func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
 	src := newMailSource()
-	cl, _, _ := linkStack(t, src)
+	cl, _, _ := linkStackOf(t, src, func(ns namespace.Namespace) namespace.Namespace { return lateAttach{ns} })
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	link := boxLink(t, cl)
