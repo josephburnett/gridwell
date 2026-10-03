@@ -7,17 +7,20 @@ package pluginhost_test
 // this test owns is exactly the disappearance the sweep arbitrates.
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 
 	"connectrpc.com/connect"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -183,5 +186,135 @@ func TestRetiredKeyStaysRetiredWithoutIdBurn(t *testing.T) {
 	}
 	if after := count(); after != before {
 		t.Fatalf("idmap grew %d → %d across reads of an UNCHANGED grid: the cached union resurrects the retired key and every read mints-and-retires a fresh id", before, after)
+	}
+}
+
+// shellWithChild starts `sh`, a child of this test process, which starts a
+// `sleep` of its own and prints its pid. The sleep outlives the sh, and is
+// killed at cleanup.
+func shellWithChild(t *testing.T) (sh *exec.Cmd, child string) {
+	t.Helper()
+	sh = exec.Command("sh", "-c", "sleep 600 & echo $!; wait")
+	out, err := sh.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sh.Start(); err != nil {
+		t.Fatalf("start sh: %v", err)
+	}
+	t.Cleanup(func() { _ = sh.Process.Kill(); _, _ = sh.Process.Wait() })
+	line, err := bufio.NewReader(out).ReadString('\n')
+	if err != nil {
+		t.Fatalf("read the child's pid: %v", err)
+	}
+	child = strings.TrimSpace(line)
+	pid, err := strconv.Atoi(child)
+	if err != nil {
+		t.Fatalf("child pid %q: %v", child, err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	return sh, child
+}
+
+// A process is under its parent's grid now. Kill an intermediate sh and its
+// child reparents: the next read of the sh's grid sweeps the child's placed
+// row, and the @info row of the dead sh, rather than keeping both for as long
+// as the child lives.
+func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
+	sh, child := shellWithChild(t)
+	v2 := pluginProcNode(t)
+	ctx := context.Background()
+	pl, err := v2.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := v2.GetGrid(ctx, plugintest.LandingOf(t, pl.Plugins[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	well := tileNamed(root.Tiles, strconv.Itoa(sh.Process.Pid))
+	if well.ChildGridId == "" {
+		t.Fatalf("sh %d has no well among %v", sh.Process.Pid, root.Tiles)
+	}
+	g, err := v2.GetGrid(ctx, well.ChildGridId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := tileNamed(g.Tiles, "@info")
+	if info.Id == "" || tileNamed(g.Tiles, child).Id == "" {
+		t.Fatalf("sh's grid lacks @info or child %s: %v", child, g.Tiles)
+	}
+	if info.TextPresentation != rpc.TextPresentationBoth {
+		t.Errorf("@info presents %q; want %q", info.TextPresentation, rpc.TextPresentationBoth)
+	}
+	for i, tile := range []*gridwellv1.Tile{info, tileNamed(g.Tiles, child)} {
+		if _, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			TileId: tile.Id, GridId: well.ChildGridId, X: int64(4 + 2*i), Y: 4, W: 1, H: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_ = sh.Process.Kill()
+	_, _ = sh.Process.Wait()
+	g, err = v2.GetGrid(ctx, well.ChildGridId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, label := range []string{child, "@info"} {
+		if tile := tileNamed(g.Tiles, label); tile.Id != "" {
+			t.Errorf("%s is still in the dead sh's grid: %+v", label, tile)
+		}
+	}
+}
+
+// Deleting a process already gone is done: the plugin answers OK and the
+// node's probe retires the row at once, without waiting for a read. Deleting
+// an @info tile is refused and signals nothing.
+func TestProcDeleteOfAGoneProcessRetiresItsRow(t *testing.T) {
+	gone, reap := sleeper(t)
+	alive, _ := sleeper(t)
+	memPath := filepath.Join(t.TempDir(), "mem.db")
+	v2 := pluginProcNodeAt(t, memPath)
+	ctx := context.Background()
+	pl, err := v2.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootGrid := plugintest.LandingOf(t, pl.Plugins[0])
+	g, err := v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	placed, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+		TileId: tileNamed(g.Tiles, gone).Id, GridId: rootGrid, X: 5, Y: 5, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reap()
+	if err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: placed.Id}); err != nil {
+		t.Fatalf("delete of a gone process: %v", err)
+	}
+	db, err := sql.Open("sqlite", memPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var tombstoned bool
+	if err := db.QueryRow(`SELECT tombstoned FROM tiles WHERE ns = 'p1' AND key = ?`, gone).Scan(&tombstoned); err != nil || !tombstoned {
+		t.Errorf("row for gone pid %s: tombstoned=%v (%v); want retired by the delete", gone, tombstoned, err)
+	}
+
+	sg, err := v2.GetGrid(ctx, tileNamed(g.Tiles, alive).ChildGridId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tileNamed(sg.Tiles, "@info").Id}); err == nil {
+		t.Error("deleting @info succeeded; want a refusal")
+	}
+	pid, _ := strconv.Atoi(alive)
+	if err := syscall.Kill(pid, 0); err != nil {
+		t.Errorf("deleting @info signalled its process %s: %v", alive, err)
 	}
 }
