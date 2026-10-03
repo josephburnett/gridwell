@@ -146,9 +146,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   survives at two hops only: the plugin subprocess and the connection
   door. Both node-side doors are codecs over the one router.
 - Plugins are the third-party door, and they live in their own repository,
-  `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc, gitlab
-  and pages on the same footing as anyone else's. This repo owns the door: the
-  proto, `api/gen/plugin/v1`, and the go-plugin handshake (`api/compose`).
+  `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc, pages,
+  gitlab, gmail and hey on the same footing as anyone else's. This repo owns
+  the door: the proto, `api/gen/plugin/v1`, and the go-plugin handshake
+  (`api/compose`).
   No gridwell package, TEST FILES INCLUDED, imports a plugin implementation
   or names that repository in a go.mod, and nothing switches on a plugin
   kind; every plugin behavior rides a wire declaration. `test/boundary`
@@ -191,6 +192,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
   comes only from a listing the source did not answer, and a read the caller
   abandoned says nothing about it (`gwerr.IsAbandoned`) (2026-10-02).
+- A plugin's memory answers when a refresh fails: the read succeeds from
+  what it remembers and the failure is the plugin's health, never a failed
+  read the memory could answer. It is the node's own rule — a remembered grid
+  serves first, and that it is a memory is the source's health — one hop
+  further (2026-10-02, `docs/plugin-standard.md` rule 7).
+- A plugin does work only to answer a call or for a `Watch` the node holds
+  with that context in scope: no walk, glance or feed runs for the process's
+  life. The node holds a stream only while something shows the plugin's
+  grids, so this is "nothing is done for nobody" one hop further (2026-10-02,
+  `docs/plugin-standard.md` rule 8).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections
