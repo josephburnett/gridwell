@@ -19,6 +19,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
@@ -195,14 +196,14 @@ func (a *Adapter) checkAdded(ctx context.Context, contexts []string) {
 	var wg sync.WaitGroup
 	for _, c := range contexts {
 		wg.Go(func() {
-			s, err := a.synthesize(ctx, gridAddr(c))
+			s, err := a.synthesize(ctx, rpc.EntryGridID(c))
 			if ctx.Err() != nil {
 				return
 			}
 			if err == nil && a.servedOnly(s) {
 				return
 			}
-			a.emitGridChanged(gridAddr(c))
+			a.emitGridChanged(rpc.EntryGridID(c))
 		})
 	}
 	wg.Wait()
@@ -358,8 +359,8 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 func (a *Adapter) applyChange(ch *pluginv1.Change) {
 	switch p := ch.GetPayload().(type) {
 	case *pluginv1.Change_ContextChanged:
-		a.emitGridChanged(gridAddr(p.ContextChanged.GetContext()))
+		a.emitGridChanged(rpc.EntryGridID(p.ContextChanged.GetContext()))
 	case *pluginv1.Change_EntryRemoved:
-		a.emitGridChanged(gridAddr(p.EntryRemoved.GetContext()))
+		a.emitGridChanged(rpc.EntryGridID(p.EntryRemoved.GetContext()))
 	}
 }

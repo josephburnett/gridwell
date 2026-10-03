@@ -2,7 +2,11 @@
 // joining the plugin's content answers with its namespace of the node's store
 // (ids, placement, framing): presentation verbs terminate here and content
 // verbs pass through. Listing mints nothing; every entry answers under its
-// derived address (address.go) and a row appears only at Adapter.mint. A dark
+// derived address (rpc.EntryTileID) and a row appears only at Adapter.mint.
+// The row is bookkeeping, resolved on the way in (Adapter.resolveTile) and
+// never handed out, since a mint that renamed the entry would take the id out
+// from under whoever stood on it; and GetTile is one List of the context
+// named, since a key→context index would copy the plugin's structure. A dark
 // source is published as this namespace's health and minted rows still read; a
 // dark plugin fails the read, since a local subprocess has no remembered
 // answers to serve.
@@ -101,7 +105,7 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
 		}
 		if m.Context != "" {
-			out.GridId = gridAddr(m.Context)
+			out.GridId = rpc.EntryGridID(m.Context)
 			f, err := a.contextFraming(m.Context)
 			if err != nil {
 				return nil, err
@@ -248,7 +252,7 @@ func sourceDetail(err error) string {
 	return "the source is not answering: " + err.Error()
 }
 
-// emitGridChanged announces a grid under its derived address (gridAddr).
+// emitGridChanged announces a grid under its derived address.
 func (a *Adapter) emitGridChanged(gridID string) {
 	if gridID == "" {
 		return
@@ -299,13 +303,13 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 	out := make([]*gridwellv1.Tile, 0, len(tiles))
 	for _, t := range tiles {
 		pt := proto.Clone(t.Tile).(*gridwellv1.Tile)
-		pt.Id = tileAddr(context, t.Key)
+		pt.Id = rpc.EntryTileID(context, t.Key)
 		pt.GridId = gridID
 		pt.ChildGridId = ""
 		e, listed := byKey[t.Key]
 		switch {
 		case listed && e.ChildContext != "":
-			pt.ChildGridId = gridAddr(e.ChildContext)
+			pt.ChildGridId = rpc.EntryGridID(e.ChildContext)
 		case t.ChildGridID != 0:
 			// A minted well the listing does not carry: its context is read
 			// back so the name handed out is still the address.
@@ -313,7 +317,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 			if err != nil {
 				return nil, err
 			}
-			pt.ChildGridId = gridAddr(ck)
+			pt.ChildGridId = rpc.EntryGridID(ck)
 		}
 		if listed {
 			pt.ServesPage = e.ServesPage
@@ -365,7 +369,7 @@ func (a *Adapter) resolveGrid(gridID string) (gid int64, context string, err err
 		}
 		return gid, context, err
 	case rpc.ShapeKey:
-		context, _, isTile, _ := splitAddr(gridID)
+		context, _, isTile, _ := rpc.SplitEntryID(gridID)
 		if isTile {
 			return 0, "", status.Errorf(codes.InvalidArgument, "plugin: %q names a tile, not a grid", gridID)
 		}
@@ -446,7 +450,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	if err != nil {
 		return nil, err
 	}
-	addr := gridAddr(ckey)
+	addr := rpc.EntryGridID(ckey)
 	g := &gridwellv1.Grid{
 		Id:          addr,
 		HostContent: ci.HostContent,
@@ -496,7 +500,7 @@ func (a *Adapter) resolveTile(tileID string) (tileRef, error) {
 		}
 		return tileRef{id: id, gid: gid, context: ckey, key: key}, nil
 	case rpc.ShapeKey:
-		ckey, key, isTile, _ := splitAddr(tileID)
+		ckey, key, isTile, _ := rpc.SplitEntryID(tileID)
 		if !isTile {
 			return tileRef{}, status.Errorf(codes.InvalidArgument, "plugin: %q names a grid, not a tile", tileID)
 		}
@@ -533,7 +537,7 @@ func (a *Adapter) mint(ctx context.Context, tileID string) (int64, error) {
 	if ref.id != 0 {
 		return ref.id, nil
 	}
-	s, err := a.synthesize(ctx, gridAddr(ref.context))
+	s, err := a.synthesize(ctx, rpc.EntryGridID(ref.context))
 	if err != nil {
 		return 0, err
 	}
@@ -577,10 +581,10 @@ func (a *Adapter) MintRef(_ context.Context, localID string) (string, error) {
 	switch rpc.ShapeOf(localID) {
 	case rpc.ShapeRow:
 		if ref, err := a.resolveTile(localID); err == nil {
-			return tileAddr(ref.context, ref.key), nil
+			return rpc.EntryTileID(ref.context, ref.key), nil
 		}
 		if _, ckey, err := a.resolveGrid(localID); err == nil {
-			return gridAddr(ckey), nil
+			return rpc.EntryGridID(ckey), nil
 		}
 		// A row nothing here answers to, retired or never this namespace's,
 		// answers itself: what it names is not this call's verdict to make.
@@ -598,7 +602,7 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 	if err != nil {
 		return nil, err
 	}
-	s, err := a.synthesize(ctx, gridAddr(ref.context))
+	s, err := a.synthesize(ctx, rpc.EntryGridID(ref.context))
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +648,7 @@ func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*g
 		if s, ok := grids[key]; ok {
 			return s, nil
 		}
-		s, err := a.synthesize(ctx, gridAddr(key))
+		s, err := a.synthesize(ctx, rpc.EntryGridID(key))
 		if err != nil {
 			return nil, err
 		}
@@ -663,7 +667,7 @@ func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*g
 			if err != nil {
 				return nil, err
 			}
-			well := parent.tileOpening(gridAddr(r.ContextPath[i]))
+			well := parent.tileOpening(rpc.EntryGridID(r.ContextPath[i]))
 			if well == nil {
 				placed = false
 				break
@@ -822,7 +826,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 		if err := a.mem.SetFraming(0, gid, f); err != nil {
 			return nil, err
 		}
-		a.hub.Publish(rpc.FramingEvent(gridAddr(ckey), f))
+		a.hub.Publish(rpc.FramingEvent(rpc.EntryGridID(ckey), f))
 		return &gridwellv1.SetFramingResponse{}, nil
 	}
 	id, err := a.mint(ctx, req.TileId)
@@ -956,6 +960,6 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 		}
 	}
 	// Either way the source changed and the client must look again.
-	a.emitGridChanged(gridAddr(ref.context))
+	a.emitGridChanged(rpc.EntryGridID(ref.context))
 	return &gridwellv1.DeleteTileResponse{}, nil
 }

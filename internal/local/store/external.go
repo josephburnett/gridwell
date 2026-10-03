@@ -42,7 +42,7 @@ func (s *Store) SQL() *sql.DB { return s.db }
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
 // a well's minted child grid, 0 for a leaf. The caller names every such tile
-// by its key either way; see pluginhost.tileAddr.
+// by its key either way; see rpc.EntryTileID.
 type ExtTile struct {
 	ID          int64
 	Key         string
