@@ -21,9 +21,7 @@ test('clicking rendered checkboxes toggles the source markers and persists', asy
   await gw.openPalette();
   await gw.dragCreate('markdown', cx, cy);
   await gw.descendCell(cx, cy);
-  // Pasted, not typed: typed, Enter would continue each list item.
-  await window.keyboard.insertText('# Todo\n\n- [ ] alpha\n- [x] beta\n\n```\n- [ ] fenced, not a task\n```');
-  await gw.waitIdle();
+  await gw.pasteText('# Todo\n\n- [ ] alpha\n- [x] beta\n\n```\n- [ ] fenced, not a task\n```');
   await gw.toggleTextMode(); // rendered
   await gw.waitIdle();
 

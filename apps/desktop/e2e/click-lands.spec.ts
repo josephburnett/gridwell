@@ -24,7 +24,7 @@ async function twoPanesWithDoc(gw: any, body: string) {
   const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(left);
   await gw.descendCell(cx, cy);
-  await gw.typeText(body);
+  await gw.pasteText(body);
   await expect.poll(() => gw.getTileContent(tile.id), { timeout: 10_000 }).toBe(body);
   return { tile, doc: left.id as string, other: right.id as string };
 }

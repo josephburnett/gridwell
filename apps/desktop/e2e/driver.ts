@@ -779,6 +779,14 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
+  // Inserts s verbatim at the caret, as a paste: no key events, so no editor
+  // keystroke rule (textedit.ContinueList) rewrites it. A spec that seeds a
+  // body uses this; typeText is for testing what typing does.
+  async pasteText(s: string): Promise<void> {
+    await this.win.keyboard.insertText(s);
+    await this.waitIdle();
+  }
+
 
   async clickScreen(x: number, y: number): Promise<void> {
     await this.win.mouse.click(x, y);
