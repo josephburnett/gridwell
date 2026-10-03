@@ -418,7 +418,10 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 	a.local(p.ID).shellConn = conn
 	a.shells.Open(key, tileID, int(cols), int(rows))
 	a.syncShellOverlayPosition()
-	term.Call("focus")
+	// A stream can open after an await, by when a press may have moved on.
+	if p.ID == a.tree.Focus {
+		term.Call("focus")
+	}
 }
 
 // attachShellRenderer gives the terminal the WebGL addon, falling back to

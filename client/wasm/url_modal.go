@@ -93,14 +93,16 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 
 	close := func() {
 		a.overlays.urlModalOpen = false
-		defer a.draw() // un-park the live views
+		defer func() {
+			a.draw() // un-park the live views
+			a.takeKeyboard()
+		}()
 		modal.Get("classList").Call("remove", "open")
 		suggestEl.Set("innerHTML", "")
 		for _, off := range offs {
 			off()
 		}
 		offs = nil
-		a.canvas.Call("focus")
 	}
 
 	commit := func() {

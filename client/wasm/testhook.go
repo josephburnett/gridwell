@@ -50,6 +50,13 @@ func (a *App) installTestHook() {
 			}
 			return nil
 		}),
+		"setSnapMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
+			// Stretches a drop's landing so a spec can press during it.
+			if len(args) == 1 {
+				snapMs = args[0].Float()
+			}
+			return nil
+		}),
 		"setBackstopMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// Retunes the outbox re-post cadence, restarting the wait in
 			// flight, so a spec can bound the backstop from both sides

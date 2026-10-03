@@ -241,9 +241,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   drop lands in or across one. Cross-plugin a left-drag links too, because
   there is no cross-plugin move. Dashed means link; deleting a link
   unlinks. Ctrl + left-click descends in a new pane split below — the
-  same split a link out of a live tile opens; in an unfocused pane it
-  still only moves focus. A press that crosses the drag threshold is a
-  drag, even if it drops on its own cell: it snaps back and is not a click
+  same split a link out of a live tile opens — in any pane. A press that
+  crosses the drag threshold is a drag, even if it drops on its own cell:
+  it snaps back and is not a click
   (2026-09-30, `dragdrop.DropRejected`). Esc cancels any drag in flight:
   everything returns to where it was at the press, and the release is a
   no-op (2026-10-01, `gesture.Escape`).
@@ -262,11 +262,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   pane: it spans that pane and slides under it as focus moves, inside a
   full-width row reserved once, so no pane ever resizes. Panes end at that
   row's top edge; the background beside the bar is nobody's and swallows
-  clicks. Clicks act in the focused pane; a click in an unfocused pane moves
-  focus, nothing else. Every button obeys that, the right one included: a
-  live url view's native context menu names the pane it acts in and focus
-  follows before any item can run. A crumb click ascends; middle-click is
-  the in-pane shortcut.
+  clicks. A crumb click ascends; middle-click is the in-pane shortcut.
+- A click lands on what it hits, in any pane, and pane focus follows in
+  the same press (2026-10-02, reversing 'moves focus, nothing else'). No
+  press is focus-only. Keyboard focus is set once, by the surface that
+  took the press, and nothing deferred may move it before the next press
+  (`gesture.Land`, `takeKeyboard`). The right button acts where it was
+  pressed; a live url view's native menu names its pane and focus follows
+  before any item runs.
 - A left-drag on a pane boundary resizes it. A press grabs at most one
   divider per axis, so at the corner of three panes it grabs both and the
   one drag moves both: two ordinary resizes sharing one gesture, rather than

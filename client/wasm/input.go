@@ -63,6 +63,7 @@ func (a *App) installCanvasInput() {
 	}), captureOpts)
 	// Single-finger touch becomes the same mouse gestures; see touch.go.
 	a.installTouchInput()
+	a.installFocusTrace()
 }
 
 // onKeyDown owns the content-zoom chord. Esc on a drag in flight is
@@ -342,6 +343,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if a.trans.Any() {
 		return nil
 	}
+	// A landing ghost parks every live surface, and its drop has already
+	// committed, so a press ends the landing rather than missing a surface.
+	if a.ghost != nil && a.dragging == nil && a.rightDrag == nil {
+		a.ghost = nil
+	}
 	// The notice strip occupies the band layoutPanes reserved below every pane,
 	// so a click there cannot be meant for a pane; errsurface owns the geometry.
 	if stripH := errsurface.StripHeight(a.errs.Len()); stripH > 0 && sy >= a.height-stripH {
@@ -376,8 +382,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	prevFocus := a.tree.Focus
 	a.focusToPane(p)
+	// Last, once the press has shown, un-parked or left what it acts on.
+	defer a.takeKeyboard()
 	button := args[0].Get("button").Int()
 	if button == 2 {
 		args[0].Call("preventDefault")
@@ -406,9 +413,20 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// In a content descent every interactive surface owns its own clicks, so a
-	// canvas left-click reaching here is chrome or margin and is swallowed.
+	// A surface that was not there to take the press gets it from here.
 	if p.ContentID() != "" {
+		// Held off so the canvas does not take the keyboard from the
+		// surface the press lands on. An open rename is committed here, as
+		// the canvas taking focus would have.
+		args[0].Call("preventDefault")
+		if in := a.doc.Call("getElementById", "gw-rename-input"); in.Truthy() {
+			in.Call("blur")
+		}
+		if a.menu.OpenOn(p.ID) {
+			a.menu.Close()
+		}
+		a.draw() // un-parks the surface the press lands on
+		a.landPress(p, r, sx, sy, args[0])
 		return nil
 	}
 
@@ -424,14 +442,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	parentCell := cellPx * p.Zoom
 	ps := p.Screen(r)
 	a.dragging = &dragState{
-		originPaneID:  p.ID,
-		originFocused: prevFocus == p.ID,
-		splitNav:      args[0].Get("ctrlKey").Truthy(),
-		tileID:        "",
-		startScreenX:  sx,
-		startScreenY:  sy,
-		curScreenX:    sx,
-		curScreenY:    sy,
+		originPaneID: p.ID,
+		splitNav:     args[0].Get("ctrlKey").Truthy(),
+		tileID:       "",
+		startScreenX: sx,
+		startScreenY: sy,
+		curScreenX:   sx,
+		curScreenY:   sy,
 		// Overridden below if the drag lands on a child preview tile.
 		srcGridID:    a.gridIDForPane(p),
 		srcCellSize:  parentCell,

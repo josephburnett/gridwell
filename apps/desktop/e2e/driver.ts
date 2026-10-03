@@ -375,11 +375,42 @@ export class GridwellDriver {
     );
   }
 
-  // Left-clicks the pane's empty center, which after an entry or split lands on
-  // no tile and so neither descends nor pans.
+  // Left-clicks the pane where the click lands on nothing. A click lands on
+  // what it hits in any pane, so on a grid that is the empty cell nearest the
+  // center; a content descent takes the click at its center.
   async focusPane(p: PaneInfo): Promise<void> {
-    await this.win.mouse.click(p.x + p.w / 2, p.y + p.h / 2);
+    const pt = await this.emptyPointIn(p);
+    await this.win.mouse.click(pt.x, pt.y);
     await this.waitIdle();
+  }
+
+  private async emptyPointIn(p: PaneInfo): Promise<{ x: number; y: number }> {
+    const center = { x: p.x + p.w / 2, y: p.y + p.h / 2 };
+    if (p.textFocus !== '') return center;
+    const tiles = (await getGrid(this.origin, p.gridID)).tiles ?? [];
+    const covered = (cx: number, cy: number) =>
+      tiles.some((t) => {
+        const [x, y, w, h] = [Number(t.x ?? 0), Number(t.y ?? 0), Number(t.w ?? 1), Number(t.h ?? 1)];
+        return cx >= x && cx < x + w && cy >= y && cy < y + h;
+      });
+    const margin = 24; // clear of the divider grab band
+    const ox = Math.floor(p.cx);
+    const oy = Math.floor(p.cy);
+    for (let r = 0; r <= 6; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || covered(ox + dx, oy + dy)) continue;
+          const pt = await this.win.evaluate(
+            ([id, x, y]) => (window as any).__gridwellTest.cellCenter(id, x, y),
+            [p.id, ox + dx, oy + dy] as [string, number, number],
+          );
+          if (pt.x >= p.x + margin && pt.x < p.x + p.w - margin && pt.y >= p.y + margin && pt.y < p.y + p.h - margin) {
+            return pt;
+          }
+        }
+      }
+    }
+    return center;
   }
 
   // Drags a primitive swatch ("well", "markdown", "url", "shell") onto a cell
@@ -466,12 +497,17 @@ export class GridwellDriver {
     const marker = `gw-attached-${Math.random().toString(36).slice(2, 8)}`;
     await this.win.keyboard.type(`printf '%s\\n' ${marker}`);
     await this.win.keyboard.press('Enter');
+    await this.waitShellLine(marker, timeout);
+  }
+
+  // Blocks until a row of the focused pane's terminal reads exactly line.
+  async waitShellLine(line: string, timeout = 10_000): Promise<void> {
     await this.win.waitForFunction(
       (m) =>
         ((window as any).__gridwellTest.shellText() as string)
           .split('\n')
           .some((l) => l.trim() === m),
-      marker,
+      line,
       { timeout },
     );
   }
@@ -485,10 +521,9 @@ export class GridwellDriver {
   }
 
   // descendCell with Control held, so the descent lands in a new pane split
-  // below, which takes focus.
-  async ctrlDescendCell(cx: number, cy: number): Promise<void> {
-    const f = await this.focused();
-    const c = await this.cellCenter(f.id, cx, cy);
+  // below, which takes focus. paneId names a pane other than the focused one.
+  async ctrlDescendCell(cx: number, cy: number, paneId?: string): Promise<void> {
+    const c = await this.cellCenter(paneId ?? (await this.focused()).id, cx, cy);
     await this.win.keyboard.down('Control');
     await this.win.mouse.click(c.x, c.y);
     await this.win.keyboard.up('Control');

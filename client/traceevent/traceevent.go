@@ -251,6 +251,14 @@ func Focus(from, to string) Event {
 	return Event{Src: "pane", Kind: "focus", Msg: "focus moves", KV: kv("from", from, "pane", to)}
 }
 
+// DOMFocus is the document's keyboard focus landing on an element: which
+// surface it is and the pane it serves, "" for none. Only a press, a user's
+// descent or ascent, or a modal moves it, so one after the press that caused
+// it is a steal.
+func DOMFocus(element, paneID string) Event {
+	return Event{Src: "dom", Kind: "dom-focus", Msg: element, KV: kv("pane", paneID)}
+}
+
 // Mods are the modifier keys held at a press.
 type Mods struct{ Ctrl, Shift, Alt, Meta bool }
 
@@ -320,8 +328,6 @@ func dropName(v dragdrop.DropAction) string {
 		return "navigate"
 	case dragdrop.DropNavigateSplit:
 		return "navigate in a split"
-	case dragdrop.DropFocusOnly:
-		return "focus only"
 	case dragdrop.DropCreateTemplate:
 		return "create"
 	case dragdrop.DropPanEnd:

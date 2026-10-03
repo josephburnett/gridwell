@@ -51,13 +51,12 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	in dragdrop.DropInput, t *dropTarget, dropX, dropY int64) {
 
 	in = dragdrop.DropInput{
-		Started:       d.started,
-		OriginFocused: d.originFocused,
-		SplitNav:      d.splitNav,
-		IsTemplate:    d.isTemplate,
-		Intent:        d.intent,
-		TileID:        d.tileID,
-		OverDelete:    a.overDeleteButton(d, sx, sy),
+		Started:    d.started,
+		SplitNav:   d.splitNav,
+		IsTemplate: d.isTemplate,
+		Intent:     d.intent,
+		TileID:     d.tileID,
+		OverDelete: a.overDeleteButton(d, sx, sy),
 	}
 	t, in.HasTarget = a.dropTargetAt(sx, sy, d.tileID)
 	if !in.HasTarget {

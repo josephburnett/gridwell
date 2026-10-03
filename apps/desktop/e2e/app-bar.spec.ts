@@ -50,7 +50,7 @@ test('one bar rides the focused pane, in a band reserved once', async ({ gw, win
     expect(after.w).toBe(before.w);
   }
 
-  // A click in an unfocused pane moves focus and does nothing else.
+  // A click on nothing in an unfocused pane moves focus, and the bar follows.
   await gw.focusPane(other);
   await expect.poll(async () => (await gw.panes()).find((p) => p.focused)?.id).toBe(other.id);
   expect((await gw.panes()).length, 'no pane closed, none zoomed').toBe(2);

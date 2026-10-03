@@ -385,10 +385,20 @@ moves, so the slot is never a wide screen away from the pane you are working
 in, inside the full-width row `wsbar.Band` reserves once, whatever has focus.
 That row is reserved layout — the pane tree ends at its top edge — so no pane,
 and no surface sized from a pane, can occlude the bar; the plain background
-either side of the bar covers no pane, and a click there does nothing. Clicks
-act in the focused pane; a click in an unfocused pane moves focus, nothing
-else. A crumb click is the ascent gesture; middle-click is the in-pane
-shortcut.
+either side of the bar covers no pane, and a click there does nothing. A crumb
+click is the ascent gesture; middle-click is the in-pane shortcut.
+
+**Clicks** land on what they hit, in any pane, and pane focus follows in the
+same press (`focusToPane`, the one owner). A surface that lives only over the
+focused pane (the textarea, the rendered view) or sits parked under an open
+menu cannot take the press itself, so the canvas finishes it, closing the menu
+or ending a drop's landing to un-park it:
+`gesture.Land` says what, from the caret under the painted character
+(`textcursor.CaretAt`, through the painter's own wrap) to the checkbox under
+the point. Keyboard focus has one writer, `takeKeyboard`, which a press, a
+user's descent or ascent, or a modal closing calls; a refresh only lays out,
+so a content fetch landing after a click cannot take the keyboard back. Every
+DOM focus change is a `dom-focus` trace record.
 
 **Shells** attach over a WebSocket at `/shell` on the page's own origin
 (`client/shellwire` writes the address and frames; `client/shellstream` owns

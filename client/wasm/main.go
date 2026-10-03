@@ -517,8 +517,6 @@ type dragState struct {
 	// menuNS is the node whose menu offered a template: primitives create there.
 	menuNS       string
 	originPaneID string
-	// originFocused makes a bare click on an unfocused pane focus-only.
-	originFocused bool
 	// splitNav records ctrl at left-press: a bare click descends in a new split.
 	splitNav     bool
 	tileID       string

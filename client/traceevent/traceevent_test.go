@@ -125,7 +125,6 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 	want := map[dragdrop.DropAction]string{
 		dragdrop.DropNavigate:       "navigate",
 		dragdrop.DropNavigateSplit:  "navigate in a split",
-		dragdrop.DropFocusOnly:      "focus only",
 		dragdrop.DropCreateTemplate: "create",
 		dragdrop.DropPanEnd:         "pan end",
 		dragdrop.DropDelete:         "delete",
@@ -159,6 +158,15 @@ func TestFocusNamesBothEnds(t *testing.T) {
 	e := Focus("p1", "p2")
 	if e.Src != "pane" || e.Kind != "focus" || e.KV["from"] != "p1" || e.KV["pane"] != "p2" {
 		t.Errorf("focus record is %+v", e)
+	}
+}
+
+// A spec asserts silence by this kind, so the kind is the contract; the
+// element is prose and the pane an id.
+func TestDOMFocusIsItsOwnKind(t *testing.T) {
+	e := DOMFocus("terminal", "p1")
+	if e.Kind != "dom-focus" || e.Msg != "terminal" || e.KV["pane"] != "p1" {
+		t.Errorf("dom-focus record is %+v", e)
 	}
 }
 

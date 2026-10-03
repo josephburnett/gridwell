@@ -163,6 +163,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 			onCommit(val)
 		}
 		a.draw()
+		a.takeKeyboard()
 	}
 	offKey = listen(in, "keydown", func(ev js.Value) {
 		ev.Call("stopPropagation")

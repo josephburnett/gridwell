@@ -284,21 +284,14 @@ func TestPaneCellAt(t *testing.T) {
 	}
 }
 
-// Clicking a pane to focus it never descends into a tile, whatever sits under
-// the cursor.
-func TestDecideDropFocusOnly(t *testing.T) {
-	unfocused := DropInput{Started: false, OriginFocused: false, TileID: "u/1"}
-	if got := DecideDrop(unfocused); got != DropFocusOnly {
-		t.Errorf("bare click on unfocused pane = %v, want DropFocusOnly", got)
+// A click lands on what it hits: the verdict never asks which pane had focus,
+// so there is no input that makes a bare click focus-only.
+func TestDecideDropBareClickAlwaysNavigates(t *testing.T) {
+	if got := DecideDrop(DropInput{Started: false, TileID: "u/1"}); got != DropNavigate {
+		t.Errorf("bare click = %v, want DropNavigate", got)
 	}
-	focused := DropInput{Started: false, OriginFocused: true, TileID: "u/1"}
-	if got := DecideDrop(focused); got != DropNavigate {
-		t.Errorf("bare click on focused pane = %v, want DropNavigate", got)
-	}
-	// Only the bare click is ambiguous, so a real drag acts either way.
-	drag := DropInput{Started: true, OriginFocused: false, TileID: "u/1", HasTarget: true}
-	if got := DecideDrop(drag); got != DropMove {
-		t.Errorf("drag from unfocused pane = %v, want DropMove", got)
+	if got := DecideDrop(DropInput{Started: false, SplitNav: true, TileID: "u/1"}); got != DropNavigateSplit {
+		t.Errorf("ctrl bare click = %v, want DropNavigateSplit", got)
 	}
 }
 
@@ -402,14 +395,10 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy}, DropClone},
 
 		// Early branches beat everything.
-		{"bare click on focused pane -> navigate (beats all)",
-			DropInput{Started: false, OriginFocused: true, IsTemplate: true, TileID: "7", OverDelete: true, HasTarget: true}, DropNavigate},
-		{"bare click on unfocused pane -> focus only (beats all)",
-			DropInput{Started: false, OriginFocused: false, IsTemplate: true, TileID: "7", OverDelete: true, HasTarget: true}, DropFocusOnly},
-		{"ctrl bare click on focused pane -> navigate in a split",
-			DropInput{Started: false, OriginFocused: true, SplitNav: true, TileID: "7"}, DropNavigateSplit},
-		{"ctrl bare click on unfocused pane -> still focus only",
-			DropInput{Started: false, OriginFocused: false, SplitNav: true, TileID: "7"}, DropFocusOnly},
+		{"bare click -> navigate (beats all)",
+			DropInput{Started: false, IsTemplate: true, TileID: "7", OverDelete: true, HasTarget: true}, DropNavigate},
+		{"ctrl bare click -> navigate in a split",
+			DropInput{Started: false, SplitNav: true, TileID: "7"}, DropNavigateSplit},
 		{"ctrl held on a started drag -> still a plain move",
 			DropInput{Started: true, SplitNav: true, TileID: "7", HasTarget: true}, DropMove},
 		{"template -> create (beats pan)",
