@@ -83,7 +83,7 @@ func TestHeyPageThroughTheContentDoor(t *testing.T) {
 		"<style>",
 		`<details class="hey-quote"><summary>Quoted text</summary><blockquote class="gmail_quote"><div>the kite flew sideways</div></blockquote></details>`,
 		"<header>From: Wren — 2026-01-05T14:03</header>",
-		`<a href="https://app.hey.com/topics/101">Open in HEY</a>`,
+		`<a href="https://app.hey.com/topics/101" target="_blank">Open in HEY</a>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q:\n%s", want, body)
