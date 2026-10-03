@@ -12,11 +12,11 @@ import (
 )
 
 // A hey CLI that goes missing after the plugin's Info passed is a source gone
-// dark, not a verdict (docs/plugin-standard.md rule 3): the Imbox keeps the
-// row the user placed and the source's health says it is not answering, and
-// putting the CLI back brings the whole box back with no restart. A verdict
-// here would refuse the grid outright, and a placed email would vanish until
-// the CLI returned.
+// dark, not a verdict (docs/plugin-standard.md rules 3 and 7): the Imbox keeps
+// every row it remembers, the placed one where the user left it, and the
+// source's health says why, and putting the CLI back clears it with no
+// restart. A verdict here would refuse the grid outright, and a placed email
+// would vanish until the CLI returned.
 func TestHeyCLIGoneAfterInfoReadsDark(t *testing.T) {
 	hey := heyAccount(t)
 	// A refresh this short walks on every read, so the read after the CLI goes
@@ -38,16 +38,24 @@ func TestHeyCLIGoneAfterInfoReadsDark(t *testing.T) {
 	}
 
 	hey.Remove(t)
-	dark := awaitGrid(t, cl, imbox, func(g *gridwellv1.GetGridResponse) bool { return len(g.Tiles) == 1 })
-	if got := dark.Tiles[0]; got.Id != placed.Tile.Id || got.X != 7 || got.Y != 3 {
-		t.Errorf("the placed row drifted in the dark: %+v", got)
+	var h *gridwellv1.EventPluginHealth
+	dark := awaitGrid(t, cl, imbox, func(g *gridwellv1.GetGridResponse) bool {
+		h = sourceHealth(t, cl)
+		return !h.GetHealthy()
+	})
+	if !strings.Contains(h.GetDetail(), "could not be run") {
+		t.Errorf("health = %+v, want the reason the CLI could not be read", h)
 	}
-	if h := sourceHealth(t, cl); h.GetHealthy() || !strings.Contains(h.GetDetail(), "source is not answering") {
-		t.Errorf("health = %+v, want the source named as not answering", h)
+	if len(dark.Tiles) != 2 {
+		t.Fatalf("the dark imbox = %v, want every remembered row", dark.Tiles)
+	}
+	got := tileWithLabel(t, dark, "Lunch plans")
+	if got.Id != placed.Tile.Id || got.X != 7 || got.Y != 3 {
+		t.Errorf("the placed row drifted in the dark: %+v", got)
 	}
 
 	hey.Restore(t)
-	awaitGrid(t, cl, imbox, func(g *gridwellv1.GetGridResponse) bool { return len(g.Tiles) == 2 })
+	awaitGrid(t, cl, imbox, func(*gridwellv1.GetGridResponse) bool { return sourceHealth(t, cl).GetHealthy() })
 }
 
 // awaitGrid reads grid until done says so. Every read must succeed: a refusal
@@ -70,21 +78,23 @@ func awaitGrid(t *testing.T, cl namespace.Namespace, grid string, done func(*gri
 	}
 }
 
-// sourceHealth is the health a subscriber arriving now is told.
+// sourceHealth is the health a subscriber arriving now is told. A healthy
+// source tells a new subscriber nothing, so a short silence is healthy.
 func sourceHealth(t *testing.T, cl namespace.Namespace) *gridwellv1.EventPluginHealth {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-	var h *gridwellv1.EventPluginHealth
+	h := &gridwellv1.EventPluginHealth{Healthy: true}
 	got := errors.New("got")
 	err := cl.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
-		if h = ev.GetPluginHealth(); h != nil {
+		if told := ev.GetPluginHealth(); told != nil {
+			h = told
 			return got
 		}
 		return nil
 	})
-	if !errors.Is(err, got) {
-		t.Fatalf("no health arrived: %v", err)
+	if err != nil && !errors.Is(err, got) && ctx.Err() == nil {
+		t.Fatalf("subscribe: %v", err)
 	}
 	return h
 }
