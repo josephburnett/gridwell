@@ -12,6 +12,10 @@ import { makeRunDir } from '../e2e/homes';
 
 // A todo the fake serves. The JSON shape is the wire form of the gitlab
 // plugin's todos.Todo, from GET /api/v4/todos: one pending review request.
+// The plugin hints a todo by its local creation day and hour, and the spawned
+// plugin shares this process's zone, so local 00:30 on the calendar's day zero
+// lands the tile at the origin cell on any host.
+const CREATED = new Date(2026, 7, 24, 0, 30).toISOString();
 const TODO = {
   id: 7,
   action_name: 'review_requested',
@@ -19,8 +23,8 @@ const TODO = {
   target_url: 'https://gitlab.example/g/p/-/merge_requests/7',
   body: 'please **review**',
   state: 'pending',
-  created_at: '2026-08-24T10:00:00Z',
-  updated_at: '2026-08-24T10:00:00Z',
+  created_at: CREATED,
+  updated_at: CREATED,
   project: { id: 1, name: 'p', path_with_namespace: 'g/p', web_url: 'https://gitlab.example/g/p' },
   author: { name: 'Ada', username: 'ada', web_url: 'https://gitlab.example/ada' },
   target: { iid: 7, title: 'change the thing', state: 'opened' },
@@ -104,8 +108,8 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   await gw.enterPlugin('todos');
   const f = await gw.focused();
   const snap = await gw.getGrid(f.gridID);
-  const week = (snap.tiles ?? []).find((t) => /^\d{4}-\d{2}-\d{2} · 1 open · 0 done$/.test(String(t.altText)));
-  expect(week, `one week well with the one open todo; have ${JSON.stringify((snap.tiles ?? []).map((t) => t.altText))}`).toBeTruthy();
+  const week = (snap.tiles ?? []).find((t) => /^\d{4}-\d{2}-\d{2}$/.test(String(t.altText)));
+  expect(week, `one week well, named by its Monday; have ${JSON.stringify((snap.tiles ?? []).map((t) => t.altText))}`).toBeTruthy();
 
   await gw.descendCell(Number(week!.x ?? 0), Number(week!.y ?? 0));
   const inner = await gw.focused();
@@ -117,13 +121,13 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   // so the oracle here is the RPC.
   expect(await gw.getTileContent(todo!.id)).toContain('please **review**');
 
-  // The trash gesture on a todo means mark-as-done. The tile does not vanish, it
-  // re-lists resolved, and the write rides the one delete path: drag, DeleteTile,
-  // plugin Delete, mark_as_done.
+  // The trash gesture on a todo means mark-as-done. The tile does not vanish:
+  // it re-lists under the same name with the done status, and the write rides
+  // the one delete path: drag, DeleteTile, plugin Delete, mark_as_done.
   await gw.deleteTileCell(Number(todo!.x ?? 0), Number(todo!.y ?? 0));
   const after = (await gw.getGrid(inner.gridID)).tiles ?? [];
   const doneTile = after.find((t) => t.id === todo!.id);
   expect(doneTile, 'the todo is still listed after the gesture').toBeTruthy();
-  expect(doneTile!.statusDetail).toBe('done');
-  expect(String(doneTile!.altText)).toContain('✅');
+  expect(doneTile!.statusDetail).toBe('✅');
+  expect(doneTile!.altText).toBe(todo!.altText);
 });

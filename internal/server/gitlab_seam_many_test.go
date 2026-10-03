@@ -18,7 +18,7 @@ import (
 // (X-Next-Page, 100 per page, newest first — the shape the first cut was
 // never exercised against): 260 todos over 14 weeks, 20 of
 // the newest pending. Pins: the outset walk is one pass per state plus
-// the pages it takes; every week gets its own counts; the root is a
+// the pages it takes; every week is named by its Monday; the root is a
 // calendar (a row per month, weeks left to right); a week descent is
 // answered from memory; and each todo tile reads as markdown.
 func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
@@ -93,7 +93,7 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	}
 	var thisWeek *gridwellv1.Tile
 	for _, tl := range root.Tiles {
-		if tl.AltText == "2026-08-24 · 5 open · 0 done" {
+		if tl.AltText == "2026-08-24" {
 			thisWeek = tl
 		}
 	}
