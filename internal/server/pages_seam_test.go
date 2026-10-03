@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -212,4 +214,71 @@ func TestPagesPluginFaceComesFromThePlugin(t *testing.T) {
 			t.Errorf("%s is a text tile with a thumbnail", tl.AltText)
 		}
 	}
+}
+
+// The text tile reads through the node as the plugin's markdown, and declares
+// it so: a body the client renders as plain text would show the markup.
+func TestPagesPluginTextTileIsMarkdown(t *testing.T) {
+	hs, grid := pagesServer(t)
+	about := tileByLabel(t, grid, "about")
+	if about.TextPresentation != rpc.TextPresentationBoth {
+		t.Errorf("about text_presentation = %q, want %q", about.TextPresentation, rpc.TextPresentationBoth)
+	}
+	data, mediaType, _, err := pagesRPC(t, hs).ReadContent(t.Context(), pagesNS+"/"+about.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mediaType != "text/markdown" || !strings.Contains(string(data), "# pages") {
+		t.Errorf("about = %q %.40q, want the markdown note", mediaType, data)
+	}
+}
+
+// The node's Probe of a listed tile asks the plugin in the context the tile
+// was listed in, and the plugin answers PRESENT there: a context either side
+// gets wrong reads as GONE, and GONE retires a live tile.
+func TestPagesPluginProbesAListedTilePresent(t *testing.T) {
+	cl := newPluginClient(t, "pages", nil)
+	ctx := t.Context()
+	info, err := cl.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grid, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: plugintest.Landing(t, info)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range grid.Tiles {
+		got, err := cl.Probe(ctx, &gridwellv1.ProbeRequest{TileId: tl.Id})
+		if err != nil || got.Presence != gridwellv1.ProbeResponse_PRESENCE_PRESENT {
+			t.Errorf("Probe(%s) = %v, %v; want PRESENT", tl.AltText, got.GetPresence(), err)
+		}
+	}
+}
+
+// A delete of a fixed page is refused, and the refusal reaches the caller of
+// the web door with its code and its reason; the tile stays listed under the
+// same id, because nothing was deleted.
+func TestPagesPluginDeleteIsRefusedWithItsReason(t *testing.T) {
+	hs, grid := pagesServer(t)
+	hello := tileByLabel(t, grid, "hello")
+	cl := pagesRPC(t, hs)
+	ctx := t.Context()
+
+	err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pagesNS + "/" + hello.Id})
+	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), "fixed") {
+		t.Fatalf("DeleteTile = %v, want Unimplemented saying the site is fixed", err)
+	}
+	after, err := cl.GetGrid(ctx, pagesNS+"/"+hello.GridId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again := tileByLabel(t, after, "hello"); again.Id != pagesNS+"/"+hello.Id {
+		t.Errorf("after a refused delete hello is %s, want the same id %s", again.Id, hello.Id)
+	}
+}
+
+// pagesRPC is a logged-in connect client on the pages server's web door.
+func pagesRPC(t *testing.T, hs *httptest.Server) *rpc.Client {
+	t.Helper()
+	return rpc.NewClient(withCookie(t, hs, testPassword).Client(), hs.URL, connect.WithProtoJSON())
 }
