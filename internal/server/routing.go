@@ -36,10 +36,10 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 				qt.ChildGridId = rpc.QualifyID(uuid, t.ChildGridId)
 			}
 		}
-		// A leaf link is a reference by construction: the store accepts only
-		// a qualified target, so the one derived Reference bit covers both
-		// link shapes.
+		// A leaf link is a reference by construction, however its target is
+		// spelled, so the one derived Reference bit covers both link shapes.
 		if t.LinkTargetId != "" {
+			qt.LinkTargetId = rpc.QualifyLinkTarget(uuid, t.LinkTargetId)
 			qt.Reference = true
 		}
 		out[i] = qt

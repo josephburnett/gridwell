@@ -164,6 +164,26 @@ func TestQualifyTilesLeafLink(t *testing.T) {
 	}
 }
 
+// A plugin's link to one of its own entries arrives as a bare entry address;
+// the leaf spells it in its own namespace, and a transit hop then carries it
+// like every other link and peels it back on the way in.
+func TestQualifyTilesLeafLinkWithinOneNamespace(t *testing.T) {
+	target := rpc.EntryTileID("everything", "t1")
+	leaf := qualifyTiles("hey", []*pb.Tile{{Id: rpc.EntryTileID("box", "t1"), GridId: rpc.EntryGridID("box"),
+		Kind: "url", LinkTargetId: target}})[0]
+	if !leaf.Reference || leaf.LinkTargetId != "hey/"+target {
+		t.Fatalf("leaf = reference %v target %q, want a link to hey/%s", leaf.Reference, leaf.LinkTargetId, target)
+	}
+	far := qualifyTilesTransit("node/conn", []*pb.Tile{leaf})[0]
+	if far.LinkTargetId != "node/conn/hey/"+target || !far.Reference {
+		t.Fatalf("through a connection = reference %v target %q", far.Reference, far.LinkTargetId)
+	}
+	back := rpc.Hop{Seg: "node", Via: "node", Transit: true}.PeelTile(far)
+	if back.LinkTargetId != "conn/hey/"+target {
+		t.Fatalf("peeled at the hop = %q, want conn/hey/%s", back.LinkTargetId, target)
+	}
+}
+
 func TestQualifyGrid(t *testing.T) {
 	if got := qualifyGrid("u", &pb.Grid{Id: "3"}); got.Id != "u/3" {
 		t.Errorf("qualifyGrid id = %q, want u/3", got.Id)

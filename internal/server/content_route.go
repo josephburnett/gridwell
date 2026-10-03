@@ -22,7 +22,7 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	if _, _, ok := rpc.SplitID(qualifiedID); !ok {
 		return nil, "", status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
 	}
-	c, local, _, transit, found := s.resolve(qualifiedID)
+	c, local, uuid, transit, found := s.resolve(qualifiedID)
 	if !found {
 		return nil, "", undeclared(qualifiedID)
 	}
@@ -33,17 +33,13 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	if err != nil {
 		return nil, "", err
 	}
-	target := tr.GetTile().GetLinkTargetId()
+	target := rpc.QualifyLinkTarget(uuid, tr.GetTile().GetLinkTargetId())
 	if target == "" {
 		return c, local, nil
 	}
-	if _, _, ok := rpc.SplitID(target); !ok {
-		return nil, "", status.Errorf(gcodes.Internal, "link target %q is not qualified", target)
-	}
-	// A leaf plugin stores its target already qualified from this node's
-	// perspective, so it routes like any other id, through resolve. Peeling
-	// the first segment by hand would answer home for a connection-chained
-	// target, which the transport owns.
+	// The target is spelled from this node, so it routes like any other id,
+	// through resolve. Peeling the first segment by hand would answer home for
+	// a connection-chained target, which the transport owns.
 	tc, tlocal, _, ttransit, found := s.resolve(target)
 	if !found {
 		return nil, "", undeclared(target)

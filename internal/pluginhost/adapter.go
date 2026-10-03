@@ -271,9 +271,22 @@ const retiredPresentationRendered = "rendered"
 
 // acceptEntries is the one door a plugin's entries enter by: it refuses a shape
 // the node cannot present (serves_page off a url entry, an unknown
-// text_presentation) and maps a retired declaration onto the live vocabulary.
-func acceptEntries(entries []*pluginv1.Entry) error {
+// text_presentation, a link it cannot draw) and maps a retired declaration
+// onto the live vocabulary. context is the context listed.
+func acceptEntries(context string, entries []*pluginv1.Entry) error {
 	for _, e := range entries {
+		if lt := e.GetLinkTarget(); lt != nil {
+			switch {
+			case lt.Context == "" || lt.Key == "":
+				return status.Errorf(codes.InvalidArgument,
+					"plugin: entry %q links to context %q key %q; a link_target names both", e.Key, lt.Context, lt.Key)
+			case e.Kind == rpc.KindWell:
+				return status.Errorf(codes.InvalidArgument,
+					"plugin: entry %q is a well with a link_target; a well opens its child_context and has no link variant", e.Key)
+			case lt.Context == context && lt.Key == e.Key:
+				return status.Errorf(codes.InvalidArgument, "plugin: entry %q links to itself", e.Key)
+			}
+		}
 		if e.ServesPage && e.Kind != rpc.KindURL {
 			return status.Errorf(codes.InvalidArgument,
 				"plugin: entry %q declares kind %q and serves_page; only a url entry serves a page, the node deriving its address — declare kind %q, or drop serves_page and serve a document body instead",
@@ -319,7 +332,11 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 			}
 			pt.ChildGridId = rpc.EntryGridID(ck)
 		}
-		if listed {
+		switch {
+		case listed && pt.LinkTargetId != "":
+			// A link's content facts are its target's, read through it.
+			pt.StatusDetail = e.StatusDetail
+		case listed:
 			pt.ServesPage = e.ServesPage
 			pt.TextPresentation = e.TextPresentation
 			pt.PreviewBlobId = faceKey(pt.PreviewBlobId, e.PreviewStamp)
@@ -397,7 +414,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		dark, resp = true, &pluginv1.ListResponse{}
 	}
 	a.noteSource(dark, sourceDetail(err))
-	if err := acceptEntries(resp.Entries); err != nil {
+	if err := acceptEntries(ckey, resp.Entries); err != nil {
 		return nil, err
 	}
 	// An authoritative listing is a verdict on every key, so rows it does not
@@ -433,7 +450,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 				kept = append(kept, t)
 				continue
 			}
-			pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: t.Key})
+			pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: t.Key, Context: ckey})
 			if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
 				if rerr := a.mem.Retire(t.ID); rerr != nil && !errors.Is(rerr, store.ErrNotFound) {
 					return nil, rerr
@@ -622,7 +639,7 @@ func (a *Adapter) absent(ctx context.Context, s *synthesized, key, tileID string
 	if s.authoritative {
 		return gwerr.DeadRef("", "plugin: %q is gone", tileID)
 	}
-	pr, err := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key})
+	pr, err := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key, Context: s.context})
 	if err != nil {
 		return err
 	}
@@ -915,11 +932,11 @@ func (a *Adapter) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePre
 func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	// An id this namespace cannot read at all is GONE. A derived address
 	// always resolves to a key, and the plugin says whether the key is there.
-	key, err := a.contentKey(req.TileId)
+	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
-	resp, err := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key})
+	resp, err := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: ref.key, Context: ref.context})
 	if err != nil {
 		if gwerr.IsTransport(err) {
 			return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_UNSPECIFIED}, nil
@@ -952,7 +969,7 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	// Only a row can be retired. Deleting an untouched entry leaves no id to
 	// retire, and the next listing simply does not name it.
 	if ref.id != 0 {
-		pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: ref.key})
+		pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: ref.key, Context: ref.context})
 		if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
 			if err := a.mem.Retire(ref.id); err != nil && !errors.Is(err, store.ErrNotFound) {
 				return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)
