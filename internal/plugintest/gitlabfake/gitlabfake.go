@@ -1,6 +1,7 @@
 // Package gitlabfake is a fake GitLab: the paged GET /api/v4/todos the
-// gridwell-plugin-gitlab binary reads and the POST
-// /api/v4/todos/:id/mark_as_done it writes, over httptest.
+// gridwell-plugin-gitlab binary reads, the POST
+// /api/v4/todos/:id/mark_as_done it writes, and the GET /api/v4/user it checks
+// its token with, over httptest.
 //
 // It fakes the service, never the plugin. A plugin is another repository's
 // module and reaches this one only as a spawned binary, so a seam test that
@@ -46,13 +47,18 @@ type Todo struct {
 	} `json:"target"`
 }
 
+// Token is the one token the fake takes; Config writes it.
+const Token = "test-token"
+
 // Server is a running fake GitLab.
 type Server struct {
 	URL string
 
-	mu    sync.Mutex
-	todos []Todo
-	calls int
+	mu     sync.Mutex
+	todos  []Todo
+	calls  int
+	down   bool
+	refuse bool
 }
 
 // New starts a fake GitLab holding todos, stopped at the end of the test.
@@ -73,17 +79,50 @@ func (s *Server) Set(todos ...Todo) {
 	s.todos = todos
 }
 
-// Calls counts the API requests served, which is how many pages the plugin
-// walked.
+// SetDown starts or ends an outage: while down, every request is answered
+// 503, the shape of GitLab unreachable.
+func (s *Server) SetDown(down bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.down = down
+}
+
+// SetRefuse starts or ends refusing the token: while refusing, every request
+// is answered 401, the shape of a token revoked or expired. A token other than
+// Token is always refused.
+func (s *Server) SetRefuse(refuse bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuse = refuse
+}
+
+// Calls counts the todo requests served, which is how many pages the plugin
+// walked and wrote. A token check is not one.
 func (s *Server) Calls() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.calls
 }
 
-// serve answers the two calls the plugin makes: the paged listing, and the
-// mark-as-done write.
+// serve answers the three calls the plugin makes, the paged listing, the
+// mark-as-done write and the token check, unless the fake is down or
+// refusing the token.
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	down, refuse := s.down, s.refuse
+	s.mu.Unlock()
+	switch {
+	case down:
+		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		return
+	case refuse || r.Header.Get("PRIVATE-TOKEN") != Token:
+		http.Error(w, `{"message":"401 Unauthorized"}`, http.StatusUnauthorized)
+		return
+	case r.URL.Path == "/api/v4/user":
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":1,"username":"ada"}`))
+		return
+	}
 	if id, ok := markDoneID(r); ok {
 		s.markDone(w, id)
 		return
@@ -174,7 +213,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Config(t *testing.T, extra map[string]string) map[string]string {
 	t.Helper()
 	tokenFile := filepath.Join(t.TempDir(), "token")
-	if err := os.WriteFile(tokenFile, []byte("test-token\n"), 0o600); err != nil {
+	if err := os.WriteFile(tokenFile, []byte(Token+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg := map[string]string{"url": s.URL, "token_file": tokenFile}
