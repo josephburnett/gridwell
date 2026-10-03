@@ -28,7 +28,7 @@ import (
 
 // gmailClient is the spawned plugin as the node reaches it. It counts the
 // plugin's ReadContent calls, which is how a test sees whether anything on
-// the node reads a message's markdown card, and while unlinked it strips
+// the node reads a text body for a message, and while unlinked it strips
 // link_target from every entry: the shape a plugin from before all mail
 // listed, so a test can place rows the way an existing node holds them.
 type gmailClient struct {
@@ -326,12 +326,12 @@ func TestGmailDeleteIsRefusedWithItsReason(t *testing.T) {
 	n.message(t, "Lunch plans")
 }
 
-// A message's markdown card answers ReadContent when asked for, but nothing
-// the node does for a url entry asks: listing, serving the email, and a
-// cross-plugin clone all read zero cards. Every reader of a body gates on a
-// body kind (rpc.IsBodyKind: the deep copy, the cache's prefetch;
-// rpc.TextDocument: the client's descent), and a message is a url.
-func TestGmailCardIsReadByNothingForAURLEntry(t *testing.T) {
+// A message has no text body, and nothing the node does for a url entry asks
+// for one: listing, serving the email, and a cross-plugin clone all read
+// zero. Every reader of a body gates on a body kind (rpc.IsBodyKind: the deep
+// copy, the cache's prefetch; rpc.TextDocument: the client's descent), and a
+// message is a url, so the plugin serves no ReadContent at all.
+func TestGmailURLEntryNeedsNoTextBody(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	msg := n.tile(t, n.all, "Lunch plans")
 	if rpc.IsBodyKind(msg.Kind) || rpc.TextDocument(msg) {
@@ -344,14 +344,6 @@ func TestGmailCardIsReadByNothingForAURLEntry(t *testing.T) {
 		t.Fatalf("clone the message home: %v", err)
 	}
 	if got := n.cards.n.Load(); got != 0 {
-		t.Fatalf("the node read %d cards for a url entry", got)
-	}
-
-	data, media, _, err := n.cl.ReadContent(t.Context(), msg.Id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if media != "text/markdown" || !strings.Contains(string(data), "Lunch plans") {
-		t.Errorf("the card = %q %q", media, data)
+		t.Fatalf("the node read %d text bodies for a url entry", got)
 	}
 }
