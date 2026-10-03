@@ -33,9 +33,8 @@ import (
 const heyNS = "uh1"
 
 // tileWithLabel finds a tile whose banner holds want. A mail tile's label is
-// the plugin's own composition — marks, sender, subject — so a seam test names
-// the part it is about rather than the whole string. Both mail seam tests use
-// it.
+// the plugin's own composition — sender, subject — so a seam test names the
+// part it is about rather than the whole string. Both mail seam tests use it.
 func tileWithLabel(t *testing.T, grid *gridwellv1.GetGridResponse, want string) *gridwellv1.Tile {
 	t.Helper()
 	for _, tl := range grid.Tiles {
@@ -134,6 +133,10 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" || tl.LinkTargetId != "" {
 			t.Errorf("%s = kind %q serves_page %v url %q link %q", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString, tl.LinkTargetId)
 		}
+		// Seen is a box's fact; everything is no box.
+		if tl.StatusDetail != "" {
+			t.Errorf("%s in everything carries status %q", tl.AltText, tl.StatusDetail)
+		}
 	}
 	// A box holds links to those tiles, each with the box's own face.
 	root, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
@@ -148,10 +151,14 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 			t.Errorf("%s in the Imbox is no link", tl.AltText)
 		}
 	}
-	// And the unread mark rides the label, so the two threads read differently.
+	// The name is sender and subject, seen or not; only the unseen thread
+	// carries a status, the unseen mark.
 	unseen := tileWithLabel(t, root, "Lunch plans")
 	seen := tileWithLabel(t, root, "Invoice 41")
-	if unseen.StatusDetail != "unseen" || seen.StatusDetail != "seen" {
+	if unseen.AltText != "Alice: Lunch plans" || seen.AltText != "Bob: Invoice 41" {
+		t.Errorf("labels = %q, %q", unseen.AltText, seen.AltText)
+	}
+	if unseen.StatusDetail != "●" || seen.StatusDetail != "" {
 		t.Errorf("status = %q, %q", unseen.StatusDetail, seen.StatusDetail)
 	}
 }
