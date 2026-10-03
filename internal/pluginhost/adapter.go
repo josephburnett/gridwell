@@ -7,9 +7,9 @@
 // never handed out, since a mint that renamed the entry would take the id out
 // from under whoever stood on it; and GetTile is one List of the context
 // named, since a key→context index would copy the plugin's structure. A dark
-// source is published as this namespace's health and minted rows still read; a
-// dark plugin fails the read, since a local subprocess has no remembered
-// answers to serve.
+// source, or a listing the plugin answered from memory, is published as this
+// namespace's health and minted rows still read; a dark plugin fails the read,
+// since a local subprocess has no remembered answers to serve.
 package pluginhost
 
 import (
@@ -417,7 +417,15 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 		dark, resp = true, &pluginv1.ListResponse{}
 	}
-	a.noteSource(dark, sourceDetail(err))
+	outage := sourceDetail(err)
+	// A memory answer serves and refreshes rows like a live one, but a memory
+	// is never a verdict, whatever it claims: nothing retires, and its reason
+	// is the source's health as a transport failure's is.
+	memory := resp.Unreachable != ""
+	if memory {
+		outage, resp.Authoritative = resp.Unreachable, false
+	}
+	a.noteSource(outage != "", outage)
 	if err := acceptEntries(ckey, resp.Entries); err != nil {
 		return nil, err
 	}
@@ -446,7 +454,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	}
 	// A non-authoritative listing sweeps by arbitration: only a definitive
 	// GONE from Probe retires an unlisted row.
-	if !dark && !resp.Authoritative {
+	if !dark && !memory && !resp.Authoritative {
 		live := map[string]bool{}
 		for _, e := range resp.Entries {
 			live[e.Key] = true

@@ -94,7 +94,12 @@ answers GONE. `ProbeRequest.context` names the context the node is asking
 about: answer whether the key is still in THAT context, since a key listed in
 several (a mail thread in a box and in everything) can leave one and stay in
 another. An empty context is a node from before contexts: answer for the
-plugin as a whole. A `placement_hint` is a preference for an entry's first
+plugin as a whole. When a refresh fails but your memory can answer, answer
+from memory and set `unreachable` to why, in a plain sentence ("the mail
+server is not answering"); leave it empty when the listing is live. The node
+serves the entries, shows the sentence as the source's health, and retires
+nothing on a memory answer, so `authoritative` is ignored while it is set.
+The next answer with it empty brings the source back up. A `placement_hint` is a preference for an entry's first
 placement only: a hint onto an occupied cell takes the first free rect of its
 size below it in the same column. An
 entry's `status_detail` is one word about its state — "unread", "done" — which

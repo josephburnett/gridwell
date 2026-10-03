@@ -99,6 +99,10 @@ message ListResponse {
   // source_label is the name of the backing source, such as the directory path
   // or the pid. The node surface has no field for it, so nothing reads it.
   string source_label = 3;
+  // unreachable is empty when the listing is live. Otherwise the plugin
+  // answered from memory and this is why, in a plain sentence; the node shows
+  // it as the source's health and keeps serving the entries.
+  string unreachable = 4;
 }
 
 message Entry {

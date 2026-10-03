@@ -387,7 +387,11 @@ type ListResponse struct {
 	Authoritative bool `protobuf:"varint,2,opt,name=authoritative,proto3" json:"authoritative,omitempty"`
 	// source_label is the name of the backing source, such as the directory path
 	// or the pid. The node surface has no field for it, so nothing reads it.
-	SourceLabel   string `protobuf:"bytes,3,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
+	SourceLabel string `protobuf:"bytes,3,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
+	// unreachable is empty when the listing is live. Otherwise the plugin
+	// answered from memory and this is why, in a plain sentence; the node shows
+	// it as the source's health and keeps serving the entries.
+	Unreachable   string `protobuf:"bytes,4,opt,name=unreachable,proto3" json:"unreachable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -439,6 +443,13 @@ func (x *ListResponse) GetAuthoritative() bool {
 func (x *ListResponse) GetSourceLabel() string {
 	if x != nil {
 		return x.SourceLabel
+	}
+	return ""
+}
+
+func (x *ListResponse) GetUnreachable() string {
+	if x != nil {
+		return x.Unreachable
 	}
 	return ""
 }
@@ -1719,11 +1730,12 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x18\n" +
 	"\acontext\x18\a \x01(\tR\acontextJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"'\n" +
 	"\vListRequest\x12\x18\n" +
-	"\acontext\x18\x01 \x01(\tR\acontext\"\x83\x01\n" +
+	"\acontext\x18\x01 \x01(\tR\acontext\"\xa5\x01\n" +
 	"\fListResponse\x12*\n" +
 	"\aentries\x18\x01 \x03(\v2\x10.plugin.v1.EntryR\aentries\x12$\n" +
 	"\rauthoritative\x18\x02 \x01(\bR\rauthoritative\x12!\n" +
-	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\"\x96\x03\n" +
+	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\x12 \n" +
+	"\vunreachable\x18\x04 \x01(\tR\vunreachable\"\x96\x03\n" +
 	"\x05Entry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
