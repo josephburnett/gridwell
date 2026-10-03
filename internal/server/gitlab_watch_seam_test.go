@@ -3,7 +3,7 @@ package server_test
 // The shipped gitlab plugin's Watch, spawned as the loader spawns it against
 // a fake GitLab and started through pluginhost.Start, reaching a client at the
 // web door: GitLab cannot tell, so the plugin polls, and only while a client
-// shows one of its grids.
+// shows one of its grids, and the linger after.
 
 import (
 	"context"
@@ -126,5 +126,12 @@ func TestGitLabWatchReachesAClientShowingTheTodos(t *testing.T) {
 	if err := cl.SetInterest(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(pluginLinger)
 	flat("nothing shown any more")
 }
+
+// pluginLinger is how long a plugin's background work outlives the last
+// stream that needed it (memo.DefaultLinger in the plugins repository): the
+// node ends a stream to change its scope, and a poll stopped across that gap
+// would restart its interval.
+const pluginLinger = 10 * time.Second
