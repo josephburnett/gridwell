@@ -11,21 +11,22 @@ package server
 // plugin never sees a URL and the door never sees the email.
 //
 // Nothing is injected. The plugin lives in another repository, so the
-// subprocess is its only door, and testdata/fake-hey is the CLI's contract as
-// an executable handed over as the `binary` config key, so the run, the argv,
-// the environment and the JSON parse are all real.
+// subprocess is its only door, and heyfake is the CLI handed over as the
+// `binary` config key, so the run, the argv, the environment and the JSON
+// parse are all real.
 
 import (
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/plugintest/heyfake"
 )
 
 // heyNS is the registry key for the hey plugin in these tests.
@@ -46,17 +47,26 @@ func tileWithLabel(t *testing.T, grid *gridwellv1.GetGridResponse, want string) 
 	return nil
 }
 
-// heyStack spawns the plugin over the stand-in CLI and stands it up behind the
-// real browser door, answering with the node-facing Info the adapter derived.
-func heyStack(t *testing.T) (*httptest.Server, namespace.Namespace, *gridwellv1.InfoResponse) {
+// heyAccount is a HEY with a thread in each box the plugin walks, Lunch
+// plans unseen.
+func heyAccount(t *testing.T) *heyfake.CLI {
 	t.Helper()
-	// An absolute path: the plugin is a subprocess and nothing promises it the
-	// test's working directory.
-	bin, err := filepath.Abs(filepath.Join("testdata", "fake-hey"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cl := newPluginClient(t, "hey", map[string]string{"binary": bin})
+	at := func(day, hour int) time.Time { return time.Date(2026, 1, day, hour, 0, 0, 0, time.UTC) }
+	hey := heyfake.New(t)
+	hey.SetBox("imbox",
+		heyfake.Thread{TopicID: 101, Subject: "Lunch plans", Summary: "Are you free friday?", From: "Alice", Email: "alice@example.com", Created: at(5, 14)},
+		heyfake.Thread{TopicID: 102, Subject: "Invoice 41", Summary: "attached", From: "Bob", Email: "bob@example.com", Seen: true, Created: at(6, 9)})
+	hey.SetBox("laterbox", heyfake.Thread{TopicID: 201, Subject: "Conference talk", Summary: "can you speak?", From: "Carol", Email: "carol@example.com", Seen: true, Created: at(7, 11)})
+	hey.SetBox("asidebox", heyfake.Thread{TopicID: 301, Subject: "Lease renewal", Summary: "sign by march", From: "Dan", Email: "dan@example.com", Seen: true, Created: at(8, 8)})
+	hey.SetBox("feedbox", heyfake.Thread{TopicID: 401, Subject: "Weekly digest", Summary: "this week", From: "News", Email: "news@example.com", Seen: true, Created: at(9, 7)})
+	return hey
+}
+
+// heyStack spawns the plugin over hey and stands it up behind the real browser
+// door, answering with the node-facing Info the adapter derived.
+func heyStack(t *testing.T, hey *heyfake.CLI) (*httptest.Server, namespace.Namespace, *gridwellv1.InfoResponse) {
+	t.Helper()
+	cl := newPluginClient(t, "hey", hey.Config(nil))
 	reg := plugin.NewRegistry()
 	reg.Register(heyNS, "hey", cl, nil)
 	hs := serveWeb(t, mustNew(t, reg, Config{}))
@@ -75,7 +85,7 @@ func heyStack(t *testing.T) (*httptest.Server, namespace.Namespace, *gridwellv1.
 // would find the entries declared and never learn whether any of them opens
 // anything.
 func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
-	_, cl, info := heyStack(t)
+	_, cl, info := heyStack(t, heyAccount(t))
 	ctx := t.Context()
 
 	if info.RootGridId != "" {
@@ -152,7 +162,7 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 // answers a key and never sees the URL, and the door addresses a tile and
 // never sees the email.
 func TestHeyPluginServesAnEmailThroughTheContentDoor(t *testing.T) {
-	hs, cl, info := heyStack(t)
+	hs, cl, info := heyStack(t, heyAccount(t))
 	for _, door := range []struct{ name, grid string }{
 		{"a box's link", info.MenuEntries[0].GridId},
 		{"everything's tile", info.MenuEntries[3].GridId},
