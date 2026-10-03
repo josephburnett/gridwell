@@ -50,9 +50,11 @@ type Todo struct {
 type Server struct {
 	URL string
 
-	mu    sync.Mutex
-	todos []Todo
-	calls int
+	mu     sync.Mutex
+	todos  []Todo
+	calls  int
+	down   bool
+	refuse bool
 }
 
 // New starts a fake GitLab holding todos, stopped at the end of the test.
@@ -73,6 +75,22 @@ func (s *Server) Set(todos ...Todo) {
 	s.todos = todos
 }
 
+// SetDown starts or ends an outage: while down, every request is answered
+// 503, the shape of GitLab unreachable.
+func (s *Server) SetDown(down bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.down = down
+}
+
+// SetRefuse starts or ends refusing the token: while refusing, every request
+// is answered 401, the shape of a token revoked or expired.
+func (s *Server) SetRefuse(refuse bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuse = refuse
+}
+
 // Calls counts the API requests served, which is how many pages the plugin
 // walked.
 func (s *Server) Calls() int {
@@ -81,9 +99,20 @@ func (s *Server) Calls() int {
 	return s.calls
 }
 
-// serve answers the two calls the plugin makes: the paged listing, and the
-// mark-as-done write.
+// serve answers the two calls the plugin makes, the paged listing and the
+// mark-as-done write, unless the fake is down or refusing the token.
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	down, refuse := s.down, s.refuse
+	s.mu.Unlock()
+	switch {
+	case down:
+		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		return
+	case refuse:
+		http.Error(w, `{"message":"401 Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
 	if id, ok := markDoneID(r); ok {
 		s.markDone(w, id)
 		return
