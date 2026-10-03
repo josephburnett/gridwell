@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
@@ -320,4 +321,61 @@ func (o *oneEntrySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1
 
 func (o *oneEntrySource) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	return &pluginv1.ListResponse{Entries: []*pluginv1.Entry{o.entry}}, nil
+}
+
+// A client showing only the box is told when a thread its links point at
+// changes, though nobody shows everything: the node watches the contexts a
+// shown grid links into, and announces the holder when one changes. Its next
+// read through the link is the new card.
+func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
+	src := newMailSource()
+	cl, _, _ := linkStack(t, src)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	link := boxLink(t, cl)
+	if body, _, _, err := cl.ReadContent(ctx, link.Id); err != nil || string(body) != "card of t1" {
+		t.Fatalf("first read = %q, %v", body, err)
+	}
+
+	events := make(chan *gridwellv1.Event, 64)
+	go func() {
+		es, err := cl.Subscribe(ctx)
+		if err != nil {
+			return
+		}
+		defer es.Close()
+		for {
+			ev, ok, err := es.Recv()
+			if err != nil || !ok {
+				return
+			}
+			events <- ev
+		}
+	}()
+	if err := cl.SetInterest(ctx, []string{boxGrid()}); err != nil {
+		t.Fatal(err)
+	}
+	for watched := false; !watched; {
+		select {
+		case scope := <-src.watches:
+			watched = slices.Contains(scope, "everything")
+		case <-ctx.Done():
+			t.Fatal("the Watch scope never named the context the box links into")
+		}
+	}
+
+	src.set(func(m *mailSource) { m.card = "card of t1, read" })
+	src.changes <- &pluginv1.Change{Payload: &pluginv1.Change_ContextChanged{
+		ContextChanged: &pluginv1.ContextChanged{Context: "everything"}}}
+	for told := false; !told; {
+		select {
+		case ev := <-events:
+			told = ev.GetGridChanged().GetGridId() == boxGrid()
+		case <-ctx.Done():
+			t.Fatal("a change to the thread never reached the box that links to it")
+		}
+	}
+	if body, _, _, err := cl.ReadContent(ctx, link.Id); err != nil || string(body) != "card of t1, read" {
+		t.Fatalf("the read after the announcement = %q, %v; want the new card", body, err)
+	}
 }

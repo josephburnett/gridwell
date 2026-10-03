@@ -64,9 +64,13 @@ type Adapter struct {
 	srcDetail string
 	liveOff   string
 
-	// scope is this plugin's share of the node's interest, the Watch stream's
-	// contexts; moved closes when it changes. SetInterest is the one writer.
+	// shown is this plugin's share of the node's interest, as contexts, and
+	// links is, per context, the contexts its last live listing links into.
+	// The Watch stream's scope derives from both (scopeLocked); moved closes
+	// when it changes. SetInterest writes shown, synthesize writes links.
 	scopeMu sync.Mutex
+	shown   []string
+	links   map[string][]string
 	scope   []string
 	moved   chan struct{}
 
@@ -416,6 +420,9 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	a.noteSource(dark, sourceDetail(err))
 	if err := acceptEntries(ckey, resp.Entries); err != nil {
 		return nil, err
+	}
+	if !dark {
+		a.noteLinks(ckey, resp.Entries)
 	}
 	// An authoritative listing is a verdict on every key, so rows it does not
 	// mention retire. An untouched entry has nothing to retire.
