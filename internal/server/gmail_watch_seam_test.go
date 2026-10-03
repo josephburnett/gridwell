@@ -26,36 +26,58 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// cardReads counts the plugin's ReadContent calls, which is how a test sees
-// whether anything on the node reads a message's markdown card.
-type cardReads struct {
+// gmailClient is the spawned plugin as the node reaches it. It counts the
+// plugin's ReadContent calls, which is how a test sees whether anything on
+// the node reads a text body for a message, and while unlinked it strips
+// link_target from every entry: the shape a plugin from before all mail
+// listed, so a test can place rows the way an existing node holds them.
+type gmailClient struct {
 	pluginv1.PluginClient
-	n atomic.Int32
+	n        atomic.Int32
+	unlinked atomic.Bool
 }
 
-func (c *cardReads) ReadContent(ctx context.Context, in *pluginv1.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pluginv1.ContentChunk], error) {
+func (c *gmailClient) ReadContent(ctx context.Context, in *pluginv1.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pluginv1.ContentChunk], error) {
 	c.n.Add(1)
 	return c.PluginClient.ReadContent(ctx, in, opts...)
 }
 
+func (c *gmailClient) List(ctx context.Context, in *pluginv1.ListRequest, opts ...grpc.CallOption) (*pluginv1.ListResponse, error) {
+	resp, err := c.PluginClient.List(ctx, in, opts...)
+	if c.unlinked.Load() {
+		for _, e := range resp.GetEntries() {
+			e.LinkTarget = nil
+		}
+	}
+	return resp, err
+}
+
 // gmailNode is the plugin on a node with a home, as `gridwell serve` runs it.
 type gmailNode struct {
-	srv            *Server
-	cl             *rpc.Client
-	g              *fakeGmail
-	cards          *cardReads
-	home           string // the home grid, qualified
-	inbox, starred string // the two doorways, qualified
+	srv                 *Server
+	cl                  *rpc.Client
+	g                   *fakeGmail
+	cards               *gmailClient
+	home                string // the home grid, qualified
+	inbox, starred, all string // the three doorways, qualified
 }
 
 // newGmailNode starts the node with the recorded Gmail's new mail held back,
 // so a test chooses when it arrives.
 func newGmailNode(t *testing.T, refresh string) *gmailNode {
 	t.Helper()
+	return newGmailNodeOf(t, refresh, func(*gmailClient) {})
+}
+
+// newGmailNodeOf is newGmailNode with the client set up by setup before the
+// node first reaches the plugin.
+func newGmailNodeOf(t *testing.T, refresh string, setup func(*gmailClient)) *gmailNode {
+	t.Helper()
 	n := &gmailNode{g: newFakeGmail(t)}
 	n.g.holdHistory(true)
 	cfg, _ := gmailConfig(t, n.g, refresh)
-	n.cards = &cardReads{PluginClient: plugintest.Spawn(t, "gmail", cfg)}
+	n.cards = &gmailClient{PluginClient: plugintest.Spawn(t, "gmail", cfg)}
+	setup(n.cards)
 
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
@@ -75,8 +97,8 @@ func newGmailNode(t *testing.T, refresh string) *gmailNode {
 		t.Fatal(err)
 	}
 	for _, p := range lp.Plugins {
-		if p.Uuid == gmailNS && len(p.MenuEntries) == 2 {
-			n.inbox, n.starred = p.MenuEntries[0].GridId, p.MenuEntries[1].GridId
+		if p.Uuid == gmailNS && len(p.MenuEntries) == 3 {
+			n.inbox, n.starred, n.all = p.MenuEntries[0].GridId, p.MenuEntries[1].GridId, p.MenuEntries[2].GridId
 		}
 	}
 	if n.inbox == "" {
@@ -85,10 +107,16 @@ func newGmailNode(t *testing.T, refresh string) *gmailNode {
 	return n
 }
 
-// message is the listed inbox tile labelled label.
+// message is the listed inbox tile labelled label: a link into all mail.
 func (n *gmailNode) message(t *testing.T, label string) *gridwellv1.Tile {
 	t.Helper()
-	g, err := n.cl.GetGrid(t.Context(), n.inbox)
+	return n.tile(t, n.inbox, label)
+}
+
+// tile is the tile labelled label that grid lists.
+func (n *gmailNode) tile(t *testing.T, grid, label string) *gridwellv1.Tile {
+	t.Helper()
+	g, err := n.cl.GetGrid(t.Context(), grid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,8 +143,8 @@ func TestGmailWatchSendsItsHeaderOnAccept(t *testing.T) {
 }
 
 // New mail Gmail's history names reaches a client showing the inbox as the
-// inbox's change, without the client asking, and the starred grid it did not
-// touch is not announced. The delta is the plugin's to read and the
+// inbox's change, without the client asking. (The starred grid may repaint
+// too: its links read all mail, which the mail also changed.) The delta is the plugin's to read and the
 // announcement the node's to fan out, so neither side alone sees the mail
 // reach a client.
 func TestGmailHistoryDeltaAnnouncesTheInbox(t *testing.T) {
@@ -163,48 +191,125 @@ func TestGmailHistoryDeltaAnnouncesTheInbox(t *testing.T) {
 	}
 
 	n.g.holdHistory(false)
-	select {
-	case id := <-events:
-		if id != n.inbox {
-			t.Fatalf("the delta announced %s, want the inbox %s", id, n.inbox)
+	for told := ""; told != n.inbox; {
+		select {
+		case told = <-events:
+		case <-ctx.Done():
+			t.Fatal("the history delta never reached the inbox")
 		}
-	case <-ctx.Done():
-		t.Fatal("the history delta never reached the client")
-	}
-	select {
-	case id := <-events:
-		t.Fatalf("after the inbox the client was told %s; the delta touched nothing else", id)
-	case <-time.After(time.Second):
 	}
 	n.message(t, "Quarterly numbers")
 }
 
-// Probe is how the node arbitrates a non-authoritative listing and how a far
-// node asks whether a tile is still there; for a message the inbox lists the
-// answer is present, through the router the connection door serves.
-func TestGmailProbeAnswersPresentForAListedMessage(t *testing.T) {
+// Probe is how the node arbitrates a listing and how a far node asks whether
+// a tile is still there, and the plugin answers for the context the tile's id
+// names, through the router the connection door serves: the inbox's message
+// is present in the inbox and in all mail, and gone from the starred grid,
+// whose whole read did not list it. Leaving a label is not being gone.
+func TestGmailProbeAnswersForTheContextAsked(t *testing.T) {
 	n := newGmailNode(t, "1h")
-	msg := n.message(t, "Lunch plans")
-	resp, err := newRouter(n.srv).Probe(t.Context(), &gridwellv1.ProbeRequest{TileId: msg.Id})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.Presence != gridwellv1.ProbeResponse_PRESENCE_PRESENT {
-		t.Errorf("Probe(%s) = %v, want present", msg.Id, resp.Presence)
+	n.tile(t, n.starred, "Invoice 41") // the starred grid has been read
+	link := n.message(t, "Lunch plans")
+	key := "msg:18c2a1b3f4d5e6f7" // Lunch plans, in the recorded inbox only
+	for id, want := range map[string]gridwellv1.ProbeResponse_Presence{
+		link.Id:           gridwellv1.ProbeResponse_PRESENCE_PRESENT,
+		link.LinkTargetId: gridwellv1.ProbeResponse_PRESENCE_PRESENT,
+		rpc.QualifyID(gmailNS, rpc.EntryTileID("label:STARRED", key)): gridwellv1.ProbeResponse_PRESENCE_GONE,
+	} {
+		resp, err := newRouter(n.srv).Probe(t.Context(), &gridwellv1.ProbeRequest{TileId: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.Presence != want {
+			t.Errorf("Probe(%s) = %v, want %v", id, resp.Presence, want)
+		}
 	}
 }
 
-// A search placed by the plugin's context path lands on the tile the inbox
-// lists — the same id, so the hit descends into what the grid shows.
-func TestGmailSearchAnswersWithTheListedTile(t *testing.T) {
+// A search hit lands on the message's one tile, the one all mail lists — the
+// same id, so the hit descends into what the grid shows.
+func TestGmailSearchLandsOnTheAllMailTile(t *testing.T) {
 	n := newGmailNode(t, "1h")
-	want := n.message(t, "Invoice 41")
+	want := n.tile(t, n.all, "Invoice 41")
 	got, err := n.cl.Search(t.Context(), "invoice", "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].GetTile().GetId() != want.Id {
-		t.Fatalf("search invoice = %v, want the inbox's %s", got, want.Id)
+		t.Fatalf("search invoice = %v, want all mail's %s", got, want.Id)
+	}
+}
+
+// A grid the plugin remembers survives Gmail going away: the plugin answers
+// its memory with the reason in unreachable, and the node keeps serving every
+// row. The memory is the plugin's and the rows the node's, so only the seam
+// shows an outage costing the user nothing on screen.
+func TestGmailWarmGridSurvivesGmailGoingAway(t *testing.T) {
+	n := newGmailNode(t, "200ms")
+	ctx := t.Context()
+	before := map[string]int{}
+	for _, grid := range []string{n.inbox, n.starred, n.all} {
+		g, err := n.cl.GetGrid(ctx, grid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[grid] = len(g.Tiles)
+	}
+
+	n.g.Stop()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		resp, err := n.cards.PluginClient.List(ctx, &pluginv1.ListRequest{Context: "label:INBOX"})
+		if err != nil {
+			t.Fatalf("a warm list with Gmail gone = %v, want memory's answer", err)
+		}
+		if resp.Unreachable != "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the plugin never said Gmail was unreachable")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for _, grid := range []string{n.inbox, n.starred, n.all} {
+		g, err := n.cl.GetGrid(ctx, grid)
+		if err != nil {
+			t.Fatalf("%s with Gmail gone = %v", grid, err)
+		}
+		if len(g.Tiles) != before[grid] {
+			t.Errorf("%s with Gmail gone shows %d tiles, want the %d it showed", grid, len(g.Tiles), before[grid])
+		}
+	}
+}
+
+// A row placed in a label while its entry was a page of its own — every row
+// an existing node holds from before all mail — becomes a link in place when
+// the plugin lists the link: the same id, where the user put it.
+func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
+	n := newGmailNodeOf(t, "1h", func(c *gmailClient) { c.unlinked.Store(true) })
+	ctx := t.Context()
+	placed := map[string]*gridwellv1.Tile{}
+	for i, grid := range []string{n.inbox, n.starred} {
+		before := n.tile(t, grid, "Invoice 41")
+		if before.Reference {
+			t.Fatalf("%s drew a link from an entry with no link_target", grid)
+		}
+		if _, err := n.cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1}); err != nil {
+			t.Fatal(err)
+		}
+		placed[grid] = before
+	}
+
+	n.cards.unlinked.Store(false)
+	target := n.tile(t, n.all, "Invoice 41")
+	for i, grid := range []string{n.inbox, n.starred} {
+		after := n.tile(t, grid, "Invoice 41")
+		if after.Id != placed[grid].Id || after.X != 7 || after.Y != int64(-2-i) || after.W != 2 {
+			t.Errorf("%s: after = %s at (%d,%d) w%d, want %s where the user put it", grid, after.Id, after.X, after.Y, after.W, placed[grid].Id)
+		}
+		if !after.Reference || after.LinkTargetId != target.Id {
+			t.Errorf("%s: after = reference %v target %q, want a link to %s", grid, after.Reference, after.LinkTargetId, target.Id)
+		}
 	}
 }
 
@@ -221,14 +326,14 @@ func TestGmailDeleteIsRefusedWithItsReason(t *testing.T) {
 	n.message(t, "Lunch plans")
 }
 
-// A message's markdown card answers ReadContent when asked for, but nothing
-// the node does for a url entry asks: listing, serving the email, and a
-// cross-plugin clone all read zero cards. Every reader of a body gates on a
-// body kind (rpc.IsBodyKind: the deep copy, the cache's prefetch;
-// rpc.TextDocument: the client's descent), and a message is a url.
-func TestGmailCardIsReadByNothingForAURLEntry(t *testing.T) {
+// A message has no text body, and nothing the node does for a url entry asks
+// for one: listing, serving the email, and a cross-plugin clone all read
+// zero. Every reader of a body gates on a body kind (rpc.IsBodyKind: the deep
+// copy, the cache's prefetch; rpc.TextDocument: the client's descent), and a
+// message is a url, so the plugin serves no ReadContent at all.
+func TestGmailURLEntryNeedsNoTextBody(t *testing.T) {
 	n := newGmailNode(t, "1h")
-	msg := n.message(t, "Lunch plans")
+	msg := n.tile(t, n.all, "Lunch plans")
 	if rpc.IsBodyKind(msg.Kind) || rpc.TextDocument(msg) {
 		t.Fatalf("a message is kind %q; this test's premise is a url", msg.Kind)
 	}
@@ -239,14 +344,6 @@ func TestGmailCardIsReadByNothingForAURLEntry(t *testing.T) {
 		t.Fatalf("clone the message home: %v", err)
 	}
 	if got := n.cards.n.Load(); got != 0 {
-		t.Fatalf("the node read %d cards for a url entry", got)
-	}
-
-	data, media, _, err := n.cl.ReadContent(t.Context(), msg.Id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if media != "text/markdown" || !strings.Contains(string(data), "Lunch plans") {
-		t.Errorf("the card = %q %q", media, data)
+		t.Fatalf("the node read %d text bodies for a url entry", got)
 	}
 }

@@ -5,8 +5,9 @@ package server
 // door as a browser reaches it.
 //
 // What the seam has to hold: the adapter turns each declared context into a
-// grid id the node can serve, both grids list through that mapping, and a
-// message is a url tile carrying serves_page whose page the door serves. The
+// grid id the node can serve, every grid lists through that mapping, a
+// message is one url tile in all mail carrying serves_page whose page the
+// door serves, and a label's row is a link to that tile. The
 // config crosses it too — the node hands over paths to the user's credential
 // and token, never their contents, plus a private state directory, and nothing
 // cached there carries a secret.
@@ -29,10 +30,15 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
 // gmailNS is the registry key for the gmail plugin in these tests.
@@ -58,6 +64,8 @@ const (
 // chooses when the new mail arrives.
 type fakeGmail struct {
 	URL string
+	// Stop takes the recorded Gmail off the network, as an outage does.
+	Stop func()
 
 	mu       sync.Mutex
 	auth     string
@@ -65,6 +73,7 @@ type fakeGmail struct {
 	metadata []string
 	history  int
 	held     bool
+	refused  bool // every request is answered as Google answers a revoked token
 }
 
 // newFakeGmail starts the recorded Gmail, stopped at the end of the test.
@@ -74,8 +83,14 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.auth = r.Header.Get("Authorization")
+		refused := g.refused
 		g.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		if refused {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":{"code":401,"message":"Request had invalid authentication credentials.","status":"UNAUTHENTICATED"}}`))
+			return
+		}
 
 		const me = "/gmail/v1/users/me"
 		const base = me + "/messages"
@@ -135,7 +150,7 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 		}
 	}))
 	t.Cleanup(hs.Close)
-	g.URL = hs.URL
+	g.URL, g.Stop = hs.URL, hs.Close
 	return g
 }
 
@@ -145,6 +160,14 @@ func (g *fakeGmail) reads() (lists int, metadata []string, history int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.lists, append([]string(nil), g.metadata...), g.history
+}
+
+// refuse answers every request as Google answers a revoked token, until it
+// is called with false.
+func (g *fakeGmail) refuse(refused bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.refused = refused
 }
 
 // holdHistory keeps the recorded delta back until it is called with false.
@@ -235,60 +258,103 @@ func gmailStack(t *testing.T, refresh string) (hs *httptest.Server, cl namespace
 	return hs, cl, info, g, stateDir
 }
 
-// The plugin's two collections are two (+) menu entries — no landing grid, no
-// privileged one — and both list. The mapping from a declared context to a
-// servable grid id is the adapter's, so a plugin unit test cannot see it: it
-// would find both declared and never learn whether either opens anything.
-func TestGmailPluginDeclaresAndListsBothCollections(t *testing.T) {
+// The plugin's contexts are three (+) menu entries — no landing grid, no
+// privileged one — and each lists: all mail holds each message once, and a
+// label holds a link to it. The mapping from a declared context to a servable
+// grid id, and from a link_target to a tile id, are the adapter's, so a plugin
+// unit test cannot see them: it would find the entries declared and never
+// learn whether a link resolves to the tile all mail lists.
+func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 	_, cl, info, _, _ := gmailStack(t, "1h")
 	ctx := t.Context()
 
 	if info.RootGridId != "" {
 		t.Fatalf("a plugin is not a place; it named a grid of its own: %q", info.RootGridId)
 	}
-	if len(info.MenuEntries) != 2 || info.MenuEntries[0].Label != "inbox" ||
-		info.MenuEntries[1].Label != "starred" {
-		t.Fatalf("menu entries = %v, want inbox and starred", info.MenuEntries)
+	if len(info.MenuEntries) != 3 || info.MenuEntries[0].Label != "inbox" ||
+		info.MenuEntries[1].Label != "starred" || info.MenuEntries[2].Label != "all mail" {
+		t.Fatalf("menu entries = %v, want inbox, starred and all mail", info.MenuEntries)
 	}
-	starred := info.MenuEntries[1]
-	if starred.GridId == "" || starred.GridId == info.MenuEntries[0].GridId {
-		t.Fatalf("the two collections must open two grids: %v", info.MenuEntries)
+	grids := map[string]bool{}
+	for _, m := range info.MenuEntries {
+		grids[m.GridId] = true
+	}
+	if len(grids) != 3 || grids[""] {
+		t.Fatalf("the three contexts must open three grids: %v", info.MenuEntries)
 	}
 
-	inbox, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
+	all, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[2].GridId})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(inbox.Tiles) != 2 {
-		t.Fatalf("the inbox = %v, want its two messages", inbox.Tiles)
+	if len(all.Tiles) != 2 {
+		t.Fatalf("all mail = %v, want each of the two messages once", all.Tiles)
 	}
 	// Every message arrives as a url tile whose page the plugin serves. That
 	// is the shape the whole client rests on: the address is the node's to
 	// derive at its /content/ door, so the message declares none of its own,
 	// and a text tile could not serve one at all.
-	for _, tl := range inbox.Tiles {
-		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" {
-			t.Errorf("%s = kind %q serves_page %v url %q", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString)
+	for _, tl := range all.Tiles {
+		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" || tl.Reference {
+			t.Errorf("%s = kind %q serves_page %v url %q reference %v", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString, tl.Reference)
 		}
 	}
-	lunch := tileWithLabel(t, inbox, "Lunch plans")
-	tileWithLabel(t, inbox, "Invoice 41")
 
-	// The starred grid is its own listing, not a copy of the inbox: the one
-	// starred message and nothing else.
-	star, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: starred.GridId})
-	if err != nil {
-		t.Fatal(err)
+	// A tile is named by its subject, and its state is one emoji the client
+	// draws beside the name, only when there is something to notice: Lunch
+	// plans is unread, Invoice 41 is read and starred, which the starred
+	// grid already says.
+	status := map[string]map[string]string{
+		"all mail": {"Lunch plans": "●", "Invoice 41": "★"},
+		"inbox":    {"Lunch plans": "●", "Invoice 41": "★"},
+		"starred":  {"Invoice 41": ""},
 	}
-	if len(star.Tiles) != 1 {
-		t.Fatalf("the starred grid = %v, want the one starred message", star.Tiles)
+	for subject, want := range status["all mail"] {
+		if tl := tileWithLabel(t, all, subject); tl.AltText != subject || tl.StatusDetail != want {
+			t.Errorf("all mail's %q = label %q status %q, want status %q", subject, tl.AltText, tl.StatusDetail, want)
+		}
 	}
-	tileWithLabel(t, star, "Invoice 41")
 
-	// The second listing — the label intersected with UNREAD — is what marks a
-	// message, and it named one of the two.
-	if lunch.StatusDetail != "unread" {
-		t.Errorf("the unread listing did not mark it: status = %q", lunch.StatusDetail)
+	// A label lists links, each to the tile all mail lists for the message:
+	// the inbox's two, and the starred grid's one, not a copy of the inbox.
+	for i, want := range [][]string{{"Lunch plans", "Invoice 41"}, {"Invoice 41"}} {
+		label, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[i].GridId})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(label.Tiles) != len(want) {
+			t.Fatalf("%s = %v, want %v", info.MenuEntries[i].Label, label.Tiles, want)
+		}
+		for _, subject := range want {
+			link := tileWithLabel(t, label, subject)
+			if link.LinkTargetId != tileWithLabel(t, all, subject).Id {
+				t.Errorf("%s's %q links to %q, want all mail's tile", info.MenuEntries[i].Label, subject, link.LinkTargetId)
+			}
+			if want := status[info.MenuEntries[i].Label][subject]; link.AltText != subject || link.StatusDetail != want {
+				t.Errorf("%s's %q = label %q status %q, want status %q", info.MenuEntries[i].Label, subject, link.AltText, link.StatusDetail, want)
+			}
+		}
+	}
+}
+
+// A token Google refuses is a config the plugin cannot serve: the spawned
+// binary refuses Info with a sentence naming the command that fixes it, and
+// passes once Google accepts the token, with no restart. The refusal is the
+// plugin's reading of Google's 401 and the sentence is what the node shows,
+// so only the real binary over a recorded Gmail proves both.
+func TestGmailRefusesATokenGoogleRefuses(t *testing.T) {
+	g := newFakeGmail(t)
+	g.refuse(true)
+	cfg, _ := gmailConfig(t, g, "1h")
+	cp := plugintest.Spawn(t, "gmail", cfg)
+
+	_, err := cp.Info(t.Context(), &pluginv1.InfoRequest{})
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "gridwell-plugin-gmail -auth -credentials") {
+		t.Fatalf("Info with a refused token = %v, want the refusal naming the auth command", err)
+	}
+	g.refuse(false)
+	if _, err := cp.Info(t.Context(), &pluginv1.InfoRequest{}); err != nil {
+		t.Fatalf("Info once Google accepts the token = %v", err)
 	}
 }
 
