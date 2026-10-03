@@ -18,6 +18,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -52,7 +53,9 @@ const (
 // how a test sees that the token file was read and sent, and counts the label
 // listings and metadata reads, which is how a test tells a full walk from a
 // history catch-up. history.list answers one recorded delta since the
-// profile's history id and nothing since the id that delta ends at.
+// profile's history id and nothing since the id that delta ends at; while held
+// it answers nothing since whatever id it is asked from, which is how a test
+// chooses when the new mail arrives.
 type fakeGmail struct {
 	URL string
 
@@ -61,6 +64,7 @@ type fakeGmail struct {
 	lists    int
 	metadata []string
 	history  int
+	held     bool
 }
 
 // newFakeGmail starts the recorded Gmail, stopped at the end of the test.
@@ -82,10 +86,15 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 		case r.URL.Path == me+"/history":
 			g.mu.Lock()
 			g.history++
+			held := g.held
 			g.mu.Unlock()
-			if q.Get("startHistoryId") == "9912345" {
+			switch {
+			case held:
+				// Gmail's answer when nothing happened: the id asked from.
+				fmt.Fprintf(w, `{"historyId": %q}`, q.Get("startHistoryId"))
+			case q.Get("startHistoryId") == "9912345":
 				w.Write(gmailRecorded(t, "history-list-new-mail.json"))
-			} else {
+			default:
 				w.Write(gmailRecorded(t, "history-list-quiet.json"))
 			}
 		case r.URL.Path == base:
@@ -138,6 +147,13 @@ func (g *fakeGmail) reads() (lists int, metadata []string, history int) {
 	return g.lists, append([]string(nil), g.metadata...), g.history
 }
 
+// holdHistory keeps the recorded delta back until it is called with false.
+func (g *fakeGmail) holdHistory(held bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.held = held
+}
+
 // Authorization is the last credential the plugin presented.
 func (g *fakeGmail) Authorization() string {
 	g.mu.Lock()
@@ -176,6 +192,28 @@ func gmailTokenFile(t *testing.T) string {
 	return p
 }
 
+// gmailConfig is exactly the shape a server.yaml plugins: entry carries for
+// the plugin over g — paths, an address, and numbers, never a secret — with
+// the private state directory it names.
+func gmailConfig(t *testing.T, g *fakeGmail, refresh string) (cfg map[string]string, stateDir string) {
+	t.Helper()
+	stateDir = t.TempDir()
+	// Absolute: the plugin is a subprocess and nothing promises it the test's
+	// working directory.
+	credentials, err := filepath.Abs(filepath.Join("testdata", "gmail", "credentials.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return map[string]string{
+		"credentials":  credentials,
+		"token":        gmailTokenFile(t),
+		"endpoint":     g.URL,
+		"state_dir":    stateDir,
+		"refresh":      refresh,
+		"max_messages": "50",
+	}, stateDir
+}
+
 // gmailStack spawns the plugin against the recorded Gmail and stands it up
 // behind the real browser door, refreshing no more often than refresh.
 // stateDir is the private directory the node hands the plugin, returned so a
@@ -183,28 +221,14 @@ func gmailTokenFile(t *testing.T) string {
 func gmailStack(t *testing.T, refresh string) (hs *httptest.Server, cl namespace.Namespace, info *gridwellv1.InfoResponse, g *fakeGmail, stateDir string) {
 	t.Helper()
 	g = newFakeGmail(t)
-	stateDir = t.TempDir()
-	// Absolute paths: the plugin is a subprocess and nothing promises it the
-	// test's working directory.
-	credentials, err := filepath.Abs(filepath.Join("testdata", "gmail", "credentials.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Exactly the shape a server.yaml plugins: entry carries — paths, an
-	// address, and numbers. No secret is ever a config value.
-	cl = newPluginClient(t, "gmail", map[string]string{
-		"credentials":  credentials,
-		"token":        gmailTokenFile(t),
-		"endpoint":     g.URL,
-		"state_dir":    stateDir,
-		"refresh":      refresh,
-		"max_messages": "50",
-	})
+	var cfg map[string]string
+	cfg, stateDir = gmailConfig(t, g, refresh)
+	cl = newPluginClient(t, "gmail", cfg)
 	reg := plugin.NewRegistry()
 	reg.Register(gmailNS, "gmail", cl, nil)
 	hs = serveWeb(t, mustNew(t, reg, Config{}))
 
-	info, err = cl.Info(t.Context(), &gridwellv1.InfoRequest{})
+	info, err := cl.Info(t.Context(), &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
