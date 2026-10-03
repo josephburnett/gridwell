@@ -64,6 +64,8 @@ const (
 // chooses when the new mail arrives.
 type fakeGmail struct {
 	URL string
+	// Stop takes the recorded Gmail off the network, as an outage does.
+	Stop func()
 
 	mu       sync.Mutex
 	auth     string
@@ -148,7 +150,7 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 		}
 	}))
 	t.Cleanup(hs.Close)
-	g.URL = hs.URL
+	g.URL, g.Stop = hs.URL, hs.Close
 	return g
 }
 

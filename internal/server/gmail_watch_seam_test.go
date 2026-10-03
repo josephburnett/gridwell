@@ -240,6 +240,48 @@ func TestGmailSearchLandsOnTheAllMailTile(t *testing.T) {
 	}
 }
 
+// A grid the plugin remembers survives Gmail going away: the plugin answers
+// its memory with the reason in unreachable, and the node keeps serving every
+// row. The memory is the plugin's and the rows the node's, so only the seam
+// shows an outage costing the user nothing on screen.
+func TestGmailWarmGridSurvivesGmailGoingAway(t *testing.T) {
+	n := newGmailNode(t, "200ms")
+	ctx := t.Context()
+	before := map[string]int{}
+	for _, grid := range []string{n.inbox, n.starred, n.all} {
+		g, err := n.cl.GetGrid(ctx, grid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[grid] = len(g.Tiles)
+	}
+
+	n.g.Stop()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		resp, err := n.cards.PluginClient.List(ctx, &pluginv1.ListRequest{Context: "label:INBOX"})
+		if err != nil {
+			t.Fatalf("a warm list with Gmail gone = %v, want memory's answer", err)
+		}
+		if resp.Unreachable != "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the plugin never said Gmail was unreachable")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for _, grid := range []string{n.inbox, n.starred, n.all} {
+		g, err := n.cl.GetGrid(ctx, grid)
+		if err != nil {
+			t.Fatalf("%s with Gmail gone = %v", grid, err)
+		}
+		if len(g.Tiles) != before[grid] {
+			t.Errorf("%s with Gmail gone shows %d tiles, want the %d it showed", grid, len(g.Tiles), before[grid])
+		}
+	}
+}
+
 // A row placed in a label while its entry was a page of its own — every row
 // an existing node holds from before all mail — becomes a link in place when
 // the plugin lists the link: the same id, where the user put it.
