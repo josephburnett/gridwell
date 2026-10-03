@@ -47,18 +47,18 @@ func (p refusingInfo) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.In
 		MenuEntries: []*pluginv1.MenuEntry{{Id: ".", Context: "."}}}, nil
 }
 
-func refusingRow(t *testing.T, cl *rpc.Client) *gridwellv1.PluginInfo {
+func pluginRow(t *testing.T, cl *rpc.Client, uuid string) *gridwellv1.PluginInfo {
 	t.Helper()
 	lp, err := cl.Handshake(context.Background())
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
 	for _, p := range lp.Plugins {
-		if p.Uuid == refusingUUID {
+		if p.Uuid == uuid {
 			return p
 		}
 	}
-	t.Fatalf("the refusing plugin is not listed: %v", lp.Plugins)
+	t.Fatalf("plugin %s is not listed: %v", uuid, lp.Plugins)
 	return nil
 }
 
@@ -84,7 +84,7 @@ func TestARefusedInfoIsBrokenWithItsReasonAndComesBack(t *testing.T) {
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
-	row := refusingRow(t, cl)
+	row := pluginRow(t, cl, refusingUUID)
 	if row.InfoError != refusal {
 		t.Errorf("InfoError = %q, want the plugin's own sentence %q", row.InfoError, refusal)
 	}
@@ -108,7 +108,7 @@ func TestARefusedInfoIsBrokenWithItsReasonAndComesBack(t *testing.T) {
 	if up := recvHealthOf(t, stream, refusingUUID); !up.Healthy {
 		t.Fatalf("after the fix, health event = %+v, want up", up)
 	}
-	row = refusingRow(t, cl)
+	row = pluginRow(t, cl, refusingUUID)
 	if row.InfoError != "" || len(row.MenuEntries) != 1 {
 		t.Errorf("after the fix the row is %v, want its one entry and no error", row)
 	}
