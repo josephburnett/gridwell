@@ -11,11 +11,14 @@ The host never switches on which plugin you are; every behavior you get
 comes from something you declared on the wire.
 
 The shipped plugins live in their own repository,
-`github.com/josephburnett/gridwell-plugins` (`fs`, `proc`, `gitlab`, `pages`),
-and use the same door as anyone else's: each is its own Go module importing
-only the api. `pages` is the smallest one, and the example for serving web
-content: no config, no state, and every page generated in the plugin.
-`gitlab` is the worked example. `fs` is the fullest surface.
+`github.com/josephburnett/gridwell-plugins` (`fs`, `proc`, `pages`, `gitlab`,
+`gmail`, `hey`), and use the same door as anyone else's: each is its own Go
+module importing only the api. `pages` is the smallest one, and the example
+for serving web content: no config, no state, and every page generated in the
+plugin. `fs` is the fullest surface. `hey` is the example for links.
+
+This doc is the door. `docs/plugin-standard.md` is what a good plugin does at
+it, rule by rule, with a checklist to tick before you ship.
 
 ## The contract
 
@@ -54,6 +57,14 @@ content: no config, no state, and every page generated in the plugin.
 `InfoResponse` is your one handshake: `kind`, `display_name`, `glyph`
 (`folder`/`process`/`well`/empty), `watch`, `writable`, and `menu_entries`
 (your collections).
+
+**Refuse a config you cannot serve.** If the source your config names is not
+there — no such directory, no CLI, a token that does not load — answer `Info`
+with an error whose message is one plain sentence saying why. The node shows
+your plugin broken with that sentence and no entries, and asks again until
+the fix lands, with no restart. Latch the first pass: once `Info` has
+answered, a source that goes away is weather, and your reads answer
+`Unavailable`, not a verdict.
 
 **Declare one `menu_entries` row per collection**, each naming its context
 key. That is how your plugin is reached: each entry becomes a + menu swatch,
