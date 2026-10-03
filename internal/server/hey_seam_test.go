@@ -148,10 +148,10 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 			t.Errorf("%s in the Imbox is no link", tl.AltText)
 		}
 	}
-	// And the unread mark rides the label, so the two threads read differently.
+	// An unseen thread carries the one mark worth noticing; a seen one, nothing.
 	unseen := tileWithLabel(t, root, "Lunch plans")
 	seen := tileWithLabel(t, root, "Invoice 41")
-	if unseen.StatusDetail != "unseen" || seen.StatusDetail != "seen" {
+	if unseen.StatusDetail != "●" || seen.StatusDetail != "" {
 		t.Errorf("status = %q, %q", unseen.StatusDetail, seen.StatusDetail)
 	}
 }
