@@ -65,7 +65,7 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   const res = await popup.request.get(popup.url());
   expect(res.status()).toBe(200);
   expect(res.headers()['content-type']).toBe('image/png');
-  expect(res.headers()['content-security-policy']).toBe('sandbox allow-scripts');
+  expect(res.headers()['content-security-policy']).toBe('sandbox allow-scripts allow-popups');
   expect(Buffer.from(await res.body()).equals(PNG_1X1)).toBe(true);
   await popup.close();
 });

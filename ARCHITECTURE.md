@@ -88,7 +88,7 @@ record shapes. Everything else derives from it:
 | Lifecycle | `Info`, `Probe`, `Handshake` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Search` |
 | Content | `ReadContent`, `WriteContent` — the one way bytes move. Versioned. A write commits at close; a broken stream leaves the old value. |
-| Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts`), gated by the content token, never the cookie. |
+| Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |

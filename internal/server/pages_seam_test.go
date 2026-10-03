@@ -130,7 +130,7 @@ func TestPagesPluginSubpathsResolveLikeABrowser(t *testing.T) {
 		t.Errorf("the door did not deliver a whole document: %.60q", body)
 	}
 	// The door's invariant rides a generated page like any other.
-	if csp := res.Header.Get("Content-Security-Policy"); csp != "sandbox allow-scripts" {
+	if csp := res.Header.Get("Content-Security-Policy"); csp != contentSandbox {
 		t.Errorf("CSP = %q", csp)
 	}
 

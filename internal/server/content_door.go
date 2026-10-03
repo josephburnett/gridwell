@@ -9,8 +9,7 @@ package server
 // grammar, the token gate and the sandbox header; the plugin owns what the
 // bytes mean.
 //
-// Every response carries `Content-Security-Policy: sandbox allow-scripts`, so
-// the page runs with an opaque origin: no cookies, no storage, no reach into
+// Every response carries the contentSandbox CSP, so the page runs with an opaque origin: no cookies, no storage, no reach into
 // the RPC surface. The server stamps the header, and plugins never write HTTP
 // headers at all.
 //
@@ -34,6 +33,12 @@ import (
 )
 
 const contentPathPrefix = "/content/"
+
+// contentSandbox is the CSP every door response carries. allow-popups lets a
+// target=_blank link reach the desktop's window-open handler, which denies the
+// popup and opens the address below as a fresh view; no sandboxed window is
+// ever created, so nothing needs allow-popups-to-escape-sandbox.
+const contentSandbox = "sandbox allow-scripts allow-popups"
 
 // ContentToken is the one derivation of the door's path capability. Its domain
 // prefix differs from AuthToken's, so neither token replays as the other.
@@ -120,9 +125,7 @@ func (s *Server) contentDoor() http.Handler {
 				if !wroteHeader {
 					wroteHeader = true
 					h := w.Header()
-					// The sandbox is the door's invariant, stamped on every
-					// response.
-					h.Set("Content-Security-Policy", "sandbox allow-scripts")
+					h.Set("Content-Security-Policy", contentSandbox)
 					h.Set("X-Content-Type-Options", "nosniff")
 					if mt := chunk.GetMediaType(); mt != "" {
 						h.Set("Content-Type", mt)
