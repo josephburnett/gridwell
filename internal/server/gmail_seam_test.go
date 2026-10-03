@@ -30,10 +30,15 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
 // gmailNS is the registry key for the gmail plugin in these tests.
@@ -66,6 +71,7 @@ type fakeGmail struct {
 	metadata []string
 	history  int
 	held     bool
+	refused  bool // every request is answered as Google answers a revoked token
 }
 
 // newFakeGmail starts the recorded Gmail, stopped at the end of the test.
@@ -75,8 +81,14 @@ func newFakeGmail(t *testing.T) *fakeGmail {
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.auth = r.Header.Get("Authorization")
+		refused := g.refused
 		g.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		if refused {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":{"code":401,"message":"Request had invalid authentication credentials.","status":"UNAUTHENTICATED"}}`))
+			return
+		}
 
 		const me = "/gmail/v1/users/me"
 		const base = me + "/messages"
@@ -146,6 +158,14 @@ func (g *fakeGmail) reads() (lists int, metadata []string, history int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.lists, append([]string(nil), g.metadata...), g.history
+}
+
+// refuse answers every request as Google answers a revoked token, until it
+// is called with false.
+func (g *fakeGmail) refuse(refused bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.refused = refused
 }
 
 // holdHistory keeps the recorded delta back until it is called with false.
@@ -312,6 +332,27 @@ func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 				t.Errorf("%s's %q = label %q status %q, want status %q", info.MenuEntries[i].Label, subject, link.AltText, link.StatusDetail, want)
 			}
 		}
+	}
+}
+
+// A token Google refuses is a config the plugin cannot serve: the spawned
+// binary refuses Info with a sentence naming the command that fixes it, and
+// passes once Google accepts the token, with no restart. The refusal is the
+// plugin's reading of Google's 401 and the sentence is what the node shows,
+// so only the real binary over a recorded Gmail proves both.
+func TestGmailRefusesATokenGoogleRefuses(t *testing.T) {
+	g := newFakeGmail(t)
+	g.refuse(true)
+	cfg, _ := gmailConfig(t, g, "1h")
+	cp := plugintest.Spawn(t, "gmail", cfg)
+
+	_, err := cp.Info(t.Context(), &pluginv1.InfoRequest{})
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "gridwell-plugin-gmail -auth -credentials") {
+		t.Fatalf("Info with a refused token = %v, want the refusal naming the auth command", err)
+	}
+	g.refuse(false)
+	if _, err := cp.Info(t.Context(), &pluginv1.InfoRequest{}); err != nil {
+		t.Fatalf("Info once Google accepts the token = %v", err)
 	}
 }
 
