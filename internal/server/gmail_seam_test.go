@@ -315,7 +315,7 @@ func TestGmailPluginServesAMessageThroughTheContentDoor(t *testing.T) {
 		t.Errorf("the email did not arrive: %.200q", body)
 	}
 	// The door's invariant rides an email like any other page.
-	if csp := res.Header.Get("Content-Security-Policy"); csp != "sandbox allow-scripts" {
+	if csp := res.Header.Get("Content-Security-Policy"); csp != contentSandbox {
 		t.Errorf("CSP = %q", csp)
 	}
 }

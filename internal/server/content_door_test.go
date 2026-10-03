@@ -139,9 +139,10 @@ func TestContentDoorServesImage(t *testing.T) {
 		t.Errorf("Content-Type = %q, want image/png", ct)
 	}
 	// The sandbox header is the door's INVARIANT: opaque origin, scripts
-	// allowed, no credentials, no reach back into Gridwell.
-	if csp := res.Header.Get("Content-Security-Policy"); csp != "sandbox allow-scripts" {
-		t.Errorf("CSP = %q, want \"sandbox allow-scripts\"", csp)
+	// allowed, no credentials, no reach back into Gridwell. Popups pass, so a
+	// target=_blank link opens below like one out of any live page.
+	if csp := res.Header.Get("Content-Security-Policy"); csp != "sandbox allow-scripts allow-popups" {
+		t.Errorf("CSP = %q, want \"sandbox allow-scripts allow-popups\"", csp)
 	}
 	if xc := res.Header.Get("X-Content-Type-Options"); xc != "nosniff" {
 		t.Errorf("nosniff header = %q", xc)
