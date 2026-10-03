@@ -90,8 +90,9 @@ func Binary(t *testing.T, kind string) string {
 // Spawn is the production spawn down to the config map, killed at the end of
 // the test. The guest inherits this process's environment, so the test's home
 // is redirected first: an fs plugin trashes a deleted file into
-// $XDG_DATA_HOME/Trash and a test must never write into the developer's. Its
-// state_dir is redirected for the same reason; see withStateDir.
+// $XDG_DATA_HOME/Trash, or $HOME/.Trash on macOS, and a test must never write
+// into the developer's. Its state_dir is redirected for the same reason; see
+// withStateDir.
 func Spawn(t *testing.T, kind string, cfg map[string]string) pluginv1.PluginClient {
 	t.Helper()
 	cp, _ := SpawnCloser(t, kind, cfg)
@@ -104,6 +105,7 @@ func Spawn(t *testing.T, kind string, cfg map[string]string) pluginv1.PluginClie
 func SpawnCloser(t *testing.T, kind string, cfg map[string]string) (pluginv1.PluginClient, func()) {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	proc, err := compose.LoadPlugin(Binary(t, kind), withStateDir(t, cfg), nil)
 	if err != nil {
 		t.Fatalf("spawn gridwell-plugin-%s: %v", kind, err)
