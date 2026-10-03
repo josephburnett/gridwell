@@ -135,6 +135,26 @@ message Entry {
   // invalidates. 0 or less means no picture. The picture is the tile's face
   // until the node holds a screenshot of the tile, which wins from then on.
   int64 preview_stamp = 10;
+  // link_target makes this entry a LINK to another of your entries, the one
+  // that owns the content: the node draws it dashed, reads its content, face
+  // and page through the target, and a copy of it is another link to the same
+  // target. The entry keeps its own key, label, status_detail and placement;
+  // its content facts (url_string, serves_page, text_presentation,
+  // preview_stamp) are the target's and the node does not read them here.
+  // Keep kind as the target's kind, and the content facts too if an older
+  // node must still present it, since a node that predates this field shows
+  // the entry as content of its own. The node mints nothing for the target
+  // until the user touches it, and a target its context no longer holds
+  // reads as a dead link. A well has no link variant here: its child_context
+  // already names where it opens.
+  EntryRef link_target = 11;
+}
+
+// EntryRef names one entry by the plugin's own words: the context that lists
+// it and its key there.
+message EntryRef {
+  string context = 1;
+  string key     = 2;
 }
 
 message PlacementHint {
@@ -192,6 +212,12 @@ message GetPreviewResponse {
 // read must never read as GONE.
 message ProbeRequest {
   string key = 1;
+  // context is the context the node is asking about: GONE means the key has
+  // left that context, which for a key listed in several contexts (a mail
+  // thread in a box and in everything) is not the same as gone everywhere.
+  // Empty means the node names none (a node from before contexts): answer
+  // for the plugin as a whole.
+  string context = 2;
 }
 message ProbeResponse {
   enum Presence {

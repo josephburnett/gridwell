@@ -90,7 +90,7 @@ func (x ProbeResponse_Presence) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProbeResponse_Presence.Descriptor instead.
 func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{16, 0}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{17, 0}
 }
 
 type InfoRequest struct {
@@ -477,7 +477,20 @@ type Entry struct {
 	// picture, such as an image file's mtime in fs, so an edited image
 	// invalidates. 0 or less means no picture. The picture is the tile's face
 	// until the node holds a screenshot of the tile, which wins from then on.
-	PreviewStamp  int64 `protobuf:"varint,10,opt,name=preview_stamp,json=previewStamp,proto3" json:"preview_stamp,omitempty"`
+	PreviewStamp int64 `protobuf:"varint,10,opt,name=preview_stamp,json=previewStamp,proto3" json:"preview_stamp,omitempty"`
+	// link_target makes this entry a LINK to another of your entries, the one
+	// that owns the content: the node draws it dashed, reads its content, face
+	// and page through the target, and a copy of it is another link to the same
+	// target. The entry keeps its own key, label, status_detail and placement;
+	// its content facts (url_string, serves_page, text_presentation,
+	// preview_stamp) are the target's and the node does not read them here.
+	// Keep kind as the target's kind, and the content facts too if an older
+	// node must still present it, since a node that predates this field shows
+	// the entry as content of its own. The node mints nothing for the target
+	// until the user touches it, and a target its context no longer holds
+	// reads as a dead link. A well has no link variant here: its child_context
+	// already names where it opens.
+	LinkTarget    *EntryRef `protobuf:"bytes,11,opt,name=link_target,json=linkTarget,proto3" json:"link_target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -582,6 +595,67 @@ func (x *Entry) GetPreviewStamp() int64 {
 	return 0
 }
 
+func (x *Entry) GetLinkTarget() *EntryRef {
+	if x != nil {
+		return x.LinkTarget
+	}
+	return nil
+}
+
+// EntryRef names one entry by the plugin's own words: the context that lists
+// it and its key there.
+type EntryRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EntryRef) Reset() {
+	*x = EntryRef{}
+	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EntryRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EntryRef) ProtoMessage() {}
+
+func (x *EntryRef) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EntryRef.ProtoReflect.Descriptor instead.
+func (*EntryRef) Descriptor() ([]byte, []int) {
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *EntryRef) GetContext() string {
+	if x != nil {
+		return x.Context
+	}
+	return ""
+}
+
+func (x *EntryRef) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
 type PlacementHint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	X             int64                  `protobuf:"varint,1,opt,name=x,proto3" json:"x,omitempty"`
@@ -594,7 +668,7 @@ type PlacementHint struct {
 
 func (x *PlacementHint) Reset() {
 	*x = PlacementHint{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -606,7 +680,7 @@ func (x *PlacementHint) String() string {
 func (*PlacementHint) ProtoMessage() {}
 
 func (x *PlacementHint) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -619,7 +693,7 @@ func (x *PlacementHint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlacementHint.ProtoReflect.Descriptor instead.
 func (*PlacementHint) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PlacementHint) GetX() int64 {
@@ -661,7 +735,7 @@ type ReadContentRequest struct {
 
 func (x *ReadContentRequest) Reset() {
 	*x = ReadContentRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -673,7 +747,7 @@ func (x *ReadContentRequest) String() string {
 func (*ReadContentRequest) ProtoMessage() {}
 
 func (x *ReadContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,7 +760,7 @@ func (x *ReadContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadContentRequest.ProtoReflect.Descriptor instead.
 func (*ReadContentRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ReadContentRequest) GetKey() string {
@@ -706,7 +780,7 @@ type ContentChunk struct {
 
 func (x *ContentChunk) Reset() {
 	*x = ContentChunk{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -718,7 +792,7 @@ func (x *ContentChunk) String() string {
 func (*ContentChunk) ProtoMessage() {}
 
 func (x *ContentChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -731,7 +805,7 @@ func (x *ContentChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContentChunk.ProtoReflect.Descriptor instead.
 func (*ContentChunk) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ContentChunk) GetData() []byte {
@@ -762,7 +836,7 @@ type WriteContentRequest struct {
 
 func (x *WriteContentRequest) Reset() {
 	*x = WriteContentRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -774,7 +848,7 @@ func (x *WriteContentRequest) String() string {
 func (*WriteContentRequest) ProtoMessage() {}
 
 func (x *WriteContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -787,7 +861,7 @@ func (x *WriteContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteContentRequest.ProtoReflect.Descriptor instead.
 func (*WriteContentRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WriteContentRequest) GetKey() string {
@@ -812,7 +886,7 @@ type WriteContentResponse struct {
 
 func (x *WriteContentResponse) Reset() {
 	*x = WriteContentResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -824,7 +898,7 @@ func (x *WriteContentResponse) String() string {
 func (*WriteContentResponse) ProtoMessage() {}
 
 func (x *WriteContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -837,7 +911,7 @@ func (x *WriteContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteContentResponse.ProtoReflect.Descriptor instead.
 func (*WriteContentResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{11}
 }
 
 // ServeContent is the web-content door's plugin half. GET-only, and subpath ""
@@ -852,7 +926,7 @@ type ServeContentRequest struct {
 
 func (x *ServeContentRequest) Reset() {
 	*x = ServeContentRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +938,7 @@ func (x *ServeContentRequest) String() string {
 func (*ServeContentRequest) ProtoMessage() {}
 
 func (x *ServeContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +951,7 @@ func (x *ServeContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServeContentRequest.ProtoReflect.Descriptor instead.
 func (*ServeContentRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{11}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ServeContentRequest) GetKey() string {
@@ -905,7 +979,7 @@ type ServeContentChunk struct {
 
 func (x *ServeContentChunk) Reset() {
 	*x = ServeContentChunk{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -917,7 +991,7 @@ func (x *ServeContentChunk) String() string {
 func (*ServeContentChunk) ProtoMessage() {}
 
 func (x *ServeContentChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -930,7 +1004,7 @@ func (x *ServeContentChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServeContentChunk.ProtoReflect.Descriptor instead.
 func (*ServeContentChunk) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ServeContentChunk) GetStatus() int64 {
@@ -963,7 +1037,7 @@ type GetPreviewRequest struct {
 
 func (x *GetPreviewRequest) Reset() {
 	*x = GetPreviewRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -975,7 +1049,7 @@ func (x *GetPreviewRequest) String() string {
 func (*GetPreviewRequest) ProtoMessage() {}
 
 func (x *GetPreviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -988,7 +1062,7 @@ func (x *GetPreviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPreviewRequest.ProtoReflect.Descriptor instead.
 func (*GetPreviewRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetPreviewRequest) GetKey() string {
@@ -1007,7 +1081,7 @@ type GetPreviewResponse struct {
 
 func (x *GetPreviewResponse) Reset() {
 	*x = GetPreviewResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1019,7 +1093,7 @@ func (x *GetPreviewResponse) String() string {
 func (*GetPreviewResponse) ProtoMessage() {}
 
 func (x *GetPreviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1032,7 +1106,7 @@ func (x *GetPreviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPreviewResponse.ProtoReflect.Descriptor instead.
 func (*GetPreviewResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetPreviewResponse) GetJpeg() []byte {
@@ -1046,15 +1120,21 @@ func (x *GetPreviewResponse) GetJpeg() []byte {
 // non-authoritative listing. UNSPECIFIED means cannot say right now; a failed
 // read must never read as GONE.
 type ProbeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// context is the context the node is asking about: GONE means the key has
+	// left that context, which for a key listed in several contexts (a mail
+	// thread in a box and in everything) is not the same as gone everywhere.
+	// Empty means the node names none (a node from before contexts): answer
+	// for the plugin as a whole.
+	Context       string `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProbeRequest) Reset() {
 	*x = ProbeRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1066,7 +1146,7 @@ func (x *ProbeRequest) String() string {
 func (*ProbeRequest) ProtoMessage() {}
 
 func (x *ProbeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1079,12 +1159,19 @@ func (x *ProbeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProbeRequest.ProtoReflect.Descriptor instead.
 func (*ProbeRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ProbeRequest) GetKey() string {
 	if x != nil {
 		return x.Key
+	}
+	return ""
+}
+
+func (x *ProbeRequest) GetContext() string {
+	if x != nil {
+		return x.Context
 	}
 	return ""
 }
@@ -1098,7 +1185,7 @@ type ProbeResponse struct {
 
 func (x *ProbeResponse) Reset() {
 	*x = ProbeResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1110,7 +1197,7 @@ func (x *ProbeResponse) String() string {
 func (*ProbeResponse) ProtoMessage() {}
 
 func (x *ProbeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1123,7 +1210,7 @@ func (x *ProbeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProbeResponse.ProtoReflect.Descriptor instead.
 func (*ProbeResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ProbeResponse) GetPresence() ProbeResponse_Presence {
@@ -1145,7 +1232,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1157,7 +1244,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1170,7 +1257,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DeleteRequest) GetKey() string {
@@ -1188,7 +1275,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1200,7 +1287,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1213,7 +1300,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
 }
 
 type SearchRequest struct {
@@ -1226,7 +1313,7 @@ type SearchRequest struct {
 
 func (x *SearchRequest) Reset() {
 	*x = SearchRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1238,7 +1325,7 @@ func (x *SearchRequest) String() string {
 func (*SearchRequest) ProtoMessage() {}
 
 func (x *SearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1251,7 +1338,7 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
 func (*SearchRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SearchRequest) GetQuery() string {
@@ -1282,7 +1369,7 @@ type SearchResult struct {
 
 func (x *SearchResult) Reset() {
 	*x = SearchResult{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1294,7 +1381,7 @@ func (x *SearchResult) String() string {
 func (*SearchResult) ProtoMessage() {}
 
 func (x *SearchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1307,7 +1394,7 @@ func (x *SearchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResult.ProtoReflect.Descriptor instead.
 func (*SearchResult) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SearchResult) GetEntry() *Entry {
@@ -1347,7 +1434,7 @@ type SearchResponse struct {
 
 func (x *SearchResponse) Reset() {
 	*x = SearchResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1359,7 +1446,7 @@ func (x *SearchResponse) String() string {
 func (*SearchResponse) ProtoMessage() {}
 
 func (x *SearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1372,7 +1459,7 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
 func (*SearchResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SearchResponse) GetResults() []*SearchResult {
@@ -1398,7 +1485,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1410,7 +1497,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1423,7 +1510,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *WatchRequest) GetContexts() []string {
@@ -1442,7 +1529,7 @@ type ContextChanged struct {
 
 func (x *ContextChanged) Reset() {
 	*x = ContextChanged{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1454,7 +1541,7 @@ func (x *ContextChanged) String() string {
 func (*ContextChanged) ProtoMessage() {}
 
 func (x *ContextChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1467,7 +1554,7 @@ func (x *ContextChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextChanged.ProtoReflect.Descriptor instead.
 func (*ContextChanged) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ContextChanged) GetContext() string {
@@ -1487,7 +1574,7 @@ type EntryRemoved struct {
 
 func (x *EntryRemoved) Reset() {
 	*x = EntryRemoved{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1499,7 +1586,7 @@ func (x *EntryRemoved) String() string {
 func (*EntryRemoved) ProtoMessage() {}
 
 func (x *EntryRemoved) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1512,7 +1599,7 @@ func (x *EntryRemoved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryRemoved.ProtoReflect.Descriptor instead.
 func (*EntryRemoved) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *EntryRemoved) GetContext() string {
@@ -1542,7 +1629,7 @@ type Change struct {
 
 func (x *Change) Reset() {
 	*x = Change{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1554,7 +1641,7 @@ func (x *Change) String() string {
 func (*Change) ProtoMessage() {}
 
 func (x *Change) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1567,7 +1654,7 @@ func (x *Change) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Change.ProtoReflect.Descriptor instead.
 func (*Change) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Change) GetPayload() isChange_Payload {
@@ -1636,7 +1723,7 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\fListResponse\x12*\n" +
 	"\aentries\x18\x01 \x03(\v2\x10.plugin.v1.EntryR\aentries\x12$\n" +
 	"\rauthoritative\x18\x02 \x01(\bR\rauthoritative\x12!\n" +
-	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\"\xe0\x02\n" +
+	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\"\x96\x03\n" +
 	"\x05Entry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
@@ -1650,7 +1737,12 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"url_string\x18\b \x01(\tR\turlString\x12?\n" +
 	"\x0eplacement_hint\x18\t \x01(\v2\x18.plugin.v1.PlacementHintR\rplacementHint\x12#\n" +
 	"\rpreview_stamp\x18\n" +
-	" \x01(\x03R\fpreviewStamp\"G\n" +
+	" \x01(\x03R\fpreviewStamp\x124\n" +
+	"\vlink_target\x18\v \x01(\v2\x13.plugin.v1.EntryRefR\n" +
+	"linkTarget\"6\n" +
+	"\bEntryRef\x12\x18\n" +
+	"\acontext\x18\x01 \x01(\tR\acontext\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\"G\n" +
 	"\rPlacementHint\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\x03R\x01y\x12\f\n" +
@@ -1677,9 +1769,10 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x11GetPreviewRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"(\n" +
 	"\x12GetPreviewResponse\x12\x12\n" +
-	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\" \n" +
+	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\":\n" +
 	"\fProbeRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"\x9d\x01\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
+	"\acontext\x18\x02 \x01(\tR\acontext\"\x9d\x01\n" +
 	"\rProbeResponse\x12=\n" +
 	"\bpresence\x18\x01 \x01(\x0e2!.plugin.v1.ProbeResponse.PresenceR\bpresence\"M\n" +
 	"\bPresence\x12\x18\n" +
@@ -1738,7 +1831,7 @@ func file_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_plugin_v1_plugin_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),  // 0: plugin.v1.ProbeResponse.Presence
 	(*InfoRequest)(nil),          // 1: plugin.v1.InfoRequest
@@ -1747,61 +1840,63 @@ var file_plugin_v1_plugin_proto_goTypes = []any{
 	(*ListRequest)(nil),          // 4: plugin.v1.ListRequest
 	(*ListResponse)(nil),         // 5: plugin.v1.ListResponse
 	(*Entry)(nil),                // 6: plugin.v1.Entry
-	(*PlacementHint)(nil),        // 7: plugin.v1.PlacementHint
-	(*ReadContentRequest)(nil),   // 8: plugin.v1.ReadContentRequest
-	(*ContentChunk)(nil),         // 9: plugin.v1.ContentChunk
-	(*WriteContentRequest)(nil),  // 10: plugin.v1.WriteContentRequest
-	(*WriteContentResponse)(nil), // 11: plugin.v1.WriteContentResponse
-	(*ServeContentRequest)(nil),  // 12: plugin.v1.ServeContentRequest
-	(*ServeContentChunk)(nil),    // 13: plugin.v1.ServeContentChunk
-	(*GetPreviewRequest)(nil),    // 14: plugin.v1.GetPreviewRequest
-	(*GetPreviewResponse)(nil),   // 15: plugin.v1.GetPreviewResponse
-	(*ProbeRequest)(nil),         // 16: plugin.v1.ProbeRequest
-	(*ProbeResponse)(nil),        // 17: plugin.v1.ProbeResponse
-	(*DeleteRequest)(nil),        // 18: plugin.v1.DeleteRequest
-	(*DeleteResponse)(nil),       // 19: plugin.v1.DeleteResponse
-	(*SearchRequest)(nil),        // 20: plugin.v1.SearchRequest
-	(*SearchResult)(nil),         // 21: plugin.v1.SearchResult
-	(*SearchResponse)(nil),       // 22: plugin.v1.SearchResponse
-	(*WatchRequest)(nil),         // 23: plugin.v1.WatchRequest
-	(*ContextChanged)(nil),       // 24: plugin.v1.ContextChanged
-	(*EntryRemoved)(nil),         // 25: plugin.v1.EntryRemoved
-	(*Change)(nil),               // 26: plugin.v1.Change
+	(*EntryRef)(nil),             // 7: plugin.v1.EntryRef
+	(*PlacementHint)(nil),        // 8: plugin.v1.PlacementHint
+	(*ReadContentRequest)(nil),   // 9: plugin.v1.ReadContentRequest
+	(*ContentChunk)(nil),         // 10: plugin.v1.ContentChunk
+	(*WriteContentRequest)(nil),  // 11: plugin.v1.WriteContentRequest
+	(*WriteContentResponse)(nil), // 12: plugin.v1.WriteContentResponse
+	(*ServeContentRequest)(nil),  // 13: plugin.v1.ServeContentRequest
+	(*ServeContentChunk)(nil),    // 14: plugin.v1.ServeContentChunk
+	(*GetPreviewRequest)(nil),    // 15: plugin.v1.GetPreviewRequest
+	(*GetPreviewResponse)(nil),   // 16: plugin.v1.GetPreviewResponse
+	(*ProbeRequest)(nil),         // 17: plugin.v1.ProbeRequest
+	(*ProbeResponse)(nil),        // 18: plugin.v1.ProbeResponse
+	(*DeleteRequest)(nil),        // 19: plugin.v1.DeleteRequest
+	(*DeleteResponse)(nil),       // 20: plugin.v1.DeleteResponse
+	(*SearchRequest)(nil),        // 21: plugin.v1.SearchRequest
+	(*SearchResult)(nil),         // 22: plugin.v1.SearchResult
+	(*SearchResponse)(nil),       // 23: plugin.v1.SearchResponse
+	(*WatchRequest)(nil),         // 24: plugin.v1.WatchRequest
+	(*ContextChanged)(nil),       // 25: plugin.v1.ContextChanged
+	(*EntryRemoved)(nil),         // 26: plugin.v1.EntryRemoved
+	(*Change)(nil),               // 27: plugin.v1.Change
 }
 var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	3,  // 0: plugin.v1.InfoResponse.menu_entries:type_name -> plugin.v1.MenuEntry
 	6,  // 1: plugin.v1.ListResponse.entries:type_name -> plugin.v1.Entry
-	7,  // 2: plugin.v1.Entry.placement_hint:type_name -> plugin.v1.PlacementHint
-	0,  // 3: plugin.v1.ProbeResponse.presence:type_name -> plugin.v1.ProbeResponse.Presence
-	6,  // 4: plugin.v1.SearchResult.entry:type_name -> plugin.v1.Entry
-	21, // 5: plugin.v1.SearchResponse.results:type_name -> plugin.v1.SearchResult
-	24, // 6: plugin.v1.Change.context_changed:type_name -> plugin.v1.ContextChanged
-	25, // 7: plugin.v1.Change.entry_removed:type_name -> plugin.v1.EntryRemoved
-	1,  // 8: plugin.v1.Plugin.Info:input_type -> plugin.v1.InfoRequest
-	4,  // 9: plugin.v1.Plugin.List:input_type -> plugin.v1.ListRequest
-	8,  // 10: plugin.v1.Plugin.ReadContent:input_type -> plugin.v1.ReadContentRequest
-	10, // 11: plugin.v1.Plugin.WriteContent:input_type -> plugin.v1.WriteContentRequest
-	12, // 12: plugin.v1.Plugin.ServeContent:input_type -> plugin.v1.ServeContentRequest
-	14, // 13: plugin.v1.Plugin.GetPreview:input_type -> plugin.v1.GetPreviewRequest
-	16, // 14: plugin.v1.Plugin.Probe:input_type -> plugin.v1.ProbeRequest
-	18, // 15: plugin.v1.Plugin.Delete:input_type -> plugin.v1.DeleteRequest
-	20, // 16: plugin.v1.Plugin.Search:input_type -> plugin.v1.SearchRequest
-	23, // 17: plugin.v1.Plugin.Watch:input_type -> plugin.v1.WatchRequest
-	2,  // 18: plugin.v1.Plugin.Info:output_type -> plugin.v1.InfoResponse
-	5,  // 19: plugin.v1.Plugin.List:output_type -> plugin.v1.ListResponse
-	9,  // 20: plugin.v1.Plugin.ReadContent:output_type -> plugin.v1.ContentChunk
-	11, // 21: plugin.v1.Plugin.WriteContent:output_type -> plugin.v1.WriteContentResponse
-	13, // 22: plugin.v1.Plugin.ServeContent:output_type -> plugin.v1.ServeContentChunk
-	15, // 23: plugin.v1.Plugin.GetPreview:output_type -> plugin.v1.GetPreviewResponse
-	17, // 24: plugin.v1.Plugin.Probe:output_type -> plugin.v1.ProbeResponse
-	19, // 25: plugin.v1.Plugin.Delete:output_type -> plugin.v1.DeleteResponse
-	22, // 26: plugin.v1.Plugin.Search:output_type -> plugin.v1.SearchResponse
-	26, // 27: plugin.v1.Plugin.Watch:output_type -> plugin.v1.Change
-	18, // [18:28] is the sub-list for method output_type
-	8,  // [8:18] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	8,  // 2: plugin.v1.Entry.placement_hint:type_name -> plugin.v1.PlacementHint
+	7,  // 3: plugin.v1.Entry.link_target:type_name -> plugin.v1.EntryRef
+	0,  // 4: plugin.v1.ProbeResponse.presence:type_name -> plugin.v1.ProbeResponse.Presence
+	6,  // 5: plugin.v1.SearchResult.entry:type_name -> plugin.v1.Entry
+	22, // 6: plugin.v1.SearchResponse.results:type_name -> plugin.v1.SearchResult
+	25, // 7: plugin.v1.Change.context_changed:type_name -> plugin.v1.ContextChanged
+	26, // 8: plugin.v1.Change.entry_removed:type_name -> plugin.v1.EntryRemoved
+	1,  // 9: plugin.v1.Plugin.Info:input_type -> plugin.v1.InfoRequest
+	4,  // 10: plugin.v1.Plugin.List:input_type -> plugin.v1.ListRequest
+	9,  // 11: plugin.v1.Plugin.ReadContent:input_type -> plugin.v1.ReadContentRequest
+	11, // 12: plugin.v1.Plugin.WriteContent:input_type -> plugin.v1.WriteContentRequest
+	13, // 13: plugin.v1.Plugin.ServeContent:input_type -> plugin.v1.ServeContentRequest
+	15, // 14: plugin.v1.Plugin.GetPreview:input_type -> plugin.v1.GetPreviewRequest
+	17, // 15: plugin.v1.Plugin.Probe:input_type -> plugin.v1.ProbeRequest
+	19, // 16: plugin.v1.Plugin.Delete:input_type -> plugin.v1.DeleteRequest
+	21, // 17: plugin.v1.Plugin.Search:input_type -> plugin.v1.SearchRequest
+	24, // 18: plugin.v1.Plugin.Watch:input_type -> plugin.v1.WatchRequest
+	2,  // 19: plugin.v1.Plugin.Info:output_type -> plugin.v1.InfoResponse
+	5,  // 20: plugin.v1.Plugin.List:output_type -> plugin.v1.ListResponse
+	10, // 21: plugin.v1.Plugin.ReadContent:output_type -> plugin.v1.ContentChunk
+	12, // 22: plugin.v1.Plugin.WriteContent:output_type -> plugin.v1.WriteContentResponse
+	14, // 23: plugin.v1.Plugin.ServeContent:output_type -> plugin.v1.ServeContentChunk
+	16, // 24: plugin.v1.Plugin.GetPreview:output_type -> plugin.v1.GetPreviewResponse
+	18, // 25: plugin.v1.Plugin.Probe:output_type -> plugin.v1.ProbeResponse
+	20, // 26: plugin.v1.Plugin.Delete:output_type -> plugin.v1.DeleteResponse
+	23, // 27: plugin.v1.Plugin.Search:output_type -> plugin.v1.SearchResponse
+	27, // 28: plugin.v1.Plugin.Watch:output_type -> plugin.v1.Change
+	19, // [19:29] is the sub-list for method output_type
+	9,  // [9:19] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_plugin_v1_plugin_proto_init() }
@@ -1809,7 +1904,7 @@ func file_plugin_v1_plugin_proto_init() {
 	if File_plugin_v1_plugin_proto != nil {
 		return
 	}
-	file_plugin_v1_plugin_proto_msgTypes[25].OneofWrappers = []any{
+	file_plugin_v1_plugin_proto_msgTypes[26].OneofWrappers = []any{
 		(*Change_ContextChanged)(nil),
 		(*Change_EntryRemoved)(nil),
 	}
@@ -1819,7 +1914,7 @@ func file_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_v1_plugin_proto_rawDesc), len(file_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
