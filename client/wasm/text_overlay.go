@@ -139,6 +139,26 @@ func (a *App) ensureFileTextarea() {
 	})
 	ta.Call("addEventListener", "input", a.overlays.textTextareaInputCb)
 
+	// Enter on a list line continues the list; see textedit.ContinueList.
+	ta.Call("addEventListener", "keydown", js.FuncOf(func(this js.Value, args []js.Value) any {
+		ev := args[0]
+		if ev.Get("key").String() != "Enter" {
+			return nil
+		}
+		e, ok := textedit.ContinueList(textedit.ListEnter{
+			Text:      ta.Get("value").String(),
+			SelStart:  ta.Get("selectionStart").Int(),
+			SelEnd:    ta.Get("selectionEnd").Int(),
+			Shift:     ev.Get("shiftKey").Truthy(),
+			OtherMod:  ev.Get("ctrlKey").Truthy() || ev.Get("altKey").Truthy() || ev.Get("metaKey").Truthy(),
+			Composing: ev.Get("isComposing").Truthy(),
+		})
+		if ok && a.applyTextareaEdit(ta, e) {
+			ev.Call("preventDefault")
+		}
+		return nil
+	}))
+
 	// Cursor moves without text changes also refresh the URL; input handles
 	// typed changes.
 	cursorCb := js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -415,4 +435,22 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	a.takeKeyboard() // the toggle's press
 	a.draw()
 	a.scheduleURLUpdate()
+}
+
+// applyTextareaEdit makes e through execCommand, so it is one native undo step
+// and fires the input event the save chain reads; false, with the selection
+// restored, when the browser refuses it.
+func (a *App) applyTextareaEdit(ta js.Value, e textedit.ListEdit) bool {
+	s0, s1 := ta.Get("selectionStart"), ta.Get("selectionEnd")
+	ta.Call("setSelectionRange", e.Start, e.End)
+	cmd, arg := "insertText", e.Insert
+	if arg == "" {
+		cmd = "delete"
+	}
+	if !a.doc.Call("execCommand", cmd, false, arg).Truthy() {
+		ta.Call("setSelectionRange", s0, s1)
+		return false
+	}
+	ta.Call("setSelectionRange", e.Caret, e.Caret)
+	return true
 }
