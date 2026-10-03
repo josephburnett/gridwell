@@ -102,9 +102,11 @@ nothing on a memory answer, so `authoritative` is ignored while it is set.
 The next answer with it empty brings the source back up. A `placement_hint` is a preference for an entry's first
 placement only: a hint onto an occupied cell takes the first free rect of its
 size below it in the same column. An
-entry's `status_detail` is one word about its state — "unread", "done" — which
-the client draws muted after the tile's name: a note on the name, never a
-second name. An entry with `serves_page` presents its `ServeContent` HTML on
+entry's `status_detail` is one emoji about its state — ✅ done, ● unread,
+★ starred — sent only when there is something to notice, and empty for the
+normal state. The client draws it before the tile's name wherever the name is
+drawn, so a long name clips and the emoji never does: a note on the name,
+never a second name. An entry with `serves_page` presents its `ServeContent` HTML on
 descent, sandboxed by the node. It is a `url` entry, and only a `url` entry:
 serving a page is what that entry's address is, and the node refuses the
 declaration on any other kind. Leave `url_string` empty — the node derives the

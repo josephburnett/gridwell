@@ -355,11 +355,12 @@ todos (`todos.WeekEntries`, row by order within the day), gmail and hey
 
 ## 11. State is status_detail, and quiet
 
-**Rule.** A tile's state lives in `status_detail` only, only when worth
-noticing; the label stays stable and the normal state sends nothing.
+**Rule.** A tile's state lives in `status_detail` only, as one emoji, only
+when worth noticing; the label stays stable and the normal state sends nothing.
 
-**Why.** "`status_detail` is one word about its state … a note on the name,
-never a second name" (`docs/plugin-authoring.md`). A label that carries state
+**Why.** "`status_detail` is one emoji about its state … a note on the name,
+never a second name" (`docs/plugin-authoring.md`). The client draws it before
+the name at every zoom the name is drawn (`tileface.BannerText`). A label that carries state
 changes the tile's name as the state changes, and a word on every tile is
 noise that hides the one that matters.
 
@@ -371,7 +372,7 @@ func (t *Thread) StatusDetail() string {
 	if t.Seen {
 		return ""
 	}
-	return "unseen"
+	return "●"
 }
 ```
 
@@ -383,7 +384,9 @@ open todo) have the same label, and only the one worth noticing carries a
 (`pages/plugin/plugin_test.go:TestEntriesAreQuietAndHintedByTheirDoc`); fs
 and proc send none, which is quiet but untested. hey and gitlab put state in the label (`UnseenMark`, `DoneMark`,
 week counts in `todos.WeekLabel`); gmail, gitlab and hey send the normal
-state ("read", "pending", "seen") on every tile.
+state ("read", "pending", "seen") on every tile, and a word where the emoji
+goes. The client draws the status before the name
+(`client/tileface/banner_test.go`).
 
 ## 12. Declare text_presentation
 
@@ -565,7 +568,7 @@ proc has no README.
 - [ ] 8. No walk, glance or feed runs except for a call or a `Watch` in scope.
 - [ ] 9. `Watch` sends its header on accept, collapses bursts, re-announces the scope on overflow.
 - [ ] 10. Placement hints depend on the key, not on list position.
-- [ ] 11. State is in `status_detail` only, the normal state sends nothing, the label is stable.
+- [ ] 11. State is one emoji in `status_detail` only, the normal state sends nothing, the label is stable.
 - [ ] 12. Every text entry declares `text_presentation`.
 - [ ] 13. Every request-scoped source call takes the request's context.
 - [ ] 14. Each condition logs once per episode.

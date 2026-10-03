@@ -100,7 +100,7 @@ test('proc: the root grid lists the served node as a child of this worker', asyn
   expect((innerSnap.tiles ?? []).some((t) => t.altText === '@info'), 'the child process has its @info').toBe(true);
 });
 
-test('gitlab: the week well descends to the todo, whose content is its markdown', async ({ gw }) => {
+test('gitlab: the week well descends to the todo, whose content is its markdown', async ({ gw, window }) => {
   await gw.enterPlugin('todos');
   const f = await gw.focused();
   const snap = await gw.getGrid(f.gridID);
@@ -126,4 +126,10 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   expect(doneTile, 'the todo is still listed after the gesture').toBeTruthy();
   expect(doneTile!.statusDetail).toBe('done');
   expect(String(doneTile!.altText)).toContain('✅');
+
+  // The banner draws the plugin's status before the name, where a right-edge
+  // clip never reaches it (tileface.BannerText).
+  await expect
+    .poll(() => window.evaluate((id: string) => (window as any).__gridwellTest.bannerTexts()[id], todo!.id), { timeout: 10_000 })
+    .toBe(`${doneTile!.statusDetail} ${doneTile!.altText}`);
 });

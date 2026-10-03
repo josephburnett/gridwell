@@ -761,8 +761,8 @@ func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outsid
 // drawTileBannerLabelIn takes the text color, so a dead link's grey label
 // shares the one banner geometry.
 func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, textColor string) {
-	label, status := tileface.BannerRuns(n)
-	if label == "" {
+	text := tileface.BannerText(n)
+	if text == "" {
 		return
 	}
 	ix := x + tileBorderPx
@@ -776,21 +776,12 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	if !shown {
 		return
 	}
+	a.bannerTexts[n.Id] = text
 	withClip(a.cctx, ix, iy, iw, ih, func() {
 		fillRectC(a.cctx, ix, iy, iw, bannerH, a.pal.SourceLabelBg)
-		bold := fontSpec(fontPx, bannerFontFamily, true)
-		drawLabel(a.cctx, label, ix+4, iy+bannerH/2, labelOpts{
-			font: bold, fill: textColor, baseline: "middle",
+		drawLabel(a.cctx, text, ix+4, iy+bannerH/2, labelOpts{
+			font: fontSpec(fontPx, bannerFontFamily, true), fill: textColor, baseline: "middle",
 		})
-		if status != "" {
-			// The status is the plugin's word, drawn muted as a note on the name.
-			a.cctx.Set("font", bold)
-			labelW := a.cctx.Call("measureText", label).Get("width").Float()
-			drawLabel(a.cctx, status, ix+4+labelW+fontPx/2, iy+bannerH/2, labelOpts{
-				font: fontSpec(fontPx, bannerFontFamily, false),
-				fill: a.pal.Muted, baseline: "middle",
-			})
-		}
 	})
 }
 

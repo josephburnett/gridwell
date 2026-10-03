@@ -550,7 +550,7 @@ copy:
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | which face a plugin tile wears | `pluginhost.faceKey` |
-| what a tile's banner reads | `tileface.BannerRuns` (name, then the plugin's status) |
+| what a tile's banner reads | `tileface.BannerText` (the plugin's status emoji, then the name) |
 | does a tile draw as host state, and which hue its banner wears | `tileface.Outside`, `tileface.BannerHue` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | what that slot's right-click offers | `circlemenu.For` |

@@ -217,6 +217,14 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
+		// The last banner line each tile drew: tileface.BannerText as painted.
+		"bannerTexts": js.FuncOf(func(js.Value, []js.Value) any {
+			out := map[string]any{}
+			for id, t := range a.bannerTexts {
+				out[id] = t
+			}
+			return out
+		}),
 		"renderedPreviews": js.FuncOf(func(js.Value, []js.Value) any {
 			// The rendered-raster cache: tile id to decode state.
 			out := map[string]any{}

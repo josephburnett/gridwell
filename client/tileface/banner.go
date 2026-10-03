@@ -2,15 +2,16 @@ package tileface
 
 import gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
-// BannerRuns is the banner's text in paint order: the name the server stamped
-// and, after it, the owning plugin's status_detail — a word about the tile's
-// state that nothing outside the plugin can derive. The shim paints status
-// muted. A status is a note on a name, never a name: with no name there is no
-// banner.
-func BannerRuns(t *gridwellv1.Tile) (label, status string) {
-	label = t.GetAltText()
-	if label == "" {
-		return "", ""
+// BannerText is the banner's one line: the owning plugin's status_detail (one
+// emoji, sent only when there is something to notice) before the name the
+// server stamped. The status leads because the banner clips from the right: a
+// long name loses its tail, never the mark. A status is a note on a name,
+// never a name: with no name there is no banner.
+func BannerText(t *gridwellv1.Tile) string {
+	label := t.GetAltText()
+	status := t.GetStatusDetail()
+	if label == "" || status == "" {
+		return label
 	}
-	return label, t.GetStatusDetail()
+	return status + " " + label
 }
