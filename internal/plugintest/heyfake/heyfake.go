@@ -80,6 +80,7 @@ type CLI struct {
 	failing map[string]failure
 	feeds   []*Feed
 	arrived chan struct{}
+	runs    map[string]int
 }
 
 type failure struct {
@@ -102,6 +103,7 @@ func New(t *testing.T) *CLI {
 		boxes:   map[string][]Thread{},
 		failing: map[string]failure{},
 		arrived: make(chan struct{}, 1),
+		runs:    map[string]int{},
 	}
 	hs := httptest.NewServer(http.HandlerFunc(c.serve))
 	// A feed holds its request open; stop ends it, or Close waits on it.
@@ -170,6 +172,14 @@ func (c *CLI) HealBox(box string) {
 	delete(c.failing, box)
 }
 
+// Runs counts the plugin's runs of one command so far, by its first word:
+// "box", "thread" or "watch".
+func (c *CLI) Runs(command string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.runs[command]
+}
+
 // Feed is one running `hey watch`, which says nothing until the test sends.
 type Feed struct {
 	lines chan string
@@ -215,6 +225,9 @@ func (f *Feed) Ready(t *testing.T) {
 	f.Send(t, `{"change":"ready","at":"`+time.Now().UTC().Format(time.RFC3339Nano)+`"}`)
 }
 
+// Done closes when the feed has ended, by End or by the plugin killing it.
+func (f *Feed) Done() <-chan struct{} { return f.done }
+
 // End makes the feed exit with code.
 func (f *Feed) End(code int) {
 	select {
@@ -248,6 +261,11 @@ func (c *CLI) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a := req.Args
+	if len(a) > 0 {
+		c.mu.Lock()
+		c.runs[a[0]]++
+		c.mu.Unlock()
+	}
 	switch {
 	case len(a) == 5 && a[0] == "box" && a[1] == "view" && a[3] == "--json" && a[4] == "--all":
 		exit(c.boxView(a[2]))
