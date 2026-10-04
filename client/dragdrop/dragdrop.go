@@ -76,7 +76,7 @@ type ChildPreview struct {
 }
 
 // ChildPreviewFor takes previewRatio, child cells per parent cell, from the
-// caller's zoomtrans.EffectiveViewZoom. The result is independent of pane size.
+// caller's zoomtrans.Well.Ratio. The result is independent of pane size.
 func ChildPreviewFor(parent Pane, well struct {
 	X, Y, W, H     int64
 	ViewCx, ViewCy float64

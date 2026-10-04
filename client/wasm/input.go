@@ -280,9 +280,9 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		hpx := float64(hoverWell.H) * parentCell
 		zw := wellOf(hoverWell)
 		// The float center accumulates across the burst: the first notch seeds
-		// from the same EffectiveCenter the preview was drawn with, and later
-		// notches feed the drift back in.
-		cx0, cy0 := zoomtrans.EffectiveCenter(zw)
+		// from the same Center the preview was drawn with, and later notches
+		// feed the drift back in.
+		cx0, cy0 := zw.Center()
 		if st, ok := a.persist.wellWheelPending[hoverWell.Id]; ok {
 			cx0, cy0 = st.cx, st.cy
 		}
@@ -319,7 +319,9 @@ func (a *App) scrollText(p *pane.Pane, x, y float64) {
 func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
 	ps := p.Screen(r)
 	cellX, cellY := ps.ScreenToCell(sx, sy)
-	p.Zoom, p.Cx, p.Cy = zoomtrans.WheelZoom(dy, p.Zoom, p.Cx, p.Cy, cellX, cellY, zoomFactor, zoomMin, zoomMax)
+	if z, cx, cy, ok := zoomtrans.WheelZoom(dy, p.Zoom, p.Cx, p.Cy, cellX, cellY, zoomFactor, zoomMin, zoomMax); ok {
+		p.Zoom, p.Cx, p.Cy = z, cx, cy
+	}
 	a.draw()
 	a.scheduleURLUpdate()
 }
@@ -676,39 +678,38 @@ const zoomDistFactor = 4.0
 // persistedGridView reads the framing the grid at (anchor, path) was left at
 // from the row that owns it. It restores every ascent with no session state,
 // where 0,0 at zoom 1 would be a framing the user never set.
-func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx, cy, zoom float64, ok bool) {
-	r := paneRectFor(a, p)
-	if r.W <= 0 || r.H <= 0 {
-		return 0, 0, 0, false
+func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (rpc.Framing, bool) {
+	size, ok := paneRectFor(a, p).Size()
+	if !ok {
+		return rpc.Framing{}, false
 	}
 	if len(path) == 0 {
-		return a.storedRootView(anchor, r)
+		return a.storedRootView(anchor, size)
 	}
 	g, found := a.c.Grid(a.gridIDForPathFrom(anchor, path[:len(path)-1]))
 	if !found {
-		return 0, 0, 0, false
+		return rpc.Framing{}, false
 	}
 	t, found := g.Tiles[path[len(path)-1]]
 	if !found {
-		return 0, 0, 0, false
+		return rpc.Framing{}, false
 	}
-	w := wellOf(t)
-	cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
-	return cx, cy, zoom, true
+	return zoomtrans.StoredView(wellOf(t), size, cellPx)
 }
 
 // storedRootView is the read side of persistFraming's root arm, the same 1x1
-// synthetic doorway inverted, at pane size r. A root's framing rides its
+// synthetic doorway inverted, at pane size s. A root's framing rides its
 // PluginInfo; false when it has none.
-func (a *App) storedRootView(anchor string, r pane.Rect) (cx, cy, zoom float64, ok bool) {
+func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool) {
 	pl, found := a.pluginByRoot(anchor)
-	if !found || pl.RootViewZoom <= 0 {
-		return 0, 0, 0, false
+	if !found {
+		return rpc.Framing{}, false
 	}
-	w := zoomtrans.Well{W: 1, H: 1,
-		ViewCx: pl.RootViewCx, ViewCy: pl.RootViewCy, ViewZoom: pl.RootViewZoom}
-	cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
-	return cx, cy, zoom, true
+	w := zoomtrans.Well{W: 1, H: 1, View: rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom)}
+	if _, visited := w.View.Framing(); !visited {
+		return rpc.Framing{}, false
+	}
+	return zoomtrans.StoredView(w, s, cellPx)
 }
 
 // splitBelowForOpen runs pane.SplitBelowForOpen, the one programmatic split,

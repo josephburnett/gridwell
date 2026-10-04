@@ -58,14 +58,13 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	door, doorTile, visit := m.leaveFrame(p, w, pl)
 	landing := p.Stack.Popped(1)
 	saved, haveSaved := landingView(landing, w)
-	if !animate || doorTile == nil {
-		content := p.Stack.Content
+	jump := func() {
 		var vp *Viewport
 		switch {
 		case haveSaved:
 			v := saved
 			vp = &v
-		case content:
+		case p.Stack.Content:
 			// A content frame's viewport is already in the landing grid's
 			// coordinates, so keeping it is where the user was.
 		default:
@@ -75,6 +74,11 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		pl.add(Effect{Kind: EffClearSelection, PaneID: p.ID})
 		m.landOnFrame(p.ID, landing, pl)
 		m.retireVisit(visit, pl)
+	}
+	// A pane with no rect has no geometry to animate through.
+	size, sized := p.Rect.Size()
+	if !animate || doorTile == nil || !sized {
+		jump()
 		return
 	}
 	r := p.Rect
@@ -115,7 +119,11 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	// The switch state is the doorway's footprint at overtake, the inverse of
 	// the descent's approach. The child grid's coordinates mean nothing out
 	// here, so zoomtrans.Ascent hands back the parent-grid center.
-	mid, switchTo := zoomtrans.Ascent(from, wl, landing.Path(), r.W, r.H, w.CellPx)
+	mid, switchTo, ok := zoomtrans.Ascent(from, wl, landing.Path(), size, w.CellPx)
+	if !ok {
+		jump()
+		return
+	}
 	if !haveSaved {
 		saved = Viewport{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
 	}
@@ -204,13 +212,15 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 }
 
 // settleFraming applies to a doorway row the framing PersistFraming is about
-// to write. zoomtrans owns the formula, which both this and the executor read
-// there, and the no-op guard is rpc.Framing.SameAs.
+// to write: zoomtrans.Writeback, the one decision the executor applies too.
 func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
-	foot := zoomtrans.Well{W: door.W, H: door.H}
-	next, err := rpc.NewFraming(p.Cx, p.Cy, zoomtrans.IntrinsicFromLive(p.Zoom,
-		zoomtrans.OvertakeZoom(foot, p.Rect.W, p.Rect.H, cellPx)))
-	if err != nil || rpc.ViewOf(door.ViewCx, door.ViewCy, door.ViewZoom).SameAs(rpc.Saved(next)) {
+	size, ok := p.Rect.Size()
+	if !ok {
+		return
+	}
+	wl := zoomtrans.WellOf(door)
+	next, ok := zoomtrans.Writeback(zoomtrans.ShownWellFraming(wl), wl, p.Cx, p.Cy, p.Zoom, size, cellPx)
+	if !ok {
 		return
 	}
 	door.ViewCx, door.ViewCy, door.ViewZoom = next.Cx(), next.Cy(), next.Zoom()

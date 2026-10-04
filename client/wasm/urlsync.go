@@ -137,16 +137,24 @@ func (a *App) ownerView(p *pane.Pane, r pane.Rect) (pane.Frame, bool) {
 	if !ok {
 		return pane.Frame{}, false
 	}
+	size, ok := r.Size()
+	if !ok {
+		return pane.Frame{}, false
+	}
 	var v pane.Frame
 	if door != nil {
-		v.Cx, v.Cy, v.Zoom = zoomtrans.StoredView(wellOf(door), r.W, r.H, cellPx)
+		f, ok := zoomtrans.StoredView(wellOf(door), size, cellPx)
+		if !ok {
+			return pane.Frame{}, false
+		}
+		v.Cx, v.Cy, v.Zoom = f.Cx(), f.Cy(), f.Zoom()
 		return v, true
 	}
 	// An unvisited root sits at its origin at live zoom 1: see
 	// zoomtrans.ShownRootFraming.
 	v.Zoom = 1
-	if cx, cy, zoom, ok := a.storedRootView(own.RootGridID, r); ok {
-		v.Cx, v.Cy, v.Zoom = cx, cy, zoom
+	if f, ok := a.storedRootView(own.RootGridID, size); ok {
+		v.Cx, v.Cy, v.Zoom = f.Cx(), f.Cy(), f.Zoom()
 	}
 	return v, true
 }
@@ -187,7 +195,10 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 	if a.trans.Active(p.ID) || p.ViewPending {
 		return
 	}
-	r := paneRectFor(a, p)
+	size, ok := paneRectFor(a, p).Size()
+	if !ok {
+		return
+	}
 	var (
 		req    gridwellv1.SetFramingRequest
 		foot   = zoomtrans.Well{W: 1, H: 1}
@@ -196,8 +207,8 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		commit func(rpc.Framing)
 	)
 	if door != nil {
-		foot = zoomtrans.Well{W: door.W, H: door.H}
-		cur = zoomtrans.ShownWellFraming(zoomtrans.WellOf(door))
+		foot = zoomtrans.WellOf(door)
+		cur = zoomtrans.ShownWellFraming(foot)
 		gridID = a.gridIDForPathFrom(doorAnchor, doorPath)
 		req = gridwellv1.SetFramingRequest{TileId: door.Id}
 		commit = func(f rpc.Framing) {
@@ -214,15 +225,13 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 			return
 		}
 		cur = zoomtrans.ShownRootFraming(
-			rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom),
-			zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx))
+			rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom), size, cellPx)
 		gridID = p.Anchor()
 		req = gridwellv1.SetFramingRequest{RootGridId: p.Anchor()}
 		commit = func(f rpc.Framing) { a.cacheDoorwayFraming(p.Anchor(), f) }
 	}
-	next, err := rpc.NewFraming(p.Cx, p.Cy,
-		zoomtrans.IntrinsicFromLive(p.Zoom, zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx)))
-	if err != nil || cur.SameAs(rpc.Saved(next)) {
+	next, ok := zoomtrans.Writeback(cur, foot, p.Cx, p.Cy, p.Zoom, size, cellPx)
+	if !ok {
 		return
 	}
 	commit(next)

@@ -138,8 +138,8 @@ func (a *App) navWorldForRestore() nav.World {
 	// one is resolved. door.Places is ByRoot's answer set.
 	if p := a.tree.FocusedPane(); p != nil {
 		for _, pd := range door.Places(a.allPlugins()) {
-			if cx, cy, zoom, ok := a.persistedGridView(p, pd.Plugin.RootGridId, nil); ok {
-				rw.RootViews[pd.Plugin.RootGridId] = nav.Viewport{Cx: cx, Cy: cy, Zoom: zoom}
+			if f, ok := a.persistedGridView(p, pd.Plugin.RootGridId, nil); ok {
+				rw.RootViews[pd.Plugin.RootGridId] = nav.Viewport{Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}
 			}
 		}
 	}
@@ -245,8 +245,8 @@ func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 	// the ascent lands at the grid's persisted framing.
 	landing := p.Popped(1)
 	if !landing.HasView() && !landing.Content {
-		if cx, cy, zoom, ok := a.persistedGridView(p, landing.Anchor(), landing.Path()); ok {
-			lw.LandingView = &nav.Viewport{Cx: cx, Cy: cy, Zoom: zoom}
+		if f, ok := a.persistedGridView(p, landing.Anchor(), landing.Path()); ok {
+			lw.LandingView = &nav.Viewport{Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}
 		}
 	}
 	return lw

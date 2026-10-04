@@ -7,11 +7,13 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// Framing is how a grid looked when it was last left through a doorway: a
-// float center in the grid's own coordinates plus a pane-size-independent
-// zoom, so a window resize never moves a saved view. NewFraming is its one
-// constructor, so a held Framing is a finite center at a finite zoom above
-// zero, and "never visited" is not a Framing but a View without one.
+// Framing is a view of a grid: a float center in the grid's own coordinates
+// plus a zoom. On a row and on the wire the zoom is the pane-size-independent
+// intrinsic ratio, how the grid looked when it was last left through a
+// doorway, so a window resize never moves a saved view; in a pane it is the
+// live one, and zoomtrans converts. NewFraming is its one constructor, so a
+// held Framing is a finite center at a finite zoom above zero, and "never
+// visited" is not a Framing but a View without one.
 type Framing struct{ cx, cy, zoom float64 }
 
 // NewFraming refuses a center that is not a point or a zoom that is not a

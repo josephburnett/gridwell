@@ -227,16 +227,16 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *gridwellv1.Tile
 }
 
 // wellPreviewFor is the one way a well's stored framing becomes a child
-// preview transform, with both halves resolved through zoomtrans' unvisited
-// sentinel, so the drop target, the pull-out hit test and the renderer place
-// a never-visited well's preview at the same pixels.
+// preview transform, with both halves resolved through zoomtrans.Well's
+// never-visited fallback, so the drop target, the pull-out hit test and the
+// renderer place a never-visited well's preview at the same pixels.
 func wellPreviewFor(ps dragdrop.Pane, n *gridwellv1.Tile) dragdrop.ChildPreview {
-	cx, cy := zoomtrans.EffectiveCenter(wellOf(n))
+	w := wellOf(n)
+	cx, cy := w.Center()
 	return dragdrop.ChildPreviewFor(ps, struct {
 		X, Y, W, H     int64
 		ViewCx, ViewCy float64
-	}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: cx, ViewCy: cy},
-		zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom))
+	}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: cx, ViewCy: cy}, w.Ratio())
 }
 
 // wellOf forwards to zoomtrans.WellOf. The local name is for the renderer's

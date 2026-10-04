@@ -65,11 +65,18 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 			Message: "nothing to descend into: " + well.AltText})
 		return
 	}
-	r := p.Rect
+	// A pane with no rect, or a view that is not one, has no descent to plan.
+	size, ok := p.Rect.Size()
+	if !ok {
+		return
+	}
 	from := zoomtrans.Endpoints{Path: p.Stack.Path(), Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
 	wl := zoomtrans.WellOf(well)
 	next := pane.Frame{Door: well.Id}
-	mid, swap, final := zoomtrans.Descent(from, wl, r.W, r.H, w.CellPx)
+	mid, swap, final, ok := zoomtrans.Descent(from, wl, size, w.CellPx)
+	if !ok {
+		return
+	}
 	base := p.Stack.Clone()
 	if w.Door.IsLink {
 		// A link crosses into another id space, so the frame carries the target

@@ -1,5 +1,7 @@
 package pane
 
+import "github.com/josephburnett/gridwell/client/zoomtrans"
+
 // Rect is the screen-space rectangle in logical pixels, one shape, aliased by
 // client/palette.
 type Rect struct {
@@ -8,6 +10,10 @@ type Rect struct {
 
 // CellPx is the renderer's base cell size at zoom 1, the one copy.
 const CellPx = 64.0
+
+// Size is r's extent as the one input framing math measures against, false
+// for a rect with no area: a pane absent from the layout has no framing.
+func (r Rect) Size() (zoomtrans.Size, bool) { return zoomtrans.SizeOf(r.W, r.H) }
 
 // Contains is half-open on the right and bottom edges.
 func (r Rect) Contains(x, y float64) bool {

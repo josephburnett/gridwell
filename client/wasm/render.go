@@ -23,7 +23,6 @@ import (
 	"github.com/josephburnett/gridwell/client/tileface"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
-	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 const (
@@ -683,10 +682,10 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	}
 	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 
-	// previewCell is parentCell times the well's intrinsic ViewZoom, so the path
+	// previewCell is parentCell times the well's intrinsic ratio, so the path
 	// swap at Overtake_now is continuous.
-	ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
-	previewCell := parentCellSize * ratio
+	wl := wellOf(n)
+	previewCell := parentCellSize * wl.Ratio()
 	showPreview := haveChild && previewCell >= 0.5
 
 	if isExitWell(n) && !showPreview {
@@ -695,7 +694,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		withClip(a.cctx, x, y, w, h, func() {
 			// Aligned so the child point the well's framing centers on lands at the
 			// well's center, where the descent viewport puts it.
-			viewCenterX, viewCenterY := zoomtrans.EffectiveCenter(wellOf(n))
+			viewCenterX, viewCenterY := wl.Center()
 			wellCenterX := x + w/2
 			wellCenterY := y + h/2
 			originX := wellCenterX - viewCenterX*previewCell
