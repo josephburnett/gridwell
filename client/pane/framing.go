@@ -51,15 +51,22 @@ type PaneGrid struct {
 // FramingWriters applies the one-active-surface rule to grid framing: of
 // several panes showing one grid only the focused one writes, because every
 // sibling writing its own rect-derived values each settle tick thrashes the
-// persisted framing.
-func FramingWriters(panes []PaneGrid, focusedID string) map[string]bool {
+// persisted framing. A pane laid has no area in (hidden under a zoomed
+// sibling) shows nothing, so it neither writes nor counts.
+func FramingWriters(panes []PaneGrid, focusedID string, laid map[string]Rect) map[string]bool {
+	shown := func(id string) bool {
+		_, ok := laid[id].Size()
+		return ok
+	}
 	byGrid := map[string]int{}
 	for _, p := range panes {
-		byGrid[p.GridID]++
+		if shown(p.PaneID) {
+			byGrid[p.GridID]++
+		}
 	}
 	out := map[string]bool{}
 	for _, p := range panes {
-		out[p.PaneID] = byGrid[p.GridID] == 1 || p.PaneID == focusedID
+		out[p.PaneID] = shown(p.PaneID) && (byGrid[p.GridID] == 1 || p.PaneID == focusedID)
 	}
 	return out
 }

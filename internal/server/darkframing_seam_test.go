@@ -42,9 +42,9 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	}
 
 	// This node's own pan, with nobody subscribed: only the write can teach it.
-	mine := rpc.Framing{Cx: 1, Cy: 2, Zoom: 1.5}
+	mine := mkFramingExt(1, 2, 1.5)
 	if _, err := h.localCl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		RootGridId: root, Cx: mine.Cx, Cy: mine.Cy, Zoom: mine.Zoom}); err != nil {
+		RootGridId: root, Cx: mine.Cx(), Cy: mine.Cy(), Zoom: mine.Zoom()}); err != nil {
 		t.Fatalf("SetFraming through the connection: %v", err)
 	}
 	// A well on the far home, framed through the connection.
@@ -53,9 +53,9 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wellFraming := rpc.Framing{Cx: 5, Cy: 6, Zoom: 0.25}
+	wellFraming := mkFramingExt(5, 6, 0.25)
 	if _, err := h.localCl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: wellFraming.Cx, Cy: wellFraming.Cy, Zoom: wellFraming.Zoom}); err != nil {
+		TileId: well.Id, Cx: wellFraming.Cx(), Cy: wellFraming.Cy(), Zoom: wellFraming.Zoom()}); err != nil {
 		t.Fatalf("SetFraming a far well: %v", err)
 	}
 	if _, err := h.localCl.GetGrid(ctx, root); err != nil {
@@ -68,7 +68,7 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	theirs := rpc.Framing{Cx: -3, Cy: 4, Zoom: 0.5}
+	theirs := mkFramingExt(-3, 4, 0.5)
 	events := make(chan *gridwellv1.Event, 64)
 	go func() {
 		es, err := h.localCl.Subscribe(ctx)
@@ -86,7 +86,7 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	}()
 	awaitFraming(ctx, t, events, root, theirs, func() {
 		if _, err := h.remoteCl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-			RootGridId: rpc.HomeGrid(farHome), Cx: theirs.Cx, Cy: theirs.Cy, Zoom: theirs.Zoom}); err != nil {
+			RootGridId: rpc.HomeGrid(farHome), Cx: theirs.Cx(), Cy: theirs.Cy(), Zoom: theirs.Zoom()}); err != nil {
 			t.Fatalf("SetFraming on the far node: %v", err)
 		}
 	})
@@ -98,14 +98,14 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the node's handshake while dark: %v", err)
 	}
-	if got := framingOf(connectionRows(lp)[0]); !got.SameAs(theirs) {
+	if got := framingOf(connectionRows(lp)[0]); !got.SameAs(rpc.Saved(theirs)) {
 		t.Errorf("the connection row while dark = %+v, want the last pan %+v", got, theirs)
 	}
 	menu, err := h.localCl.HandshakeNS(ctx, farNS)
 	if err != nil {
 		t.Fatalf("the far node's menu while dark: %v", err)
 	}
-	if got := framingOf(rpc.HomeRow(menu)); !got.SameAs(theirs) {
+	if got := framingOf(rpc.HomeRow(menu)); !got.SameAs(rpc.Saved(theirs)) {
 		t.Errorf("the far home row while dark = %+v, want the last pan %+v", got, theirs)
 	}
 	g, err := h.localCl.GetGrid(ctx, root)
@@ -114,7 +114,7 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	}
 	for _, tl := range g.Tiles {
 		if tl.Id == well.Id {
-			if got := (rpc.Framing{Cx: tl.ViewCx, Cy: tl.ViewCy, Zoom: tl.ViewZoom}); !got.SameAs(wellFraming) {
+			if got := (rpc.ViewOf(tl.ViewCx, tl.ViewCy, tl.ViewZoom)); !got.SameAs(rpc.Saved(wellFraming)) {
 				t.Errorf("the far well while dark = %+v, want %+v", got, wellFraming)
 			}
 		}
@@ -132,13 +132,13 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := framingOf(rpc.HomeRow(menu)); !got.SameAs(theirs) {
+	if got := framingOf(rpc.HomeRow(menu)); !got.SameAs(rpc.Saved(theirs)) {
 		t.Errorf("after a refused pan the far home row = %+v, want %+v", got, theirs)
 	}
 }
 
-func framingOf(pl *gridwellv1.PluginInfo) rpc.Framing {
-	return rpc.Framing{Cx: pl.GetRootViewCx(), Cy: pl.GetRootViewCy(), Zoom: pl.GetRootViewZoom()}
+func framingOf(pl *gridwellv1.PluginInfo) rpc.View {
+	return rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom())
 }
 
 // awaitFraming makes the write until its event reaches the client under
@@ -154,7 +154,7 @@ func awaitFraming(ctx context.Context, t *testing.T, events <-chan *gridwellv1.E
 			select {
 			case ev := <-events:
 				fc := ev.GetGridFramingChanged()
-				if fc.GetGridId() == gridID && f.SameAs(rpc.Framing{Cx: fc.GetViewCx(), Cy: fc.GetViewCy(), Zoom: fc.GetViewZoom()}) {
+				if fc.GetGridId() == gridID && rpc.Saved(f).SameAs(rpc.ViewOf(fc.GetViewCx(), fc.GetViewCy(), fc.GetViewZoom())) {
 					return
 				}
 			case <-deadline:

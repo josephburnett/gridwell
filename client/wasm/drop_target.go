@@ -129,14 +129,16 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	if p.ContentID() != "" {
 		return nil, false
 	}
-	parentCell := cellPx * p.Zoom
-
-	ps := p.Screen(r)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return nil, false
+	}
+	parentCell := ps.Cell()
 	parentOriginX, parentOriginY := ps.CellToScreen(0, 0)
 
 	// An open well under the cursor promotes the target to its child grid.
 	// The rule is dragdrop.PromoteToWell's.
-	cellX, cellY := cellAtScreen(p, r, sx, sy)
+	cellX, cellY := ps.CellAt(sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
 		dragdrop.PromoteToWell(rpc.IsWellKind(n.Kind), n.ChildGridId, n.Id, excludeTileID) {
 		cp := wellPreviewFor(ps, n)
@@ -212,7 +214,11 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *gridwellv1.Tile
 	if !ok {
 		return nil
 	}
-	cp := wellPreviewFor(p.Screen(r), well)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return nil
+	}
+	cp := wellPreviewFor(ps, well)
 	// FloorCellAt floors toward -inf, the correct hit-test answer in a
 	// well's negative quadrant, where int64() truncation would mis-target.
 	cellX, cellY := dragdrop.FloorCellAt(cp.OriginX, cp.OriginY, cp.CellPx, sx, sy)
@@ -227,16 +233,16 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *gridwellv1.Tile
 }
 
 // wellPreviewFor is the one way a well's stored framing becomes a child
-// preview transform, with both halves resolved through zoomtrans' unvisited
-// sentinel, so the drop target, the pull-out hit test and the renderer place
-// a never-visited well's preview at the same pixels.
+// preview transform, with both halves resolved through zoomtrans.Well's
+// never-visited fallback, so the drop target, the pull-out hit test and the
+// renderer place a never-visited well's preview at the same pixels.
 func wellPreviewFor(ps dragdrop.Pane, n *gridwellv1.Tile) dragdrop.ChildPreview {
-	cx, cy := zoomtrans.EffectiveCenter(wellOf(n))
+	w := wellOf(n)
+	cx, cy := w.Center()
 	return dragdrop.ChildPreviewFor(ps, struct {
 		X, Y, W, H     int64
 		ViewCx, ViewCy float64
-	}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: cx, ViewCy: cy},
-		zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom))
+	}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: cx, ViewCy: cy}, w.Ratio())
 }
 
 // wellOf forwards to zoomtrans.WellOf. The local name is for the renderer's

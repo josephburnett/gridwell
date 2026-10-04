@@ -23,7 +23,6 @@ import (
 	"github.com/josephburnett/gridwell/client/tileface"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
-	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 const (
@@ -440,8 +439,13 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	g, gridOK := a.c.Grid(gid)
 
 	const inset = paneBorderPx
+	pscreen, shown := p.Screen(r)
 	withClip(a.cctx, r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset, func() {
-		pscreen := p.Screen(r)
+		// A pane with no view has no cells to draw.
+		if !shown {
+			fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.Bg)
+			return
+		}
 
 		// Grid lines render whether or not the grid loaded; a focused text tile has
 		// none.
@@ -455,7 +459,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 			a.drawGridNotice(r, gid)
 		}
 		if gridOK {
-			cellSize := pscreen.CellPx * pscreen.Zoom
+			cellSize := pscreen.Cell()
 			selected := a.selectedFor(p.ID)
 			// In a content descent, render in the inner box that matches the textarea.
 			if p.ContentID() != "" {
@@ -610,7 +614,7 @@ func (a *App) drawURLOpenTabButton() {
 
 // drawGridLines fades out when cells are tiny, so zoom-out paints no wash.
 func (a *App) drawGridLines(color string, ps dragdrop.Pane, r pane.Rect) {
-	cellSize := ps.CellPx * ps.Zoom
+	cellSize := ps.Cell()
 	originX, originY := ps.CellToScreen(0, 0)
 	drawGridLinesIn(a.cctx, color, r.X, r.Y, r.W, r.H, cellSize, originX, originY)
 }
@@ -683,10 +687,10 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	}
 	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 
-	// previewCell is parentCell times the well's intrinsic ViewZoom, so the path
+	// previewCell is parentCell times the well's intrinsic ratio, so the path
 	// swap at Overtake_now is continuous.
-	ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
-	previewCell := parentCellSize * ratio
+	wl := wellOf(n)
+	previewCell := parentCellSize * wl.Ratio()
 	showPreview := haveChild && previewCell >= 0.5
 
 	if isExitWell(n) && !showPreview {
@@ -695,7 +699,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		withClip(a.cctx, x, y, w, h, func() {
 			// Aligned so the child point the well's framing centers on lands at the
 			// well's center, where the descent viewport puts it.
-			viewCenterX, viewCenterY := zoomtrans.EffectiveCenter(wellOf(n))
+			viewCenterX, viewCenterY := wl.Center()
 			wellCenterX := x + w/2
 			wellCenterY := y + h/2
 			originX := wellCenterX - viewCenterX*previewCell
@@ -996,7 +1000,7 @@ func (a *App) paneBorderColors() pane.BorderColors {
 // drawEdgeIndicators marks every tile outside the viewport on the ray from
 // the viewport center.
 func (a *App) drawEdgeIndicators(nodes map[string]*gridwellv1.Tile, ps dragdrop.Pane, r pane.Rect) {
-	cellSize := ps.CellPx * ps.Zoom
+	cellSize := ps.Cell()
 	const inset = 12.0
 	innerL := r.X + inset
 	innerR := r.X + r.W - inset

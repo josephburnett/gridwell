@@ -1,6 +1,11 @@
 package pane
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
+)
 
 // A pane's place is one stack of frames: the grid you landed in, the tile you
 // came through, and the viewport you have there. Every descent pushes one and
@@ -17,7 +22,10 @@ type Frame struct {
 	Door    string
 	Content bool
 
-	Cx, Cy, Zoom float64
+	// View is the viewport this level was left at, its zoom the live one, or
+	// none: a level a URL or layout blob restored and the pane has not shown.
+	// SetView is its one writer.
+	View rpc.View
 
 	// TextMode picks the textarea overlay or the sanitized-HTML one.
 	// TextScroll is inside the content's interior in logical pixels.
@@ -56,31 +64,52 @@ func (f Footprint) Center() (cx, cy float64) {
 }
 
 // ContentFrame is the one constructor for a content descent's frame, because a
-// frame with no zoom reads as never visited and the ascent out of it would
-// compute its overtake from nothing.
+// frame with no view would have the ascent out of it compute its overtake
+// from nothing.
 func ContentFrame(tileID string, foot Footprint, zoom float64, textMode string, scrollX, scrollY float64) Frame {
 	cx, cy := foot.Center()
-	return Frame{
+	f := Frame{
 		Door: tileID, Content: true,
-		Cx: cx, Cy: cy, Zoom: zoom,
 		TextMode:    textMode,
 		TextScrollX: scrollX,
 		TextScrollY: scrollY,
 	}
+	f.SetView(cx, cy, zoom)
+	return f
 }
+
+// SetView sets the frame's viewport, refusing a center that is not a point or
+// a zoom that is not a size; the frame then keeps what it had.
+func (f *Frame) SetView(cx, cy, zoom float64) bool {
+	v, err := rpc.NewFraming(cx, cy, zoom)
+	if err != nil {
+		return false
+	}
+	f.View = rpc.Saved(v)
+	return true
+}
+
+// Live is the frame's viewport, false when it has none.
+func (f Frame) Live() (rpc.Framing, bool) { return f.View.Framing() }
 
 // HasView reports whether the frame carries a viewport the pane was left at. A
 // frame restored from a URL or a layout blob has none, so the ascent onto it
 // falls back to the grid's persisted framing rather than an arbitrary origin.
-func (f Frame) HasView() bool { return f.Zoom > 0 && !f.ViewPending }
+func (f Frame) HasView() bool {
+	_, ok := f.Live()
+	return ok && !f.ViewPending
+}
 
-// Adopt settles a pending top frame on v's view and text state. A frame that
-// is not pending keeps its own.
+// Adopt settles a pending top frame on v's view and text state, refusing a v
+// with no view. A frame that is not pending keeps its own.
 func (s *Stack) Adopt(v Frame) bool {
 	if !s.ViewPending {
 		return false
 	}
-	s.Cx, s.Cy, s.Zoom = v.Cx, v.Cy, v.Zoom
+	if _, ok := v.Live(); !ok {
+		return false
+	}
+	s.View = v.View
 	s.TextMode, s.TextScrollX, s.TextScrollY = v.TextMode, v.TextScrollX, v.TextScrollY
 	s.ViewPending = false
 	return true
@@ -95,7 +124,7 @@ type Stack struct {
 }
 
 func NewStack(gridID string) Stack {
-	return Stack{Frame: Frame{GridID: gridID, Zoom: 1}}
+	return Stack{Frame: Frame{GridID: gridID, View: rpc.Saved(zoomtrans.Origin)}}
 }
 
 // StackAt builds the stack a restored place names: a root grid, a path of

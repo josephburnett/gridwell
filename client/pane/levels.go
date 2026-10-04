@@ -3,6 +3,9 @@ package pane
 import (
 	"crypto/sha256"
 	"encoding/hex"
+
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 // The window's stack of levels. What lies through a pane tile is a whole tree,
@@ -32,18 +35,17 @@ type Level struct {
 // constructor for the decode-failure, boot-restore and capture-fallback
 // defaults, so a level that could not read its blob and one that never had a
 // blob open the same way.
-func TreeAtPlace(idPrefix, anchor string, path []string, cx, cy, zoom float64) *Tree {
+func TreeAtPlace(idPrefix, anchor string, path []string, view rpc.View) *Tree {
 	t := NewTree()
 	t.IDPrefix = idPrefix
 	p := t.FocusedPane()
 	p.ID = idPrefix + p.ID
 	t.Focus = p.ID
 	p.Stack = StackAt(anchor, path, "")
-	p.Cx, p.Cy = cx, cy
-	if zoom <= 0 {
-		zoom = 1
+	p.View = rpc.Saved(zoomtrans.Origin)
+	if _, ok := view.Framing(); ok {
+		p.View = view
 	}
-	p.Zoom = zoom
 	return t
 }
 

@@ -25,7 +25,7 @@ func arranged(t *gridwellv1.Tile) *gridwellv1.Tile {
 // layoutBytes is a blob the codec can read back: one pane at g2.
 func layoutBytes(t *testing.T) []byte {
 	t.Helper()
-	data, _, err := pane.EncodeLayout(pane.TreeAtPlace("w1:", "g2", nil, 1, 2, 1), nil)
+	data, _, err := pane.EncodeLayout(pane.TreeAtPlace("w1:", "g2", nil, rpc.ViewOf(1, 2, 1)), nil)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestBootLevel(t *testing.T) {
 			t.Fatalf("a boot restore captured a window it never had")
 		}
 		p := e.Tree.FocusedPane()
-		if p == nil || p.Anchor() != "g1" || p.Cx != 4 || p.Cy != 5 {
+		if p == nil || p.Anchor() != "g1" || !centredOn(p.View, 4, 5) {
 			t.Fatalf("landed at %+v, want the pane tile's grid, centred on the tile", p)
 		}
 	})
@@ -402,7 +402,7 @@ func TestLeaveLevels(t *testing.T) {
 			t.Fatalf("effects = %v, want the re-centre", kinds(plan))
 		}
 		e := only(t, plan, EffInstallPlace)
-		if e.Stack.Anchor() != "g9" || e.Stack.Cx != 4 || e.Stack.Cy != 5 {
+		if e.Stack.Anchor() != "g9" || !centredOn(e.Stack.View, 4, 5) {
 			t.Fatalf("re-centred on %+v, want the tile in the grid it lives in", e.Stack)
 		}
 	})

@@ -227,7 +227,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	if dir.ChildGridID == 0 {
 		t.Fatal("well minted no child grid")
 	}
-	if err := d.SetFraming(dir.ID, 0, rpc.Framing{Cx: 3, Cy: -1, Zoom: 1.5}); err != nil {
+	if err := d.SetFraming(dir.ID, 0, mkFraming(3, -1, 1.5)); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.SetTextView(f.ID, 0, 120, 400, 300, "rendered"); err != nil {
@@ -269,14 +269,15 @@ func TestExtRetireIsTheDeleteGesture(t *testing.T) {
 func TestExtRootFraming(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.ContextID("root")
-	if _, ok, err := d.RootFraming(gid); err != nil || ok {
-		t.Fatalf("fresh context claims a root view: ok=%v err=%v", ok, err)
+	if v, err := d.RootFraming(gid); err != nil || !v.SameAs(rpc.View{}) {
+		t.Fatalf("fresh context claims a root view: %+v err=%v", v, err)
 	}
-	if err := d.SetFraming(0, gid, rpc.Framing{Cx: 1.5, Cy: -2.25, Zoom: 0.8}); err != nil {
+	if err := d.SetFraming(0, gid, mkFraming(1.5, -2.25, 0.8)); err != nil {
 		t.Fatal(err)
 	}
-	if f, ok, err := d.RootFraming(gid); err != nil || !ok || f.Cx != 1.5 || f.Cy != -2.25 || f.Zoom != 0.8 {
-		t.Fatalf("root framing round trip: %+v ok=%v err=%v", f, ok, err)
+	v, err := d.RootFraming(gid)
+	if f, ok := v.Framing(); err != nil || !ok || f.Cx() != 1.5 || f.Cy() != -2.25 || f.Zoom() != 0.8 {
+		t.Fatalf("root framing round trip: %+v err=%v", v, err)
 	}
 }
 

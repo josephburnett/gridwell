@@ -2,6 +2,7 @@ package nav
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/transition"
@@ -96,9 +97,6 @@ type FreezeTarget struct {
 	GridID string
 }
 
-// Viewport is a pane's centre and zoom in the grid it shows.
-type Viewport struct{ Cx, Cy, Zoom float64 }
-
 // Effect is one thing the shim does.
 type Effect struct {
 	Kind EffectKind
@@ -113,7 +111,7 @@ type Effect struct {
 
 	// Place and tree.
 	Stack     *pane.Stack
-	Viewport  *Viewport
+	Viewport  *rpc.Framing
 	Foot      pane.Footprint
 	Zoom      float64
 	Level     *pane.Level

@@ -7,6 +7,7 @@ package nav
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -257,7 +258,7 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		// A tile from a plugin without Search keeps the place it was restored
 		// with; the engagement happens either way.
 		if r.OK {
-			landHealed(c.PaneID, c.Tile, r.Wells, &pl)
+			landHealed(c.PaneID, c.Tile, r.Wells, w, &pl)
 		}
 		m.autoLiveOnDescent(c.PaneID, c.Tile, nil, w, &pl)
 	case stepRestoreRoot:
@@ -343,7 +344,7 @@ func (p *planner) plan() Plan     { return Plan{Effects: p.effects, Next: p.next
 
 // install installs a pane's place on the plan's own copy of the stack, so what
 // the caller does with its own afterwards reaches nobody.
-func (p *planner) install(paneID string, st pane.Stack, vp *Viewport) {
+func (p *planner) install(paneID string, st pane.Stack, vp *rpc.Framing) {
 	c := st.Clone()
 	p.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &c, Viewport: vp})
 }

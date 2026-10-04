@@ -55,16 +55,18 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 		return nil, err
 	}
 	// The well's framing is at once the preview, the descent target and the
-	// ascent return. The writeback's response is the current row, so return
-	// that rather than the pre-framing create response.
-	framed, err := dst.SetFraming(ctx, &pb.SetFramingRequest{
-		TileId: created.GetTile().GetId(),
-		Cx:     srcLocalTile.ViewCx, Cy: srcLocalTile.ViewCy, Zoom: srcLocalTile.ViewZoom,
-	})
-	if err != nil {
-		return created, fmt.Errorf("well framing: %w", err)
+	// ascent return; a source never visited has none to copy. The
+	// writeback's response is the current row, so return that rather than
+	// the pre-framing create response.
+	if f, ok := rpc.ViewOf(srcLocalTile.ViewCx, srcLocalTile.ViewCy, srcLocalTile.ViewZoom).Framing(); ok {
+		framed, err := dst.SetFraming(ctx, &pb.SetFramingRequest{
+			TileId: created.GetTile().GetId(), Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom(),
+		})
+		if err != nil {
+			return created, fmt.Errorf("well framing: %w", err)
+		}
+		created = &pb.TileResponse{Tile: framed.GetTile()}
 	}
-	created = &pb.TileResponse{Tile: framed.GetTile()}
 
 	dstChild := created.GetTile().GetChildGridId()
 	for _, child := range g.Tiles {

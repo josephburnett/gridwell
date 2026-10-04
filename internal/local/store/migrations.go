@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/dbformat"
 )
 
@@ -22,7 +23,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 15
+const schemaVersion = 16
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -106,6 +107,46 @@ var migrations = []migration{
 	// Additive: NULL is every existing row's meaning, its own id.
 	{to: 15, run: addColumnIfMissingDDL("tiles", "shell_session",
 		`ALTER TABLE tiles ADD COLUMN shell_session INTEGER`)},
+	// v16: never visited is NULL, not a zero zoom, so no computation can
+	// write the sentinel. tiles.view_cx/cy/zoom lose NOT NULL DEFAULT 0, which
+	// only a rebuild drops; grids.root_* were already nullable. A conversion,
+	// not a drop: every row stays, and a framing no reader could show — a zero
+	// or negative zoom, a NULL or non-finite part — becomes three NULLs, the
+	// never-visited it already read as.
+	{to: 16, run: migrateV16},
+}
+
+// finiteSQL holds when every column named is a finite number; SQLite reads
+// 9e999 as infinity and compares NULL as NULL, so COALESCE settles that.
+func finiteSQL(cols ...string) string {
+	var parts []string
+	for _, c := range cols {
+		parts = append(parts, c+" > -9e999 AND "+c+" < 9e999")
+	}
+	return "COALESCE(" + strings.Join(parts, " AND ") + ", 0)"
+}
+
+// migrateV16 converts every framing no reader can show to NULLs; see the
+// chain entry.
+func migrateV16(ctx context.Context, tx *sql.Tx) error {
+	if err := rebuildTiles(ctx, tx, 15); err != nil {
+		return err
+	}
+	// DROP TABLE tiles took idx_tiles_live_key with it; see rebuildTiles.
+	if _, err := tx.ExecContext(ctx, externalsIndexDDL); err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`UPDATE tiles SET view_cx = NULL, view_cy = NULL, view_zoom = NULL
+		 WHERE NOT (` + finiteSQL("view_cx", "view_cy", "view_zoom") + ` AND view_zoom > 0)`,
+		`UPDATE grids SET root_cx = NULL, root_cy = NULL, root_zoom = NULL
+		 WHERE NOT (` + finiteSQL("root_cx", "root_cy", "root_zoom") + ` AND root_zoom > 0)`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("convert never-visited framing: %w", err)
+		}
+	}
+	return nil
 }
 
 // migrateV14 adds serves_page and marks the existing page rows; see the chain
@@ -222,7 +263,7 @@ func rebuildSelect(ctx context.Context, tx *sql.Tx, columns string) (string, err
 //     already-converted value would be shifted a second time.
 //  2. Home's root moves out of the `system` KV table onto its root grid row
 //     in the empty namespace, converted the same way, and the keys are
-//     deleted. Zoom 0 means never visited and copies nothing.
+//     deleted. A home root never visited copies nothing.
 //  3. tiles rebuilds, converting view_x and view_y through rebuildSelect.
 func migrateV11(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx,
@@ -243,8 +284,8 @@ func migrateV11(ctx context.Context, tx *sql.Tx) error {
 
 // moveHomeRootFraming copies home's root viewport from the system KV table
 // onto its root grid row and deletes the keys. The stored cx and cy were the
-// origin of a 1x1 synthetic doorway, so they convert by + 0.5; a missing or
-// zero zoom means never visited, with nothing to carry.
+// origin of a 1x1 synthetic doorway, so they convert by + 0.5; what is not an
+// rpc.Framing is never visited, with nothing to carry.
 func moveHomeRootFraming(ctx context.Context, tx *sql.Tx) error {
 	read := func(key string) (float64, error) {
 		var v sql.NullFloat64
@@ -254,19 +295,15 @@ func moveHomeRootFraming(ctx context.Context, tx *sql.Tx) error {
 		}
 		return v.Float64, err
 	}
-	zoom, err := read("root_zoom")
-	if err != nil {
-		return fmt.Errorf("read home root zoom: %w", err)
+	var parts [3]float64
+	for i, key := range []string{"root_view_cx", "root_view_cy", "root_zoom"} {
+		v, err := read(key)
+		if err != nil {
+			return fmt.Errorf("read home root %s: %w", key, err)
+		}
+		parts[i] = v
 	}
-	if zoom > 0 {
-		cx, err := read("root_view_cx")
-		if err != nil {
-			return fmt.Errorf("read home root cx: %w", err)
-		}
-		cy, err := read("root_view_cy")
-		if err != nil {
-			return fmt.Errorf("read home root cy: %w", err)
-		}
+	if f, ok := rpc.ViewOf(parts[0]+0.5, parts[1]+0.5, parts[2]).Framing(); ok {
 		rootID, ok, err := systemValue(ctx, tx, systemKeyRootGridID)
 		if err != nil {
 			return fmt.Errorf("read home root grid id: %w", err)
@@ -274,7 +311,7 @@ func moveHomeRootFraming(ctx context.Context, tx *sql.Tx) error {
 		if ok {
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND ns = ''`,
-				cx+0.5, cy+0.5, zoom, rootID); err != nil {
+				f.Cx(), f.Cy(), f.Zoom(), rootID); err != nil {
 				return fmt.Errorf("write home root framing: %w", err)
 			}
 		}

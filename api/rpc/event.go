@@ -18,7 +18,7 @@ func HealthEvent(uuid string, healthy bool, detail string) *pb.Event {
 // wire, from the store and the plugin adapter alike.
 func FramingEvent(gridID string, f Framing) *pb.Event {
 	return &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: &pb.GridFramingChanged{
-		GridId: gridID, ViewCx: f.Cx, ViewCy: f.Cy, ViewZoom: f.Zoom,
+		GridId: gridID, ViewCx: f.cx, ViewCy: f.cy, ViewZoom: f.zoom,
 	}}}
 }
 

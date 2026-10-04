@@ -30,7 +30,7 @@ func TestCloneExitWellSharesReferenceNoNewGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.Framing{})
+	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
 	if err != nil {
 		t.Fatalf("create exit well: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestDeleteExitWellDropsReferenceOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.Framing{})
+	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestMoveExitWellPreservesReference(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.Framing{})
+	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}

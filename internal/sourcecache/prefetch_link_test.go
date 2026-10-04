@@ -33,7 +33,7 @@ func (u *linkUpstream) Handshake(context.Context, *pb.HandshakeRequest) (*pb.Han
 	if u.dark {
 		return nil, u.offline()
 	}
-	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "u1/g1", "", rpc.Framing{})}}, nil
+	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "u1/g1", "", rpc.View{})}}, nil
 }
 
 func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {

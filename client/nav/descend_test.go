@@ -14,7 +14,7 @@ import (
 func gridPane(id, gridID string) PaneView {
 	return PaneView{
 		ID: id, Stack: pane.NewStack(gridID),
-		Cx: 0, Cy: 0, Zoom: 1,
+		View: viewOf(0, 0, 1),
 		Rect: pane.Rect{W: 800, H: 600}, GridID: gridID,
 	}
 }

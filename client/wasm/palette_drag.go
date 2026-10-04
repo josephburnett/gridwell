@@ -91,7 +91,9 @@ func (a *App) clickTemplate(d *dragState) {
 		// The same descent a link tile takes, through a synthetic link tile
 		// at the pane's view center, so ascent lands back exactly here.
 		well := paletteItemGhostNode(d.item)
-		well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
+		if v, ok := fp.Live(); ok {
+			well.X, well.Y = int64(math.Floor(v.Cx()-0.5)), int64(math.Floor(v.Cy()-0.5))
+		}
 		a.descend(fp, well)
 	case palette.ClickVisit:
 		pr.click(a, fp)

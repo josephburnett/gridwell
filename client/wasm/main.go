@@ -547,7 +547,7 @@ type dragState struct {
 	srcCellSize float64
 
 	// The origin pane's viewport at the press, which a cancelled pan restores.
-	pressCx, pressCy, pressZoom float64
+	pressView rpc.View
 }
 
 // dragThreshold is the single owner of the drag threshold. The native layer
@@ -595,7 +595,6 @@ func main() {
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
 	app.tree = pane.NewTree()
-	app.tree.FocusedPane().Zoom = 1.0
 	// After the canvas and the tree, because applying a palette redraws.
 	app.applyTheme(app.storedTheme())
 	app.resize()
@@ -686,7 +685,7 @@ func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
 	p := a.tree.FocusedPane()
 	// Land at home; applyURLOnBoot may restore a place over it.
-	p.Reset(pane.Frame{GridID: a.home, Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
+	p.Reset(pane.Frame{GridID: a.home, View: p.View})
 	if a.home != "" {
 		a.fetchGrid(a.home)
 	}
@@ -870,9 +869,8 @@ func (a *App) frame() {
 		t := anim.Progress(now, tr.StartMs(), seg.DurationMs)
 		eased := anim.EaseOutCubic(t)
 		if p := a.tree.FindPane(tr.PaneID); p != nil {
-			p.Cx = anim.Lerp(seg.FromCx, seg.ToCx, eased)
-			p.Cy = anim.Lerp(seg.FromCy, seg.ToCy, eased)
-			p.Zoom = anim.LerpExp(seg.FromZoom, seg.ToZoom, eased)
+			p.SetView(anim.Lerp(seg.FromCx, seg.ToCx, eased), anim.Lerp(seg.FromCy, seg.ToCy, eased),
+				anim.LerpExp(seg.FromZoom, seg.ToZoom, eased))
 		}
 		if t >= 1 {
 			a.trans.Advance(tr.PaneID, now)
@@ -914,9 +912,7 @@ func (a *App) enterSegment(paneID string, seg transition.Segment) {
 	if seg.Place != nil {
 		p.Stack = seg.Place.Clone()
 	}
-	p.Cx = seg.FromCx
-	p.Cy = seg.FromCy
-	p.Zoom = seg.FromZoom
+	p.SetView(seg.FromCx, seg.FromCy, seg.FromZoom)
 }
 
 // landTransition is what arriving means; a content descent pushes its frame
@@ -1021,10 +1017,12 @@ func (a *App) startSSE() {
 				a.emit(traceevent.EventRefetch(plan.Fetch))
 				a.fetchGrid(plan.Fetch)
 			}
-			if f := plan.Reframe; f != nil && a.cacheDoorwayFraming(f.GetGridId(),
-				rpc.Framing{Cx: f.GetViewCx(), Cy: f.GetViewCy(), Zoom: f.GetViewZoom()}) {
-				a.emit(traceevent.EventApplied(ev))
-				a.draw()
+			if f := plan.Reframe; f != nil {
+				fr, ok := rpc.ViewOf(f.GetViewCx(), f.GetViewCy(), f.GetViewZoom()).Framing()
+				if ok && a.cacheDoorwayFraming(f.GetGridId(), fr) {
+					a.emit(traceevent.EventApplied(ev))
+					a.draw()
+				}
 			}
 			if plan.Health != nil {
 				a.reportPluginHealth(plan.Health)

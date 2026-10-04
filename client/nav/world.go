@@ -2,6 +2,7 @@ package nav
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -19,10 +20,10 @@ type PaneView struct {
 	// Stack is a clone: the machine reads it and returns a new one, holding no
 	// place of its own between calls.
 	Stack pane.Stack
-	// Cx, Cy, Zoom are the live viewport, the transition's scratch values
-	// mid-animation.
-	Cx, Cy, Zoom float64
-	Rect         pane.Rect
+	// View is the live viewport, the transition's scratch values
+	// mid-animation; none when the pane shows no view.
+	View rpc.View
+	Rect pane.Rect
 	// GridID is the grid the place names, resolved by the gatherer because the
 	// walk reads the cache and kicks its own fetches.
 	GridID string
@@ -61,7 +62,7 @@ type LeaveWorld struct {
 	DoorTile *gridwellv1.Tile
 	// LandingView is persistedGridView for the grid being landed on, nil when
 	// nothing is persisted or the owning row is not cached.
-	LandingView *Viewport
+	LandingView *rpc.Framing
 }
 
 // LevelWorld is the row the return animation zooms out onto. nil means it is
@@ -108,7 +109,7 @@ type RestoreWorld struct {
 	// RootViews is persistedGridView's root arm against the focused pane's
 	// rect, keyed by grid id because which one the address names is the
 	// machine's to decode.
-	RootViews map[string]Viewport
+	RootViews map[string]rpc.Framing
 }
 
 func (rw *RestoreWorld) rows(gridID string) (map[string]RestoreTile, bool) {
@@ -123,11 +124,14 @@ func (rw *RestoreWorld) failed(gridID string) bool {
 	return rw != nil && rw.Failed[gridID]
 }
 
-func (rw *RestoreWorld) rootView(gridID string) Viewport {
+func (rw *RestoreWorld) rootView(gridID string) rpc.View {
 	if rw == nil {
-		return Viewport{}
+		return rpc.View{}
 	}
-	return rw.RootViews[gridID]
+	if f, ok := rw.RootViews[gridID]; ok {
+		return rpc.Saved(f)
+	}
+	return rpc.View{}
 }
 
 // World is one navigation snapshot.

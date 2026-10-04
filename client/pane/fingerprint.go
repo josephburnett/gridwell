@@ -103,6 +103,7 @@ func fingerprintPane(f Fingerprint, p *Pane, views bool) Fingerprint {
 	if !views {
 		return f
 	}
-	return f.Num(p.Cx).Num(p.Cy).Num(p.Zoom).Flag(p.ViewPending).
+	cx, cy, zoom := p.View.Wire()
+	return f.Num(cx).Num(cy).Num(zoom).Flag(p.ViewPending).
 		Str(p.TextMode).Num(p.TextScrollX).Num(p.TextScrollY).Num(p.TextZoom)
 }

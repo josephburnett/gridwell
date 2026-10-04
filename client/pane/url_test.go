@@ -1,6 +1,7 @@
 package pane
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestEncodeRoot(t *testing.T) {
 }
 
 func TestEncodeRootWithViewport(t *testing.T) {
-	got := EncodeURL(URLState{X: 5.5, Y: -2, Zoom: 1.5})
+	got := EncodeURL(URLState{X: 5.5, Y: -2, Zoom: 1.5, HasZoom: true})
 	want := "/?x=5.5&y=-2&z=1.5"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -46,20 +47,20 @@ func TestEncodeFileTextAtOrigin(t *testing.T) {
 }
 
 func TestEncodeOmitsDefaultZoom(t *testing.T) {
-	if got := EncodeURL(URLState{TileIDs: []string{"1"}, Zoom: 1.0}); got != "/1" {
+	if got := EncodeURL(URLState{TileIDs: []string{"1"}, Zoom: 1.0, HasZoom: true}); got != "/1" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeOmitsZeroXY(t *testing.T) {
-	got := EncodeURL(URLState{TileIDs: []string{"1"}, Zoom: 1.5})
+	got := EncodeURL(URLState{TileIDs: []string{"1"}, Zoom: 1.5, HasZoom: true})
 	if got != "/1?z=1.5" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeStripsTrailingZeros(t *testing.T) {
-	got := EncodeURL(URLState{TileIDs: []string{"1"}, X: 0.5, Y: 1.0, Zoom: 2.0})
+	got := EncodeURL(URLState{TileIDs: []string{"1"}, X: 0.5, Y: 1.0, Zoom: 2.0, HasZoom: true})
 	// X=0.5 → "0.5"; Y=1.0 → "1"; Zoom=2.0 → "2"
 	want := "/1?x=0.5&y=1&z=2"
 	if got != want {
@@ -140,10 +141,10 @@ func TestDecodeIgnoresTrailingSlash(t *testing.T) {
 func TestRoundTrip(t *testing.T) {
 	cases := []URLState{
 		{},
-		{TileIDs: []string{"3", "4", "5"}, X: 12.5, Y: -3.25, Zoom: 1.5},
+		{TileIDs: []string{"3", "4", "5"}, X: 12.5, Y: -3.25, Zoom: 1.5, HasZoom: true},
 		{TileIDs: []string{"9"}, CursorMode: true, Col: 0, Row: 0},
 		{TileIDs: []string{"42", "100", "99"}, CursorMode: true, Col: 100, Row: 25},
-		{TileIDs: []string{"7"}, Zoom: 1.234},
+		{TileIDs: []string{"7"}, Zoom: 1.234, HasZoom: true},
 	}
 	for _, in := range cases {
 		raw := EncodeURL(in)
@@ -212,8 +213,24 @@ func TestDecodeBadFloatIgnored(t *testing.T) {
 	if s.Y != 2 {
 		t.Errorf("Y = %v, want 2", s.Y)
 	}
-	if s.Zoom != 0 {
-		t.Errorf("Zoom = %v, want 0 (bad float ignored)", s.Zoom)
+	if s.Zoom != 0 || s.HasZoom {
+		t.Errorf("Zoom = %v (%v), want none (bad float ignored)", s.Zoom, s.HasZoom)
+	}
+}
+
+// An address is typed by anyone, so the decode keeps only a center that is a
+// point and a zoom that is a size: no URL can install a NaN or infinite view.
+func TestDecodeRefusesAViewThatIsNotOne(t *testing.T) {
+	for _, raw := range []string{
+		"/3?x=NaN&y=Inf&z=NaN", "/3?x=-Inf&z=Inf", "/3?z=0", "/3?z=-1", "/3?x=1e999&z=1e999",
+	} {
+		s, err := DecodeURL(raw)
+		if err != nil {
+			t.Fatalf("%s: %v", raw, err)
+		}
+		if s.X != 0 || s.Y != 0 || s.HasZoom {
+			t.Errorf("%s decoded a view: (%v, %v, %v %v)", raw, s.X, s.Y, s.Zoom, s.HasZoom)
+		}
 	}
 }
 
@@ -249,7 +266,7 @@ func TestDecodeBadCursorIgnored(t *testing.T) {
 // tile id and, in raw-text mode, the cursor.
 func TestURLStateOfGridPlace(t *testing.T) {
 	p := &Pane{ID: "p1", Stack: StackAt("u1/1", []string{"3", "4", "5"}, "")}
-	p.Cx, p.Cy, p.Zoom = 12.5, -3, 1.5
+	p.SetView(12.5, -3, 1.5)
 	s := URLStateOf(&p.Stack, "home/1", false, 0, 0)
 	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4", "5"}) {
 		t.Errorf("TileIDs = %v", s.TileIDs)
@@ -286,7 +303,7 @@ func TestURLStateOfContentPlace(t *testing.T) {
 	if !s.CursorMode || s.Col != 12 || s.Row != 7 {
 		t.Errorf("cursor = (mode=%v, c=%d, r=%d)", s.CursorMode, s.Col, s.Row)
 	}
-	if s.X != 0 || s.Zoom != 0 {
+	if s.X != 0 || s.HasZoom {
 		t.Errorf("a content place carries no grid viewport: %+v", s)
 	}
 }
@@ -329,7 +346,11 @@ func TestBootViewport(t *testing.T) {
 			URLBootView{Apply: true, Cx: 4, Cy: 0, SetZoom: false}},
 	}
 	for _, c := range cases {
-		if got := URLBootViewport(c.ux, c.uy, c.uz, c.rx, c.ry, c.rz); got != c.want {
+		st, err := DecodeURL(fmt.Sprintf("/?x=%v&y=%v&z=%v", c.ux, c.uy, c.uz))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := URLBootViewport(st, rpc.ViewOf(c.rx, c.ry, c.rz)); got != c.want {
 			t.Errorf("%s: URLBootViewport = %+v, want %+v", c.name, got, c.want)
 		}
 	}
@@ -353,7 +374,7 @@ func TestEncodeAnchorAsPath(t *testing.T) {
 		{URLState{Anchor: "0123456789abcdef0123456789abcdef/1", TileIDs: []string{"5"}},
 			"/0123456789abcdef0123456789abcdef/1/5"},
 		// Viewport rides in the query as before.
-		{URLState{Anchor: "k3x9m2q/1", TileIDs: []string{"3"}, X: 5.5, Zoom: 1.5}, "/k3x9m2q/1/3?x=5.5&z=1.5"},
+		{URLState{Anchor: "k3x9m2q/1", TileIDs: []string{"3"}, X: 5.5, Zoom: 1.5, HasZoom: true}, "/k3x9m2q/1/3?x=5.5&z=1.5"},
 	}
 	for _, c := range cases {
 		if got := EncodeURL(c.in); got != c.want {
@@ -513,7 +534,7 @@ func TestKeyFormURLRoundTrip(t *testing.T) {
 		// A text-mode content leaf, cursor and all.
 		{Anchor: "k3x9m2q/1", TileIDs: []string{deep}, CursorMode: true, Col: 24, Row: 10},
 		// A grid leaf with a viewport, reached through a key-form well.
-		{Anchor: "k3x9m2q/1", TileIDs: []string{deep, "7"}, X: 5.5, Y: -2, Zoom: 1.5},
+		{Anchor: "k3x9m2q/1", TileIDs: []string{deep, "7"}, X: 5.5, Y: -2, Zoom: 1.5, HasZoom: true},
 	} {
 		raw := EncodeURL(st)
 		got, err := DecodeURL(raw)

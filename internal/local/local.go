@@ -100,15 +100,17 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		return nil, errToStatus(err)
 	}
 	// Every declared doorway carries its grid's framing, root and trashcan
-	// alike. A fresh DB's zero zoom reads as the calibrated default.
-	view, _, err := p.st.RootFraming(ctx)
+	// alike.
+	view, err := p.st.RootFraming(ctx)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	trashView, _, err := p.st.GridFraming(trash)
+	trashView, err := p.st.GridFraming(trash)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
+	tcx, tcy, tzoom := trashView.Wire()
+	rcx, rcy, rzoom := view.Wire()
 	return &gridwellv1.InfoResponse{
 		Glyph:         rpc.GlyphWell,
 		DisplayName:   "home",
@@ -119,12 +121,12 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 			Label:  "trash",
 			Glyph:  rpc.GlyphTrash,
 			GridId: trash,
-			ViewCx: trashView.Cx, ViewCy: trashView.Cy, ViewZoom: trashView.Zoom,
+			ViewCx: tcx, ViewCy: tcy, ViewZoom: tzoom,
 		}},
 		Writable:     true,
-		RootViewCx:   view.Cx,
-		RootViewCy:   view.Cy,
-		RootViewZoom: view.Zoom,
+		RootViewCx:   rcx,
+		RootViewCy:   rcy,
+		RootViewZoom: rzoom,
 	}, nil
 }
 
@@ -260,7 +262,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 				t.ChildGridId, t.AltText,
-				rpc.Framing{Cx: t.ViewCx, Cy: t.ViewCy, Zoom: t.ViewZoom}))
+				rpc.ViewOf(t.ViewCx, t.ViewCy, t.ViewZoom)))
 		}
 		return tileResp(p.st.CreateWell(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText))
 	case rpc.KindText:

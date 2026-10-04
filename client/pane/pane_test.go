@@ -53,7 +53,7 @@ func TestSplitHorizontalCreatesSibling(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
 	first.Stack = StackAt("u/1", []string{"1", "2", "3"}, "")
-	first.Cx, first.Cy, first.Zoom = 10, 20, 2.0
+	first.SetView(10, 20, 2.0)
 
 	newP, err := tr.Split(Horizontal)
 	if err != nil {
@@ -66,7 +66,7 @@ func TestSplitHorizontalCreatesSibling(t *testing.T) {
 		t.Error("new pane has same id as old")
 	}
 	// Clone preserves state.
-	if newP.Cx != 10 || newP.Cy != 20 || newP.Zoom != 2.0 {
+	if !viewIs(newP.View, 10, 20, 2.0) {
 		t.Errorf("new pane state not cloned: %+v", newP)
 	}
 	if len(newP.Path()) != 3 {
@@ -89,7 +89,7 @@ func TestSetFocusUnknown(t *testing.T) {
 
 func TestCloneCarriesTextFields(t *testing.T) {
 	src := &Pane{ID: "p1", Stack: StackAt("u/1", []string{"1", "2"}, "42")}
-	src.Cx, src.Cy, src.Zoom = 3, 4, 5
+	src.SetView(3, 4, 5)
 	src.TextMode = "text"
 	src.TextScrollX, src.TextScrollY, src.TextZoom = 1.5, 7.25, 1.1
 	dst := src.Clone("p2")
@@ -110,12 +110,12 @@ func TestCloneCarriesTextFields(t *testing.T) {
 // restoring grid, path, viewport, content descent and the + menu.
 func TestPortalRoundTrip(t *testing.T) {
 	p := &Pane{ID: "p1", Stack: StackAt("db-uuid/1", []string{"3", "4"}, "9")}
-	p.Cx, p.Cy, p.Zoom = 5, 6, 1.5
+	p.SetView(5, 6, 1.5)
 	p.TextMode, p.TextScrollY, p.TextZoom = "text", 2.0, 1.2
 	p.MenuOpen = true
 
 	// Jump into another plugin at its root.
-	p.Push(Frame{GridID: "fs-uuid/1", Door: "lnk", Zoom: 1})
+	p.Push(viewed(Frame{GridID: "fs-uuid/1", Door: "lnk"}, 0, 0, 1))
 	if p.Anchor() != "fs-uuid/1" || len(p.Path()) != 0 || p.ContentID() != "" {
 		t.Fatalf("after portal: anchor=%q path=%v content=%q", p.Anchor(), p.Path(), p.ContentID())
 	}
@@ -129,8 +129,8 @@ func TestPortalRoundTrip(t *testing.T) {
 	if got := p.Path(); len(got) != 2 || got[0] != "3" || got[1] != "4" {
 		t.Errorf("path = %v, want [3 4]", got)
 	}
-	if p.Cx != 5 || p.Cy != 6 || p.Zoom != 1.5 {
-		t.Errorf("viewport = (%v,%v,%v), want (5,6,1.5)", p.Cx, p.Cy, p.Zoom)
+	if !viewIs(p.View, 5, 6, 1.5) {
+		t.Errorf("viewport = %+v, want (5,6,1.5)", p.View)
 	}
 	if p.ContentID() != "9" || p.TextMode != "text" {
 		t.Errorf("content descent not restored: %+v", p.Frame)
@@ -155,12 +155,12 @@ func TestPortalRoundTrip(t *testing.T) {
 // An animated ascent computes where it is heading without moving the pane.
 func TestPoppedDoesNotTouchTheLiveStack(t *testing.T) {
 	p := &Pane{ID: "p1", Stack: StackAt("fs-uuid/1", []string{"3", "4"}, "")}
-	p.Cx, p.Cy, p.Zoom = 9, 9, 2
+	p.SetView(9, 9, 2)
 	after := p.Popped(2)
 	if after.Depth() != 1 || after.Anchor() != "fs-uuid/1" || len(after.Path()) != 0 {
 		t.Errorf("Popped(2) = %+v", after)
 	}
-	if p.Depth() != 3 || p.Cx != 9 || p.Zoom != 2 {
+	if p.Depth() != 3 || !viewIs(p.View, 9, 9, 2) {
 		t.Errorf("Popped mutated the live stack: %+v", p.Frame)
 	}
 	// Clamped at the bottom, never below it.
@@ -184,7 +184,7 @@ func TestCloneDeepCopiesTheStack(t *testing.T) {
 func TestSplitInheritsTextFields(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
-	first.Push(Frame{Door: "77", Content: true, Zoom: 1})
+	first.Push(viewed(Frame{Door: "77", Content: true}, 0, 0, 1))
 	first.TextMode = "rendered"
 	first.TextScrollY = 12.5
 	first.TextZoom = 0.85
@@ -403,7 +403,7 @@ func TestRelocateToFollowsTheDestination(t *testing.T) {
 	p := &Pane{ID: "a", Stack: StackAt("u1/0", []string{"u1/3"}, "u1/9")}
 	p.TextMode, p.TextScrollY = "text", 40
 	dest := &Pane{ID: "b", Stack: StackAt("u2/0", []string{"u2/7", "u2/8"}, "")}
-	dest.Cx, dest.Cy, dest.Zoom = 10, 20, 2
+	dest.SetView(10, 20, 2)
 	p.RelocateTo(dest, "u2/44", Footprint{X: 4, Y: 6, W: 2, H: 2}, 3)
 	if p.Anchor() != "u2/0" || len(p.Path()) != 2 || p.Path()[1] != "u2/8" {
 		t.Fatalf("location not taken: %+v", p.Crumbs())
@@ -413,11 +413,11 @@ func TestRelocateToFollowsTheDestination(t *testing.T) {
 	}
 	// A promoted pane is a descended pane, so the next ascent has an overtake
 	// to compute from instead of zoom 0.
-	if !p.HasView() || p.Cx != 5 || p.Cy != 7 || p.Zoom != 3 {
+	if !p.HasView() || !viewIs(p.View, 5, 7, 3) {
 		t.Fatalf("promoted frame carries no viewport: %+v", p.Frame)
 	}
 	// The pane ascends into the destination's viewport, not the origin's.
-	if !p.Pop() || p.Cx != 10 || p.Cy != 20 || p.Zoom != 2 {
+	if !p.Pop() || !viewIs(p.View, 10, 20, 2) {
 		t.Fatalf("ascent does not land where the destination stood: %+v", p.Frame)
 	}
 	dest.Pop()
@@ -454,7 +454,7 @@ func TestSplitBelowForOpen(t *testing.T) {
 		t.Fatalf("the new pane is not a clone of the place: %+v", p.Stack)
 	}
 	// A content descent is cloned too, and the clone must shed it.
-	p.Push(Frame{Door: "77", Content: true, Zoom: 1})
+	p.Push(viewed(Frame{Door: "77", Content: true}, 0, 0, 1))
 	q, split, shed := tr.SplitBelowForOpen(tall)
 	if !split || !shed || q.ContentID() != "77" {
 		t.Fatalf("content clone: (%v, %v, %v) content=%q", q.ID, split, shed, q.ContentID())

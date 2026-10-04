@@ -110,11 +110,11 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		}
 		if m.Context != "" {
 			out.GridId = rpc.EntryGridID(m.Context)
-			f, err := a.contextFraming(m.Context)
+			v, err := a.contextFraming(m.Context)
 			if err != nil {
 				return nil, err
 			}
-			out.ViewCx, out.ViewCy, out.ViewZoom = f.Cx, f.Cy, f.Zoom
+			out.ViewCx, out.ViewCy, out.ViewZoom = v.Wire()
 		}
 		resp.MenuEntries = append(resp.MenuEntries, out)
 	}
@@ -131,15 +131,14 @@ func declaredEntries(ci *pluginv1.InfoResponse) []*pluginv1.MenuEntry {
 	return []*pluginv1.MenuEntry{{Id: ci.RootContext, Context: ci.RootContext}}
 }
 
-// contextFraming is the framing remembered for one context's grid, zero when
-// never visited. An unreadable store is an error, not a silent zero.
-func (a *Adapter) contextFraming(ckey string) (rpc.Framing, error) {
+// contextFraming is the framing remembered for one context's grid. An
+// unreadable store is an error, not a silent none.
+func (a *Adapter) contextFraming(ckey string) (rpc.View, error) {
 	gid, ok, err := a.mem.LookupContext(ckey)
 	if err != nil || !ok {
-		return rpc.Framing{}, err
+		return rpc.View{}, err
 	}
-	f, _, err := a.mem.RootFraming(gid)
-	return f, err
+	return a.mem.RootFraming(gid)
 }
 
 // Subscribe serves this namespace's event stream: health of the subprocess and
@@ -851,7 +850,10 @@ func (a *Adapter) changedTile(ctx context.Context, id int64) (*gridwellv1.Tile, 
 
 // SetFraming persists framing on a doorway tile row or a context's grid row.
 func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
-	f := rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
+	f, err := rpc.FramingOf(req)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	if req.RootGridId != "" {
 		_, ckey, err := a.resolveGrid(req.RootGridId)
 		if err != nil {

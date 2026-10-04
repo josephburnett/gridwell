@@ -22,9 +22,9 @@ func TestAPreviewNeverDrawsAnOlderBlobsLeaves(t *testing.T) {
 		}
 		return data
 	}
-	withGone := pane.TreeAtPlace("", "g0", nil, 0, 0, 1)
+	withGone := pane.TreeAtPlace("", "g0", nil, rpc.ViewOf(0, 0, 1))
 	withGone.FocusedPane().Stack = pane.StackAt("g0", nil, "gone")
-	before, after := encode(withGone), encode(pane.TreeAtPlace("", "g0", nil, 0, 0, 1))
+	before, after := encode(withGone), encode(pane.TreeAtPlace("", "g0", nil, rpc.ViewOf(0, 0, 1)))
 
 	row := func(blob int64) *gridwellv1.Tile {
 		return &gridwellv1.Tile{Id: "w", GridId: "g", Kind: rpc.KindPane, Version: 1, BlobId: blob}

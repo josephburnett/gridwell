@@ -250,7 +250,7 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 			root = QualifyID(prefix, c.RootGridId)
 		}
 		out.Plugins = append(out.Plugins, ConnectionRow(QualifyID(prefix, c.Uuid), c.Label, root, c.StatusDetail,
-			Framing{Cx: c.RootViewCx, Cy: c.RootViewCy, Zoom: c.RootViewZoom}))
+			ViewOf(c.RootViewCx, c.RootViewCy, c.RootViewZoom)))
 	}
 	return out
 }

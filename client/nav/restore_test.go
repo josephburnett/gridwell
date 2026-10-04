@@ -28,7 +28,7 @@ func restoreWorld(grids map[string]map[string]RestoreTile) World {
 	w := baseWorld(gridPane("pane1", "p1/1"))
 	w.Home = "p1/1"
 	w.Restore = &RestoreWorld{Grids: grids, Failed: map[string]bool{},
-		RootViews: map[string]Viewport{}}
+		RootViews: map[string]rpc.Framing{}}
 	return w
 }
 
@@ -121,10 +121,10 @@ func TestRestoreBootPlans(t *testing.T) {
 func TestRestoreBootViewport(t *testing.T) {
 	t.Run("the address wins", func(t *testing.T) {
 		w := restoreWorld(homeOnly())
-		w.Restore.RootViews["p1/1"] = Viewport{Cx: 9, Cy: 9, Zoom: 4}
+		w.Restore.RootViews["p1/1"] = fr(9, 9, 4)
 		plan := New().Do(bootGesture("/?x=5&y=-2&z=1.5"), w)
 		v := *plan.Effects[1].Viewport
-		if v != (Viewport{Cx: 5, Cy: -2, Zoom: 1.5}) {
+		if v != fr(5, -2, 1.5) {
 			t.Fatalf("viewport = %+v, want the address's", v)
 		}
 	})
@@ -132,17 +132,17 @@ func TestRestoreBootViewport(t *testing.T) {
 	t.Run("a pan-only address keeps the pane's zoom", func(t *testing.T) {
 		plan := New().Do(bootGesture("/?x=5&y=-2"), restoreWorld(homeOnly()))
 		v := *plan.Effects[1].Viewport
-		if v != (Viewport{Cx: 5, Cy: -2, Zoom: 1}) {
+		if v != fr(5, -2, 1) {
 			t.Fatalf("viewport = %+v, want the pane's own zoom kept", v)
 		}
 	})
 
 	t.Run("no address viewport: the framing the root was left at", func(t *testing.T) {
 		w := restoreWorld(homeOnly())
-		w.Restore.RootViews["p1/1"] = Viewport{Cx: 9, Cy: 9, Zoom: 4}
+		w.Restore.RootViews["p1/1"] = fr(9, 9, 4)
 		plan := New().Do(bootGesture("/"), w)
 		v := *plan.Effects[1].Viewport
-		if v != (Viewport{Cx: 9, Cy: 9, Zoom: 4}) {
+		if v != fr(9, 9, 4) {
 			t.Fatalf("viewport = %+v, want the persisted root view", v)
 		}
 	})

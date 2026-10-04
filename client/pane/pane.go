@@ -38,7 +38,7 @@ func (s Side) Direction() Direction {
 }
 
 // Pane is a leaf in the pane tree. Its place is the embedded Stack, whose top
-// frame is unrolled so p.Cx and friends read the current level directly.
+// frame is unrolled so p.View and friends read the current level directly.
 type Pane struct {
 	ID string
 	Stack

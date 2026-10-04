@@ -90,7 +90,7 @@ func framingFixture(t *testing.T) (*Layer, *framingSource) {
 	t.Helper()
 	src := &framingSource{
 		lists: map[string]*pb.HandshakeResponse{
-			"": {Plugins: []*pb.PluginInfo{rpc.ConnectionRow("conn", "Far", farHome, "", rpc.Framing{})}},
+			"": {Plugins: []*pb.PluginInfo{rpc.ConnectionRow("conn", "Far", farHome, "", rpc.View{})}},
 			"conn": {HomeGridId: farHome, Plugins: []*pb.PluginInfo{
 				{Uuid: "conn/r", RootGridId: farHome},
 				{Uuid: "conn/p", MenuEntries: []*pb.MenuEntry{
@@ -127,12 +127,12 @@ func remembered(t *testing.T, cc *Layer, src *framingSource, ns string) *pb.Hand
 	return resp
 }
 
-func rowFraming(pl *pb.PluginInfo) rpc.Framing {
-	return rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}
+func rowFraming(pl *pb.PluginInfo) rpc.View {
+	return rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom)
 }
 
-func entryFraming(e *pb.MenuEntry) rpc.Framing {
-	return rpc.Framing{Cx: e.ViewCx, Cy: e.ViewCy, Zoom: e.ViewZoom}
+func entryFraming(e *pb.MenuEntry) rpc.View {
+	return rpc.ViewOf(e.ViewCx, e.ViewCy, e.ViewZoom)
 }
 
 // A far root's framing event lands on every remembered doorway rooted at that
@@ -141,26 +141,26 @@ func entryFraming(e *pb.MenuEntry) rpc.Framing {
 func TestAFramingEventReframesTheRememberedDoorways(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
-	f := rpc.Framing{Cx: 3, Cy: -4, Zoom: 0.5}
-	g := rpc.Framing{Cx: 7, Cy: 8, Zoom: 2}
+	f := mkFraming(3, -4, 0.5)
+	g := mkFraming(7, 8, 2)
 	for range 2 {
 		cc.applyEvent(ctx, rpc.FramingEvent(farHome, f))
 		cc.applyEvent(ctx, rpc.FramingEvent(farFeed, g))
 	}
 
 	rows := remembered(t, cc, src, "").GetPlugins()
-	if got := rowFraming(rows[0]); !got.SameAs(f) {
+	if got := rowFraming(rows[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the connection row = %+v, want %+v", got, f)
 	}
 	far := remembered(t, cc, src, "conn")
-	if got := rowFraming(rpc.HomeRow(far)); !got.SameAs(f) {
+	if got := rowFraming(rpc.HomeRow(far)); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the far home row = %+v, want %+v", got, f)
 	}
 	entries := far.GetPlugins()[1].GetMenuEntries()
-	if got := entryFraming(entries[0]); !got.SameAs(g) {
+	if got := entryFraming(entries[0]); !got.SameAs(rpc.Saved(g)) {
 		t.Errorf("the collection entry = %+v, want %+v", got, g)
 	}
-	if got := entryFraming(entries[1]); got.Zoom != 0 {
+	if got := entryFraming(entries[1]); !got.SameAs(rpc.View{}) {
 		t.Errorf("an entry rooted elsewhere moved: %+v", got)
 	}
 }
@@ -169,15 +169,15 @@ func TestAFramingEventReframesTheRememberedDoorways(t *testing.T) {
 // or not its event ever arrives: the source is silent here.
 func TestAnAcceptedRootFramingIsRemembered(t *testing.T) {
 	cc, src := framingFixture(t)
-	f := rpc.Framing{Cx: 1, Cy: 2, Zoom: 1.5}
+	f := mkFraming(1, 2, 1.5)
 	if _, err := cc.SetFraming(context.Background(), &pb.SetFramingRequest{
-		RootGridId: farHome, Cx: f.Cx, Cy: f.Cy, Zoom: f.Zoom}); err != nil {
+		RootGridId: farHome, Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}); err != nil {
 		t.Fatalf("SetFraming: %v", err)
 	}
-	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(f) {
+	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the connection row = %+v, want %+v", got, f)
 	}
-	if got := rowFraming(rpc.HomeRow(remembered(t, cc, src, "conn"))); !got.SameAs(f) {
+	if got := rowFraming(rpc.HomeRow(remembered(t, cc, src, "conn"))); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the far home row = %+v, want %+v", got, f)
 	}
 }
@@ -188,7 +188,7 @@ func TestAnAcceptedRootFramingIsRemembered(t *testing.T) {
 func TestADarkFramingWriteIsRefusedAndNotRemembered(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
-	was := rpc.Framing{Cx: 1, Cy: 1, Zoom: 1}
+	was := mkFraming(1, 1, 1)
 	cc.applyEvent(ctx, rpc.FramingEvent(farHome, was))
 	src.setDown(true)
 	_, err := cc.SetFraming(ctx, &pb.SetFramingRequest{RootGridId: farHome, Cx: 9, Cy: 9, Zoom: 3})
@@ -200,7 +200,7 @@ func TestADarkFramingWriteIsRefusedAndNotRemembered(t *testing.T) {
 		t.Errorf("dark SetFraming answers %v, another dark write %v: one refusal", status.Code(err), status.Code(werr))
 	}
 	src.setDown(false)
-	if got := rowFraming(rpc.HomeRow(remembered(t, cc, src, "conn"))); !got.SameAs(was) {
+	if got := rowFraming(rpc.HomeRow(remembered(t, cc, src, "conn"))); !got.SameAs(rpc.Saved(was)) {
 		t.Errorf("the far home row = %+v, want the last accepted %+v", got, was)
 	}
 }
@@ -229,30 +229,30 @@ func TestATileEventReframesTheRememberedWell(t *testing.T) {
 func TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
-	f := rpc.Framing{Cx: 3, Cy: -4, Zoom: 0.5}
+	f := mkFraming(3, -4, 0.5)
 	cc.applyEvent(ctx, rpc.FramingEvent(farHome, f))
 	resp, err := cc.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(f) {
+	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("a row answering no framing = %+v, want the remembered %+v", got, f)
 	}
-	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(f) {
+	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the silence was remembered over the framing: %+v", got)
 	}
 
-	g := rpc.Framing{Cx: 1, Cy: 1, Zoom: 2}
+	g := mkFraming(1, 1, 2)
 	src.mu.Lock()
-	src.lists[""].Plugins[0].RootViewCx, src.lists[""].Plugins[0].RootViewCy, src.lists[""].Plugins[0].RootViewZoom = g.Cx, g.Cy, g.Zoom
+	src.lists[""].Plugins[0].RootViewCx, src.lists[""].Plugins[0].RootViewCy, src.lists[""].Plugins[0].RootViewZoom = g.Cx(), g.Cy(), g.Zoom()
 	src.mu.Unlock()
 	if resp, err = cc.Handshake(ctx, &pb.HandshakeRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(g) {
+	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(rpc.Saved(g)) {
 		t.Errorf("the source's answer = %+v, want %+v", got, g)
 	}
-	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(g) {
+	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(g)) {
 		t.Errorf("remembered after the answer = %+v, want %+v", got, g)
 	}
 }

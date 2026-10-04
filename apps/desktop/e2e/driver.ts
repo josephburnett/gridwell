@@ -88,8 +88,8 @@ export interface PluginDescriptor {
   // The row's pluginhealth class; "" for a plugin's own row, which has none
   // because a plugin is not a place.
   status: string;
-  // The handshake's persisted view of that grid; zoom 0 means never set. The
-  // server-side oracle for a root-grid reframe.
+  // The handshake's persisted view of that grid, all 0 (absent) when never
+  // visited. The server-side oracle for a root-grid reframe.
   rootViewCx: number;
   rootViewCy: number;
   rootViewZoom: number;

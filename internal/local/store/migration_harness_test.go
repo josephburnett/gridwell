@@ -1166,6 +1166,92 @@ func init() {
 			}
 		},
 	})
+
+	// v16: never visited is NULL. A framed well and a framed root keep their
+	// framing to the bit; a zero zoom, the 2026-10-04 trace's NaN-as-NULL
+	// root center and an infinite zoom all read as never visited before and
+	// are three NULLs after. Every row survives.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 16,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			for _, w := range []struct{ alt, view string }{
+				{"v15 framed well", "4.25, -6.5, 0.375"},
+				{"v15 unvisited well", "4.5, 3.5, 0"},
+				{"v15 infinite well", "1, 1, 9e999"},
+			} {
+				res, err := db.Exec(`INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
+				if err != nil {
+					t.Fatalf("seed child grid: %v", err)
+				}
+				if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, view_cx, view_cy, view_zoom,
+					child_grid_id, alt_text, created_at, updated_at)
+					VALUES (`+rootID+`, 'well', 95, 9, 1, 1, `+w.view+`, ?, ?, 100, 100)`, mustID(t, res), w.alt); err != nil {
+					t.Fatalf("seed %s: %v", w.alt, err)
+				}
+			}
+			for _, g := range []struct{ key, view string }{
+				{"v15 framed", "3, -2, 0.5"},
+				{"v15 nan", "NULL, NULL, 0.0045"},
+				{"v15 zero", "1, 1, 0"},
+			} {
+				if _, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key, root_cx, root_cy, root_zoom)
+					VALUES (100, 100, 'p16', ?, `+g.view+`)`, g.key); err != nil {
+					t.Fatalf("seed root %s: %v", g.key, err)
+				}
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			type view struct{ cx, cy, zoom sql.NullFloat64 }
+			framed := func(cx, cy, zoom float64) view {
+				return view{sql.NullFloat64{Float64: cx, Valid: true}, sql.NullFloat64{Float64: cy, Valid: true},
+					sql.NullFloat64{Float64: zoom, Valid: true}}
+			}
+			for alt, want := range map[string]view{
+				"v15 framed well":    framed(4.25, -6.5, 0.375),
+				"v15 unvisited well": {},
+				"v15 infinite well":  {},
+			} {
+				var got view
+				if err := db.QueryRow(`SELECT view_cx, view_cy, view_zoom FROM tiles WHERE alt_text = ?`, alt).
+					Scan(&got.cx, &got.cy, &got.zoom); err != nil {
+					t.Fatalf("%s did not survive v16: %v", alt, err)
+				}
+				if got != want {
+					t.Errorf("%s: framing = %+v, want %+v", alt, got, want)
+				}
+			}
+			for key, want := range map[string]view{
+				"v15 framed": framed(3, -2, 0.5),
+				"v15 nan":    {},
+				"v15 zero":   {},
+			} {
+				var got view
+				if err := db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE ns = 'p16' AND context_key = ?`, key).
+					Scan(&got.cx, &got.cy, &got.zoom); err != nil {
+					t.Fatalf("root %s did not survive v16: %v", key, err)
+				}
+				if got != want {
+					t.Errorf("root %s: framing = %+v, want %+v", key, got, want)
+				}
+			}
+			// A well minted after v16 is never visited with nothing written.
+			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, child_grid_id, alt_text, created_at, updated_at)
+				SELECT grid_id, 'well', 96, 9, 1, 1, ?, 'v16 fresh well', 100, 100 FROM tiles WHERE alt_text = 'v15 framed well'`,
+				mustID(t, res)); err != nil {
+				t.Fatalf("mint a well after v16: %v", err)
+			}
+			var zoom sql.NullFloat64
+			if err := db.QueryRow(`SELECT view_zoom FROM tiles WHERE alt_text = 'v16 fresh well'`).Scan(&zoom); err != nil || zoom.Valid {
+				t.Errorf("a fresh well's view_zoom = %+v (err %v), want NULL", zoom, err)
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.

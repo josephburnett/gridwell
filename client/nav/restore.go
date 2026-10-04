@@ -5,6 +5,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/urlwalk"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 // The restore verbs: decode an address and go there. A grid the snapshot does
@@ -60,7 +61,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 		pl.add(Effect{Kind: EffCancelTransition})
 		pl.add(Effect{Kind: EffForgetPane, PaneID: paneID})
 		// A restore replaces where the pane is, not how it is framed.
-		pl.install(paneID, oneFrame(w.Home, p.Cx, p.Cy, p.Zoom), nil)
+		pl.install(paneID, oneFrame(w.Home, p.View), nil)
 		pl.add(Effect{Kind: EffRefreshOverlay})
 	}
 	state, err := pane.DecodeURL(g.Raw)
@@ -87,7 +88,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 			return m.endRestore(d, &pl)
 		}
 	}
-	pl.install(paneID, oneFrame(d.State.Anchor, p.Cx, p.Cy, p.Zoom), nil)
+	pl.install(paneID, oneFrame(d.State.Anchor, p.View), nil)
 
 	// The URL's path segments are bare well ids, qualified with the anchor's
 	// namespace to match the grid's keys.
@@ -113,13 +114,14 @@ func (m *Machine) restoreRoot(d *restoreData, w World, pl *planner) Plan {
 		return m.endRestore(d, pl)
 	}
 	root := w.Restore.rootView(d.State.Anchor)
-	if bv := pane.URLBootViewport(d.State.X, d.State.Y, d.State.Zoom,
-		root.Cx, root.Cy, root.Zoom); bv.Apply {
-		v := Viewport{Cx: bv.Cx, Cy: bv.Cy, Zoom: p.Zoom}
+	if bv := pane.URLBootViewport(d.State, root); bv.Apply {
+		zoom := liveZoom(p)
 		if bv.SetZoom {
-			v.Zoom = bv.Zoom
+			zoom = bv.Zoom
 		}
-		pl.add(Effect{Kind: EffInstallPlace, PaneID: d.PaneID, Viewport: &v})
+		if v, err := rpc.NewFraming(bv.Cx, bv.Cy, zoom); err == nil {
+			pl.add(Effect{Kind: EffInstallPlace, PaneID: d.PaneID, Viewport: &v})
+		}
 	}
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 	return m.endRestore(d, pl)
@@ -139,14 +141,17 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 	// Outer frames carry no viewport, so the ascent out lands on each grid's
 	// persisted framing.
 	st := pane.StackAt(d.State.Anchor, path, leaf)
-	v := Viewport{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
-	if v.Zoom <= 0 {
-		v.Zoom = 1
+	v, viewed := p.View.Framing()
+	if !viewed {
+		v = zoomtrans.Origin
 	}
 	if leaf == "" {
-		v.Cx, v.Cy = d.State.X, d.State.Y
-		if d.State.Zoom > 0 {
-			v.Zoom = d.State.Zoom
+		zoom := v.Zoom()
+		if d.State.HasZoom {
+			zoom = d.State.Zoom
+		}
+		if u, err := rpc.NewFraming(d.State.X, d.State.Y, zoom); err == nil {
+			v = u
 		}
 		pl.install(d.PaneID, st, &v)
 		return m.finishRestore(d, path, w, pl)
@@ -213,10 +218,18 @@ func (m *Machine) awaitGrid(d *restoreData, gridID string, s step, w World, pl *
 }
 
 // oneFrame is the place a jump clears a pane down to.
-func oneFrame(gridID string, cx, cy, zoom float64) pane.Stack {
+func oneFrame(gridID string, view rpc.View) pane.Stack {
 	var s pane.Stack
-	s.Reset(pane.Frame{GridID: gridID, Cx: cx, Cy: cy, Zoom: zoom})
+	s.Reset(pane.Frame{GridID: gridID, View: view})
 	return s
+}
+
+// liveZoom is the zoom p shows, zoomtrans.Origin's when it shows no view.
+func liveZoom(p PaneView) float64 {
+	if live, ok := p.View.Framing(); ok {
+		return live.Zoom()
+	}
+	return zoomtrans.Origin.Zoom()
 }
 
 // walkURL runs urlwalk.Walk against the snapshot. need names the first grid it

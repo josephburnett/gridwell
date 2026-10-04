@@ -3,15 +3,41 @@ package dragdrop
 import (
 	"math"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
-func TestScreenToCellRoundTrip(t *testing.T) {
-	p := Pane{
-		ScreenX: 100, ScreenY: 50, ScreenW: 800, ScreenH: 600,
-		Cx: 5, Cy: 7, Zoom: 1.5, CellPx: 64,
+// mkPane is NewPane for a layout a test knows is one.
+func mkPane(x, y, w, h, cx, cy, zoom, cellPx float64) Pane {
+	v, err := rpc.NewFraming(cx, cy, zoom)
+	if err != nil {
+		panic(err)
 	}
+	p, ok := NewPane(x, y, w, h, v, cellPx)
+	if !ok {
+		panic("not a pane")
+	}
+	return p
+}
+
+// A pane with no area or no cell size is no pane, so nothing downstream can
+// divide by it.
+func TestNewPaneRefusesWhatHasNoCells(t *testing.T) {
+	v, _ := rpc.NewFraming(0, 0, 1)
+	for _, c := range [][5]float64{
+		{0, 0, 0, 600, 64}, {0, 0, 800, 0, 64}, {0, 0, -1, 600, 64},
+		{0, 0, 800, 600, 0}, {math.NaN(), 0, 800, 600, 64}, {0, 0, math.Inf(1), 600, 64},
+	} {
+		if p, ok := NewPane(c[0], c[1], c[2], c[3], v, c[4]); ok {
+			t.Errorf("NewPane%v = %+v, want none", c, p)
+		}
+	}
+}
+
+func TestScreenToCellRoundTrip(t *testing.T) {
+	p := mkPane(100, 50, 800, 600, 5, 7, 1.5, 64)
 	for _, c := range []struct{ x, y float64 }{
 		{0, 0}, {-3, 4}, {12.5, -2.25}, {1e3, -1e3},
 	} {
@@ -36,10 +62,7 @@ func TestSnapToCell(t *testing.T) {
 }
 
 func TestChildPreviewRoundTrip(t *testing.T) {
-	parent := Pane{
-		ScreenX: 0, ScreenY: 0, ScreenW: 800, ScreenH: 600,
-		Cx: 0, Cy: 0, Zoom: 1.0, CellPx: 64,
-	}
+	parent := mkPane(0, 0, 800, 600, 0, 0, 1.0, 64)
 	well := struct {
 		X, Y, W, H     int64
 		ViewCx, ViewCy float64
@@ -65,18 +88,13 @@ func TestChildPreviewRoundTrip(t *testing.T) {
 func TestChildPreviewCenterAlignsWithViewCenter(t *testing.T) {
 	// The preview's view center lands at the well's screen center, which
 	// is the calibration zoomtrans relies on.
-	parent := Pane{
-		ScreenX: 0, ScreenY: 0, ScreenW: 1000, ScreenH: 1000,
-		Cx: 0, Cy: 0, Zoom: 2.0, CellPx: 64,
-	}
+	parent := mkPane(0, 0, 1000, 1000, 0, 0, 2.0, 64)
 	well := struct {
 		X, Y, W, H     int64
 		ViewCx, ViewCy float64
 	}{X: 0, Y: 0, W: 4, H: 4, ViewCx: 2, ViewCy: 2}
 	cp := ChildPreviewFor(parent, well, 1.0/8.0)
-	parentCell := parent.CellPx * parent.Zoom
 	wellCenterX, wellCenterY := parent.CellToScreen(2, 2) // center of 4×4 well at (0,0)
-	_ = parentCell
 	// The well's view center is also (2, 2) in child cells.
 	viewCenterScreenX, viewCenterScreenY := cp.CellToScreen(2, 2)
 	if !near(viewCenterScreenX, wellCenterX) || !near(viewCenterScreenY, wellCenterY) {
@@ -257,10 +275,7 @@ func TestResizeAnchorsAndCursor(t *testing.T) {
 
 func TestPaneCellAt(t *testing.T) {
 	// A 1000x800 pane centered on cell (0, 0), 64 px cells, zoom 1.
-	p := Pane{
-		ScreenX: 0, ScreenY: 0, ScreenW: 1000, ScreenH: 800,
-		Cx: 0, Cy: 0, Zoom: 1, CellPx: 64,
-	}
+	p := mkPane(0, 0, 1000, 800, 0, 0, 1, 64)
 	// The pane center at (500, 400) is cell (0, 0).
 	cx, cy := p.CellAt(500, 400)
 	if cx != 0 || cy != 0 {
@@ -565,7 +580,7 @@ func TestRectsOverlap(t *testing.T) {
 }
 
 func TestPaneShows(t *testing.T) {
-	p := Pane{ScreenW: 640, ScreenH: 640, Zoom: 1, CellPx: 64}
+	p := mkPane(0, 0, 640, 640, 0, 0, 1, 64)
 	cases := []struct {
 		name       string
 		x, y, w, h float64

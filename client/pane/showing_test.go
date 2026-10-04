@@ -29,42 +29,42 @@ func TestShowing(t *testing.T) {
 		want  []string
 	}{
 		{"a pane in a grid", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"p/1"}},
 		{"a pane through a well shows the well's grid", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", []string{"w5"}, 0, 0, 1)
+			tr := TreeAtPlace("", "p/1", []string{"w5"}, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"g-w5"}},
 		{"a pane in a content tile shows the grid the tile sits in", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", []string{"w5"}, 0, 0, 1)
+			tr := TreeAtPlace("", "p/1", []string{"w5"}, rpc.ViewOf(0, 0, 1))
 			tr.FocusedPane().Push(ContentFrame("f9", Footprint{W: 1, H: 1}, 1, "", 0, 0))
 			return tr, allLaidOut(tr)
 		}, []string{"g-w5"}},
 		{"two panes on one grid are one entry", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			second, _ := tr.Split(Vertical)
 			second.Stack = StackAt("p/1", nil, "t3")
 			return tr, allLaidOut(tr)
 		}, []string{"p/1"}},
 		{"two panes on two grids, sorted", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "q/1", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "q/1", nil, rpc.ViewOf(0, 0, 1))
 			second, _ := tr.Split(Vertical)
 			second.Stack = StackAt("n/1", []string{"w2"}, "")
 			return tr, allLaidOut(tr)
 		}, []string{"g-w2", "q/1"}},
 		{"a pane the layout hides is not shown", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "q/1", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "q/1", nil, rpc.ViewOf(0, 0, 1))
 			second, _ := tr.Split(Vertical)
 			second.Stack = StackAt("n/1", nil, "")
 			return tr, map[string]Rect{second.ID: {W: 1, H: 1}}
 		}, []string{"n/1"}},
 		{"a well not yet fetched shows as deep as it resolves", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", []string{"w5", "?"}, 0, 0, 1)
+			tr := TreeAtPlace("", "p/1", []string{"w5", "?"}, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"g-w5"}},
 		{"a pane with no place shows nothing", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "", nil, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, nil},
 	}
@@ -81,10 +81,10 @@ func TestShowing(t *testing.T) {
 // Inside a pane tile the window shows that level's tree; the tree it parked
 // is off screen, so its grids are not shown.
 func TestShowingALevelShowsOnlyItsOwnTree(t *testing.T) {
-	outer := TreeAtPlace("w0:", "outer/1", nil, 0, 0, 1)
+	outer := TreeAtPlace("w0:", "outer/1", nil, rpc.ViewOf(0, 0, 1))
 	var lv Levels
 	lv.Push(Level{OuterTree: outer, TileID: "pt/4", GridID: "outer/1"})
-	inner := TreeAtPlace("w1:", "inner/1", nil, 0, 0, 1)
+	inner := TreeAtPlace("w1:", "inner/1", nil, rpc.ViewOf(0, 0, 1))
 	got := Showing(inner, allLaidOut(inner), fakeLeaf, noTiles)
 	if !reflect.DeepEqual(got, []string{"inner/1"}) || strings.Contains(strings.Join(got, ","), "outer") {
 		t.Errorf("Showing = %v, want only the level in front", got)
@@ -116,20 +116,20 @@ func TestShowingWellPreviews(t *testing.T) {
 		want  []string
 	}{
 		{"a well and a link on screen show their grids, one level deep", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"c/1", "far/c", "p/1"}},
 		{"a well scrolled into view is shown", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", nil, 100, 100, 1)
+			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(100, 100, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"c/off", "p/1"}},
 		{"a pane in a content tile draws no previews", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "p/1", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			tr.FocusedPane().Push(ContentFrame("text", Footprint{W: 1, H: 1}, 1, "", 0, 0))
 			return tr, allLaidOut(tr)
 		}, []string{"p/1"}},
 		{"a hidden pane's previews are not shown", func() (*Tree, map[string]Rect) {
-			tr := TreeAtPlace("", "q/1", nil, 0, 0, 1)
+			tr := TreeAtPlace("", "q/1", nil, rpc.ViewOf(0, 0, 1))
 			first := tr.FocusedPane()
 			second, _ := tr.Split(Vertical)
 			second.Stack = StackAt("p/1", nil, "")

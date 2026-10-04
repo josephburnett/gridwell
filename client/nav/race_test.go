@@ -70,8 +70,8 @@ func TestSecondDescentMidAnimationLandsTheFirst(t *testing.T) {
 	// outgoing animation's scratch viewport.
 	landed := gridPane("pane1", "gc")
 	landed.Stack = pane.NewStack("g1")
-	landed.Stack.Push(pane.Frame{Door: "w1", Cx: 2, Cy: 2, Zoom: 0.5})
-	landed.Cx, landed.Cy, landed.Zoom = 2, 2, 0.5
+	landed.Stack.Push(framed(pane.Frame{Door: "w1"}, 2, 2, 0.5))
+	landed.View = viewOf(2, 2, 0.5)
 	after := baseWorld(landed)
 	after.Door = &DoorWorld{}
 	second := m.Do(*first.Next, after)
