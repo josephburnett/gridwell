@@ -232,9 +232,9 @@ type MenuEntry struct {
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
 	// meaning as PluginInfo.root_view_*. A doorway carries the framing of the
-	// grid behind it, so re-entering a collection lands where it was left. Zero
-	// zoom means never visited and the client substitutes its calibrated
-	// default.
+	// grid behind it, so re-entering a collection lands where it was left. All
+	// three are absent when never visited (rpc.ViewOf), and the client
+	// substitutes its calibrated default.
 	ViewCx        float64 `protobuf:"fixed64,8,opt,name=view_cx,json=viewCx,proto3" json:"view_cx,omitempty"`
 	ViewCy        float64 `protobuf:"fixed64,9,opt,name=view_cy,json=viewCy,proto3" json:"view_cy,omitempty"`
 	ViewZoom      float64 `protobuf:"fixed64,10,opt,name=view_zoom,json=viewZoom,proto3" json:"view_zoom,omitempty"`
@@ -338,7 +338,7 @@ type Tile struct {
 	// the descent target and the ascent return value. A float center in the
 	// child grid's coordinates (view_cx, view_cy) plus the pane-size-independent
 	// intrinsic zoom (live over overtake), the same three numbers a root grid
-	// keeps on its own row. view_zoom == 0 means never visited.
+	// keeps on its own row. All three are absent when never visited.
 	ViewZoom    float64 `protobuf:"fixed64,12,opt,name=view_zoom,json=viewZoom,proto3" json:"view_zoom,omitempty"`
 	ViewCx      float64 `protobuf:"fixed64,36,opt,name=view_cx,json=viewCx,proto3" json:"view_cx,omitempty"`
 	ViewCy      float64 `protobuf:"fixed64,37,opt,name=view_cy,json=viewCy,proto3" json:"view_cy,omitempty"`
@@ -731,7 +731,7 @@ type InfoResponse struct {
 	Writable bool `protobuf:"varint,9,opt,name=writable,proto3" json:"writable,omitempty"`
 	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
 	// center in grid coordinates and the intrinsic zoom. The home fills it from
-	// its system KV table; a plugin with no persistent root view returns zero.
+	// its root grid row; a root never visited leaves all three absent.
 	// The client seeds the doorway framing from it so re-entry restores the
 	// left-off view. It is read-only here; SetFraming is the write path.
 	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
@@ -1967,7 +1967,7 @@ type PluginInfo struct {
 	Label      string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
 	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
 	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport,
-	// forwarded verbatim from InfoResponse. Zero means never visited; the
+	// forwarded verbatim from InfoResponse. Absent when never visited; the
 	// client substitutes the default calibrated zoom on enterPlugin.
 	RootViewCx   float64 `protobuf:"fixed64,7,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,8,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
@@ -2099,7 +2099,7 @@ type ConnectionInfo struct {
 	Uuid          string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	RootGridId    string                 `protobuf:"bytes,3,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`   // the remote's home, qualified; "" while pending
-	RootViewCx    float64                `protobuf:"fixed64,4,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"` // the remote home's persisted view (zero = unknown)
+	RootViewCx    float64                `protobuf:"fixed64,4,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"` // the remote home's persisted view (absent = unknown)
 	RootViewCy    float64                `protobuf:"fixed64,5,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom  float64                `protobuf:"fixed64,6,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
 	StatusDetail  string                 `protobuf:"bytes,7,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"` // the last dial/learn failure while pending

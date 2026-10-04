@@ -66,18 +66,17 @@ keyed by tile id), showing a deleted tile's frozen frame on a new one.`,
 	{name: "w", ddl: "INTEGER NOT NULL DEFAULT 1 CHECK (w > 0)", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.W }},
 	{name: "h", ddl: "INTEGER NOT NULL DEFAULT 1 CHECK (h > 0)", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.H }},
 	{
-		name: "view_cx", ddl: "REAL NOT NULL DEFAULT 0", since: 1,
+		name: "view_cx", ddl: "REAL", since: 1,
 		comment: `well: the framing this doorway was left at — a float center in the
 child grid's coordinates plus the pane-size-independent intrinsic
 zoom (live over overtake). One shape, shared with a root grid's
-root_cx/cy/zoom. view_zoom = 0 is the one "never visited"
-convention: cx/cy carry no meaning then and the reader falls back
-to the preview calibration. since is 1 because the data existed at
-v1 as the integer origin view_x/view_y, which v11 converted.`,
-		bind: func(t *gridwellv1.Tile) any { return &t.ViewCx },
+root_cx/cy/zoom: all three NULL when never visited, else an
+rpc.Framing (v16). since is 1 because the data existed at v1 as the
+integer origin view_x/view_y, which v11 converted.`,
+		bind: func(t *gridwellv1.Tile) any { return nullFloat64{&t.ViewCx} },
 	},
-	{name: "view_cy", ddl: "REAL NOT NULL DEFAULT 0", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.ViewCy }},
-	{name: "view_zoom", ddl: "REAL NOT NULL DEFAULT 0", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.ViewZoom }},
+	{name: "view_cy", ddl: "REAL", since: 1, bind: func(t *gridwellv1.Tile) any { return nullFloat64{&t.ViewCy} }},
+	{name: "view_zoom", ddl: "REAL", since: 1, bind: func(t *gridwellv1.Tile) any { return nullFloat64{&t.ViewZoom} }},
 	{
 		name: "child_grid_id", ddl: "INTEGER", since: 1,
 		comment: `No FK on child_grid_id: an exit well's child grid lives in another
@@ -233,7 +232,7 @@ grids. Added at schema v9, additive.`,
 		name: "root_cx", ddl: "REAL", since: 11,
 		comment: `root_cx/cy/zoom is the framing of a root grid — one with no doorway
 tile to carry it — in exactly the shape a doorway's view_cx/cy/zoom
-uses. A NULL or zero zoom means never visited. Home's root is this
+uses, NULL when never visited. Home's root is this
 row with ns = ''; a plugin context's is its own. It reaches the client
 through the Info handshake's root_view_* fields, never as a Grid
 field, which is why it is storage-only here.`,
@@ -379,7 +378,7 @@ func rebuildColumns(reads int) string {
 	return strings.Join(names, ", ")
 }
 
-// nullString, nullInt64 and intBool are the scan adapters for columns whose
+// nullString, nullInt64, nullFloat64 and intBool are the scan adapters for columns whose
 // SQL shape is not the Go shape. One per shape, named on the descriptor entry,
 // so a nullable column cannot be scanned as non-nullable, which would fail
 // only on the first NULL row in production.
@@ -402,6 +401,18 @@ func (n nullInt64) Scan(v any) error {
 		return err
 	}
 	*n.p = ni.Int64
+	return nil
+}
+
+// nullFloat64 reads NULL as 0, which on the wire is the absent field.
+type nullFloat64 struct{ p *float64 }
+
+func (n nullFloat64) Scan(v any) error {
+	var nf sql.NullFloat64
+	if err := nf.Scan(v); err != nil {
+		return err
+	}
+	*n.p = nf.Float64
 	return nil
 }
 

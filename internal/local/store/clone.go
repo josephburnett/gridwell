@@ -142,13 +142,14 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		`SELECT alt_user FROM tiles WHERE id = ?`, srcID).Scan(&altUser); err != nil {
 		return 0, fmt.Errorf("tile copy: read alt_user of source %d: %w", srcID, err)
 	}
+	vcx, vcy, vzoom := viewArgs(rpc.ViewOf(n.ViewCx, n.ViewCy, n.ViewZoom))
 	// The copy is written by name: copyBinding renders the column list from
 	// the descriptor in columns.go and refuses a map that misses a copied
 	// column, so a forgotten clone path is a named error, not a silent gap.
 	cols, args, err := copyBinding(map[string]any{
 		"version": n.Version, "grid_id": gridID, "kind": n.Kind,
 		"x": x, "y": y, "w": n.W, "h": n.H,
-		"view_cx": n.ViewCx, "view_cy": n.ViewCy, "view_zoom": n.ViewZoom,
+		"view_cx": vcx, "view_cy": vcy, "view_zoom": vzoom,
 		"child_grid_id": child,
 		"text_x":        n.TextX, "text_y": n.TextY, "text_w": n.TextW, "text_h": n.TextH,
 		"text_mode": textMode, "blob_id": blob,

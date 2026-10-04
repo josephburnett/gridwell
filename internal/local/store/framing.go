@@ -5,10 +5,9 @@ package store
 // zoom, so a window resize never moves a saved view. It lives on the row that
 // owns the doorway, a tile row (view_cx, view_cy, view_zoom) for a grid
 // entered through a well, or a grid row (root_cx, root_cy, root_zoom) for a
-// root, home's included at ns = ''. A zero or NULL zoom is the one "never
-// visited" convention: cx and cy carry no meaning and the reader falls back to
-// the preview calibration. This file is the single SQL writer, so the shape
-// cannot drift.
+// root, home's included at ns = ''. Never visited is three NULLs, written only
+// by a row's creation; updateFraming writes only an rpc.Framing. This file is
+// the single SQL writer, so the shape cannot drift.
 
 import (
 	"context"
@@ -20,6 +19,15 @@ import (
 // execer is the write half of a *sql.DB or *sql.Tx.
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// viewArgs binds v as the three framing columns: NULL when never visited.
+func viewArgs(v rpc.View) (cx, cy, zoom any) {
+	f, ok := v.Framing()
+	if !ok {
+		return nil, nil, nil
+	}
+	return f.Cx(), f.Cy(), f.Zoom()
 }
 
 // updateFraming writes f onto the row that owns it and reports how many rows

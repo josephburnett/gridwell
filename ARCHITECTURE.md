@@ -264,8 +264,12 @@ format contract is `internal/local/store/CLAUDE.md`.
 **Framing** is one shape: a float center in the grid's own coordinates plus
 a pane-size-independent zoom (the intrinsic ratio, live/overtake). It lives
 on the row that owns the doorway — `tiles.view_cx/cy/zoom` for a well,
-`grids.root_cx/cy/zoom` for a root with no doorway. Zoom 0 means never
-visited. One store writer, one wire verb, one client function.
+`grids.root_cx/cy/zoom` for a root with no doorway. It is a checked value,
+`rpc.Framing`, whose one constructor refuses a center that is not a point or
+a zoom that is not a finite size above zero, at the wire and at the store.
+Never visited is no framing: NULL in storage, absent on the wire, an
+`rpc.View` without one in Go. One store writer, one wire verb, one client
+function.
 
 **`version`** means the user's content bytes changed: a text body, a url's
 address, a typed name. It is the optimistic-concurrency claim for those three
