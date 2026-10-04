@@ -109,3 +109,34 @@ func TestARemovedCLICannotRunUntilRestored(t *testing.T) {
 		t.Errorf("the restored CLI = %d", code)
 	}
 }
+
+// A thread the feed announces is in its box from then on, so a walk that
+// reads the box after the line agrees with it, as HEY's would.
+func TestAnAddedThreadIsInItsBox(t *testing.T) {
+	c := New(t)
+	c.SetBox("imbox", Thread{TopicID: 7, Subject: "Kites"})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, c.Path(), "watch", "--events", "added")
+	cmd.Env = append(os.Environ(), "HEY_NONINTERACTIVE=1")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	f := c.AwaitFeed(t)
+	f.Add(t, "imbox", Thread{TopicID: 8, Subject: "Board games"})
+	sc := bufio.NewScanner(out)
+	if !sc.Scan() || !strings.Contains(sc.Text(), `"change":"added"`) || !strings.Contains(sc.Text(), `"kind":"imbox"`) ||
+		!strings.Contains(sc.Text(), `"thread_id":8`) || !strings.Contains(sc.Text(), `"name":"Board games"`) {
+		t.Fatalf("the line = %q", sc.Text())
+	}
+	f.End(0)
+	_ = cmd.Wait()
+	box, _, code := runHey(t, c, "box", "view", "imbox", "--json", "--all")
+	if code != 0 || !strings.Contains(box, `"topic_id":7`) || !strings.Contains(box, `"topic_id":8`) {
+		t.Errorf("box view after the line = %d %q", code, box)
+	}
+}
