@@ -20,11 +20,13 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
+	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
 
 // A file written in a directory a client shows reaches it as that grid's
@@ -252,5 +254,150 @@ func TestFsShowingWhatWasReadAnnouncesNothing(t *testing.T) {
 	}
 	if got, want := told(), map[string]int{subs["d05"]: 1}; !maps.Equal(got, want) {
 		t.Fatalf("showing them again after a file was written in d05 told the client %v, want %v", got, want)
+	}
+}
+
+// wideFar is a connection wide enough that the prefetch walk over it is still
+// warming cache.db seconds after a client subscribes.
+type wideFar struct {
+	namespace.Unimplemented
+}
+
+const wideRoot = "geneva/rnode1/g"
+
+func (wideFar) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+	return &gridwellv1.InfoResponse{}, nil
+}
+
+func (wideFar) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
+	return &gridwellv1.HandshakeResponse{Plugins: []*gridwellv1.PluginInfo{
+		rpc.ConnectionRow("geneva", "Geneva", wideRoot, "", rpc.View{})}}, nil
+}
+
+// GetGrid answers twenty wells per grid, two levels deep.
+func (wideFar) GetGrid(_ context.Context, in *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
+	resp := &gridwellv1.GetGridResponse{Grid: &gridwellv1.Grid{Id: in.GridId}}
+	if len(in.GridId) > len(wideRoot)+4 {
+		return resp, nil
+	}
+	for i := range 20 {
+		resp.Tiles = append(resp.Tiles, &gridwellv1.Tile{
+			Id: fmt.Sprintf("%s/t%d", in.GridId, i), GridId: in.GridId, Kind: "well",
+			ChildGridId: fmt.Sprintf("%s%02d", in.GridId, i), X: int64(i), W: 1, H: 1,
+		})
+	}
+	return resp, nil
+}
+
+func (wideFar) GetTilePreview(context.Context, *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
+	return &gridwellv1.GetTilePreviewResponse{}, nil
+}
+
+func (wideFar) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, _ func(*gridwellv1.Event) error) error {
+	<-ctx.Done()
+	return nil
+}
+
+// A directory whose listing does not move tells a client showing it nothing,
+// however busily the files in it are written. The node's own home is the case
+// a user meets: shown through fs, it holds cache.db, which the connection's
+// prefetch walk writes for as long as it runs, while every name in it, and so
+// the listing, stays as it was.
+func TestFsShowingTheNodeHomeWhileItsCacheWarmsSettles(t *testing.T) {
+	const fsUUID = "pfshome"
+	home := t.TempDir()
+	st, err := store.Open(filepath.Join(home, "gridwell.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	cache, err := sourcecache.Open(filepath.Join(home, "cache.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+	cp := plugintest.Spawn(t, "fs", map[string]string{"root": home})
+	a, stop := pluginhost.Start(cp, st.Namespace(fsUUID), nil, "plugin "+fsUUID+" watch")
+	reg := plugin.NewRegistry()
+	reg.Register(localNodeID, "home", local.New(st, nil), nil)
+	reg.Register(fsUUID, "fs", a, stop)
+	// node.Start's transport wiring.
+	reg.SetTransport(cache.Front(wideFar{}, sourcecache.Options{Prefetch: true}), nil)
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	lp, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shown string
+	for _, p := range lp.Plugins {
+		if p.Uuid == fsUUID {
+			shown = plugintest.LandingOf(t, p)
+		}
+	}
+	if shown == "" {
+		t.Fatal("no fs plugin in the handshake")
+	}
+
+	// Subscribing starts the walk.
+	changed := make(chan struct{}, 256)
+	go func() {
+		es, err := cl.Subscribe(ctx)
+		if err != nil {
+			return
+		}
+		defer es.Close()
+		for {
+			ev, ok, err := es.Recv()
+			if err != nil || !ok {
+				return
+			}
+			if ev.GetGridChanged().GetGridId() == shown {
+				changed <- struct{}{}
+			}
+		}
+	}()
+	first, err := cl.GetGrid(ctx, shown)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
+		t.Fatal(err)
+	}
+	walSize := func() int64 {
+		fi, err := os.Stat(filepath.Join(home, "cache.db-wal"))
+		if err != nil {
+			return 0
+		}
+		return fi.Size()
+	}
+	before := walSize()
+
+	// The client refetches on each change it is told of, as every client does.
+	told, same := 0, 0
+	window := time.After(3 * time.Second)
+	for done := false; !done; {
+		select {
+		case <-changed:
+			told++
+			g, err := cl.GetGrid(ctx, shown)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fmt.Sprint(g.Tiles) == fmt.Sprint(first.Tiles) {
+				same++
+			}
+		case <-window:
+			done = true
+		}
+	}
+	if walSize() <= before {
+		t.Fatal("the walk wrote nothing to cache.db in the window, so the window tested nothing")
+	}
+	if told > 0 {
+		t.Fatalf("nothing in the node's home was added, removed or renamed, yet a client showing it was told %d changes in 3s and refetched each; %d of them served the listing it already held", told, same)
 	}
 }
