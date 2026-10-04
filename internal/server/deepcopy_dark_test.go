@@ -308,8 +308,16 @@ func TestMidCopyFailureNeverDoublesTheWell(t *testing.T) {
 	}
 	// A NESTED well, so the failing copy runs through the child arm (the
 	// top-level clone has its own, correct, guard).
-	if _, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: well.ChildGridId, Tile: &pb.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, AltText: "inner"}}); err != nil {
+	inner, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: well.ChildGridId, Tile: &pb.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, AltText: "inner"}})
+	if err != nil {
 		t.Fatal(err)
+	}
+	// Both are visited, so the copy writes a framing for each; a doorway
+	// never visited has none to copy.
+	for _, id := range []string{well.Id, inner.Id} {
+		if _, err := cl.SetFraming(ctx, &pb.SetFramingRequest{TileId: id, Cx: 0.5, Cy: 0.5, Zoom: 0.25}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// The dest tunnel drops MID-copy: the outer copy's framing (1st

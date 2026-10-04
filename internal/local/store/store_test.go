@@ -105,18 +105,19 @@ func TestBootstrapRoot(t *testing.T) {
 func TestRootFramingRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	if _, ok, err := s.RootFraming(ctx); err != nil || ok {
-		t.Fatalf("a fresh home claims a root framing: ok=%v err=%v", ok, err)
+	if v, err := s.RootFraming(ctx); err != nil || !v.SameAs(rpc.View{}) {
+		t.Fatalf("a fresh home claims a root framing: %+v err=%v", v, err)
 	}
 	root, err := s.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := rpc.Framing{Cx: 3.5, Cy: -7.25, Zoom: 1.5}
-	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: root, Cx: want.Cx, Cy: want.Cy, Zoom: want.Zoom}); err != nil {
+	want := mkFraming(3.5, -7.25, 1.5)
+	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: root, Cx: want.Cx(), Cy: want.Cy(), Zoom: want.Zoom()}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	got, ok, err := s.RootFraming(ctx)
+	v, err := s.RootFraming(ctx)
+	got, ok := v.Framing()
 	if err != nil || !ok {
 		t.Fatalf("get: ok=%v err=%v", ok, err)
 	}

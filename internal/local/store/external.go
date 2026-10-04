@@ -450,20 +450,16 @@ func (n *Namespace) Retire(tileID int64) error {
 }
 
 // RootFraming reads a root grid's framing, the row that owns it when there is
-// no doorway tile. ok=false means never visited: no value, or a zero zoom, the
-// convention framing.go documents.
-func (n *Namespace) RootFraming(gridID int64) (f rpc.Framing, ok bool, err error) {
+// no doorway tile.
+func (n *Namespace) RootFraming(gridID int64) (rpc.View, error) {
 	var ncx, ncy, nzoom sql.NullFloat64
-	err = n.s.db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).
+	err := n.s.db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).
 		Scan(&ncx, &ncy, &nzoom)
 	if errors.Is(err, sql.ErrNoRows) {
-		return rpc.Framing{}, false, ErrNotFound
+		return rpc.View{}, ErrNotFound
 	}
-	if err != nil {
-		return rpc.Framing{}, false, err
+	if err != nil || !ncx.Valid || !ncy.Valid || !nzoom.Valid {
+		return rpc.View{}, err
 	}
-	if !nzoom.Valid || nzoom.Float64 <= 0 {
-		return rpc.Framing{}, false, nil
-	}
-	return rpc.Framing{Cx: ncx.Float64, Cy: ncy.Float64, Zoom: nzoom.Float64}, true, nil
+	return rpc.ViewOf(ncx.Float64, ncy.Float64, nzoom.Float64), nil
 }

@@ -563,8 +563,7 @@ func TestShowingAGridNeverStampsAFramingOnIt(t *testing.T) {
 			{X: 2, Y: 3, W: 2, H: 2, ViewCx: 5.37, ViewCy: -7.125, ViewZoom: 0.4},
 		} {
 			cx, cy, live := StoredView(w, paneW, paneH, cell)
-			saved := rpc.Framing{Cx: cx, Cy: cy,
-				Zoom: IntrinsicFromLive(live, OvertakeZoom(w, paneW, paneH, cell))}
+			saved := rpc.ViewOf(cx, cy, IntrinsicFromLive(live, OvertakeZoom(w, paneW, paneH, cell)))
 			if !ShownWellFraming(w).SameAs(saved) {
 				t.Errorf("pane %vx%v: showing %+v and saving back what it shows stamped %+v",
 					paneW, paneH, w, saved)
@@ -573,26 +572,26 @@ func TestShowingAGridNeverStampsAFramingOnIt(t *testing.T) {
 		// A root grid is entered by no doorway, so its unvisited view is the
 		// origin at live zoom 1 rather than the preview calibration.
 		overtake := Overtake(1, 1, paneW, paneH, cell)
-		shown := ShownRootFraming(rpc.Framing{}, overtake)
-		if !shown.SameAs(rpc.Framing{Zoom: IntrinsicFromLive(1, overtake)}) {
+		shown := ShownRootFraming(rpc.View{}, overtake)
+		if !shown.SameAs(rpc.ViewOf(0, 0, IntrinsicFromLive(1, overtake))) {
 			t.Errorf("pane %vx%v: showing an unvisited root stamped %+v", paneW, paneH, shown)
 		}
 		// What the user does move is still a write.
-		if shown.SameAs(rpc.Framing{Cx: 1, Zoom: shown.Zoom}) {
+		if f, _ := shown.Framing(); shown.SameAs(rpc.ViewOf(1, 0, f.Zoom())) {
 			t.Errorf("pane %vx%v: a pan of an unvisited root must still be written", paneW, paneH)
 		}
-		if shown.SameAs(rpc.Framing{Zoom: IntrinsicFromLive(2, overtake)}) {
+		if shown.SameAs(rpc.ViewOf(0, 0, IntrinsicFromLive(2, overtake))) {
 			t.Errorf("pane %vx%v: a zoom of an unvisited root must still be written", paneW, paneH)
 		}
 	}
 	if ShownWellFraming(Well{W: 1, H: 1}).
-		SameAs(rpc.Framing{Cx: 0.5, Cy: 0.5, Zoom: 2 * DefaultWellViewZoom}) {
+		SameAs(rpc.ViewOf(0.5, 0.5, 2*DefaultWellViewZoom)) {
 		t.Error("a reframe of an unvisited doorway must still be written")
 	}
 	// The stamp is what makes this matter: a root grid's would carry the
 	// window it was looked at in into a window it was not.
-	if ShownRootFraming(rpc.Framing{}, Overtake(1, 1, 1280, 800, cell)).
-		SameAs(ShownRootFraming(rpc.Framing{}, Overtake(1, 1, 480, 900, cell))) {
+	if ShownRootFraming(rpc.View{}, Overtake(1, 1, 1280, 800, cell)).
+		SameAs(ShownRootFraming(rpc.View{}, Overtake(1, 1, 480, 900, cell))) {
 		t.Fatal("the two panes above must disagree, or the case is not covered")
 	}
 }

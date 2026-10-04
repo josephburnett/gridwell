@@ -184,22 +184,22 @@ func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
 }
 
 // ShownWellFraming is the framing a doorway row is already showing: the stored
-// one, or StoredView's for the never-visited sentinel. The writeback diffs
+// one, or StoredView's for a doorway never visited. The writeback diffs
 // against this, so a grid the user only looked at is never stamped.
-func ShownWellFraming(w Well) rpc.Framing {
+func ShownWellFraming(w Well) rpc.View {
 	cx, cy := EffectiveCenter(w)
-	return rpc.Framing{Cx: cx, Cy: cy, Zoom: EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)}
+	return rpc.ViewOf(cx, cy, EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom))
 }
 
 // ShownRootFraming is ShownWellFraming for a root grid, which no doorway leads
 // into: an unvisited root sits at the grid origin at live zoom 1, not at
 // DefaultWellViewZoom's preview calibration, so its intrinsic zoom is one over
 // the synthetic 1×1 overtake and depends on the pane it is read in.
-func ShownRootFraming(stored rpc.Framing, overtake float64) rpc.Framing {
-	if stored.Zoom > 0 {
+func ShownRootFraming(stored rpc.View, overtake float64) rpc.View {
+	if _, ok := stored.Framing(); ok {
 		return stored
 	}
-	return rpc.Framing{Zoom: IntrinsicFromLive(1, overtake)}
+	return rpc.ViewOf(0, 0, IntrinsicFromLive(1, overtake))
 }
 
 // Ascent computes the endpoints of an ascent back through w, Descent's

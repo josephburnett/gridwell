@@ -208,14 +208,12 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 // there, and the no-op guard is rpc.Framing.SameAs.
 func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
 	foot := zoomtrans.Well{W: door.W, H: door.H}
-	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy,
-		Zoom: zoomtrans.IntrinsicFromLive(p.Zoom,
-			zoomtrans.OvertakeZoom(foot, p.Rect.W, p.Rect.H, cellPx))}
-	cur := rpc.Framing{Cx: door.ViewCx, Cy: door.ViewCy, Zoom: door.ViewZoom}
-	if cur.SameAs(next) {
+	next, err := rpc.NewFraming(p.Cx, p.Cy, zoomtrans.IntrinsicFromLive(p.Zoom,
+		zoomtrans.OvertakeZoom(foot, p.Rect.W, p.Rect.H, cellPx)))
+	if err != nil || rpc.ViewOf(door.ViewCx, door.ViewCy, door.ViewZoom).SameAs(rpc.Saved(next)) {
 		return
 	}
-	door.ViewCx, door.ViewCy, door.ViewZoom = next.Cx, next.Cy, next.Zoom
+	door.ViewCx, door.ViewCy, door.ViewZoom = next.Cx(), next.Cy(), next.Zoom()
 }
 
 // landingView is the viewport an ascent lands at: the frame's own, or the

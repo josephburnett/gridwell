@@ -142,7 +142,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 	sub.nsTile = id
-	if err := sub.ns.SetFraming(0, gid, rpc.Framing{Cx: 1, Cy: 2, Zoom: 0.75}); err != nil {
+	if err := sub.ns.SetFraming(0, gid, mkFraming(1, 2, 0.75)); err != nil {
 		t.Fatal(err)
 	}
 	return sub

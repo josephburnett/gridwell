@@ -637,8 +637,9 @@ message DeleteTileResponse {}
 // SetFramingRequest is the one framing verb: how a grid looked when the user
 // left it through a given doorway. cx and cy are a float center in the grid's
 // own coordinates; zoom is the pane-size-independent intrinsic ratio (live over
-// overtake), so a window resize never moves a saved view. Zoom 0 means never
-// visited.
+// overtake), so a window resize never moves a saved view. A center that is not
+// a point or a zoom that is not a finite size above zero is refused as
+// InvalidArgument with the reason (rpc.FramingOf); never visited is no write.
 //
 // Exactly one target is set, and that target also routes the call to the owning
 // plugin. tile_id names the doorway tile a grid was entered through, interior

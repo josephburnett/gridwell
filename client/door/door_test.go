@@ -80,7 +80,7 @@ func TestFindMissesCleanly(t *testing.T) {
 // A + menu row wears one face in the menu and the bar alike, so an undeclared
 // glyph cannot mean one thing at one call site and another at the next.
 func TestRowFaceIsTheSameInTheMenuAndInTheBar(t *testing.T) {
-	conn := rpc.ConnectionRow("n2/rtb", "", "n2/rtb/rp/1", "", rpc.Framing{})
+	conn := rpc.ConnectionRow("n2/rtb", "", "n2/rtb/rp/1", "", rpc.View{})
 	rows := []*gridwellv1.PluginInfo{
 		{Uuid: "ufs", Glyph: rpc.GlyphFolder, RootGridId: "ufs/1"},
 		{Uuid: "ugl", RootGridId: "ugl/1"}, // the gitlab shape: declares nothing

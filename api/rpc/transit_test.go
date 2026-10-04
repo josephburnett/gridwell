@@ -70,8 +70,8 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 		}
 	}
 	want := []*pb.PluginInfo{
-		ConnectionRow("hop/n1/rtb", "rtb", "hop/n1/rtb/r/1", "", Framing{Cx: 2, Cy: 3, Zoom: 0.5}),
-		ConnectionRow("hop/n1/far", "far", "", "dial refused", Framing{}),
+		ConnectionRow("hop/n1/rtb", "rtb", "hop/n1/rtb/r/1", "", ViewOf(2, 3, 0.5)),
+		ConnectionRow("hop/n1/far", "far", "", "dial refused", View{}),
 	}
 	if len(rows) != len(want) {
 		t.Fatalf("connection rows = %+v, want %+v", rows, want)

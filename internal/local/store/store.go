@@ -232,11 +232,11 @@ func (s *Store) PluginUUID(ctx context.Context) (string, error) {
 }
 
 // RootFraming returns home's root framing, in the same three columns a plugin
-// context's root keeps. ok=false means never visited.
-func (s *Store) RootFraming(ctx context.Context) (f rpc.Framing, ok bool, err error) {
+// context's root keeps.
+func (s *Store) RootFraming(ctx context.Context) (rpc.View, error) {
 	rootID, err := rootGridID(ctx, s.db)
 	if err != nil {
-		return rpc.Framing{}, false, err
+		return rpc.View{}, err
 	}
 	return s.Namespace("").RootFraming(rootID)
 }
@@ -244,10 +244,10 @@ func (s *Store) RootFraming(ctx context.Context) (f rpc.Framing, ok bool, err er
 // GridFraming is the same fact for any grid of home, by its decimal id. Home
 // declares its trashcan as a menu entry, and an entry carries the framing of
 // the grid behind it exactly as a root does, so the two read one column set.
-func (s *Store) GridFraming(gridID string) (f rpc.Framing, ok bool, err error) {
+func (s *Store) GridFraming(gridID string) (rpc.View, error) {
 	id, err := parseID(gridID)
 	if err != nil {
-		return rpc.Framing{}, false, err
+		return rpc.View{}, err
 	}
 	return s.Namespace("").RootFraming(id)
 }
@@ -266,6 +266,10 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
+	f, err := rpc.FramingOf(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidArgument, err)
+	}
 	var out *gridwellv1.Tile
 	err = s.withMutation(ctx, "SetFraming", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
@@ -275,7 +279,7 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 		if !isWellKind(n.Kind) {
 			return ErrNotWellTile
 		}
-		if _, err := updateFraming(ctx, tx, "", tileID, 0, rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}, s.now().Unix()); err != nil {
+		if _, err := updateFraming(ctx, tx, "", tileID, 0, f, s.now().Unix()); err != nil {
 			return err
 		}
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)
@@ -292,8 +296,11 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 	if err != nil {
 		return fmt.Errorf("%w: invalid root_grid_id", ErrInvalidArgument)
 	}
+	f, err := rpc.FramingOf(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidArgument, err)
+	}
 	return s.withMutation(ctx, "SetFraming/root", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		f := rpc.Framing{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
 		n, err := updateFraming(ctx, tx, "", 0, gridID, f, s.now().Unix())
 		if err != nil {
 			return err

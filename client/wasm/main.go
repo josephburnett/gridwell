@@ -1021,10 +1021,12 @@ func (a *App) startSSE() {
 				a.emit(traceevent.EventRefetch(plan.Fetch))
 				a.fetchGrid(plan.Fetch)
 			}
-			if f := plan.Reframe; f != nil && a.cacheDoorwayFraming(f.GetGridId(),
-				rpc.Framing{Cx: f.GetViewCx(), Cy: f.GetViewCy(), Zoom: f.GetViewZoom()}) {
-				a.emit(traceevent.EventApplied(ev))
-				a.draw()
+			if f := plan.Reframe; f != nil {
+				fr, ok := rpc.ViewOf(f.GetViewCx(), f.GetViewCy(), f.GetViewZoom()).Framing()
+				if ok && a.cacheDoorwayFraming(f.GetGridId(), fr) {
+					a.emit(traceevent.EventApplied(ev))
+					a.draw()
+				}
 			}
 			if plan.Health != nil {
 				a.reportPluginHealth(plan.Health)

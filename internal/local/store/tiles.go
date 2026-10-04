@@ -134,9 +134,9 @@ func (s *Store) CreateWell(ctx context.Context, gridID string, x, y, w, h int64,
 // child is owned by whoever created it and named by a qualified "<uuid>/<id>"
 // string, so deleting the well removes only the reference. view carries the
 // source's framing when the well is a cross-plugin clone of a framed one, so
-// the link previews and descends where the source did; zero zoom means never
-// visited.
-func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.Framing) (*gridwellv1.Tile, error) {
+// the link previews and descends where the source did.
+func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.View) (*gridwellv1.Tile, error) {
+	vcx, vcy, vzoom := view.Wire()
 	if childGridID == "" {
 		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
 	}
@@ -147,7 +147,7 @@ func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h in
 					view_cx, view_cy, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
 				VALUES (?, 'well', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				gid, x, y, w, h, view.Cx, view.Cy, view.Zoom, childGridID, alt, now, now)
+				gid, x, y, w, h, vcx, vcy, vzoom, childGridID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert exit well: %w", err)
 			}

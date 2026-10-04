@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 )
 
@@ -185,11 +184,12 @@ func TestRootFramingLeavesTheGridRowOtherwiseAlone(t *testing.T) {
 		}
 	}
 
-	f, ok, err := s.RootFraming(ctx)
+	v, err := s.RootFraming(ctx)
+	f, ok := v.Framing()
 	if err != nil || !ok {
 		t.Fatalf("root framing: %v ok=%v", err, ok)
 	}
-	if !f.SameAs(rpc.Framing{Cx: -3.5, Cy: 8.25, Zoom: 0.4}) {
+	if !f.SameAs(mkFraming(-3.5, 8.25, 0.4)) {
 		t.Errorf("root framing round-trip: %+v", f)
 	}
 }

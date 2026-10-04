@@ -191,7 +191,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 	var (
 		req    gridwellv1.SetFramingRequest
 		foot   = zoomtrans.Well{W: 1, H: 1}
-		cur    rpc.Framing
+		cur    rpc.View
 		gridID string
 		commit func(rpc.Framing)
 	)
@@ -202,7 +202,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		req = gridwellv1.SetFramingRequest{TileId: door.Id}
 		commit = func(f rpc.Framing) {
 			a.c.PatchTile(door, func(t *gridwellv1.Tile) {
-				t.ViewCx, t.ViewCy, t.ViewZoom = f.Cx, f.Cy, f.Zoom
+				t.ViewCx, t.ViewCy, t.ViewZoom = f.Cx(), f.Cy(), f.Zoom()
 			})
 		}
 	} else {
@@ -214,26 +214,26 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 			return
 		}
 		cur = zoomtrans.ShownRootFraming(
-			rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom},
+			rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom),
 			zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx))
 		gridID = p.Anchor()
 		req = gridwellv1.SetFramingRequest{RootGridId: p.Anchor()}
 		commit = func(f rpc.Framing) { a.cacheDoorwayFraming(p.Anchor(), f) }
 	}
-	next := rpc.Framing{Cx: p.Cx, Cy: p.Cy,
-		Zoom: zoomtrans.IntrinsicFromLive(p.Zoom, zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx))}
-	if cur.SameAs(next) {
+	next, err := rpc.NewFraming(p.Cx, p.Cy,
+		zoomtrans.IntrinsicFromLive(p.Zoom, zoomtrans.OvertakeZoom(foot, r.W, r.H, cellPx)))
+	if err != nil || cur.SameAs(rpc.Saved(next)) {
 		return
 	}
 	commit(next)
-	req.Cx, req.Cy, req.Zoom = next.Cx, next.Cy, next.Zoom
+	req.Cx, req.Cy, req.Zoom = next.Cx(), next.Cy(), next.Zoom()
 	// One dispatcher for both rows a framing can live on. They differ only in
 	// which id keys the parked write, never in policy.
 	key := req.TileId
 	if key == "" {
 		key = req.RootGridId
 	}
-	a.emit(traceevent.Framing(gridID, req.TileId, next.Cx, next.Cy, next.Zoom))
+	a.emit(traceevent.Framing(gridID, req.TileId, next.Cx(), next.Cy(), next.Zoom()))
 	a.postFramingPersist("SetFraming", gridID, key,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetFraming(ctx, &req)

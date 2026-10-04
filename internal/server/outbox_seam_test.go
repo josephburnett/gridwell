@@ -61,13 +61,13 @@ func flakyClient(t *testing.T) (hs *httptest.Server, healthy, flaky *rpc.Client,
 
 // framingOf reads a doorway tile's persisted framing back out of the store,
 // through the server — the far end of every framing write below.
-func framingOf(t *testing.T, cl *rpc.Client, tileID string) rpc.Framing {
+func framingOf(t *testing.T, cl *rpc.Client, tileID string) rpc.View {
 	t.Helper()
 	tile, err := cl.GetTile(context.Background(), tileID)
 	if err != nil {
 		t.Fatalf("GetTile: %v", err)
 	}
-	return rpc.Framing{Cx: tile.ViewCx, Cy: tile.ViewCy, Zoom: tile.ViewZoom}
+	return rpc.ViewOf(tile.ViewCx, tile.ViewCy, tile.ViewZoom)
 }
 
 // TestContentConflictSurfaces (a): a text edit whose save basis lost a race
@@ -173,10 +173,10 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 
 	out := outbox.New()
 	key := outbox.Key{Op: "SetFraming", ID: well.Id}
-	framing := rpc.Framing{Cx: 12.5, Cy: -3.25, Zoom: 1.75}
+	framing := mkFraming(12.5, -3.25, 1.75)
 	var post func()
 	post = func() {
-		_, err := flaky.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: well.Id, Cx: framing.Cx, Cy: framing.Cy, Zoom: framing.Zoom})
+		_, err := flaky.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: well.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()})
 		out.Record(clientsync.Of(err), key, post)
 	}
 
@@ -185,7 +185,7 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 	if out.Len() != 1 {
 		t.Fatalf("a transport failure left %d writes parked, want 1", out.Len())
 	}
-	if got := framingOf(t, healthy, well.Id); got == framing {
+	if got := framingOf(t, healthy, well.Id); got.SameAs(rpc.Saved(framing)) {
 		t.Fatal("the server took the write while the link was down")
 	}
 
@@ -211,7 +211,7 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 	if out.Len() != 0 {
 		t.Errorf("a landed write left %d parked", out.Len())
 	}
-	if got := framingOf(t, healthy, well.Id); got != framing {
+	if got := framingOf(t, healthy, well.Id); !got.SameAs(rpc.Saved(framing)) {
 		t.Errorf("framing after the kick = %+v, want %+v", got, framing)
 	}
 }
@@ -408,8 +408,8 @@ func TestUnloadDrainsTheOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	framing := rpc.Framing{Cx: 5, Cy: 6, Zoom: 0.75}
-	req := &gridwellv1.SetFramingRequest{TileId: well.Id, Cx: framing.Cx, Cy: framing.Cy, Zoom: framing.Zoom}
+	framing := mkFraming(5, 6, 0.75)
+	req := &gridwellv1.SetFramingRequest{TileId: well.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()}
 
 	out := outbox.New()
 	key := outbox.Key{Op: "SetFraming", ID: well.Id}
@@ -427,7 +427,7 @@ func TestUnloadDrainsTheOutbox(t *testing.T) {
 			t.Fatalf("framing beacon = %d, want 200", res.StatusCode)
 		}
 	}
-	if got := framingOf(t, healthy, well.Id); got != framing {
+	if got := framingOf(t, healthy, well.Id); !got.SameAs(rpc.Saved(framing)) {
 		t.Errorf("framing after the unload drain = %+v, want %+v", got, framing)
 	}
 }

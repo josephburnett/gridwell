@@ -36,11 +36,11 @@ func updateFraming(ctx context.Context, x execer, ns string, tileID, gridID int6
 		res, err = x.ExecContext(ctx,
 			`UPDATE tiles SET view_cx = ?, view_cy = ?, view_zoom = ?, updated_at = ?
 			 WHERE id = ? AND ns = ? AND tombstoned = 0`,
-			f.Cx, f.Cy, f.Zoom, now, tileID, ns)
+			f.Cx(), f.Cy(), f.Zoom(), now, tileID, ns)
 	} else {
 		res, err = x.ExecContext(ctx,
 			`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND ns = ?`,
-			f.Cx, f.Cy, f.Zoom, gridID, ns)
+			f.Cx(), f.Cy(), f.Zoom(), gridID, ns)
 	}
 	if err != nil {
 		return 0, err

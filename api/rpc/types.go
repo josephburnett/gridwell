@@ -5,7 +5,6 @@
 package rpc
 
 import (
-	"math"
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -113,11 +112,12 @@ const PluginKindConnection = "connection"
 // row of kind connection, its landing as the root and the last dial failure
 // as InfoError. A pending connection is rootless, so health reads it as
 // waiting, not broken.
-func ConnectionRow(uuid, label, rootGridID, statusDetail string, view Framing) *pb.PluginInfo {
+func ConnectionRow(uuid, label, rootGridID, statusDetail string, view View) *pb.PluginInfo {
+	cx, cy, zoom := view.Wire()
 	return &pb.PluginInfo{
 		Uuid: uuid, Kind: PluginKindConnection, Label: label, Glyph: GlyphGlobe,
 		RootGridId: rootGridID, InfoError: statusDetail,
-		RootViewCx: view.Cx, RootViewCy: view.Cy, RootViewZoom: view.Zoom,
+		RootViewCx: cx, RootViewCy: cy, RootViewZoom: zoom,
 	}
 }
 
@@ -275,48 +275,4 @@ func ShellSession(t *pb.Tile) string {
 		return t.ShellSession
 	}
 	return ContentID(t)
-}
-
-// Framing is how a grid looked when it was last left through a doorway: a
-// float center in the grid's own coordinates plus a pane-size-independent
-// zoom, so a window resize never moves a saved view. Zoom == 0 means never
-// visited, and Cx and Cy mean nothing then.
-type Framing struct {
-	Cx   float64
-	Cy   float64
-	Zoom float64
-}
-
-// framingEpsilon is how close two framings count as the same picture.
-const framingEpsilon = 0.001
-
-// SameAs is the same-framing test, within framingEpsilon. Every persister
-// consults it, so a settle tick never churns the store.
-func (f Framing) SameAs(g Framing) bool {
-	return math.Abs(f.Cx-g.Cx) < framingEpsilon &&
-		math.Abs(f.Cy-g.Cy) < framingEpsilon &&
-		math.Abs(f.Zoom-g.Zoom) < framingEpsilon
-}
-
-// Reframe writes a root grid's framing onto every doorway rooted at gridID, a
-// row's own and a declared entry's alike, and reports whether any value moved
-// by SameAs.
-func Reframe(gridID string, f Framing, plugins []*pb.PluginInfo) bool {
-	if gridID == "" {
-		return false
-	}
-	changed := false
-	for _, pl := range plugins {
-		if pl.RootGridId == gridID && !f.SameAs(Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}) {
-			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.Cx, f.Cy, f.Zoom
-			changed = true
-		}
-		for _, e := range pl.MenuEntries {
-			if e.GridId == gridID && !f.SameAs(Framing{Cx: e.ViewCx, Cy: e.ViewCy, Zoom: e.ViewZoom}) {
-				e.ViewCx, e.ViewCy, e.ViewZoom = f.Cx, f.Cy, f.Zoom
-				changed = true
-			}
-		}
-	}
-	return changed
 }

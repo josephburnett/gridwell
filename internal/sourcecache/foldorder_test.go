@@ -55,10 +55,10 @@ func TestALiveAnswerNeverInstallsOverAFoldMadeSinceItsRead(t *testing.T) {
 
 	t.Run("a framing event against a handshake", func(t *testing.T) {
 		cc, src, held := heldFixture(t)
-		mine, theirs := rpc.Framing{Cx: 1, Cy: 2, Zoom: 1.5}, rpc.Framing{Cx: -3, Cy: 4, Zoom: 0.5}
+		mine, theirs := mkFraming(1, 2, 1.5), mkFraming(-3, 4, 0.5)
 		src.mu.Lock()
 		row := src.lists[""].Plugins[0]
-		row.RootViewCx, row.RootViewCy, row.RootViewZoom = mine.Cx, mine.Cy, mine.Zoom
+		row.RootViewCx, row.RootViewCy, row.RootViewZoom = mine.Cx(), mine.Cy(), mine.Zoom()
 		src.mu.Unlock()
 		done := make(chan struct{})
 		go func() {
@@ -69,7 +69,7 @@ func TestALiveAnswerNeverInstallsOverAFoldMadeSinceItsRead(t *testing.T) {
 		cc.applyEvent(ctx, rpc.FramingEvent(farHome, theirs))
 		close(held.release)
 		<-done
-		if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(theirs) {
+		if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(theirs)) {
 			t.Errorf("the connection row = %+v, want the folded %+v", got, theirs)
 		}
 	})

@@ -337,7 +337,7 @@ func TestReframeWritesEveryDoorwayRootedAtTheGrid(t *testing.T) {
 			MenuEntries: []*pb.MenuEntry{{Id: "trash", GridId: "loc/9"}, {Id: "same", GridId: "loc/1"}}},
 		{Uuid: "p", MenuEntries: []*pb.MenuEntry{{Id: "feed", GridId: "p/~ZmVlZA"}}},
 	}
-	f := Framing{Cx: 1.5, Cy: -2, Zoom: 0.75}
+	f, _ := NewFraming(1.5, -2, 0.75)
 	if !Reframe("loc/1", f, menu) {
 		t.Fatal("a new framing reported no change")
 	}

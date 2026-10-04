@@ -49,8 +49,8 @@ func TestChainOfSplitsTheHopsFromTheTail(t *testing.T) {
 func TestReachEdgesReadsWhereEachConnectionLands(t *testing.T) {
 	lp := &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{
 		{Uuid: "nodeme1/toa/nodea01", RootGridId: "nodeme1/toa/nodea01/1"},
-		ConnectionRow("nodeme1/toa/nodea01/toc", "C", "nodeme1/toa/nodea01/toc/nodec01/1", "", Framing{}),
-		ConnectionRow("nodeme1/toa/nodea01/pending", "P", "", "dialing", Framing{}),
+		ConnectionRow("nodeme1/toa/nodea01/toc", "C", "nodeme1/toa/nodea01/toc/nodec01/1", "", View{}),
+		ConnectionRow("nodeme1/toa/nodea01/pending", "P", "", "dialing", View{}),
 	}}
 	got := ReachEdges(lp)
 	if len(got) != 1 || got[0] != (ReachEdge{Conn: "toc", Lands: "nodec01", Label: "C"}) {

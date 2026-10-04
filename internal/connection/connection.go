@@ -228,7 +228,7 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 		st := s.stateOf(name)
 		status := st.detail
 		var rootGridID string
-		var view rpc.Framing
+		var view rpc.View
 		switch {
 		case st.mismatch:
 			// The landing verdict outranks the learned root: the row keeps the
@@ -240,7 +240,7 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 				vctx, cancel := context.WithTimeout(ctx, rowsHandshakeWait)
 				if lp, err := lc.client.Handshake(vctx, &gridwellv1.HandshakeRequest{}); err == nil {
 					if h := rpc.HomeRow(lp); h != nil {
-						view = rpc.Framing{Cx: h.RootViewCx, Cy: h.RootViewCy, Zoom: h.RootViewZoom}
+						view = rpc.ViewOf(h.RootViewCx, h.RootViewCy, h.RootViewZoom)
 					}
 				}
 				cancel()

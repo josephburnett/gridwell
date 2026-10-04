@@ -179,7 +179,7 @@ func TestPlaceTileExitWellHasNoLocalSubtree(t *testing.T) {
 	root := rootID(t, s)
 	interior := placeWell(t, s, root, 0, 0)
 	exit, err := s.CreateExitWell(ctx, root, 3, 3, 1, 1,
-		"aabbccddaabbccddaabbccddaabbccdd/7", "mounted", rpc.Framing{})
+		"aabbccddaabbccddaabbccddaabbccdd/7", "mounted", rpc.View{})
 	if err != nil {
 		t.Fatalf("create exit well: %v", err)
 	}

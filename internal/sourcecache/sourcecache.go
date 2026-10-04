@@ -400,28 +400,29 @@ func doorwayGrids(l *pb.HandshakeResponse) []string {
 	return ids
 }
 
-// keepFraming gives every doorway of fresh that answers no framing (zero
-// zoom, rpc.Framing's "never visited") the framing old remembers for the same
-// grid.
+// keepFraming gives every doorway of fresh that answers no framing (an
+// rpc.View with none) the framing old remembers for the same grid.
 func keepFraming(fresh, old *pb.HandshakeResponse) {
-	known := map[string]rpc.Framing{}
-	for _, pl := range old.GetPlugins() {
-		if pl.GetRootViewZoom() != 0 {
-			known[pl.GetRootGridId()] = rpc.Framing{Cx: pl.GetRootViewCx(), Cy: pl.GetRootViewCy(), Zoom: pl.GetRootViewZoom()}
-		}
-		for _, e := range pl.GetMenuEntries() {
-			if e.GetViewZoom() != 0 {
-				known[e.GetGridId()] = rpc.Framing{Cx: e.GetViewCx(), Cy: e.GetViewCy(), Zoom: e.GetViewZoom()}
-			}
+	known := map[string]rpc.View{}
+	remember := func(gridID string, v rpc.View) {
+		if _, ok := v.Framing(); ok {
+			known[gridID] = v
 		}
 	}
+	for _, pl := range old.GetPlugins() {
+		remember(pl.GetRootGridId(), rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()))
+		for _, e := range pl.GetMenuEntries() {
+			remember(e.GetGridId(), rpc.ViewOf(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()))
+		}
+	}
+	unset := func(cx, cy, zoom float64) bool { return rpc.ViewOf(cx, cy, zoom).SameAs(rpc.View{}) }
 	for _, pl := range fresh.GetPlugins() {
-		if f, ok := known[pl.GetRootGridId()]; ok && pl.GetRootViewZoom() == 0 {
-			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.Cx, f.Cy, f.Zoom
+		if v, ok := known[pl.GetRootGridId()]; ok && unset(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()) {
+			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = v.Wire()
 		}
 		for _, e := range pl.GetMenuEntries() {
-			if f, ok := known[e.GetGridId()]; ok && e.GetViewZoom() == 0 {
-				e.ViewCx, e.ViewCy, e.ViewZoom = f.Cx, f.Cy, f.Zoom
+			if v, ok := known[e.GetGridId()]; ok && unset(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()) {
+				e.ViewCx, e.ViewCy, e.ViewZoom = v.Wire()
 			}
 		}
 	}
@@ -854,7 +855,9 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		c.deleteTile(ctx, p.TileRemoved.GetTileId())
 	case *pb.Event_GridFramingChanged:
 		fc := p.GridFramingChanged
-		c.reframe(ctx, fc.GetGridId(), rpc.Framing{Cx: fc.GetViewCx(), Cy: fc.GetViewCy(), Zoom: fc.GetViewZoom()})
+		if f, ok := rpc.ViewOf(fc.GetViewCx(), fc.GetViewCy(), fc.GetViewZoom()).Framing(); ok {
+			c.reframe(ctx, fc.GetGridId(), f)
+		}
 	case *pb.Event_PluginHealth:
 		// The source's supervisor says whether it can be reached. A key deeper
 		// than a connection segment is a far plugin, not the machine. No
@@ -925,7 +928,10 @@ func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.S
 	switch {
 	case err != nil:
 	case in.RootGridId != "":
-		c.reframe(ctx, in.RootGridId, rpc.Framing{Cx: in.Cx, Cy: in.Cy, Zoom: in.Zoom})
+		// The source accepted it, so it decodes.
+		if f, ferr := rpc.FramingOf(in); ferr == nil {
+			c.reframe(ctx, in.RootGridId, f)
+		}
 	default:
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
 	}

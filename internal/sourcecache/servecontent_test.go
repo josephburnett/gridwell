@@ -168,7 +168,7 @@ func (p *pageFake) Handshake(context.Context, *pb.HandshakeRequest) (*pb.Handsha
 	if p.dark {
 		return nil, status.Error(codes.Unavailable, "tunnel down")
 	}
-	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "1", "", rpc.Framing{})}}, nil
+	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "1", "", rpc.View{})}}, nil
 }
 func (p *pageFake) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if p.dark {

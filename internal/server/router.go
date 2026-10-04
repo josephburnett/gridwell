@@ -518,6 +518,10 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 // framing) is not an error; a root write invalidates the Info cache, which
 // carries the framing.
 func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
+	f, err := rpc.FramingOf(req)
+	if err != nil {
+		return nil, status.Error(gcodes.InvalidArgument, err.Error())
+	}
 	m := req
 	root := m.RootGridId != ""
 	ref := m.TileId
@@ -528,7 +532,7 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.SetFramingRequest{Cx: m.Cx, Cy: m.Cy, Zoom: m.Zoom}
+	out := &pb.SetFramingRequest{Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}
 	if root {
 		out.RootGridId = ref
 	} else {

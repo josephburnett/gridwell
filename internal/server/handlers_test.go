@@ -521,7 +521,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx := context.Background()
 
-	want := rpc.Framing{Cx: 5.37, Cy: -7.125, Zoom: 0.1}
+	want := mkFraming(5.37, -7.125, 0.1)
 
 	// The doorway row: a well tile.
 	well, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 3, Y: 3, W: 3, H: 5}})
@@ -529,12 +529,12 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 		t.Fatal(err)
 	}
 	set, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: want.Cx, Cy: want.Cy, Zoom: want.Zoom,
+		TileId: well.Id, Cx: want.Cx(), Cy: want.Cy(), Zoom: want.Zoom(),
 	})
 	if err != nil {
 		t.Fatalf("SetFraming(doorway): %v", err)
 	}
-	if got := (rpc.Framing{Cx: set.ViewCx, Cy: set.ViewCy, Zoom: set.ViewZoom}); got != want {
+	if got := rpc.ViewOf(set.ViewCx, set.ViewCy, set.ViewZoom); got != rpc.Saved(want) {
 		t.Errorf("the write's own response = %+v, want %+v", got, want)
 	}
 	// Read it back the way the client actually reads a doorway: through
@@ -549,7 +549,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 			continue
 		}
 		found = true
-		if got := (rpc.Framing{Cx: tile.ViewCx, Cy: tile.ViewCy, Zoom: tile.ViewZoom}); got != want {
+		if got := rpc.ViewOf(tile.ViewCx, tile.ViewCy, tile.ViewZoom); got != rpc.Saved(want) {
 			t.Errorf("doorway framing read back = %+v, want %+v", got, want)
 		}
 	}
@@ -559,7 +559,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 
 	// The root row: the same verb, the same shape, no doorway. It reads
 	// back through the handshake, where a root's framing rides.
-	if _, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: root, Cx: want.Cx, Cy: want.Cy, Zoom: want.Zoom}); err != nil {
+	if _, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: root, Cx: want.Cx(), Cy: want.Cy(), Zoom: want.Zoom()}); err != nil {
 		t.Fatalf("SetFraming(root): %v", err)
 	}
 	hs, err := cl.Handshake(ctx)
@@ -572,7 +572,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 			continue
 		}
 		rootRow = true
-		if got := (rpc.Framing{Cx: pl.RootViewCx, Cy: pl.RootViewCy, Zoom: pl.RootViewZoom}); got != want {
+		if got := rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom); got != rpc.Saved(want) {
 			t.Errorf("root framing read back = %+v, want %+v", got, want)
 		}
 	}
@@ -582,7 +582,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 
 	// And the guiding rule: re-writing the SAME framing changes nothing.
 	if _, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: want.Cx, Cy: want.Cy, Zoom: want.Zoom,
+		TileId: well.Id, Cx: want.Cx(), Cy: want.Cy(), Zoom: want.Zoom(),
 	}); err != nil {
 		t.Fatalf("SetFraming(doorway, again): %v", err)
 	}
@@ -590,7 +590,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := (rpc.Framing{Cx: again.ViewCx, Cy: again.ViewCy, Zoom: again.ViewZoom}); got != want {
+	if got := rpc.ViewOf(again.ViewCx, again.ViewCy, again.ViewZoom); got != rpc.Saved(want) {
 		t.Errorf("rewriting the same framing moved it: %+v, want %+v", got, want)
 	}
 	if again.Version != set.Version {
