@@ -21,7 +21,7 @@ import {
 import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
-import { logLine, trace } from './trace';
+import { handOverTrace, logLine, trace } from './trace';
 import { menuChose, menuOpened } from './viewtrace';
 
 // The renderer's declared choices, as a trace record names them; webviews.ts
@@ -120,6 +120,7 @@ export function registerWebviewIpc(
     });
   });
 
+  ipcMain.handle(CH.handOverTrace, (): Promise<string> => handOverTrace());
 }
 
 // forwarder pushes a registry callback's event onto its EV channel unchanged;

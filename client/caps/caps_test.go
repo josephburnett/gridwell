@@ -26,6 +26,12 @@ func TestDerive(t *testing.T) {
 	if c := Derive(Bridge{ChoiceMenu: true}, false); !c.ChoiceMenu || c.LiveURL {
 		t.Errorf("a menu-only bridge: want ChoiceMenu alone, got %+v", c)
 	}
+	if c := Derive(Bridge{Trace: true}, false); !c.HostTrace || c.LiveURL || c.ChoiceMenu {
+		t.Errorf("a trace-only bridge: want HostTrace alone, got %+v", c)
+	}
+	if c := Derive(NoBridge(), false); c.HostTrace {
+		t.Errorf("a browser has no trace half beside the client's, got %+v", c)
+	}
 	if c := Derive(urlBridge, false); !c.Shells {
 		t.Errorf("shells enabled + bridge: want Shells, got %+v", c)
 	}

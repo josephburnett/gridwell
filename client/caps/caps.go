@@ -1,8 +1,9 @@
 // Package caps owns the client's environment capability set: what the host can
-// place over the page — native live URL views and native menus — and whether
-// this node has shells. It is derived once at boot, so no other code tests for
-// the bridge to make a feature decision, and, like client/pluginhealth, it
-// holds the errsurface report for a missing capability.
+// place over the page — native live URL views and native menus — whether it
+// keeps a trace half of its own, and whether this node has shells. It is
+// derived once at boot, so no other code tests for the bridge to make a
+// feature decision, and, like client/pluginhealth, it holds the errsurface
+// report for a missing capability.
 package caps
 
 import "github.com/josephburnett/gridwell/client/errsurface"
@@ -16,6 +17,9 @@ type Caps struct {
 	// Shells is whether shell tiles exist on this node at all: the + palette
 	// offers the primitive, a descent attaches, a create is accepted.
 	Shells bool
+	// HostTrace is whether the host keeps a trace half of its own, which a
+	// dump must have it hand over first.
+	HostTrace bool
 }
 
 // Bridge is what the native host declares it can do, window.gridwell's caps
@@ -27,6 +31,8 @@ type Bridge struct {
 	LiveURL bool
 	// ChoiceMenu is whether the host implements showChoiceMenu.
 	ChoiceMenu bool
+	// Trace is whether the host implements handOverTrace.
+	Trace bool
 }
 
 // NoBridge is a plain browser host.
@@ -39,6 +45,7 @@ func Derive(bridge Bridge, shellsDisabled bool) Caps {
 		LiveURL:    bridge.LiveURL,
 		ChoiceMenu: bridge.ChoiceMenu,
 		Shells:     !shellsDisabled,
+		HostTrace:  bridge.Trace,
 	}
 }
 

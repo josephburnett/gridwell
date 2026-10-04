@@ -209,6 +209,65 @@ test('only one flush is in flight at a time', async () => {
   assert.equal(c.pendingCount(), 1, 'the record emitted in flight was not acknowledged by that post');
 });
 
+// A dump is written from the node's ring, so what main still holds when one is
+// asked for has to reach the node first, inside the window or not, and after a
+// post already carrying records lands rather than beside it.
+test('a hand-over posts everything pending once the post in flight lands', async () => {
+  const k = clock();
+  const bodies: string[] = [];
+  let release = (): void => {};
+  let first = true;
+  const c = new TraceClient({
+    cid: 'cid7abc',
+    now: k.now,
+    post: async (b) => {
+      bodies.push(b);
+      if (first) {
+        first = false;
+        await new Promise<void>((r) => (release = r));
+      }
+      return true;
+    },
+  });
+  c.emit({ src: 'main', kind: 'boot', msg: 'one' });
+  k.advance(TRACE_FLUSH_MS);
+  const ticking = c.tick();
+  c.emit({ src: 'contextmenu', kind: 'choose', msg: 'dump' });
+  const handed = c.handOver();
+  await Promise.resolve();
+  assert.equal(bodies.length, 1, 'the hand-over posted beside the post in flight');
+  release();
+  await ticking;
+  assert.equal(await handed, '', 'a kept hand-over has nothing to report');
+  assert.deepEqual(records(bodies[1]).map((r) => r.msg), ['dump']);
+  assert.equal(c.pendingCount(), 0);
+});
+
+// What the node never got is a gap in the dump, and the dump says so.
+test("a hand-over answers why the node does not have main's records", async () => {
+  const unarmed = new TraceClient({ cid: 'cid7abc', now: clock().now });
+  unarmed.emit({ src: 'main', kind: 'boot', msg: 'one' });
+  assert.match(await unarmed.handOver(), /not armed/);
+
+  const refused = new TraceClient({ cid: 'cid7abc', now: clock().now, post: async () => false });
+  refused.emit({ src: 'main', kind: 'boot', msg: 'one' });
+  assert.notEqual(await refused.handOver(), '');
+  assert.equal(refused.pendingCount(), 1, 'a refused hand-over is still owed');
+
+  const down = new TraceClient({
+    cid: 'cid7abc',
+    now: clock().now,
+    post: async () => {
+      throw new Error('connection refused');
+    },
+  });
+  down.emit({ src: 'main', kind: 'boot', msg: 'one' });
+  assert.match(await down.handOver(), /connection refused/);
+
+  const idle = new TraceClient({ cid: 'cid7abc', now: clock().now, post: async () => false });
+  assert.equal(await idle.handOver(), '', 'nothing owed is nothing missing');
+});
+
 // The ring is the bound on an unreachable node. What it drops is a hole in the
 // story, so the hole is told: one record, with the count.
 test('a wrap drops the oldest unacknowledged records and says so', () => {

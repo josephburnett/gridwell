@@ -56,7 +56,7 @@ const api = {
   version: 1,
   // Which parts of the bridge this preload implements. caps.Derive reads it, so
   // exposing the bridge does not imply every native feature.
-  caps: { liveUrl: true, choiceMenu: true },
+  caps: { liveUrl: true, choiceMenu: true, trace: true },
 
   placeWebview(args: PlaceArgs): Promise<void> {
     return ipcRenderer.invoke(CH.place, args);
@@ -93,6 +93,11 @@ const api = {
   // Which live panes main's mirror pump captures; see MirroredArgs.
   setMirrored(args: MirroredArgs): Promise<void> {
     return ipcRenderer.invoke(CH.setMirrored, args);
+  },
+  // Main's own trace half, handed to the node before a dump; see
+  // TraceClient.handOver. The args are bridgeVerb's and carry nothing.
+  handOverTrace(_args: object): Promise<string> {
+    return ipcRenderer.invoke(CH.handOverTrace);
   },
 
   ...listeners,

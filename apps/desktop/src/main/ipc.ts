@@ -25,6 +25,8 @@ export const CH = {
                                // rows; main knows nothing of what they mean.
   setMirrored: 'gw:setMirrored', // MirroredArgs → void
   move: 'gw:move', // MoveArgs → void; rejects when fromPaneId holds no view
+  handOverTrace: 'gw:handOverTrace', // void → string: '' once the node holds
+                                     // main's trace records, else why not.
 } as const;
 
 // Live url view's preload → main (send, fire-and-forget). The view swallows the

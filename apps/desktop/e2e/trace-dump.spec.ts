@@ -131,6 +131,14 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   expect(drop?.kv?.pane, `the drop record names the pane it was made in: ${JSON.stringify(drop)}`)
     .toBeTruthy();
 
+  // The dump asks every half for what it still holds, so main's record of the
+  // very pick that asked for it is in the file, not still waiting out main's
+  // flush window.
+  expect(
+    lines.some((r) => r.origin === 'electron' && r.src === 'contextmenu' && r.kind === 'choose' && r.msg === 'dump'),
+    `main's record of the Dump logs pick is in the dump; ${describeDump(lines)}`,
+  ).toBe(true);
+
   // Every origin names its build once, at its start.
   expect(bootOrigins(lines), `boot records; ${describeDump(lines)}`).toEqual(['client', 'electron', 'node']);
   expect(mine.filter((r) => r.kind === 'boot').length, 'this client boots once').toBe(1);

@@ -84,7 +84,7 @@ export class TraceClient {
   private dropped = 0;
   private lastCT = 0;
   private lastFlush: number;
-  private inFlight = false;
+  private flight: Promise<string> | null = null;
   private aborter: AbortController | null = null;
 
   constructor(o: TraceOptions = {}) {
@@ -130,10 +130,37 @@ export class TraceClient {
   // time, because two would send the same records twice and acknowledge each
   // other's.
   async tick(force = false): Promise<void> {
-    if (this.inFlight || !this.post || !(force || this.needFlush())) return;
+    if (this.flight || !this.post || !(force || this.needFlush())) return;
+    // A failure leaves the records pending, and the ring is the bound on that
+    // memory; only a hand-over has someone to tell.
+    await this.send();
+  }
+
+  // handOver is what a dump asks of this half: everything pending, posted now
+  // and after any post already in flight, answering '' once the node has kept
+  // it and otherwise why it has not, so the dump can say what it is missing.
+  async handOver(): Promise<string> {
+    while (this.flight) await this.flight;
+    return this.send();
+  }
+
+  private send(): Promise<string> {
+    const flight = (async () => {
+      try {
+        return await this.postPending();
+      } finally {
+        this.flight = null;
+      }
+    })();
+    this.flight = flight;
+    return flight;
+  }
+
+  private async postPending(): Promise<string> {
+    const post = this.post;
+    if (!post) return this.pendingCount() > 0 ? 'the trace door is not armed' : '';
     const batch = this.pendingBatch();
-    if (!batch) return;
-    this.inFlight = true;
+    if (!batch) return '';
     this.lastFlush = this.now();
     const aborter = new AbortController();
     this.aborter = aborter;
@@ -141,17 +168,15 @@ export class TraceClient {
       'Content-Type': 'application/x-ndjson',
       [TRACE_CLOCK_HEADER]: String(this.lastFlush),
     };
-    let ok = false;
     try {
-      ok = await this.post(batch.body, aborter.signal, headers);
-    } catch {
-      // The door is unreachable, or the post was abandoned; the records stay
-      // pending and the ring is the bound on that memory.
+      if (!(await post(batch.body, aborter.signal, headers))) return 'the node did not keep the batch';
+      batch.ack();
+      return '';
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
     } finally {
-      this.inFlight = false;
       if (this.aborter === aborter) this.aborter = null;
     }
-    if (ok) batch.ack();
   }
 
   // Every unacknowledged record as JSON lines, and the ack to call once the
@@ -270,7 +295,12 @@ export function flushTrace(): void {
   void mainRing.tick(true);
 }
 
-let flushTimer: ReturnType<typeof setInterval> | null = null;
+// handOverTrace is CH.handOverTrace: see TraceClient.handOver.
+export function handOverTrace(): Promise<string> {
+  return mainRing.handOver();
+}
+
+let flushTimer:ReturnType<typeof setInterval> | null = null;
 
 // stopTrace ends the trace's traffic for good. The quit sequence calls it once
 // the windows have closed, so no request is in flight when the app exits.

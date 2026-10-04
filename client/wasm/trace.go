@@ -4,19 +4,20 @@ package main
 
 // The client's half of the trace. Everything the shim records goes through
 // emit, and every batch reaches the node through one post at a time, on the
-// same settle cadence as the other write-outs. A post that fails surfaces
-// nothing: a notice is itself a record, so the two would feed each other.
+// same settle cadence as the other write-outs. A routine post that fails
+// surfaces nothing: a notice is itself a record, so the two would feed each
+// other. Only a dump, which the user asked for, says what it is missing.
 
 import (
 	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
+	"syscall/js"
 	"time"
 
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/cadence"
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/trace"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
@@ -61,26 +62,49 @@ func (a *App) postTraceBatch(batch []byte, done func(kept bool)) {
 	a.armTraceFlush()
 }
 
-// dumpTrace hands the node what this client is still holding, waits for it to
-// be kept, and asks for the ring on disk. Where it landed is a notice: a
-// diagnostic the user cannot find is no diagnostic.
+// dumpTrace has every half hand the node what it is still holding, then asks
+// for the ring on disk. Where it landed, and any half that could not hand
+// over, is a notice (trace.DumpNotice): a diagnostic the user cannot find is no
+// diagnostic.
 func (a *App) dumpTrace() {
 	go func() {
+		halves := []trace.HandOver{{Origin: tracewire.OriginClient}}
 		if batch, done := a.pump.Force(a.tr, time.Now()); batch != nil {
 			_, err := a.postTrace(tracewire.Path, batch)
 			done(err == nil)
+			if err != nil {
+				halves[0].Lost = err.Error()
+			}
 		}
-		body, err := a.postTrace(tracewire.DumpPath, nil)
+		if a.caps.HostTrace {
+			halves = append(halves, trace.HandOver{Origin: tracewire.OriginElectron, Lost: a.bridgeHandOverTrace()})
+		}
 		var dump tracewire.DumpResponse
+		body, err := a.postTrace(tracewire.DumpPath, nil)
 		if err == nil {
 			err = json.Unmarshal(body, &dump)
 		}
-		if err != nil {
-			a.reportErr(errsurface.Error, traceSource, "logs could not be dumped: "+err.Error())
+		sev, msg := trace.DumpNotice(dump.Path, err, halves)
+		a.reportErr(sev, traceSource, msg)
+	}()
+}
+
+// bridgeHandOverTrace waits for the host's TraceClient.handOver, answering why
+// its records did not reach the node, empty when they did. It blocks, so it
+// runs only off the event loop.
+func (a *App) bridgeHandOverTrace() string {
+	lost := make(chan string, 1)
+	called := a.bridgeVerb("handOverTrace", nil, func(res js.Value) {
+		if res.Type() != js.TypeString {
+			lost <- "the host answered no verdict"
 			return
 		}
-		a.reportErr(errsurface.Info, traceSource, "logs dumped to "+dump.Path)
-	}()
+		lost <- res.String()
+	}, func() { lost <- "the host refused the hand-over" })
+	if !called {
+		return "the host bridge is gone"
+	}
+	return <-lost
 }
 
 // traceSource is the notice strip's name for the trace itself, so a second

@@ -40,6 +40,7 @@ func bridgeCaps() caps.Bridge {
 	return caps.Bridge{
 		LiveURL:    c.Get("liveUrl").Truthy(),
 		ChoiceMenu: c.Get("choiceMenu").Truthy(),
+		Trace:      c.Get("trace").Truthy(),
 	}
 }
 
