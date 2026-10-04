@@ -15,7 +15,8 @@ The shipped plugins live in their own repository,
 `gmail`, `hey`), and use the same door as anyone else's: each is its own Go
 module importing only the api. `pages` is the smallest one, and the example
 for serving web content: no config, no state, and every page generated in the
-plugin. `fs` is the fullest surface. `hey` is the example for links.
+plugin. `fs` is the fullest surface. `hey` and `gmail` are the examples for
+links, and `fs` lists its symlinks as links.
 
 This doc is the door. `docs/plugin-standard.md` is what a good plugin does at
 it, rule by rule, with a checklist to tick before you ship.
@@ -26,8 +27,11 @@ it, rule by rule, with a checklist to tick before you ship.
   packages: `gen/plugin/v1` (implement `PluginServer`), `compose` (the
   handshake, and how a node loads you), `gwerr` (the error vocabulary). The
   guest-side helper for your main is a second small module in the plugins
-  repository, `github.com/josephburnett/gridwell-plugins/guest`. Not Go? The
-  service is plain gRPC behind hashicorp go-plugin's handshake.
+  repository, `github.com/josephburnett/gridwell-plugins/guest`. A plugin that
+  remembers its source takes the cache file, the shared walks, the `Watch`
+  fan-out and the calendar placement from a third,
+  `github.com/josephburnett/gridwell-plugins/memo`. Not Go? The service is
+  plain gRPC behind hashicorp go-plugin's handshake.
 - **Binary**: `gridwell-plugin-<kind>` beside the `gridwell` binary, on
   `GRIDWELL_PLUGIN_DIR`, on PATH, or named by `binary:` in `server.yaml`.
   Register with a `plugins:` entry (`kind`, optional `label`, your `config`
@@ -63,8 +67,9 @@ there — no such directory, no CLI, a token that does not load — answer `Info
 with an error whose message is one plain sentence saying why. The node shows
 your plugin broken with that sentence and no entries, and asks again until
 the fix lands, with no restart. Latch the first pass: once `Info` has
-answered, a source that goes away is weather, and your reads answer
-`Unavailable`, not a verdict.
+answered, a source that goes away is weather — a token revoked or a CLI
+signed out included — and your reads answer `Unavailable`, or from memory
+with `unreachable` set (see Listings), never a verdict.
 
 **Declare one `menu_entries` row per collection**, each naming its context
 key. That is how your plugin is reached: each entry becomes a + menu swatch,
@@ -107,7 +112,8 @@ entry's `status_detail` is one emoji about its state — ✅ done, ● unread,
 normal state. The client draws it before the tile's name wherever the name is
 drawn, so a long name clips and the emoji never does: a note on the name,
 never a second name. An entry with `serves_page` presents its `ServeContent` HTML on
-descent, sandboxed by the node. It is a `url` entry, and only a `url` entry:
+descent, sandboxed by the node: scripts run, and on the desktop a
+`target=_blank` link opens its address in a new pane below. It is a `url` entry, and only a `url` entry:
 serving a page is what that entry's address is, and the node refuses the
 declaration on any other kind. Leave `url_string` empty — the node derives the
 address when the page is opened — and serve a document body from a `text` entry
