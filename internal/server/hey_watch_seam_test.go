@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
+	"github.com/josephburnett/gridwell/internal/plugintest/heyfake"
 )
 
 // Nothing is done for nobody (docs/plugin-standard.md rule 8), across the
@@ -79,7 +80,7 @@ func TestHeyFeedRunsOnlyWhileAGridIsShown(t *testing.T) {
 	}
 	feed := hey.AwaitFeed(t)
 	feed.Ready(t)
-	feed.Send(t, `{"change":"added","at":"2026-09-28T19:01:04.695Z","box":{"id":1,"kind":"imbox","name":"Imbox"},"posting_id":930,"thread_id":103,"new":true,"posting":{"id":930,"kind":"topic","name":"Board games","summary":"Thursday at mine?","seen":true,"created_at":"2026-01-09T19:01:04Z","creator":{"name":"Erin","email_address":"erin@example.com"}}}`)
+	feed.Add(t, "imbox", heyfake.Thread{TopicID: 103, Subject: "Board games", Summary: "Thursday at mine?", From: "Erin", Email: "erin@example.com", Seen: true, Created: time.Date(2026, 1, 9, 19, 1, 4, 0, time.UTC)})
 	for told := false; !told; {
 		select {
 		case ev := <-events:

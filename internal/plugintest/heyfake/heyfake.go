@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -182,6 +183,7 @@ func (c *CLI) Runs(command string) int {
 
 // Feed is one running `hey watch`, which says nothing until the test sends.
 type Feed struct {
+	cli   *CLI
 	lines chan string
 	end   chan int
 	done  chan struct{}
@@ -209,7 +211,33 @@ func (c *CLI) AwaitFeed(t *testing.T) *Feed {
 	}
 }
 
-// Send prints one line on the feed.
+// Add lands th in box and prints the line announcing it. A walk takes what
+// `box view` lists as the box, so a line naming a thread its box lacks is a
+// HEY that cannot exist, and the thread vanishes at whichever walk follows:
+// a thread's line goes through Add, never Send.
+func (f *Feed) Add(t *testing.T, box string, th Thread) {
+	t.Helper()
+	f.cli.mu.Lock()
+	threads := slices.DeleteFunc(slices.Clone(f.cli.boxes[box]), func(o Thread) bool { return o.TopicID == th.TopicID })
+	f.cli.boxes[box] = append(threads, th)
+	f.cli.mu.Unlock()
+	line, err := json.Marshal(map[string]any{
+		"change":     "added",
+		"at":         time.Now().UTC().Format(time.RFC3339Nano),
+		"box":        map[string]any{"kind": box, "name": box},
+		"posting_id": th.TopicID,
+		"thread_id":  th.TopicID,
+		"new":        true,
+		"posting":    postingOf(th),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Send(t, string(line))
+}
+
+// Send prints one line on the feed: ready, disconnected, resync, or one it
+// cannot parse.
 func (f *Feed) Send(t *testing.T, line string) {
 	t.Helper()
 	select {
@@ -292,6 +320,12 @@ type posting struct {
 	} `json:"creator"`
 }
 
+func postingOf(t Thread) posting {
+	p := posting{ID: t.TopicID, TopicID: t.TopicID, Kind: "topic", Name: t.Subject, Summary: t.Summary, Seen: t.Seen, CreatedAt: t.Created}
+	p.Creator.Name, p.Creator.EmailAddress = t.From, t.Email
+	return p
+}
+
 func (c *CLI) boxView(box string) (int, string, string) {
 	c.mu.Lock()
 	threads, f := c.boxes[box], c.failing[box]
@@ -309,9 +343,7 @@ func (c *CLI) boxView(box string) (int, string, string) {
 	}
 	postings := []posting{}
 	for _, t := range threads {
-		p := posting{ID: t.TopicID, TopicID: t.TopicID, Kind: "topic", Name: t.Subject, Summary: t.Summary, Seen: t.Seen, CreatedAt: t.Created}
-		p.Creator.Name, p.Creator.EmailAddress = t.From, t.Email
-		postings = append(postings, p)
+		postings = append(postings, postingOf(t))
 	}
 	out, err := json.Marshal(map[string]any{
 		"ok":      true,
@@ -357,7 +389,7 @@ func (c *CLI) threadRead(id string) (int, string, string) {
 // watch holds the run open, printing what the test sends, until the test ends
 // it, the plugin kills the CLI, or the test is over.
 func (c *CLI) watch(w http.ResponseWriter, r *http.Request, exit func(int, string, string)) {
-	f := &Feed{lines: make(chan string), end: make(chan int), done: make(chan struct{})}
+	f := &Feed{cli: c, lines: make(chan string), end: make(chan int), done: make(chan struct{})}
 	defer close(f.done)
 	fl, _ := w.(http.Flusher)
 	w.WriteHeader(http.StatusOK)
