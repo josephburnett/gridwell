@@ -111,7 +111,7 @@ func (a *App) cancelGesture(relayed bool) bool {
 	}
 	if u.View {
 		if p := a.tree.FindPane(d.originPaneID); p != nil {
-			p.Cx, p.Cy, p.Zoom = d.pressCx, d.pressCy, d.pressZoom
+			p.View = d.pressView
 		}
 	}
 	a.canvas.Get("style").Set("cursor", "")
@@ -174,8 +174,14 @@ func (a *App) menuPaneForPointer() (*pane.Pane, pane.Rect, bool) {
 }
 
 // cellAtScreen floors: round-half makes clicks in a tile's lower-right miss.
-func cellAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) (int64, int64) {
-	return p.Screen(r).CellAt(sx, sy)
+// false when p shows nothing at r.
+func cellAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) (int64, int64, bool) {
+	ps, ok := p.Screen(r)
+	if !ok {
+		return 0, 0, false
+	}
+	x, y := ps.CellAt(sx, sy)
+	return x, y, true
 }
 
 func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *gridwellv1.Tile {
@@ -235,10 +241,10 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// gesture.ClassifyWheel routes; this handler only resolves the impure facts.
 	var hoverWell *gridwellv1.Tile
 	wellCoverage := 0.0
-	if p.ContentID() == "" {
+	ps, shown := p.Screen(r)
+	if shown && p.ContentID() == "" {
 		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsWellKind(t.Kind) && t.ChildGridId != "" {
 			hoverWell = t
-			ps := p.Screen(r)
 			x0, y0 := ps.CellToScreen(float64(t.X), float64(t.Y))
 			x1, _ := ps.CellToScreen(float64(t.X)+1, float64(t.Y))
 			cell := x1 - x0
@@ -272,7 +278,6 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// The wheel zooms the grid inside the hovered well, its stored preview
 		// framing, not the grid the pane shows. The settle persister posts one
 		// framing write per tile at flush.
-		ps := p.Screen(r)
 		x0, y0 := ps.CellToScreen(float64(hoverWell.X), float64(hoverWell.Y))
 		x1, _ := ps.CellToScreen(float64(hoverWell.X)+1, float64(hoverWell.Y))
 		parentCell := x1 - x0
@@ -317,10 +322,14 @@ func (a *App) scrollText(p *pane.Pane, x, y float64) {
 // wheelZoomPaneAt keeps the world point under (sx, sy) under it after the zoom,
 // map-style. The bar-band wheel passes the pane's center.
 func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
-	ps := p.Screen(r)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return
+	}
+	v := ps.View()
 	cellX, cellY := ps.ScreenToCell(sx, sy)
-	if z, cx, cy, ok := zoomtrans.WheelZoom(dy, p.Zoom, p.Cx, p.Cy, cellX, cellY, zoomFactor, zoomMin, zoomMax); ok {
-		p.Zoom, p.Cx, p.Cy = z, cx, cy
+	if z, cx, cy, ok := zoomtrans.WheelZoom(dy, v.Zoom(), v.Cx(), v.Cy(), cellX, cellY, zoomFactor, zoomMin, zoomMax); ok {
+		p.SetView(cx, cy, z)
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -439,10 +448,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// fall through so the click also pans / selects
 	}
 
-	cellX, cellY := cellAtScreen(p, r, sx, sy)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return nil
+	}
+	cellX, cellY := ps.CellAt(sx, sy)
 	n := a.tileAtCell(p, cellX, cellY)
-	parentCell := cellPx * p.Zoom
-	ps := p.Screen(r)
+	parentCell := ps.Cell()
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		splitNav:     args[0].Get("ctrlKey").Truthy(),
@@ -455,9 +467,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		srcGridID:    a.gridIDForPane(p),
 		srcCellSize:  parentCell,
 		snapshotTile: &gridwellv1.Tile{},
-		pressCx:      p.Cx,
-		pressCy:      p.Cy,
-		pressZoom:    p.Zoom,
+		pressView:    p.View,
 	}
 	if n != nil {
 		// Pull out of well: when a child preview tile sits at the cursor, that
@@ -529,9 +539,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// the mousedown, so there is no text-scroll arm here.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			cellSize := cellPx * focused.Zoom
-			focused.Cx -= (sx - d.curScreenX) / cellSize
-			focused.Cy -= (sy - d.curScreenY) / cellSize
+			if v, ok := focused.Live(); ok {
+				cellSize := cellPx * v.Zoom()
+				focused.SetView(v.Cx()-(sx-d.curScreenX)/cellSize, v.Cy()-(sy-d.curScreenY)/cellSize, v.Zoom())
+			}
 		}
 	} else if a.ghost != nil {
 		// The same dragdrop.DecideDrop verdict onMouseUp commits, so a
@@ -567,7 +578,9 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 		// not cells. A right-drag clone keeps the bare cellPx fallback.
 		size = cellPx
 		if src := a.tree.FindPane(d.originPaneID); src != nil && !d.intent.Creates() {
-			size = cellPx * src.Zoom
+			if v, ok := src.Live(); ok {
+				size = cellPx * v.Zoom()
+			}
 		}
 	}
 	a.ghost = &ghost{
@@ -632,7 +645,10 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 		// Ascent lives on the middle button and the bar's crumb click.
 		return false
 	}
-	cellX, cellY := cellAtScreen(p, r, sx, sy)
+	cellX, cellY, ok := cellAtScreen(p, r, sx, sy)
+	if !ok {
+		return false
+	}
 	hit := a.tileAtCell(p, cellX, cellY)
 	if hit == nil {
 		return false

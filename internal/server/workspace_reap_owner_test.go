@@ -112,14 +112,16 @@ func TestReapFindsEncoderWrittenReferences(t *testing.T) {
 	tr := pane.NewTree()
 	p := tr.FocusedPane()
 	p.Stack = pane.NewStack(root)
-	p.Push(pane.Frame{GridID: "other/1", Door: root, Zoom: 1})
+	crossing := pane.Frame{GridID: "other/1", Door: root}
+	crossing.SetView(0, 0, 1)
+	p.Push(crossing)
 	p.Push(pane.Frame{Door: eph.Id, Content: true})
 	second, err := tr.Split(pane.Vertical)
 	if err != nil {
 		t.Fatal(err)
 	}
 	second.Stack = pane.StackAt(root, nil, txt.Id)
-	second.Zoom = 1
+	second.SetView(0, 0, 1)
 
 	data, skipped, err := pane.EncodeLayout(tr, nil)
 	if err != nil {

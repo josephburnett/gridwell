@@ -2,6 +2,7 @@ package nav
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"strconv"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -61,18 +62,22 @@ func (m *Machine) enterLevel(g Gesture, w World) Plan {
 	// zooming: its first descent captures the window layout, and a zoom over an
 	// unchanged view reads as a stutter.
 	here := p.Stack.Clone()
+	live, viewed := p.View.Framing()
+	if !viewed {
+		live = zoomtrans.Origin
+	}
 	seg := transition.Segment{
 		Place:  &here,
-		FromCx: p.Cx, FromCy: p.Cy, FromZoom: p.Zoom,
-		ToCx: p.Cx, ToCy: p.Cy, ToZoom: p.Zoom,
+		FromCx: live.Cx(), FromCy: live.Cy(), FromZoom: live.Zoom(),
+		ToCx: live.Cx(), ToCy: live.Cy(), ToZoom: live.Zoom(),
 		DurationMs: w.TransitionMs,
 	}
 	expand := pt.BlobId == 0
 	if !expand {
 		cx, cy := pane.Footprint{X: pt.X, Y: pt.Y, W: pt.W, H: pt.H}.Center()
 		target := panebox.FitZoom(p.Rect, pt.W, pt.H, w.TextSideInset, w.CellPx)
-		if target < p.Zoom {
-			target = p.Zoom
+		if target < live.Zoom() {
+			target = live.Zoom()
 		}
 		seg.ToCx, seg.ToCy, seg.ToZoom = cx, cy, target
 	}
@@ -169,10 +174,9 @@ func (m *Machine) levelFallbackTree(ld *levelData) *pane.Tree {
 	if ld.Boot {
 		t := ld.Tile
 		cx, cy := pane.Footprint{X: t.X, Y: t.Y, W: t.W, H: t.H}.Center()
-		return pane.TreeAtPlace(ld.IDPrefix, t.GridId, nil, cx, cy, 1)
+		return pane.TreeAtPlace(ld.IDPrefix, t.GridId, nil, rpc.ViewOf(cx, cy, zoomtrans.Origin.Zoom()))
 	}
-	return pane.TreeAtPlace(ld.IDPrefix, ld.Origin.Anchor(), ld.Origin.Path(),
-		ld.Origin.Cx, ld.Origin.Cy, ld.Origin.Zoom)
+	return pane.TreeAtPlace(ld.IDPrefix, ld.Origin.Anchor(), ld.Origin.Path(), ld.Origin.View)
 }
 
 func (m *Machine) levelReady(ld *levelData, pl *planner) Plan {
@@ -324,15 +328,19 @@ func (m *Machine) animateLevelReturn(g Gesture, w World, pl *planner) {
 	}
 	t := w.Level.Tile
 	cx, cy := pane.Footprint{X: t.X, Y: t.Y, W: t.W, H: t.H}.Center()
+	live, viewed := p.View.Framing()
+	if !viewed {
+		return
+	}
 	overtake := panebox.FitZoom(p.Rect, t.W, t.H, w.TextSideInset, w.CellPx)
-	if overtake < p.Zoom {
-		overtake = p.Zoom
+	if overtake < live.Zoom() {
+		overtake = live.Zoom()
 	}
 	here := p.Stack.Clone()
 	pl.add(Effect{Kind: EffStartTransition, PaneID: p.ID, Segments: []transition.Segment{{
 		Place:  &here,
 		FromCx: cx, FromCy: cy, FromZoom: overtake,
-		ToCx: p.Cx, ToCy: p.Cy, ToZoom: p.Zoom,
+		ToCx: live.Cx(), ToCy: live.Cy(), ToZoom: live.Zoom(),
 		DurationMs: w.TransitionMs,
 	}}})
 }
@@ -366,7 +374,11 @@ func (m *Machine) levelRecentre(c cont, r Result, w World, pl *planner) {
 	}
 	t := r.Tile
 	cx, cy := pane.Footprint{X: t.X, Y: t.Y, W: t.W, H: t.H}.Center()
-	pl.install(c.PaneID, oneFrame(t.GridId, cx, cy, p.Zoom), nil)
+	zoom := zoomtrans.Origin.Zoom()
+	if live, viewed := p.View.Framing(); viewed {
+		zoom = live.Zoom()
+	}
+	pl.install(c.PaneID, oneFrame(t.GridId, rpc.ViewOf(cx, cy, zoom)), nil)
 	pl.add(Effect{Kind: EffFetchGrid, GridID: t.GridId})
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 }

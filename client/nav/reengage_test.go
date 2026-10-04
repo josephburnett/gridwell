@@ -146,8 +146,8 @@ func TestHealedPlans(t *testing.T) {
 		}
 		// Centred on the tile in its new grid, so ascending out of the
 		// descent lands looking at it.
-		if st.Cx != 3.5 || st.Cy != 3 {
-			t.Errorf("viewport = (%v, %v), want the tile's centre", st.Cx, st.Cy)
+		if !centredOn(st.View, 3.5, 3) {
+			t.Errorf("viewport = %+v, want the tile's centre", st.View)
 		}
 		if g := only(t, plan, EffFetchGrid).GridID; g != "elsewhere" {
 			t.Errorf("fetched %q, want the grid the tile now lives in", g)

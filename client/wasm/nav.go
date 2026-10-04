@@ -110,7 +110,7 @@ func (a *App) navWorldForRestore() nav.World {
 	rw := &nav.RestoreWorld{
 		Grids:     map[string]map[string]nav.RestoreTile{},
 		Failed:    map[string]bool{},
-		RootViews: map[string]nav.Viewport{},
+		RootViews: map[string]rpc.Framing{},
 	}
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)
@@ -139,7 +139,7 @@ func (a *App) navWorldForRestore() nav.World {
 	if p := a.tree.FocusedPane(); p != nil {
 		for _, pd := range door.Places(a.allPlugins()) {
 			if f, ok := a.persistedGridView(p, pd.Plugin.RootGridId, nil); ok {
-				rw.RootViews[pd.Plugin.RootGridId] = nav.Viewport{Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}
+				rw.RootViews[pd.Plugin.RootGridId] = f
 			}
 		}
 	}
@@ -173,9 +173,7 @@ func (a *App) navWorldCommon() nav.World {
 		w.Panes = append(w.Panes, nav.PaneView{
 			ID:      p.ID,
 			Stack:   p.Stack.Clone(),
-			Cx:      p.Cx,
-			Cy:      p.Cy,
-			Zoom:    p.Zoom,
+			View:    p.View,
 			Rect:    r,
 			GridID:  gid,
 			Scratch: a.scratchGridIn(gid),
@@ -246,7 +244,7 @@ func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 	landing := p.Popped(1)
 	if !landing.HasView() && !landing.Content {
 		if f, ok := a.persistedGridView(p, landing.Anchor(), landing.Path()); ok {
-			lw.LandingView = &nav.Viewport{Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}
+			lw.LandingView = &f
 		}
 	}
 	return lw

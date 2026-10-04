@@ -65,12 +65,13 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 			Message: "nothing to descend into: " + well.AltText})
 		return
 	}
-	// A pane with no rect, or a view that is not one, has no descent to plan.
+	// A pane with no rect or no view has no descent to plan.
 	size, ok := p.Rect.Size()
-	if !ok {
+	live, viewed := p.View.Framing()
+	if !ok || !viewed {
 		return
 	}
-	from := zoomtrans.Endpoints{Path: p.Stack.Path(), Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
+	from := zoomtrans.Endpoints{Path: p.Stack.Path(), Cx: live.Cx(), Cy: live.Cy(), Zoom: live.Zoom()}
 	wl := zoomtrans.WellOf(well)
 	next := pane.Frame{Door: well.Id}
 	mid, swap, final, ok := zoomtrans.Descent(from, wl, size, w.CellPx)
@@ -126,9 +127,13 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 	r := p.Rect
 	foot := pane.Footprint{X: file.X, Y: file.Y, W: file.W, H: file.H}
 	wellCx, wellCy := foot.Center()
+	live, viewed := p.View.Framing()
+	if !viewed {
+		return
+	}
 	target := panebox.FitZoom(r, file.W, file.H, w.TextSideInset, w.CellPx)
-	if target < p.Zoom {
-		target = p.Zoom
+	if target < live.Zoom() {
+		target = live.Zoom()
 	}
 
 	if rpc.TextDocument(file) {
@@ -167,7 +172,7 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 		Segments: []transition.Segment{
 			{
 				Place:  &animBase,
-				FromCx: p.Cx, FromCy: p.Cy, FromZoom: p.Zoom,
+				FromCx: live.Cx(), FromCy: live.Cy(), FromZoom: live.Zoom(),
 				ToCx: wellCx, ToCy: wellCy, ToZoom: target,
 				DurationMs: w.TransitionMs,
 			},
@@ -243,9 +248,10 @@ func (m *Machine) healStale(paneID string, tile *gridwellv1.Tile, w World, pl *p
 	return true
 }
 
-// landHealed re-anchors the pane at the owning root with the fresh path; the
-// layout persister picks it up from the live tree.
-func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, pl *planner) {
+// landHealed re-anchors the pane at the owning root with the fresh path, at
+// the zoom the pane shows; the layout persister picks it up from the live
+// tree.
+func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, w World, pl *planner) {
 	anchor := tile.GridId
 	path := make([]string, 0, len(wells))
 	if len(wells) > 0 {
@@ -255,8 +261,13 @@ func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, 
 		}
 	}
 	st := pane.StackAt(anchor, path, tile.Id)
-	st.Cx = float64(tile.X) + float64(tile.W)/2
-	st.Cy = float64(tile.Y) + float64(tile.H)/2
+	zoom := zoomtrans.Origin.Zoom()
+	if p, ok := w.Pane(paneID); ok {
+		if live, viewed := p.View.Framing(); viewed {
+			zoom = live.Zoom()
+		}
+	}
+	st.SetView(float64(tile.X)+float64(tile.W)/2, float64(tile.Y)+float64(tile.H)/2, zoom)
 	pl.install(paneID, st, nil)
 	pl.add(Effect{Kind: EffFetchGrid, GridID: tile.GridId})
 	pl.add(Effect{Kind: EffScheduleURLUpdate})

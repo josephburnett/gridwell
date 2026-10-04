@@ -70,11 +70,15 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 	if gid == "" {
 		return
 	}
-	v, ok := a.ownerView(leaf.Pane, leaf.Live)
+	f, ok := a.ownerView(leaf.Pane, leaf.Live)
 	if !ok {
 		return
 	}
-	cell := leaf.Cell(v.Zoom)
+	v, ok := f.Live()
+	if !ok {
+		return
+	}
+	cell := leaf.Cell(v.Zoom())
 	if cell < 0.5 {
 		return
 	}
@@ -82,9 +86,9 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 	c := a.cctx
 	withClip(c, r.X, r.Y, r.W, r.H, func() {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2
-		drawGridLinesIn(c, a.pal.GridLineInterior, r.X, r.Y, r.W, r.H, cell, cx-v.Cx*cell, cy-v.Cy*cell)
+		drawGridLinesIn(c, a.pal.GridLineInterior, r.X, r.Y, r.W, r.H, cell, cx-v.Cx()*cell, cy-v.Cy()*cell)
 		if g, ok := a.c.Grid(gid); ok {
-			a.drawChildPreview(g, v.Cx, v.Cy, cx, cy, cell, r.X, r.Y, r.W, r.H, "")
+			a.drawChildPreview(g, v.Cx(), v.Cy(), cx, cy, cell, r.X, r.Y, r.W, r.H, "")
 		}
 	})
 }

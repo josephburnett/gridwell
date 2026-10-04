@@ -3,30 +3,49 @@
 // in-flight preview and the commit obey.
 package dragdrop
 
-import "math"
+import (
+	"math"
 
-// Pane is one pane's screen rectangle and viewport. A cell is CellPx*Zoom
-// pixels on screen.
+	"github.com/josephburnett/gridwell/api/rpc"
+)
+
+// Pane is one pane laid out on screen showing a grid at a live view. NewPane
+// is its one constructor, so a cell is a finite size above zero and every
+// conversion between screen and cells is finite: no draw loop or drop can
+// divide by a zoom of zero.
 type Pane struct {
-	ScreenX, ScreenY float64 // top-left of the pane in screen coordinates
-	ScreenW, ScreenH float64
-	Cx, Cy           float64 // viewport center in cells
-	Zoom             float64
-	CellPx           float64
+	x, y, w, h float64 // the pane's screen rectangle
+	view       rpc.Framing
+	cellPx     float64
 }
+
+// NewPane refuses a rectangle with no area or a cell size that is not one.
+func NewPane(x, y, w, h float64, view rpc.Framing, cellPx float64) (Pane, bool) {
+	if !rpc.Finite(x) || !rpc.Finite(y) || !rpc.Finite(w) || !rpc.Finite(h) || w <= 0 || h <= 0 ||
+		!rpc.Finite(cellPx) || cellPx <= 0 {
+		return Pane{}, false
+	}
+	return Pane{x, y, w, h, view, cellPx}, true
+}
+
+// View is the live view the pane shows.
+func (p Pane) View() rpc.Framing { return p.view }
+
+// Cell is one cell's size on screen in pixels.
+func (p Pane) Cell() float64 { return p.cellPx * p.view.Zoom() }
 
 // ScreenToCell returns floating-point cells; the caller floors or rounds.
 func (p Pane) ScreenToCell(sx, sy float64) (float64, float64) {
-	cellSize := p.CellPx * p.Zoom
-	cx := p.Cx + (sx-(p.ScreenX+p.ScreenW/2))/cellSize
-	cy := p.Cy + (sy-(p.ScreenY+p.ScreenH/2))/cellSize
+	cellSize := p.Cell()
+	cx := p.view.Cx() + (sx-(p.x+p.w/2))/cellSize
+	cy := p.view.Cy() + (sy-(p.y+p.h/2))/cellSize
 	return cx, cy
 }
 
 func (p Pane) CellToScreen(cx, cy float64) (float64, float64) {
-	cellSize := p.CellPx * p.Zoom
-	sx := p.ScreenX + p.ScreenW/2 + (cx-p.Cx)*cellSize
-	sy := p.ScreenY + p.ScreenH/2 + (cy-p.Cy)*cellSize
+	cellSize := p.Cell()
+	sx := p.x + p.w/2 + (cx-p.view.Cx())*cellSize
+	sy := p.y + p.h/2 + (cy-p.view.Cy())*cellSize
 	return sx, sy
 }
 
@@ -34,9 +53,9 @@ func (p Pane) CellToScreen(cx, cy float64) (float64, float64) {
 // the one cull, so what is drawn and what is said to be shown agree.
 func (p Pane) Shows(x, y, w, h float64) bool {
 	left, top := p.CellToScreen(x, y)
-	cellSize := p.CellPx * p.Zoom
-	return left+w*cellSize >= p.ScreenX && top+h*cellSize >= p.ScreenY &&
-		left <= p.ScreenX+p.ScreenW && top <= p.ScreenY+p.ScreenH
+	cellSize := p.Cell()
+	return left+w*cellSize >= p.x && top+h*cellSize >= p.y &&
+		left <= p.x+p.w && top <= p.y+p.h
 }
 
 // CellAt floors; see FloorCellAt.
@@ -81,7 +100,7 @@ func ChildPreviewFor(parent Pane, well struct {
 	X, Y, W, H     int64
 	ViewCx, ViewCy float64
 }, previewRatio float64) ChildPreview {
-	parentCell := parent.CellPx * parent.Zoom
+	parentCell := parent.Cell()
 	previewCell := parentCell * previewRatio
 	wellLeft, wellTop := parent.CellToScreen(float64(well.X), float64(well.Y))
 	wellCenterX := wellLeft + float64(well.W)*parentCell/2

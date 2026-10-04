@@ -24,6 +24,10 @@ func SizeOf(w, h float64) (Size, bool) {
 	return Size{w, h}, true
 }
 
+// Origin is the live view of a grid nobody has framed: its origin at zoom 1,
+// where a fresh pane and a root never visited sit.
+var Origin, _ = rpc.NewFraming(0, 0, 1)
+
 // Endpoints is one end of a transition: descent path, viewport center in
 // cells, zoom multiplier.
 type Endpoints struct {
@@ -239,7 +243,7 @@ func ShownRootFraming(stored rpc.View, s Size, cellPx float64) rpc.View {
 	if _, ok := stored.Framing(); ok {
 		return stored
 	}
-	return rpc.ViewOf(0, 0, IntrinsicFromLive(1, Overtake(1, 1, s, cellPx)))
+	return rpc.ViewOf(Origin.Cx(), Origin.Cy(), IntrinsicFromLive(Origin.Zoom(), Overtake(1, 1, s, cellPx)))
 }
 
 // Ascent computes the endpoints of an ascent back through w, Descent's

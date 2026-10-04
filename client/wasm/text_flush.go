@@ -155,8 +155,10 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	// Only when something moved: see textedit.Reframes. A pure
 	// descend-and-ascent writes nothing, and leaves nothing in the cache
 	// either, since the next ascent diffs against what it finds there.
+	// A pane with no rect has no window to frame: see pane.FramingWriters.
+	_, sized := r.Size()
 	next := textedit.Framing{X: scrollX, Y: scrollY, W: viewW, H: viewH, Mode: p.TextMode}
-	reframed := !p.ViewPending && textedit.Reframes(textedit.FramingOf(file), next, !editable)
+	reframed := sized && !p.ViewPending && textedit.Reframes(textedit.FramingOf(file), next, !editable)
 	if reframed {
 		// Patched before the round trip, so the ascent transition reflects
 		// the framed window rather than the one the server still holds.

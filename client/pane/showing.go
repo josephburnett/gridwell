@@ -31,7 +31,10 @@ func Showing(t *Tree, laidOut map[string]Rect, leaf func(anchor string, path []s
 		if p.ContentID() != "" {
 			return
 		}
-		ps := p.Screen(r)
+		ps, ok := p.Screen(r)
+		if !ok {
+			return
+		}
 		for _, n := range tiles(g) {
 			if n.Kind == rpc.KindWell && n.ChildGridId != "" && ps.Shows(float64(n.X), float64(n.Y), float64(n.W), float64(n.H)) {
 				out = append(out, n.ChildGridId)
@@ -42,10 +45,12 @@ func Showing(t *Tree, laidOut map[string]Rect, leaf func(anchor string, path []s
 	return slices.Compact(out)
 }
 
-// Screen is p laid out at r, in the shape dragdrop measures.
-func (p *Pane) Screen(r Rect) dragdrop.Pane {
-	return dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: CellPx,
+// Screen is p laid out at r, in the shape dragdrop measures; false when p
+// has no view or r no area, so it shows nothing.
+func (p *Pane) Screen(r Rect) (dragdrop.Pane, bool) {
+	v, ok := p.Live()
+	if !ok {
+		return dragdrop.Pane{}, false
 	}
+	return dragdrop.NewPane(r.X, r.Y, r.W, r.H, v, CellPx)
 }

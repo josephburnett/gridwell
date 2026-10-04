@@ -9,13 +9,13 @@ import (
 // mixed in.
 func chainPane() *Pane {
 	p := &Pane{ID: "p1", Stack: NewStack("k3x9m2q/1")}
-	p.Push(Frame{Door: "12", Zoom: 1})
-	p.Push(Frame{GridID: "n5aaaaa/1", Door: "lnk1", Zoom: 1})
-	p.Push(Frame{Door: "33", Content: true, Zoom: 1})
-	p.Push(Frame{GridID: "mnt7abc/9", Door: "lnk2", Zoom: 1})
-	p.Push(Frame{Door: "4", Zoom: 1})
-	p.Push(Frame{Door: "7", Zoom: 1})
-	p.Push(Frame{Door: "21", Content: true, Zoom: 1})
+	p.Push(viewed(Frame{Door: "12"}, 0, 0, 1))
+	p.Push(viewed(Frame{GridID: "n5aaaaa/1", Door: "lnk1"}, 0, 0, 1))
+	p.Push(viewed(Frame{Door: "33", Content: true}, 0, 0, 1))
+	p.Push(viewed(Frame{GridID: "mnt7abc/9", Door: "lnk2"}, 0, 0, 1))
+	p.Push(viewed(Frame{Door: "4"}, 0, 0, 1))
+	p.Push(viewed(Frame{Door: "7"}, 0, 0, 1))
+	p.Push(viewed(Frame{Door: "21", Content: true}, 0, 0, 1))
 	return p
 }
 

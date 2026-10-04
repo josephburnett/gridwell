@@ -612,6 +612,7 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 		if p == nil {
 			continue
 		}
+		cx, cy, zoom := p.View.Wire()
 		out = append(out, map[string]any{
 			"id":      id,
 			"x":       r.X,
@@ -630,9 +631,9 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"stale": a.c.SourceDark(a.gridIDForPane(p)),
 			// Viewport center in grid cells plus zoom, so a spec can drop on
 			// a cell it knows is on-screen whatever the stored framing.
-			"cx":   p.Cx,
-			"cy":   p.Cy,
-			"zoom": p.Zoom,
+			"cx":   cx,
+			"cy":   cy,
+			"zoom": zoom,
 			// Doorways deep: one number, because there is one place stack.
 			"placeDepth": p.Depth() - 1,
 			"tileIds":    a.paneTileIDs(p),
@@ -801,7 +802,11 @@ func (a *App) thCellCenter(_ js.Value, args []js.Value) any {
 		return nil
 	}
 	cx, cy := args[1].Float(), args[2].Float()
-	sx, sy := p.Screen(r).CellToScreen(cx+0.5, cy+0.5)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return nil
+	}
+	sx, sy := ps.CellToScreen(cx+0.5, cy+0.5)
 	return map[string]any{"x": sx, "y": sy}
 }
 

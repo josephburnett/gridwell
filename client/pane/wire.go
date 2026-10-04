@@ -17,6 +17,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/panelayout"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 // ChainPrefix is the transit chain through which a pane tile's owning node is
@@ -253,7 +254,7 @@ func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNod
 
 func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane {
 	p := &Pane{ID: idPrefix + lp.ID, Stack: decodePlace(lp, abs)}
-	p.Zoom = 1
+	p.View = rpc.Saved(zoomtrans.Origin)
 	p.ViewPending = true
 	return p
 }

@@ -31,8 +31,13 @@ type URLState struct {
 	// TileIDs is the descent path as bare segments. Its last id may be a
 	// content tile, resolved after DecodeURL.
 	TileIDs []string
-	// Viewport, when the leaf is a grid. Only non-defaults are emitted.
-	X, Y, Zoom float64
+	// X and Y are the viewport center when the leaf is a grid, and Zoom its
+	// zoom when HasZoom. Only non-defaults are emitted, and the decode keeps
+	// only a finite center and a finite zoom above zero, so an address cannot
+	// carry a view that is not one.
+	X, Y    float64
+	Zoom    float64
+	HasZoom bool
 	// CursorMode is a content leaf in text mode with a cursor to preserve.
 	CursorMode bool
 	Col, Row   int
@@ -56,17 +61,12 @@ type URLBootView struct {
 
 // URLBootViewport resolves the root pane's framing when the app opens with no
 // descent path: the URL's viewport, else the stored root view, else nothing.
-func URLBootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) URLBootView {
-	if urlX != 0 || urlY != 0 || urlZoom != 0 {
-		v := URLBootView{Apply: true, Cx: urlX, Cy: urlY}
-		if urlZoom > 0 {
-			v.SetZoom = true
-			v.Zoom = urlZoom
-		}
-		return v
+func URLBootViewport(st URLState, root rpc.View) URLBootView {
+	if st.X != 0 || st.Y != 0 || st.HasZoom {
+		return URLBootView{Apply: true, Cx: st.X, Cy: st.Y, SetZoom: st.HasZoom, Zoom: st.Zoom}
 	}
-	if rootZoom > 0 {
-		return URLBootView{Apply: true, Cx: rootCx, Cy: rootCy, SetZoom: true, Zoom: rootZoom}
+	if f, ok := root.Framing(); ok {
+		return URLBootView{Apply: true, Cx: f.Cx(), Cy: f.Cy(), SetZoom: true, Zoom: f.Zoom()}
 	}
 	return URLBootView{}
 }
@@ -83,8 +83,8 @@ func URLStateOf(s *Stack, home string, isText bool, col, row int) URLState {
 			st.CursorMode = true
 			st.Col, st.Row = col, row
 		}
-	} else {
-		st.X, st.Y, st.Zoom = s.Cx, s.Cy, s.Zoom
+	} else if v, ok := s.Live(); ok {
+		st.X, st.Y, st.Zoom, st.HasZoom = v.Cx(), v.Cy(), v.Zoom(), true
 	}
 	if anchor != home {
 		st.Anchor = anchor
@@ -128,7 +128,7 @@ func EncodeURL(s URLState) string {
 		if s.Y != 0 {
 			q.Set("y", urlTrimFloat(s.Y, 2))
 		}
-		if s.Zoom != 0 && s.Zoom != URLDefaultZoom {
+		if s.HasZoom && s.Zoom != URLDefaultZoom {
 			q.Set("z", urlTrimFloat(s.Zoom, 3))
 		}
 	}
@@ -214,16 +214,27 @@ func DecodeURL(raw string) (URLState, error) {
 		}
 	} else {
 		if v, ok := q["x"]; ok {
-			s.X, _ = strconv.ParseFloat(v[0], 64)
+			s.X = urlFinite(v[0])
 		}
 		if v, ok := q["y"]; ok {
-			s.Y, _ = strconv.ParseFloat(v[0], 64)
+			s.Y = urlFinite(v[0])
 		}
 		if v, ok := q["z"]; ok {
-			s.Zoom, _ = strconv.ParseFloat(v[0], 64)
+			if z := urlFinite(v[0]); z > 0 {
+				s.Zoom, s.HasZoom = z, true
+			}
 		}
 	}
 	return s, nil
+}
+
+// urlFinite reads a query number, 0 for one that is not finite.
+func urlFinite(raw string) float64 {
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || !rpc.Finite(v) {
+		return 0
+	}
+	return v
 }
 
 // URLPlace is the structural location a URL names, everything except the

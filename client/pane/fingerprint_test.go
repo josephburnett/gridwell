@@ -13,7 +13,7 @@ func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 		tr := NewTree()
 		p := tr.FocusedPane()
 		p.Stack = NewStack("g7abcde")
-		p.Cx, p.Cy, p.Zoom = 1, 2, 3
+		p.SetView(1, 2, 3)
 		return tr
 	}
 	moves := []struct {
@@ -21,9 +21,9 @@ func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 		layout, framing bool
 		do              func(*Tree)
 	}{
-		{"a pan", false, true, func(tr *Tree) { tr.FocusedPane().Cx += 0.5 }},
-		{"a zoom", false, true, func(tr *Tree) { tr.FocusedPane().Zoom *= 2 }},
-		{"a descent", true, true, func(tr *Tree) { tr.FocusedPane().Push(Frame{Door: "t7abcde", Zoom: 1}) }},
+		{"a pan", false, true, func(tr *Tree) { tr.FocusedPane().SetView(1.5, 2, 3) }},
+		{"a zoom", false, true, func(tr *Tree) { tr.FocusedPane().SetView(1, 2, 6) }},
+		{"a descent", true, true, func(tr *Tree) { tr.FocusedPane().Push(viewed(Frame{Door: "t7abcde"}, 0, 0, 1)) }},
 		{"a text scroll", false, true, func(tr *Tree) { tr.FocusedPane().TextScrollY = 40 }},
 		{"a text mode toggle", false, true, func(tr *Tree) { tr.FocusedPane().TextMode = "rendered" }},
 		{"a content zoom", false, true, func(tr *Tree) { tr.FocusedPane().TextZoom = 1.5 }},
@@ -76,8 +76,8 @@ func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 		// A pan and back is the place the user started at, and writing it is
 		// a no-op the flush already refuses.
 		moved := build()
-		moved.FocusedPane().Cx += 0.5
-		moved.FocusedPane().Cx -= 0.5
+		moved.FocusedPane().SetView(1.5, 2, 3)
+		moved.FocusedPane().SetView(1, 2, 3)
 		if fp(moved).Value() != fp(build()).Value() {
 			t.Errorf("%s: a pan and back is not the place it started at", name)
 		}

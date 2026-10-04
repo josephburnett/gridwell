@@ -138,8 +138,7 @@ func randomTree(r *rand.Rand) *Tree {
 				p.Push(leaf)
 			}
 		}
-		p.Cx, p.Cy = float64(r.Intn(41)-20), float64(r.Intn(41)-20)
-		p.Zoom = 0.25 * float64(r.Intn(8)+1)
+		p.SetView(float64(r.Intn(41)-20), float64(r.Intn(41)-20), 0.25*float64(r.Intn(8)+1))
 		if text {
 			p.TextMode = []string{"text", "rendered"}[r.Intn(2)]
 			p.TextScrollX, p.TextScrollY = float64(r.Intn(200)), float64(r.Intn(200))
@@ -217,7 +216,7 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 	p := tr.FocusedPane()
 	p.Stack = StackAt(prefix+"plugin-uuid/1",
 		[]string{prefix + "plugin-uuid/4", prefix + "plugin-uuid/9"}, prefix+"plugin-uuid/12")
-	p.Zoom = 2
+	p.SetView(0, 0, 2)
 
 	data, skipped, err := EncodeLayout(tr, rel)
 	if err != nil || len(skipped) != 0 {
@@ -260,14 +259,14 @@ func TestLayoutLeafOutsidePrefix(t *testing.T) {
 	tr := NewTree()
 	inside := tr.FocusedPane()
 	inside.Stack = StackAt(prefix+"plugin/1", nil, "")
-	inside.Cx, inside.Cy, inside.Zoom = 5, 6, 2
+	inside.SetView(5, 6, 2)
 	outside, err := tr.Split(Vertical)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// reachable by the reader, not by the owner
 	outside.Stack = StackAt("local-plugin/1", []string{"local-plugin/3"}, "")
-	outside.Cx, outside.Zoom = 9, 3
+	outside.SetView(9, 0, 3)
 
 	data, skipped, err := EncodeLayout(tr, rel)
 	if err != nil {
@@ -347,7 +346,7 @@ func TestLayoutKeepsEveryLevelFromTheRoot(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
 	p.Stack = StackAt("plugin/1", []string{"plugin/4"}, "")
-	p.Push(Frame{GridID: "other/1", Door: "plugin/9", Zoom: 1})
+	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 0, 0, 1))
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
@@ -411,8 +410,8 @@ func TestLayoutOuterViewportsStaySessionOnly(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
 	p.Stack = NewStack("plugin/1")
-	p.Cx, p.Cy, p.Zoom = 11, 22, 3
-	p.Push(Frame{GridID: "other/1", Door: "plugin/9", Zoom: 1})
+	p.SetView(11, 22, 3)
+	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 0, 0, 1))
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
@@ -442,7 +441,7 @@ func TestLayoutOmitsPlaceWhenTheProjectionHoldsIt(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
 	p.Stack = StackAt("plugin/1", []string{"plugin/4", "plugin/7"}, "plugin/12")
-	p.Zoom = 1
+	p.SetView(0, 0, 1)
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
@@ -462,7 +461,7 @@ func TestEncoderAlwaysWritesTextFocus(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
 	p.Stack = NewStack("plugin/1")
-	p.Push(Frame{GridID: "other/1", Door: "plugin/9", Zoom: 1})
+	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 0, 0, 1))
 	p.Push(Frame{Door: "other/12", Content: true})
 	if p.ProjectionHolds() {
 		t.Fatal("fixture no longer forces Place; pick a deeper place")
@@ -555,13 +554,13 @@ func TestLayoutHoldsNoView(t *testing.T) {
 		tr := NewTree()
 		g := tr.FocusedPane()
 		g.Stack = StackAt("plugin/1", []string{"plugin/4"}, "")
-		g.Cx, g.Cy, g.Zoom = cx, cy, zoom
+		g.SetView(cx, cy, zoom)
 		c, err := tr.Split(Vertical)
 		if err != nil {
 			t.Fatal(err)
 		}
 		c.Stack = StackAt("plugin/1", nil, "plugin/12")
-		c.Cx, c.Cy, c.Zoom = cx, cy, zoom
+		c.SetView(cx, cy, zoom)
 		c.TextMode, c.TextScrollX, c.TextScrollY, c.TextZoom = mode, sx, sy, tz
 		return tr
 	}

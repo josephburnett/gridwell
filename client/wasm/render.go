@@ -439,8 +439,13 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	g, gridOK := a.c.Grid(gid)
 
 	const inset = paneBorderPx
+	pscreen, shown := p.Screen(r)
 	withClip(a.cctx, r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset, func() {
-		pscreen := p.Screen(r)
+		// A pane with no view has no cells to draw.
+		if !shown {
+			fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.Bg)
+			return
+		}
 
 		// Grid lines render whether or not the grid loaded; a focused text tile has
 		// none.
@@ -454,7 +459,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 			a.drawGridNotice(r, gid)
 		}
 		if gridOK {
-			cellSize := pscreen.CellPx * pscreen.Zoom
+			cellSize := pscreen.Cell()
 			selected := a.selectedFor(p.ID)
 			// In a content descent, render in the inner box that matches the textarea.
 			if p.ContentID() != "" {
@@ -609,7 +614,7 @@ func (a *App) drawURLOpenTabButton() {
 
 // drawGridLines fades out when cells are tiny, so zoom-out paints no wash.
 func (a *App) drawGridLines(color string, ps dragdrop.Pane, r pane.Rect) {
-	cellSize := ps.CellPx * ps.Zoom
+	cellSize := ps.Cell()
 	originX, originY := ps.CellToScreen(0, 0)
 	drawGridLinesIn(a.cctx, color, r.X, r.Y, r.W, r.H, cellSize, originX, originY)
 }
@@ -995,7 +1000,7 @@ func (a *App) paneBorderColors() pane.BorderColors {
 // drawEdgeIndicators marks every tile outside the viewport on the ray from
 // the viewport center.
 func (a *App) drawEdgeIndicators(nodes map[string]*gridwellv1.Tile, ps dragdrop.Pane, r pane.Rect) {
-	cellSize := ps.CellPx * ps.Zoom
+	cellSize := ps.Cell()
 	const inset = 12.0
 	innerL := r.X + inset
 	innerR := r.X + r.W - inset

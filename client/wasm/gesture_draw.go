@@ -211,11 +211,15 @@ func drawHotspotArrow(c js.Value, cx, cy, dx, dy float64) {
 	c.Call("stroke")
 }
 
-// tileScreenRect is the on-screen rectangle of tile n as pane p draws it.
+// tileScreenRect is the on-screen rectangle of tile n as pane p draws it,
+// empty when p shows nothing.
 func tileScreenRect(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect) (left, top, w, h float64) {
-	ps := p.Screen(r)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return
+	}
 	left, top = ps.CellToScreen(float64(n.X), float64(n.Y))
-	cellSize := cellPx * p.Zoom
+	cellSize := ps.Cell()
 	w = float64(n.W) * cellSize
 	h = float64(n.H) * cellSize
 	return
@@ -224,9 +228,12 @@ func tileScreenRect(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect) (left, top, w
 // drawTileResizePreview outlines the proposed new footprint. The original
 // tile keeps painting in place, so this is a dashed stroke on top.
 func (a *App) drawTileResizePreview(rd *rightDragState) {
-	ps := rd.tilePane.Screen(rd.tilePaneR)
+	ps, ok := rd.tilePane.Screen(rd.tilePaneR)
+	if !ok {
+		return
+	}
 	left, top := ps.CellToScreen(float64(rd.tileNewX), float64(rd.tileNewY))
-	cellSize := cellPx * rd.tilePane.Zoom
+	cellSize := ps.Cell()
 	w := float64(rd.tileNewW) * cellSize
 	h := float64(rd.tileNewH) * cellSize
 	a.cctx.Set("strokeStyle", a.pal.TileResize)

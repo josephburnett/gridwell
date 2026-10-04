@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"strings"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -70,7 +71,7 @@ func (a *App) navPopLevel(e nav.Effect) {
 		}
 		return
 	}
-	a.tree = pane.TreeAtPlace("", e.GridID, nil, 0, 0, 1)
+	a.tree = pane.TreeAtPlace("", e.GridID, nil, rpc.View{})
 }
 
 // captureWorkspaceTree clones the window layout as a fresh pane tile's
@@ -106,8 +107,7 @@ func (a *App) captureWorkspaceTree(tileID, idPrefix, originPane string) *pane.Tr
 	if op := a.tree.FindPane(originPane); op != nil {
 		origin = op.Stack
 	}
-	return pane.TreeAtPlace(idPrefix, origin.Anchor(), origin.Path(),
-		origin.Cx, origin.Cy, origin.Zoom)
+	return pane.TreeAtPlace(idPrefix, origin.Anchor(), origin.Path(), origin.View)
 }
 
 // reportLayoutSkipped posts the one notice for panes an encode could not place
@@ -128,7 +128,7 @@ func (a *App) reportLayoutSkipped(tileID string, skipped []string) {
 func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	tree.Walk(func(p *pane.Pane) {
 		if p.Anchor() == "" {
-			p.Reset(pane.Frame{GridID: a.home, Zoom: 1, ViewPending: true})
+			p.Reset(pane.Frame{GridID: a.home, View: rpc.Saved(zoomtrans.Origin), ViewPending: true})
 		}
 		a.fetchGrid(a.gridIDForPane(p))
 		if p.ContentID() != "" {

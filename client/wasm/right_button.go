@@ -200,7 +200,10 @@ func (a *App) onRightMove(sx, sy float64) {
 }
 
 func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *gridwellv1.Tile {
-	cellX, cellY := cellAtScreen(p, r, sx, sy)
+	cellX, cellY, ok := cellAtScreen(p, r, sx, sy)
+	if !ok {
+		return nil
+	}
 	return a.tileAtCell(p, cellX, cellY)
 }
 
@@ -208,6 +211,10 @@ func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *gridwellv
 // clones or links through a.dragging past the threshold, and everything outside
 // resizes, which has no destination and so ignores the intent.
 func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
+	ps, ok := p.Screen(r)
+	if !ok {
+		return
+	}
 	common := rightDragState{
 		startX:     sx,
 		startY:     sy,
@@ -227,7 +234,7 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 		common.kind = rightDragTileResize
 		common.pinX, common.pinY,
 			common.origMovingX, common.origMovingY,
-			common.clickCellX, common.clickCellY = tileResizeAnchors(n, p, r, sx, sy)
+			common.clickCellX, common.clickCellY = tileResizeAnchors(n, ps, sx, sy)
 		common.tileNewX = n.X
 		common.tileNewY = n.Y
 		common.tileNewW = n.W
@@ -238,22 +245,27 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 }
 
 func inTileCenter(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	ps := p.Screen(r)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return false
+	}
 	cx, cy := ps.ScreenToCell(sx, sy)
 	return dragdrop.InTileCenter(n.X, n.Y, n.W, n.H, cx, cy)
 }
 
-func tileResizeAnchors(n *gridwellv1.Tile, p *pane.Pane, r pane.Rect, sx, sy float64) (
+func tileResizeAnchors(n *gridwellv1.Tile, ps dragdrop.Pane, sx, sy float64) (
 	pinX, pinY, origMovingX, origMovingY, clickCellX, clickCellY int64,
 ) {
-	ps := p.Screen(r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	a := dragdrop.ResizeAnchorsFor(n.X, n.Y, n.W, n.H, cxF, cyF)
 	return a.PinX, a.PinY, a.OrigMovingX, a.OrigMovingY, a.ClickCellX, a.ClickCellY
 }
 
 func tileResizeFromPin(rd *rightDragState, sx, sy float64) (int64, int64, int64, int64) {
-	ps := rd.tilePane.Screen(rd.tilePaneR)
+	ps, ok := rd.tilePane.Screen(rd.tilePaneR)
+	if !ok {
+		return rd.tileNode.X, rd.tileNode.Y, rd.tileNode.W, rd.tileNode.H
+	}
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	curCellX := int64(math.Round(cxF))
 	curCellY := int64(math.Round(cyF))
@@ -312,7 +324,10 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 // ghost materializes only past dragThreshold, and the original stays visible,
 // because both intents create.
 func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
-	ps := p.Screen(r)
+	ps, ok := p.Screen(r)
+	if !ok {
+		return
+	}
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
 	a.dragging = &dragState{
@@ -323,7 +338,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, s
 		curScreenX:   sx,
 		curScreenY:   sy,
 		srcGridID:    a.gridIDForPane(p),
-		srcCellSize:  cellPx * p.Zoom,
+		srcCellSize:  ps.Cell(),
 	}
 	a.dragging.grabTile(n, cxF, cyF, tlX, tlY)
 }

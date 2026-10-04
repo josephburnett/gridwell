@@ -13,8 +13,8 @@ import (
 // in the child grid at (5, 6) zoom 2.
 func wellPane(id string) PaneView {
 	p := gridPane(id, "g1")
-	p.Stack.Push(pane.Frame{Door: "w1", Cx: 5, Cy: 6, Zoom: 2})
-	p.Cx, p.Cy, p.Zoom = 5, 6, 2
+	p.Stack.Push(framed(pane.Frame{Door: "w1"}, 5, 6, 2))
+	p.View = viewOf(5, 6, 2)
 	return p
 }
 
@@ -23,7 +23,7 @@ func contentPane(id, tileID string) PaneView {
 	p := gridPane(id, "g1")
 	p.Stack.Push(pane.ContentFrame(tileID, pane.Footprint{X: 2, Y: 2, W: 3, H: 2},
 		4, rpc.TextModeText, 0, 0))
-	p.Cx, p.Cy, p.Zoom = 3.5, 3, 4
+	p.View = viewOf(3.5, 3, 4)
 	return p
 }
 
@@ -157,7 +157,7 @@ func TestAscendEphemeralWithASplitSiblingDoesNotDelete(t *testing.T) {
 
 func TestAscendOutOfARootGridWithNoDoorway(t *testing.T) {
 	p := gridPane("pane1", "g1")
-	p.Stack = pane.StackOf([]pane.Frame{{GridID: "g1", Zoom: 1}, {GridID: "g2", Zoom: 1}})
+	p.Stack = pane.StackOf([]pane.Frame{framed(pane.Frame{GridID: "g1"}, 0, 0, 1), framed(pane.Frame{GridID: "g2"}, 0, 0, 1)})
 	w := baseWorld(p)
 	w.Leave = &LeaveWorld{}
 	plan := New().Do(ascendGesture("pane1", 1, true), w)
@@ -242,8 +242,8 @@ func TestAscendLandingBackOnContentReEngages(t *testing.T) {
 func TestAscendRestoresTheMenuItWasLeftWith(t *testing.T) {
 	p := gridPane("pane1", "g1")
 	p.Stack.MenuOpen = true
-	p.Stack.Push(pane.Frame{Door: "w1", Cx: 5, Cy: 6, Zoom: 2})
-	p.Cx, p.Cy, p.Zoom = 5, 6, 2
+	p.Stack.Push(framed(pane.Frame{Door: "w1"}, 5, 6, 2))
+	p.View = viewOf(5, 6, 2)
 	w := baseWorld(p)
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true}
 	plan := New().Do(ascendGesture("pane1", 1, true), w)
@@ -254,9 +254,9 @@ func TestAscendRestoresTheMenuItWasLeftWith(t *testing.T) {
 
 func TestAscendMultiHopOnlyAnimatesTheLast(t *testing.T) {
 	p := gridPane("pane1", "g1")
-	p.Stack.Push(pane.Frame{Door: "w1", Cx: 1, Cy: 1, Zoom: 1})
-	p.Stack.Push(pane.Frame{Door: "w2", Cx: 5, Cy: 6, Zoom: 2})
-	p.Cx, p.Cy, p.Zoom = 5, 6, 2
+	p.Stack.Push(framed(pane.Frame{Door: "w1"}, 1, 1, 1))
+	p.Stack.Push(framed(pane.Frame{Door: "w2"}, 5, 6, 2))
+	p.View = viewOf(5, 6, 2)
 	w := baseWorld(p)
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
 		DoorTile: &gridwellv1.Tile{Id: "w2", Kind: rpc.KindWell, GridId: "gc", W: 4, H: 4}}
@@ -275,8 +275,8 @@ func TestAscendMultiHopOnlyAnimatesTheLast(t *testing.T) {
 
 	// The second hop reads the place the first landed on.
 	landed := gridPane("pane1", "g1")
-	landed.Stack.Push(pane.Frame{Door: "w1", Cx: 1, Cy: 1, Zoom: 1})
-	landed.Cx, landed.Cy, landed.Zoom = 1, 1, 1
+	landed.Stack.Push(framed(pane.Frame{Door: "w1"}, 1, 1, 1))
+	landed.View = viewOf(1, 1, 1)
 	w2 := baseWorld(landed)
 	w2.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow()}
 	second := m.Do(*first.Next, w2)
@@ -293,19 +293,19 @@ func TestAscendLandingViewport(t *testing.T) {
 	// falls back to the grid's persisted framing rather than an origin.
 	p := gridPane("pane1", "g1")
 	p.Stack = pane.StackAt("g1", []string{"w1"}, "")
-	p.Cx, p.Cy, p.Zoom = 5, 6, 2
+	p.View = viewOf(5, 6, 2)
 	w := baseWorld(p)
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
-		LandingView: &Viewport{Cx: 8, Cy: 9, Zoom: 1.5}}
+		LandingView: ptr(fr(8, 9, 1.5))}
 	vp := only(t, New().Do(ascendGesture("pane1", 1, true), w), EffInstallPlace).Viewport
-	if vp == nil || *vp != (Viewport{Cx: 8, Cy: 9, Zoom: 1.5}) {
+	if vp == nil || *vp != fr(8, 9, 1.5) {
 		t.Fatalf("landed at %+v, want the persisted framing", vp)
 	}
 
 	// With nothing persisted either, a grid landing goes to the origin...
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true}
 	vp = only(t, New().Do(ascendGesture("pane1", 1, true), w), EffInstallPlace).Viewport
-	if vp == nil || *vp != (Viewport{Zoom: 1}) {
+	if vp == nil || *vp != fr(0, 0, 1) {
 		t.Fatalf("landed at %+v, want the origin", vp)
 	}
 

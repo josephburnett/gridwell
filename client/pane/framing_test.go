@@ -52,15 +52,22 @@ func TestFramingWriters(t *testing.T) {
 		{PaneID: "b", GridID: "g1"}, // shares g1 with a
 		{PaneID: "c", GridID: "g2"}, // sole viewer
 	}
-	w := FramingWriters(panes, "a")
+	r := Rect{W: 400, H: 300}
+	laid := map[string]Rect{"a": r, "b": r, "c": r}
+	w := FramingWriters(panes, "a", laid)
 	if !w["a"] || w["b"] || !w["c"] {
 		t.Errorf("focused=a: got %+v, want a and c writing, b passive", w)
 	}
-	w = FramingWriters(panes, "c")
+	w = FramingWriters(panes, "c", laid)
 	if w["a"] || w["b"] || !w["c"] {
 		t.Errorf("focused=c: got %+v, want only c writing (g1 has no active surface)", w)
 	}
-	if w := FramingWriters(nil, "x"); len(w) != 0 {
+	// b hidden: a is g1's one shown pane, so it writes unfocused.
+	w = FramingWriters(panes, "c", map[string]Rect{"a": r, "c": r})
+	if !w["a"] || w["b"] || !w["c"] {
+		t.Errorf("b hidden: got %+v, want a and c writing", w)
+	}
+	if w := FramingWriters(nil, "x", nil); len(w) != 0 {
 		t.Errorf("no panes: got %+v", w)
 	}
 }

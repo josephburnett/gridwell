@@ -59,7 +59,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	landing := p.Stack.Popped(1)
 	saved, haveSaved := landingView(landing, w)
 	jump := func() {
-		var vp *Viewport
+		var vp *rpc.Framing
 		switch {
 		case haveSaved:
 			v := saved
@@ -68,16 +68,18 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 			// A content frame's viewport is already in the landing grid's
 			// coordinates, so keeping it is where the user was.
 		default:
-			vp = &Viewport{Cx: 0, Cy: 0, Zoom: 1.0}
+			v := zoomtrans.Origin
+			vp = &v
 		}
 		pl.install(p.ID, landing, vp)
 		pl.add(Effect{Kind: EffClearSelection, PaneID: p.ID})
 		m.landOnFrame(p.ID, landing, pl)
 		m.retireVisit(visit, pl)
 	}
-	// A pane with no rect has no geometry to animate through.
+	// A pane with no rect or no view has no geometry to animate through.
 	size, sized := p.Rect.Size()
-	if !animate || doorTile == nil || !sized {
+	live, viewed := p.View.Framing()
+	if !animate || doorTile == nil || !sized || !viewed {
 		jump()
 		return
 	}
@@ -95,18 +97,18 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		cx := float64(doorTile.X) + float64(doorTile.W)/2
 		cy := float64(doorTile.Y) + float64(doorTile.H)/2
 		overtake := panebox.FitZoom(r, doorTile.W, doorTile.H, w.TextSideInset, w.CellPx)
-		if overtake > p.Zoom {
-			overtake = p.Zoom
+		if overtake > live.Zoom() {
+			overtake = live.Zoom()
 		}
 		if !haveSaved {
-			saved = Viewport{Cx: cx, Cy: cy, Zoom: 1.0}
+			saved = centredAt(cx, cy)
 		}
 		land := landing.Clone()
 		pl.add(Effect{Kind: EffStartTransition, PaneID: p.ID, TraceTileID: door, Land: tok,
 			Segments: []transition.Segment{{
 				Place:  &land,
 				FromCx: cx, FromCy: cy, FromZoom: overtake,
-				ToCx: saved.Cx, ToCy: saved.Cy, ToZoom: saved.Zoom,
+				ToCx: saved.Cx(), ToCy: saved.Cy(), ToZoom: saved.Zoom(),
 				DurationMs: w.TransitionMs,
 			}}})
 		return
@@ -114,7 +116,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	// Out of a child grid: one segment finishing the child's trip to the
 	// calibrated switch state, one panning and zooming the parent back to the
 	// landing viewport. Pan and zoom interpolate together inside a segment.
-	from := zoomtrans.Endpoints{Path: p.Stack.Path(), Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
+	from := zoomtrans.Endpoints{Path: p.Stack.Path(), Cx: live.Cx(), Cy: live.Cy(), Zoom: live.Zoom()}
 	wl := zoomtrans.WellOf(doorTile)
 	// The switch state is the doorway's footprint at overtake, the inverse of
 	// the descent's approach. The child grid's coordinates mean nothing out
@@ -125,14 +127,14 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		return
 	}
 	if !haveSaved {
-		saved = Viewport{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
+		saved = centredAt(switchTo.Cx, switchTo.Cy)
 	}
 	cur := p.Stack.Clone()
 	land := landing.Clone()
 	childDist := zoomtrans.PanDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom, w.CellPx) +
 		zoomtrans.ZoomDist(from.Zoom, mid.Zoom, w.CellPx, w.ZoomDistFactor)
-	parentDist := zoomtrans.PanDist(saved.Cx-switchTo.Cx, saved.Cy-switchTo.Cy, saved.Zoom, w.CellPx) +
-		zoomtrans.ZoomDist(switchTo.Zoom, saved.Zoom, w.CellPx, w.ZoomDistFactor)
+	parentDist := zoomtrans.PanDist(saved.Cx()-switchTo.Cx, saved.Cy()-switchTo.Cy, saved.Zoom(), w.CellPx) +
+		zoomtrans.ZoomDist(switchTo.Zoom, saved.Zoom(), w.CellPx, w.ZoomDistFactor)
 	durations := anim.SplitN([]float64{childDist, parentDist}, w.TransitionMs)
 	pl.add(Effect{Kind: EffStartTransition, PaneID: p.ID, TraceTileID: door, Land: tok,
 		Segments: []transition.Segment{
@@ -145,7 +147,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 			{
 				Place:  &land,
 				FromCx: switchTo.Cx, FromCy: switchTo.Cy, FromZoom: switchTo.Zoom,
-				ToCx: saved.Cx, ToCy: saved.Cy, ToZoom: saved.Zoom,
+				ToCx: saved.Cx(), ToCy: saved.Cy(), ToZoom: saved.Zoom(),
 				DurationMs: durations[1],
 			},
 		}})
@@ -215,11 +217,12 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 // to write: zoomtrans.Writeback, the one decision the executor applies too.
 func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
 	size, ok := p.Rect.Size()
-	if !ok {
+	live, viewed := p.View.Framing()
+	if !ok || !viewed {
 		return
 	}
 	wl := zoomtrans.WellOf(door)
-	next, ok := zoomtrans.Writeback(zoomtrans.ShownWellFraming(wl), wl, p.Cx, p.Cy, p.Zoom, size, cellPx)
+	next, ok := zoomtrans.Writeback(zoomtrans.ShownWellFraming(wl), wl, live.Cx(), live.Cy(), live.Zoom(), size, cellPx)
 	if !ok {
 		return
 	}
@@ -229,17 +232,27 @@ func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
 // landingView is the viewport an ascent lands at: the frame's own, or the
 // grid's persisted framing when a URL or layout blob encoded the place but not
 // the viewports above it. Never an arbitrary origin.
-func landingView(landing pane.Stack, w World) (Viewport, bool) {
+func landingView(landing pane.Stack, w World) (rpc.Framing, bool) {
 	if landing.HasView() {
-		return Viewport{Cx: landing.Cx, Cy: landing.Cy, Zoom: landing.Zoom}, true
+		return landing.Live()
 	}
 	if landing.Content {
-		return Viewport{}, false
+		return rpc.Framing{}, false
 	}
 	if v := w.Leave.LandingView; v != nil {
 		return *v, true
 	}
-	return Viewport{}, false
+	return rpc.Framing{}, false
+}
+
+// centredAt is the live view centred on (cx, cy) at zoomtrans.Origin's zoom,
+// where an ascent with no saved view lands; Origin itself when (cx, cy) is not
+// a point.
+func centredAt(cx, cy float64) rpc.Framing {
+	if f, err := rpc.NewFraming(cx, cy, zoomtrans.Origin.Zoom()); err == nil {
+		return f
+	}
+	return zoomtrans.Origin
 }
 
 // retireVisit plans the end of an ephemeral visit once the pane's place no

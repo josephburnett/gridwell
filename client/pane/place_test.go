@@ -1,18 +1,21 @@
 package pane
 
 import (
+	"math"
 	"reflect"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // A descent pushes and an ascent pops, and the viewport you left a level at is
 // the frame you left: no second stack to keep in step.
 func TestPushPopRestoresTheViewportYouLeft(t *testing.T) {
 	s := NewStack("home/1")
-	s.Cx, s.Cy, s.Zoom = 5, 6, 1.5
+	s.SetView(5, 6, 1.5)
 
-	s.Push(Frame{Door: "7", Zoom: 1})
-	s.Cx, s.Cy, s.Zoom = 100, 200, 3
+	s.Push(viewed(Frame{Door: "7"}, 0, 0, 1))
+	s.SetView(100, 200, 3)
 
 	if s.Depth() != 2 || s.Anchor() != "home/1" || !reflect.DeepEqual(s.Path(), []string{"7"}) {
 		t.Fatalf("after descent: depth=%d anchor=%q path=%v", s.Depth(), s.Anchor(), s.Path())
@@ -20,7 +23,7 @@ func TestPushPopRestoresTheViewportYouLeft(t *testing.T) {
 	if !s.Pop() {
 		t.Fatal("pop with a frame below returned false")
 	}
-	if s.Cx != 5 || s.Cy != 6 || s.Zoom != 1.5 {
+	if !viewIs(s.View, 5, 6, 1.5) {
 		t.Fatalf("ascent did not land on the frame we left: %+v", s.Frame)
 	}
 	if s.Pop() {
@@ -113,17 +116,39 @@ func TestStackAtBuildsTheRestoredPlace(t *testing.T) {
 	}
 }
 
+// A frame has a view only when one was set: a frame a URL restored has none,
+// and no zoom, however computed, can stand in for one.
 func TestHasViewMarksAnUnsavedFrame(t *testing.T) {
-	if (Frame{Zoom: 1}).HasView() != true || (Frame{}).HasView() != false {
-		t.Fatal("HasView must key off a positive zoom")
+	if !viewed(Frame{}, 0, 0, 1).HasView() || (Frame{}).HasView() {
+		t.Fatal("HasView must key off a view having been set")
+	}
+	var f Frame
+	for _, z := range []float64{0, -1, math.NaN(), math.Inf(1)} {
+		if f.SetView(1, 1, z) || f.HasView() {
+			t.Errorf("SetView took zoom %v", z)
+		}
+	}
+	if f.SetView(math.NaN(), 1, 1) || f.HasView() {
+		t.Error("SetView took a NaN center")
 	}
 }
+
+// viewed is f with its view set to a view a test knows is one.
+func viewed(f Frame, cx, cy, zoom float64) Frame {
+	if !f.SetView(cx, cy, zoom) {
+		panic("not a view")
+	}
+	return f
+}
+
+// viewIs holds when v is exactly (cx, cy, zoom).
+func viewIs(v rpc.View, cx, cy, zoom float64) bool { return v == rpc.ViewOf(cx, cy, zoom) }
 
 // Reset makes the whole stack one frame, so a restore to a shallower place
 // leaves no deeper frame behind to ascend into.
 func TestResetClearsEveryFrame(t *testing.T) {
 	s := StackAt("home/1", []string{"4", "9"}, "13")
-	s.Reset(Frame{GridID: "other/1", Zoom: 1})
+	s.Reset(viewed(Frame{GridID: "other/1"}, 0, 0, 1))
 	if s.Depth() != 1 || s.Anchor() != "other/1" || s.Content {
 		t.Fatalf("after reset: %+v", s.Crumbs())
 	}
@@ -153,11 +178,8 @@ func TestContentFrameCarriesTheTilesOwnViewport(t *testing.T) {
 	if f.Door != "u1/9" || !f.Content {
 		t.Fatalf("not a content frame: %+v", f)
 	}
-	if f.Cx != 4 || f.Cy != 6 {
-		t.Fatalf("not centred on the footprint: %+v", f)
-	}
-	if !f.HasView() || f.Zoom != 2.5 {
-		t.Fatalf("no viewport: %+v", f)
+	if !f.HasView() || !viewIs(f.View, 4, 6, 2.5) {
+		t.Fatalf("not centred on the footprint at its zoom: %+v", f)
 	}
 	if f.TextMode != "rendered" || f.TextScrollX != 7 || f.TextScrollY != 11 {
 		t.Fatalf("text state not carried: %+v", f)
@@ -177,8 +199,8 @@ func TestARestoredFrameAdoptsItsOwnersViewOnce(t *testing.T) {
 	if !p.ViewPending || p.HasView() {
 		t.Fatalf("a restored leaf reads as holding a view: %+v", p.Frame)
 	}
-	if p.Zoom <= 0 {
-		t.Fatalf("the placeholder must still draw: zoom %v", p.Zoom)
+	if _, ok := p.Live(); !ok {
+		t.Fatalf("the placeholder must still draw: %+v", p.View)
 	}
 
 	// Split before the row answers: the clone waits for the same row.
@@ -190,20 +212,20 @@ func TestARestoredFrameAdoptsItsOwnersViewOnce(t *testing.T) {
 		t.Fatal("a split of a restored leaf took the placeholder as a view")
 	}
 
-	if !p.Adopt(Frame{Cx: 4, Cy: 5, Zoom: 2}) {
+	if !p.Adopt(viewed(Frame{}, 4, 5, 2)) {
 		t.Fatal("a pending frame refused its owner's view")
 	}
-	if p.ViewPending || !p.HasView() || p.Cx != 4 || p.Cy != 5 || p.Zoom != 2 {
+	if p.ViewPending || !p.HasView() || !viewIs(p.View, 4, 5, 2) {
 		t.Fatalf("adopted frame = %+v", p.Frame)
 	}
-	p.Cx = 9
-	if p.Adopt(Frame{Cx: 4, Cy: 5, Zoom: 2}) || p.Cx != 9 {
+	p.SetView(9, 5, 2)
+	if p.Adopt(viewed(Frame{}, 4, 5, 2)) || !viewIs(p.View, 9, 5, 2) {
 		t.Fatalf("a settled view was overwritten: %+v", p.Frame)
 	}
 
 	// Descending out of a still-pending frame leaves it with no view to come
 	// back to, so the ascent lands on the owner row's framing.
-	np.Push(Frame{Door: "w2", Zoom: 1})
+	np.Push(viewed(Frame{Door: "w2"}, 0, 0, 1))
 	np.Pop()
 	if np.HasView() {
 		t.Fatalf("the ascent would land on a placeholder: %+v", np.Frame)
@@ -226,7 +248,7 @@ func TestARestoredContentFrameAdoptsItsRowsTextState(t *testing.T) {
 		t.Fatal("refused")
 	}
 	if p.TextMode != "rendered" || p.TextScrollX != 7 || p.TextScrollY != 70 ||
-		p.Cx != 3 || p.Cy != 4 || p.Zoom != 3 || p.Door != "t1" || !p.Content {
+		!viewIs(p.View, 3, 4, 3) || p.Door != "t1" || !p.Content {
 		t.Fatalf("adopted content frame = %+v", p.Frame)
 	}
 }

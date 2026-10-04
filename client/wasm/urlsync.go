@@ -46,7 +46,7 @@ func (a *App) flushFramingSave() {
 	a.tree.Walk(func(p *pane.Pane) {
 		pgs = append(pgs, pane.PaneGrid{PaneID: p.ID, GridID: a.gridIDForPane(p)})
 	})
-	writers := pane.FramingWriters(pgs, a.tree.Focus)
+	writers := pane.FramingWriters(pgs, a.tree.Focus, a.layoutPanes())
 	a.tree.Walk(func(p *pane.Pane) {
 		if writers[p.ID] {
 			a.persistPaneFraming(p)
@@ -118,8 +118,13 @@ func (a *App) framingDoor(own pane.FramingOwner) (door *gridwellv1.Tile, ok bool
 }
 
 // ownerView is the read side of persistPaneFraming: the view p's owner row
-// holds at pane size r, false while that row is not cached.
+// holds at pane size r, false while that row is not cached or when r has no
+// area, where a pane hidden under a zoomed sibling has no view to take.
 func (a *App) ownerView(p *pane.Pane, r pane.Rect) (pane.Frame, bool) {
+	size, ok := r.Size()
+	if !ok {
+		return pane.Frame{}, false
+	}
 	own := p.FramingTarget()
 	if own.Content {
 		file, ok := a.descendedTile(p)
@@ -137,24 +142,20 @@ func (a *App) ownerView(p *pane.Pane, r pane.Rect) (pane.Frame, bool) {
 	if !ok {
 		return pane.Frame{}, false
 	}
-	size, ok := r.Size()
-	if !ok {
-		return pane.Frame{}, false
-	}
 	var v pane.Frame
 	if door != nil {
 		f, ok := zoomtrans.StoredView(wellOf(door), size, cellPx)
 		if !ok {
 			return pane.Frame{}, false
 		}
-		v.Cx, v.Cy, v.Zoom = f.Cx(), f.Cy(), f.Zoom()
+		v.View = rpc.Saved(f)
 		return v, true
 	}
-	// An unvisited root sits at its origin at live zoom 1: see
+	// An unvisited root sits at zoomtrans.Origin: see
 	// zoomtrans.ShownRootFraming.
-	v.Zoom = 1
+	v.View = rpc.Saved(zoomtrans.Origin)
 	if f, ok := a.storedRootView(own.RootGridID, size); ok {
-		v.Cx, v.Cy, v.Zoom = f.Cx(), f.Cy(), f.Zoom()
+		v.View = rpc.Saved(f)
 	}
 	return v, true
 }
@@ -230,7 +231,11 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		req = gridwellv1.SetFramingRequest{RootGridId: p.Anchor()}
 		commit = func(f rpc.Framing) { a.cacheDoorwayFraming(p.Anchor(), f) }
 	}
-	next, ok := zoomtrans.Writeback(cur, foot, p.Cx, p.Cy, p.Zoom, size, cellPx)
+	live, ok := p.Live()
+	if !ok {
+		return
+	}
+	next, ok := zoomtrans.Writeback(cur, foot, live.Cx(), live.Cy(), live.Zoom(), size, cellPx)
 	if !ok {
 		return
 	}
@@ -261,10 +266,13 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	if !ok || p.ViewPending || !rpc.TextDocument(file) || a.possiblyEphemeral(p, file) {
 		return
 	}
+	r := paneRectFor(a, p)
+	if _, sized := r.Size(); !sized {
+		return
+	}
 	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
 	gid := a.gridIDForPane(p)
-	r := paneRectFor(a, p)
 	_, _, iw, ih := textInnerBox(r)
 	next := textedit.Framing{X: scrollX, Y: scrollY, W: int64(iw + 0.5), H: int64(ih + 0.5), Mode: p.TextMode}
 	if !textedit.Reframes(textedit.FramingOf(file), next, a.tileReadOnly(file)) {
