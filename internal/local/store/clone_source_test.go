@@ -89,7 +89,7 @@ func TestCloningLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	if _, err := s.SetFrozen(ctx, url.Id, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetContentZoom(ctx, url.Id, 1.25); err != nil {
+	if _, err := s.SetContentZoom(ctx, url.Id, zoomOf(1.25)); err != nil {
 		t.Fatal(err)
 	}
 	shell, err := s.CreateShell(ctx, outer.ChildGridId, 6, 0, 2, 2)

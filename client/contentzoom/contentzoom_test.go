@@ -17,7 +17,7 @@ func TestOf(t *testing.T) {
 
 func TestClamp(t *testing.T) {
 	for _, c := range []struct{ in, want float64 }{
-		{0.1, Min}, {Min, Min}, {1, 1}, {Max, Max}, {9, Max},
+		{0.1, rpc.ContentZoomMin}, {rpc.ContentZoomMin, rpc.ContentZoomMin}, {1, 1}, {rpc.ContentZoomMax, rpc.ContentZoomMax}, {9, rpc.ContentZoomMax},
 	} {
 		if got := Clamp(c.in); got != c.want {
 			t.Errorf("Clamp(%v) = %v, want %v", c.in, got, c.want)
@@ -29,7 +29,7 @@ func TestShellFontPx(t *testing.T) {
 	for _, c := range []struct {
 		z    float64
 		want int
-	}{{1, 13}, {2, 26}, {Min, 7}} {
+	}{{1, 13}, {2, 26}, {rpc.ContentZoomMin, 7}} {
 		if got := ShellFontPx(c.z); got != c.want {
 			t.Errorf("ShellFontPx(%v) = %v, want %v", c.z, got, c.want)
 		}
@@ -52,8 +52,8 @@ func TestDecide(t *testing.T) {
 		{"url in", rpc.KindURL, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
 		{"shell in", rpc.KindShell, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
 		{"zero reads as unzoomed by Of, not here", rpc.KindText, false, KeyIn, Of(0), Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"in stops at Max", rpc.KindText, false, KeyIn, Max, Verdict{Next: Max, Consume: true, Apply: true, Persist: true}},
-		{"out stops at Min", rpc.KindText, false, KeyOut, Min, Verdict{Next: Min, Consume: true, Apply: true, Persist: true}},
+		{"in stops at Max", rpc.KindText, false, KeyIn, rpc.ContentZoomMax, Verdict{Next: rpc.ContentZoomMax, Consume: true, Apply: true, Persist: true}},
+		{"out stops at Min", rpc.KindText, false, KeyOut, rpc.ContentZoomMin, Verdict{Next: rpc.ContentZoomMin, Consume: true, Apply: true, Persist: true}},
 		{"ephemeral applies without a write", rpc.KindURL, true, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: false}},
 		{"a well is not zoomable", rpc.KindWell, false, KeyIn, 1, Verdict{}},
 		{"a pane tile is not zoomable", rpc.KindPane, false, KeyIn, 1, Verdict{}},
@@ -70,6 +70,19 @@ func TestDecide(t *testing.T) {
 					c.kind, c.possiblyEphemeral, c.key, c.cur, got, c.want)
 			}
 		})
+	}
+}
+
+// Every zoom a press shows is one the writers accept, so its persist is never
+// refused.
+func TestEveryPressIsWritable(t *testing.T) {
+	for _, k := range []string{KeyIn, KeyOut, KeyReset} {
+		for cur := 0.1; cur < 10; cur *= 1.07 {
+			v := Decide(rpc.KindText, false, k, cur)
+			if _, err := rpc.NewContentZoom(v.Next); err != nil {
+				t.Errorf("press %q at %v shows %v: %v", k, cur, v.Next, err)
+			}
+		}
 	}
 }
 

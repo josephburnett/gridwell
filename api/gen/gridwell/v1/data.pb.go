@@ -2641,8 +2641,8 @@ type SetTileRequest struct {
 	// user edit. Refused for text tiles, whose name derives from the first line.
 	Rename string `protobuf:"bytes,6,opt,name=rename,proto3" json:"rename,omitempty"`
 	// content_zoom is the per-tile content scale. Framing: no claim, and it never
-	// bumps version. Refused for wells. optional so presence is explicit,
-	// because 0 is a meaningful stored value.
+	// bumps version. Refused for wells, and outside the range rpc.NewContentZoom
+	// declares. optional so presence is explicit: an absent zoom is no write.
 	ContentZoom *float64 `protobuf:"fixed64,7,opt,name=content_zoom,json=contentZoom,proto3,oneof" json:"content_zoom,omitempty"`
 	// url_frozen is the user's standing freeze on a url or shell tile. Framing:
 	// no claim, and it never bumps version. Refused for a kind that cannot go

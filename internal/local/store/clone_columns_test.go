@@ -30,7 +30,7 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// ...a content zoom, which is framing and bumps no version...
-	if _, err := s.SetContentZoom(ctx, tile.Id, 1.5); err != nil {
+	if _, err := s.SetContentZoom(ctx, tile.Id, zoomOf(1.5)); err != nil {
 		t.Fatal(err)
 	}
 	// ...and a user rename, which latches alt_user.

@@ -233,7 +233,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	if err := d.SetTextView(f.ID, 0, 120, 400, 300, "rendered"); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.SetContentZoom(f.ID, 1.25); err != nil {
+	if err := d.SetContentZoom(f.ID, zoomOf(1.25)); err != nil {
 		t.Fatal(err)
 	}
 	listing[1].Label = "f renamed"

@@ -323,7 +323,11 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return tileResp(p.st.RenameTile(ctx, req.TileId, req.Version, req.Rename))
 	}
 	if req.ContentZoom != nil {
-		return tileResp(p.st.SetContentZoom(ctx, req.TileId, *req.ContentZoom))
+		z, err := rpc.NewContentZoom(*req.ContentZoom)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		return tileResp(p.st.SetContentZoom(ctx, req.TileId, z))
 	}
 	if req.UrlFrozen != nil {
 		return tileResp(p.st.SetFrozen(ctx, req.TileId, *req.UrlFrozen))

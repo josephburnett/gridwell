@@ -133,13 +133,10 @@ const contentZoomSet = `content_zoom = ?`
 // SetContentZoom persists the per-tile content scale. It is framing, so no
 // claim and no bump. Wells are refused: their view_zoom is the grid viewport,
 // a different fact with its own writer.
-func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoom float64) (*gridwellv1.Tile, error) {
+func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoom rpc.ContentZoom) (*gridwellv1.Tile, error) {
 	tileID, err := parseID(tileIDStr)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	if contentZoom < 0 {
-		return nil, fmt.Errorf("%w: content_zoom must be >= 0", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
 	err = s.withMutation(ctx, "SetContentZoom", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
@@ -152,7 +149,7 @@ func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoo
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET `+contentZoomSet+`, updated_at = ? WHERE id = ?`,
-			contentZoom, s.now().Unix(), tileID); err != nil {
+			contentZoom.Float(), s.now().Unix(), tileID); err != nil {
 			return err
 		}
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)

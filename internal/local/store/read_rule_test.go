@@ -60,7 +60,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 	if _, err := s.SetFrozen(ctx, url.Id, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetContentZoom(ctx, url.Id, 1.5); err != nil {
+	if _, err := s.SetContentZoom(ctx, url.Id, zoomOf(1.5)); err != nil {
 		t.Fatal(err)
 	}
 

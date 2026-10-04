@@ -6,7 +6,16 @@ import (
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
+
+func zoomOf(z float64) rpc.ContentZoom {
+	c, err := rpc.NewContentZoom(z)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
 
 // The one pin on what a tile row's `version` means: the user's content bytes
 // changed. It is the optimistic-concurrency claim for those edits and nothing
@@ -195,7 +204,7 @@ var versionCases = []versionCase{
 	{
 		name: "SetContentZoom/content scale", subject: shellSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.SetContentZoom(ctx, tile.Id, 1.5)
+			_, err := s.SetContentZoom(ctx, tile.Id, zoomOf(1.5))
 			return err
 		},
 	},
@@ -331,7 +340,7 @@ func TestContentZoomRefusesWells(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWell: %v", err)
 	}
-	if _, err := s.SetContentZoom(ctx, well.Id, 2); err == nil {
+	if _, err := s.SetContentZoom(ctx, well.Id, zoomOf(2)); err == nil {
 		t.Error("SetContentZoom on a well must be refused")
 	}
 }

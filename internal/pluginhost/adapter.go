@@ -798,13 +798,21 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 			return nil, status.Error(codes.InvalidArgument, "plugin: a url writeback with no screenshot writes nothing")
 		}
 	}
+	var zoom rpc.ContentZoom
+	if req.ContentZoom != nil {
+		z, err := rpc.NewContentZoom(*req.ContentZoom)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		zoom = z
+	}
 	id, err := a.mint(ctx, req.TileId)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case req.ContentZoom != nil:
-		err = a.mem.SetContentZoom(id, *req.ContentZoom)
+		err = a.mem.SetContentZoom(id, zoom)
 	case req.UrlFrozen != nil:
 		err = a.mem.SetFrozen(id, *req.UrlFrozen)
 	default:

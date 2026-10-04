@@ -421,8 +421,8 @@ func (n *Namespace) SetTextView(tileID, tx, ty, tw, th int64, mode string) error
 }
 
 // SetContentZoom persists the per-tile content scale.
-func (n *Namespace) SetContentZoom(tileID int64, zoom float64) error {
-	return n.exec(contentZoomSet, tileID, zoom)
+func (n *Namespace) SetContentZoom(tileID int64, zoom rpc.ContentZoom) error {
+	return n.exec(contentZoomSet, tileID, zoom.Float())
 }
 
 // Retire tombstones one tile row: the delete-gesture path. The row stays so a

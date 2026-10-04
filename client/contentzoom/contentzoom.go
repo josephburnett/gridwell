@@ -1,15 +1,13 @@
 // Package contentzoom owns the content-zoom policy: the chord keys and their
-// steps, the range a zoom is clamped into, and what one press does to the
-// tile a pane is descended into. The wasm shim is the hands.
+// steps, and what one press does to the tile a pane is descended into. The
+// range is rpc.NewContentZoom's. The wasm shim is the hands.
 package contentzoom
 
 import "github.com/josephburnett/gridwell/api/rpc"
 
 const (
-	// Step is one press; Min and Max bound the result.
+	// Step is one press.
 	Step = 1.1
-	Min  = 0.5
-	Max  = 3.0
 
 	shellBaseFontPx = 13.0
 )
@@ -33,8 +31,8 @@ func Of(stored float64) float64 {
 	return 1
 }
 
-// Clamp holds a zoom inside [Min, Max].
-func Clamp(z float64) float64 { return min(max(z, Min), Max) }
+// Clamp holds a zoom inside the range a writer accepts.
+func Clamp(z float64) float64 { return min(max(z, rpc.ContentZoomMin), rpc.ContentZoomMax) }
 
 // ShellFontPx is the terminal font at zoom z.
 func ShellFontPx(z float64) int { return int(shellBaseFontPx*z + 0.5) }
