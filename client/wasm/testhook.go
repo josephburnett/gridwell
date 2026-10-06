@@ -103,6 +103,7 @@ func (a *App) installTestHook() {
 		"palette":       js.FuncOf(a.thPalette),
 		"ghost":         js.FuncOf(a.thGhost),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
+		"tileAt":        js.FuncOf(a.thTileAt),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
 		"urlViews":      js.FuncOf(a.thURLViews),
@@ -808,6 +809,22 @@ func (a *App) thCellCenter(_ js.Value, args []js.Value) any {
 	}
 	sx, sy := ps.CellToScreen(cx+0.5, cy+0.5)
 	return map[string]any{"x": sx, "y": sy}
+}
+
+// thTileAt is the id of the tile a press on cell (cx, cy) of the pane hits:
+// the client's cache, which trails the server oracle by an echo.
+func (a *App) thTileAt(_ js.Value, args []js.Value) any {
+	if len(args) < 3 {
+		return ""
+	}
+	p := a.tree.FindPane(args[0].String())
+	if p == nil {
+		return ""
+	}
+	if n := a.tileAtCell(p, int64(args[1].Int()), int64(args[2].Int())); n != nil {
+		return n.Id
+	}
+	return ""
 }
 
 func (a *App) focusedPaneRect() (*pane.Pane, pane.Rect, bool) {

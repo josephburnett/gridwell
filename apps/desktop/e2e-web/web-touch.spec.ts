@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from '../e2e/oracle';
 import { longPressDrag, pinch, twoFingerTap } from './touch';
+import { installEchoGate, holdEchoFor } from './echo';
 
 // Crosses the touch seam, from client/touchgest through synthetic mouse and
 // wheel events into the unchanged gesture engine: real TouchEvents injected over
@@ -98,6 +99,7 @@ test('touch: tapping the previous crumb ascends a text descent (#222)', async ({
 });
 
 test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, window }) => {
+  await installEchoGate(window);
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -111,6 +113,9 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
   // centers come from the same hook the mouse specs use.
   const fromPt = await gw.cellCenter(f.id, cx, cy);
   const toPt = await gw.cellCenter(f.id, cx + 1, cy);
+  // The move's echo lands after the server oracle answers, as it did twice
+  // on the loaded CI runner.
+  await holdEchoFor(window, 2_000);
   const s = await window.context().newCDPSession(window);
   await s.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
@@ -136,11 +141,12 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
     'one-finger drag moved the tile on the server',
   ).toBeTruthy();
 
-  // flake, 2026-09-20, OPEN: this tap read textFocus "" twice on the CI runner
-  // and nowhere else. What waitIdle guarantees after a CDP touch drag is the
-  // open question; docs/flake-ledger.md carries the evidence.
+  // flake, 2026-09-20: the tap acts on the client's cache, which holds the
+  // move only once its echo lands, so it waits on that rather than the
+  // server (docs/flake-ledger.md).
   //
   // Tap descends into it; two-finger tap ascends back out.
+  await gw.waitClientTileAt(f.id, cx + 1, cy, created.id!);
   await window.touchscreen.tap(toPt.x, toPt.y);
   await gw.waitIdle();
   let p = await gw.focused();
