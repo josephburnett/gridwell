@@ -9,7 +9,22 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
+
+// Reader opens a read-only handle on the store file at path, for a test
+// outside the store that asks what is at rest. The store's own handle never
+// leaves its package.
+func Reader(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
 
 // Snapshot is every row of every table, columns and all, in a stable order.
 // Two snapshots differ exactly when a stored fact differs. sqlite_sequence is

@@ -244,9 +244,9 @@ func TestReadingNeverMutates(t *testing.T) {
 
 	for _, c := range readCases() {
 		t.Run(c.name, func(t *testing.T) {
-			before := storetest.Snapshot(t, s.SQL())
+			before := storetest.Snapshot(t, s.db)
 			c.run(ctx, s, sub)
-			if after := storetest.Snapshot(t, s.SQL()); after != before {
+			if after := storetest.Snapshot(t, s.db); after != before {
 				t.Errorf("%s wrote to the store:\n%s", c.name, storetest.Diff(before, after))
 			}
 		})
@@ -267,9 +267,9 @@ func TestAReadOnAFreshHomeWritesNothing(t *testing.T) {
 				ns:      s.Namespace("plug1"),
 				entries: []*pluginv1.Entry{{Key: "notes.md", Kind: "text", Label: "notes.md"}},
 			}
-			before := storetest.Snapshot(t, s.SQL())
+			before := storetest.Snapshot(t, s.db)
 			c.run(ctx, s, sub)
-			if after := storetest.Snapshot(t, s.SQL()); after != before {
+			if after := storetest.Snapshot(t, s.db); after != before {
 				t.Errorf("%s wrote to a fresh store:\n%s", c.name, storetest.Diff(before, after))
 			}
 		})

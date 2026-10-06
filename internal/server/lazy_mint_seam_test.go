@@ -25,20 +25,23 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// lazyStack is newTestServerWithPlugins keeping the store handle, because the
-// question these tests ask is "what is in the file".
-func lazyStack(t *testing.T) (cl *rpc.Client, st *store.Store, hs httpServer, fsRoot string) {
+// lazyStack is newTestServerWithPlugins with a read-only handle on the store's
+// file, because the question these tests ask is "what is in the file".
+func lazyStack(t *testing.T) (cl *rpc.Client, st *sql.DB, hs httpServer, fsRoot string) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
+	path := filepath.Join(t.TempDir(), "gridwell.db")
+	s, err := store.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	st = storetest.Reader(t, path)
 	reg := plugin.NewRegistry()
 	registerPrimaryLocaldb(t, reg, s)
 	fsRoot = t.TempDir()
@@ -49,7 +52,7 @@ func lazyStack(t *testing.T) (cl *rpc.Client, st *store.Store, hs httpServer, fs
 	reg.SetLabel(fsPluginUUID, "files")
 	srv := mustNew(t, reg, Config{})
 	h := serveWeb(t, srv)
-	return rpc.NewClient(h.Client(), h.URL, connect.WithProtoJSON()), s, httpServer{h.URL, h.Client()}, fsRoot
+	return rpc.NewClient(h.Client(), h.URL, connect.WithProtoJSON()), st, httpServer{h.URL, h.Client()}, fsRoot
 }
 
 type httpServer struct {
@@ -60,11 +63,11 @@ type httpServer struct {
 // pluginRows counts the tile and grid rows any plugin namespace owns. Home is
 // ns = ” and is not lazy, so it is excluded: this is exactly the number
 // browsing must not move.
-func pluginRows(t *testing.T, st *store.Store) (tiles, grids int) {
+func pluginRows(t *testing.T, st *sql.DB) (tiles, grids int) {
 	t.Helper()
 	count := func(q string) int {
 		var n int
-		if err := st.SQL().QueryRow(q).Scan(&n); err != nil && err != sql.ErrNoRows {
+		if err := st.QueryRow(q).Scan(&n); err != nil && err != sql.ErrNoRows {
 			t.Fatal(err)
 		}
 		return n
@@ -315,10 +318,10 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 
 // storedReference reads a home tile's link_target_id straight out of the file,
 // so the assertion is about what is at rest, not about what the wire says.
-func storedReference(t *testing.T, st *store.Store, qualifiedID string) string {
+func storedReference(t *testing.T, st *sql.DB, qualifiedID string) string {
 	t.Helper()
 	var target sql.NullString
-	if err := st.SQL().QueryRow(`SELECT link_target_id FROM tiles WHERE id = ? AND ns = ''`,
+	if err := st.QueryRow(`SELECT link_target_id FROM tiles WHERE id = ? AND ns = ''`,
 		rpc.LocalOf(qualifiedID)).Scan(&target); err != nil {
 		t.Fatal(err)
 	}

@@ -320,7 +320,7 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 func rowCount(t *testing.T, st *Store) int {
 	t.Helper()
 	var n int
-	if err := st.SQL().QueryRow(`SELECT count(*) FROM tiles`).Scan(&n); err != nil {
+	if err := st.db.QueryRow(`SELECT count(*) FROM tiles`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	return n

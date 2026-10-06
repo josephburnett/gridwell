@@ -115,7 +115,7 @@ func TestCloningLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 		t.Fatal(err)
 	}
 	srcTiles, srcGrids := subtree(t, s, outer)
-	before := storetest.DumpOf(t, s.SQL())
+	before := storetest.DumpOf(t, s.db)
 
 	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
 		TileId: outer.Id, DestGridId: root, X: 10, Y: 0,
@@ -123,7 +123,7 @@ func TestCloningLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-	after := storetest.DumpOf(t, s.SQL())
+	after := storetest.DumpOf(t, s.db)
 
 	for _, table := range []string{"tiles", "grids"} {
 		ids := srcTiles

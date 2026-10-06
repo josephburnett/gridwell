@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -132,15 +134,16 @@ func (m *mailSource) Watch(req *pluginv1.WatchRequest, s pluginv1.Plugin_WatchSe
 	}
 }
 
-func linkStack(t *testing.T, src *mailSource) (*rpc.Client, *store.Store, string) {
+func linkStack(t *testing.T, src *mailSource) (*rpc.Client, *sql.DB, string) {
 	t.Helper()
 	return linkStackOf(t, src, func(ns namespace.Namespace) namespace.Namespace { return ns })
 }
 
 // linkStackOf is linkStack with the plugin's namespace as wrap makes it.
-func linkStackOf(t *testing.T, src *mailSource, wrap func(namespace.Namespace) namespace.Namespace) (*rpc.Client, *store.Store, string) {
+func linkStackOf(t *testing.T, src *mailSource, wrap func(namespace.Namespace) namespace.Namespace) (*rpc.Client, *sql.DB, string) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
+	path := filepath.Join(t.TempDir(), "gridwell.db")
+	st, err := store.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +164,7 @@ func linkStackOf(t *testing.T, src *mailSource, wrap func(namespace.Namespace) n
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cl, st, rpc.HomeGrid(lp)
+	return cl, storetest.Reader(t, path), rpc.HomeGrid(lp)
 }
 
 func boxGrid() string { return rpc.QualifyID(linkPluginUUID, rpc.EntryGridID("box")) }
