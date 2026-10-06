@@ -291,8 +291,7 @@ export class GridwellDriver {
   }
 
   // Waits until a press on the cell would hit tileID. waitIdle and the getGrid
-  // oracle both settle before the write's echo reaches the client's cache, so
-  // a spec that presses a tile it just placed waits on this instead.
+  // oracle can both settle before a create's echo reaches the client's cache.
   async waitClientTileAt(paneID: string, cx: number, cy: number, tileID: string): Promise<void> {
     await this.win.waitForFunction(
       ([id, x, y, want]) => (window as any).__gridwellTest.tileAt(id, x, y) === want,
