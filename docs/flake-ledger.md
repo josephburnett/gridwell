@@ -65,9 +65,12 @@ None is open.
   process: the untouched control pane keeps capturing while the reloaded
   one never does. CI passes this scenario on every run — the three
   `check-electron` failures that day were all at the first scenario, a
-  different mechanism. No mechanism inside Gridwell has been named, so
-  `make check-electron` is about half green on that box and a failure
-  there is worth a second run before it is believed.
+  different mechanism: the first view was placed before the GPU process,
+  which holds the display compositor, had started, and on a cold runner disk
+  its Mesa probe takes seconds (closed by `src/harness/host.ts`). For this
+  row no mechanism inside Gridwell has been named, so `make check-electron`
+  is about half green on that box and a failure there is worth a second run
+  before it is believed.
 
   The error name is shared, the mechanism is not. `capturePage` also
   rejects with `UnknownVizError` inside a main-frame navigation, where the
