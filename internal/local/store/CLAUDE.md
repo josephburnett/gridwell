@@ -117,7 +117,9 @@ every open. Never relax them.
   (callers: `WriteContent`'s text and url arms, `RenameTile`) claims and
   `finishContentEdit` bumps. Everything else — captures, framing, layout —
   goes through `loadForWrite` + `emitTileChanged` and neither claims nor
-  bumps. Layout races resolve last-writer-wins; the overlap check in the
+  bumps. Those single-tile writes run in `withTileWrite`, so one that lands
+  where the row already is writes nothing and tells no one
+  (`repeat_write_test.go`). Layout races resolve last-writer-wins; the overlap check in the
   same transaction is what prevents two tiles in one cell.
   `version_rule_test.go` is the table.
 - Blobs are sha256-addressed, immutable, refcounted, and carry their
