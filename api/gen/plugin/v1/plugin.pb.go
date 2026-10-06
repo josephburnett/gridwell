@@ -513,7 +513,15 @@ type Entry struct {
 	// body under another stamp knows its bytes moved and one holding it under
 	// this stamp knows they did not. ReadContent answers the same stamp with
 	// the bytes.
-	ContentStamp  string `protobuf:"bytes,12,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
+	ContentStamp string `protobuf:"bytes,12,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
+	// read_only says this text entry's body takes no edits, and why, in a
+	// plain sentence the client shows; "" means it takes them when the plugin
+	// is writable. Declare it for a body you know you would refuse, such as a
+	// summary standing in for the bytes or a file the process may not write,
+	// so the client never offers an edit that cannot land. It is the entry's
+	// fact, as text_presentation is: writable says the plugin takes edits at
+	// all. The node carries it on the tile (Tile.read_only).
+	ReadOnly      string `protobuf:"bytes,13,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -628,6 +636,13 @@ func (x *Entry) GetLinkTarget() *EntryRef {
 func (x *Entry) GetContentStamp() string {
 	if x != nil {
 		return x.ContentStamp
+	}
+	return ""
+}
+
+func (x *Entry) GetReadOnly() string {
+	if x != nil {
+		return x.ReadOnly
 	}
 	return ""
 }
@@ -1871,7 +1886,7 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\aentries\x18\x01 \x03(\v2\x10.plugin.v1.EntryR\aentries\x12$\n" +
 	"\rauthoritative\x18\x02 \x01(\bR\rauthoritative\x12!\n" +
 	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\x12 \n" +
-	"\vunreachable\x18\x04 \x01(\tR\vunreachable\"\xbb\x03\n" +
+	"\vunreachable\x18\x04 \x01(\tR\vunreachable\"\xd8\x03\n" +
 	"\x05Entry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
@@ -1888,7 +1903,8 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	" \x01(\x03R\fpreviewStamp\x124\n" +
 	"\vlink_target\x18\v \x01(\v2\x13.plugin.v1.EntryRefR\n" +
 	"linkTarget\x12#\n" +
-	"\rcontent_stamp\x18\f \x01(\tR\fcontentStamp\"6\n" +
+	"\rcontent_stamp\x18\f \x01(\tR\fcontentStamp\x12\x1b\n" +
+	"\tread_only\x18\r \x01(\tR\breadOnly\"6\n" +
 	"\bEntryRef\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\"G\n" +

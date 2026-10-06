@@ -33,6 +33,9 @@ type Input struct {
 	Descended     bool
 	DescendedText bool
 	DescendedName string
+	// DescendedReadOnly is the descended row's Tile.read_only: why its source
+	// takes no edits to its body.
+	DescendedReadOnly string
 	// PossiblyEphemeral gates the rename and CertainlyEphemeral the label: a
 	// name written about a visit that may be about to die is a mark the user
 	// never asked for, while saying "ephemeral" needs a known yes.
@@ -84,11 +87,15 @@ const unnamed = "unnamed"
 // Decide answers the descent before the level, because a pane inside a tile
 // names that tile and not the room around it. Anything with no name of its own
 // falls through to a muted "unnamed" rather than to blank chrome. A pane on a
-// grid also says what its source calls it, unless that only repeats the name.
+// grid also says what its source calls it, unless that only repeats the name,
+// and a pane inside a body its source takes no edits to says why.
 func Decide(in Input) Verdict {
 	v := decideName(in)
-	if !in.Descent && in.SourceLabel != v.Label {
+	switch {
+	case !in.Descent && in.SourceLabel != v.Label:
 		v.Source = in.SourceLabel
+	case in.Descent && in.Descended && in.DescendedReadOnly != "":
+		v.Source = "read-only: " + in.DescendedReadOnly
 	}
 	return v
 }

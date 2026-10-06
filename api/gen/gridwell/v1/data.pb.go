@@ -462,7 +462,13 @@ type Tile struct {
 	// for such a row what version does for a home row: a body read under
 	// another stamp is behind it, and one read under this stamp is not.
 	// Wire-only, never a stored column.
-	ContentStamp  string `protobuf:"bytes,39,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
+	ContentStamp string `protobuf:"bytes,39,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
+	// read_only is the owning plugin's sentence for why this text tile's body
+	// takes no edits though its grid is writable, "" when it takes them:
+	// plugin.v1 Entry.read_only, carried by the adapter and verbatim in
+	// transit. The client shows such a body as it shows any read-only text
+	// (textedit.ReadOnly). Wire-only, never a stored column.
+	ReadOnly      string `protobuf:"bytes,40,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -710,6 +716,13 @@ func (x *Tile) GetShellSession() string {
 func (x *Tile) GetContentStamp() string {
 	if x != nil {
 		return x.ContentStamp
+	}
+	return ""
+}
+
+func (x *Tile) GetReadOnly() string {
+	if x != nil {
+		return x.ReadOnly
 	}
 	return ""
 }
@@ -3697,7 +3710,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\x90\a\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xad\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -3733,7 +3746,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
 	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\x12#\n" +
 	"\rshell_session\x18& \x01(\tR\fshellSession\x12#\n" +
-	"\rcontent_stamp\x18' \x01(\tR\fcontentStampJ\x04\b\x02\x10\x03J\x04\b\n" +
+	"\rcontent_stamp\x18' \x01(\tR\fcontentStamp\x12\x1b\n" +
+	"\tread_only\x18( \x01(\tR\breadOnlyJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
 	"\vInfoRequest\"\xec\x02\n" +
 	"\fInfoResponse\x12!\n" +

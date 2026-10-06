@@ -245,6 +245,13 @@ message Tile {
   // another stamp is behind it, and one read under this stamp is not.
   // Wire-only, never a stored column.
   string content_stamp = 39;
+
+  // read_only is the owning plugin's sentence for why this text tile's body
+  // takes no edits though its grid is writable, "" when it takes them:
+  // plugin.v1 Entry.read_only, carried by the adapter and verbatim in
+  // transit. The client shows such a body as it shows any read-only text
+  // (textedit.ReadOnly). Wire-only, never a stored column.
+  string read_only = 40;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────

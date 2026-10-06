@@ -86,6 +86,29 @@ func TestDecideCheckboxClick(t *testing.T) {
 	}
 }
 
+func TestReadOnlyTable(t *testing.T) {
+	cases := []struct {
+		name         string
+		kind         string
+		gridWritable bool
+		readOnly     string
+		want         bool
+	}{
+		{"text in a grid that takes edits", rpc.KindText, true, "", false},
+		{"text its source says takes none", rpc.KindText, true, "big.log is larger than a body shows", true},
+		{"text in a grid that takes none", rpc.KindText, false, "", true},
+		{"text refused by both", rpc.KindText, false, "x", true},
+		{"a url is no read-only text", rpc.KindURL, false, "x", false},
+		{"a well is no read-only text", rpc.KindWell, true, "x", false},
+	}
+	for _, c := range cases {
+		tile := &gridwellv1.Tile{Kind: c.kind, ReadOnly: c.readOnly}
+		if got := ReadOnly(tile, c.gridWritable); got != c.want {
+			t.Errorf("%s: ReadOnly = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestDecideDescentTable(t *testing.T) {
 	doc := &gridwellv1.Tile{Kind: rpc.KindText, AltText: "notes.md"}
 	url := &gridwellv1.Tile{Kind: rpc.KindURL}

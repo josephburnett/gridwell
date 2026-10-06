@@ -164,6 +164,14 @@ message Entry {
   // this stamp knows they did not. ReadContent answers the same stamp with
   // the bytes.
   string content_stamp = 12;
+  // read_only says this text entry's body takes no edits, and why, in a
+  // plain sentence the client shows; "" means it takes them when the plugin
+  // is writable. Declare it for a body you know you would refuse, such as a
+  // summary standing in for the bytes or a file the process may not write,
+  // so the client never offers an edit that cannot land. It is the entry's
+  // fact, as text_presentation is: writable says the plugin takes edits at
+  // all. The node carries it on the tile (Tile.read_only).
+  string read_only = 13;
 }
 
 // EntryRef names one entry by the plugin's own words: the context that lists

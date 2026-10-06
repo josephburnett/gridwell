@@ -671,7 +671,10 @@ serve `WriteContent`; name every text entry's bytes with `content_stamp`, on
 the entry and on the read; refuse a write whose claimed stamp is not the
 entry's now with `FailedPrecondition`; answer the written bytes' stamp; and
 tell the write as the entry's `EntryChanged`, as rule 18 tells any change in
-place. A body you cannot take back whole is refused with its reason.
+place. A body you already know you would refuse (a summary, a cut-short
+head, a file you may not write) says so on its entry, in `read_only` with
+the reason, so it is never offered for editing; a write that reaches one
+anyway is refused with that reason.
 
 **Why.** "A tile behaves the same wherever its content comes from"
 (CLAUDE.md, promises): a home document is typed into and saved, so a file
@@ -679,7 +682,10 @@ should be. "Things stay as you left them": a save must never overwrite bytes
 the user has not seen, and the stamp is the claim that says which bytes the
 edit was typed over, as a version is for a home row (`docs/freshness.md`,
 trace (c)). The answered stamp is what the next save claims, and the echo's
-stamp is how the client knows its own write and keeps the text.
+stamp is how the client knows its own write and keeps the text. A textarea
+that takes typing and then refuses it is "it just disappeared" with extra
+steps (CLAUDE.md, rule 6); refusing with the reason is for the write the user
+could not have known would fail.
 
 **Example.** `fs/plugin/plugin.go` (`plugin-edits` branch), `write`:
 
@@ -694,12 +700,17 @@ file and answers the stamp a read names; a stale stamp is `FailedPrecondition`
 and leaves the other writer's bytes; a summary, a page, an oversized body, a
 read-only file and a key outside the root are refused with reasons; a broken
 stream writes nothing. `fs/plugin/stamp_test.go`: the listing and the read
-name one stamp. Across the seam, `internal/server/fs_write_seam_test.go` (a
+name one stamp. `fs/plugin/readonly_test.go`: each entry a write would
+refuse declares `read_only` with the reason, and each that declares none
+takes the write. Across the seam, `internal/server/fs_write_seam_test.go` (a
 save lands and its echo keeps the text, a disk change under a dirty edit is
-the conflict, a write the plugin cannot take parks and lands) and
-`fs_stamp_seam_test.go`.
+the conflict, a write the plugin cannot take parks and lands),
+`fs_stamp_seam_test.go`, `fs_readonly_seam_test.go` (the tile carries
+`read_only`, a chmod reaches it with no gesture) and
+`apps/desktop/e2e/fs-readonly.spec.ts`.
 
-**Today.** Meets: fs (`plugin-edits` branch). N/A: proc, pages, gitlab,
+**Today.** Meets: fs (`plugin-edits` branch; `read_only` on
+`plugin-readonly`). N/A: proc, pages, gitlab,
 gmail and hey, which take no body back and declare no `writable`.
 
 ## Checklist
@@ -727,4 +738,4 @@ lines say what remains.
 - [ ] 16. A real-binary seam test per verb, and one for `Watch` if declared.
 - [ ] 17. The README matches the code.
 - [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `ContextChanged` only for a listing that may have moved.
-- [ ] 19. A body you take back is declared `writable`, named by `content_stamp`, refused on a stale stamp with `FailedPrecondition`, and answered with the written bytes' stamp.
+- [ ] 19. A body you take back is declared `writable`, named by `content_stamp`, refused on a stale stamp with `FailedPrecondition`, and answered with the written bytes' stamp; a text entry you would refuse declares `read_only` with the reason.

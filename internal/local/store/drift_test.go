@@ -45,6 +45,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"text_presentation": "declared by the owning plugin: how its text body presents",
 				"content_stamp":     "the owning plugin's name for the bytes behind a claimless row, as its listing answered it",
 				"status_detail":     "the owning plugin's current trouble with this tile (an ssh well's last dial error)",
+				"read_only":         "the owning plugin's reason this text body takes no edits",
 			},
 		},
 	}

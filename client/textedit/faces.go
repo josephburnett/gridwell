@@ -6,6 +6,13 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 )
 
+// ReadOnly holds for a text tile whose body takes no edits: its grid's bodies
+// take none (gridWritable, false for an unknown grid), or its source says
+// this one takes none (Tile.read_only).
+func ReadOnly(t *gridwellv1.Tile, gridWritable bool) bool {
+	return rpc.TextDocument(t) && (!gridWritable || t.ReadOnly != "")
+}
+
 // ToggleVisible decides whether the rendered/raw toggle exists for a text
 // tile. A declared text_presentation is the authority. Undeclared, a writable
 // doc always toggles and a read-only tile toggles only when its name is

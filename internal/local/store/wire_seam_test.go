@@ -42,6 +42,7 @@ func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
 		"TextPresentation": "declared by the owning plugin from its content",
 		"StatusDetail":     "the owning plugin's current trouble with the tile",
 		"ContentStamp":     "the owning plugin's name for a claimless row's bytes",
+		"ReadOnly":         "the owning plugin's reason a text body takes no edits",
 	}
 	covered := map[string]bool{}
 	for _, tile := range wireFixtures(t) {
