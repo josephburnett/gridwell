@@ -7,6 +7,9 @@ package boundary
 import (
 	"bufio"
 	"bytes"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -327,5 +330,52 @@ func TestOneEventFanOut(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// storeWriteFunnel is the one function in internal/local/store that may open
+// a write on the store's handle. Everything it writes is in a transaction and
+// leaves a trace record; a write beside it does neither.
+const storeWriteFunnel = "withMutation"
+
+// No non-test file in the store writes on its handle (a .db selector) outside
+// storeWriteFunnel. Its write helpers take a *sql.Tx, so the handle cannot be
+// passed to one either.
+func TestOneStoreWriteFunnel(t *testing.T) {
+	dir := filepath.Join(repoRoot(t), "internal", "local", "store")
+	writes := map[string]bool{"Exec": true, "ExecContext": true, "Begin": true, "BeginTx": true, "Prepare": true, "PrepareContext": true}
+	paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Name.Name == storeWriteFunnel {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || !writes[sel.Sel.Name] {
+					return true
+				}
+				if recv, ok := sel.X.(*ast.SelectorExpr); ok && recv.Sel.Name == "db" {
+					t.Errorf("%s: %s writes on the store's handle — every store write goes through %s, which runs it in a transaction and traces it", fset.Position(call.Pos()), fn.Name.Name, storeWriteFunnel)
+				}
+				return true
+			})
+		}
 	}
 }

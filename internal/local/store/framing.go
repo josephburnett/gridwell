@@ -16,11 +16,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// execer is the write half of a *sql.DB or *sql.Tx.
-type execer interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-}
-
 // viewArgs binds v as the three framing columns: NULL when never visited.
 func viewArgs(v rpc.View) (cx, cy, zoom any) {
 	f, ok := v.Framing()
@@ -35,18 +30,18 @@ func viewArgs(v rpc.View) (cx, cy, zoom any) {
 // non-zero, and a tombstoned tile refuses the write because a retired key
 // stays retired. A grid row takes no timestamp: updated_at on grids follows
 // content.
-func updateFraming(ctx context.Context, x execer, ns string, tileID, gridID int64, f rpc.Framing, now int64) (int64, error) {
+func updateFraming(ctx context.Context, tx *sql.Tx, ns string, tileID, gridID int64, f rpc.Framing, now int64) (int64, error) {
 	var (
 		res sql.Result
 		err error
 	)
 	if tileID != 0 {
-		res, err = x.ExecContext(ctx,
+		res, err = tx.ExecContext(ctx,
 			`UPDATE tiles SET view_cx = ?, view_cy = ?, view_zoom = ?, updated_at = ?
 			 WHERE id = ? AND ns = ? AND tombstoned = 0`,
 			f.Cx(), f.Cy(), f.Zoom(), now, tileID, ns)
 	} else {
-		res, err = x.ExecContext(ctx,
+		res, err = tx.ExecContext(ctx,
 			`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND ns = ?`,
 			f.Cx(), f.Cy(), f.Zoom(), gridID, ns)
 	}
