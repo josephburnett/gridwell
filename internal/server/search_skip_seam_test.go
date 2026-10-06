@@ -64,3 +64,25 @@ func TestASearchSaysWhatItWentWithout(t *testing.T) {
 		t.Fatalf("skipped = %q, want the connection the far node went with", got)
 	}
 }
+
+// An id: lookup is routed at every hop to the one namespace that owns the id,
+// so nothing else is asked and nothing else can be skipped.
+func TestAnIDLookupAsksOnlyItsOwner(t *testing.T) {
+	ctx := context.Background()
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
+		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pfail01", "feed", failingSearch{}, nil) })
+	tile, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: localNodeID + "/geneva/rnode1/" + h.rootBare,
+		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 1, H: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.localCl.Search(ctx, "id:"+tile.Id, tile.Id, 1)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != tile.Id || len(resp.Skipped) != 0 {
+		t.Fatalf("id lookup = %v, want the one tile and nothing skipped", resp)
+	}
+}

@@ -1726,8 +1726,8 @@ func (x *GetTileRequest) GetTileId() string {
 // merged displays.
 //
 // On the server surface, scope routes to one namespace and the plugin that owns
-// that qualified id answers; an empty scope fans out to every configured plugin
-// in config order. A transit hop forwards the query to the remote node, which
+// that qualified id answers, and an id: lookup routes on its id the same way;
+// otherwise an empty scope fans out to every configured plugin in config order. A transit hop forwards the query to the remote node, which
 // fans out again, so an unscoped search recurses through every connected node
 // and results come back qualified like every other id.
 type SearchRequest struct {

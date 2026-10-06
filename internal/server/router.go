@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"log"
@@ -256,17 +257,18 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// Search routes a scope to its owner; an empty scope fans out to every
-// namespace, each bounded by rpc.SearchHopTimeout, and names each it went
-// without (rpc.SearchHop).
+// Search routes a scope to its owner, and an id: lookup is its own scope; free
+// text with no scope fans out to every namespace, each bounded by
+// rpc.SearchHopTimeout, and names each it went without (rpc.SearchHop).
 func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
 	m := req
-	if m.Scope != "" {
-		c, _, uuid, transit, err := rt.route(m.Scope)
+	scope := cmp.Or(m.Scope, rpc.ParseSearchQuery(m.Query).ID)
+	if scope != "" {
+		c, _, uuid, transit, err := rt.route(scope)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.Search(ctx, &pb.SearchRequest{Query: rt.hop(m.Scope, transit).PeelSearchQuery(m.Query), Limit: m.Limit})
+		resp, err := c.Search(ctx, &pb.SearchRequest{Query: rt.hop(scope, transit).PeelSearchQuery(m.Query), Limit: m.Limit})
 		if err != nil {
 			return nil, err
 		}
