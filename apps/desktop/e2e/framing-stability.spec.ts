@@ -9,7 +9,7 @@ import { makeRunDir } from './homes';
 // persists its viewport.
 
 const FS_ROOT = makeRunDir();
-// A second fs root, with a document and a subdirectory in it: the read-only
+// A second fs root, with a document and a subdirectory in it: the host-file
 // scroll test needs a file to descend into and the mid-descent reframe needs a
 // doorway. FS_ROOT stays empty for the root-grid pan test, whose press would
 // otherwise land on a tile instead of the grid.
@@ -272,16 +272,16 @@ for (const face of ['text', 'rendered'] as const) {
   });
 }
 
-// A read-only host file scrolls like any other text tile. The body is the
-// plugin's; where the user left the window is the node's, held in the plugin's
+// A host file scrolls like any other text tile. The body is the plugin's;
+// where the user left the window is the node's, held in the plugin's
 // namespace of the store (#236, #270).
 //
-// The scroll is also this entry's FIRST durable fact, so it mints the entry's
+// The window is also this entry's FIRST durable fact, so it mints the entry's
 // row while the reader is standing on the entry's id. The pane's content id must
 // not move under them (#297): a rename would hide the rendered overlay mid-read
 // and leave the URL naming a tile the next listing does not contain, so the
 // reload would land at the plugin root.
-test('a read-only file keeps its scroll, and its id, across a reload', async ({ gw, window }) => {
+test('a host file keeps its scroll, and its id, across a reload', async ({ gw, window }) => {
   await gw.enterPlugin('docs');
   const root = (await gw.focused()).gridID;
   const at = async () => (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'long.md')!;
@@ -290,9 +290,10 @@ test('a read-only file keeps its scroll, and its id, across a reload', async ({ 
   await gw.descendCell(Number(doc.x ?? 0), Number(doc.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
   const standingOn = (await gw.focused()).textFocus;
-  // A read-only tile always shows the rendered face, a scrolling DOM overlay.
-  // Scroll it the way the browser does, and the app's own listener writes the
-  // position onto the pane.
+  // The rendered face is a scrolling DOM overlay. Scroll it the way the
+  // browser does, and the app's own listener writes the position onto the
+  // pane.
+  await gw.toggleTextMode(); // rendered
   await expect
     .poll(() => window.evaluate(() => document.getElementById('gw-rendered-view')?.textContent ?? ''))
     .toContain('line');
@@ -310,7 +311,7 @@ test('a read-only file keeps its scroll, and its id, across a reload', async ({ 
   // the same id.
   await expect
     .poll(async () => Number(((await at()) as { textY?: number | string })?.textY ?? 0), {
-      message: 'a read-only file persists its scroll',
+      message: 'a host file persists its scroll',
       timeout: 15_000,
     })
     .toBeGreaterThan(0);
@@ -420,10 +421,12 @@ test('scrolling a plugin document refetches nothing of its parent', async ({ gw,
   expect(doc, 'long.md listed').toBeTruthy();
   await gw.descendCell(Number(doc!.x ?? 0), Number(doc!.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
+  await gw.toggleTextMode(); // rendered
   await expect
     .poll(() => window.evaluate(() => document.getElementById('gw-rendered-view')?.textContent ?? ''))
     .toContain('line');
   await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
 
   const asked: string[] = [];
   await window.route('**/gridwell.v1.Gridwell/GetGrid', async (r: any) => {
