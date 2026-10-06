@@ -225,16 +225,12 @@ func openCacheFile(cfg *config.ServerConfig) (*sourcecache.Store, error) {
 	return sourcecache.Open(config.CacheFile(cfg.CacheDir))
 }
 
-// startTransport reconciles the connection store against the declared
+// startTransport reconciles the store's connection rows against the declared
 // connections, dials them bounded, and installs the transport as the node's
 // connection namespace ("<id>/<conn>/…") behind front.
 func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig, front func(namespace.Namespace) namespace.Namespace) error {
-	db, err := connection.NewDB(st.SQL())
-	if err != nil {
-		return err
-	}
 	userHome, _ := os.UserHomeDir()
-	impl, err := connection.New(db, dial.Dial, userHome, cfg.Connections, cfg.RetiredNames)
+	impl, err := connection.New(st, dial.Dial, userHome, cfg.Connections, cfg.RetiredNames)
 	if err != nil {
 		return err
 	}

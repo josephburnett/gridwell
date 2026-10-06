@@ -37,10 +37,6 @@ func (s *Store) Namespace(ns string) *Namespace {
 	return &Namespace{s: s, ns: ns}
 }
 
-// SQL exposes the store's one database handle for the node's other tables: a
-// second handle on the same file would meet an instant SQLITE_BUSY.
-func (s *Store) SQL() *sql.DB { return s.db }
-
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
 // a well's minted child grid, 0 for a leaf. The caller names every such tile

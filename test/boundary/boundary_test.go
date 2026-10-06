@@ -411,3 +411,81 @@ func TestOneStoreWriteFunnel(t *testing.T) {
 		}
 	}
 }
+
+// sqliteOpeners maps each non-test file outside internal/local/store allowed to
+// open a SQLite handle to why it may. The store's handle never leaves its
+// package, so a handle opened here is the only way to write gridwell.db beside
+// storeWriteFunnel.
+var sqliteOpeners = map[string]string{
+	"internal/sourcecache/sourcecache.go":         "cache.db, the disposable connection cache, not gridwell.db",
+	"internal/pluginmeta/pluginmeta.go":           "the storage-only _gridwell_meta identity marker, checked before the store opens; it carries no node fact (internal/local/store/CLAUDE.md)",
+	"internal/cli/backup.go":                      "VACUUM INTO a fresh snapshot file; it writes no row of the source",
+	"internal/local/store/storetest/storetest.go": "a read-only (mode=ro) handle for tests that ask what is at rest",
+}
+
+// gridwell.db has one writer. No non-test file outside the store opens a
+// SQLite handle unless sqliteOpeners names it, and no exported store function
+// hands out the store's handle or a transaction on it. A write from anywhere
+// else is untraced and outside storeWriteFunnel's transaction.
+func TestOneStoreHandle(t *testing.T) {
+	root := repoRoot(t)
+	storeDir := filepath.Join("internal", "local", "store")
+	openNeedle := "sql.Open" + "("
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if pruned(root, path, d) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") || strings.HasSuffix(d.Name(), "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if filepath.Dir(rel) == storeDir {
+			f, err := parser.ParseFile(fset, path, nil, 0)
+			if err != nil {
+				return err
+			}
+			for _, decl := range f.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || !fn.Name.IsExported() || fn.Type.Results == nil {
+					continue
+				}
+				for _, res := range fn.Type.Results.List {
+					star, ok := res.Type.(*ast.StarExpr)
+					if !ok {
+						continue
+					}
+					if sel, ok := star.X.(*ast.SelectorExpr); ok && (sel.Sel.Name == "DB" || sel.Sel.Name == "Tx") {
+						if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "sql" {
+							t.Errorf("%s: %s hands out the store's handle — a caller could write gridwell.db outside %s; add a store method that writes through it", fset.Position(fn.Pos()), fn.Name.Name, storeWriteFunnel)
+						}
+					}
+				}
+			}
+			return nil
+		}
+		if _, ok := sqliteOpeners[rel]; ok {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytes.Contains(data, []byte(openNeedle)) {
+			t.Errorf("%s opens a SQLite handle — gridwell.db is written only by internal/local/store through %s; add a store method, or name this file in sqliteOpeners with the reason it does not write the node's file", rel, storeWriteFunnel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

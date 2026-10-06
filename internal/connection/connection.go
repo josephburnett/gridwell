@@ -25,6 +25,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/eventhub"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -52,7 +53,7 @@ var rowsHandshakeWait = time.Second
 type Server struct {
 	namespace.Unimplemented
 
-	db   *DB
+	st   *store.Store
 	dial Dialer
 	home string // the host's home dir, for ~-relative key defaults
 
@@ -113,15 +114,16 @@ type liveConn struct {
 // The router calls the transport as a Go value; the compiler says so.
 var _ namespace.Namespace = (*Server)(nil)
 
-// New builds the transport and reconciles the store against the declared
-// connections. server.yaml is authoritative about what is declared and
-// retired_names about what is retired; boot never retires a name on absence,
-// and the `deleted` column is written from retired_names here and nowhere
-// else. It is also the boot gate on host-local config: a row that could never
-// dial fails `serve`. home "" means no ~ defaults.
-func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
+// New builds the transport and reconciles the node store's connection rows
+// against the declared connections. server.yaml is authoritative about what is
+// declared and retired_names about what is retired; boot never retires a name
+// on absence, and the `deleted` column is written from retired_names here and
+// nowhere else. A boot that changes nothing writes nothing. It is also the boot
+// gate on host-local config: a row that could never dial fails `serve`. home ""
+// means no ~ defaults. Closing the transport leaves st open; the node owns it.
+func New(st *store.Store, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
-	s := &Server{db: db, dial: dialer, home: home, conns: map[string]*Conn{},
+	s := &Server{st: st, dial: dialer, home: home, conns: map[string]*Conn{},
 		live: map[string]*liveConn{}, health: map[string]connState{},
 		hub: eventhub.New(rpc.EventKey)}
 	retiredSet := map[string]bool{}
@@ -134,41 +136,45 @@ func New(db *DB, dialer Dialer, home string, conns []config.ConnectionConfig, re
 		if _, err := s.dialConfig(c); err != nil {
 			return nil, fmt.Errorf("connection %q: %w", c.Name, err)
 		}
-		row, err := db.Get(ctx, c.Name)
-		if err != nil && !errors.Is(err, ErrNotFound) {
-			return nil, err
+		row, err := st.Connection(ctx, c.Name)
+		if errors.Is(err, store.ErrNotFound) {
+			err = st.DeclareConnection(ctx, c.Name)
 		}
-		if err := db.Ensure(ctx, c.Name); err != nil {
+		if err != nil {
 			return nil, err
 		}
 		s.conns[c.Name] = &Conn{Cfg: c, RemoteRoot: row.RemoteRoot}
 		s.order = append(s.order, c.Name)
 	}
-	// A tombstone retired_names does not hold is a leftover from the old boot
-	// reconcile that retired on absence, so clear it.
-	rows, err := db.List(ctx)
+	rows, err := st.Connections(ctx)
 	if err != nil {
 		return nil, err
 	}
+	deleted := map[string]bool{}
 	for _, r := range rows {
+		deleted[r.Name] = r.Deleted
+		// A tombstone retired_names does not hold is a leftover from the old
+		// boot reconcile that retired on absence, so clear it.
 		if r.Deleted && !retiredSet[r.Name] {
 			log.Printf("gridwell: connection %q: clearing a tombstone the old boot reconcile wrote; retirement now lives in retired_names", r.Name)
-			if err := db.Revive(ctx, r.Name); err != nil {
+			if err := st.SetConnectionRetired(ctx, r.Name, false); err != nil {
 				return nil, fmt.Errorf("connection %q: clear stale tombstone: %w", r.Name, err)
 			}
 		}
 	}
 	for _, name := range retired {
-		if err := db.Tombstone(ctx, name); err != nil {
+		if deleted[name] {
+			continue
+		}
+		if err := st.SetConnectionRetired(ctx, name, true); err != nil {
 			return nil, fmt.Errorf("reserve retired name %q: %w", name, err)
 		}
 	}
 	return s, nil
 }
 
-// Close tears down every live connection, waits for the goroutines they ran
-// (a learn or a fan-in must not outlive the server that started it), and
-// closes the store.
+// Close tears down every live connection and waits for the goroutines they
+// ran: a learn or a fan-in must not outlive the server that started it.
 func (s *Server) Close() error {
 	s.mu.Lock()
 	s.closed = true
@@ -179,7 +185,7 @@ func (s *Server) Close() error {
 	}
 	s.mu.Unlock()
 	s.bg.Wait()
-	return s.db.Close()
+	return nil
 }
 
 // ConnectAll dials every declared connection and learns its landing, bounded
@@ -277,7 +283,7 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	if !ok {
 		// Only the tombstone's wording says forever; a name merely no
 		// longer declared comes back with its stanza.
-		if row, err := s.db.Get(ctx, first); err == nil && row.Deleted {
+		if row, err := s.st.Connection(ctx, first); err == nil && row.Deleted {
 			return nil, "", gwerr.DeadRef(first, "connection: connection %q was retired", first)
 		}
 		return nil, "", gwerr.DeadRef(first, "connection: no connection %q", first)
@@ -433,7 +439,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 		return "", s.noteLandingMismatch(name, root, info.RootGridId)
 	}
 	if root == "" {
-		if err := s.db.SetRemoteRoot(ctx, name, info.RootGridId); err != nil {
+		if err := s.st.SetConnectionRoot(ctx, name, info.RootGridId); err != nil {
 			// kickRootFetch drops this error, so the row is the only place
 			// that can say why.
 			s.note(name, connState{detail: err.Error()})
@@ -598,7 +604,7 @@ func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 		// is. A name the config merely stopped declaring answers not-gone and
 		// its links survive, because a failed read must never sweep a tile.
 		if first, _, ok := rpc.SplitID(req.TileId); ok {
-			if row, derr := s.db.Get(ctx, first); derr == nil && row.Deleted {
+			if row, derr := s.st.Connection(ctx, first); derr == nil && row.Deleted {
 				return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 			}
 		}

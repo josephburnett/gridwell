@@ -51,7 +51,7 @@ func landedTransport(t *testing.T, client namespace.Namespace) *Server {
 	dialer := func(dial.Config) (namespace.Namespace, func(), error) {
 		return client, func() {}, nil
 	}
-	s, err := New(sharedConnDB(t), dialer, "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
+	s, err := New(openStore(t), dialer, "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

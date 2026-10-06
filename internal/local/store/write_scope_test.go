@@ -109,11 +109,11 @@ func TestAWriteTouchesOnlyWhatItOwns(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			before := storetest.DumpOf(t, s.SQL())
+			before := storetest.DumpOf(t, s.db)
 			if err := c.mutate(t, s, ctx, tile); err != nil {
 				t.Fatalf("mutate: %v", err)
 			}
-			for _, ch := range storetest.Changed(before, storetest.DumpOf(t, s.SQL())) {
+			for _, ch := range storetest.Changed(before, storetest.DumpOf(t, s.db)) {
 				if why := scope.refuse(ch, tile.Id, tile.GridId, trash); why != "" {
 					t.Errorf("%s: %s", ch, why)
 				}
@@ -171,14 +171,14 @@ func TestRootFramingLeavesTheGridRowOtherwiseAlone(t *testing.T) {
 	root := rootID(t, s)
 	seedBystanders(t, s, root)
 
-	before := storetest.DumpOf(t, s.SQL())
+	before := storetest.DumpOf(t, s.db)
 	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 		RootGridId: root, Cx: -3.5, Cy: 8.25, Zoom: 0.4,
 	}); err != nil {
 		t.Fatalf("SetFraming: %v", err)
 	}
 	scope := writeScope{grid: []string{"root_cx", "root_cy", "root_zoom"}}
-	for _, ch := range storetest.Changed(before, storetest.DumpOf(t, s.SQL())) {
+	for _, ch := range storetest.Changed(before, storetest.DumpOf(t, s.db)) {
 		if why := scope.refuse(ch, "", root, ""); why != "" {
 			t.Errorf("%s: %s", ch, why)
 		}

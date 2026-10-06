@@ -243,8 +243,7 @@ field, which is why it is storage-only here.`,
 
 // connectionsColumns is the connections table, in DDL order: what the node
 // remembers about a connection beyond what server.yaml declares. No column is
-// on the wire and internal/connection owns the queries, but the shape is the
-// store's, so the table evolves through the one migration chain.
+// on the wire; the table evolves through the one migration chain.
 var connectionsColumns = []column[struct{}]{
 	{
 		name: "name", ddl: "TEXT PRIMARY KEY", since: 13,

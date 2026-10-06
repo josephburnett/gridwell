@@ -45,11 +45,11 @@ func TestARepeatedWriteWritesNothing(t *testing.T) {
 			s.SetClock(func() time.Time { return time.Unix(2_000_000_000, 0) })
 			events, cancel := s.SubscribeEvents()
 			defer cancel()
-			before := storetest.DumpOf(t, s.SQL())
+			before := storetest.DumpOf(t, s.db)
 			if err := c.mutate(t, s, ctx, tile); err != nil {
 				t.Fatalf("repeat: %v", err)
 			}
-			if ch := storetest.Changed(before, storetest.DumpOf(t, s.SQL())); len(ch) > 0 {
+			if ch := storetest.Changed(before, storetest.DumpOf(t, s.db)); len(ch) > 0 {
 				t.Errorf("the repeat wrote %v", ch)
 			}
 			if err := s.SetTileAlt(ctx, sentinel.Id, "sentinel", false); err != nil {

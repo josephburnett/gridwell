@@ -3,7 +3,6 @@ package connection
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -33,12 +32,7 @@ func (deadSubscribeClient) Subscribe(context.Context, *gridwellv1.SubscribeReque
 // fan-in keeps. Retrying silently presents as tiles that stopped updating
 // with no evidence.
 func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
-	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	s := newTestServer(t, db)
+	s := newTestServer(t, openStore(t))
 	events, unsub := s.hub.Subscribe()
 	t.Cleanup(unsub)
 
@@ -66,7 +60,7 @@ func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
 // cache in front of it serves a remembered grid as if it were live and the
 // client's tint says the connection is fine.
 func TestASubscriberArrivingAfterTheOutageIsToldOfIt(t *testing.T) {
-	s := newTestServer(t, openConnDB(t))
+	s := newTestServer(t, openStore(t))
 	first, unsub := s.hub.Subscribe()
 	t.Cleanup(unsub)
 
@@ -125,7 +119,7 @@ func refusingDialer(detail string) Dialer {
 // the dial failure never reached the fan-in, so nothing ever published it.
 func TestASubscriberIsToldOfAConnectionThatCannotDial(t *testing.T) {
 	ctx := context.Background()
-	s, err := New(sharedConnDB(t), refusingDialer("no route to host"), "",
+	s, err := New(openStore(t), refusingDialer("no route to host"), "",
 		[]config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +177,7 @@ func TestFanInRemoteRetriesOnTheDeclaredBackoff(t *testing.T) {
 	t.Cleanup(func() { namespace.DefaultBackoff = was })
 	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}
 
-	s := newTestServer(t, openConnDB(t))
+	s := newTestServer(t, openStore(t))
 	events, unsub := s.hub.Subscribe()
 	t.Cleanup(unsub)
 

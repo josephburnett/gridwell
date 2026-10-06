@@ -2,7 +2,6 @@ package connection
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -13,7 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/client/deadref"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
-	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -41,24 +39,6 @@ func (c landingClient) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest
 	return &gridwellv1.GetGridResponse{Grid: &gridwellv1.Grid{Id: req.GridId}}, nil
 }
 
-// sharedConnDB binds the connection store to a node store the test owns, the
-// production shape: closing a transport leaves the store open for the next
-// boot. The store is what makes the connections table, so the file is opened
-// through it.
-func sharedConnDB(t *testing.T) *DB {
-	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	db, err := NewDB(st.SQL())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db
-}
-
 // A connection's name is dropped from server.yaml and later declared again:
 // three boots over one store, across the boot reconcile, the row, the routing
 // table, and the roster a client reads a reference's deadness from. Boot 1
@@ -68,7 +48,7 @@ func sharedConnDB(t *testing.T) *DB {
 // same landing.
 func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	ctx := context.Background()
-	db := sharedConnDB(t)
+	st := openStore(t)
 
 	const nodeID = "lnode1"
 	rtb := []config.ConnectionConfig{{Name: "rtb", Addr: "/far/federation.sock"}}
@@ -89,12 +69,12 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	}
 
 	// Boot 1: declared, landing learned, reference live.
-	s1, err := New(db, dialer, "", rtb, nil)
+	s1, err := New(st, dialer, "", rtb, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s1.ConnectAll(ctx)
-	if r, _ := db.Get(ctx, "rtb"); r.RemoteRoot != "rnode1/7" {
+	if r, _ := st.Connection(ctx, "rtb"); r.RemoteRoot != "rnode1/7" {
 		t.Fatalf("boot 1 remote_root = %q, want the learned landing", r.RemoteRoot)
 	}
 	if deadref.DeadTile(ref, roster(s1), nodeID, nil) {
@@ -109,11 +89,11 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 
 	// Boot 2: the stanza is gone. Nothing is retired; the row and its landing
 	// stay; the namespace does not resolve; the reference is dead.
-	s2, err := New(db, dialer, "", nil, nil)
+	s2, err := New(st, dialer, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := db.Get(ctx, "rtb")
+	r, err := st.Connection(ctx, "rtb")
 	if err != nil {
 		t.Fatalf("the undeclared row must survive: %v", err)
 	}
@@ -145,7 +125,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	}
 
 	// Boot 3: declared again. Everything comes back on the same landing.
-	s3, err := New(db, dialer, "", rtb, nil)
+	s3, err := New(st, dialer, "", rtb, nil)
 	if err != nil {
 		t.Fatalf("boot 3 refused a name only absence ever retired: %v", err)
 	}

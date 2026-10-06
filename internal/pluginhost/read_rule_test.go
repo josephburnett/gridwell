@@ -8,13 +8,13 @@ package pluginhost_test
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
@@ -53,14 +53,16 @@ func readEveryVerb(t *testing.T, cl *rpc.Client, grid string) {
 
 // nsRows is what the node has written down about this plugin: its grid rows and
 // its tile rows, whole.
-func nsRows(t *testing.T, st *store.Store) string {
+func nsRows(t *testing.T, db *sql.DB) string {
 	t.Helper()
-	return storetest.Table(t, st.SQL(), "grids") + "\n--\n" + storetest.Table(t, st.SQL(), "tiles")
+	return storetest.Table(t, db, "grids") + "\n--\n" + storetest.Table(t, db, "tiles")
 }
 
 func TestListingAPluginGridMintsNothing(t *testing.T) {
 	root := seedTree(t)
-	cl, st := pluginNodeAt(t, root, filepath.Join(t.TempDir(), "mem.db"))
+	path := filepath.Join(t.TempDir(), "mem.db")
+	cl, _ := pluginNodeAt(t, root, path)
+	db := storetest.Reader(t, path)
 	ctx := context.Background()
 
 	pl, err := cl.Handshake(ctx)
@@ -73,15 +75,15 @@ func TestListingAPluginGridMintsNothing(t *testing.T) {
 	// read leaves them none: a row here would be a durable fact about an entry
 	// the user has never so much as moved, and it would survive the file being
 	// deleted.
-	before := storetest.Snapshot(t, st.SQL())
+	before := storetest.Snapshot(t, db)
 	readEveryVerb(t, cl, landing)
 	if _, err := cl.Handshake(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if after := storetest.Snapshot(t, st.SQL()); after != before {
+	if after := storetest.Snapshot(t, db); after != before {
 		t.Errorf("reading an untouched plugin grid wrote to the store:\n%s", storetest.Diff(before, after))
 	}
-	if rows := nsRows(t, st); strings.Contains(rows, "ns=p1") {
+	if rows := nsRows(t, db); strings.Contains(rows, "ns=p1") {
 		t.Errorf("an untouched plugin grid has rows:\n%s", rows)
 	}
 
@@ -103,7 +105,7 @@ func TestListingAPluginGridMintsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	touched := storetest.Snapshot(t, st.SQL())
+	touched := storetest.Snapshot(t, db)
 	if touched == before {
 		t.Fatal("the touch minted nothing, so the case below proves nothing")
 	}
@@ -114,7 +116,7 @@ func TestListingAPluginGridMintsNothing(t *testing.T) {
 	if _, err := cl.GetTile(ctx, notes.Id); err != nil {
 		t.Fatal(err)
 	}
-	if after := storetest.Snapshot(t, st.SQL()); after != touched {
+	if after := storetest.Snapshot(t, db); after != touched {
 		t.Errorf("reading a touched plugin grid rewrote the user's arrangement:\n%s",
 			storetest.Diff(touched, after))
 	}

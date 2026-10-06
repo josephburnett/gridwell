@@ -144,11 +144,7 @@ func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, d
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = connStore.Close() })
-	db, err := connection.NewDB(connStore.SQL())
-	if err != nil {
-		t.Fatal(err)
-	}
-	transport, err := connection.New(db, func(cfg dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(connStore, func(cfg dial.Config) (namespace.Namespace, func(), error) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.dialed = append(h.dialed, cfg)

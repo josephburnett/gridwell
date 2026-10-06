@@ -3,7 +3,6 @@ package connection
 import (
 	"context"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -37,12 +36,7 @@ func (answeringSearchClient) Search(context.Context, *gridwellv1.SearchRequest) 
 // fan-out reads. Without the bound, a hanging hop holds the caller's unbounded
 // context forever.
 func TestSearchFanOutBoundsEachHop(t *testing.T) {
-	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	s := newTestServer(t, db)
+	s := newTestServer(t, openStore(t))
 	s.mu.Lock()
 	s.live["dead"] = &liveConn{client: hangingSearchClient{}}
 	s.live["fine"] = &liveConn{client: answeringSearchClient{}}

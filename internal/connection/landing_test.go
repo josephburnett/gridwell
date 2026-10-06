@@ -40,11 +40,11 @@ func (c movingClient) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv
 // node's tiles.
 func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 	ctx := context.Background()
-	db := sharedConnDB(t)
-	if err := db.Ensure(ctx, "rtb"); err != nil {
+	st := openStore(t)
+	if err := st.DeclareConnection(ctx, "rtb"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SetRemoteRoot(ctx, "rtb", "rnode1/7"); err != nil {
+	if err := st.SetConnectionRoot(ctx, "rtb", "rnode1/7"); err != nil {
 		t.Fatal(err)
 	}
 	conns := []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}
@@ -52,14 +52,14 @@ func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 	// The far end is a different node now. Nothing here is a first learn, so
 	// this is the revalidation: the landing is checked on every reconnect,
 	// not only the boot that learned it.
-	s, err := New(db, landingDialer("othernode/2"), "", conns, nil)
+	s, err := New(st, landingDialer("othernode/2"), "", conns, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	s.ConnectAll(ctx)
 
-	if r, _ := db.Get(ctx, "rtb"); r.RemoteRoot != "rnode1/7" {
+	if r, _ := st.Connection(ctx, "rtb"); r.RemoteRoot != "rnode1/7" {
 		t.Fatalf("stored remote_root = %q — a different node's answer must NEVER overwrite the landing references name", r.RemoteRoot)
 	}
 	rows := s.Rows(ctx)
@@ -76,7 +76,7 @@ func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 
 	// The same connection against the node it was learned on serves, with
 	// nothing on its row.
-	s2, err := New(db, landingDialer("rnode1/7"), "", conns, nil)
+	s2, err := New(st, landingDialer("rnode1/7"), "", conns, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,15 +96,15 @@ func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 // and its references live again.
 func TestLandingCheckHealsWhenTheTargetComesBack(t *testing.T) {
 	ctx := context.Background()
-	db := sharedConnDB(t)
-	if err := db.Ensure(ctx, "rtb"); err != nil {
+	st := openStore(t)
+	if err := st.DeclareConnection(ctx, "rtb"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SetRemoteRoot(ctx, "rtb", "rnode1/7"); err != nil {
+	if err := st.SetConnectionRoot(ctx, "rtb", "rnode1/7"); err != nil {
 		t.Fatal(err)
 	}
 	root := "othernode/2"
-	s, err := New(db, func(dial.Config) (namespace.Namespace, func(), error) {
+	s, err := New(st, func(dial.Config) (namespace.Namespace, func(), error) {
 		return movingClient{root: &root}, func() {}, nil
 	}, "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
 	if err != nil {
@@ -139,14 +139,10 @@ func TestLandingThatCannotBeStoredSaysSoOnTheRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := NewDB(st.SQL())
-	if err != nil {
+	if err := st.DeclareConnection(ctx, "rtb"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Ensure(ctx, "rtb"); err != nil {
-		t.Fatal(err)
-	}
-	s, err := New(db, landingDialer("rnode1/7"), "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
+	s, err := New(st, landingDialer("rnode1/7"), "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

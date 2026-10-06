@@ -261,11 +261,7 @@ func TestContentDoorThroughAConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = connStore.Close() })
-	db, err := connection.NewDB(connStore.SQL())
-	if err != nil {
-		t.Fatal(err)
-	}
-	transport, err := connection.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(connStore, func(dial.Config) (namespace.Namespace, func(), error) {
 		return farNode, func() {}, nil
 	}, "", []config.ConnectionConfig{{Name: "far", Addr: "/tmp/far.sock"}}, nil)
 	if err != nil {

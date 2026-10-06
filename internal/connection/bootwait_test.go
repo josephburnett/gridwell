@@ -46,7 +46,7 @@ func gatedTransport(t *testing.T, gate <-chan struct{}) *Server {
 	dialer := func(dial.Config) (namespace.Namespace, func(), error) {
 		return gatedClient{landingClient: landingClient{root: "rnode1/7"}, gate: gate}, func() {}, nil
 	}
-	s, err := New(sharedConnDB(t), dialer, "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
+	s, err := New(openStore(t), dialer, "", []config.ConnectionConfig{{Name: "rtb", Addr: "/s"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

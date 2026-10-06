@@ -1,7 +1,6 @@
 package connection
 
 import (
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -15,12 +14,7 @@ import (
 // changes on the floor, leaving a pane stale until some unrelated event
 // touched the same grid.
 func TestHubNeverDropsDistinctTilesForAStalledSubscriber(t *testing.T) {
-	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	s := newTestServer(t, db)
+	s := newTestServer(t, openStore(t))
 	events, unsub := s.hub.Subscribe()
 	t.Cleanup(unsub)
 
