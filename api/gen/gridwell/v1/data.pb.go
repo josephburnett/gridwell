@@ -2608,16 +2608,18 @@ func (x *CloneTileRequest) GetY() int64 {
 // tile.kind to the one operation that kind supports:
 //
 //	text  → text_x/text_y/text_w/text_h/text_mode  (framing)
-//	url   → url_string, alt_text (page title), preview jpeg, url_history
+//	url   → alt_text (page title), preview jpeg, url_history
 //	                                              (automatic capture)
 //	shell → preview jpeg                          (automatic capture)
 //
 // Well framing is not here: SetFraming is the one verb for both rows that
-// can own it, doorway tile and root grid alike.
+// can own it, doorway tile and root grid alike. A url's address is content
+// and rides WriteContent; a SetTile carrying url_string is refused as
+// InvalidArgument, so the address has one writer.
 //
 // Nothing this message can write is a user content edit, so no arm bumps the
 // version and no arm carries a claim, apart from rename. Empty preview,
-// url_string, and alt_text fields are skipped so a partial capture never
+// alt_text, and url_history fields are skipped so a partial capture never
 // clobbers good state.
 type SetTileRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
