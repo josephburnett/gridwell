@@ -26,6 +26,9 @@ type Cache struct {
 	// not routable and editing one clone must leave a sibling alone.
 	content map[string]*contentEntry
 	stamps  uint64
+	// holds is the placements written ahead of their echo, by tile id.
+	holds map[string]*hold
+	seq   uint64
 }
 
 // contentEntry is a body, the row version and blob it derives from, and
@@ -84,7 +87,8 @@ func (g *Grid) HostContent() bool { return g != nil && g.Meta.HostContent }
 
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{}, dark: map[string]bool{}}
+	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{},
+		dark: map[string]bool{}, holds: map[string]*hold{}}
 }
 
 // AskContent is the basis a content read is filed under, taken before the
@@ -230,12 +234,21 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	gr := &Grid{Meta: g, Tiles: map[string]*gridwellv1.Tile{}}
+	var away []*gridwellv1.Tile
 	for _, n := range tiles {
+		if n = c.admitLocked(n, false); n.GridId != g.Id {
+			away = append(away, n)
+			continue
+		}
 		c.ageContentLocked(n, false)
 		c.evictElsewhereLocked(n.Id, g.Id)
 		gr.Tiles[n.Id] = n
 	}
+	c.keepHeldLocked(gr)
 	c.grids[g.Id] = gr
+	for _, n := range away {
+		c.storeLocked(n, false)
+	}
 }
 
 // evictElsewhereLocked gives a row one home: the grid that last answered for
@@ -370,8 +383,8 @@ func (c *Cache) putTileLocked(g *Grid, n *gridwellv1.Tile, told bool) bool {
 func (c *Cache) UpdateTile(gridID string, t *gridwellv1.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if g, ok := c.cachedRowLocked(gridID, t); ok {
-		c.putTileLocked(g, t, false)
+	if _, ok := c.cachedRowLocked(gridID, t); ok {
+		c.storeLocked(c.admitLocked(t, false), false)
 	}
 }
 
@@ -403,9 +416,11 @@ const (
 	WroteName
 	// WroteFrozen is the standing freeze, a framing write: no version.
 	WroteFrozen
+	// WrotePlacement is a tile's grid and footprint, layout: no version.
+	WrotePlacement
 )
 
-func (w Wrote) claimsVersion() bool { return w != WroteFrozen }
+func (w Wrote) claimsVersion() bool { return w != WroteFrozen && w != WrotePlacement }
 
 func (w Wrote) copy(dst, src *gridwellv1.Tile) {
 	switch w {
@@ -417,6 +432,8 @@ func (w Wrote) copy(dst, src *gridwellv1.Tile) {
 		dst.AltText = src.AltText
 	case WroteFrozen:
 		dst.UrlFrozen = src.UrlFrozen
+	case WrotePlacement:
+		PlacementOf(src).set(dst)
 	}
 }
 
@@ -440,7 +457,24 @@ func (c *Cache) PutWriteResponse(gridID string, resp *gridwellv1.Tile, w Wrote) 
 		n.Version = resp.Version
 	}
 	w.copy(n, resp)
+	if n = c.admitLocked(n, false); n.GridId != g.Meta.GetId() {
+		c.storeLocked(n, false)
+		return
+	}
 	c.putTileLocked(g, n, false)
+}
+
+// storeLocked puts n in its grid through putTileLocked, or, for a grid this
+// cache does not hold, only ages and evicts. told is putTileLocked's. Callers
+// hold c.mu.
+func (c *Cache) storeLocked(n *gridwellv1.Tile, told bool) bool {
+	g, ok := c.grids[n.GridId]
+	if !ok {
+		c.ageContentLocked(n, told)
+		c.evictElsewhereLocked(n.Id, n.GridId)
+		return false
+	}
+	return c.putTileLocked(g, n, told)
 }
 
 // PatchTile folds an optimistic local change to one row in through the event
@@ -466,14 +500,7 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		if n == nil {
 			return false
 		}
-		told := p.TileChanged.GetContentChanged()
-		g, ok := c.grids[n.GridId]
-		if !ok {
-			c.ageContentLocked(n, told)
-			c.evictElsewhereLocked(n.Id, n.GridId)
-			return false
-		}
-		return c.putTileLocked(g, n, told)
+		return c.storeLocked(c.admitLocked(n, true), p.TileChanged.GetContentChanged())
 	case *gridwellv1.Event_TileRemoved:
 		r := p.TileRemoved
 		if r == nil {
@@ -481,6 +508,10 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		}
 		g, ok := c.grids[r.GridId]
 		if !ok {
+			return false
+		}
+		// The held placement put it here after this removal.
+		if h, ok := c.holds[r.TileId]; ok && h.p.GridID == r.GridId {
 			return false
 		}
 		_, present := g.Tiles[r.TileId]

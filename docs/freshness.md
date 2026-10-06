@@ -413,6 +413,12 @@ The version interlock, the outbox park, and the drain.
    Framing writes are `optimistic`, so `clientsync.ReactOptimistic` rolls the
    cache patch back on a verdict and keeps it on transport, where it is the
    value the retry will land.
+   A placement (`App.postPlacement`, a move or a resize) is optimistic too,
+   but parks nothing: any failure puts the tile back and the drag snaps back.
+   Layout claims no version, so the interlock in step 5 cannot order two
+   placements; `cache.Place` holds the placement against every older row
+   instead, until the stream carries it (the stream is ordered, so nothing
+   older follows) or, once the write has landed, a grid read answers.
 9. The drain. `startSSE` sets `gap` on any stream error and on a clean EOF —
    Subscribe has no cursor, so both are gaps — and calls
    `retryKick(true, cache.EverySource)` on the next successful subscribe. The

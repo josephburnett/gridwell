@@ -58,12 +58,12 @@ func TestAWriteResponseContributesOnlyWhatItWrote(t *testing.T) {
 	// predates.
 	cached := func() *gridwellv1.Tile {
 		return &gridwellv1.Tile{Id: "t", GridId: "g", Kind: rpc.KindURL, Version: 3,
-			TextY: 0, BlobId: 7, AltText: "cached", UrlString: "https://cached", UrlFrozen: false}
+			X: 1, W: 1, H: 1, TextY: 0, BlobId: 7, AltText: "cached", UrlString: "https://cached", UrlFrozen: false}
 	}
 	// What the node answered: its row at version v, from before the scroll.
 	resp := func(v int64) *gridwellv1.Tile {
 		return &gridwellv1.Tile{Id: "t", GridId: "g", Kind: rpc.KindURL, Version: v,
-			TextY: 900, BlobId: 8, AltText: "written", UrlString: "https://written", UrlFrozen: true}
+			X: 2, W: 1, H: 1, TextY: 900, BlobId: 8, AltText: "written", UrlString: "https://written", UrlFrozen: true}
 	}
 	cases := []struct {
 		name string
@@ -76,10 +76,11 @@ func TestAWriteResponseContributesOnlyWhatItWrote(t *testing.T) {
 		{"address", WroteAddress, 4, func(t *gridwellv1.Tile) { t.Version, t.UrlString = 4, "https://written" }},
 		{"name", WroteName, 4, func(t *gridwellv1.Tile) { t.Version, t.AltText = 4, "written" }},
 		{"content older than the cache", WroteBody, 2, func(*gridwellv1.Tile) {}},
-		// Framing claims no version, so the answer's version is not taken
+		// Framing and layout claim no version, so the answer's version is not taken
 		// whichever way it points.
 		{"freeze", WroteFrozen, 5, func(t *gridwellv1.Tile) { t.UrlFrozen = true }},
 		{"freeze from an older row", WroteFrozen, 1, func(t *gridwellv1.Tile) { t.UrlFrozen = true }},
+		{"placement", WrotePlacement, 5, func(t *gridwellv1.Tile) { t.X = 2 }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

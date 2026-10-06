@@ -7,6 +7,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
@@ -124,32 +125,43 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// DropMove.
 	a.landGhostAtCell(t, dropX, dropY)
 
-	dstGridID := t.gridID
-	srcGridID := d.srcGridID
-
-	// PlaceTile is the one placement writeback: an id plus the full (grid, x,
-	// y, w, h) fact, with no descent path and no version claim, since
-	// placement is layout and last-writer-wins.
 	req := &gridwellv1.PlaceTileRequest{
 		TileId: d.tileID,
-		GridId: dstGridID,
+		GridId: t.gridID,
 		X:      dropX,
 		Y:      dropY,
 		W:      d.snapshotTile.W,
 		H:      d.snapshotTile.H,
 	}
-	// A drag carries no parked value: snapping the ghost back to its origin
-	// is the reconcile the user can see.
-	a.post(write{
-		label: "PlaceTile", gid: srcGridID,
-		call: func(ctx context.Context) error {
-			_, err := a.cl.PlaceTile(ctx, req)
-			return err
-		},
-		undo: func() { a.snapBackToOrigin(d) },
-	})
+	a.postPlacement(d.srcGridID, req, func() { a.snapBackToOrigin(d) })
 	a.draw()
 	return true
+}
+
+// postPlacement is the one placement writeback, PlaceTile: an id plus the
+// full (grid, x, y, w, h) fact, no version claim, last-writer-wins. The cache
+// holds the placement from the release (cache.Place), so the tile is where
+// the user put it before any event. A failure puts it back, and snapBack is
+// the caller's animation of that; a placement parks nothing.
+func (a *App) postPlacement(gid string, req *gridwellv1.PlaceTileRequest, snapBack func()) {
+	pl := a.c.Place(req.TileId, cache.Placement{GridID: req.GridId, X: req.X, Y: req.Y, W: req.W, H: req.H})
+	var resp *gridwellv1.Tile
+	a.post(write{
+		label: "PlaceTile", gid: gid, optimistic: true,
+		call: func(ctx context.Context) error {
+			var err error
+			resp, err = a.cl.PlaceTile(ctx, req)
+			return err
+		},
+		then: func() { pl.Landed(resp) },
+		undo: func() {
+			pl.Failed()
+			if snapBack != nil {
+				snapBack()
+			}
+			a.scheduleFrame(traceevent.WhyDrag)
+		},
+	})
 }
 
 // commitLinkDrop creates the link a DropLink verdict asks for: an exit well

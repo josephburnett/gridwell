@@ -142,11 +142,17 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
   ).toBeTruthy();
 
   // flake, 2026-09-20: the tap acts on the client's cache, which holds the
-  // move only once its echo lands, so it waits on that rather than the
-  // server (docs/flake-ledger.md).
+  // move from the release (cache.Place), while the echo is still held
+  // (docs/flake-ledger.md).
   //
   // Tap descends into it; two-finger tap ascends back out.
-  await gw.waitClientTileAt(f.id, cx + 1, cy, created.id!);
+  expect(
+    await window.evaluate(
+      ([id, x, y]) => (window as any).__gridwellTest.tileAt(id, x, y),
+      [f.id, cx + 1, cy] as [string, number, number],
+    ),
+    'the client holds the move before its echo',
+  ).toBe(created.id);
   await window.touchscreen.tap(toPt.x, toPt.y);
   await gw.waitIdle();
   let p = await gw.focused();

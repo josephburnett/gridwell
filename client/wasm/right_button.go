@@ -429,7 +429,7 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	})
 }
 
-// commitTileResize goes through PlaceTile, the one placement writeback.
+// commitTileResize goes through postPlacement, the one placement writeback.
 func (a *App) commitTileResize(rd *rightDragState) {
 	n := rd.tileNode
 	if rd.tileNewX == n.X && rd.tileNewY == n.Y && rd.tileNewW == n.W && rd.tileNewH == n.H {
@@ -439,17 +439,13 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	if p == nil {
 		return
 	}
-	gid := a.gridIDForPane(p)
-	req := &gridwellv1.PlaceTileRequest{
+	a.postPlacement(a.gridIDForPane(p), &gridwellv1.PlaceTileRequest{
 		TileId: n.Id,
 		GridId: n.GridId,
 		X:      rd.tileNewX,
 		Y:      rd.tileNewY,
 		W:      rd.tileNewW,
 		H:      rd.tileNewH,
-	}
-	a.postTileMutate("PlaceTile", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.PlaceTile(ctx, req)
 	}, nil)
 }
 
