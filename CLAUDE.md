@@ -142,6 +142,10 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A clone of a link is another link to the same target, never a copy of the
   target: the deep copy is of content, and a link's content is its path
   (2026-10-06).
+- A clone whose source is dark lands as a link to it, never a refused or
+  empty copy: the copy reads the source before it creates anything, and a
+  source that does not answer gets the link a ctrl + right-drag would make
+  (`server.deepCopyTile`, 2026-10-06).
 
 **Node**
 

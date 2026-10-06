@@ -36,11 +36,11 @@ import (
 //   - a url copies its url_string plus the frozen preview and history;
 //   - a shell copies as a link to its source, since a clone shares its
 //     source's session and a session is namespace-local;
-//   - a source that never answered degrades to a link.
+//   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
 
 // deepCopyWell reads the source child grid before anything is created, so an
-// unreachable room degrades to a link (sourceUnreachable with a nil out) rather
-// than to an empty solid well pretending to be a copy.
+// unreachable room answers with nothing created and deepCopyTile links instead
+// of leaving an empty solid well pretending to be a copy.
 func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	srcChild := srcLocalTile.ChildGridId
 	g, err := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcChild})
@@ -98,9 +98,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 		// place would stack a link on the cell it occupies, and the user
 		// would get an overlap refusal on a grid they never touched.
 		if created == nil && gwerr.IsTransport(err) {
-			// The room is dark, not gone, so degrade to a link: the dashed
-			// border already means "lives elsewhere", which beats failing the
-			// walk or leaving an empty well that lies about being a copy.
+			// Dark, not gone: a link (CLAUDE.md, 2026-10-06).
 			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 		}
 		return created, err
