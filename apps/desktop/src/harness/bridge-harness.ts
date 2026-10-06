@@ -3,10 +3,11 @@
 // window.gridwell.* through the preload bridge and the ipcMain handlers.
 //
 //   npm run build && xvfb-run -a electron dist/harness/bridge-harness.js
-import { app, BaseWindow, WebContentsView, Menu } from 'electron';
+import { app, WebContentsView, Menu } from 'electron';
 import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
 import { registerWebviewIpc } from '../main/register';
+import { hostWindow } from './host';
 
 function fail(msg: string): never {
   console.error('HARNESS FAIL:', msg);
@@ -65,8 +66,8 @@ const PAGE =
     })();
   </script>`);
 
-app.whenReady().then(() => {
-  const win = new BaseWindow({ width: 800, height: 600, show: true });
+app.whenReady().then(async () => {
+  const win = await hostWindow().catch((e: unknown) => fail(String(e)));
   const root = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),

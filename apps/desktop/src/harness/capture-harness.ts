@@ -15,6 +15,7 @@ import { registerWebviewIpc } from '../main/register';
 import type { ErrorEvent, FrameEvent, NavEvent } from '../main/ipc';
 import { PARK_COORD, SESSION_PARTITION } from '../main/viewutil';
 import { FOCUS_SETTLE_MS } from '../main/focusguard';
+import { hostWindow } from './host';
 
 // A throwaway Chromium profile per run, set before app is ready: the
 // storage-flush scenario asserts what is on disk under SESSION_PARTITION, and a
@@ -49,9 +50,9 @@ function fail(msg: string): never {
 }
 
 // A load is an event, so waiting for it costs a cold machine nothing. A frame
-// is a budget, because Chromium announces no first paint. Keeping them apart is
-// what stops a runner that has just unpacked Electron from spending the frame
-// budget on its first renderer.
+// is a budget, because Chromium announces no first paint. Keeping them apart,
+// and the compositor's start apart from both (see host.ts), is what stops a
+// cold runner from spending the frame budget on its first renderer.
 const LOAD_BUDGET_MS = 30_000;
 const FRAME_BUDGET_MS = 6_000;
 
@@ -142,7 +143,7 @@ async function startPage(): Promise<{ url: string; slowUrl: string; close: () =>
 
 app.whenReady().then(async () => {
   const navEvents: NavEvent[] = [];
-  const win = new BaseWindow({ width: 800, height: 600, show: true });
+  const win = await hostWindow().catch((e: unknown) => fail(String(e)));
   const registry = new WebviewRegistry(win, { onNav: (ev) => navEvents.push(ev) });
 
   await registry.place('pane1', 'u1/42', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
