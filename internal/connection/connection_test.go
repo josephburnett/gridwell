@@ -8,26 +8,30 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
 // newTestServer builds a transport with no connections and no dialer.
-func newTestServer(t *testing.T, db *DB) *Server {
+func newTestServer(t *testing.T, st *store.Store) *Server {
 	t.Helper()
-	s, err := New(db, nil, "", nil, nil)
+	s, err := New(st, nil, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
 }
 
-func openConnDB(t *testing.T) *DB {
+// openStore opens a node store the test owns, the production shape: the
+// store makes the connections table, and closing a transport leaves it open
+// for the next boot.
+func openStore(t *testing.T) *store.Store {
 	t.Helper()
-	db, err := OpenDB(filepath.Join(t.TempDir(), "remote.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
-	return db
+	t.Cleanup(func() { _ = st.Close() })
+	return st
 }
 
 // server.yaml is authoritative about what is DECLARED; retired_names is the
@@ -36,8 +40,8 @@ func openConnDB(t *testing.T) *DB {
 // stanza; a retired name is reserved even on a fresh store and never returns.
 func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 	ctx := context.Background()
-	db := openConnDB(t)
-	s, err := New(db, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}, {Name: "rtb", Addr: "/t"}}, []string{"olddead"})
+	st := openStore(t)
+	s, err := New(st, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}, {Name: "rtb", Addr: "/t"}}, []string{"olddead"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,20 +49,20 @@ func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 	if len(rows) != 2 || rows[0].Uuid != "geneva" || rows[0].Label != "geneva" || rows[1].Uuid != "rtb" {
 		t.Fatalf("rows = %+v", rows)
 	}
-	if r, _ := db.Get(ctx, "olddead"); !r.Deleted {
+	if r, _ := st.Connection(ctx, "olddead"); !r.Deleted {
 		t.Fatal("retired_names must be reserved in the store")
 	}
 	// A landing the transport learned, so the surviving row has something to
 	// lose.
-	if err := db.SetRemoteRoot(ctx, "rtb", "rnode1/3"); err != nil {
+	if err := st.SetConnectionRoot(ctx, "rtb", "rnode1/3"); err != nil {
 		t.Fatal(err)
 	}
 	// Drop rtb from the config: the row survives untouched. Boot never
 	// retires on absence.
-	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, []string{"olddead"}); err != nil {
+	if _, err := New(st, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, []string{"olddead"}); err != nil {
 		t.Fatal(err)
 	}
-	r, err := db.Get(ctx, "rtb")
+	r, err := st.Connection(ctx, "rtb")
 	if err != nil {
 		t.Fatalf("an undeclared connection's row must survive: %v", err)
 	}
@@ -69,7 +73,7 @@ func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 		t.Fatalf("remote_root = %q, want the learned landing intact", r.RemoteRoot)
 	}
 	// Re-declare it: the connection comes back, landing and all.
-	s2, err := New(db, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}, {Name: "rtb", Addr: "/t"}}, []string{"olddead"})
+	s2, err := New(st, nil, "", []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}, {Name: "rtb", Addr: "/t"}}, []string{"olddead"})
 	if err != nil {
 		t.Fatalf("a name the config merely dropped must be declarable again: %v", err)
 	}
@@ -96,7 +100,7 @@ func TestRefusedNamesNeverReachTheTransport(t *testing.T) {
 			refused++
 			continue
 		}
-		if _, err := New(openConnDB(t), nil, "", cfg.Connections, cfg.RetiredNames); err == nil {
+		if _, err := New(openStore(t), nil, "", cfg.Connections, cfg.RetiredNames); err == nil {
 			t.Errorf("%q was accepted: config let it through and the transport has no check of its own", yml)
 		}
 	}
@@ -111,17 +115,17 @@ func TestRefusedNamesNeverReachTheTransport(t *testing.T) {
 // mounts through that name come back. No SQL by hand.
 func TestStaleTombstonesHealAndRetiredNamesMirror(t *testing.T) {
 	ctx := context.Background()
-	db := openConnDB(t)
-	if err := db.Tombstone(ctx, "laptop"); err != nil {
+	st := openStore(t)
+	if err := st.SetConnectionRetired(ctx, "laptop", true); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SetRemoteRoot(ctx, "laptop", "rnode1/3"); err != nil {
+	if err := st.SetConnectionRoot(ctx, "laptop", "rnode1/3"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(db, nil, "", []config.ConnectionConfig{{Name: "laptop", Addr: "/s"}}, nil); err != nil {
+	if _, err := New(st, nil, "", []config.ConnectionConfig{{Name: "laptop", Addr: "/s"}}, nil); err != nil {
 		t.Fatalf("a declared name the old reconcile tombstoned must heal, not refuse: %v", err)
 	}
-	r, _ := db.Get(ctx, "laptop")
+	r, _ := st.Connection(ctx, "laptop")
 	if r.Deleted {
 		t.Fatal("the stale tombstone must be cleared")
 	}
@@ -130,21 +134,21 @@ func TestStaleTombstonesHealAndRetiredNamesMirror(t *testing.T) {
 	}
 	// An UNdeclared row heals too: the mirror is retired_names, whether the
 	// name is declared this boot or not.
-	if err := db.Tombstone(ctx, "ghost"); err != nil {
+	if err := st.SetConnectionRetired(ctx, "ghost", true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(db, nil, "", nil, nil); err != nil {
+	if _, err := New(st, nil, "", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := db.Get(ctx, "ghost"); r.Deleted {
+	if r, _ := st.Connection(ctx, "ghost"); r.Deleted {
 		t.Fatal("only retired_names retires a name")
 	}
 	// And retired_names is mirrored onto the row, declared or not, so route
 	// and Probe can read retirement off it.
-	if _, err := New(db, nil, "", nil, []string{"ghost"}); err != nil {
+	if _, err := New(st, nil, "", nil, []string{"ghost"}); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := db.Get(ctx, "ghost"); !r.Deleted {
+	if r, _ := st.Connection(ctx, "ghost"); !r.Deleted {
 		t.Fatal("retired_names must be mirrored onto the row")
 	}
 }
@@ -214,7 +218,7 @@ func TestDialConfigRefusesAPathThatIsNotThere(t *testing.T) {
 func TestNewRefusesAMisconfiguredConnection(t *testing.T) {
 	home := t.TempDir()
 	key := filepath.Join(home, "nope", "id_ed25519")
-	_, err := New(openConnDB(t), nil, home, []config.ConnectionConfig{
+	_, err := New(openStore(t), nil, home, []config.ConnectionConfig{
 		{Name: "geneva", Host: "h", User: "u", Addr: "/sock", Key: key, KnownHosts: key},
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "geneva") || !strings.Contains(err.Error(), key) {

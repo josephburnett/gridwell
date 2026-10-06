@@ -145,10 +145,6 @@ func newMesh(t *testing.T, ids []string, edges []meshEdge) *mesh {
 func (m *mesh) declare(id string, edges []meshEdge, retired []string) {
 	m.t.Helper()
 	n := m.nodes[id]
-	db, err := connection.NewDB(n.st.SQL())
-	if err != nil {
-		m.t.Fatal(err)
-	}
 	var conns []config.ConnectionConfig
 	for _, e := range edges {
 		if e.From == id {
@@ -156,7 +152,7 @@ func (m *mesh) declare(id string, edges []meshEdge, retired []string) {
 			conns = append(conns, config.ConnectionConfig{Name: e.Name, Label: e.To, Addr: "/mesh/" + e.To})
 		}
 	}
-	transport, err := connection.New(db, func(cfg dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(n.st, func(cfg dial.Config) (namespace.Namespace, func(), error) {
 		to := strings.TrimPrefix(cfg.Addr, "/mesh/")
 		if _, ok := m.nodes[to]; !ok {
 			return nil, nil, errors.New("no node answers at " + cfg.Addr)

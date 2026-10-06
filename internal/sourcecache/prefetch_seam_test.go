@@ -59,16 +59,12 @@ func connFixtureWith(t *testing.T, opts Options, wrap func(namespace.Namespace) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = near.Close() })
-	db, err := connection.NewDB(near.SQL())
-	if err != nil {
-		t.Fatal(err)
-	}
 	conn = "farconn"
 	dialed := namespace.Namespace(far)
 	if wrap != nil {
 		dialed = wrap(dialed)
 	}
-	transport, err := connection.New(db, func(dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(near, func(dial.Config) (namespace.Namespace, func(), error) {
 		return dialed, func() {}, nil
 	}, "", []config.ConnectionConfig{{Name: conn, Addr: "/far/federation.sock"}}, nil)
 	if err != nil {
@@ -117,11 +113,7 @@ func twoConnFixture(t *testing.T, opts Options) (cc *Layer, a, b *farNode, roots
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = near.Close() })
-	db, err := connection.NewDB(near.SQL())
-	if err != nil {
-		t.Fatal(err)
-	}
-	transport, err := connection.New(db, func(cfg dial.Config) (namespace.Namespace, func(), error) {
+	transport, err := connection.New(near, func(cfg dial.Config) (namespace.Namespace, func(), error) {
 		n, ok := byAddr[cfg.Addr]
 		if !ok {
 			return nil, nil, fmt.Errorf("no far node at %s", cfg.Addr)

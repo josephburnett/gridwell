@@ -34,7 +34,7 @@ func TestTellFarIsBoundedByTellFarWait(t *testing.T) {
 	tellFarWait = 50 * time.Millisecond
 	t.Cleanup(func() { tellFarWait = old })
 
-	s := newTestServer(t, openConnDB(t))
+	s := newTestServer(t, openStore(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	far := &hungFar{calls: make(chan []string, 4)}

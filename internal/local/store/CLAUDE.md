@@ -47,8 +47,9 @@ intact.
   DDL, the SELECT, the scan, the clone INSERT, and every rebuild copy list
   derive from it. Only the tiles kind `CHECK` (`tilesCheck`) is literal text.
 - `connections` is in the chain like everything else, adopted by v13. The
-  store owns its shape; `internal/connection` owns the queries and holds no
-  DDL, and `NewDB` refuses a handle this store never opened. The `system` KV
+  store owns its shape and its queries (`connections.go`), and writes its
+  rows through `withMutation` like every other node fact;
+  `internal/connection` decides what to write and holds no handle. The `system` KV
   table and `_gridwell_meta` stay outside: neither carries a user fact.
 - `schema.go` `tablesDDL()` renders the descriptor: the shape a fresh
   `Open` materializes. `tablesV1` is the frozen v1 base. Never edit it.
