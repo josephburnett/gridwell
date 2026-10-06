@@ -56,6 +56,26 @@ func TestCloneRunsAtTheNearestNodeThatSeesBothEnds(t *testing.T) {
 		}
 	})
 
+	t.Run("a copy is born with its bytes", func(t *testing.T) {
+		// A create followed by a WriteContent leaves a bodiless tile any
+		// reader between the two can see; the 2026-10-04 trace caught one.
+		src := m.text(ctx, meNode, rpc.QualifyID(meNode, m.nodes[meNode].root), 1, "whole")
+		dst := m.home(meNode, aNode, "toa")
+		asked := m.asks(meNode, "toa")
+		creates, writes := asked.creates.Load(), asked.writes.Load()
+		got, err := me.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: src.Id, DestGridId: dst, X: 4, Y: 4})
+		if err != nil {
+			t.Fatalf("clone home → a: %v", err)
+		}
+		if asked.creates.Load() != creates+1 || asked.writes.Load() != writes {
+			t.Fatalf("across toa: creates %d→%d writes %d→%d; want one create carrying the bytes and no write",
+				creates, asked.creates.Load(), writes, asked.writes.Load())
+		}
+		if body := readBody(ctx, t, me, got.Id); body != "whole" {
+			t.Fatalf("clone body = %q, want the source's", body)
+		}
+	})
+
 	t.Run("home to two hops away", func(t *testing.T) {
 		src := m.text(ctx, meNode, rpc.QualifyID(meNode, m.nodes[meNode].root), 0, "from home")
 		dst := m.home(meNode, cNode, "toa", "toc")

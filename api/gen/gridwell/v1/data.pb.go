@@ -2384,15 +2384,20 @@ func (x *DeadReference) GetNamespace() string {
 //	well  → child_grid_id set makes an exit well pointing at a grid in
 //	        another plugin, a qualified "<uuid>/<grid-id>"; empty allocates
 //	        a fresh interior child grid. alt_text is the well's label.
-//	text  → the body follows as a WriteContent.
+//	text  → content is the body.
+//	pane  → content is the layout; empty is never arranged.
 //	url   → url_string.
 //	shell → no extra fields.
 //
 // A plugin that does not accept creates leaves this unimplemented.
 type CreateTileRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	Tile          *Tile                  `protobuf:"bytes,3,opt,name=tile,proto3" json:"tile,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	GridId string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	Tile   *Tile                  `protobuf:"bytes,3,opt,name=tile,proto3" json:"tile,omitempty"`
+	// content is the bytes a text or pane tile is born with, stored with the
+	// row in one write, so no reader sees the tile without them. Refused on
+	// every other kind.
+	Content       []byte `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2437,6 +2442,13 @@ func (x *CreateTileRequest) GetGridId() string {
 func (x *CreateTileRequest) GetTile() *Tile {
 	if x != nil {
 		return x.Tile
+	}
+	return nil
+}
+
+func (x *CreateTileRequest) GetContent() []byte {
+	if x != nil {
+		return x.Content
 	}
 	return nil
 }
@@ -3693,10 +3705,11 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"-\n" +
 	"\rDeadReference\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"_\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"y\n" +
 	"\x11CreateTileRequest\x12\x17\n" +
 	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12%\n" +
-	"\x04tile\x18\x03 \x01(\v2\x11.gridwell.v1.TileR\x04tileJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"3\n" +
+	"\x04tile\x18\x03 \x01(\v2\x11.gridwell.v1.TileR\x04tile\x12\x18\n" +
+	"\acontent\x18\x05 \x01(\fR\acontentJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"3\n" +
 	"\x18ShellSessionAliveRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"1\n" +
 	"\x19ShellSessionAliveResponse\x12\x14\n" +

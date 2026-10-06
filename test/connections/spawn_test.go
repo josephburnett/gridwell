@@ -269,7 +269,7 @@ func TestConnectionSpawn(t *testing.T) {
 		"gridId": wellChild,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
-	// Creation carries metadata only, and the body follows through the
+	// The body is written after the create, through the
 	// content write, routed by the qualified id.
 	txtRow, err := clientFor(localOrigin).WriteContent(context.Background(),
 		txt["id"].(string), num(txt["version"]), []byte("# across the spawn gate"))

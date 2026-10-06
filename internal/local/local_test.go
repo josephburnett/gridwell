@@ -38,8 +38,8 @@ func rootGrid(t *testing.T, p *local.Plugin) string {
 	return info.RootGridId
 }
 
-// createText is a CreateTile helper for a text tile. Creation is
-// metadata-only; the body follows through the one content write.
+// createText is a CreateTile helper for a text tile, its body written after
+// the create so the tile carries a written version.
 func createText(t *testing.T, p *local.Plugin, gridID string, data []byte) *gridwellv1.Tile {
 	t.Helper()
 	cr, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
