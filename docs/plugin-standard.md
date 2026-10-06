@@ -656,13 +656,25 @@ entry equals `List`'s, and the directory is not announced) and
 `TestWatchTellsAFileSavedByRenameItsEntry`; across the seam
 `internal/server/fs_content_change_seam_test.go` (an open file, a text face
 and an image face show the new bytes) and
-`link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`.
+`link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`. For a
+plugin over `memo.Changes`, `PublishEntry` is the send
+(`memo/changes_test.go`: after the listings, once per entry, never lost to
+an overflow), and each plugin pins one changed body told once under a new
+stamp and an unchanged one told nothing:
+`proc/plugin/watch_test.go:TestAPollTellsAChangedInfoBodyOnce`,
+`gitlab/plugin/watch_test.go:TestAWalkTellsAChangedBodyAsItsEntry`,
+`hey/plugin/watch_test.go:TestAReplyIsToldAsTheThreadsEntry`; across the
+seam `internal/server/proc_content_change_seam_test.go`,
+`gitlab_content_change_seam_test.go` and `hey_content_change_seam_test.go`.
 
-**Today.** Meets: fs (`plugin-content` branch, api v0.6.0). N/A: pages,
-whose site is its own code. Partial: proc, gitlab, gmail and hey send
-`ContextChanged` alone, so a body of theirs that changes in place (proc's
-`@info`, a hey thread's card) reaches an open view only when it is next read
-from scratch.
+**Today.** Meets: fs (`plugin-content` branch, api v0.6.0); on the
+`plugin-changed` branch, proc, whose poll of a shown pid tells `@info` when
+its body moves, stamped by a hash of the body (the process table keeps no
+version); gitlab, which tells a todo whose markdown moved, stamped by a hash
+of it (GitLab's `updated_at` does not move when a todo is derived done);
+hey, which tells a thread a reply landed on, stamped by HEY's `active_at`.
+N/A: pages, whose site is its own code; gmail, whose messages Gmail never
+changes once it has them, so nothing of its changes in place.
 
 ## 19. A write claims the stamp it read
 
@@ -706,8 +718,8 @@ gmail and hey, which take no body back and declare no `writable`.
 
 Tick each before you ship. At `729ba73` the shipped plugins tick every box
 but four: 3 (gitlab, gmail), 14 (gmail), 16 (proc, gitlab) and 17 (gitlab,
-hey); rules 18 and 19, added later, are met by fs alone. The rules' Today
-lines say what remains.
+hey); rules 18 and 19 were added later: 18 is met by fs, proc, gitlab and
+hey, and 19 by fs alone. The rules' Today lines say what remains.
 
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
 - [ ] 2. `Info` refuses a config it cannot serve with a sentence, and latches.
