@@ -455,7 +455,14 @@ type Tile struct {
 	// tile that started it, set on a clone so every copy shares its source's
 	// session. Empty means the tile's own id; rpc.ShellSession reads it. Stored,
 	// qualified and peeled like the tile's own id, and never set by clients.
-	ShellSession  string `protobuf:"bytes,38,opt,name=shell_session,json=shellSession,proto3" json:"shell_session,omitempty"`
+	ShellSession string `protobuf:"bytes,38,opt,name=shell_session,json=shellSession,proto3" json:"shell_session,omitempty"`
+	// content_stamp is the source's name for the bytes behind a row with no
+	// version claim (a plugin's): plugin.v1 Entry.content_stamp, carried by the
+	// adapter and verbatim in transit, "" when the source names none. It does
+	// for such a row what version does for a home row: a body read under
+	// another stamp is behind it, and one read under this stamp is not.
+	// Wire-only, never a stored column.
+	ContentStamp  string `protobuf:"bytes,39,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -696,6 +703,13 @@ func (x *Tile) GetStatusDetail() string {
 func (x *Tile) GetShellSession() string {
 	if x != nil {
 		return x.ShellSession
+	}
+	return ""
+}
+
+func (x *Tile) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
 	}
 	return ""
 }
@@ -1295,7 +1309,8 @@ func (x *GetTilePreviewResponse) GetJpeg() []byte {
 // so bytes and version are paired at the owner. Later chunks carry data only.
 // On a leaf-link tile the serving node resolves through link_target_id, the one
 // resolution point, so callers never reimplement link semantics. A plugin whose
-// bodies are not version-edited sends version 0.
+// bodies are not version-edited sends version 0 and, in its place, the
+// bytes' content_stamp (Tile.content_stamp).
 type ReadContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
@@ -1343,8 +1358,9 @@ func (x *ReadContentRequest) GetTileId() string {
 type ContentChunk struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"` // chunk 1 only
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`                     // chunk 1 only
+	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`          // chunk 1 only
+	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`                              // chunk 1 only
+	ContentStamp  string                 `protobuf:"bytes,4,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"` // chunk 1 only
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1398,6 +1414,13 @@ func (x *ContentChunk) GetVersion() int64 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *ContentChunk) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
 }
 
 // WriteContent streams a tile's content bytes up. The first message binds
@@ -3661,7 +3684,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xeb\x06\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\x90\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -3696,7 +3719,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
 	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\x12#\n" +
-	"\rshell_session\x18& \x01(\tR\fshellSessionJ\x04\b\x02\x10\x03J\x04\b\n" +
+	"\rshell_session\x18& \x01(\tR\fshellSession\x12#\n" +
+	"\rcontent_stamp\x18' \x01(\tR\fcontentStampJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
 	"\vInfoRequest\"\xec\x02\n" +
 	"\fInfoResponse\x12!\n" +
@@ -3740,12 +3764,13 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x16GetTilePreviewResponse\x12\x12\n" +
 	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\"-\n" +
 	"\x12ReadContentRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\tR\x06tileId\"[\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x80\x01\n" +
 	"\fContentChunk\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversion\"\\\n" +
+	"\aversion\x18\x03 \x01(\x03R\aversion\x12#\n" +
+	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"\\\n" +
 	"\x13WriteContentRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x12\n" +

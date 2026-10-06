@@ -833,7 +833,7 @@ func (a *App) fetchTileContent(tileID string) {
 // as surfacing it, because a waiting caller has a continuation.
 func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
 	asked := a.c.AskContent(tileID)
-	data, _, version, err := a.cl.ReadContent(ctx, tileID)
+	data, _, basis, err := a.cl.ReadContent(ctx, tileID)
 	// clientsync.ReactRead is the one table; this runs its arms.
 	o := clientsync.Of(err)
 	a.fetch.contents.Settle(tileID, clientsync.ReactRead(o))
@@ -844,7 +844,7 @@ func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) e
 		}
 		return err
 	}
-	a.c.PutFetchedContent(tileID, data, version, asked)
+	a.c.PutFetchedContent(tileID, data, basis, asked)
 	a.refreshFileOverlay()
 	then()
 	return nil

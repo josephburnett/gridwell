@@ -46,7 +46,7 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	// through the link: one content entry, keyed by the id that owns the
 	// bytes, dirty, based on the version it was fetched under.
 	c := cache.New()
-	c.PutFetchedContent(target.Id, []byte("v0"), target.Version, c.AskContent(target.Id))
+	c.PutFetchedContent(target.Id, []byte("v0"), rpc.BasisOf(target), c.AskContent(target.Id))
 	c.PutEditedContent(target.Id, []byte("typed"))
 
 	// Both flushes reach for the head of the same chain at the same moment.
@@ -80,7 +80,7 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 			defer wg.Done()
 			rendezvous()
 			basis, haveBasis := c.SaveBasis(target.Id)
-			claim := textedit.SaveClaim(rowID == target.Id, rowVersion, basis, haveBasis)
+			claim := textedit.SaveClaim(rowID == target.Id, rowVersion, basis.Version, haveBasis)
 			tile, err := cl.WriteContent(ctx, target.Id, claim, data)
 			mu.Lock()
 			defer mu.Unlock()
@@ -113,8 +113,8 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	if string(data) != "typed and more" {
 		t.Errorf("stored content = %q, want the last write in queue order", data)
 	}
-	if basis, ok := c.SaveBasis(target.Id); !ok || basis != target.Version+2 {
+	if basis, ok := c.SaveBasis(target.Id); !ok || basis.Version != target.Version+2 {
 		t.Errorf("save basis = %d (present %v), want %d: both writes chained",
-			basis, ok, target.Version+2)
+			basis.Version, ok, target.Version+2)
 	}
 }

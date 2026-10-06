@@ -223,7 +223,10 @@ func (a *Adapter) announceMoved(ctx context.Context, context string) {
 }
 
 // listingSum is a listing as a client holds it: every entry the source
-// answered, its label, and whether the answer was authoritative.
+// answered, its label, and whether the answer was authoritative. An entry's
+// content stamp is not in it: bytes that moved are that entry's
+// EntryChanged, and a directory whose files are written while its names stay
+// has not moved.
 type listingSum [sha256.Size]byte
 
 // sumOf is the listing's sum, false for a dark listing, which holds nothing
@@ -233,8 +236,13 @@ func sumOf(s *synthesized) (listingSum, bool) {
 	if s.dark {
 		return listingSum{}, false
 	}
+	entries := make([]*pluginv1.Entry, len(s.entries))
+	for i, e := range s.entries {
+		entries[i] = proto.CloneOf(e)
+		entries[i].ContentStamp = ""
+	}
 	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(
-		&pluginv1.ListResponse{Entries: s.entries, Authoritative: s.authoritative, SourceLabel: s.grid.SourceLabel})
+		&pluginv1.ListResponse{Entries: entries, Authoritative: s.authoritative, SourceLabel: s.grid.SourceLabel})
 	if err != nil {
 		return listingSum{}, false
 	}

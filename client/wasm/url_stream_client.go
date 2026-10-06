@@ -141,7 +141,7 @@ func (a *App) seedURLAddress(t *gridwellv1.Tile) {
 	if _, ok := a.c.TileContent(t.Id); ok {
 		return
 	}
-	a.c.PutFetchedContent(t.Id, []byte(t.UrlString), t.Version, a.c.AskContent(t.Id))
+	a.c.PutFetchedContent(t.Id, []byte(t.UrlString), rpc.BasisOf(t), a.c.AskContent(t.Id))
 }
 
 // noteLandedAddress makes the address v's page landed on its row's pending

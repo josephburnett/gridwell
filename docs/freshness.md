@@ -129,14 +129,19 @@ row's blob as the cache held it when the read was asked
 one rule: a higher row version, or the same version with another blob (a
 pane layout write mints a blob without a bump), is a body the row has moved
 past. A row with no claim — a plugin's, version 0 and no blob — has no fact
-that orders its bytes, so for it the event is the change: a `TileChanged`
-flagged `content_changed` makes a clean body behind, and nothing else does,
-so a refetch after `GridChanged`, whose rows are equal, keeps every open
-body, and a framing write on the same row keeps it too. `ageContentLocked`
+that orders its bytes. Where its source names them (`Tile.content_stamp`,
+the plugin's `Entry.content_stamp`, which the read answers with the bytes),
+the stamp decides as a version would: a row under another stamp makes a
+clean body behind, by event or refetch alike, and one under the body's own
+stamp does not, so the echo of the body's own save is no news. Where the
+source names none, the event is the change: a `TileChanged` flagged
+`content_changed` makes a clean body behind, and nothing else does, so a
+refetch after `GridChanged`, whose rows are equal, keeps every open body,
+and a framing write on the same row keeps it too. `ageContentLocked`
 applies the rule to every row the cache learns — event,
 `PutGrid` refetch, or write response, whether or not the row's grid is
-cached — and `PutFetchedContent` to a reply the cached row moved past while
-it was in flight. Who reads the body again is whoever draws it: the cache
+cached — and `PutFetchedContent` to a reply whose row moved blob or stamp
+while it was in flight. Who reads the body again is whoever draws it: the cache
 only drops it. What is drawn from a body (a face's raster, a wrap) is keyed
 by `Cache.BodyGen`, the bytes as last given, never by the row's version,
 which a plugin body's does not move. `SaveBasis` is what a save claims, never the grid row
@@ -545,6 +550,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The echo interlock drops an older `TileChanged` | `client/cache/cache_test.go:TestApplyStaleEchoDropped` (unit) |
 | A fetch never clobbers dirty bytes; a stale reply never regresses the basis | `cache_test.go:TestFetchNeverClobbersDirtyContent`, `TestStaleFetchNeverRegressesContent` |
 | A save response keeps mid-flight typing and only advances the basis | `cache_test.go:TestSavedContentKeepsMidFlightTyping` |
+| A plugin body is aged by its source's stamp: its own save's echo keeps it, another stamp drops it, a reply whose row moved stamp mid-flight is refused; a remembered body keeps its stamp; across the seam the row and the read name a file's bytes by one stamp | `client/cache/binding_test.go:TestAStampedBodyAgesByItsStamp`, `internal/sourcecache/stamp_test.go`, `internal/server/fs_stamp_seam_test.go` |
 | A body answers only for the blob it was filed under, whichever door the newer row came by; a save is filed under its response row | `client/cache/binding_test.go:TestABodyIsBoundToItsOwnBlob`, `TestASavedBodyAnswersForItsResponseRow`, `TestDirtyTextSurvivesAForeignRowAnywhere` |
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |

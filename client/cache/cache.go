@@ -31,48 +31,65 @@ type Cache struct {
 	seq   uint64
 }
 
-// contentEntry is a body, the row version and blob it derives from, and
-// whether it carries unsaved edits reconciliation must not discard. base is
-// also the version a save claims.
+// contentEntry is a body, the basis and row it derives from, and whether it
+// carries unsaved edits reconciliation must not discard. base is also what a
+// save claims.
 type contentEntry struct {
 	data  []byte
-	base  int64
-	blob  BlobBasis
+	base  rpc.ContentBasis
+	row   RowBasis
 	dirty bool
 	// gen names the bytes the server last gave; see BodyGen.
 	gen uint64
 }
 
-// BlobBasis is the blob id a body is filed under: for a fetch, the row's blob
-// taken before the read; for a save, the blob its response row names.
-type BlobBasis struct {
-	id    int64
+// RowBasis is the row a body is filed under: for a fetch, the row's blob and
+// stamp taken before the read; for a save, those its response row names.
+type RowBasis struct {
+	blob  int64
+	stamp string
 	known bool
 }
 
-// differs reports that a row naming blob may hold other bytes. An unknown
-// basis vouches only for a row with no blob.
-func (b BlobBasis) differs(blob int64) bool {
+// rowBasis is the RowBasis row n names.
+func rowBasis(n *gridwellv1.Tile) RowBasis {
+	return RowBasis{blob: n.BlobId, stamp: n.ContentStamp, known: true}
+}
+
+// differs reports that row n may name other bytes than the row the body was
+// filed under. An unknown basis vouches only for a row with no blob and no
+// stamp.
+func (b RowBasis) differs(n *gridwellv1.Tile) bool {
+	return b.blobDiffers(n.BlobId) || n.ContentStamp != b.stamp
+}
+
+func (b RowBasis) blobDiffers(blob int64) bool {
 	if !b.known {
 		return blob != 0
 	}
-	return blob != b.id
+	return blob != b.blob
 }
 
 // behind reports that row n names bytes the entry does not hold. Version
-// orders content edits; a pane layout mints a blob without a bump, so within
-// one version the blob decides; and a row with no claim has no fact that
-// orders its bytes, so told, the event saying they changed
+// orders content edits, and a pane layout mints a blob without a bump, so
+// within one version the blob decides. A row with no claim has no fact that
+// orders its bytes: where its source names them (Tile.content_stamp) the
+// stamp decides, so the echo of the entry's own save is not news; where it
+// names none, told, the event saying they changed
 // (TileChanged.content_changed), is the change. Dirty bytes are never behind:
 // their save reconciles them.
 func (e *contentEntry) behind(n *gridwellv1.Tile, told bool) bool {
 	switch {
-	case e.dirty || n.Version < e.base:
+	case e.dirty || n.Version < e.base.Version:
 		return false
-	case n.Version > e.base || told:
+	case n.Version > e.base.Version:
+		return true
+	case n.ContentStamp != "":
+		return n.ContentStamp != e.base.Stamp
+	case told:
 		return true
 	}
-	return e.blob.differs(n.BlobId)
+	return e.row.blobDiffers(n.BlobId)
 }
 
 // Grid is a cached grid plus its tiles indexed by id.
@@ -93,30 +110,30 @@ func New() *Cache {
 
 // AskContent is the basis a content read is filed under, taken before the
 // read is sent and handed back to PutFetchedContent.
-func (c *Cache) AskContent(tileID string) BlobBasis {
+func (c *Cache) AskContent(tileID string) RowBasis {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if n := c.rowLocked(tileID); n != nil {
-		return BlobBasis{id: n.BlobId, known: true}
+		return rowBasis(n)
 	}
-	return BlobBasis{}
+	return RowBasis{}
 }
 
-// PutFetchedContent stores a body read from the server under the version it
-// was read at and the blob it was asked against. It never replaces a dirty
-// entry or regresses the base (that manufactures a 409). A reply whose row
-// moved blob mid-flight is not stored; only the blob is compared, because a
-// version the read disagrees with would ask forever.
-func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64, asked BlobBasis) {
+// PutFetchedContent stores a body read from the server under the basis it was
+// read at and the row it was asked against. It never replaces a dirty entry
+// or regresses the version (that manufactures a 409). A reply whose row moved
+// blob or stamp mid-flight is not stored; only the row is compared, because a
+// basis the read disagrees with would ask forever.
+func (c *Cache) PutFetchedContent(tileID string, data []byte, base rpc.ContentBasis, asked RowBasis) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e, ok := c.content[tileID]; ok && (e.dirty || base < e.base) {
+	if e, ok := c.content[tileID]; ok && (e.dirty || base.Version < e.base.Version) {
 		return
 	}
-	if n := c.rowLocked(tileID); n != nil && asked.differs(n.BlobId) {
+	if n := c.rowLocked(tileID); n != nil && asked.differs(n) {
 		return
 	}
-	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, blob: asked, gen: c.nextGenLocked()}
+	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, row: asked, gen: c.nextGenLocked()}
 }
 
 func (c *Cache) nextGenLocked() uint64 {
@@ -138,8 +155,8 @@ func (c *Cache) BodyGen(tileID string) uint64 {
 }
 
 // PutEditedContent stores an optimistic, not-yet-saved edit, keeping the
-// entry's base. With no prior entry the base is 0, so the save fails the
-// version check and reconciles visibly rather than overwriting.
+// entry's base. With no prior entry the base is zero, so the save fails the
+// version or stamp check and reconciles visibly rather than overwriting.
 func (c *Cache) PutEditedContent(tileID string, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -158,23 +175,23 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 func (c *Cache) PutSavedContent(row *gridwellv1.Tile, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	blob := BlobBasis{id: row.BlobId, known: true}
+	base, filed := rpc.BasisOf(row), rowBasis(row)
 	if e, ok := c.content[row.Id]; ok && e.dirty && !bytes.Equal(e.data, data) {
-		e.base, e.blob = row.Version, blob
+		e.base, e.row = base, filed
 		return
 	}
-	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: row.Version, blob: blob, gen: c.nextGenLocked()}
+	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: base, row: filed, gen: c.nextGenLocked()}
 }
 
-// SaveBasis returns the version a content write must claim. Only fetches and
+// SaveBasis returns the basis a content write must claim. Only fetches and
 // save responses advance it, never a foreign writer's event, so a save on
 // unrefreshed bytes is rejected rather than overwriting.
-func (c *Cache) SaveBasis(tileID string) (int64, bool) {
+func (c *Cache) SaveBasis(tileID string) (rpc.ContentBasis, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.content[tileID]
 	if !ok {
-		return 0, false
+		return rpc.ContentBasis{}, false
 	}
 	return e.base, true
 }
@@ -407,8 +424,8 @@ func (c *Cache) cachedRowLocked(gridID string, t *gridwellv1.Tile) (*Grid, bool)
 type Wrote int
 
 const (
-	// WroteBody is a content write's bytes: the blob, and the name a text
-	// tile derives from its first line.
+	// WroteBody is a content write's bytes: the blob or the source's stamp,
+	// and the name a text tile derives from its first line.
 	WroteBody Wrote = iota + 1
 	// WroteAddress is a url's address.
 	WroteAddress
@@ -425,7 +442,7 @@ func (w Wrote) claimsVersion() bool { return w != WroteFrozen && w != WrotePlace
 func (w Wrote) copy(dst, src *gridwellv1.Tile) {
 	switch w {
 	case WroteBody:
-		dst.BlobId, dst.AltText = src.BlobId, src.AltText
+		dst.BlobId, dst.AltText, dst.ContentStamp = src.BlobId, src.AltText, src.ContentStamp
 	case WroteAddress:
 		dst.UrlString = src.UrlString
 	case WroteName:

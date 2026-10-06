@@ -503,7 +503,15 @@ type Entry struct {
 	// until the user touches it, and a target its context no longer holds
 	// reads as a dead link. A well has no link variant here: its child_context
 	// already names where it opens.
-	LinkTarget    *EntryRef `protobuf:"bytes,11,opt,name=link_target,json=linkTarget,proto3" json:"link_target,omitempty"`
+	LinkTarget *EntryRef `protobuf:"bytes,11,opt,name=link_target,json=linkTarget,proto3" json:"link_target,omitempty"`
+	// content_stamp names the bytes a text entry's ReadContent answers right
+	// now, such as fs's file mtime and size: it changes whenever they do, and
+	// "" means you name none. It is the version a plugin row lacks. The node
+	// carries it on the tile (Tile.content_stamp), so a client holding the
+	// body under another stamp knows its bytes moved and one holding it under
+	// this stamp knows they did not. ReadContent answers the same stamp with
+	// the bytes.
+	ContentStamp  string `protobuf:"bytes,12,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -613,6 +621,13 @@ func (x *Entry) GetLinkTarget() *EntryRef {
 		return x.LinkTarget
 	}
 	return nil
+}
+
+func (x *Entry) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
 }
 
 // EntryRef names one entry by the plugin's own words: the context that lists
@@ -737,8 +752,10 @@ func (x *PlacementHint) GetH() int64 {
 	return 0
 }
 
-// ReadContent streams an entry's content bytes. Chunk 1 carries media_type.
-// Plugin content is not version-edited; a version is a node fact.
+// ReadContent streams an entry's content bytes. Chunk 1 carries media_type
+// and the bytes' content_stamp, taken before they are read so a change during
+// the read cannot pass for these bytes. Plugin content is not version-edited;
+// a version is a node fact.
 type ReadContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -786,7 +803,8 @@ func (x *ReadContentRequest) GetKey() string {
 type ContentChunk struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"` // chunk 1 only
+	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`          // chunk 1 only
+	ContentStamp  string                 `protobuf:"bytes,3,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"` // chunk 1 only; see Entry.content_stamp
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -831,6 +849,13 @@ func (x *ContentChunk) GetData() []byte {
 func (x *ContentChunk) GetMediaType() string {
 	if x != nil {
 		return x.MediaType
+	}
+	return ""
+}
+
+func (x *ContentChunk) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
 	}
 	return ""
 }
@@ -1819,7 +1844,7 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\aentries\x18\x01 \x03(\v2\x10.plugin.v1.EntryR\aentries\x12$\n" +
 	"\rauthoritative\x18\x02 \x01(\bR\rauthoritative\x12!\n" +
 	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\x12 \n" +
-	"\vunreachable\x18\x04 \x01(\tR\vunreachable\"\x96\x03\n" +
+	"\vunreachable\x18\x04 \x01(\tR\vunreachable\"\xbb\x03\n" +
 	"\x05Entry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
@@ -1835,7 +1860,8 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\rpreview_stamp\x18\n" +
 	" \x01(\x03R\fpreviewStamp\x124\n" +
 	"\vlink_target\x18\v \x01(\v2\x13.plugin.v1.EntryRefR\n" +
-	"linkTarget\"6\n" +
+	"linkTarget\x12#\n" +
+	"\rcontent_stamp\x18\f \x01(\tR\fcontentStamp\"6\n" +
 	"\bEntryRef\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\"G\n" +
@@ -1845,11 +1871,12 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x01w\x18\x03 \x01(\x03R\x01w\x12\f\n" +
 	"\x01h\x18\x04 \x01(\x03R\x01h\"&\n" +
 	"\x12ReadContentRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"A\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"f\n" +
 	"\fContentChunk\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
 	"\n" +
-	"media_type\x18\x02 \x01(\tR\tmediaType\";\n" +
+	"media_type\x18\x02 \x01(\tR\tmediaType\x12#\n" +
+	"\rcontent_stamp\x18\x03 \x01(\tR\fcontentStamp\";\n" +
 	"\x13WriteContentRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\"\x16\n" +

@@ -106,28 +106,28 @@ func (c *Client) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb
 	return resp.Msg.GetTile(), nil
 }
 
-// ReadContent's first chunk carries the media type and the row version the
-// bytes belong to, which is the save basis. A leaf link resolves at the
-// serving node.
-func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, mediaType string, version int64, err error) {
+// ReadContent's first chunk carries the media type and the basis the bytes
+// belong to, which is the save basis. A leaf link resolves at the serving
+// node.
+func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, mediaType string, basis ContentBasis, err error) {
 	stream, err := c.cl.ReadContent(ctx, connect.NewRequest(&pb.ReadContentRequest{TileId: tileID}))
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", ContentBasis{}, err
 	}
 	defer stream.Close()
 	first := true
 	for stream.Receive() {
 		msg := stream.Msg()
 		if first {
-			mediaType, version = msg.MediaType, msg.Version
+			mediaType, basis = msg.MediaType, ContentBasis{Version: msg.Version, Stamp: msg.ContentStamp}
 			first = false
 		}
 		data = append(data, msg.Data...)
 	}
 	if err := stream.Err(); err != nil {
-		return nil, "", 0, err
+		return nil, "", ContentBasis{}, err
 	}
-	return data, mediaType, version, nil
+	return data, mediaType, basis, nil
 }
 
 // WriteContent is version-claimed and commits at close, so a failure anywhere

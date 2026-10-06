@@ -562,8 +562,8 @@ func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
 	if string(data) != string(body) {
 		t.Errorf("link content = %q, want the target's %q", data, body)
 	}
-	if version != src.Version {
-		t.Errorf("link content version = %d, want the target's %d", version, src.Version)
+	if version.Version != src.Version {
+		t.Errorf("link content version = %d, want the target's %d", version.Version, src.Version)
 	}
 
 	// The preview door resolves the same link the same way.

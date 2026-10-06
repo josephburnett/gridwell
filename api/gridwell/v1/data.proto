@@ -237,6 +237,14 @@ message Tile {
   // session. Empty means the tile's own id; rpc.ShellSession reads it. Stored,
   // qualified and peeled like the tile's own id, and never set by clients.
   string shell_session = 38;
+
+  // content_stamp is the source's name for the bytes behind a row with no
+  // version claim (a plugin's): plugin.v1 Entry.content_stamp, carried by the
+  // adapter and verbatim in transit, "" when the source names none. It does
+  // for such a row what version does for a home row: a body read under
+  // another stamp is behind it, and one read under this stamp is not.
+  // Wire-only, never a stored column.
+  string content_stamp = 39;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -340,14 +348,16 @@ message GetTilePreviewResponse {
 // so bytes and version are paired at the owner. Later chunks carry data only.
 // On a leaf-link tile the serving node resolves through link_target_id, the one
 // resolution point, so callers never reimplement link semantics. A plugin whose
-// bodies are not version-edited sends version 0.
+// bodies are not version-edited sends version 0 and, in its place, the
+// bytes' content_stamp (Tile.content_stamp).
 message ReadContentRequest {
   string tile_id = 1;
 }
 message ContentChunk {
   bytes data = 1;
-  string media_type = 2; // chunk 1 only
-  int64 version = 3;     // chunk 1 only
+  string media_type = 2;    // chunk 1 only
+  int64 version = 3;        // chunk 1 only
+  string content_stamp = 4; // chunk 1 only
 }
 
 // WriteContent streams a tile's content bytes up. The first message binds

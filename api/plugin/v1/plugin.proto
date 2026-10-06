@@ -154,6 +154,14 @@ message Entry {
   // reads as a dead link. A well has no link variant here: its child_context
   // already names where it opens.
   EntryRef link_target = 11;
+  // content_stamp names the bytes a text entry's ReadContent answers right
+  // now, such as fs's file mtime and size: it changes whenever they do, and
+  // "" means you name none. It is the version a plugin row lacks. The node
+  // carries it on the tile (Tile.content_stamp), so a client holding the
+  // body under another stamp knows its bytes moved and one holding it under
+  // this stamp knows they did not. ReadContent answers the same stamp with
+  // the bytes.
+  string content_stamp = 12;
 }
 
 // EntryRef names one entry by the plugin's own words: the context that lists
@@ -172,14 +180,17 @@ message PlacementHint {
 
 // ─── Content ───────────────────────────────────────────────────────────────
 
-// ReadContent streams an entry's content bytes. Chunk 1 carries media_type.
-// Plugin content is not version-edited; a version is a node fact.
+// ReadContent streams an entry's content bytes. Chunk 1 carries media_type
+// and the bytes' content_stamp, taken before they are read so a change during
+// the read cannot pass for these bytes. Plugin content is not version-edited;
+// a version is a node fact.
 message ReadContentRequest {
   string key = 1;
 }
 message ContentChunk {
-  bytes  data       = 1;
-  string media_type = 2; // chunk 1 only
+  bytes  data          = 1;
+  string media_type    = 2; // chunk 1 only
+  string content_stamp = 3; // chunk 1 only; see Entry.content_stamp
 }
 
 // WriteContent streams an entry's new content up, and the first message binds

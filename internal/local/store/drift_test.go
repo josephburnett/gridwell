@@ -43,6 +43,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 			wireOnly: map[string]string{
 				"reference":         `derived by the router from a qualified child_grid_id — the one authoritative "is a link" signal`,
 				"text_presentation": "declared by the owning plugin: how its text body presents",
+				"content_stamp":     "the owning plugin's name for the bytes behind a claimless row, as its listing answered it",
 				"status_detail":     "the owning plugin's current trouble with this tile (an ssh well's last dial error)",
 			},
 		},

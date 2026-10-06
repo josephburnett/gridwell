@@ -90,7 +90,7 @@ func (a *App) beaconTileContent(cid string, t *gridwellv1.Tile, data []byte) boo
 		editable = a.takesContent(t)
 		owner = t.Id == cid
 	}
-	version, do := textedit.DecideUnloadFlush(t != nil, editable, owner, rowVersion, basis, haveBasis)
+	version, do := textedit.DecideUnloadFlush(t != nil, editable, owner, rowVersion, basis.Version, haveBasis)
 	switch do {
 	case textedit.UnloadSkip:
 		return true // nothing may write; not a fallback case

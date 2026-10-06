@@ -115,7 +115,9 @@ its own grid — the home's `GetGrid` and `Adapter.synthesize` — carried
 verbatim in transit, where `TransitQualifyGrid` reads an older node's one
 bit for both.
 `TileChanged.content_changed` (this claimless row's bytes moved) comes from
-`pluginhost.Adapter.applyEntry` alone.
+`pluginhost.Adapter.applyEntry` alone, and `Tile.content_stamp` (the
+source's name for those bytes) from the plugin's `Entry` through
+`pluginhost.buildTiles`.
 `Grid.host_content` (these rows project host state) and
 `Grid.glyph` (the grid's identity face) come from the owning plugin's
 `Info` through `pluginhost/adapter.go`; they are what the client reads
@@ -330,12 +332,15 @@ framing back through `SetFraming` and freezes a live preview, with no claim
 and no version bump.
 A debounced settle persister does the same without waiting for an ascent.
 
-**Content.** A cache entry ({bytes, base version, dirty}, keyed by tile id)
-owns a text tile's body. Keystrokes mirror into it; every flush goes through
-`text_flush.go` by tile id, never through the DOM. A stale save 409s and
-reconciles visibly. `cache.Apply` drops events older than the cached row and
-spares a dirty body. A plugin row has no version, so its event says when its
-bytes moved (`TileChanged.content_changed`).
+**Content.** A cache entry ({bytes, base, dirty}, keyed by tile id) owns a
+text tile's body; its base (`rpc.ContentBasis`) is the version the bytes
+were read at, or for a plugin row, which has none, the source's stamp.
+Keystrokes mirror into it; every flush goes through `text_flush.go` by tile
+id, never through the DOM. A stale save 409s and reconciles visibly.
+`cache.Apply` drops events older than the cached row and spares a dirty
+body. A plugin row's stamp (`Tile.content_stamp`) says whether a body is
+behind it, and where the source names none, its event says when its bytes
+moved (`TileChanged.content_changed`).
 
 **Outbox.** `client/outbox` is the ordered record of writes the server has
 not answered: framing, captures, layout, unsaved bytes. One reconcile rule

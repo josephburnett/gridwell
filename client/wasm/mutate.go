@@ -331,5 +331,5 @@ func (a *App) enqueueTextSave(gid, tileID, cid string, rowVersion int64, data []
 // textedit.SaveClaim owns the rule.
 func (a *App) saveClaimedContent(gid, cid string, rowOwnsContent bool, rowVersion int64, data []byte) (*gridwellv1.Tile, bool) {
 	basis, haveBasis := a.c.SaveBasis(cid)
-	return a.postWriteContent(gid, cid, textedit.SaveClaim(rowOwnsContent, rowVersion, basis, haveBasis), data)
+	return a.postWriteContent(gid, cid, textedit.SaveClaim(rowOwnsContent, rowVersion, basis.Version, haveBasis), data)
 }

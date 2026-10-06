@@ -76,8 +76,8 @@ func TestReadContentResolvesLeafLinkAtServer(t *testing.T) {
 	if string(data) != "# The Source\n\nbody" {
 		t.Errorf("link content = %q, want the target's body", data)
 	}
-	if version != src.Version {
-		t.Errorf("link content version = %d, want the target's %d", version, src.Version)
+	if version.Version != src.Version {
+		t.Errorf("link content version = %d, want the target's %d", version.Version, src.Version)
 	}
 
 	// Writing through a link id is refused — a link owns no content, and

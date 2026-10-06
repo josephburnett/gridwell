@@ -100,8 +100,8 @@ func TestCreateTextRPC(t *testing.T) {
 	if string(data) != "# hi" {
 		t.Errorf("content = %q", data)
 	}
-	if version != tile.Version {
-		t.Errorf("content version = %d, want the tile row's %d", version, tile.Version)
+	if version.Version != tile.Version {
+		t.Errorf("content version = %d, want the tile row's %d", version.Version, tile.Version)
 	}
 
 	// The bytes↔version pairing is the client's save basis: after an edit
@@ -116,8 +116,8 @@ func TestCreateTextRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get tile content after edit: %v", err)
 	}
-	if string(data) != "# hi v2" || version != upd.Version {
-		t.Errorf("after edit: content = %q version = %d, want %q at version %d", data, version, "# hi v2", upd.Version)
+	if string(data) != "# hi v2" || version.Version != upd.Version {
+		t.Errorf("after edit: content = %q version = %d, want %q at version %d", data, version.Version, "# hi v2", upd.Version)
 	}
 }
 

@@ -136,7 +136,7 @@ func TestCaptureDuringAnEditDoesNotConflict(t *testing.T) {
 		t.Fatalf("content zoom: %v", err)
 	}
 
-	if _, err := cl.WriteContent(ctx, tile.Id, basis, []byte("https://the.user.typed.this")); err != nil {
+	if _, err := cl.WriteContent(ctx, tile.Id, basis.Version, []byte("https://the.user.typed.this")); err != nil {
 		t.Fatalf("the user's edit lost to a capture: %v", err)
 	}
 	after, err := cl.GetTile(ctx, tile.Id)
@@ -151,8 +151,8 @@ func TestCaptureDuringAnEditDoesNotConflict(t *testing.T) {
 		t.Errorf("the capture was lost: history=%q preview=%d", after.UrlHistory, after.PreviewBlobId)
 	}
 	// And exactly one bump happened, from the one user edit.
-	if after.Version != basis+1 {
-		t.Errorf("version %d -> %d; only the content edit may bump", basis, after.Version)
+	if after.Version != basis.Version+1 {
+		t.Errorf("version %d -> %d; only the content edit may bump", basis.Version, after.Version)
 	}
 }
 

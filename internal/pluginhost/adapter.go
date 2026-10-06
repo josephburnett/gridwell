@@ -336,6 +336,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 			// A link's content facts are its target's, read through it.
 			pt.StatusDetail = e.StatusDetail
 		case listed:
+			pt.ContentStamp = e.ContentStamp
 			pt.ServesPage = e.ServesPage
 			pt.TextPresentation = e.TextPresentation
 			pt.PreviewBlobId = faceKey(pt.PreviewBlobId, e.PreviewStamp)
@@ -902,8 +903,9 @@ func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRe
 		if rerr != nil {
 			return rerr
 		}
-		// Plugin content is not version-edited, so version 0.
-		if serr := send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType}); serr != nil {
+		// Plugin content is not version-edited, so version 0; its stamp
+		// stands in.
+		if serr := send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType, ContentStamp: chunk.ContentStamp}); serr != nil {
 			return serr
 		}
 	}
