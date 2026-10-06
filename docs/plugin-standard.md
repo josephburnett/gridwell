@@ -607,9 +607,9 @@ stand-in CLI).
 **Today.** Meets: fs; pages (`internal/server/pages_seam_test.go`, every verb
 it serves); gmail (`gmail_seam_test.go`, `gmail_watch_seam_test.go`); hey
 (`hey_seam_test.go`, `hey_verbs_seam_test.go`, `hey_watch_seam_test.go`,
-`hey_page_seam_test.go`). Partial: proc, whose `@info` body (`ReadContent`)
-no seam test reads (`internal/pluginhost/proc_parity_test.go` checks its
-presentation only); gitlab, whose `Probe` no seam test asks.
+`hey_page_seam_test.go`); proc, whose `@info` body
+`proc_content_change_seam_test.go` reads. Partial: gitlab, whose `Probe` no
+seam test asks.
 
 ## 17. The README matches the code
 
