@@ -491,7 +491,8 @@ type Entry struct {
 	// preview_stamp is a positive generation number for the entry's GetPreview
 	// picture, such as an image file's mtime in fs, so an edited image
 	// invalidates. 0 or less means no picture. The picture is the tile's face
-	// until the node holds a screenshot of the tile, which wins from then on.
+	// until the node holds a screenshot of the tile, which wins until a page you
+	// serve changes in place (EntryChanged), unless the user froze it.
 	PreviewStamp int64 `protobuf:"varint,10,opt,name=preview_stamp,json=previewStamp,proto3" json:"preview_stamp,omitempty"`
 	// link_target makes this entry a LINK to another of your entries, the one
 	// that owns the content: the node draws it dashed, reads its content, face

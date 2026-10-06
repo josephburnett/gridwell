@@ -46,6 +46,9 @@ type urlView struct {
 	// gen is main's view behind this handle, minted at place and kept by a
 	// move; see urlview.GoneEnds.
 	gen urlview.Gen
+	// reloadOwed is a page its source changed (urlview.PageMoved), loaded
+	// again once the view is on screen.
+	reloadOwed bool
 }
 
 var (
@@ -171,7 +174,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	old := from.urlView
 	from.urlView = nil
 	v := a.urlViewIn(to, old.tileID, old.owns)
-	v.navDirty, v.lastURL, v.lastTitle, v.gen = old.navDirty, old.lastURL, old.lastTitle, old.gen
+	v.navDirty, v.lastURL, v.lastTitle, v.gen, v.reloadOwed = old.navDirty, old.lastURL, old.lastTitle, old.gen, old.reloadOwed
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
 	urlConsole("move pane=%s→%s tile=%s", fromID, to.ID, v.tileID)
@@ -355,11 +358,41 @@ func (a *App) syncURLViews() {
 			a.closeURLStream(paneID, true)
 			continue
 		}
+		if v.reloadOwed {
+			v.reloadOwed = false
+			a.reloadURLView(paneID, v)
+		}
 		a.bridgeSetBounds(paneID, contentViewBounds(r))
 		// focused feeds main's focus-steal guard in webviews.ts: only the
 		// focused pane's view may take keyboard focus back after a park.
 		a.bridgeSetHidden(paneID, pane.ParkSurface(g, paneID), paneID == a.tree.Focus)
 	}
+}
+
+// owePageReload marks every live view of tileID owed a reload; syncURLViews
+// runs it for the ones on screen.
+func (a *App) owePageReload(tileID string) {
+	owed := false
+	for _, pl := range a.locals {
+		if v := pl.urlView; v != nil && v.tileID == tileID {
+			v.reloadOwed, owed = true, true
+		}
+	}
+	if owed {
+		a.draw()
+	}
+}
+
+// reloadURLView loads v's page again at the address the descent opened.
+func (a *App) reloadURLView(paneID string, v *urlView) {
+	t := a.cachedTileByID(v.tileID)
+	if t == nil {
+		return
+	}
+	addr := a.webAddress(t)
+	a.emit(traceevent.URLReload(paneID, v.tileID))
+	urlConsole("reload pane=%s tile=%s url=%s", paneID, v.tileID, addr)
+	a.bridgeReload(paneID, addr)
 }
 
 // canvasGesture mirrors this frame's gesture and overlay state for

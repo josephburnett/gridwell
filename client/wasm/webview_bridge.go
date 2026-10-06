@@ -236,6 +236,11 @@ func (a *App) bridgeGoBack(paneID string) {
 	a.bridgeVerb("goBack", map[string]any{"paneId": paneID}, nil, nil)
 }
 
+// bridgeReload loads addr in the pane's live view again.
+func (a *App) bridgeReload(paneID, addr string) {
+	a.bridgeVerb("reload", map[string]any{"paneId": paneID, "url": addr}, nil, nil)
+}
+
 // bridgeShowMenu pops the live view's context menu from the bar circle's
 // right-click. A page that hijacks contextmenu makes the in-page menu
 // unreachable, and the circle sits outside the view's rect.

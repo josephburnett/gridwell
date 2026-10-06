@@ -166,6 +166,32 @@ app.whenReady().then(async () => {
   await registry.remove('paneb');
   console.log('goBack ok: second → first, no-op at the start');
 
+  // ── reload shows the page its source changed, in the same view ──────────
+  // A served page whose plugin says it changed loads again at the address the
+  // descent opened (urlview.PageMoved); the server answers each load anew.
+  let served = 0;
+  const changing = http.createServer((_req, res) => {
+    served++;
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`<title>Thread</title><body>version ${served}</body>`);
+  });
+  await new Promise<void>((r) => changing.listen(0, '127.0.0.1', () => r()));
+  const threadUrl = `http://127.0.0.1:${(changing.address() as { port: number }).port}/content/tok/p%2F~dA/`;
+  await registry.place('paner', 'p/~dA', threadUrl, { x: 0, y: 0, width: 400, height: 300 });
+  const wcr = registry.webContentsFor('paner')!;
+  await loadFinished(wcr, 'the thread');
+  const firstBody = await wcr.executeJavaScript('document.body.textContent');
+  const reloaded = loadFinished(wcr, 'the reloaded thread');
+  registry.reload('paner', threadUrl);
+  await reloaded;
+  const reloadedBody = await wcr.executeJavaScript('document.body.textContent');
+  if (registry.webContentsFor('paner') !== wcr) fail('reload replaced the view');
+  if (firstBody === reloadedBody) fail(`reload still shows ${JSON.stringify(firstBody)}`);
+  if (wcr.getURL() !== threadUrl) fail(`reload landed at ${wcr.getURL()}, want ${threadUrl}`);
+  await registry.remove('paner');
+  changing.close();
+  console.log(`reload ok: ${JSON.stringify(firstBody)} → ${JSON.stringify(reloadedBody)} in the same view`);
+
   // ── a view placed while an overlay is open starts parked ────────────────
   // A view placed while the palette is open must land at PARK_COORD, never on
   // top of the canvas overlay for even one round trip.

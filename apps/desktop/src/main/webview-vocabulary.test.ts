@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
-// Drift lint for the bridge method vocabulary: the eleven verbs the renderer
+// Drift lint for the bridge method vocabulary: the twelve verbs the renderer
 // invokes and the twelve listeners it subscribes through. preload.ts owns the
 // names; client/wasm spells every one again as a string literal, because Go
 // reaches JavaScript by name through js.Value and the two languages share no
@@ -40,7 +40,7 @@ test('the wasm calls exactly the bridge verbs the preload exposes', () => {
   const preload = matches(read(PRELOAD), /^ {2}(\w+)\(_?args: /gm);
   const wasm = matches(wasmSource(), /bridgeVerb\("(\w+)"/g);
 
-  assert.equal(preload.length, 11, `expected 11 verbs in ${PRELOAD}, got ${JSON.stringify(preload)}`);
+  assert.equal(preload.length, 12, `expected 12 verbs in ${PRELOAD}, got ${JSON.stringify(preload)}`);
   assert.deepEqual(
     wasm,
     preload,

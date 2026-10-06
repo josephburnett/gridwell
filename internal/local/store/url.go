@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -71,6 +72,29 @@ func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) error {
 			return ErrNotURLTile
 		}
 		return n.s.setURLPreviewTx(ctx, tx, tileID, jpeg)
+	})
+}
+
+// DropURLPreview retires a plugin url row's screenshot, so the row's face is
+// its plugin's picture until the next capture; pluginhost.pageFaceStale says
+// when. A capture carries no claim, so neither does its retirement.
+func (n *Namespace) DropURLPreview(tileID int64) error {
+	return n.write("DropURLPreview", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+		var blob sql.NullInt64
+		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0 AND kind = 'url'`,
+			tileID, n.ns).Scan(&blob)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil || !blob.Valid {
+			return err
+		}
+		// The reference goes before the blob, or the foreign key trips when
+		// decBlobRefcount collects it.
+		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET preview_blob_id = NULL WHERE id = ?`, tileID); err != nil {
+			return err
+		}
+		return n.s.decBlobRefcount(ctx, tx, blob.Int64)
 	})
 }
 

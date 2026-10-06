@@ -9,6 +9,7 @@ import {
   SetZoomArgs,
   RemoveArgs,
   PaneRef,
+  ReloadArgs,
   FreezeResult,
   ViewRightdown,
   ViewTouchScroll,
@@ -88,6 +89,10 @@ export function registerWebviewIpc(
 
   ipcMain.handle(CH.goBack, (_e, a: PaneRef): void => {
     registry.goBack(a.paneId);
+  });
+
+  ipcMain.handle(CH.reload, (_e, a: ReloadArgs): void => {
+    registry.reload(a.paneId, a.url);
   });
 
   ipcMain.handle(CH.showMenu, (_e, a: PaneRef): void => {

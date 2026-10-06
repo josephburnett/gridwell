@@ -121,6 +121,39 @@ func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
 	}
 }
 
+// A screenshot a moved page retires releases its blob, and the row takes the
+// next capture as any row does.
+func TestDroppingAPluginScreenshotReleasesItsBlob(t *testing.T) {
+	st, d := openExt(t)
+	id := mintOne(t, d, pageEntry("a.html"))
+	if err := d.DropURLPreview(id); err != nil {
+		t.Fatalf("dropping no screenshot = %v, want nothing to do", err)
+	}
+	if err := d.SetURLPreview(id, []byte("shot")); err != nil {
+		t.Fatal(err)
+	}
+	var blob int64
+	if err := st.db.QueryRow(`SELECT preview_blob_id FROM tiles WHERE id = ?`, id).Scan(&blob); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.DropURLPreview(id); err != nil {
+		t.Fatal(err)
+	}
+	if blobExists(t, st, blob) {
+		t.Fatal("the dropped screenshot is still stored")
+	}
+	verifyRefcounts(t, st)
+	if err := d.SetURLPreview(id, []byte("next")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := d.Preview(id); string(got) != "next" {
+		t.Fatalf("Preview = %q after the next capture, want next", got)
+	}
+	if err := st.Namespace("other").DropURLPreview(id); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("another namespace dropped the screenshot: %v", err)
+	}
+}
+
 // A row answers a source that no longer lists it from its snapshot, so the
 // snapshot holds every fact the row presents with. A page row without its
 // serves_page would answer as a url tile with no address, which the client
