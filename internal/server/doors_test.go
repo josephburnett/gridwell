@@ -6,10 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -31,7 +29,7 @@ func TestWebDoorServesNoGRPC(t *testing.T) {
 		return ln.Addr().String()
 	}
 	info := func(addr string) error {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := dial.ClientConn(addr)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -5,7 +5,7 @@ package dial
 // The far side is the node's own connection door — server.ListenConnectionDoor
 // under server.ConnectionDoorServer — behind a listener that swallows bytes on
 // command, so nothing but gRPC keepalive can tell the client anything is wrong.
-// Both dials wear grpcDialOptions, so one transport proves the policy.
+// Both dials wear ClientConn, so one transport proves the policy.
 
 import (
 	"context"

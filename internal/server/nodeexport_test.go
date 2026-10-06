@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
 	gcodes "google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
@@ -116,8 +115,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 
-	conn, err := grpc.NewClient(ln.Addr().String(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := dial.ClientConn(ln.Addr().String())
 	if err != nil {
 		t.Fatalf("grpc dial: %v", err)
 	}

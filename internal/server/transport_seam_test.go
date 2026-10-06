@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	_ "modernc.org/sqlite"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -133,8 +131,7 @@ func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, d
 	remoteHTTP.Start()
 	t.Cleanup(remoteHTTP.Close)
 	h.farDoor = remoteHTTP
-	grpcConn, err := grpc.NewClient(strings.TrimPrefix(remoteHTTP.URL, "http://"),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	grpcConn, err := dial.ClientConn(strings.TrimPrefix(remoteHTTP.URL, "http://"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -228,16 +228,26 @@ var doorServerOwners = map[string]string{
 	"internal/namespace/roundtrip_test.go": "not a node door: a throwaway gRPC server for the namespace codec test",
 }
 
+// doorClientOwners is doorServerOwners for the dialing side: the files allowed
+// to build a gRPC client, and why.
+var doorClientOwners = map[string]string{
+	"internal/connection/dial/dial.go":     "the node's dial owner: ClientConn",
+	"internal/plugintest/plugintest.go":    "not a node door: the plugin subprocess's go-plugin client",
+	"internal/namespace/roundtrip_test.go": "not a node door: a throwaway gRPC client for the namespace codec test",
+}
+
 // No file here, test files included, builds a raw http.Server or gRPC server or
-// opens a raw unix listener outside the owners above. A harness that built its
-// own would serve a shape the node never runs, and every seam test through it
-// would cross a door that does not exist in production.
+// opens a raw unix listener outside the owners above, nor a gRPC client outside
+// doorClientOwners. A harness that built its own would serve or dial a shape
+// the node never runs, and every seam test through it would cross a door that
+// does not exist in production.
 func TestOneDoorServerOwner(t *testing.T) {
 	root := repoRoot(t)
 	// Concatenated so this file does not match its own needles.
 	httpNeedle := "&http.Server" + "{"
 	grpcNeedle := "grpc.NewServer" + "("
 	unixNeedle := "net.Listen(" + `"unix"`
+	clientNeedle := "grpc.NewClient" + "("
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -255,7 +265,9 @@ func TestOneDoorServerOwner(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if _, ok := doorServerOwners[rel]; ok {
+		_, server := doorServerOwners[rel]
+		_, client := doorClientOwners[rel]
+		if server && client {
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -266,6 +278,12 @@ func TestOneDoorServerOwner(t *testing.T) {
 		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
 		for line := 1; sc.Scan(); line++ {
 			text := sc.Text()
+			if !client && strings.Contains(text, clientNeedle) {
+				t.Errorf("%s:%d builds a raw gRPC client — the node dials a connection door with one shape (dial.ClientConn); a test that dials another can pass against a door the node cannot reach. Route through it, or exempt this file in doorClientOwners with the reason", rel, line)
+			}
+			if server {
+				continue
+			}
 			if strings.Contains(text, httpNeedle) {
 				t.Errorf("%s:%d builds a raw http.Server — a node door's server shape has one owner (server.WebDoorServer / server.ConnectionDoorServer); route through it", rel, line)
 			}

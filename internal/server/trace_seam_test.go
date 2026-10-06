@@ -11,14 +11,13 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	clienttrace "github.com/josephburnett/gridwell/client/trace"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -162,7 +161,7 @@ func TestTheConnectionDoorTracesItsRPCs(t *testing.T) {
 	go hs.Serve(ln)
 	t.Cleanup(func() { hs.Close() })
 
-	conn, err := grpc.NewClient(ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := dial.ClientConn(ln.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +209,7 @@ func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 	door := ConnectionDoorServer(srv.ConnectionHandler())
 	go door.Serve(ln)
 	t.Cleanup(func() { door.Close() })
-	conn, err := grpc.NewClient(ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := dial.ClientConn(ln.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
