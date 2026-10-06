@@ -1,13 +1,13 @@
 package sourcecache
 
 // Whole-source prefetch: the cache remembers what you touched, and this walker
-// warms what you did not, so "everything on this source is readable offline"
-// is literally true. It is a per-namespace policy (Options.Prefetch), and the
-// data is small by construction, so the walk is a full traversal and the caps
-// are emergency valves. It goes through the wrapper's own read methods, so
-// every answer lands by the one existing write path. A transport failure
-// aborts quietly and the next trigger walks again; a coded refusal skips that
-// branch, because the walker must never invent reachability the source denies.
+// warms what you did not (CLAUDE.md, 2026-10-06). It is a per-namespace policy
+// (Options.Prefetch), and the data is small by construction, so the walk is a
+// full traversal and the caps are emergency valves. It goes through the
+// wrapper's own read methods, so every answer lands by the one existing write
+// path. A transport failure aborts quietly and the next trigger walks again; a
+// coded refusal skips that branch, because the walker must never invent
+// reachability the source denies.
 
 import (
 	"context"

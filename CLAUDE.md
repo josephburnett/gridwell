@@ -139,6 +139,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.
 - Clone is an eager deep copy. COW was tried and torn out.
+- A clone of a link is another link to the same target, never a copy of the
+  target: the deep copy is of content, and a link's content is its path
+  (2026-10-06).
+- A clone whose source is dark lands as a link to it, never a refused or
+  empty copy: the copy reads the source before it creates anything, and a
+  source that does not answer gets the link a ctrl + right-drag would make
+  (`server.deepCopyTile`, 2026-10-06).
 
 **Node**
 
@@ -205,6 +212,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   life. The node holds a stream only while something shows the plugin's
   grids, so this is "nothing is done for nobody" one hop further (2026-10-02,
   `docs/plugin-standard.md` rule 8).
+- The connection cache walks a far node's whole source on every subscribe
+  and again when the connection comes back, so a far home reads while its
+  connection is down. It is the decided exception to "nothing is done for
+  nobody": the store needs the result, because offline readability means
+  everything on the far machine, not only what was visited
+  (`sourcecache.kickPrefetch`, 2026-10-06).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections

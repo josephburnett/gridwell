@@ -30,17 +30,17 @@ import (
 // What copies as what:
 //   - a solid well becomes a new well plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
-//   - an exit well or leaf link copies as a reference;
+//   - an exit well or leaf link copies as a reference (CLAUDE.md, 2026-10-06);
 //   - text and pane bytes go ReadContent to WriteContent; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
 //   - a url copies its url_string plus the frozen preview and history;
 //   - a shell copies as a link to its source, since a clone shares its
 //     source's session and a session is namespace-local;
-//   - a source that never answered degrades to a link.
+//   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
 
 // deepCopyWell reads the source child grid before anything is created, so an
-// unreachable room degrades to a link (sourceUnreachable with a nil out) rather
-// than to an empty solid well pretending to be a copy.
+// unreachable room answers with nothing created and deepCopyTile links instead
+// of leaving an empty solid well pretending to be a copy.
 func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	srcChild := srcLocalTile.ChildGridId
 	g, err := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcChild})
@@ -90,7 +90,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 
 	switch {
 	case rpc.IsWellKind(q.Kind) && q.Reference:
-		// A reference copies as a reference: the shared child, qualified.
+		// The link names the shared child, qualified.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 	case rpc.IsWellKind(q.Kind):
 		created, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
@@ -98,14 +98,11 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 		// place would stack a link on the cell it occupies, and the user
 		// would get an overlap refusal on a grid they never touched.
 		if created == nil && gwerr.IsTransport(err) {
-			// The room is dark, not gone, so degrade to a link: the dashed
-			// border already means "lives elsewhere", which beats failing the
-			// walk or leaving an empty well that lies about being a copy.
+			// Dark, not gone: a link (CLAUDE.md, 2026-10-06).
 			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 		}
 		return created, err
 	case q.LinkTargetId != "":
-		// The tile being copied is a reference, so the copy is one too.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
 	case t.Kind == rpc.KindShell:
 		// A clone shares its source's session, and a session lives on the

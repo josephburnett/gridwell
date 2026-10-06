@@ -2199,9 +2199,11 @@ type HandshakeResponse struct {
 	Connections []*ConnectionInfo `protobuf:"bytes,13,rep,name=connections,proto3" json:"connections,omitempty"`
 	// shells_disabled: this node refuses shell tiles outright, from server.yaml's
 	// disable_shells. The client removes the shell primitive from the + palette,
-	// and the server refuses CreateTile(kind=shell) and OpenShell whichever
-	// plugin would serve them. It is a node-level operator fact, so it rides the
-	// node handshake rather than any per-plugin Info.
+	// and the server refuses CreateTile(kind=shell) and OpenShell before routing,
+	// on any grid. Only a home holds shells: a plugin creates no tile at all (its
+	// CreateTile is Unimplemented) and plugin.v1 entry kinds have no shell. It is
+	// a node-level operator fact, so it rides the node handshake rather than any
+	// per-plugin Info.
 	ShellsDisabled bool `protobuf:"varint,4,opt,name=shells_disabled,json=shellsDisabled,proto3" json:"shells_disabled,omitempty"`
 	// content_token gates the HTTP /content/ door, the ServeContent carrier.
 	// Pages served there run sandboxed with an opaque origin, so neither their
@@ -2608,16 +2610,18 @@ func (x *CloneTileRequest) GetY() int64 {
 // tile.kind to the one operation that kind supports:
 //
 //	text  → text_x/text_y/text_w/text_h/text_mode  (framing)
-//	url   → url_string, alt_text (page title), preview jpeg, url_history
+//	url   → alt_text (page title), preview jpeg, url_history
 //	                                              (automatic capture)
 //	shell → preview jpeg                          (automatic capture)
 //
 // Well framing is not here: SetFraming is the one verb for both rows that
-// can own it, doorway tile and root grid alike.
+// can own it, doorway tile and root grid alike. A url's address is content
+// and rides WriteContent; a SetTile carrying url_string is refused as
+// InvalidArgument, so the address has one writer.
 //
 // Nothing this message can write is a user content edit, so no arm bumps the
 // version and no arm carries a claim, apart from rename. Empty preview,
-// url_string, and alt_text fields are skipped so a partial capture never
+// alt_text, and url_history fields are skipped so a partial capture never
 // clobbers good state.
 type SetTileRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
