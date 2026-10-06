@@ -231,12 +231,12 @@ func TestGmailProbeAnswersForTheContextAsked(t *testing.T) {
 func TestGmailSearchLandsOnTheAllMailTile(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	want := n.tile(t, n.all, "Invoice 41")
-	got, err := n.cl.Search(t.Context(), "invoice", "", 0)
+	resp, err := n.cl.Search(t.Context(), "invoice", "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].GetTile().GetId() != want.Id {
-		t.Fatalf("search invoice = %v, want all mail's %s", got, want.Id)
+	if got := resp.GetResults(); len(got) != 1 || got[0].GetTile().GetId() != want.Id {
+		t.Fatalf("search invoice = %v, want all mail's %s", resp, want.Id)
 	}
 }
 
@@ -319,7 +319,7 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 func TestGmailDeleteIsRefusedWithItsReason(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	msg := n.message(t, "Lunch plans")
-	err := n.cl.DeleteTile(t.Context(), &gridwellv1.DeleteTileRequest{TileId: msg.Id})
+	_, err := n.cl.DeleteTile(t.Context(), &gridwellv1.DeleteTileRequest{TileId: msg.Id})
 	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), "read-only projection") {
 		t.Fatalf("DeleteTile = %v, want the plugin's read-only refusal", err)
 	}

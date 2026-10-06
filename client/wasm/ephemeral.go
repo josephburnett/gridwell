@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -114,7 +113,7 @@ func (a *App) deleteEphemeralTile(gridID, tileID string) {
 	a.post(write{
 		label: "DeleteTile", gid: gridID, id: tileID,
 		source: "ephemeral", failText: "ephemeral tile cleanup failed",
-		call:   func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
+		call:   a.deleteCall(req),
 		beacon: jsonBeacon(func() (string, []byte) { return rpc.DeleteTileBeacon(req) }),
 	})
 }

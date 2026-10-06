@@ -6,7 +6,6 @@ package server
 
 import (
 	"context"
-	"log"
 	"strings"
 
 	gcodes "google.golang.org/grpc/codes"
@@ -41,10 +40,11 @@ func (s *Server) spreadInterest(union []string) {
 			shares[owner{uuid, transit}] = append(shares[owner{uuid, transit}], local)
 		}
 	}
+	// A refusal is the namespace's own news, on its stream (namespace.Namespace).
 	for _, n := range s.namespaces() {
 		_, err := n.NS.SetInterest(context.Background(), &pb.SetInterestRequest{GridIds: shares[owner{n.UUID, n.Transit}]})
-		if err != nil && status.Code(err) != gcodes.Unimplemented {
-			log.Printf("gridwell: interest for %s: %v", n.UUID, err)
+		if err != nil && !isUnimplemented(err) {
+			trace.Emit("interest", "refused", err.Error(), map[string]string{"ns": n.UUID})
 		}
 	}
 }

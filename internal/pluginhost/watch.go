@@ -318,7 +318,8 @@ func (a *Adapter) follow(ctx context.Context, scope []string, opened func() erro
 
 // SetInterest takes this plugin's share of the node's interest, grids the
 // node serves for it, as the contexts shown. A grid that no longer resolves
-// is not watched.
+// is not watched. A share it cannot take leaves the scope where it was, so
+// live updates are off for what is shown until one lands.
 func (a *Adapter) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequest) (*gridwellv1.SetInterestResponse, error) {
 	var shown []string
 	for _, gid := range req.GetGridIds() {
@@ -328,12 +329,14 @@ func (a *Adapter) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequ
 		case codes.NotFound, codes.InvalidArgument:
 			continue
 		default:
+			a.setSource(func() { a.interestOff = "what is shown could not be watched: " + err.Error() })
 			return nil, err
 		}
 		if c != "" {
 			shown = append(shown, c)
 		}
 	}
+	a.setSource(func() { a.interestOff = "" })
 	a.scopeMu.Lock()
 	defer a.scopeMu.Unlock()
 	a.shown = shown

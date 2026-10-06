@@ -264,7 +264,7 @@ func TestPagesPluginDeleteIsRefusedWithItsReason(t *testing.T) {
 	cl := pagesRPC(t, hs)
 	ctx := t.Context()
 
-	err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pagesNS + "/" + hello.Id})
+	_, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pagesNS + "/" + hello.Id})
 	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), "fixed") {
 		t.Fatalf("DeleteTile = %v, want Unimplemented saying the site is fixed", err)
 	}

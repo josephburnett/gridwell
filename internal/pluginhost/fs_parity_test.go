@@ -181,7 +181,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 		t.Fatalf("the placement renamed the entry: %q, was %q", minted.Id, bin.Id)
 	}
 	bin = minted
-	if err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "data.bin")); !os.IsNotExist(err) {
@@ -190,7 +190,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	if _, err := v2.GetTile(ctx, bin.Id); err == nil {
 		t.Fatal("a retired tile still reads")
 	}
-	if err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id}); err != nil {
 		t.Fatalf("delete must be idempotent: %v", err)
 	}
 	// Recreation mints a fresh ROW. The entry's public id is its key's address
@@ -221,7 +221,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 			doc = tile
 		}
 	}
-	if err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: doc.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: doc.Id}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "notes.md")); !os.IsNotExist(err) {

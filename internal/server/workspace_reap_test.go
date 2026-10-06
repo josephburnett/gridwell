@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -67,7 +68,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane): %v", err)
 	}
 
@@ -81,7 +82,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 	// The second delete (inside the trash) DESTROYS — and only then does
 	// the router reap what the arrangement owned.
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
@@ -104,16 +105,53 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	if _, err := cl.WriteContent(ctx, pt2.Id, pt2.Version, []byte(`{"v":999,"root":{}}`)); err != nil {
 		t.Fatalf("SetPaneLayout (future version): %v", err)
 	}
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, pt2.Id); err != nil {
 		t.Fatal(err)
 	}
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph2.Id); err != nil {
 		t.Errorf("unreadable blob must reap NOTHING (never guess), but the scratch tile is gone: %v", err)
+	}
+}
+
+// A pane tile's destroy that reaps an ephemeral shell whose session will not
+// stop says so on its answer, as a destroyed shell row's own delete does.
+func TestAReapThatLeavesASessionRunningSaysSo(t *testing.T) {
+	ctx := context.Background()
+	f := newShellDoorFixture(t, Config{ID: "lnode1"})
+	g, err := f.cl.GetGrid(ctx, f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eph, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: g.Grid.ScratchGridId,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := fmt.Sprintf(`{"v":1,"root":{"pane":{"id":"p1","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}},"focus":"p1"}`,
+		f.root, eph.Id)
+	if _, err := f.cl.WriteContent(ctx, pt.Id, pt.Version, []byte(layout)); err != nil {
+		t.Fatal(err)
+	}
+	f.fake.KillErr = fmt.Errorf("tmux: server exited unexpectedly")
+	if _, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id})
+	if err != nil {
+		t.Fatalf("destroy = %v, want it to land", err)
+	}
+	if !strings.Contains(resp.SessionLeft, "server exited unexpectedly") {
+		t.Fatalf("session_left = %q, want the reaped shell's reason", resp.SessionLeft)
 	}
 }

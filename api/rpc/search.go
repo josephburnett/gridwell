@@ -2,10 +2,13 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -38,12 +41,30 @@ func ParseSearchQuery(q string) SearchQuery {
 // Search issues one query. scope routes to the namespace owning that qualified
 // id; "" fans out across every plugin, and transit nodes recurse. limit caps
 // results per answering plugin, 0 for its default.
-func (c *Client) Search(ctx context.Context, query, scope string, limit int32) ([]*pb.SearchResult, error) {
+func (c *Client) Search(ctx context.Context, query, scope string, limit int32) (*pb.SearchResponse, error) {
 	resp, err := c.cl.Search(ctx, connect.NewRequest(&pb.SearchRequest{
 		Query: query, Scope: scope, Limit: limit,
 	}))
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg.Results, nil
+	return resp.Msg, nil
+}
+
+// SearchHop is one fan-out hop's answer as the fan-out keeps it: what the hop
+// found, or for a hop that failed, one skip naming the hop itself, an empty
+// namespace its qualifier fills in. Unimplemented is no results.
+func SearchHop(resp *pb.SearchResponse, err error) *pb.SearchResponse {
+	var reason string
+	switch {
+	case err == nil:
+		return resp
+	case status.Code(err) == codes.Unimplemented:
+		return &pb.SearchResponse{}
+	case errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.DeadlineExceeded:
+		reason = "did not answer within " + SearchHopTimeout.String()
+	default:
+		reason = status.Convert(err).Message()
+	}
+	return &pb.SearchResponse{Skipped: []*pb.SearchSkip{{Reason: reason}}}
 }

@@ -293,7 +293,7 @@ func TestProcDeleteOfAGoneProcessRetiresItsRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	reap()
-	if err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: placed.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: placed.Id}); err != nil {
 		t.Fatalf("delete of a gone process: %v", err)
 	}
 	db, err := sql.Open("sqlite", memPath)
@@ -310,7 +310,7 @@ func TestProcDeleteOfAGoneProcessRetiresItsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tileNamed(sg.Tiles, "@info").Id}); err == nil {
+	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tileNamed(sg.Tiles, "@info").Id}); err == nil {
 		t.Error("deleting @info succeeded; want a refusal")
 	}
 	pid, _ := strconv.Atoi(alive)

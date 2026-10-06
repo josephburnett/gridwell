@@ -206,9 +206,12 @@ func (c *Client) SetFrozen(ctx context.Context, tileID string, frozen bool) (*pb
 	})))
 }
 
-func (c *Client) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) error {
-	_, err := c.cl.DeleteTile(ctx, connect.NewRequest(req))
-	return err
+func (c *Client) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
+	resp, err := c.cl.DeleteTile(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
 }
 
 // EventStream wraps Connect's server-stream client. Always call Close.

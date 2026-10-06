@@ -9,6 +9,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"net"
 	"net/http"
@@ -549,4 +550,26 @@ func TestTheShellDoorTracesARefusal(t *testing.T) {
 		}
 	}
 	t.Error("a refused attach left no record")
+}
+
+// A delete the user asked for lands even when the session it ends will not
+// stop, and the answer at the door says so instead of a log line.
+func TestADeleteThatLeavesTheSessionRunningSaysSo(t *testing.T) {
+	ctx := context.Background()
+	f := newShellDoorFixture(t, Config{ID: "lnode1"})
+	sh := f.createShell(t, 0, 0)
+	f.fake.KillErr = errors.New("tmux: server exited unexpectedly")
+	if resp, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: sh.Id}); err != nil || resp.SessionLeft != "" {
+		t.Fatalf("to the trash = (%v, %v), want a clean delete: the trash keeps the session", resp, err)
+	}
+	resp, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: sh.Id})
+	if err != nil {
+		t.Fatalf("destroy = %v, want it to land", err)
+	}
+	if !strings.Contains(resp.SessionLeft, "server exited unexpectedly") {
+		t.Fatalf("session_left = %q, want the reason the session is still running", resp.SessionLeft)
+	}
+	if _, err := f.cl.GetTile(ctx, sh.Id); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("the row after the destroy: %v, want NotFound", err)
+	}
 }

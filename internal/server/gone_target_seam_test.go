@@ -125,7 +125,7 @@ func TestALinkToADestroyedHomeTileIsDead(t *testing.T) {
 	// The first delete moves the target to the trash, where links keep
 	// resolving; the second destroys it.
 	for range 2 {
-		if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: target.Id}); err != nil {
+		if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: target.Id}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := cl.GetTile(ctx, link.Id); err != nil {
@@ -133,7 +133,7 @@ func TestALinkToADestroyedHomeTileIsDead(t *testing.T) {
 		}
 	}
 	goneReads(ctx, t, cl, link, "the target was destroyed")
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: link.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: link.Id}); err != nil {
 		t.Fatalf("deleting the dead link: %v", err)
 	}
 }

@@ -90,10 +90,11 @@ func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 
 	// Search before the week was ever listed: the hit is minted through the
 	// same synthesis a GetGrid would run.
-	hits, err := cl.Search(ctx, "widget", "", 10)
+	found, err := cl.Search(ctx, "widget", "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
+	hits := found.GetResults()
 	if len(hits) != 1 {
 		t.Fatalf("hits = %v, want the one widget todo", hits)
 	}
@@ -127,9 +128,9 @@ func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 
 	// Scoped to the plugin, the same answer; an id: locate is the one
 	// selector the adapter cannot resolve yet and says so.
-	scoped, err := cl.Search(ctx, "widget", hit.Tile.Id, 10)
-	if err != nil || len(scoped) != 1 || scoped[0].Tile.Id != hit.Tile.Id {
-		t.Errorf("scoped search = %v, %v", scoped, err)
+	found, err = cl.Search(ctx, "widget", hit.Tile.Id, 10)
+	if scoped := found.GetResults(); err != nil || len(scoped) != 1 || scoped[0].Tile.Id != hit.Tile.Id {
+		t.Errorf("scoped search = %v, %v", found, err)
 	}
 	if _, err := cl.Search(ctx, "id:"+hit.Tile.Id, hit.Tile.Id, 1); err == nil {
 		t.Error("id: locate through the adapter must refuse, not answer an empty or wrong place")

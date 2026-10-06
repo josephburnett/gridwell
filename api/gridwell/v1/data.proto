@@ -418,8 +418,8 @@ message GetTileRequest {
 // merged displays.
 //
 // On the server surface, scope routes to one namespace and the plugin that owns
-// that qualified id answers; an empty scope fans out to every configured plugin
-// in config order. A transit hop forwards the query to the remote node, which
+// that qualified id answers, and an id: lookup routes on its id the same way;
+// otherwise an empty scope fans out to every configured plugin in config order. A transit hop forwards the query to the remote node, which
 // fans out again, so an unscoped search recurses through every connected node
 // and results come back qualified like every other id.
 message SearchRequest {
@@ -439,6 +439,16 @@ message SearchResult {
 }
 message SearchResponse {
   repeated SearchResult results = 1;
+  // skipped is every namespace a fan-out asked and did not hear from, so a
+  // shorter list never passes for a whole one. Unimplemented is no results,
+  // not a skip.
+  repeated SearchSkip skipped = 2;
+}
+// SearchSkip names one namespace a fan-out went without, qualified like a
+// health event's plugin_uuid, and why.
+message SearchSkip {
+  string namespace = 1;
+  string reason    = 2;
 }
 
 // Handshake enumerates the plugins a node hosts, in config order. The client
@@ -643,7 +653,13 @@ message DeleteTileRequest {
   string tile_id = 2;
   reserved 3; // version
 }
-message DeleteTileResponse {}
+// DeleteTileResponse answers a delete that landed. session_left is why a shell
+// session the destroy should have ended is still running, the row's own or an
+// ephemeral's its pane tile's layout owned; empty when none was left. The next
+// start's orphan sweep is its net.
+message DeleteTileResponse {
+  string session_left = 1;
+}
 
 // SetFramingRequest is the one framing verb: how a grid looked when the user
 // left it through a given doorway. cx and cy are a float center in the grid's

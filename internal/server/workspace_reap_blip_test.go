@@ -90,7 +90,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 
 	_, paneLocal, _ := rpc.SplitID(pt.Id)
 	bc.armID = paneLocal
-	if err := cl.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: pt.Id}); err != nil {
 		t.Fatalf("DeleteTile: %v", err)
 	}
 	bc.blip.Store(false)

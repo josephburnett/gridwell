@@ -46,7 +46,7 @@ func destroyPane(t *testing.T, cl *rpc.Client, tileID string) {
 	t.Helper()
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
-		if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tileID}); err != nil {
+		if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tileID}); err != nil {
 			t.Fatalf("DeleteTile(pane) %d: %v", i+1, err)
 		}
 	}

@@ -1,9 +1,12 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"log"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -256,16 +259,18 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// Search routes a scope to its owner; an empty scope fans out to every
-// namespace, each bounded by rpc.SearchHopTimeout with errors skipped.
+// Search routes a scope to its owner, and an id: lookup is its own scope; free
+// text with no scope fans out to every namespace, each bounded by
+// rpc.SearchHopTimeout, and names each it went without (rpc.SearchHop).
 func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
 	m := req
-	if m.Scope != "" {
-		c, _, uuid, transit, err := rt.route(m.Scope)
+	scope := cmp.Or(m.Scope, rpc.ParseSearchQuery(m.Query).ID)
+	if scope != "" {
+		c, _, uuid, transit, err := rt.route(scope)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.Search(ctx, &pb.SearchRequest{Query: rt.hop(m.Scope, transit).PeelSearchQuery(m.Query), Limit: m.Limit})
+		resp, err := c.Search(ctx, &pb.SearchRequest{Query: rt.hop(scope, transit).PeelSearchQuery(m.Query), Limit: m.Limit})
 		if err != nil {
 			return nil, err
 		}
@@ -278,16 +283,15 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		hop := rpc.Hop{Seg: n.UUID, Via: n.UUID, Transit: n.Transit}
 		resp, err := n.NS.Search(pctx, &pb.SearchRequest{Query: hop.PeelSearchQuery(m.Query), Limit: m.Limit})
 		cancel()
-		if err != nil {
-			continue // Unimplemented, a timeout, a dead plugin: no answer here
-		}
-		out.Results = append(out.Results, qualifySearch(n.Transit, n.UUID, resp).Results...)
+		q := qualifySearch(n.Transit, n.UUID, rpc.SearchHop(resp, err))
+		out.Results = append(out.Results, q.Results...)
+		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
 func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.SearchResponse {
-	return rpc.QualifySearchResponse(resp, func(ts []*pb.Tile) []*pb.Tile {
+	return rpc.QualifySearchResponse(uuid, resp, func(ts []*pb.Tile) []*pb.Tile {
 		return qualifyTilesFor(transit, uuid, ts)
 	})
 }
@@ -446,17 +450,19 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		candidates = rt.workspaceEphemeralCandidates(ctx, c, local, qualifiedID)
 	}
 	m.TileId = local
-	if _, err := c.DeleteTile(ctx, m); err != nil {
+	resp, err := c.DeleteTile(ctx, m)
+	if err != nil {
 		return nil, err
 	}
 	if len(candidates) > 0 {
 		// Reap only on an explicit NotFound: a missed reap is reclaimed by the
 		// boot sweep, a wrong one by nothing.
 		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); status.Code(err) == gcodes.NotFound {
-			rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)
+			left := append([]string{resp.GetSessionLeft()}, rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)...)
+			resp = &pb.DeleteTileResponse{SessionLeft: strings.Join(slices.DeleteFunc(left, func(s string) bool { return s == "" }), "; ")}
 		}
 	}
-	return &pb.DeleteTileResponse{}, nil
+	return resp, nil
 }
 
 // workspaceEphemeralCandidates reads a pane tile's layout blob for leaf ids
@@ -482,8 +488,9 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 }
 
 // reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed pane
-// tile's captured leaves, best-effort: it must not block the user's delete.
-func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) {
+// tile's captured leaves, best-effort: it must not block the user's delete. It
+// answers why each shell session it should have ended is still running.
+func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) (left []string) {
 	for _, id := range candidates {
 		ec, elocal, euuid, transit, err := rt.route(id)
 		if err != nil {
@@ -508,10 +515,17 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 		if err != nil || et.GetTile() == nil || et.GetTile().GridId != info.ScratchGridId {
 			continue // not an ephemeral: viewed content, never touched
 		}
-		if _, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal}); err != nil {
+		dr, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal})
+		switch {
+		case err != nil && et.GetTile().Kind == rpc.KindShell:
+			left = append(left, "the shell "+id+" was not removed: "+status.Convert(err).Message())
+		case err != nil:
 			log.Printf("gridwell: delete %s: reaping ephemeral %s failed: %v", qualifiedID, id, err)
+		default:
+			left = append(left, dr.GetSessionLeft())
 		}
 	}
+	return left
 }
 
 // SetFraming is the one framing write. Unimplemented (a plugin that keeps no
