@@ -21,6 +21,7 @@ import (
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -396,5 +397,76 @@ func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
 	}
 	if body, _, _, err := cl.ReadContent(ctx, link.Id); err != nil || string(body) != "card of t1, read" {
 		t.Fatalf("the read after the announcement = %q, %v; want the new card", body, err)
+	}
+}
+
+// A thread whose card changed in place, its listing as it was, is told as
+// EntryChanged, and the body a client holds through the box's link ages: the
+// link reads its target's bytes (rpc.ContentID), so the target's TileChanged
+// is news to the link too. Its next read is the new card.
+func TestATargetsNewBytesReachTheBodyALinkShows(t *testing.T) {
+	src := newMailSource()
+	cl, _, _ := linkStack(t, src)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	link := boxLink(t, cl)
+	c := cache.New()
+	g, err := cl.GetGrid(ctx, boxGrid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.PutGrid(g.Grid, g.Tiles)
+	cid := rpc.ContentID(link)
+	asked := c.AskContent(cid)
+	body, _, version, err := cl.ReadContent(ctx, cid)
+	if err != nil || string(body) != "card of t1" {
+		t.Fatalf("first read = %q, %v", body, err)
+	}
+	c.PutFetchedContent(cid, body, version, asked)
+
+	events := make(chan *gridwellv1.Event, 64)
+	go func() {
+		es, err := cl.Subscribe(ctx)
+		if err != nil {
+			return
+		}
+		defer es.Close()
+		for {
+			ev, ok, err := es.Recv()
+			if err != nil || !ok {
+				return
+			}
+			events <- ev
+		}
+	}()
+	if err := cl.SetInterest(ctx, []string{boxGrid()}); err != nil {
+		t.Fatal(err)
+	}
+	for watched := false; !watched; {
+		select {
+		case scope := <-src.watches:
+			watched = slices.Contains(scope, "everything")
+		case <-ctx.Done():
+			t.Fatal("the Watch scope never named the context the box links into")
+		}
+	}
+	time.Sleep(namespace.SettleTime)
+
+	src.set(func(m *mailSource) { m.card = "card of t1, read" })
+	src.changes <- &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{
+		Context: "everything", Entry: &pluginv1.Entry{Key: "t1", Kind: rpc.KindText, Label: "Lunch"}}}}
+	for {
+		if _, held := c.TileContent(cid); !held {
+			break
+		}
+		select {
+		case ev := <-events:
+			c.Apply(ev)
+		case <-ctx.Done():
+			t.Fatal("the link's body still holds the old card: nothing told it the target's bytes moved")
+		}
+	}
+	if body, _, _, err := cl.ReadContent(ctx, cid); err != nil || string(body) != "card of t1, read" {
+		t.Fatalf("the read after the change = %q, %v; want the new card", body, err)
 	}
 }

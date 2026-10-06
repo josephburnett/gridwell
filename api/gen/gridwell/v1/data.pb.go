@@ -3315,10 +3315,17 @@ func (x *GridFramingChanged) GetViewZoom() float64 {
 }
 
 type TileChanged struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Tile  *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"`
+	// content_changed: the bytes behind this row changed though nothing on the
+	// row says so. A row with no claim (a plugin's: version 0, no blob) has no
+	// fact that orders its bytes, so the event is the change, and a client drops
+	// a clean body it holds for the row. Set only by the node that learned it
+	// from its source; a framing or capture write on the same row leaves it
+	// unset, and a versioned row never needs it.
+	ContentChanged bool `protobuf:"varint,2,opt,name=content_changed,json=contentChanged,proto3" json:"content_changed,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TileChanged) Reset() {
@@ -3356,6 +3363,13 @@ func (x *TileChanged) GetTile() *Tile {
 		return x.Tile
 	}
 	return nil
+}
+
+func (x *TileChanged) GetContentChanged() bool {
+	if x != nil {
+		return x.ContentChanged
+	}
+	return false
 }
 
 type TileRemoved struct {
@@ -3858,9 +3872,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\agrid_id\x18\x01 \x01(\tR\x06gridId\x12\x17\n" +
 	"\aview_cx\x18\x02 \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\x03 \x01(\x01R\x06viewCy\x12\x1b\n" +
-	"\tview_zoom\x18\x04 \x01(\x01R\bviewZoom\"4\n" +
+	"\tview_zoom\x18\x04 \x01(\x01R\bviewZoom\"]\n" +
 	"\vTileChanged\x12%\n" +
-	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"?\n" +
+	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\x12'\n" +
+	"\x0fcontent_changed\x18\x02 \x01(\bR\x0econtentChanged\"?\n" +
 	"\vTileRemoved\x12\x17\n" +
 	"\agrid_id\x18\x01 \x01(\tR\x06gridId\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\"\x90\x01\n" +

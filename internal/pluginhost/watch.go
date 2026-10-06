@@ -1,10 +1,11 @@
 package pluginhost
 
 // The plugin's Watch stream is how a source that changes on its own reaches a
-// grid open on screen: each Change becomes the event a write through this
-// adapter would have published, so a client reacts to it exactly as to one.
-// Its scope is the contexts some client shows (SetInterest) and the contexts
-// their link entries point into (noteLinks).
+// grid open on screen: a moved listing becomes the GridChanged a write through
+// this adapter would have published, and an entry changed in place the
+// TileChanged that carries its bytes' news. Its scope is the contexts some
+// client shows (SetInterest) and the contexts their link entries point into
+// (noteLinks).
 
 import (
 	"context"
@@ -422,19 +423,83 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 	return slices.Clone(a.scope), a.moved
 }
 
-// applyChange announces a context whose listing moved (announceMoved). A
-// removal is announced as DeleteTile announces one: the refetch it causes runs
-// the listing's own sweep, so the row retires by the one path that retires
-// rows.
+// applyChange announces a context whose listing moved (announceMoved) and an
+// entry changed in place (applyEntry). A removal is announced as DeleteTile
+// announces one: the refetch it causes runs the listing's own sweep, so the
+// row retires by the one path that retires rows.
 func (a *Adapter) applyChange(ctx context.Context, ch *pluginv1.Change) {
-	var c string
 	switch p := ch.GetPayload().(type) {
 	case *pluginv1.Change_ContextChanged:
-		c = p.ContextChanged.GetContext()
+		a.announceMoved(ctx, p.ContextChanged.GetContext())
+	case *pluginv1.Change_EntryChanged:
+		a.applyEntry(ctx, p.EntryChanged.GetContext(), p.EntryChanged.GetEntry())
 	case *pluginv1.Change_EntryRemoved:
-		c = p.EntryRemoved.GetContext()
-	default:
+		// The one reading of the retired arm: a ContextChanged for its context.
+		a.announceMoved(ctx, p.EntryRemoved.GetContext())
+	}
+}
+
+// applyEntry tells every client that one entry changed in place: its row as
+// GetGrid serves it, flagged content_changed, because a plugin row carries no
+// version that could say its bytes moved. An entry the node will not accept
+// or cannot find is the listing's to answer, so it is a ContextChanged.
+func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.Entry) {
+	t, err := a.entryTile(ctx, context, e)
+	if ctx.Err() != nil {
 		return
 	}
-	a.announceMoved(ctx, c)
+	if err != nil || t == nil {
+		a.announceMoved(ctx, context)
+		return
+	}
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: t, ContentChanged: true},
+	}})
+}
+
+// entryTile is e's wire tile in context, nil when the context holds none. A
+// row keeps its own placement, so e alone builds it and refreshes its
+// snapshot as a listing would; an untouched entry's placement flows from the
+// whole listing (store.Namespace.Overlay), so the context is listed.
+func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Entry) (*gridwellv1.Tile, error) {
+	if e == nil {
+		return nil, nil
+	}
+	entries := []*pluginv1.Entry{e}
+	if err := acceptEntries(context, entries); err != nil {
+		return nil, err
+	}
+	gid, _, err := a.mem.LookupContext(context)
+	if err != nil {
+		return nil, err
+	}
+	_, minted, err := a.mem.LiveTileID(gid, e.Key)
+	if err != nil {
+		return nil, err
+	}
+	if !minted {
+		s, err := a.synthesize(ctx, rpc.EntryGridID(context))
+		if err != nil {
+			return nil, err
+		}
+		return s.tileForKey(e.Key), nil
+	}
+	if err := a.mem.Refresh(gid, entries); err != nil {
+		return nil, err
+	}
+	rows, err := a.mem.Overlay(gid, entries)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		if r.Key != e.Key {
+			continue
+		}
+		tiles, err := buildTiles(rpc.EntryGridID(context), context, []store.ExtTile{r}, entries, a.mem.ContextKey)
+		if err != nil {
+			return nil, err
+		}
+		return tiles[0], nil
+	}
+	return nil, nil
 }

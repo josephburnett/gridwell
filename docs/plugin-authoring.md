@@ -166,21 +166,27 @@ Once a stream is open the node lists each context it adds, the whole scope
 after a drop, and tells the clients to list again any whose answer moved,
 because a change sent into no stream reaches nobody. So a scope change costs
 you one `List` per added context.
-Send a change when a listing you would give now differs from the last one
-you could have given:
+Send a change when what you would answer now differs from what you last
+could have:
 
 - `ContextChanged{context}`: that context's `List` would answer
-  differently — an entry arrived, moved, or changed its label, status or
-  stamp.
-- `EntryRemoved{context, key}`: the entry left that context. The node
-  treats it as `ContextChanged` for the context; the listing that follows
-  retires the key by the usual rule, so list honestly.
+  differently — an entry arrived, left, moved, or changed its label, status
+  or stamp. The node lists the context and tells the clients showing it only
+  if the answer moved, so a `ContextChanged` that moves nothing costs you one
+  `List` and the user nothing; the listing that follows retires a gone key by
+  the usual rule, so list honestly.
+- `EntryChanged{context, entry}`: one entry's content changed in place — a
+  file's bytes written, a picture redrawn — with the entry re-read, exactly
+  as `List` would answer it now. A plugin row carries no version, so this is
+  the only way new bytes reach a body a client already holds: the node tells
+  every client showing the entry, and each reads the body again. Send it for
+  the entry that owns the content; a link to it reads through it.
+- `EntryRemoved` is retired: send `ContextChanged`. The node still reads it
+  as one, for a binary built before.
 
-A change is a hint, not data: the node publishes it to the clients showing
-that context, and they list again. Send one when something changed, never
-one per poll, and collapse a burst into one per context. A change nobody is
-looking at costs no listing, and naming a context the node has never listed
-is harmless.
+Send one when something changed, never one per poll, and collapse a burst
+into one per context and one per entry. A change nobody is looking at costs
+no listing, and naming a context the node has never listed is harmless.
 
 `InfoResponse.watch` is the declaration. Leave it unset and the node never
 asks, which is healthy. Set it and answer Unimplemented and the node tells

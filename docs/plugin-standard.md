@@ -353,7 +353,10 @@ for {
 ```
 
 The burst is collapsed by `watcher.touch` (one announcement per directory per
-`DebounceWindow`), and a full queue raises `lost`.
+`DebounceWindow`), and a full queue raises `lost`. On the `plugin-content`
+branch the queue is a set of what each stream is owed, so a stream that falls
+behind owes each change once and loses none, and an OS overflow owes the
+whole scope (rule 18).
 
 **Test.** `fs/plugin/watch_test.go:TestWatchAnnouncesABurstOnceForItsDirectory`
 and `TestWatchOverflowAnnouncesTheWholeScope`; `memo/changes_test.go:TestChangesFanOut`
@@ -628,11 +631,45 @@ not for a cold one (rule 3); hey says everything is laid out "a row per day,
 newest at the top" (`hey/README.md:210-211`), while its hint is
 `calendar.Cell`: a column per day, newest to the right, a row per hour.
 
+## 18. Say which entry changed
+
+**Rule.** When an entry's content changes in place, its bytes or its
+picture, send `EntryChanged` with the entry re-read exactly as `List` would
+answer it; send `ContextChanged` only when the listing may have moved. Never
+send `EntryRemoved`, which is retired.
+
+**Why.** "An open grid shows what its source knows" (CLAUDE.md, promises). A
+plugin row carries no version, so nothing on a listing says a body moved, and
+a client holding the old body keeps it: the node checks a `ContextChanged`
+against what it served and, the listing unchanged, tells no one. The
+`EntryChanged` is the only news a body has moved (`docs/freshness.md`, layer
+6), and it costs the node no listing for an entry with a row.
+
+**Example.** `fs/plugin/watch.go` (`plugin-content` branch): a write, or a
+file created over its name as an editor's save does, owes the file's entry;
+a name that came, went or moved owes the directory's listing. At the
+window's close the stream is sent every listing, then each file re-read
+through `entryOf`, the one function `List` answers with.
+
+**Test.** `fs/plugin/watch_test.go:TestWatchTellsAWrittenFileItsEntry` (the
+entry equals `List`'s, and the directory is not announced) and
+`TestWatchTellsAFileSavedByRenameItsEntry`; across the seam
+`internal/server/fs_content_change_seam_test.go` (an open file, a text face
+and an image face show the new bytes) and
+`link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`.
+
+**Today.** Meets: fs (`plugin-content` branch, api v0.6.0). N/A: pages,
+whose site is its own code. Partial: proc, gitlab, gmail and hey send
+`ContextChanged` alone, so a body of theirs that changes in place (proc's
+`@info`, a hey thread's card) reaches an open view only when it is next read
+from scratch.
+
 ## Checklist
 
 Tick each before you ship. At `729ba73` the shipped plugins tick every box
 but four: 3 (gitlab, gmail), 14 (gmail), 16 (proc, gitlab) and 17 (gitlab,
-hey). The rules' Today lines say what remains.
+hey); rule 18, added later, is met by fs alone. The rules' Today lines say
+what remains.
 
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
 - [ ] 2. `Info` refuses a config it cannot serve with a sentence, and latches.
@@ -651,3 +688,4 @@ hey). The rules' Today lines say what remains.
 - [ ] 15. Cache file, flights and fan-out come from the shared package.
 - [ ] 16. A real-binary seam test per verb, and one for `Watch` if declared.
 - [ ] 17. The README matches the code.
+- [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `ContextChanged` only for a listing that may have moved.

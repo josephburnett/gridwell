@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
@@ -523,11 +524,13 @@ type listingPlugin struct {
 	files  map[string][]string
 	labels map[string]string
 	down   map[string]bool
+	lists  int
 }
 
 func (p *listingPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.lists++
 	if p.down[req.Context] {
 		return nil, status.Error(codes.Unavailable, "the source is unreachable")
 	}
@@ -715,5 +718,96 @@ func TestWatchContextChangedAnnouncesOnlyAMovedListing(t *testing.T) {
 	poke <- "all"
 	if got, want := announced(), map[string]int{rpc.EntryGridID("all"): 1}; !maps.Equal(got, want) {
 		t.Errorf("a moved listing told twice announced %v, want %v", got, want)
+	}
+}
+
+// An EntryChanged reaches clients as the entry's TileChanged, flagged
+// content_changed because a plugin row has no version that could say its
+// bytes moved, and never as a GridChanged: the listing did not move. A row
+// keeps its own placement and is built from the entry alone, with no List;
+// an untouched entry sits where the listing flows it, so the context is
+// listed. An entry the node will not accept says nothing of its own.
+func TestWatchEntryChangedIsTheEntrysTileChanged(t *testing.T) {
+	poke := make(chan *pluginv1.Change)
+	p := newListingPlugin(map[string][]string{"all": {"a", "b"}},
+		func(_ int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+			for {
+				select {
+				case ch := <-poke:
+					if err := send(ch); err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return nil
+				}
+			}
+		})
+	a, seen := watchingNothing(t, p, nil)
+	read(t, a, "all")
+	show(t, a, "all")
+	if got := awaitAnnounced(t, p, seen, "all"); len(got) != 0 {
+		t.Fatalf("the open announced %v, want nothing", got)
+	}
+	if _, err := a.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{
+		TileId: rpc.EntryTileID("all", "a"), X: 7, Y: 3, W: 1, H: 1}); err != nil {
+		t.Fatal(err)
+	}
+	collect(seen)
+	served, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID("all")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tileOf := func(key string) *gridwellv1.Tile {
+		for _, n := range served.Tiles {
+			if n.Id == rpc.EntryTileID("all", key) {
+				return n
+			}
+		}
+		t.Fatalf("GetGrid served no %q", key)
+		return nil
+	}
+	told := func(key string) *gridwellv1.TileChanged {
+		t.Helper()
+		var got *gridwellv1.TileChanged
+		for _, ev := range collect(seen) {
+			if ev.GetGridChanged() != nil {
+				t.Errorf("an entry changed in place announced %v", ev)
+			}
+			if tc := ev.GetTileChanged(); tc != nil {
+				got = tc
+			}
+		}
+		if got == nil {
+			t.Fatalf("the change to %q told no TileChanged", key)
+		}
+		return got
+	}
+	entry := func(key string) *pluginv1.Change {
+		return &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{
+			Context: "all", Entry: &pluginv1.Entry{Key: key, Kind: "text", Label: key}}}}
+	}
+
+	p.edit(func() { p.lists = 0 })
+	poke <- entry("a")
+	tc := told("a")
+	if !tc.ContentChanged || !proto.Equal(tc.Tile, tileOf("a")) {
+		t.Errorf("a row's change told %v (content_changed %v), want the row GetGrid serves %v", tc.Tile, tc.ContentChanged, tileOf("a"))
+	}
+	p.edit(func() {
+		if p.lists != 0 {
+			t.Errorf("a row's change listed its context %d times, want none", p.lists)
+		}
+	})
+
+	poke <- entry("b")
+	if tc := told("b"); !tc.ContentChanged || !proto.Equal(tc.Tile, tileOf("b")) {
+		t.Errorf("an untouched entry's change told %v, want the tile GetGrid serves %v", tc.Tile, tileOf("b"))
+	}
+
+	poke <- &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{
+		Context: "all", Entry: &pluginv1.Entry{Key: "a", Kind: "text", Label: "a", ServesPage: true}}}}
+	time.Sleep(300 * time.Millisecond)
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("an entry the node refuses, in an unmoved listing, told %v", evs)
 	}
 }

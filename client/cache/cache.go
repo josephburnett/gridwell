@@ -55,13 +55,15 @@ func (b BlobBasis) differs(blob int64) bool {
 
 // behind reports that row n names bytes the entry does not hold. Version
 // orders content edits; a pane layout mints a blob without a bump, so within
-// one version the blob decides. Dirty bytes are never behind: their save
-// reconciles them.
-func (e *contentEntry) behind(n *gridwellv1.Tile) bool {
+// one version the blob decides; and a row with no claim has no fact that
+// orders its bytes, so told, the event saying they changed
+// (TileChanged.content_changed), is the change. Dirty bytes are never behind:
+// their save reconciles them.
+func (e *contentEntry) behind(n *gridwellv1.Tile, told bool) bool {
 	switch {
 	case e.dirty || n.Version < e.base:
 		return false
-	case n.Version > e.base:
+	case n.Version > e.base || told:
 		return true
 	}
 	return e.blob.differs(n.BlobId)
@@ -208,7 +210,7 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	defer c.mu.Unlock()
 	gr := &Grid{Meta: g, Tiles: map[string]*gridwellv1.Tile{}}
 	for _, n := range tiles {
-		c.ageContentLocked(n)
+		c.ageContentLocked(n, false)
 		c.evictElsewhereLocked(n.Id, g.Id)
 		gr.Tiles[n.Id] = n
 	}
@@ -227,10 +229,11 @@ func (c *Cache) evictElsewhereLocked(tileID, home string) {
 	}
 }
 
-// ageContentLocked drops a clean body row n has moved past, whether or not
-// its grid is cached. Callers hold c.mu.
-func (c *Cache) ageContentLocked(n *gridwellv1.Tile) {
-	if e, ok := c.content[n.Id]; ok && e.behind(n) {
+// ageContentLocked drops a clean body row n has moved past, or that an event
+// told has changed (see contentEntry.behind), whether or not its grid is
+// cached. Callers hold c.mu.
+func (c *Cache) ageContentLocked(n *gridwellv1.Tile, told bool) {
+	if e, ok := c.content[n.Id]; ok && e.behind(n, told) {
 		delete(c.content, n.Id)
 	}
 }
@@ -328,13 +331,13 @@ func (c *Cache) KnownGridIDs() []string { return c.ResyncSet(EverySource) }
 
 // putTileLocked is the one door into a grid's tile map. A row strictly older
 // than the cached one is refused; a same-version row applies, because framing
-// never bumps version. Callers hold c.mu.
-func (c *Cache) putTileLocked(g *Grid, n *gridwellv1.Tile) bool {
+// never bumps version. told is ageContentLocked's. Callers hold c.mu.
+func (c *Cache) putTileLocked(g *Grid, n *gridwellv1.Tile, told bool) bool {
 	cur, exists := g.Tiles[n.Id]
 	if exists && n.Version < cur.Version {
 		return false
 	}
-	c.ageContentLocked(n)
+	c.ageContentLocked(n, told)
 	c.evictElsewhereLocked(n.Id, g.Meta.GetId())
 	g.Tiles[n.Id] = n
 	return true
@@ -347,7 +350,7 @@ func (c *Cache) UpdateTile(gridID string, t *gridwellv1.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if g, ok := c.cachedRowLocked(gridID, t); ok {
-		c.putTileLocked(g, t)
+		c.putTileLocked(g, t, false)
 	}
 }
 
@@ -359,7 +362,7 @@ func (c *Cache) cachedRowLocked(gridID string, t *gridwellv1.Tile) (*Grid, bool)
 			return g, true
 		}
 	}
-	c.ageContentLocked(t)
+	c.ageContentLocked(t, false)
 	return nil, false
 }
 
@@ -416,7 +419,7 @@ func (c *Cache) PutWriteResponse(gridID string, resp *gridwellv1.Tile, w Wrote) 
 		n.Version = resp.Version
 	}
 	w.copy(n, resp)
-	c.putTileLocked(g, n)
+	c.putTileLocked(g, n, false)
 }
 
 // PatchTile folds an optimistic local change to one row in through the event
@@ -442,13 +445,14 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		if n == nil {
 			return false
 		}
+		told := p.TileChanged.GetContentChanged()
 		g, ok := c.grids[n.GridId]
 		if !ok {
-			c.ageContentLocked(n)
+			c.ageContentLocked(n, told)
 			c.evictElsewhereLocked(n.Id, n.GridId)
 			return false
 		}
-		return c.putTileLocked(g, n)
+		return c.putTileLocked(g, n, told)
 	case *gridwellv1.Event_TileRemoved:
 		r := p.TileRemoved
 		if r == nil {

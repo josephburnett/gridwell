@@ -34,6 +34,11 @@ func EventKey(ev *pb.Event) string {
 	case *pb.Event_GridFramingChanged:
 		return "f/" + p.GridFramingChanged.GetGridId()
 	case *pb.Event_TileChanged:
+		// A content change is keyed apart, so a framing event on the same row
+		// behind it cannot replace the news that its bytes moved.
+		if p.TileChanged.GetContentChanged() {
+			return "c/" + p.TileChanged.GetTile().GetId()
+		}
 		return "t/" + p.TileChanged.GetTile().GetId()
 	case *pb.Event_TileRemoved:
 		// Keyed apart from TileChanged, and by grid: a cross-grid move emits
