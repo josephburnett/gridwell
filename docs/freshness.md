@@ -52,7 +52,10 @@ screen refetches what moved and a directory whose files are written but whose
 names stay announces nothing. An `EntryChanged` is the entry's own
 `TileChanged`, its row as `GetGrid` serves it, flagged `content_changed`
 (`Adapter.applyEntry`): the listing did not move, and a plugin row has no
-version to say its bytes did. A coded refusal is not darkness: the listings
+version to say its bytes did. A page the plugin serves that changed this way
+is not the page its screenshot shows, so the row gives the screenshot up and
+its face is the plugin's picture until the next capture, unless the user
+froze it (`pageFaceStale`). A coded refusal is not darkness: the listings
 still answer, so it rides a healthy `EventPluginHealth` as
 `live_updates_off` (`Adapter.noteWatch`), told once and cleared when a
 re-opened stream is open. A share of interest the adapter cannot take leaves

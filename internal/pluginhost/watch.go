@@ -467,8 +467,9 @@ func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.En
 
 // entryTile is e's wire tile in context, nil when the context holds none. A
 // row keeps its own placement, so e alone builds it and refreshes its
-// snapshot as a listing would; an untouched entry's placement flows from the
-// whole listing (store.Namespace.Overlay), so the context is listed.
+// snapshot as a listing would, and retires a screenshot the change left behind
+// (pageFaceStale); an untouched entry's placement flows from the whole listing
+// (store.Namespace.Overlay), so the context is listed.
 func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Entry) (*gridwellv1.Tile, error) {
 	if e == nil {
 		return nil, nil
@@ -502,6 +503,12 @@ func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Ent
 	for _, r := range rows {
 		if r.Key != e.Key {
 			continue
+		}
+		if pageFaceStale(e, r.Tile) {
+			if err := a.mem.DropURLPreview(r.ID); err != nil {
+				return nil, err
+			}
+			r.PreviewBlobId = 0
 		}
 		tiles, err := buildTiles(rpc.EntryGridID(context), context, []store.ExtTile{r}, entries, a.mem.ContextKey)
 		if err != nil {

@@ -363,6 +363,14 @@ func faceKey(blobID, stamp int64) int64 {
 	return 0
 }
 
+// pageFaceStale reports that row's screenshot no longer pictures entry e,
+// whose source just said its bytes moved: the page is the plugin's, so the
+// screenshot is of a page that is gone. The freeze gesture's screenshot is the
+// user's and stays, and a link has no face of its own.
+func pageFaceStale(e *pluginv1.Entry, row *gridwellv1.Tile) bool {
+	return e.ServesPage && e.LinkTarget == nil && row.PreviewBlobId != 0 && !row.UrlFrozen
+}
+
 // synthesized is one grid as the adapter derives it; rows[i] matches tiles[i].
 type synthesized struct {
 	grid    *gridwellv1.Grid
