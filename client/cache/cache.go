@@ -25,6 +25,7 @@ type Cache struct {
 	// content is the one body store, keyed by tile id because blob ids are
 	// not routable and editing one clone must leave a sibling alone.
 	content map[string]*contentEntry
+	stamps  uint64
 }
 
 // contentEntry is a body, the row version and blob it derives from, and
@@ -35,6 +36,8 @@ type contentEntry struct {
 	base  int64
 	blob  BlobBasis
 	dirty bool
+	// stamp names the bytes the server last gave; see ContentStamp.
+	stamp uint64
 }
 
 // BlobBasis is the blob id a body is filed under: for a fetch, the row's blob
@@ -109,7 +112,25 @@ func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64, asked 
 	if n := c.rowLocked(tileID); n != nil && asked.differs(n.BlobId) {
 		return
 	}
-	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, blob: asked}
+	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, blob: asked, stamp: c.nextStampLocked()}
+}
+
+func (c *Cache) nextStampLocked() uint64 {
+	c.stamps++
+	return c.stamps
+}
+
+// ContentStamp names the body cached for a tile as the server last gave it, 0
+// when none is: what a picture or a wrap of the body is keyed by, since a
+// plugin row's version never moves when its bytes do. An unsaved edit keeps
+// the stamp, as it keeps the version.
+func (c *Cache) ContentStamp(tileID string) uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.content[tileID]; ok {
+		return e.stamp
+	}
+	return 0
 }
 
 // PutEditedContent stores an optimistic, not-yet-saved edit, keeping the
@@ -120,7 +141,7 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 	defer c.mu.Unlock()
 	e := c.content[tileID]
 	if e == nil {
-		e = &contentEntry{}
+		e = &contentEntry{stamp: c.nextStampLocked()}
 		c.content[tileID] = e
 	}
 	e.data = cloneBytes(data)
@@ -138,7 +159,7 @@ func (c *Cache) PutSavedContent(row *gridwellv1.Tile, data []byte) {
 		e.base, e.blob = row.Version, blob
 		return
 	}
-	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: row.Version, blob: blob}
+	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: row.Version, blob: blob, stamp: c.nextStampLocked()}
 }
 
 // SaveBasis returns the version a content write must claim. Only fetches and

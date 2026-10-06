@@ -47,8 +47,8 @@ func svgOK(s string) func() (string, bool) {
 	return func() (string, bool) { return s, true }
 }
 
-func key(version int64, bucket float64) Key {
-	return Key{TileID: "t1", Version: version, Bucket: bucket}
+func key(bytes uint64, bucket float64) Key {
+	return Key{TileID: "t1", Bytes: bytes, Bucket: bucket}
 }
 
 // A bucket rounds down, so a raster drawn at the text's scale is never wider
@@ -101,7 +101,7 @@ func TestFailureReportsOncePerKeyAndNeverRetries(t *testing.T) {
 	}
 }
 
-func TestNewVersionClearsFailedState(t *testing.T) {
+func TestNewBytesClearFailedState(t *testing.T) {
 	ras := &fakeRasterizer{}
 	var reports []string
 	c := NewCache(ras, func(id string) { reports = append(reports, id) })
@@ -111,10 +111,10 @@ func TestNewVersionClearsFailedState(t *testing.T) {
 
 	var readies int
 	if _, _, ok := c.Ensure(key(2, 64), svgOK("v2"), func() { readies++ }); ok {
-		t.Fatal("the new version's raster is not loaded yet")
+		t.Fatal("the new bytes' raster is not loaded yet")
 	}
 	if ras.calls != 2 {
-		t.Fatalf("Rasterize calls = %d, want 2: a new version re-rasterizes", ras.calls)
+		t.Fatalf("Rasterize calls = %d, want 2: new bytes re-rasterize", ras.calls)
 	}
 	ras.resolve(0)
 	if readies != 1 {
@@ -148,7 +148,7 @@ func TestSupersededFailureIsNotReported(t *testing.T) {
 	}
 }
 
-func TestOtherBucketsSurviveTheSameVersionAndSweepOnANewOne(t *testing.T) {
+func TestOtherBucketsSurviveTheSameBytesAndSweepOnNewOnes(t *testing.T) {
 	ras := &fakeRasterizer{}
 	c := NewCache(ras, nil)
 
@@ -160,13 +160,13 @@ func TestOtherBucketsSurviveTheSameVersionAndSweepOnANewOne(t *testing.T) {
 		t.Fatal("the 64 bucket must survive a draw at 128")
 	}
 	if narrow.revoked || wide.revoked {
-		t.Fatal("two buckets of one version must not revoke each other")
+		t.Fatal("two buckets of one body must not revoke each other")
 	}
 
 	// New bytes at one bucket retire the other bucket's picture.
 	c.Ensure(key(2, 64), svgOK("a2"), nil)
 	if !wide.revoked {
-		t.Error("a bucket whose version moved on must be swept and revoked")
+		t.Error("a bucket whose bytes moved on must be swept and revoked")
 	}
 	if !narrow.revoked {
 		t.Error("the replaced same-bucket raster must be revoked")
@@ -195,7 +195,7 @@ func TestDropRevokesEveryBucket(t *testing.T) {
 	c := NewCache(ras, nil)
 	c.Ensure(key(1, 64), svgOK("a"), nil)
 	c.Ensure(key(1, 128), svgOK("b"), nil)
-	c.Ensure(Key{TileID: "t2", Version: 1, Bucket: 64}, svgOK("c"), nil)
+	c.Ensure(Key{TileID: "t2", Bytes: 1, Bucket: 64}, svgOK("c"), nil)
 	a := ras.resolve(0)
 	b := ras.resolve(0)
 	other := ras.resolve(0)
@@ -228,9 +228,9 @@ func TestLateResultAfterDropIsRevoked(t *testing.T) {
 }
 
 // A zoom that crosses into a bucket with no raster yet keeps drawing the
-// document from the nearest ready bucket of the same version, never raw
-// source and never another version's picture.
-func TestStandInAcrossBucketsNeverAcrossVersions(t *testing.T) {
+// document from the nearest ready bucket of the same bytes, never raw
+// source and never other bytes' picture.
+func TestStandInAcrossBucketsNeverAcrossBytes(t *testing.T) {
 	ras := &fakeRasterizer{}
 	c := NewCache(ras, nil)
 	c.Ensure(key(1, 128), svgOK("v1@128"), nil)
@@ -253,9 +253,9 @@ func TestStandInAcrossBucketsNeverAcrossVersions(t *testing.T) {
 		t.Fatalf("landed: %v %v %v, want 192's own raster", r, w, ok)
 	}
 
-	// New bytes: the old version's buckets are no stand-in.
+	// New bytes: the old bytes' buckets are no stand-in.
 	if r, _, ok := c.Ensure(key(2, 256), svgOK("v2@256"), nil); ok {
-		t.Fatalf("v2 in flight served %v: a stand-in must never cross versions", r.(*fakeRaster).svg)
+		t.Fatalf("v2 in flight served %v: a stand-in must never cross bytes", r.(*fakeRaster).svg)
 	}
 	ras.resolve(0)
 	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2@128"), nil); !ok || w != 256 || r.(*fakeRaster).svg != "v2@256" {

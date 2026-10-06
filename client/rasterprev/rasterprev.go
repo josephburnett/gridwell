@@ -1,5 +1,5 @@
 // Package rasterprev holds the rendered-text preview cache: one rasterized
-// document per (tile, version, width bucket), superseded when the tile's bytes
+// document per (tile, bytes, width bucket), superseded when the tile's bytes
 // or its layout width move. Rasterizing is JS-only, so it sits behind the
 // Rasterizer interface and tests inject a fake.
 package rasterprev
@@ -35,15 +35,17 @@ func Bucket(contentW float64) float64 {
 	return buckets[max(i-1, 0)]
 }
 
-// Key identifies one raster. Version is the tile's, so new bytes never draw
-// the old picture; Org is part of the identity because it picks the renderer,
-// and Theme because the document is rasterized in the colors on screen.
+// Key identifies one raster. Bytes is the stamp of the body it is made from
+// (cache.ContentStamp), so new bytes never draw the old picture, a plugin's
+// included, whose row version never moves; Org is part of the identity
+// because it picks the renderer, and Theme because the document is rasterized
+// in the colors on screen.
 type Key struct {
-	TileID  string
-	Version int64
-	Bucket  float64
-	Org     bool
-	Theme   string
+	TileID string
+	Bytes  uint64
+	Bucket float64
+	Org    bool
+	Theme  string
 }
 
 // Raster is the loaded image handle the renderer draws.
@@ -79,7 +81,7 @@ func NewCache(ras Rasterizer, onErr func(tileID string)) *Cache {
 
 // Ensure returns k's raster and the width it was made at, starting a
 // rasterization on a miss. While k's is in flight it answers with the nearest
-// ready bucket of the same tile, version, renderer and theme, so a zoom that
+// ready bucket of the same tile, bytes, renderer and theme, so a zoom that
 // crosses a bucket keeps showing the document; with none, and once k failed,
 // ok is false and the caller paints raw source. build supplies the SVG and
 // reports false when the tile's bytes have not loaded yet, which caches
@@ -99,10 +101,10 @@ func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Rast
 	if !ok {
 		return c.standIn(k)
 	}
-	// Other buckets whose version moved on re-rasterize on next use; keeping
+	// Other buckets whose bytes moved on re-rasterize on next use; keeping
 	// one would draw the previous bytes at the next zoom step.
 	for os, old := range c.entries {
-		if os != s && os.tileID == k.TileID && old.Ident.Version != k.Version {
+		if os != s && os.tileID == k.TileID && old.Ident.Bytes != k.Bytes {
 			old.Release()
 			delete(c.entries, os)
 		}
@@ -113,7 +115,7 @@ func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Rast
 		c.entries[s] = e
 	}
 	// The slot answers for the key it is rasterizing, so a frame mid-flight
-	// paints raw source instead of the previous version's picture, and asks
+	// paints raw source instead of the previous bytes' picture, and asks
 	// for no second rasterization of the same document.
 	e.Adopt(k)
 	gen := e.Begin(k)

@@ -201,3 +201,39 @@ func TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo(t *testing.T) {
 		}
 	})
 }
+
+// A body's stamp names the bytes the server last gave, not the row: a plugin
+// body read again after its event said it moved gets a new stamp at the same
+// version, so a picture or wrap keyed by it is made again; typing keeps it,
+// as typing keeps the version; a save gives the saved bytes their own.
+func TestAStampNamesTheBytesNotTheRow(t *testing.T) {
+	c := New()
+	row := &gridwellv1.Tile{Id: "p/~a", GridId: "p/~", Kind: rpc.KindText}
+	c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row})
+	if s := c.ContentStamp("p/~a"); s != 0 {
+		t.Fatalf("no body, stamp %d; want 0", s)
+	}
+	c.PutFetchedContent("p/~a", []byte("one"), 0, c.AskContent("p/~a"))
+	first := c.ContentStamp("p/~a")
+	if first == 0 {
+		t.Fatal("a fetched body has no stamp")
+	}
+	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: row, ContentChanged: true}}})
+	if s := c.ContentStamp("p/~a"); s != 0 {
+		t.Fatalf("an aged body still stamped %d", s)
+	}
+	c.PutFetchedContent("p/~a", []byte("two"), 0, c.AskContent("p/~a"))
+	second := c.ContentStamp("p/~a")
+	if second == 0 || second == first {
+		t.Fatalf("new bytes at the same version stamped %d after %d; want a new stamp", second, first)
+	}
+	c.PutEditedContent("p/~a", []byte("two, typed"))
+	if s := c.ContentStamp("p/~a"); s != second {
+		t.Errorf("typing moved the stamp %d -> %d", second, s)
+	}
+	c.PutSavedContent(&gridwellv1.Tile{Id: "p/~a", Version: 1}, []byte("two, typed"))
+	if s := c.ContentStamp("p/~a"); s == second || s == 0 {
+		t.Errorf("saved bytes kept stamp %d", s)
+	}
+}

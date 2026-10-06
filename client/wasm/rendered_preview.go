@@ -6,6 +6,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/rasterprev"
@@ -79,11 +80,11 @@ func (r *svgRaster) Revoke() {
 func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value, float64, bool) {
 	bucket := rasterprev.Bucket(contentW)
 	k := rasterprev.Key{
-		TileID:  n.Id,
-		Version: n.Version,
-		Bucket:  bucket,
-		Org:     markdown.IsOrg(n.AltText),
-		Theme:   a.themeName.String(),
+		TileID: n.Id,
+		Bytes:  a.c.ContentStamp(rpc.ContentID(n)),
+		Bucket: bucket,
+		Org:    markdown.IsOrg(n.AltText),
+		Theme:  a.themeName.String(),
 	}
 	r, madeAt, ok := a.views.renderedPrev.Ensure(k, func() (string, bool) {
 		body, ok := a.tileBody(n)
