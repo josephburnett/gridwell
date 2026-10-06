@@ -87,7 +87,7 @@ record shapes. Everything else derives from it:
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Search` |
-| Content | `ReadContent`, `WriteContent` — the one way bytes move. Versioned. A write commits at close; a broken stream leaves the old value. |
+| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
@@ -347,7 +347,8 @@ not answered: framing, captures, layout, unsaved bytes. One reconcile rule
 (`Record`: a transport failure parks a retry, any verdict acks). Two drains:
 the retry kick on reconnect and the unload flush by `sendBeacon`. It holds
 order and retry, never a copy of a value. `client/wasm/mutate.go` has two
-paths: `postWriteContent` (the one write that claims a version) and
+paths: `postWriteContent` (the one write that claims a basis, a version or a
+plugin's stamp) and
 `write`/`do` (everything else).
 
 **Dead links.** A link is a path of hops. When any hop stops declaring the

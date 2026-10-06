@@ -664,12 +664,50 @@ whose site is its own code. Partial: proc, gitlab, gmail and hey send
 `@info`, a hey thread's card) reaches an open view only when it is next read
 from scratch.
 
+## 19. A write claims the stamp it read
+
+**Rule.** If your source can take a text body back, declare `writable` and
+serve `WriteContent`; name every text entry's bytes with `content_stamp`, on
+the entry and on the read; refuse a write whose claimed stamp is not the
+entry's now with `FailedPrecondition`; answer the written bytes' stamp; and
+tell the write as the entry's `EntryChanged`, as rule 18 tells any change in
+place. A body you cannot take back whole is refused with its reason.
+
+**Why.** "A tile behaves the same wherever its content comes from"
+(CLAUDE.md, promises): a home document is typed into and saved, so a file
+should be. "Things stay as you left them": a save must never overwrite bytes
+the user has not seen, and the stamp is the claim that says which bytes the
+edit was typed over, as a version is for a home row (`docs/freshness.md`,
+trace (c)). The answered stamp is what the next save claims, and the echo's
+stamp is how the client knows its own write and keeps the text.
+
+**Example.** `fs/plugin/plugin.go` (`plugin-edits` branch), `write`:
+
+```go
+if now := fsfile.ContentStamp(fi.ModTime(), fi.Size()); claimed != now {
+	return "", status.Errorf(codes.FailedPrecondition, "fs plugin: %q changed on disk since it was read", key)
+}
+```
+
+**Test.** `fs/plugin/write_test.go`: a write claiming the stamp replaces the
+file and answers the stamp a read names; a stale stamp is `FailedPrecondition`
+and leaves the other writer's bytes; a summary, a page, an oversized body, a
+read-only file and a key outside the root are refused with reasons; a broken
+stream writes nothing. `fs/plugin/stamp_test.go`: the listing and the read
+name one stamp. Across the seam, `internal/server/fs_write_seam_test.go` (a
+save lands and its echo keeps the text, a disk change under a dirty edit is
+the conflict, a write the plugin cannot take parks and lands) and
+`fs_stamp_seam_test.go`.
+
+**Today.** Meets: fs (`plugin-edits` branch). N/A: proc, pages, gitlab,
+gmail and hey, which take no body back and declare no `writable`.
+
 ## Checklist
 
 Tick each before you ship. At `729ba73` the shipped plugins tick every box
 but four: 3 (gitlab, gmail), 14 (gmail), 16 (proc, gitlab) and 17 (gitlab,
-hey); rule 18, added later, is met by fs alone. The rules' Today lines say
-what remains.
+hey); rules 18 and 19, added later, are met by fs alone. The rules' Today
+lines say what remains.
 
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
 - [ ] 2. `Info` refuses a config it cannot serve with a sentence, and latches.
@@ -689,3 +727,4 @@ what remains.
 - [ ] 16. A real-binary seam test per verb, and one for `Watch` if declared.
 - [ ] 17. The README matches the code.
 - [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `ContextChanged` only for a listing that may have moved.
+- [ ] 19. A body you take back is declared `writable`, named by `content_stamp`, refused on a stale stamp with `FailedPrecondition`, and answered with the written bytes' stamp.

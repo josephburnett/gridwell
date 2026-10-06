@@ -375,15 +375,23 @@ The version interlock, the outbox park, and the drain.
    typed during an outage cannot stay out of the outbox.
 2. The debounce sweep or an ascent flush calls `App.enqueueTextSave`, which
    goes through `contentSaves` (`outbox.SaveQueue`), the per-key serial
-   queue a pane layout shares. The version is claimed AT SEND TIME, after
+   queue a pane layout shares. The basis is claimed AT SEND TIME, after
    any earlier write for the same tile has
-   advanced the basis: `a.c.SaveBasis(tileID)`, never the grid row version.
+   advanced it: `a.c.SaveBasis(tileID)`, never the grid row's.
    The row advances when a foreign writer's event or a refetch lands without
    this client seeing the new bytes; claiming it would carry the current
-   version with stale bytes past the server's check.
+   version with stale bytes past the server's check. The basis is an
+   `rpc.ContentBasis`: the version for a home body, and for a plugin's, which
+   has none, the source's stamp the bytes were read under
+   (`ContentChunk.content_stamp`).
 3. `App.postWriteContent` → `rpc.Client.WriteContent` → the router → the
    owning namespace. Home claims and bumps through `claimContentVersion` +
-   `finishContentEdit`, the one pair that may, and emits a `TileChanged`.
+   `finishContentEdit`, the one pair that may, and emits a `TileChanged`. A
+   plugin's adapter writes through by key with the claimed stamp
+   (`Adapter.WriteContent`), the plugin refuses a stamp that is not the
+   entry's now with the same `FailedPrecondition` a stale version gets, and
+   the adapter answers the row with the written bytes' stamp and emits its
+   `TileChanged`, flagged `content_changed`.
 4. On success the client advances immediately, not when the echo lands:
    `a.c.UpdateTile(tile.GridID, *tile)` and
    `a.c.PutSavedContent(tile, newContent)`, filed under the response row.
@@ -394,7 +402,10 @@ The version interlock, the outbox park, and the drain.
    If an earlier write's echo (version N-1) is still in flight, the interlock
    `n.Version < cur.Version` drops it: applying it would roll the tile back
    and then forward, a mutation the user never made. The response row at N
-   stands.
+   stands. A plugin's write echoes twice — the adapter's `TileChanged` and the
+   plugin's own `Watch` `EntryChanged` — both carrying the written bytes'
+   stamp, which the body is now filed under, so neither drops it: the typed
+   text stays, saved or still being typed.
 
    There is one door into a grid's tile map, `Cache.putTileLocked`, and both
    `Apply` and `UpdateTile` are it: the interlock and content aging
@@ -559,4 +570,5 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A foreign edit becomes visible, and opening/closing never stomps it | `apps/desktop/e2e/foreign-writer.spec.ts` |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
 | An older write RESPONSE is refused by the same interlock an older echo is: one door into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneDoor`, `TestUpdateTileAgesTheBodyToo` (unit) |
+| A plugin body saves as a home one does: a clean save lands on disk and its own echoes keep the typed text; bytes changed on disk under a dirty edit refuse the save as a conflict and show the file; a write the plugin cannot take parks under its key-form id and lands when it is back; a verdict never parks | `internal/server/fs_write_seam_test.go`, `internal/pluginhost/adapter_caps_test.go:TestAdapterStampsTheWriteFactsThePluginDeclares`, the fs plugin's `fs/plugin/write_test.go`; live, `apps/desktop/e2e/fs-edit.spec.ts` |
 | `syncContentOutbox`'s derivation: dirty→park, clean→ack, and the pre-drain sweep over the dirty set | `client/outbox/outbox_test.go:TestRecordContentIsTheDirtinessFork`, `TestSyncContentParksTheDirtySetInOrder` (`Outbox.RecordContent`/`SyncContent`; `mutate.go` is glue) |
