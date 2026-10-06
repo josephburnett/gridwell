@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +60,9 @@ func TestSearchFanOutBoundsEachHop(t *testing.T) {
 	case resp := <-done:
 		if len(resp.GetResults()) != 1 || resp.Results[0].Tile.Id != "fine/farplug/7" {
 			t.Fatalf("want the live hop's qualified result, got %+v", resp.GetResults())
+		}
+		if sk := resp.GetSkipped(); len(sk) != 1 || sk[0].Namespace != "dead" || !strings.Contains(sk[0].Reason, "did not answer") {
+			t.Fatalf("skipped = %+v, want the hung connection named with its timeout", sk)
 		}
 	case <-time.After(8 * time.Second):
 		t.Fatal("search stalled on the hung connection — no per-hop bound")

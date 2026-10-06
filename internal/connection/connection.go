@@ -813,17 +813,15 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 		hctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
 		resp, err := hp.client.Search(hctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
 		cancel()
-		if err != nil {
-			log.Printf("gridwell: search: connection %s skipped: %v", hp.ns, err)
-			continue
-		}
-		out.Results = append(out.Results, prependSearchResp(hp.ns, resp).Results...)
+		q := prependSearchResp(hp.ns, rpc.SearchHop(resp, err))
+		out.Results = append(out.Results, q.Results...)
+		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
 func prependSearchResp(ns string, resp *gridwellv1.SearchResponse) *gridwellv1.SearchResponse {
-	return rpc.QualifySearchResponse(resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
+	return rpc.QualifySearchResponse(ns, resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
 		return rpc.TransitQualifyTiles(ns, ts)
 	})
 }

@@ -257,7 +257,8 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 }
 
 // Search routes a scope to its owner; an empty scope fans out to every
-// namespace, each bounded by rpc.SearchHopTimeout with errors skipped.
+// namespace, each bounded by rpc.SearchHopTimeout, and names each it went
+// without (rpc.SearchHop).
 func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
 	m := req
 	if m.Scope != "" {
@@ -278,16 +279,15 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		hop := rpc.Hop{Seg: n.UUID, Via: n.UUID, Transit: n.Transit}
 		resp, err := n.NS.Search(pctx, &pb.SearchRequest{Query: hop.PeelSearchQuery(m.Query), Limit: m.Limit})
 		cancel()
-		if err != nil {
-			continue // Unimplemented, a timeout, a dead plugin: no answer here
-		}
-		out.Results = append(out.Results, qualifySearch(n.Transit, n.UUID, resp).Results...)
+		q := qualifySearch(n.Transit, n.UUID, rpc.SearchHop(resp, err))
+		out.Results = append(out.Results, q.Results...)
+		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
 func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.SearchResponse {
-	return rpc.QualifySearchResponse(resp, func(ts []*pb.Tile) []*pb.Tile {
+	return rpc.QualifySearchResponse(uuid, resp, func(ts []*pb.Tile) []*pb.Tile {
 		return qualifyTilesFor(transit, uuid, ts)
 	})
 }

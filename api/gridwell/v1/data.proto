@@ -432,6 +432,16 @@ message SearchResult {
 }
 message SearchResponse {
   repeated SearchResult results = 1;
+  // skipped is every namespace a fan-out asked and did not hear from, so a
+  // shorter list never passes for a whole one. Unimplemented is no results,
+  // not a skip.
+  repeated SearchSkip skipped = 2;
+}
+// SearchSkip names one namespace a fan-out went without, qualified like a
+// health event's plugin_uuid, and why.
+message SearchSkip {
+  string namespace = 1;
+  string reason    = 2;
 }
 
 // Handshake enumerates the plugins a node hosts, in config order. The client

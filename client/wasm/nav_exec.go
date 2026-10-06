@@ -343,7 +343,8 @@ func (a *App) navAwait(e nav.Effect) {
 		// deadline, which the machine already handles, rather than a walk
 		// that never resumes.
 		a.await(tok, inflight.Bounded, a.navWorldCommon, func(ctx context.Context) nav.Result {
-			res, err := a.cl.Search(ctx, req.Query, req.Scope, int32(req.Limit))
+			resp, err := a.cl.Search(ctx, req.Query, req.Scope, int32(req.Limit))
+			res := resp.GetResults()
 			if err != nil || len(res) == 0 {
 				return nav.Result{}
 			}

@@ -153,9 +153,13 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 }
 
 // QualifySearchResponse rewrites every id a search answer carries through the
-// caller's tile rule, the one place leaf and transit differ.
-func QualifySearchResponse(resp *pb.SearchResponse, qualifyTiles func([]*pb.Tile) []*pb.Tile) *pb.SearchResponse {
+// caller's tile rule, the one place leaf and transit differ, and puts the hop's
+// segment, prefix, before every skipped namespace.
+func QualifySearchResponse(prefix string, resp *pb.SearchResponse, qualifyTiles func([]*pb.Tile) []*pb.Tile) *pb.SearchResponse {
 	out := &pb.SearchResponse{Results: make([]*pb.SearchResult, 0, len(resp.Results))}
+	for _, s := range resp.Skipped {
+		out.Skipped = append(out.Skipped, &pb.SearchSkip{Namespace: QualifyNS(prefix, s.Namespace), Reason: s.Reason})
+	}
 	for _, r := range resp.Results {
 		qr := &pb.SearchResult{Snippet: r.Snippet, Score: r.Score}
 		if r.Tile != nil {
