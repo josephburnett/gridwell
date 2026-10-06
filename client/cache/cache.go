@@ -25,7 +25,7 @@ type Cache struct {
 	// content is the one body store, keyed by tile id because blob ids are
 	// not routable and editing one clone must leave a sibling alone.
 	content map[string]*contentEntry
-	stamps  uint64
+	gens    uint64
 	// holds is the placements written ahead of their echo, by tile id.
 	holds map[string]*hold
 	seq   uint64
@@ -39,8 +39,8 @@ type contentEntry struct {
 	base  int64
 	blob  BlobBasis
 	dirty bool
-	// stamp names the bytes the server last gave; see ContentStamp.
-	stamp uint64
+	// gen names the bytes the server last gave; see BodyGen.
+	gen uint64
 }
 
 // BlobBasis is the blob id a body is filed under: for a fetch, the row's blob
@@ -116,23 +116,23 @@ func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64, asked 
 	if n := c.rowLocked(tileID); n != nil && asked.differs(n.BlobId) {
 		return
 	}
-	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, blob: asked, stamp: c.nextStampLocked()}
+	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, blob: asked, gen: c.nextGenLocked()}
 }
 
-func (c *Cache) nextStampLocked() uint64 {
-	c.stamps++
-	return c.stamps
+func (c *Cache) nextGenLocked() uint64 {
+	c.gens++
+	return c.gens
 }
 
-// ContentStamp names the body cached for a tile as the server last gave it, 0
-// when none is: what a picture or a wrap of the body is keyed by, since a
-// plugin row's version never moves when its bytes do. An unsaved edit keeps
-// the stamp, as it keeps the version.
-func (c *Cache) ContentStamp(tileID string) uint64 {
+// BodyGen is the generation of the body cached for a tile, as the server last
+// gave it, 0 when none is: what a picture or a wrap of the body is keyed by,
+// since a plugin row's version never moves when its bytes do. An unsaved edit
+// keeps the generation, as it keeps the version.
+func (c *Cache) BodyGen(tileID string) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if e, ok := c.content[tileID]; ok {
-		return e.stamp
+		return e.gen
 	}
 	return 0
 }
@@ -145,7 +145,7 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 	defer c.mu.Unlock()
 	e := c.content[tileID]
 	if e == nil {
-		e = &contentEntry{stamp: c.nextStampLocked()}
+		e = &contentEntry{gen: c.nextGenLocked()}
 		c.content[tileID] = e
 	}
 	e.data = cloneBytes(data)
@@ -163,7 +163,7 @@ func (c *Cache) PutSavedContent(row *gridwellv1.Tile, data []byte) {
 		e.base, e.blob = row.Version, blob
 		return
 	}
-	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: row.Version, blob: blob, stamp: c.nextStampLocked()}
+	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: row.Version, blob: blob, gen: c.nextGenLocked()}
 }
 
 // SaveBasis returns the version a content write must claim. Only fetches and

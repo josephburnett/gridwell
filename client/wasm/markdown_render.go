@@ -203,13 +203,13 @@ func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scroll
 }
 
 // memoWrap caches the wrap, because re-wrapping every visible document each
-// frame costs O(doc x tiles). Keyed by content id, the bytes' stamp
-// (cache.ContentStamp), length and columns, so a same-length uncommitted edit
+// frame costs O(doc x tiles). Keyed by content id, the bytes' generation
+// (cache.BodyGen), length and columns, so a same-length uncommitted edit
 // may render one debounce cycle stale in a background preview. Bounded by wholesale reset, since it is
 // derived and never a fact.
 func (a *App) memoWrap(n *gridwellv1.Tile) func(string, int) []string {
 	return func(src string, cols int) []string {
-		key := rpc.ContentID(n) + "\x00" + strconv.FormatUint(a.c.ContentStamp(rpc.ContentID(n)), 10) + "\x00" +
+		key := rpc.ContentID(n) + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(n)), 10) + "\x00" +
 			strconv.Itoa(len(src)) + "\x00" + strconv.Itoa(cols)
 		if lines, ok := a.views.wrapCache[key]; ok {
 			return lines

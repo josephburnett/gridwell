@@ -81,7 +81,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 	bucket := rasterprev.Bucket(contentW)
 	k := rasterprev.Key{
 		TileID: n.Id,
-		Bytes:  a.c.ContentStamp(rpc.ContentID(n)),
+		Bytes:  a.c.BodyGen(rpc.ContentID(n)),
 		Bucket: bucket,
 		Org:    markdown.IsOrg(n.AltText),
 		Theme:  a.themeName.String(),
