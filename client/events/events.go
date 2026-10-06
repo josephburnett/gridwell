@@ -7,14 +7,19 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/urlview"
 )
 
 // Plan is what one event asks for after cache.Apply. Empty strings and nil
 // ask for nothing.
 type Plan struct {
-	// DropPreviews names a removed tile whose decoded preview and rendered
-	// raster must be released, or deleting tiles leaks browser images.
+	// DropPreviews names a tile whose decoded preview and rendered raster
+	// must be released: a removed one, or deleting tiles leaks browser images,
+	// or a page whose capture no longer answers (urlview.PageMoved).
 	DropPreviews string
+	// Reload names a tile whose live views load their page again
+	// (urlview.PageMoved).
+	Reload string
 	// ClearLatch and Fetch name a changed grid. GridChanged is the one
 	// per-grid signal, so it also clears that grid's failure latch, and the
 	// refetch is unconditional: the next descent would otherwise read stale.
@@ -43,7 +48,15 @@ func Route(ev *pb.Event) Plan {
 		return Plan{DropPreviews: p.TileRemoved.GetTileId()}
 	case *pb.Event_TileChanged:
 		if t := p.TileChanged.GetTile(); t != nil {
-			return Plan{ClearContent: rpc.ContentID(t)}
+			plan := Plan{ClearContent: rpc.ContentID(t)}
+			m := urlview.PageMoved(t, p.TileChanged.GetContentChanged())
+			if m.Reload {
+				plan.Reload = rpc.ContentID(t)
+			}
+			if m.DropCapture {
+				plan.DropPreviews = rpc.ContentID(t)
+			}
+			return plan
 		}
 	case *pb.Event_GridChanged:
 		id := p.GridChanged.GetGridId()

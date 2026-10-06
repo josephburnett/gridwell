@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
 
@@ -28,6 +29,14 @@ func TestRouteTable(t *testing.T) {
 		{"a changed link clears the latch on the body it now shows",
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "n/4", GridId: "n/1", LinkTargetId: "p/~Zm9v"}}}},
 			Plan{ClearContent: "p/~Zm9v"}},
+		{"a served page that moved reloads its live views and drops the capture the node retired",
+			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{ContentChanged: true,
+				Tile: &pb.Tile{Id: "p/~dA", GridId: "p/~Yw", Kind: rpc.KindURL, ServesPage: true}}}},
+			Plan{ClearContent: "p/~dA", Reload: "p/~dA", DropPreviews: "p/~dA"}},
+		{"a frozen one keeps its face and has no live view",
+			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{ContentChanged: true,
+				Tile: &pb.Tile{Id: "p/~dA", GridId: "p/~Yw", Kind: rpc.KindURL, ServesPage: true, PreviewBlobId: 7, UrlFrozen: true}}}},
+			Plan{ClearContent: "p/~dA"}},
 		{"a changed event with no row asks for nothing",
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{}}},
 			Plan{}},
