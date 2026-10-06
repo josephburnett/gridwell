@@ -88,18 +88,18 @@ type Grid struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	// writable reports whether the grid's owning plugin accepts mutations.
-	// It is per grid, not per namespace, because one connection fronts many
-	// remote plugins with differing capabilities. Stamped by the serving node
-	// from the owning plugin's Info at a leaf, passed through verbatim in
-	// transit. Wire-only, never persisted.
+	// writable: this grid's text bodies accept edits (WriteContent), so the
+	// client lets the user type into its text tiles. The owning namespace
+	// stamps it on every grid it serves, the home always and a plugin's from
+	// plugin.v1 InfoResponse.writable, and transit carries it verbatim. It is
+	// per grid, not per namespace, because one connection fronts namespaces
+	// that differ. Wire-only, never persisted.
 	Writable bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
 	// scratch_grid_id is the grid where ephemeral visits opened from this grid
 	// land: the owning plugin's own scratch grid, or the serving node's home
 	// scratch grid when the plugin declares none. Qualified from the receiver's
-	// perspective and chained through mounts, by the same stamping rule as
-	// writable. "" only when the owning plugin's Info was unreachable.
-	// Wire-only.
+	// perspective and chained through mounts. "" only when the owning plugin's
+	// Info was unreachable. Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// node_ns is the namespace chain of the node serving this grid, from the
 	// receiver's perspective: "" for a grid served by the node you are talking
@@ -113,13 +113,12 @@ type Grid struct {
 	// transit with grid_id prefixed per hop. Wire-only.
 	MenuEntries []*MenuEntry `protobuf:"bytes,11,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
 	// host_content says this grid projects host state, such as a directory or
-	// the process table, instead of holding content of its own. Its rows are
-	// read-only and the client renders them with the host treatment: the
-	// outside tint and the exit border family. The owning plugin declares it
-	// (plugin.v1 InfoResponse.host_content), the adapter that serves the grid
-	// stamps it, and transit carries it verbatim as it does writable. A reader
-	// consults it instead of learning a kind's name. Wire-only, never
-	// persisted.
+	// the process table, instead of holding content of its own, and the client
+	// renders its rows with the host treatment: the outside tint and the exit
+	// border family. The owning plugin declares it (plugin.v1
+	// InfoResponse.host_content), the adapter that serves the grid stamps it,
+	// and transit carries it verbatim. A reader consults it instead of
+	// learning a kind's name. Wire-only, never persisted.
 	HostContent bool `protobuf:"varint,13,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
 	// glyph is the owning plugin's declared identity glyph for this grid, from
 	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
@@ -134,7 +133,15 @@ type Grid struct {
 	// stands on the grid. Like the rows, it is a memory of the source, not a
 	// node fact, so gridwell.db never holds it. Stamped by the adapter,
 	// verbatim in transit. Wire-only.
-	SourceLabel   string `protobuf:"bytes,15,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
+	SourceLabel string `protobuf:"bytes,15,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
+	// accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
+	// offers its primitives and a swatch drops into it, and its url rows'
+	// addresses are the node's to write. The owning namespace stamps it on
+	// every grid it serves, true for the home and false for a plugin, which
+	// creates nothing; transit carries it verbatim. It is absent only from a
+	// node built before it split from writable, whose one bit said both, and
+	// rpc.TransitQualifyGrid reads that bit for it. Wire-only.
+	AcceptsTiles  *bool `protobuf:"varint,16,opt,name=accepts_tiles,json=acceptsTiles,proto3,oneof" json:"accepts_tiles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,9 +239,16 @@ func (x *Grid) GetSourceLabel() string {
 	return ""
 }
 
+func (x *Grid) GetAcceptsTiles() bool {
+	if x != nil && x.AcceptsTiles != nil {
+		return *x.AcceptsTiles
+	}
+	return false
+}
+
 // MenuEntry is one declared (+) menu entry: a doorway onto one collection,
 // such as the home's trashcan or a mail plugin's Feed. Declared in Info,
-// stamped per grid by the serving node as writable is, and passed verbatim
+// stamped per grid by the serving node, and passed verbatim
 // through transit hops, where grid_id gains the hop prefix like every id. The
 // swatch behaves like a menu row's over grid_id: click descends, drag drops an
 // exit-well link.
@@ -441,7 +455,14 @@ type Tile struct {
 	// tile that started it, set on a clone so every copy shares its source's
 	// session. Empty means the tile's own id; rpc.ShellSession reads it. Stored,
 	// qualified and peeled like the tile's own id, and never set by clients.
-	ShellSession  string `protobuf:"bytes,38,opt,name=shell_session,json=shellSession,proto3" json:"shell_session,omitempty"`
+	ShellSession string `protobuf:"bytes,38,opt,name=shell_session,json=shellSession,proto3" json:"shell_session,omitempty"`
+	// content_stamp is the source's name for the bytes behind a row with no
+	// version claim (a plugin's): plugin.v1 Entry.content_stamp, carried by the
+	// adapter and verbatim in transit, "" when the source names none. It does
+	// for such a row what version does for a home row: a body read under
+	// another stamp is behind it, and one read under this stamp is not.
+	// Wire-only, never a stored column.
+	ContentStamp  string `protobuf:"bytes,39,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -686,6 +707,13 @@ func (x *Tile) GetShellSession() string {
 	return ""
 }
 
+func (x *Tile) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
+}
+
 // Info is the whole plugin handshake: a plugin loaded from server.yaml is
 // already there, so Info reports its identity and its default root grid. There
 // is no Attach or Detach. The gRPC connection, opened at load and closed at
@@ -738,11 +766,6 @@ type InfoResponse struct {
 	// mounted; it persists as visited-url history. Empty for plugins that do
 	// not support ephemeral visits, such as fs and proc.
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
-	// writable reports that this plugin accepts CreateTile, so new primitives can
-	// be dropped into its grids. The plugin declares it once here.
-	// A node that re-derived it from the kind string would present a remote
-	// plugin reached through a connection as read-only.
-	Writable bool `protobuf:"varint,9,opt,name=writable,proto3" json:"writable,omitempty"`
 	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
 	// center in grid coordinates and the intrinsic zoom. The home fills it from
 	// its root grid row; a root never visited leaves all three absent.
@@ -813,13 +836,6 @@ func (x *InfoResponse) GetScratchGridId() string {
 		return x.ScratchGridId
 	}
 	return ""
-}
-
-func (x *InfoResponse) GetWritable() bool {
-	if x != nil {
-		return x.Writable
-	}
-	return false
 }
 
 func (x *InfoResponse) GetRootViewCx() float64 {
@@ -1293,7 +1309,8 @@ func (x *GetTilePreviewResponse) GetJpeg() []byte {
 // so bytes and version are paired at the owner. Later chunks carry data only.
 // On a leaf-link tile the serving node resolves through link_target_id, the one
 // resolution point, so callers never reimplement link semantics. A plugin whose
-// bodies are not version-edited sends version 0.
+// bodies are not version-edited sends version 0 and, in its place, the
+// bytes' content_stamp (Tile.content_stamp).
 type ReadContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
@@ -1341,8 +1358,9 @@ func (x *ReadContentRequest) GetTileId() string {
 type ContentChunk struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"` // chunk 1 only
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`                     // chunk 1 only
+	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`          // chunk 1 only
+	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`                              // chunk 1 only
+	ContentStamp  string                 `protobuf:"bytes,4,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"` // chunk 1 only
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1398,6 +1416,13 @@ func (x *ContentChunk) GetVersion() int64 {
 	return 0
 }
 
+func (x *ContentChunk) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
+}
+
 // WriteContent streams a tile's content bytes up. The first message binds
 // tile_id and claims the version, checked against the row before any byte is
 // accepted; subsequent messages carry data only. The write commits at close, so
@@ -1407,11 +1432,17 @@ func (x *ContentChunk) GetVersion() int64 {
 // claims and bumps, while a pane layout is framing-class with no claim and no
 // bump. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
+//
+// A row with no version (a plugin's) claims content_stamp instead, the stamp
+// its bytes were read under (ContentChunk.content_stamp), which its source
+// checks as the store checks a version; the response row carries the stamp
+// of the bytes written. A versioned row's owner ignores it.
 type WriteContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	ContentStamp  string                 `protobuf:"bytes,4,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1465,6 +1496,13 @@ func (x *WriteContentRequest) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *WriteContentRequest) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
 }
 
 // ServeContent is the RPC carrier behind the server's HTTP /content/ endpoint.
@@ -3636,7 +3674,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xc8\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\x84\x03\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
@@ -3647,7 +3685,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x12!\n" +
 	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
 	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12!\n" +
-	"\fsource_label\x18\x0f \x01(\tR\vsourceLabelJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\fsource_label\x18\x0f \x01(\tR\vsourceLabel\x12(\n" +
+	"\raccepts_tiles\x18\x10 \x01(\bH\x00R\facceptsTiles\x88\x01\x01B\x10\n" +
+	"\x0e_accepts_tilesJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\f\x10\r\"\xc1\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -3657,7 +3697,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xeb\x06\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\x90\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -3692,15 +3732,15 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
 	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\x12#\n" +
-	"\rshell_session\x18& \x01(\tR\fshellSessionJ\x04\b\x02\x10\x03J\x04\b\n" +
+	"\rshell_session\x18& \x01(\tR\fshellSession\x12#\n" +
+	"\rcontent_stamp\x18' \x01(\tR\fcontentStampJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
-	"\vInfoRequest\"\x82\x03\n" +
+	"\vInfoRequest\"\xec\x02\n" +
 	"\fInfoResponse\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
 	"rootGridId\x12&\n" +
-	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\x12\x1a\n" +
-	"\bwritable\x18\t \x01(\bR\bwritable\x12 \n" +
+	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\x12 \n" +
 	"\froot_view_cx\x18\n" +
 	" \x01(\x01R\n" +
 	"rootViewCx\x12 \n" +
@@ -3708,7 +3748,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
+	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
+	"J\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +
@@ -3736,16 +3777,18 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x16GetTilePreviewResponse\x12\x12\n" +
 	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\"-\n" +
 	"\x12ReadContentRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\tR\x06tileId\"[\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x80\x01\n" +
 	"\fContentChunk\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversion\"\\\n" +
+	"\aversion\x18\x03 \x01(\x03R\aversion\x12#\n" +
+	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"\x81\x01\n" +
 	"\x13WriteContentRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"H\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12#\n" +
+	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"H\n" +
 	"\x13ServeContentRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x18\n" +
 	"\asubpath\x18\x02 \x01(\tR\asubpath\"^\n" +
@@ -4060,6 +4103,7 @@ func file_gridwell_v1_data_proto_init() {
 	if File_gridwell_v1_data_proto != nil {
 		return
 	}
+	file_gridwell_v1_data_proto_msgTypes[0].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[35].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[48].OneofWrappers = []any{
 		(*Event_GridChanged)(nil),

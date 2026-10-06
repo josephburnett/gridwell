@@ -39,7 +39,7 @@ func TestAPreviewNeverDrawsAnOlderBlobsLeaves(t *testing.T) {
 		return found
 	}
 
-	c.PutFetchedContent("w", before, 1, c.AskContent("w"))
+	c.PutFetchedContent("w", before, rpc.ContentBasis{Version: 1}, c.AskContent("w"))
 	if tr, ok := l.Tree("w", 7, body); !ok || !names(tr) {
 		t.Fatal("the first layout should decode with its leaf")
 	}
@@ -49,7 +49,7 @@ func TestAPreviewNeverDrawsAnOlderBlobsLeaves(t *testing.T) {
 		t.Fatal("blob 8's preview drew blob 7's leaf")
 	}
 
-	c.PutFetchedContent("w", after, 1, c.AskContent("w"))
+	c.PutFetchedContent("w", after, rpc.ContentBasis{Version: 1}, c.AskContent("w"))
 	if tr, ok := l.Tree("w", 8, body); !ok || names(tr) {
 		t.Fatalf("blob 8's own bytes should decode without the leaf: ok=%v", ok)
 	}

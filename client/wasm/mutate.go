@@ -268,14 +268,14 @@ func (a *App) putEditedContent(cid string, data []byte) {
 	a.recordContent(cid)
 }
 
-// postWriteContent fires the one version-claimed write and on success
-// replaces the cached blob. Its outbox bookkeeping is recordContent's: the
-// entry's dirtiness is whether the write is still owed. Bounded, doubly so
-// because saves for one document run on a serial queue.
-func (a *App) postWriteContent(gid, tileID string, version int64, newContent []byte) (*gridwellv1.Tile, bool) {
+// postWriteContent fires the one claimed write and on success replaces the
+// cached body. Its outbox bookkeeping is recordContent's: the entry's
+// dirtiness is whether the write is still owed. Bounded, doubly so because
+// saves for one document run on a serial queue.
+func (a *App) postWriteContent(gid, tileID string, claim rpc.ContentBasis, newContent []byte) (*gridwellv1.Tile, bool) {
 	ctx, cancel := inflight.Bounded()
 	defer cancel()
-	tile, err := a.cl.WriteContent(ctx, tileID, version, newContent)
+	tile, err := a.cl.WriteContent(ctx, tileID, claim, newContent)
 	if err != nil {
 		o := clientsync.Of(err)
 		r := clientsync.ReactSave(o)
@@ -316,20 +316,20 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 
 // enqueueTextSave posts a content write through the document's serial queue,
 // named by textedit.SaveQueueKey. The claim is read at send time, so
-// pipelined saves chain versions instead of both claiming the same one.
-// rowVersion is the fallback for an entry gone by send time.
-func (a *App) enqueueTextSave(gid, tileID, cid string, rowVersion int64, data []byte) {
+// pipelined saves chain their bases instead of both claiming the same one.
+// row is the fallback for an entry gone by send time.
+func (a *App) enqueueTextSave(gid, tileID, cid string, row rpc.ContentBasis, data []byte) {
 	a.emit(traceevent.TextSave(tileID, cid, len(data)))
 	a.persist.contentSaves.Enqueue(textedit.SaveQueueKey(tileID, cid), func() bool {
-		_, ok := a.saveClaimedContent(gid, cid, tileID == cid, rowVersion, data)
+		_, ok := a.saveClaimedContent(gid, cid, tileID == cid, row, data)
 		return ok
 	})
 }
 
-// saveClaimedContent claims a version and posts one text content write.
+// saveClaimedContent claims a basis and posts one text content write.
 // Every text write reaches it, so no path can spell the claim differently;
 // textedit.SaveClaim owns the rule.
-func (a *App) saveClaimedContent(gid, cid string, rowOwnsContent bool, rowVersion int64, data []byte) (*gridwellv1.Tile, bool) {
+func (a *App) saveClaimedContent(gid, cid string, rowOwnsContent bool, row rpc.ContentBasis, data []byte) (*gridwellv1.Tile, bool) {
 	basis, haveBasis := a.c.SaveBasis(cid)
-	return a.postWriteContent(gid, cid, textedit.SaveClaim(rowOwnsContent, rowVersion, basis, haveBasis), data)
+	return a.postWriteContent(gid, cid, textedit.SaveClaim(rowOwnsContent, row, basis, haveBasis), data)
 }

@@ -64,7 +64,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		`"a":{"pane":{"id":"p1","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}},`+
 		`"b":{"pane":{"id":"p2","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}}}},"focus":"p1"}`,
 		root, eph.Id, root, txt.Id)
-	if _, err := cl.WriteContent(ctx, pt.Id, pt.Version, []byte(layout)); err != nil {
+	if _, err := cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, []byte(layout)); err != nil {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
@@ -102,7 +102,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cl.WriteContent(ctx, pt2.Id, pt2.Version, []byte(`{"v":999,"root":{}}`)); err != nil {
+	if _, err := cl.WriteContent(ctx, pt2.Id, rpc.ContentBasis{Version: pt2.Version}, []byte(`{"v":999,"root":{}}`)); err != nil {
 		t.Fatalf("SetPaneLayout (future version): %v", err)
 	}
 	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
@@ -140,7 +140,7 @@ func TestAReapThatLeavesASessionRunningSaysSo(t *testing.T) {
 	}
 	layout := fmt.Sprintf(`{"v":1,"root":{"pane":{"id":"p1","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}},"focus":"p1"}`,
 		f.root, eph.Id)
-	if _, err := f.cl.WriteContent(ctx, pt.Id, pt.Version, []byte(layout)); err != nil {
+	if _, err := f.cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, []byte(layout)); err != nil {
 		t.Fatal(err)
 	}
 	f.fake.KillErr = fmt.Errorf("tmux: server exited unexpectedly")

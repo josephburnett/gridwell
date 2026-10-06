@@ -8,8 +8,8 @@ func TestOffer(t *testing.T) {
 		in                Offer
 		primitives, shell bool
 	}{
-		{"writable node with shells", Offer{Writable: true}, true, true},
-		{"writable node, shells disabled", Offer{Writable: true, ShellsDisabled: true}, true, false},
+		{"writable node with shells", Offer{AcceptsTiles: true}, true, true},
+		{"writable node, shells disabled", Offer{AcceptsTiles: true, ShellsDisabled: true}, true, false},
 		{"read-only grid offers nothing, shells or not", Offer{}, false, false},
 		{"read-only grid on a shell-less node", Offer{ShellsDisabled: true}, false, false},
 	}

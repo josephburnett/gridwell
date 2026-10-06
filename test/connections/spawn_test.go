@@ -272,7 +272,7 @@ func TestConnectionSpawn(t *testing.T) {
 	// The body is written after the create, through the
 	// content write, routed by the qualified id.
 	txtRow, err := clientFor(localOrigin).WriteContent(context.Background(),
-		txt["id"].(string), num(txt["version"]), []byte("# across the spawn gate"))
+		txt["id"].(string), gwrpc.ContentBasis{Version: num(txt["version"])}, []byte("# across the spawn gate"))
 	if err != nil {
 		t.Fatalf("WriteContent through the chain: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestConnectionSpawn(t *testing.T) {
 			// The foreign writer speaks the content write directly
 			// against the remote node, as another device would.
 			wt, werr := clientFor(remoteOrigin).WriteContent(
-				context.Background(), peel(peel(txtID)), version, []byte(body))
+				context.Background(), peel(peel(txtID)), gwrpc.ContentBasis{Version: version}, []byte(body))
 			if werr != nil {
 				t.Fatalf("remote WriteContent: %v", werr)
 			}
@@ -463,7 +463,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	})["tile"].(map[string]any)
 	body := "# through a declared connection"
 	if _, err := clientFor(localOrigin).WriteContent(context.Background(),
-		txt["id"].(string), num(txt["version"]), []byte(body)); err != nil {
+		txt["id"].(string), gwrpc.ContentBasis{Version: num(txt["version"])}, []byte(body)); err != nil {
 		t.Fatalf("WriteContent through the connection chain: %v", err)
 	}
 	if got, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), txt["id"].(string)); err != nil || string(got) != body {

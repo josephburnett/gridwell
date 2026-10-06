@@ -5,64 +5,67 @@ import (
 	"path/filepath"
 	"testing"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// capsPlugin declares every capability the plugin.v1 handshake has.
+// capsPlugin declares the plugin.v1 handshake's capabilities, writable as
+// told.
 type capsPlugin struct {
 	pluginv1.UnimplementedPluginServer
+	writable bool
 }
 
-func (capsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "caps", DisplayName: "caps", RootContext: "r", Watch: true, Writable: true}, nil
+func (p capsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	return &pluginv1.InfoResponse{Kind: "caps", DisplayName: "caps", RootContext: "r", Watch: true, Writable: p.writable}, nil
 }
 
-// The adapter declares the doors IT opens, never the plugin's: it has no
-// WriteContent, so a declared writable:true would offer editing the adapter
-// refuses, and writable stays false whatever the plugin says. Its Subscribe —
-// the supervisor's health and the grids its writes changed — is checked here
-// too, because the server's fan-in subscribes to every namespace and a stream
-// that is not there sends it into Unimplemented retries forever.
-func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
-	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = memStore.Close() })
-	cp, cpCloser, err := plugintest.Loopback(capsPlugin{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cpCloser)
-	client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
-	ctx := context.Background()
+func (capsPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+	return &pluginv1.ListResponse{Authoritative: true}, nil
+}
 
-	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Writable {
-		t.Error("Info declares writable; the adapter has no WriteContent to back it")
-	}
-	// The stream lives as long as its context, so the context ending is how it
-	// ends — never Unimplemented.
-	subCtx, subCancel := context.WithCancel(ctx)
-	subCancel()
-	if serr := client.Subscribe(subCtx, &gridwellv1.SubscribeRequest{}, func(*gridwellv1.Event) error { return nil }); serr != nil {
-		t.Errorf("Subscribe answered %v; the adapter must serve a stream", serr)
-	}
-	_, werr := client.WriteContent(ctx, func() (*gridwellv1.WriteContentRequest, error) {
-		return &gridwellv1.WriteContentRequest{TileId: "1"}, nil
-	})
-	if status.Code(werr) != codes.Unimplemented {
-		t.Errorf("WriteContent answered %v; a false writable declaration must mean no write door", werr)
+// A plugin's grids are writable exactly as it declares, since the adapter
+// writes a body through to it by key, and never accept tiles, since a plugin
+// creates none. Its Subscribe — the supervisor's health and the grids its
+// writes changed — is checked here too, because the server's fan-in
+// subscribes to every namespace and a stream that is not there sends it into
+// Unimplemented retries forever.
+func TestAdapterStampsTheWriteFactsThePluginDeclares(t *testing.T) {
+	for _, writable := range []bool{true, false} {
+		memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = memStore.Close() })
+		cp, cpCloser, err := plugintest.Loopback(capsPlugin{writable: writable})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(cpCloser)
+		client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
+		ctx := context.Background()
+
+		g, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID("r")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if g.Grid.Writable != writable {
+			t.Errorf("declared writable %v: the grid's writable is %v", writable, g.Grid.Writable)
+		}
+		if g.Grid.AcceptsTiles == nil || g.Grid.GetAcceptsTiles() {
+			t.Errorf("accepts_tiles = %v, want a stamped false: a plugin creates no tiles", g.Grid.AcceptsTiles)
+		}
+		// The stream lives as long as its context, so the context ending is
+		// how it ends — never Unimplemented.
+		subCtx, subCancel := context.WithCancel(ctx)
+		subCancel()
+		if serr := client.Subscribe(subCtx, &gridwellv1.SubscribeRequest{}, func(*gridwellv1.Event) error { return nil }); serr != nil {
+			t.Errorf("Subscribe answered %v; the adapter must serve a stream", serr)
+		}
 	}
 }
 

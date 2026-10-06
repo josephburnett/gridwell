@@ -4,11 +4,21 @@ import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
 // Plain-text files show verbatim, with no markdown mangling, because the plugin
-// declares text_presentation "plain". A read-only body refreshes on every
-// descent; caching it at version 0 would hide every later edit on disk.
+// declares text_presentation "plain". A body read under a stamp the file has
+// moved past is read again; caching it at version 0 would hide every later
+// edit on disk.
 
 const ROOT = makeRunDir();
-test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
+// Two plugins go through the FIXTURE form; see framing-stability.spec.ts.
+// pages declares no writable, so its notes are the read-only plugin document.
+test.use({
+  extraPlugins: async ({}, use) => {
+    await use([
+      { kind: 'fs', name: 'code', config: { root: ROOT } },
+      { kind: 'pages', name: 'site', config: {} },
+    ]);
+  },
+});
 
 test('the plugin fs declares no tool it cannot honor (#271)', async ({ gw, window }) => {
   await gw.enterPlugin('code');
@@ -68,40 +78,30 @@ test('a source file shows as plain text and refreshes each open', async ({ gw, w
 
   await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
-  // The '#' line is not a heading, the body sits in a plain <pre>, and no
-  // toggle offers a markdown flip.
-  await expect
-    .poll(() =>
-      window.evaluate(() => document.getElementById('gw-rendered-view')?.innerHTML ?? ''),
-    )
-    .toContain('gw-plain');
-  const html = await window.evaluate(() => document.getElementById('gw-rendered-view')!.innerHTML);
-  expect(html).toContain('# not a heading');
-  expect(html).not.toContain('<h1');
+  // The '#' line is the file's own bytes in the editor, and no toggle offers
+  // a markdown flip.
+  await expect.poll(async () => gw.textareaValue()).toBe('# not a heading\nplain body v1\n');
   expect(
     await window.evaluate(() => (document.getElementById('gw-text-toggle') as HTMLElement)?.style.display),
     'no rendered/raw toggle for a plain declaration',
   ).toBe('none');
 
-  // Every open re-reads, since the body is read-only, so bytes changed on disk
-  // show on the next descent.
+  // Bytes changed on disk while the file is closed show on the next descent:
+  // the row's stamp moved past the body's.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   fs.writeFileSync(path.join(ROOT, 'notes.go'), 'plain body v2 — changed on disk\n');
   await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
   await expect
-    .poll(() =>
-      window.evaluate(() => document.getElementById('gw-rendered-view')?.textContent ?? ''),
-      { timeout: 10_000 },
-    )
-    .toContain('changed on disk');
+    .poll(async () => gw.textareaValue(), { timeout: 10_000 })
+    .toBe('plain body v2 — changed on disk\n');
 });
 
-test('a file open in a pane shows bytes written on disk with no gesture', async ({ gw, window }) => {
-  // The plugin tells the entry changed (EntryChanged), the node tells the
-  // client its row's bytes moved (TileChanged.content_changed), and the cache
-  // drops the body the open view draws, so the view reads it again. Nothing
-  // on the row moves: a plugin body has no version.
+test('a file open in a pane shows bytes written on disk with no gesture', async ({ gw }) => {
+  // The plugin tells the entry changed (EntryChanged) under a new stamp, the
+  // node tells the client its row's bytes moved (Tile.content_stamp), and the
+  // cache drops the clean body the open view draws, so the view reads it
+  // again. The row's version does not move: a plugin body has none.
   const file = path.join(ROOT, 'live.go');
   fs.writeFileSync(file, 'first body\n');
   await gw.enterPlugin('code');
@@ -109,8 +109,7 @@ test('a file open in a pane shows bytes written on disk with no gesture', async 
   const tile = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t) => t.altText === 'live.go')!;
   expect(tile, 'live.go listed').toBeTruthy();
   await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
-  const shown = () =>
-    window.evaluate(() => document.getElementById('gw-rendered-view')?.textContent ?? '');
+  const shown = async () => (await gw.textareaValue()) ?? '';
   await expect.poll(shown, { timeout: 10_000 }).toContain('first body');
 
   fs.writeFileSync(file, 'second body, written while open\n');
@@ -127,9 +126,9 @@ test('a projection rearranged stays rearranged: fs tiles move and resize (#266)'
   const dir = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'movedir')!;
   expect(dir, 'movedir listed').toBeTruthy();
 
-  // A same-grid left-drag is placement rather than creation, so the read-only
-  // projection accepts it and its store persists it. The client must not refuse
-  // the gesture before the RPC can fire.
+  // A same-grid left-drag is placement rather than creation, so the
+  // projection, which accepts no tiles, accepts it and its store persists it.
+  // The client must not refuse the gesture before the RPC can fire.
   const fx = Number(dir.x ?? 0);
   const fy = Number(dir.y ?? 0);
   await gw.dragTileCell(fx, fy, fx, fy + 2);
@@ -160,21 +159,21 @@ test('a projection rearranged stays rearranged: fs tiles move and resize (#266)'
     .toBe('2x1');
 });
 
-test('a read-only file is selectable, and stays so through a reload (#268)', async ({
+test('a read-only plugin document is selectable, and stays so through a reload (#268)', async ({
   gw,
   window,
 }) => {
-  fs.writeFileSync(path.join(ROOT, 'copyme.txt'), 'grab these words with the mouse\n');
-  await gw.enterPlugin('code');
+  await gw.enterPlugin('site');
   const f = await gw.focused();
-  const tile = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'copyme.txt')!;
+  const tile = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'about')!;
+  expect(tile, 'the about note listed').toBeTruthy();
   await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
 
   // The descent must reach the url through the completion write, since a
-  // read-only file has no textarea events to stand in for a missing one. The
-  // reload must then restore the rendered DOM face, because the canvas-drawn
-  // text mode has nothing to select.
+  // read-only document has no textarea events to stand in for a missing one.
+  // The reload must then restore the rendered DOM face, because the
+  // canvas-drawn text mode has nothing to select.
   const fileSeg = String(tile.id).split('/').pop()!;
   await expect
     .poll(() => window.evaluate(() => location.pathname), { timeout: 10_000 })
@@ -191,13 +190,13 @@ test('a read-only file is selectable, and stays so through a reload (#268)', asy
         }),
       { timeout: 15_000 },
     )
-    .toContain('grab these words');
+    .toContain('serves web pages');
 
   // A real mouse drag must select the text, so no handler may swallow the drag
   // and no user-select may block it.
   const box = await window.evaluate(() => {
-    const pre = document.querySelector('#gw-rendered-view pre.gw-plain')!;
-    const r = pre.getBoundingClientRect();
+    const p = document.querySelector('#gw-rendered-view p')!;
+    const r = p.getBoundingClientRect();
     return { x: r.x, y: r.y, w: r.width, h: r.height };
   });
   await window.mouse.move(box.x + 2, box.y + 8);
@@ -206,5 +205,5 @@ test('a read-only file is selectable, and stays so through a reload (#268)', asy
   await window.mouse.up();
   await expect
     .poll(() => window.evaluate(() => globalThis.getSelection()?.toString() ?? ''))
-    .toContain('grab');
+    .toContain('plugin');
 });

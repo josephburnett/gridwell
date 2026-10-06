@@ -129,16 +129,21 @@ row's blob as the cache held it when the read was asked
 one rule: a higher row version, or the same version with another blob (a
 pane layout write mints a blob without a bump), is a body the row has moved
 past. A row with no claim — a plugin's, version 0 and no blob — has no fact
-that orders its bytes, so for it the event is the change: a `TileChanged`
-flagged `content_changed` makes a clean body behind, and nothing else does,
-so a refetch after `GridChanged`, whose rows are equal, keeps every open
-body, and a framing write on the same row keeps it too. `ageContentLocked`
+that orders its bytes. Where its source names them (`Tile.content_stamp`,
+the plugin's `Entry.content_stamp`, which the read answers with the bytes),
+the stamp decides as a version would: a row under another stamp makes a
+clean body behind, by event or refetch alike, and one under the body's own
+stamp does not, so the echo of the body's own save is no news. Where the
+source names none, the event is the change: a `TileChanged` flagged
+`content_changed` makes a clean body behind, and nothing else does, so a
+refetch after `GridChanged`, whose rows are equal, keeps every open body,
+and a framing write on the same row keeps it too. `ageContentLocked`
 applies the rule to every row the cache learns — event,
 `PutGrid` refetch, or write response, whether or not the row's grid is
-cached — and `PutFetchedContent` to a reply the cached row moved past while
-it was in flight. Who reads the body again is whoever draws it: the cache
+cached — and `PutFetchedContent` to a reply whose row moved blob or stamp
+while it was in flight. Who reads the body again is whoever draws it: the cache
 only drops it. What is drawn from a body (a face's raster, a wrap) is keyed
-by `Cache.ContentStamp`, the bytes as last given, never by the row's version,
+by `Cache.BodyGen`, the bytes as last given, never by the row's version,
 which a plugin body's does not move. `SaveBasis` is what a save claims, never the grid row
 version, so a foreign writer's event can advance the row without ever
 advancing what this client is allowed to claim. A dirty entry is never
@@ -370,15 +375,23 @@ The version interlock, the outbox park, and the drain.
    typed during an outage cannot stay out of the outbox.
 2. The debounce sweep or an ascent flush calls `App.enqueueTextSave`, which
    goes through `contentSaves` (`outbox.SaveQueue`), the per-key serial
-   queue a pane layout shares. The version is claimed AT SEND TIME, after
+   queue a pane layout shares. The basis is claimed AT SEND TIME, after
    any earlier write for the same tile has
-   advanced the basis: `a.c.SaveBasis(tileID)`, never the grid row version.
+   advanced it: `a.c.SaveBasis(tileID)`, never the grid row's.
    The row advances when a foreign writer's event or a refetch lands without
    this client seeing the new bytes; claiming it would carry the current
-   version with stale bytes past the server's check.
+   version with stale bytes past the server's check. The basis is an
+   `rpc.ContentBasis`: the version for a home body, and for a plugin's, which
+   has none, the source's stamp the bytes were read under
+   (`ContentChunk.content_stamp`).
 3. `App.postWriteContent` → `rpc.Client.WriteContent` → the router → the
    owning namespace. Home claims and bumps through `claimContentVersion` +
-   `finishContentEdit`, the one pair that may, and emits a `TileChanged`.
+   `finishContentEdit`, the one pair that may, and emits a `TileChanged`. A
+   plugin's adapter writes through by key with the claimed stamp
+   (`Adapter.WriteContent`), the plugin refuses a stamp that is not the
+   entry's now with the same `FailedPrecondition` a stale version gets, and
+   the adapter answers the row with the written bytes' stamp and emits its
+   `TileChanged`, flagged `content_changed`.
 4. On success the client advances immediately, not when the echo lands:
    `a.c.UpdateTile(tile.GridID, *tile)` and
    `a.c.PutSavedContent(tile, newContent)`, filed under the response row.
@@ -389,7 +402,10 @@ The version interlock, the outbox park, and the drain.
    If an earlier write's echo (version N-1) is still in flight, the interlock
    `n.Version < cur.Version` drops it: applying it would roll the tile back
    and then forward, a mutation the user never made. The response row at N
-   stands.
+   stands. A plugin's write echoes twice — the adapter's `TileChanged` and the
+   plugin's own `Watch` `EntryChanged` — both carrying the written bytes'
+   stamp, which the body is now filed under, so neither drops it: the typed
+   text stays, saved or still being typed.
 
    There is one door into a grid's tile map, `Cache.putTileLocked`, and both
    `Apply` and `UpdateTile` are it: the interlock and content aging
@@ -545,6 +561,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The echo interlock drops an older `TileChanged` | `client/cache/cache_test.go:TestApplyStaleEchoDropped` (unit) |
 | A fetch never clobbers dirty bytes; a stale reply never regresses the basis | `cache_test.go:TestFetchNeverClobbersDirtyContent`, `TestStaleFetchNeverRegressesContent` |
 | A save response keeps mid-flight typing and only advances the basis | `cache_test.go:TestSavedContentKeepsMidFlightTyping` |
+| A plugin body is aged by its source's stamp: its own save's echo keeps it, another stamp drops it, a reply whose row moved stamp mid-flight is refused; a remembered body keeps its stamp; across the seam the row and the read name a file's bytes by one stamp | `client/cache/binding_test.go:TestAStampedBodyAgesByItsStamp`, `internal/sourcecache/stamp_test.go`, `internal/server/fs_stamp_seam_test.go` |
 | A body answers only for the blob it was filed under, whichever door the newer row came by; a save is filed under its response row | `client/cache/binding_test.go:TestABodyIsBoundToItsOwnBlob`, `TestASavedBodyAnswersForItsResponseRow`, `TestDirtyTextSurvivesAForeignRowAnywhere` |
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |
@@ -553,4 +570,5 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A foreign edit becomes visible, and opening/closing never stomps it | `apps/desktop/e2e/foreign-writer.spec.ts` |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
 | An older write RESPONSE is refused by the same interlock an older echo is: one door into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneDoor`, `TestUpdateTileAgesTheBodyToo` (unit) |
+| A plugin body saves as a home one does: a clean save lands on disk and its own echoes keep the typed text; bytes changed on disk under a dirty edit refuse the save as a conflict and show the file; a write the plugin cannot take parks under its key-form id and lands when it is back; a verdict never parks | `internal/server/fs_write_seam_test.go`, `internal/pluginhost/adapter_caps_test.go:TestAdapterStampsTheWriteFactsThePluginDeclares`, the fs plugin's `fs/plugin/write_test.go`; live, `apps/desktop/e2e/fs-edit.spec.ts` |
 | `syncContentOutbox`'s derivation: dirty→park, clean→ack, and the pre-drain sweep over the dirty set | `client/outbox/outbox_test.go:TestRecordContentIsTheDirtinessFork`, `TestSyncContentParksTheDirtySetInOrder` (`Outbox.RecordContent`/`SyncContent`; `mutate.go` is glue) |

@@ -99,14 +99,7 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 	if err != nil {
 		return nil, err
 	}
-	resp := &gridwellv1.InfoResponse{
-		DisplayName: ci.DisplayName,
-		Glyph:       ci.Glyph,
-		// Writable describes the door this adapter opens, not the plugin's
-		// answer: false because there is no WriteContent here and passing the
-		// plugin's through would offer editing that is then refused.
-		Writable: false,
-	}
+	resp := &gridwellv1.InfoResponse{DisplayName: ci.DisplayName, Glyph: ci.Glyph}
 	for _, m := range declaredEntries(ci) {
 		out := &gridwellv1.MenuEntry{
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
@@ -343,6 +336,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 			// A link's content facts are its target's, read through it.
 			pt.StatusDetail = e.StatusDetail
 		case listed:
+			pt.ContentStamp = e.ContentStamp
 			pt.ServesPage = e.ServesPage
 			pt.TextPresentation = e.TextPresentation
 			pt.PreviewBlobId = faceKey(pt.PreviewBlobId, e.PreviewStamp)
@@ -478,19 +472,21 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 		tiles = kept
 	}
-	// host_content and glyph ride the grid: a grid reached through a mount has
-	// no local row. source_label is the listing's own, so it is as fresh as
-	// the rows.
+	// host_content, glyph and writable ride the grid: a grid reached through
+	// a mount has no local row. source_label is the listing's own, so it is
+	// as fresh as the rows. A plugin creates no tiles.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, err
 	}
 	addr := rpc.EntryGridID(ckey)
 	g := &gridwellv1.Grid{
-		Id:          addr,
-		HostContent: ci.HostContent,
-		Glyph:       ci.Glyph,
-		SourceLabel: resp.SourceLabel,
+		Id:           addr,
+		AcceptsTiles: proto.Bool(false),
+		Writable:     ci.Writable,
+		HostContent:  ci.HostContent,
+		Glyph:        ci.Glyph,
+		SourceLabel:  resp.SourceLabel,
 	}
 	wire, err := buildTiles(addr, ckey, tiles, resp.Entries, a.mem.ContextKey)
 	if err != nil {
@@ -907,11 +903,67 @@ func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRe
 		if rerr != nil {
 			return rerr
 		}
-		// Plugin content is not version-edited, so version 0.
-		if serr := send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType}); serr != nil {
+		// Plugin content is not version-edited, so version 0; its stamp
+		// stands in.
+		if serr := send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType, ContentStamp: chunk.ContentStamp}); serr != nil {
 			return serr
 		}
 	}
+}
+
+// WriteContent writes a body through to the plugin by key, claiming the stamp
+// it was read under; the version a plugin row lacks is not read. It commits
+// only at the caller's clean close, answers the row as GetTile serves it
+// carrying the written bytes' stamp, and tells it as the home tells its own
+// writes, a TileChanged, flagged because the row's version cannot say so.
+func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
+	first, err := recv()
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "plugin: write: empty stream")
+	}
+	key, err := a.contentKey(first.TileId)
+	if err != nil {
+		return nil, err
+	}
+	// Cancelled unless the stream closes cleanly, so the plugin never sees
+	// the end of a write the caller broke off.
+	wctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	up, err := a.cp.WriteContent(wctx)
+	if err != nil {
+		return nil, err
+	}
+	msg := &pluginv1.WriteContentRequest{Key: key, Data: first.Data, ContentStamp: first.ContentStamp}
+	for n := len(first.Data); ; {
+		if err := up.Send(msg); err != nil {
+			_, rerr := up.CloseAndRecv()
+			return nil, cmp.Or(rerr, err)
+		}
+		next, rerr := recv()
+		if errors.Is(rerr, io.EOF) {
+			break
+		}
+		if rerr != nil {
+			return nil, rerr
+		}
+		if n += len(next.Data); n > rpc.MaxContentBytes {
+			return nil, status.Error(codes.InvalidArgument, "plugin: write: content too large")
+		}
+		msg = &pluginv1.WriteContentRequest{Data: next.Data}
+	}
+	wrote, err := up.CloseAndRecv()
+	if err != nil {
+		return nil, err
+	}
+	t, err := a.tileByID(ctx, first.TileId)
+	if err != nil {
+		return nil, err
+	}
+	t.ContentStamp = wrote.ContentStamp
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: proto.CloneOf(t), ContentChanged: true},
+	}})
+	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
 func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	gwrpc "github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/connection/dial/dialtest"
 	"github.com/josephburnett/gridwell/internal/server"
 )
@@ -118,7 +119,7 @@ func TestConnectionDoorHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
 	// editRemote edits directly on the remote node, as another device
 	// would, and bumps the tracked version.
 	editRemote := func(body string) {
-		wt, err := clientFor(remoteOrigin).WriteContent(context.Background(), remoteTxtID, version, []byte(body))
+		wt, err := clientFor(remoteOrigin).WriteContent(context.Background(), remoteTxtID, gwrpc.ContentBasis{Version: version}, []byte(body))
 		if err != nil {
 			t.Fatalf("remote WriteContent: %v", err)
 		}

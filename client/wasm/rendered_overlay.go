@@ -119,7 +119,7 @@ func (a *App) refreshRenderedOverlay() {
 	s.Set("fontSize", pxf(14*a.textScaleFor(p)))
 	s.Set("display", "block")
 
-	key := t.Id + "\x00" + strconv.FormatUint(a.c.ContentStamp(rpc.ContentID(t)), 10) + "\x00" +
+	key := t.Id + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(t)), 10) + "\x00" +
 		strconv.FormatBool(markdown.IsOrg(t.AltText)) + "\x00" + fmt.Sprint(len(body))
 	if key != a.overlays.lastRenderedKey {
 		div.Set("innerHTML", textedit.PresentationHTML(t, body))

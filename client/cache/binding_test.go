@@ -19,7 +19,7 @@ func TestABodyIsBoundToItsOwnBlob(t *testing.T) {
 	pane := func(grid string, blob int64) *gridwellv1.Tile {
 		return &gridwellv1.Tile{Id: "10", GridId: grid, Kind: rpc.KindPane, Version: 1, BlobId: blob}
 	}
-	fetchA := func(c *Cache) { c.PutFetchedContent("10", []byte("A"), 1, c.AskContent("10")) }
+	fetchA := func(c *Cache) { c.PutFetchedContent("10", []byte("A"), vb(1), c.AskContent("10")) }
 	cases := []struct {
 		name string
 		// seed leaves layout A cached, filed under whatever the cache knew.
@@ -53,7 +53,7 @@ func TestABodyIsBoundToItsOwnBlob(t *testing.T) {
 			func(c *Cache) {
 				asked := c.AskContent("10")
 				c.Apply(changedEvent(pane("1", 8)))
-				c.PutFetchedContent("10", []byte("A"), 1, asked)
+				c.PutFetchedContent("10", []byte("A"), vb(1), asked)
 			}},
 	}
 	for _, tc := range cases {
@@ -64,7 +64,7 @@ func TestABodyIsBoundToItsOwnBlob(t *testing.T) {
 			if b, ok := c.TileContent("10"); ok {
 				t.Fatalf("layout %q answered for a row naming blob 8", b)
 			}
-			c.PutFetchedContent("10", []byte("B"), 1, c.AskContent("10"))
+			c.PutFetchedContent("10", []byte("B"), vb(1), c.AskContent("10"))
 			if b, ok := c.TileContent("10"); !ok || string(b) != "B" {
 				t.Fatalf("a read filed under the current row = %q %v, want B", b, ok)
 			}
@@ -79,7 +79,7 @@ func TestASavedBodyAnswersForItsResponseRow(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 1, BlobId: 7},
 	})
-	c.PutFetchedContent("10", []byte("A"), 1, c.AskContent("10"))
+	c.PutFetchedContent("10", []byte("A"), vb(1), c.AskContent("10"))
 
 	row := &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 1, BlobId: 8}
 	c.PutSavedContent(row, []byte("B"))
@@ -96,7 +96,7 @@ func TestDirtyTextSurvivesAForeignRowAnywhere(t *testing.T) {
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		{Id: "10", GridId: "1", Kind: rpc.KindText, Version: 3, BlobId: 7},
 	})
-	c.PutFetchedContent("10", []byte("# saved"), 3, c.AskContent("10"))
+	c.PutFetchedContent("10", []byte("# saved"), vb(3), c.AskContent("10"))
 	c.PutEditedContent("10", []byte("# typing"))
 
 	foreign := &gridwellv1.Tile{Id: "10", GridId: "9", Kind: rpc.KindText, Version: 4, BlobId: 8}
@@ -106,8 +106,8 @@ func TestDirtyTextSurvivesAForeignRowAnywhere(t *testing.T) {
 	if b, ok := c.DirtyContent("10"); !ok || string(b) != "# typing" {
 		t.Fatalf("a foreign row discarded unsaved typing: %q %v", b, ok)
 	}
-	if base, _ := c.SaveBasis("10"); base != 3 {
-		t.Errorf("save basis = %d, want 3 so the save conflicts visibly", base)
+	if base, _ := c.SaveBasis("10"); base.Version != 3 {
+		t.Errorf("save basis = %d, want 3 so the save conflicts visibly", base.Version)
 	}
 }
 
@@ -151,7 +151,7 @@ func TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo(t *testing.T) {
 	seeded := func() *Cache {
 		c := New()
 		c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row()})
-		c.PutFetchedContent("p/~a", []byte("one"), 0, c.AskContent("p/~a"))
+		c.PutFetchedContent("p/~a", []byte("one"), vb(0), c.AskContent("p/~a"))
 		return c
 	}
 	kept := []struct {
@@ -202,38 +202,106 @@ func TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo(t *testing.T) {
 	})
 }
 
-// A body's stamp names the bytes the server last gave, not the row: a plugin
-// body read again after its event said it moved gets a new stamp at the same
-// version, so a picture or wrap keyed by it is made again; typing keeps it,
-// as typing keeps the version; a save gives the saved bytes their own.
-func TestAStampNamesTheBytesNotTheRow(t *testing.T) {
+// A body's generation names the bytes the server last gave, not the row: a
+// plugin body read again after its event said it moved gets a new one at the
+// same version, so a picture or wrap keyed by it is made again; typing keeps
+// it, as typing keeps the version; a save gives the saved bytes their own.
+func TestAGenerationNamesTheBytesNotTheRow(t *testing.T) {
 	c := New()
 	row := &gridwellv1.Tile{Id: "p/~a", GridId: "p/~", Kind: rpc.KindText}
 	c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row})
-	if s := c.ContentStamp("p/~a"); s != 0 {
-		t.Fatalf("no body, stamp %d; want 0", s)
+	if s := c.BodyGen("p/~a"); s != 0 {
+		t.Fatalf("no body, generation %d; want 0", s)
 	}
-	c.PutFetchedContent("p/~a", []byte("one"), 0, c.AskContent("p/~a"))
-	first := c.ContentStamp("p/~a")
+	c.PutFetchedContent("p/~a", []byte("one"), vb(0), c.AskContent("p/~a"))
+	first := c.BodyGen("p/~a")
 	if first == 0 {
-		t.Fatal("a fetched body has no stamp")
+		t.Fatal("a fetched body has no generation")
 	}
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: row, ContentChanged: true}}})
-	if s := c.ContentStamp("p/~a"); s != 0 {
-		t.Fatalf("an aged body still stamped %d", s)
+	if s := c.BodyGen("p/~a"); s != 0 {
+		t.Fatalf("an aged body still at generation %d", s)
 	}
-	c.PutFetchedContent("p/~a", []byte("two"), 0, c.AskContent("p/~a"))
-	second := c.ContentStamp("p/~a")
+	c.PutFetchedContent("p/~a", []byte("two"), vb(0), c.AskContent("p/~a"))
+	second := c.BodyGen("p/~a")
 	if second == 0 || second == first {
-		t.Fatalf("new bytes at the same version stamped %d after %d; want a new stamp", second, first)
+		t.Fatalf("new bytes at the same version at generation %d after %d; want a new one", second, first)
 	}
 	c.PutEditedContent("p/~a", []byte("two, typed"))
-	if s := c.ContentStamp("p/~a"); s != second {
-		t.Errorf("typing moved the stamp %d -> %d", second, s)
+	if s := c.BodyGen("p/~a"); s != second {
+		t.Errorf("typing moved the generation %d -> %d", second, s)
 	}
 	c.PutSavedContent(&gridwellv1.Tile{Id: "p/~a", Version: 1}, []byte("two, typed"))
-	if s := c.ContentStamp("p/~a"); s == second || s == 0 {
-		t.Errorf("saved bytes kept stamp %d", s)
+	if s := c.BodyGen("p/~a"); s == second || s == 0 {
+		t.Errorf("saved bytes kept generation %d", s)
 	}
+}
+
+// A row whose source names its bytes (Tile.content_stamp) is aged by the
+// stamp, as a home row is by its version: the echo of bytes the body already
+// holds, told or not, keeps it, so text typed into a plugin body is never
+// dropped by its own save's echo; another stamp, by event or by refetch, drops
+// a clean body; and a row that moved stamp while a read was out refuses the
+// reply.
+func TestAStampedBodyAgesByItsStamp(t *testing.T) {
+	row := func(stamp string) *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "p/~a", GridId: "p/~", Kind: rpc.KindText, ContentStamp: stamp}
+	}
+	told := func(n *gridwellv1.Tile) *gridwellv1.Event {
+		return &gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+			TileChanged: &gridwellv1.TileChanged{Tile: n, ContentChanged: true}}}
+	}
+	seeded := func() *Cache {
+		c := New()
+		c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row("s1")})
+		c.PutFetchedContent("p/~a", []byte("one"), rpc.ContentBasis{Stamp: "s1"}, c.AskContent("p/~a"))
+		return c
+	}
+	for name, then := range map[string]func(c *Cache){
+		"its own stamp, told":      func(c *Cache) { c.Apply(told(row("s1"))) },
+		"its own stamp, refetched": func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row("s1")}) },
+	} {
+		c := seeded()
+		then(c)
+		if b, ok := c.TileContent("p/~a"); !ok || string(b) != "one" {
+			t.Errorf("%s: body = %q, %v; want it kept", name, b, ok)
+		}
+	}
+	for name, then := range map[string]func(c *Cache){
+		"another stamp, told":      func(c *Cache) { c.Apply(told(row("s2"))) },
+		"another stamp, refetched": func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row("s2")}) },
+	} {
+		c := seeded()
+		then(c)
+		if b, ok := c.TileContent("p/~a"); ok {
+			t.Errorf("%s: body = %q; want it dropped for a refetch", name, b)
+		}
+	}
+
+	t.Run("a save and its echo", func(t *testing.T) {
+		c := seeded()
+		c.PutEditedContent("p/~a", []byte("typed"))
+		resp := row("s2")
+		c.PutWriteResponse("p/~", resp, WroteBody)
+		c.PutSavedContent(resp, []byte("typed"))
+		if base, _ := c.SaveBasis("p/~a"); base.Stamp != "s2" {
+			t.Fatalf("the save basis after the save is %+v; want the response's stamp", base)
+		}
+		c.Apply(told(row("s2")))
+		if b, ok := c.TileContent("p/~a"); !ok || string(b) != "typed" {
+			t.Errorf("the saved body after its own echo = %q, %v; want it kept", b, ok)
+		}
+	})
+
+	t.Run("a row that moved while the read was out", func(t *testing.T) {
+		c := New()
+		c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row("s1")})
+		asked := c.AskContent("p/~a")
+		c.Apply(told(row("s2")))
+		c.PutFetchedContent("p/~a", []byte("one"), rpc.ContentBasis{Stamp: "s1"}, asked)
+		if b, ok := c.TileContent("p/~a"); ok {
+			t.Errorf("a reply asked under s1 was stored as %q after the row moved to s2", b)
+		}
+	})
 }

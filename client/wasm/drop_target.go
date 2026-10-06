@@ -64,8 +64,8 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	}
 	// Unknown is not read-only: a drop must not be refused because the
 	// target grid's fetch has not landed.
-	targetWritable, targetKnown := a.gridWritable(t.gridID)
-	in.TargetReadOnly = targetKnown && !targetWritable
+	accepts, targetKnown := a.gridAcceptsTiles(t.gridID)
+	in.TargetRefusesTiles = targetKnown && !accepts
 	in.SameGrid = t.gridID == d.srcGridID
 	in.CrossPlugin = dropCrossNamespace(d, t)
 	if !d.intent.Creates() {
@@ -182,7 +182,7 @@ func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 // same-namespace cross-grid move with a host-content endpoint, since host mv
 // is unimplemented and host directories are not a placement medium. A
 // cross-namespace left-drag verdicts DropLink and is exempt; a read-only
-// destination is the separate TargetReadOnly gate.
+// destination is the separate TargetRefusesTiles gate.
 func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false

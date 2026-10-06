@@ -87,7 +87,7 @@ record shapes. Everything else derives from it:
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Search` |
-| Content | `ReadContent`, `WriteContent` — the one way bytes move. Versioned. A write commits at close; a broken stream leaves the old value. |
+| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
@@ -106,11 +106,18 @@ and a plugin row also keeps it in its snapshot beside kind, label and
 `url_string` (`store.snapshotOf`), so a row its source does not list right
 now still presents as the page it was. A plugin tile's `preview_blob_id` is
 `pluginhost.faceKey`'s: the node's screenshot of the tile once one exists,
-else the plugin's picture keyed below zero. `Grid.writable`, `scratch_grid_id`, and
+else the plugin's picture keyed below zero. `Grid.scratch_grid_id` and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
 transit), which fails the read when the owner's handshake does not answer.
+`Grid.accepts_tiles` (the + menu, a drop, a url's address) and
+`Grid.writable` (its bodies take edits) are the owning namespace's stamp on
+its own grid — the home's `GetGrid` and `Adapter.synthesize` — carried
+verbatim in transit, where `TransitQualifyGrid` reads an older node's one
+bit for both.
 `TileChanged.content_changed` (this claimless row's bytes moved) comes from
-`pluginhost.Adapter.applyEntry` alone.
+`pluginhost.Adapter.applyEntry` alone, and `Tile.content_stamp` (the
+source's name for those bytes) from the plugin's `Entry` through
+`pluginhost.buildTiles`.
 `Grid.host_content` (these rows project host state) and
 `Grid.glyph` (the grid's identity face) come from the owning plugin's
 `Info` through `pluginhost/adapter.go`; they are what the client reads
@@ -325,19 +332,23 @@ framing back through `SetFraming` and freezes a live preview, with no claim
 and no version bump.
 A debounced settle persister does the same without waiting for an ascent.
 
-**Content.** A cache entry ({bytes, base version, dirty}, keyed by tile id)
-owns a text tile's body. Keystrokes mirror into it; every flush goes through
-`text_flush.go` by tile id, never through the DOM. A stale save 409s and
-reconciles visibly. `cache.Apply` drops events older than the cached row and
-spares a dirty body. A plugin row has no version, so its event says when its
-bytes moved (`TileChanged.content_changed`).
+**Content.** A cache entry ({bytes, base, dirty}, keyed by tile id) owns a
+text tile's body; its base (`rpc.ContentBasis`) is the version the bytes
+were read at, or for a plugin row, which has none, the source's stamp.
+Keystrokes mirror into it; every flush goes through `text_flush.go` by tile
+id, never through the DOM. A stale save 409s and reconciles visibly.
+`cache.Apply` drops events older than the cached row and spares a dirty
+body. A plugin row's stamp (`Tile.content_stamp`) says whether a body is
+behind it, and where the source names none, its event says when its bytes
+moved (`TileChanged.content_changed`).
 
 **Outbox.** `client/outbox` is the ordered record of writes the server has
 not answered: framing, captures, layout, unsaved bytes. One reconcile rule
 (`Record`: a transport failure parks a retry, any verdict acks). Two drains:
 the retry kick on reconnect and the unload flush by `sendBeacon`. It holds
 order and retry, never a copy of a value. `client/wasm/mutate.go` has two
-paths: `postWriteContent` (the one write that claims a version) and
+paths: `postWriteContent` (the one write that claims a basis, a version or a
+plugin's stamp) and
 `write`/`do` (everything else).
 
 **Dead links.** A link is a path of hops. When any hop stops declaring the

@@ -233,8 +233,8 @@ func TestConnectionThroughTheChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g.Grid.NodeNs != localNodeID+"/geneva" || !g.Grid.Writable {
-		t.Fatalf("landing grid = %+v, want node_ns %s/geneva, writable", g.Grid, localNodeID)
+	if g.Grid.NodeNs != localNodeID+"/geneva" || !g.Grid.Writable || !g.Grid.GetAcceptsTiles() {
+		t.Fatalf("landing grid = %+v, want node_ns %s/geneva, writable and accepting tiles", g.Grid, localNodeID)
 	}
 
 	// Write through the chain, read back on the remote's own door.
@@ -562,8 +562,8 @@ func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
 	if string(data) != string(body) {
 		t.Errorf("link content = %q, want the target's %q", data, body)
 	}
-	if version != src.Version {
-		t.Errorf("link content version = %d, want the target's %d", version, src.Version)
+	if version.Version != src.Version {
+		t.Errorf("link content version = %d, want the target's %d", version.Version, src.Version)
 	}
 
 	// The preview door resolves the same link the same way.

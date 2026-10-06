@@ -1022,7 +1022,7 @@ func TestAnEmptyBodyIsRemembered(t *testing.T) {
 	if down {
 		t.Fatal("remembering an empty body broke the cache: the strip now says it cannot remember answers")
 	}
-	if _, _, _, ok := cc.loadContent(ctx, id); !ok {
+	if _, _, _, _, ok := cc.loadContent(ctx, id); !ok {
 		t.Fatal("an empty body was not remembered")
 	}
 

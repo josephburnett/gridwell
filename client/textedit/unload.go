@@ -19,14 +19,14 @@ const (
 // DecideUnloadFlush decides whether a dying page writes a dirty content entry;
 // what it claims is SaveClaim's. An unknown row still writes, because unload
 // is the one flush with no next sweep behind it.
-func DecideUnloadFlush(rowKnown, rowTakesBytes, rowOwnsContent bool, rowVersion, basis int64, haveBasis bool) (claim int64, do UnloadFlush) {
+func DecideUnloadFlush(rowKnown, rowTakesBytes, rowOwnsContent bool, row, basis rpc.ContentBasis, haveBasis bool) (claim rpc.ContentBasis, do UnloadFlush) {
 	if rowKnown && !rowTakesBytes {
-		return 0, UnloadSkip
+		return rpc.ContentBasis{}, UnloadSkip
 	}
 	if !haveBasis && !rowKnown {
-		return 0, UnloadAsync
+		return rpc.ContentBasis{}, UnloadAsync
 	}
-	return SaveClaim(rowKnown && rowOwnsContent, rowVersion, basis, haveBasis), UnloadBeacon
+	return SaveClaim(rowKnown && rowOwnsContent, row, basis, haveBasis), UnloadBeacon
 }
 
 // Framing is a text tile's persisted window, the SetTextView payload. Both

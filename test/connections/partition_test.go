@@ -19,6 +19,7 @@ import (
 	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	gwrpc "github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/connection/dial/dialtest"
 )
 
@@ -119,14 +120,14 @@ func TestMountPartitionServesCache(t *testing.T) {
 		"gridId": wellChild,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
-	if _, err := cl.WriteContent(ctx, warmT["id"].(string), num(warmT["version"]), []byte("warmed words")); err != nil {
+	if _, err := cl.WriteContent(ctx, warmT["id"].(string), gwrpc.ContentBasis{Version: num(warmT["version"])}, []byte("warmed words")); err != nil {
 		t.Fatal(err)
 	}
 	coldT := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": wellChild,
 		"tile":   map[string]any{"kind": "text", "x": 2, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
-	if _, err := cl.WriteContent(ctx, coldT["id"].(string), num(coldT["version"]), []byte("cold words")); err != nil {
+	if _, err := cl.WriteContent(ctx, coldT["id"].(string), gwrpc.ContentBasis{Version: num(coldT["version"])}, []byte("cold words")); err != nil {
 		t.Fatal(err)
 	}
 	// A second never-read text for the re-warm after the revival. It is not
@@ -135,7 +136,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 		"gridId": wellChild,
 		"tile":   map[string]any{"kind": "text", "x": 4, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
-	if _, err := cl.WriteContent(ctx, colderT["id"].(string), num(colderT["version"]), []byte("colder words")); err != nil {
+	if _, err := cl.WriteContent(ctx, colderT["id"].(string), gwrpc.ContentBasis{Version: num(colderT["version"])}, []byte("colder words")); err != nil {
 		t.Fatal(err)
 	}
 

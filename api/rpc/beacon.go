@@ -63,9 +63,9 @@ func DeleteTileBeacon(req *pb.DeleteTileRequest) (path string, body []byte) {
 // Returns a nil body when the data will not fit the beacon budget, so the
 // caller falls back to the ordinary async post rather than beaconing something
 // the browser truncates.
-func WriteContentBeacon(tileID string, version int64, data []byte) (path string, body []byte) {
+func WriteContentBeacon(tileID string, claim ContentBasis, data []byte) (path string, body []byte) {
 	const beaconBudget = 60 * 1024
-	m, err := protojson.Marshal(&pb.WriteContentRequest{TileId: tileID, Version: version, Data: data})
+	m, err := protojson.Marshal(&pb.WriteContentRequest{TileId: tileID, Version: claim.Version, ContentStamp: claim.Stamp, Data: data})
 	if err != nil || len(m) > beaconBudget {
 		return "", nil
 	}

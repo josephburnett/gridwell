@@ -259,6 +259,19 @@ const (
 	TextPresentationBoth  = "both"
 )
 
+// ContentBasis names a body's bytes as their owner does: the row version for a
+// versioned body, the source's stamp (Tile.content_stamp) for a claimless one.
+// A read answers it with the bytes, and a write claims it.
+type ContentBasis struct {
+	Version int64
+	Stamp   string
+}
+
+// BasisOf is the basis row t names for the bytes behind it.
+func BasisOf(t *pb.Tile) ContentBasis {
+	return ContentBasis{Version: t.GetVersion(), Stamp: t.GetContentStamp()}
+}
+
 // ContentID is the tile id that owns a tile's content: a leaf link's target, or
 // the tile's own id.
 func ContentID(t *pb.Tile) string {

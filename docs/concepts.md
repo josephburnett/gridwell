@@ -48,7 +48,7 @@ here.
 | **dark** (`internal/sourcecache` and `internal/pluginhost`, health events) | Declared, not answering right now — a connection that will not dial, or a plugin whose directory or API stopped answering while its process still does. Fetched, reported, recovers on its own. It is one fact: a room served by a dark source is a memory rather than an answer, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
 | **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
 | **broken** (`pluginhealth.Broken`) | A doorway that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
-| **unknown** | Not yet known, which is neither yes nor no. `scratch.For` and `a.gridWritable` both return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
+| **unknown** | Not yet known, which is neither yes nor no. `scratch.For`, `a.gridWritable` and `a.gridAcceptsTiles` all return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
 
 `pluginhealth.Classify` answers only for a row that can be a door: a node's
 home, a connection, a plugin's collection swatch. A plugin's own row is none of
@@ -58,7 +58,7 @@ those, so it has no status at all — nothing draws it, and no click reaches it.
 
 | Concept | What it does |
 |---|---|
-| **content** | The user's bytes: a text body, a typed url, a typed name. The only class that claims a version and can 409. |
+| **content** | The user's bytes: a text body, a typed url, a typed name. The only class that claims a version and can 409. A plugin's body has no version, so its write claims the source's stamp of the bytes it was typed over (`Tile.content_stamp`), and a stale stamp is the same conflict. |
 | **framing** | Where you left a view: `SetFraming`, and `SetTile`'s text-window, content-zoom and url-frozen arms. No claim, no bump. |
 | **capture** | What the machine observed: a preview JPEG, a page title, a url trail. No claim, no bump. |
 | **layout** | Where things sit: place, clone, delete. No claim, no bump; last-writer-wins. |
@@ -72,7 +72,8 @@ class, and the word says who started the write.
 
 | Concept | What it does |
 |---|---|
-| **read-only** (`a.tileReadOnly`) | A text tile in a grid that is not writable: no textarea, no save, no checkbox flip, rendered face only. Nobody types into a derived body and silently re-posts it. |
+| **read-only** (`a.tileReadOnly`) | A text tile in a grid that is not writable (`Grid.writable`, its bodies take edits): no textarea, no save, no checkbox flip, rendered face only. Nobody types into a derived body and silently re-posts it. A home grid is writable; a plugin's is exactly when the plugin declares `writable`, and then its text tiles save to the source like a home document. |
+| **accepts tiles** (`Grid.accepts_tiles`) | The grid takes new tiles: the + menu offers the primitives, a swatch or a clone drops into it, and its url rows' addresses are the node's to write. Every home grid does; a plugin's never does, since a plugin creates nothing, and that is apart from whether its bodies take edits. |
 | **host_content** (`Grid.Meta.HostContent`) | Every row in this grid projects host state and gets the red "outside Gridwell" treatment. The plugin declares it, so the client never learns plugin kinds. |
 | **serves_page** | This url tile opens at the `/content/` door, where its plugin serves the page, instead of at an address of its own. It is either a text tile or a url tile: a text tile cannot serve from the plugin, so the plugin door (`acceptEntries`) refuses the declaration on every kind but url. The address, title and history are the plugin's, so the freeze writes the screenshot alone (`urlview.Writeback`); the face, the standing freeze and the zoom are a url tile's. |
 | **text_presentation: plain** | Verbatim preformatted text; no rendered/raw toggle. |

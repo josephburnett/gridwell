@@ -157,7 +157,7 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	urlTile, err = cl.WriteContent(ctx, urlTile.Id, urlTile.Version, []byte("https://example.com/album"))
+	urlTile, err = cl.WriteContent(ctx, urlTile.Id, rpc.ContentBasis{Version: urlTile.Version}, []byte("https://example.com/album"))
 	if err != nil {
 		t.Fatal(err)
 	}

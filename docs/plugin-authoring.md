@@ -50,7 +50,8 @@ it, rule by rule, with a checklist to tick before you ship.
 - **Unimplemented is fine**: a minimal plugin is `Info` + `List` +
   `ReadContent`. Search = no results, ServeContent = 404, Watch = the
   node learns of changes only when it next lists, WriteContent =
-  read-only, GetPreview = no thumbnail, Delete = refused.
+  read-only (leave `writable` unset), GetPreview = no thumbnail,
+  Delete = refused.
 - **Errors**: transport-shaped failures (Unavailable, DeadlineExceeded)
   mean "not right now" and the node serves what it has.
   Coded answers mean what they say. Never answer NotFound for something
@@ -171,16 +172,18 @@ could have:
 
 - `ContextChanged{context}`: that context's `List` would answer
   differently — an entry arrived, left, moved, or changed its label, status
-  or stamp. The node lists the context and tells the clients showing it only
+  or picture stamp. The node lists the context and tells the clients showing it only
   if the answer moved, so a `ContextChanged` that moves nothing costs you one
   `List` and the user nothing; the listing that follows retires a gone key by
   the usual rule, so list honestly.
 - `EntryChanged{context, entry}`: one entry's content changed in place — a
   file's bytes written, a picture redrawn — with the entry re-read, exactly
-  as `List` would answer it now. A plugin row carries no version, so this is
-  the only way new bytes reach a body a client already holds: the node tells
-  every client showing the entry, and each reads the body again. Send it for
-  the entry that owns the content; a link to it reads through it.
+  as `List` would answer it now, its `content_stamp` moved with the bytes. A
+  plugin row carries no version, so this is the only way new bytes reach a
+  body a client already holds: the node tells every client showing the
+  entry, and each whose body is under another stamp reads it again. Send it
+  for the entry that owns the content; a link to it reads through it. A
+  content stamp alone moving is not a listing that moved.
 - `EntryRemoved` is retired: send `ContextChanged`. The node still reads it
   as one, for a binary built before.
 
@@ -197,6 +200,32 @@ error is shown to the user as live updates off, in your words, until a
 re-opened stream is open. Neither makes your source dark: your listings still
 answer, so a limit you hit (`ResourceExhausted`) costs live updates, not the
 source.
+
+## Edits
+
+A text body you can take back is a text body the user can edit: set
+`InfoResponse.writable` and implement `WriteContent`, and the node stamps
+every grid of yours writable, so the client lets the user type into its text
+tiles and saves them to you by key. Leave it unset and they are read-only.
+You create no tiles: the + menu offers nothing on your grids either way.
+
+Name the bytes: set `content_stamp` on every text entry, and on the first
+`ReadContent` chunk, to a string that changes whenever they do — fs uses the
+file's mtime and size. Take it before reading the bytes, so a change during
+the read leaves a stamp that does not match them. It is the version your
+rows lack: the client files a body under it and keeps the body while your
+listing names the same stamp.
+
+A `WriteContent` carries the whole new body and claims, in its first message,
+the stamp the writer read. Commit only at the clean end of the stream. If
+the claim is not the entry's stamp now, refuse with `FailedPrecondition`: the
+user typed over bytes that are no longer there, and the client drops the
+edit, shows the source as it is, and says so. Answer the stamp of the bytes
+you wrote; the user's next save claims it. Write atomically (a temp file and
+a rename, for a file), and refuse with the reason (`InvalidArgument`,
+`PermissionDenied`) a body you cannot take back whole. Your `Watch` tells
+the write like any change in place, as an `EntryChanged`: the client knows
+the stamp, so its own echo drops nothing the user typed.
 
 ## Previews
 

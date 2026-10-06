@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	gwrpc "github.com/josephburnett/gridwell/api/rpc"
 )
 
 func TestDirectConnectSpawn(t *testing.T) {
@@ -74,7 +76,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 	})["tile"].(map[string]any)
 	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }
 	if _, err := clientFor(localOrigin).WriteContent(ctx,
-		txt["id"].(string), num(txt["version"]), []byte("direct, no ssh anywhere")); err != nil {
+		txt["id"].(string), gwrpc.ContentBasis{Version: num(txt["version"])}, []byte("direct, no ssh anywhere")); err != nil {
 		t.Fatalf("write through direct chain: %v", err)
 	}
 	body, _, _, err := clientFor(localOrigin).ReadContent(ctx, txt["id"].(string))

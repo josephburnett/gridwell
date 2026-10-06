@@ -54,9 +54,9 @@ func (a *App) createURLAtCell(gid string, cellX, cellY int64) {
 func (a *App) openConfigureURL(p *pane.Pane, t *gridwellv1.Tile) {
 	gid := a.gridIDForPane(p)
 	paneID, id := p.ID, t.Id
-	// The address is content, so the write claims the row's version as the
+	// The address is content, so the write claims the row's basis as the
 	// descent saw it.
-	version := t.Version
+	claim := rpc.BasisOf(t)
 	candidates := a.urlSuggestCandidates(uuidOf(gid))
 	a.openURLModal(candidates, func(url string) {
 		go func() {
@@ -69,7 +69,7 @@ func (a *App) openConfigureURL(p *pane.Pane, t *gridwellv1.Tile) {
 				label: "ConfigureURL", gid: gid, id: id,
 				source: "url", failText: "url save failed",
 				call: func(ctx context.Context) error {
-					t, werr := a.cl.WriteContent(ctx, id, version, []byte(url))
+					t, werr := a.cl.WriteContent(ctx, id, claim, []byte(url))
 					if werr == nil {
 						tile = t
 					}

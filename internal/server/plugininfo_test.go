@@ -278,12 +278,11 @@ func (p *infoFlakePlugin) Info(ctx context.Context, req *pb.InfoRequest) (*pb.In
 
 // TestGetGridFailsWhenOwnerInfoFails crosses the read seam a buildPluginInfo
 // unit test cannot reach: server -> Connect wire -> rpc.Client.GetGrid. Grid
-// writable, scratch_grid_id and menu_entries come from the owning namespace's
-// Info and from nowhere else, so a failed handshake must fail the read. The
-// alternative — answering the grid with the fields unset — is a room that
-// presents read-only with no + primitives and no ephemeral visits, and that
-// flips back to writable on the next read, because Info is not negatively
-// cached.
+// scratch_grid_id and menu_entries come from the owning namespace's Info and
+// from nowhere else, so a failed handshake must fail the read. The
+// alternative — answering the grid with the fields unset — is a room with no
+// doorways and no ephemeral visits, and that flips back on the next read,
+// because Info is not negatively cached.
 func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(":memory:")
@@ -332,14 +331,14 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	}
 }
 
-// scratchlessPlugin declares a writable grid and no scratch grid of its own:
-// its ephemeral visits land in the node home's scratch grid.
+// scratchlessPlugin declares no scratch grid of its own: its ephemeral visits
+// land in the node home's scratch grid.
 type scratchlessPlugin struct {
 	namespace.Unimplemented
 }
 
 func (scratchlessPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1", Writable: true}, nil
+	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
 func (scratchlessPlugin) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {

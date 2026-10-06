@@ -25,18 +25,18 @@ message Grid {
   reserved 2; // object_id
   int64 version = 3;
   reserved 4, 5; // source_kind, source_id
-  // writable reports whether the grid's owning plugin accepts mutations.
-  // It is per grid, not per namespace, because one connection fronts many
-  // remote plugins with differing capabilities. Stamped by the serving node
-  // from the owning plugin's Info at a leaf, passed through verbatim in
-  // transit. Wire-only, never persisted.
+  // writable: this grid's text bodies accept edits (WriteContent), so the
+  // client lets the user type into its text tiles. The owning namespace
+  // stamps it on every grid it serves, the home always and a plugin's from
+  // plugin.v1 InfoResponse.writable, and transit carries it verbatim. It is
+  // per grid, not per namespace, because one connection fronts namespaces
+  // that differ. Wire-only, never persisted.
   bool writable = 6;
   // scratch_grid_id is the grid where ephemeral visits opened from this grid
   // land: the owning plugin's own scratch grid, or the serving node's home
   // scratch grid when the plugin declares none. Qualified from the receiver's
-  // perspective and chained through mounts, by the same stamping rule as
-  // writable. "" only when the owning plugin's Info was unreachable.
-  // Wire-only.
+  // perspective and chained through mounts. "" only when the owning plugin's
+  // Info was unreachable. Wire-only.
   string scratch_grid_id = 7;
   reserved 8; // proxy_endpoint
   reserved 9; // create_schemas
@@ -55,13 +55,12 @@ message Grid {
   // transit with grid_id prefixed per hop. Wire-only.
   repeated MenuEntry menu_entries = 11;
   // host_content says this grid projects host state, such as a directory or
-  // the process table, instead of holding content of its own. Its rows are
-  // read-only and the client renders them with the host treatment: the
-  // outside tint and the exit border family. The owning plugin declares it
-  // (plugin.v1 InfoResponse.host_content), the adapter that serves the grid
-  // stamps it, and transit carries it verbatim as it does writable. A reader
-  // consults it instead of learning a kind's name. Wire-only, never
-  // persisted.
+  // the process table, instead of holding content of its own, and the client
+  // renders its rows with the host treatment: the outside tint and the exit
+  // border family. The owning plugin declares it (plugin.v1
+  // InfoResponse.host_content), the adapter that serves the grid stamps it,
+  // and transit carries it verbatim. A reader consults it instead of
+  // learning a kind's name. Wire-only, never persisted.
   bool host_content = 13;
   // glyph is the owning plugin's declared identity glyph for this grid, from
   // the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
@@ -77,11 +76,19 @@ message Grid {
   // node fact, so gridwell.db never holds it. Stamped by the adapter,
   // verbatim in transit. Wire-only.
   string source_label = 15;
+  // accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
+  // offers its primitives and a swatch drops into it, and its url rows'
+  // addresses are the node's to write. The owning namespace stamps it on
+  // every grid it serves, true for the home and false for a plugin, which
+  // creates nothing; transit carries it verbatim. It is absent only from a
+  // node built before it split from writable, whose one bit said both, and
+  // rpc.TransitQualifyGrid reads that bit for it. Wire-only.
+  optional bool accepts_tiles = 16;
 }
 
 // MenuEntry is one declared (+) menu entry: a doorway onto one collection,
 // such as the home's trashcan or a mail plugin's Feed. Declared in Info,
-// stamped per grid by the serving node as writable is, and passed verbatim
+// stamped per grid by the serving node, and passed verbatim
 // through transit hops, where grid_id gains the hop prefix like every id. The
 // swatch behaves like a menu row's over grid_id: click descends, drag drops an
 // exit-well link.
@@ -230,6 +237,14 @@ message Tile {
   // session. Empty means the tile's own id; rpc.ShellSession reads it. Stored,
   // qualified and peeled like the tile's own id, and never set by clients.
   string shell_session = 38;
+
+  // content_stamp is the source's name for the bytes behind a row with no
+  // version claim (a plugin's): plugin.v1 Entry.content_stamp, carried by the
+  // adapter and verbatim in transit, "" when the source names none. It does
+  // for such a row what version does for a home row: a body read under
+  // another stamp is behind it, and one read under this stamp is not.
+  // Wire-only, never a stored column.
+  string content_stamp = 39;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -259,11 +274,7 @@ message InfoResponse {
   // mounted; it persists as visited-url history. Empty for plugins that do
   // not support ephemeral visits, such as fs and proc.
   string scratch_grid_id = 8;
-  // writable reports that this plugin accepts CreateTile, so new primitives can
-  // be dropped into its grids. The plugin declares it once here.
-  // A node that re-derived it from the kind string would present a remote
-  // plugin reached through a connection as read-only.
-  bool writable = 9;
+  reserved 9; // writable; the namespace stamps Grid.accepts_tiles and Grid.writable
   // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
   // center in grid coordinates and the intrinsic zoom. The home fills it from
   // its root grid row; a root never visited leaves all three absent.
@@ -337,14 +348,16 @@ message GetTilePreviewResponse {
 // so bytes and version are paired at the owner. Later chunks carry data only.
 // On a leaf-link tile the serving node resolves through link_target_id, the one
 // resolution point, so callers never reimplement link semantics. A plugin whose
-// bodies are not version-edited sends version 0.
+// bodies are not version-edited sends version 0 and, in its place, the
+// bytes' content_stamp (Tile.content_stamp).
 message ReadContentRequest {
   string tile_id = 1;
 }
 message ContentChunk {
   bytes data = 1;
-  string media_type = 2; // chunk 1 only
-  int64 version = 3;     // chunk 1 only
+  string media_type = 2;    // chunk 1 only
+  int64 version = 3;        // chunk 1 only
+  string content_stamp = 4; // chunk 1 only
 }
 
 // WriteContent streams a tile's content bytes up. The first message binds
@@ -356,10 +369,16 @@ message ContentChunk {
 // claims and bumps, while a pane layout is framing-class with no claim and no
 // bump. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
+//
+// A row with no version (a plugin's) claims content_stamp instead, the stamp
+// its bytes were read under (ContentChunk.content_stamp), which its source
+// checks as the store checks a version; the response row carries the stamp
+// of the bytes written. A versioned row's owner ignores it.
 message WriteContentRequest {
   string tile_id = 1;
   int64 version = 2;
   bytes data = 3;
+  string content_stamp = 4;
 }
 
 // ServeContent is the RPC carrier behind the server's HTTP /content/ endpoint.
@@ -469,7 +488,7 @@ message PluginInfo {
   string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
   string kind          = 2;   // "home", "fs", "proc", "connection"
   string label         = 3;   // display name
-  reserved 4;                 // writable; Grid.writable is the fact
+  reserved 4;                 // writable; Grid.accepts_tiles and Grid.writable are the facts
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
                               // grid; click-enter descends here
   reserved 6;                 // scratch_grid_id; Grid.scratch_grid_id is the fact
@@ -593,9 +612,10 @@ message ShellSessionAliveResponse {
 }
 
 // Mutations. A version claim rides only the writes that change the user's
-// content bytes — WriteContent and SetTile's rename arm — and the server
-// returns a version-conflict error when it does not match. Layout, framing,
-// and capture writes carry no claim at all.
+// content bytes — WriteContent, whose claim for a row with no version is its
+// stamp, and SetTile's rename arm — and the server returns a conflict error
+// when it does not match. Layout, framing, and capture writes carry no claim
+// at all.
 
 message CloneTileRequest {
   reserved 1, 5; // path, dest_path

@@ -60,7 +60,7 @@ func TestWriteContentBeaconSeam(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path, body := rpc.WriteContentBeacon(tile.Id, tile.Version, []byte("survived the tab close"))
+	path, body := rpc.WriteContentBeacon(tile.Id, rpc.ContentBasis{Version: tile.Version}, []byte("survived the tab close"))
 	if path == "" || body == nil {
 		t.Fatal("WriteContentBeacon returned empty")
 	}
@@ -81,7 +81,7 @@ func TestWriteContentBeaconSeam(t *testing.T) {
 	// a beacon must never force-write over a foreign edit. (The store's
 	// answer, not the transport's: the POST itself still returns 200 with
 	// the error in the stream, which is why the pin asserts CONTENT.)
-	path, body = rpc.WriteContentBeacon(tile.Id, tile.Version, []byte("stale stomp"))
+	path, body = rpc.WriteContentBeacon(tile.Id, rpc.ContentBasis{Version: tile.Version}, []byte("stale stomp"))
 	postBeacon(t, hs, path, rpc.BeaconStreamType, body)
 	data, _, _, err = cl.ReadContent(ctx, tile.Id)
 	if err != nil {
@@ -93,7 +93,7 @@ func TestWriteContentBeaconSeam(t *testing.T) {
 
 	// Oversized data refuses at build time (the browser would truncate or
 	// reject it) so the caller falls back to the async path.
-	if p, b := rpc.WriteContentBeacon(tile.Id, 1, bytes.Repeat([]byte("x"), 128*1024)); p != "" || b != nil {
+	if p, b := rpc.WriteContentBeacon(tile.Id, rpc.ContentBasis{Version: 1}, bytes.Repeat([]byte("x"), 128*1024)); p != "" || b != nil {
 		t.Error("oversized WriteContentBeacon should return empty for async fallback")
 	}
 }
@@ -106,14 +106,14 @@ func TestSetURLStateBeaconSeam(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tile, err = cl.WriteContent(ctx, tile.Id, tile.Version, []byte("https://start.example"))
+	tile, err = cl.WriteContent(ctx, tile.Id, rpc.ContentBasis{Version: tile.Version}, []byte("https://start.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// The landed address is content, so it beacons as a claimed write; the
 	// title and trail are captures and beacon as SetTile.
-	apath, abody := rpc.WriteContentBeacon(tile.Id, tile.Version, []byte("https://deep.example/page/40"))
+	apath, abody := rpc.WriteContentBeacon(tile.Id, rpc.ContentBasis{Version: tile.Version}, []byte("https://deep.example/page/40"))
 	if res := postBeacon(t, hs, apath, rpc.BeaconStreamType, abody); res.StatusCode != http.StatusOK {
 		t.Fatalf("url-address beacon = %d, want 200", res.StatusCode)
 	}

@@ -35,8 +35,8 @@ func Bucket(contentW float64) float64 {
 	return buckets[max(i-1, 0)]
 }
 
-// Key identifies one raster. Bytes is the stamp of the body it is made from
-// (cache.ContentStamp), so new bytes never draw the old picture, a plugin's
+// Key identifies one raster. Bytes is the generation of the body it is made from
+// (cache.BodyGen), so new bytes never draw the old picture, a plugin's
 // included, whose row version never moves; Org is part of the identity
 // because it picks the renderer, and Theme because the document is rasterized
 // in the colors on screen.

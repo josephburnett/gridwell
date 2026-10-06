@@ -49,9 +49,11 @@ message InfoResponse {
   // and answers Unimplemented has live updates off, said once on a healthy
   // event; its listings still answer, so it is never shown dark.
   bool watch = 5;
-  // writable: the plugin accepts WriteContent on some of its entries.
-  // Presentation writes never reach a plugin, so this is a content capability
-  // only.
+  // writable: the plugin accepts WriteContent on its text entries. It is the
+  // one owner: the node stamps it as Grid.writable on every grid it serves
+  // for the plugin, so the client lets the user type into those tiles, and
+  // without it they are read-only. Presentation writes never reach a plugin,
+  // so this is a content capability only.
   bool writable = 6;
   // menu_entries: the plugin's collections, one row each, and the way a plugin
   // is reached. Each becomes a (+) menu swatch, and the node stamps them onto
@@ -154,6 +156,14 @@ message Entry {
   // reads as a dead link. A well has no link variant here: its child_context
   // already names where it opens.
   EntryRef link_target = 11;
+  // content_stamp names the bytes a text entry's ReadContent answers right
+  // now, such as fs's file mtime and size: it changes whenever they do, and
+  // "" means you name none. It is the version a plugin row lacks. The node
+  // carries it on the tile (Tile.content_stamp), so a client holding the
+  // body under another stamp knows its bytes moved and one holding it under
+  // this stamp knows they did not. ReadContent answers the same stamp with
+  // the bytes.
+  string content_stamp = 12;
 }
 
 // EntryRef names one entry by the plugin's own words: the context that lists
@@ -172,25 +182,40 @@ message PlacementHint {
 
 // ─── Content ───────────────────────────────────────────────────────────────
 
-// ReadContent streams an entry's content bytes. Chunk 1 carries media_type.
-// Plugin content is not version-edited; a version is a node fact.
+// ReadContent streams an entry's content bytes. Chunk 1 carries media_type
+// and the bytes' content_stamp, taken before they are read so a change during
+// the read cannot pass for these bytes. Plugin content is not version-edited;
+// a version is a node fact.
 message ReadContentRequest {
   string key = 1;
 }
 message ContentChunk {
-  bytes  data       = 1;
-  string media_type = 2; // chunk 1 only
+  bytes  data          = 1;
+  string media_type    = 2; // chunk 1 only
+  string content_stamp = 3; // chunk 1 only; see Entry.content_stamp
 }
 
-// WriteContent streams an entry's new content up, and the first message binds
-// the key. It commits at close, like every Gridwell write, so a broken stream
-// leaves the old value intact. A plugin that only projects a source leaves it
-// unimplemented.
+// WriteContent streams an entry's whole new content up, and the first message
+// binds the key and claims the stamp. It commits at close, like every
+// Gridwell write, so a broken stream leaves the old value intact. A plugin
+// that only projects a source leaves it unimplemented and does not declare
+// writable.
+//
+// content_stamp is the stamp the writer read the bytes under
+// (ContentChunk.content_stamp). Refuse a write whose stamp is not the entry's
+// stamp now with FailedPrecondition, the conflict a stale version gets, so
+// bytes the writer has not seen are never overwritten. Answer the stamp of
+// the bytes written, which the writer's next write claims. The write is a
+// change in place like any other, so your Watch tells it as the entry's
+// EntryChanged; the node knows its own echo by the stamp.
 message WriteContentRequest {
-  string key  = 1;
-  bytes  data = 2;
+  string key           = 1;
+  bytes  data          = 2;
+  string content_stamp = 3; // first message only
 }
-message WriteContentResponse {}
+message WriteContentResponse {
+  string content_stamp = 1;
+}
 
 // ServeContent is the web-content door's plugin half. GET-only, and subpath ""
 // is the entry's root page. Sandboxing happens at the node.

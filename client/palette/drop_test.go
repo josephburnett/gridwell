@@ -14,17 +14,17 @@ func TestDropOn(t *testing.T) {
 		{"a release over occupied cells snaps back",
 			Release{Target: true, Occupied: true, SameNode: true}, DropSnapBack},
 		{"a healthy doorway over a writable grid links",
-			Release{Target: true, Doorway: true, Enterable: true, Writable: true}, DropLink},
+			Release{Target: true, Doorway: true, Enterable: true, AcceptsTiles: true}, DropLink},
 		{"a doorway that cannot be entered snaps back",
-			Release{Target: true, Doorway: true, Writable: true}, DropSnapBack},
+			Release{Target: true, Doorway: true, AcceptsTiles: true}, DropSnapBack},
 		{"a doorway over a read-only or uncached grid snaps back",
 			Release{Target: true, Doorway: true, Enterable: true}, DropSnapBack},
 		{"a primitive over another node's grid refuses",
-			Release{Target: true, Writable: true}, DropRefuse},
+			Release{Target: true, AcceptsTiles: true}, DropRefuse},
 		{"a primitive over this node's grid creates",
-			Release{Target: true, SameNode: true, Writable: true}, DropCreate},
+			Release{Target: true, SameNode: true, AcceptsTiles: true}, DropCreate},
 		{"the promote crumb over this node's grid promotes",
-			Release{Target: true, SameNode: true, Writable: true, Promote: true}, DropPromote},
+			Release{Target: true, SameNode: true, AcceptsTiles: true, Promote: true}, DropPromote},
 		{"the promote crumb over another node's grid refuses",
 			Release{Target: true, Promote: true}, DropRefuse},
 	}
@@ -38,7 +38,7 @@ func TestDropOn(t *testing.T) {
 // A link is the one thing that may cross nodes, since a link out of a plugin
 // is how the far grid is reached at all.
 func TestDropOnDoorwayCrossesNodes(t *testing.T) {
-	in := Release{Target: true, Doorway: true, Enterable: true, Writable: true}
+	in := Release{Target: true, Doorway: true, Enterable: true, AcceptsTiles: true}
 	if got := DropOn(in); got != DropLink {
 		t.Fatalf("DropOn(doorway across nodes) = %v, want %v", got, DropLink)
 	}

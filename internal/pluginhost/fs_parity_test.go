@@ -361,11 +361,10 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 	}
 }
 
-// TestFSPluginTextViewPersists: a read-only host file's scroll position and
-// mode are node facts, and the fs stack keeps them. The client used to skip
-// posting SetTextView for a plugin-owned text tile because the pre-plugin fs
-// refused the write (#236); this pins the answer the client now relies on, at
-// the seam where it would change — the real binary, the adapter, the store.
+// TestFSPluginTextViewPersists: a host file's scroll position and mode are
+// node facts, whoever owns its bytes, and the fs stack keeps them. This pins
+// the answer the client relies on, at the seam where it would change — the
+// real binary, the adapter, the store.
 //
 // Framing carries no version claim, so the write must not bump the tile's
 // version: what the user's bytes are has not changed.
@@ -382,9 +381,6 @@ func TestFSPluginTextViewPersists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g.Grid.Writable {
-		t.Fatal("the fs root grid answered writable: this test is about a READ-ONLY host tile")
-	}
 	var notes *gridwellv1.Tile
 	for _, tile := range g.Tiles {
 		if tile.AltText == "notes.md" {
@@ -392,10 +388,10 @@ func TestFSPluginTextViewPersists(t *testing.T) {
 		}
 	}
 	if notes.Id == "" || notes.Kind != rpc.KindText {
-		t.Fatalf("no read-only notes.md text tile: %+v", notes)
+		t.Fatalf("no notes.md text tile: %+v", notes)
 	}
 	if _, err := v2.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: notes.Id, Tile: &gridwellv1.Tile{Kind: rpc.KindText, TextX: 12, TextY: 340, TextW: 600, TextH: 400, TextMode: rpc.TextModeRendered}}); err != nil {
-		t.Fatalf("the fs stack refused text framing for a read-only file: %v", err)
+		t.Fatalf("the fs stack refused text framing for a host file: %v", err)
 	}
 	held, err := v2.GetTile(ctx, notes.Id)
 	if err != nil {

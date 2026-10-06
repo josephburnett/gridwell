@@ -311,8 +311,8 @@ func TestDecideDropBareClickAlwaysNavigates(t *testing.T) {
 }
 
 // Rejected before the RPC, so no reconcile notice follows.
-func TestDecideDropTargetReadOnly(t *testing.T) {
-	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetReadOnly: true}
+func TestDecideDropTargetRefusesTiles(t *testing.T) {
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetRefusesTiles: true}
 	if got := DecideDrop(base); got != DropRejected {
 		t.Errorf("move onto read-only grid = %v, want DropRejected", got)
 	}
@@ -322,7 +322,7 @@ func TestDecideDropTargetReadOnly(t *testing.T) {
 		t.Errorf("clone onto read-only grid = %v, want DropRejected", got)
 	}
 	ok := base
-	ok.TargetReadOnly = false
+	ok.TargetRefusesTiles = false
 	if got := DecideDrop(ok); got != DropMove {
 		t.Errorf("move onto writable grid = %v, want DropMove", got)
 	}
@@ -332,7 +332,7 @@ func TestDecideDropTargetReadOnly(t *testing.T) {
 // rearrangement the node persists on every grid.
 func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	rearrange := DropInput{Started: true, TileID: "u/1", HasTarget: true,
-		TargetReadOnly: true, SameGrid: true}
+		TargetRefusesTiles: true, SameGrid: true}
 	if got := DecideDrop(rearrange); got != DropMove {
 		t.Errorf("same-grid move on read-only grid = %v, want DropMove", got)
 	}
@@ -360,7 +360,7 @@ func TestMoveForbidden(t *testing.T) {
 		{"cross regular->host", false, false, false, true, true},
 		{"cross host->host (regression)", false, false, true, true, true},
 		// A drag across an id namespace is a link, so the host arms are
-		// exempt and TargetReadOnly gates the destination.
+		// exempt and TargetRefusesTiles gates the destination.
 		{"cross-plugin left-drag is a link, not forbidden", false, true, false, false, false},
 		{"cross-plugin from a host grid links too", false, true, true, false, false},
 	}
@@ -473,9 +473,9 @@ func TestDecideDrop(t *testing.T) {
 		{"ctrl right drag onto same cell -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, SameCell: true}, DropRejected},
 		{"ctrl right drag onto a read-only grid -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, TargetReadOnly: true}, DropRejected},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, TargetRefusesTiles: true}, DropRejected},
 		{"ctrl right drag in the tile's own read-only grid -> rejected (creation)",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, TargetReadOnly: true, SameGrid: true}, DropRejected},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, TargetRefusesTiles: true, SameGrid: true}, DropRejected},
 		{"ctrl right drag over delete still deletes",
 			DropInput{Started: true, TileID: "7", OverDelete: true, Intent: IntentLink}, DropDelete},
 
@@ -487,7 +487,7 @@ func TestDecideDrop(t *testing.T) {
 		{"cross-plugin link onto occupied -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Occupied: true}, DropRejected},
 		{"cross-plugin link onto read-only target -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, TargetReadOnly: true}, DropRejected},
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, TargetRefusesTiles: true}, DropRejected},
 		{"cross-plugin drop over delete still deletes",
 			DropInput{Started: true, TileID: "7", OverDelete: true, CrossPlugin: true}, DropDelete},
 	}

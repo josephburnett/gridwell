@@ -21,6 +21,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 		ScratchGridId: "far/9",
 		NodeNs:        "farnode",
 		Writable:      true,
+		AcceptsTiles:  proto.Bool(false),
 		HostContent:   true,
 		Glyph:         "folder",
 		SourceLabel:   "/srv/docs",
@@ -30,7 +31,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 	if out.Id != "hop/far/7" || out.ScratchGridId != "hop/far/9" || out.NodeNs != "hop/farnode" {
 		t.Fatalf("ids not prepended one segment: %+v", out)
 	}
-	if !out.Writable || !out.HostContent || out.Glyph != "folder" || out.SourceLabel != "/srv/docs" {
+	if !out.Writable || out.GetAcceptsTiles() || !out.HostContent || out.Glyph != "folder" || out.SourceLabel != "/srv/docs" {
 		t.Fatalf("stamped facts must ride verbatim: %+v", out)
 	}
 	if len(out.MenuEntries) != 1 || out.MenuEntries[0].GridId != "hop/far/7" {
@@ -44,6 +45,17 @@ func TestTransitQualifyGrid(t *testing.T) {
 	}
 	if got := TransitQualifyGrid("hop", &pb.Grid{Id: "far/7"}); got.ScratchGridId != "" {
 		t.Fatalf("empty scratch id must stay empty, got %q", got.ScratchGridId)
+	}
+}
+
+// A node built before accepts_tiles split from writable stamped one bit for
+// both facts, so a grid from it that names no accepts_tiles takes writable's.
+func TestTransitQualifyGridReadsAnOlderNodesOneBitForBothFacts(t *testing.T) {
+	for _, writable := range []bool{true, false} {
+		out := TransitQualifyGrid("hop", &pb.Grid{Id: "far/7", Writable: writable})
+		if out.AcceptsTiles == nil || out.GetAcceptsTiles() != writable || out.Writable != writable {
+			t.Errorf("writable=%v: accepts_tiles=%v writable=%v, want both %v", writable, out.AcceptsTiles, out.Writable, writable)
+		}
 	}
 }
 

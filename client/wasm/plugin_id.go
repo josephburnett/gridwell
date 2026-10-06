@@ -40,20 +40,33 @@ func (a *App) answeredDead(id string) bool {
 		a.fetch.contents.Dead(id) || a.fetch.previews.Dead(id)
 }
 
-// gridWritable reports whether the grid accepts new or edited tiles, and
-// whether that is known. The fact travels on the grid, because a uuid lookup
-// against the local plugin list cannot answer for a remote plugin reached
-// through an ssh mount. An uncached grid answers (false, false), never a
-// guess, and each caller picks its own default where the reason is visible.
+// gridWritable reports Grid.writable, whether the grid's bodies take edits,
+// and whether that is known. Both grid facts travel on the grid, because a
+// uuid lookup against the local plugin list cannot answer for a remote
+// plugin reached through an ssh mount. An uncached grid answers (false,
+// false), never a guess, and each caller picks its own default where the
+// reason is visible.
 func (a *App) gridWritable(gridID string) (writable, known bool) {
+	g, ok := a.gridMeta(gridID)
+	return g.GetWritable(), ok
+}
+
+// gridAcceptsTiles is gridWritable for Grid.accepts_tiles: whether the grid
+// takes new tiles.
+func (a *App) gridAcceptsTiles(gridID string) (accepts, known bool) {
+	g, ok := a.gridMeta(gridID)
+	return g.GetAcceptsTiles(), ok
+}
+
+func (a *App) gridMeta(gridID string) (*gridwellv1.Grid, bool) {
 	if gridID == "" {
-		return false, false
+		return nil, false
 	}
 	g, ok := a.c.Grid(gridID)
 	if !ok {
-		return false, false
+		return nil, false
 	}
-	return g.Meta.Writable, true
+	return g.Meta, true
 }
 
 // pluginByRoot returns the doorway rooted at gridID, a menu row's own grid

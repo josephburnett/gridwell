@@ -256,12 +256,13 @@ type DropInput struct {
 	OverDelete bool
 	HasTarget  bool
 	Forbidden  bool
-	// TargetReadOnly rejects an arrival before the RPC. A same-grid
-	// left-drag is placement, not creation, and is exempt.
-	TargetReadOnly bool
-	SameGrid       bool
-	SameCell       bool
-	Occupied       bool
+	// TargetRefusesTiles is a destination known not to accept tiles
+	// (Grid.accepts_tiles), which rejects an arrival before the RPC. A
+	// same-grid left-drag is placement, not creation, and is exempt.
+	TargetRefusesTiles bool
+	SameGrid           bool
+	SameCell           bool
+	Occupied           bool
 	// CrossPlugin: the grids are in different id namespaces, so a left-drag
 	// verdicts DropLink and a right-drag stays DropClone.
 	CrossPlugin bool
@@ -287,7 +288,7 @@ func DecideDrop(in DropInput) DropAction {
 		return DropCreateTemplate
 	case in.Forbidden:
 		return DropRejected
-	case in.TargetReadOnly && !(in.SameGrid && !in.Intent.Creates()):
+	case in.TargetRefusesTiles && !(in.SameGrid && !in.Intent.Creates()):
 		return DropRejected
 	case in.SameCell:
 		return DropRejected

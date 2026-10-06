@@ -131,8 +131,8 @@ func (a *App) urlViewIn(p *pane.Pane, tileID string, owns bool) *urlView {
 
 // ownsURLRow is urlview.Owns for row t.
 func (a *App) ownsURLRow(t *gridwellv1.Tile) bool {
-	writable, known := a.gridWritable(t.GridId)
-	return urlview.Owns(rpc.PageContent(t), writable, known)
+	accepts, known := a.gridAcceptsTiles(t.GridId)
+	return urlview.Owns(rpc.PageContent(t), accepts, known)
 }
 
 // seedURLAddress files row t's address as its content entry, the basis a
@@ -141,7 +141,7 @@ func (a *App) seedURLAddress(t *gridwellv1.Tile) {
 	if _, ok := a.c.TileContent(t.Id); ok {
 		return
 	}
-	a.c.PutFetchedContent(t.Id, []byte(t.UrlString), t.Version, a.c.AskContent(t.Id))
+	a.c.PutFetchedContent(t.Id, []byte(t.UrlString), rpc.BasisOf(t), a.c.AskContent(t.Id))
 }
 
 // noteLandedAddress makes the address v's page landed on its row's pending

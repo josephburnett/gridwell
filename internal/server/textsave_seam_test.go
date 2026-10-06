@@ -46,7 +46,7 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	// through the link: one content entry, keyed by the id that owns the
 	// bytes, dirty, based on the version it was fetched under.
 	c := cache.New()
-	c.PutFetchedContent(target.Id, []byte("v0"), target.Version, c.AskContent(target.Id))
+	c.PutFetchedContent(target.Id, []byte("v0"), rpc.BasisOf(target), c.AskContent(target.Id))
 	c.PutEditedContent(target.Id, []byte("typed"))
 
 	// Both flushes reach for the head of the same chain at the same moment.
@@ -75,12 +75,12 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	wg.Add(2)
 	// One flush, spelled as the client spells it: claim at send time through
 	// textedit.SaveClaim, write, then advance the basis from the response.
-	save := func(rowID string, rowVersion int64, data []byte) func() bool {
+	save := func(rowID string, row rpc.ContentBasis, data []byte) func() bool {
 		return func() bool {
 			defer wg.Done()
 			rendezvous()
 			basis, haveBasis := c.SaveBasis(target.Id)
-			claim := textedit.SaveClaim(rowID == target.Id, rowVersion, basis, haveBasis)
+			claim := textedit.SaveClaim(rowID == target.Id, row, basis, haveBasis)
 			tile, err := cl.WriteContent(ctx, target.Id, claim, data)
 			mu.Lock()
 			defer mu.Unlock()
@@ -96,10 +96,10 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	q := outbox.NewSaveQueue()
 	// The ascent flush: it holds the link row it was descended through.
 	q.Enqueue(textedit.SaveQueueKey(link.Id, rpc.ContentID(link)),
-		save(link.Id, link.Version, []byte("typed")))
+		save(link.Id, rpc.BasisOf(link), []byte("typed")))
 	// The debounce sweep: it holds the content id.
 	q.Enqueue(textedit.SaveQueueKey(target.Id, target.Id),
-		save(target.Id, target.Version, []byte("typed and more")))
+		save(target.Id, rpc.BasisOf(target), []byte("typed and more")))
 	wg.Wait()
 
 	if len(errs) > 0 {
@@ -113,8 +113,8 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	if string(data) != "typed and more" {
 		t.Errorf("stored content = %q, want the last write in queue order", data)
 	}
-	if basis, ok := c.SaveBasis(target.Id); !ok || basis != target.Version+2 {
+	if basis, ok := c.SaveBasis(target.Id); !ok || basis.Version != target.Version+2 {
 		t.Errorf("save basis = %d (present %v), want %d: both writes chained",
-			basis, ok, target.Version+2)
+			basis.Version, ok, target.Version+2)
 	}
 }

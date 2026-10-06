@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS content (
     data       BLOB NOT NULL,
     fetched_at INTEGER NOT NULL
 );
+-- A remembered body's source stamp (ContentChunk.content_stamp), beside
+-- its row in content. Additive, like servecontent.
+CREATE TABLE IF NOT EXISTS contentstamps (
+    tile_id TEXT PRIMARY KEY,
+    stamp   TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS previews (
     tile_id    TEXT PRIMARY KEY,
     jpeg       BLOB NOT NULL,
@@ -660,8 +666,7 @@ func (c *Layer) deleteTile(ctx context.Context, tileID string) {
 	c.order.fold([]string{tileID}, func() {
 		_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID)
 		c.noteCache("delete tile", err)
-		_, err = c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
-		c.noteCache("delete content", err)
+		c.dropContent(ctx, tileID, "delete content")
 		_, err = c.db.ExecContext(ctx, `DELETE FROM previews WHERE tile_id = ?`, tileID)
 		c.noteCache("delete preview", err)
 	})
@@ -696,7 +701,7 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 // ReadContent tees the live stream, storing only at a clean end. A transport
 // failure falls back to the remembered body only before any chunk has flowed.
 func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
-	var mediaType string
+	var mediaType, stamp string
 	var version int64
 	var data []byte
 	var gotChunk, oversized bool
@@ -704,12 +709,16 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 	defer r.end()
 	err := c.Namespace.ReadContent(ctx, in, func(ch *pb.ContentChunk) error {
 		gotChunk = true
-		// Chunk 1 carries media_type and version, sent even for empty content.
+		// Chunk 1 carries media_type, version and stamp, sent even for empty
+		// content.
 		if mediaType == "" && ch.GetMediaType() != "" {
 			mediaType = ch.GetMediaType()
 		}
 		if version == 0 && ch.GetVersion() != 0 {
 			version = ch.GetVersion()
+		}
+		if stamp == "" && ch.GetContentStamp() != "" {
+			stamp = ch.GetContentStamp()
 		}
 		if !oversized {
 			data = append(data, ch.GetData()...)
@@ -723,15 +732,15 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		if !oversized {
-			r.install([]string{in.TileId}, func() { c.storeContent(ctx, in.TileId, mediaType, version, data) })
+			r.install([]string{in.TileId}, func() { c.storeContent(ctx, in.TileId, mediaType, version, stamp, data) })
 		}
 		return nil
 	}
 	if !gotChunk && gwerr.IsTransport(err) {
-		if mt, ver, cached, ok := c.loadContent(ctx, in.TileId); ok {
+		if mt, ver, st, cached, ok := c.loadContent(ctx, in.TileId); ok {
 			return sendChunked(cached, func(b []byte, first bool) error {
 				if first {
-					return send(&pb.ContentChunk{MediaType: mt, Version: ver, Data: b})
+					return send(&pb.ContentChunk{MediaType: mt, Version: ver, ContentStamp: st, Data: b})
 				}
 				return send(&pb.ContentChunk{Data: b})
 			})
@@ -758,19 +767,30 @@ func sendChunked(data []byte, emit func(b []byte, first bool) error) error {
 	}
 }
 
-func (c *Layer) loadContent(ctx context.Context, tileID string) (mediaType string, version int64, data []byte, ok bool) {
-	if err := c.db.QueryRowContext(ctx, `SELECT media_type, version, data FROM content WHERE tile_id = ?`, tileID).
-		Scan(&mediaType, &version, &data); err != nil {
-		return "", 0, nil, false
+func (c *Layer) loadContent(ctx context.Context, tileID string) (mediaType string, version int64, stamp string, data []byte, ok bool) {
+	if err := c.db.QueryRowContext(ctx, `SELECT c.media_type, c.version, COALESCE(s.stamp, ''), c.data
+		FROM content c LEFT JOIN contentstamps s ON s.tile_id = c.tile_id WHERE c.tile_id = ?`, tileID).
+		Scan(&mediaType, &version, &stamp, &data); err != nil {
+		return "", 0, "", nil, false
 	}
-	return mediaType, version, data, true
+	return mediaType, version, stamp, data, true
 }
 
-func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, version int64, data []byte) {
+func (c *Layer) storeContent(ctx context.Context, tileID, mediaType string, version int64, stamp string, data []byte) {
 	_, err := c.db.ExecContext(ctx, `INSERT INTO content (tile_id, media_type, version, data, fetched_at) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(tile_id) DO UPDATE SET media_type=excluded.media_type, version=excluded.version, data=excluded.data, fetched_at=excluded.fetched_at`,
 		tileID, mediaType, version, blob(data), now())
 	c.noteCache("store content", err)
+	_, err = c.db.ExecContext(ctx, `INSERT INTO contentstamps (tile_id, stamp) VALUES (?, ?)
+		ON CONFLICT(tile_id) DO UPDATE SET stamp=excluded.stamp`, tileID, stamp)
+	c.noteCache("store content stamp", err)
+}
+
+func (c *Layer) dropContent(ctx context.Context, tileID, what string) {
+	_, err := c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
+	c.noteCache(what, err)
+	_, err = c.db.ExecContext(ctx, `DELETE FROM contentstamps WHERE tile_id = ?`, tileID)
+	c.noteCache(what, err)
 }
 
 // blob binds a body for one of the NOT NULL blob columns. A nil []byte would
@@ -999,10 +1019,7 @@ func (c *Layer) WriteContent(ctx context.Context, recv func() (*pb.WriteContentR
 	c.noteReachTile(ctx, err, tileID)
 	if err == nil {
 		if tileID != "" {
-			c.order.fold([]string{tileID}, func() {
-				_, derr := c.db.ExecContext(ctx, `DELETE FROM content WHERE tile_id = ?`, tileID)
-				c.noteCache("drop written content", derr)
-			})
+			c.order.fold([]string{tileID}, func() { c.dropContent(ctx, tileID, "drop written content") })
 		}
 		c.foldWrite(ctx, tileID, resp.GetTile())
 	}

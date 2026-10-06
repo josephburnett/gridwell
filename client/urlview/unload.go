@@ -14,10 +14,10 @@ type Capture struct {
 }
 
 // Owns reports that a url row's address, title and trail are the node's to
-// write, not a plugin's. A grid not yet read is attempted: the server's
-// verdict is the authority.
-func Owns(page, gridWritable, gridKnown bool) bool {
-	return !page && (gridWritable || !gridKnown)
+// write, not a plugin's: its grid accepts tiles (Grid.accepts_tiles). A grid
+// not yet read is attempted: the server's verdict is the authority.
+func Owns(page, gridAcceptsTiles, gridKnown bool) bool {
+	return !page && (gridAcceptsTiles || !gridKnown)
 }
 
 // WriteAddress decides whether the address a live view landed on is written
