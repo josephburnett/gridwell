@@ -20,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/tileface"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
@@ -722,11 +723,10 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
-// tileReadOnly holds for a text tile whose grid's bodies take no edits
-// (Grid.writable), and for an unknown grid.
+// tileReadOnly is textedit.ReadOnly over the tile's cached grid.
 func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
 	writable, _ := a.gridWritable(n.GridId)
-	return n.Kind == rpc.KindText && !writable
+	return textedit.ReadOnly(n, writable)
 }
 
 // isLinkTile reports a reference: trashing one unlinks it. Reference is the

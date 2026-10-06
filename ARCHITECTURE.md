@@ -113,7 +113,9 @@ transit), which fails the read when the owner's handshake does not answer.
 `Grid.writable` (its bodies take edits) are the owning namespace's stamp on
 its own grid — the home's `GetGrid` and `Adapter.synthesize` — carried
 verbatim in transit, where `TransitQualifyGrid` reads an older node's one
-bit for both.
+bit for both. `Tile.read_only` (this one body takes none, and why) is the
+entry's, from the plugin's `Entry` through `pluginhost.buildTiles`, and
+`textedit.ReadOnly` reads it beside `Grid.writable`.
 `TileChanged.content_changed` (this claimless row's bytes moved) comes from
 `pluginhost.Adapter.applyEntry` alone, and `Tile.content_stamp` (the
 source's name for those bytes) from the plugin's `Entry` through

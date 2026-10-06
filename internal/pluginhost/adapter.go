@@ -337,6 +337,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 			pt.StatusDetail = e.StatusDetail
 		case listed:
 			pt.ContentStamp = e.ContentStamp
+			pt.ReadOnly = e.ReadOnly
 			pt.ServesPage = e.ServesPage
 			pt.TextPresentation = e.TextPresentation
 			pt.PreviewBlobId = faceKey(pt.PreviewBlobId, e.PreviewStamp)
