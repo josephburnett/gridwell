@@ -106,9 +106,14 @@ and a plugin row also keeps it in its snapshot beside kind, label and
 `url_string` (`store.snapshotOf`), so a row its source does not list right
 now still presents as the page it was. A plugin tile's `preview_blob_id` is
 `pluginhost.faceKey`'s: the node's screenshot of the tile once one exists,
-else the plugin's picture keyed below zero. `Grid.writable`, `scratch_grid_id`, and
+else the plugin's picture keyed below zero. `Grid.scratch_grid_id` and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
 transit), which fails the read when the owner's handshake does not answer.
+`Grid.accepts_tiles` (the + menu, a drop, a url's address) and
+`Grid.writable` (its bodies take edits) are the owning namespace's stamp on
+its own grid — the home's `GetGrid` and `Adapter.synthesize` — carried
+verbatim in transit, where `TransitQualifyGrid` reads an older node's one
+bit for both.
 `TileChanged.content_changed` (this claimless row's bytes moved) comes from
 `pluginhost.Adapter.applyEntry` alone.
 `Grid.host_content` (these rows project host state) and

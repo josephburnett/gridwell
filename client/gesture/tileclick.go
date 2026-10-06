@@ -32,10 +32,10 @@ type ClickInput struct {
 	// Page is rpc.PageContent: the owning plugin serves this url tile's page,
 	// so the node derives the address and there is none for the user to type.
 	Page bool
-	// Writable is the tile's grid's writable bit, unknown reading as false.
-	// A typed address is a content write, so a grid that refuses one, a
-	// plugin's among them, is never asked for it.
-	Writable bool
+	// AcceptsTiles is the tile's Grid.accepts_tiles, unknown reading as
+	// false. Only such a grid's url rows hold an address the node writes, so
+	// a plugin's is never asked for one.
+	AcceptsTiles bool
 	// LeafLink is rpc.LeafLink: the address lives on the target, so a link
 	// never prompts for one.
 	LeafLink bool
@@ -51,7 +51,7 @@ type ClickInput struct {
 func DecideTileClick(in ClickInput) ClickVerdict {
 	switch {
 	case in.URL && in.URLEmpty && !in.LeafLink && !in.Page:
-		if in.Writable {
+		if in.AcceptsTiles {
 			return ClickConfigureURL
 		}
 		return ClickNone

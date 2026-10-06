@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // Plugin wraps store.Store as a namespace.Namespace and owns the shell PTY
@@ -123,7 +124,6 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 			GridId: trash,
 			ViewCx: tcx, ViewCy: tcy, ViewZoom: tzoom,
 		}},
-		Writable:     true,
 		RootViewCx:   rcx,
 		RootViewCy:   rcy,
 		RootViewZoom: rzoom,
@@ -151,11 +151,14 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 	return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
 }
 
+// GetGrid stamps what every home grid is: it takes new tiles and its bodies
+// take edits.
 func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	r, err := p.st.GetGrid(ctx, req.GridId)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
+	r.Grid.AcceptsTiles, r.Grid.Writable = proto.Bool(true), true
 	return r, nil
 }
 

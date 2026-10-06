@@ -25,18 +25,18 @@ message Grid {
   reserved 2; // object_id
   int64 version = 3;
   reserved 4, 5; // source_kind, source_id
-  // writable reports whether the grid's owning plugin accepts mutations.
-  // It is per grid, not per namespace, because one connection fronts many
-  // remote plugins with differing capabilities. Stamped by the serving node
-  // from the owning plugin's Info at a leaf, passed through verbatim in
-  // transit. Wire-only, never persisted.
+  // writable: this grid's text bodies accept edits (WriteContent), so the
+  // client lets the user type into its text tiles. The owning namespace
+  // stamps it on every grid it serves, the home always and a plugin's from
+  // plugin.v1 InfoResponse.writable, and transit carries it verbatim. It is
+  // per grid, not per namespace, because one connection fronts namespaces
+  // that differ. Wire-only, never persisted.
   bool writable = 6;
   // scratch_grid_id is the grid where ephemeral visits opened from this grid
   // land: the owning plugin's own scratch grid, or the serving node's home
   // scratch grid when the plugin declares none. Qualified from the receiver's
-  // perspective and chained through mounts, by the same stamping rule as
-  // writable. "" only when the owning plugin's Info was unreachable.
-  // Wire-only.
+  // perspective and chained through mounts. "" only when the owning plugin's
+  // Info was unreachable. Wire-only.
   string scratch_grid_id = 7;
   reserved 8; // proxy_endpoint
   reserved 9; // create_schemas
@@ -55,13 +55,12 @@ message Grid {
   // transit with grid_id prefixed per hop. Wire-only.
   repeated MenuEntry menu_entries = 11;
   // host_content says this grid projects host state, such as a directory or
-  // the process table, instead of holding content of its own. Its rows are
-  // read-only and the client renders them with the host treatment: the
-  // outside tint and the exit border family. The owning plugin declares it
-  // (plugin.v1 InfoResponse.host_content), the adapter that serves the grid
-  // stamps it, and transit carries it verbatim as it does writable. A reader
-  // consults it instead of learning a kind's name. Wire-only, never
-  // persisted.
+  // the process table, instead of holding content of its own, and the client
+  // renders its rows with the host treatment: the outside tint and the exit
+  // border family. The owning plugin declares it (plugin.v1
+  // InfoResponse.host_content), the adapter that serves the grid stamps it,
+  // and transit carries it verbatim. A reader consults it instead of
+  // learning a kind's name. Wire-only, never persisted.
   bool host_content = 13;
   // glyph is the owning plugin's declared identity glyph for this grid, from
   // the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
@@ -77,11 +76,19 @@ message Grid {
   // node fact, so gridwell.db never holds it. Stamped by the adapter,
   // verbatim in transit. Wire-only.
   string source_label = 15;
+  // accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
+  // offers its primitives and a swatch drops into it, and its url rows'
+  // addresses are the node's to write. The owning namespace stamps it on
+  // every grid it serves, true for the home and false for a plugin, which
+  // creates nothing; transit carries it verbatim. It is absent only from a
+  // node built before it split from writable, whose one bit said both, and
+  // rpc.TransitQualifyGrid reads that bit for it. Wire-only.
+  optional bool accepts_tiles = 16;
 }
 
 // MenuEntry is one declared (+) menu entry: a doorway onto one collection,
 // such as the home's trashcan or a mail plugin's Feed. Declared in Info,
-// stamped per grid by the serving node as writable is, and passed verbatim
+// stamped per grid by the serving node, and passed verbatim
 // through transit hops, where grid_id gains the hop prefix like every id. The
 // swatch behaves like a menu row's over grid_id: click descends, drag drops an
 // exit-well link.
@@ -259,11 +266,7 @@ message InfoResponse {
   // mounted; it persists as visited-url history. Empty for plugins that do
   // not support ephemeral visits, such as fs and proc.
   string scratch_grid_id = 8;
-  // writable reports that this plugin accepts CreateTile, so new primitives can
-  // be dropped into its grids. The plugin declares it once here.
-  // A node that re-derived it from the kind string would present a remote
-  // plugin reached through a connection as read-only.
-  bool writable = 9;
+  reserved 9; // writable; the namespace stamps Grid.accepts_tiles and Grid.writable
   // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
   // center in grid coordinates and the intrinsic zoom. The home fills it from
   // its root grid row; a root never visited leaves all three absent.
@@ -469,7 +472,7 @@ message PluginInfo {
   string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
   string kind          = 2;   // "home", "fs", "proc", "connection"
   string label         = 3;   // display name
-  reserved 4;                 // writable; Grid.writable is the fact
+  reserved 4;                 // writable; Grid.accepts_tiles and Grid.writable are the facts
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
                               // grid; click-enter descends here
   reserved 6;                 // scratch_grid_id; Grid.scratch_grid_id is the fact

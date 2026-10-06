@@ -73,7 +73,7 @@ func TestAnUnlistedPageRowStaysAPage(t *testing.T) {
 				if !rpc.PageContent(tile) {
 					t.Errorf("%s answers %+v, want a page the plugin serves", verb, tile)
 				}
-				if v := clickOn(tile, g.Grid.Writable); v != gesture.ClickDescend {
+				if v := clickOn(tile, g.Grid.GetAcceptsTiles()); v != gesture.ClickDescend {
 					t.Errorf("%s: a click on the page answers verdict %v, want a descent into it", verb, v)
 				}
 			}
@@ -81,10 +81,10 @@ func TestAnUnlistedPageRowStaysAPage(t *testing.T) {
 	}
 }
 
-// clickOn is the client's left-click verdict on tile in a grid of the given
-// writability, from the facts the shim resolves (client/wasm/input.go
-// attemptDescentOrAscent).
-func clickOn(tile *gridwellv1.Tile, writable bool) gesture.ClickVerdict {
+// clickOn is the client's left-click verdict on tile in a grid that does or
+// does not accept tiles, from the facts the shim resolves
+// (client/wasm/input.go attemptDescentOrAscent).
+func clickOn(tile *gridwellv1.Tile, acceptsTiles bool) gesture.ClickVerdict {
 	return gesture.DecideTileClick(gesture.ClickInput{
 		Well:           rpc.IsWellKind(tile.Kind),
 		ContentDescent: rpc.IsContentDescentKind(tile.Kind),
@@ -92,7 +92,7 @@ func clickOn(tile *gridwellv1.Tile, writable bool) gesture.ClickVerdict {
 		URL:            tile.Kind == rpc.KindURL,
 		URLEmpty:       tile.UrlString == "",
 		Page:           rpc.PageContent(tile),
-		Writable:       writable,
+		AcceptsTiles:   acceptsTiles,
 		LeafLink:       rpc.LeafLink(tile),
 	})
 }

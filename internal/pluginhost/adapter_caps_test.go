@@ -10,6 +10,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
@@ -24,9 +25,14 @@ func (capsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRe
 	return &pluginv1.InfoResponse{Kind: "caps", DisplayName: "caps", RootContext: "r", Watch: true, Writable: true}, nil
 }
 
-// The adapter declares the doors IT opens, never the plugin's: it has no
+func (capsPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+	return &pluginv1.ListResponse{Authoritative: true}, nil
+}
+
+// The adapter stamps the doors IT opens, never the plugin's: it has no
 // WriteContent, so a declared writable:true would offer editing the adapter
-// refuses, and writable stays false whatever the plugin says. Its Subscribe —
+// refuses, and its grids' writable stays false whatever the plugin says; a
+// plugin creates no tiles, so they never accept any. Its Subscribe —
 // the supervisor's health and the grids its writes changed — is checked here
 // too, because the server's fan-in subscribes to every namespace and a stream
 // that is not there sends it into Unimplemented retries forever.
@@ -44,12 +50,15 @@ func TestAdapterDeclaresOnlyTheDoorsItOpens(t *testing.T) {
 	client := pluginhost.New(cp, memStore.Namespace("p1"), nil)
 	ctx := context.Background()
 
-	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
+	g, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID("r")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Writable {
-		t.Error("Info declares writable; the adapter has no WriteContent to back it")
+	if g.Grid.Writable {
+		t.Error("the grid is writable; the adapter has no WriteContent to back it")
+	}
+	if g.Grid.AcceptsTiles == nil || g.Grid.GetAcceptsTiles() {
+		t.Errorf("accepts_tiles = %v, want a stamped false: a plugin creates no tiles", g.Grid.AcceptsTiles)
 	}
 	// The stream lives as long as its context, so the context ending is how it
 	// ends — never Unimplemented.

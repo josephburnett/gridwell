@@ -51,6 +51,12 @@ func fill(t *testing.T, v reflect.Value) {
 			fv.SetFloat(float64(n) + 0.5)
 		case reflect.Bool:
 			fv.SetBool(true)
+		case reflect.Pointer:
+			if f.Type.Elem().Kind() != reflect.Bool {
+				t.Fatalf("fill: %s.%s points at %s — extend fill", rt.Name(), f.Name, f.Type.Elem().Kind())
+			}
+			b := true
+			fv.Set(reflect.ValueOf(&b))
 		case reflect.Slice:
 			et := f.Type.Elem()
 			if et.Kind() != reflect.Pointer || et.Elem().Kind() != reflect.Struct {

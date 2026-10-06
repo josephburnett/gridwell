@@ -137,12 +137,17 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 
 // TransitQualifyGrid prepends prefix to a Grid's own id, its scratch grid,
 // node_ns and its menu entries' targets; everything else rides verbatim,
-// because the far node already stamped its plugin's facts.
+// because the far node already stamped its plugin's facts. A grid with no
+// accepts_tiles is from a node whose one writable bit said both facts, and
+// this is where that bit is read for it.
 func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	if g == nil {
 		return nil
 	}
 	out := proto.Clone(g).(*pb.Grid)
+	if out.AcceptsTiles == nil {
+		out.AcceptsTiles = proto.Bool(g.Writable)
+	}
 	out.Id = QualifyID(prefix, g.Id)
 	if g.ScratchGridId != "" {
 		out.ScratchGridId = QualifyID(prefix, g.ScratchGridId)

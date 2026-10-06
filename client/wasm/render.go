@@ -268,8 +268,8 @@ func (a *App) paletteGroups(p *pane.Pane) (plugins, primitives []paletteItem) {
 		items = append(items, paletteItem{isPlugin: true, plugin: s.Plugin, entry: s.Entry})
 	}
 	prims := make([]paletteItem, 0, len(primitiveKinds))
-	writable, _ := a.gridWritable(a.gridIDForPane(p))
-	offer := palette.Offer{Writable: writable, ShellsDisabled: ctx.shellsDisabled}
+	acceptsTiles, _ := a.gridAcceptsTiles(a.gridIDForPane(p))
+	offer := palette.Offer{AcceptsTiles: acceptsTiles, ShellsDisabled: ctx.shellsDisabled}
 	if offer.Primitives() {
 		for _, k := range primitiveKinds {
 			if k == tplShell && !offer.Shell() {
@@ -722,8 +722,8 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
-// tileReadOnly holds for a plugin's text tile, which has no write-back, and
-// for an unknown grid.
+// tileReadOnly holds for a text tile whose grid's bodies take no edits
+// (Grid.writable), and for an unknown grid.
 func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
 	writable, _ := a.gridWritable(n.GridId)
 	return n.Kind == rpc.KindText && !writable

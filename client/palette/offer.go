@@ -6,15 +6,15 @@ package palette
 
 // Offer is what the grid and its node declare.
 type Offer struct {
-	// Writable is the grid's bit; unknown is not writable, so no swatch is
+	// AcceptsTiles is Grid.accepts_tiles; unknown is false, so no swatch is
 	// shown on a guess a drop would then refuse.
-	Writable bool
+	AcceptsTiles bool
 	// ShellsDisabled is the context node's disable_shells.
 	ShellsDisabled bool
 }
 
 // Primitives reports whether the primitive row is offered at all.
-func (o Offer) Primitives() bool { return o.Writable }
+func (o Offer) Primitives() bool { return o.AcceptsTiles }
 
 // Shell reports whether the shell swatch is among them.
-func (o Offer) Shell() bool { return o.Writable && !o.ShellsDisabled }
+func (o Offer) Shell() bool { return o.AcceptsTiles && !o.ShellsDisabled }

@@ -148,7 +148,7 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 		r.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
 			max(d.snapshotTile.W, 1), max(d.snapshotTile.H, 1), "")
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
-		r.Writable, _ = a.gridWritable(t.gridID)
+		r.AcceptsTiles, _ = a.gridAcceptsTiles(t.gridID)
 		if r.Doorway {
 			st, classified := pluginhealth.Classify(d.item.plugin)
 			r.Enterable = classified && st == pluginhealth.Enterable

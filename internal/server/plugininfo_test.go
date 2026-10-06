@@ -332,14 +332,14 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	}
 }
 
-// scratchlessPlugin declares a writable grid and no scratch grid of its own:
-// its ephemeral visits land in the node home's scratch grid.
+// scratchlessPlugin declares no scratch grid of its own: its ephemeral visits
+// land in the node home's scratch grid.
 type scratchlessPlugin struct {
 	namespace.Unimplemented
 }
 
 func (scratchlessPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1", Writable: true}, nil
+	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
 func (scratchlessPlugin) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {

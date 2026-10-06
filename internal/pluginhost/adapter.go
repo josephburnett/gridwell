@@ -99,14 +99,7 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 	if err != nil {
 		return nil, err
 	}
-	resp := &gridwellv1.InfoResponse{
-		DisplayName: ci.DisplayName,
-		Glyph:       ci.Glyph,
-		// Writable describes the door this adapter opens, not the plugin's
-		// answer: false because there is no WriteContent here and passing the
-		// plugin's through would offer editing that is then refused.
-		Writable: false,
-	}
+	resp := &gridwellv1.InfoResponse{DisplayName: ci.DisplayName, Glyph: ci.Glyph}
 	for _, m := range declaredEntries(ci) {
 		out := &gridwellv1.MenuEntry{
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
@@ -480,17 +473,19 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	}
 	// host_content and glyph ride the grid: a grid reached through a mount has
 	// no local row. source_label is the listing's own, so it is as fresh as
-	// the rows.
+	// the rows. A plugin creates no tiles, and its bodies take no edits:
+	// this door has no WriteContent.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, err
 	}
 	addr := rpc.EntryGridID(ckey)
 	g := &gridwellv1.Grid{
-		Id:          addr,
-		HostContent: ci.HostContent,
-		Glyph:       ci.Glyph,
-		SourceLabel: resp.SourceLabel,
+		Id:           addr,
+		AcceptsTiles: proto.Bool(false),
+		HostContent:  ci.HostContent,
+		Glyph:        ci.Glyph,
+		SourceLabel:  resp.SourceLabel,
 	}
 	wire, err := buildTiles(addr, ckey, tiles, resp.Entries, a.mem.ContextKey)
 	if err != nil {

@@ -26,7 +26,8 @@ func TestDescriptorMatchesProto(t *testing.T) {
 			message: (&pb.Grid{}).ProtoReflect().Descriptor(),
 			onWire:  wireNames(gridsColumns),
 			wireOnly: map[string]string{
-				"writable":        "stamped by the serving node from the owning plugin's Info — a per-grid capability, never persisted",
+				"writable":        "stamped by the owning namespace: its bodies take edits — a per-grid capability, never persisted",
+				"accepts_tiles":   "stamped by the owning namespace: it takes new tiles — a per-grid capability, never persisted",
 				"scratch_grid_id": "stamped by the serving node, qualified per hop",
 				"node_ns":         "the namespace chain of the node serving the grid, from the receiver's perspective",
 				"menu_entries":    "stamped by the serving node from the owning plugin's Info",

@@ -72,7 +72,8 @@ class, and the word says who started the write.
 
 | Concept | What it does |
 |---|---|
-| **read-only** (`a.tileReadOnly`) | A text tile in a grid that is not writable: no textarea, no save, no checkbox flip, rendered face only. Nobody types into a derived body and silently re-posts it. |
+| **read-only** (`a.tileReadOnly`) | A text tile in a grid that is not writable (`Grid.writable`, its bodies take edits): no textarea, no save, no checkbox flip, rendered face only. Nobody types into a derived body and silently re-posts it. |
+| **accepts tiles** (`Grid.accepts_tiles`) | The grid takes new tiles: the + menu offers the primitives, a swatch or a clone drops into it, and its url rows' addresses are the node's to write. Every home grid does; a plugin's never does, since a plugin creates nothing, and that is apart from whether its bodies take edits. |
 | **host_content** (`Grid.Meta.HostContent`) | Every row in this grid projects host state and gets the red "outside Gridwell" treatment. The plugin declares it, so the client never learns plugin kinds. |
 | **serves_page** | This url tile opens at the `/content/` door, where its plugin serves the page, instead of at an address of its own. It is either a text tile or a url tile: a text tile cannot serve from the plugin, so the plugin door (`acceptEntries`) refuses the declaration on every kind but url. The address, title and history are the plugin's, so the freeze writes the screenshot alone (`urlview.Writeback`); the face, the standing freeze and the zoom are a url tile's. |
 | **text_presentation: plain** | Verbatim preformatted text; no rendered/raw toggle. |

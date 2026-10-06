@@ -77,7 +77,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	if err != nil {
 		return nil, err
 	}
-	// Grid.writable and scratch_grid_id are the owning plugin's facts, from
+	// scratch_grid_id and menu_entries are the owning plugin's facts, from
 	// its Info or, in transit, the remote node's stamp.
 	var g *pb.Grid
 	if transit {
@@ -91,7 +91,6 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			if ierr != nil {
 				return nil, infoFaceError(req.GridId, uuid, ierr)
 			}
-			g.Writable = info.Writable
 			if info.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			} else if hu := rt.srv.homeUUID(); hu != "" && hu != uuid {
@@ -676,10 +675,7 @@ func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse
 	if err != nil {
 		return nil, err
 	}
-	return &pb.InfoResponse{
-		Writable:   false,
-		RootGridId: rpc.HomeGrid(lp),
-	}, nil
+	return &pb.InfoResponse{RootGridId: rpc.HomeGrid(lp)}, nil
 }
 
 // Probe routes by tile id: presence is the owning namespace's verdict, never

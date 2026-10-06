@@ -124,8 +124,8 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 }
 
 func TestNodeExportInfoDescribesTheNode(t *testing.T) {
-	// A mounter's Info handshake sees the NODE: its HOME as the root (where
-	// a direct client lands too), read-only.
+	// A mounter's Info handshake sees the NODE: its HOME as the root, where
+	// a direct client lands too.
 	c, _ := nodeServer(t)
 	info, err := c.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
@@ -133,9 +133,6 @@ func TestNodeExportInfoDescribesTheNode(t *testing.T) {
 	}
 	if want := homeRoot(t, c); info.RootGridId != want {
 		t.Errorf("RootGridId = %q, want the home root %q", info.RootGridId, want)
-	}
-	if info.Writable {
-		t.Error("capabilities = writable:true, want a read-only export")
 	}
 }
 

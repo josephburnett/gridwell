@@ -35,10 +35,10 @@ type Release struct {
 	// Enterable is pluginhealth.Classify == Enterable. DropOn reads it on the
 	// doorway arm alone, so the caller may leave it false elsewhere.
 	Enterable bool
-	// Writable is the destination grid's writable bit. Unknown is not
-	// writable: minting into a grid that may refuse the link would show a tile
+	// AcceptsTiles is the destination's Grid.accepts_tiles. Unknown is false:
+	// minting into a grid that may refuse the link would show a tile
 	// the next read takes back.
-	Writable bool
+	AcceptsTiles bool
 	// SameNode is whether the destination belongs to the node whose menu
 	// offered the swatch.
 	SameNode bool
@@ -53,7 +53,7 @@ func DropOn(r Release) Drop {
 	case !r.Target, r.Occupied:
 		return DropSnapBack
 	case r.Doorway:
-		if r.Enterable && r.Writable {
+		if r.Enterable && r.AcceptsTiles {
 			return DropLink
 		}
 		return DropSnapBack

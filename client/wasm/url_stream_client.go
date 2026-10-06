@@ -131,8 +131,8 @@ func (a *App) urlViewIn(p *pane.Pane, tileID string, owns bool) *urlView {
 
 // ownsURLRow is urlview.Owns for row t.
 func (a *App) ownsURLRow(t *gridwellv1.Tile) bool {
-	writable, known := a.gridWritable(t.GridId)
-	return urlview.Owns(rpc.PageContent(t), writable, known)
+	accepts, known := a.gridAcceptsTiles(t.GridId)
+	return urlview.Owns(rpc.PageContent(t), accepts, known)
 }
 
 // seedURLAddress files row t's address as its content entry, the basis a
