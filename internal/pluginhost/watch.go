@@ -187,27 +187,38 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 	}
 }
 
-// checkAdded lists each context once and announces its grid only when what
-// the source answers now is not exactly what GetGrid served since the grid was
-// last announced: the node checks, so a client refetches only what moved. A
-// context the source cannot list right now, or that nobody read, is
-// announced, because what a client holds is unknown. The listings run
-// together and through synthesize, so they write rows as any read does.
+// checkAdded announces each context a stream adds whose listing moved
+// (announceMoved); the listings run together.
 func (a *Adapter) checkAdded(ctx context.Context, contexts []string) {
 	var wg sync.WaitGroup
 	for _, c := range contexts {
-		wg.Go(func() {
-			s, err := a.synthesize(ctx, rpc.EntryGridID(c))
-			if ctx.Err() != nil {
-				return
-			}
-			if err == nil && a.servedOnly(s) {
-				return
-			}
-			a.emitGridChanged(rpc.EntryGridID(c))
-		})
+		wg.Go(func() { a.announceMoved(ctx, c) })
 	}
 	wg.Wait()
+}
+
+// announceMoved lists context once and announces its grid, and every grid
+// whose links read into it, only when the answer is not exactly what GetGrid
+// served or this announced since: the node checks, so a client refetches only
+// what moved and the same listing is never announced twice. A context the
+// source cannot list right now, or that nobody read, is announced, because
+// what a client holds is unknown. The listing runs through synthesize, so it
+// writes rows as any read does.
+func (a *Adapter) announceMoved(ctx context.Context, context string) {
+	s, err := a.synthesize(ctx, rpc.EntryGridID(context))
+	if ctx.Err() != nil {
+		return
+	}
+	if err == nil && a.servedOnly(s) {
+		return
+	}
+	a.emitGridChanged(rpc.EntryGridID(context))
+	if err == nil {
+		a.noteServed(s)
+	}
+	for _, holder := range a.linkedFrom(context) {
+		a.emitGridChanged(rpc.EntryGridID(holder))
+	}
 }
 
 // listingSum is a listing as a client holds it: every entry the source
@@ -229,7 +240,7 @@ func sumOf(s *synthesized) (listingSum, bool) {
 	return sha256.Sum256(b), true
 }
 
-// noteServed records a listing GetGrid answered.
+// noteServed records a listing GetGrid answered or announceMoved announced.
 func (a *Adapter) noteServed(s *synthesized) {
 	sum, ok := sumOf(s)
 	if !ok {
@@ -266,17 +277,17 @@ type watchStream struct {
 }
 
 func (a *Adapter) openWatch(ctx context.Context, scope []string) *watchStream {
-	ctx, cancel := context.WithCancel(ctx)
+	streamCtx, cancel := context.WithCancel(ctx)
 	s := &watchStream{opened: make(chan struct{}), ack: make(chan struct{}), done: make(chan struct{}), cancel: cancel}
 	go func() {
 		defer close(s.done)
-		s.err = a.follow(ctx, scope, func() error {
+		s.err = a.follow(streamCtx, ctx, scope, func() error {
 			close(s.opened)
 			select {
 			case <-s.ack:
 				return nil
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-streamCtx.Done():
+				return streamCtx.Err()
 			}
 		})
 	}()
@@ -294,7 +305,9 @@ func (s *watchStream) stop() {
 // follow reads one Watch stream to its end. The stream is open once its header
 // arrives, which the plugin sends on accepting it, or with its first change at
 // the latest; a stream that ended unopened has no header, and Recv says how.
-func (a *Adapter) follow(ctx context.Context, scope []string, opened func() error) error {
+// A change is applied under apply, which outlives the stream, so a swap that
+// ends the stream does not abandon a change it already took.
+func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func() error) error {
 	stream, err := a.cp.Watch(ctx, &pluginv1.WatchRequest{Contexts: scope})
 	if err != nil {
 		return err
@@ -312,7 +325,7 @@ func (a *Adapter) follow(ctx context.Context, scope []string, opened func() erro
 		if err != nil {
 			return err
 		}
-		a.applyChange(ch)
+		a.applyChange(apply, ch)
 	}
 }
 
@@ -409,12 +422,11 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 	return slices.Clone(a.scope), a.moved
 }
 
-// applyChange announces what a Change names as a GridChanged on the context's
-// derived address, row or no row, and on every context that links into it,
-// whose links read what changed. A removal is announced the way DeleteTile
-// announces one: the refetch it causes runs the listing's own sweep, so the
-// row retires by the one path that retires rows.
-func (a *Adapter) applyChange(ch *pluginv1.Change) {
+// applyChange announces a context whose listing moved (announceMoved). A
+// removal is announced as DeleteTile announces one: the refetch it causes runs
+// the listing's own sweep, so the row retires by the one path that retires
+// rows.
+func (a *Adapter) applyChange(ctx context.Context, ch *pluginv1.Change) {
 	var c string
 	switch p := ch.GetPayload().(type) {
 	case *pluginv1.Change_ContextChanged:
@@ -424,8 +436,5 @@ func (a *Adapter) applyChange(ch *pluginv1.Change) {
 	default:
 		return
 	}
-	a.emitGridChanged(rpc.EntryGridID(c))
-	for _, holder := range a.linkedFrom(c) {
-		a.emitGridChanged(rpc.EntryGridID(holder))
-	}
+	a.announceMoved(ctx, c)
 }

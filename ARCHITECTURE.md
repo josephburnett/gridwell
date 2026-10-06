@@ -168,8 +168,9 @@ pane's grid, or a well's preview on screen: `pane.Showing`), the node holds
 one `Watch` stream to it (`pluginhost.Start`), scoped to the
 contexts shown (`WatchRequest.contexts`, the plugin's share of
 `interest.Book`'s union, re-opened with the new set when it changes), and
-publishes each change the plugin sends as the `GridChanged` a write would
-have. A plugin holds no node fact. It answers in its own stable string keys
+publishes a `ContextChanged` the plugin sends as the `GridChanged` a write
+would have, once the node has listed the context and found it moved. A plugin
+holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to
 it as `state_dir` at spawn: its own memory of its source, under cache.db's

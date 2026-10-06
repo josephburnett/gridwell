@@ -39,6 +39,7 @@ type mailSource struct {
 	mu      sync.Mutex
 	gone    bool   // everything no longer holds t1, and says so on Probe
 	card    string // t1's card
+	subject string // t1's label in everything
 	asLink  bool   // the box lists t1 as a link; else as a page of its own
 	inBox   bool   // the box lists t1 at all
 	probes  []string
@@ -47,7 +48,7 @@ type mailSource struct {
 }
 
 func newMailSource() *mailSource {
-	return &mailSource{card: "card of t1", asLink: true, inBox: true,
+	return &mailSource{card: "card of t1", subject: "Lunch", asLink: true, inBox: true,
 		watches: make(chan []string, 16), changes: make(chan *pluginv1.Change, 16)}
 }
 
@@ -69,7 +70,7 @@ func (m *mailSource) List(_ context.Context, req *pluginv1.ListRequest) (*plugin
 	switch req.Context {
 	case "everything":
 		if !m.gone {
-			resp.Entries = append(resp.Entries, &pluginv1.Entry{Key: "t1", Kind: rpc.KindText, Label: "Lunch"})
+			resp.Entries = append(resp.Entries, &pluginv1.Entry{Key: "t1", Kind: rpc.KindText, Label: m.subject})
 		}
 	case "box":
 		if m.inBox {
@@ -341,8 +342,8 @@ func (l lateAttach) Subscribe(ctx context.Context, req *gridwellv1.SubscribeRequ
 
 // A client showing only the box is told when a thread its links point at
 // changes, though nobody shows everything: the node watches the contexts a
-// shown grid links into, and announces the holder when one changes. Its next
-// read through the link is the new card. The source is watched for the
+// shown grid links into, and announces the holder when one's listing moves.
+// Its next read through the link is the new card. The source is watched for the
 // client's stream only once that stream hears the source, so a change told
 // the moment the Watch opens is not lost to a stream still attaching.
 func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
@@ -382,7 +383,7 @@ func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
 		}
 	}
 
-	src.set(func(m *mailSource) { m.card = "card of t1, read" })
+	src.set(func(m *mailSource) { m.card, m.subject = "card of t1, read", "Lunch (2)" })
 	src.changes <- &pluginv1.Change{Payload: &pluginv1.Change_ContextChanged{
 		ContextChanged: &pluginv1.ContextChanged{Context: "everything"}}}
 	for told := false; !told; {

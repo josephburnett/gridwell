@@ -77,8 +77,9 @@ type Adapter struct {
 	moved   chan struct{}
 
 	// served is, per grid address, each distinct listing GetGrid has answered
-	// since the grid was last announced: what a client may hold. See
-	// checkAdded; emitGridChanged clears an entry.
+	// since the grid was last announced, and the one it was announced with:
+	// what a client may hold. See announceMoved; emitGridChanged clears an
+	// entry.
 	servedMu sync.Mutex
 	served   map[string][]listingSum
 }
