@@ -5,6 +5,8 @@ import (
 	"context"
 	"io"
 	"log"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -456,7 +458,8 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		// Reap only on an explicit NotFound: a missed reap is reclaimed by the
 		// boot sweep, a wrong one by nothing.
 		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); status.Code(err) == gcodes.NotFound {
-			rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)
+			left := append([]string{resp.GetSessionLeft()}, rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)...)
+			resp = &pb.DeleteTileResponse{SessionLeft: strings.Join(slices.DeleteFunc(left, func(s string) bool { return s == "" }), "; ")}
 		}
 	}
 	return resp, nil
@@ -485,8 +488,9 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 }
 
 // reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed pane
-// tile's captured leaves, best-effort: it must not block the user's delete.
-func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) {
+// tile's captured leaves, best-effort: it must not block the user's delete. It
+// answers why each shell session it should have ended is still running.
+func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) (left []string) {
 	for _, id := range candidates {
 		ec, elocal, euuid, transit, err := rt.route(id)
 		if err != nil {
@@ -511,10 +515,17 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 		if err != nil || et.GetTile() == nil || et.GetTile().GridId != info.ScratchGridId {
 			continue // not an ephemeral: viewed content, never touched
 		}
-		if _, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal}); err != nil {
+		dr, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal})
+		switch {
+		case err != nil && et.GetTile().Kind == rpc.KindShell:
+			left = append(left, "the shell "+id+" was not removed: "+status.Convert(err).Message())
+		case err != nil:
 			log.Printf("gridwell: delete %s: reaping ephemeral %s failed: %v", qualifiedID, id, err)
+		default:
+			left = append(left, dr.GetSessionLeft())
 		}
 	}
+	return left
 }
 
 // SetFraming is the one framing write. Unimplemented (a plugin that keeps no

@@ -2840,9 +2840,10 @@ func (x *DeleteTileRequest) GetTileId() string {
 	return ""
 }
 
-// DeleteTileResponse answers a delete that landed. session_left is why the
-// shell session the destroyed row was the last to name is still running, empty
-// when none was left; the next start's orphan sweep is its net.
+// DeleteTileResponse answers a delete that landed. session_left is why a shell
+// session the destroy should have ended is still running, the row's own or an
+// ephemeral's its pane tile's layout owned; empty when none was left. The next
+// start's orphan sweep is its net.
 type DeleteTileResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionLeft   string                 `protobuf:"bytes,1,opt,name=session_left,json=sessionLeft,proto3" json:"session_left,omitempty"`
