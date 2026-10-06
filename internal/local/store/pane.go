@@ -95,23 +95,25 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 	if err != nil {
 		return nil, false, err
 	}
+	// One statement, so each layout is the blob its row names at one instant
+	// (see readSnapshot); a NULL is a row whose blob is missing.
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT blob_id FROM tiles WHERE ns = '' AND kind = 'pane' AND blob_id IS NOT NULL`)
+		`SELECT b.data FROM tiles t LEFT JOIN blobs b ON b.id = t.blob_id
+		 WHERE t.ns = '' AND t.kind = 'pane' AND t.blob_id IS NOT NULL`)
 	if err != nil {
 		return nil, false, fmt.Errorf("workspace refs: %w", err)
 	}
-	blobIDs, err := collect(rows, func(rows *sql.Rows) (int64, error) {
-		var id int64
-		err := rows.Scan(&id)
-		return id, err
+	layouts, err := collect(rows, func(rows *sql.Rows) ([]byte, error) {
+		var data []byte
+		err := rows.Scan(&data)
+		return data, err
 	})
 	if err != nil {
 		return nil, false, err
 	}
 	refs = map[string]bool{}
-	for _, blobID := range blobIDs {
-		data, _, err := s.GetBlobWithMedia(ctx, blobID)
-		if err != nil {
+	for _, data := range layouts {
+		if data == nil {
 			unreadable = true
 			continue
 		}

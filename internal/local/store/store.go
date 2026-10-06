@@ -357,6 +357,13 @@ func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return tx.Commit()
 }
 
+// readSnapshot is how a read of more than one statement sees one state of the
+// database. Outside it, a write can land between a row and the blob it names
+// and release that blob, so the read answers NotFound for a tile that exists.
+func (s *Store) readSnapshot(ctx context.Context, fn func(*sql.Tx) error) error {
+	return s.withTx(ctx, fn)
+}
+
 // withMutation runs fn in a transaction and, on commit, publishes the events
 // fn appended, in order. Every store write goes through it, so it is also
 // where a write says it happened: verb is the caller's, and what it touched

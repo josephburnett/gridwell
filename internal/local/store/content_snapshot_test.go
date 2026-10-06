@@ -87,3 +87,35 @@ func TestReadContentOverlappingWriteReadsOneSnapshot(t *testing.T) {
 		t.Fatalf("read = %q, want the bytes before or after the write", got)
 	}
 }
+
+// The frozen face is the same shape: a row naming a blob, read while a
+// re-freeze swaps the blob and releases the old one.
+func TestTilePreviewOverlappingAFreezeReadsOneSnapshot(t *testing.T) {
+	s := newTestStore(t)
+	sh, err := s.CreateShell(context.Background(), rootID(t, s), 0, 0, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetShellPreview(context.Background(), sh.Id, []byte("first face")); err != nil {
+		t.Fatal(err)
+	}
+
+	base, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var werr error
+	ctx := &writeWhileHeld{Context: base, s: s, done: make(chan struct{}), write: func() {
+		_, werr = s.SetShellPreview(context.Background(), sh.Id, []byte("second face"))
+	}}
+
+	jpeg, err := s.GetTilePreview(ctx, sh.Id)
+	<-ctx.done
+	if werr != nil {
+		t.Fatalf("write: %v", werr)
+	}
+	if err != nil {
+		t.Fatalf("preview read overlapping a re-freeze: %v", err)
+	}
+	if got := string(jpeg); got != "first face" && got != "second face" {
+		t.Fatalf("preview = %q, want the face before or after the freeze", got)
+	}
+}
