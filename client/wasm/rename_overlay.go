@@ -36,6 +36,7 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 		descended = t
 		in.Descended, in.DescendedName = true, t.AltText
 		in.DescendedText = t.Kind == rpc.KindText
+		in.DescendedReadOnly = t.GetReadOnly()
 		in.PossiblyEphemeral = a.possiblyEphemeral(p, t)
 		in.CertainlyEphemeral = a.certainlyEphemeral(p, t)
 	}

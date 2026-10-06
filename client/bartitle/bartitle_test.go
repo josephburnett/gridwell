@@ -167,6 +167,29 @@ func TestDecideSourceLabel(t *testing.T) {
 	}
 }
 
+// A text body its source will not take back says why after its name, the one
+// place the user looks before typing into it.
+func TestDecideReadOnlyReason(t *testing.T) {
+	cases := []struct {
+		name string
+		in   Input
+		want string
+	}{
+		{"a descended body its source refuses says why",
+			Input{Descent: true, Descended: true, DescendedText: true, DescendedName: "data.bin",
+				DescendedReadOnly: "data.bin is shown as a summary of the file, not its bytes"},
+			"data.bin — read-only: data.bin is shown as a summary of the file, not its bytes"},
+		{"a body that takes edits names itself alone",
+			Input{Descent: true, Descended: true, DescendedText: true, DescendedName: "notes.md"},
+			"notes.md"},
+	}
+	for _, c := range cases {
+		if got := Decide(c.in).Text(); got != c.want {
+			t.Errorf("%s: Decide(%+v).Text() = %q, want %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
 // The source label is shown, never edited: the rename still names the room's
 // own row with its own name.
 func TestDecideSourceLabelLeavesTheRenameAlone(t *testing.T) {
