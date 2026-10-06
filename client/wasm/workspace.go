@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"strings"
 
@@ -153,7 +154,7 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 		if fr := a.ws.At(level); fr != nil && fr.TileID == tileID {
 			fr.Name = tile.AltText
 		}
-		a.c.UpdateTile(tile.GridId, tile)
+		a.c.PutWriteResponse(tile.GridId, tile, cache.WroteName)
 	})
 }
 
@@ -224,8 +225,7 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 			// Filed before the row lands, so no frame sees the new blob
 			// without its bytes and the preview never refetches this write.
 			a.c.PutSavedContent(tile, data)
-			a.c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-				TileChanged: &gridwellv1.TileChanged{Tile: tile}}})
+			a.c.PutWriteResponse(tile.GridId, tile, cache.WroteBody)
 			a.resolveErr("rpc:PaneLayout")
 			landed = true
 		},

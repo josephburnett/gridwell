@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -309,7 +310,7 @@ func (a *App) postFrozen(tileID string, frozen bool, after func()) {
 		},
 		then: func() {
 			if tile != nil {
-				a.c.UpdateTile(tile.GridId, tile)
+				a.c.PutWriteResponse(tile.GridId, tile, cache.WroteFrozen)
 			}
 		},
 		done: func() {

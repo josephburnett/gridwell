@@ -45,7 +45,7 @@ func grpcCreateText(t *testing.T, c namespace.Namespace, gridID string, body []b
 	}
 	tile := r.Tile
 	if len(body) > 0 {
-		// Creation is metadata-only; the body follows through the one write.
+		// Written after the create, so the row carries a written version.
 		resp, err := c.WriteContent(context.Background(),
 			sendParts(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: body}))
 		if err != nil {

@@ -303,7 +303,7 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "SetTextView", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withTileWrite(ctx, "SetTextView", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, rpc.KindText, ErrNotTextTile)
 		if err != nil {
 			return err

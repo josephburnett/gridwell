@@ -340,22 +340,83 @@ func (c *Cache) putTileLocked(g *Grid, n *gridwellv1.Tile) bool {
 	return true
 }
 
-// UpdateTile folds one row learned outside the Subscribe stream into the
-// named grid. It never inserts, so a response routed through a leaf link
-// cannot plant a foreign tile.
+// UpdateTile folds one row read outside the Subscribe stream into the named
+// grid. It never inserts, so a response routed through a leaf link cannot
+// plant a foreign tile. A write's response goes through PutWriteResponse.
 func (c *Cache) UpdateTile(gridID string, t *gridwellv1.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	g, ok := c.grids[gridID]
+	if g, ok := c.cachedRowLocked(gridID, t); ok {
+		c.putTileLocked(g, t)
+	}
+}
+
+// cachedRowLocked is the grid holding t's row, or false after aging t's body,
+// so a row this cache does not hold is never inserted. Callers hold c.mu.
+func (c *Cache) cachedRowLocked(gridID string, t *gridwellv1.Tile) (*Grid, bool) {
+	if g, ok := c.grids[gridID]; ok {
+		if _, ok := g.Tiles[t.Id]; ok {
+			return g, true
+		}
+	}
+	c.ageContentLocked(t)
+	return nil, false
+}
+
+// Wrote names what one write set, which is all its response may contribute:
+// the rest of the response row is a snapshot an echo may already have
+// overtaken at the same version, since framing claims none, and folding it
+// in would put back a window the user has scrolled away from.
+type Wrote int
+
+const (
+	// WroteBody is a content write's bytes: the blob, and the name a text
+	// tile derives from its first line.
+	WroteBody Wrote = iota + 1
+	// WroteAddress is a url's address.
+	WroteAddress
+	// WroteName is a typed name.
+	WroteName
+	// WroteFrozen is the standing freeze, a framing write: no version.
+	WroteFrozen
+)
+
+func (w Wrote) claimsVersion() bool { return w != WroteFrozen }
+
+func (w Wrote) copy(dst, src *gridwellv1.Tile) {
+	switch w {
+	case WroteBody:
+		dst.BlobId, dst.AltText = src.BlobId, src.AltText
+	case WroteAddress:
+		dst.UrlString = src.UrlString
+	case WroteName:
+		dst.AltText = src.AltText
+	case WroteFrozen:
+		dst.UrlFrozen = src.UrlFrozen
+	}
+}
+
+// PutWriteResponse folds the row a write answered with into the named grid,
+// taking only what w names and, for a content write, the version it claimed.
+// A content response older than the cached row says nothing new. Like
+// UpdateTile it never inserts.
+func (c *Cache) PutWriteResponse(gridID string, resp *gridwellv1.Tile, w Wrote) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	g, ok := c.cachedRowLocked(gridID, resp)
 	if !ok {
-		c.ageContentLocked(t)
 		return
 	}
-	if _, ok := g.Tiles[t.Id]; !ok {
-		c.ageContentLocked(t)
-		return
+	cur := g.Tiles[resp.Id]
+	n := proto.CloneOf(cur)
+	if w.claimsVersion() {
+		if resp.Version < cur.Version {
+			return
+		}
+		n.Version = resp.Version
 	}
-	c.putTileLocked(g, t)
+	w.copy(n, resp)
+	c.putTileLocked(g, n)
 }
 
 // PatchTile folds an optimistic local change to one row in through the event

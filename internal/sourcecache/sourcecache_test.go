@@ -437,12 +437,12 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	// PRIME the subscription: the fan-in goroutine registers with the
 	// store's hub asynchronously, so a mutation fired before it lands is
 	// missed forever (this test hung exactly that way once). Re-fire a
-	// framing write (no version bump — the same claim stays valid) until
-	// its event arrives.
+	// framing write until its event arrives, a new center each time, since
+	// a write that changes nothing tells no one.
 	primed := false
 	for i := 0; i < 50 && !primed; i++ {
 		if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
-			Cx: 1, Cy: 1, Zoom: 2}); err != nil {
+			Cx: float64(i + 1), Cy: 1, Zoom: 2}); err != nil {
 			t.Fatal(err)
 		}
 		select {

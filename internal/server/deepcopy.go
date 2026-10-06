@@ -18,8 +18,8 @@ import (
 // destination cell, the walk inside a copied well at each source cell, so the
 // rule is written once and holds at every depth. The router reads the source
 // subtree through the namespace interface and materializes it in the
-// destination plugin: create, recurse, bytes through the one content door,
-// framing and face through the one writeback.
+// destination plugin: create, recurse, framing and face through the one
+// writeback.
 //
 // Creation is necessarily top-down, because an interior well's child grid is
 // allocated by its create. So the destination well appears immediately and
@@ -31,7 +31,8 @@ import (
 //   - a solid well becomes a new well plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
 //   - an exit well or leaf link copies as a reference (CLAUDE.md, 2026-10-06);
-//   - text and pane bytes go ReadContent to WriteContent; a pane layout stays
+//   - text and pane bytes go ReadContent to the create, so the copy is born
+//     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
 //   - a url copies its url_string plus the frozen preview and history;
 //   - a shell copies as a link to its source, since a clone shares its
@@ -50,7 +51,7 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 
 	created, err := rt.createCopy(ctx, dst, dstGrid,
 		&pb.Tile{Kind: rpc.KindWell, X: x, Y: y, W: srcLocalTile.W, H: srcLocalTile.H,
-			AltText: srcLocalTile.AltText})
+			AltText: srcLocalTile.AltText}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +138,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 
 	created, err := rt.createCopy(ctx, dst, dstGrid,
 		&pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H,
-			AltText: t.AltText, UrlString: t.UrlString})
+			AltText: t.AltText, UrlString: t.UrlString}, body)
 	if err != nil {
 		return nil, err
 	}
@@ -145,15 +146,6 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 	version := created.GetTile().GetVersion()
 
 	switch {
-	case rpc.IsBodyKind(t.Kind):
-		if len(body) == 0 {
-			return created, nil
-		}
-		// Not atomic with the create: a failure leaves a visible, deletable
-		// empty copy and surfaces, never a silent half-state.
-		if _, err := writeAllContent(ctx, dst, id, version, body); err != nil {
-			return nil, err
-		}
 	case t.Kind == rpc.KindURL:
 		// The frozen face travels with the copy. An unreachable preview skips:
 		// the copy's own facts are present and the face re-freezes on the next
@@ -181,7 +173,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 	default:
 		return created, nil
 	}
-	// A second write moved the row, so the answer is a fresh read of it.
+	// The face write moved the row, so the answer is a fresh read of it.
 	return freshCopy(ctx, dst, created), nil
 }
 
@@ -197,7 +189,7 @@ func (rt *router) linkCopy(ctx context.Context, dst copyDst, dstGrid string, t *
 	} else {
 		tile.LinkTargetId = target
 	}
-	return rt.createCopy(ctx, dst, dstGrid, tile)
+	return rt.createCopy(ctx, dst, dstGrid, tile, nil)
 }
 
 // copyDst is where a deep copy writes: the destination namespace, the peel into
@@ -209,18 +201,18 @@ type copyDst struct {
 	holder string
 }
 
-// createCopy stores one copy row. The create goes straight to the destination
-// namespace rather than back through CreateTile, so the reference it may carry
-// is canonicalized, spelled for its holder and peeled into dst's frame here
-// instead; see router.CreateTile.
-func (rt *router) createCopy(ctx context.Context, dst copyDst, dstGrid string, tile *pb.Tile) (*pb.TileResponse, error) {
+// createCopy stores one copy row with the bytes it is born with. The create
+// goes straight to the destination namespace rather than back through
+// CreateTile, so the reference it may carry is canonicalized, spelled for its
+// holder and peeled into dst's frame here instead; see router.CreateTile.
+func (rt *router) createCopy(ctx context.Context, dst copyDst, dstGrid string, tile *pb.Tile, content []byte) (*pb.TileResponse, error) {
 	if err := rt.mintReferences(ctx, tile); err != nil {
 		return nil, err
 	}
 	if err := rt.spellReferences(ctx, dst.holder, tile); err != nil {
 		return nil, err
 	}
-	return dst.CreateTile(ctx, &pb.CreateTileRequest{GridId: dstGrid, Tile: dst.hop.PeelTile(tile)})
+	return dst.CreateTile(ctx, &pb.CreateTileRequest{GridId: dstGrid, Tile: dst.hop.PeelTile(tile), Content: content})
 }
 
 // freshCopy re-reads the copy so the answer carries the version and the face

@@ -329,7 +329,8 @@ message GetTilePreviewResponse {
 // ─── Content streams ──────────────────────────────────────────────────────
 // ReadContent and WriteContent are the one way content bytes move: finite,
 // versioned, transactional values. OpenShell is the live wire instead.
-// Creation is metadata-only and a body follows as a write.
+// A text or pane tile may be born with its bytes (CreateTileRequest.content);
+// every later change is a write.
 
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
 // the tile row version the bytes belong to, which is the client's save basis,
@@ -561,7 +562,8 @@ message DeadReference {
 //   well  → child_grid_id set makes an exit well pointing at a grid in
 //           another plugin, a qualified "<uuid>/<grid-id>"; empty allocates
 //           a fresh interior child grid. alt_text is the well's label.
-//   text  → the body follows as a WriteContent.
+//   text  → content is the body.
+//   pane  → content is the layout; empty is never arranged.
 //   url   → url_string.
 //   shell → no extra fields.
 // A plugin that does not accept creates leaves this unimplemented.
@@ -570,6 +572,10 @@ message CreateTileRequest {
   string grid_id = 2;
   Tile   tile    = 3;
   reserved 4; // data
+  // content is the bytes a text or pane tile is born with, stored with the
+  // row in one write, so no reader sees the tile without them. Refused on
+  // every other kind.
+  bytes  content = 5;
 }
 
 // ShellSessionAlive reports whether the tile's Gridwell-private tmux

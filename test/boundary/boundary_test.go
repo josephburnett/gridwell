@@ -356,9 +356,17 @@ func TestOneEventFanOut(t *testing.T) {
 // leaves a trace record; a write beside it does neither.
 const storeWriteFunnel = "withMutation"
 
+// storeTxOpener is the one function that begins a transaction, and only the
+// funnel and the read snapshot may call it: a read of several statements
+// needs one state of the database, and a write needs the funnel's trace.
+const storeTxOpener = "withTx"
+
+var storeTxCallers = map[string]bool{storeWriteFunnel: true, "readSnapshot": true}
+
 // No non-test file in the store writes on its handle (a .db selector) outside
-// storeWriteFunnel. Its write helpers take a *sql.Tx, so the handle cannot be
-// passed to one either.
+// storeWriteFunnel, or begins a transaction outside storeTxOpener, or calls
+// storeTxOpener outside storeTxCallers. Its write helpers take a *sql.Tx, so
+// the handle cannot be passed to one either.
 func TestOneStoreWriteFunnel(t *testing.T) {
 	dir := filepath.Join(repoRoot(t), "internal", "local", "store")
 	writes := map[string]bool{"Exec": true, "ExecContext": true, "Begin": true, "BeginTx": true, "Prepare": true, "PrepareContext": true}
@@ -386,7 +394,13 @@ func TestOneStoreWriteFunnel(t *testing.T) {
 					return true
 				}
 				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok || !writes[sel.Sel.Name] {
+				if !ok {
+					return true
+				}
+				if sel.Sel.Name == storeTxOpener && !storeTxCallers[fn.Name.Name] {
+					t.Errorf("%s: %s begins a transaction — only %s and readSnapshot may", fset.Position(call.Pos()), fn.Name.Name, storeWriteFunnel)
+				}
+				if !writes[sel.Sel.Name] || fn.Name.Name == storeTxOpener {
 					return true
 				}
 				if recv, ok := sel.X.(*ast.SelectorExpr); ok && recv.Sel.Name == "db" {

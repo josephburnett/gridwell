@@ -89,23 +89,31 @@ func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version i
 // ReadContent is the single content-bytes read: the bytes paired with the row
 // version they belong to, in one call at the owner, so a caller can never hold
 // a version apart from its bytes. A tile with no blob returns empty bytes and
-// its current version. A url tile's content is its address.
+// its current version. A url tile's content is its address. The row and its
+// blob are one snapshot; see readSnapshot.
 func (s *Store) ReadContent(ctx context.Context, tileID string) (data []byte, mediaType string, version int64, err error) {
-	t, err := s.GetTile(ctx, tileID)
+	id, err := parseID(tileID)
+	if err != nil {
+		return nil, "", 0, ErrNotFound
+	}
+	err = s.readSnapshot(ctx, func(tx *sql.Tx) error {
+		t, err := s.loadTile(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		version = t.Version
+		switch {
+		case t.Kind == rpc.KindURL:
+			data, mediaType = []byte(t.UrlString), "text/plain; charset=utf-8"
+		case t.BlobId != 0:
+			data, mediaType, err = readBlob(ctx, tx, t.BlobId)
+		}
+		return err
+	})
 	if err != nil {
 		return nil, "", 0, err
 	}
-	if t.Kind == rpc.KindURL {
-		return []byte(t.UrlString), "text/plain; charset=utf-8", t.Version, nil
-	}
-	if t.BlobId == 0 {
-		return nil, "", t.Version, nil
-	}
-	data, mediaType, err = s.GetBlobWithMedia(ctx, t.BlobId)
-	if err != nil {
-		return nil, "", 0, err
-	}
-	return data, mediaType, t.Version, nil
+	return data, mediaType, version, nil
 }
 
 // RenameTile is the versioned user rename: it sets alt_text and latches

@@ -84,15 +84,10 @@ func (c *Client) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(req)))
 }
 
-// CreateWithContent follows the create with a content write, because creation
-// is metadata-only on the wire. A failure between the two leaves an empty tile:
-// visible and deletable, never silent.
+// CreateWithContent creates a text or pane tile born with data.
 func (c *Client) CreateWithContent(ctx context.Context, req *pb.CreateTileRequest, data []byte) (*pb.Tile, error) {
-	t, err := c.CreateTile(ctx, req)
-	if err != nil || len(data) == 0 {
-		return t, err
-	}
-	return c.WriteContent(ctx, t.Id, t.Version, data)
+	req.Content = data
+	return c.CreateTile(ctx, req)
 }
 
 // SetTile is the one capture and framing writeback; each scalar arm carries

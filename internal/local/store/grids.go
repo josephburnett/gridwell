@@ -150,19 +150,20 @@ func (n *Namespace) Preview(tileID int64) ([]byte, error) {
 }
 
 // tilePreview is the one frozen-face read.
-func (s *Store) tilePreview(ctx context.Context, ns string, id int64) ([]byte, error) {
-	var previewBID sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ?`, id, ns).Scan(&previewBID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	if !previewBID.Valid {
-		return nil, nil
-	}
-	return s.GetBlob(ctx, previewBID.Int64)
+func (s *Store) tilePreview(ctx context.Context, ns string, id int64) (jpeg []byte, err error) {
+	err = s.readSnapshot(ctx, func(tx *sql.Tx) error {
+		var previewBID sql.NullInt64
+		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ?`, id, ns).Scan(&previewBID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil || !previewBID.Valid {
+			return err
+		}
+		jpeg, _, err = readBlob(ctx, tx, previewBID.Int64)
+		return err
+	})
+	return jpeg, err
 }
 
 // SessionNamers is how many shell rows name one tmux session, and how many of

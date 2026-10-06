@@ -270,7 +270,7 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 		return nil, fmt.Errorf("%w: %v", ErrInvalidArgument, err)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "SetFraming", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withTileWrite(ctx, "SetFraming", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
@@ -344,23 +344,37 @@ func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error
 	return out, rows.Err()
 }
 
+// withTx runs fn inside a transaction.
+func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// readSnapshot is how a read of more than one statement sees one state of the
+// database. Outside it, a write can land between a row and the blob it names
+// and release that blob, so the read answers NotFound for a tile that exists.
+func (s *Store) readSnapshot(ctx context.Context, fn func(*sql.Tx) error) error {
+	return s.withTx(ctx, fn)
+}
+
 // withMutation runs fn in a transaction and, on commit, publishes the events
 // fn appended, in order. Every store write goes through it (test/boundary
 // pins it), so it is where a write says it happened: what it touched comes
 // from its events, or from rows for a write that has none (Namespace.write).
 func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error, rows ...string) error {
 	var events []*gridwellv1.Event
-	err := func() error {
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin: %w", err)
-		}
-		if err := fn(tx, &events); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		return tx.Commit()
-	}()
+	err := s.withTx(ctx, func(tx *sql.Tx) error { return fn(tx, &events) })
+	if errors.Is(err, errUnchanged) {
+		trace.Emit("store", "write", verb+" unchanged", nil)
+		return nil
+	}
 	if err != nil {
 		trace.Emit("store", "write", verb+" error: "+err.Error(), nil)
 		return err
@@ -370,6 +384,67 @@ func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.T
 		s.publish(ev)
 	}
 	return nil
+}
+
+// errUnchanged rolls back a tile write that left its row as it found it.
+var errUnchanged = errors.New("store: write changed nothing")
+
+// withTileWrite is withMutation for a write without a claim to one existing
+// tile: framing, layout, a capture. One that lands where the row already is
+// rolls back, so it neither stamps updated_at nor tells a subscriber, because
+// every open view would re-read and re-settle against a change that is not
+// one. The row is compared whole, columns off the wire included.
+func (s *Store) withTileWrite(ctx context.Context, verb string, tileID int64, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {
+	return s.withMutation(ctx, verb, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		before, err := tileImage(ctx, tx, tileID)
+		if err != nil {
+			return err
+		}
+		if err := fn(tx, events); err != nil {
+			return err
+		}
+		after, err := tileImage(ctx, tx, tileID)
+		if err != nil {
+			return err
+		}
+		if after == before {
+			return errUnchanged
+		}
+		return nil
+	})
+}
+
+// tileImage is a tile row as one comparable value, every column but
+// updated_at. A missing row is the empty image, so the write's own load
+// reports it.
+func tileImage(ctx context.Context, tx *sql.Tx, tileID int64) (string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT * FROM tiles WHERE id = ?`, tileID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "", rows.Err()
+	}
+	cols, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+	vals := make([]any, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := rows.Scan(ptrs...); err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for i, c := range cols {
+		if c != "updated_at" {
+			fmt.Fprintf(&b, "%s=%#v;", c, vals[i])
+		}
+	}
+	return b.String(), rows.Err()
 }
 
 // touched names the entities a mutation changed, and for a single-tile write

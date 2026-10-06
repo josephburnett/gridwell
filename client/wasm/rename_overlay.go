@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/bartitle"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -190,7 +191,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 // reflects it immediately. The TileChanged event confirms.
 func (a *App) commitRename(tileID, alt string) {
 	a.commitRenameRetained(tileID, alt, func(t *gridwellv1.Tile) {
-		a.c.UpdateTile(t.GridId, t)
+		a.c.PutWriteResponse(t.GridId, t, cache.WroteName)
 	})
 }
 

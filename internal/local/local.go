@@ -250,6 +250,9 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "create: nil tile")
 	}
+	if len(req.Content) > 0 && (t.LinkTargetId != "" || !rpc.IsBodyKind(t.Kind)) {
+		return nil, status.Errorf(codes.InvalidArgument, "create: a %s tile is not born with content", t.Kind)
+	}
 	if t.LinkTargetId != "" {
 		// A leaf link of any leaf kind; the store validates kind and target.
 		return tileResp(p.st.CreateLeafLink(ctx, req.GridId, t.X, t.Y, t.W, t.H,
@@ -266,7 +269,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		}
 		return tileResp(p.st.CreateWell(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText))
 	case rpc.KindText:
-		return tileResp(p.st.CreateText(ctx, req.GridId, t.X, t.Y, t.W, t.H, nil))
+		return tileResp(p.st.CreateText(ctx, req.GridId, t.X, t.Y, t.W, t.H, req.Content))
 	case rpc.KindURL:
 		// A url create on the scratch grid is an ephemeral visit, routed
 		// path-free because the scratch grid has no descent path.
@@ -281,9 +284,8 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		}
 		return tileResp(p.st.CreateShell(ctx, req.GridId, t.X, t.Y, t.W, t.H))
 	case rpc.KindPane:
-		// A NULL blob_id means never arranged; the first arrangement rides
-		// WriteContent.
-		return tileResp(p.st.CreatePane(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, nil))
+		// No content is a NULL blob_id: never arranged.
+		return tileResp(p.st.CreatePane(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Content))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
 	}

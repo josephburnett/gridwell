@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/inflight"
@@ -307,7 +308,7 @@ func (a *App) postWriteContent(gid, tileID string, version int64, newContent []b
 	// saves claim it at send time. The tile is cached under the response
 	// row's own grid, so a save through a leaf link cannot plant a foreign
 	// row in the wrong grid map.
-	a.c.UpdateTile(tile.GridId, tile)
+	a.c.PutWriteResponse(tile.GridId, tile, cache.WroteBody)
 	a.c.PutSavedContent(tile, newContent)
 	a.recordContent(tile.Id)
 	return tile, true

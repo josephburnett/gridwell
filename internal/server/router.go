@@ -3,7 +3,6 @@ package server
 import (
 	"cmp"
 	"context"
-	"io"
 	"log"
 	"slices"
 	"strings"
@@ -413,17 +412,6 @@ func readAllContent(ctx context.Context, c namespace.Namespace, tileID string) (
 		return nil, err
 	}
 	return data, nil
-}
-
-func writeAllContent(ctx context.Context, c namespace.Namespace, tileID string, version int64, data []byte) (*pb.TileResponse, error) {
-	sent := false
-	return c.WriteContent(ctx, func() (*pb.WriteContentRequest, error) {
-		if sent {
-			return nil, io.EOF
-		}
-		sent = true
-		return &pb.WriteContentRequest{TileId: tileID, Version: version, Data: data}, nil
-	})
 }
 
 func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error) {

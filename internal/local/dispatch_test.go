@@ -13,21 +13,11 @@ import (
 
 func createTile(t *testing.T, p *local.Plugin, gridID string, tile *gridwellv1.Tile, data []byte) *gridwellv1.Tile {
 	t.Helper()
-	r, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: gridID, Tile: tile})
+	r, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: gridID, Tile: tile, Content: data})
 	if err != nil {
 		t.Fatalf("CreateTile(%s): %v", tile.Kind, err)
 	}
-	out := r.Tile
-	if len(data) > 0 {
-		// Creation is metadata-only; the body follows through the one write.
-		w, err := p.Store().WriteContent(context.Background(), out.Id, out.Version, data)
-		if err != nil {
-			t.Fatalf("WriteContent(%s): %v", tile.Kind, err)
-		}
-		out = getTile(t, p, out.Id)
-		_ = w
-	}
-	return out
+	return r.Tile
 }
 
 func getTile(t *testing.T, p *local.Plugin, id string) *gridwellv1.Tile {
@@ -115,6 +105,16 @@ func TestSetAndCreateRejectBadKinds(t *testing.T) {
 	}
 	if _, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: "bogus", W: 1, H: 1}}); err == nil {
 		t.Error("CreateTile(unknown kind) should error")
+	}
+	// Content a kind cannot hold is refused, never dropped.
+	for _, tile := range []*gridwellv1.Tile{
+		{Kind: "well", W: 1, H: 1},
+		{Kind: "url", W: 1, H: 1, UrlString: "https://example.com"},
+		{Kind: "text", W: 1, H: 1, LinkTargetId: "x"},
+	} {
+		if _, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: tile, Content: []byte("b")}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("CreateTile(%s with content, link %q) = %v, want InvalidArgument", tile.Kind, tile.LinkTargetId, err)
+		}
 	}
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{Tile: nil}); err == nil {
 		t.Error("SetTile(nil) should error")

@@ -23,7 +23,7 @@ func (s *Store) SetFrozen(ctx context.Context, tileIDStr string, frozen bool) (*
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "SetFrozen", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withTileWrite(ctx, "SetFrozen", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		if err := s.setFrozenTx(ctx, tx, "", tileID, frozen); err != nil {
 			return err
 		}
