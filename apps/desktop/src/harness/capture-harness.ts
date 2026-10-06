@@ -10,6 +10,7 @@ import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
+import { captureAttempt, describeAttempt } from '../main/capture';
 import { registerWebviewIpc } from '../main/register';
 import type { ErrorEvent, FrameEvent, NavEvent } from '../main/ipc';
 import { PARK_COORD, SESSION_PARTITION } from '../main/viewutil';
@@ -84,15 +85,35 @@ async function waitForFirstFrame(
   await loadFinished(wc, what);
   const loadMs = Date.now() - loadStart;
   const frameStart = Date.now();
+  // Every miss is tallied by kind, so a slow first frame on a runner says
+  // whether the surface was absent, empty, or wedged.
+  const misses = new Map<string, number>();
+  const view = { webContents: wc } as unknown as WebContentsView;
   while (Date.now() - frameStart < FRAME_BUDGET_MS) {
-    const jpeg = await registry.capture(paneId);
-    if (jpeg.length > 0) {
-      console.log(`${what}: loaded in ${loadMs}ms, first frame ${Date.now() - frameStart}ms after`);
+    const attempt = await captureAttempt(view);
+    if (attempt.kind === 'ok') {
+      const jpeg = await registry.capture(paneId);
+      if (jpeg.length === 0) fail(`${what}: the view has a frame, but the registry's capture returned none`);
+      console.log(`${what}: loaded in ${loadMs}ms, first frame ${Date.now() - frameStart}ms after${tally(misses)}${gpuStatus()}`);
       return jpeg;
     }
+    const key = describeAttempt(attempt);
+    misses.set(key, (misses.get(key) ?? 0) + 1);
     await new Promise((r) => setTimeout(r, 100));
   }
-  fail(`${what}: loaded in ${loadMs}ms, then produced no frame within ${FRAME_BUDGET_MS}ms`);
+  fail(`${what}: loaded in ${loadMs}ms, then produced no frame within ${FRAME_BUDGET_MS}ms${tally(misses)}${gpuStatus()}`);
+}
+
+// Hosts differ in whether Chromium composites on the GPU, so a first-frame
+// timing is read beside the path that produced it.
+function gpuStatus(): string {
+  const gpu = app.getGPUFeatureStatus();
+  return ` (gpu_compositing=${gpu.gpu_compositing} rasterization=${gpu.rasterization})`;
+}
+
+function tally(misses: Map<string, number>): string {
+  if (misses.size === 0) return '';
+  return '; missed: ' + [...misses].map(([k, n]) => `${n}x ${k}`).join(', ');
 }
 
 // How long /slow holds its body open. Long enough that a mirror tick lands
