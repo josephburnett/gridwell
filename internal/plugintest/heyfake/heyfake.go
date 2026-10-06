@@ -63,6 +63,9 @@ type Thread struct {
 	From, Email      string
 	Seen             bool
 	Created          time.Time
+	// Active is HEY's active_at, when the thread last gained an entry; zero
+	// sends none.
+	Active time.Time
 	// HTML is what `thread read` answers; empty is a one-article document
 	// holding the summary.
 	HTML string
@@ -314,6 +317,7 @@ type posting struct {
 	Summary   string    `json:"summary"`
 	Seen      bool      `json:"seen"`
 	CreatedAt time.Time `json:"created_at"`
+	ActiveAt  time.Time `json:"active_at,omitzero"`
 	Creator   struct {
 		Name         string `json:"name"`
 		EmailAddress string `json:"email_address"`
@@ -321,7 +325,7 @@ type posting struct {
 }
 
 func postingOf(t Thread) posting {
-	p := posting{ID: t.TopicID, TopicID: t.TopicID, Kind: "topic", Name: t.Subject, Summary: t.Summary, Seen: t.Seen, CreatedAt: t.Created}
+	p := posting{ID: t.TopicID, TopicID: t.TopicID, Kind: "topic", Name: t.Subject, Summary: t.Summary, Seen: t.Seen, CreatedAt: t.Created, ActiveAt: t.Active}
 	p.Creator.Name, p.Creator.EmailAddress = t.From, t.Email
 	return p
 }
