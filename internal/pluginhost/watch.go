@@ -211,7 +211,7 @@ func (a *Adapter) checkAdded(ctx context.Context, contexts []string) {
 }
 
 // listingSum is a listing as a client holds it: every entry the source
-// answered, and whether the answer was authoritative.
+// answered, its label, and whether the answer was authoritative.
 type listingSum [sha256.Size]byte
 
 // sumOf is the listing's sum, false for a dark listing, which holds nothing
@@ -222,7 +222,7 @@ func sumOf(s *synthesized) (listingSum, bool) {
 		return listingSum{}, false
 	}
 	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(
-		&pluginv1.ListResponse{Entries: s.entries, Authoritative: s.authoritative})
+		&pluginv1.ListResponse{Entries: s.entries, Authoritative: s.authoritative, SourceLabel: s.grid.SourceLabel})
 	if err != nil {
 		return listingSum{}, false
 	}

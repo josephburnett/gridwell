@@ -127,7 +127,14 @@ type Grid struct {
 	// travels on the GRID because a plugin-list lookup cannot answer for a
 	// grid reached through a mount. Stamped by the adapter, verbatim in
 	// transit. Wire-only, never persisted.
-	Glyph         string `protobuf:"bytes,14,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	Glyph string `protobuf:"bytes,14,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	// source_label is the owning plugin's name for what backs this grid, as
+	// its listing answered it (plugin.v1 ListResponse.source_label: a
+	// directory path, "Inbox · 12 unread"); the bar shows it while a pane
+	// stands on the grid. Like the rows, it is a memory of the source, not a
+	// node fact, so gridwell.db never holds it. Stamped by the adapter,
+	// verbatim in transit. Wire-only.
+	SourceLabel   string `protobuf:"bytes,15,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -214,6 +221,13 @@ func (x *Grid) GetHostContent() bool {
 func (x *Grid) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
+	}
+	return ""
+}
+
+func (x *Grid) GetSourceLabel() string {
+	if x != nil {
+		return x.SourceLabel
 	}
 	return ""
 }
@@ -3519,7 +3533,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xa5\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xc8\x02\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
@@ -3529,7 +3543,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	" \x01(\tR\x06nodeNs\x129\n" +
 	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x12!\n" +
 	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
-	"\x05glyph\x18\x0e \x01(\tR\x05glyphJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12!\n" +
+	"\fsource_label\x18\x0f \x01(\tR\vsourceLabelJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\f\x10\r\"\xc1\x01\n" +
 	"\tMenuEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +

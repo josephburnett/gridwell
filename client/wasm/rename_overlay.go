@@ -48,6 +48,9 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 			parent, in.Parent, in.ParentName = t, true, t.AltText
 		}
 		in.ConfigLabel = a.declaredLabel(p)
+		if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+			in.SourceLabel = g.Meta.GetSourceLabel()
+		}
 	}
 	v := bartitle.Decide(in)
 	switch v.Rename {

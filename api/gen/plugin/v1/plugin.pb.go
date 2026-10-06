@@ -386,7 +386,8 @@ type ListResponse struct {
 	// sweep fact only the plugin knows.
 	Authoritative bool `protobuf:"varint,2,opt,name=authoritative,proto3" json:"authoritative,omitempty"`
 	// source_label is the name of the backing source, such as the directory path
-	// or the pid. The node surface has no field for it, so nothing reads it.
+	// or the pid. The node carries it onto the grid it serves (Grid.source_label)
+	// and the client's bar shows it.
 	SourceLabel string `protobuf:"bytes,3,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
 	// unreachable is empty when the listing is live. Otherwise the plugin
 	// answered from memory and this is why, in a plain sentence; the node shows

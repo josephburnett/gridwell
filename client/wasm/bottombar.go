@@ -171,7 +171,7 @@ func (a *App) barTitleGeom() (x, w, textX float64, label string, editable, muted
 		return
 	}
 	v, _ := a.barTitle(p)
-	label, editable, muted = a.bubbleDecorate(p, v.Label), v.Editable, v.Muted
+	label, editable, muted = a.bubbleDecorate(p, v.Text()), v.Editable, v.Muted
 	if label == "" {
 		return
 	}

@@ -52,22 +52,48 @@ type Input struct {
 	// ConfigLabel is the declared label of an uncached parent, resolved on the
 	// no-descent arm alone for the same reason as Door.
 	ConfigLabel string
+	// SourceLabel is the pane's grid's Grid.source_label, resolved on the
+	// no-descent arm alone.
+	SourceLabel string
 }
 
-// Verdict is what the bar draws and what a right-click edits.
+// Verdict is what the bar draws and what a right-click edits. Label is the
+// room's own name, the one Rename edits; Source is shown after it, never
+// edited.
 type Verdict struct {
 	Rename   Rename
 	Label    string
+	Source   string
 	Editable bool
 	Muted    bool
+}
+
+// Text is what the bar draws. The name comes first because the bar clips a
+// long title from the right (wsbar.TitleSpan), so a narrow bar loses the
+// source before the name. The dash keeps it apart from the "·" plugins use
+// inside their labels.
+func (v Verdict) Text() string {
+	if v.Source == "" {
+		return v.Label
+	}
+	return v.Label + " — " + v.Source
 }
 
 const unnamed = "unnamed"
 
 // Decide answers the descent before the level, because a pane inside a tile
 // names that tile and not the room around it. Anything with no name of its own
-// falls through to a muted "unnamed" rather than to blank chrome.
+// falls through to a muted "unnamed" rather than to blank chrome. A pane on a
+// grid also says what its source calls it, unless that only repeats the name.
 func Decide(in Input) Verdict {
+	v := decideName(in)
+	if !in.Descent && in.SourceLabel != v.Label {
+		v.Source = in.SourceLabel
+	}
+	return v
+}
+
+func decideName(in Input) Verdict {
 	if r := renameOf(in); r != RenameNone {
 		switch name := renameName(in, r); name {
 		case "":

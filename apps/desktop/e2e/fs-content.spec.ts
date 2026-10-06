@@ -35,6 +35,26 @@ test('an fs grid wears the glyph its plugin declared, not a kind the client know
   expect(chain[0].glyph, 'home is owned content').toBe('well');
 });
 
+test('the bar says which directory an fs grid lists, at its door and a level down', async ({ gw }) => {
+  // The plugin's listing names its source (ListResponse.source_label), the
+  // adapter carries it on the grid, and the bar draws it after the room's name.
+  fs.mkdirSync(path.join(ROOT, 'sub'), { recursive: true });
+  // The plugin may name the root as configured or with its links resolved.
+  const endsIn = (d: string) => {
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(` — (${esc(d)}|${esc(fs.realpathSync(d))})$`);
+  };
+  await gw.enterPlugin('code');
+  await expect.poll(async () => (await gw.barName()).label, { timeout: 10_000 }).toMatch(endsIn(ROOT));
+  const f = await gw.focused();
+  const sub = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t) => t.altText === 'sub')!;
+  expect(sub, 'sub listed as a well').toBeTruthy();
+  await gw.descendCell(Number(sub.x ?? 0), Number(sub.y ?? 0));
+  const label = async () => (await gw.barName()).label;
+  await expect.poll(label, { timeout: 10_000 }).toMatch(endsIn(path.join(ROOT, 'sub')));
+  expect(await label(), 'the room is named before its source').toMatch(/^sub — /);
+});
+
 test('a source file shows as plain text and refreshes each open', async ({ gw, window }) => {
   // The freshness half of this test mutates the file and the module-scoped dir
   // persists across runs, so rewrite it first.

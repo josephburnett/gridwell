@@ -132,3 +132,46 @@ func TestDecideAnchorBeatsParent(t *testing.T) {
 		t.Fatalf("Decide(anchor over parent) = %+v, want the door's label", got)
 	}
 }
+
+// A grid's source label follows the room's name on every arm a pane stands on
+// a grid, and never inside a tile, where the level's facts are stale.
+func TestDecideSourceLabel(t *testing.T) {
+	cases := []struct {
+		name string
+		in   Input
+		want string
+	}{
+		{"a collection names its source after its door",
+			Input{AtAnchor: true, Door: door.Entry, DoorName: "Inbox (hey)", SourceLabel: "Inbox · 12 unread"},
+			"Inbox (hey) — Inbox · 12 unread"},
+		{"a well row inside a plugin grid names its directory",
+			Input{Parent: true, ParentName: "src", SourceLabel: "/srv/src"},
+			"src — /srv/src"},
+		{"a nameless room still says its source",
+			Input{AtAnchor: true, SourceLabel: "/srv"},
+			"unnamed — /srv"},
+		{"a source that only repeats the name adds nothing",
+			Input{AtAnchor: true, Door: door.Entry, DoorName: "pages", SourceLabel: "pages"},
+			"pages"},
+		{"a grid whose source says nothing shows the name alone",
+			Input{AtAnchor: true, Door: door.Entry, DoorName: "Feed (hey)"},
+			"Feed (hey)"},
+		{"inside a tile the source does not show",
+			Input{Descent: true, Descended: true, DescendedName: "notes", SourceLabel: "/srv"},
+			"notes"},
+	}
+	for _, c := range cases {
+		if got := Decide(c.in).Text(); got != c.want {
+			t.Errorf("%s: Decide(%+v).Text() = %q, want %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
+// The source label is shown, never edited: the rename still names the room's
+// own row with its own name.
+func TestDecideSourceLabelLeavesTheRenameAlone(t *testing.T) {
+	v := Decide(Input{AtAnchor: true, Door: door.Well, DoorName: "inbox", SourceLabel: "/srv/inbox"})
+	if v.Rename != RenameDoor || v.Label != "inbox" || !v.Editable {
+		t.Fatalf("Decide = %+v, want the well's rename on its own name", v)
+	}
+}

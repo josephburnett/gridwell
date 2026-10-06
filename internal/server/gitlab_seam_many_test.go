@@ -9,7 +9,6 @@ import (
 	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/plugintest/gitlabfake"
 )
@@ -44,7 +43,7 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	gl := gitlabfake.New(t, all...)
 
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	client, cp, closeStack := gitlabStackAt(t, memPath, gl.Config(t, nil))
+	client, _, closeStack := gitlabStackAt(t, memPath, gl.Config(t, nil))
 	defer closeStack()
 	ctx := context.Background()
 	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
@@ -59,21 +58,10 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	if len(root.Tiles) != 14 || gl.Calls() != 4 {
 		t.Fatalf("root = %d weeks after %d calls, want 14 weeks after 4", len(root.Tiles), gl.Calls())
 	}
-	// The counts are the plugin's own summary of the walk. They are read at
-	// the plugin door, where they live: Grid.source_id, the node field that
-	// used to carry the label onward, was retired with source_kind — nothing
-	// on the node surface or the client ever read it. Without this the
-	// pagination arithmetic would have no assertion at all.
-	pinfo, err := cp.Info(ctx, &pluginv1.InfoRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	lst, err := cp.List(ctx, &pluginv1.ListRequest{Context: pinfo.GetMenuEntries()[0].GetContext()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if lst.GetSourceLabel() != "gitlab todos · 20 open · 240 done" {
-		t.Errorf("root source label = %q", lst.GetSourceLabel())
+	// The counts are the plugin's own summary of the walk, read where the bar
+	// reads them: on the grid the node serves.
+	if got := root.Grid.GetSourceLabel(); got != "gitlab todos · 20 open · 240 done" {
+		t.Errorf("root source label = %q", got)
 	}
 	labels := map[string]bool{}
 	rows := map[int64]int{}
