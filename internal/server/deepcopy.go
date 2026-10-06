@@ -30,7 +30,7 @@ import (
 // What copies as what:
 //   - a solid well becomes a new well plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
-//   - an exit well or leaf link copies as a reference;
+//   - an exit well or leaf link copies as a reference (CLAUDE.md, 2026-10-06);
 //   - text and pane bytes go ReadContent to WriteContent; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
 //   - a url copies its url_string plus the frozen preview and history;
@@ -90,7 +90,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 
 	switch {
 	case rpc.IsWellKind(q.Kind) && q.Reference:
-		// A reference copies as a reference: the shared child, qualified.
+		// The link names the shared child, qualified.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 	case rpc.IsWellKind(q.Kind):
 		created, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
@@ -105,7 +105,6 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 		}
 		return created, err
 	case q.LinkTargetId != "":
-		// The tile being copied is a reference, so the copy is one too.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
 	case t.Kind == rpc.KindShell:
 		// A clone shares its source's session, and a session lives on the

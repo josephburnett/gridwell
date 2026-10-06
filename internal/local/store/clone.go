@@ -95,8 +95,8 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		shellSession      sql.NullString
 	)
 	if n.LinkTargetId != "" {
-		// A copy of a link is another link to the same target, and the CHECK's
-		// link branch requires every content column NULL.
+		// A copy of a link is a link (CLAUDE.md, 2026-10-06); the CHECK's link
+		// branch requires every content column NULL.
 		linkTarget = sql.NullString{String: n.LinkTargetId, Valid: true}
 	}
 	switch {

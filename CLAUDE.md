@@ -139,6 +139,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.
 - Clone is an eager deep copy. COW was tried and torn out.
+- A clone of a link is another link to the same target, never a copy of the
+  target: the deep copy is of content, and a link's content is its path
+  (2026-10-06).
 
 **Node**
 
