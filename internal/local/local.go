@@ -500,19 +500,39 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	// The key is read first: a destroy takes the row that names it.
 	key := ""
 	if p.shell != nil {
-		key, _ = p.sessionOf(ctx, req.TileId)
+		k, err := p.sessionOf(ctx, req.TileId)
+		switch status.Code(err) {
+		case codes.OK:
+			key = k
+		case codes.NotFound, codes.InvalidArgument: // no row, or not a shell of ours
+		default:
+			return nil, err
+		}
 	}
 	if err := p.st.DeleteTile(ctx, req); err != nil {
 		return nil, errToStatus(err)
 	}
 	// The session dies with the last row naming it, a trashed row included.
-	// The startup orphan sweep is the net.
-	if key != "" {
-		if n, err := p.st.ShellSessionNamers(ctx, key); err == nil && n.Rows == 0 {
-			_ = p.shell.Kill(key)
-		}
+	if key == "" {
+		return &gridwellv1.DeleteTileResponse{}, nil
 	}
-	return &gridwellv1.DeleteTileResponse{}, nil
+	return &gridwellv1.DeleteTileResponse{SessionLeft: p.endSession(ctx, key)}, nil
+}
+
+// endSession kills key's session once no row names it, answering why one was
+// left running.
+func (p *Plugin) endSession(ctx context.Context, key string) string {
+	n, err := p.st.ShellSessionNamers(ctx, key)
+	if err != nil {
+		return "could not tell whether the shell session is still named: " + err.Error()
+	}
+	if n.Rows > 0 {
+		return ""
+	}
+	if err := p.shell.Kill(key); err != nil {
+		return "the shell session would not stop: " + err.Error()
+	}
+	return ""
 }
 
 func (p *Plugin) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {

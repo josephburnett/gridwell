@@ -41,7 +41,7 @@ func TestFsDeleteInAnUnreadableDirectorySurfacesAndKeepsTheRow(t *testing.T) {
 	row := rowIDOf(t, st.Namespace("p1"), ".", "notes.md")
 
 	lighten := darken(t, root)
-	err = cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: notes.Id})
+	_, err = cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: notes.Id})
 	var ce *connect.Error
 	if !errors.As(err, &ce) || ce.Code() != connect.CodeUnavailable || !strings.Contains(ce.Message(), "permission denied") {
 		t.Fatalf("DeleteTile in an unreadable directory = %v, want Unavailable naming the reason", err)

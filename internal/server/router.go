@@ -446,7 +446,8 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		candidates = rt.workspaceEphemeralCandidates(ctx, c, local, qualifiedID)
 	}
 	m.TileId = local
-	if _, err := c.DeleteTile(ctx, m); err != nil {
+	resp, err := c.DeleteTile(ctx, m)
+	if err != nil {
 		return nil, err
 	}
 	if len(candidates) > 0 {
@@ -456,7 +457,7 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 			rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)
 		}
 	}
-	return &pb.DeleteTileResponse{}, nil
+	return resp, nil
 }
 
 // workspaceEphemeralCandidates reads a pane tile's layout blob for leaf ids

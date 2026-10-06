@@ -268,7 +268,7 @@ func TestDeleteTileRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 }

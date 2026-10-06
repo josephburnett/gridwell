@@ -319,7 +319,7 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 func TestGmailDeleteIsRefusedWithItsReason(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	msg := n.message(t, "Lunch plans")
-	err := n.cl.DeleteTile(t.Context(), &gridwellv1.DeleteTileRequest{TileId: msg.Id})
+	_, err := n.cl.DeleteTile(t.Context(), &gridwellv1.DeleteTileRequest{TileId: msg.Id})
 	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), "read-only projection") {
 		t.Fatalf("DeleteTile = %v, want the plugin's read-only refusal", err)
 	}

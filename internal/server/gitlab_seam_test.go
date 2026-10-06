@@ -282,7 +282,7 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 	}
 
 	// The trash gesture. GitLab accepts the mark-as-done; the todo stays.
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: todo.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: todo.Id}); err != nil {
 		t.Fatalf("trash a todo: %v", err)
 	}
 

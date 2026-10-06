@@ -424,7 +424,7 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	}
 	a.post(write{
 		label: "DeleteTile", gid: src,
-		call: func(ctx context.Context) error { return a.cl.DeleteTile(ctx, req) },
+		call: a.deleteCall(req),
 		undo: refetch,
 	})
 }

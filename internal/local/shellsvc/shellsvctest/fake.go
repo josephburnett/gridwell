@@ -26,6 +26,8 @@ type FakeStreamer struct {
 	// session, which is how the real streamer behaves when the PTY layer
 	// refuses: no tmux server, a failed exec, or a platform with no PTY.
 	OpenErr error
+	// KillErr, when set, makes every Kill fail with it and leave the session.
+	KillErr error
 }
 
 func New() *FakeStreamer { return &FakeStreamer{alive: map[string]bool{}} }
@@ -61,6 +63,9 @@ func (f *FakeStreamer) HasSession(key string) (bool, error) {
 func (f *FakeStreamer) Kill(key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.KillErr != nil {
+		return f.KillErr
+	}
 	f.killed = append(f.killed, key)
 	delete(f.alive, key)
 	return nil

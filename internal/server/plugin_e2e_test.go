@@ -113,7 +113,7 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 4. Delete alpha.txt: the file is removed from disk and swept from the grid.
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
 		TileId: alpha.Id,
 	}); err != nil {
 		t.Fatalf("DeleteTile: %v", err)

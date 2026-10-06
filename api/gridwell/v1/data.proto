@@ -632,7 +632,12 @@ message DeleteTileRequest {
   string tile_id = 2;
   reserved 3; // version
 }
-message DeleteTileResponse {}
+// DeleteTileResponse answers a delete that landed. session_left is why the
+// shell session the destroyed row was the last to name is still running, empty
+// when none was left; the next start's orphan sweep is its net.
+message DeleteTileResponse {
+  string session_left = 1;
+}
 
 // SetFramingRequest is the one framing verb: how a grid looked when the user
 // left it through a given doorway. cx and cy are a float center in the grid's

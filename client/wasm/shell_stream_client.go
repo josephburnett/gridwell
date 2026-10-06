@@ -774,3 +774,15 @@ func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []b
 		},
 	})
 }
+
+// deleteCall is DeleteTile as a write's call. A session the delete left
+// running is told, though the delete itself landed.
+func (a *App) deleteCall(req *gridwellv1.DeleteTileRequest) func(context.Context) error {
+	return func(ctx context.Context) error {
+		resp, err := a.cl.DeleteTile(ctx, req)
+		if left := resp.GetSessionLeft(); left != "" {
+			a.reportErr(errsurface.Error, "shell", "deleted, but "+left)
+		}
+		return err
+	}
+}

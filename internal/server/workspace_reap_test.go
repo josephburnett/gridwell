@@ -67,7 +67,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane): %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 	// The second delete (inside the trash) DESTROYS — and only then does
 	// the router reap what the arrangement owned.
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
@@ -104,13 +104,13 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	if _, err := cl.WriteContent(ctx, pt2.Id, pt2.Version, []byte(`{"v":999,"root":{}}`)); err != nil {
 		t.Fatalf("SetPaneLayout (future version): %v", err)
 	}
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, pt2.Id); err != nil {
 		t.Fatal(err)
 	}
-	if err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph2.Id); err != nil {

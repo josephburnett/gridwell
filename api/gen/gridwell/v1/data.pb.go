@@ -2775,8 +2775,12 @@ func (x *DeleteTileRequest) GetTileId() string {
 	return ""
 }
 
+// DeleteTileResponse answers a delete that landed. session_left is why the
+// shell session the destroyed row was the last to name is still running, empty
+// when none was left; the next start's orphan sweep is its net.
 type DeleteTileResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionLeft   string                 `protobuf:"bytes,1,opt,name=session_left,json=sessionLeft,proto3" json:"session_left,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2809,6 +2813,13 @@ func (x *DeleteTileResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DeleteTileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTileResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *DeleteTileResponse) GetSessionLeft() string {
+	if x != nil {
+		return x.SessionLeft
+	}
+	return ""
 }
 
 // SetFramingRequest is the one framing verb: how a grid looked when the user
@@ -3720,8 +3731,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\v_url_frozenJ\x04\b\x01\x10\x02J\x04\b\t\x10\n" +
 	"\"8\n" +
 	"\x11DeleteTileRequest\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\tR\x06tileIdJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04\"\x14\n" +
-	"\x12DeleteTileResponse\"\x88\x01\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileIdJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04\"7\n" +
+	"\x12DeleteTileResponse\x12!\n" +
+	"\fsession_left\x18\x01 \x01(\tR\vsessionLeft\"\x88\x01\n" +
 	"\x11SetFramingRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12 \n" +
 	"\froot_grid_id\x18\x02 \x01(\tR\n" +
