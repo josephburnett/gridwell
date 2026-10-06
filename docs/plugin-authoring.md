@@ -209,6 +209,12 @@ every grid of yours writable, so the client lets the user type into its text
 tiles and saves them to you by key. Leave it unset and they are read-only.
 You create no tiles: the + menu offers nothing on your grids either way.
 
+A text entry whose body you already know you would refuse — a summary
+standing in for the bytes, the first part of something too long, a file you
+may not write — sets `Entry.read_only` to the reason in a plain sentence: the
+client shows that body read-only and the bar says why, rather than taking
+typing it will lose. Compute it from the same rule your write refuses on.
+
 Name the bytes: set `content_stamp` on every text entry, and on the first
 `ReadContent` chunk, to a string that changes whenever they do — fs uses the
 file's mtime and size. Take it before reading the bytes, so a change during
