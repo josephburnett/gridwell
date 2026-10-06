@@ -392,7 +392,9 @@ stands in (`rasterprev.Cache`).
 
 **The bar.** One bar at the bottom of the window (`client/wsbar`,
 `bottombar.go`), always there, riding the focused pane: one crumb per frame,
-the title, and the circle slot (+ menu / back / refresh). `wsbar.Rect` owns
+the title, and the circle slot (+ menu / back / refresh). The title is the
+room's name, then, on a grid, what its source calls it (`Grid.source_label`,
+from the plugin's listing); `bartitle.Decide` owns it. `wsbar.Rect` owns
 where it is — the chrome spans the focused pane and slides under it as focus
 moves, so the slot is never a wide screen away from the pane you are working
 in, inside the full-width row `wsbar.Band` reserves once, whatever has focus.
