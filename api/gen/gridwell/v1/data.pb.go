@@ -2199,9 +2199,11 @@ type HandshakeResponse struct {
 	Connections []*ConnectionInfo `protobuf:"bytes,13,rep,name=connections,proto3" json:"connections,omitempty"`
 	// shells_disabled: this node refuses shell tiles outright, from server.yaml's
 	// disable_shells. The client removes the shell primitive from the + palette,
-	// and the server refuses CreateTile(kind=shell) and OpenShell whichever
-	// plugin would serve them. It is a node-level operator fact, so it rides the
-	// node handshake rather than any per-plugin Info.
+	// and the server refuses CreateTile(kind=shell) and OpenShell before routing,
+	// on any grid. Only a home holds shells: a plugin creates no tile at all (its
+	// CreateTile is Unimplemented) and plugin.v1 entry kinds have no shell. It is
+	// a node-level operator fact, so it rides the node handshake rather than any
+	// per-plugin Info.
 	ShellsDisabled bool `protobuf:"varint,4,opt,name=shells_disabled,json=shellsDisabled,proto3" json:"shells_disabled,omitempty"`
 	// content_token gates the HTTP /content/ door, the ServeContent carrier.
 	// Pages served there run sandboxed with an opaque origin, so neither their
