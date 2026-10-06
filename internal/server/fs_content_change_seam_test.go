@@ -4,7 +4,8 @@ package server_test
 // file's body in a pane, a text tile's face in a shown grid, an image's face.
 // The client half is the shim's own loop over its js-free owners: cache.Apply,
 // events.Route, a refetch of the grid the plan names, and a ReadContent for a
-// body the cache no longer holds (render.go fetchTileContent).
+// body the cache no longer holds (render.go fetchTileContent). Every shipped
+// plugin's content-change seam test runs that client (newContentClientOf).
 
 import (
 	"bytes"
@@ -54,12 +55,19 @@ func newContentClient(t *testing.T, uuid, root string) *contentClient {
 // adapter through via, nil for directly.
 func newContentClientVia(t *testing.T, uuid, root string, via func(namespace.Namespace) namespace.Namespace) *contentClient {
 	t.Helper()
+	return newContentClientOf(t, uuid, "fs", map[string]string{"root": root}, via)
+}
+
+// newContentClientOf is newContentClientVia over the shipped plugin kind,
+// spawned with cfg.
+func newContentClientOf(t *testing.T, uuid, kind string, cfg map[string]string, via func(namespace.Namespace) namespace.Namespace) *contentClient {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
+	cp := plugintest.Spawn(t, kind, cfg)
 	a, stop := pluginhost.Start(cp, st.Namespace(uuid), nil, "plugin "+uuid+" watch")
 	var ns namespace.Namespace = a
 	if via != nil {
@@ -67,7 +75,7 @@ func newContentClientVia(t *testing.T, uuid, root string, via func(namespace.Nam
 	}
 	reg := plugin.NewRegistry()
 	reg.Register(localNodeID, "home", local.New(st, nil), nil)
-	reg.Register(uuid, "fs", ns, stop)
+	reg.Register(uuid, kind, ns, stop)
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -83,7 +91,7 @@ func newContentClientVia(t *testing.T, uuid, root string, via func(namespace.Nam
 		}
 	}
 	if k.landing == "" {
-		t.Fatal("no fs plugin in the handshake")
+		t.Fatalf("no %s plugin in the handshake", kind)
 	}
 	go func() {
 		es, err := cl.Subscribe(ctx)
@@ -113,16 +121,21 @@ func (k *contentClient) fetchGrid(id string) {
 
 func (k *contentClient) tile(label string) *gridwellv1.Tile {
 	k.t.Helper()
-	g, ok := k.c.Grid(k.landing)
+	return k.tileIn(k.landing, label)
+}
+
+func (k *contentClient) tileIn(grid, label string) *gridwellv1.Tile {
+	k.t.Helper()
+	g, ok := k.c.Grid(grid)
 	if !ok {
-		k.t.Fatal("landing not cached")
+		k.t.Fatalf("grid %s not cached", grid)
 	}
 	for _, n := range g.Tiles {
 		if n.AltText == label {
 			return n
 		}
 	}
-	k.t.Fatalf("no tile %q in the landing", label)
+	k.t.Fatalf("no tile %q in %s", label, grid)
 	return nil
 }
 
