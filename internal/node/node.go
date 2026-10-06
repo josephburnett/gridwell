@@ -149,8 +149,7 @@ func Start(opts Options) (*Node, error) {
 	if err := plugin.LoadInto(reg, cfg, opts.Home, st); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))
 	}
-	// The transport gets prefetch: offline readability means everything on the
-	// far machine, not only what was visited.
+	// The transport gets prefetch (CLAUDE.md, 2026-10-06).
 	if err := startTransport(reg, st, cfg, func(ns namespace.Namespace) namespace.Namespace {
 		return cache.Front(ns, sourcecache.Options{Prefetch: true})
 	}); err != nil {
