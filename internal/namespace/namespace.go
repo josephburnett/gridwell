@@ -80,6 +80,7 @@ type Namespace interface {
 	// SetInterest names the grids someone is showing. At the node's door it
 	// is one session's set (interest.Book); from the node to one of its
 	// namespaces it is that namespace's whole share of the union, with no
-	// session.
+	// session, and one it cannot take it tells on its own stream as
+	// EventPluginHealth.live_updates_off.
 	SetInterest(ctx context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error)
 }

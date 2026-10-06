@@ -13,6 +13,7 @@
 package pluginhost
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -57,12 +58,13 @@ type Adapter struct {
 
 	// The source's state as the listings and the Watch stream found it, held
 	// only to announce its transitions; setSource is the one writer. liveOff
-	// is the Watch stream's verdict, which is not darkness: a source that
-	// lists but cannot watch still answers live.
-	srcMu     sync.Mutex
-	srcDark   bool
-	srcDetail string
-	liveOff   string
+	// is the Watch stream's verdict and interestOff SetInterest's, neither of
+	// them darkness: a source that lists but cannot watch still answers live.
+	srcMu       sync.Mutex
+	srcDark     bool
+	srcDetail   string
+	liveOff     string
+	interestOff string
 
 	// shown is this plugin's share of the node's interest, as contexts, and
 	// links is, per context, the contexts its last live listing links into.
@@ -240,7 +242,7 @@ func (a *Adapter) source() sourceState {
 }
 
 func (a *Adapter) sourceLocked() sourceState {
-	s := sourceState{dark: a.srcDark, liveOff: a.liveOff}
+	s := sourceState{dark: a.srcDark, liveOff: cmp.Or(a.liveOff, a.interestOff)}
 	if s.dark {
 		s.detail = a.srcDetail
 	}
