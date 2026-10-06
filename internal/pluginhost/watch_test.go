@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
@@ -210,13 +211,15 @@ func TestWatchDeclaredButUnimplementedTurnsLiveUpdatesOff(t *testing.T) {
 	}
 }
 
-// A stream that ends is re-opened, quietly, and the re-open, like the first
-// open, announces each context of its scope that no client read, so a client
-// refetches what it shows and nothing sent while no stream was open is lost.
-// A context with a row that no one shows is not announced.
+// A stream that ends is re-opened, quietly. The first open announces its
+// scope's contexts that no client read, so a client refetches what it shows;
+// the re-open checks them again and, the listing having not moved since it
+// was announced, says nothing. A context with a row that no one shows is not
+// announced.
 func TestWatchEveryOpenAnnouncesItsScope(t *testing.T) {
 	drop := make(chan struct{})
 	p := &watchPlugin{
+		scopes: make(chan []string, 4),
 		accept: func(int32) bool { return true },
 		serve: func(n int32, ctx context.Context, _ func(*pluginv1.Change) error) error {
 			if n == 1 {
@@ -235,19 +238,18 @@ func TestWatchEveryOpenAnnouncesItsScope(t *testing.T) {
 	if _, err := a.mem.ContextID("inner"); err != nil {
 		t.Fatal(err)
 	}
-	for _, what := range []string{"the first open", "the re-open"} {
-		if ev := await(t, seen); ev.GetGridChanged().GetGridId() != rpc.EntryGridID("all") {
-			t.Fatalf("%s announced %v, want GridChanged(%q)", what, ev, rpc.EntryGridID("all"))
-		}
-		if evs := collect(seen); len(evs) != 0 {
-			t.Fatalf("then %v, want nothing more", evs)
-		}
-		if what == "the first open" {
-			close(drop)
-		}
+	awaitScope(t, p.scopes)
+	if ev := await(t, seen); ev.GetGridChanged().GetGridId() != rpc.EntryGridID("all") {
+		t.Fatalf("the first open announced %v, want GridChanged(%q)", ev, rpc.EntryGridID("all"))
 	}
 	if evs := collect(seen); len(evs) != 0 {
-		t.Errorf("then %v, want nothing more", evs)
+		t.Fatalf("then %v, want nothing more", evs)
+	}
+	close(drop)
+	awaitScope(t, p.scopes)
+	time.Sleep(300 * time.Millisecond) // the open lists what it adds before it announces
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("the re-open of an unmoved scope announced %v, want nothing", evs)
 	}
 }
 
@@ -265,27 +267,24 @@ func awaitScope(t *testing.T, scopes <-chan []string) []string {
 
 // A scope change loses no change: the old stream closes only once the new one
 // is open, so a change to a context in both scopes during the swap arrives on
-// a stream and the node announces nothing for it; a context the new scope adds
-// is announced once unless the client read it and it has not changed since,
-// and one it drops not at all.
+// a stream and is announced once; a context the new scope adds is announced
+// once unless the client read it and it has not changed since, and one it
+// drops not at all.
 func TestWatchScopeChangeLosesNoChange(t *testing.T) {
 	sends := make(chan func(*pluginv1.Change) error, 1)
-	p := &watchPlugin{
-		scopes: make(chan []string, 4),
-		accept: func(int32) bool { return true },
-		opening: func(n int32) {
-			if n == 2 {
-				// The source changes while the new stream is being opened.
-				_ = (<-sends)(contextChanged("all"))
-			}
-		},
-		serve: func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error {
-			if n == 1 {
-				sends <- send
-			}
-			<-ctx.Done()
-			return nil
-		},
+	p := newListingPlugin(map[string][]string{"all": {"a"}}, func(n int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+		if n == 1 {
+			sends <- send
+		}
+		<-ctx.Done()
+		return nil
+	})
+	p.opening = func(n int32) {
+		if n == 2 {
+			// The source changes while the new stream is being opened.
+			p.edit(func() { p.files["all"] = append(p.files["all"], "b") })
+			_ = (<-sends)(contextChanged("all"))
+		}
 	}
 	a, seen := watchingNothing(t, p, nil)
 	for _, c := range []string{"inner", "gone", "more"} {
@@ -525,11 +524,13 @@ type listingPlugin struct {
 	files  map[string][]string
 	labels map[string]string
 	down   map[string]bool
+	lists  int
 }
 
 func (p *listingPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.lists++
 	if p.down[req.Context] {
 		return nil, status.Error(codes.Unavailable, "the source is unreachable")
 	}
@@ -665,5 +666,148 @@ func TestSourceLabelRidesTheGridAndMovesTheListing(t *testing.T) {
 	show(t, a, "all")
 	if got, want := awaitAnnounced(t, p, seen, "all"), map[string]int{rpc.EntryGridID("all"): 1}; !maps.Equal(got, want) {
 		t.Errorf("a label-only change announced %v, want %v", got, want)
+	}
+}
+
+// A ContextChanged is checked as a scope add is: the node lists the context
+// and tells clients only when the listing moved from what it served or last
+// announced. Changes that move no name announce nothing, however often the
+// plugin says so; a moved listing is announced once, and the same listing is
+// never announced twice.
+func TestWatchContextChangedAnnouncesOnlyAMovedListing(t *testing.T) {
+	poke := make(chan string)
+	p := newListingPlugin(map[string][]string{"all": {"a"}},
+		func(_ int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+			for {
+				select {
+				case c := <-poke:
+					if err := send(contextChanged(c)); err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return nil
+				}
+			}
+		})
+	a, seen := watchingNothing(t, p, nil)
+	read(t, a, "all")
+	show(t, a, "all")
+	if got := awaitAnnounced(t, p, seen, "all"); len(got) != 0 {
+		t.Fatalf("the open announced %v, want nothing", got)
+	}
+	announced := func() map[string]int {
+		time.Sleep(300 * time.Millisecond)
+		got := map[string]int{}
+		for _, ev := range collect(seen) {
+			if id := ev.GetGridChanged().GetGridId(); id != "" {
+				got[id]++
+			}
+		}
+		return got
+	}
+
+	for range 3 {
+		poke <- "all"
+	}
+	if got := announced(); len(got) != 0 {
+		t.Errorf("three changes to an unmoved listing announced %v, want nothing", got)
+	}
+
+	p.edit(func() { p.files["all"] = append(p.files["all"], "b") })
+	poke <- "all"
+	poke <- "all"
+	if got, want := announced(), map[string]int{rpc.EntryGridID("all"): 1}; !maps.Equal(got, want) {
+		t.Errorf("a moved listing told twice announced %v, want %v", got, want)
+	}
+}
+
+// An EntryChanged reaches clients as the entry's TileChanged, flagged
+// content_changed because a plugin row has no version that could say its
+// bytes moved, and never as a GridChanged: the listing did not move. A row
+// keeps its own placement and is built from the entry alone, with no List;
+// an untouched entry sits where the listing flows it, so the context is
+// listed. An entry the node will not accept says nothing of its own.
+func TestWatchEntryChangedIsTheEntrysTileChanged(t *testing.T) {
+	poke := make(chan *pluginv1.Change)
+	p := newListingPlugin(map[string][]string{"all": {"a", "b"}},
+		func(_ int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+			for {
+				select {
+				case ch := <-poke:
+					if err := send(ch); err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return nil
+				}
+			}
+		})
+	a, seen := watchingNothing(t, p, nil)
+	read(t, a, "all")
+	show(t, a, "all")
+	if got := awaitAnnounced(t, p, seen, "all"); len(got) != 0 {
+		t.Fatalf("the open announced %v, want nothing", got)
+	}
+	if _, err := a.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{
+		TileId: rpc.EntryTileID("all", "a"), X: 7, Y: 3, W: 1, H: 1}); err != nil {
+		t.Fatal(err)
+	}
+	collect(seen)
+	served, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID("all")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tileOf := func(key string) *gridwellv1.Tile {
+		for _, n := range served.Tiles {
+			if n.Id == rpc.EntryTileID("all", key) {
+				return n
+			}
+		}
+		t.Fatalf("GetGrid served no %q", key)
+		return nil
+	}
+	told := func(key string) *gridwellv1.TileChanged {
+		t.Helper()
+		var got *gridwellv1.TileChanged
+		for _, ev := range collect(seen) {
+			if ev.GetGridChanged() != nil {
+				t.Errorf("an entry changed in place announced %v", ev)
+			}
+			if tc := ev.GetTileChanged(); tc != nil {
+				got = tc
+			}
+		}
+		if got == nil {
+			t.Fatalf("the change to %q told no TileChanged", key)
+		}
+		return got
+	}
+	entry := func(key string) *pluginv1.Change {
+		return &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{
+			Context: "all", Entry: &pluginv1.Entry{Key: key, Kind: "text", Label: key}}}}
+	}
+
+	p.edit(func() { p.lists = 0 })
+	poke <- entry("a")
+	tc := told("a")
+	if !tc.ContentChanged || !proto.Equal(tc.Tile, tileOf("a")) {
+		t.Errorf("a row's change told %v (content_changed %v), want the row GetGrid serves %v", tc.Tile, tc.ContentChanged, tileOf("a"))
+	}
+	p.edit(func() {
+		if p.lists != 0 {
+			t.Errorf("a row's change listed its context %d times, want none", p.lists)
+		}
+	})
+
+	poke <- entry("b")
+	if tc := told("b"); !tc.ContentChanged || !proto.Equal(tc.Tile, tileOf("b")) {
+		t.Errorf("an untouched entry's change told %v, want the tile GetGrid serves %v", tc.Tile, tileOf("b"))
+	}
+
+	poke <- &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{
+		Context: "all", Entry: &pluginv1.Entry{Key: "a", Kind: "text", Label: "a", ServesPage: true}}}}
+	time.Sleep(300 * time.Millisecond)
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("an entry the node refuses, in an unmoved listing, told %v", evs)
 	}
 }

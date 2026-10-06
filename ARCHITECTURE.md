@@ -109,6 +109,8 @@ now still presents as the page it was. A plugin tile's `preview_blob_id` is
 else the plugin's picture keyed below zero. `Grid.writable`, `scratch_grid_id`, and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
 transit), which fails the read when the owner's handshake does not answer.
+`TileChanged.content_changed` (this claimless row's bytes moved) comes from
+`pluginhost.Adapter.applyEntry` alone.
 `Grid.host_content` (these rows project host state) and
 `Grid.glyph` (the grid's identity face) come from the owning plugin's
 `Info` through `pluginhost/adapter.go`; they are what the client reads
@@ -168,8 +170,10 @@ pane's grid, or a well's preview on screen: `pane.Showing`), the node holds
 one `Watch` stream to it (`pluginhost.Start`), scoped to the
 contexts shown (`WatchRequest.contexts`, the plugin's share of
 `interest.Book`'s union, re-opened with the new set when it changes), and
-publishes each change the plugin sends as the `GridChanged` a write would
-have. A plugin holds no node fact. It answers in its own stable string keys
+publishes a `ContextChanged` the plugin sends as the `GridChanged` a write
+would have, once the node has listed the context and found it moved, and an
+`EntryChanged` as that entry's `TileChanged` flagged `content_changed`. A
+plugin holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to
 it as `state_dir` at spawn: its own memory of its source, under cache.db's
@@ -325,7 +329,8 @@ A debounced settle persister does the same without waiting for an ascent.
 owns a text tile's body. Keystrokes mirror into it; every flush goes through
 `text_flush.go` by tile id, never through the DOM. A stale save 409s and
 reconciles visibly. `cache.Apply` drops events older than the cached row and
-spares a dirty body.
+spares a dirty body. A plugin row has no version, so its event says when its
+bytes moved (`TileChanged.content_changed`).
 
 **Outbox.** `client/outbox` is the ordered record of writes the server has
 not answered: framing, captures, layout, unsaved bytes. One reconcile rule

@@ -45,8 +45,9 @@ message InfoResponse {
   // privileged collection.
   string root_context = 4;
   // watch: the plugin implements Watch (live change events). It is the one
-  // owner: the node opens Watch only when this is set, and a plugin that sets
-  // it and answers Unimplemented is shown as unhealthy.
+  // owner: the node opens Watch only when this is set. A plugin that sets it
+  // and answers Unimplemented has live updates off, said once on a healthy
+  // event; its listings still answer, so it is never shown dark.
   bool watch = 5;
   // writable: the plugin accepts WriteContent on some of its entries.
   // Presentation writes never reach a plugin, so this is a content capability
@@ -264,16 +265,34 @@ message SearchResponse {
 // WatchRequest's contexts are your own context keys the node wants watched:
 // the ones some client shows, on this node or any node that reaches it. A
 // file shown in a pane counts through its context. When the set changes the
-// node ends the stream and opens one with the new set, and while nothing of
-// yours is shown it holds none open. Empty means the node names no scope (a
-// node from before scopes): watch what you judge cheap. A feed that is
-// account-wide rather than per context may ignore the set.
+// node opens a stream with the new set and ends the old one only once the new
+// one has sent its header, so a context in both is watched throughout; while
+// nothing of yours is shown it holds none open. Empty means the node names no
+// scope (a node from before scopes): watch what you judge cheap. A feed that
+// is account-wide rather than per context may ignore the set.
 message WatchRequest {
   repeated string contexts = 1;
 }
+// ContextChanged says context's listing may have moved: an entry added,
+// removed, renamed or re-described. The node lists it and tells clients only
+// if the answer moved, so a ContextChanged that moves nothing costs one List
+// and no client anything.
 message ContextChanged {
   string context = 1;
 }
+// EntryChanged says one entry changed in place, its bytes or its picture,
+// with the listing otherwise as it was: a file written. entry is the entry
+// re-read, exactly as List would answer it now, and the node needs nothing
+// else to tell every client showing it. A plugin row carries no version, so
+// this is the only way its bytes reach a body a client already holds.
+message EntryChanged {
+  string context = 1;
+  Entry  entry   = 2;
+}
+// EntryRemoved is RETIRED and its arm number is kept rather than reused: a
+// removal is a listing that moved, which ContextChanged says. The node reads
+// it in one place, as a ContextChanged for its context, so an older binary
+// keeps working. Do not send it.
 message EntryRemoved {
   string context = 1;
   string key     = 2;
@@ -282,6 +301,7 @@ message Change {
   oneof payload {
     ContextChanged context_changed = 1;
     EntryRemoved   entry_removed   = 2;
+    EntryChanged   entry_changed   = 3;
   }
 }
 

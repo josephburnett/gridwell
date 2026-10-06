@@ -20,6 +20,11 @@ func TestEventKey(t *testing.T) {
 		ev:   &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "t1", GridId: "g1"}}}},
 		want: "t/t1",
 	}, {
+		name: "tile_changed with its bytes, apart from a framing change",
+		ev: &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
+			Tile: &pb.Tile{Id: "t1", GridId: "g1"}, ContentChanged: true}}},
+		want: "c/t1",
+	}, {
 		name: "tile_removed",
 		ev:   &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "g1", TileId: "t1"}}},
 		want: "r/g1/t1",

@@ -171,28 +171,28 @@ func QualifySearchResponse(prefix string, resp *pb.SearchResponse, qualifyTiles 
 	return out
 }
 
-// QualifyEventIDs prepends prefix to every id in a change event. A health
+// QualifyEventIDs prepends prefix to every id in a change event and keeps
+// every other field, so a fact an event carries survives each hop. A health
 // event's plugin uuid is an id like any other, so a far namespace's health
 // stays addressable here.
 func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb.Tile) *pb.Event {
 	switch p := ev.Payload.(type) {
 	case *pb.Event_GridChanged:
-		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
-			GridId: QualifyID(prefix, p.GridChanged.GridId),
-		}}}
+		g := proto.CloneOf(p.GridChanged)
+		g.GridId = QualifyID(prefix, g.GridId)
+		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: g}}
 	case *pb.Event_GridFramingChanged:
-		f := proto.Clone(p.GridFramingChanged).(*pb.GridFramingChanged)
+		f := proto.CloneOf(p.GridFramingChanged)
 		f.GridId = QualifyID(prefix, f.GridId)
 		return &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: f}}
 	case *pb.Event_TileChanged:
-		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
-			Tile: qualifyTile(p.TileChanged.Tile),
-		}}}
+		t := proto.CloneOf(p.TileChanged)
+		t.Tile = qualifyTile(p.TileChanged.Tile)
+		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: t}}
 	case *pb.Event_TileRemoved:
-		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{
-			GridId: QualifyID(prefix, p.TileRemoved.GridId),
-			TileId: QualifyID(prefix, p.TileRemoved.TileId),
-		}}}
+		r := proto.CloneOf(p.TileRemoved)
+		r.GridId, r.TileId = QualifyID(prefix, r.GridId), QualifyID(prefix, r.TileId)
+		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: r}}
 	case *pb.Event_PluginHealth:
 		// An empty uuid means the namespace this event rode in from: the
 		// cache layer reports its own store health without knowing the uuid

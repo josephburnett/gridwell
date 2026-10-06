@@ -97,6 +97,26 @@ test('a source file shows as plain text and refreshes each open', async ({ gw, w
     .toContain('changed on disk');
 });
 
+test('a file open in a pane shows bytes written on disk with no gesture', async ({ gw, window }) => {
+  // The plugin tells the entry changed (EntryChanged), the node tells the
+  // client its row's bytes moved (TileChanged.content_changed), and the cache
+  // drops the body the open view draws, so the view reads it again. Nothing
+  // on the row moves: a plugin body has no version.
+  const file = path.join(ROOT, 'live.go');
+  fs.writeFileSync(file, 'first body\n');
+  await gw.enterPlugin('code');
+  const f = await gw.focused();
+  const tile = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t) => t.altText === 'live.go')!;
+  expect(tile, 'live.go listed').toBeTruthy();
+  await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
+  const shown = () =>
+    window.evaluate(() => document.getElementById('gw-rendered-view')?.textContent ?? '');
+  await expect.poll(shown, { timeout: 10_000 }).toContain('first body');
+
+  fs.writeFileSync(file, 'second body, written while open\n');
+  await expect.poll(shown, { timeout: 10_000 }).toContain('second body, written while open');
+});
+
 test('a projection rearranged stays rearranged: fs tiles move and resize (#266)', async ({
   gw,
 }) => {

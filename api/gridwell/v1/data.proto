@@ -736,6 +736,13 @@ message GridFramingChanged {
 
 message TileChanged {
   Tile tile = 1;
+  // content_changed: the bytes behind this row changed though nothing on the
+  // row says so. A row with no claim (a plugin's: version 0, no blob) has no
+  // fact that orders its bytes, so the event is the change, and a client drops
+  // a clean body it holds for the row. Set only by the node that learned it
+  // from its source; a framing or capture write on the same row leaves it
+  // unset, and a versioned row never needs it.
+  bool content_changed = 2;
 }
 
 message TileRemoved {

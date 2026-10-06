@@ -134,3 +134,106 @@ func TestARowHasOneHomeInTheCache(t *testing.T) {
 		}
 	}
 }
+
+// A plugin row carries no claim, version 0 and no blob, so its event is the
+// only news that its bytes moved: a TileChanged that says content_changed
+// drops the clean body it names, a dirty one stays for its save to reconcile,
+// and a framing event, a client's own patch or a refetch of the same row ages
+// nothing.
+func TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo(t *testing.T) {
+	row := func() *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "p/~a", GridId: "p/~", Kind: rpc.KindText}
+	}
+	told := func(n *gridwellv1.Tile) *gridwellv1.Event {
+		return &gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+			TileChanged: &gridwellv1.TileChanged{Tile: n, ContentChanged: true}}}
+	}
+	seeded := func() *Cache {
+		c := New()
+		c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row()})
+		c.PutFetchedContent("p/~a", []byte("one"), 0, c.AskContent("p/~a"))
+		return c
+	}
+	kept := []struct {
+		name string
+		then func(c *Cache)
+	}{
+		{"a refetch of the same row", func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row()}) }},
+		{"a framing event", func(c *Cache) {
+			n := row()
+			n.TextY = 40
+			c.Apply(changedEvent(n))
+		}},
+		{"the client's own patch", func(c *Cache) { c.PatchTile(row(), func(n *gridwellv1.Tile) { n.TextY = 40 }) }},
+		{"a write response", func(c *Cache) { c.UpdateTile("p/~", row()) }},
+	}
+	for _, tc := range kept {
+		t.Run(tc.name, func(t *testing.T) {
+			c := seeded()
+			tc.then(c)
+			if b, ok := c.TileContent("p/~a"); !ok || string(b) != "one" {
+				t.Errorf("the body after %s = %q, %v; want it kept", tc.name, b, ok)
+			}
+		})
+	}
+	t.Run("an event that says the bytes moved", func(t *testing.T) {
+		c := seeded()
+		c.Apply(told(row()))
+		if b, ok := c.TileContent("p/~a"); ok {
+			t.Errorf("the body after content_changed = %q; want it dropped for a refetch", b)
+		}
+	})
+	t.Run("an event that says so for a grid not cached", func(t *testing.T) {
+		c := seeded()
+		n := row()
+		n.GridId = "p/~elsewhere"
+		c.Apply(told(n))
+		if _, ok := c.TileContent("p/~a"); ok {
+			t.Error("the body survived content_changed arriving for a grid the cache does not hold")
+		}
+	})
+	t.Run("a dirty body", func(t *testing.T) {
+		c := seeded()
+		c.PutEditedContent("p/~a", []byte("typed"))
+		c.Apply(told(row()))
+		if b, ok := c.TileContent("p/~a"); !ok || string(b) != "typed" {
+			t.Errorf("the dirty body after content_changed = %q, %v; want it kept", b, ok)
+		}
+	})
+}
+
+// A body's stamp names the bytes the server last gave, not the row: a plugin
+// body read again after its event said it moved gets a new stamp at the same
+// version, so a picture or wrap keyed by it is made again; typing keeps it,
+// as typing keeps the version; a save gives the saved bytes their own.
+func TestAStampNamesTheBytesNotTheRow(t *testing.T) {
+	c := New()
+	row := &gridwellv1.Tile{Id: "p/~a", GridId: "p/~", Kind: rpc.KindText}
+	c.PutGrid(&gridwellv1.Grid{Id: "p/~"}, []*gridwellv1.Tile{row})
+	if s := c.ContentStamp("p/~a"); s != 0 {
+		t.Fatalf("no body, stamp %d; want 0", s)
+	}
+	c.PutFetchedContent("p/~a", []byte("one"), 0, c.AskContent("p/~a"))
+	first := c.ContentStamp("p/~a")
+	if first == 0 {
+		t.Fatal("a fetched body has no stamp")
+	}
+	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: row, ContentChanged: true}}})
+	if s := c.ContentStamp("p/~a"); s != 0 {
+		t.Fatalf("an aged body still stamped %d", s)
+	}
+	c.PutFetchedContent("p/~a", []byte("two"), 0, c.AskContent("p/~a"))
+	second := c.ContentStamp("p/~a")
+	if second == 0 || second == first {
+		t.Fatalf("new bytes at the same version stamped %d after %d; want a new stamp", second, first)
+	}
+	c.PutEditedContent("p/~a", []byte("two, typed"))
+	if s := c.ContentStamp("p/~a"); s != second {
+		t.Errorf("typing moved the stamp %d -> %d", second, s)
+	}
+	c.PutSavedContent(&gridwellv1.Tile{Id: "p/~a", Version: 1}, []byte("two, typed"))
+	if s := c.ContentStamp("p/~a"); s == second || s == 0 {
+		t.Errorf("saved bytes kept stamp %d", s)
+	}
+}

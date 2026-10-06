@@ -1,10 +1,11 @@
 package pluginhost
 
 // The plugin's Watch stream is how a source that changes on its own reaches a
-// grid open on screen: each Change becomes the event a write through this
-// adapter would have published, so a client reacts to it exactly as to one.
-// Its scope is the contexts some client shows (SetInterest) and the contexts
-// their link entries point into (noteLinks).
+// grid open on screen: a moved listing becomes the GridChanged a write through
+// this adapter would have published, and an entry changed in place the
+// TileChanged that carries its bytes' news. Its scope is the contexts some
+// client shows (SetInterest) and the contexts their link entries point into
+// (noteLinks).
 
 import (
 	"context"
@@ -187,27 +188,38 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 	}
 }
 
-// checkAdded lists each context once and announces its grid only when what
-// the source answers now is not exactly what GetGrid served since the grid was
-// last announced: the node checks, so a client refetches only what moved. A
-// context the source cannot list right now, or that nobody read, is
-// announced, because what a client holds is unknown. The listings run
-// together and through synthesize, so they write rows as any read does.
+// checkAdded announces each context a stream adds whose listing moved
+// (announceMoved); the listings run together.
 func (a *Adapter) checkAdded(ctx context.Context, contexts []string) {
 	var wg sync.WaitGroup
 	for _, c := range contexts {
-		wg.Go(func() {
-			s, err := a.synthesize(ctx, rpc.EntryGridID(c))
-			if ctx.Err() != nil {
-				return
-			}
-			if err == nil && a.servedOnly(s) {
-				return
-			}
-			a.emitGridChanged(rpc.EntryGridID(c))
-		})
+		wg.Go(func() { a.announceMoved(ctx, c) })
 	}
 	wg.Wait()
+}
+
+// announceMoved lists context once and announces its grid, and every grid
+// whose links read into it, only when the answer is not exactly what GetGrid
+// served or this announced since: the node checks, so a client refetches only
+// what moved and the same listing is never announced twice. A context the
+// source cannot list right now, or that nobody read, is announced, because
+// what a client holds is unknown. The listing runs through synthesize, so it
+// writes rows as any read does.
+func (a *Adapter) announceMoved(ctx context.Context, context string) {
+	s, err := a.synthesize(ctx, rpc.EntryGridID(context))
+	if ctx.Err() != nil {
+		return
+	}
+	if err == nil && a.servedOnly(s) {
+		return
+	}
+	a.emitGridChanged(rpc.EntryGridID(context))
+	if err == nil {
+		a.noteServed(s)
+	}
+	for _, holder := range a.linkedFrom(context) {
+		a.emitGridChanged(rpc.EntryGridID(holder))
+	}
 }
 
 // listingSum is a listing as a client holds it: every entry the source
@@ -229,7 +241,7 @@ func sumOf(s *synthesized) (listingSum, bool) {
 	return sha256.Sum256(b), true
 }
 
-// noteServed records a listing GetGrid answered.
+// noteServed records a listing GetGrid answered or announceMoved announced.
 func (a *Adapter) noteServed(s *synthesized) {
 	sum, ok := sumOf(s)
 	if !ok {
@@ -266,17 +278,17 @@ type watchStream struct {
 }
 
 func (a *Adapter) openWatch(ctx context.Context, scope []string) *watchStream {
-	ctx, cancel := context.WithCancel(ctx)
+	streamCtx, cancel := context.WithCancel(ctx)
 	s := &watchStream{opened: make(chan struct{}), ack: make(chan struct{}), done: make(chan struct{}), cancel: cancel}
 	go func() {
 		defer close(s.done)
-		s.err = a.follow(ctx, scope, func() error {
+		s.err = a.follow(streamCtx, ctx, scope, func() error {
 			close(s.opened)
 			select {
 			case <-s.ack:
 				return nil
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-streamCtx.Done():
+				return streamCtx.Err()
 			}
 		})
 	}()
@@ -294,7 +306,9 @@ func (s *watchStream) stop() {
 // follow reads one Watch stream to its end. The stream is open once its header
 // arrives, which the plugin sends on accepting it, or with its first change at
 // the latest; a stream that ended unopened has no header, and Recv says how.
-func (a *Adapter) follow(ctx context.Context, scope []string, opened func() error) error {
+// A change is applied under apply, which outlives the stream, so a swap that
+// ends the stream does not abandon a change it already took.
+func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func() error) error {
 	stream, err := a.cp.Watch(ctx, &pluginv1.WatchRequest{Contexts: scope})
 	if err != nil {
 		return err
@@ -312,7 +326,7 @@ func (a *Adapter) follow(ctx context.Context, scope []string, opened func() erro
 		if err != nil {
 			return err
 		}
-		a.applyChange(ch)
+		a.applyChange(apply, ch)
 	}
 }
 
@@ -409,23 +423,83 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 	return slices.Clone(a.scope), a.moved
 }
 
-// applyChange announces what a Change names as a GridChanged on the context's
-// derived address, row or no row, and on every context that links into it,
-// whose links read what changed. A removal is announced the way DeleteTile
+// applyChange announces a context whose listing moved (announceMoved) and an
+// entry changed in place (applyEntry). A removal is announced as DeleteTile
 // announces one: the refetch it causes runs the listing's own sweep, so the
 // row retires by the one path that retires rows.
-func (a *Adapter) applyChange(ch *pluginv1.Change) {
-	var c string
+func (a *Adapter) applyChange(ctx context.Context, ch *pluginv1.Change) {
 	switch p := ch.GetPayload().(type) {
 	case *pluginv1.Change_ContextChanged:
-		c = p.ContextChanged.GetContext()
+		a.announceMoved(ctx, p.ContextChanged.GetContext())
+	case *pluginv1.Change_EntryChanged:
+		a.applyEntry(ctx, p.EntryChanged.GetContext(), p.EntryChanged.GetEntry())
 	case *pluginv1.Change_EntryRemoved:
-		c = p.EntryRemoved.GetContext()
-	default:
+		// The one reading of the retired arm: a ContextChanged for its context.
+		a.announceMoved(ctx, p.EntryRemoved.GetContext())
+	}
+}
+
+// applyEntry tells every client that one entry changed in place: its row as
+// GetGrid serves it, flagged content_changed, because a plugin row carries no
+// version that could say its bytes moved. An entry the node will not accept
+// or cannot find is the listing's to answer, so it is a ContextChanged.
+func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.Entry) {
+	t, err := a.entryTile(ctx, context, e)
+	if ctx.Err() != nil {
 		return
 	}
-	a.emitGridChanged(rpc.EntryGridID(c))
-	for _, holder := range a.linkedFrom(c) {
-		a.emitGridChanged(rpc.EntryGridID(holder))
+	if err != nil || t == nil {
+		a.announceMoved(ctx, context)
+		return
 	}
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: t, ContentChanged: true},
+	}})
+}
+
+// entryTile is e's wire tile in context, nil when the context holds none. A
+// row keeps its own placement, so e alone builds it and refreshes its
+// snapshot as a listing would; an untouched entry's placement flows from the
+// whole listing (store.Namespace.Overlay), so the context is listed.
+func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Entry) (*gridwellv1.Tile, error) {
+	if e == nil {
+		return nil, nil
+	}
+	entries := []*pluginv1.Entry{e}
+	if err := acceptEntries(context, entries); err != nil {
+		return nil, err
+	}
+	gid, _, err := a.mem.LookupContext(context)
+	if err != nil {
+		return nil, err
+	}
+	_, minted, err := a.mem.LiveTileID(gid, e.Key)
+	if err != nil {
+		return nil, err
+	}
+	if !minted {
+		s, err := a.synthesize(ctx, rpc.EntryGridID(context))
+		if err != nil {
+			return nil, err
+		}
+		return s.tileForKey(e.Key), nil
+	}
+	if err := a.mem.Refresh(gid, entries); err != nil {
+		return nil, err
+	}
+	rows, err := a.mem.Overlay(gid, entries)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		if r.Key != e.Key {
+			continue
+		}
+		tiles, err := buildTiles(rpc.EntryGridID(context), context, []store.ExtTile{r}, entries, a.mem.ContextKey)
+		if err != nil {
+			return nil, err
+		}
+		return tiles[0], nil
+	}
+	return nil, nil
 }

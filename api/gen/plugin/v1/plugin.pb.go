@@ -146,8 +146,9 @@ type InfoResponse struct {
 	// privileged collection.
 	RootContext string `protobuf:"bytes,4,opt,name=root_context,json=rootContext,proto3" json:"root_context,omitempty"`
 	// watch: the plugin implements Watch (live change events). It is the one
-	// owner: the node opens Watch only when this is set, and a plugin that sets
-	// it and answers Unimplemented is shown as unhealthy.
+	// owner: the node opens Watch only when this is set. A plugin that sets it
+	// and answers Unimplemented has live updates off, said once on a healthy
+	// event; its listings still answer, so it is never shown dark.
 	Watch bool `protobuf:"varint,5,opt,name=watch,proto3" json:"watch,omitempty"`
 	// writable: the plugin accepts WriteContent on some of its entries.
 	// Presentation writes never reach a plugin, so this is a content capability
@@ -1484,10 +1485,11 @@ func (x *SearchResponse) GetResults() []*SearchResult {
 // WatchRequest's contexts are your own context keys the node wants watched:
 // the ones some client shows, on this node or any node that reaches it. A
 // file shown in a pane counts through its context. When the set changes the
-// node ends the stream and opens one with the new set, and while nothing of
-// yours is shown it holds none open. Empty means the node names no scope (a
-// node from before scopes): watch what you judge cheap. A feed that is
-// account-wide rather than per context may ignore the set.
+// node opens a stream with the new set and ends the old one only once the new
+// one has sent its header, so a context in both is watched throughout; while
+// nothing of yours is shown it holds none open. Empty means the node names no
+// scope (a node from before scopes): watch what you judge cheap. A feed that
+// is account-wide rather than per context may ignore the set.
 type WatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Contexts      []string               `protobuf:"bytes,1,rep,name=contexts,proto3" json:"contexts,omitempty"`
@@ -1532,6 +1534,10 @@ func (x *WatchRequest) GetContexts() []string {
 	return nil
 }
 
+// ContextChanged says context's listing may have moved: an entry added,
+// removed, renamed or re-described. The node lists it and tells clients only
+// if the answer moved, so a ContextChanged that moves nothing costs one List
+// and no client anything.
 type ContextChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -1576,6 +1582,67 @@ func (x *ContextChanged) GetContext() string {
 	return ""
 }
 
+// EntryChanged says one entry changed in place, its bytes or its picture,
+// with the listing otherwise as it was: a file written. entry is the entry
+// re-read, exactly as List would answer it now, and the node needs nothing
+// else to tell every client showing it. A plugin row carries no version, so
+// this is the only way its bytes reach a body a client already holds.
+type EntryChanged struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Entry         *Entry                 `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EntryChanged) Reset() {
+	*x = EntryChanged{}
+	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EntryChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EntryChanged) ProtoMessage() {}
+
+func (x *EntryChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EntryChanged.ProtoReflect.Descriptor instead.
+func (*EntryChanged) Descriptor() ([]byte, []int) {
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *EntryChanged) GetContext() string {
+	if x != nil {
+		return x.Context
+	}
+	return ""
+}
+
+func (x *EntryChanged) GetEntry() *Entry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+// EntryRemoved is RETIRED and its arm number is kept rather than reused: a
+// removal is a listing that moved, which ContextChanged says. The node reads
+// it in one place, as a ContextChanged for its context, so an older binary
+// keeps working. Do not send it.
 type EntryRemoved struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -1586,7 +1653,7 @@ type EntryRemoved struct {
 
 func (x *EntryRemoved) Reset() {
 	*x = EntryRemoved{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1598,7 +1665,7 @@ func (x *EntryRemoved) String() string {
 func (*EntryRemoved) ProtoMessage() {}
 
 func (x *EntryRemoved) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1611,7 +1678,7 @@ func (x *EntryRemoved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryRemoved.ProtoReflect.Descriptor instead.
 func (*EntryRemoved) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *EntryRemoved) GetContext() string {
@@ -1634,6 +1701,7 @@ type Change struct {
 	//
 	//	*Change_ContextChanged
 	//	*Change_EntryRemoved
+	//	*Change_EntryChanged
 	Payload       isChange_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1641,7 +1709,7 @@ type Change struct {
 
 func (x *Change) Reset() {
 	*x = Change{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[26]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1653,7 +1721,7 @@ func (x *Change) String() string {
 func (*Change) ProtoMessage() {}
 
 func (x *Change) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[26]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1666,7 +1734,7 @@ func (x *Change) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Change.ProtoReflect.Descriptor instead.
 func (*Change) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Change) GetPayload() isChange_Payload {
@@ -1694,6 +1762,15 @@ func (x *Change) GetEntryRemoved() *EntryRemoved {
 	return nil
 }
 
+func (x *Change) GetEntryChanged() *EntryChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Change_EntryChanged); ok {
+			return x.EntryChanged
+		}
+	}
+	return nil
+}
+
 type isChange_Payload interface {
 	isChange_Payload()
 }
@@ -1706,9 +1783,15 @@ type Change_EntryRemoved struct {
 	EntryRemoved *EntryRemoved `protobuf:"bytes,2,opt,name=entry_removed,json=entryRemoved,proto3,oneof"`
 }
 
+type Change_EntryChanged struct {
+	EntryChanged *EntryChanged `protobuf:"bytes,3,opt,name=entry_changed,json=entryChanged,proto3,oneof"`
+}
+
 func (*Change_ContextChanged) isChange_Payload() {}
 
 func (*Change_EntryRemoved) isChange_Payload() {}
+
+func (*Change_EntryChanged) isChange_Payload() {}
 
 var File_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
@@ -1808,13 +1891,17 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\fWatchRequest\x12\x1a\n" +
 	"\bcontexts\x18\x01 \x03(\tR\bcontexts\"*\n" +
 	"\x0eContextChanged\x12\x18\n" +
-	"\acontext\x18\x01 \x01(\tR\acontext\":\n" +
+	"\acontext\x18\x01 \x01(\tR\acontext\"P\n" +
+	"\fEntryChanged\x12\x18\n" +
+	"\acontext\x18\x01 \x01(\tR\acontext\x12&\n" +
+	"\x05entry\x18\x02 \x01(\v2\x10.plugin.v1.EntryR\x05entry\":\n" +
 	"\fEntryRemoved\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\"\x99\x01\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\"\xd9\x01\n" +
 	"\x06Change\x12D\n" +
 	"\x0fcontext_changed\x18\x01 \x01(\v2\x19.plugin.v1.ContextChangedH\x00R\x0econtextChanged\x12>\n" +
-	"\rentry_removed\x18\x02 \x01(\v2\x17.plugin.v1.EntryRemovedH\x00R\fentryRemovedB\t\n" +
+	"\rentry_removed\x18\x02 \x01(\v2\x17.plugin.v1.EntryRemovedH\x00R\fentryRemoved\x12>\n" +
+	"\rentry_changed\x18\x03 \x01(\v2\x17.plugin.v1.EntryChangedH\x00R\fentryChangedB\t\n" +
 	"\apayload2\xa2\x05\n" +
 	"\x06Plugin\x127\n" +
 	"\x04Info\x12\x16.plugin.v1.InfoRequest\x1a\x17.plugin.v1.InfoResponse\x127\n" +
@@ -1844,7 +1931,7 @@ func file_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_plugin_v1_plugin_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),  // 0: plugin.v1.ProbeResponse.Presence
 	(*InfoRequest)(nil),          // 1: plugin.v1.InfoRequest
@@ -1872,8 +1959,9 @@ var file_plugin_v1_plugin_proto_goTypes = []any{
 	(*SearchResponse)(nil),       // 23: plugin.v1.SearchResponse
 	(*WatchRequest)(nil),         // 24: plugin.v1.WatchRequest
 	(*ContextChanged)(nil),       // 25: plugin.v1.ContextChanged
-	(*EntryRemoved)(nil),         // 26: plugin.v1.EntryRemoved
-	(*Change)(nil),               // 27: plugin.v1.Change
+	(*EntryChanged)(nil),         // 26: plugin.v1.EntryChanged
+	(*EntryRemoved)(nil),         // 27: plugin.v1.EntryRemoved
+	(*Change)(nil),               // 28: plugin.v1.Change
 }
 var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	3,  // 0: plugin.v1.InfoResponse.menu_entries:type_name -> plugin.v1.MenuEntry
@@ -1883,33 +1971,35 @@ var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	0,  // 4: plugin.v1.ProbeResponse.presence:type_name -> plugin.v1.ProbeResponse.Presence
 	6,  // 5: plugin.v1.SearchResult.entry:type_name -> plugin.v1.Entry
 	22, // 6: plugin.v1.SearchResponse.results:type_name -> plugin.v1.SearchResult
-	25, // 7: plugin.v1.Change.context_changed:type_name -> plugin.v1.ContextChanged
-	26, // 8: plugin.v1.Change.entry_removed:type_name -> plugin.v1.EntryRemoved
-	1,  // 9: plugin.v1.Plugin.Info:input_type -> plugin.v1.InfoRequest
-	4,  // 10: plugin.v1.Plugin.List:input_type -> plugin.v1.ListRequest
-	9,  // 11: plugin.v1.Plugin.ReadContent:input_type -> plugin.v1.ReadContentRequest
-	11, // 12: plugin.v1.Plugin.WriteContent:input_type -> plugin.v1.WriteContentRequest
-	13, // 13: plugin.v1.Plugin.ServeContent:input_type -> plugin.v1.ServeContentRequest
-	15, // 14: plugin.v1.Plugin.GetPreview:input_type -> plugin.v1.GetPreviewRequest
-	17, // 15: plugin.v1.Plugin.Probe:input_type -> plugin.v1.ProbeRequest
-	19, // 16: plugin.v1.Plugin.Delete:input_type -> plugin.v1.DeleteRequest
-	21, // 17: plugin.v1.Plugin.Search:input_type -> plugin.v1.SearchRequest
-	24, // 18: plugin.v1.Plugin.Watch:input_type -> plugin.v1.WatchRequest
-	2,  // 19: plugin.v1.Plugin.Info:output_type -> plugin.v1.InfoResponse
-	5,  // 20: plugin.v1.Plugin.List:output_type -> plugin.v1.ListResponse
-	10, // 21: plugin.v1.Plugin.ReadContent:output_type -> plugin.v1.ContentChunk
-	12, // 22: plugin.v1.Plugin.WriteContent:output_type -> plugin.v1.WriteContentResponse
-	14, // 23: plugin.v1.Plugin.ServeContent:output_type -> plugin.v1.ServeContentChunk
-	16, // 24: plugin.v1.Plugin.GetPreview:output_type -> plugin.v1.GetPreviewResponse
-	18, // 25: plugin.v1.Plugin.Probe:output_type -> plugin.v1.ProbeResponse
-	20, // 26: plugin.v1.Plugin.Delete:output_type -> plugin.v1.DeleteResponse
-	23, // 27: plugin.v1.Plugin.Search:output_type -> plugin.v1.SearchResponse
-	27, // 28: plugin.v1.Plugin.Watch:output_type -> plugin.v1.Change
-	19, // [19:29] is the sub-list for method output_type
-	9,  // [9:19] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	6,  // 7: plugin.v1.EntryChanged.entry:type_name -> plugin.v1.Entry
+	25, // 8: plugin.v1.Change.context_changed:type_name -> plugin.v1.ContextChanged
+	27, // 9: plugin.v1.Change.entry_removed:type_name -> plugin.v1.EntryRemoved
+	26, // 10: plugin.v1.Change.entry_changed:type_name -> plugin.v1.EntryChanged
+	1,  // 11: plugin.v1.Plugin.Info:input_type -> plugin.v1.InfoRequest
+	4,  // 12: plugin.v1.Plugin.List:input_type -> plugin.v1.ListRequest
+	9,  // 13: plugin.v1.Plugin.ReadContent:input_type -> plugin.v1.ReadContentRequest
+	11, // 14: plugin.v1.Plugin.WriteContent:input_type -> plugin.v1.WriteContentRequest
+	13, // 15: plugin.v1.Plugin.ServeContent:input_type -> plugin.v1.ServeContentRequest
+	15, // 16: plugin.v1.Plugin.GetPreview:input_type -> plugin.v1.GetPreviewRequest
+	17, // 17: plugin.v1.Plugin.Probe:input_type -> plugin.v1.ProbeRequest
+	19, // 18: plugin.v1.Plugin.Delete:input_type -> plugin.v1.DeleteRequest
+	21, // 19: plugin.v1.Plugin.Search:input_type -> plugin.v1.SearchRequest
+	24, // 20: plugin.v1.Plugin.Watch:input_type -> plugin.v1.WatchRequest
+	2,  // 21: plugin.v1.Plugin.Info:output_type -> plugin.v1.InfoResponse
+	5,  // 22: plugin.v1.Plugin.List:output_type -> plugin.v1.ListResponse
+	10, // 23: plugin.v1.Plugin.ReadContent:output_type -> plugin.v1.ContentChunk
+	12, // 24: plugin.v1.Plugin.WriteContent:output_type -> plugin.v1.WriteContentResponse
+	14, // 25: plugin.v1.Plugin.ServeContent:output_type -> plugin.v1.ServeContentChunk
+	16, // 26: plugin.v1.Plugin.GetPreview:output_type -> plugin.v1.GetPreviewResponse
+	18, // 27: plugin.v1.Plugin.Probe:output_type -> plugin.v1.ProbeResponse
+	20, // 28: plugin.v1.Plugin.Delete:output_type -> plugin.v1.DeleteResponse
+	23, // 29: plugin.v1.Plugin.Search:output_type -> plugin.v1.SearchResponse
+	28, // 30: plugin.v1.Plugin.Watch:output_type -> plugin.v1.Change
+	21, // [21:31] is the sub-list for method output_type
+	11, // [11:21] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_plugin_v1_plugin_proto_init() }
@@ -1917,9 +2007,10 @@ func file_plugin_v1_plugin_proto_init() {
 	if File_plugin_v1_plugin_proto != nil {
 		return
 	}
-	file_plugin_v1_plugin_proto_msgTypes[26].OneofWrappers = []any{
+	file_plugin_v1_plugin_proto_msgTypes[27].OneofWrappers = []any{
 		(*Change_ContextChanged)(nil),
 		(*Change_EntryRemoved)(nil),
+		(*Change_EntryChanged)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1927,7 +2018,7 @@ func file_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_v1_plugin_proto_rawDesc), len(file_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

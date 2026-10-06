@@ -199,9 +199,15 @@ func TestQualifyEvent(t *testing.T) {
 	if grid.GetGridChanged().GridId != "u/1" {
 		t.Errorf("GridChanged id = %q", grid.GetGridChanged().GridId)
 	}
-	tile := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "5", GridId: "1"}}}})
-	if tile.GetTileChanged().Tile.Id != "u/5" || tile.GetTileChanged().Tile.GridId != "u/1" {
-		t.Errorf("TileChanged tile = %+v", tile.GetTileChanged().Tile)
+	for _, transit := range []bool{false, true} {
+		tile := qualifyEvent("u", transit, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
+			Tile: &pb.Tile{Id: "5", GridId: "1"}, ContentChanged: true}}})
+		if tile.GetTileChanged().Tile.Id != "u/5" || tile.GetTileChanged().Tile.GridId != "u/1" {
+			t.Errorf("TileChanged tile = %+v", tile.GetTileChanged().Tile)
+		}
+		if !tile.GetTileChanged().GetContentChanged() {
+			t.Errorf("transit %v: a TileChanged lost content_changed crossing the hop", transit)
+		}
 	}
 	rem := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "1", TileId: "5"}}})
 	if rem.GetTileRemoved().GridId != "u/1" || rem.GetTileRemoved().TileId != "u/5" {
