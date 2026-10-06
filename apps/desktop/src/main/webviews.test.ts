@@ -137,6 +137,7 @@ test('a page that closes itself retires its entry: one notice, the renderer told
   r.reg.setHidden('p1', true, false);
   r.reg.setZoom('p1', 1.5);
   r.reg.goBack('p1');
+  r.reg.reload('p1', 'https://accounts.example/signinclose');
   const freeze = await r.reg.remove('p1');
   assert.deepEqual(freeze, { jpegBase64: '', url: '', title: '', history: '' });
   assert.equal(r.errors.length, 1, `the calls after the end raised more notices: ${JSON.stringify(r.errors)}`);
@@ -325,6 +326,22 @@ test('a parked view hands Esc to the renderer; a shown one keeps it for its page
   assert.equal(keyDown(wc, 'a'), false, 'a parked view took a key that is not Esc');
   assert.deepEqual(r.escapes, ['p1']);
   assert.equal(r.reg.escapeRelays, 1);
+});
+
+test('a reload loads the address again in the same view, and a pane with no view ignores it', async () => {
+  const r = rig();
+  const page = 'http://127.0.0.1:1/content/tok/p%2F~dA/';
+  await r.reg.place('p1', 'p/~dA', page, BOUNDS, 0, '', true, false, true);
+  const wc = r.views[0].webContents!;
+
+  r.reg.reload('p1', page);
+  r.reg.reload('p2', page);
+
+  assert.equal(r.views.length, 1, 'a reload made a second view');
+  assert.equal(wc.loads, 2, 'the page did not load again');
+  assert.equal(wc.url, page);
+  assert.equal(wc.closed, 0, 'a reload closed the page');
+  assert.deepEqual(r.errors, []);
 });
 
 test('a move from a pane that holds no view is refused', async () => {

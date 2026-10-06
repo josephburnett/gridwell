@@ -14,6 +14,7 @@ import {
   MoveArgs,
   RemoveArgs,
   PaneRef,
+  ReloadArgs,
   FreezeResult,
 } from '../main/ipc';
 
@@ -80,6 +81,9 @@ const api = {
   },
   goBack(args: PaneRef): Promise<void> {
     return ipcRenderer.invoke(CH.goBack, args);
+  },
+  reload(args: ReloadArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.reload, args);
   },
   // The bar circle's right-click over a live url, with no in-page context.
   showMenu(args: PaneRef): Promise<void> {

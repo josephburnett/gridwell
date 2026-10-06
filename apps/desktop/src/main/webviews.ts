@@ -534,6 +534,14 @@ export class WebviewRegistry {
     if (nav.canGoBack()) nav.goBack();
   }
 
+  // reload loads url in the pane's view again, the navigation place makes,
+  // for a page its source changed (urlview.PageMoved).
+  reload(paneId: string, url: string): void {
+    const e = this.entries.get(paneId);
+    if (!e) return;
+    void e.view.webContents.loadURL(url);
+  }
+
   async removeAll(): Promise<void> {
     await Promise.all(this.paneIds().map((id) => this.remove(id)));
   }

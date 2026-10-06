@@ -1001,6 +1001,9 @@ func (a *App) startSSE() {
 				a.views.urlPreview.Drop(plan.DropPreviews)
 				a.views.renderedPrev.Drop(plan.DropPreviews)
 			}
+			if plan.Reload != "" {
+				a.owePageReload(plan.Reload)
+			}
 			if plan.ClearLatch != "" {
 				a.fetch.grids.Change(plan.ClearLatch)
 			}

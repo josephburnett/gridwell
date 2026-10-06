@@ -17,6 +17,7 @@ export const CH = {
   setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom)
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
+  reload: 'gw:reload',     // ReloadArgs → void
   showMenu: 'gw:showMenu', // PaneRef → void. The bar circle's right-click
                            // over a live url, which works even when the page
                            // hijacks contextmenu.
@@ -77,6 +78,12 @@ export interface ForwardedRightdown {
 
 export interface PaneRef {
   paneId: string;
+}
+
+// The pane's view loads url again: its page's source changed it.
+export interface ReloadArgs {
+  paneId: string;
+  url: string;
 }
 
 // One choice in a menu the renderer declared. client/circlemenu owns the rows;

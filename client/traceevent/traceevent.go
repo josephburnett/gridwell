@@ -170,6 +170,12 @@ func URLClose(paneID, tileID string, freeze bool) Event {
 	return Event{Src: "url", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
 }
 
+// URLReload is a live view loading its page again because its source changed
+// it.
+func URLReload(paneID, tileID string) Event {
+	return Event{Src: "url", Kind: "reload", Msg: "live view reloads its changed page", KV: kv("pane", paneID, "tile", tileID)}
+}
+
 // URLMove is a live view handed to another pane with its page.
 func URLMove(fromPaneID, toPaneID, tileID string) Event {
 	return Event{Src: "url", Kind: "move", Msg: "live view moves",
