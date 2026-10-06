@@ -7,6 +7,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -78,7 +79,7 @@ func (a *App) openConfigureURL(p *pane.Pane, t *gridwellv1.Tile) {
 			if err != nil {
 				return
 			}
-			a.c.UpdateTile(tile.GridId, tile)
+			a.c.PutWriteResponse(tile.GridId, tile, cache.WroteAddress)
 			fp := a.tree.FindPane(paneID)
 			if fp == nil || fp.ContentID() != "" {
 				return

@@ -3,6 +3,8 @@ package cache
 import (
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -35,7 +37,7 @@ func TestWriteResponseDoesNotRevertALaterSameVersionFraming(t *testing.T) {
 	c.Apply(echo(row(2, oldY))) // WriteContent
 	c.Apply(echo(row(2, newY))) // SetTextView
 	// postWriteContent's response, read by the node before the SetTextView.
-	c.UpdateTile("1", row(2, oldY))
+	c.PutWriteResponse("1", row(2, oldY), WroteBody)
 
 	g, _ = c.Grid("1")
 	got := g.Tiles["1552"]
@@ -46,5 +48,58 @@ func TestWriteResponseDoesNotRevertALaterSameVersionFraming(t *testing.T) {
 	pane := textedit.Framing{Y: newY, W: 600, H: 400, Mode: rpc.TextModeText}
 	if textedit.Reframes(textedit.FramingOf(got), pane, false) {
 		t.Errorf("the next settle re-sends SetTextView %+v, which the node already holds", pane)
+	}
+}
+
+// A write's response contributes what the write set and, for a content
+// write, the version it claimed; every other field stays as the cache has it.
+func TestAWriteResponseContributesOnlyWhatItWrote(t *testing.T) {
+	// The cached row: v3, scrolled to TextY 0 by an echo the response
+	// predates.
+	cached := func() *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "t", GridId: "g", Kind: rpc.KindURL, Version: 3,
+			TextY: 0, BlobId: 7, AltText: "cached", UrlString: "https://cached", UrlFrozen: false}
+	}
+	// What the node answered: its row at version v, from before the scroll.
+	resp := func(v int64) *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "t", GridId: "g", Kind: rpc.KindURL, Version: v,
+			TextY: 900, BlobId: 8, AltText: "written", UrlString: "https://written", UrlFrozen: true}
+	}
+	cases := []struct {
+		name string
+		w    Wrote
+		v    int64
+		want func(*gridwellv1.Tile)
+	}{
+		{"body", WroteBody, 4, func(t *gridwellv1.Tile) { t.Version, t.BlobId, t.AltText = 4, 8, "written" }},
+		{"body, same version", WroteBody, 3, func(t *gridwellv1.Tile) { t.BlobId, t.AltText = 8, "written" }},
+		{"address", WroteAddress, 4, func(t *gridwellv1.Tile) { t.Version, t.UrlString = 4, "https://written" }},
+		{"name", WroteName, 4, func(t *gridwellv1.Tile) { t.Version, t.AltText = 4, "written" }},
+		{"content older than the cache", WroteBody, 2, func(*gridwellv1.Tile) {}},
+		// Framing claims no version, so the answer's version is not taken
+		// whichever way it points.
+		{"freeze", WroteFrozen, 5, func(t *gridwellv1.Tile) { t.UrlFrozen = true }},
+		{"freeze from an older row", WroteFrozen, 1, func(t *gridwellv1.Tile) { t.UrlFrozen = true }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New()
+			c.PutGrid(&gridwellv1.Grid{Id: "g"}, []*gridwellv1.Tile{cached()})
+			c.PutWriteResponse("g", resp(tc.v), tc.w)
+			want := cached()
+			tc.want(want)
+			g, _ := c.Grid("g")
+			if got := g.Tiles["t"]; !proto.Equal(got, want) {
+				t.Errorf("cached row\n got %v\nwant %v", got, want)
+			}
+		})
+	}
+	// A write through a link answers a row this cache does not hold: nothing
+	// is planted.
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "g"}, nil)
+	c.PutWriteResponse("g", resp(4), WroteBody)
+	if g, _ := c.Grid("g"); len(g.Tiles) != 0 {
+		t.Errorf("a response for an uncached row was inserted: %v", g.Tiles)
 	}
 }
