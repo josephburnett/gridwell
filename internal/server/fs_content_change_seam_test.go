@@ -22,6 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/client/events"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
@@ -38,11 +39,20 @@ type contentClient struct {
 	c       *cache.Cache
 	events  chan *gridwellv1.Event
 	landing string
-	// changed counts the grid changes the client was told.
+	// changed counts the grid changes the client was told, and told the
+	// rows whose bytes it was told moved, by id.
 	changed int
+	told    map[string]int
 }
 
 func newContentClient(t *testing.T, uuid, root string) *contentClient {
+	t.Helper()
+	return newContentClientVia(t, uuid, root, nil)
+}
+
+// newContentClientVia is newContentClient with the node reaching the fs
+// adapter through via, nil for directly.
+func newContentClientVia(t *testing.T, uuid, root string, via func(namespace.Namespace) namespace.Namespace) *contentClient {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
@@ -51,9 +61,13 @@ func newContentClient(t *testing.T, uuid, root string) *contentClient {
 	t.Cleanup(func() { _ = st.Close() })
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	a, stop := pluginhost.Start(cp, st.Namespace(uuid), nil, "plugin "+uuid+" watch")
+	var ns namespace.Namespace = a
+	if via != nil {
+		ns = via(a)
+	}
 	reg := plugin.NewRegistry()
 	reg.Register(localNodeID, "home", local.New(st, nil), nil)
-	reg.Register(uuid, "fs", a, stop)
+	reg.Register(uuid, "fs", ns, stop)
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -141,6 +155,12 @@ func (k *contentClient) run(d time.Duration, until func() bool) bool {
 			k.c.Apply(ev)
 			if ev.GetGridChanged() != nil {
 				k.changed++
+			}
+			if tc := ev.GetTileChanged(); tc.GetContentChanged() {
+				if k.told == nil {
+					k.told = map[string]int{}
+				}
+				k.told[tc.GetTile().GetId()]++
 			}
 			if p := events.Route(ev); p.Fetch != "" {
 				k.fetchGrid(p.Fetch)

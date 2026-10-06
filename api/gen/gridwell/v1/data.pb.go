@@ -1432,11 +1432,17 @@ func (x *ContentChunk) GetContentStamp() string {
 // claims and bumps, while a pane layout is framing-class with no claim and no
 // bump. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
+//
+// A row with no version (a plugin's) claims content_stamp instead, the stamp
+// its bytes were read under (ContentChunk.content_stamp), which its source
+// checks as the store checks a version; the response row carries the stamp
+// of the bytes written. A versioned row's owner ignores it.
 type WriteContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	ContentStamp  string                 `protobuf:"bytes,4,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1490,6 +1496,13 @@ func (x *WriteContentRequest) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *WriteContentRequest) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
 }
 
 // ServeContent is the RPC carrier behind the server's HTTP /content/ endpoint.
@@ -3770,11 +3783,12 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12#\n" +
-	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"\\\n" +
+	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"\x81\x01\n" +
 	"\x13WriteContentRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"H\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12#\n" +
+	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"H\n" +
 	"\x13ServeContentRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x18\n" +
 	"\asubpath\x18\x02 \x01(\tR\asubpath\"^\n" +

@@ -74,7 +74,7 @@ func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
 		a.reportErr(errsurface.Error, "textedit",
 			"unsaved edit is not being saved — its tile no longer accepts edits")
 	case textedit.FlushPost:
-		a.enqueueTextSave(t.GridId, t.Id, cid, t.Version, data)
+		a.enqueueTextSave(t.GridId, t.Id, cid, rpc.BasisOf(t), data)
 	}
 }
 
@@ -83,21 +83,21 @@ func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
 // did not leave and the caller falls back to the async post.
 func (a *App) beaconTileContent(cid string, t *gridwellv1.Tile, data []byte) bool {
 	basis, haveBasis := a.c.SaveBasis(cid)
-	var rowVersion int64
+	var row rpc.ContentBasis
 	editable, owner := false, false
 	if t != nil {
-		rowVersion = t.Version
+		row = rpc.BasisOf(t)
 		editable = a.takesContent(t)
 		owner = t.Id == cid
 	}
-	version, do := textedit.DecideUnloadFlush(t != nil, editable, owner, rowVersion, basis.Version, haveBasis)
+	claim, do := textedit.DecideUnloadFlush(t != nil, editable, owner, row, basis, haveBasis)
 	switch do {
 	case textedit.UnloadSkip:
 		return true // nothing may write; not a fallback case
 	case textedit.UnloadAsync:
 		return false
 	}
-	path, body := rpc.WriteContentBeacon(cid, version, data)
+	path, body := rpc.WriteContentBeacon(cid, claim, data)
 	return body != nil && a.sendBeacon(path, body, rpc.BeaconStreamType)
 }
 
@@ -181,7 +181,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 		// advanced since.
 		if hasBuf {
 			cid := rpc.ContentID(file)
-			if _, ok := a.saveClaimedContent(gid, cid, file.Id == cid, file.Version, buf); !ok {
+			if _, ok := a.saveClaimedContent(gid, cid, file.Id == cid, rpc.BasisOf(file), buf); !ok {
 				return false
 			}
 		}

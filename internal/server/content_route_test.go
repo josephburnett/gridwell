@@ -82,7 +82,7 @@ func TestReadContentResolvesLeafLinkAtServer(t *testing.T) {
 
 	// Writing through a link id is refused — a link owns no content, and
 	// content writes address the target explicitly.
-	if _, err := cl.WriteContent(ctx, link.Id, link.Version, []byte("stomp")); err == nil {
+	if _, err := cl.WriteContent(ctx, link.Id, rpc.ContentBasis{Version: link.Version}, []byte("stomp")); err == nil {
 		t.Error("WriteContent on a link must be refused")
 	}
 

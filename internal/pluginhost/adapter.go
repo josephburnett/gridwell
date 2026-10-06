@@ -472,10 +472,9 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 		tiles = kept
 	}
-	// host_content and glyph ride the grid: a grid reached through a mount has
-	// no local row. source_label is the listing's own, so it is as fresh as
-	// the rows. A plugin creates no tiles, and its bodies take no edits:
-	// this door has no WriteContent.
+	// host_content, glyph and writable ride the grid: a grid reached through
+	// a mount has no local row. source_label is the listing's own, so it is
+	// as fresh as the rows. A plugin creates no tiles.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, err
@@ -484,6 +483,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	g := &gridwellv1.Grid{
 		Id:           addr,
 		AcceptsTiles: proto.Bool(false),
+		Writable:     ci.Writable,
 		HostContent:  ci.HostContent,
 		Glyph:        ci.Glyph,
 		SourceLabel:  resp.SourceLabel,
@@ -909,6 +909,61 @@ func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRe
 			return serr
 		}
 	}
+}
+
+// WriteContent writes a body through to the plugin by key, claiming the stamp
+// it was read under; the version a plugin row lacks is not read. It commits
+// only at the caller's clean close, answers the row as GetTile serves it
+// carrying the written bytes' stamp, and tells it as the home tells its own
+// writes, a TileChanged, flagged because the row's version cannot say so.
+func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
+	first, err := recv()
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "plugin: write: empty stream")
+	}
+	key, err := a.contentKey(first.TileId)
+	if err != nil {
+		return nil, err
+	}
+	// Cancelled unless the stream closes cleanly, so the plugin never sees
+	// the end of a write the caller broke off.
+	wctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	up, err := a.cp.WriteContent(wctx)
+	if err != nil {
+		return nil, err
+	}
+	msg := &pluginv1.WriteContentRequest{Key: key, Data: first.Data, ContentStamp: first.ContentStamp}
+	for n := len(first.Data); ; {
+		if err := up.Send(msg); err != nil {
+			_, rerr := up.CloseAndRecv()
+			return nil, cmp.Or(rerr, err)
+		}
+		next, rerr := recv()
+		if errors.Is(rerr, io.EOF) {
+			break
+		}
+		if rerr != nil {
+			return nil, rerr
+		}
+		if n += len(next.Data); n > rpc.MaxContentBytes {
+			return nil, status.Error(codes.InvalidArgument, "plugin: write: content too large")
+		}
+		msg = &pluginv1.WriteContentRequest{Data: next.Data}
+	}
+	wrote, err := up.CloseAndRecv()
+	if err != nil {
+		return nil, err
+	}
+	t, err := a.tileByID(ctx, first.TileId)
+	if err != nil {
+		return nil, err
+	}
+	t.ContentStamp = wrote.ContentStamp
+	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+		TileChanged: &gridwellv1.TileChanged{Tile: proto.CloneOf(t), ContentChanged: true},
+	}})
+	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
 func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {

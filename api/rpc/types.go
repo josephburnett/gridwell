@@ -261,7 +261,7 @@ const (
 
 // ContentBasis names a body's bytes as their owner does: the row version for a
 // versioned body, the source's stamp (Tile.content_stamp) for a claimless one.
-// A read answers it with the bytes.
+// A read answers it with the bytes, and a write claims it.
 type ContentBasis struct {
 	Version int64
 	Stamp   string

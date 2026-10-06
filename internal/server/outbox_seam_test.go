@@ -86,11 +86,11 @@ func TestContentConflictSurfaces(t *testing.T) {
 	basis := tile.Version
 
 	// Someone else edits the bytes; our basis is now stale.
-	if _, err := cl.WriteContent(ctx, tile.Id, basis, []byte("their edit")); err != nil {
+	if _, err := cl.WriteContent(ctx, tile.Id, rpc.ContentBasis{Version: basis}, []byte("their edit")); err != nil {
 		t.Fatalf("foreign edit: %v", err)
 	}
 
-	_, err = cl.WriteContent(ctx, tile.Id, basis, []byte("my edit"))
+	_, err = cl.WriteContent(ctx, tile.Id, rpc.ContentBasis{Version: basis}, []byte("my edit"))
 	if err == nil {
 		t.Fatal("a stale save basis must not be accepted — that is the stomp")
 	}
@@ -136,7 +136,7 @@ func TestCaptureDuringAnEditDoesNotConflict(t *testing.T) {
 		t.Fatalf("content zoom: %v", err)
 	}
 
-	if _, err := cl.WriteContent(ctx, tile.Id, basis.Version, []byte("https://the.user.typed.this")); err != nil {
+	if _, err := cl.WriteContent(ctx, tile.Id, rpc.ContentBasis{Version: basis.Version}, []byte("https://the.user.typed.this")); err != nil {
 		t.Fatalf("the user's edit lost to a capture: %v", err)
 	}
 	after, err := cl.GetTile(ctx, tile.Id)
@@ -249,7 +249,7 @@ func echoesOf(t *testing.T, cl *rpc.Client, tileID string, basis int64) (resp, e
 	time.Sleep(300 * time.Millisecond) // the stream is fanned in before the writes
 
 	for i, body := range [][]byte{[]byte("first"), []byte("second")} {
-		tile, err := cl.WriteContent(ctx, tileID, basis, body)
+		tile, err := cl.WriteContent(ctx, tileID, rpc.ContentBasis{Version: basis}, body)
 		if err != nil {
 			t.Fatalf("write %d: %v", i+1, err)
 		}

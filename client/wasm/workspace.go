@@ -218,7 +218,7 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 		source: "layout:" + tileID, failText: "workspace layout unsaved",
 		call: func(ctx context.Context) error {
 			var err error
-			tile, err = a.cl.WriteContent(ctx, tileID, 0, data)
+			tile, err = a.cl.WriteContent(ctx, tileID, rpc.ContentBasis{}, data)
 			return err
 		},
 		then: func() {
@@ -242,7 +242,7 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 			held(landed)
 		},
 		beacon: func() (string, []byte, string) {
-			path, body := rpc.WriteContentBeacon(tileID, 0, data)
+			path, body := rpc.WriteContentBeacon(tileID, rpc.ContentBasis{}, data)
 			return path, body, rpc.BeaconStreamType
 		},
 	})

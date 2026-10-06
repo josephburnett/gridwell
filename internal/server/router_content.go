@@ -7,6 +7,7 @@ import (
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -51,7 +52,8 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 	if err != nil {
 		return nil, err
 	}
-	bound := &pb.WriteContentRequest{TileId: local, Version: first.Version, Data: first.Data}
+	bound := proto.CloneOf(first)
+	bound.TileId = local
 	sentBind := false
 	resp, err := c.WriteContent(ctx, func() (*pb.WriteContentRequest, error) {
 		if !sentBind {

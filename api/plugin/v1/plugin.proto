@@ -49,9 +49,11 @@ message InfoResponse {
   // and answers Unimplemented has live updates off, said once on a healthy
   // event; its listings still answer, so it is never shown dark.
   bool watch = 5;
-  // writable: the plugin accepts WriteContent on some of its entries.
-  // Presentation writes never reach a plugin, so this is a content capability
-  // only.
+  // writable: the plugin accepts WriteContent on its text entries. It is the
+  // one owner: the node stamps it as Grid.writable on every grid it serves
+  // for the plugin, so the client lets the user type into those tiles, and
+  // without it they are read-only. Presentation writes never reach a plugin,
+  // so this is a content capability only.
   bool writable = 6;
   // menu_entries: the plugin's collections, one row each, and the way a plugin
   // is reached. Each becomes a (+) menu swatch, and the node stamps them onto
@@ -193,15 +195,27 @@ message ContentChunk {
   string content_stamp = 3; // chunk 1 only; see Entry.content_stamp
 }
 
-// WriteContent streams an entry's new content up, and the first message binds
-// the key. It commits at close, like every Gridwell write, so a broken stream
-// leaves the old value intact. A plugin that only projects a source leaves it
-// unimplemented.
+// WriteContent streams an entry's whole new content up, and the first message
+// binds the key and claims the stamp. It commits at close, like every
+// Gridwell write, so a broken stream leaves the old value intact. A plugin
+// that only projects a source leaves it unimplemented and does not declare
+// writable.
+//
+// content_stamp is the stamp the writer read the bytes under
+// (ContentChunk.content_stamp). Refuse a write whose stamp is not the entry's
+// stamp now with FailedPrecondition, the conflict a stale version gets, so
+// bytes the writer has not seen are never overwritten. Answer the stamp of
+// the bytes written, which the writer's next write claims. The write is a
+// change in place like any other, so your Watch tells it as the entry's
+// EntryChanged; the node knows its own echo by the stamp.
 message WriteContentRequest {
-  string key  = 1;
-  bytes  data = 2;
+  string key           = 1;
+  bytes  data          = 2;
+  string content_stamp = 3; // first message only
 }
-message WriteContentResponse {}
+message WriteContentResponse {
+  string content_stamp = 1;
+}
 
 // ServeContent is the web-content door's plugin half. GET-only, and subpath ""
 // is the entry's root page. Sandboxing happens at the node.

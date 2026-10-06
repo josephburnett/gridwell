@@ -150,9 +150,11 @@ type InfoResponse struct {
 	// and answers Unimplemented has live updates off, said once on a healthy
 	// event; its listings still answer, so it is never shown dark.
 	Watch bool `protobuf:"varint,5,opt,name=watch,proto3" json:"watch,omitempty"`
-	// writable: the plugin accepts WriteContent on some of its entries.
-	// Presentation writes never reach a plugin, so this is a content capability
-	// only.
+	// writable: the plugin accepts WriteContent on its text entries. It is the
+	// one owner: the node stamps it as Grid.writable on every grid it serves
+	// for the plugin, so the client lets the user type into those tiles, and
+	// without it they are read-only. Presentation writes never reach a plugin,
+	// so this is a content capability only.
 	Writable bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
 	// menu_entries: the plugin's collections, one row each, and the way a plugin
 	// is reached. Each becomes a (+) menu swatch, and the node stamps them onto
@@ -860,14 +862,24 @@ func (x *ContentChunk) GetContentStamp() string {
 	return ""
 }
 
-// WriteContent streams an entry's new content up, and the first message binds
-// the key. It commits at close, like every Gridwell write, so a broken stream
-// leaves the old value intact. A plugin that only projects a source leaves it
-// unimplemented.
+// WriteContent streams an entry's whole new content up, and the first message
+// binds the key and claims the stamp. It commits at close, like every
+// Gridwell write, so a broken stream leaves the old value intact. A plugin
+// that only projects a source leaves it unimplemented and does not declare
+// writable.
+//
+// content_stamp is the stamp the writer read the bytes under
+// (ContentChunk.content_stamp). Refuse a write whose stamp is not the entry's
+// stamp now with FailedPrecondition, the conflict a stale version gets, so
+// bytes the writer has not seen are never overwritten. Answer the stamp of
+// the bytes written, which the writer's next write claims. The write is a
+// change in place like any other, so your Watch tells it as the entry's
+// EntryChanged; the node knows its own echo by the stamp.
 type WriteContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	ContentStamp  string                 `protobuf:"bytes,3,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"` // first message only
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -916,8 +928,16 @@ func (x *WriteContentRequest) GetData() []byte {
 	return nil
 }
 
+func (x *WriteContentRequest) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
+}
+
 type WriteContentResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContentStamp  string                 `protobuf:"bytes,1,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -950,6 +970,13 @@ func (x *WriteContentResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use WriteContentResponse.ProtoReflect.Descriptor instead.
 func (*WriteContentResponse) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *WriteContentResponse) GetContentStamp() string {
+	if x != nil {
+		return x.ContentStamp
+	}
+	return ""
 }
 
 // ServeContent is the web-content door's plugin half. GET-only, and subpath ""
@@ -1876,11 +1903,13 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12#\n" +
-	"\rcontent_stamp\x18\x03 \x01(\tR\fcontentStamp\";\n" +
+	"\rcontent_stamp\x18\x03 \x01(\tR\fcontentStamp\"`\n" +
 	"\x13WriteContentRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\"\x16\n" +
-	"\x14WriteContentResponse\"A\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\x12#\n" +
+	"\rcontent_stamp\x18\x03 \x01(\tR\fcontentStamp\";\n" +
+	"\x14WriteContentResponse\x12#\n" +
+	"\rcontent_stamp\x18\x01 \x01(\tR\fcontentStamp\"A\n" +
 	"\x13ServeContentRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
 	"\asubpath\x18\x02 \x01(\tR\asubpath\"^\n" +

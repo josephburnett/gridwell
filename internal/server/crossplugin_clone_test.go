@@ -215,7 +215,7 @@ func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
 	}
 
 	// Independence: editing the copy leaves the source byte-identical.
-	if _, err := cl.WriteContent(ctx, copiedText.Id, copiedText.Version, []byte("# changed")); err != nil {
+	if _, err := cl.WriteContent(ctx, copiedText.Id, rpc.ContentBasis{Version: copiedText.Version}, []byte("# changed")); err != nil {
 		t.Fatal(err)
 	}
 	orig, _, _, err := cl.ReadContent(ctx, inner.Id)
@@ -300,7 +300,7 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	}
 
 	// The copies are independent: editing the copy leaves the source alone.
-	if _, err := cl.WriteContent(ctx, copyT.Id, copyT.Version, []byte("# changed")); err != nil {
+	if _, err := cl.WriteContent(ctx, copyT.Id, rpc.ContentBasis{Version: copyT.Version}, []byte("# changed")); err != nil {
 		t.Fatalf("edit copy: %v", err)
 	}
 	orig, _, _, err := cl.ReadContent(ctx, txt.Id)
@@ -346,7 +346,7 @@ func TestCloneAcrossPluginsCopiesCurrentContent(t *testing.T) {
 	}
 	// A real content edit: the source's version is now past what the clone
 	// caller last saw.
-	if _, err := cl.WriteContent(ctx, txt.Id, txt.Version, []byte("v1")); err != nil {
+	if _, err := cl.WriteContent(ctx, txt.Id, rpc.ContentBasis{Version: txt.Version}, []byte("v1")); err != nil {
 		t.Fatalf("WriteContent: %v", err)
 	}
 	cp, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
@@ -399,7 +399,7 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	}
 
 	// Independence: rearranging the copy leaves the source's layout alone.
-	if _, err := cl.WriteContent(ctx, cp.Id, cp.Version,
+	if _, err := cl.WriteContent(ctx, cp.Id, rpc.ContentBasis{Version: cp.Version},
 		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`)); err != nil {
 		t.Fatalf("edit copy: %v", err)
 	}

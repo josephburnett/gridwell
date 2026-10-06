@@ -84,7 +84,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 	}
 	layout := `{"v":1,"root":{"pane":{"id":"p1","anchor":"` + root +
 		`","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"` + eph.Id + `"}},"focus":"p1"}`
-	if _, err := cl.WriteContent(ctx, pt.Id, pt.Version, []byte(layout)); err != nil {
+	if _, err := cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, []byte(layout)); err != nil {
 		t.Fatal(err)
 	}
 

@@ -130,12 +130,13 @@ func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, m
 	return data, mediaType, basis, nil
 }
 
-// WriteContent is version-claimed and commits at close, so a failure anywhere
-// leaves the old value intact. data is the complete new value.
-func (c *Client) WriteContent(ctx context.Context, tileID string, version int64, data []byte) (*pb.Tile, error) {
+// WriteContent claims the basis the bytes it replaces were read under and
+// commits at close, so a failure anywhere leaves the old value intact. data is
+// the complete new value.
+func (c *Client) WriteContent(ctx context.Context, tileID string, claim ContentBasis, data []byte) (*pb.Tile, error) {
 	stream := c.cl.WriteContent(ctx)
 	end := min(ContentChunkBytes, len(data))
-	if err := stream.Send(&pb.WriteContentRequest{TileId: tileID, Version: version, Data: data[:end]}); err != nil {
+	if err := stream.Send(&pb.WriteContentRequest{TileId: tileID, Version: claim.Version, ContentStamp: claim.Stamp, Data: data[:end]}); err != nil {
 		_, cerr := stream.CloseAndReceive()
 		if cerr != nil {
 			return nil, cerr

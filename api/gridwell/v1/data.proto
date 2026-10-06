@@ -369,10 +369,16 @@ message ContentChunk {
 // claims and bumps, while a pane layout is framing-class with no claim and no
 // bump. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
+//
+// A row with no version (a plugin's) claims content_stamp instead, the stamp
+// its bytes were read under (ContentChunk.content_stamp), which its source
+// checks as the store checks a version; the response row carries the stamp
+// of the bytes written. A versioned row's owner ignores it.
 message WriteContentRequest {
   string tile_id = 1;
   int64 version = 2;
   bytes data = 3;
+  string content_stamp = 4;
 }
 
 // ServeContent is the RPC carrier behind the server's HTTP /content/ endpoint.
@@ -606,9 +612,10 @@ message ShellSessionAliveResponse {
 }
 
 // Mutations. A version claim rides only the writes that change the user's
-// content bytes — WriteContent and SetTile's rename arm — and the server
-// returns a version-conflict error when it does not match. Layout, framing,
-// and capture writes carry no claim at all.
+// content bytes — WriteContent, whose claim for a row with no version is its
+// stamp, and SetTile's rename arm — and the server returns a conflict error
+// when it does not match. Layout, framing, and capture writes carry no claim
+// at all.
 
 message CloneTileRequest {
   reserved 1, 5; // path, dest_path

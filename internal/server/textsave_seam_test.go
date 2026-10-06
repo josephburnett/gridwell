@@ -75,12 +75,12 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	wg.Add(2)
 	// One flush, spelled as the client spells it: claim at send time through
 	// textedit.SaveClaim, write, then advance the basis from the response.
-	save := func(rowID string, rowVersion int64, data []byte) func() bool {
+	save := func(rowID string, row rpc.ContentBasis, data []byte) func() bool {
 		return func() bool {
 			defer wg.Done()
 			rendezvous()
 			basis, haveBasis := c.SaveBasis(target.Id)
-			claim := textedit.SaveClaim(rowID == target.Id, rowVersion, basis.Version, haveBasis)
+			claim := textedit.SaveClaim(rowID == target.Id, row, basis, haveBasis)
 			tile, err := cl.WriteContent(ctx, target.Id, claim, data)
 			mu.Lock()
 			defer mu.Unlock()
@@ -96,10 +96,10 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	q := outbox.NewSaveQueue()
 	// The ascent flush: it holds the link row it was descended through.
 	q.Enqueue(textedit.SaveQueueKey(link.Id, rpc.ContentID(link)),
-		save(link.Id, link.Version, []byte("typed")))
+		save(link.Id, rpc.BasisOf(link), []byte("typed")))
 	// The debounce sweep: it holds the content id.
 	q.Enqueue(textedit.SaveQueueKey(target.Id, target.Id),
-		save(target.Id, target.Version, []byte("typed and more")))
+		save(target.Id, rpc.BasisOf(target), []byte("typed and more")))
 	wg.Wait()
 
 	if len(errs) > 0 {

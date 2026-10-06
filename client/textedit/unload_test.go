@@ -25,9 +25,9 @@ func TestDecideUnloadFlush(t *testing.T) {
 		{"uncached row, no basis", false, false, false, 0, 0, false, 0, UnloadAsync},
 	}
 	for _, c := range cases {
-		claim, do := DecideUnloadFlush(c.rowKnown, c.editable, c.owner, c.rowVersion, c.basis, c.haveBasis)
-		if claim != c.wantClaim || do != c.want {
-			t.Errorf("%s: = (%d, %v), want (%d, %v)", c.name, claim, do, c.wantClaim, c.want)
+		claim, do := DecideUnloadFlush(c.rowKnown, c.editable, c.owner, v(c.rowVersion), v(c.basis), c.haveBasis)
+		if claim != v(c.wantClaim) || do != c.want {
+			t.Errorf("%s: = (%+v, %v), want (%d, %v)", c.name, claim, do, c.wantClaim, c.want)
 		}
 	}
 }
