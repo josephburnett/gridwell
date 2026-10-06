@@ -23,13 +23,14 @@ func TestTransitQualifyGrid(t *testing.T) {
 		Writable:      true,
 		HostContent:   true,
 		Glyph:         "folder",
+		SourceLabel:   "/srv/docs",
 		MenuEntries:   []*pb.MenuEntry{{Id: "search", GridId: "far/7"}},
 	}
 	out := TransitQualifyGrid("hop", in)
 	if out.Id != "hop/far/7" || out.ScratchGridId != "hop/far/9" || out.NodeNs != "hop/farnode" {
 		t.Fatalf("ids not prepended one segment: %+v", out)
 	}
-	if !out.Writable || !out.HostContent || out.Glyph != "folder" {
+	if !out.Writable || !out.HostContent || out.Glyph != "folder" || out.SourceLabel != "/srv/docs" {
 		t.Fatalf("stamped facts must ride verbatim: %+v", out)
 	}
 	if len(out.MenuEntries) != 1 || out.MenuEntries[0].GridId != "hop/far/7" {

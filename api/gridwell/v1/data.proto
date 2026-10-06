@@ -70,6 +70,13 @@ message Grid {
   // grid reached through a mount. Stamped by the adapter, verbatim in
   // transit. Wire-only, never persisted.
   string glyph = 14;
+  // source_label is the owning plugin's name for what backs this grid, as
+  // its listing answered it (plugin.v1 ListResponse.source_label: a
+  // directory path, "Inbox · 12 unread"); the bar shows it while a pane
+  // stands on the grid. Like the rows, it is a memory of the source, not a
+  // node fact, so gridwell.db never holds it. Stamped by the adapter,
+  // verbatim in transit. Wire-only.
+  string source_label = 15;
 }
 
 // MenuEntry is one declared (+) menu entry: a doorway onto one collection,

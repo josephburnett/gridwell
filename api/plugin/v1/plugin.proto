@@ -97,7 +97,8 @@ message ListResponse {
   // sweep fact only the plugin knows.
   bool authoritative = 2;
   // source_label is the name of the backing source, such as the directory path
-  // or the pid. The node surface has no field for it, so nothing reads it.
+  // or the pid. The node carries it onto the grid it serves (Grid.source_label)
+  // and the client's bar shows it.
   string source_label = 3;
   // unreachable is empty when the listing is live. Otherwise the plugin
   // answered from memory and this is why, in a plain sentence; the node shows

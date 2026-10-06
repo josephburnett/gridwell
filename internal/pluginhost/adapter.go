@@ -476,7 +476,8 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		tiles = kept
 	}
 	// host_content and glyph ride the grid: a grid reached through a mount has
-	// no local row.
+	// no local row. source_label is the listing's own, so it is as fresh as
+	// the rows.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, err
@@ -486,6 +487,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		Id:          addr,
 		HostContent: ci.HostContent,
 		Glyph:       ci.Glyph,
+		SourceLabel: resp.SourceLabel,
 	}
 	wire, err := buildTiles(addr, ckey, tiles, resp.Entries, a.mem.ContextKey)
 	if err != nil {

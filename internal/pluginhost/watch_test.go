@@ -521,9 +521,10 @@ func TestARespawnedProcessRefusingAgainIsAnnouncedAgain(t *testing.T) {
 // transport would.
 type listingPlugin struct {
 	watchPlugin
-	mu    sync.Mutex
-	files map[string][]string
-	down  map[string]bool
+	mu     sync.Mutex
+	files  map[string][]string
+	labels map[string]string
+	down   map[string]bool
 }
 
 func (p *listingPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
@@ -532,7 +533,7 @@ func (p *listingPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*plu
 	if p.down[req.Context] {
 		return nil, status.Error(codes.Unavailable, "the source is unreachable")
 	}
-	resp := &pluginv1.ListResponse{Authoritative: true}
+	resp := &pluginv1.ListResponse{Authoritative: true, SourceLabel: p.labels[req.Context]}
 	for _, f := range p.files[req.Context] {
 		resp.Entries = append(resp.Entries, &pluginv1.Entry{Key: f, Kind: "text", Label: f})
 	}
@@ -643,5 +644,26 @@ func TestWatchReopenAnnouncesOnlyWhatChanged(t *testing.T) {
 	close(drop)
 	if got, want := awaitAnnounced(t, p, seen, "all", "d1", "d2"), map[string]int{rpc.EntryGridID("d2"): 1}; !maps.Equal(got, want) {
 		t.Errorf("the re-open announced %v, want %v", got, want)
+	}
+}
+
+// The source's label is part of the listing a client holds: it rides the grid
+// GetGrid serves, and a listing that moved only its label is announced as one
+// that moved a row is, or the bar keeps the old count.
+func TestSourceLabelRidesTheGridAndMovesTheListing(t *testing.T) {
+	p := newListingPlugin(map[string][]string{"all": {"a"}}, idle)
+	p.labels = map[string]string{"all": "Inbox · 12 unread"}
+	a, seen := watchingNothing(t, p, nil)
+	resp, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID("all")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resp.Grid.GetSourceLabel(); got != "Inbox · 12 unread" {
+		t.Errorf("grid source_label = %q, want the listing's", got)
+	}
+	p.edit(func() { p.labels["all"] = "Inbox · 11 unread" })
+	show(t, a, "all")
+	if got, want := awaitAnnounced(t, p, seen, "all"), map[string]int{rpc.EntryGridID("all"): 1}; !maps.Equal(got, want) {
+		t.Errorf("a label-only change announced %v, want %v", got, want)
 	}
 }
