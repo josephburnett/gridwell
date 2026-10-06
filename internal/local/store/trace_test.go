@@ -2,10 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
 
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -70,4 +73,70 @@ func TestARefusedStoreWriteSaysSo(t *testing.T) {
 		}
 	}
 	t.Error("a refused write left no record")
+}
+
+// A plugin row's write goes through the same funnel as home's, so it leaves
+// the same record. It publishes no event to read its row off, so it names
+// the row itself, qualified by its namespace.
+func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
+	_, d := openExt(t)
+	gid, err := d.ContextID("inbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gs := strconv.FormatInt(gid, 10)
+	id, err := d.Mint(gid, &pluginv1.Entry{Key: "a", Kind: "text", Label: "a"}, 0, 0, 0, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := strconv.FormatInt(id, 10)
+	f, err := rpc.NewFraming(1, 2, 1.5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := rpc.NewContentZoom(1.25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []struct {
+		verb, keys string
+		write      func() error
+	}{
+		{"Place", "plug1:t/" + ts, func() error { return d.Place(id, 3, 3, 1, 1) }},
+		{"SetFraming", "plug1:t/" + ts, func() error { return d.SetFraming(id, 0, f) }},
+		{"SetFraming", "plug1:f/" + gs, func() error { return d.SetFraming(0, gid, f) }},
+		{"SetTextView", "plug1:t/" + ts, func() error { return d.SetTextView(id, 0, 0, 4, 4, "") }},
+		{"SetContentZoom", "plug1:t/" + ts, func() error { return d.SetContentZoom(id, z) }},
+		{"Mint", "plug1:g/" + gs + "/b", func() error {
+			_, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, 5, 5, 1, 1)
+			return err
+		}},
+		{"ContextID", "plug1:c/sent", func() error { _, err := d.ContextID("sent"); return err }},
+	} {
+		if err := w.write(); err != nil {
+			t.Fatalf("%s: %v", w.verb, err)
+		}
+		rec, ok := find(trace.Default().Snapshot(), w.verb)
+		if !ok {
+			t.Errorf("%s on a plugin row left no record", w.verb)
+			continue
+		}
+		if rec.Src != "store" || rec.Kind != "write" || rec.KV["keys"] != w.keys {
+			t.Errorf("%s record = %+v, want the store's write naming %q", w.verb, rec, w.keys)
+		}
+	}
+}
+
+// A refused plugin-row write says so, as a refused home write does.
+func TestARefusedPluginRowWriteSaysSo(t *testing.T) {
+	_, d := openExt(t)
+	if err := d.Place(999999, 0, 0, 1, 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Place on no row = %v, want ErrNotFound", err)
+	}
+	for _, rec := range trace.Default().Snapshot() {
+		if rec.Src == "store" && strings.HasPrefix(rec.Msg, "Place error:") {
+			return
+		}
+	}
+	t.Error("a refused plugin-row write left no record")
 }

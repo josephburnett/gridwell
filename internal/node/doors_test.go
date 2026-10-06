@@ -7,10 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 )
 
 // The listener seam of the two doors: the web door binds where config says,
@@ -40,7 +38,7 @@ func TestStartBindsTheConnectionDoorOnASocketOnly(t *testing.T) {
 		t.Fatalf("socket mode = %v (%v), want 0600", st.Mode(), err)
 	}
 	info := func(target string) error {
-		conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := dial.ClientConn(target)
 		if err != nil {
 			t.Fatal(err)
 		}

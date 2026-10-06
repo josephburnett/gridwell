@@ -7,6 +7,9 @@ package boundary
 import (
 	"bufio"
 	"bytes"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -225,16 +228,26 @@ var doorServerOwners = map[string]string{
 	"internal/namespace/roundtrip_test.go": "not a node door: a throwaway gRPC server for the namespace codec test",
 }
 
+// doorClientOwners is doorServerOwners for the dialing side: the files allowed
+// to build a gRPC client, and why.
+var doorClientOwners = map[string]string{
+	"internal/connection/dial/dial.go":     "the node's dial owner: ClientConn",
+	"internal/plugintest/plugintest.go":    "not a node door: the plugin subprocess's go-plugin client",
+	"internal/namespace/roundtrip_test.go": "not a node door: a throwaway gRPC client for the namespace codec test",
+}
+
 // No file here, test files included, builds a raw http.Server or gRPC server or
-// opens a raw unix listener outside the owners above. A harness that built its
-// own would serve a shape the node never runs, and every seam test through it
-// would cross a door that does not exist in production.
+// opens a raw unix listener outside the owners above, nor a gRPC client outside
+// doorClientOwners. A harness that built its own would serve or dial a shape
+// the node never runs, and every seam test through it would cross a door that
+// does not exist in production.
 func TestOneDoorServerOwner(t *testing.T) {
 	root := repoRoot(t)
 	// Concatenated so this file does not match its own needles.
 	httpNeedle := "&http.Server" + "{"
 	grpcNeedle := "grpc.NewServer" + "("
 	unixNeedle := "net.Listen(" + `"unix"`
+	clientNeedle := "grpc.NewClient" + "("
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -252,7 +265,9 @@ func TestOneDoorServerOwner(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if _, ok := doorServerOwners[rel]; ok {
+		_, server := doorServerOwners[rel]
+		_, client := doorClientOwners[rel]
+		if server && client {
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -263,6 +278,12 @@ func TestOneDoorServerOwner(t *testing.T) {
 		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
 		for line := 1; sc.Scan(); line++ {
 			text := sc.Text()
+			if !client && strings.Contains(text, clientNeedle) {
+				t.Errorf("%s:%d builds a raw gRPC client — the node dials a connection door with one shape (dial.ClientConn); a test that dials another can pass against a door the node cannot reach. Route through it, or exempt this file in doorClientOwners with the reason", rel, line)
+			}
+			if server {
+				continue
+			}
 			if strings.Contains(text, httpNeedle) {
 				t.Errorf("%s:%d builds a raw http.Server — a node door's server shape has one owner (server.WebDoorServer / server.ConnectionDoorServer); route through it", rel, line)
 			}
@@ -327,5 +348,52 @@ func TestOneEventFanOut(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// storeWriteFunnel is the one function in internal/local/store that may open
+// a write on the store's handle. Everything it writes is in a transaction and
+// leaves a trace record; a write beside it does neither.
+const storeWriteFunnel = "withMutation"
+
+// No non-test file in the store writes on its handle (a .db selector) outside
+// storeWriteFunnel. Its write helpers take a *sql.Tx, so the handle cannot be
+// passed to one either.
+func TestOneStoreWriteFunnel(t *testing.T) {
+	dir := filepath.Join(repoRoot(t), "internal", "local", "store")
+	writes := map[string]bool{"Exec": true, "ExecContext": true, "Begin": true, "BeginTx": true, "Prepare": true, "PrepareContext": true}
+	paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Name.Name == storeWriteFunnel {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || !writes[sel.Sel.Name] {
+					return true
+				}
+				if recv, ok := sel.X.(*ast.SelectorExpr); ok && recv.Sel.Name == "db" {
+					t.Errorf("%s: %s writes on the store's handle — every store write goes through %s, which runs it in a transaction and traces it", fset.Position(call.Pos()), fn.Name.Name, storeWriteFunnel)
+				}
+				return true
+			})
+		}
 	}
 }

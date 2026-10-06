@@ -8,11 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 )
 
 // A cache.db that cannot be opened fails no read: the node answers everything,
@@ -71,7 +69,7 @@ func serveNode(t *testing.T, home string) *config.ServerConfig {
 // returns the first unhealthy report, or nil if the window closes first.
 func firstUnhealthy(t *testing.T, cfg *config.ServerConfig, within time.Duration) *gridwellv1.EventPluginHealth {
 	t.Helper()
-	conn, err := grpc.NewClient("unix:"+cfg.Federation.Socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := dial.ClientConn("unix:" + cfg.Federation.Socket)
 	if err != nil {
 		t.Fatal(err)
 	}

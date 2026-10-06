@@ -49,8 +49,10 @@ comment beside it says.
    fixed the class; aim for the design where the bug cannot be written.
    A door's listener and server configuration is one such fact with an
    owner, not glue each harness rewrites: `server.WebDoorServer` and
-   `server.ConnectionDoorServer` are the two shapes, `test/boundary` pins
-   them, and a harness that builds its own serves a door the node never runs.
+   `server.ConnectionDoorServer` are the two shapes, `dial.ClientConn` is
+   the one way to dial a connection door, `test/boundary` pins all three,
+   and a harness that builds its own serves or dials a door the node never
+   runs.
 2. **Root-cause first.** State the mechanism in one sentence before touching
    anything. If you cannot name it, keep digging. A retry, a `setTimeout`, or
    a nil-check that hides the nil is a smell, not a fix.

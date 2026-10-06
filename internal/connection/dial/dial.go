@@ -206,15 +206,16 @@ var connectBackoff = backoff.Config{
 	MaxDelay:   10 * time.Second,
 }
 
-// grpcDialOptions is the posture both dials wear, so the ssh bridge and the
-// direct socket cannot drift apart. Each caller adds only what its transport
-// needs.
-func grpcDialOptions() []grpc.DialOption {
-	return []grpc.DialOption{
+// ClientConn is the node's one connection-door client: the posture both dials
+// wear, so the ssh bridge and the direct socket cannot drift apart, plus only
+// what the caller's transport needs. A test that dials a connection door uses
+// it too (test/boundary pins it), so it crosses the door the node crosses.
+func ClientConn(target string, transport ...grpc.DialOption) (*grpc.ClientConn, error) {
+	return grpc.NewClient(target, append([]grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepaliveParams),
 		grpc.WithConnectParams(grpc.ConnectParams{Backoff: connectBackoff}),
-	}
+	}, transport...)...)
 }
 
 // Dial returns a client of the remote node's export plus a closer. The client
@@ -247,11 +248,10 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 
 	// A fixed passthrough target: gRPC's resolvers would strip the leading
 	// slash off a socket path, and the dialer opens cfg.Addr regardless.
-	conn, err := grpc.NewClient("passthrough:///connection",
-		append(grpcDialOptions(), grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+	conn, err := ClientConn("passthrough:///connection",
+		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
 			return rd.dial("unix", cfg.Addr)
-		}))...,
-	)
+		}))
 	if err != nil {
 		return nil, nil, fmt.Errorf("grpc over tunnel: %w", err)
 	}
@@ -268,7 +268,7 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 // same uid only. Across machines the ssh bridge is the one authenticated
 // transport.
 func dialDirect(addr string) (namespace.Namespace, func(), error) {
-	conn, err := grpc.NewClient("unix:"+addr, grpcDialOptions()...)
+	conn, err := ClientConn("unix:" + addr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("direct dial %s: %w", addr, err)
 	}

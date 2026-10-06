@@ -63,12 +63,16 @@ func (n *Namespace) ContextID(key string) (int64, error) {
 		return 0, err
 	}
 	now := n.s.now().UnixNano()
-	res, err := n.s.db.Exec(`INSERT INTO grids (version, created_at, updated_at, ns, context_key)
-		VALUES (0, ?, ?, ?, ?)`, now, now, n.ns, key)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
+	err = n.write("ContextID", "c/"+key, func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, ns, context_key)
+			VALUES (0, ?, ?, ?, ?)`, now, now, n.ns, key)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
+	return id, err
 }
 
 // ContextKey resolves a minted grid id back to the plugin's context key.
@@ -225,14 +229,19 @@ func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, 
 		child = childGridID
 	}
 	now := n.s.now().UnixNano()
-	res, err := n.s.db.Exec(`INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
-		child_grid_id, url_string, alt_text, serves_page, link_target_id, created_at, updated_at, ns, key)
-		VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, s.link, now, now, n.ns, e.Key)
-	if err != nil {
-		return 0, fmt.Errorf("store: mint %q: %w", e.Key, err)
-	}
-	return res.LastInsertId()
+	var id int64
+	err := n.write("Mint", "g/"+strconv.FormatInt(gridID, 10)+"/"+e.Key, func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
+			child_grid_id, url_string, alt_text, serves_page, link_target_id, created_at, updated_at, ns, key)
+			VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, s.link, now, now, n.ns, e.Key)
+		if err != nil {
+			return fmt.Errorf("store: mint %q: %w", e.Key, err)
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
+	return id, err
 }
 
 // Refresh updates a row's content snapshot to what the listing just said,
@@ -275,8 +284,7 @@ func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 // what the tiles CHECK lets only an owner hold, its screenshot and its text
 // mode, since a link's face is its target's.
 func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
-	ctx := context.Background()
-	return n.s.withMutation(ctx, "Refresh", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {
 			if _, err := tx.ExecContext(ctx, `UPDATE tiles SET preview_blob_id = NULL, text_mode = NULL
 				WHERE id = ? AND ns = ? AND tombstoned = 0`, r.ID, n.ns); err != nil {
@@ -375,40 +383,61 @@ func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
 	})
 }
 
+// write runs one write to this namespace's rows through the store's funnel
+// (withMutation). A plugin row publishes no store event, so row names what it
+// touched for the record: an id as rpc.EventKey spells it, or, before the
+// mint, its grid and key.
+func (n *Namespace) write(verb, row string, fn func(ctx context.Context, tx *sql.Tx) error) error {
+	ctx := context.Background()
+	return n.s.withMutation(ctx, verb, func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+		return fn(ctx, tx)
+	}, n.ns+":"+row)
+}
+
+func tileRow(id int64) string { return "t/" + strconv.FormatInt(id, 10) }
+
 // exec runs a single-row UPDATE on a live row of this namespace, mapping zero
 // rows to ErrNotFound: a retired row refuses mutation.
-func (n *Namespace) exec(set string, tileID int64, args ...any) error {
+func (n *Namespace) exec(verb, set string, tileID int64, args ...any) error {
 	args = append(args, tileID, n.ns)
-	res, err := n.s.db.Exec(`UPDATE tiles SET `+set+` WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
-	if err != nil {
-		return err
-	}
-	k, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if k == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return n.write(verb, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+` WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
+		if err != nil {
+			return err
+		}
+		k, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if k == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 // Place is the placement writeback; the grid never changes.
 func (n *Namespace) Place(tileID, x, y, w, h int64) error {
-	return n.exec(placementSet, tileID, x, y, w, h)
+	return n.exec("Place", placementSet, tileID, x, y, w, h)
 }
 
 // SetFraming persists framing into this namespace's memory, the one writer of
 // the one shape (framing.go). Exactly one of tileID and rootGridID is set.
 func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) error {
-	k, err := updateFraming(context.Background(), n.s.db, n.ns, tileID, rootGridID, f, n.s.now().UnixNano())
-	if err != nil {
-		return err
+	row := tileRow(tileID)
+	if tileID == 0 {
+		row = "f/" + strconv.FormatInt(rootGridID, 10)
 	}
-	if k == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return n.write("SetFraming", row, func(ctx context.Context, tx *sql.Tx) error {
+		k, err := updateFraming(ctx, tx, n.ns, tileID, rootGridID, f, n.s.now().UnixNano())
+		if err != nil {
+			return err
+		}
+		if k == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 // SetTextView persists a text tile's framed window.
@@ -417,19 +446,18 @@ func (n *Namespace) SetTextView(tileID, tx, ty, tw, th int64, mode string) error
 	if mode != "" {
 		m = mode
 	}
-	return n.exec(textViewSet+textModeSet, tileID, tx, ty, tw, th, m)
+	return n.exec("SetTextView", textViewSet+textModeSet, tileID, tx, ty, tw, th, m)
 }
 
 // SetContentZoom persists the per-tile content scale.
 func (n *Namespace) SetContentZoom(tileID int64, zoom rpc.ContentZoom) error {
-	return n.exec(contentZoomSet, tileID, zoom.Float())
+	return n.exec("SetContentZoom", contentZoomSet, tileID, zoom.Float())
 }
 
 // Retire tombstones one tile row: the delete-gesture path. The row stays so a
 // stale reference stays interpretable, and its screenshot is released.
 func (n *Namespace) Retire(tileID int64) error {
-	ctx := context.Background()
-	return n.s.withMutation(ctx, "Retire", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+	return n.write("Retire", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		var preview sql.NullInt64
 		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`,
 			tileID, n.ns).Scan(&preview)

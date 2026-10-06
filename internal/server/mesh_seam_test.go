@@ -19,8 +19,6 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -114,7 +112,7 @@ func newMesh(t *testing.T, ids []string, edges []meshEdge) *mesh {
 		hs.Config = server.ConnectionDoorServer(n.door)
 		hs.Start()
 		t.Cleanup(hs.Close)
-		conn, err := grpc.NewClient(strings.TrimPrefix(hs.URL, "http://"), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := dial.ClientConn(strings.TrimPrefix(hs.URL, "http://"))
 		if err != nil {
 			t.Fatal(err)
 		}

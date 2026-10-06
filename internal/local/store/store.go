@@ -157,7 +157,7 @@ func (s *Store) bootstrap(ctx context.Context) error {
 	if len(absent) == 0 {
 		return nil
 	}
-	return s.withTx(ctx, func(tx *sql.Tx) error {
+	return s.withMutation(ctx, "Bootstrap", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
 		for _, key := range absent {
 			id, err := insertGrid(ctx, tx, s.now().Unix())
 			if err != nil {
@@ -344,31 +344,28 @@ func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error
 	return out, rows.Err()
 }
 
-// withTx runs fn inside a transaction.
-func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	if err := fn(tx); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	return tx.Commit()
-}
-
 // withMutation runs fn in a transaction and, on commit, publishes the events
-// fn appended, in order. Every store write goes through it, so it is also
-// where a write says it happened: verb is the caller's, and what it touched
-// comes from the events it is about to publish rather than a second reading.
-func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {
+// fn appended, in order. Every store write goes through it (test/boundary
+// pins it), so it is where a write says it happened: what it touched comes
+// from its events, or from rows for a write that has none (Namespace.write).
+func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error, rows ...string) error {
 	var events []*gridwellv1.Event
-	err := s.withTx(ctx, func(tx *sql.Tx) error { return fn(tx, &events) })
+	err := func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin: %w", err)
+		}
+		if err := fn(tx, &events); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		return tx.Commit()
+	}()
 	if err != nil {
 		trace.Emit("store", "write", verb+" error: "+err.Error(), nil)
 		return err
 	}
-	trace.Emit("store", "write", verb, touched(events))
+	trace.Emit("store", "write", verb, touched(events, rows))
 	for _, ev := range events {
 		s.publish(ev)
 	}
@@ -377,11 +374,11 @@ func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.T
 
 // touched names the entities a mutation changed, and for a single-tile write
 // its kind and the version it left behind.
-func touched(events []*gridwellv1.Event) map[string]string {
-	if len(events) == 0 {
+func touched(events []*gridwellv1.Event, rows []string) map[string]string {
+	if len(events) == 0 && len(rows) == 0 {
 		return nil
 	}
-	keys := make([]string, 0, len(events))
+	keys := append([]string(nil), rows...)
 	for _, ev := range events {
 		keys = append(keys, rpc.EventKey(ev))
 	}
