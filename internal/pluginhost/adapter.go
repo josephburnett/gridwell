@@ -82,13 +82,20 @@ type Adapter struct {
 	// entry.
 	servedMu sync.Mutex
 	served   map[string][]listingSum
+
+	lacks absentVerbs
 }
 
 var _ namespace.Namespace = (*Adapter)(nil)
 
-// New builds the adapter; the caller owns both halves' lifecycles.
+// New builds the adapter; the caller owns both halves' lifecycles, and the
+// adapter listens to sup for as long as sup lives.
 func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapter {
-	return &Adapter{cp: cp, mem: mem, sup: sup, hub: eventhub.New(rpc.EventKey), moved: make(chan struct{})}
+	a := &Adapter{cp: cp, mem: mem, sup: sup, hub: eventhub.New(rpc.EventKey), moved: make(chan struct{})}
+	if sup != nil {
+		sup.OnHealth(func(bool, string) { a.lacks.forget() })
+	}
+	return a
 }
 
 // Info translates the plugin handshake, resolving each declared collection to
@@ -470,7 +477,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 				kept = append(kept, t)
 				continue
 			}
-			pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: t.Key, Context: ckey})
+			pr, perr := a.probe(ctx, t.Key, ckey)
 			if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
 				if rerr := a.mem.Retire(t.ID); rerr != nil && !errors.Is(rerr, store.ErrNotFound) {
 					return nil, rerr
@@ -663,7 +670,7 @@ func (a *Adapter) absent(ctx context.Context, s *synthesized, key, tileID string
 	if s.authoritative {
 		return gwerr.DeadRef("", "plugin: %q is gone", tileID)
 	}
-	pr, err := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key, Context: s.context})
+	pr, err := a.probe(ctx, key, s.context)
 	if err != nil {
 		return err
 	}
@@ -680,7 +687,9 @@ func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*g
 	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
 		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the memory DB)")
 	}
-	resp, err := a.cp.Search(ctx, &pluginv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+	resp, err := ask(&a.lacks, "Search", func() (*pluginv1.SearchResponse, error) {
+		return a.cp.Search(ctx, &pluginv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -934,33 +943,35 @@ func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.Wri
 	if err != nil {
 		return nil, err
 	}
-	// Cancelled unless the stream closes cleanly, so the plugin never sees
-	// the end of a write the caller broke off.
-	wctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	up, err := a.cp.WriteContent(wctx)
-	if err != nil {
-		return nil, err
-	}
-	msg := &pluginv1.WriteContentRequest{Key: key, Data: first.Data, ContentStamp: first.ContentStamp}
-	for n := len(first.Data); ; {
-		if err := up.Send(msg); err != nil {
-			_, rerr := up.CloseAndRecv()
-			return nil, cmp.Or(rerr, err)
+	wrote, err := ask(&a.lacks, "WriteContent", func() (*pluginv1.WriteContentResponse, error) {
+		// Cancelled unless the stream closes cleanly, so the plugin never
+		// sees the end of a write the caller broke off.
+		wctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		up, err := a.cp.WriteContent(wctx)
+		if err != nil {
+			return nil, err
 		}
-		next, rerr := recv()
-		if errors.Is(rerr, io.EOF) {
-			break
+		msg := &pluginv1.WriteContentRequest{Key: key, Data: first.Data, ContentStamp: first.ContentStamp}
+		for n := len(first.Data); ; {
+			if err := up.Send(msg); err != nil {
+				_, rerr := up.CloseAndRecv()
+				return nil, cmp.Or(rerr, err)
+			}
+			next, rerr := recv()
+			if errors.Is(rerr, io.EOF) {
+				break
+			}
+			if rerr != nil {
+				return nil, rerr
+			}
+			if n += len(next.Data); n > rpc.MaxContentBytes {
+				return nil, status.Error(codes.InvalidArgument, "plugin: write: content too large")
+			}
+			msg = &pluginv1.WriteContentRequest{Data: next.Data}
 		}
-		if rerr != nil {
-			return nil, rerr
-		}
-		if n += len(next.Data); n > rpc.MaxContentBytes {
-			return nil, status.Error(codes.InvalidArgument, "plugin: write: content too large")
-		}
-		msg = &pluginv1.WriteContentRequest{Data: next.Data}
-	}
-	wrote, err := up.CloseAndRecv()
+		return up.CloseAndRecv()
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -980,22 +991,25 @@ func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContent
 	if err != nil {
 		return err
 	}
-	cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: key, Subpath: req.Subpath})
-	if err != nil {
-		return err
-	}
-	for {
-		chunk, rerr := cs.Recv()
-		if rerr == io.EOF {
-			return nil
+	_, err = ask(&a.lacks, "ServeContent", func() (struct{}, error) {
+		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: key, Subpath: req.Subpath})
+		if err != nil {
+			return struct{}{}, err
 		}
-		if rerr != nil {
-			return rerr
+		for {
+			chunk, rerr := cs.Recv()
+			if rerr == io.EOF {
+				return struct{}{}, nil
+			}
+			if rerr != nil {
+				return struct{}{}, rerr
+			}
+			if serr := send(&gridwellv1.ServeContentChunk{Status: chunk.Status, MediaType: chunk.MediaType, Data: chunk.Data}); serr != nil {
+				return struct{}{}, serr
+			}
 		}
-		if serr := send(&gridwellv1.ServeContentChunk{Status: chunk.Status, MediaType: chunk.MediaType, Data: chunk.Data}); serr != nil {
-			return serr
-		}
-	}
+	})
+	return err
 }
 
 // GetTilePreview answers the face faceKey named.
@@ -1013,11 +1027,21 @@ func (a *Adapter) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePre
 			return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
 		}
 	}
-	resp, err := a.cp.GetPreview(ctx, &pluginv1.GetPreviewRequest{Key: ref.key})
+	resp, err := ask(&a.lacks, "GetPreview", func() (*pluginv1.GetPreviewResponse, error) {
+		return a.cp.GetPreview(ctx, &pluginv1.GetPreviewRequest{Key: ref.key})
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &gridwellv1.GetTilePreviewResponse{Jpeg: resp.Jpeg}, nil
+}
+
+// probe is every Probe the adapter sends, the listing's sweep and the delete's
+// arbitration included.
+func (a *Adapter) probe(ctx context.Context, key, context string) (*pluginv1.ProbeResponse, error) {
+	return ask(&a.lacks, "Probe", func() (*pluginv1.ProbeResponse, error) {
+		return a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key, Context: context})
+	})
 }
 
 func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
@@ -1027,7 +1051,7 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 	if err != nil {
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
-	resp, err := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: ref.key, Context: ref.context})
+	resp, err := a.probe(ctx, ref.key, ref.context)
 	if err != nil {
 		if gwerr.IsTransport(err) {
 			return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_UNSPECIFIED}, nil
@@ -1054,13 +1078,15 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	if err != nil {
 		return nil, err
 	}
-	if _, err := a.cp.Delete(ctx, &pluginv1.DeleteRequest{Key: ref.key}); err != nil {
+	if _, err := ask(&a.lacks, "Delete", func() (*pluginv1.DeleteResponse, error) {
+		return a.cp.Delete(ctx, &pluginv1.DeleteRequest{Key: ref.key})
+	}); err != nil {
 		return nil, err
 	}
 	// Only a row can be retired. Deleting an untouched entry leaves no id to
 	// retire, and the next listing simply does not name it.
 	if ref.id != 0 {
-		pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: ref.key, Context: ref.context})
+		pr, perr := a.probe(ctx, ref.key, ref.context)
 		if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
 			if err := a.mem.Retire(ref.id); err != nil && !errors.Is(err, store.ErrNotFound) {
 				return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)

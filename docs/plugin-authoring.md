@@ -51,7 +51,9 @@ it, rule by rule, with a checklist to tick before you ship.
   `ReadContent`. Search = no results, ServeContent = 404, Watch = the
   node learns of changes only when it next lists, WriteContent =
   read-only (leave `writable` unset), GetPreview = no thumbnail,
-  Delete = refused.
+  Delete = refused. Unimplemented means the verb, not the key: the node
+  remembers it, with your reason, for the life of your process and does
+  not ask that verb again until a respawn (`pluginhost.absentVerbs`).
 - **Errors**: transport-shaped failures (Unavailable, DeadlineExceeded)
   mean "not right now" and the node serves what it has.
   Coded answers mean what they say. Never answer NotFound for something
