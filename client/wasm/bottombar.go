@@ -299,7 +299,7 @@ func (a *App) barSlotClick(button int) {
 		if t, ok := a.descendedGridTile(p); ok {
 			if a.isShellDescent(p) {
 				// The verdict that drew this glyph resolved the key.
-				if key, ok := a.shellKey(t, a.findTileByID); ok {
+				if key, ok := a.shellKey(t, true); ok {
 					a.openShellStream(p, t.Id, key)
 				}
 			} else {

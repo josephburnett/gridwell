@@ -100,14 +100,15 @@ func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 		return false
 	}
 	// Until a link's target is read there is no session to ask about, and the
-	// read findTileByID kicks redraws.
-	key, ok := a.shellKey(tile, a.findTileByID)
+	// read askContentRow kicks redraws.
+	key, ok := a.shellKey(tile, true)
 	if !ok {
 		return false
 	}
+	face, _ := a.contentRow(tile)
 	alive, known := a.shellAlive[key]
 	v := shellconn.DecideShellRefreshVisible(
-		tile.Kind == rpc.KindShell, tile.PreviewBlobId != 0, known, alive)
+		tile.Kind == rpc.KindShell, face.PreviewBlobId != 0, known, alive)
 	if v.Probe {
 		a.probeShellSessionAlive(key, rpc.ContentID(tile), nil)
 	}
@@ -159,12 +160,14 @@ func (a *App) setShellAlive(key string, alive bool) {
 	}
 }
 
-// shellKey is shellconn.SessionKey with a link's target read through lookup.
-func (a *App) shellKey(row *gridwellv1.Tile, lookup func(string) *gridwellv1.Tile) (string, bool) {
-	var target *gridwellv1.Tile
-	if row.LinkTargetId != "" {
-		target = lookup(row.LinkTargetId)
+// shellKey is shellconn.SessionKey over row's content row, read through
+// contentRow, or askContentRow when ask holds.
+func (a *App) shellKey(row *gridwellv1.Tile, ask bool) (string, bool) {
+	resolve := a.contentRow
+	if ask {
+		resolve = a.askContentRow
 	}
+	target, _ := resolve(row)
 	return shellconn.SessionKey(row, target)
 }
 
@@ -173,7 +176,7 @@ func (a *App) shellKey(row *gridwellv1.Tile, lookup func(string) *gridwellv1.Til
 func (a *App) forgetShellAlive(tileID string) {
 	key := tileID
 	if t := a.cachedTileByID(tileID); t != nil {
-		if k, ok := a.shellKey(t, a.cachedTileByID); ok {
+		if k, ok := a.shellKey(t, false); ok {
 			key = k
 		}
 	}

@@ -112,7 +112,13 @@ func (a *App) focusedTextDescent() (*pane.Pane, *gridwellv1.Tile, pane.Rect, tex
 	if t != nil {
 		readOnly = a.tileReadOnly(t)
 	}
-	return p, t, paneRectFor(a, p), textedit.DecideDescent(t, readOnly, p.TextMode)
+	shown := t
+	if t != nil && rpc.TextDocument(t) {
+		// A link's presentation is its target's, so a target not read yet
+		// is a row that has not landed.
+		shown, _ = a.askContentRow(t)
+	}
+	return p, t, paneRectFor(a, p), textedit.DecideDescent(shown, readOnly, p.TextMode)
 }
 
 // descentKind classifies what the pane is descended into, off the one

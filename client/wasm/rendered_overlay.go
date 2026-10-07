@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -104,7 +105,8 @@ func (a *App) refreshRenderedOverlay() {
 		return
 	}
 	body, ok := a.tileBody(t)
-	if !ok {
+	shown, state := a.askContentRow(t)
+	if !ok || state != contentrow.Ready {
 		hide() // the canvas paints raw source until the fetch lands
 		return
 	}
@@ -122,7 +124,7 @@ func (a *App) refreshRenderedOverlay() {
 	key := t.Id + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(t)), 10) + "\x00" +
 		strconv.FormatBool(markdown.IsOrg(t.AltText)) + "\x00" + fmt.Sprint(len(body))
 	if key != a.overlays.lastRenderedKey {
-		div.Set("innerHTML", textedit.PresentationHTML(t, body))
+		div.Set("innerHTML", textedit.PresentationHTML(shown, body))
 		a.overlays.lastRenderedKey = key
 		div.Set("scrollTop", p.TextScrollY)
 		div.Set("scrollLeft", p.TextScrollX)
