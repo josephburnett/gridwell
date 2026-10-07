@@ -46,6 +46,18 @@ test("a box's link opens its thread's page in a new tab", async ({ gw, window })
     if (m.text().includes('no address yet')) notices.push(m.text());
   });
 
+  // The page writes its place to the address bar on a settle after the
+  // descent lands, and a loaded runner can stretch that past the steps
+  // before the reload. Every history write lands 2 s late here, so the window
+  // is always open and the reload must wait on the address itself.
+  await window.evaluate(() => {
+    for (const verb of ['pushState', 'replaceState'] as const) {
+      const write = history[verb].bind(history);
+      history[verb] = (...args: Parameters<History['pushState']>) => {
+        setTimeout(() => write(...args), 2_000);
+      };
+    }
+  });
   await gw.clickPluginSwatch('set aside (hey)');
   const f = await gw.focused();
   await expect
@@ -64,7 +76,11 @@ test("a box's link opens its thread's page in a new tab", async ({ gw, window })
 
   // Opening the + menu read every collection, everything included, for its
   // swatch. A reload comes back to the box with nothing else read, as a phone
-  // returning to the tab does.
+  // returning to the tab does. It reloads what the address bar says, so it
+  // waits for the box to be written there.
+  await expect
+    .poll(() => window.evaluate(() => location.pathname), { timeout: 15_000 })
+    .toBe('/' + f.gridID);
   await window.reload();
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
   await gw.waitClientTileAt(f.id, cx, cy, link.id);
