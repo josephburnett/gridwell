@@ -24,32 +24,44 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// span is one rpc's pair of records. A unary request is known at the entry
-// record; a stream's first message arrives after it, so a stream's entity
-// rides only the exit record.
+// span is one rpc's pair of records. A stream's first message arrives after
+// the call, so its entry record waits for that message, or the end, and names
+// the entity as a unary one does.
 type span struct {
 	reqID, verb, id string
 	start           time.Time
+	started         bool
 }
 
-// rpcSpan emits the entry record. req is the request message, nil for a
-// stream.
+// rpcSpan opens the span; req is the request message, nil for a stream.
 func rpcSpan(reqID, procedure string, req any) *span {
 	s := &span{reqID: reqID, verb: procedure[strings.LastIndex(procedure, "/")+1:], start: time.Now()}
-	s.saw(req)
-	trace.Emit("router", "rpc", s.verb+" start", s.kv())
+	if req != nil {
+		s.saw(req)
+	}
 	return s
 }
 
-// saw names the span's entity from the first message that carries one.
+// saw names the span's entity from the first message that carries one, and
+// emits the entry record on the first message.
 func (s *span) saw(msg any) {
 	if s.id == "" {
 		s.id = entityOf(msg)
+	}
+	s.open()
+}
+
+// open emits the entry record once.
+func (s *span) open() {
+	if !s.started {
+		s.started = true
+		trace.Emit("router", "rpc", s.verb+" start", s.kv())
 	}
 }
 
 // end emits the exit record, under the codec's own spelling of the error code.
 func (s *span) end(err error, code string) {
+	s.open()
 	kv := s.kv()
 	kv["ms"] = strconv.FormatInt(time.Since(s.start).Milliseconds(), 10)
 	msg := s.verb + " ok"
