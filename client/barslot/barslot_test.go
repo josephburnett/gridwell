@@ -45,6 +45,19 @@ func TestDecide(t *testing.T) {
 			ModeURLOpenTab,
 		},
 		{
+			// A link's address is its target's; until that row is read the
+			// tab has nothing to open, and a tap would only say so.
+			"a browser-host url link whose target is not read yet offers no tab",
+			Input{Descent: true, Content: rpc.DescentURL, ContentPending: true},
+			ModeNothing,
+		},
+		{
+			// Going live reads the target itself (nav.followLink).
+			"a url link whose target is not read yet still goes live on a live host",
+			Input{Descent: true, Content: rpc.DescentURL, CanLiveURL: true, ContentPending: true},
+			ModeGoLive,
+		},
+		{
 			"a frozen shell whose refresh shows goes live",
 			Input{Descent: true, Content: rpc.DescentShell, Durable: true, ShellRefreshVisible: true},
 			ModeGoLive,

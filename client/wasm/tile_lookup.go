@@ -6,6 +6,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
@@ -54,6 +55,23 @@ func (a *App) findTileByID(id string) *gridwellv1.Tile {
 	return nil
 }
 
+// contentRow is the row whose content facts t presents (contentrow.Of), from
+// the cache alone.
+func (a *App) contentRow(t *gridwellv1.Tile) (*gridwellv1.Tile, contentrow.State) {
+	dead := t != nil && rpc.LeafLink(t) && a.deadLink(t)
+	return contentrow.Of(t, a.cachedTileByID, dead)
+}
+
+// askContentRow is contentRow for a descent or a gesture that needs the
+// facts: a link whose target is in no cached grid reads it through the by-id
+// read, and the frame its grid lands in decides again. A grid face never
+// asks, or a box of links would read every target behind it.
+func (a *App) askContentRow(t *gridwellv1.Tile) (*gridwellv1.Tile, contentrow.State) {
+	row, s := a.contentRow(t)
+	a.fetchLinkTarget(contentrow.Ask(t, s))
+	return row, s
+}
+
 // tileForPane resolves a tile a pane names. The fallback by-id walk is for a
 // tile off the pane's grid: an ephemeral url visit focuses one in the scratch
 // grid, and a delete moves a descended row to the trash, neither of which
@@ -94,7 +112,13 @@ func (a *App) focusedTextDescent() (*pane.Pane, *gridwellv1.Tile, pane.Rect, tex
 	if t != nil {
 		readOnly = a.tileReadOnly(t)
 	}
-	return p, t, paneRectFor(a, p), textedit.DecideDescent(t, readOnly, p.TextMode)
+	shown := t
+	if t != nil && rpc.TextDocument(t) {
+		// A link's presentation is its target's, so a target not read yet
+		// is a row that has not landed.
+		shown, _ = a.askContentRow(t)
+	}
+	return p, t, paneRectFor(a, p), textedit.DecideDescent(shown, readOnly, p.TextMode)
 }
 
 // descentKind classifies what the pane is descended into, off the one

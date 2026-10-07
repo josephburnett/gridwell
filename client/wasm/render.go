@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/clientsync"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/palette"
@@ -723,10 +724,16 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
-// tileReadOnly is textedit.ReadOnly over the tile's cached grid.
+// tileReadOnly is textedit.ReadOnly over the row whose content n presents and
+// that row's cached grid. Until a link's target is read the link's own grid
+// answers, and the node refuses a write the target does not take.
 func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
-	writable, _ := a.gridWritable(n.GridId)
-	return textedit.ReadOnly(n, writable)
+	row, s := a.contentRow(n)
+	if s != contentrow.Ready {
+		row = n
+	}
+	writable, _ := a.gridWritable(row.GridId)
+	return textedit.ReadOnly(row, writable)
 }
 
 // isLinkTile reports a reference: trashing one unlinks it. Reference is the

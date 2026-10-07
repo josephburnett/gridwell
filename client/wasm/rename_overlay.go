@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/bartitle"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -36,7 +37,9 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 		descended = t
 		in.Descended, in.DescendedName = true, t.AltText
 		in.DescendedText = t.Kind == rpc.KindText
-		in.DescendedReadOnly = t.GetReadOnly()
+		if row, s := a.askContentRow(t); s == contentrow.Ready {
+			in.DescendedReadOnly = row.ReadOnly
+		}
 		in.PossiblyEphemeral = a.possiblyEphemeral(p, t)
 		in.CertainlyEphemeral = a.certainlyEphemeral(p, t)
 	}

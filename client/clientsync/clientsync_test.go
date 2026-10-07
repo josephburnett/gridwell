@@ -397,3 +397,18 @@ func TestAPlaceReadSaysTheDeadVerdict(t *testing.T) {
 		}
 	}
 }
+
+// A link whose target is gone draws dead and says nothing: the read that
+// found it out is a link's, not a place's.
+func TestATargetReadSaysNothingOfTheDeadVerdict(t *testing.T) {
+	for v, want := range map[inflight.Verdict]bool{
+		inflight.Answered:    false,
+		inflight.Unreachable: false,
+		inflight.Refused:     true,
+		inflight.Dead:        false,
+	} {
+		if got := TargetReadSurfaces(v); got != want {
+			t.Errorf("TargetReadSurfaces(%v) = %v, want %v", v, got, want)
+		}
+	}
+}

@@ -42,6 +42,9 @@ type Input struct {
 	Content   rpc.Descent
 	URLLive   bool
 	ShellLive bool
+	// ContentPending is a link whose target row is not read yet
+	// (contentrow.Pending): its address is the target's.
+	ContentPending bool
 	// CanLiveURL is caps.LiveURL.
 	CanLiveURL bool
 	// ShellRefreshVisible is shellconn.DecideShellRefreshVisible's Show. The
@@ -82,7 +85,7 @@ func Decide(in Input) Mode {
 			return ModeURLBack
 		case in.CanLiveURL:
 			return ModeGoLive
-		default:
+		case !in.ContentPending:
 			return ModeURLOpenTab
 		}
 	case rpc.DescentShell:

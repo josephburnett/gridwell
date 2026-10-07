@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/clientsync"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
@@ -58,10 +59,11 @@ func (a *App) drawPreviewPlaceholder(label string, x, y, w, h float64) {
 	})
 }
 
-// drawURLTileInPane renders the URL tile a pane is descended into. Mirror
-// frames from a live view flow into the same urlPreview cache, so this draw
-// reflects them.
+// drawURLTileInPane renders the URL tile a pane is descended into, with its
+// content row's face. Mirror frames from a live view flow into the same
+// urlPreview cache, so this draw reflects them.
 func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
+	n = a.descendedFace(n)
 	// The native view paints over this box, so the JPEG here shows while it
 	// is parked during a gesture. Bounds are syncURLViews'.
 	withClip(a.cctx, x, y, w, h, func() {
@@ -79,6 +81,7 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 // on top of it, but painting underneath avoids a flash before the overlay is
 // positioned for the frame.
 func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h float64) {
+	n = a.descendedFace(n)
 	withClip(a.cctx, x, y, w, h, func() {
 		fillRectC(a.cctx, x, y, w, h, a.pal.ShellFill)
 
@@ -99,6 +102,15 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h f
 			drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder)
 		}
 	})
+}
+
+// descendedFace is the row whose face a descended tile shows: its content
+// row, or the tile's own name until a link's target is read.
+func (a *App) descendedFace(n *gridwellv1.Tile) *gridwellv1.Tile {
+	if row, s := a.askContentRow(n); s == contentrow.Ready {
+		return row
+	}
+	return n
 }
 
 // drawShellTile is drawURLTile for a shell. The outline is the shell orange,

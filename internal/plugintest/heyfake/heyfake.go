@@ -96,11 +96,17 @@ type failure struct {
 // of the test. Every box starts empty.
 func New(t *testing.T) *CLI {
 	t.Helper()
+	return NewIn(t, t.TempDir())
+}
+
+// NewIn is New linking the CLI into dir, for a harness outside the test that
+// must name the path before the test starts.
+func NewIn(t *testing.T, dir string) *CLI {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := t.TempDir()
 	c := &CLI{
 		path:    filepath.Join(dir, Name),
 		stop:    make(chan struct{}),
