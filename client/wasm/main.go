@@ -776,8 +776,19 @@ func (a *App) refetchGrid(id string) {
 	a.fetchGrid(id)
 }
 
-// fetchTileByID resolves a routable tile id whose grid is not cached.
+// fetchTileByID resolves a routable tile id whose grid is not cached: a place
+// a pane stands in, whose refusal is said (clientsync.PlaceReadSurfaces).
 func (a *App) fetchTileByID(tileID string) {
+	a.readTileByID(tileID, clientsync.PlaceReadSurfaces)
+}
+
+// fetchLinkTarget is fetchTileByID for a link's target, which draws dead
+// rather than say so (clientsync.TargetReadSurfaces).
+func (a *App) fetchLinkTarget(tileID string) {
+	a.readTileByID(tileID, clientsync.TargetReadSurfaces)
+}
+
+func (a *App) readTileByID(tileID string, surfaces func(inflight.Verdict) bool) {
 	if tileID == "" {
 		return
 	}
@@ -801,8 +812,9 @@ func (a *App) fetchTileByID(tileID string) {
 		v := clientsync.ReactRead(o)
 		a.fetch.tiles.Settle(tileID, v)
 		switch {
-		case clientsync.PlaceReadSurfaces(v):
-			// The asker is a crumb or a descent, which would otherwise say nothing.
+		case surfaces(v):
+			// The asker is a crumb, a descent or a link's target, which would
+			// otherwise say nothing.
 			detail := "the row is gone"
 			if err != nil {
 				detail = rpcErrText(err)

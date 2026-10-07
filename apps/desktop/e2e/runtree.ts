@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
@@ -86,4 +87,12 @@ export function treeEnv(): Record<string, string> {
     GRIDWELL_STATIC: staticDir(),
     GRIDWELL_PLUGIN_DIR: pluginDir(),
   };
+}
+
+// Compiles one of this repo's Go test packages to out, for a fixture a spec
+// hosts (internal/plugintest/heyfake's TestE2EHost). A fixture is not a launch
+// artifact, so it is built from source, not taken from the snapshot.
+export function buildGoTest(pkg: string, out: string): void {
+  const built = spawnSync('go', ['test', '-c', '-o', out, pkg], { cwd: REPO_ROOT, encoding: 'utf8' });
+  if (built.status !== 0) throw new Error(`go test -c ${pkg}: ${built.stderr}`);
 }

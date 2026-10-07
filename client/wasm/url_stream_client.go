@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -62,15 +63,17 @@ func contentViewBounds(r pane.Rect) viewBounds {
 	return viewBounds{X: x, Y: y, W: w, H: h}
 }
 
-// webAddress resolves the address a url tile presents at (urlview.Address). A
-// served page's door address is never persisted, because the desktop origin is
-// an ephemeral port.
+// webAddress resolves the address a url tile presents at (urlview.Address),
+// read off its content row: "" while a link's target is not read, or dead. A
+// served page's door address is never persisted, because the desktop origin
+// is an ephemeral port.
 func (a *App) webAddress(t *gridwellv1.Tile) string {
-	if !rpc.WebContent(t) {
+	row, s := a.askContentRow(t)
+	if s != contentrow.Ready || !rpc.WebContent(row) {
 		return ""
 	}
-	return urlview.Address(rpc.PageContent(t),
-		rpc.PageURL(a.origin, a.contentToken, rpc.ContentID(t)), t.UrlString)
+	return urlview.Address(rpc.PageContent(row),
+		rpc.PageURL(a.origin, a.contentToken, row.Id), row.UrlString)
 }
 
 // openURLStream goes live; what that does to the row is

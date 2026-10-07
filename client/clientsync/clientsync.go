@@ -84,6 +84,12 @@ func PlaceReadSurfaces(v inflight.Verdict) bool {
 	return v == inflight.Refused || v == inflight.Dead
 }
 
+// TargetReadSurfaces is PlaceReadSurfaces for a link's target read: the link
+// draws dead, so only a refusal that is not the dead verdict is said.
+func TargetReadSurfaces(v inflight.Verdict) bool {
+	return v == inflight.Refused
+}
+
 // Reaction is what a mutation's outcome calls for; success is the zero value.
 type Reaction struct {
 	// Refetch is never set on Transport: it could revert a patch whose write

@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/barslot"
 	"github.com/josephburnett/gridwell/client/bartitle"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -228,6 +229,11 @@ func (a *App) barSlotMode(p *pane.Pane) barslot.Mode {
 		ShellLive:  a.hasShellStream(p.ID),
 		CanLiveURL: a.caps.LiveURL,
 	}
+	if in.Content == rpc.DescentURL && !in.CanLiveURL {
+		t, _ := a.descendedTile(p)
+		_, s := a.askContentRow(t)
+		in.ContentPending = s == contentrow.Pending
+	}
 	if in.Content == rpc.DescentShell {
 		// The pane's own grid, with no scratch fallback: an ephemeral visit
 		// resolves to nothing, which is exactly what Durable means.
@@ -317,18 +323,14 @@ func (a *App) barSlotClick(button int) {
 }
 
 // openURLInNewTab is the frozen host's answer to "descend live". A tile with
-// no address yet says so, instead of a silent dead tap.
+// no address yet says so, instead of a silent dead tap; a link whose target is
+// not read yet offers no tab at all (barslot.Input.ContentPending).
 func (a *App) openURLInNewTab(p *pane.Pane) {
 	t, ok := a.descendedTile(p)
 	if !ok {
 		return
 	}
 	url := a.webAddress(t)
-	if url == "" {
-		if ct := a.cachedTileByID(a.contentKey(t.Id)); ct != nil {
-			url = a.webAddress(ct)
-		}
-	}
 	if url == "" {
 		a.reportErr(errsurface.Info, "urlopen", "this url tile has no address yet")
 		return
