@@ -134,7 +134,7 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 // followScope follows the scope until a stream ends, re-opening as it moves.
 // A stream replaces the one before only once it is open, so a context in both
 // scopes is watched throughout; each context the open adds is then checked
-// (checkAdded), since a change between the client's listing and the open is
+// (check), since a change between the client's listing and the open is
 // otherwise announced by nothing. An attempt's first open adds its whole
 // scope, which is what catches up after a drop. A context the scope dropped
 // is shown by no one, so it is not checked.
@@ -175,7 +175,7 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 				added = append(added, c)
 			}
 		}
-		a.checkAdded(ctx, added)
+		a.check(ctx, added)
 		watched = scope
 		close(cur.ack)
 		select {
@@ -188,37 +188,50 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 	}
 }
 
-// checkAdded announces each context a stream adds whose listing moved
-// (announceMoved); the listings run together.
-func (a *Adapter) checkAdded(ctx context.Context, contexts []string) {
+// check lists contexts together and announces, in one batch, those whose
+// listing moved (settle).
+func (a *Adapter) check(ctx context.Context, contexts []string) {
+	var mu sync.Mutex
+	var moved []string
 	var wg sync.WaitGroup
 	for _, c := range contexts {
-		wg.Go(func() { a.announceMoved(ctx, c) })
+		wg.Go(func() {
+			if a.listingMoved(ctx, c) {
+				mu.Lock()
+				moved = append(moved, c)
+				mu.Unlock()
+			}
+		})
 	}
 	wg.Wait()
+	a.announce(moved)
 }
 
-// announceMoved lists context once and announces its grid, and every grid
-// whose links read into it, only when the answer is not exactly what GetGrid
-// served or this announced since: the node checks, so a client refetches only
-// what moved and the same listing is never announced twice. A context the
-// source cannot list right now, or that nobody read, is announced, because
-// what a client holds is unknown. The listing runs through synthesize, so it
-// writes rows as any read does.
-func (a *Adapter) announceMoved(ctx context.Context, context string) {
+// listingMoved lists context once and settles it. A context the source
+// refuses to list right now has moved, because what a client holds of it is
+// unknown. The listing runs through synthesize, so it writes rows as any read
+// does.
+func (a *Adapter) listingMoved(ctx context.Context, context string) bool {
 	s, err := a.synthesize(ctx, rpc.EntryGridID(context))
 	if ctx.Err() != nil {
-		return
+		return false
 	}
-	if err == nil && a.servedOnly(s) {
-		return
+	return err != nil || a.settle(s, true)
+}
+
+// announce publishes each context's grid and every grid whose links read into
+// one, each grid once however many of its links moved.
+func (a *Adapter) announce(contexts []string) {
+	var grids []string
+	for _, c := range contexts {
+		grids = append(grids, rpc.EntryGridID(c))
+		for _, holder := range a.linkedFrom(c) {
+			grids = append(grids, rpc.EntryGridID(holder))
+		}
 	}
-	a.emitGridChanged(rpc.EntryGridID(context))
-	if err == nil {
-		a.noteServed(s)
-	}
-	for _, holder := range a.linkedFrom(context) {
-		a.emitGridChanged(rpc.EntryGridID(holder))
+	slices.Sort(grids)
+	for _, g := range slices.Compact(grids) {
+		a.publishGridChanged(g)
 	}
 }
 
@@ -229,12 +242,12 @@ func (a *Adapter) announceMoved(ctx context.Context, context string) {
 // has not moved.
 type listingSum [sha256.Size]byte
 
-// sumOf is the listing's sum, false for a dark listing, which holds nothing
-// to compare, or one that does not marshal, which is then never recorded and
-// always announced.
-func sumOf(s *synthesized) (listingSum, bool) {
+// sumOf is the listing's sum. The zero sum is a dark listing, or one that
+// does not marshal: noted when read, so the grid is announced when it lists
+// again, and never noted by a check nobody read.
+func sumOf(s *synthesized) listingSum {
 	if s.dark {
-		return listingSum{}, false
+		return listingSum{}
 	}
 	entries := make([]*pluginv1.Entry, len(s.entries))
 	for i, e := range s.entries {
@@ -244,36 +257,60 @@ func sumOf(s *synthesized) (listingSum, bool) {
 	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(
 		&pluginv1.ListResponse{Entries: entries, Authoritative: s.authoritative, SourceLabel: s.grid.SourceLabel})
 	if err != nil {
-		return listingSum{}, false
+		return listingSum{}
 	}
-	return sha256.Sum256(b), true
+	return sha256.Sum256(b)
 }
 
-// noteServed records a listing GetGrid answered or announceMoved announced.
-func (a *Adapter) noteServed(s *synthesized) {
-	sum, ok := sumOf(s)
-	if !ok {
-		return
+// servedGrid is what clients may hold of one grid: each distinct listing
+// read since it was last announced, and the last listing noted, with gen
+// counting notes so a read can tell one landed while it was in flight.
+type servedGrid struct {
+	sums []listingSum
+	last listingSum
+	gen  uint64
+}
+
+func (a *Adapter) servedGen(gridID string) uint64 {
+	a.servedMu.Lock()
+	defer a.servedMu.Unlock()
+	if g := a.served[gridID]; g != nil {
+		return g.gen
 	}
+	return 0
+}
+
+// settle notes listing s and reports whether its grid must be announced, in
+// one critical section so no read lands between check and note. A read moved
+// only if another listing was noted while it was in flight; a check also if
+// it differs from what was read. A grid nobody read is noted, not announced:
+// a client re-reads what it shows itself when its stream reconnects.
+func (a *Adapter) settle(s *synthesized, check bool) (moved bool) {
+	sum := sumOf(s)
 	a.servedMu.Lock()
 	defer a.servedMu.Unlock()
 	if a.served == nil {
-		a.served = map[string][]listingSum{}
+		a.served = map[string]*servedGrid{}
 	}
-	if !slices.Contains(a.served[s.grid.Id], sum) {
-		a.served[s.grid.Id] = append(a.served[s.grid.Id], sum)
+	g := a.served[s.grid.Id]
+	if g == nil {
+		g = &servedGrid{}
+		a.served[s.grid.Id] = g
 	}
-}
-
-// servedOnly reports whether s is the one listing served for its grid.
-func (a *Adapter) servedOnly(s *synthesized) bool {
-	sum, ok := sumOf(s)
-	if !ok {
+	if check && s.dark && len(g.sums) == 0 {
 		return false
 	}
-	a.servedMu.Lock()
-	defer a.servedMu.Unlock()
-	return slices.Equal(a.served[s.grid.Id], []listingSum{sum})
+	raced := g.gen != s.since && g.last != sum
+	differs := check && len(g.sums) > 0 && !slices.Equal(g.sums, []listingSum{sum})
+	switch {
+	case raced || differs:
+		g.sums, moved = []listingSum{sum}, true
+	case !slices.Contains(g.sums, sum):
+		g.sums = append(g.sums, sum)
+	}
+	g.last = sum
+	g.gen++
+	return moved
 }
 
 // watchStream is one Watch stream followed on its own goroutine. Once open it
@@ -431,19 +468,19 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 	return slices.Clone(a.scope), a.moved
 }
 
-// applyChange announces a context whose listing moved (announceMoved) and an
+// applyChange announces a context whose listing moved (check) and an
 // entry changed in place (applyEntry). A removal is announced as DeleteTile
 // announces one: the refetch it causes runs the listing's own sweep, so the
 // row retires by the one path that retires rows.
 func (a *Adapter) applyChange(ctx context.Context, ch *pluginv1.Change) {
 	switch p := ch.GetPayload().(type) {
 	case *pluginv1.Change_ContextChanged:
-		a.announceMoved(ctx, p.ContextChanged.GetContext())
+		a.check(ctx, []string{p.ContextChanged.GetContext()})
 	case *pluginv1.Change_EntryChanged:
 		a.applyEntry(ctx, p.EntryChanged.GetContext(), p.EntryChanged.GetEntry())
 	case *pluginv1.Change_EntryRemoved:
 		// The one reading of the retired arm: a ContextChanged for its context.
-		a.announceMoved(ctx, p.EntryRemoved.GetContext())
+		a.check(ctx, []string{p.EntryRemoved.GetContext()})
 	}
 }
 
@@ -457,7 +494,7 @@ func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.En
 		return
 	}
 	if err != nil || t == nil {
-		a.announceMoved(ctx, context)
+		a.check(ctx, []string{context})
 		return
 	}
 	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{

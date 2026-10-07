@@ -19,6 +19,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -72,6 +73,7 @@ func TestProcWatchReachesAClientShowingThePid(t *testing.T) {
 	cp := plugintest.Spawn(t, "proc", map[string]string{"pid": shownProc.pid})
 	a, stop := pluginhost.Start(cp, st.Namespace(procUUID), nil, "plugin "+procUUID+" watch")
 	reg := plugin.NewRegistry()
+	reg.Register(localNodeID, "home", local.New(st, nil), nil)
 	reg.Register(procUUID, "proc", a, stop)
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -107,6 +109,11 @@ func TestProcWatchReachesAClientShowingThePid(t *testing.T) {
 			events <- ev
 		}
 	}()
+	// The client reads what it shows, so a change before the stream opens is
+	// told by the open's check.
+	if _, err := cl.GetGrid(ctx, shown); err != nil {
+		t.Fatal(err)
+	}
 	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
 		t.Fatal(err)
 	}
@@ -123,8 +130,6 @@ func TestProcWatchReachesAClientShowingThePid(t *testing.T) {
 			}
 		}
 	}
-	// The stream's open is announced once the plugin polls the pid.
-	await("the Watch opening")
 	quiet := func(what string) {
 		t.Helper()
 		for {
@@ -136,11 +141,21 @@ func TestProcWatchReachesAClientShowingThePid(t *testing.T) {
 			}
 		}
 	}
-	quiet("after the open")
+	quiet("an open over a quiet pid")
+	shownProc.fork(t)
+	await("a child started under the shown pid")
+	// The change's own TileChanged may follow; only the next steps are quiet.
+	for drained := false; !drained; {
+		select {
+		case <-events:
+		case <-time.After(time.Second):
+			drained = true
+		}
+	}
 
 	unshownProc.fork(t)
 	quiet("a child started under a pid no one shows")
 
 	shownProc.fork(t)
-	await("a child started under the shown pid")
+	await("another child started under the shown pid")
 }

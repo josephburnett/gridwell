@@ -184,9 +184,9 @@ func TestTheConnectionDoorTracesItsRPCs(t *testing.T) {
 	}
 }
 
-// A span names the entity its request is about, so a dump joins the node's
-// work on a grid to the client's records about that grid without the request
-// id. Unary and streaming, on both doors.
+// A span names the entity its request is about, at its start and its end, so
+// a dump joins the node's work on a grid to the client's records about that
+// grid without the request id. Unary and streaming, on both doors.
 func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Home: t.TempDir()}))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
@@ -219,15 +219,22 @@ func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 	pb.NewGridwellClient(conn).GetTile(ctx, &pb.GetTileRequest{TileId: "nope/t1abcde"})
 
 	want := map[string]string{unaryReq: "nope/g7abcde", streamReq: "nope/t7abcde", grpcReq: "nope/t1abcde"}
-	ends := map[string]tracewire.Record{}
+	starts, ends := map[string]tracewire.Record{}, map[string]tracewire.Record{}
 	for _, rec := range trace.Default().Snapshot() {
-		if _, ok := want[rec.KV["req"]]; ok && rec.Src == "router" && !strings.HasSuffix(rec.Msg, " start") {
+		if _, ok := want[rec.KV["req"]]; !ok || rec.Src != "router" {
+			continue
+		}
+		if strings.HasSuffix(rec.Msg, " start") {
+			starts[rec.KV["req"]] = rec
+		} else {
 			ends[rec.KV["req"]] = rec
 		}
 	}
 	for req, id := range want {
-		if got := ends[req].KV["id"]; got != id {
-			t.Errorf("the span under req %q names entity %q, want %q: %+v", req, got, id, ends[req])
+		for what, rec := range map[string]tracewire.Record{"start": starts[req], "end": ends[req]} {
+			if got := rec.KV["id"]; got != id {
+				t.Errorf("the span's %s under req %q names entity %q, want %q: %+v", what, req, got, id, rec)
+			}
 		}
 	}
 }

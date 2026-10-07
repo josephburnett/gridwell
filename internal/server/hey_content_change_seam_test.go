@@ -78,6 +78,10 @@ func showHeyThread(t *testing.T) *heyShown {
 			s.events <- ev
 		}
 	}()
+	// The client reads what it shows.
+	if _, err := s.cl.GetGrid(ctx, s.shown); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.cl.SetInterest(ctx, []string{s.shown}); err != nil {
 		t.Fatal(err)
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
+	"github.com/josephburnett/gridwell/internal/plugintest/heyfake"
 )
 
 // heyGrids is the plugin's collections by menu label, everything included.
@@ -137,17 +138,19 @@ func TestHeyDeleteIsRefusedWithTheReason(t *testing.T) {
 }
 
 // Showing a collection opens the plugin's Watch, and the stream counts open at
-// its header: the node then checks the shown grid and tells the client. With
-// the feed silent and nothing read, the header is the only thing the plugin
-// sends, so a stream that waits for its first change never opens and the
-// client hears nothing.
+// its header: the node then checks the shown grid and tells the client it
+// moved since the client read it. With the feed silent, the header is the
+// only thing the plugin sends, so a stream that waits for its first change
+// never opens and the client hears nothing.
 func TestHeyWatchHeaderArrivesWhenAStreamOpens(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	cp := plugintest.Spawn(t, "hey", heyAccount(t).Config(nil))
+	hey := heyAccount(t)
+	// Every read walks the box, so the open's check sees what moved.
+	cp := plugintest.Spawn(t, "hey", hey.Config(map[string]string{"refresh": "1ms"}))
 	a, stop := pluginhost.Start(cp, st.Namespace(heyNS), nil, "plugin "+heyNS+" watch")
 	reg := plugin.NewRegistry()
 	reg.Register(heyNS, "hey", a, stop)
@@ -187,6 +190,11 @@ func TestHeyWatchHeaderArrivesWhenAStreamOpens(t *testing.T) {
 			events <- ev
 		}
 	}()
+	if _, err := cl.GetGrid(ctx, shown); err != nil {
+		t.Fatal(err)
+	}
+	hey.SetBox("imbox", heyfake.Thread{TopicID: 104, Subject: "Moved", Summary: "while nobody watched",
+		From: "Fay", Email: "fay@example.com", Created: time.Date(2026, 1, 10, 9, 0, 0, 0, time.UTC)})
 	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
 		t.Fatal(err)
 	}

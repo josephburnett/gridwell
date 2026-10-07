@@ -45,6 +45,7 @@ func TestFsWatchReachesAClientShowingTheDirectory(t *testing.T) {
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	a, stop := pluginhost.Start(cp, st.Namespace(fsUUID), nil, "plugin "+fsUUID+" watch")
 	reg := plugin.NewRegistry()
+	reg.Register(localNodeID, "home", local.New(st, nil), nil)
 	reg.Register(fsUUID, "fs", a, stop)
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -80,6 +81,11 @@ func TestFsWatchReachesAClientShowingTheDirectory(t *testing.T) {
 			events <- ev
 		}
 	}()
+	// The client reads what it shows, so a change before the stream opens is
+	// told by the open's check.
+	if _, err := cl.GetGrid(ctx, shown); err != nil {
+		t.Fatal(err)
+	}
 	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +102,6 @@ func TestFsWatchReachesAClientShowingTheDirectory(t *testing.T) {
 			}
 		}
 	}
-	// The stream's open is announced once the plugin watches the directory.
-	await("the Watch opening")
 	quiet := func(what string) {
 		t.Helper()
 		for {
@@ -109,7 +113,19 @@ func TestFsWatchReachesAClientShowingTheDirectory(t *testing.T) {
 			}
 		}
 	}
-	quiet("after the open")
+	quiet("an open over a quiet disk")
+	if err := os.WriteFile(filepath.Join(root, "first.txt"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	await("a file written in the shown directory")
+	// The change's own TileChanged may follow; only the next steps are quiet.
+	for drained := false; !drained; {
+		select {
+		case <-events:
+		case <-time.After(time.Second):
+			drained = true
+		}
+	}
 
 	if err := os.WriteFile(filepath.Join(root, "unshown", "x.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -119,7 +135,7 @@ func TestFsWatchReachesAClientShowingTheDirectory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "new.txt"), []byte("new"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	await("a file written in the shown directory")
+	await("another file written in the shown directory")
 }
 
 // Showing what a client has just read tells it nothing: entering a directory
@@ -399,5 +415,148 @@ func TestFsShowingTheNodeHomeWhileItsCacheWarmsSettles(t *testing.T) {
 	}
 	if told > 0 {
 		t.Fatalf("nothing in the node's home was added, removed or renamed, yet a client showing it was told %d changes in 3s and refetched each; %d of them served the listing it already held", told, same)
+	}
+}
+
+// A node that boots while a client shows grids tells it nothing while the
+// disk is quiet: the client re-reads what it shows itself, and a context the
+// scope adds only because a shown grid links into it was read by nobody, so
+// it is noted, not announced. A file then written is one GridChanged for its
+// directory and one for each grid linking into it, however many links each
+// holds.
+func TestFsBootingWhileShownAnnouncesOnlyWhatMoves(t *testing.T) {
+	const fsUUID = "pfsboot"
+	root := t.TempDir()
+	for _, d := range []string{"d0", "d1", "d2", "d3", "d4"} {
+		if err := os.Mkdir(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, d, "a.txt"), []byte(d), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for link, target := range map[string]string{
+		"l0":    "d0/a.txt",
+		"l0b":   "d0/a.txt",
+		"l2":    "d2/a.txt",
+		"l3":    "d3/a.txt",
+		"d1/l0": "../d0/a.txt",
+	} {
+		if err := os.Symlink(target, filepath.Join(root, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
+	a, stop := pluginhost.Start(cp, st.Namespace(fsUUID), nil, "plugin "+fsUUID+" watch")
+	reg := plugin.NewRegistry()
+	reg.Register(localNodeID, "home", local.New(st, nil), nil)
+	reg.Register(fsUUID, "fs", a, stop)
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	lp, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shown string
+	for _, p := range lp.Plugins {
+		if p.Uuid == fsUUID {
+			shown = plugintest.LandingOf(t, p)
+		}
+	}
+	if shown == "" {
+		t.Fatal("no fs plugin in the handshake")
+	}
+
+	events := make(chan *gridwellv1.Event, 256)
+	go func() {
+		es, err := cl.Subscribe(ctx)
+		if err != nil {
+			return
+		}
+		defer es.Close()
+		for {
+			ev, ok, err := es.Recv()
+			if err != nil || !ok {
+				return
+			}
+			events <- ev
+		}
+	}()
+	readGrid := func(gid string) *gridwellv1.GetGridResponse {
+		t.Helper()
+		g, err := cl.GetGrid(ctx, gid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	dirs := map[string]string{} // name → grid
+	for _, tile := range readGrid(shown).Tiles {
+		if tile.ChildGridId != "" {
+			dirs[tile.AltText] = tile.ChildGridId
+		}
+	}
+	if len(dirs) != 5 {
+		t.Fatalf("the root shows %d directories, want 5: %v", len(dirs), dirs)
+	}
+	told := func() map[string]int {
+		got := map[string]int{}
+		deadline := time.After(2 * time.Second)
+		for {
+			select {
+			case ev := <-events:
+				if id := ev.GetGridChanged().GetGridId(); id != "" {
+					got[id]++
+				}
+			case <-deadline:
+				return got
+			}
+		}
+	}
+
+	// The client's own re-read of what it shows, then its interest; d2 and d3
+	// join the scope through the root's links, read by nobody.
+	readGrid(dirs["d0"])
+	readGrid(dirs["d1"])
+	if err := cl.SetInterest(ctx, []string{shown, dirs["d0"], dirs["d1"]}); err != nil {
+		t.Fatal(err)
+	}
+	if got := told(); len(got) != 0 {
+		t.Fatalf("a quiet disk told the client %v, want nothing", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "d2", "new.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := told(), map[string]int{dirs["d2"]: 1, shown: 1}; !maps.Equal(got, want) {
+		t.Fatalf("a file written in d2 told the client %v, want %v", got, want)
+	}
+	readGrid(shown)
+
+	if err := os.WriteFile(filepath.Join(root, "d0", "new.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := told(), map[string]int{dirs["d0"]: 1, shown: 1, dirs["d1"]: 1}; !maps.Equal(got, want) {
+		t.Fatalf("a file written in d0 told the client %v, want %v", got, want)
+	}
+	readGrid(shown)
+	readGrid(dirs["d0"])
+	readGrid(dirs["d1"])
+
+	// A scope the client moves onto a grid it has just read tells it nothing.
+	readGrid(dirs["d4"])
+	if err := cl.SetInterest(ctx, []string{shown, dirs["d0"], dirs["d4"]}); err != nil {
+		t.Fatal(err)
+	}
+	if got := told(); len(got) != 0 {
+		t.Fatalf("moving the scope over a quiet disk told the client %v, want nothing", got)
 	}
 }

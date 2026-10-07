@@ -359,6 +359,10 @@ func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
 	if body, _, _, err := cl.ReadContent(ctx, link.Id); err != nil || string(body) != "card of t1" {
 		t.Fatalf("first read = %q, %v", body, err)
 	}
+	// A client drawing the link reads the target's grid too (fetchTileByID).
+	if _, err := cl.GetGrid(ctx, rpc.QualifyID(linkPluginUUID, rpc.EntryGridID("everything"))); err != nil {
+		t.Fatal(err)
+	}
 
 	events := make(chan *gridwellv1.Event, 64)
 	go func() {
