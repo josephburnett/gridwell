@@ -198,8 +198,11 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	if !w.pause() {
 		return false
 	}
-	if _, err := w.c.GetTilePreview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && gwerr.IsTransport(err) {
-		return false
+	// A 0 key is no face (pb.Tile.preview_blob_id), so there is nothing to ask.
+	if t.GetPreviewBlobId() != 0 {
+		if _, err := w.c.GetTilePreview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && gwerr.IsTransport(err) {
+			return false
+		}
 	}
 	// A body is what the walk fetches; everything else renders offline from
 	// its cached row and preview.
