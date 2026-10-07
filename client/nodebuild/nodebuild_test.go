@@ -35,6 +35,31 @@ func TestDecide(t *testing.T) {
 	}
 }
 
+// What a reload leaves behind is said once, by kind and count, never dropped
+// silently.
+func TestUnsaved(t *testing.T) {
+	const tail = " from before gridwell was updated"
+	const why = " not saved: the node no longer takes this page's writes"
+	for _, tc := range []struct {
+		name string
+		ops  []string
+		want string
+	}{
+		{"nothing parked says nothing", nil, ""},
+		{"one write", []string{"SetFraming"}, "1 view change" + tail + " was" + why},
+		{"kinds that are one kind count together", []string{"PlaceTile", "PaneLayout"}, "2 layout changes" + tail + " were" + why},
+		{"kinds in drain order", []string{"SetFraming", "PlaceTile", "SetTextView", "SetFrozen"},
+			"2 view changes, 1 layout change and 1 page capture" + tail + " were" + why},
+		{"an op with no name is named by itself", []string{"SetFraming", "Mystery"}, "1 view change and 1 Mystery" + tail + " were" + why},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Unsaved(tc.ops); got != tc.want {
+				t.Errorf("Unsaved(%v) =\n %q\nwant\n %q", tc.ops, got, tc.want)
+			}
+		})
+	}
+}
+
 // Only the door's verdict is a refusal; an answer is an acceptance; a
 // transport failure is neither, because the node said nothing.
 func TestGateHears(t *testing.T) {

@@ -38,6 +38,12 @@ func (a *App) staleBuild(node string) {
 	// closeAllURLStreams); the trace goes first, since it is how the reload is
 	// read back.
 	a.writeURLNow()
+	keys := a.persist.out.Keys()
+	ops := make([]string, len(keys))
+	for i, k := range keys {
+		ops[i] = k.Op
+	}
+	carryNotice(nodebuild.Unsaved(ops))
 	go func() {
 		a.handOverBeforeReload()
 		js.Global().Get("location").Call("reload")
@@ -58,6 +64,40 @@ func (a *App) handOverBeforeReload() {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// carriedNoticeKey is the one sessionStorage entry: the notice a page that
+// reloads for its build hands the page that replaces it, read once. It is the
+// tab's, so it reaches the reload and no other tab, and the errsurface strip
+// dies with the page that would have shown it.
+const carriedNoticeKey = "gridwell.build-notice"
+
+// carryNotice leaves msg for the reloaded page; "" leaves nothing. Storage a
+// browser blocks throws, and then the notice is only in the trace.
+func carryNotice(msg string) {
+	if msg == "" {
+		return
+	}
+	defer func() { recover() }()
+	if ss := js.Global().Get("sessionStorage"); ss.Truthy() {
+		ss.Call("setItem", carriedNoticeKey, msg)
+	}
+}
+
+// showCarriedNotice puts on the strip what the page before the reload could
+// not save, once.
+func (a *App) showCarriedNotice() {
+	defer func() { recover() }()
+	ss := js.Global().Get("sessionStorage")
+	if !ss.Truthy() {
+		return
+	}
+	v := ss.Call("getItem", carriedNoticeKey)
+	if v.Type() != js.TypeString {
+		return
+	}
+	ss.Call("removeItem", carriedNoticeKey)
+	a.reportErr(errsurface.Error, buildSource, v.String())
 }
 
 // pageReloaded reports whether a reload loaded this page, read from the

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -159,4 +160,60 @@ func Notice(v Verdict, node string) string {
 		return "the node runs " + n + " but serves a client of another build: rebuild the client"
 	}
 	return ""
+}
+
+// kinds names a parked write by its outbox op; an op missing here is named
+// by itself.
+var kinds = map[string][2]string{
+	"Content":         {"text edit", "text edits"},
+	"Rename":          {"rename", "renames"},
+	"ConfigureURL":    {"address", "addresses"},
+	"PlaceTile":       {"layout change", "layout changes"},
+	"PaneLayout":      {"layout change", "layout changes"},
+	"DeleteTile":      {"delete", "deletes"},
+	"SetFraming":      {"view change", "view changes"},
+	"SetContentZoom":  {"view change", "view changes"},
+	"SetTextView":     {"view change", "view changes"},
+	"SetURLState":     {"page capture", "page captures"},
+	"SetFrozen":       {"page capture", "page captures"},
+	"SetShellPreview": {"shell capture", "shell captures"},
+}
+
+// Unsaved is the one notice for the parked writes the door refused a page
+// about to reload, given their outbox ops in drain order, "" for none. They
+// cannot be sent again: they are this build's, and the door takes only the
+// node's.
+func Unsaved(ops []string) string {
+	var order [][2]string
+	counts := map[[2]string]int{}
+	for _, op := range ops {
+		k, ok := kinds[op]
+		if !ok {
+			k = [2]string{op, op}
+		}
+		if counts[k] == 0 {
+			order = append(order, k)
+		}
+		counts[k]++
+	}
+	if len(order) == 0 {
+		return ""
+	}
+	parts := make([]string, len(order))
+	for i, k := range order {
+		name := k[0]
+		if counts[k] > 1 {
+			name = k[1]
+		}
+		parts[i] = strconv.Itoa(counts[k]) + " " + name
+	}
+	list := parts[len(parts)-1]
+	if len(parts) > 1 {
+		list = strings.Join(parts[:len(parts)-1], ", ") + " and " + list
+	}
+	verb := " were"
+	if len(ops) == 1 {
+		verb = " was"
+	}
+	return list + " from before gridwell was updated" + verb + " not saved: the node no longer takes this page's writes"
 }

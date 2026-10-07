@@ -83,6 +83,18 @@ test('a tab whose node changed build reloads and lands where it was', async ({ g
   const placePath = path();
 
   await node.kill();
+  // A pan the dead node cannot take parks; the new node refuses it as this
+  // build's, so the reload must say it was not saved.
+  const inside = await gw.focused();
+  await gw.panFocusedGrid(
+    Math.round(inside.cx) + 1,
+    Math.round(inside.cy),
+    Math.round(inside.cx) - 1,
+    Math.round(inside.cy),
+  );
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.outbox()), { timeout: 15_000 })
+    .toContainEqual(expect.stringMatching(/^SetFraming:/));
   const stop = await nameAnotherBuild(window);
   // The reloaded document's load comes before its client boots, so its calls
   // name the page's own build again.
@@ -95,6 +107,15 @@ test('a tab whose node changed build reloads and lands where it was', async ({ g
   expect(await navigationType(window), 'the page reloaded itself').toBe('reload');
   expect(path(), 'the URL held the place').toBe(placePath);
   await expect.poll(async () => (await gw.focused()).gridID, { timeout: 15_000 }).toBe(place.gridID);
+  await expect
+    .poll(
+      async () => {
+        const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
+        return errs.notices.filter((n: any) => n.source === 'build').map((n: any) => n.message);
+      },
+      { message: 'the reloaded page says what the old one could not save', timeout: 15_000 },
+    )
+    .toContainEqual(expect.stringMatching(/^\d+ view changes? from before gridwell was updated (was|were) not saved/));
 
   // Both halves recorded it: the door's refusal and the page's answer. Read
   // once, not polled: the old page's records die with it, so its answer is
