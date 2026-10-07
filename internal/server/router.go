@@ -182,6 +182,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		// The /content/ door's capability, handed out only here, on the
 		// cookie-authenticated mux.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
+		Build:        rt.srv.build,
 		Plugins:      out,
 	}
 	// Home is the node's own store, where "/" lands.

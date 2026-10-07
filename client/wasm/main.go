@@ -671,6 +671,7 @@ func (a *App) bootstrap() {
 		a.draw()
 		time.Sleep(backoff.Next())
 	}
+	a.emit(traceevent.NodeBuild(plugins.Build))
 	a.plugins = plugins.Plugins
 	// shells_disabled folds into caps at boot, the one owner of what this client
 	// can do.

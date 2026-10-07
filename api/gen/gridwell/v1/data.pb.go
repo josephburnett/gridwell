@@ -2345,7 +2345,11 @@ type HandshakeResponse struct {
 	// checked against the current password as the cookie is. It is a node-level
 	// fact of the local origin: content URLs are always built against the serving
 	// node, and a connection is followed behind the door, over the RPC.
-	ContentToken  string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
+	ContentToken string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
+	// build is the commit the node was built from (tracewire.BuildCommit), ""
+	// for an unstamped build, for the client's log. Nothing depends on it: the
+	// web door refuses a page of another build on every call (StaleBuild).
+	Build         string `protobuf:"bytes,14,opt,name=build,proto3" json:"build,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2411,6 +2415,13 @@ func (x *HandshakeResponse) GetShellsDisabled() bool {
 func (x *HandshakeResponse) GetContentToken() string {
 	if x != nil {
 		return x.ContentToken
+	}
+	return ""
+}
+
+func (x *HandshakeResponse) GetBuild() string {
+	if x != nil {
+		return x.Build
 	}
 	return ""
 }
@@ -3865,14 +3876,15 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\froot_view_cy\x18\x05 \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\x06 \x01(\x01R\frootViewZoom\x12#\n" +
-	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xa5\x02\n" +
+	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xbb\x02\n" +
 	"\x11HandshakeResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12 \n" +
 	"\fhome_grid_id\x18\t \x01(\tR\n" +
 	"homeGridId\x12=\n" +
 	"\vconnections\x18\r \x03(\v2\x1b.gridwell.v1.ConnectionInfoR\vconnections\x12'\n" +
 	"\x0fshells_disabled\x18\x04 \x01(\bR\x0eshellsDisabled\x12#\n" +
-	"\rcontent_token\x18\x05 \x01(\tR\fcontentTokenJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\n" +
+	"\rcontent_token\x18\x05 \x01(\tR\fcontentToken\x12\x14\n" +
+	"\x05build\x18\x0e \x01(\tR\x05buildJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\r\"5\n" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"-\n" +

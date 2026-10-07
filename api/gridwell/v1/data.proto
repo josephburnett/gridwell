@@ -565,6 +565,10 @@ message HandshakeResponse {
   // fact of the local origin: content URLs are always built against the serving
   // node, and a connection is followed behind the door, over the RPC.
   string content_token = 5;
+  // build is the commit the node was built from (tracewire.BuildCommit), ""
+  // for an unstamped build, for the client's log. Nothing depends on it: the
+  // web door refuses a page of another build on every call (StaleBuild).
+  string build = 14;
 }
 
 
