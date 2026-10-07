@@ -52,14 +52,51 @@ const liveUpdatesPrefix = "live:"
 // under, apart from its health notice so the two clear independently.
 func LiveUpdatesSource(uuid string) string { return liveUpdatesPrefix + uuid }
 
+// BuildSource keys the notice that the node runs another build than this
+// page (client/nodebuild); BuildStuckSource the one that a reload cannot
+// fix, apart so only the first carries Reload.
+const (
+	BuildSource      = "build"
+	BuildStuckSource = "build:stuck"
+)
+
 // Sticky names an ongoing condition, reported once on the transition, that
 // would otherwise expire while still true. Plugin health and live updates
 // resolve on the event that ends them; the backend notice can only be
-// dismissed. This table is the one owner; report sites do not choose.
+// dismissed; the build notices last as long as the page. This table is the
+// one owner; report sites do not choose.
 func Sticky(source string) bool {
-	return source == "electron:backend" ||
+	return source == "electron:backend" || source == BuildSource || source == BuildStuckSource ||
 		strings.HasPrefix(source, pluginHealthPrefix) ||
 		strings.HasPrefix(source, liveUpdatesPrefix)
+}
+
+// Action is what a notice's button does. A notice with one is not dismissed
+// by a press on its row: it stays until the button is pressed, and it never
+// folds into the overflow.
+type Action int
+
+const (
+	NoAction Action = iota
+	// Reload loads the page again, through the unload path every reload
+	// takes.
+	Reload
+)
+
+// ActionOf is the one table of which notices carry a button.
+func ActionOf(source string) Action {
+	if source == BuildSource {
+		return Reload
+	}
+	return NoAction
+}
+
+// ButtonLabel is the button's text, "" for a notice with none.
+func ButtonLabel(a Action) string {
+	if a == Reload {
+		return "Reload"
+	}
+	return ""
 }
 
 // maxNotices is a safety valve against an unattended failure loop, not a
@@ -98,8 +135,10 @@ func (s *Surface) Report(sev Severity, source, message string, now time.Time) {
 	n := Notice{ID: s.nextID, Source: source, Message: message, Severity: sev, Count: 1, deadline: deadline}
 	s.nextID++
 	s.notices = append([]Notice{n}, s.notices...)
-	if len(s.notices) > maxNotices {
-		s.notices = s.notices[:maxNotices]
+	for i := len(s.notices) - 1; len(s.notices) > maxNotices && i >= 0; i-- {
+		if ActionOf(s.notices[i].Source) == NoAction {
+			s.notices = append(s.notices[:i], s.notices[i+1:]...)
+		}
 	}
 }
 
@@ -194,13 +233,22 @@ type Row struct {
 	OverflowCount int
 }
 
-// Rows lays out top down, newest first. Render and hit-testing both read it,
-// so they cannot disagree.
+// Rows lays out top down, notices with a button first, then newest first.
+// Render and hit-testing both read it, so they cannot disagree.
 func Rows(notices []Notice, stripTop float64) []Row {
 	n := len(notices)
 	if n == 0 {
 		return nil
 	}
+	ordered := make([]Notice, 0, n)
+	for _, pass := range []bool{true, false} {
+		for _, nt := range notices {
+			if (ActionOf(nt.Source) != NoAction) == pass {
+				ordered = append(ordered, nt)
+			}
+		}
+	}
+	notices = ordered
 	vis := n
 	if vis > MaxRows {
 		vis = MaxRows
@@ -213,21 +261,53 @@ func Rows(notices []Notice, stripTop float64) []Row {
 	return rows
 }
 
+// Label counts the reports of a notice without a button; one with a button is
+// a standing condition whose message is restated as it changes.
 func Label(n Notice) string {
-	if n.Count > 1 {
+	if n.Count > 1 && ActionOf(n.Source) == NoAction {
 		return fmt.Sprintf("%s ×%d", n.Message, n.Count)
 	}
 	return n.Message
 }
 
-// DismissAt takes the whole row as the target, with no separate close box. The
-// caller has already established that y is at or below stripTop.
-func (s *Surface) DismissAt(y, stripTop float64) bool {
-	rows := Rows(s.notices, stripTop)
-	for _, r := range rows {
-		if y >= r.Y && y < r.Y+RowH {
-			return s.Dismiss(r.Notice.ID)
-		}
+// Button geometry: inset from the row's right end, the strip spanning width.
+const (
+	ButtonW     = 64.0
+	ButtonInset = 3.0
+)
+
+// ButtonRect is where r's button is drawn and pressed; ok is false for a
+// notice with none.
+func ButtonRect(r Row, width float64) (x, y, w, h float64, ok bool) {
+	if ActionOf(r.Notice.Source) == NoAction {
+		return 0, 0, 0, 0, false
 	}
-	return false
+	return width - ButtonW - ButtonInset, r.Y + ButtonInset, ButtonW, RowH - 2*ButtonInset, true
+}
+
+// Press is what a press in the strip did: dismissed a notice, or pressed a
+// button whose Action the caller runs.
+type Press struct {
+	Dismissed bool
+	Action    Action
+}
+
+// PressAt takes a press at (x, y) in a strip of the given width. A row press
+// dismisses its notice unless the notice has a button, which is then the only
+// target. The caller has already established that y is at or below stripTop.
+func (s *Surface) PressAt(x, y, stripTop, width float64) Press {
+	for _, r := range Rows(s.notices, stripTop) {
+		if y < r.Y || y >= r.Y+RowH {
+			continue
+		}
+		if a := ActionOf(r.Notice.Source); a != NoAction {
+			bx, by, bw, bh, _ := ButtonRect(r, width)
+			if x >= bx && x < bx+bw && y >= by && y < by+bh {
+				return Press{Action: a}
+			}
+			return Press{}
+		}
+		return Press{Dismissed: s.Dismiss(r.Notice.ID)}
+	}
+	return Press{}
 }

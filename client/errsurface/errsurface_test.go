@@ -163,6 +163,8 @@ func TestSticky(t *testing.T) {
 		{"plugin:0b6f3a", true},
 		{"live:0b6f3a", true},
 		{"electron:backend", true},
+		{BuildSource, true},
+		{BuildStuckSource, true},
 		// One-shot events fade once they stop recurring.
 		{"rpc:MoveTile", false},
 		{"events", false},        // the event retry loop re-reports every second while down
@@ -259,29 +261,112 @@ func TestNextDeadline(t *testing.T) {
 	}
 }
 
-func TestDismissAt(t *testing.T) {
+func TestPressAt(t *testing.T) {
 	s := New()
 	s.Report(Error, "a", "x", t0) // the older notice, row 1
 	s.Report(Error, "b", "y", t0) // the newest, row 0
-	top := 500.0
+	top, width := 500.0, 800.0
 
-	// A click in the second row dismisses the older notice "a".
-	if !s.DismissAt(top+RowH+1, top) {
-		t.Fatalf("click in row 1 did not dismiss")
+	// A press in the second row dismisses the older notice "a".
+	if got := s.PressAt(10, top+RowH+1, top, width); !got.Dismissed {
+		t.Fatalf("press in row 1 did not dismiss")
 	}
 	if s.Len() != 1 || s.Notices()[0].Source != "b" {
 		t.Fatalf("wrong notice dismissed: %+v", s.Notices())
 	}
-	// A click below the populated rows does nothing.
-	if s.DismissAt(top+RowH+1, top) {
-		t.Errorf("click below last row must not dismiss")
+	// A press below the populated rows does nothing.
+	if got := s.PressAt(10, top+RowH+1, top, width); got != (Press{}) {
+		t.Errorf("press below last row did %+v", got)
 	}
-	if !s.DismissAt(top+1, top) {
-		t.Fatalf("click in row 0 did not dismiss")
+	if got := s.PressAt(10, top+1, top, width); !got.Dismissed {
+		t.Fatalf("press in row 0 did not dismiss")
 	}
 	if s.Len() != 0 {
 		t.Fatalf("queue not empty: %+v", s.Notices())
 	}
+}
+
+// Which notices carry a button and what it does is one table; nothing else
+// gets one.
+func TestActionOf(t *testing.T) {
+	for _, c := range []struct {
+		source string
+		want   Action
+		label  string
+	}{
+		{BuildSource, Reload, "Reload"},
+		{BuildStuckSource, NoAction, ""},
+		{"plugin:0b6f3a", NoAction, ""},
+		{"electron:backend", NoAction, ""},
+		{"rpc:MoveTile", NoAction, ""},
+	} {
+		if got := ActionOf(c.source); got != c.want {
+			t.Errorf("ActionOf(%q) = %v, want %v", c.source, got, c.want)
+		}
+		if got := ButtonLabel(ActionOf(c.source)); got != c.label {
+			t.Errorf("ButtonLabel(%q) = %q, want %q", c.source, got, c.label)
+		}
+	}
+}
+
+// A notice with a button stays until the button is pressed: a press on the
+// rest of its row does nothing, and it shows however many notices come after.
+func TestNoticeWithAButton(t *testing.T) {
+	s := New()
+	s.Report(Info, BuildSource, "Gridwell was updated — reload to continue.", t0)
+	for i := 0; i < maxNotices+MaxRows; i++ {
+		s.Report(Error, fmt.Sprintf("s%d", i), "m", t0)
+	}
+	if !hasSource(s, BuildSource) {
+		t.Fatal("the capacity valve dropped the notice with a button")
+	}
+	if s.Expire(t0.Add(time.Hour)); !hasSource(s, BuildSource) {
+		t.Fatal("the notice with a button expired")
+	}
+	for i := 0; i < MaxRows; i++ {
+		s.Report(Error, fmt.Sprintf("s%d", i), "m", t0)
+	}
+	top, width := 500.0, 800.0
+	rows := Rows(s.Notices(), top)
+	if rows[0].Notice.Source != BuildSource {
+		t.Fatalf("row 0 is %q, want the notice with a button", rows[0].Notice.Source)
+	}
+	x, y, w, h, ok := ButtonRect(rows[0], width)
+	if !ok || x+w > width || y < rows[0].Y || y+h > rows[0].Y+RowH {
+		t.Fatalf("button %v,%v %vx%v ok=%v outside its row", x, y, w, h, ok)
+	}
+	if _, _, _, _, ok := ButtonRect(rows[1], width); ok {
+		t.Error("a notice without an action has a button")
+	}
+	if got := s.PressAt(10, top+1, top, width); got != (Press{}) {
+		t.Errorf("a press beside the button did %+v", got)
+	}
+	if got := s.PressAt(x+w/2, y+h/2, top, width); got != (Press{Action: Reload}) {
+		t.Errorf("a press on the button did %+v, want Reload", got)
+	}
+	s.Report(Info, BuildSource, "restated", t0)
+	if got := Label(rowOf(s, BuildSource)); got != "restated" {
+		t.Errorf("Label = %q, want the message without a count", got)
+	}
+}
+
+func hasSource(s *Surface, source string) bool {
+	_, ok := findSource(s, source)
+	return ok
+}
+
+func rowOf(s *Surface, source string) Notice {
+	n, _ := findSource(s, source)
+	return n
+}
+
+func findSource(s *Surface, source string) (Notice, bool) {
+	for _, n := range s.Notices() {
+		if n.Source == source {
+			return n, true
+		}
+	}
+	return Notice{}, false
 }
 
 // Every read path that succeeds resolves its own source, and most of them

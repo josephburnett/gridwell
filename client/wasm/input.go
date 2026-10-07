@@ -360,9 +360,14 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		a.ghost = nil
 	}
 	// The notice strip occupies the band layoutPanes reserved below every pane,
-	// so a click there cannot be meant for a pane; errsurface owns the geometry.
+	// so a click there cannot be meant for a pane; errsurface owns the geometry
+	// and says what the press did. A button answers the left button only.
 	if stripH := errsurface.StripHeight(a.errs.Len()); stripH > 0 && sy >= a.height-stripH {
-		if a.errs.DismissAt(sy, a.height-stripH) {
+		press := a.errs.PressAt(sx, sy, a.height-stripH, a.width)
+		if press.Action == errsurface.Reload && args[0].Get("button").Int() == 0 {
+			a.reloadPage()
+		}
+		if press.Dismissed {
 			a.draw()
 		}
 		return nil

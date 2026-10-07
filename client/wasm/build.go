@@ -15,10 +15,6 @@ import (
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
-// buildSource is the notice strip's name for the verdict, so each refusal
-// replaces the last.
-const buildSource = "build"
-
 // staleBuild acts once per verdict: every refused call reports here, and a
 // page holding unsaved text keeps being refused until it holds none.
 func (a *App) staleBuild(node string) {
@@ -29,21 +25,25 @@ func (a *App) staleBuild(node string) {
 	a.stale = &v
 	a.emit(traceevent.StaleBuild(a.gate.Build(), node, v.String()))
 	if v != nodebuild.Reload {
-		a.reportErr(errsurface.Error, buildSource, nodebuild.Notice(v, node))
+		a.reportErr(errsurface.Error, errsurface.BuildSource, nodebuild.Notice(v, node))
 		a.draw()
 		return
 	}
-	// The URL is the place the reload lands on, so a pending write goes now.
-	// The reload takes the unload path every reload takes (flushOnUnload,
-	// closeAllURLStreams); the trace goes first, since it is how the reload is
-	// read back.
-	a.writeURLNow()
 	keys := a.persist.out.Keys()
 	ops := make([]string, len(keys))
 	for i, k := range keys {
 		ops[i] = k.Op
 	}
 	carryNotice(nodebuild.Unsaved(ops))
+	a.reloadPage()
+}
+
+// reloadPage is errsurface.Reload. The URL is the place the reload lands on,
+// so a pending write goes now. The reload takes the unload path every reload
+// takes (flushOnUnload, closeAllURLStreams); the trace goes first, since it is
+// how the reload is read back.
+func (a *App) reloadPage() {
+	a.writeURLNow()
 	go func() {
 		a.handOverBeforeReload()
 		js.Global().Get("location").Call("reload")
@@ -97,7 +97,7 @@ func (a *App) showCarriedNotice() {
 		return
 	}
 	ss.Call("removeItem", carriedNoticeKey)
-	a.reportErr(errsurface.Error, buildSource, v.String())
+	a.reportErr(errsurface.Error, errsurface.BuildSource, v.String())
 }
 
 // pageReloaded reports whether a reload loaded this page, read from the
