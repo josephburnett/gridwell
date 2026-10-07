@@ -2,15 +2,17 @@ import { Route } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { createExitWell } from './oracle';
 
-// A renderer that reloads for its build (nodebuild.Decide) must take its live
-// url views down on the way out: a native WebContentsView is not part of the
-// page, so one the reload leaves behind paints over the reloaded canvas and
-// swallows its clicks. The sidecar cannot be rebuilt under a running app, so
-// the page's calls are made to name another build, the shape the door judges.
+// A renderer whose node runs another build offers the reload in a notice
+// (nodebuild.Decide) and reloads only when its button is pressed; the reload
+// must take its live url views down on the way out: a native WebContentsView
+// is not part of the page, so one the reload leaves behind paints over the
+// reloaded canvas and swallows its clicks. The sidecar cannot be rebuilt under
+// a running app, so the page's calls are made to name another build, the shape
+// the door judges.
 
 const OLD_BUILD = 'e2e-old-build';
 
-test('a renderer reloading for its build leaves no live view behind and lands where it was', async ({
+test('a renderer offered a reload for its build reloads when asked, leaving no live view behind', async ({
   electronApp,
   gw,
   window,
@@ -51,13 +53,34 @@ test('a renderer reloading for its build leaves no live view behind and lands wh
     if (!stale) return route.continue();
     await route.continue({ headers: { ...route.request().headers(), 'gridwell-build': OLD_BUILD } });
   });
+  const buildNotice = async () =>
+    (await window.evaluate(() => (window as any).__gridwellTest.errors().notices)).find(
+      (n: any) => n.source === 'build',
+    );
+  await window.evaluate(() => ((window as any).__buildSpecMark = true));
+  await createExitWell(gw.origin, home.gridID, 'nowhere/1', 'poke', cx + 2, cy);
+  await expect
+    .poll(async () => (await buildNotice())?.message, { message: 'the notice offers the reload', timeout: 30_000 })
+    .toMatch(/^Gridwell was updated — reload to continue\./);
+  // Long enough that the reload the client used to take on its own would have
+  // begun: it ran on the first refusal.
+  await window.waitForTimeout(3_000);
+  expect(
+    {
+      same: await window.evaluate(() => (window as any).__buildSpecMark === true),
+      views: await regPaneIds(),
+    },
+    'nothing reloaded on its own, and the live view is still up',
+  ).toEqual({ same: true, views: [below.id] });
+
   // The reloaded document's load comes before its client boots, so its calls
   // name the page's own build again.
   const reloaded = window.waitForEvent('load', { timeout: 60_000 });
   window.once('load', () => {
     stale = false;
   });
-  await createExitWell(gw.origin, home.gridID, 'nowhere/1', 'poke', cx + 2, cy);
+  const b = (await buildNotice()).button;
+  await window.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
   await reloaded;
 
   expect(

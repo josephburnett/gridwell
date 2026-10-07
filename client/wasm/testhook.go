@@ -381,11 +381,18 @@ func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 }
 
 // thErrors returns the errsurface notice queue, newest first, plus the
-// strip's screen geometry so a spec can click a row to dismiss it. It is what
-// makes "and no errors surfaced" assertable.
+// strip's screen geometry and each button's, so a spec can click a row to
+// dismiss it or press its button. It is what makes "and no errors surfaced"
+// assertable.
 func (a *App) thErrors(js.Value, []js.Value) any {
 	notices := a.errs.Notices()
 	stripH := errsurface.StripHeight(len(notices))
+	buttons := map[int]any{}
+	for _, r := range errsurface.Rows(notices, a.height-stripH) {
+		if x, y, w, h, ok := errsurface.ButtonRect(r, a.width); ok {
+			buttons[r.Notice.ID] = map[string]any{"x": x, "y": y, "w": w, "h": h}
+		}
+	}
 	rows := make([]any, 0, len(notices))
 	for _, n := range notices {
 		sev := "error"
@@ -397,6 +404,7 @@ func (a *App) thErrors(js.Value, []js.Value) any {
 			"message":  n.Message,
 			"severity": sev,
 			"count":    n.Count,
+			"button":   buttons[n.ID],
 		})
 	}
 	return map[string]any{

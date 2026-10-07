@@ -4,7 +4,8 @@ package main
 
 // The page's one answer to the door refusing its build, wherever the refusal
 // arrived: an rpc, the event stream, a shell socket. nodebuild.Decide is the
-// rule; this runs its arms.
+// rule and nodebuild.Notice the words; this shows them, and reloads only when
+// the notice's button is pressed (errsurface.Reload).
 
 import (
 	"syscall/js"
@@ -15,35 +16,37 @@ import (
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
-// buildSource is the notice strip's name for the verdict, so each refusal
-// replaces the last.
-const buildSource = "build"
-
-// staleBuild acts once per verdict: every refused call reports here, and a
-// page holding unsaved text keeps being refused until it holds none.
+// staleBuild runs for every refused call. Each refused write may add to what
+// reloading will cost, so the notice is restated whenever its words change.
 func (a *App) staleBuild(node string) {
-	v := nodebuild.Decide(pageReloaded(), a.gate.Accepted(), len(a.c.DirtyTileIDs()))
-	if a.stale != nil && *a.stale == v {
-		return
+	v := nodebuild.Decide(pageReloaded(), a.gate.Accepted())
+	source, other, sev := errsurface.BuildSource, errsurface.BuildStuckSource, errsurface.Info
+	if v == nodebuild.Stuck {
+		source, other, sev = other, source, errsurface.Error
 	}
-	a.stale = &v
-	a.emit(traceevent.StaleBuild(a.gate.Build(), node, v.String()))
-	if v != nodebuild.Reload {
-		a.reportErr(errsurface.Error, buildSource, nodebuild.Notice(v, node))
-		a.draw()
-		return
+	if a.stale == nil || *a.stale != v {
+		a.stale = &v
+		a.emit(traceevent.StaleBuild(a.gate.Build(), node, v.String()))
+		a.errs.Resolve(other)
 	}
-	// The URL is the place the reload lands on, so a pending write goes now.
-	// The reload takes the unload path every reload takes (flushOnUnload,
-	// closeAllURLStreams); the trace goes first, since it is how the reload is
-	// read back.
-	a.writeURLNow()
 	keys := a.persist.out.Keys()
 	ops := make([]string, len(keys))
 	for i, k := range keys {
 		ops[i] = k.Op
 	}
-	carryNotice(nodebuild.Unsaved(ops))
+	msg := nodebuild.Notice(v, node, ops, len(a.c.DirtyTileIDs()))
+	if shown, ok := a.errs.Message(source); ok && shown == msg {
+		return
+	}
+	a.reportErr(sev, source, msg)
+}
+
+// reloadPage is errsurface.Reload. The URL is the place the reload lands on,
+// so a pending write goes now. The reload takes the unload path every reload
+// takes (flushOnUnload, closeAllURLStreams); the trace goes first, since it is
+// how the reload is read back.
+func (a *App) reloadPage() {
+	a.writeURLNow()
 	go func() {
 		a.handOverBeforeReload()
 		js.Global().Get("location").Call("reload")
@@ -64,40 +67,6 @@ func (a *App) handOverBeforeReload() {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-}
-
-// carriedNoticeKey is the one sessionStorage entry: the notice a page that
-// reloads for its build hands the page that replaces it, read once. It is the
-// tab's, so it reaches the reload and no other tab, and the errsurface strip
-// dies with the page that would have shown it.
-const carriedNoticeKey = "gridwell.build-notice"
-
-// carryNotice leaves msg for the reloaded page; "" leaves nothing. Storage a
-// browser blocks throws, and then the notice is only in the trace.
-func carryNotice(msg string) {
-	if msg == "" {
-		return
-	}
-	defer func() { recover() }()
-	if ss := js.Global().Get("sessionStorage"); ss.Truthy() {
-		ss.Call("setItem", carriedNoticeKey, msg)
-	}
-}
-
-// showCarriedNotice puts on the strip what the page before the reload could
-// not save, once.
-func (a *App) showCarriedNotice() {
-	defer func() { recover() }()
-	ss := js.Global().Get("sessionStorage")
-	if !ss.Truthy() {
-		return
-	}
-	v := ss.Call("getItem", carriedNoticeKey)
-	if v.Type() != js.TypeString {
-		return
-	}
-	ss.Call("removeItem", carriedNoticeKey)
-	a.reportErr(errsurface.Error, buildSource, v.String())
 }
 
 // pageReloaded reports whether a reload loaded this page, read from the

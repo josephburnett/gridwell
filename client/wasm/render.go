@@ -428,9 +428,19 @@ func (a *App) drawErrStrip() {
 		if row.OverflowCount > 0 {
 			label += "  (+" + strconv.Itoa(row.OverflowCount) + " more)"
 		}
-		drawLabel(a.cctx, label, 12, row.Y+errsurface.RowH/2, labelOpts{
-			font: "12px system-ui, sans-serif", fill: fg, baseline: "middle",
-		})
+		opts := labelOpts{font: "12px system-ui, sans-serif", fill: fg, baseline: "middle"}
+		// The button inverts the row's shades, so it needs no colour of its own.
+		bx, by, bw, bh, button := errsurface.ButtonRect(row, a.width)
+		if button {
+			opts.maxW = bx - 20
+		}
+		drawLabel(a.cctx, label, 12, row.Y+errsurface.RowH/2, opts)
+		if button {
+			fillRectC(a.cctx, bx, by, bw, bh, fg)
+			drawLabel(a.cctx, errsurface.ButtonLabel(errsurface.ActionOf(row.Notice.Source)), bx+bw/2, by+bh/2, labelOpts{
+				font: "12px system-ui, sans-serif", fill: bg, align: "center", baseline: "middle",
+			})
+		}
 	}
 }
 

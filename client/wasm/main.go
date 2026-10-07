@@ -692,7 +692,6 @@ func (a *App) bootstrap() {
 
 func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
-	a.showCarriedNotice()
 	p := a.tree.FocusedPane()
 	// Land at home; applyURLOnBoot may restore a place over it.
 	p.Reset(pane.Frame{GridID: a.home, View: p.View})

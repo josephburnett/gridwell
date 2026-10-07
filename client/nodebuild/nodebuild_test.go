@@ -17,44 +17,48 @@ func TestDecide(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
 		reloaded, accepted bool
-		unsaved            int
 		want               Verdict
 	}{
-		{"the node changed under a running page", false, true, 0, Reload},
-		{"a tab opened on a node newer than its cached client", false, false, 0, Reload},
-		{"a reloaded page the node has answered, refused after a later restart", true, true, 0, Reload},
-		{"text the node never saved stays on screen", false, true, 2, Hold},
-		{"a reload just served it and the node still refuses", true, false, 0, Stuck},
-		{"a loop is never the answer, unsaved text or not", true, false, 1, Stuck},
+		{"the node changed under a running page", false, true, Offer},
+		{"a tab opened on a node newer than its cached client", false, false, Offer},
+		{"a reloaded page the node has answered, refused after a later restart", true, true, Offer},
+		{"a reload just served it and the node still refuses", true, false, Stuck},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := Decide(tc.reloaded, tc.accepted, tc.unsaved); got != tc.want {
-				t.Errorf("Decide(%v,%v,%d) = %v, want %v", tc.reloaded, tc.accepted, tc.unsaved, got, tc.want)
+			if got := Decide(tc.reloaded, tc.accepted); got != tc.want {
+				t.Errorf("Decide(%v,%v) = %v, want %v", tc.reloaded, tc.accepted, got, tc.want)
 			}
 		})
 	}
 }
 
-// What a reload leaves behind is said once, by kind and count, never dropped
-// silently.
-func TestUnsaved(t *testing.T) {
-	const tail = " from before gridwell was updated"
-	const why = " not saved: the node no longer takes this page's writes"
+// The one notice names what reloading costs, by kind and count, never
+// dropping it silently.
+func TestNotice(t *testing.T) {
 	for _, tc := range []struct {
 		name string
+		v    Verdict
 		ops  []string
+		text int
 		want string
 	}{
-		{"nothing parked says nothing", nil, ""},
-		{"one write", []string{"SetFraming"}, "1 view change" + tail + " was" + why},
-		{"kinds that are one kind count together", []string{"PlaceTile", "PaneLayout"}, "2 layout changes" + tail + " were" + why},
-		{"kinds in drain order", []string{"SetFraming", "PlaceTile", "SetTextView", "SetFrozen"},
-			"2 view changes, 1 layout change and 1 page capture" + tail + " were" + why},
-		{"an op with no name is named by itself", []string{"SetFraming", "Mystery"}, "1 view change and 1 Mystery" + tail + " were" + why},
+		{"nothing to lose", Offer, nil, 0, Updated},
+		{"one write", Offer, []string{"SetFraming"}, 0, Updated + " 1 view change was not saved."},
+		{"kinds that are one kind count together", Offer, []string{"PlaceTile", "PaneLayout"}, 0,
+			Updated + " 2 layout changes were not saved."},
+		{"kinds in drain order", Offer, []string{"SetFraming", "PlaceTile", "SetTextView", "SetFrozen"}, 0,
+			Updated + " 2 view changes, 1 layout change and 1 page capture were not saved."},
+		{"an op with no name is named by itself", Offer, []string{"SetFraming", "Mystery"}, 0,
+			Updated + " 1 view change and 1 Mystery were not saved."},
+		{"text the node never saved", Offer, []string{"Content"}, 1,
+			Updated + " 1 text edit was not saved. Copy your text first."},
+		{"text not yet parked", Offer, nil, 2, Updated + " Copy your text first."},
+		{"a reload cannot fix it", Stuck, []string{"SetFraming"}, 1,
+			"the node runs 0123456 but serves a client of another build: rebuild the client"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := Unsaved(tc.ops); got != tc.want {
-				t.Errorf("Unsaved(%v) =\n %q\nwant\n %q", tc.ops, got, tc.want)
+			if got := Notice(tc.v, "0123456789abcdef", tc.ops, tc.text); got != tc.want {
+				t.Errorf("Notice =\n %q\nwant\n %q", got, tc.want)
 			}
 		})
 	}
