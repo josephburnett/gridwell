@@ -111,55 +111,57 @@ func (h *heardConn) Receive(msg any) error {
 	return err
 }
 
-// Verdict is what a page does when the door refuses its build.
+// Verdict is what a page does when the door refuses its build. It never
+// reloads itself: only the user's press on the notice's button does
+// (errsurface.Reload).
 type Verdict int
 
 const (
-	// Reload loads the node's own client, through the unload path every
-	// reload takes; the URL holds the place, so it lands where it was.
-	Reload Verdict = iota
-	// Hold keeps the page, because it holds text the node never saved and
-	// will no longer take from it: the bytes stay on screen to be copied.
-	Hold
+	// Offer keeps the page and offers the reload in one notice that names
+	// what reloading will cost.
+	Offer Verdict = iota
 	// Stuck is a page a reload just served and the node still refuses: the
 	// node is serving a client of another build, and another reload would
-	// loop.
+	// fail the same way.
 	Stuck
 )
 
 func (v Verdict) String() string {
-	switch v {
-	case Hold:
-		return "hold"
-	case Stuck:
+	if v == Stuck {
 		return "stuck"
 	}
-	return "reload"
+	return "offer"
 }
 
 // Decide is the one answer to the door's refusal. reloaded is whether a
 // reload loaded this page, accepted whether the node has answered any of its
-// calls, unsaved how many tiles hold text the node has not saved.
-func Decide(reloaded, accepted bool, unsaved int) Verdict {
-	switch {
-	case reloaded && !accepted:
+// calls.
+func Decide(reloaded, accepted bool) Verdict {
+	if reloaded && !accepted {
 		return Stuck
-	case unsaved > 0:
-		return Hold
 	}
-	return Reload
+	return Offer
 }
 
-// Notice is what the strip says for a verdict that keeps the page.
-func Notice(v Verdict, node string) string {
-	n := tracewire.ShortCommit(node)
-	switch v {
-	case Hold:
-		return "gridwell was updated to " + n + " and this page can no longer save: copy your unsaved text, then reload"
-	case Stuck:
-		return "the node runs " + n + " but serves a client of another build: rebuild the client"
+// Updated opens the notice that offers the reload.
+const Updated = "Gridwell was updated — reload to continue."
+
+// Notice is what the strip says for a verdict. Offer's names what reloading
+// will cost: the parked writes the door refused, given their outbox ops in
+// drain order (Unsaved), and, when unsavedText tiles hold text the node never
+// saved, that it should be copied first.
+func Notice(v Verdict, node string, ops []string, unsavedText int) string {
+	if v == Stuck {
+		return "the node runs " + tracewire.ShortCommit(node) + " but serves a client of another build: rebuild the client"
 	}
-	return ""
+	msg := Updated
+	if u := Unsaved(ops); u != "" {
+		msg += " " + u + "."
+	}
+	if unsavedText > 0 {
+		msg += " Copy your text first."
+	}
+	return msg
 }
 
 // kinds names a parked write by its outbox op; an op missing here is named
@@ -179,10 +181,9 @@ var kinds = map[string][2]string{
 	"SetShellPreview": {"shell capture", "shell captures"},
 }
 
-// Unsaved is the one notice for the parked writes the door refused a page
-// about to reload, given their outbox ops in drain order, "" for none. They
-// cannot be sent again: they are this build's, and the door takes only the
-// node's.
+// Unsaved names the parked writes the door refused, by kind and count, "" for
+// none. They cannot be sent again: they are this build's, and the door takes
+// only the node's.
 func Unsaved(ops []string) string {
 	var order [][2]string
 	counts := map[[2]string]int{}
@@ -215,5 +216,5 @@ func Unsaved(ops []string) string {
 	if len(ops) == 1 {
 		verb = " was"
 	}
-	return list + " from before gridwell was updated" + verb + " not saved: the node no longer takes this page's writes"
+	return list + verb + " not saved"
 }

@@ -345,6 +345,9 @@ func TestNoticeWithAButton(t *testing.T) {
 		t.Errorf("a press on the button did %+v, want Reload", got)
 	}
 	s.Report(Info, BuildSource, "restated", t0)
+	if m, ok := s.Message(BuildSource); !ok || m != "restated" {
+		t.Errorf("Message = %q, %v, want the restatement", m, ok)
+	}
 	if got := Label(rowOf(s, BuildSource)); got != "restated" {
 		t.Errorf("Label = %q, want the message without a count", got)
 	}

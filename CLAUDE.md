@@ -77,10 +77,8 @@ comment beside it says.
    decided, not accidental: the session pane tree, the selection, the outer
    frames of a pane's place, the pane-tile level stack, Chromium's own
    session storage, and the theme — a client view preference, not a fact
-   about your things, so it lives in `localStorage` (2026-09-19). The notice a
-   page reloading for its build hands the page that replaces it rides one
-   `sessionStorage` entry, read once (2026-10-07). Do not add to that list
-   without a decision.
+   about your things, so it lives in `localStorage` (2026-09-19). Do not add
+   to that list without a decision.
 8. **DRY is correctness.** If a fix in one place doesn't fix an identical
    behavior elsewhere, unify them.
 9. **Commit each logical change on its own.** Never batch. If an
@@ -319,11 +317,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   tile. Nothing about sessions or networks crosses the wire.
 - No parameterized plugins. Modals center on the active pane.
 - A client the node served runs the node's build: the door refuses any call
-  from another build and the client reloads (2026-10-07). A page holding text
-  the node never saved does not reload: the text stays on screen, because the
-  door refuses its save too (`nodebuild.Decide`). Every other parked write
-  the door refused is named in one notice the reloaded page shows
-  (`nodebuild.Unsaved`).
+  from another build, and the client shows one persistent notice with a
+  Reload button and reloads only when the user asks (2026-10-07).
 
 ## Gates
 

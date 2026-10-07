@@ -183,6 +183,16 @@ func (s *Surface) Notices() []Notice {
 
 func (s *Surface) Len() int { return len(s.notices) }
 
+// Message is what the notice for source says, false when there is none.
+func (s *Surface) Message(source string) (string, bool) {
+	for _, n := range s.notices {
+		if n.Source == source {
+			return n.Message, true
+		}
+	}
+	return "", false
+}
+
 // Dismiss reports whether it removed a notice, like every mutation here: the
 // render layer repaints on the verdict, not on the call.
 func (s *Surface) Dismiss(id int) bool {
