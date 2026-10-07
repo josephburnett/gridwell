@@ -37,7 +37,9 @@ const (
 // that answered. A context deadline is the client's own timer
 // (inflight.Deadline), so it is Transport: read as a verdict it would drop
 // bytes. A Canceled the far side sent wraps no context.Canceled, so it stays
-// Transport.
+// Transport. The door's stale-build refusal is Transport too: the verb never
+// ran, so a write's bytes are still owed, and the page's one answer to it is
+// client/nodebuild's, not a conflict's reload of the body.
 func Of(err error) Outcome {
 	if err == nil {
 		return OutcomeOK
@@ -50,6 +52,9 @@ func Of(err error) Outcome {
 	}
 	var ce *connect.Error
 	if !errors.As(err, &ce) {
+		return OutcomeTransport
+	}
+	if _, stale := gwerr.StaleBuildOf(ce); stale {
 		return OutcomeTransport
 	}
 	switch ce.Code() {

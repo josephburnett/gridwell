@@ -73,7 +73,8 @@ type Server struct {
 
 	interest *interest.Book
 
-	// build is tracewire.BuildCommit, read once, which the handshake names.
+	// build is tracewire.BuildCommit, read once: the handshake names it and
+	// staleBuild judges every page's call against it.
 	build string
 }
 

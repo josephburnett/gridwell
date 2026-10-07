@@ -48,6 +48,7 @@ func TestOf(t *testing.T) {
 	}{
 		{"nil is ok", nil, OutcomeOK},
 		{"failed precondition is conflict", connect.NewError(connect.CodeFailedPrecondition, errors.New("version")), OutcomeConflict},
+		{"the door refusing this page's build is transport", gwerr.StaleBuild("nodebuild", "pagebuild"), OutcomeTransport},
 		{"unavailable is transport", connect.NewError(connect.CodeUnavailable, errors.New("refused")), OutcomeTransport},
 		{"deadline is transport", connect.NewError(connect.CodeDeadlineExceeded, errors.New("timeout")), OutcomeTransport},
 		{"canceled from the far side is transport", connect.NewError(connect.CodeCanceled, errors.New("canceled")), OutcomeTransport},

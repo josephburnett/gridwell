@@ -17,4 +17,7 @@ internal/server/rpctrace.go traceInterceptor.WrapStreamingHandler
 client/trace/interceptor.go interceptor.WrapUnary
 client/trace/interceptor.go interceptor.WrapStreamingClient
 client/trace/interceptor.go interceptor.WrapStreamingHandler
+client/nodebuild/nodebuild.go interceptor.WrapUnary
+client/nodebuild/nodebuild.go interceptor.WrapStreamingClient
+client/nodebuild/nodebuild.go interceptor.WrapStreamingHandler
 

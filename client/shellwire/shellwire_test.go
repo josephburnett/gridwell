@@ -3,6 +3,8 @@ package shellwire
 import (
 	"net/url"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
 // What AttachURL writes is exactly what ParseAttach reads. Only a round trip
@@ -16,7 +18,7 @@ func TestAttachURLRoundTrip(t *testing.T) {
 		{"https://box.tailnet.ts.net", "wss"},
 		{"http://[::1]:9000", "ws"},
 	} {
-		raw, err := AttachURL(tc.origin, "abc1234/12", 120, 40)
+		raw, err := AttachURL(tc.origin, "b1", "abc1234/12", 120, 40)
 		if err != nil {
 			t.Fatalf("AttachURL(%q): %v", tc.origin, err)
 		}
@@ -37,6 +39,9 @@ func TestAttachURLRoundTrip(t *testing.T) {
 		if a.TileID != "abc1234/12" || a.Cols != 120 || a.Rows != 40 {
 			t.Fatalf("%q: round trip gave %+v", raw, a)
 		}
+		if b := u.Query().Get(tracewire.BuildQuery); b != "b1" {
+			t.Fatalf("%q: build %q, want the page's", raw, b)
+		}
 	}
 }
 
@@ -44,7 +49,7 @@ func TestAttachURLRoundTrip(t *testing.T) {
 // intact, or a mounted node's shell attaches to the wrong tile.
 func TestAttachURLQualifiedChain(t *testing.T) {
 	const id = "abc1234/desk/xyz9876/41"
-	raw, err := AttachURL("http://127.0.0.1:1/", id, 80, 24)
+	raw, err := AttachURL("http://127.0.0.1:1/", "b1", id, 80, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,10 +64,10 @@ func TestAttachURLQualifiedChain(t *testing.T) {
 }
 
 func TestAttachURLRejectsNonHTTPOrigin(t *testing.T) {
-	if _, err := AttachURL("file:///tmp", "a/1", 80, 24); err == nil {
+	if _, err := AttachURL("file:///tmp", "b1", "a/1", 80, 24); err == nil {
 		t.Fatal("a file: origin must be refused")
 	}
-	if _, err := AttachURL("http:///nohost", "a/1", 80, 24); err == nil {
+	if _, err := AttachURL("http:///nohost", "b1", "a/1", 80, 24); err == nil {
 		t.Fatal("an origin with no host must be refused")
 	}
 }

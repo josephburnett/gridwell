@@ -23,6 +23,13 @@ const (
 	// makes, so the client's records and the server's name the same work.
 	RequestHeader = "Gridwell-Request"
 
+	// BuildHeader carries the calling page's BuildCommit on every call it
+	// makes, and BuildQuery the same on the two that cannot set a header: a
+	// beacon and the shell WebSocket. The web door refuses a page of another
+	// build (Server.staleBuild).
+	BuildHeader = "Gridwell-Build"
+	BuildQuery  = "gridwell_build"
+
 	// ClockHeader is the sender's clock when it posted a batch to Path, in
 	// unix milliseconds. The node reads the skew off it once per batch and
 	// places each record at its CT plus that skew.

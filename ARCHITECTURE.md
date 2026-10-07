@@ -143,8 +143,10 @@ connections are two owners even though one transport serves both.
 
 Two listeners. The web door (`web.bind`) serves Connect, the content door,
 and the shell door behind a password cookie; serve mints the 0600
-`web-password` file and prints it, delete it to rotate. The connection door
-is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
+`web-password` file and prints it, delete it to rotate. Behind the cookie the
+build gate (`Server.staleBuild`) refuses any call a page of another build
+makes, before the verb runs; the page reloads (`client/nodebuild`). The
+connection door is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
 `server.yaml` key is `federation:` and its file is `federation.sock`, kept
 because an existing home already has them written down.
 
@@ -596,6 +598,7 @@ copy:
 | how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellReferences` |
 | is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
+| does this page run the node's build, and what it does when not | `Server.staleBuild`; `gwerr.StaleBuild`; `nodebuild.Decide` |
 | this event stream is established | `namespace.Follow` |
 | which grids the clients are showing | `interest.Book`, fed by `SetInterest`, counted by the `Subscribe` stream |
 | how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |

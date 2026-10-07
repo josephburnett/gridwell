@@ -34,7 +34,7 @@ func (a *App) sendBeacon(path string, body []byte, contentType string) bool {
 	if !nav.Truthy() || !nav.Get("sendBeacon").Truthy() {
 		return false
 	}
-	return nav.Call("sendBeacon", a.origin+path, blob).Bool()
+	return nav.Call("sendBeacon", a.origin+a.gate.BeaconPath(path), blob).Bool()
 }
 
 // flushOnUnload is the beforeunload durable-state path. It ends with a live

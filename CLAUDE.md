@@ -316,6 +316,10 @@ These were decided deliberately. Do not reverse one without a new decision.
 - The Chromium session is host-local: one partition for every live url
   tile. Nothing about sessions or networks crosses the wire.
 - No parameterized plugins. Modals center on the active pane.
+- A client the node served runs the node's build: the door refuses any call
+  from another build and the client reloads (2026-10-07). A page holding text
+  the node never saved does not reload: the text stays on screen, because the
+  door refuses its save too (`nodebuild.Decide`).
 
 ## Gates
 
