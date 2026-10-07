@@ -1,8 +1,7 @@
 import { test as base, expect, Page } from '@playwright/test';
-import { ChildProcess } from 'node:child_process';
 import { seedHome } from '../e2e/fixtures';
 import { removeHome } from '../e2e/homes';
-import { Served, spawnServe, freePort, authenticate } from './fixtures';
+import { RestartableServe, freePort, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
@@ -12,40 +11,7 @@ import { tileAt } from '../e2e/oracle';
 // These specs kill the server mid-session and prove the retry kick lands the
 // save on the reborn server with no user action, or swallow one request without
 // killing anything and prove the client recovers on its own. The stock `serve`
-// fixture cannot revive its process, so this file owns a restartable server.
-
-
-
-class RestartableServe {
-  child: ChildProcess | null = null;
-  token = '';
-  constructor(
-    readonly home: string,
-    readonly port: number,
-  ) {}
-  get origin(): string {
-    return `http://127.0.0.1:${this.port}`;
-  }
-  get served(): Served {
-    return { origin: this.origin, home: this.home, token: this.token, child: this.child! };
-  }
-  async start(): Promise<void> {
-    const served = await spawnServe(this.home, this.port);
-    this.child = served.child;
-    this.token = served.token; // the same password gives the same token across restarts
-  }
-  // SIGKILL, so there is no goodbye on any stream: the shape of a dropped link.
-  // It waits for the exit so the port is genuinely free for the restart.
-  async kill(): Promise<void> {
-    const child = this.child;
-    this.child = null;
-    if (!child) return;
-    await new Promise<void>((resolve) => {
-      child.once('exit', () => resolve());
-      child.kill('SIGKILL');
-    });
-  }
-}
+// fixture cannot revive its process, so these specs restart a RestartableServe.
 
 type Fixtures = {
   outage: RestartableServe;
