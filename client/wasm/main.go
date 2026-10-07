@@ -30,6 +30,7 @@ import (
 	"github.com/josephburnett/gridwell/client/interest"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/nav"
+	"github.com/josephburnett/gridwell/client/nodebuild"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
@@ -127,6 +128,11 @@ type App struct {
 
 	// unloading switches framing writes to sendBeacon; see unload.go.
 	unloading bool
+
+	// gate names this page's build on every call and hears the door refuse
+	// it; stale is the verdict last acted on (build.go).
+	gate  *nodebuild.Gate
+	stale *nodebuild.Verdict
 
 	// touchDownTarget is where synthetic MouseDowns route; owned by touch.go.
 	touch           *touchgest.Machine
@@ -560,11 +566,13 @@ func main() {
 	origin := js.Global().Get("location").Get("origin").String()
 	// Before the App: the rpc client's interceptor records into it.
 	tr := trace.New(trace.DefaultCapacity, trace.NewRequestID())
+	gate := nodebuild.New(tracewire.BuildCommit(), func(node string) { app.staleBuild(node) })
 	app = &App{
 		doc:                js.Global().Get("document"),
 		win:                js.Global().Get("window"),
 		origin:             origin,
-		cl:                 rpc.NewDefaultClient(origin, connect.WithInterceptors(trace.Interceptor(tr, time.Now))),
+		cl:                 rpc.NewDefaultClient(origin, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
+		gate:               gate,
 		c:                  cache.New(),
 		interestKick:       make(chan struct{}, 1),
 		locals:             map[string]*paneLocal{},
@@ -587,7 +595,7 @@ func main() {
 	// The flush timer exists now; the interceptor's records reach the ring no
 	// other way.
 	tr.OnEmit = app.armTraceFlush
-	app.emit(traceevent.Boot(tracewire.BuildCommit(), runtime.Version(),
+	app.emit(traceevent.Boot(gate.Build(), runtime.Version(),
 		jsString(js.Global().Get("navigator").Get("userAgent"))))
 	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed, app.paneLayoutUnreadable)
 	app.trans = transition.New(app.enterSegment, app.landTransition)
@@ -634,7 +642,7 @@ func main() {
 
 	// PTY bytes ride the /shell WebSocket on this page's origin and cookie.
 	app.shells = shellstream.New(
-		shellws.Dialer(shellws.Options{Origin: origin}),
+		shellws.Dialer(shellws.Options{Origin: origin, Build: gate.Build(), OnStaleBuild: gate.Stale}),
 		func(key string, data []byte) { app.onShellData(key, data) },
 		func(e shellstream.Exit) { app.onShellExit(e.Key, e.Message, e.SessionGone) },
 	)
@@ -671,6 +679,7 @@ func (a *App) bootstrap() {
 		a.draw()
 		time.Sleep(backoff.Next())
 	}
+	a.emit(traceevent.NodeBuild(plugins.Build))
 	a.plugins = plugins.Plugins
 	// shells_disabled folds into caps at boot, the one owner of what this client
 	// can do.
@@ -683,6 +692,7 @@ func (a *App) bootstrap() {
 
 func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
+	a.showCarriedNotice()
 	p := a.tree.FocusedPane()
 	// Land at home; applyURLOnBoot may restore a place over it.
 	p.Reset(pane.Frame{GridID: a.home, View: p.View})

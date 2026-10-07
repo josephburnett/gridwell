@@ -68,14 +68,7 @@ func (a *App) postTraceBatch(batch []byte, done func(kept bool)) {
 // diagnostic.
 func (a *App) dumpTrace() {
 	go func() {
-		halves := []trace.HandOver{{Origin: tracewire.OriginClient}}
-		if batch, done := a.pump.Force(a.tr, time.Now()); batch != nil {
-			_, err := a.postTrace(tracewire.Path, batch)
-			done(err == nil)
-			if err != nil {
-				halves[0].Lost = err.Error()
-			}
-		}
+		halves := []trace.HandOver{{Origin: tracewire.OriginClient, Lost: a.handOverTrace()}}
 		if a.caps.HostTrace {
 			halves = append(halves, trace.HandOver{Origin: tracewire.OriginElectron, Lost: a.bridgeHandOverTrace()})
 		}
@@ -87,6 +80,22 @@ func (a *App) dumpTrace() {
 		sev, msg := trace.DumpNotice(dump.Path, err, halves)
 		a.reportErr(sev, traceSource, msg)
 	}()
+}
+
+// handOverTrace posts every record this client still holds, answering why
+// they did not reach the node, empty when they did. It blocks, so it runs only
+// off the event loop.
+func (a *App) handOverTrace() string {
+	batch, done := a.pump.Force(a.tr, time.Now())
+	if batch == nil {
+		return ""
+	}
+	_, err := a.postTrace(tracewire.Path, batch)
+	done(err == nil)
+	if err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // bridgeHandOverTrace waits for the host's TraceClient.handOver, answering why

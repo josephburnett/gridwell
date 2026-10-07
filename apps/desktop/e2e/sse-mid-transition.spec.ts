@@ -43,7 +43,12 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
     async ([org, gridId, wellId]: string[]) => {
       const r = await fetch(`${org}/gridwell.v1.Gridwell/CreateTile`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Connect-Protocol-Version': '1',
+          // The door refuses a page's call that names no build (Server.staleBuild).
+          'Gridwell-Build': (window as any).__gridwellTest.build(),
+        },
         body: JSON.stringify({
           gridId,
           path: { wellIds: [wellId] },
@@ -125,7 +130,12 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
       async ([org, gridId, wellId]: string[]) => {
         const r = await fetch(`${org}/gridwell.v1.Gridwell/CreateTile`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Connect-Protocol-Version': '1',
+            // The door refuses a page's call that names no build (Server.staleBuild).
+            'Gridwell-Build': (window as any).__gridwellTest.build(),
+          },
           body: JSON.stringify({
             gridId,
             path: { wellIds: [wellId] },

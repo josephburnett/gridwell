@@ -55,6 +55,10 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 			// Re-issue on every authenticated request, so the 400-day cap
 			// slides and a regularly-used browser never expires.
 			setAuthCookie(w, token)
+			if client, stale := s.staleBuild(r); stale {
+				s.refuseStaleBuild(w, r, client)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}

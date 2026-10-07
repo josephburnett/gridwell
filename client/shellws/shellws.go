@@ -26,6 +26,11 @@ type Options struct {
 	// Origin is the page's own http(s) origin; the door is same-origin by
 	// construction.
 	Origin string
+	// Build is the page's tracewire.BuildCommit, and OnStaleBuild hears the
+	// door's refusal of it, the one answer every call shares
+	// (client/nodebuild). Nil hears nothing.
+	Build        string
+	OnStaleBuild func(node string)
 	// HTTPClient and Header are honored off-browser only: a browser attaches
 	// its own cookies and forbids setting handshake headers.
 	HTTPClient *http.Client
@@ -43,7 +48,7 @@ func Dialer(o Options) shellstream.Dialer {
 			bound = DefaultWriteTimeout
 		}
 		c := &conn{wake: make(chan struct{}, 1), ctx: ctx, cancel: cancel, onEnd: onEnd, writeBound: bound}
-		addr, err := shellwire.AttachURL(o.Origin, tileID, cols, rows)
+		addr, err := shellwire.AttachURL(o.Origin, o.Build, tileID, cols, rows)
 		if err != nil {
 			c.end("shell address: "+err.Error(), false)
 			return c
@@ -125,6 +130,9 @@ func (c *conn) run(addr string, o Options, onData func([]byte)) {
 				return
 			}
 			if ctl.Kind == shellwire.KindExit {
+				if ctl.StaleBuild != "" && o.OnStaleBuild != nil {
+					o.OnStaleBuild(ctl.StaleBuild)
+				}
 				c.end(ctl.Message, ctl.SessionGone)
 				return
 			}

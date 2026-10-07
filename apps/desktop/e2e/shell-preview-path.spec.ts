@@ -73,7 +73,12 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
   const jpegB64 = await window.evaluate(async ([org, tileId]: string[]) => {
     const r = await fetch(`${org}/gridwell.v1.Gridwell/GetTilePreview`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Connect-Protocol-Version': '1',
+        // The door refuses a page's call that names no build (Server.staleBuild).
+        'Gridwell-Build': (window as any).__gridwellTest.build(),
+      },
       body: JSON.stringify({ tileId }),
     });
     return ((await r.json()) as { jpeg?: string }).jpeg ?? '';

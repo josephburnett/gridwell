@@ -72,6 +72,10 @@ type Server struct {
 	infoCache map[string]*pb.InfoResponse
 
 	interest *interest.Book
+
+	// build is tracewire.BuildCommit, read once: the handshake names it and
+	// staleBuild judges every page's call against it.
+	build string
 }
 
 // New refuses an empty Config.Password: the browser door has no open mode.
@@ -85,6 +89,7 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 		mux:               http.NewServeMux(),
 		shellWriteTimeout: defaultShellWriteTimeout,
 		infoCache:         map[string]*pb.InfoResponse{},
+		build:             tracewire.BuildCommit(),
 	}
 	srv.interest = interest.New(srv.spreadInterest)
 	srv.routes()

@@ -565,6 +565,10 @@ message HandshakeResponse {
   // fact of the local origin: content URLs are always built against the serving
   // node, and a connection is followed behind the door, over the RPC.
   string content_token = 5;
+  // build is the commit the node was built from (tracewire.BuildCommit), ""
+  // for an unstamped build, for the client's log. Nothing depends on it: the
+  // web door refuses a page of another build on every call (StaleBuild).
+  string build = 14;
 }
 
 
@@ -581,6 +585,16 @@ message TileResponse {
 // answering node's frame, empty when the namespace answered for a gone key.
 message DeadReference {
   string namespace = 1;
+}
+
+// StaleBuild is the detail on the FailedPrecondition the web door answers a
+// page of another build with, before the verb runs: node is the door's build,
+// client the one the page named ("" when it named none). gwerr.StaleBuild
+// writes it and gwerr.StaleBuildOf reads it; the client's one answer is to
+// reload (client/nodebuild).
+message StaleBuild {
+  string node   = 1;
+  string client = 2;
 }
 
 // CreateTileRequest creates one tile of any kind. There is no version: the

@@ -116,7 +116,7 @@ func (s *Server) shellDoor() http.Handler {
 			return s.openShellBound(ctx, ns, local, bind, recv, send)
 		})
 		trace.Emit("shelldoor", "pty", closeVerdict(msg, gone), kv)
-		writeShellExit(conn, s.shellWriteTimeout, msg, gone)
+		writeShellExit(conn, s.shellWriteTimeout, shellwire.EncodeExit(msg, gone))
 	})
 }
 
@@ -133,9 +133,9 @@ func closeVerdict(message string, sessionGone bool) string {
 
 // writeShellExit carries the verdict a WebSocket close code cannot: why the
 // attachment ended, and whether the session itself is gone.
-func writeShellExit(conn *websocket.Conn, bound time.Duration, message string, sessionGone bool) {
+func writeShellExit(conn *websocket.Conn, bound time.Duration, exit []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), bound)
-	_ = conn.Write(ctx, websocket.MessageText, shellwire.EncodeExit(message, sessionGone))
+	_ = conn.Write(ctx, websocket.MessageText, exit)
 	cancel()
 	_ = conn.Close(websocket.StatusNormalClosure, "")
 }

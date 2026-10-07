@@ -149,6 +149,8 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
+		// The build this page names on its calls (nodebuild.Gate).
+		"build": js.FuncOf(func(js.Value, []js.Value) any { return a.gate.Build() }),
 		// The writes the server has not acknowledged, in drain order, as
 		// "<op>:<id>".
 		"outbox": js.FuncOf(func(js.Value, []js.Value) any {

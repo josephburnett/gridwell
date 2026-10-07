@@ -80,6 +80,40 @@ export async function stopServe(child: ChildProcess): Promise<void> {
   });
 }
 
+// One home served on one port across restarts, for the specs that take the
+// node away under a live client. The stock serve fixture cannot revive its
+// process.
+export class RestartableServe {
+  child: ChildProcess | null = null;
+  token = '';
+  constructor(
+    readonly home: string,
+    readonly port: number,
+  ) {}
+  get origin(): string {
+    return `http://127.0.0.1:${this.port}`;
+  }
+  get served(): Served {
+    return { origin: this.origin, home: this.home, token: this.token, child: this.child! };
+  }
+  async start(): Promise<void> {
+    const served = await spawnServe(this.home, this.port);
+    this.child = served.child;
+    this.token = served.token; // the same password gives the same token across restarts
+  }
+  // SIGKILL, so there is no goodbye on any stream: the shape of a dropped link.
+  // It waits for the exit so the port is genuinely free for the restart.
+  async kill(): Promise<void> {
+    const child = this.child;
+    this.child = null;
+    if (!child) return;
+    await new Promise<void>((resolve) => {
+      child.once('exit', () => resolve());
+      child.kill('SIGKILL');
+    });
+  }
+}
+
 // The cookie a spec's own fetch must carry against a served origin.
 export function authHeaders(served: Served): Record<string, string> {
   return { Cookie: `gridwell_auth=${served.token}` };

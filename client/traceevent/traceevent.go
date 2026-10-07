@@ -41,6 +41,28 @@ func Boot(commit, goVersion, userAgent string) Event {
 		KV: kv("commit", commit, "go", goVersion, "ua", userAgent)}
 }
 
+// NodeBuild is the build the node's handshake named, beside the client's own
+// on its boot record.
+func NodeBuild(node string) Event {
+	return Event{Src: "client", Kind: "handshake", Msg: "node runs " + shortOrUnstamped(node),
+		KV: kv("node", node)}
+}
+
+// StaleBuild is the door refusing this page's build and what the page did
+// about it (nodebuild.Decide).
+func StaleBuild(client, node, verdict string) Event {
+	return Event{Src: "client", Kind: "build", Msg: "the node runs " + shortOrUnstamped(node) +
+		", this page " + shortOrUnstamped(client) + ": " + verdict,
+		KV: kv("client", client, "node", node, "verdict", verdict)}
+}
+
+func shortOrUnstamped(build string) string {
+	if build == "" {
+		return "no build"
+	}
+	return tracewire.ShortCommit(build)
+}
+
 // Notice is a user-visible notice, under the source that raised it.
 func Notice(sev errsurface.Severity, source, message string) Event {
 	s := "error"

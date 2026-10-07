@@ -1,7 +1,7 @@
 // Package shellwire is the shell transport's wire grammar, the one place the
 // client and the server agree on how PTY bytes cross the web door:
 //
-//	GET <origin>/shell?tile_id=<qualified>&cols=N&rows=N   (Upgrade: websocket)
+//	GET <origin>/shell?tile_id=<qualified>&cols=N&rows=N&gridwell_build=B   (Upgrade: websocket)
 //	  · gated by the same auth cookie as every other page request
 //	    (internal/server/auth.go) and strict same-origin;
 //	  · binary frames both ways are raw PTY bytes, nothing wrapping them;
@@ -16,6 +16,8 @@ import (
 	"errors"
 	"net/url"
 	"strconv"
+
+	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
 // Path is the door's address on the web mux.
@@ -52,12 +54,16 @@ type Control struct {
 	// transport failing, and the client flips the refresh affordance off.
 	Message     string `json:"message,omitempty"`
 	SessionGone bool   `json:"session_gone,omitempty"`
+	// StaleBuild is the node's build when the door refused a page of another
+	// one (gwerr.StaleBuild), the socket's form of that verdict.
+	StaleBuild string `json:"stale_build,omitempty"`
 }
 
 // AttachURL is the address a client dials to attach to tileID's PTY. origin is
-// the page's own http(s) origin, whose scheme is swapped to ws(s).
+// the page's own http(s) origin, whose scheme is swapped to ws(s); build is
+// the page's, which a browser cannot send as a header.
 // shellsvc.ClampSize owns the size bounds, so nothing is re-clamped here.
-func AttachURL(origin, tileID string, cols, rows int) (string, error) {
+func AttachURL(origin, build, tileID string, cols, rows int) (string, error) {
 	u, err := url.Parse(origin)
 	if err != nil {
 		return "", err
@@ -78,6 +84,7 @@ func AttachURL(origin, tileID string, cols, rows int) (string, error) {
 	q.Set(QueryTileID, tileID)
 	q.Set(QueryCols, strconv.Itoa(cols))
 	q.Set(QueryRows, strconv.Itoa(rows))
+	q.Set(tracewire.BuildQuery, build)
 	u.RawQuery = q.Encode()
 	u.Fragment = ""
 	return u.String(), nil
@@ -118,6 +125,12 @@ func EncodeResize(cols, rows int) []byte {
 
 func EncodeExit(message string, sessionGone bool) []byte {
 	return mustJSON(Control{Kind: KindExit, Message: message, SessionGone: sessionGone})
+}
+
+// EncodeStaleBuild is the exit the door sends a page of another build before
+// any PTY is touched.
+func EncodeStaleBuild(message, node string) []byte {
+	return mustJSON(Control{Kind: KindExit, Message: message, StaleBuild: node})
 }
 
 // DecodeControl is used by both ends, so an unreadable frame is a failure at

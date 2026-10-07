@@ -298,7 +298,7 @@ func TestShellDoorRefusesUnknownTile(t *testing.T) {
 func TestShellDoorRequiresTheAuthCookie(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
-	addr, err := shellwire.AttachURL(f.hs.URL, tile.Id, 80, 24)
+	addr, err := shellwire.AttachURL(f.hs.URL, "", tile.Id, 80, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ func TestShellDoorRequiresTheAuthCookie(t *testing.T) {
 func TestShellDoorRefusesCrossOrigin(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
-	addr, err := shellwire.AttachURL(f.hs.URL, tile.Id, 80, 24)
+	addr, err := shellwire.AttachURL(f.hs.URL, "", tile.Id, 80, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +348,7 @@ func TestShellDoorRefusedWhenShellsDisabled(t *testing.T) {
 	off := newShellDoorFixture(t, Config{DisableShells: true})
 	// Any shell id at all: the refusal precedes resolution, exactly as it
 	// does on the node export, so it cannot depend on the tile existing.
-	addr, err := shellwire.AttachURL(off.hs.URL, off.uuid+"/1", 80, 24)
+	addr, err := shellwire.AttachURL(off.hs.URL, "", off.uuid+"/1", 80, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +411,7 @@ func TestShellDoorReleasesThePTYWhenTheViewerStopsDraining(t *testing.T) {
 	const bound = 250 * time.Millisecond
 	f := newShellDoorFixture(t, Config{}, func(s *Server) { s.shellWriteTimeout = bound })
 	tile := f.createShell(t, 0, 0)
-	addr, err := shellwire.AttachURL(f.hs.URL, tile.Id, 80, 24)
+	addr, err := shellwire.AttachURL(f.hs.URL, "", tile.Id, 80, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
