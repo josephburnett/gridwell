@@ -6,6 +6,8 @@ package server_test
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,11 +29,12 @@ import (
 
 const watchUUID = "pwatch1"
 
-// pokedWatch declares Watch and one collection, and sends a ContextChanged
-// for it on every poke.
+// pokedWatch declares Watch and one collection, and on every poke adds an
+// entry to it and sends its ContextChanged.
 type pokedWatch struct {
 	pluginv1.UnimplementedPluginServer
-	poke chan struct{}
+	poke    chan struct{}
+	entries *atomic.Int32
 }
 
 func (pokedWatch) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
@@ -39,14 +42,23 @@ func (pokedWatch) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoRe
 		MenuEntries: []*pluginv1.MenuEntry{{Id: "all", Label: "All", Context: "all"}}}, nil
 }
 
-func (pokedWatch) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
-	return &pluginv1.ListResponse{Authoritative: true}, nil
+func (p pokedWatch) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+	resp := &pluginv1.ListResponse{Authoritative: true}
+	if p.entries == nil {
+		return resp, nil
+	}
+	for i := range p.entries.Load() {
+		k := fmt.Sprintf("e%d", i)
+		resp.Entries = append(resp.Entries, &pluginv1.Entry{Key: k, Kind: "text", Label: k})
+	}
+	return resp, nil
 }
 
 func (p pokedWatch) Watch(_ *pluginv1.WatchRequest, s grpc.ServerStreamingServer[pluginv1.Change]) error {
 	for {
 		select {
 		case <-p.poke:
+			p.entries.Add(1)
 			if err := s.Send(&pluginv1.Change{Payload: &pluginv1.Change_ContextChanged{
 				ContextChanged: &pluginv1.ContextChanged{Context: "all"}}}); err != nil {
 				return err
@@ -61,7 +73,7 @@ func (p pokedWatch) Watch(_ *pluginv1.WatchRequest, s grpc.ServerStreamingServer
 // pluginhost.Start, and returns its poke.
 func registerWatching(t *testing.T, reg *plugin.Registry, st *store.Store) chan<- struct{} {
 	t.Helper()
-	p := pokedWatch{poke: make(chan struct{}, 1)}
+	p := pokedWatch{poke: make(chan struct{}, 1), entries: new(atomic.Int32)}
 	cp, closer, err := plugintest.Loopback(p)
 	if err != nil {
 		t.Fatal(err)

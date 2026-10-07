@@ -172,8 +172,8 @@ func TestGmailHistoryDeltaAnnouncesTheInbox(t *testing.T) {
 	if err := n.cl.SetInterest(ctx, []string{n.inbox, n.starred}); err != nil {
 		t.Fatal(err)
 	}
-	// Nobody read either grid, so the open announces both, and the first walk
-	// announces them again. Settled is over a second of nothing: past the
+	// Nobody read either grid, so the open notes both, and the first walk
+	// announces what it moves. Settled is over a second of nothing: past the
 	// refresher's tick, whose held history changes nothing.
 	opened := map[string]bool{}
 	for settled := false; !settled; {
@@ -186,10 +186,6 @@ func TestGmailHistoryDeltaAnnouncesTheInbox(t *testing.T) {
 			t.Fatalf("the Watch never settled; saw %v", opened)
 		}
 	}
-	if !opened[n.inbox] || !opened[n.starred] {
-		t.Fatalf("the open announced %v, want both doorways", opened)
-	}
-
 	n.g.holdHistory(false)
 	for told := ""; told != n.inbox; {
 		select {

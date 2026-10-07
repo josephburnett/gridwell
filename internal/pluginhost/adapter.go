@@ -76,12 +76,10 @@ type Adapter struct {
 	scope   []string
 	moved   chan struct{}
 
-	// served is, per grid address, each distinct listing GetGrid has answered
-	// since the grid was last announced, and the one it was announced with:
-	// what a client may hold. See announceMoved; emitGridChanged clears an
-	// entry.
+	// served is, per grid address, what a client may hold of it; settle is
+	// its one check and note, and emitGridChanged forgets what it holds.
 	servedMu sync.Mutex
-	served   map[string][]listingSum
+	served   map[string]*servedGrid
 }
 
 var _ namespace.Namespace = (*Adapter)(nil)
@@ -251,14 +249,20 @@ func sourceDetail(err error) string {
 	return "the source is not answering: " + err.Error()
 }
 
-// emitGridChanged announces a grid under its derived address.
+// emitGridChanged announces a grid a write moved under its derived address.
 func (a *Adapter) emitGridChanged(gridID string) {
 	if gridID == "" {
 		return
 	}
 	a.servedMu.Lock()
-	delete(a.served, gridID)
+	if g := a.served[gridID]; g != nil {
+		g.sums = nil
+	}
 	a.servedMu.Unlock()
+	a.publishGridChanged(gridID)
+}
+
+func (a *Adapter) publishGridChanged(gridID string) {
 	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{
 		GridChanged: &gridwellv1.GridChanged{GridId: gridID},
 	}})
@@ -381,6 +385,8 @@ type synthesized struct {
 	entries []*pluginv1.Entry
 	// dark and authoritative are what the listing was; see absent.
 	dark, authoritative bool
+	// since is the grid's servedGrid.gen before the listing was asked.
+	since uint64
 }
 
 // resolveGrid reads a wire grid id as the context it names plus the grid row
@@ -413,6 +419,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	if err != nil {
 		return nil, err
 	}
+	since := a.servedGen(rpc.EntryGridID(ckey))
 	// A transport failure is "not right now", not a verdict: nothing retires.
 	dark := false
 	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Context: ckey})
@@ -502,7 +509,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		return nil, err
 	}
 	return &synthesized{grid: g, context: ckey, gid: gid, rows: tiles, tiles: wire, entries: resp.Entries,
-		dark: dark, authoritative: resp.Authoritative}, nil
+		dark: dark, authoritative: resp.Authoritative, since: since}, nil
 }
 
 func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
@@ -510,7 +517,9 @@ func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (
 	if err != nil {
 		return nil, err
 	}
-	a.noteServed(s)
+	if a.settle(s, false) {
+		a.announce([]string{s.context})
+	}
 	return &gridwellv1.GetGridResponse{Grid: s.grid, Tiles: s.tiles}, nil
 }
 

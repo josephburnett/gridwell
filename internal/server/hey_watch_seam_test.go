@@ -75,6 +75,10 @@ func TestHeyFeedRunsOnlyWhileAGridIsShown(t *testing.T) {
 			events <- ev
 		}
 	}()
+	// The client reads what it shows.
+	if _, err := cl.GetGrid(ctx, shown); err != nil {
+		t.Fatal(err)
+	}
 	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
 		t.Fatal(err)
 	}
