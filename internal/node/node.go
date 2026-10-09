@@ -235,6 +235,7 @@ func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerCon
 	if err != nil {
 		return err
 	}
+	impl.SwitchedOff(func(name string) bool { return reg.Disabled(rpc.QualifyID(cfg.ID, name)) })
 	impl.ConnectAll(context.Background())
 	reg.SetTransport(front(impl), func() { closeImpl(impl) })
 	for _, c := range cfg.Connections {

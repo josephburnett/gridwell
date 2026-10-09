@@ -157,16 +157,12 @@ func (r *Registry) Get(id string) (namespace.Namespace, bool) {
 	return c, ok
 }
 
+// Close runs every closer once the registry has let go of its lock: a closer
+// takes its source's own lock, under which that source reads Disabled.
 func (r *Registry) Close() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	for id, c := range r.closers {
-		c()
-		delete(r.closers, id)
-	}
-	if r.transportClose != nil {
-		r.transportClose()
-	}
+	closers, transportClose := r.closers, r.transportClose
+	r.closers = make(map[string]func())
 	r.transport, r.transportClose = nil, nil
 	r.clients = make(map[string]namespace.Namespace)
 	r.kinds = make(map[string]string)
@@ -174,4 +170,11 @@ func (r *Registry) Close() {
 	r.switches = make(map[string]func())
 	r.off = make(map[string]bool)
 	r.order = nil
+	r.mu.Unlock()
+	for _, c := range closers {
+		c()
+	}
+	if transportClose != nil {
+		transportClose()
+	}
 }
