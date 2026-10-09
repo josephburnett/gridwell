@@ -6,6 +6,7 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -235,10 +236,11 @@ func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerCon
 	if err != nil {
 		return err
 	}
+	impl.SwitchedOff(func(name string) bool { return reg.Disabled(rpc.QualifyID(cfg.ID, name)) })
 	impl.ConnectAll(context.Background())
 	reg.SetTransport(front(impl), func() { closeImpl(impl) })
 	for _, c := range cfg.Connections {
-		reg.Switch(rpc.QualifyID(cfg.ID, c.Name), func() { impl.Disable(c.Name) })
+		reg.Switch(rpc.QualifyID(cfg.ID, c.Name), cmp.Or(c.Label, c.Name), func() { impl.Disable(c.Name) })
 	}
 	return nil
 }

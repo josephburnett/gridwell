@@ -243,7 +243,11 @@ one the node registers per connection closes its transport and refuses every
 later dial. The router tells it on every stream as `EventPluginHealth.disabled`
 whatever a layer underneath says (`Server.asSwitched`). The source then reads
 as dark, nothing tries it again, and a restart brings it back, because
-nothing about it was written.
+nothing about it was written. It is read-only meanwhile, decided in the
+router for plugins and connections alike (`server/disabled.go`): a write to
+it is refused with `gwerr.SourceDisabled`, a verdict the client drops rather
+than parks, and a grid it serves is stamped unwritable with every row
+`read_only` and the reason, so the editor refuses before a key is typed.
 
 The host-local half of a row is checked before the node serves: a missing
 `addr`, a `key` or `known_hosts` path that is not there or not readable fails

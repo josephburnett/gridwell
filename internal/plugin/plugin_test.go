@@ -54,7 +54,7 @@ func TestRegistry_CloseForgetsEveryFact(t *testing.T) {
 func TestRegistry_DisableStopsOnceAndOnlyASwitch(t *testing.T) {
 	reg := plugin.NewRegistry()
 	stops := 0
-	reg.Switch("p1", func() { stops++ })
+	reg.Switch("p1", "P1", func() { stops++ })
 	if err := reg.Disable("home"); err == nil || reg.Disabled("home") {
 		t.Fatal("a namespace with no switch was disabled")
 	}
@@ -68,5 +68,11 @@ func TestRegistry_DisableStopsOnceAndOnlyASwitch(t *testing.T) {
 	}
 	if got := reg.DisabledNow(); len(got) != 1 || got[0] != "p1" {
 		t.Fatalf("DisabledNow = %v, want [p1]", got)
+	}
+	if got, want := reg.DisabledReason("p1"), "P1 is disabled until the node restarts"; got != want {
+		t.Fatalf("DisabledReason = %q, want %q", got, want)
+	}
+	if got := reg.DisabledReason("home"); got != "" {
+		t.Fatalf("a source never disabled gives a reason: %q", got)
 	}
 }

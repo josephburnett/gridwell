@@ -256,3 +256,21 @@ func TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt(t *testing.T) {
 		t.Errorf("remembered after the answer = %+v, want %+v", got, g)
 	}
 }
+
+// A root framing write names its grid, not a tile, so its outcome is the
+// root's source's reachability. Read off the empty tile id it named the
+// source "", which is every unchained grid's, and a refused pan made every
+// such grid revalidate on each read.
+func TestARootFramingWriteDarkensItsOwnSourceOnly(t *testing.T) {
+	cc, src := framingFixture(t)
+	src.setDown(true)
+	if _, err := cc.SetFraming(context.Background(), &pb.SetFramingRequest{RootGridId: farHome, Cx: 1, Cy: 1, Zoom: 1}); err == nil {
+		t.Fatal("a dark source accepted a framing write")
+	}
+	if cc.isDark("") {
+		t.Error("a failed root write darkened the source of every unchained grid")
+	}
+	if !cc.isDark(sourceOf(farHome)) {
+		t.Errorf("a failed root write left its own source %q light", sourceOf(farHome))
+	}
+}

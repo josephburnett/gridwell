@@ -413,3 +413,46 @@ func TestATargetReadSaysNothingOfTheDeadVerdict(t *testing.T) {
 		}
 	}
 }
+
+// disabledAnswer is the node's disabled verdict as the browser receives it,
+// through the one codec that rebuilds an error.
+func disabledAnswer() error {
+	off := gwerr.SourceDisabled("n/rtb", "rtb is disabled until the node restarts")
+	return gwerr.ConnectDetails(off, connect.NewError(gwerr.ConnectCode(status.Code(off)), errors.New(status.Convert(off).Message())))
+}
+
+// A write to a source the user disabled is a verdict that cannot change before
+// the node restarts: never parked, never retried. An optimistic write (a pan,
+// a drag) is dropped without a word, since the source's chip already says it
+// is off; a save, which drops the user's words, says why; a plain
+// FailedPrecondition stays a conflict.
+func TestTheDisabledVerdict(t *testing.T) {
+	if got := Of(disabledAnswer()); got != OutcomeDisabled {
+		t.Fatalf("Of(disabled) = %v, want OutcomeDisabled", got)
+	}
+	if got := Of(connect.NewError(connect.CodeFailedPrecondition, errors.New("version"))); got != OutcomeConflict {
+		t.Fatalf("Of(plain failed_precondition) = %v, want OutcomeConflict", got)
+	}
+	if Unheard(OutcomeDisabled) {
+		t.Fatal("the disabled verdict reads as unheard, so the outbox would park it")
+	}
+	for name, r := range map[string]Reaction{
+		"React": React(OutcomeDisabled), "ReactOptimistic": ReactOptimistic(OutcomeDisabled), "ReactSave": ReactSave(OutcomeDisabled),
+	} {
+		if r.Retry {
+			t.Errorf("%s retries the disabled verdict: %+v", name, r)
+		}
+	}
+	if got, want := ReactOptimistic(OutcomeDisabled), (Reaction{DropLocal: true}); got != want {
+		t.Errorf("ReactOptimistic(disabled) = %+v, want %+v: dropped, no notice, no refetch", got, want)
+	}
+	if got := NoticesFor(ReactOptimistic(OutcomeDisabled), OutcomeDisabled, true); got != (Notices{}) {
+		t.Errorf("an optimistic write meeting the disabled verdict posts %+v, want nothing", got)
+	}
+	if got, want := ReactSave(OutcomeDisabled), ReactSave(OutcomeRejected); got != want {
+		t.Errorf("ReactSave(disabled) = %+v, want the rejection %+v: the user's words are dropped, so it is said", got, want)
+	}
+	if got, want := React(OutcomeDisabled), (Reaction{Log: true}); got != want {
+		t.Errorf("React(disabled) = %+v, want %+v: a gesture refused says why", got, want)
+	}
+}

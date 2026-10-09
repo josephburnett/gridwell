@@ -103,7 +103,9 @@ health on the stream this layer relays — and written through one door,
 `setDark`, whose transition back to light is also what re-warms that source.
 Every other read passes through and remembers, falling back to the remembered
 answer on a transport-class failure only. Writes always pass through and fold
-their responses into the remembered rows (`foldWrite`). The relayed stream
+their responses into the remembered rows (`foldWrite`), except to a source
+the user disabled, whose writes the router refuses before they reach this
+layer (`gwerr.SourceDisabled`, `server/disabled.go`). The relayed stream
 folds in the same way (`applyEvent`): `TileChanged` and `TileRemoved` into
 the tile rows, a well's framing riding its tile, and `GridFramingChanged` into
 every remembered handshake's doorways rooted at that grid (`Layer.reframe`,
@@ -124,7 +126,9 @@ on recovery, never once per retry. Every relayed event is re-qualified by
 health uuid included, so a far namespace's health stays addressable here.
 A source the user disabled (`plugin.Registry.Disable`) is told as disabled
 whatever a layer under the router says of it (`Server.asSwitched`), and a
-stream opens with every disabled one.
+stream opens with every disabled one. At the switch, every grid of it on
+screen is announced changed (`Server.announceDisabled`), so the views read it
+again and take its read-only stamp.
 The router holds no freshness state; it is a relay with a health contract.
 
 **6. The client cache** — `client/cache/cache.go`. The server is canonical.

@@ -67,6 +67,13 @@ func (b *Book) Set(id string, grids []string) {
 	b.recount()
 }
 
+// Union is every grid a counted session shows.
+func (b *Book) Union() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.union)
+}
+
 func (b *Book) at(id string) *session {
 	s, ok := b.sessions[id]
 	if !ok {

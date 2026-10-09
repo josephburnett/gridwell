@@ -18,6 +18,10 @@ func HealthEvent(uuid string, healthy bool, detail string) *pb.Event {
 // source gives one.
 const DisabledDetail = "disabled until the node restarts"
 
+// DisabledReason is what a disabled source's rows say and its writes are
+// refused with, naming the source by its label.
+func DisabledReason(label string) string { return label + " is " + DisabledDetail }
+
 // DisabledEvent is the health a source the user switched off reports for the
 // rest of the node's life.
 func DisabledEvent(uuid string) *pb.Event {

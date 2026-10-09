@@ -71,10 +71,9 @@ type Server struct {
 	// absent is reachable. Every kind of failure is this one fact, written
 	// only by note. Never persisted.
 	health map[string]connState
-	// stopped is every connection Disable tore down; it is never dialed
-	// again. The user's switch is plugin.Registry's; this is the dial it
-	// stops.
-	stopped map[string]bool
+	// off reads which connections the user disabled, by name; the record is
+	// plugin.Registry's (SwitchedOff). Nil disables none.
+	off func(name string) bool
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 
@@ -128,7 +127,7 @@ var _ namespace.Namespace = (*Server)(nil)
 func New(st *store.Store, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
 	s := &Server{st: st, dial: dialer, home: home, conns: map[string]*Conn{},
-		live: map[string]*liveConn{}, health: map[string]connState{}, stopped: map[string]bool{},
+		live: map[string]*liveConn{}, health: map[string]connState{},
 		hub: eventhub.New(rpc.EventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
@@ -192,13 +191,18 @@ func (s *Server) Close() error {
 	return nil
 }
 
-// Disable is a connection's switch (plugin.Registry.Switch): its transport
-// closes, cancelling everything it runs, and every later read through the
-// name is refused unavailable without a dial, so the cache answers for it as
-// for any dark connection.
+// SwitchedOff hands the server its reader of the user's switch, before
+// anything dials.
+func (s *Server) SwitchedOff(off func(name string) bool) { s.off = off }
+
+func (s *Server) switchedOff(name string) bool { return s.off != nil && s.off(name) }
+
+// Disable is a connection's switch (plugin.Registry.Switch), run once the
+// registry records it off: its transport closes, cancelling everything it
+// runs, and every later read through the name is refused unavailable without
+// a dial, so the cache answers for it as for any dark connection.
 func (s *Server) Disable(name string) {
 	s.mu.Lock()
-	s.stopped[name] = true
 	lc := s.live[name]
 	delete(s.live, name)
 	s.mu.Unlock()
@@ -395,7 +399,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 		s.mu.Unlock()
 		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: the node is shutting down", name)
 	}
-	if s.stopped[name] {
+	if s.switchedOff(name) {
 		s.mu.Unlock()
 		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: %s", name, rpc.DisabledDetail)
 	}
@@ -528,7 +532,7 @@ func (s *Server) kickRootFetch(c *Conn) {
 // retrying every five seconds publishes once.
 func (s *Server) note(name string, st connState) bool {
 	s.mu.Lock()
-	if s.stopped[name] {
+	if s.switchedOff(name) {
 		// A learn or fan-in that outlived Disable does not speak for it.
 		st = connState{detail: rpc.DisabledDetail}
 	}

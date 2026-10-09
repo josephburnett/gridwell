@@ -597,6 +597,17 @@ message StaleBuild {
   string client = 2;
 }
 
+// SourceDisabled is the detail on the FailedPrecondition a node answers a write
+// with when the source that owns its target is one the user disabled: the
+// write cannot land before the node restarts, so the client drops it rather
+// than parking it for a retry. Not Unavailable: the hop that relays it
+// reached its far end, which is not dark. namespace is the disabled source in
+// the answering node's frame. gwerr.SourceDisabled writes it and
+// gwerr.IsSourceDisabled reads it.
+message SourceDisabled {
+  string namespace = 1;
+}
+
 // CreateTileRequest creates one tile of any kind. There is no version: the
 // tile does not exist yet. tile.kind selects which fields are meaningful:
 //   well  → child_grid_id set makes an exit well pointing at a grid in

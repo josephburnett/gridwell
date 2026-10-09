@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -54,16 +55,18 @@ func IsDeadRef(err error) bool {
 	return false
 }
 
-// ConnectDetails carries a status's DeadReference onto a Connect error; the
-// Connect codec is the one hop that rebuilds an error and would drop it.
+// ConnectDetails carries a status's verdict details (DeadReference,
+// SourceDisabled) onto a Connect error; the Connect codec is the one hop that
+// rebuilds an error and would drop them.
 func ConnectDetails(err error, ce *connect.Error) *connect.Error {
 	st, ok := status.FromError(err)
 	if !ok {
 		return ce
 	}
 	for _, d := range st.Details() {
-		if dr, ok := d.(*pb.DeadReference); ok {
-			if cd, derr := connect.NewErrorDetail(dr); derr == nil {
+		switch v := d.(type) {
+		case *pb.DeadReference, *pb.SourceDisabled:
+			if cd, derr := connect.NewErrorDetail(v.(proto.Message)); derr == nil {
 				ce.AddDetail(cd)
 			}
 		}

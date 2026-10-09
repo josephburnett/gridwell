@@ -237,7 +237,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   health notice, stays disabled until the node restarts. It is held in the
   node's memory only (`plugin.Registry.Disable`), never in `server.yaml` or
   `gridwell.db`, nothing tries it meanwhile, and it reads as dark, with no
-  notice standing (2026-10-09).
+  notice standing (2026-10-09). Disabled is a verdict, not an outage: the
+  router refuses a write to it with `gwerr.SourceDisabled`, which the client
+  drops without parking or retrying (an optimistic one silently), and every
+  grid it serves is stamped `writable=false`, `accepts_tiles=false`, each
+  row `read_only` with the reason, so an edit is refused before it is typed;
+  a merely-down source keeps parking writes in the outbox (2026-10-09).
 - The web door always has a password (the minted 0600 `web-password` file;
   delete it to rotate). The connection door is a 0600 unix socket, never
   TCP. Its `server.yaml` key stays `federation:` and its file stays

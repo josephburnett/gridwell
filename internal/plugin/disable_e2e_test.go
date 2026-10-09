@@ -17,6 +17,7 @@ import (
 	"connectrpc.com/connect"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -60,8 +61,18 @@ func TestADisabledPluginIsStoppedAndNeverRespawned(t *testing.T) {
 		t.Fatal(err)
 	}
 	landing := plugintest.LandingOf(t, pl.Plugins[0])
-	if _, err := cl.GetGrid(ctx, landing); err != nil {
+	before, err := cl.GetGrid(ctx, landing)
+	if err != nil {
 		t.Fatal(err)
+	}
+	var notes *gridwellv1.Tile
+	for _, tile := range before.GetTiles() {
+		if tile.GetAltText() == "notes.md" {
+			notes = tile
+		}
+	}
+	if notes == nil {
+		t.Fatal("no notes.md row to write to")
 	}
 	if children(t) != 1 {
 		t.Fatal("the fs subprocess is not running before the disable")
@@ -104,6 +115,19 @@ func TestADisabledPluginIsStoppedAndNeverRespawned(t *testing.T) {
 	_, err = cl.GetGrid(ctx, landing)
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("read of a disabled plugin's grid = %v, want unavailable (dark)", err)
+	}
+
+	// Its writes are the disabled verdict, never a transport failure the
+	// client would park and retry, and never a layout write the node could
+	// take without the plugin.
+	writes := map[string]error{}
+	_, writes["WriteContent"] = cl.WriteContent(ctx, notes.GetId(), rpc.BasisOf(notes), []byte("lost"))
+	_, writes["SetFraming"] = cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: landing, Cx: 1, Cy: 1, Zoom: 1})
+	_, writes["PlaceTile"] = cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: notes.GetId(), X: 7, Y: 3, W: 1, H: 1})
+	for verb, err := range writes {
+		if !gwerr.IsSourceDisabled(err) {
+			t.Errorf("%s on a disabled plugin = %v, want the disabled verdict", verb, err)
+		}
 	}
 }
 
