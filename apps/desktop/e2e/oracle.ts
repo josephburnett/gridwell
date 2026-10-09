@@ -242,6 +242,17 @@ export async function createLeafLink(
   return ((await res.json()) as { tile: Tile }).tile;
 }
 
+// The Disable button's verb, pressed for a source whose notice the spec does
+// not draw (a connection that answers carries no Disable button).
+export async function disableSource(origin: string, namespace: string): Promise<void> {
+  const res = await fetch(`${origin}/${SERVICE}/DisableSource`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ namespace }),
+  });
+  if (!res.ok) throw new Error(`DisableSource(${namespace}) failed: ${res.status} ${await res.text()}`);
+}
+
 // writeContent for a text body, the foreign-writer specs' shape.
 export async function updateText(
   origin: string,
