@@ -489,6 +489,9 @@ func (a *Adapter) applyChange(ctx context.Context, ch *pluginv1.Change) {
 // version that could say its bytes moved. An entry the node will not accept
 // or cannot find is the listing's to answer, so it is a ContextChanged.
 func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.Entry) {
+	if !a.fresh(context, e) {
+		return
+	}
 	t, err := a.entryTile(ctx, context, e)
 	if ctx.Err() != nil {
 		return
@@ -500,6 +503,31 @@ func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.En
 	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 		TileChanged: &gridwellv1.TileChanged{Tile: t, ContentChanged: true},
 	}})
+}
+
+type entryRef struct{ context, key string }
+
+// fresh notes the stamp e is told under and reports whether it moved. A source
+// may tell one change twice (two streams across a scope swap, a walk replaying
+// a feed line), and a second tell would retire the screenshot a view took of
+// the page since the first. An entry with no stamp is always fresh: nothing
+// tells its tells apart.
+func (a *Adapter) fresh(context string, e *pluginv1.Entry) bool {
+	stamp := e.GetContentStamp()
+	if stamp == "" {
+		return true
+	}
+	ref := entryRef{context, e.GetKey()}
+	a.toldMu.Lock()
+	defer a.toldMu.Unlock()
+	if a.told[ref] == stamp {
+		return false
+	}
+	if a.told == nil {
+		a.told = map[entryRef]string{}
+	}
+	a.told[ref] = stamp
+	return true
 }
 
 // entryTile is e's wire tile in context, nil when the context holds none. A

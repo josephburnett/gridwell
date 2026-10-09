@@ -185,7 +185,8 @@ could have:
   body a client already holds: the node tells every client showing the
   entry, and each whose body is under another stamp reads it again. Send it
   for the entry that owns the content; a link to it reads through it. A
-  content stamp alone moving is not a listing that moved.
+  content stamp alone moving is not a listing that moved, and a second tell
+  under the stamp already told is no change: the node drops it.
 - `EntryRemoved` is retired: send `ContextChanged`. The node still reads it
   as one, for a binary built before.
 
