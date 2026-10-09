@@ -163,6 +163,15 @@ func TitleSpan(crumbsEnd, width, textW float64) (x, w, textX float64, ok bool) {
 	return x, w, x + TitleInset, true
 }
 
+// CrumbsEnd is where the chain stops and the title's room begins, relative to
+// the bar's left edge.
+func CrumbsEnd(segs []Segment) float64 {
+	if n := len(segs); n > 0 {
+		return segs[n-1].X + segs[n-1].W
+	}
+	return 0
+}
+
 // At takes x relative to the bar's left edge.
 func At(segs []Segment, x float64) (Segment, bool) {
 	for _, s := range segs {

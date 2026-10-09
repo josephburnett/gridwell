@@ -62,10 +62,22 @@ func TestRouteClick(t *testing.T) {
 			barClick(2, BoundaryW+2), ActionNone, -1},
 		{"a middle press on a chain crumb does nothing",
 			barClick(1, BoundaryW+2), ActionNone, -1},
-		{"a left press on empty band space is swallowed",
-			barClick(0, 190), ActionNone, -1},
-		{"a right press on empty band space is swallowed",
+		{"a left press beside the title, past the crumbs, zooms like the name",
+			barClick(0, 190), ActionZoom, -1},
+		{"a left press just past the last crumb zooms",
+			barClick(0, BoundaryW+2*RowH), ActionZoom, -1},
+		{"a left press just short of the slot zooms",
+			barClick(0, 400-SlotW-0.5), ActionZoom, -1},
+		{"a left press at the title's right edge, off the text, zooms",
+			barClick(0, 300), ActionZoom, -1},
+		{"a right press beside the title is swallowed, never a rename",
 			barClick(2, 190), ActionNone, -1},
+		{"a right press just short of the slot is swallowed",
+			barClick(2, 400-SlotW-0.5), ActionNone, -1},
+		{"a middle press beside the title does nothing",
+			barClick(1, 190), ActionNone, -1},
+		{"a left press on the last crumb's right edge still ascends",
+			barClick(0, BoundaryW+2*RowH-0.5), ActionAscend, 2},
 	}
 	for _, c := range cases {
 		got := RouteClick(c.in)
@@ -112,13 +124,27 @@ func TestRouteClickPromote(t *testing.T) {
 	}
 }
 
-// A title that did not fit leaves its span to the crumbs beneath it rather
-// than eating presses at the bar's center.
+// A title that did not fit leaves no name to press, on its span or beside it.
 func TestRouteClickNoTitle(t *testing.T) {
-	in := barClick(0, 210)
-	in.TitleOK = false
+	for _, x := range []float64{210, 190} {
+		in := barClick(0, x)
+		in.TitleOK = false
+		if got := RouteClick(in); got.Action != ActionNone {
+			t.Fatalf("RouteClick(no title, x=%v) = %v, want %v", x, got.Action, ActionNone)
+		}
+	}
+}
+
+// With no crumbs the name's room starts at the bar's left edge.
+func TestRouteClickNameAreaWithoutCrumbs(t *testing.T) {
+	in := barClick(0, 2)
+	in.Segments, in.Chain = nil, nil
+	if got := RouteClick(in); got.Action != ActionZoom {
+		t.Fatalf("RouteClick(left at x=2, no crumbs) = %v, want %v", got.Action, ActionZoom)
+	}
+	in.Button = 2
 	if got := RouteClick(in); got.Action != ActionNone {
-		t.Fatalf("RouteClick(no title) = %v, want %v", got.Action, ActionNone)
+		t.Fatalf("RouteClick(right at x=2, no crumbs) = %v, want %v", got.Action, ActionNone)
 	}
 }
 

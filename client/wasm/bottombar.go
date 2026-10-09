@@ -182,11 +182,7 @@ func (a *App) barTitleGeom() (x, w, textX float64, label string, editable, muted
 	}
 	a.cctx.Set("font", barFont)
 	textW := a.cctx.Call("measureText", label).Get("width").Float()
-	segs := a.bottomBarSegments(a.navChain())
-	crumbsEnd := 0.0
-	if n := len(segs); n > 0 {
-		crumbsEnd = segs[n-1].X + segs[n-1].W
-	}
+	crumbsEnd := wsbar.CrumbsEnd(a.bottomBarSegments(a.navChain()))
 	tx, tw, ttx, spanOK := wsbar.TitleSpan(crumbsEnd, bw, textW)
 	if !spanOK {
 		return
