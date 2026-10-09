@@ -396,8 +396,9 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *gridwellv1.Tile {
 	return t
 }
 
-// bottomBarClick consumes a press in the bar's band, always on the focused
-// pane, and the background either side swallows presses too. wsbar.RouteClick
+// bottomBarClick consumes a press in the bar's band: on the bar it acts on
+// the focused pane, and a left press beside it focuses the column above,
+// which moves the bar there. wsbar.RouteClick
 // says where the press goes; this gathers the world facts and runs the effect.
 // They are gathered on the ZoneBar arm alone, so a press anywhere else in the
 // window never walks the caches.
@@ -428,6 +429,11 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	switch hit.Action {
 	case wsbar.ActionPass:
 		return false
+	case wsbar.ActionFocusColumn:
+		if id, ok := wsbar.BandFocus(a.layoutPanes(), a.tree.Recency(), sx); ok {
+			a.focusToPane(a.tree.FindPane(id))
+			a.takeKeyboard()
+		}
 	case wsbar.ActionSlotMenu:
 		a.openCircleMenu(p)
 	case wsbar.ActionSlot:

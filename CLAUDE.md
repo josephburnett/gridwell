@@ -297,8 +297,10 @@ These were decided deliberately. Do not reverse one without a new decision.
 - One bar, at the bottom of the window, always visible, riding the focused
   pane: it spans that pane and slides under it as focus moves, inside a
   full-width row reserved once, so no pane ever resizes. Panes end at that
-  row's top edge; the background beside the bar is nobody's and swallows
-  clicks. A crumb click ascends; middle-click is the in-pane shortcut.
+  row's top edge; a left click on the background beside the bar focuses
+  the most recently focused pane of the column above it, that recency being
+  part of the session selection (2026-10-09, `wsbar.BandFocus`). A crumb
+  click ascends; middle-click is the in-pane shortcut.
 - A click lands on what it hits, in any pane, and pane focus follows in
   the same press (2026-10-02, reversing 'moves focus, nothing else'). No
   press is focus-only. Keyboard focus is set once, by the surface that

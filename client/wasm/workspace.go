@@ -67,8 +67,8 @@ func (a *App) navPopLevel(e nav.Effect) {
 	}
 	if f.OuterTree != nil {
 		a.tree = f.OuterTree
-		if f.OriginPane != "" && a.tree.FindPane(f.OriginPane) != nil {
-			a.tree.Focus = f.OriginPane
+		if f.OriginPane != "" {
+			_ = a.tree.SetFocus(f.OriginPane)
 		}
 		return
 	}

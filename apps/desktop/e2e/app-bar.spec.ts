@@ -3,8 +3,8 @@ import { test, expect } from './fixtures';
 // One bar at the bottom of the window, as wide as the focused pane and sitting
 // under it. The band it sits in is full width and reserved once, so every pane
 // ends at its top edge and no pane resizes when focus moves. Beside the bar the
-// band belongs to no pane, and a click there does nothing and does not fall
-// through.
+// band belongs to no pane: a right click there does nothing and does not fall
+// through (a left click focuses the column above; bar-row-focus.spec.ts).
 
 test('one bar rides the focused pane, in a band reserved once', async ({ gw, window }) => {
   await gw.enterPlugin('home');
@@ -39,7 +39,8 @@ test('one bar rides the focused pane, in a band reserved once', async ({ gw, win
   expect(pal.plusX).toBeLessThan(focused.x + focused.w);
   expect(pal.plusY).toBeGreaterThan(bar2.top);
 
-  await gw.clickScreen(other.x + other.w - 8, bar2.top + bar2.height / 2);
+  await window.mouse.click(other.x + other.w - 8, bar2.top + bar2.height / 2, { button: 'right' });
+  await gw.waitIdle();
   expect((await gw.palette()).open, 'no + menu beside the bar').toBe(false);
   const afterQuiet = await gw.panes();
   expect(afterQuiet.find((p) => p.focused)?.id, 'focus stayed put').toBe(focused.id);

@@ -2,7 +2,7 @@ package wsbar
 
 import "github.com/josephburnett/gridwell/client/pane"
 
-// Where a press in the bar goes. The bar is one row with no pane under it, so
+// Where a press in the bar goes. The bar is one row with no pane in it, so
 // everything but a point outside the band is consumed, and one table answers
 // both buttons: a gesture cannot mean one thing where it is drawn and another
 // where it is dispatched.
@@ -11,8 +11,9 @@ import "github.com/josephburnett/gridwell/client/pane"
 type Action int
 
 const (
-	// ActionNone consumes the press and does nothing: the band beside the bar,
-	// empty space between crumbs, and every gesture the middle button makes.
+	// ActionNone consumes the press and does nothing: empty space between
+	// crumbs, the band beside the bar for any button but the left, and every
+	// gesture the middle button makes.
 	ActionNone Action = iota
 	// ActionPass leaves the press to the pane under it.
 	ActionPass
@@ -36,6 +37,8 @@ const (
 	ActionPromote
 	// ActionAscend ascends to Segment's crumb.
 	ActionAscend
+	// ActionFocusColumn focuses the pane BandFocus names, which takes the bar.
+	ActionFocusColumn
 )
 
 // Click is the world state a press reads. X is relative to the bar's left
@@ -72,6 +75,9 @@ func RouteClick(in Click) Hit {
 	case ZoneOutside:
 		return Hit{Action: ActionPass}
 	case ZoneBand:
+		if in.Button == 0 {
+			return Hit{Action: ActionFocusColumn}
+		}
 		return Hit{Action: ActionNone}
 	}
 	inSlot := in.X >= in.BarW-SlotW
