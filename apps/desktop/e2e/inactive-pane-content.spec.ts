@@ -120,57 +120,80 @@ test('an fs file changed on disk shows its new bytes in the pane focus left', as
     .toBe('version two, from disk\n');
 });
 
-// The share of pixels that differ between two same-size screenshots, decoded
-// in the page because the harness carries no image library.
-async function pixelDiff(window: any, a: Buffer, b: Buffer): Promise<number> {
-  return window.evaluate(async ([a64, b64]: [string, string]) => {
-    const load = (s: string) =>
-      new Promise<HTMLImageElement>((res, rej) => {
-        const img = new Image();
-        img.onload = () => res(img);
-        img.onerror = rej;
-        img.src = 'data:image/png;base64,' + s;
-      });
-    const [ia, ib] = await Promise.all([load(a64), load(b64)]);
-    const px = (img: HTMLImageElement) => {
-      const c = document.createElement('canvas');
-      c.width = img.width;
-      c.height = img.height;
-      const ctx = c.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-      return ctx.getImageData(0, 0, img.width, img.height).data;
-    };
-    const da = px(ia);
-    const db = px(ib);
-    let off = 0;
-    for (let i = 0; i < da.length; i += 4) {
-      const d = Math.max(Math.abs(da[i] - db[i]), Math.abs(da[i + 1] - db[i + 1]), Math.abs(da[i + 2] - db[i + 2]));
-      if (d > 64) off++;
+// The words that begin each line of a rendered document, and the width its
+// lines are laid out in, measured in the page. Comparing line breaks rather
+// than pixels keeps the check blind to how text is antialiased: the overlay's
+// DOM text and the raster's picture of it may smooth glyphs differently.
+type Layout = { contentW: number; lineStarts: string[] };
+
+// The focused pane's overlay, as laid out on screen.
+const overlayLayout = (window: any): Promise<Layout> =>
+  window.evaluate(() => {
+    const el = document.getElementById('gw-rendered-view')!;
+    const cs = getComputedStyle(el);
+    return (window as any).__wrapLayout(el, el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+  });
+
+// The raster's document laid out off screen exactly as its SVG holds it, the
+// width and inset it was made at included.
+const rasterLayout = (window: any, svg: string): Promise<Layout> =>
+  window.evaluate((svg: string) => {
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const root = document.importNode(doc.getElementsByTagNameNS('http://www.w3.org/1999/xhtml', 'div')[0], true) as HTMLElement;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-20000px;top:0;visibility:hidden';
+    host.appendChild(root);
+    document.body.appendChild(host);
+    try {
+      const cs = getComputedStyle(root);
+      return (window as any).__wrapLayout(root, root.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+    } finally {
+      host.remove();
     }
-    return off / (da.length / 4);
-  }, [a.toString('base64'), b.toString('base64')]);
-}
+  }, svg);
+
+const installWrapLayout = (window: any) =>
+  window.evaluate(() => {
+    (window as any).__wrapLayout = (el: HTMLElement, contentW: number) => {
+      const lineStarts: string[] = [];
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let last = -Infinity;
+      let i = 0;
+      for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
+        if (n.parentElement?.closest('style')) continue;
+        for (const m of n.data.matchAll(/\S+/g)) {
+          const r = document.createRange();
+          r.setStart(n, m.index!);
+          r.setEnd(n, m.index! + m[0].length);
+          const top = r.getClientRects()[0].top;
+          if (top > last + 1) lineStarts.push(`${i}:${m[0]}`);
+          last = Math.max(last, top);
+          i++;
+        }
+      }
+      return { contentW, lineStarts };
+    };
+  });
 
 test('a rendered pane wraps the same lines focused or not', async ({ gw, window }) => {
   const para =
     'The quick brown fox jumps over the lazy dog, again and again, until the paragraph wraps across ' +
     'several lines of the pane, and then some more words so that a narrower layout breaks them elsewhere.';
-  // Long enough to scroll, so the overlay's scrollbar is on screen.
+  // Long enough to scroll, so the overlay keeps its scrollbar.
   const { left, right } = await splitOnText(gw, `# Heading\n\n` + `${para}\n\n`.repeat(12));
   await gw.toggleTextMode(); // rendered
   await expect(window.locator('#gw-rendered-view')).toBeVisible();
-  const box = await window.evaluate(() => (window as any).__gridwellTest.textInnerBox());
-  // Short of the scrollbar, which only the overlay draws.
-  const inner = await window.evaluate(() => document.getElementById('gw-rendered-view')!.clientWidth);
-  const clip = { x: Math.ceil(box.x), y: Math.ceil(box.y), width: inner - 2, height: 160 };
   await gw.waitIdle();
-  const focused = await window.screenshot({ clip });
+  await installWrapLayout(window);
+  const focused = await overlayLayout(window);
 
   await gw.focusPane(await paneById(gw, right.id));
   await expect
     .poll(async () => (await painted(window))['pane:' + left.id] ?? '', { timeout: 10_000 })
     .toMatch(/^raster:/);
-  await gw.waitIdle();
-  const unfocused = await window.screenshot({ clip });
-  expect(await pixelDiff(window, focused, unfocused), 'the pane re-wrapped when focus left it').toBeLessThan(0.01);
+  const unfocused = await rasterLayout(window, (await painted(window))['pane:' + left.id].slice('raster:'.length));
+
+  expect(focused.lineStarts.length, 'the document wraps').toBeGreaterThan(12 * 2);
+  expect(focused.lineStarts, 'the pane re-wrapped when focus left it').toEqual(unfocused.lineStarts);
+  expect(focused.contentW, 'the overlay lays out at the raster width').toBeCloseTo(unfocused.contentW, 0);
 });
