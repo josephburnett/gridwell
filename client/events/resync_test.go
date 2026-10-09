@@ -99,7 +99,7 @@ func TestAHealthBurstResyncsOnceItSettles(t *testing.T) {
 			slices.SortStableFunc(c.flips, func(a, b flip) int { return cmp.Compare(a.at, b.at) })
 			for _, f := range c.flips {
 				clk.to(f.at)
-				h := ReactHealth(&pb.EventPluginHealth{PluginUuid: f.source, Healthy: f.healthy}, f.source, dark[f.source])
+				h := ReactHealth(&pb.EventPluginHealth{PluginUuid: f.source, Healthy: f.healthy}, f.source, dark[f.source], false)
 				dark[f.source] = !f.healthy
 				notice[f.source] = h.Dark.Message != ""
 				if h.Resync != "" {

@@ -81,25 +81,31 @@ type HealthReaction struct {
 	Resync string
 }
 
-// StickyNotice is one errsurface.Sticky notice: up with Message, or down when
-// Message is empty.
+// StickyNotice is one errsurface.Sticky notice: up with Message and its
+// button, or down when Message is empty.
 type StickyNotice struct {
 	Source  string
 	Message string
+	Action  errsurface.Action
 }
 
-// ReactHealth is the one table over a health event, given the source's label
-// and whether the client held it dark before (cache.NoteHealth).
-func ReactHealth(h *pb.EventPluginHealth, label string, wasDark bool) HealthReaction {
+// ReactHealth is the one table over a health event, given the source's label,
+// whether the client held it dark before (cache.NoteHealth), and whether the
+// user may switch it off (pluginhealth.Disableable). A disabled source is
+// dark and says nothing more: the user asked for exactly that.
+func ReactHealth(h *pb.EventPluginHealth, label string, wasDark, disableable bool) HealthReaction {
 	uuid := h.GetPluginUuid()
 	r := HealthReaction{
 		Dark:    StickyNotice{Source: errsurface.PluginHealthSource(uuid)},
 		LiveOff: StickyNotice{Source: errsurface.LiveUpdatesSource(uuid)},
 	}
-	if !h.GetHealthy() {
+	if !h.GetHealthy() && !h.GetDisabled() {
 		r.Dark.Message = label + ": live updates stopped — " + h.GetDetail()
+		if disableable {
+			r.Dark.Action = errsurface.Disable
+		}
 	}
-	if off := h.GetLiveUpdatesOff(); off != "" {
+	if off := h.GetLiveUpdatesOff(); off != "" && !h.GetDisabled() {
 		r.LiveOff.Message = label + ": live updates off — " + off
 	}
 	if wasDark == h.GetHealthy() {

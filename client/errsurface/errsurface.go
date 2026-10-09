@@ -30,6 +30,8 @@ type Notice struct {
 	Message  string
 	Severity Severity
 	Count    int
+	// Action is the notice's button, NoAction for none.
+	Action Action
 	// deadline is zero for sticky sources.
 	deadline time.Time
 }
@@ -45,6 +47,12 @@ const pluginHealthPrefix = "plugin:"
 // PluginHealthSource is the source a namespace's health notice lives under,
 // one per uuid, so a flapping source updates its row in place.
 func PluginHealthSource(uuid string) string { return pluginHealthPrefix + uuid }
+
+// HealthUUID is the namespace a health notice's source names, false for any
+// other source.
+func HealthUUID(source string) (string, bool) {
+	return strings.CutPrefix(source, pluginHealthPrefix)
+}
 
 const liveUpdatesPrefix = "live:"
 
@@ -81,9 +89,13 @@ const (
 	// Reload loads the page again, through the unload path every reload
 	// takes.
 	Reload
+	// Disable switches the health notice's source off until the node
+	// restarts; the health event that follows takes the notice down.
+	Disable
 )
 
-// ActionOf is the one table of which notices carry a button.
+// ActionOf is the button a source always carries. A button that depends on
+// more than the source is its reporter's to offer (Offer).
 func ActionOf(source string) Action {
 	if source == BuildSource {
 		return Reload
@@ -93,8 +105,11 @@ func ActionOf(source string) Action {
 
 // ButtonLabel is the button's text, "" for a notice with none.
 func ButtonLabel(a Action) string {
-	if a == Reload {
+	switch a {
+	case Reload:
 		return "Reload"
+	case Disable:
+		return "Disable"
 	}
 	return ""
 }
@@ -113,9 +128,16 @@ type Surface struct {
 func New() *Surface { return &Surface{nextID: 1} }
 
 // Report adds a notice or refreshes the one for the same source, keeping its
-// ID and restarting its expiry. The caller passes now, so the package is
-// clock-free.
+// ID and restarting its expiry, with the button ActionOf gives the source.
+// The caller passes now, so the package is clock-free.
 func (s *Surface) Report(sev Severity, source, message string, now time.Time) {
+	s.Offer(sev, source, message, ActionOf(source), now)
+}
+
+// Offer is Report with the button its reporter decided: a health notice
+// offers Disable only for a source the user may switch off
+// (events.ReactHealth).
+func (s *Surface) Offer(sev Severity, source, message string, act Action, now time.Time) {
 	deadline := now.Add(ExpireAfter)
 	if Sticky(source) {
 		deadline = time.Time{}
@@ -125,6 +147,7 @@ func (s *Surface) Report(sev Severity, source, message string, now time.Time) {
 			n := s.notices[i]
 			n.Message = message
 			n.Severity = sev
+			n.Action = act
 			n.Count++
 			n.deadline = deadline
 			s.notices = append(s.notices[:i], s.notices[i+1:]...)
@@ -132,11 +155,11 @@ func (s *Surface) Report(sev Severity, source, message string, now time.Time) {
 			return
 		}
 	}
-	n := Notice{ID: s.nextID, Source: source, Message: message, Severity: sev, Count: 1, deadline: deadline}
+	n := Notice{ID: s.nextID, Source: source, Message: message, Severity: sev, Count: 1, Action: act, deadline: deadline}
 	s.nextID++
 	s.notices = append([]Notice{n}, s.notices...)
 	for i := len(s.notices) - 1; len(s.notices) > maxNotices && i >= 0; i-- {
-		if ActionOf(s.notices[i].Source) == NoAction {
+		if s.notices[i].Action == NoAction {
 			s.notices = append(s.notices[:i], s.notices[i+1:]...)
 		}
 	}
@@ -253,7 +276,7 @@ func Rows(notices []Notice, stripTop float64) []Row {
 	ordered := make([]Notice, 0, n)
 	for _, pass := range []bool{true, false} {
 		for _, nt := range notices {
-			if (ActionOf(nt.Source) != NoAction) == pass {
+			if (nt.Action != NoAction) == pass {
 				ordered = append(ordered, nt)
 			}
 		}
@@ -274,7 +297,7 @@ func Rows(notices []Notice, stripTop float64) []Row {
 // Label counts the reports of a notice without a button; one with a button is
 // a standing condition whose message is restated as it changes.
 func Label(n Notice) string {
-	if n.Count > 1 && ActionOf(n.Source) == NoAction {
+	if n.Count > 1 && n.Action == NoAction {
 		return fmt.Sprintf("%s ×%d", n.Message, n.Count)
 	}
 	return n.Message
@@ -289,17 +312,18 @@ const (
 // ButtonRect is where r's button is drawn and pressed; ok is false for a
 // notice with none.
 func ButtonRect(r Row, width float64) (x, y, w, h float64, ok bool) {
-	if ActionOf(r.Notice.Source) == NoAction {
+	if r.Notice.Action == NoAction {
 		return 0, 0, 0, 0, false
 	}
 	return width - ButtonW - ButtonInset, r.Y + ButtonInset, ButtonW, RowH - 2*ButtonInset, true
 }
 
 // Press is what a press in the strip did: dismissed a notice, or pressed a
-// button whose Action the caller runs.
+// button whose Action the caller runs on the notice of Source.
 type Press struct {
 	Dismissed bool
 	Action    Action
+	Source    string
 }
 
 // PressAt takes a press at (x, y) in a strip of the given width. A row press
@@ -310,10 +334,10 @@ func (s *Surface) PressAt(x, y, stripTop, width float64) Press {
 		if y < r.Y || y >= r.Y+RowH {
 			continue
 		}
-		if a := ActionOf(r.Notice.Source); a != NoAction {
+		if a := r.Notice.Action; a != NoAction {
 			bx, by, bw, bh, _ := ButtonRect(r, width)
 			if x >= bx && x < bx+bw && y >= by && y < by+bh {
-				return Press{Action: a}
+				return Press{Action: a, Source: r.Notice.Source}
 			}
 			return Press{}
 		}

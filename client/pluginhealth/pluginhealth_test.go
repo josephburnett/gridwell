@@ -161,3 +161,23 @@ func TestUnrootedLink(t *testing.T) {
 		}
 	}
 }
+
+// The Disable button is offered for what this node declares and the user may
+// stop: its plugins and connections. Home (whose uuid the source cache's own
+// health also wears) and a source further along a connection are not this
+// node's to stop.
+func TestDisableable(t *testing.T) {
+	roster := []*gridwellv1.PluginInfo{
+		{Uuid: "n1", Label: "home", RootGridId: "n1/1"},
+		{Uuid: "pfs", Label: "files"},
+		rpc.ConnectionRow("n1/away", "away", "", "dial refused", rpc.View{}),
+	}
+	for uuid, want := range map[string]bool{
+		"pfs": true, "n1/away": true,
+		"n1": false, "n1/away/far1": false, "n1/away/far1/pfs": false, "gone": false,
+	} {
+		if got := Disableable(roster, "n1/1", uuid); got != want {
+			t.Errorf("Disableable(%q) = %v, want %v", uuid, got, want)
+		}
+	}
+}

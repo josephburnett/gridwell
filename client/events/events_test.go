@@ -69,49 +69,67 @@ func TestReactHealthTable(t *testing.T) {
 		live = "live:n/c"
 	)
 	cases := []struct {
-		name    string
-		wasDark bool
-		h       *pb.EventPluginHealth
-		want    HealthReaction
+		name        string
+		wasDark     bool
+		disableable bool
+		h           *pb.EventPluginHealth
+		want        HealthReaction
 	}{
-		{"going dark says so and resyncs", false,
+		{"going dark says so and resyncs", false, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "gone"},
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone"},
 				LiveOff: StickyNotice{Source: live},
 				Resync:  "n/c"}},
-		{"coming back takes the notice down and resyncs", true,
+		{"coming back takes the notice down and resyncs", true, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true},
 			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}, Resync: "n/c"}},
-		{"a refused watch on a light source is its own notice and no resync", false,
+		{"a refused watch on a light source is its own notice and no resync", false, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true, LiveUpdatesOff: "too many watches"},
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark},
 				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"}}},
-		{"the watch opening takes that notice down and resyncs nothing", false,
+		{"the watch opening takes that notice down and resyncs nothing", false, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true},
 			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}}},
-		{"coming back with the watch still refused keeps that notice and resyncs", true,
+		{"coming back with the watch still refused keeps that notice and resyncs", true, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true, LiveUpdatesOff: "too many watches"},
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark},
 				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"},
 				Resync:  "n/c"}},
-		{"a dark source with its watch refused shows both", false,
+		{"a dark source with its watch refused shows both", false, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "gone", LiveUpdatesOff: "too many watches"},
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone"},
 				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"},
 				Resync:  "n/c"}},
-		{"a down repeated while dark is not a move", true,
+		{"a down repeated while dark is not a move", true, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "still gone"},
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — still gone"},
 				LiveOff: StickyNotice{Source: live}}},
+		{"a source the user may switch off offers Disable while down", false, true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "gone"},
+			HealthReaction{
+				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone", Action: errsurface.Disable},
+				LiveOff: StickyNotice{Source: live},
+				Resync:  "n/c"}},
+		{"a refused watch offers no Disable: the source still answers", false, true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true, LiveUpdatesOff: "too many watches"},
+			HealthReaction{
+				Dark:    StickyNotice{Source: dark},
+				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"}}},
+		{"disabled while down takes every notice down and stays dark", true, true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "disabled until the node restarts", Disabled: true, LiveUpdatesOff: "x"},
+			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}}},
+		{"disabled while light goes dark without a notice", false, true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Detail: "disabled until the node restarts", Disabled: true},
+			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}, Resync: "n/c"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := ReactHealth(c.h, "fs", c.wasDark); got != c.want {
+			if got := ReactHealth(c.h, "fs", c.wasDark, c.disableable); got != c.want {
 				t.Errorf("got  %+v\nwant %+v", got, c.want)
 			}
 		})
