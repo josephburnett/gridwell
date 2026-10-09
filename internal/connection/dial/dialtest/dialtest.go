@@ -50,9 +50,10 @@ type Handle struct {
 	addr string
 	conf *ssh.ServerConfig
 
-	mu    sync.Mutex
-	ln    net.Listener
-	conns map[net.Conn]struct{}
+	mu     sync.Mutex
+	ln     net.Listener
+	conns  map[net.Conn]struct{}
+	silent bool
 }
 
 // Restartable is Server with a Handle for killing and resuming the sshd.
@@ -141,6 +142,20 @@ func (h *Handle) Resume(t *testing.T) {
 	go h.serve(ln)
 }
 
+// Silence leaves every channel open from now on unanswered, neither accepted
+// nor refused: what a dialer sees when the session died under its open.
+func (h *Handle) Silence() {
+	h.mu.Lock()
+	h.silent = true
+	h.mu.Unlock()
+}
+
+func (h *Handle) isSilent() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.silent
+}
+
 func (h *Handle) track(c net.Conn) {
 	h.mu.Lock()
 	h.conns[c] = struct{}{}
@@ -169,6 +184,9 @@ func (h *Handle) serve(ln net.Listener) {
 			defer sc.Close()
 			go ssh.DiscardRequests(reqs)
 			for newChan := range chans {
+				if h.isSilent() {
+					continue
+				}
 				if newChan.ChannelType() != "direct-streamlocal@openssh.com" {
 					newChan.Reject(ssh.UnknownChannelType, "only direct-streamlocal@openssh.com")
 					continue

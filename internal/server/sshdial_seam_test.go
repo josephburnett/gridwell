@@ -182,7 +182,9 @@ func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 	t.Cleanup(dialClose)
 	ctx := context.Background()
 
-	if _, err := client.Info(ctx, &gridwellv1.InfoRequest{}); err != nil {
+	firstCtx, cancelFirst := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelFirst()
+	if _, err := client.Info(firstCtx, &gridwellv1.InfoRequest{}); err != nil {
 		t.Fatalf("Info before outage: %v", err)
 	}
 
@@ -200,11 +202,15 @@ func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 
 	// The sshd returns on the same address. The mount must recover WITHOUT
 	// any restart: gRPC's next reconnect calls the dialer, the dialer
-	// re-establishes the ssh session. Poll within the reconnect backoff.
+	// re-establishes the ssh session. A dial parked on the dead session ends
+	// with gRPC's connect bound (20s), so the wait covers that plus a backoff,
+	// and each call has its own deadline, so a parked connection fails here.
 	sshd.Resume(t)
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(40 * time.Second)
 	for {
-		_, err := client.Info(ctx, &gridwellv1.InfoRequest{})
+		callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		_, err := client.Info(callCtx, &gridwellv1.InfoRequest{})
+		cancel()
 		if err == nil {
 			break
 		}
