@@ -831,6 +831,86 @@ func TestWatchEntryChangedIsTheEntrysTileChanged(t *testing.T) {
 	}
 }
 
+// pagePlugin lists one served page in "all" and sends what poke hands it.
+type pagePlugin struct {
+	watchPlugin
+}
+
+func (*pagePlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+	return &pluginv1.ListResponse{Authoritative: true, Entries: []*pluginv1.Entry{
+		{Key: "t", Kind: rpc.KindURL, Label: "t", ServesPage: true, ContentStamp: "s1"}}}, nil
+}
+
+// An entry told again under the stamp it was last told under changed nothing:
+// a source may tell one change twice (two streams across a scope swap, a walk
+// replaying a feed line), and the second tell must not retire the screenshot
+// a live view took of the page as it is since the first.
+func TestAnEntryToldAgainUnderItsStampChangesNothing(t *testing.T) {
+	poke := make(chan *pluginv1.Change)
+	p := &pagePlugin{watchPlugin{scopes: make(chan []string, 8), accept: func(int32) bool { return true },
+		serve: func(_ int32, ctx context.Context, send func(*pluginv1.Change) error) error {
+			for {
+				select {
+				case ch := <-poke:
+					if err := send(ch); err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return nil
+				}
+			}
+		}}}
+	a, seen := watchingNothing(t, p, nil)
+	read(t, a, "all")
+	show(t, a, "all")
+	if got := awaitScope(t, p.scopes); !slices.Equal(got, []string{"all"}) {
+		t.Fatalf("stream opened on %v, want [all]", got)
+	}
+	ctx := context.Background()
+	id := rpc.EntryTileID("all", "t")
+	capture := func(jpeg string) int64 {
+		t.Helper()
+		got, err := a.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: id,
+			Tile: &gridwellv1.Tile{Kind: rpc.KindURL}, Preview: []byte(jpeg)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.GetTile().GetPreviewBlobId()
+	}
+	served := func() int64 {
+		t.Helper()
+		g, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID("all")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tl := range g.Tiles {
+			if tl.Id == id {
+				return tl.PreviewBlobId
+			}
+		}
+		t.Fatalf("GetGrid served no %s", id)
+		return 0
+	}
+	changed := &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{
+		Context: "all", Entry: &pluginv1.Entry{Key: "t", Kind: rpc.KindURL, Label: "t", ServesPage: true, ContentStamp: "s2"}}}}
+
+	capture("\xff\xd8\xff before")
+	collect(seen)
+	poke <- changed
+	if ev := await(t, seen); ev.GetTileChanged().GetTile().GetPreviewBlobId() > 0 {
+		t.Fatalf("the change told %v, want the screenshot of the page before it retired", ev)
+	}
+	next := capture("\xff\xd8\xff after")
+	collect(seen)
+	poke <- changed
+	if evs := collect(seen); len(evs) != 0 {
+		t.Errorf("the change told again under its stamp told %v, want nothing", evs)
+	}
+	if got := served(); got != next {
+		t.Errorf("the grid serves face key %d after the change was told again, want the capture since it %d", got, next)
+	}
+}
+
 // A client's read in flight while the open checks its grid races nothing: the
 // read lands after the check noted the grid, and is announced only when the
 // listing it took differs from the one noted meanwhile. A read of the listing

@@ -184,7 +184,9 @@ contexts shown (`WatchRequest.contexts`, the plugin's share of
 `interest.Book`'s union, re-opened with the new set when it changes), and
 publishes a `ContextChanged` the plugin sends as the `GridChanged` a write
 would have, once the node has listed the context and found it moved, and an
-`EntryChanged` as that entry's `TileChanged` flagged `content_changed`. A
+`EntryChanged` as that entry's `TileChanged` flagged `content_changed`, once
+per stamp: a second tell under the stamp last told is no change
+(`Adapter.fresh`). A
 plugin holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to

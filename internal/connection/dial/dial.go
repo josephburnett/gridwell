@@ -81,27 +81,81 @@ type redialer struct {
 	client *ssh.Client // nil means not established, or known dead
 }
 
+// newRedialer reads cfg's key and known_hosts; the session comes up on the
+// first dial.
+func newRedialer(cfg Config) (*redialer, error) {
+	keyBytes, err := os.ReadFile(cfg.KeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read key %q: %w", cfg.KeyPath, err)
+	}
+	signer, err := ssh.ParsePrivateKey(keyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse key: %w", err)
+	}
+	hostKey, err := knownhosts.New(cfg.KnownHosts)
+	if err != nil {
+		return nil, fmt.Errorf("load known_hosts %q: %w", cfg.KnownHosts, err)
+	}
+	return &redialer{
+		host:    cfg.Host,
+		user:    cfg.User,
+		auth:    []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		hostKey: hostKey,
+	}, nil
+}
+
 // dial drops the whole session on a channel-open failure and retries once:
 // telling a dead session from a refused endpoint is not worth the fragility,
-// and the cost is one extra handshake.
-func (r *redialer) dial(_ string, addr string) (net.Conn, error) {
+// and the cost is one extra handshake. ctx is gRPC's bound on one connect
+// attempt; see openWithin.
+func (r *redialer) dial(ctx context.Context, addr string) (net.Conn, error) {
 	if c := r.current(); c != nil {
-		conn, err := c.Dial("unix", addr)
+		conn, err := openWithin(ctx, c, addr)
 		if err == nil {
 			return conn, nil
 		}
 		r.drop(c)
+		if ctx.Err() != nil {
+			return nil, err
+		}
 	}
 	c, err := r.establish()
 	if err != nil {
 		return nil, err
 	}
-	conn, err := c.Dial("unix", addr)
+	conn, err := openWithin(ctx, c, addr)
 	if err != nil {
 		r.drop(c)
 		return nil, err
 	}
 	return conn, nil
+}
+
+// openWithin is c.Dial ended by ctx. x/crypto's channel open waits for the
+// peer's answer with no bound, and a session that dies under the open never
+// sends one, which would park the connection in CONNECTING for good. An
+// abandoned open's goroutine waits as long as the open does.
+func openWithin(ctx context.Context, c *ssh.Client, addr string) (net.Conn, error) {
+	type opened struct {
+		conn net.Conn
+		err  error
+	}
+	res := make(chan opened, 1)
+	go func() {
+		conn, err := c.Dial("unix", addr)
+		res <- opened{conn, err}
+	}()
+	select {
+	case o := <-res:
+		return o.conn, o.err
+	case <-ctx.Done():
+		go func() {
+			if o := <-res; o.conn != nil {
+				_ = o.conn.Close()
+			}
+		}()
+		return nil, ctx.Err()
+	}
 }
 
 func (r *redialer) current() *ssh.Client {
@@ -227,30 +281,16 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 	if cfg.Host == "" {
 		return dialDirect(cfg.Addr)
 	}
-	keyBytes, err := os.ReadFile(cfg.KeyPath)
+	rd, err := newRedialer(cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read key %q: %w", cfg.KeyPath, err)
-	}
-	signer, err := ssh.ParsePrivateKey(keyBytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse key: %w", err)
-	}
-	hostKey, err := knownhosts.New(cfg.KnownHosts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load known_hosts %q: %w", cfg.KnownHosts, err)
-	}
-	rd := &redialer{
-		host:    cfg.Host,
-		user:    cfg.User,
-		auth:    []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		hostKey: hostKey,
+		return nil, nil, err
 	}
 
 	// A fixed passthrough target: gRPC's resolvers would strip the leading
 	// slash off a socket path, and the dialer opens cfg.Addr regardless.
 	conn, err := ClientConn("passthrough:///connection",
-		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
-			return rd.dial("unix", cfg.Addr)
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return rd.dial(ctx, cfg.Addr)
 		}))
 	if err != nil {
 		return nil, nil, fmt.Errorf("grpc over tunnel: %w", err)

@@ -81,6 +81,11 @@ type Adapter struct {
 	servedMu sync.Mutex
 	served   map[string]*servedGrid
 
+	// told is, per entry, the content stamp it was last told under; fresh is
+	// its one check and note.
+	toldMu sync.Mutex
+	told   map[entryRef]string
+
 	lacks absentVerbs
 }
 
