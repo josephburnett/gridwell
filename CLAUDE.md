@@ -313,6 +313,12 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.
+- A pane shows one document whether or not it has focus. The focused pane
+  shows the cached bytes; every other face is a picture of them (a wrap, a
+  raster) keyed by `cache.BodyGen`, which every change to the bytes moves,
+  an unsaved edit included, so no picture outlives the bytes it was made
+  of. A slot's last picture stands in only while its successor rasterizes
+  (`rasterprev.Cache`, 2026-10-09).
 - The Chromium session is host-local: one partition for every live url
   tile. Nothing about sessions or networks crosses the wire.
 - No parameterized plugins. Modals center on the active pane.

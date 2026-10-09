@@ -149,9 +149,12 @@ applies the rule to every row the cache learns — event,
 `PutGrid` refetch, or write response, whether or not the row's grid is
 cached — and `PutFetchedContent` to a reply whose row moved blob or stamp
 while it was in flight. Who reads the body again is whoever draws it: the cache
-only drops it. What is drawn from a body (a face's raster, a wrap) is keyed
-by `Cache.BodyGen`, the bytes as last given, never by the row's version,
-which a plugin body's does not move. `SaveBasis` is what a save claims, never the grid row
+only drops it. What is drawn from a body (a face's raster, a wrap, the rendered
+overlay) is keyed by `Cache.BodyGen`, which moves whenever the cached bytes
+do, an unsaved edit included, never by the row's version, which a plugin
+body's does not move and an edit moves for no one: a focused pane reads the
+bytes and an unfocused one a picture of them, so a key an edit leaves alone
+shows the two panes different documents. `SaveBasis` is what a save claims, never the grid row
 version, so a foreign writer's event can advance the row without ever
 advancing what this client is allowed to claim. A dirty entry is never
 overwritten by a fetch, a save response, or a delete: it is the one copy of

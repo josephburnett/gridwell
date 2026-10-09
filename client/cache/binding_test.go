@@ -202,10 +202,10 @@ func TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo(t *testing.T) {
 	})
 }
 
-// A body's generation names the bytes the server last gave, not the row: a
-// plugin body read again after its event said it moved gets a new one at the
-// same version, so a picture or wrap keyed by it is made again; typing keeps
-// it, as typing keeps the version; a save gives the saved bytes their own.
+// A body's generation names the bytes the cache holds, not the row: a plugin
+// body read again after its event said it moved gets a new one at the same
+// version, and so does every edit, so a picture or wrap keyed by it is never
+// one of other bytes; a save of the bytes already held keeps it.
 func TestAGenerationNamesTheBytesNotTheRow(t *testing.T) {
 	c := New()
 	row := &gridwellv1.Tile{Id: "p/~a", GridId: "p/~", Kind: rpc.KindText}
@@ -229,12 +229,23 @@ func TestAGenerationNamesTheBytesNotTheRow(t *testing.T) {
 		t.Fatalf("new bytes at the same version at generation %d after %d; want a new one", second, first)
 	}
 	c.PutEditedContent("p/~a", []byte("two, typed"))
-	if s := c.BodyGen("p/~a"); s != second {
-		t.Errorf("typing moved the generation %d -> %d", second, s)
+	typed := c.BodyGen("p/~a")
+	if typed == second || typed == 0 {
+		t.Fatalf("typing kept generation %d: a picture of the bytes before it still matches", typed)
 	}
-	c.PutSavedContent(&gridwellv1.Tile{Id: "p/~a", Version: 1}, []byte("two, typed"))
-	if s := c.BodyGen("p/~a"); s == second || s == 0 {
-		t.Errorf("saved bytes kept generation %d", s)
+	// Same length as the last edit, other bytes.
+	c.PutEditedContent("p/~a", []byte("two, tyPed"))
+	if s := c.BodyGen("p/~a"); s == typed || s == 0 {
+		t.Fatalf("a same-length edit kept generation %d", s)
+	}
+	edited := c.BodyGen("p/~a")
+	c.PutSavedContent(&gridwellv1.Tile{Id: "p/~a", Version: 1}, []byte("two, tyPed"))
+	if s := c.BodyGen("p/~a"); s != edited {
+		t.Errorf("saving the bytes held moved the generation %d -> %d", edited, s)
+	}
+	c.PutSavedContent(&gridwellv1.Tile{Id: "p/~a", Version: 2}, []byte("other bytes"))
+	if s := c.BodyGen("p/~a"); s == edited || s == 0 {
+		t.Errorf("saved bytes other than those held kept generation %d", s)
 	}
 }
 

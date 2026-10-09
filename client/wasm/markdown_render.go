@@ -6,6 +6,7 @@ import (
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"strconv"
+	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -65,13 +66,15 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 				if a.drawRenderedPreview(n, frame, x, y, w, h, 0) {
 					// e2e attribution, read by the renderedPreviews testhook.
 					a.renderedPanePaints[n.Id]++
+					a.paintedText["pane:"+p.ID] = "raster:" + a.lastRasterSVG
 					return
 				}
 			}
 			if body, ok := a.tileBody(n); ok {
-				a.drawMarkdownText(a.cctx, string(body), originX, originY,
+				lines := a.drawMarkdownText(a.cctx, string(body), originX, originY,
 					a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
 				a.noteTextFace(n.Id, nil, 0)
+				a.paintedText["pane:"+p.ID] = strings.Join(lines, "\n")
 			}
 		} else {
 			a.tileBody(n) // warm the cache so the overlay has content when shown
@@ -103,13 +106,17 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 			drawn := false
 			if n.TextMode == rpc.TextModeRendered {
 				drawn = a.drawRenderedPreview(n, frame, x, y, w, h, topInset)
+				if drawn {
+					a.paintedText[n.Id] = "raster:" + a.lastRasterSVG
+				}
 			}
 			if !drawn {
 				if body, ok := a.tileBody(n); ok {
-					a.drawMarkdownText(a.cctx, string(body),
+					lines := a.drawMarkdownText(a.cctx, string(body),
 						x-scrollX*scale, y+topInset-scrollY*scale,
 						frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
 					a.noteTextFace(n.Id, nil, 0)
+					a.paintedText[n.Id] = strings.Join(lines, "\n")
 				}
 			}
 		}
@@ -171,7 +178,7 @@ const rawTextLineHeight = 1.35
 // monospace, so the budget is a pure column count and the text cannot reflow
 // when focus moves.
 func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
-	wrap func(src string, cols int) []string) {
+	wrap func(src string, cols int) []string) []string {
 	// One face for the whole document: the wrap measure and every line share
 	// it, and the bracket keeps it from outliving the paint.
 	c.Call("save")
@@ -191,7 +198,8 @@ func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scroll
 	// and desc come from the scaled canvas font above.
 	slotted := markdown.RawTextLineSlot(fontPx, rawTextLineHeight, scale, st.pad, scrollY, asc, desc)
 	slotTop := slotted.Top0
-	for _, ln := range wrap(src, rawWrapCols(m, w, scale, st.pad)) {
+	lines := wrap(src, rawWrapCols(m, w, scale, st.pad))
+	for _, ln := range lines {
 		if slotTop >= h {
 			break // nothing below the bottom edge is visible
 		}
@@ -200,17 +208,17 @@ func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scroll
 		}
 		slotTop += slotted.Slot
 	}
+	return lines
 }
 
 // memoWrap caches the wrap, because re-wrapping every visible document each
 // frame costs O(doc x tiles). Keyed by content id, the bytes' generation
-// (cache.BodyGen), length and columns, so a same-length uncommitted edit
-// may render one debounce cycle stale in a background preview. Bounded by wholesale reset, since it is
+// (cache.BodyGen) and columns. Bounded by wholesale reset, since it is
 // derived and never a fact.
 func (a *App) memoWrap(n *gridwellv1.Tile) func(string, int) []string {
 	return func(src string, cols int) []string {
 		key := rpc.ContentID(n) + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(n)), 10) + "\x00" +
-			strconv.Itoa(len(src)) + "\x00" + strconv.Itoa(cols)
+			strconv.Itoa(cols)
 		if lines, ok := a.views.wrapCache[key]; ok {
 			return lines
 		}

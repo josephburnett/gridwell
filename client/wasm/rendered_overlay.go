@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -122,7 +121,7 @@ func (a *App) refreshRenderedOverlay() {
 	s.Set("display", "block")
 
 	key := t.Id + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(t)), 10) + "\x00" +
-		strconv.FormatBool(markdown.IsOrg(t.AltText)) + "\x00" + fmt.Sprint(len(body))
+		strconv.FormatBool(markdown.IsOrg(t.AltText))
 	if key != a.overlays.lastRenderedKey {
 		div.Set("innerHTML", textedit.PresentationHTML(shown, body))
 		a.overlays.lastRenderedKey = key
@@ -180,8 +179,6 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 	}
 	a.putEditedContent(rpc.ContentID(t), toggled)
 	a.scheduleFileSave()
-	// The render key does not change on a toggle, so force the re-render.
-	a.overlays.lastRenderedKey = ""
 	a.refreshRenderedOverlay()
 	a.draw()
 }

@@ -168,8 +168,9 @@ func TestOtherBucketsSurviveTheSameBytesAndSweepOnNewOnes(t *testing.T) {
 	if !wide.revoked {
 		t.Error("a bucket whose bytes moved on must be swept and revoked")
 	}
+	ras.resolve(0)
 	if !narrow.revoked {
-		t.Error("the replaced same-bucket raster must be revoked")
+		t.Error("the replaced same-bucket raster must be revoked once its successor lands")
 	}
 	if _, ok := c.States()["t1"]; !ok {
 		t.Error("the tile keeps its new pending entry")
@@ -255,7 +256,7 @@ func TestStandInAcrossBucketsNeverAcrossBytes(t *testing.T) {
 
 	// New bytes: the old bytes' buckets are no stand-in.
 	if r, _, ok := c.Ensure(key(2, 256), svgOK("v2@256"), nil); ok {
-		t.Fatalf("v2 in flight served %v: a stand-in must never cross bytes", r.(*fakeRaster).svg)
+		t.Fatalf("v2 in flight served %v: a stand-in crosses bytes only in its own slot", r.(*fakeRaster).svg)
 	}
 	ras.resolve(0)
 	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2@128"), nil); !ok || w != 256 || r.(*fakeRaster).svg != "v2@256" {
@@ -293,5 +294,57 @@ func TestStandInTieGoesToTheNarrower(t *testing.T) {
 	ras.resolve(0)
 	if _, w, ok := c.Ensure(key(1, 192), svgOK("192"), nil); !ok || w != 128 {
 		t.Errorf("tie: width %v ok %v, want 128, which cannot clip", w, ok)
+	}
+}
+
+// Typing moves the bytes on every keystroke, so a face rasterizes again for
+// each. Until the new picture lands, the slot's last picture stands in, and
+// never longer: the landing or the failure retires it. Without it, a face of a
+// document being typed elsewhere would flash raw source per keystroke.
+func TestASlotsLastPictureStandsInOnlyWhileItsSuccessorIsInFlight(t *testing.T) {
+	ras := &fakeRasterizer{}
+	c := NewCache(ras, nil)
+	c.Ensure(key(1, 128), svgOK("v1"), nil)
+	v1 := ras.resolve(0)
+
+	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2"), nil); !ok || w != 128 || r != v1 {
+		t.Fatalf("v2 in flight: %v %v %v, want v1 standing in", r, w, ok)
+	}
+	// A third edit before the second lands keeps the last landed picture.
+	if r, _, ok := c.Ensure(key(3, 128), svgOK("v3"), nil); !ok || r != v1 {
+		t.Fatalf("v3 in flight over v2 in flight: %v %v, want v1 still", r, ok)
+	}
+	if v1.revoked {
+		t.Fatal("the standing-in picture was revoked while it stands in")
+	}
+	ras.resolve(0) // v2 lands late: superseded
+	if r, _, ok := c.Ensure(key(3, 128), svgOK("v3"), nil); !ok || r != v1 {
+		t.Fatalf("after the superseded v2 landed: %v %v, want v1 until v3 lands", r, ok)
+	}
+	v3 := ras.resolve(0)
+	if r, _, ok := c.Ensure(key(3, 128), svgOK("v3"), nil); !ok || r != v3 {
+		t.Fatalf("v3 landed: %v %v, want v3", r, ok)
+	}
+	if !v1.revoked {
+		t.Error("the stand-in outlived its successor's landing")
+	}
+
+	// A failure retires the stand-in too: the face says raw, not old bytes.
+	c.Ensure(key(4, 128), svgOK("v4"), nil)
+	ras.fail(0)
+	if r, _, ok := c.Ensure(key(4, 128), svgOK("v4"), nil); ok {
+		t.Fatalf("v4 failed and %v stood in", r.(*fakeRaster).svg)
+	}
+	if !v3.revoked {
+		t.Error("the stand-in outlived its successor's failure")
+	}
+
+	// Another theme is another picture, never a stand-in.
+	c.Ensure(key(5, 128), svgOK("v5"), nil)
+	ras.resolve(0)
+	other := key(6, 128)
+	other.Theme = "light"
+	if _, _, ok := c.Ensure(other, svgOK("light"), nil); ok {
+		t.Error("a stand-in crossed themes")
 	}
 }
