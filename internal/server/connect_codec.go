@@ -112,6 +112,10 @@ func (h *connectHandler) WriteContent(ctx context.Context, stream *connect.Clien
 	return connect.NewResponse(resp), nil
 }
 
+func (h *connectHandler) DisableSource(ctx context.Context, req *connect.Request[pb.DisableSourceRequest]) (*connect.Response[pb.DisableSourceResponse], error) {
+	return unary(h.rt.DisableSource)(ctx, req)
+}
+
 func (h *connectHandler) SetInterest(ctx context.Context, req *connect.Request[pb.SetInterestRequest]) (*connect.Response[pb.SetInterestResponse], error) {
 	return unary(h.rt.SetInterest)(ctx, req)
 }

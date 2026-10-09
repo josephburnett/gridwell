@@ -86,6 +86,8 @@ const (
 	GridwellSubscribeProcedure = "/gridwell.v1.Gridwell/Subscribe"
 	// GridwellSetInterestProcedure is the fully-qualified name of the Gridwell's SetInterest RPC.
 	GridwellSetInterestProcedure = "/gridwell.v1.Gridwell/SetInterest"
+	// GridwellDisableSourceProcedure is the fully-qualified name of the Gridwell's DisableSource RPC.
+	GridwellDisableSourceProcedure = "/gridwell.v1.Gridwell/DisableSource"
 )
 
 // GridwellClient is a client for the gridwell.v1.Gridwell service.
@@ -124,6 +126,7 @@ type GridwellClient interface {
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
 	SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error)
+	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
 }
 
 // NewGridwellClient constructs a client for the gridwell.v1.Gridwell service. By default, it uses
@@ -257,6 +260,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetInterest")),
 			connect.WithClientOptions(opts...),
 		),
+		disableSource: connect.NewClient[v1.DisableSourceRequest, v1.DisableSourceResponse](
+			httpClient,
+			baseURL+GridwellDisableSourceProcedure,
+			connect.WithSchema(gridwellMethods.ByName("DisableSource")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -282,6 +291,7 @@ type gridwellClient struct {
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
 	setInterest       *connect.Client[v1.SetInterestRequest, v1.SetInterestResponse]
+	disableSource     *connect.Client[v1.DisableSourceRequest, v1.DisableSourceResponse]
 }
 
 // Info calls gridwell.v1.Gridwell.Info.
@@ -384,6 +394,11 @@ func (c *gridwellClient) SetInterest(ctx context.Context, req *connect.Request[v
 	return c.setInterest.CallUnary(ctx, req)
 }
 
+// DisableSource calls gridwell.v1.Gridwell.DisableSource.
+func (c *gridwellClient) DisableSource(ctx context.Context, req *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error) {
+	return c.disableSource.CallUnary(ctx, req)
+}
+
 // GridwellHandler is an implementation of the gridwell.v1.Gridwell service.
 type GridwellHandler interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
@@ -420,6 +435,7 @@ type GridwellHandler interface {
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
 	SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error)
+	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
 }
 
 // NewGridwellHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -549,6 +565,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetInterest")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellDisableSourceHandler := connect.NewUnaryHandler(
+		GridwellDisableSourceProcedure,
+		svc.DisableSource,
+		connect.WithSchema(gridwellMethods.ByName("DisableSource")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/gridwell.v1.Gridwell/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case GridwellInfoProcedure:
@@ -591,6 +613,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellSubscribeHandler.ServeHTTP(w, r)
 		case GridwellSetInterestProcedure:
 			gridwellSetInterestHandler.ServeHTTP(w, r)
+		case GridwellDisableSourceProcedure:
+			gridwellDisableSourceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -678,4 +702,8 @@ func (UnimplementedGridwellHandler) Subscribe(context.Context, *connect.Request[
 
 func (UnimplementedGridwellHandler) SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetInterest is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.DisableSource is not implemented"))
 }

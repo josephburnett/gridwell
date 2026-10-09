@@ -233,6 +233,16 @@ its share of the interest union (`SetInterest`) is cut by connection and
 told to that node under the session of the connection's own event stream
 (`connection.tellFar`), so a far plugin watches what is on screen here.
 
+**Disabled** is the one health a user sets. `DisableSource` names a plugin
+or a connection as its health event does, and `plugin.Registry` is the one
+owner of which were switched off, in memory for the process's life: the
+switch the loader registers stops the plugin's supervisor for good, and the
+one the node registers per connection closes its transport and refuses every
+later dial. The router tells it on every stream as `EventPluginHealth.disabled`
+whatever a layer underneath says (`Server.asSwitched`). The source then reads
+as dark, nothing tries it again, and a restart brings it back, because
+nothing about it was written.
+
 The host-local half of a row is checked before the node serves: a missing
 `addr`, a `key` or `known_hosts` path that is not there or not readable fails
 `serve`, naming the connection and the exact path. This machine can settle

@@ -574,13 +574,24 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 
 // Subscribe fans every watching namespace's events (Info.watch) into the
 // client's, re-qualified. Failures heal through namespace.Refollow and are
-// told as EventPluginHealth. The stream also keeps its session's interest
+// told as EventPluginHealth; a disabled source is told so first, and only so
+// after (asSwitched). The stream also keeps its session's interest
 // counted (interest.Book.Open), but only once every namespace's stream has
 // settled: interest is what starts a source watching, and a change it reports
 // before this stream hears it would reach no one.
 func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Attached before the record is read, so a disable racing this open is
+	// told at least once.
+	off, detach := rt.srv.switchedOff.Subscribe()
+	defer detach()
+	for _, ns := range rt.srv.pluginReg.DisabledNow() {
+		if err := send(rpc.DisabledEvent(ns)); err != nil {
+			return err
+		}
+	}
 
 	events := make(chan *pb.Event, 64)
 	var settling sync.WaitGroup
@@ -612,6 +623,10 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 	for {
 		select {
 		case ev := <-events:
+			if err := send(rt.srv.asSwitched(ev)); err != nil {
+				return err
+			}
+		case ev := <-off:
 			if err := send(ev); err != nil {
 				return err
 			}
@@ -619,6 +634,27 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 			return nil
 		}
 	}
+}
+
+// asSwitched is the one place a disabled source's health is told: whatever a
+// layer under the router says of it, its process dying or its fan-in failing,
+// it is disabled.
+func (s *Server) asSwitched(ev *pb.Event) *pb.Event {
+	if h := ev.GetPluginHealth(); h != nil && s.pluginReg.Disabled(h.GetPluginUuid()) {
+		return rpc.DisabledEvent(h.GetPluginUuid())
+	}
+	return ev
+}
+
+// DisableSource switches off a plugin or connection this node declares until
+// the node exits (plugin.Registry.Disable), and tells every open stream.
+func (rt *router) DisableSource(_ context.Context, req *pb.DisableSourceRequest) (*pb.DisableSourceResponse, error) {
+	ns := req.GetNamespace()
+	if err := rt.srv.pluginReg.Disable(ns); err != nil {
+		return nil, status.Error(gcodes.FailedPrecondition, "disable: "+err.Error())
+	}
+	rt.srv.switchedOff.Publish(rpc.DisabledEvent(ns))
+	return &pb.DisableSourceResponse{}, nil
 }
 
 // watchPlugin fans plugin uuid's events into the client's stream until ctx
